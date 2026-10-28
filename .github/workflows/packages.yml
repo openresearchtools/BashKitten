@@ -126,10 +126,23 @@ jobs:
   sources:
     needs: node
     runs-on: ubuntu-24.04
+    env:
+      BASHKITTEN_SOURCE_CACHE: ${{ runner.temp }}/source-cache
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         persist-credentials: false
+        # The source serializer reads every committed blob directly from Git.
+        # Materialize only its helpers and the blocker's existing verifier inputs.
+        sparse-checkout-cone-mode: false
+        sparse-checkout: |
+          /agent/packaging/
+          /auth/dependencies/**/sources.json
+          /files/go_runtime.py
+          /browser/bashkitten/scripts/blocker_asset_provenance.py
+          /browser/bashkitten/BLOCKER-ASSET-SOURCE-NOTICE
+          /browser/browser/components/blocker/assets/
+          /browser/browser/components/blocker/scripts/
     - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
       with:
         node-version: '24'
@@ -137,6 +150,13 @@ jobs:
       with:
         pattern: node-runtime-*
         path: node-inputs
+    - name: Reuse shared authentication source downloads
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ${{ env.BASHKITTEN_SOURCE_CACHE }}
+        key: auth-source-archives-${{ hashFiles('auth/dependencies/**/sources.json') }}
+        # Do not persist another multi-gigabyte copy of every component's
+        # originals in the main repository's native compiler-cache budget.
     - name: Collect exact product and locked npm source
       run: python3 agent/packaging/sources.py "$RUNNER_TEMP/sources" --node-sources node-inputs --cache "$RUNNER_TEMP/source-cache"
     - name: Collect retained adblock corresponding source
@@ -169,6 +189,15 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         persist-credentials: false
+        # Package validation needs the full Git index for fingerprints, without
+        # another materialized copy of the imported browser/Office sources.
+        sparse-checkout-cone-mode: false
+        sparse-checkout: |
+          /agent/packaging/
+          /agent/src/server/platform/termux/updates-prepare.py
+          /browser/bashkitten/config/version.txt
+          /browser/browser/config/version_display.txt
+          /README.md
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         # Auth/search carry matching sources; Node sources are already in the

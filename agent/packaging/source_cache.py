@@ -6,11 +6,15 @@ This is download preparation, not dependency resolution. Build owners retain
 their native lock, package-identity, license and offline compilation checks.
 """
 import hashlib
+import http.client
 import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import tempfile
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -77,21 +81,34 @@ def fetch(record, cache=None, *, local=None, offline=False):
     if not (seed is not None and seed.is_file()) and (
             offline or os.environ.get('BASHKITTEN_OFFLINE_SOURCES') == '1'):
         raise FileNotFoundError('Pinned source is absent from the offline cache: ' + url)
-    with tempfile.NamedTemporaryFile(dir=directory, prefix='.source-', delete=False) as output:
-        incoming = Path(output.name)
+    attempts = 1 if seed is not None and seed.is_file() else 3
+    for attempt in range(attempts):
+        incoming = None
         try:
-            if seed is not None and seed.is_file():
-                with seed.open('rb') as source:
-                    shutil.copyfileobj(source, output)
-            else:
-                request = urllib.request.Request(url, headers={'User-Agent': 'BashKitten-Source-Builder/1'})
-                with urllib.request.urlopen(request, timeout=180) as source:
-                    shutil.copyfileobj(source, output)
-            output.flush()
+            with tempfile.NamedTemporaryFile(dir=directory, prefix='.source-', delete=False) as output:
+                incoming = Path(output.name)
+                if seed is not None and seed.is_file():
+                    with seed.open('rb') as source:
+                        shutil.copyfileobj(source, output)
+                else:
+                    request = urllib.request.Request(url, headers={'User-Agent': 'BashKitten-Source-Builder/1'})
+                    with urllib.request.urlopen(request, timeout=180) as source:
+                        shutil.copyfileobj(source, output)
             if not verified(incoming):
-                raise ValueError('Downloaded source checksum/size mismatch: ' + url)
+                raise ValueError(f'Downloaded source checksum/size mismatch: {url}; '
+                                 f'expected sha256={expected}, size={size}; '
+                                 f'received sha256={digest(incoming)}, size={incoming.stat().st_size}')
             incoming.chmod(0o644)
             incoming.replace(target)
+            return target
+        except (urllib.error.URLError, http.client.HTTPException, TimeoutError, ConnectionError, ValueError) as error:
+            retryable = (not isinstance(error, urllib.error.HTTPError)
+                         or error.code in (408, 429) or error.code >= 500)
+            if attempt + 1 == attempts or not retryable:
+                raise
+            print(f'Pinned source download attempt {attempt + 1}/{attempts} failed: {error}; '
+                  'retrying the same URL and checksum', file=sys.stderr)
+            time.sleep(attempt + 1)
         finally:
-            incoming.unlink(missing_ok=True)
-    return target
+            if incoming is not None:
+                incoming.unlink(missing_ok=True)

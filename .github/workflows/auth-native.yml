@@ -152,6 +152,8 @@ jobs:
       matrix:
         target: ${{ fromJSON(inputs.target && inputs.target != 'all' && format('["{0}"]', inputs.target) || '["linux-amd64","linux-arm64","termux-aarch64","termux-x86_64"]') }}
     runs-on: ubuntu-24.04
+    env:
+      BASHKITTEN_SOURCE_CACHE: ${{ runner.temp }}/source-cache
     steps:
       - uses: actions/checkout@v4
         with:
@@ -160,6 +162,13 @@ jobs:
             agent/native/remote
             agent/packaging
             agent/src/server/access
+      - name: Restore shared pinned authentication source archives
+        id: source-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.BASHKITTEN_SOURCE_CACHE }}
+          # Original source bytes are identical across all four target ABIs.
+          key: auth-source-archives-${{ hashFiles('auth/dependencies/**/sources.json') }}
       - uses: actions/download-artifact@v4
         with:
           pattern: auth-component-*-${{ matrix.target }}
@@ -173,6 +182,12 @@ jobs:
             tar -xzf "$archive" -C "$RUNNER_TEMP/payload"
           done
           python3 auth/build/assemble.py "$GITHUB_WORKSPACE" "$RUNNER_TEMP/payload" "$TARGET" "$RUNNER_TEMP/artifacts"
+      - name: Preserve verified shared source downloads
+        if: always() && steps.source-cache.outcome == 'success' && steps.source-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.BASHKITTEN_SOURCE_CACHE }}
+          key: ${{ steps.source-cache.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@v4
         with:
           name: auth-${{ matrix.target }}
