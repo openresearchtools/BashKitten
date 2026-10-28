@@ -1,0 +1,16 @@
+{
+  "name": "@vue/compiler-vue2",
+  "version": "2.7.16",
+  "repository": "https://github.com/vuejs/vue",
+  "commit": "bed04a77e575d6c4c1d903f60087dca874f7213e",
+  "license": "MIT",
+  "notice": {
+    "file": "LICENSE",
+    "url": "https://raw.githubusercontent.com/vuejs/vue/bed04a77e575d6c4c1d903f60087dca874f7213e/LICENSE",
+    "sha256": "17fb24bc303763f3fe1911ee24e5225c7ad59f0e3a5d8123e9b730c100a306a6"
+  },
+  "npmMetadata": {
+    "url": "https://registry.npmjs.org/@vue/compiler-vue2/2.7.16",
+    "sha256": "070df44c65bea4eb22a8bea025c200ef8999d85bba9ff04758df9f308c4152a4"
+  }
+}

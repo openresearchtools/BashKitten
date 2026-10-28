@@ -1,0 +1,26 @@
+{
+  "name": "SPDX License List Data",
+  "version": "3.29.0",
+  "repository": "https://github.com/spdx/license-list-data",
+  "commit": "31ba1a50e5397e00a304dbadc76531740e89ee48",
+  "tag": "v3.29.0",
+  "scope": "Canonical MIT identifier text used only for packages whose exact published metadata explicitly declares SPDX MIT. The original template copyright placeholder is retained verbatim; it is not an invented attribution or a claim that upstream shipped this file.",
+  "files": [
+    {
+      "file": "text/MIT.txt",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/text/MIT.txt",
+      "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+    },
+    {
+      "file": "json/details/MIT.json",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/json/details/MIT.json",
+      "sha256": "0c2b3c87a154a4aaac6bc6a735dd454dc29d9a78c23a85deedb080e0c65de1f8"
+    },
+    {
+      "file": "README.md",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/README.md",
+      "sha256": "9d5e2eaa0daa05418074f90201d1e320fd3792018fe1a2ffdc3ebf69c9fffc44"
+    }
+  ],
+  "refUrl": "https://api.github.com/repos/spdx/license-list-data/git/ref/tags/v3.29.0"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@vue/devtools-api",
+  "version": "6.6.4",
+  "repository": "https://github.com/vuejs/vue-devtools",
+  "commit": "df6ab6bb7791a7a525a97990de73b3ea5e9a1941",
+  "license": "MIT",
+  "notice": {
+    "file": "LICENSE",
+    "url": "https://raw.githubusercontent.com/vuejs/vue-devtools/df6ab6bb7791a7a525a97990de73b3ea5e9a1941/LICENSE",
+    "sha256": "050bbca6960784db52ff387271bf2ecc5cbed7cf8581b415d528a6ecb6585015"
+  },
+  "npmMetadata": {
+    "url": "https://registry.npmjs.org/@vue/devtools-api/6.6.4",
+    "sha256": "71da25052eebfc4d8fb990777623c8e84d7cfc8faebd0eeb235127a8123b3591"
+  }
+}

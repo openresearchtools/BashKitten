@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "name": "@types/localforage",
+  "version": "0.0.34",
+  "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped",
+  "commit": "e6a0a9f288cff4b2bb2e59cdabc629c4cf6962f6",
+  "files": [
+    {
+      "file": "LICENSE",
+      "url": "https://raw.githubusercontent.com/DefinitelyTyped/DefinitelyTyped/e6a0a9f288cff4b2bb2e59cdabc629c4cf6962f6/LICENSE",
+      "sha256": "0a48f63d7d32a49d196dce4b2e0cbc236c2cc8fef42cb20e005e4d5f813cc8f6"
+    },
+    {
+      "file": "notNeededPackages.json",
+      "url": "https://raw.githubusercontent.com/DefinitelyTyped/DefinitelyTyped/e6a0a9f288cff4b2bb2e59cdabc629c4cf6962f6/notNeededPackages.json",
+      "sha256": "d8e239b541bc07bbe8bc5a34b45fb6ab60be29c9381630b4a8517dce64717043"
+    }
+  ],
+  "scope": "Original DefinitelyTyped MIT terms and exact transition metadata generating the 0.0.34 stub published on 2017-03-21. The npm tarball contains only README.md and package.json, declares MIT, and includes no executable code or type definitions.",
+  "npmArchiveSha256": "f578d4ff964be6fd1652ba07b9ffe0aa441b3b57f7caf38ffeb138aa2b522591",
+  "notNeededEntry": {
+    "libraryName": "localforage",
+    "typingsPackageName": "localforage",
+    "sourceRepoURL": "https://github.com/localForage/localForage",
+    "asOfVersion": "0.0.34"
+  }
+}

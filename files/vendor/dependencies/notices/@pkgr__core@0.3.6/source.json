@@ -1,0 +1,16 @@
+{
+  "name": "@pkgr/core",
+  "version": "0.3.6",
+  "repository": "https://github.com/un-ts/pkgr",
+  "commit": "6e1c7260486c7251e61404176a293986229a5869",
+  "license": "MIT",
+  "notice": {
+    "file": "LICENSE",
+    "url": "https://raw.githubusercontent.com/un-ts/pkgr/6e1c7260486c7251e61404176a293986229a5869/LICENSE",
+    "sha256": "82a222189ab9764f8ec1c052b9661f2c9f12db52387312acbf73b2be5b8b6c32"
+  },
+  "npmMetadata": {
+    "url": "https://registry.npmjs.org/@pkgr/core/0.3.6",
+    "sha256": "594448cf9ffc4636530688ea2f5b7317631a3c6735841a1a182fa277ad7dfb4f"
+  }
+}

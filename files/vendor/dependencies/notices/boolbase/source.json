@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "name": "boolbase",
+  "version": "1.0.0",
+  "repository": "https://github.com/fb55/boolbase",
+  "commit": "b566b40fabb9310c9e1e8bd5719afb6eece98425",
+  "files": [
+    {
+      "file": "LICENSE",
+      "url": "https://raw.githubusercontent.com/fb55/boolbase/b566b40fabb9310c9e1e8bd5719afb6eece98425/LICENSE",
+      "sha256": "cdf4d87ae0a6c160227263bf4e39a0a10e30e89ae7256e0f7ac7bde0836552c6"
+    }
+  ],
+  "scope": "Upstream license-text addition merged after npm 1.0.0; runtime index.js at the license commit is byte-identical to retained npm 1.0.0 and initial release source. The release tarball declares ISC but omits the full license file.",
+  "runtimeEquivalence": {
+    "file": "index.js",
+    "sha256": "c62510fca8738c7444cdf5012bdd0ce214a1b6f7eaff7facb3a919e4656d7341",
+    "initialCommit": "9837d5bf4f30390ac6384a6bc605ca2d69ade4bf",
+    "npmArchiveSha256": "69628ff8092c5ff940ea4a0f29da98d520615bae138755c9e059033606c6caa8"
+  }
+}

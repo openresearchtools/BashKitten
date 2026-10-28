@@ -1,0 +1,18 @@
+{
+  "name": "@humanfs/types",
+  "version": "0.15.0",
+  "repository": "https://github.com/humanwhocodes/humanfs",
+  "commit": "85069f193cbacc371c3beb649ce746f8c5a493be",
+  "license": "Apache-2.0",
+  "scope": "Published types package explicitly declares Apache-2.0; this is the original complete Apache-2.0 text in its sibling core package at the exact same monorepo release commit. No inferred copyright notice.",
+  "notice": {
+    "file": "LICENSE",
+    "upstreamPath": "packages/core/LICENSE",
+    "url": "https://raw.githubusercontent.com/humanwhocodes/humanfs/85069f193cbacc371c3beb649ce746f8c5a493be/packages/core/LICENSE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+  },
+  "npmMetadata": {
+    "url": "https://registry.npmjs.org/@humanfs/types/0.15.0",
+    "sha256": "debc8d4e7eb6bf6c1e25264f6cca07bccab958e3b8a16d9e79e1554dfa927917"
+  }
+}
