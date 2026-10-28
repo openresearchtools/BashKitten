@@ -313,26 +313,25 @@ async function selectItem(item, event) {
     const from = Math.min(anchor, event.index),
       to = Math.max(anchor, event.index),
       generation = view,
-      controller = (rangeController = new AbortController()),
-      version = items.version;
+      controller = (rangeController = new AbortController());
     selection.clear();
     try {
-      for (let start = from; start <= to; start += 80) {
-        const result = await loadPage({
-          start,
-          limit: Math.min(80, to - start + 1),
-          signal: controller.signal,
-        });
+      for await (const page of items.range(from, to, {
+        signal: controller.signal,
+      })) {
         if (generation !== view || controller.signal.aborted) return;
-        if (result.version !== version)
-          throw Error("The library changed. Refresh before selecting a range.");
-        for (const record of result.items)
+        for (const record of page)
           selection.set(record.key, selectedIdentity(record));
         items.setSelection(selection.keys());
         notify(selection.size + " selected");
       }
     } catch (error) {
-      if (!controller.signal.aborted) notify(error);
+      if (generation === view && !controller.signal.aborted) {
+        selection.clear();
+        items.setSelection([]);
+        notify(error);
+      }
+      return;
     }
   } else {
     anchor = event.index;
@@ -1129,7 +1128,7 @@ function storeJob(id, job) {
   for (const callback of jobListeners.get(key) || []) callback(value);
 }
 function jobProgress(job) {
-  const progress = job.progress?.import;
+  const progress = job.progress?.import || job.progress?.["openalex-import"];
   return progress
     ? `${progress.completed}/${progress.total} records`
     : `${job.completed}/${job.total}`;
@@ -1318,6 +1317,10 @@ async function showJob(job) {
     }
   });
   d.actions.append(resume, cancel);
+  if (job.kind === "openalex-search-import")
+    d.actions.append(
+      button("Browse source outcomes", () => showSearchOutcomes(job)),
+    );
   const key = job.projectId + ":" + job.id,
     listeners = jobListeners.get(key) || new Set();
   const updated = (latest) => {
@@ -1342,10 +1345,62 @@ async function showJob(job) {
     { once: true },
   );
 }
-function showJobResult(job, result) {
-  const d = dialog("Operation result"),
-    controller = new AbortController(),
-    pending = [],
+function showSearchOutcomes(job) {
+  const d = dialog("Imported source outcomes"),
+    rows = node("div", { class: "search-results" }),
+    targetScope = api.project(job.projectId);
+  d.body.append(rows);
+  let list;
+  list = new VirtualList({
+    element: rows,
+    label: "Source outcomes",
+    key: (item) => item.sourceId,
+    rowHeight: 60,
+    load: ({ start, limit, cursor, signal }) =>
+      targetScope.request(
+        "jobs/" +
+          job.id +
+          "/results?" +
+          query({
+            start,
+            limit,
+            cursor,
+            version: list?.version ?? undefined,
+          }),
+        { signal },
+      ),
+    render: (item) =>
+      node(
+        "span",
+        { class: "source-label" },
+        node("strong", {}, item.sourceId),
+        node(
+          "small",
+          {},
+          human(item.status) +
+            (resolverSteps(item).length ? " · Browser step required" : "") +
+            (item.error ? " · " + item.error : ""),
+        ),
+      ),
+    onSelect: (item) =>
+      showJobResult(job, {
+        status: item.status,
+        error: item.error,
+        result: item,
+      }),
+    onStatus: (text, error) => {
+      d.notice.textContent = error?.message || text;
+    },
+  });
+  d.actions.append(
+    button("Close", () => d.el.close()),
+    button("Refresh", () => list.reset({ preservePosition: true })),
+  );
+  d.el.addEventListener("close", () => list.destroy(), { once: true });
+  d.open();
+}
+function resolverSteps(result) {
+  const pending = [],
     stack = [result];
   while (stack.length) {
     const value = stack.pop();
@@ -1356,8 +1411,14 @@ function showJobResult(job, result) {
       for (const child of Object.values(value))
         if (child && typeof child === "object") stack.push(child);
   }
+  return pending;
+}
+function showJobResult(job, result) {
+  const d = dialog("Operation result"),
+    controller = new AbortController(),
+    pending = resolverSteps(result);
   d.body.append(node("p", {}, result.error || human(result.status)));
-  if (result.result?.status === "imported")
+  if (Number.isSafeInteger(result.result?.count))
     d.body.append(
       node(
         "p",
@@ -1365,6 +1426,32 @@ function showJobResult(job, result) {
         `${result.result.count} reference${result.result.count === 1 ? "" : "s"} imported; ${result.result.collections || 0} collection${result.result.collections === 1 ? "" : "s"} imported.`,
       ),
     );
+  if (Number.isSafeInteger(result.result?.processed)) {
+    const outcome = result.result;
+    d.body.append(
+      node(
+        "p",
+        {},
+        `${outcome.processed} processed · ${outcome.imported} imported · ${outcome.skipped} skipped · ${outcome.failed} failed`,
+      ),
+      node(
+        "p",
+        {},
+        `${outcome.totalResultsReported} matching results reported · requested limit ${outcome.limit} · ${outcome.stoppedBecause === "limit" ? "requested limit reached" : "end of results"}`,
+      ),
+      button("Browse all source outcomes", () => showSearchOutcomes(job)),
+    );
+    if (outcome.pendingBrowserRequests)
+      d.body.append(
+        node(
+          "p",
+          { class: "notice" },
+          `${outcome.pendingBrowserRequests} browser steps remain. Browse the source outcomes to continue them.`,
+        ),
+      );
+  }
+  if (result.result?.sourceId)
+    d.body.append(node("p", {}, "Source: " + result.result.sourceId));
   if (pending.length)
     d.body.append(
       node(
@@ -1663,7 +1750,8 @@ function openAlexDialog(saved) {
     order.add(new Option(label, value));
   const from = node("input", { type: "date" }),
     to = node("input", { type: "date" }),
-    limit = node("input", { type: "number", min: 1, max: 1000, value: 100 });
+    limit = node("input", { type: "number", min: 1, step: 1, value: 1000 }),
+    modeNotice = node("p", { class: "notice" });
   const article = node("input", { type: "checkbox" }),
     abstract = node("input", { type: "checkbox" }),
     oa = node("input", { type: "checkbox" }),
@@ -1722,6 +1810,7 @@ function openAlexDialog(saved) {
     filterSearch,
     filterGroups,
     filters,
+    modeNotice,
   );
   const summary = node("p", { class: "notice", role: "status" }),
     results = node("div", { class: "search-results" }),
@@ -1737,6 +1826,8 @@ function openAlexDialog(saved) {
     selection = new Map();
   let searchSpec = null,
     request,
+    searchImportAttempt,
+    submittingSearchImport = false,
     generation = 0;
   d.body.append(
     node(
@@ -1766,12 +1857,17 @@ function openAlexDialog(saved) {
         body: {
           ...specification,
           page: Math.floor(start / pageSize) + 1,
-          pageSize,
+          pageSize:
+            specification.queryMode === "semantic"
+              ? Math.min(50, specification.limit)
+              : pageSize,
           cursor,
         },
         signal,
       });
       signal.throwIfAborted();
+      if (start === 0 && !submittingSearchImport)
+        importAll.disabled = !result.records.length;
       const records = result.records.slice(
         0,
         Math.max(0, specification.limit - start),
@@ -1883,7 +1979,16 @@ function openAlexDialog(saved) {
     searchMode.disabled = semantic;
     exact.disabled = semantic;
     order.disabled = semantic;
+    limit.setCustomValidity("");
+    text.setCustomValidity("");
+    if (semantic) limit.max = "50";
+    else limit.removeAttribute("max");
+    modeNotice.textContent = semantic
+      ? "OpenAlex semantic search supports up to 50 results and 2,000 query characters."
+      : "Imports beyond the first 10,000 results require an OpenAlex key in References Settings.";
   };
+  limit.addEventListener("input", () => limit.setCustomValidity(""));
+  text.addEventListener("input", () => text.setCustomValidity(""));
   queryMode.addEventListener("change", updateMode);
   const search = button("Search", () => form.requestSubmit(), {
       class: "primary",
@@ -1909,6 +2014,16 @@ function openAlexDialog(saved) {
     ),
   );
   async function runSearch(estimate = false) {
+    limit.setCustomValidity(
+      Number.isSafeInteger(Number(limit.value)) && Number(limit.value) > 0
+        ? ""
+        : "Enter a positive whole number of results.",
+    );
+    text.setCustomValidity(
+      queryMode.value === "semantic" && text.value.length > 2000
+        ? "OpenAlex semantic search accepts up to 2,000 query characters."
+        : "",
+    );
     if (!form.reportValidity()) return;
     request?.abort();
     request = new AbortController();
@@ -1928,9 +2043,13 @@ function openAlexDialog(saved) {
     };
     if (!estimate) {
       searchSpec = specification;
+      searchImportAttempt = null;
       selection.clear();
       list.reset({ preserveSelection: false });
       importButton.disabled = true;
+      importAll.disabled = true;
+      importAll.textContent =
+        "Import up to " + specification.limit + " results";
       detailBody.replaceChildren();
       search.disabled = false;
       return;
@@ -1993,6 +2112,41 @@ function openAlexDialog(saved) {
     },
     { disabled: true },
   );
+  const importAll = button(
+    "Import matching results",
+    async () => {
+      if (!searchSpec || submittingSearchImport) return;
+      submittingSearchImport = true;
+      importAll.disabled = true;
+      const { limit: maximum, ...search } = searchSpec,
+        body = {
+          search,
+          limit: maximum,
+          target: targetCollection?.key || null,
+          resolvePDFs: resolve.checked,
+        },
+        fingerprint = JSON.stringify(body);
+      if (searchImportAttempt?.fingerprint !== fingerprint)
+        searchImportAttempt = { fingerprint, requestId: crypto.randomUUID() };
+      try {
+        const job = await targetScope.request("openalex/import", {
+          method: "POST",
+          body: { ...body, requestId: searchImportAttempt.requestId },
+        });
+        trackJob(targetProject, job);
+        d.notice.textContent =
+          "Import of up to " +
+          maximum +
+          " matching results queued. Progress, cancellation and source outcomes are in Jobs.";
+      } catch (error) {
+        d.notice.textContent = error.message;
+      } finally {
+        submittingSearchImport = false;
+        importAll.disabled = !searchSpec || !list.length;
+      }
+    },
+    { disabled: true },
+  );
   d.actions.append(
     button("Close", () => d.el.close()),
     button("Save search", () =>
@@ -2018,6 +2172,7 @@ function openAlexDialog(saved) {
       importButton.disabled = !selection.size;
     }),
     importButton,
+    importAll,
   );
   d.el.addEventListener(
     "close",
@@ -2032,13 +2187,13 @@ function openAlexDialog(saved) {
     text.value = saved.query || "";
     custom.value = saved.filter || "";
     order.value = saved.sort || "";
-    limit.value = saved.limit || 100;
+    limit.value = saved.limit || 1000;
     queryMode.value = saved.queryMode || "boolean";
     searchMode.value = saved.field || "all";
     exact.checked = !!saved.exact;
-    updateMode();
     chips();
   }
+  updateMode();
   text.focus();
 }
 
