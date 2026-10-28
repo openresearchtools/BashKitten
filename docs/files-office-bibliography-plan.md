@@ -507,10 +507,18 @@ The Pi adapter uses native authenticated document sessions and operations. Keep
 it replaceable with the backend modules, without browser rebuilds. Native UNO/
 kit scripting can express text, tables, cell values/formulas, ranges and drawing/
 slide operations, but every required operation needs a released-source capability
-check and end-to-end result verification. Prefer released `cool`/`scriptinterop` operations where they cover the need;
-the release warns about future removal of legacy `com.sun.star` compatibility,
-so isolate any required legacy UNO calls and test upgrades. Selection-only UI
-commands are not sufficient for reliable structured agent edits. Avoid a second document engine.
+check and end-to-end result verification. Prefer released `cool`/`scriptinterop`
+operations where they cover the need. **Available native UNO, including
+`com.sun.star`, is explicitly allowed when those APIs lack a required operation.**
+A preferred-API gap is not grounds to omit editing, inspection or citation
+functionality that the shipped UNO interface can provide. The release's warning
+about possible future legacy removal is an upgrade/compatibility concern, not a
+ban on using it now. Keep these calls in the replaceable adapter, document the
+native operation and test against the exact shipped version. On upgrades, migrate
+or narrowly expose the missing native capability before dropping a working path;
+do not silently reduce functionality. Only a gap in both available native routes
+justifies a small extension/API patch, not a new document engine. Selection-only
+UI commands are not sufficient for reliable structured agent edits.
 
 ### 5.2 Separate human and agent participants in the same document
 
@@ -525,8 +533,10 @@ Provide a **browserless native WebSocket participant** for Pi: the released
 session handshake/load/UNO/script protocol can be driven by a small backend
 adapter. The server renders/edits through its existing kit. This is not ordinary
 REST file rewriting, and an HTTP conversion endpoint is not a live participant.
-The internal read-only remote-document client is evidence of the protocol, not
-an editable agent endpoint to bypass. `/co/collab` is a separate desktop/WASM
+`RemoteDocumentBroker` is a real browserless protocol example, but deliberately
+uses read-only permission and restricted commands. Reuse the normal authenticated
+editable session path for agents; do not relax that internal client's restrictions
+or describe it as the general agent editing API. `/co/collab` is a separate desktop/WASM
 coordination route, not the general live editing API. Verify authenticated script execution,
 view selection, results/errors, disconnect/reconnect and safe disposal on the
 exact build. No permanent hidden browser or new Mozilla Office actor is assumed.
@@ -1256,6 +1266,64 @@ provider/account system or duplicate compaction machinery. Keep `full-read` and
 and authority; never use another backend's credentials merely because the
 browser has a tab open there.
 
+### 11.1 Full References and live collaboration control for agents
+
+**User clarification — 28 October 2026:** preserve the full agent reference-
+management workflow previously provided through Zotero, now against **our
+References manager**, and connect it end to end to the live Collabora document.
+The integration must not stop at opening a document, inserting plain-text
+citations or exposing a subset of the old reviewer tools. Stock Pi discovery,
+the standalone CLI and Systematic Reviewer use the same backend contracts and
+project identity as the user-facing References UI and Office plugin.
+
+| Agent capability | Required end-to-end behavior |
+| --- | --- |
+| Libraries and organization | Create/select the correct independent project library; inspect/create/edit collections, items, metadata, tags, notes, relationships and attachments through the same authorized References API as the UI; retain normal archive/delete semantics |
+| Search and import | Search OpenAlex/library records; import selected/batched DOI/PMID/PMCID/OpenAlex records; retrieve/enrich abstracts with the existing strict validation/provenance rules; resolve PDFs using the shared native-derived resolver queue and custom resolvers, with native human challenge handling where needed |
+| Read and research | Retrieve complete item metadata, abstract/full-text/attachment information and job results; preserve reviewer harvesting, semantic ranking, screening, extraction, analysis and source-reading capabilities rather than replacing them with citation-only tools |
+| Live document control | Open/create/read structured text, tables, cells/formulas, ranges, slides/shapes and managed citation identities; edit through the agent's own authenticated native participant while the user works in the same document |
+| Citation control | Search/select References items, insert/edit single or multi-item clusters, locators/affixes/suppress-author, read rendered text plus identities, set style/locale, refresh/renumber all citations and insert/update bibliography using the same plugin/backend operations as the GUI |
+| Persistence and delivery | Await native save/export completion; inspect history, open/restore authorized snapshots through the same coordinated owner, export supported formats/PDF or an explicit citation-unlinked copy, and return/open the normal browser URL |
+
+Keep libraries in their separate external databases and attachments in the
+project's Bibliography directory. Resolve library/item identities explicitly;
+never retarget a running import/edit because another tab changed its selection.
+Missing data, unresolved identifiers, native permission failures and interrupted
+jobs remain observable to Pi with usable status/results. Reuse the existing
+reviewer compatibility API where applicable; product names/descriptions remain
+References, and any necessary old tool aliases are migration compatibility only.
+No Zotero cloud account or running Zotero desktop application becomes required.
+
+The full path is: **owned Pi operation → authorized References/Office adapter →
+References backend and agent's native Collabora view → shared live document →
+native WOPI save/export**, with results returned to Pi and visible to the human.
+A reference-library mutation alone does not mean the document citation changed;
+refresh through the citation adapter and report the actual affected document
+state. A document edit must preserve existing citation fields/metadata and human
+changes. Prefer stable native object/range identities over shared cursor state;
+use native locks, undo groups, conflict handling and acknowledgements. Distinct
+views permit concurrent work in different locations; overlapping edits follow
+Collabora's native semantics rather than a claim of conflict-free editing.
+
+Use `cool`/`scriptinterop` first and shipped UNO where needed, including citation
+field operations and structured reads. Verify each capability rather than
+rejecting UNO for being legacy or replacing it with direct ZIP/XML rewrites of
+an active file. If neither native route exposes a required operation, add only
+the missing narrow plugin/API seam and keep the feature an explicit unresolved
+gate until it works. No large hardcoded Office fork or new collaboration engine.
+
+Acceptance must exercise a complete research-to-document flow in Writer, Calc
+and Impress: agent creates/selects a project library, imports identifiers,
+enriches metadata/abstracts, resolves an attachment, reads evidence, opens the
+same document as the human, edits another location, inserts/edits citations,
+changes style, refreshes the bibliography, saves and exports. Verify both views
+reflect the same managed citations, the human selection is preserved, undo and
+reconnect behave natively, and save/reopen preserves identities in all six
+formats. Repeat relevant operations with the user joining after the agent and
+the agent joining after the user, on Linux and native Termux. Maintain pinned
+compatibility checks for both preferred and UNO-backed operations on upgrades.
+This is required acceptance, not a claim that these bridges are implemented.
+
 ## 12. Clean removal of the old Files and preview implementation
 
 Make this deletion/refactor a bounded workstream after replacement interfaces
@@ -1740,6 +1808,11 @@ Required acceptance groups:
 - [ ] **Round trips/export:** DOCX/XLSX/PPTX and ODT/ODS/ODP save/reopen with durable
   citation identity; source-preserving conversion behavior; plain-text citation
   export copy; current-revision PDF/preview with Office, no LibreOffice path.
+- [ ] **Agent end-to-end control:** the complete section 11.1 library/import/
+  enrichment/PDF/research/live-edit/citation/style/bibliography/save/export flow
+  works with the same References manager and live human document in all three
+  editors. Preferred APIs and necessary UNO paths both have pinned coverage;
+  legacy warnings do not become silent feature omissions.
 - [ ] **Systematic Reviewer:** existing harvesting, identifiers, full-text,
   semantic ranking, screening/extraction/analysis and writing capabilities remain
   discoverable through stock Pi; writes use our library/live Office API.

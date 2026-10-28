@@ -64,6 +64,13 @@ views, UNO/kit scripting, native saves/exports and the native history host
 handshake. Keep full snapshot retention and the required References/citation/
 Systematic Reviewer scope across Writer, Calc and Impress and native Termux.
 The detailed plan records capability gates rather than claiming implementation.
+The later agent-control clarification requires the complete former Zotero-backed
+research/library workflow through our References API and the same live human/
+agent document. Prefer native `cool`/`scriptinterop`; available UNO is explicitly
+allowed for required operations they do not expose. Isolate/test those calls on
+upgrades instead of silently dropping features. Research/import/enrichment/PDFs,
+managed citations/style/bibliography, edits, saves and exports must work end to
+end through native sessions and replaceable adapters.
 
 Keep Quantum updatable through a separately versioned Collabora add-on, reusing
 pinned upstream WOPI source and a minimal documented provider/launch hook. No

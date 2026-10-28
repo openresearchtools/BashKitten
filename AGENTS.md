@@ -90,6 +90,19 @@ WOPI, snapshot, Pi or citation logic through Quantum internals or modify its
 OnlyOffice protocol. Maintain a small named patch series and upstream-update
 contract tests. Prefer native upstream support and remove redundant adapters.
 
+Agents must have full end-to-end References management and live Collabora
+control, preserving the reviewer's previous Zotero-backed capabilities through
+our own References API: project libraries/collections/items, metadata/abstract
+search/import/enrichment, PDF resolution/attachments, citations/style/refresh/
+bibliography and native save/export. User and agent share the same document as
+distinct authenticated views. Prefer released `cool`/`scriptinterop`, but use
+available native UNO (`com.sun.star` included) wherever needed for missing
+operations. Legacy deprecation warnings require isolated adapters and pinned
+upgrade checks, not disabled functionality. Only a gap in the actual available
+native APIs justifies a narrow extension seam. `RemoteDocumentBroker` remains a
+restricted read-only example and `/co/collab` a separate coordination route;
+neither is the agent editing endpoint. See the plan's section 11.1 acceptance.
+
 Always open Collabora with light UI **and light document canvas**, preserving
 stored cell/font/slide colors. Use native `ui_defaults=UITheme=light;SavedUIState=false`
 and WOPI browser settings for dark-background preferences; verify runtime toggle/
