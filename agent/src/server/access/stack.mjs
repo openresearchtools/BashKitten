@@ -241,6 +241,26 @@ ${backend('local')}
 }
 }
 `;
+    if (this.officeWopiOrigin) config += `${this.officeWopiOrigin} {
+bind 127.0.0.1
+reverse_proxy ${quote('unix/' + path.join(runDir, 'office-addon.sock'))} {
+flush_interval -1
+}
+}
+`;
+    if (this.applicationOrigin) config += `${this.applicationOrigin} {
+bind 127.0.0.1
+tls internal
+route {
+${strip}
+reverse_proxy ${quote('unix/' + path.join(runDir, 'apps-http.sock'))} {
+${proxyHeaders()}
+header_up X-Bashkitten-Proxy ${this.proxyToken}
+flush_interval -1
+}
+}
+}
+`;
     const addresses = (this.remoteOrigins || []).map(origin => origin + ':' + this.remotePort);
     if (addresses.length) config += `${addresses.join(', ')} {
 bind 127.0.0.1
@@ -321,6 +341,51 @@ ${backend('remote')}
     }
     await writeJson(paths.caddyJson, adapted);
   }
+  async ensureApplicationGateway() {
+    if (!this.ready || this.stopping) throw Error('The owning backend is off');
+    if (this.applicationStarting) return this.applicationStarting;
+    if (this.applicationOrigin) return { origin: this.applicationOrigin, identity: this.identity };
+    this.applicationStarting = (async () => {
+      this.applicationOrigin = 'https://127.0.0.1:' + await availablePort(0);
+      try {
+        await this.writeCaddy();
+        await command(binary('caddy'), ['reload', '--config', paths.caddyJson, '--address', 'unix/' + paths.admin]);
+        await this.waitUntil(() => new Promise(resolve => {
+          const request = https.get(this.applicationOrigin, { ca: this.identity.caPem, rejectUnauthorized: true }, response => { response.resume(); resolve(true); });
+          request.setTimeout(2000, () => request.destroy()); request.once('error', () => resolve(false));
+        }), 'Applications HTTPS');
+        if (!this.ready || this.stopping) throw Error('The owning backend stopped during application startup');
+        return { origin: this.applicationOrigin, identity: this.identity };
+      } catch (error) { this.applicationOrigin = null; throw error; }
+      finally { this.applicationStarting = null; }
+    })();
+    return this.applicationStarting;
+  }
+  async applicationOfficeLayout() {
+    if (!this.ready || this.stopping) throw Error('The owning backend is off');
+    const reserve = async (id, name, excluded = []) => {
+      const existing = (await this.services.entries()).find(entry => entry.id === id);
+      if (existing) {
+        if (existing.application !== id || existing.target.network !== 'tcp' || !/^127\.0\.0\.1:[0-9]+$/.test(existing.target.address)) throw Error(`The ${name} service is not owned by this application`);
+        const port = Number(existing.target.address.split(':')[1]);
+        if (excluded.includes(port)) throw Error('Office and its callback endpoint must use distinct owned ports');
+        return port;
+      }
+      let port;
+      do { port = await availablePort(0); } while (excluded.includes(port));
+      await this.services.ensureApplication({ id, name, kind: 'web', scheme: 'http', openPath: '/',
+        target: { network: 'tcp', address: '127.0.0.1:' + port }, command: null, startup: false, enabled: false }, { start: false });
+      return port;
+    };
+    const port = await reserve('office', 'Office'), wopiPort = await reserve('office-wopi', 'Office callbacks', [port]);
+    const origin = 'http://127.0.0.1:' + wopiPort;
+    if (this.officeWopiOrigin !== origin) {
+      this.officeWopiOrigin = origin;
+      try { await this.writeCaddy(); await command(binary('caddy'), ['reload', '--config', paths.caddyJson, '--address', 'unix/' + paths.admin]); }
+      catch (error) { this.officeWopiOrigin = null; throw error; }
+    }
+    return { port, wopiURL: origin, serviceRoot: '/apps/office' };
+  }
   async reconfigureRemote() {
     if (!this.ready || this.stopping) throw Error('Turn on Agent before changing remote access');
     this.reconfiguring = true;
@@ -398,6 +463,8 @@ ${backend('remote')}
   }
   async stop() { this.stopping = true; this.ready = false; await this.stopChildren(); this.info = null; }
   async stopChildren() {
+    this.applicationOrigin = null;
+    this.officeWopiOrigin = null;
     this.phoneOwnerToken = null;
     this.providerOwnerToken = null;
     this.remote?.cancelPending();

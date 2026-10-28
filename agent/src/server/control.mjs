@@ -51,7 +51,7 @@ export async function controlRequest(command, value) {
   }
   const deadline = Date.now() + 120000;
   for (let attempt = 0; ; attempt++) {
-    try { return await socketRequest(controlSocket, '/' + command, value, command === 'whisper-acquire' ? 0 : command === 'start' || command === 'restart' || command === 'autostart-startup' || command.startsWith('share-') ? 180000 : 30000); }
+    try { return await socketRequest(controlSocket, '/' + command, value, command === 'whisper-acquire' ? 0 : command === 'start' || command === 'restart' || command === 'autostart-startup' || command === 'application-service' || command.startsWith('share-') ? 180000 : 30000); }
     catch (error) {
       // A fresh launch can reach the old controller after its status reply but
       // before shutdown finishes. Retry rejected starts or failed connections,
@@ -431,6 +431,12 @@ async function serve() {
     if (command === 'service-status') return stack.services.status();
     if (command === 'service-save') return stack.services.save(value);
     if (command === 'service-remove') return stack.services.remove(value);
+    if (command === 'application-gateway') return stack.ensureApplicationGateway();
+    if (command === 'application-office-layout') return stack.applicationOfficeLayout();
+    if (command === 'application-service') {
+      if (!stack.ready || stopping || browserClosing || shutdownRequested) throw Error('The owning backend is off or stopping');
+      return stack.services.ensureApplication(value.service, { start: value.start !== false, restart: value.restart === true });
+    }
     if (command === 'service-action') {
       if (value.action !== 'stop' && (stopping || browserClosing || shutdownRequested)) throw Error('BashKitten is stopping');
       if (value.action !== 'stop' && !stack.ready) throw Error('Turn on Local before starting a service');
@@ -500,6 +506,10 @@ async function serve() {
       if (req.url === '/browser-shutdown') beginBrowserShutdown(value);
       if (platform === 'linux' && value.browserOwner && req.url !== '/browser-shutdown') await adoptBrowser(value.browserOwner);
       if (req.url === '/status') return json(res, await status());
+      // Readiness can include a cold native kit startup. The existing service
+      // owner coalesces/serializes its catalogue and rejects late starts during
+      // shutdown; do not hold the controller command queue while waiting.
+      if (req.url === '/application-service') return json(res, await action('application-service', value));
       // Sampling is local, read-only and on demand. It must not queue behind a
       // model loading or package operation, and never starts/stops a workload.
       if (req.url === '/performance-sample') return json(res, await performance.sample(value));
@@ -592,7 +602,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
   if (process.argv[4] === '--read-only' && !['localai-status', 'localai-record', 'native-models-catalogue'].includes(command)) {
     console.error(JSON.stringify({ error: 'Unsupported read-only license operation' })); process.exitCode = 1;
   } else if (command === 'machine-transport') {
-    try { await (await import('./machines/browser-transport.mjs')).browserTransport(process.argv[3]); }
+    try { await (await import('./machines/browser-transport.mjs')).browserTransport(process.argv[3], process.argv[4]); }
     catch (error) { console.error(JSON.stringify({error:error.message})); process.exitCode = 1; }
   } else if (command === 'serve') {
     if (process.env.BASHKITTEN_GUARDED === '1' && Number(process.env.BASHKITTEN_GUARD_PID) === process.ppid) await serve();

@@ -30,20 +30,29 @@ export async function managerAllowed(record) {
 }
 
 export async function runManagerRequest(req, res, record, action) {
+  return runManagerOperation(record, action, {
+    cancel: () => { req.destroy(); res.destroy(); },
+    watch: abort => { res.once('close', abort); return () => res.off('close', abort); },
+  });
+}
+
+// The same admission/drain owner also covers native app callbacks and sockets.
+// Keeping them here makes policy revocation wait for in-flight atomic writes.
+export async function runManagerOperation(record, action, { cancel = () => {}, watch } = {}) {
   const controller = new AbortController();
   const operation = { remote: !record.local, owner: record.key, signal: controller.signal };
   const epoch = generation;
-  operation.cancel = () => { controller.abort(denied()); req.destroy(); res.destroy(); };
+  operation.cancel = () => { controller.abort(denied()); cancel(); };
   operation.finished = new Promise(resolve => { operation.finish = resolve; });
   requests.add(operation);
   const disconnected = () => controller.abort(Error('File request closed'));
-  res.once('close', disconnected);
+  const unwatch = watch?.(disconnected);
   try {
     if (!await managerAllowed(record) || (operation.remote && epoch !== generation)) throw denied();
     controller.signal.throwIfAborted();
-    return await context.run(operation, action);
+    return await context.run(operation, () => action(operation));
   } finally {
-    res.off('close', disconnected); requests.delete(operation); operation.finish();
+    unwatch?.(); requests.delete(operation); operation.finish();
   }
 }
 
@@ -72,7 +81,12 @@ const contains = (root, value) => value === root || value.startsWith(root + path
 export const canonicalManagerPath = value => contains('/data/user/0/com.termux', value)
   ? '/data/data/com.termux' + value.slice('/data/user/0/com.termux'.length) : value;
 const privatePaths = [
+  // All backend-owned state (including Pi credentials and controller logs) is
+  // outside ordinary app sources. Dedicated chat/library/history APIs expose
+  // only their authorized records; Pi's native filesystem tools are unchanged.
+  dataDir,
   ...['access', 'run', 'display', 'llama', 'localai', 'models', 'updates', 'runtimes',
+    'services', 'office-sessions', 'bibliography', 'references',
     'runtime.json', 'control.json', 'server.json', 'settings.json', 'autostart.json'].map(name => path.join(dataDir, name)),
   machineRoot, storageRoot, ...(platform === 'linux' ? [runtimeRoot] : []),
   bundledRoot.replace(/\/$/, ''), authBin, path.join(os.homedir(), '.config/systemd/user'),
@@ -92,18 +106,28 @@ export async function authorizeManagerPath(filename, { tree = false } = {}) {
   const access = managerContext();
   access?.signal.throwIfAborted();
   if (!access?.remote) return;
-  const target = await resolved(filename);
+  return authorizeApplicationPath(filename, { tree });
+}
+export async function privateManagerPaths() {
   const localAI = await readJson(path.join(dataDir, 'localai/config.json'), null);
   const configured = [localAI?.llama?.preset, localAI?.llama?.keyFile,
     ...(localAI?.llama?.mode === 'custom' ? [localAI.llama.binary, ...(localAI.llama.libraries || [])] : [])].filter(value => typeof value === 'string' && path.isAbsolute(value));
-  for (const entry of [...privatePaths, ...configured]) {
-    const root = await resolved(entry);
+  return Promise.all([...privatePaths, ...configured].map(resolved));
+}
+
+// Ordinary app tabs never expose private backend state, including to a local
+// broad home-folder source. Chat attachments retain their separate policy.
+export async function authorizeApplicationPath(filename, { tree = false } = {}) {
+  const access = managerContext();
+  access?.signal.throwIfAborted();
+  const target = await resolved(filename);
+  for (const root of await privateManagerPaths()) {
     if (contains(root, target) || (tree && contains(target, root))) {
       throw Object.assign(Error('This path contains private host configuration'), { status: 403 });
     }
   }
   const stat = await fs.stat(filename).catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
   // A hard link has no canonical pathname back to the protected original.
-  if (stat?.isFile() && stat.nlink !== 1) throw Object.assign(Error('Remote file operations cannot access hard-linked files'), { status: 403 });
-  access.signal.throwIfAborted();
+  if (stat?.isFile() && stat.nlink !== 1) throw Object.assign(Error('File application operations cannot access hard-linked files'), { status: 403 });
+  access?.signal.throwIfAborted();
 }

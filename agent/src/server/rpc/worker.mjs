@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { PiRpc, translateEvent, activeBranch, usageView, displayMessage, queueItem, savedSession } from './rpc.mjs';
-import { readMeta, writeMeta, readJson, writeJson, sessionDir, socketPath, privateDir, json, jsonBody, dataDir, socketRequest } from '../common.mjs';
+import { readMeta, writeMeta, readJson, writeJson, sessionDir, socketPath, privateDir, json, jsonBody, body, dataDir, socketRequest } from '../common.mjs';
 import path from 'node:path';
 import { syncContext } from './context.mjs';
 import { providerRevision } from './services.mjs';
@@ -651,6 +651,25 @@ const extensionServer = http.createServer(async (req, res) => {
     const supplied = Buffer.from(String(req.headers.authorization || '').replace(/^Bearer /, ''));
     const expected = Buffer.from(workerKey);
     if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return json(res, { error: 'Worker authorization required' }, 403);
+    if (req.method === 'POST' && req.url === '/apps') {
+      if (stopping || !rpc || rpc.child.exitCode !== null || rpc.child.killed) return json(res, { error: 'Pi worker is not running' }, 409);
+      const value = JSON.parse((await body(req, 16 * 1024 * 1024)).toString('utf8'));
+      if (!value || !['references', 'office', 'files'].includes(value.component) || Object.keys(value).some(key => !['component', 'method', 'path', 'body'].includes(key))) throw Error('Invalid application operation');
+      const controller = new AbortController();
+      const cancel = () => { if (!res.writableEnded) controller.abort(Error('Application request cancelled')); };
+      req.once('aborted', cancel); res.once('close', cancel);
+      try {
+        // Bind the adopted/forked session here, never accept caller-provided
+        // project grants, participant identities or another backend's authority.
+        const { appsRequest } = await import('../apps/client.mjs');
+        const result = await appsRequest({ ...value, session: id }, { signal: controller.signal });
+        if (!controller.signal.aborted) return json(res, result);
+        return;
+      } catch (error) {
+        if (!controller.signal.aborted) return json(res, { error: error.message,
+          ...(error.code ? { code: error.code } : {}), ...(error.details ? { details: error.details } : {}) }, error.status || 400);
+      } finally { req.removeListener('aborted', cancel); res.removeListener('close', cancel); }
+    }
     if (req.method !== 'POST' || req.url !== '/questions/create') return json(res, { error: 'Unknown worker extension operation' }, 404);
     return json(res, await questionOwner.request(await jsonBody(req)));
   } catch (error) { json(res, { error: error.message }, 400); }

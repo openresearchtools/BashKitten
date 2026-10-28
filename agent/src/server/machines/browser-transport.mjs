@@ -6,7 +6,11 @@ import fs from 'node:fs/promises';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { machineControl } from './index.mjs';
 
-export async function browserTransport(id) {
+export async function browserTransport(id, component) {
+  if (component !== undefined) {
+    if (component !== 'files') throw Error('Unsupported machine application');
+    return applicationTransport(id, component);
+  }
   const endpoint = await machineControl('endpoint', { id });
   const url = new URL(endpoint.url);
   if (url.protocol !== 'https:' || url.hostname !== '127.0.0.1' || url.pathname !== '/' || url.username || url.password) throw Error('Invalid machine HTTPS endpoint');
@@ -67,4 +71,27 @@ export async function browserTransport(id) {
   process.stdin.resume(); process.stdin.once('end', close); process.stdin.once('error',close);
   process.once('SIGTERM',close); process.once('SIGINT',close);
   process.stdout.write(JSON.stringify({ ...endpoint, route: {port:server.address().port, username:'machine',password} }) + '\n');
+}
+
+// The same browser-owned pipe lifetime exposes only the fixed guest app socket.
+// App grants authenticate every HTTP/socket operation; this carrier supplies no
+// Agent cookie, management route or transport to another backend.
+async function applicationTransport(id, component) {
+  const endpoint = await machineControl('application-endpoint', { id, component });
+  const stat = await fs.stat(endpoint.socketPath);
+  if (!stat.isSocket() || stat.uid !== process.getuid()) throw Error('Machine application endpoint is not an owned Unix socket');
+  const sockets = new Set();
+  const track = socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); socket.on('error', () => socket.destroy()); return socket; };
+  const server = net.createServer(client => {
+    track(client); client.pause();
+    const upstream = track(net.createConnection(endpoint.socketPath));
+    client.once('close', () => upstream.destroy()); upstream.once('close', () => client.destroy());
+    upstream.once('connect', () => { client.pipe(upstream); upstream.pipe(client); client.resume(); });
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  const port = server.address().port;
+  const close = () => { for (const socket of sockets) socket.destroy(); server.close(); };
+  process.stdin.resume(); process.stdin.once('end', close); process.stdin.once('error', close);
+  process.once('SIGTERM', close); process.once('SIGINT', close);
+  process.stdout.write(JSON.stringify({ machineId: id, component, url: `https://127.0.0.1:${port}`, port }) + '\n');
 }

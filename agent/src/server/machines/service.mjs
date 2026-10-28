@@ -702,6 +702,16 @@ async function action(name,value={},requestSignal) {
     const session=await guestCall(value.id,'local-session');
     return {...session,socketPath:path.join(r.files.exchange,'agent-https.sock'),controlSocket:path.join(r.files.exchange,'agent/control.sock'),machineId:value.id};
   }
+  if(name==='application-endpoint') {
+    if(value.component!=='files')throw Error('Unsupported container application');
+    const info=await inspect(value.id);if(!info?.State?.Running)throw Error('Start this machine before connecting');
+    // The guest backend creates this fixed private endpoint on first app use.
+    // No browser-supplied address or path can broaden the machine carrier.
+    const socketPath=path.join(r.files.exchange,'agent/apps.sock');
+    const endpoint=await fs.stat(socketPath).catch(()=>null);
+    if(!endpoint?.isSocket())throw Error('Open Files in this container before connecting its application tab');
+    return {socketPath,machineId:value.id,component:'files'};
+  }
   if(name==='display') {
     const info=await inspect(value.id);
     if(!info?.State?.Running)throw Error('Start this container before opening Display');

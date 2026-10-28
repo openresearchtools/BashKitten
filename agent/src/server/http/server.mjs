@@ -11,7 +11,7 @@ import { createPhoneWorkerSlot, withoutPhoneIssuers } from '../phone/owner.mjs';
 import { handleGuestBrowser } from '../access/guest-browser.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { loadPi, allowRuntimeWork } from '../rpc/runtime.mjs';
-import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, createJson, json, jsonBody, formBody, workerRequest, safeName, withinRoot, allMeta } from '../common.mjs';
+import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, createJson, json, jsonBody, body, formBody, workerRequest, safeName, withinRoot, allMeta } from '../common.mjs';
 import { displayMessage, queueItem, savedSession } from '../rpc/rpc.mjs';
 import { bindMessageEntries, unconsumedMessages } from '../rpc/message-presentation.mjs';
 import { ensureManager, controlRequest } from '../control.mjs';
@@ -19,9 +19,7 @@ import * as auth from './web-auth.mjs';
 import { Services } from '../rpc/services.mjs';
 import { gitChanges, gitDiff } from '../files/git.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
-import { fileDirectory, filePath, referencedFile, sessionImage, listFiles, sendFile, uploadFiles, saveAttachments } from '../files/files.mjs';
-import { startFileJob, fileJob, cancelFileJob, downloadFileJob, sendZip, closeFileJobs, revokeRemoteFileJobs } from '../files/jobs.mjs';
-import { prepareAndSendFile, closeFilePreviews, revokeRemotePreviews } from '../files/previews.mjs';
+import { fileDirectory, filePath, referencedFile, sessionImage, sendFile, saveAttachments } from '../files/files.mjs';
 import { managerAllowed, managerContext, authorizeManagerPath, runManagerRequest, refreshManagerPolicy, watchManagerPolicy } from '../files/access.mjs';
 import { syncContext } from '../rpc/context.mjs';
 import { platform } from '../platform/index.mjs';
@@ -35,6 +33,7 @@ import { subagentSettings, readSubagentSettings, saveSubagentSettings } from '..
 import { SubagentChats } from '../rpc/subagent-chats.mjs';
 import { stopSavedQuestions } from '../rpc/questions.mjs';
 import { projects, createProject, renameProject, removeProject, moveChat, forgetChat, projectDirectory } from '../projects.mjs';
+import { ApplicationModules } from '../apps/index.mjs';
 
 process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
@@ -71,6 +70,10 @@ await syncContext();
 const here = path.dirname(fileURLToPath(import.meta.url));
 const scheme = 'https';
 const services = new Services(), starts = new Map();
+const apps = new ApplicationModules({ auth, resolveSession: async id => {
+  const meta = await readMeta(id), catalogue = await projects();
+  return { id, cwd: (await savedSession(meta))?.getCwd() || meta.cwd, projectId: catalogue.chats[id] || null };
+} });
 const subagents = new SubagentChats({ createSession, ensureWorker, running });
 const phoneBackend = new PhoneBackend({ listSessions: sessionList, createSession, ensureWorker, running });
 const configFile = path.join(dataDir, 'settings.json');
@@ -204,6 +207,10 @@ async function deleteSession(id) {
   await forgetChat(id);
 }
 function requireMethod(req, allowed) { if (!allowed.includes(req.method)) throw Object.assign(Error('Method not allowed'), { status: 405 }); }
+async function applicationBody(req) {
+  const bytes = await body(req, 16 * 1024 * 1024);
+  try { return bytes.length ? JSON.parse(bytes.toString('utf8')) : {}; } catch { throw Error('Invalid application JSON request'); }
+}
 const logo = await fs.readFile(path.join(here, '../../web/logo.png'));
 const favicon = await fs.readFile(path.join(here, '../../web/favicon.ico'));
 const logoUrl = '/logo.png?v=' + createHash('sha256').update(logo).digest('hex');
@@ -229,51 +236,17 @@ async function selectedFile(url) {
 }
 async function fileRequest(req, res, url, record) {
   const route = url.pathname, mutation = !['GET', 'HEAD'].includes(req.method);
-  if (route === '/api/files/previews/content') {
-    requireMethod(req, ['GET']);
-    if (url.searchParams.size !== 2 ||
-        (url.searchParams.getAll('root').length !== 1 && url.searchParams.getAll('session').length !== 1) ||
-        url.searchParams.getAll('path').length !== 1) {
-      throw Object.assign(Error('Choose a file to view'), { status: 400 });
-    }
-    return await prepareAndSendFile(req, res, await selectedFile(url), close => auth.watch(record, close));
-  }
   if (route === '/api/folders') {
     requireMethod(req, ['GET', 'POST']);
     if (mutation) { const input = await jsonBody(req); const parent = (await pickerDirectory(input.parent)).path; const folder = path.join(parent, safeName(input.name)); await authorizeManagerPath(folder); await fs.mkdir(folder, { mode: 0o700 }); return json(res, { path: folder }); }
     return json(res, await listFolders(url.searchParams.get('path') || config.default_cwd, url.searchParams.get('nearest') === 'true'));
   }
-  if (route === '/api/files/jobs') {
-    requireMethod(req, ['POST']); return json(res, await startFileJob(await jsonBody(req)), 202);
-  }
-  if (route === '/api/files/archive' && req.method === 'POST') {
-    const { root } = await jsonBody(req);
-    return json(res, await startFileJob({ operation: 'archive', root, paths: [''] }, { whole: true }), 202);
-  }
-  const fileJobRoute = route.match(/^\/api\/files\/jobs\/([a-f0-9-]{36})(?:\/(cancel|download))?$/);
-  if (fileJobRoute) {
-    const [, id, action] = fileJobRoute;
-    requireMethod(req, action === 'cancel' ? ['POST'] : ['GET']);
-    if (action === 'cancel') return json(res, cancelFileJob(id));
-    if (action === 'download') return await downloadFileJob(req, res, id);
-    return json(res, fileJob(id));
-  }
-  if (route === '/api/files' || route === '/api/files/content' || route === '/api/files/archive') {
-    requireMethod(req, route === '/api/files' ? ['GET', 'POST'] : ['GET', 'HEAD']);
-    if (route === '/api/files/content' && url.searchParams.has('session')) {
-      const selection = await selectedFile(url);
-      return await sendFile(req, res, await filePath(selection.root, selection.path), url.searchParams.get('download') === 'true');
-    }
-    const root = (await fileDirectory(url.searchParams.get('root'))).path;
-    const relative = url.searchParams.get('path') || '';
-    if (route.endsWith('/content')) return await sendFile(req, res, await filePath(root, relative), url.searchParams.get('download') === 'true');
-    if (route.endsWith('/archive')) return await sendZip(req, res, root);
-    if (mutation) {
-      const form = await formBody(req);
-      try { return json(res, { saved: await uploadFiles(root, relative, form.getAll('file')) }); }
-      finally { await form.cleanup(); }
-    }
-    return json(res, await listFiles(root, relative));
+  // Shared transcript/native file access remains; Quantum owns browsing,
+  // mutations, transfers and archives. Removed manager endpoints return 404.
+  if (route === '/api/files/content') {
+    requireMethod(req, ['GET', 'HEAD']);
+    const selection = await selectedFile(url);
+    return await sendFile(req, res, await filePath(selection.root, selection.path), url.searchParams.get('download') === 'true');
   }
   if (route === '/api/git/changes' || route === '/api/git/diff') {
     requireMethod(req, ['GET']);
@@ -305,11 +278,24 @@ async function handler(req, res) {
       if (req.method !== 'GET' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
       return json(res, { pid: process.pid, instance: instanceToken });
     }
+    if (route === '/api/instance/apps') {
+      if (req.method !== 'POST' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
+      const input = await applicationBody(req);
+      if (input.session) await readMeta(input.session);
+      const controller = new AbortController(), cancel = () => controller.abort(Error('Application caller disconnected'));
+      res.once('close', cancel);
+      try { return json(res, await apps.request(input, auth.localAuthority(), { signal: controller.signal, workerId: input.session })); }
+      catch (error) {
+        const details = error.details && Object.fromEntries(['operationId', 'reason', 'version', 'hash', 'message'].filter(key => typeof error.details[key] === 'string').map(key => [key, error.details[key].slice(0, 16000)]));
+        return json(res, { error: error.message, code: typeof error.code === 'string' ? error.code : undefined, ...(details ? { details } : {}) }, error.status || 400);
+      }
+      finally { res.off('close', cancel); }
+    }
     if (route === '/api/instance/file-manager') {
       if (req.method !== 'POST' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
       const { block } = await jsonBody(req);
       if (typeof block !== 'boolean') throw Error('Choose file-manager policy transition');
-      await refreshManagerPolicy(async () => { await Promise.all([revokeRemoteFileJobs(), revokeRemotePreviews()]); }, block);
+      await refreshManagerPolicy(() => apps.revokeRemote(), block);
       return json(res, { ok: true });
     }
     if (route === '/api/instance/provider-login') {
@@ -351,6 +337,32 @@ async function handler(req, res) {
     if (route === '/api/bootstrap') { requireMethod(req, ['GET']); return json(res, { ...await auth.bootstrap(record), fileManager: await managerAllowed(record) }); }
     if (!record) throw Object.assign(Error('Sign in to BashKitten'), { status: 401 });
     if (mutation) auth.checkCsrf(req, record);
+    if (route === '/api/apps/resolve') {
+      requireMethod(req, ['POST']);
+      return json(res, await apps.resolve(await applicationBody(req), record));
+    }
+    const appOpen = /^\/api\/apps\/(files|references)\/open$/.exec(route);
+    if (appOpen) {
+      requireMethod(req, ['POST']);
+      return json(res, await apps.open(appOpen[1], await applicationBody(req), record));
+    }
+    if (route === '/api/references/connector') {
+      requireMethod(req, ['POST']);
+      const controller = new AbortController(), cancel = () => controller.abort(Error('References caller disconnected'));
+      res.once('close', cancel);
+      try { return json(res, await apps.connector(await applicationBody(req), record, { signal: controller.signal })); }
+      finally { res.off('close', cancel); }
+    }
+    if (route.startsWith('/api/references/')) {
+      requireMethod(req, ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+      const controller = new AbortController(), cancel = () => controller.abort(Error('References caller disconnected'));
+      res.once('close', cancel);
+      try {
+        const result = await apps.request({ component: 'references', method: req.method, path: route.slice('/api/references'.length) + url.search,
+          body: mutation ? await applicationBody(req) : undefined }, record, { signal: controller.signal });
+        return apps.sendResult(req, res, result, record);
+      } finally { res.off('close', cancel); }
+    }
     if (/^\/api\/(?:files|folders|git)(?:\/|$)/.test(route)) {
       const stopWatching = auth.watch(record, () => { req.destroy(); res.destroy(); });
       try { return await runManagerRequest(req, res, record, () => fileRequest(req, res, url, record)); }
@@ -606,4 +618,4 @@ for (const meta of await allMeta()) if (await running(meta.id)) {
   await workerRequest(meta.id, '/context', {}).catch(() => {});
 }
 console.log('BashKitten private Pi RPC backend ready');
-process.on('SIGTERM', () => { closeBrowserChannels(); activeServer.close(); activeServer.closeAllConnections(); Promise.allSettled([services.cancel(), closeFileJobs(), closeFilePreviews()]).finally(() => process.exit(0)); });
+process.on('SIGTERM', () => { closeBrowserChannels(); activeServer.close(); activeServer.closeAllConnections(); Promise.allSettled([services.cancel(), apps.close()]).finally(() => process.exit(0)); });

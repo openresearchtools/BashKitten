@@ -17,11 +17,17 @@ export async function login(req) {
     if (requestOrigin !== localOrigin || !localCookieName || !localToken) return null;
     const values = String(req.headers.cookie || '').split(';').map(part => part.trim()).filter(part => part.startsWith(localCookieName + '='));
     if (values.length !== 1 || !equal(values[0].slice(localCookieName.length + 1), localToken)) return null;
-    return { local: true, username: 'local', cookie: localToken, key: createHash('sha256').update('local\0' + localToken).digest('hex'), origin: requestOrigin };
+    return localAuthority();
   }
   if (req.headers['x-bashkitten-access'] !== 'remote') return null;
   const username = req.headers['remote-user'], cookie = req.headers.cookie;
   return typeof username === 'string' && username && cookie ? { username, cookie, key: createHash('sha256').update(cookie).digest('hex'), origin: origin(req) } : null;
+}
+// For authenticated private worker/controller operations only. This record never
+// crosses an API boundary and is checked/revoked by the same web-session owner.
+export function localAuthority() {
+  if (!localOrigin || !localToken) throw Error('The local backend identity is unavailable');
+  return { local: true, username: 'local', cookie: localToken, key: createHash('sha256').update('local\0' + localToken).digest('hex'), origin: localOrigin };
 }
 export function checkOrigin(req) {
   if (req.headers.origin !== origin(req)) throw Object.assign(Error('Invalid request origin'), { status: 403 });

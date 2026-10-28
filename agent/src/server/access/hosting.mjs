@@ -17,6 +17,7 @@ const runningDir = path.join(accessDir, 'services');
 const script = fileURLToPath(import.meta.url), exec = promisify(execFile);
 const idPattern = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const localAI = id => ['localai-llama', 'localai-whisper'].includes(id);
+const applications = new Set(['files', 'quantum', 'office', 'office-addon', 'office-wopi', 'references']);
 const unit = id => `bashkitten-service-${id}.scope`;
 // Managed guests have their own session supervisor, not a systemd user manager.
 // Capture the controller's execution role before applying a command environment.
@@ -44,7 +45,9 @@ function definition(value) {
     command = { argv, cwd, env };
   }
   if (value.startup && !command) throw Error('Launch on startup needs an owned command');
+  if (value.application !== undefined && (!applications.has(value.application) || value.application !== value.id)) throw Error('Invalid managed application identity');
   return { id: value.id, name: value.name.trim(), target: target(value.target), kind: value.kind, scheme: value.scheme,
+    ...(value.application ? { application: value.application } : {}),
     openPath: value.openPath, enabled: value.enabled, startup: value.startup, command };
 }
 function reachable(endpoint) {
@@ -58,7 +61,7 @@ function reachable(endpoint) {
 
 /** One host catalogue; commands are private. Remote clients receive IDs/state only. */
 export class HostedServices {
-  constructor(stack) { this.stack = stack; this.running = new Map(); this.published = new Set(); }
+  constructor(stack) { this.stack = stack; this.running = new Map(); this.published = new Set(); this.starts = new Map(); this.preparing = new Map(); this.stopping = false; this.generation = 0; this.reconcile = Promise.resolve(); }
   async entries() {
     const saved = await readJson(stateFile, { version: 2, services: [] });
     if (saved.version !== undefined && saved.version !== 2) throw Error('Unsupported saved service version');
@@ -100,12 +103,24 @@ export class HostedServices {
     this.published.delete(id);
   }
   async save(value) {
+    const operation = this.reconcile.then(() => this.saveEntry(value));
+    this.reconcile = operation.catch(() => {}); return operation;
+  }
+  async saveEntry(value) {
     const entries = await this.entries();
     if (value.revision !== digest(JSON.stringify(entries))) throw Error('Services changed. Refresh before saving.');
     if (localAI(value.service?.id) && !value.internal) throw Error('Configure this service in LocalAI');
-    const entry = definition({ ...value.service, id: value.service?.id || randomUUID() });
+    let entry = definition({ ...value.service, id: value.service?.id || randomUUID() });
     if (entry.id === 'localai-whisper' && entry.enabled) throw Error('Whisper is available only through authenticated dictation');
     const index = entries.findIndex(item => item.id === entry.id);
+    if (entries[index]?.application) {
+      const saved = entries[index];
+      // Native Settings edits the existing startup/publication choices. The
+      // packaged component retains its service target, identity and command.
+      entry = definition({ ...saved, enabled: entry.enabled, startup: entry.startup });
+      if (!['files', 'references'].includes(entry.application) && entry.enabled) throw Error('This internal application service is available only through its authenticated web gateway');
+      if (['office-addon', 'office-wopi'].includes(entry.application) && entry.startup) throw Error('Office starts this dependency with its authenticated storage owner');
+    } else if (entry.application && !value.internal) throw Error('Application identities are registered by their native component');
     if (index >= 0 && JSON.stringify(entries[index]) === JSON.stringify(entry)) return this.status();
     if (index >= 0 && (!entry.enabled || JSON.stringify(entries[index].target) !== JSON.stringify(entry.target) || JSON.stringify(entries[index].command) !== JSON.stringify(entry.command))) await this.unpublish(entry.id);
     if (index === -1) entries.push(entry); else entries[index] = entry;
@@ -113,6 +128,10 @@ export class HostedServices {
     await this.publish(); return this.status();
   }
   async remove(value) {
+    const operation = this.reconcile.then(() => this.removeEntry(value));
+    this.reconcile = operation.catch(() => {}); return operation;
+  }
+  async removeEntry(value) {
     const entries = await this.entries();
     if (localAI(value.id)) throw Error('Configure this service in LocalAI');
     if (value.revision !== digest(JSON.stringify(entries))) throw Error('Services changed. Refresh before removing.');
@@ -134,12 +153,21 @@ export class HostedServices {
     await this.publish(); return this.status({ remote });
   }
   async start(entry) {
+    if (this.stopping) throw Error('Hosted services are stopping');
+    if (this.starts.has(entry.id)) return this.starts.get(entry.id);
+    const pending = this.startOwned(entry);
+    this.starts.set(entry.id, pending);
+    try { return await pending; } finally { this.starts.delete(entry.id); }
+  }
+  async startOwned(entry) {
+    const generation = this.generation;
     if (this.running.get(entry.id)?.child) return;
     const { argv, cwd } = entry.command;
     await fs.access(argv[0], fs.constants.X_OK);
     if (!(await fs.stat(cwd)).isDirectory()) throw Error('The service working directory no longer exists');
     await privateDir(runningDir);
     await writeJson(path.join(runningDir, entry.id + '.json'), entry);
+    if (this.stopping || generation !== this.generation) throw Error('Hosted services are stopping');
     const child = spawn(binary('runtime-guard'), [process.execPath, script, entry.id, 'serve'], { stdio: ['ignore', 'pipe', 'pipe'] });
     const owner = { child, state: 'starting', error: '', output: '', revision: digest(JSON.stringify(entry)), stopping: false };
     this.running.set(entry.id, owner);
@@ -168,6 +196,7 @@ export class HostedServices {
     owner.state = 'running';
   }
   async stop(id) {
+    await this.starts.get(id)?.catch(() => {});
     const owner = this.running.get(id);
     if (!owner?.child) return;
     owner.stopping = true; owner.state = 'stopping';
@@ -191,9 +220,60 @@ export class HostedServices {
     }
   }
   async stopAll() {
+    this.stopping = true; this.generation++;
+    await Promise.allSettled([...this.starts.values()]);
     const results = await Promise.allSettled([...this.running.keys()].map(id => this.stop(id)));
+    this.stopping = false;
     const failure = results.find(result => result.status === 'rejected');
     if (failure) throw failure.reason;
+  }
+
+  // Native app modules supply only their own launch/configuration. The existing
+  // catalogue, saved autostart choices, guard and lifetime remain authoritative.
+  async ensureApplication(value, { start = true, restart = false } = {}) {
+    if (!applications.has(value?.id)) throw Error('Unknown application service');
+    const generation = this.generation;
+    const proposed = definition({ ...value, application: value.id }), key = proposed.id;
+    const previous = this.preparing.get(key);
+    if (previous) {
+      await previous;
+      return this.ensureApplication(value, { start, restart });
+    }
+    const pending = (async () => {
+      let entry;
+      const reconcile = this.reconcile.then(async () => {
+        const entries = await this.entries(), index = entries.findIndex(item => item.id === key);
+        const saved = entries[index];
+        if (saved && saved.application !== key) throw Error(`The service ID ${key} already belongs to a user-configured service. Rename that service before installing this application.`);
+        entry = definition({ ...proposed, ...(saved ? { startup: saved.startup, enabled: saved.enabled } : {}) });
+        if (saved && JSON.stringify(saved.command) !== JSON.stringify(entry.command) && this.running.get(key)?.child) {
+          if (!restart) throw Error(`${entry.name} configuration changed. Restart the owning backend before replacing its running component.`);
+          await this.stop(key);
+        }
+        if (saved && JSON.stringify(saved) === JSON.stringify(entry)) return;
+        if (index < 0) entries.push(entry); else entries[index] = entry;
+        await writeJson(stateFile, { version: 2, services: entries });
+        await this.publish();
+      });
+      this.reconcile = reconcile.catch(() => {}); await reconcile;
+      if (generation !== this.generation || this.stopping || !this.stack.ready || this.stack.stopping) throw Error('The owning backend is stopping');
+      if (start && entry.command) {
+        // A live port alone cannot prove process ownership. Never adopt an
+        // unrelated service left at the configured target after a crash.
+        if (!this.running.get(key)?.child && await reachable(entry.target)) throw Error(`${entry.name} endpoint is already occupied by an unowned process`);
+        await this.start(entry);
+        for (const deadline = Date.now() + 120000; Date.now() < deadline;) {
+          const owner = this.running.get(key);
+          if (this.stopping || !owner?.child || owner.stopping) throw Error(owner?.error || `${entry.name} stopped during startup`);
+          if (await reachable(entry.target)) return { id: key, target: entry.target, scheme: entry.scheme };
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        throw Error(`${entry.name} did not become ready. Inspect the service output.`);
+      }
+      return { id: key, target: entry.target, scheme: entry.scheme };
+    })();
+    this.preparing.set(key, pending);
+    try { return await pending; } finally { this.preparing.delete(key); }
   }
 }
 

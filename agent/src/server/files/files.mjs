@@ -8,7 +8,6 @@ import { authorizeManagerPath, managerContext } from './access.mjs';
 import { fileURLToPath } from 'node:url';
 import { dataDir, privateDir, safeName } from '../common.mjs';
 import { platform, projectLocations } from '../platform/index.mjs';
-import { previewKind } from './preview-types.mjs';
 
 const types = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.bmp': 'image/bmp', '.avif': 'image/avif', '.ico': 'image/x-icon', '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/plain', '.json': 'application/json', '.html': 'text/html', '.js': 'text/plain', '.ts': 'text/plain', '.css': 'text/plain', '.csv': 'text/csv', '.zip': 'application/zip', '.mp3': 'audio/mpeg', '.mp4': 'video/mp4' };
 export const mimeType = filename => types[path.extname(filename).toLowerCase()] || 'application/octet-stream';
@@ -95,46 +94,15 @@ export async function sessionImage(meta, reference, view) {
   if (!mimeType(file).startsWith('image/')) throw Object.assign(Error('This file is not a supported image'), { status: 415 });
   return file;
 }
-export async function listFiles(root, relative = '') {
-  const location = await fileDirectory(root);
-  root = location.path;
-  const dir = await filePath(root, relative);
-  if (!(await fs.stat(dir)).isDirectory()) throw Error('Choose a folder');
-  // Following a directory link can change the canonical root; clients use the
-  // returned root/currentPath rather than manufacture parent-traversal paths.
-  if (!containsPath(root, dir)) root = dir;
-  const entries = [];
-  for (const file of await fs.readdir(dir, { withFileTypes: true })) {
-    // External/dangling links remain selectable for copying/deleting the link itself.
-    const rel = path.relative(root, path.join(dir, file.name));
-    try {
-      const real = canonicalPath(await fs.realpath(path.join(dir, file.name)));
-      await authorizeManagerPath(real);
-      if (!containsPath(location.scopeRoot, real)) throw Error('Outside available files');
-      const stat = await fs.stat(real);
-      const kind = stat.isFile() ? await previewKind(real, file.name).catch(error => {
-        if (error.status === 403 || managerContext()?.signal.aborted) throw error;
-        return null;
-      }) : null;
-      entries.push({ name: file.name, path: rel, directory: stat.isDirectory(), symlink: file.isSymbolicLink(), size: stat.size, previewKind: kind });
-    } catch (error) { if (error.status === 403) continue; entries.push({ name: file.name, path: rel, blocked: true, symlink: file.isSymbolicLink() }); }
-  }
-  entries.sort((a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name));
-  return { root, path: path.relative(root, dir), currentPath: dir, parent: dir === location.scopeRoot ? null : path.dirname(dir), scopeRoot: location.scopeRoot, entries };
-}
-export async function sendFile(req, res, file, download = false, name = path.basename(file), { artifact = false, generatedPreview = false } = {}) {
-  if (!artifact) await authorizeManagerPath(file);
+export async function sendFile(req, res, file, download = false, name = path.basename(file)) {
+  await authorizeManagerPath(file);
   const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
-    if (!artifact) await authorizeManagerPath(`/proc/self/fd/${handle.fd}`);
+    await authorizeManagerPath(`/proc/self/fd/${handle.fd}`);
     const stat = await handle.stat();
     if (!stat.isFile()) throw Error('Choose a regular file');
-    // Only our generated standalone viewer may run its nonce-authorized code.
-    // Its own meta policy further restricts scripts; its document iframe remains
-    // opaque. Raw repository HTML/SVG keeps the script-disabled sandbox below.
-    const policy = artifact && generatedPreview && mimeType(file) === 'text/html'
-      ? "sandbox allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; frame-src 'self' about: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
-      : "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:";
+    // Repository HTML/SVG remains a passive download, never application code.
+    const policy = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:";
     const headers = { 'Content-Type': mimeType(file), 'Content-Length': stat.size,
       'Content-Disposition': disposition(name, download), 'X-Content-Type-Options': 'nosniff',
       'Content-Security-Policy': policy, 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store' };
@@ -142,17 +110,6 @@ export async function sendFile(req, res, file, download = false, name = path.bas
     if (req.method === 'HEAD') { res.end(); return; }
     await pipeline(handle.createReadStream({ autoClose: false }), res, { signal: managerContext()?.signal });
   } finally { await handle.close(); }
-}
-export async function uploadFiles(root, relative, files) {
-  const dir = await filePath(root, relative), saved = [];
-  if (!(await fs.stat(dir)).isDirectory()) throw Error('Upload destination is not a folder');
-  for (const file of files) {
-    const target = path.join(dir, safeName(file.name));
-    await authorizeManagerPath(target);
-    await storeUpload(file, target);
-    saved.push(path.relative(root, target));
-  }
-  return saved;
 }
 export async function saveAttachments(files) {
   if (!files.length) return [];
