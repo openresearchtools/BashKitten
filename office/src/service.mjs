@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { NativeOfficeSession, OfficeError } from './native-session.mjs';
 import { nativeOperation } from '../extension/kit.mjs';
 import { runCitationCommand } from '../extension/citations.mjs';
@@ -15,9 +16,24 @@ const ownerKey = identity => {
 
 // AuthorizeOpen belongs to the existing backend + WOPI file owner. Caller-supplied
 // tokens, origins and paths cannot become a session grant through this module.
-export function createOfficeService({ authorizeOpen, authorizeSession, authorizeSnapshot, references, sessionOptions = {}, Session = NativeOfficeSession } = {}) {
+export function createOfficeService({ authorizeOpen, authorizeSession, authorizeRenew, authorizeSnapshot, references, sessionOptions = {}, Session = NativeOfficeSession } = {}) {
   if (typeof authorizeOpen !== 'function') throw new Error('Office requires the backend authorized-open owner');
   const sessions = new Map(), opening = new Map();
+  async function connectNative(grant, signal) {
+    const timeoutMs = sessionOptions.timeoutMs ?? 60000, deadline = Date.now() + timeoutMs;
+    for (let attempt = 1; ; attempt++) {
+      const native = new Session(grant, { ...sessionOptions, timeoutMs: Math.max(1, deadline - Date.now()) });
+      try { await native.connect({ signal }); native.timeoutMs = timeoutMs; return native; }
+      catch (error) {
+        native.close();
+        // Match the released client's bounded quadratic retry for the broker's
+        // explicit unloading response. No edit, save or permission failure is replayed.
+        const pause = 500 * attempt * attempt;
+        if (error.code !== 'document_unloading' || attempt >= 10 || Date.now() + pause >= deadline) throw error;
+        await delay(pause, undefined, { signal });
+      }
+    }
+  }
   async function open(body, identity, signal) {
     const owner = ownerKey(identity);
     const grant = await authorizeOpen(body, identity, { signal });
@@ -26,10 +42,11 @@ export function createOfficeService({ authorizeOpen, authorizeSession, authorize
     for (const session of sessions.values()) if (session.key === key && !session.native.closed) return describe(session);
     if (opening.has(key)) return opening.get(key);
     const task = (async () => {
-      const native = new Session(grant, sessionOptions);
+      const native = await connectNative(grant, signal);
       try {
-        await native.connect({ signal });
-        const { value: capabilities } = await native.call(nativeOperation, { operation: 'capabilities' }, { signal });
+        if (authorizeRenew) native.startTokenRenewal((current, options) => authorizeRenew(current, identity, options));
+        const canScript = native.scriptingAllowed;
+        const capabilities = canScript ? (await native.call(nativeOperation, { operation: 'capabilities' }, { signal })).value : { documentType: native.status?.type, readOnly: true, nativeUno: false, nativeTextInspection: true, citationMetadataAvailable: false };
         const session = { id: native.id, key, owner, projectId: grant.projectId || identity.projectId || body.projectId, grantId: identity.grantId, identity, native, grant, capabilities };
         sessions.set(session.id, session); native.once('closed', () => sessions.delete(session.id));
         return describe(session);
@@ -52,6 +69,7 @@ export function createOfficeService({ authorizeOpen, authorizeSession, authorize
     return runCitationCommand({
       invoke: async (operation, options) => (await session.native.call(nativeOperation, operation, options)).value,
       renderDocument: (state, options) => references.renderDocument(state, { ...options, identity: session.identity, projectId: session.projectId }),
+      importSnapshots: typeof references.importSnapshots === 'function' ? (body, options) => references.importSnapshots(body, { ...options, identity: session.identity, projectId: session.projectId }) : undefined,
       documentType: session.native.status?.type, projectId: session.projectId, request, signal,
     });
   }
@@ -60,6 +78,8 @@ export function createOfficeService({ authorizeOpen, authorizeSession, authorize
     const session = owned(sessionId, identity);
     await authorizeSession?.(session.identity, { signal });
     if (!request || typeof request.operation !== 'string') throw new OfficeError('invalid_operation', 'An Office operation is required');
+    if (request.operation === 'capabilities') return session.native.scriptingAllowed ? session.capabilities : { documentType: session.native.status?.type, readOnly: true, nativeUno: false, nativeTextInspection: true, citationMetadataAvailable: false };
+    if (request.operation === 'inspect' && !session.native.scriptingAllowed) return session.native.inspectReadOnly({ range: request.range, signal });
     if (request.operation === 'save') return session.native.save({ signal });
     if (request.operation === 'export') {
       if (Object.keys(request).some(key => !['operation', 'format', 'name'].includes(key))) throw new OfficeError('invalid_export', 'Export accepts format and name; unlinking or output paths need an explicit copy operation');
@@ -68,7 +88,9 @@ export function createOfficeService({ authorizeOpen, authorizeSession, authorize
     if (request.operation === 'export.copy') {
       if (Object.keys(request).some(key => !['operation', 'format', 'name'].includes(key))) throw new OfficeError('invalid_export', 'A static citation copy accepts only format and name');
       const copied = await session.native.saveCopy({ ...request, signal });
-      const description = await open({ documentId: copied.documentId, projectId: session.projectId }, session.identity, signal);
+      let description;
+      try { description = await open({ documentId: copied.documentId, projectId: session.projectId }, session.identity, signal); }
+      catch (error) { error.details = { ...error.details, copyDocumentId: copied.documentId, sourceDocumentId: session.grant.documentId }; throw error; }
       const copy = owned(description.sessionId, session.identity);
       try {
         const { value: state } = await copy.native.call(nativeOperation, { operation: 'citations.inspect' }, { signal });
@@ -119,8 +141,8 @@ export function createOfficeService({ authorizeOpen, authorizeSession, authorize
     },
     async coordinateNativeRestore(documentId, { grant, signal } = {}) {
       if (!grant || grant.documentId !== documentId || grant.mode !== 'edit') throw new OfficeError('invalid_grant', 'Native history restore needs an authorized editable document grant');
-      const native = new Session(grant, sessionOptions);
-      try { await native.connect({ signal }); return await native.prepareRestore({ signal }); }
+      const native = await connectNative(grant, signal);
+      try { return await native.prepareRestore({ signal }); }
       finally { native.close(); }
     },
     close() { for (const session of sessions.values()) session.native.close(); sessions.clear(); },

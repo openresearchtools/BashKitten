@@ -17,7 +17,7 @@ try {
   const cluster = await chooseCitation({ api, projectId: context.projectId, initial: invocation.initial, style: invocation.style, preview: async (cluster, { signal } = {}) => {
     const { operation, id, target, documentType } = invocation;
     const result = await runCitationCommand({ invoke, renderDocument, documentType, projectId: context.projectId, request: { operation, id, target, cluster }, signal, preview: true });
-    const citation = id ? result.state.citations.find(c => c.id === id) : result.state.citations.find(c => c.target);
+    const citation = result.state.citations.find(c => c.id === result.occurrenceId);
     return { html: citation?.html || '', text: citation?.text || '', sortedItems: citation?.sortedItems || citation?.items, sortable: result.rendered.style.sortable };
   } });
   if (cluster) window.cool.dialog.close(cluster); else window.cool.dialog.cancel();

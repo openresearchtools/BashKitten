@@ -15,6 +15,7 @@ export function nativeWebSocketUrl(grant) {
   if (!['http:', 'https:'].includes(source.protocol) || source.username || source.password || source.hash) throw new OfficeError('invalid_grant', 'Invalid WOPI source');
   const documentUri = new URL(source);
   documentUri.searchParams.set('access_token', grant.accessToken);
+  if (Number.isFinite(grant.accessTokenTtl) && grant.accessTokenTtl > 0) documentUri.searchParams.set('access_token_ttl', String(grant.accessTokenTtl));
   documentUri.searchParams.set('permission', grant.mode === 'edit' ? 'edit' : 'readonly');
   office.protocol = office.protocol === 'https:' ? 'wss:' : 'ws:';
   const root = grant.editorInternalURL || grant.editorBaseUrl ? office.pathname.replace(/\/$/, '') : '';
@@ -31,11 +32,14 @@ export class NativeOfficeSession extends EventEmitter {
     this.grant = grant; this.WebSocketImpl = WebSocketImpl; this.timeoutMs = timeoutMs;
     this.maxMessageBytes = maxMessageBytes; this.verifyRelease = verifyRelease;
     this.id = randomUUID(); this.pending = new Map(); this.waiters = new Set(); this.tail = Promise.resolve();
-    this.status = null; this.wopi = null; this.server = null; this.uncertain = null; this.closed = false;
+    this.status = null; this.wopi = null; this.fileMode = null; this.permission = null; this.server = null; this.uncertain = null; this.closed = false;
+    this.lifetime = new AbortController(); this.renewalTimer = null; this.renewal = null; this.renewalAttempts = 0;
   }
   async connect({ signal } = {}) {
     const { url, loadUrl } = nativeWebSocketUrl(this.grant);
-    const ready = this.waitFor(message => message.startsWith('status:'), { signal });
+    // The native broker sends filemode/perm independently of the kit status.
+    // A lock failure can make an otherwise writable WOPI grant read-only.
+    const ready = this.waitFor(() => Boolean(this.status && this.wopi && this.fileMode), { signal });
     this.socket = new this.WebSocketImpl(url); this.socket.binaryType = 'arraybuffer';
     this.socket.addEventListener('open', () => {
       this.send('coolclient ' + SUPPORTED_RELEASE.protocol);
@@ -43,7 +47,7 @@ export class NativeOfficeSession extends EventEmitter {
     });
     this.socket.addEventListener('message', event => this.receive(event.data));
     this.socket.addEventListener('error', () => this.fail(new OfficeError('connection_failed', 'The authenticated Office connection failed')));
-    this.socket.addEventListener('close', () => { this.closed = true; this.fail(new OfficeError('connection_closed', 'The Office participant disconnected')); this.emit('closed'); });
+    this.socket.addEventListener('close', () => { this.closed = true; clearTimeout(this.renewalTimer); this.lifetime.abort(); this.fail(new OfficeError('connection_closed', 'The Office participant disconnected')); this.emit('closed'); });
     try { await ready; } catch (error) { this.close(); throw error; }
     if (this.verifyRelease && (!this.server || this.server.Version !== SUPPORTED_RELEASE.version || this.server.Hash !== SUPPORTED_RELEASE.hash)) {
       this.close(); throw new OfficeError('release_mismatch', 'Office native API release has changed; run the pinned compatibility checks', this.server && { version: this.server.Version, hash: this.server.Hash });
@@ -58,8 +62,11 @@ export class NativeOfficeSession extends EventEmitter {
       if (message.startsWith('coolserver ')) this.server = jsonAfter(message, 'coolserver ');
       if (message.startsWith('status:') || message.startsWith('statusupdate:')) this.status = jsonAfter(message, message.startsWith('status:') ? 'status:' : 'statusupdate:');
       if (message.startsWith('wopi:')) this.wopi = jsonAfter(message, 'wopi:');
+      if (message.startsWith('filemode:')) this.fileMode = jsonAfter(message, 'filemode:');
+      if (message.startsWith('perm:')) this.permission = message.slice(5).trim();
       if (message.startsWith('lastmodtime:')) this.lastModified = message.slice(12).trim();
       if (message.startsWith('viewinfo:')) this.views = jsonAfter(message, 'viewinfo:');
+      if (message.startsWith('tokenexpired') && this.renewToken) this.renewAccessToken();
       if (message.startsWith('executescriptresult:')) {
         const result = jsonAfter(message, 'executescriptresult:');
         const pending = this.pending.get(result.id);
@@ -70,7 +77,8 @@ export class NativeOfficeSession extends EventEmitter {
         }
       }
       if (message.startsWith('error:')) {
-        const error = new OfficeError('native_error', message);
+        const unloading = /(?:^|\s)cmd=load(?:\s|$)/.test(message) && /(?:^|\s)kind=docunloading(?:\s|$)/.test(message);
+        const error = new OfficeError(unloading ? 'document_unloading' : 'native_error', message);
         for (const pending of this.pending.values()) pending.reject(error);
         this.pending.clear();
         for (const waiter of [...this.waiters]) waiter.reject(error);
@@ -102,12 +110,45 @@ export class NativeOfficeSession extends EventEmitter {
     });
   }
   exclusive(work) { const task = this.tail.then(work); this.tail = task.catch(() => {}); return task; }
+  get readOnly() { return this.grant.mode !== 'edit' || Boolean(this.status?.readonly) || this.fileMode?.readOnly === true || this.permission === 'readonly' || this.wopi?.UserCanWrite === false; }
+  get scriptingAllowed() { return !this.readOnly && !this.wopi?.DisableCopy && !this.wopi?.DisablePrint && !this.wopi?.DisableExport; }
+  startTokenRenewal(renewToken) { this.renewToken = renewToken; this.scheduleTokenRenewal(); }
+  scheduleTokenRenewal(pause) {
+    clearTimeout(this.renewalTimer);
+    if (this.closed || !this.renewToken || !(this.grant.accessTokenTtl > 0)) return;
+    this.renewalTimer = setTimeout(() => this.renewAccessToken(), pause ?? Math.max(0, this.grant.accessTokenTtl - Date.now() - 60000));
+    this.renewalTimer.unref?.();
+  }
+  renewAccessToken() {
+    if (this.closed || !this.renewToken || this.renewal) return this.renewal;
+    // Token reset must remain available while a native save is awaiting host
+    // renewal; putting it behind the edit queue would deadlock that save.
+    this.renewal = (async () => {
+      try {
+        const renewed = await this.renewToken(this.grant, { signal: this.lifetime.signal });
+        this.lifetime.signal.throwIfAborted();
+        if (typeof renewed.accessToken !== 'string' || /\s/.test(renewed.accessToken) || !renewed.accessToken || !Number.isFinite(renewed.accessTokenTtl) || renewed.accessTokenTtl <= Date.now() + 60000) throw new OfficeError('invalid_renewal', 'The Office host returned an invalid participant renewal');
+        this.send('resetaccesstoken ' + renewed.accessToken + ' ' + renewed.accessTokenTtl);
+        Object.assign(this.grant, renewed); this.tokenRenewalFailure = null; this.renewalAttempts = 0; this.scheduleTokenRenewal();
+      } catch (error) {
+        if (this.closed) return;
+        const failure = new OfficeError('token_renewal_failed', 'The Office host could not renew this participant', { code: error.code, status: error.status });
+        this.tokenRenewalFailure = failure;
+        if (this.grant.accessTokenTtl <= Date.now() || [401, 403].includes(error.status)) this.fail(failure);
+        this.emit('nativeError', failure);
+        if (![401, 403].includes(error.status) && ++this.renewalAttempts < 10) this.scheduleTokenRenewal(5000);
+      } finally { this.renewal = null; }
+    })();
+    return this.renewal;
+  }
   assertEditing() {
-    if (this.grant.mode !== 'edit' || this.status?.readonly || this.wopi?.UserCanWrite === false || this.wopi?.DisableCopy || this.wopi?.DisablePrint || this.wopi?.DisableExport) throw new OfficeError('native_permission', 'Native kit scripting requires an editable view with copy, print and export permissions');
+    if (!this.scriptingAllowed) throw new OfficeError('native_permission', 'Native kit scripting requires an editable view with copy, print and export permissions');
+    if (this.tokenRenewalFailure && this.grant.accessTokenTtl <= Date.now()) throw this.tokenRenewalFailure;
     if (this.uncertain) throw new OfficeError('uncertain_mutation', 'A prior operation has an uncertain outcome; inspect and explicitly reconcile it before another edit', this.uncertain);
   }
   call(fn, args, { signal, mutation = false } = {}) {
     return this.exclusive(async () => {
+      if (!this.scriptingAllowed) throw new OfficeError('native_permission', 'This native view does not permit kit scripts');
       if (mutation) this.assertEditing();
       if (signal?.aborted) throw new OfficeError('cancelled', 'Office operation cancelled before dispatch');
       const id = randomUUID();
@@ -123,7 +164,7 @@ export class NativeOfficeSession extends EventEmitter {
         return await result;
       } catch (error) {
         // A timeout/disconnect is not evidence that an edit did not happen. Never replay it.
-        if (mutation && sent && ['timeout', 'cancelled', 'connection_closed', 'connection_failed'].includes(error.code)) { this.uncertain = { operationId: id, reason: error.code }; error.details = this.uncertain; }
+        if (mutation && sent && ['timeout', 'cancelled', 'connection_closed', 'connection_failed', 'token_renewal_failed'].includes(error.code)) { this.uncertain = { operationId: id, reason: error.code }; error.details = this.uncertain; }
         result.catch(() => {}); throw error;
       } finally { this.pending.delete(id); }
     });
@@ -131,6 +172,14 @@ export class NativeOfficeSession extends EventEmitter {
   reconcile(operationId) {
     if (!this.uncertain || this.uncertain.operationId !== operationId) throw new OfficeError('reconcile_mismatch', 'Reconciliation must identify the uncertain operation');
     this.uncertain = null;
+  }
+  inspectReadOnly({ range, signal } = {}) {
+    return this.exclusive(async () => {
+      if (range !== undefined && (typeof range !== 'string' || !/^[A-Za-z0-9:$._-]{1,100}$/.test(range))) throw new OfficeError('invalid_range', 'Use a bounded native cell range such as A1:D100');
+      const response = this.waitFor(message => message.startsWith('commandvalues:'), { signal });
+      this.send('commandvalues command=.uno:ExtractDocumentStructure?filter=text' + (range ? ',range:' + range : ''));
+      return { documentType: this.status?.type, readOnly: true, structure: jsonAfter(await response, 'commandvalues:'), citationMetadataAvailable: false };
+    });
   }
   save({ signal } = {}) {
     return this.exclusive(async () => {
@@ -148,7 +197,7 @@ export class NativeOfficeSession extends EventEmitter {
   }
   prepareRestore({ signal } = {}) {
     return this.exclusive(async () => {
-      if (this.grant.mode !== 'edit' || this.status?.readonly || this.wopi?.UserCanWrite === false) throw new OfficeError('native_permission', 'History restore requires an editable native participant');
+      if (this.readOnly) throw new OfficeError('native_permission', 'History restore requires an editable native participant');
       signal?.throwIfAborted();
       // The broker emits this only after its native save/upload and close sequence.
       // A socket disconnect, host message or successful kit save alone is insufficient.
@@ -162,9 +211,13 @@ export class NativeOfficeSession extends EventEmitter {
     return this.exclusive(async () => {
       this.assertEditing();
       if (!['docx', 'odt', 'xlsx', 'ods', 'pptx', 'odp'].includes(format) || typeof name !== 'string' || !name.endsWith('.' + format) || /[\x00-\x1f/\\]/.test(name)) throw new OfficeError('invalid_copy', 'A copy needs a filename matching one of the six editable Office formats');
+      if (signal?.aborted) throw new OfficeError('cancelled', 'Office copy cancelled before dispatch');
+      const operationId = randomUUID();
       const response = this.waitFor(message => message.startsWith('saveas:'), { signal });
       this.send('saveas url=wopi:' + encodeURIComponent(name) + ' format=' + format + ' options=');
-      const raw = await response;
+      let raw;
+      try { raw = await response; }
+      catch (error) { if (['timeout', 'cancelled', 'connection_closed', 'connection_failed', 'token_renewal_failed'].includes(error.code)) { this.uncertain = { operationId, reason: error.code, operation: 'save-copy', name }; error.details = this.uncertain; } throw error; }
       const parameters = Object.fromEntries([...raw.matchAll(/(\w+)=([^ ]+)/g)].map(([, key, value]) => [key, value]));
       const copied = new URL(parameters.url), original = new URL(this.grant.wopiSrc);
       if (copied.origin !== original.origin || copied.pathname.slice(0, copied.pathname.lastIndexOf('/') + 1) !== original.pathname.slice(0, original.pathname.lastIndexOf('/') + 1) || copied.pathname === original.pathname) throw new OfficeError('copy_scope', 'Native Save As did not create an independent file on this document host');
@@ -191,5 +244,5 @@ export class NativeOfficeSession extends EventEmitter {
     });
   }
   fail(error) { for (const p of this.pending.values()) p.reject(error); this.pending.clear(); for (const w of [...this.waiters]) w.reject(error); }
-  close() { if (!this.closed) { this.closed = true; this.socket?.close(1000, 'Participant closed'); this.fail(new OfficeError('connection_closed', 'The Office participant disconnected')); } }
+  close() { if (!this.closed) { this.closed = true; clearTimeout(this.renewalTimer); this.lifetime.abort(); this.socket?.close(1000, 'Participant closed'); this.fail(new OfficeError('connection_closed', 'The Office participant disconnected')); } }
 }

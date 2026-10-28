@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Uses the normal WOPI host wrapper. Credentials stay in that authorized host.
 export async function connectReferencesHost({ signal, timeoutMs = 15000 } = {}) {
+  signal?.throwIfAborted();
   const nonce = crypto.randomUUID(), pending = new Map();
   if (window.top === window || window.top === window.parent) throw new Error('Open this document through its authorized Files host to use References');
   let origin, sequence = 0, disposed = false;
@@ -21,7 +22,7 @@ export async function connectReferencesHost({ signal, timeoutMs = 15000 } = {}) 
     }
   }
   window.addEventListener('message', receive);
-  const dispose = () => { if (disposed) return; disposed = true; clearTimeout(timer); window.removeEventListener('message', receive); for (const waiter of pending.values()) { waiter.cleanup(); waiter.reject(new Error('References context closed')); } pending.clear(); };
+  const dispose = () => { if (disposed) return; disposed = true; clearTimeout(timer); rejectReady(new Error('References context closed')); window.removeEventListener('message', receive); signal?.removeEventListener('abort', dispose); for (const waiter of pending.values()) { window.top.postMessage({ MessageId: 'BashKitten_ReferencesCancel', nonce, requestId: waiter.requestId }, origin); waiter.cleanup(); waiter.reject(new Error('References context closed')); } pending.clear(); };
   window.addEventListener('pagehide', dispose, { once: true });
   signal?.addEventListener('abort', dispose, { once: true });
   window.top.postMessage({ MessageId: 'BashKitten_ReferencesReady', nonce }, '*');
@@ -30,14 +31,14 @@ export async function connectReferencesHost({ signal, timeoutMs = 15000 } = {}) 
     if (disposed) return Promise.reject(new Error('References context closed'));
     if (!path.startsWith('/')) path = '/api/references/' + path;
     const prefix = '/api/references/projects/' + encodeURIComponent(context.projectId);
-    if (!(path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix + '?')) && !/^\/api\/references\/(styles|locales)(\?|$)/.test(path)) return Promise.reject(new Error('The References request is outside this document’s project'));
+    if (!(path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix + '?'))) return Promise.reject(new Error('The References request is outside this document’s project'));
     if (!['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) return Promise.reject(new Error('Invalid References method'));
     const requestId = String(++sequence);
     return new Promise((resolve, reject) => {
-      const abort = () => { pending.delete(requestId); window.top.postMessage({ MessageId: 'BashKitten_ReferencesCancel', nonce, requestId }, origin); reject(new DOMException('Cancelled', 'AbortError')); };
+      const abort = () => { pending.delete(requestId); cleanup(); window.top.postMessage({ MessageId: 'BashKitten_ReferencesCancel', nonce, requestId }, origin); reject(new DOMException('Cancelled', 'AbortError')); };
       const cleanup = () => signal?.removeEventListener('abort', abort);
       if (signal?.aborted) { abort(); return; }
-      pending.set(requestId, { resolve, reject, cleanup }); signal?.addEventListener('abort', abort, { once: true });
+      pending.set(requestId, { requestId, resolve, reject, cleanup }); signal?.addEventListener('abort', abort, { once: true });
       window.top.postMessage({ MessageId: 'BashKitten_ReferencesRequest', nonce, requestId, method, path, body }, origin);
     });
   }

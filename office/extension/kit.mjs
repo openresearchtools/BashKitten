@@ -17,13 +17,66 @@ export function nativeOperation(request) {
   const text = (value, max = 262144) => typeof value === 'string' && value.length <= max ? value : fail('Invalid or oversized text');
   const has = name => properties.getPropertySetInfo().hasPropertyByName(name);
   const portablePrefix = 'ADDIN BASHKITTEN_CITATION ';
-  let fieldCache, applyingState;
+  const portableNamespace = 'urn:bashkitten:references:1';
+  let fieldCache, objectCache, applyingState;
+  function objectPayload(object) {
+    if (!object.getPropertySetInfo().hasPropertyByName('UserDefinedAttributes')) return null;
+    const attrs = object.getPropertyValue('UserDefinedAttributes');
+    for (const key of attrs.getElementNames()) {
+      const value = attrs.getByName(key);
+      if (value.Namespace !== portableNamespace || key.split(':').at(-1) !== 'reference' || value.Value.length > 2 * 1024 * 1024) continue;
+      try { const payload = JSON.parse(value.Value); if (payload.version === 1 && payload.citation?.id && (Array.isArray(payload.citation.items) || payload.bibliography)) return payload; } catch (_) {}
+    }
+    return null;
+  }
+  function portableObjects() {
+    if (objectCache) return objectCache;
+    objectCache = []; let visited = 0;
+    if (documentType === 'spreadsheet') {
+      const sheets = model.getSheets();
+      for (let s = 0; s < sheets.getCount(); s++) {
+        const owner = sheets.getByIndex(s), cursor = owner.createCursor(); cursor.gotoEndOfUsedArea(false);
+        const end = cursor.getRangeAddress(), used = owner.getCellRangeByPosition(0, 0, end.EndColumn, end.EndRow);
+        const formats = used.getUniqueCellFormatRanges();
+        if (formats.getCount() > 10000) fail('Citation metadata inspection exceeds the native format-group bound');
+        for (let f = 0; f < formats.getCount(); f++) {
+          const ranges = formats.getByIndex(f).getRangeAddresses(); if (!ranges.length) continue;
+          const sample = owner.getCellByPosition(ranges[0].StartColumn, ranges[0].StartRow), payload = objectPayload(sample);
+          if (!payload) continue;
+          for (const range of ranges) {
+            if ((range.EndColumn - range.StartColumn + 1) * (range.EndRow - range.StartRow + 1) + objectCache.length > 10000) fail('Copied managed cells exceed the document citation bound');
+            for (let row = range.StartRow; row <= range.EndRow; row++) for (let col = range.StartColumn; col <= range.EndColumn; col++) objectCache.push({ object: owner.getCellByPosition(col, row), payload, anchor: { kind: 'cell', nativeKey: s + ':' + row + ':' + col }, position: [s, row, col] });
+          }
+        }
+      }
+    } else if (documentType === 'presentation') {
+      const pages = model.getDrawPages();
+      function walk(collection, page, path) {
+        for (let index = 0; index < collection.getCount(); index++) {
+          if (++visited > 20000) fail('Citation metadata inspection exceeds the native shape bound');
+          const object = collection.getByIndex(index), indices = [...path, index], payload = objectPayload(object);
+          if (payload) objectCache.push({ object, parent: collection, payload, anchor: { kind: 'shape', name: object.getName(), nativeKey: page + ':' + indices.join('.') }, position: [page, ...indices] });
+          if (object.supportsService('com.sun.star.drawing.GroupShape')) walk(object, page, indices);
+        }
+      }
+      for (let page = 0; page < pages.getCount(); page++) walk(pages.getByIndex(page), page, []);
+    }
+    return objectCache;
+  }
+  function writeObjectPayload(object, citation) {
+    const attrs = object.getPropertyValue('UserDefinedAttributes');
+    for (const key of attrs.getElementNames()) if (attrs.getByName(key).Namespace === portableNamespace && key.split(':').at(-1) === 'reference') attrs.removeByName(key);
+    if (citation) attrs.insertByName('bk:reference', new css.xml.AttributeData({ Namespace: portableNamespace, Type: 'CDATA', Value: portablePayload(citation).slice(portablePrefix.length) }));
+    object.setPropertyValue('UserDefinedAttributes', attrs); objectCache = null;
+  }
   function portableFields() {
     if (fieldCache) return fieldCache;
     fieldCache = [];
     if (documentType !== 'text') return fieldCache;
     const fields = model.getTextFields().createEnumeration();
+    let visited = 0;
     while (fields.hasMoreElements()) {
+      if (++visited > 100000) fail('Native field inspection exceeds the document bound');
       const field = fields.nextElement();
       if (typeof field.getParameters !== 'function') continue;
       const params = field.getParameters(), key = 'vnd.oasis.opendocument.field.code';
@@ -35,38 +88,52 @@ export function nativeOperation(request) {
     return fieldCache;
   }
   const metadata = () => {
-    const state = has(propertyName) ? JSON.parse(properties.getPropertyValue(propertyName)) : { version: 1, revision: 0, citations: [], bibliography: null };
+    const raw = has(propertyName) ? properties.getPropertyValue(propertyName) : null;
+    if (raw !== null && (typeof raw !== 'string' || raw.length > 2 * 1024 * 1024)) fail('Embedded citation state exceeds the document bound');
+    const state = raw === null ? { version: 1, revision: 0, citations: [], bibliography: null } : JSON.parse(raw);
+    if (state.version !== 1 || !Array.isArray(state.citations) || state.citations.length > 10000) fail('The embedded citation state is invalid or requires another plugin version');
     const seen = new Set();
     for (const { field, payload } of portableFields()) {
       const citation = { ...payload.citation }, original = citation.id;
       if (seen.has(original)) citation.id = original + ':copy:' + field.getName();
       seen.add(original);
       citation.anchor = { kind: 'field', name: field.getName(), note: citation.note || null };
+      state.style ||= payload.style; state.libraryId ||= payload.libraryId; state.noteType ||= payload.noteType;
+      state.embeddedItems = { ...(state.embeddedItems || {}), ...(payload.embeddedItems || {}) };
       if (payload.bibliography) { state.bibliography = citation; continue; }
       const index = state.citations.findIndex(old => old.id === citation.id);
       if (index < 0) state.citations.push(citation); else state.citations[index] = citation;
-      state.style ||= payload.style; state.libraryId ||= payload.libraryId;
+    }
+    for (const { object, payload, anchor } of portableObjects()) {
+      const citation = { ...payload.citation }, original = citation.id;
+      if (seen.has(original)) citation.id = original + ':copy:' + anchor.nativeKey;
+      seen.add(original); citation.anchor = anchor;
+      state.style ||= payload.style; state.libraryId ||= payload.libraryId; state.noteType ||= payload.noteType;
       state.embeddedItems = { ...(state.embeddedItems || {}), ...(payload.embeddedItems || {}) };
+      if (payload.bibliography) { state.bibliography = citation; continue; }
+      const index = state.citations.findIndex(old => old.id === citation.id);
+      if (index < 0) state.citations.push(citation); else { citation.anchor.name ||= state.citations[index].anchor?.name; state.citations[index] = citation; }
     }
     return state;
   };
   function portablePayload(citation) {
     const state = applyingState || metadata(), embeddedItems = {};
-    for (const item of citation.items || []) if (state.embeddedItems?.[item.id]) embeddedItems[item.id] = state.embeddedItems[item.id];
+    const items = citation.id === 'bibliography' ? Object.keys(state.embeddedItems || {}).map(id => ({ id })) : citation.items || [];
+    for (const item of items) if (state.embeddedItems?.[item.id]) embeddedItems[item.id] = state.embeddedItems[item.id];
     const { anchor, target, runs, rendered, missing, ...occurrence } = citation;
-    return portablePrefix + JSON.stringify({ version: 1, citation: occurrence, bibliography: citation.id === 'bibliography', style: state.style, libraryId: state.libraryId, embeddedItems });
+    return portablePrefix + JSON.stringify({ version: 1, citation: occurrence, bibliography: citation.id === 'bibliography', style: state.style, noteType: state.noteType, libraryId: state.libraryId, embeddedItems });
   }
   function nativeMark(citation) {
     if (citation.anchor.kind === 'field') return portableFields().find(item => item.field.getName() === citation.anchor.name)?.field;
     const marks = model.getBookmarks(); return marks.hasByName(citation.anchor.name) ? marks.getByName(citation.anchor.name) : null;
   }
   const persist = state => {
-    state.revision += 1;
-    const value = JSON.stringify(state);
-    if (value.length > 2 * 1024 * 1024) fail('Embedded citation metadata exceeds the document bound');
+    if (state) state.revision += 1;
+    const value = state ? JSON.stringify(state) : null;
+    if (value?.length > 2 * 1024 * 1024) fail('Embedded citation metadata exceeds the document bound');
     const property = (name, value) => new css.beans.PropertyValue({ Name: name, Handle: 0, Value: value, State: css.beans.PropertyState.DIRECT_VALUE });
     const sequence = uno.type.sequence(uno.type.struct(css.beans.PropertyValue));
-    const updated = [property('NamePrefix', propertyName), property('UserDefinedProperties', new uno.Any(sequence, [property(propertyName, value)]))];
+    const updated = [property('NamePrefix', propertyName), property('UserDefinedProperties', new uno.Any(sequence, value === null ? [] : [property(propertyName, value)]))];
     // Native SetDocumentProperties participates in the same undo context through
     // the isolated generic property-undo patch, and outlives this participant.
     css.frame.DispatchHelper.create(uno.componentContext).executeDispatch(model.getCurrentController().getFrame(), '.uno:SetDocumentProperties', '', 0, [property('UpdatedProperties', new uno.Any(sequence, updated))]);
@@ -76,9 +143,12 @@ export function nativeOperation(request) {
     if (request.expectedRevision !== state.revision) fail('Citation state changed; read it again before applying this operation');
   };
   const requireType = type => { if (type !== documentType) fail('Operation requires ' + type); };
-  function paragraph(index) {
+  function writerOwner(target) {
+    return target?.table ? model.getTextTables().getByName(text(target.table, 80)).getCellByName(text(target.cell, 30)) : model.getText();
+  }
+  function paragraph(index, owner = model.getText()) {
     requireType('text'); integer(index, 0, 100000, 'paragraph index');
-    const enumeration = model.getText().createEnumeration();
+    const enumeration = owner.createEnumeration();
     let current = 0;
     while (enumeration.hasMoreElements()) {
       const element = enumeration.nextElement();
@@ -90,13 +160,25 @@ export function nativeOperation(request) {
   }
   function writerRange(target) {
     if (target?.selection) return model.getCurrentController().getViewCursor();
-    const para = paragraph(target?.paragraph ?? 0);
+    const para = paragraph(target?.paragraph ?? 0, writerOwner(target));
     const value = para.getString();
     if (target.expectedText !== undefined && target.expectedText !== value) fail('Paragraph changed; refresh before editing');
     const offset = integer(target.offset ?? value.length, 0, value.length, 'text offset');
     const length = integer(target.length ?? 0, 0, value.length - offset, 'text length');
-    const cursor = para.getText().createTextCursorByRange(para.getStart());
-    cursor.goRight(offset, false); cursor.goRight(length, true);
+    function at(position) {
+      const cursor = para.getText().createTextCursorByRange(para.getStart());
+      if (position === value.length) { cursor.gotoRange(para.getEnd(), false); return cursor; }
+      cursor.goRight(position, true);
+      // Native field delimiters occupy cursor positions but are not rendered
+      // in XTextRange.getString(). Resolve the public rendered-text offset.
+      let consumed = cursor.getString().length, attempts = 0;
+      while (consumed < position) {
+        if (++attempts > 30000 || !cursor.goRight(position - consumed, true)) fail('Cannot resolve the native text position');
+        const next = cursor.getString().length; if (next > position) fail('The requested offset crosses a native field boundary'); consumed = next;
+      }
+      cursor.collapseToEnd(); return cursor;
+    }
+    const cursor = at(offset); if (length) cursor.gotoRange(at(offset + length), true);
     return cursor;
   }
   function sheet(name) {
@@ -125,8 +207,12 @@ export function nativeOperation(request) {
     return page.getByIndex(integer(target?.index ?? 0, 0, page.getCount() - 1, 'shape index'));
   }
   function anchorName(id) { return 'BKREF_' + text(id, 100).replace(/[^a-zA-Z0-9]/g, '').slice(0, 32); }
+  function portableMatch(item, citation) {
+    return item.anchor.nativeKey === citation.anchor.nativeKey && (item.payload.citation.id === citation.id || item.payload.citation.id + ':copy:' + item.anchor.nativeKey === citation.id);
+  }
   function anchorFor(citation) {
     if (citation.anchor.kind === 'field') return nativeMark(citation)?.getAnchor() || null;
+    if (citation.anchor.nativeKey) { const native = portableObjects().find(item => portableMatch(item, citation))?.object; if (native) return native; }
     if (citation.anchor.kind === 'bookmark') {
       const marks = model.getBookmarks();
       return marks.hasByName(citation.anchor.name) ? marks.getByName(citation.anchor.name).getAnchor() : null;
@@ -134,13 +220,14 @@ export function nativeOperation(request) {
     if (citation.anchor.kind === 'cell') {
       const names = model.getPropertyValue('NamedRanges');
       if (!names.hasByName(citation.anchor.name)) return null;
-      return names.getByName(citation.anchor.name).getReferredCells();
+      const anchor = names.getByName(citation.anchor.name).getReferredCells(), payload = objectPayload(anchor);
+      return payload && payload.citation.id !== citation.id ? null : anchor;
     }
     if (citation.anchor.kind === 'shape') {
       const pages = model.getDrawPages();
       for (let p = 0; p < pages.getCount(); p++) for (let s = 0; s < pages.getByIndex(p).getCount(); s++) {
         const shape = pages.getByIndex(p).getByIndex(s);
-        if (shape.getName() === citation.anchor.name) return shape;
+        if (shape.getName() === citation.anchor.name) { const payload = objectPayload(shape); return payload && payload.citation.id !== citation.id ? null : shape; }
       }
       return null;
     }
@@ -150,20 +237,34 @@ export function nativeOperation(request) {
   function writerLocation(range) {
     let location = range;
     try { if (range.getText().supportsService('com.sun.star.text.Footnote')) location = range.getText().getAnchor(); } catch (_) {}
-    const enumeration = model.getText().createEnumeration(); let index = 0;
-    while (enumeration.hasMoreElements()) {
-      const para = enumeration.nextElement();
-      if (!para.supportsService('com.sun.star.text.Paragraph')) continue;
-      try {
-        const owner = para.getText();
-        if (owner.compareRegionStarts(para.getStart(), location.getStart()) >= 0 && owner.compareRegionStarts(para.getEnd(), location.getStart()) <= 0) {
-          const cursor = owner.createTextCursorByRange(para.getStart()); cursor.gotoRange(location.getStart(), true);
-          return { paragraph: index, offset: cursor.getString().length, length: location.getString().length, expectedText: para.getString() };
+    let visited = 0;
+    function locate(owner, target, prefix, depth) {
+      if (depth > 16) fail('Native text nesting exceeds the inspection bound');
+      const enumeration = owner.createEnumeration(); let index = 0, elementIndex = 0;
+      while (enumeration.hasMoreElements()) {
+        if (++visited > 100000) fail('Native text inspection exceeds the paragraph bound');
+        const element = enumeration.nextElement(), order = [...prefix, elementIndex++];
+        if (element.supportsService('com.sun.star.text.TextTable')) {
+          const names = element.getCellNames();
+          for (let cell = 0; cell < names.length; cell++) {
+            const found = locate(element.getCellByName(names[cell]), { table: element.getName(), cell: names[cell] }, [...order, cell], depth + 1);
+            if (found) return found;
+          }
+        } else if (element.supportsService('com.sun.star.text.Paragraph')) {
+          try {
+            const textOwner = element.getText();
+            if (textOwner.compareRegionStarts(element.getStart(), location.getStart()) >= 0 && textOwner.compareRegionStarts(element.getEnd(), location.getStart()) <= 0) {
+              const cursor = textOwner.createTextCursorByRange(element.getStart()); cursor.gotoRange(location.getStart(), true);
+              const offset = cursor.getString().length;
+              return { ...target, paragraph: index, offset, length: location.getString().length, expectedText: element.getString(), order: [...order, offset] };
+            }
+          } catch (error) { if (!String(error.message).includes('IllegalArgument')) throw error; }
+          index++;
         }
-      } catch (_) {}
-      index++;
+      }
+      return null;
     }
-    fail('The native text location is outside the main document');
+    return locate(model.getText(), {}, [], 0) || fail('The native text location is outside the document body or its tables');
   }
   function selectionTarget() {
     const controller = model.getCurrentController();
@@ -179,9 +280,9 @@ export function nativeOperation(request) {
   }
   function orderPosition(citation) {
     const anchor = citation.anchor && anchorFor(citation);
+    if (citation.anchor?.nativeKey) { const found = portableObjects().find(item => portableMatch(item, citation)); if (found) return found.position; }
     if (documentType === 'text') {
-      const location = anchor ? writerLocation(anchor) : citation.target;
-      return [location.paragraph, location.offset];
+      return writerLocation(anchor || writerRange(citation.target)).order;
     }
     if (documentType === 'spreadsheet') {
       const address = (anchor || cell(citation.target)).getRangeAddress(); return [address.Sheet, address.StartRow, address.StartColumn];
@@ -238,56 +339,71 @@ export function nativeOperation(request) {
     cursor.setPropertyValue('CharUnderline', short(0));
     const supportsLink = cursor.getPropertySetInfo().hasPropertyByName('HyperLinkURL');
     if (supportsLink) cursor.setPropertyValue('HyperLinkURL', '');
-    let offset = 0;
-    for (const run of runs ?? []) {
-      if (!run.text || offset + run.text.length > full.length) continue;
-      cursor.gotoRange(range.getStart(), false); cursor.goRight(offset, false); cursor.goRight(run.text.length, true);
+    let offset = 0; const links = [];
+    function styleRun(cursor, run) {
       if (run.italic) cursor.setPropertyValue('CharPosture', css.awt.FontSlant.ITALIC);
       if (run.bold) cursor.setPropertyValue('CharWeight', new uno.Any(uno.type.float, 150));
       if (run.superscript) { cursor.setPropertyValue('CharEscapement', short(33)); cursor.setPropertyValue('CharEscapementHeight', new uno.Any(uno.type.byte, 58)); }
       if (run.subscript) { cursor.setPropertyValue('CharEscapement', short(-33)); cursor.setPropertyValue('CharEscapementHeight', new uno.Any(uno.type.byte, 58)); }
       if (run.underline) cursor.setPropertyValue('CharUnderline', short(1));
+    }
+    for (const run of runs ?? []) {
+      if (!run.text || offset + run.text.length > full.length) continue;
+      cursor.gotoRange(range.getStart(), false); cursor.goRight(offset, false); cursor.goRight(run.text.length, true);
+      styleRun(cursor, run);
       if (run.url && supportsLink) cursor.setPropertyValue('HyperLinkURL', run.url);
+      else if (run.url) links.push({ offset, run });
       offset += run.text.length;
     }
+    // Calc/Impress expose links as their native URL text fields, not Writer's
+    // HyperLinkURL cursor property. Insert from the end because a field has
+    // one native character position while its rendered label may be longer.
+    for (const { offset, run } of links.reverse()) {
+      cursor.gotoRange(range.getStart(), false); cursor.goRight(offset, false); cursor.goRight(run.text.length, true);
+      const field = model.createInstance('com.sun.star.text.TextField.URL');
+      field.setPropertyValue('URL', run.url); field.setPropertyValue('Representation', run.text);
+      owner.insertTextContent(cursor, field, true);
+      const anchor = field.getAnchor(), styled = owner.createTextCursorByRange(anchor.getStart()); styled.gotoRange(anchor.getEnd(), true); styleRun(styled, run);
+    }
   }
-  function writeAnchor(citation, target, replace) {
+  function writeAnchor(citation, target, replace, preparedTarget) {
     let anchor = replace ? anchorFor(citation) : null;
     if (replace && !anchor) fail('Citation anchor was deleted; refresh the document state');
     if (documentType === 'text') {
-      let insertionRange;
-      if (anchor && (citation.anchor.note || null) !== (citation.note || null)) {
-        const oldNote = citation.anchor.note ? anchor.getText() : null;
-        const oldRange = oldNote ? oldNote.getAnchor() : anchor;
-        insertionRange = oldRange.getText().createTextCursorByRange(oldRange.getStart());
-        if (!oldNote) insertionRange.gotoRange(oldRange.getEnd(), true);
-        nativeMark(citation).dispose(); fieldCache = null;
-        if (oldNote) oldRange.getText().removeTextContent(oldNote); else insertionRange.setString('');
-        anchor = null;
-      }
-      if (!anchor) {
-        let range = insertionRange || writerRange(target || {});
-        if (intersectsManaged(range)) fail('The insertion target overlaps a managed citation');
-        if (citation.note) {
-          const footnote = model.createInstance(citation.note === 'endnote' ? 'com.sun.star.text.Endnote' : 'com.sun.star.text.Footnote');
-          range.getText().insertTextContent(range, footnote, false);
-          range = footnote.createTextCursor();
-        }
-        const mark = model.createInstance('com.sun.star.text.Fieldmark'); mark.setPropertyValue('PrivateSeparatorAtStart', true); mark.setName(anchorName(citation.id));
-        range.setString(citation.text); range.getText().insertTextContent(range, mark, true);
-        mark.setFieldType('vnd.oasis.opendocument.field.UNHANDLED'); mark.getParameters().insertByName('vnd.oasis.opendocument.field.code', portablePayload(citation)); fieldCache = null;
-        citation.anchor = { kind: 'field', name: mark.getName(), note: citation.note || null };
-        anchor = mark.getAnchor();
+      const controller = model.getCurrentController(), frame = controller.getFrame();
+      const property = (Name, Value) => new css.beans.PropertyValue({ Name, Value, Handle: 0, State: css.beans.PropertyState.DIRECT_VALUE });
+      const sequence = uno.type.sequence(uno.type.struct(css.beans.PropertyValue));
+      const fieldType = 'vnd.oasis.opendocument.field.UNHANDLED';
+      const escapeHTML = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const html = citation.html || (citation.runs || [{ text: citation.text }]).map(run => {
+        let out = escapeHTML(run.text).replace(/\n/g, '<br>');
+        for (const [flag, tag] of [['italic', 'i'], ['bold', 'b'], ['superscript', 'sup'], ['subscript', 'sub'], ['underline', 'u']]) if (run[flag]) out = '<' + tag + '>' + out + '</' + tag + '>';
+        if (run.url && /^(https?:|mailto:)/i.test(run.url)) out = '<a href="' + escapeHTML(run.url) + '">' + out + '</a>';
+        return out;
+      }).join('');
+      const fields = [property('FieldType', fieldType), property('FieldCommand', portablePayload(citation)), property('FieldResult', html)];
+      const dispatch = css.frame.DispatchHelper.create(uno.componentContext);
+      const sameNote = anchor && (citation.anchor.note || null) === (citation.note || null);
+      if (sameNote && citation.anchor.kind === 'field') {
+        const cursor = anchor.getText().createTextCursorByRange(anchor.getStart()); cursor.goRight(1, false); controller.select(cursor);
+        dispatch.executeDispatch(frame, '.uno:UpdateTextFormField', '', 0, [property('FieldType', fieldType), property('FieldCommandPrefix', portablePrefix), property('Field', new uno.Any(sequence, fields))]);
       } else {
-        // Reattach the native bookmark around the replacement; no paragraph flattening.
-        const oldMark = nativeMark(citation);
-        const range = anchor.getText().createTextCursorByRange(anchor.getStart()); range.gotoRange(anchor.getEnd(), true);
-        oldMark.dispose(); range.setString(citation.text);
-        const mark = model.createInstance('com.sun.star.text.Fieldmark'); mark.setPropertyValue('PrivateSeparatorAtStart', true); mark.setName(citation.anchor.name);
-        range.getText().insertTextContent(range, mark, true); mark.setFieldType('vnd.oasis.opendocument.field.UNHANDLED'); mark.getParameters().insertByName('vnd.oasis.opendocument.field.code', portablePayload(citation)); fieldCache = null;
-        citation.anchor = { kind: 'field', name: mark.getName(), note: citation.note || null }; anchor = mark.getAnchor();
+        let range = preparedTarget || (!anchor ? writerRange(target || {}) : null);
+        if (anchor) {
+          const oldNote = citation.anchor.note ? anchor.getText() : null, oldRange = oldNote ? oldNote.getAnchor() : anchor;
+          range = oldRange.getText().createTextCursorByRange(oldRange.getStart());
+          if (!oldNote) range.gotoRange(oldRange.getEnd(), true);
+          nativeMark(citation).dispose(); fieldCache = null;
+          if (oldNote) oldRange.getText().removeTextContent(oldNote);
+        } else if (intersectsManaged(range)) fail('The insertion target overlaps a managed citation');
+        range.setString(''); controller.select(range);
+        if (citation.note) fields.push(property('Wrapper', citation.note === 'endnote' ? 'Endnote' : 'Footnote'));
+        dispatch.executeDispatch(frame, '.uno:TextFormField', '', 0, fields);
       }
-      applyRuns(anchor, citation.runs);
+      fieldCache = null;
+      const installed = portableFields().find(item => item.payload.citation.id === citation.id && (!sameNote || item.field.getName() === citation.anchor.name)) || portableFields().find(item => item.payload.citation.id === citation.id);
+      if (!installed) fail('Native Office did not acknowledge the managed field');
+      citation.anchor = { kind: 'field', name: installed.field.getName(), note: citation.note || null };
     } else if (documentType === 'spreadsheet') {
       if (!anchor) {
         anchor = cell(target);
@@ -298,20 +414,20 @@ export function nativeOperation(request) {
         names.addNewByName(name, anchor.getPropertyValue('AbsoluteName'), address, 0);
         citation.anchor = { kind: 'cell', name };
       }
-      anchor.setString(citation.text); applyRuns(anchor, citation.runs);
+      anchor.setString(citation.text); applyRuns(anchor, citation.runs); writeObjectPayload(anchor, citation);
     } else if (documentType === 'presentation') {
       if (!anchor) {
         const page = slide(target?.slide);
         if (target?.existingShape) {
           anchor = findShape(target);
           if (intersectsManaged(anchor) || anchor.getString() !== target.expectedText) fail('The citation code shape changed');
-        } else { anchor = model.createInstance('com.sun.star.drawing.TextShape'); page.add(anchor); }
+        } else { anchor = model.createInstance('com.sun.star.drawing.TextShape'); page.add(anchor); anchor.setPropertyValue('TextAutoGrowHeight', false); anchor.setPropertyValue('TextAutoGrowWidth', false); }
         anchor.setName(anchorName(citation.id));
         if (!target?.existingShape) anchor.setPosition(new css.awt.Point({ X: integer(target?.x ?? 1000, 0, 200000, 'x'), Y: integer(target?.y ?? 1000, 0, 200000, 'y') }));
         if (!target?.existingShape) anchor.setSize(new css.awt.Size({ Width: integer(target?.width ?? 18000, 100, 200000, 'width'), Height: integer(target?.height ?? 2000, 100, 200000, 'height') }));
         citation.anchor = { kind: 'shape', name: anchor.getName() };
       }
-      anchor.setString(citation.text); applyRuns(anchor, citation.runs);
+      anchor.setString(citation.text); applyRuns(anchor, citation.runs); writeObjectPayload(anchor, citation);
     } else fail('Unsupported document family');
     return citation;
   }
@@ -323,20 +439,23 @@ export function nativeOperation(request) {
       if (!unlink && !note) anchor.setString(''); mark.dispose(); fieldCache = null;
       if (note) note.getAnchor().getText().removeTextContent(note);
     } else if (documentType === 'spreadsheet') {
-      if (!unlink) anchor.setString(''); model.getPropertyValue('NamedRanges').removeByName(citation.anchor.name);
+      if (!unlink) anchor.setString(''); writeObjectPayload(anchor, null);
+      const names = model.getPropertyValue('NamedRanges'); if (citation.anchor.name && names.hasByName(citation.anchor.name)) names.removeByName(citation.anchor.name);
     } else if (!unlink) {
+      const native = portableObjects().find(item => portableMatch(item, citation));
+      if (native?.parent) { native.parent.remove(anchor); objectCache = null; return; }
       const pages = model.getDrawPages();
       for (let p = 0; p < pages.getCount(); p++) { const page = pages.getByIndex(p); for (let s = 0; s < page.getCount(); s++) if (page.getByIndex(s).getName() === citation.anchor.name) { page.remove(anchor); return; } }
-    } else anchor.setName('Text_' + citation.id);
+    } else { writeObjectPayload(anchor, null); anchor.setName('Text_' + citation.id); }
   }
   const operation = request.operation;
   if (operation === 'capabilities') return { documentType, adapterVersion: 1, preferredModel: false, nativeUno: true, citations: true, boundedInspection: true };
   if (operation === 'selection') return { documentType, target: selectionTarget() };
   if (operation === 'codes.region') {
     if (documentType === 'text') {
-      const target = request.target || selectionTarget(), para = paragraph(target.paragraph);
+      const target = request.target || selectionTarget(), para = paragraph(target.paragraph, writerOwner(target));
       const style = para.getPropertyValue('ParaStyleName');
-      return { documentType, text: para.getString(), target: { paragraph: target.paragraph }, codeStyle: /(?:code|preformatted|source)/i.test(style) };
+      return { documentType, text: para.getString(), target: { paragraph: target.paragraph, ...(target.table ? { table: target.table, cell: target.cell } : {}) }, codeStyle: /(?:code|preformatted|source)/i.test(style) };
     }
     if (documentType === 'spreadsheet') {
       const target = request.target || selectionTarget(), value = cell(target);
@@ -355,6 +474,7 @@ export function nativeOperation(request) {
   if (operation === 'citations.prepare') {
     const current = metadata(); checkRevision(current);
     const desired = request.state;
+    if (desired.nativeSnapshot !== undefined && desired.nativeSnapshot !== snapshot(current)) fail('Native citation positions or text changed; inspect before preparing this operation');
     for (const citation of desired.citations) {
       const old = current.citations.find(c => c.id === citation.id);
       if (old) { citation.anchor = old.anchor; if (!anchorFor(old)) fail('A citation anchor was deleted; reconcile it before refresh'); }
@@ -370,10 +490,13 @@ export function nativeOperation(request) {
         const at = orderPosition(citation), notes = desired.noteType === 'endnote' ? model.getEndnotes() : model.getFootnotes(); let preceding = 0;
         for (let n = 0; n < notes.getCount(); n++) {
           const pos = writerLocation(notes.getByIndex(n).getAnchor());
-          if (pos.paragraph < at[0] || pos.paragraph === at[0] && pos.offset < at[1]) preceding++;
+          for (let i = 0; i < Math.max(pos.order.length, at.length); i++) {
+            if ((pos.order[i] || 0) < (at[i] || 0)) { preceding++; break; }
+            if ((pos.order[i] || 0) > (at[i] || 0)) break;
+          }
         }
         citation.noteIndex = preceding + addedNotes + 1;
-        if (!citation.anchor?.note) addedNotes++;
+        if (citation.anchor?.note !== (desired.noteType || 'footnote')) addedNotes++;
       }
     }
     desired.nativeSnapshot = snapshot(current);
@@ -497,18 +620,24 @@ export function nativeOperation(request) {
       applyingState = desired;
       if (desired.nativeSnapshot !== undefined && desired.nativeSnapshot !== snapshot(state)) fail('Native citation positions or text changed during rendering; refresh before applying');
       for (const c of desired.citations) { text(c.text); if (c.anchor && !anchorFor(c)) fail('Citation anchor missing'); }
+      const preparedTargets = {};
+      if (documentType === 'text') {
+        for (const c of [...desired.citations, ...(desired.bibliography ? [desired.bibliography] : [])]) {
+          if (!c.anchor) { const range = writerRange(c.target || {}); if (intersectsManaged(range)) fail('The insertion target overlaps a managed citation'); preparedTargets[c.id] = range; }
+        }
+      }
       delete desired.nativeSnapshot;
       for (const old of state.citations) if (!desired.citations.some(c => c.id === old.id)) removeAnchor(old, false);
       const citations = [];
       for (const incoming of desired.citations) {
         const old = state.citations.find(c => c.id === incoming.id), citation = { ...incoming, anchor: old?.anchor };
         if (old && !anchorFor(old)) fail('Citation anchor was deleted; reconcile before refresh');
-        citations.push(writeAnchor(citation, incoming.target, !!old)); delete citation.target; delete citation.runs;
+        citations.push(writeAnchor(citation, incoming.target, !!old, preparedTargets[citation.id])); delete citation.target; delete citation.runs;
       }
       let bibliography = null;
       if (desired.bibliography?.text !== undefined) {
         bibliography = { ...desired.bibliography, id: desired.bibliography.id || 'bibliography', anchor: state.bibliography?.anchor };
-        writeAnchor(bibliography, desired.bibliography.target, !!state.bibliography?.anchor); delete bibliography.target; delete bibliography.runs;
+        writeAnchor(bibliography, desired.bibliography.target, !!state.bibliography?.anchor, preparedTargets[bibliography.id]); delete bibliography.target; delete bibliography.runs;
       } else if (state.bibliography?.anchor) removeAnchor(state.bibliography, false);
       persist({ ...desired, revision: state.revision, citations, bibliography });
       return inspectCitations();
@@ -516,7 +645,7 @@ export function nativeOperation(request) {
     if (operation === 'citations.unlink') {
       const state = metadata(); checkRevision(state);
       for (const citation of [...state.citations, ...(state.bibliography?.anchor ? [state.bibliography] : [])]) removeAnchor(citation, true);
-      if (has(propertyName)) properties.removeProperty(propertyName); return { unlinked: true };
+      persist(null); return { unlinked: true };
     }
     fail('Unknown Office operation ' + operation);
   } catch (error) { failed = true; throw error; }
