@@ -1,0 +1,14 @@
+Systematic Reviewer
+
+Adapted from openresearchtools/systematic-reviewer, AGPL-3.0-or-later.
+The complete license is in LICENSE. The frozen committed V3 source, reviewed
+local changes and SHA-256 manifest are in vendor/v3; the main-branch UI reference
+is in vendor/main. Source imports are immutable.
+
+BashKitten modifications (28 October 2026): project-qualified References API,
+owned-worker authorization, native Collabora edit/save/export tools, canonical
+References citation identities and adapted research guidance. The donor Markdown
+parser, atomic output helper and explicit-endpoint semantic ranking implementation
+are retained. The former desktop integration, credential store, metadata resolvers
+and DOCX serializer are not runtime dependencies. Backend services own shared
+metadata, CSL, private service configuration, native Office and file persistence.

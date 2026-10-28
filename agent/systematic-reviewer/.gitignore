@@ -1,0 +1,2 @@
+# Development dependencies; release packaging uses the root pinned source graph.
+/node_modules/

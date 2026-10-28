@@ -19,7 +19,9 @@
       "./chats.mjs",
       "./ask-user.mjs",
       "./chatgpt-usage.mjs",
-      "./full-read.ts"
+      "./full-read.ts",
+      "./office-references.mjs",
+      "../systematic-reviewer/extensions/index.mjs"
     ],
     "skills": [
       "./skills/browser-android",
@@ -29,7 +31,10 @@
       "./skills/subagents",
       "./skills/chats",
       "./skills/ask-user",
-      "./skills/phoneuse"
+      "./skills/phoneuse",
+      "./skills/references",
+      "./skills/office",
+      "../systematic-reviewer/skills/systematic-review"
     ]
   }
 }

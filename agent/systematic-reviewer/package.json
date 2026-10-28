@@ -1,0 +1,38 @@
+{
+  "name": "@bashkitten/systematic-reviewer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "description": "Systematic Reviewer research capabilities using BashKitten References and live Collabora",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "files": [
+    "extensions",
+    "lib",
+    "skills",
+    "scripts",
+    "docs",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/index.mjs"
+    ],
+    "skills": [
+      "./skills/systematic-review"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "dependencies": {
+    "mdast-util-from-markdown": "2.1.0",
+    "mdast-util-gfm-table": "2.0.0",
+    "micromark-extension-gfm-table": "2.1.2"
+  }
+}

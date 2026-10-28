@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+import { Type } from 'typebox';
+import { applicationRequest, applicationFailure } from './apps-channel.mjs';
+import { browserCall } from './client.mjs';
+
+const result = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], details: value });
+const segment = value => {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9._~-]+$/.test(value) || ['.', '..'].includes(value)) throw Error('Use a returned stable identifier');
+  return encodeURIComponent(value);
+};
+export default function officeReferences(pi) {
+  pi.registerTool({
+    name: 'references', label: 'References', exposure: 'deferred',
+    description: 'Manage the current backend’s project libraries through the shared References API. Read the references skill. Explicit project IDs, bounded pages, item versions and import/job identities are required. Supports collections/items/metadata/tags/notes/relations, attachments/full text, identifier/OpenAlex import, abstract enrichment, PDF resolution, citations and styles. Long work returns cancellable jobs; never start another server or resolver.',
+    parameters: Type.Object({
+      method: Type.Union(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(value => Type.Literal(value))),
+      path: Type.String({ description: 'Component-relative References API path, including explicit /projects/<id>/ scope and query parameters' }),
+      body: Type.Optional(Type.Any()),
+    }, { additionalProperties: false }),
+    async execute(_id, { method, path, body }, signal) {
+      try { return result(await applicationRequest('references', method, path, body, { signal })); }
+      catch (error) { return applicationFailure(error); }
+    },
+  });
+  pi.registerTool({
+    name: 'office', label: 'Office', exposure: 'deferred',
+    description: 'Open/create, inspect, edit, save and export live Collabora documents, sheets and presentations through your own authenticated native view. Read the office skill. Editing does not require an open editor tab. Use returned native identities and acknowledgements, preserve managed citations, and await save/export. Optional show opens the returned normal browser URL for rendering/visual inspection. Human and agent use separate views of the same document.',
+    parameters: Type.Object({
+      action: Type.Union(['open', 'execute', 'close'].map(value => Type.Literal(value))),
+      projectId: Type.Optional(Type.String()), documentId: Type.Optional(Type.String()),
+      relativePath: Type.Optional(Type.String({ description: 'Existing file relative to the explicit owning project; native owner verifies scope and access' })),
+      sessionId: Type.Optional(Type.String()),
+      create: Type.Optional(Type.Object({ name: Type.String(), format: Type.String() })),
+      command: Type.Optional(Type.Record(Type.String(), Type.Any())),
+      show: Type.Optional(Type.Boolean({ description: 'Open the normal browser URL returned by native open; visual inspection is optional' })),
+    }, { additionalProperties: false }),
+    async execute(_id, value, signal) {
+      try {
+        if (!['open', 'execute', 'close'].includes(value.action)) throw Error('Use office open, execute or close');
+        let reply;
+        if (value.action === 'open') {
+          if (!value.projectId || [value.documentId, value.relativePath, value.create].filter(Boolean).length !== 1) throw Error('Open requires projectId and exactly one documentId, relativePath or create');
+          reply = await applicationRequest('office', 'POST', '/sessions', { projectId: value.projectId,
+            ...(value.documentId ? { documentId: value.documentId } : {}), ...(value.relativePath ? { relativePath: value.relativePath } : {}),
+            ...(value.create ? { create: value.create } : {}) }, { signal });
+          if (value.show) {
+            try {
+              if (!reply.body?.browserUrl) throw Error('Office did not return a browser URL');
+              const tab = await browserCall('tabs.create', { url: reply.body.browserUrl, application: true }, { signal });
+              return result({ ...reply, tab });
+            } catch (error) {
+              // Opening the native participant already succeeded. An optional
+              // visual tab failure must not hide its session or imply no edit view.
+              return result({ ...reply, viewError: { message: error.message } });
+            }
+          }
+        } else if (value.action === 'execute') {
+          if (!value.command?.operation) throw Error('Execute requires an explicit native command.operation');
+          reply = await applicationRequest('office', 'POST', `/sessions/${segment(value.sessionId)}/commands`, value.command, { signal });
+        } else reply = await applicationRequest('office', 'DELETE', `/sessions/${segment(value.sessionId)}`, undefined, { signal });
+        return result(reply);
+      } catch (error) { return applicationFailure(error); }
+    },
+  });
+}
