@@ -6,6 +6,16 @@ paths and response envelopes are the same as the `references` Pi tool and human
 UI. `scripts/zotero.mjs` retains only its deprecated filename as a migration alias.
 Old local-desktop URL/credential options are not accepted.
 
+Actual files use `--path /projects/PROJECT/import --file sources.ris`, optional
+`--encoding`, `--target COLLECTION`, `--request-id STABLE_ID`. The client sends
+256 KiB chunks through the same upload owner as the UI; decoding/native detection
+run in the worker and return resumable jobs. `--input` alongside a file supplies
+small transfer options only. Attachments use
+`--path /projects/PROJECT/connector/saveAttachment --file paper.pdf --input metadata.json`
+with `parentKey` and optional title/contentType; `saveStandaloneAttachment` accepts
+an optional collection `target`. Recover lost commits with the unchanged file
+and same request ID, preserving returned recovery receipts.
+
 Inside an owned Pi worker the inherited private worker key binds the current
 session. An ordinary local CLI supplies `--session CHAT_ID` and uses the existing
 private backend owner helper; it does not create a public API or new token store.
@@ -19,6 +29,11 @@ returned continuation cursors. `GET .../items/KEY/children`, `.../fulltext` and
 `.../openalex/import` use shared jobs, receipts and native cancellation. Preserve
 partial, unresolved and interrupted outcomes; uncertain writes need reconciliation.
 Collections, item data/tags/notes/relations, schema and styles use the same API.
+The bundled References skill documents project create/archive/relink, deliberate
+library deletion, recent-job recovery, selected native exports, saved searches,
+copied-snapshot reconciliation and POST `/resolve` for browser-assisted PDFs.
+OpenAlex imports may supply a search specification and explicit chosen total;
+the backend pages lazily and exposes bounded `jobs/ID/results` pages.
 
 `scripts/openalex.mjs search|import` and `scripts/harvest.mjs` are convenience
 entries for shared bounded OpenAlex/Crossref requests. `scripts/citations.mjs`

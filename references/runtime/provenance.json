@@ -110,6 +110,20 @@
       ],
       "adaptation": "Native export endpoint preparation and ItemGetter retained; Koa response replaced by project-authorized bounded metadata response. Native format MIME mapping is copied unchanged. Explicit file-copy requests are rejected by metadata export, with project Bibliography available through existing Files.",
       "sourceSha256": "879f6b7dd342ade7c8eaf747d94917465b699fd364128f9cc35781adf02aba1c"
+    },
+    {
+      "name": "native-capture-session-note",
+      "source": "vendor/zotero/source/chrome/content/zotero/xpcom/server/saveSession.js",
+      "sourceSha256": "632225db7452ae6c261b84bbacc06a012d707b342cb94108c9c6713cc2d3fdc0",
+      "files": [
+        "runtime/session-note-native.js",
+        "capture-session.mjs"
+      ],
+      "nativeMethods": [
+        "SaveSession._updateNote",
+        "SaveSession._updateItems automatic tag preservation"
+      ],
+      "adaptation": "Exact native note-update method; injected version-guarded project item/save/erase host. Stable session note keys recover a lost save acknowledgement."
     }
   ]
 }

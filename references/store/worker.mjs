@@ -28,6 +28,9 @@ function connection(file) {
   }
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(file);
+  const hasCollectionSearch = db
+    .prepare("SELECT name FROM sqlite_master WHERE name='collection_search'")
+    .get();
   chmodSync(file, 0o600);
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL);
@@ -44,17 +47,30 @@ function connection(file) {
     CREATE VIRTUAL TABLE IF NOT EXISTS item_search USING fts5(key UNINDEXED, title, creators, fields, tags, tokenize='unicode61 remove_diacritics 2');
     CREATE TABLE IF NOT EXISTS collections (key TEXT PRIMARY KEY, version INTEGER NOT NULL, name TEXT NOT NULL, parent TEXT REFERENCES collections(key), data TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS collections_parent ON collections(parent,name,key);
+    CREATE VIRTUAL TABLE IF NOT EXISTS collection_search USING fts5(name,content='collections',content_rowid='rowid',tokenize='unicode61 remove_diacritics 2');
+    CREATE TRIGGER IF NOT EXISTS collection_search_insert AFTER INSERT ON collections BEGIN
+      INSERT INTO collection_search(rowid,name) VALUES(new.rowid,new.name); END;
+    CREATE TRIGGER IF NOT EXISTS collection_search_delete AFTER DELETE ON collections BEGIN
+      INSERT INTO collection_search(collection_search,rowid,name) VALUES('delete',old.rowid,old.name); END;
+    CREATE TRIGGER IF NOT EXISTS collection_search_update AFTER UPDATE ON collections BEGIN
+      INSERT INTO collection_search(collection_search,rowid,name) VALUES('delete',old.rowid,old.name);
+      INSERT INTO collection_search(rowid,name) VALUES(new.rowid,new.name); END;
     CREATE TABLE IF NOT EXISTS memberships (item TEXT REFERENCES items(key) ON DELETE CASCADE, collection TEXT REFERENCES collections(key) ON DELETE CASCADE, PRIMARY KEY(collection,item));
     CREATE INDEX IF NOT EXISTS memberships_item ON memberships(item,collection);
     CREATE TABLE IF NOT EXISTS identifiers (kind TEXT NOT NULL, value TEXT NOT NULL, item TEXT REFERENCES items(key) ON DELETE CASCADE, PRIMARY KEY(kind,value,item));
     CREATE TABLE IF NOT EXISTS fulltext (item TEXT PRIMARY KEY REFERENCES items(key) ON DELETE CASCADE, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS receipts (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS receipt_versions (prefix TEXT PRIMARY KEY, version INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS receipts_jobs_created ON receipts(json_extract(data,'$.createdAt') DESC,id) WHERE substr(id,1,4)='job:';
     CREATE TABLE IF NOT EXISTS searches (key TEXT PRIMARY KEY,version INTEGER NOT NULL,name TEXT NOT NULL,data TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS searches_name ON searches(name,key);
     CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY, data TEXT NOT NULL);
     PRAGMA user_version=1;`);
   connections.set(file, db);
+  if (!hasCollectionSearch)
+    db.exec(
+      "INSERT INTO collection_search(collection_search) VALUES('rebuild')",
+    );
   if (connections.size > 8) {
     const [old, value] = connections.entries().next().value;
     value.close();
@@ -440,15 +456,52 @@ const operations = {
     }
     return [...found.values()];
   },
-  collections: (db, { parent = null, start = 0, limit = 80 } = {}) => ({
-    items: db
-      .prepare(
-        "SELECT * FROM collections WHERE parent IS ? ORDER BY name,key LIMIT ? OFFSET ?",
+  eraseSessionNote: (db, { key, expected, sessionID }) =>
+    transaction(db, () => {
+      const row = checked(db, "items", key, expected);
+      const data = JSON.parse(row.data);
+      if (
+        data.itemType !== "note" ||
+        data.provenance?.captureSession !== sessionID
       )
-      .all(parent, Math.min(200, limit), start)
-      .map(decode),
-    version: version(db),
-  }),
+        fail("This note does not belong to the capture session", 403);
+      db.prepare("DELETE FROM item_search WHERE key=?").run(key);
+      db.prepare("DELETE FROM items WHERE key=?").run(key);
+      return { version: nextVersion(db) };
+    }),
+  collections: (
+    db,
+    { parent = null, query = "", start = 0, limit = 80 } = {},
+  ) => {
+    limit = Math.max(1, Math.min(200, Number(limit) || 80));
+    if (!Number.isSafeInteger(start) || start < 0)
+      fail("Invalid collection offset");
+    const terms =
+      String(query)
+        .slice(0, 2048)
+        .match(/[\p{L}\p{N}]+/gu) || [];
+    const where = terms.length
+      ? "rowid IN (SELECT rowid FROM collection_search WHERE collection_search MATCH ?)"
+      : "parent IS ?";
+    const value = terms.length
+      ? terms
+          .slice(0, 24)
+          .map((term) => '"' + term + '"*')
+          .join(" AND ")
+      : parent;
+    const rows = db
+      .prepare(
+        `SELECT * FROM collections WHERE ${where} ORDER BY name,key LIMIT ? OFFSET ?`,
+      )
+      .all(value, limit + 1, start);
+    const more = rows.length > limit;
+    if (more) rows.pop();
+    return {
+      items: rows.map(decode),
+      version: version(db),
+      nextStart: more ? start + rows.length : null,
+    };
+  },
   collection: (db, { key: k }) =>
     decode(db.prepare("SELECT * FROM collections WHERE key=?").get(k)) ||
     fail("Collection not found", 404),
@@ -512,14 +565,50 @@ const operations = {
       ? JSON.parse(row.data)
       : fail("Full text has not been indexed", 404);
   },
-  record: (db, { table = "receipts", id, data }) => {
+  record: (db, { table = "receipts", id, data, revisionPrefix }) => {
     if (!["receipts", "settings"].includes(table)) fail("Invalid record table");
     if (data !== undefined)
-      db.prepare(
-        `INSERT INTO ${table} VALUES(?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data`,
-      ).run(id, JSON.stringify(data));
+      transaction(db, () => {
+        db.prepare(
+          `INSERT INTO ${table} VALUES(?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data`,
+        ).run(id, JSON.stringify(data));
+        if (revisionPrefix)
+          db.prepare(
+            "INSERT INTO receipt_versions VALUES(?,1) ON CONFLICT(prefix) DO UPDATE SET version=version+1",
+          ).run(revisionPrefix);
+      });
     const row = db.prepare(`SELECT data FROM ${table} WHERE id=?`).get(id);
     return row ? JSON.parse(row.data) : null;
+  },
+  recordPage: (
+    db,
+    { prefix, cursor = "", start = 0, limit = 80, expectedVersion },
+  ) => {
+    limit = Math.min(100, Math.max(1, limit));
+    if (typeof prefix !== "string" || (cursor && !cursor.startsWith(prefix)))
+      fail("Invalid outcome cursor");
+    if (!Number.isSafeInteger(start) || start < 0)
+      fail("Invalid outcome offset");
+    const version =
+      db
+        .prepare("SELECT version FROM receipt_versions WHERE prefix=?")
+        .get(prefix)?.version || 0;
+    if (expectedVersion !== undefined && expectedVersion !== version)
+      fail("Job outcomes changed; reload this page", 409);
+    const rows = db
+      .prepare(
+        "SELECT id,data FROM receipts WHERE id>=? AND id<? AND id>? ORDER BY id LIMIT ? OFFSET ?",
+      )
+      .all(prefix, prefix + "\uffff", cursor, limit + 1, cursor ? 0 : start);
+    const more = rows.length > limit;
+    if (more) rows.pop();
+    return {
+      items: rows.map((row) => JSON.parse(row.data)),
+      next: more ? rows.at(-1).id : null,
+      nextStart: more ? start + rows.length : null,
+      hasMore: more,
+      version,
+    };
   },
 };
 parentPort.on("message", ({ id, file, operation, args }) => {

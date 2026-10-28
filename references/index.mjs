@@ -9,6 +9,7 @@ import { Store } from "./store/index.mjs";
 import { extractPDF } from "./extract.mjs";
 import { NativeComponents } from "./native.mjs";
 import { decodeRFC2047 } from "./headers.mjs";
+import { updateCaptureSession } from "./capture-session.mjs";
 import {
   normalizeIdentifier,
   resolveIdentifiers,
@@ -28,6 +29,15 @@ const bounded = (value, max = 200) => {
   return value;
 };
 const digest = (value) => createHash("sha256").update(value).digest("hex");
+// Only the upload owner can supply a private file to the native import worker.
+const nativeImportSource = Symbol("nativeImportSource");
+const importEncodings = new Set([
+  "utf-8",
+  "utf-16le",
+  "utf-16be",
+  "windows-1252",
+  "iso-8859-1",
+]);
 const cleanFilename = (name) =>
   String(name || "attachment")
     .replace(/[\\/\u0000-\u001f]/g, "_")
@@ -101,6 +111,7 @@ export async function createReferencesService({
         "putSearch",
         "deleteSearch",
         "importCollections",
+        "eraseSessionNote",
       ].includes(op) ||
       (["record", "fulltext"].includes(op) && args.data !== undefined);
     if (!mutation) return store.call(p.file, op, args, signal);
@@ -114,6 +125,21 @@ export async function createReferencesService({
     return p.runAuthorized ? p.runAuthorized(commit) : commit(signal);
   };
   const identity = (p, key) => `bkref:${backendId}/${p.id}/${key}`;
+  async function withOperation(key, work, signal) {
+    const prior = operations.get(key) || Promise.resolve();
+    const pending = prior
+      .catch(() => {})
+      .then(() => {
+        signal?.throwIfAborted();
+        return work();
+      });
+    operations.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      if (operations.get(key) === pending) operations.delete(key);
+    }
+  }
   const decorate = (p, item) => ({
     ...item,
     id: identity(p, item.key),
@@ -194,11 +220,15 @@ export async function createReferencesService({
     return Object.values(value).flatMap(pendingResolvers);
   }
   function finishJobStatus(status) {
-    status.status = pendingResolvers(status.results).length
-      ? "waiting-for-browser"
-      : status.results.some((x) => x.status === "error")
-        ? "partial"
-        : "complete";
+    status.status =
+      pendingResolvers(status.results).length ||
+      status.results.some((value) => value.result?.pendingBrowserRequests > 0)
+        ? "waiting-for-browser"
+        : status.results.some(
+              (x) => x.status === "error" || x.result?.status === "partial",
+            )
+          ? "partial"
+          : "complete";
   }
   async function completeResolver(p, request, receipt) {
     const completed = {
@@ -211,6 +241,24 @@ export async function createReferencesService({
       id: "resolver:" + request.requestId,
       data: completed,
     });
+    if (request.resultReceipt) {
+      const outcome = await call(p, "record", { id: request.resultReceipt });
+      if (outcome) {
+        for (const pending of pendingResolvers(outcome))
+          if (pending.requestId === request.requestId) {
+            pending.status = "complete";
+            pending.attachment = receipt;
+          }
+        await call(p, "record", {
+          id: request.resultReceipt,
+          data: outcome,
+          revisionPrefix: request.resultReceipt.slice(
+            0,
+            request.resultReceipt.lastIndexOf(":result:") + 8,
+          ),
+        });
+      }
+    }
     for (const jobId of new Set(
       [request.jobId, ...(request.jobIds || [])].filter(Boolean),
     )) {
@@ -219,6 +267,14 @@ export async function createReferencesService({
         jobStates.get(jobKey) ||
         (await call(p, "record", { id: "job:" + jobId }));
       if (status) {
+        if (request.resultReceipt)
+          for (const entry of status.results) {
+            if (entry.result?.pendingBrowserRequests)
+              entry.result.pendingBrowserRequests = Math.max(
+                0,
+                entry.result.pendingBrowserRequests - 1,
+              );
+          }
         for (const pending of pendingResolvers(status.results)) {
           if (pending.requestId === request.requestId) {
             pending.status = "complete";
@@ -231,6 +287,17 @@ export async function createReferencesService({
       }
     }
     return receipt;
+  }
+  async function assertResolverActive(p, request) {
+    const ids = [
+      ...new Set([request.jobId, ...(request.jobIds || [])].filter(Boolean)),
+    ];
+    if (!ids.length) return;
+    for (const id of ids) {
+      const job = await call(p, "record", { id: "job:" + id });
+      if (job && job.status !== "cancelled") return;
+    }
+    fail("The resolver job was cancelled", 409);
   }
   async function job(
     p,
@@ -316,7 +383,11 @@ export async function createReferencesService({
           for (let i = 0; i < values.length; i++) {
             controller.signal.throwIfAborted();
             await project(authority, p.id);
-            if (status.results[i]?.status === "complete") continue;
+            if (
+              status.results[i]?.status === "complete" &&
+              status.results[i]?.result?.status !== "partial"
+            )
+              continue;
             try {
               status.results[i] = {
                 index: i,
@@ -355,6 +426,110 @@ export async function createReferencesService({
       }
     })();
     return status;
+  }
+  async function importJob(p, authority, body, signal) {
+    let source;
+    let target = body.target;
+    let requestId = body.requestId || randomUUID();
+    if (body.uploadId) {
+      const upload = await call(
+        p,
+        "record",
+        { id: "upload:" + body.uploadId },
+        signal,
+      );
+      if (
+        !upload ||
+        upload.pid !== p.id ||
+        upload.method !== "import" ||
+        upload.bodyEncoding !== "binary" ||
+        !upload.sealed ||
+        upload.cancelled
+      )
+        fail("A completed reference-file upload is required", 409);
+      const expectedPath = path.join(
+        path.dirname(p.file),
+        "imports",
+        upload.id,
+      );
+      if (upload.tempPath !== expectedPath)
+        fail("Import source is outside its library", 403);
+      const params = new URLSearchParams(upload.queryString || "");
+      requestId = upload.requestId;
+      if (body.requestId && body.requestId !== requestId)
+        fail("Import request identity differs from its upload", 409);
+      target = params.get("target");
+      source = {
+        path: expectedPath,
+        byteLength: upload.byteLength,
+        encoding: upload.encoding,
+        sha256: upload.sha256,
+      };
+    } else if (
+      typeof body.text !== "string" ||
+      Buffer.byteLength(body.text, "utf8") > 32 * 1024 * 1024
+    ) {
+      fail("Import text must be at most 32 MiB", 413);
+    }
+    const params = new URLSearchParams({
+      sessionID: requestId,
+      summary: "true",
+    });
+    if (target) {
+      await call(p, "collection", { key: target }, signal);
+      params.set("target", target);
+    }
+    const values = [
+      source
+        ? {
+            uploadId: body.uploadId,
+            sha256: source.sha256,
+            encoding: source.encoding,
+            target,
+          }
+        : body.text,
+    ];
+    const result = await job(
+      p,
+      authority,
+      "file-import",
+      values,
+      async (value, activeSignal, receipt, context) => {
+        const result = await connector(
+          p,
+          authority,
+          "import",
+          {
+            data: source ? undefined : value,
+            [nativeImportSource]: source,
+            onProgress: context.onProgress,
+          },
+          params,
+          {},
+          activeSignal,
+        );
+        if (source) await fs.rm(source.path, { force: true });
+        return result;
+      },
+      requestId,
+      { resume: body.resume },
+    );
+    // Persist only the sealed upload identity, never its bytes or private path.
+    await call(
+      p,
+      "record",
+      {
+        id: "job-request:" + result.id,
+        data: {
+          path: `/projects/${encodeURIComponent(p.id)}/import`,
+          body: source
+            ? { uploadId: body.uploadId, requestId, summary: true }
+            : { text: body.text, target, requestId, summary: true },
+        },
+      },
+      signal,
+    );
+    return result;
   }
   async function enrich(p, item, signal, raw) {
     const data = item.data;
@@ -432,6 +607,7 @@ export async function createReferencesService({
     authority,
     resolverContext,
     resolveFiles = settings.automaticPDFs,
+    target,
   ) {
     const normalized = normalizeIdentifier(input);
     const resolution = await resolveIdentifiers({
@@ -448,14 +624,19 @@ export async function createReferencesService({
         [normalized.type]: normalized.value,
       }).filter(([, value]) => value),
     );
+    const metadataIdentifiers = (data) => ({
+      DOI: data.DOI || data.provenance?.identifiers?.DOI,
+      PMID:
+        data.PMID ||
+        String(data.extra || "").match(/^PMID:\s*(\d+)/m)?.[1] ||
+        data.provenance?.identifiers?.PMID,
+      PMCID:
+        data.PMCID ||
+        String(data.extra || "").match(/^PMCID:\s*(\S+)/m)?.[1] ||
+        data.provenance?.identifiers?.PMCID,
+    });
     const checkIdentifiers = (data) => {
-      const actual = {
-        DOI: data.DOI,
-        PMID:
-          data.PMID || String(data.extra || "").match(/^PMID:\s*(\d+)/m)?.[1],
-        PMCID:
-          data.PMCID || String(data.extra || "").match(/^PMCID:\s*(\S+)/m)?.[1],
-      };
+      const actual = metadataIdentifiers(data);
       const comparable = (kind, value) =>
         kind === "PMCID"
           ? String(value)
@@ -476,6 +657,52 @@ export async function createReferencesService({
             409,
           );
     };
+    const rememberIdentifiers = async (item) => {
+      checkIdentifiers(item.data);
+      const prior = item.data.provenance?.identifiers || {};
+      const changed = Object.entries(lookupIdentifiers).some(
+        ([kind, value]) => prior[kind] !== value,
+      );
+      if (changed)
+        item = await call(
+          p,
+          "put",
+          {
+            value: {
+              key: item.key,
+              data: {
+                ...item.data,
+                provenance: {
+                  ...item.data.provenance,
+                  identifiers: { ...prior, ...lookupIdentifiers },
+                  identityResolution: resolved,
+                },
+              },
+            },
+            expected: item.version,
+          },
+          signal,
+        );
+      return addToImportTarget(p, item, target, signal);
+    };
+    const skipped = async (item) => ({
+      input,
+      status: "skipped",
+      item: decorate(p, item),
+      resolution: resolved,
+      ...(resolveFiles
+        ? {
+            pdfs: await resolvePDFs(
+              p,
+              authority,
+              [item],
+              signal,
+              true,
+              resolverContext,
+            ),
+          }
+        : {}),
+    });
     const matches = await call(
       p,
       "find",
@@ -484,15 +711,8 @@ export async function createReferencesService({
     );
     if (matches.length > 1)
       fail("Several records match this identifier; reconcile duplicates");
-    if (matches.length === 1) {
-      checkIdentifiers(matches[0].data);
-      return {
-        input,
-        status: "skipped",
-        item: decorate(p, matches[0]),
-        resolution: resolved,
-      };
-    }
+    if (matches.length === 1)
+      return skipped(await rememberIdentifiers(matches[0]));
     const metadata = translator
       ? await translator.resolve(resolved.zoteroIdentifier, {
           signal,
@@ -508,31 +728,77 @@ export async function createReferencesService({
     );
     if (!regular.length)
       fail("No reference metadata was returned for this identifier", 502);
+    if (regular.length !== 1)
+      fail(
+        "Identifier translation returned several references; choose one before import",
+        422,
+      );
     for (const item of regular) checkIdentifiers(item);
-    const items = await call(
-      p,
-      "batch",
-      {
-        items: nativeValues(
-          metadata.map((data) => ({
-            ...data,
-            provenance: {
-              source: "pinned-translator",
-              input,
-              resolution: resolved,
-              identifiers: ["attachment", "note", "annotation"].includes(
-                data.itemType,
-              )
-                ? {}
-                : lookupIdentifiers,
-              retrievedAt: new Date().toISOString(),
+    for (const [kind, value] of Object.entries(
+      metadataIdentifiers(regular[0]),
+    )) {
+      if (!value) continue;
+      const identifier = normalizeIdentifier(
+        kind === "DOI" ? value : kind + ":" + value,
+      );
+      if (identifier.type === kind) lookupIdentifiers[kind] = identifier.value;
+    }
+    // PMID/PMCID translations can reveal a DOI absent from the initial input.
+    // Recheck all verified identities in the existing per-project commit owner.
+    const committed = await withOperation(
+      "identifier-commit:" + p.id,
+      async () => {
+        const found = await call(
+          p,
+          "find",
+          { identifiers: lookupIdentifiers },
+          signal,
+        );
+        if (found.length > 1)
+          fail(
+            "Several records match the translated identifiers; reconcile duplicates",
+            409,
+          );
+        if (found.length === 1)
+          return { reused: await rememberIdentifiers(found[0]) };
+        return {
+          items: await call(
+            p,
+            "batch",
+            {
+              items: nativeValues(
+                metadata.map((data) => ({
+                  ...data,
+                  collections:
+                    data.parentItem ||
+                    ["attachment", "note", "annotation"].includes(data.itemType)
+                      ? data.collections || []
+                      : target
+                        ? [target]
+                        : data.collections || [],
+                  provenance: {
+                    source: "pinned-translator",
+                    input,
+                    resolution: resolved,
+                    identifiers: ["attachment", "note", "annotation"].includes(
+                      data.itemType,
+                    )
+                      ? {}
+                      : lookupIdentifiers,
+                    retrievedAt: new Date().toISOString(),
+                  },
+                })),
+              ),
+              receipt,
             },
-          })),
-        ),
-        receipt,
+            signal,
+          ),
+        };
       },
       signal,
     );
+    if (committed.reused) return skipped(committed.reused);
+    const items = committed.items;
     const enriched = [];
     for (const item of items) {
       if (["attachment", "note", "annotation"].includes(item.data.itemType)) {
@@ -568,6 +834,329 @@ export async function createReferencesService({
       ...(pdfs ? { pdfs } : {}),
     };
   }
+  async function addToImportTarget(p, item, target, signal) {
+    if (!target || item.data.collections?.includes(target)) return item;
+    return call(
+      p,
+      "put",
+      {
+        value: {
+          key: item.key,
+          data: {
+            ...item.data,
+            collections: [...(item.data.collections || []), target],
+          },
+        },
+        expected: item.version,
+      },
+      signal,
+    );
+  }
+  async function importOpenAlexRecord(
+    p,
+    authority,
+    raw,
+    activeSignal,
+    receipt,
+    context,
+    options = {},
+  ) {
+    const record = openAlexRecord(raw),
+      identifier = record.doi
+        ? "DOI:" + record.doi
+        : record.pmid
+          ? "PMID:" + record.pmid
+          : null;
+    if (identifier) {
+      const imported = await importIdentifier(
+        p,
+        identifier,
+        activeSignal,
+        receipt,
+        authority,
+        context,
+        options.resolvePDFs ?? settings.automaticPDFs,
+        options.target,
+      );
+      const candidates =
+        imported.items || (imported.item ? [imported.item] : []);
+      for (const item of candidates.filter(
+        (x) => !["attachment", "note", "annotation"].includes(x.data.itemType),
+      )) {
+        const updated = decorate(p, await enrich(p, item, activeSignal, raw));
+        if (imported.item?.key === item.key) imported.item = updated;
+        if (imported.items)
+          imported.items = imported.items.map((value) =>
+            value.key === item.key ? updated : value,
+          );
+      }
+      return imported;
+    }
+    const previous = await call(
+      p,
+      "find",
+      { identifiers: { OpenAlex: record.id } },
+      activeSignal,
+    );
+    if (previous.length > 1) fail("Several items share this OpenAlex identity");
+    if (previous.length === 1) {
+      const item = await addToImportTarget(
+        p,
+        previous[0],
+        options.target,
+        activeSignal,
+      );
+      return {
+        status: "skipped",
+        item: decorate(p, item),
+        ...((options.resolvePDFs ?? settings.automaticPDFs)
+          ? {
+              pdfs: await resolvePDFs(
+                p,
+                authority,
+                [item],
+                activeSignal,
+                true,
+                context,
+              ),
+            }
+          : {}),
+      };
+    }
+    const metadata = await native.call(
+      "translateOpenAlex",
+      [raw],
+      activeSignal,
+    );
+    const values = nativeValues(
+      metadata.map((data) => ({
+        ...data,
+        collections: data.parentItem
+          ? []
+          : options.target
+            ? [options.target]
+            : [],
+        abstractNote: selectAbstract(record.abstract, data.abstractNote || "")
+          .text,
+        provenance: {
+          openalex: {
+            id: record.id,
+            raw,
+            sourceUrl: record.sourceUrl,
+            retrievedAt: new Date().toISOString(),
+          },
+          abstract: {
+            openalex: record.abstract,
+            chosenSource: record.abstract ? "OpenAlex" : null,
+            warnings: record.abstractIssue || null,
+          },
+        },
+      })),
+    );
+    const imported = await call(
+      p,
+      "batch",
+      { items: values, receipt },
+      activeSignal,
+    );
+    const pdfs =
+      (options.resolvePDFs ?? settings.automaticPDFs)
+        ? await resolvePDFs(
+            p,
+            authority,
+            imported.filter(
+              (x) =>
+                !["attachment", "note", "annotation"].includes(x.data.itemType),
+            ),
+            activeSignal,
+            true,
+            context,
+          )
+        : undefined;
+    return {
+      status: "imported",
+      items: imported.map((x) => decorate(p, x)),
+      ...(pdfs ? { pdfs } : {}),
+    };
+  }
+  async function importOpenAlexSearch(p, authority, body, signal) {
+    if (
+      !body.search ||
+      typeof body.search !== "object" ||
+      Array.isArray(body.search) ||
+      Object.keys(body.search).some(
+        (key) =>
+          !["query", "filter", "sort", "queryMode", "field", "exact"].includes(
+            key,
+          ),
+      ) ||
+      !Number.isSafeInteger(body.limit) ||
+      body.limit < 1
+    )
+      fail(
+        "Search import requires a search specification and a positive explicit result limit",
+      );
+    if (!body.search.query && !body.search.filter)
+      fail("Choose a query or filter for search import");
+    if (body.search.queryMode === "semantic" && body.limit > 50)
+      fail("OpenAlex semantic search returns at most 50 results per query");
+    if (body.limit > 10000 && !settings.openalexKey)
+      fail(
+        "Importing beyond OpenAlex's first 10,000 results requires a free OpenAlex key for cursor paging in References Settings",
+      );
+    return job(
+      p,
+      authority,
+      "openalex-search-import",
+      [
+        {
+          search: body.search,
+          limit: body.limit,
+          target: body.target || null,
+          resolvePDFs: body.resolvePDFs ?? settings.automaticPDFs,
+        },
+      ],
+      async (input, activeSignal, receipt, context) => {
+        const summary = {
+          status: "imported",
+          processed: 0,
+          imported: 0,
+          skipped: 0,
+          failed: 0,
+          pendingBrowserRequests: 0,
+          totalResultsReported: null,
+          limit: input.limit,
+          stoppedBecause: "end-of-results",
+          results: [],
+        };
+        let pageNumber = 1;
+        let cursor =
+          settings.openalexKey && input.search.queryMode !== "semantic"
+            ? "*"
+            : null;
+        const seenCursors = new Set();
+        const pageSize = Math.min(100, input.limit);
+        while (summary.processed < input.limit) {
+          activeSignal.throwIfAborted();
+          await project(authority, p.id);
+          const pageReceipt = receipt + ":page:" + pageNumber;
+          let page = await call(p, "record", { id: pageReceipt }, activeSignal);
+          if (!page) {
+            const response = await handle({
+              method: "POST",
+              path: `/projects/${encodeURIComponent(p.id)}/openalex/search`,
+              body: {
+                ...input.search,
+                ...(cursor ? { cursor } : { page: pageNumber }),
+                pageSize,
+              },
+              authority,
+              signal: activeSignal,
+            });
+            if (response.status !== 200)
+              fail(
+                response.body.error || "OpenAlex page failed",
+                response.status,
+              );
+            page = response.body;
+            await call(
+              p,
+              "record",
+              { id: pageReceipt, data: page },
+              activeSignal,
+            );
+          }
+          summary.totalResultsReported = page.totalResultsReported;
+          for (const record of page.records) {
+            if (summary.processed >= input.limit) break;
+            const recordReceipt = receipt + ":result:" + record.id;
+            let outcome = await call(
+              p,
+              "record",
+              { id: recordReceipt },
+              activeSignal,
+            );
+            if (outcome?.pageNumber && outcome.pageNumber !== pageNumber)
+              continue;
+            if (!outcome || outcome.status === "error") {
+              try {
+                const imported = await importOpenAlexRecord(
+                  p,
+                  authority,
+                  record.raw,
+                  activeSignal,
+                  receipt + ":source:" + record.id + ":items",
+                  { ...context, resultReceipt: recordReceipt },
+                  input,
+                );
+                outcome = {
+                  sourceId: record.id,
+                  pageNumber,
+                  status: imported.status,
+                  itemIds: (
+                    imported.items || (imported.item ? [imported.item] : [])
+                  ).map((item) => item.id),
+                  ...(imported.pdfs ? { pdfs: imported.pdfs } : {}),
+                };
+              } catch (error) {
+                activeSignal.throwIfAborted();
+                outcome = {
+                  sourceId: record.id,
+                  pageNumber,
+                  status: "error",
+                  error: error.message,
+                };
+              }
+              await call(
+                p,
+                "record",
+                {
+                  id: recordReceipt,
+                  data: outcome,
+                  revisionPrefix: receipt + ":result:",
+                },
+                activeSignal,
+              );
+            }
+            if (summary.results.length < 80) summary.results.push(outcome);
+            summary.pendingBrowserRequests += pendingResolvers(outcome).length;
+            summary.processed++;
+            if (outcome.status === "imported") summary.imported++;
+            else if (outcome.status === "skipped") summary.skipped++;
+            else summary.failed++;
+            context.onProgress({
+              key: "openalex-import",
+              status: "importing",
+              completed: summary.processed,
+              total: Math.min(input.limit, summary.totalResultsReported),
+              imported: summary.imported,
+              skipped: summary.skipped,
+              failed: summary.failed,
+            });
+            await new Promise((resolve) => setImmediate(resolve));
+          }
+          if (
+            !page.records.length ||
+            (cursor ? !page.nextCursor : !page.nextPage)
+          )
+            break;
+          if (cursor) {
+            if (seenCursors.has(page.nextCursor))
+              fail("OpenAlex returned a repeated page cursor", 502);
+            seenCursors.add(page.nextCursor);
+            cursor = page.nextCursor;
+          }
+          if (++pageNumber > Math.ceil(input.limit / pageSize) + 1)
+            fail("OpenAlex repeated records prevented bounded paging", 502);
+        }
+        if (summary.processed >= input.limit) summary.stoppedBecause = "limit";
+        if (summary.failed) summary.status = "partial";
+        return summary;
+      },
+      body.requestId,
+      { resume: body.resume },
+    );
+  }
   async function saveAttachment(p, authority, meta, body, sessionID) {
     if (p.runAuthorized)
       return p.runAuthorized(async (ownerSignal) => {
@@ -595,6 +1184,7 @@ export async function createReferencesService({
       )
         fail("Resolver receipt does not match this capture", 403);
       if (resolverRequest.status === "complete") return resolverRequest.receipt;
+      await assertResolverActive(p, resolverRequest);
       if (
         resolverRequest.status !== "challenge-required" ||
         resolverRequest.expiresAt < Date.now()
@@ -680,6 +1270,7 @@ export async function createReferencesService({
       const hash = createHash("sha256");
       await pipeline(createReadStream(destination), hash);
       const sha256 = hash.digest("hex");
+      if (resolverRequest) await assertResolverActive(p, resolverRequest);
       const byteLength = (await fs.stat(destination)).size;
       const result = await call(p, "put", {
         value: {
@@ -861,7 +1452,7 @@ export async function createReferencesService({
             controller.abort(new DOMException("Library deleted", "AbortError"));
         for (const upload of uploads.values())
           if (upload.pid === projectId) {
-            await upload.file.close().catch(() => {});
+            await upload.file?.close().catch(() => {});
             await fs.rm(upload.tempPath, { force: true });
             uploads.delete(upload.id);
           }
@@ -875,6 +1466,10 @@ export async function createReferencesService({
         await store.call(p.file, "closeLibrary", {});
         for (const suffix of ["", "-wal", "-shm"])
           await fs.rm(p.file + suffix, { force: true });
+        await fs.rm(path.join(path.dirname(p.file), "imports"), {
+          recursive: true,
+          force: true,
+        });
         if (attachmentDirectory)
           await fs.rm(attachmentDirectory, { recursive: true, force: true });
         return {
@@ -917,6 +1512,8 @@ export async function createReferencesService({
           signal,
           "recognize:" + sessionID,
           authority,
+          undefined,
+          false,
         );
         const parent =
           imported.item ||
@@ -1063,6 +1660,7 @@ export async function createReferencesService({
               })),
               settings,
               automatic,
+              methods: context.methods,
               temporaryRoot: path.join(root, "downloads"),
             },
           ],
@@ -1104,6 +1702,7 @@ export async function createReferencesService({
               ...recipe,
               jobId: context.jobId,
               jobIndex: context.jobIndex,
+              resultReceipt: context.resultReceipt,
             },
           });
           outputs.push({ id: identity(p, item.key), ...recipe });
@@ -1242,6 +1841,7 @@ export async function createReferencesService({
           receipt: request.receipt,
           completedAt: request.completedAt,
         };
+      await assertResolverActive(p, request);
       if (
         request.status !== "challenge-required" ||
         request.expiresAt < Date.now()
@@ -1254,7 +1854,7 @@ export async function createReferencesService({
         signal,
       );
       if (parent.data.deleted) fail("Resolver parent is in the trash", 409);
-      const { jobId, jobIndex, ...recipe } = request;
+      const { jobId, jobIndex, jobIds, resultReceipt, ...recipe } = request;
       return recipe;
     }
     if (method === "getSelectedCollection") {
@@ -1263,8 +1863,9 @@ export async function createReferencesService({
         "collections",
         {
           parent: body?.parent || null,
+          query: body?.q || "",
           start: Number(body?.start) || 0,
-          limit: 80,
+          limit: Math.min(100, Number(body?.limit) || 80),
         },
         signal,
       );
@@ -1275,6 +1876,7 @@ export async function createReferencesService({
         libraryEditable: true,
         filesEditable: true,
         target: body?.target || "L" + p.id,
+        kind: body?.target ? "collection" : "library",
         collectionID: body?.target || null,
         collectionName: body?.target
           ? (await call(p, "collection", { key: body.target }, signal)).data
@@ -1285,15 +1887,27 @@ export async function createReferencesService({
           ? (await call(p, "collection", { key: body.target }, signal)).data
               .name
           : p.name || p.id,
-        targets: list.items.map((c) => ({
-          id: c.key,
-          name: c.data.name,
-          level: 0,
-          libraryID: p.id,
-          filesEditable: true,
-        })),
-        nextStart:
-          list.items.length === 80 ? (Number(body?.start) || 0) + 80 : null,
+        targets: [
+          {
+            id: "L" + p.id,
+            kind: "library",
+            name: p.name || p.id,
+            libraryID: p.id,
+            filesEditable: true,
+            level: 0,
+          },
+          ...list.items.map((c) => ({
+            id: c.key,
+            kind: "collection",
+            name: c.data.name,
+            parent: c.data.parentCollection || null,
+            level: 1,
+            libraryID: p.id,
+            filesEditable: true,
+          })),
+        ],
+        nextStart: list.nextStart,
+        version: list.version,
       };
     }
     if (method === "upload-begin") {
@@ -1305,7 +1919,16 @@ export async function createReferencesService({
         if (old) {
           if (old.requestHash !== requestHash)
             fail("Upload request ID was reused with different data", 409);
-          return { uploadId: old.uploadId };
+          const upload = await call(p, "record", {
+            id: "upload:" + old.uploadId,
+          });
+          if (upload && !upload.cancelled)
+            return {
+              uploadId: old.uploadId,
+              offset: upload.offset,
+              ...(upload.sealed ? { sealed: true } : {}),
+              ...(upload.result ? { receipt: upload.result } : {}),
+            };
         }
       }
       if (body.parentKey) {
@@ -1333,9 +1956,26 @@ export async function createReferencesService({
         (body.bodyEncoding === "json" && body.byteLength > 32 * 1024 * 1024)
       )
         fail("Invalid upload");
+      if (body.method === "import" && body.bodyEncoding === "binary") {
+        if (
+          body.byteLength > 32 * 1024 * 1024 ||
+          !body.requestId ||
+          !importEncodings.has(body.encoding || "utf-8")
+        )
+          fail(
+            "Reference-file uploads require a request ID, supported encoding and at most 32 MiB",
+          );
+        const params = new URLSearchParams(body.queryString || "");
+        if (params.get("summary") !== "true")
+          fail("Reference-file uploads require summary jobs");
+        const target = params.get("target");
+        if (target) await call(p, "collection", { key: target }, signal);
+        body = { ...body, encoding: body.encoding || "utf-8" };
+      }
       for (const upload of uploads.values()) {
         if (upload.expires < Date.now()) {
-          await upload.file.close();
+          await upload.file?.close();
+          if (upload.sealed) continue;
           await fs.rm(upload.tempPath, { force: true });
           uploads.delete(upload.id);
         }
@@ -1369,7 +2009,7 @@ export async function createReferencesService({
           id: "upload-request:" + body.requestId,
           data: { uploadId: id, requestHash },
         });
-      return { uploadId: id };
+      return { uploadId: id, offset: 0 };
     }
     if (method.startsWith("upload-")) {
       let u = uploads.get(body.uploadId);
@@ -1377,15 +2017,33 @@ export async function createReferencesService({
         u = await call(p, "record", { id: "upload:" + body.uploadId });
         if (u?.result) return u.result;
         if (u?.cancelled) fail("Upload was cancelled", 409);
-        if (u && u.pid === p.id && u.expires >= Date.now()) {
-          u.file = await fs.open(u.tempPath, "r+");
+        if (u && u.pid === p.id && (u.sealed || u.expires >= Date.now())) {
+          if (!u.sealed)
+            u.file = await fs.open(u.tempPath, "r+").catch(async (error) => {
+              if (
+                error.code !== "ENOENT" ||
+                u.method !== "import" ||
+                u.bodyEncoding !== "binary"
+              )
+                throw error;
+              // A crash can occur between the atomic move and its SQLite receipt.
+              u.tempPath = path.join(path.dirname(p.file), "imports", u.id);
+              return fs.open(u.tempPath, "r+");
+            });
           uploads.set(u.id, u);
         }
       }
-      if (!u || u.pid !== p.id || u.expires < Date.now())
+      if (!u || u.pid !== p.id || (!u.sealed && u.expires < Date.now()))
         fail("Upload is unavailable", 404);
       if (method === "upload-cancel") {
-        await u.file.close();
+        if (u.sealed)
+          return {
+            cancelled: false,
+            sealed: true,
+            uploadId: u.id,
+            job: await call(p, "record", { id: "job:" + u.requestId }),
+          };
+        await u.file?.close();
         await fs.rm(u.tempPath, { force: true });
         uploads.delete(u.id);
         await call(p, "record", {
@@ -1395,6 +2053,7 @@ export async function createReferencesService({
         return { cancelled: true };
       }
       if (method === "upload-chunk") {
+        if (u.sealed) fail("Upload has already been sealed", 409);
         if (
           typeof body.data !== "string" ||
           body.data.length > 349528 ||
@@ -1419,6 +2078,43 @@ export async function createReferencesService({
       if (method === "upload-commit") {
         if (u.result) return u.result;
         if (u.offset !== u.byteLength) fail("Upload is incomplete", 409);
+        if (u.method === "import" && u.bodyEncoding === "binary") {
+          if (!u.sealed) {
+            await u.file?.sync();
+            await u.file?.close();
+            u.file = undefined;
+            const directory = path.join(path.dirname(p.file), "imports");
+            await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+            const destination = path.join(directory, u.id);
+            if (u.tempPath !== destination)
+              await fs.rename(u.tempPath, destination);
+            u.tempPath = destination;
+            const hash = createHash("sha256");
+            await pipeline(createReadStream(destination), hash, { signal });
+            u.sha256 = hash.digest("hex");
+            u.sealed = true;
+            await call(p, "record", {
+              id: "upload:" + u.id,
+              data: { ...u, file: undefined },
+            });
+          }
+          u.result = await importJob(
+            p,
+            authority,
+            {
+              uploadId: u.id,
+              requestId: u.requestId,
+              summary: true,
+            },
+            signal,
+          );
+          await call(p, "record", {
+            id: "upload:" + u.id,
+            data: { ...u, file: undefined },
+          });
+          uploads.delete(u.id);
+          return u.result;
+        }
         await u.file.sync();
         const q = new URLSearchParams(u.queryString || "");
         const data =
@@ -1506,6 +2202,21 @@ export async function createReferencesService({
         body,
         sessionID,
       );
+      if (method === "saveStandaloneAttachment") {
+        const session = await call(
+          p,
+          "record",
+          { id: "capture:" + sessionID },
+          signal,
+        );
+        session.items[meta.id || sessionID] = attachment.key;
+        await call(
+          p,
+          "record",
+          { id: "capture:" + sessionID, data: session },
+          signal,
+        );
+      }
       if (
         method === "saveStandaloneAttachment" &&
         attachment.data.contentType === "application/pdf"
@@ -1581,17 +2292,24 @@ export async function createReferencesService({
     if (method === "import") {
       if (!sessionID) fail("Capture sessionID required");
       const text = typeof body === "string" ? body : body.data;
+      const source = body?.[nativeImportSource];
       const operationId = "import:" + sessionID;
       const inputHash = digest(
-        JSON.stringify({ text, target: query.get("target") }),
+        JSON.stringify({
+          ...(source
+            ? { sha256: source.sha256, encoding: source.encoding }
+            : { text }),
+          target: query.get("target"),
+        }),
       );
       const previous = await call(p, "record", { id: operationId }, signal);
       if (previous && previous.inputHash !== inputHash)
         fail("Import request ID was reused with different input", 409);
+      if (previous?.completed) return previous.result;
       await call(p, "record", { id: operationId, data: { inputHash } }, signal);
       const bundle = await native.call(
-        "translateImportBundle",
-        [text, { target: query.get("target"), operationId }],
+        source ? "translateImportFile" : "translateImportBundle",
+        [source || text, { target: query.get("target"), operationId }],
         signal,
       );
       const values = nativeValues(
@@ -1632,7 +2350,7 @@ export async function createReferencesService({
         summary,
         body?.onProgress,
       );
-      return summary
+      const result = summary
         ? {
             status: "imported",
             count: values.length,
@@ -1640,67 +2358,67 @@ export async function createReferencesService({
             requestId: sessionID,
           }
         : written.map((item) => decorate(p, item));
+      if (summary)
+        await call(
+          p,
+          "record",
+          { id: operationId, data: { inputHash, completed: true, result } },
+          signal,
+        );
+      return result;
     }
-    if (method === "updateSession") {
-      const s = await call(p, "record", { id: "capture:" + sessionID });
-      if (!s) fail("Capture session unavailable", 404);
-      const hasTarget = Object.hasOwn(body, "target");
-      if (hasTarget && body.target)
-        await call(p, "collection", { key: body.target }, signal);
-      const values = [];
-      for (const k of Object.values(s.items || {})) {
-        const item = await call(p, "get", { key: k }, signal);
-        const data = { ...item.data };
-        if (hasTarget) data.collections = body.target ? [body.target] : [];
-        if (body.tags !== undefined)
-          data.tags = String(body.tags)
-            .split(",")
-            .map((tag) => ({ tag: tag.trim() }))
-            .filter((x) => x.tag);
-        values.push({ key: k, version: item.version, data });
-      }
-      if (values.length) await call(p, "batch", { items: values }, signal);
-      if (hasTarget) {
-        s.target = body.target || null;
-        await call(p, "record", { id: "capture:" + sessionID, data: s });
-      }
-      if (body.note) {
-        const parent = Object.values(s.items || {})[0];
-        if (parent)
-          await call(
-            p,
-            "batch",
-            {
-              items: [
-                {
-                  data: {
-                    itemType: "note",
-                    parentItem: parent,
-                    note: String(body.note),
-                  },
-                },
-              ],
-              receipt:
-                "capture-note:" + sessionID + ":" + digest(String(body.note)),
-            },
-            signal,
-          );
-      }
-      return {};
+    if (method === "updateSession")
+      return updateCaptureSession(p, sessionID, body, call, signal);
+    if (method === "hasAttachmentResolvers") {
+      const session = await call(
+        p,
+        "record",
+        { id: "capture:" + sessionID },
+        signal,
+      );
+      if (!session?.items?.[body.itemID])
+        fail("Capture item is unavailable", 404);
+      const item = await call(
+        p,
+        "get",
+        { key: session.items[body.itemID] },
+        signal,
+      );
+      return native.call(
+        "hasAttachmentResolvers",
+        [{ data: item.data, settings }],
+        signal,
+      );
     }
-    if (method === "hasAttachmentResolvers") return { hasResolvers: true };
     if (method === "getRecognizedItem") {
       const r = await call(p, "record", { id: "recognition:" + sessionID });
       return r?.item || false;
     }
     if (method === "saveAttachmentFromResolver") {
       const s = await call(p, "record", { id: "capture:" + sessionID });
-      return resolvePDFs(
-        p,
-        authority,
-        [await call(p, "get", { key: s.items[body.itemID] })],
-        signal,
-      );
+      if (!s?.items?.[body.itemID]) fail("Capture item is unavailable", 404);
+      const result = (
+        await resolvePDFs(
+          p,
+          authority,
+          [await call(p, "get", { key: s.items[body.itemID] })],
+          signal,
+          true,
+          { methods: ["oa", "custom"] },
+        )
+      )[0];
+      if (result?.status === "complete" && result.attachment)
+        return result.attachment.data.title || "Full text";
+      if (result?.status === "challenge-required")
+        throw Object.assign(
+          Error("Browser assistance is required to save this attachment"),
+          {
+            status: 409,
+            code: "BROWSER_REQUIRED",
+            details: { requestId: result.requestId },
+          },
+        );
+      fail("Failed to save an attachment", 502);
     }
     fail("Connector capability is not connected: " + method, 501);
   }
@@ -1767,6 +2485,7 @@ export async function createReferencesService({
           "openalex/import",
           "citations/render",
           "citations/parse",
+          "citations/import-snapshots",
           "items/enrich",
           "items/resolve-pdfs",
           "items/manage",
@@ -1818,6 +2537,7 @@ export async function createReferencesService({
           headers,
           signal,
         );
+        if (key === "saveAttachmentFromResolver") status = 201;
       } else if (op === "citation-options")
         result = await native.call(
           "citationOptions",
@@ -1832,26 +2552,8 @@ export async function createReferencesService({
           sessionID: body.requestId || randomUUID(),
         });
         if (body.target) params.set("target", body.target);
-        if (body.summary) {
-          params.set("summary", "true");
-          result = await job(
-            p,
-            authority,
-            "file-import",
-            [body.text],
-            (text, activeSignal, receipt, context) =>
-              connector(
-                p,
-                authority,
-                "import",
-                { data: text, onProgress: context.onProgress },
-                params,
-                {},
-                activeSignal,
-              ),
-            body.requestId,
-            { resume: body.resume },
-          );
+        if (body.summary || body.uploadId) {
+          result = await importJob(p, authority, body, signal);
           status = 202;
         } else {
           result = await connector(
@@ -1969,6 +2671,29 @@ export async function createReferencesService({
           automaticPDFs: !!settings.automaticPDFs,
         };
       } else if (op === "jobs") {
+        if (key && action === "results" && method === "GET") {
+          const owner = await call(p, "record", { id: "job:" + key }, signal);
+          if (!owner || owner.kind !== "openalex-search-import")
+            fail("This job has no paged source outcomes", 404);
+          return {
+            status: 200,
+            headers: responseHeaders,
+            body: await call(
+              p,
+              "recordPage",
+              {
+                prefix: key + ":0:result:",
+                cursor: query.get("cursor") || "",
+                start: Number(query.get("start")) || 0,
+                limit: Number(query.get("limit")) || 80,
+                expectedVersion: query.has("version")
+                  ? Number(query.get("version"))
+                  : undefined,
+              },
+              signal,
+            ),
+          };
+        }
         if (!key && method === "GET") {
           const page = await call(
             p,
@@ -2043,6 +2768,8 @@ export async function createReferencesService({
         )
           result = { ...result, status: "interrupted" };
       } else if (op === "identifiers" && key === "import") {
+        if (body.target)
+          await call(p, "collection", { key: body.target }, signal);
         result = await job(
           p,
           authority,
@@ -2057,6 +2784,7 @@ export async function createReferencesService({
               authority,
               context,
               body.resolvePDFs ?? settings.automaticPDFs,
+              body.target,
             ),
           body.requestId,
           { resume: body.resume },
@@ -2118,6 +2846,11 @@ export async function createReferencesService({
             fail("Unsupported OpenAlex search mode or field");
           if (queryMode === "semantic" && field !== "all")
             fail("Semantic search does not support a field restriction");
+          if (
+            queryMode === "semantic" &&
+            String(body.query || "").length > 2000
+          )
+            fail("OpenAlex semantic search accepts at most 2,000 characters");
           if (body.query) {
             const name =
               queryMode === "semantic"
@@ -2136,19 +2869,37 @@ export async function createReferencesService({
             u.searchParams.set("sort", String(body.sort).slice(0, 4096));
           const rows = body.estimate
             ? 1
-            : Math.min(100, Math.max(1, Number(body.pageSize) || 80));
+            : Math.min(
+                queryMode === "semantic" ? 50 : 100,
+                Math.max(1, Number(body.pageSize) || 80),
+              );
           u.searchParams.set("per_page", String(rows));
-          if (body.cursor) {
-            if (body.cursor !== "*" && !settings.openalexKey)
+          const cursor =
+            body.cursor ||
+            (settings.openalexKey &&
+            queryMode !== "semantic" &&
+            !body.estimate &&
+            Number(body.page || 1) === 1
+              ? "*"
+              : null);
+          if (cursor) {
+            if (cursor !== "*" && !settings.openalexKey)
               fail(
                 "Cursor paging requires an OpenAlex key in References Settings",
               );
-            u.searchParams.set("cursor", body.cursor);
-          } else
-            u.searchParams.set(
-              "page",
-              String(Math.max(1, Math.min(10000, Number(body.page) || 1))),
-            );
+            u.searchParams.set("cursor", cursor);
+          } else {
+            const page = Math.max(1, Number(body.page) || 1);
+            if (!Number.isSafeInteger(page) || page * rows > 10000)
+              fail(
+                "OpenAlex basic paging covers its first 10,000 results; continue with a returned cursor and configured key",
+              );
+            if (queryMode === "semantic" && page !== 1)
+              fail(
+                "OpenAlex semantic search has only one page of at most 50 results",
+              );
+            u.searchParams.set("page", String(page));
+          }
           if (Buffer.byteLength(u.href) > 4094)
             fail(
               "OpenAlex request exceeds its URL limit; split the query into smaller searches",
@@ -2180,7 +2931,9 @@ export async function createReferencesService({
             totalResultsReported: raw.meta.count,
             nextCursor: raw.meta.next_cursor || null,
             nextPage:
-              raw.results.length === rows ? (Number(body.page) || 1) + 1 : null,
+              queryMode !== "semantic" && raw.results.length === rows
+                ? (Number(body.page) || 1) + 1
+                : null,
             estimate: !!body.estimate,
             provenance: { url: u.href, retrievedAt: new Date().toISOString() },
           };
@@ -2191,107 +2944,28 @@ export async function createReferencesService({
             signal,
           });
       } else if (op === "openalex" && key === "import") {
-        result = await job(
-          p,
-          authority,
-          "openalex-import",
-          bounded(body.records, 1000),
-          async (raw, activeSignal, receipt, context) => {
-            const record = openAlexRecord(raw),
-              identifier = record.doi
-                ? "DOI:" + record.doi
-                : record.pmid
-                  ? "PMID:" + record.pmid
-                  : null;
-            if (identifier) {
-              const imported = await importIdentifier(
-                p,
-                identifier,
-                activeSignal,
-                receipt,
-                authority,
-                context,
-                body.resolvePDFs ?? settings.automaticPDFs,
-              );
-              const candidates =
-                imported.items || (imported.item ? [imported.item] : []);
-              for (const item of candidates.filter(
-                (x) =>
-                  !["attachment", "note", "annotation"].includes(
-                    x.data.itemType,
-                  ),
-              ))
-                await enrich(p, item, activeSignal, raw);
-              return imported;
-            }
-            const previous = await call(
+        if (body.target)
+          await call(p, "collection", { key: body.target }, signal);
+        result = body.search
+          ? await importOpenAlexSearch(p, authority, body, signal)
+          : await job(
               p,
-              "find",
-              { identifiers: { OpenAlex: record.id } },
-              activeSignal,
+              authority,
+              "openalex-import",
+              bounded(body.records, 1000),
+              (raw, activeSignal, receipt, context) =>
+                importOpenAlexRecord(
+                  p,
+                  authority,
+                  raw,
+                  activeSignal,
+                  receipt,
+                  context,
+                  body,
+                ),
+              body.requestId,
+              { resume: body.resume },
             );
-            if (previous.length > 1)
-              fail("Several items share this OpenAlex identity");
-            if (previous.length === 1)
-              return { status: "skipped", item: decorate(p, previous[0]) };
-            const metadata = await native.call(
-              "translateOpenAlex",
-              [raw],
-              activeSignal,
-            );
-            const values = nativeValues(
-              metadata.map((data) => ({
-                ...data,
-                abstractNote: selectAbstract(
-                  record.abstract,
-                  data.abstractNote || "",
-                ).text,
-                provenance: {
-                  openalex: {
-                    id: record.id,
-                    raw,
-                    sourceUrl: record.sourceUrl,
-                    retrievedAt: new Date().toISOString(),
-                  },
-                  abstract: {
-                    openalex: record.abstract,
-                    chosenSource: record.abstract ? "OpenAlex" : null,
-                    warnings: record.abstractIssue || null,
-                  },
-                },
-              })),
-            );
-            const imported = await call(
-              p,
-              "batch",
-              { items: values, receipt },
-              activeSignal,
-            );
-            const pdfs =
-              (body.resolvePDFs ?? settings.automaticPDFs)
-                ? await resolvePDFs(
-                    p,
-                    authority,
-                    imported.filter(
-                      (x) =>
-                        !["attachment", "note", "annotation"].includes(
-                          x.data.itemType,
-                        ),
-                    ),
-                    activeSignal,
-                    true,
-                    context,
-                  )
-                : undefined;
-            return {
-              status: "imported",
-              items: imported.map((x) => decorate(p, x)),
-              ...(pdfs ? { pdfs } : {}),
-            };
-          },
-          body.requestId,
-          { resume: body.resume },
-        );
         status = 202;
       } else if (op === "styles")
         result = await native.call(
@@ -2304,7 +2978,139 @@ export async function createReferencesService({
           ],
           signal,
         );
-      else if (op === "citations" && key === "parse") {
+      else if (op === "citations" && key === "import-snapshots") {
+        if (
+          !body.items ||
+          typeof body.items !== "object" ||
+          Array.isArray(body.items) ||
+          !body.requestId ||
+          typeof body.requestId !== "string" ||
+          body.requestId.length > 128
+        )
+          fail("Snapshot import requires an item map and stable request ID");
+        const entries = Object.entries(body.items);
+        bounded(entries, 100);
+        if (
+          Buffer.byteLength(JSON.stringify(body.items), "utf8") >
+          4 * 1024 * 1024
+        )
+          fail("Snapshot import accepts at most 4 MiB per batch", 413);
+        if (body.target)
+          await call(p, "collection", { key: body.target }, signal);
+        result = await withOperation(
+          "snapshot-import:" + p.id + ":" + body.requestId,
+          async () => {
+            const receipt = "snapshot-import:" + body.requestId;
+            const inputHash = digest(
+              JSON.stringify({
+                items: body.items,
+                target: body.target || null,
+              }),
+            );
+            const previous = await call(p, "record", { id: receipt }, signal);
+            if (previous && previous.inputHash !== inputHash)
+              fail(
+                "Snapshot import identity was reused with different input",
+                409,
+              );
+            if (previous?.result) result = previous.result;
+            else {
+              await call(
+                p,
+                "record",
+                { id: receipt, data: { inputHash } },
+                signal,
+              );
+              const mapping = {},
+                items = [];
+              for (const [original, snapshot] of entries) {
+                signal?.throwIfAborted();
+                if (
+                  !/^bkref:[A-Za-z0-9._~-]+\/[A-Za-z0-9._~-]+\/[A-Z0-9]+$/.test(
+                    original,
+                  ) ||
+                  !snapshot ||
+                  typeof snapshot.type !== "string" ||
+                  typeof snapshot.title !== "string" ||
+                  (snapshot.id && snapshot.id !== original)
+                )
+                  fail("Invalid canonical CSL snapshot");
+                let item;
+                if (original.startsWith(`bkref:${backendId}/${p.id}/`)) {
+                  try {
+                    item = await call(
+                      p,
+                      "get",
+                      { key: itemKey(p, original) },
+                      signal,
+                    );
+                  } catch (error) {
+                    if (error.status !== 404) throw error;
+                  }
+                }
+                if (item)
+                  item = await addToImportTarget(p, item, body.target, signal);
+                else {
+                  const operationId = receipt + ":" + original;
+                  const bundle = await native.call(
+                    "translateImportBundle",
+                    [
+                      JSON.stringify([{ ...snapshot, id: original }]),
+                      { operationId },
+                    ],
+                    signal,
+                  );
+                  const records = nativeValues(
+                    bundle.items.map((data) => ({
+                      ...data,
+                      collections: data.parentItem
+                        ? []
+                        : body.target
+                          ? [body.target]
+                          : [],
+                      provenance: {
+                        importedSnapshot: {
+                          id: original,
+                          itemData: snapshot,
+                          importedAt: new Date().toISOString(),
+                        },
+                      },
+                    })),
+                    operationId,
+                  );
+                  const imported = await call(
+                    p,
+                    "batch",
+                    { items: records, receipt: operationId },
+                    signal,
+                  );
+                  const regular = imported.filter(
+                    (value) =>
+                      !["attachment", "note", "annotation"].includes(
+                        value.data.itemType,
+                      ),
+                  );
+                  if (regular.length !== 1)
+                    fail("Native CSL import did not yield one reference", 422);
+                  item = regular[0];
+                }
+                mapping[original] = identity(p, item.key);
+                items.push(decorate(p, item));
+              }
+              result = { mapping, items };
+              await call(
+                p,
+                "record",
+                { id: receipt, data: { inputHash, result } },
+                signal,
+              );
+            }
+            return result;
+          },
+          signal,
+        );
+        status = 201;
+      } else if (op === "citations" && key === "parse") {
         result = await native.call("parseCitations", [body.text], signal);
         for (const c of result.citations) {
           for (const item of c.cluster.items) {
@@ -2319,9 +3125,15 @@ export async function createReferencesService({
           body.metadataSource === "snapshot"
             ? structuredClone(body.embeddedItems || {})
             : {};
+        const unlinkedItems = new Set();
         for (const c of state.citations || []) {
           for (const source of c.items || []) {
-            const k = itemKey(p, source.id);
+            if (
+              !/^bkref:[A-Za-z0-9._~-]+\/[A-Za-z0-9._~-]+\/[A-Z0-9]+$/.test(
+                source.id || "",
+              )
+            )
+              fail("Invalid canonical reference identity");
             if (
               state.embeddedItems[source.id] &&
               (!state.embeddedItems[source.id].type ||
@@ -2329,16 +3141,19 @@ export async function createReferencesService({
             )
               fail("Invalid embedded CSL snapshot");
             if (!state.embeddedItems[source.id]) {
+              const k = itemKey(p, source.id);
               const i = await call(p, "get", { key: k }, signal);
               state.embeddedItems[source.id] = await native.call(
                 "toCSL",
                 [i.data, source.id],
                 signal,
               );
-            }
+            } else if (!source.id.startsWith(`bkref:${backendId}/${p.id}/`))
+              unlinkedItems.add(source.id);
           }
         }
         result = await native.call("renderDocument", [state], signal);
+        result.unlinkedItems = [...unlinkedItems];
       } else if (op === "items" && key === "manage") {
         if (method !== "POST") fail("Method not allowed", 405);
         if (
@@ -2645,7 +3460,11 @@ export async function createReferencesService({
       return {
         status: error.status || (error.name === "AbortError" ? 499 : 500),
         headers: { "Cache-Control": "no-store" },
-        body: { error: error.message },
+        body: {
+          error: error.message,
+          ...(error.code ? { code: error.code } : {}),
+          ...(error.details ? { details: error.details } : {}),
+        },
       };
     }
   }
@@ -2653,6 +3472,17 @@ export async function createReferencesService({
     handle,
     validateLibraryRelink,
     deleteLibrary,
+    importSnapshots: async (body, { authority, projectId, signal } = {}) => {
+      const result = await handle({
+        method: "POST",
+        path: `/projects/${projectId}/citations/import-snapshots`,
+        body,
+        authority,
+        signal,
+      });
+      if (result.status !== 201) fail(result.body.error, result.status);
+      return result.body;
+    },
     parseDocument: async (
       text,
       { authority, identity: identityAuthority, projectId, signal } = {},
@@ -2681,8 +3511,8 @@ export async function createReferencesService({
     close: async () => {
       for (const c of jobs.values()) c.abort();
       for (const u of uploads.values()) {
-        await u.file.close().catch(() => {});
-        await fs.rm(u.tempPath, { force: true });
+        await u.file?.close().catch(() => {});
+        if (!u.sealed) await fs.rm(u.tempPath, { force: true });
       }
       await Promise.all([store.close(), native.close()]);
     },

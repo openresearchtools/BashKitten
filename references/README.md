@@ -52,6 +52,10 @@ transport context and are never compared with the persistent backend UUID.
   `items/export` exports selected metadata, notes and attachment URLs. File copies
   belong to the ordinary Files/Bibliography workflow; `exportFileData` is rejected
   explicitly by the metadata route.
+  Real files use the existing `connector/upload-*` owner with binary `import`,
+  sealed encoding/collection/request ID and 256 KiB chunks. The worker decodes
+  at most 32 MiB; no whole-file JSON request crosses the gateway. Success discards
+  staging bytes; interrupted/partial jobs retain them for explicit resume.
 - `settings` exposes safe configuration status. Keys are write-only and live
   in the private backend. Resolver JSON remains the native array/single-object
   language, including JSPath mappings and `automatic` opt-in.
@@ -61,8 +65,12 @@ transport context and are never compared with the persistent backend UUID.
 `renderDocument(state,{authority,projectId,signal})` is the internal wrapper for
 the same whole-document CSL route. It returns ordered rich/plain clusters,
 processor sorting, note metadata, bibliography and resolved embedded CSL items.
-Snapshot mode validates every identity against the explicit project namespace
-without replacing library metadata. The parser calls the preserved reviewer
+Snapshot mode requires current-project authorization for library reads. Fully
+supplied foreign canonical snapshots render without any foreign-library access;
+IDs remain unchanged and `unlinkedItems` identifies them. Explicit
+`citations/import-snapshots` uses the native CSL JSON translator and returns a
+retry-stable old-to-new map (100 items/4 MiB), reusing current-project IDs. It does
+not mutate a document. The parser calls the preserved reviewer
 Markdown parser and returns UTF-16 positions, ignoring code examples.
 
 The optional `authorizeLibraryLifecycle` callback belongs to the existing owner

@@ -366,6 +366,7 @@ export async function citationOptions({ locale = "en-US" } = {}) {
   );
   const labels = JSON.parse(source.match(/"labels":\s*(\[[\s\S]*?\])/)[1]);
   return {
+    nameVariables: [...CSL.NAME_VARIABLES],
     locales: (await fs.readdir(localeRoot))
       .filter((x) => /^locales-[A-Za-z-]+\.xml$/.test(x))
       .map((x) => x.slice(8, -4)),

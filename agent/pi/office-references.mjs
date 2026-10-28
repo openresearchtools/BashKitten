@@ -2,6 +2,8 @@
 import { Type } from 'typebox';
 import { applicationRequest, applicationFailure } from './apps-channel.mjs';
 import { browserCall } from './client.mjs';
+import { resolve } from 'node:path';
+import { importReferenceFile } from './references-files.mjs';
 
 const result = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], details: value });
 const segment = value => {
@@ -16,9 +18,18 @@ export default function officeReferences(pi) {
       method: Type.Union(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(value => Type.Literal(value))),
       path: Type.String({ description: 'Component-relative References API path, including explicit /projects/<id>/ scope and query parameters' }),
       body: Type.Optional(Type.Any()),
+      file: Type.Optional(Type.String({ description: 'Local file to stream. POST /projects/PROJECT/import accepts target, encoding and requestId; connector/saveAttachment accepts parentKey,title,contentType,requestId; connector/saveStandaloneAttachment accepts target,title,contentType,requestId. No bytes enter model context.' })),
     }, { additionalProperties: false }),
-    async execute(_id, { method, path, body }, signal) {
-      try { return result(await applicationRequest('references', method, path, body, { signal })); }
+    async execute(_id, { method, path, body, file }, signal, onUpdate, ctx) {
+      try {
+        if (file) {
+          if (method !== 'POST') throw Error('Reference-file import requires POST');
+          return result(await importReferenceFile(resolve(ctx.cwd, file), path, body, {
+            signal, onProgress: value => onUpdate?.(result({ status: 'uploading', ...value })),
+          }));
+        }
+        return result(await applicationRequest('references', method, path, body, { signal }));
+      }
       catch (error) { return applicationFailure(error); }
     },
   });

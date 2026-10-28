@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { createRequire } from "node:module";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 const require = createRequire(import.meta.url);
 const { FORMATS, CONTENT_TYPES } = require("./runtime/formats.js");
@@ -39,6 +39,23 @@ export async function translateIdentifier(
 }
 export async function translateImport(text, { signal } = {}) {
   return (await translateImportBundle(text, { signal })).items;
+}
+export async function translateImportFile(source, options = {}) {
+  options.signal?.throwIfAborted();
+  const file = await stat(source.path);
+  if (
+    !file.isFile() ||
+    file.size > 32 * 1024 * 1024 ||
+    file.size !== source.byteLength
+  )
+    throw Error("Import file size changed or exceeds 32 MiB");
+  const bytes = await readFile(source.path, { signal: options.signal });
+  if (createHash("sha256").update(bytes).digest("hex") !== source.sha256)
+    throw Error("Import file changed after upload");
+  const text = new TextDecoder(source.encoding, { fatal: true }).decode(bytes);
+  if (Buffer.byteLength(text, "utf8") > 32 * 1024 * 1024)
+    throw Error("Decoded import data exceeds 32 MiB of UTF-8 text");
+  return translateImportBundle(text, options);
 }
 export async function translateImportBundle(
   text,

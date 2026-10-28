@@ -32,6 +32,7 @@ live file with direct ZIP/XML edits or run a standalone conversion process.
 | `format` | Native `target,properties`; preserve authored cell/font/slide colors. |
 | `citations.inspect`, `citations.insert`, `citations.edit`, `citations.remove` | Use returned plugin state and native target/occurrence identity; clusters retain ordered verified References IDs, locators, affixes and suppress-author. |
 | `citations.style`, `citations.refresh`, `citations.bibliography` | Set installed style/locale and render the complete ordered document state through the shared plugin. |
+| `citations.import-snapshots` | Explicitly import copied references into the current project with stable `requestId`, optional `collection`; the adapter verifies revision/positions before relinking fields. |
 | `save`, `export` | Await actual save acknowledgement; export supplies supported `format` and optional `name`, returning its real result/view URL. |
 
 Inspect native capabilities and the specific API result before assuming a command
@@ -49,6 +50,13 @@ style/locale, refresh and bibliography. Refresh after a library change, and veri
 the resulting live document. Do not flatten fields to hide an error. Typed
 `sr-cite:` markers are optional interchange that must be promoted to native fields
 by a supported adapter, not pasted as a substitute for live citations.
+
+Copied fields can use `metadataSource:'snapshot'` on style/refresh: supplied CSL
+renders with its original identities and no foreign-library read. Library mode
+uses authorized current-project records. Import/remap is a separate explicit
+action. If import succeeds but concurrent edits prevent relinking, retain
+`error.details.imported` (request ID/mapping), inspect and reconcile; never
+blindly import another copy or overwrite changed citation positions.
 
 Await native save/export before reporting delivery. `review_export_docx` is a
 shortcut for a native save then DOCX export of this session. Explicit static

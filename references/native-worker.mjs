@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { parentPort } from "node:worker_threads";
 import * as translation from "./translation.mjs";
-import { resolveFiles, validateResolvers } from "./resolvers.mjs";
+import {
+  resolveFiles,
+  validateResolvers,
+  hasAttachmentResolvers,
+} from "./resolvers.mjs";
 import * as citations from "./citations.mjs";
 import { citationParser } from "./host-paths.mjs";
 import requestContext from "./runtime/request-context.js";
@@ -39,32 +43,44 @@ parentPort.on("message", async ({ id, method, args, cancel }) => {
               : method === "citationOptions"
                 ? await citations.citationOptions(args[0])
                 : method === "resolveFiles"
-                  ? await resolveFiles(args[0], {
-                      signal: controller.signal,
-                      onProgress: (progress) =>
-                        parentPort.postMessage({ id, progress }),
-                    })
-                  : method === "validateResolvers"
-                    ? validateResolvers(args[0])
-                    : await requestContext.run(
-                        {
+                  ? await requestContext.run(
+                      {
+                        signal: controller.signal,
+                        settings: args[0]?.settings,
+                      },
+                      () =>
+                        resolveFiles(args[0], {
                           signal: controller.signal,
-                          settings: args[1]?.settings,
-                        },
-                        () =>
-                          [
-                            "translateIdentifier",
-                            "translateImport",
-                            "translateImportBundle",
-                            "translateOpenAlex",
-                            "translateExport",
-                          ].includes(method)
-                            ? translation[method](args[0], {
-                                ...args[1],
-                                signal: controller.signal,
-                              })
-                            : translation[method](...args),
-                      );
+                          onProgress: (progress) =>
+                            parentPort.postMessage({ id, progress }),
+                        }),
+                    )
+                  : method === "hasAttachmentResolvers"
+                    ? await hasAttachmentResolvers(args[0], {
+                        signal: controller.signal,
+                      })
+                    : method === "validateResolvers"
+                      ? validateResolvers(args[0])
+                      : await requestContext.run(
+                          {
+                            signal: controller.signal,
+                            settings: args[1]?.settings,
+                          },
+                          () =>
+                            [
+                              "translateIdentifier",
+                              "translateImport",
+                              "translateImportBundle",
+                              "translateImportFile",
+                              "translateOpenAlex",
+                              "translateExport",
+                            ].includes(method)
+                              ? translation[method](args[0], {
+                                  ...args[1],
+                                  signal: controller.signal,
+                                })
+                              : translation[method](...args),
+                        );
     parentPort.postMessage({ id, result });
   } catch (e) {
     parentPort.postMessage({

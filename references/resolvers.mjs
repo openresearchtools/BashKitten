@@ -466,7 +466,7 @@ export async function resolverRuntime() {
   })());
 }
 export async function resolveFiles(
-  { items, temporaryRoot, settings = {}, automatic = false },
+  { items, temporaryRoot, settings = {}, automatic = false, methods },
   { signal, onProgress } = {},
 ) {
   const { Z, states, Item, observers } = await resolverRuntime();
@@ -495,7 +495,7 @@ export async function resolveFiles(
       }),
     );
   try {
-    await Z.Attachments.addAvailableFiles(nativeItems);
+    await Z.Attachments.addAvailableFiles(nativeItems, { methods });
     signal?.throwIfAborted();
     return nativeItems.map((item) => ({
       id: item.id,
@@ -509,4 +509,15 @@ export async function resolveFiles(
       observers.delete(item.id);
     }
   }
+}
+export async function hasAttachmentResolvers(
+  { data, settings = {} },
+  { signal } = {},
+) {
+  signal?.throwIfAborted();
+  const { Z, Item } = await resolverRuntime();
+  const item = new Item(data, { settings, signal, automatic: true });
+  return (
+    Z.Attachments.getFileResolvers(item, ["oa", "custom"], true).length > 0
+  );
 }
