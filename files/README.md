@@ -140,6 +140,14 @@ network/toolchain download disabled. Quantum analytics publishing is compiled ou
 using its native default `!analytics` build; native update checks are disabled.
 No registry-image publishing or cache service is used.
 
+`runtime-go.json` selects licensed native cache and logging libraries and
+go-ffmpeg 1.0.0. Small typed/configuration facades preserve Quantum's call boundary;
+the selected libraries own expiration, cleanup, formatting and media concurrency.
+The prepared FFmpeg subset omits its unused logger adapter. Obsolete unlicensed
+archives remain recoverable in Git history and are absent from the current source
+bundle. The build verifies both the actual platform package closure and linked
+binary module versions, and retains those receipts in `sources/`.
+
 The native artifact root contains `bin/`, `legal/`, `sources/`, `licenses.json`
 and `manifest.json`. Full notices use the shared runtime license-record format. `depends` contains
 actual OS package dependencies; `sourceDependencies` holds preserved source pins.

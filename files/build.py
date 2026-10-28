@@ -2,6 +2,7 @@
 """Offline, separately packaged Files native build. Never edits pristine imports."""
 import argparse, hashlib, io, json, os, pathlib, platform, re, shutil, subprocess, tarfile, zipfile
 import notices
+import go_runtime
 ROOT = pathlib.Path(__file__).resolve().parent
 DEPS = ROOT / 'vendor/dependencies'
 def sha(data): return hashlib.sha256(data).hexdigest()
@@ -70,7 +71,7 @@ def main():
         stamp = work/'build-target.json'
         if stamp.exists() and json.loads(stamp.read_text()) != identity: raise ValueError('A work directory cannot mix native target architectures')
         write_json(stamp, identity)
-    graph = json.loads((DEPS/'sources.json').read_text()); native = json.loads((DEPS/'native-sources.json').read_text())
+    graph = go_runtime.select(json.loads((DEPS/'sources.json').read_text())); native = json.loads((DEPS/'native-sources.json').read_text())
     for name, expected in graph['inputHashes'].items():
         if sha((ROOT/name).read_bytes()) != expected: raise ValueError('Dependency lock changed: '+name)
     archives = work/'archives'; archives.mkdir(exist_ok=True); proxy = work/'goproxy'; proxy.mkdir(exist_ok=True)
@@ -88,6 +89,7 @@ def main():
     shutil.copytree(ROOT/'vendor/quantum/source', source)
     for name in (ROOT/'patches/quantum/series').read_text().splitlines():
         if name and not name.startswith('#'): run(['patch','-p1','--fuzz=0','--batch','-i',ROOT/'patches/quantum'/name], source)
+    go_runtime.prepare(source, graph['components'])
     source_dirs = {}
     for entry in native['components']:
         if entry['role'] in ('runtime-source','native-build-tool-source'):
@@ -141,7 +143,10 @@ def main():
     (payload/'bin').mkdir(parents=True)
     native_version = 'github.com/gtsteffaniak/filebrowser/backend/internal/version'
     ldflags = '-s -w -X '+native_version+'.Version=2.0.2-stable+bashkitten -X '+native_version+'.CommitSHA=2c071d1e6eb48d4b88da2657885d345663a0a88b'
-    run([args.go,'build','-trimpath','-tags=mupdf,extlib,static'+(',cgosql' if toolchain else ''),'-ldflags='+ldflags,'-o',payload/'bin/filebrowser','.'],source/'backend',env)
+    tags = 'mupdf,extlib,static'+(',cgosql' if toolchain else '')
+    prepared_modules = go_runtime.resolved(args.go, source/'backend', env, tags)
+    run([args.go,'build','-mod=readonly','-trimpath','-tags='+tags,'-ldflags='+ldflags,'-o',payload/'bin/filebrowser','.'],source/'backend',env)
+    linked_modules = go_runtime.linked(args.go, payload/'bin/filebrowser', env)
     addon = work/'addon';
     if addon.exists(): shutil.rmtree(addon)
     shutil.copytree(ROOT/'addon',addon)
@@ -151,19 +156,21 @@ def main():
     licenses = notices.write(payload, legal_records)
     shutil.copy2(ROOT/'vendor/quantum/source/LICENSE',payload/'legal/Quantum-LICENSE')
     for name in ['COPYING','LICENSE','NOTICE']: shutil.copy2(ROOT/'addon'/name,payload/'legal'/('addon-'+name))
-    licenses.extend([{'name':'File Browser Quantum','version':'2.0.2-stable','license':'Apache-2.0','text':(payload/'legal/Quantum-LICENSE').read_text()}, {'name':'BashKitten Files Office add-on','license':'AGPL-3.0-only AND Apache-2.0 AND MIT','text':'\n\n'.join((ROOT/'addon'/name).read_text() for name in ['NOTICE','COPYING','LICENSE'])}])
+    licenses.extend([{'name':'File Browser Quantum','version':'2.0.2-stable','license':'Apache-2.0','text':(payload/'legal/Quantum-LICENSE').read_text()}, {'name':'BashKitten Files adapters and Office add-on','license':'AGPL-3.0-only AND Apache-2.0 AND MIT','text':'\n\n'.join((ROOT/'addon'/name).read_text() for name in ['NOTICE','COPYING','LICENSE'])}])
     with tarfile.open(go_source/go_pin['file']) as archive:
         go_text = '\n\n'.join(archive.extractfile(name).read().decode(errors='replace') for name in go_pin['licenses'])
     (payload/'legal/Go-NOTICES').write_text(go_text)
     licenses.append({'name':'Go runtime and standard library','version':go_pin['version'],'source':go_pin['url'],'license':'BSD-3-Clause and included notices','text':go_text})
     if toolchain: licenses.extend(termux.notices(args,toolchain))
     write_json(payload/'licenses.json',licenses)
-    (payload/'sources').mkdir(exist_ok=True); shutil.copy2(DEPS/'sources.json',payload/'sources/dependencies.json');shutil.copy2(DEPS/'native-sources.json',payload/'sources/native-dependencies.json')
+    (payload/'sources').mkdir(exist_ok=True); write_json(payload/'sources/dependencies.json', {**graph, 'components': [{key:value for key,value in entry.items() if key != 'localArchive'} for entry in graph['components']]});shutil.copy2(DEPS/'native-sources.json',payload/'sources/native-dependencies.json')
+    shutil.copy2(DEPS/'licensed-go-sources.json',payload/'sources/licensed-go-sources.json'); shutil.copy2(ROOT/'runtime-go.json',payload/'sources/runtime-go.json')
+    write_json(payload/'sources/prepared-go-modules.json', prepared_modules); write_json(payload/'sources/linked-go-modules.json', linked_modules)
     shutil.copy2(DEPS/'notice-sources.json',payload/'sources/notice-sources.json')
     shutil.copy2(go_source/'sources.json',payload/'sources/go-toolchain.json')
     revision = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     depends, abi = linux_metadata(payload, work, args.architecture) if args.target == 'linux' else termux.metadata(payload,args,toolchain)
-    manifest={'schema':1,'target':args.target,'architecture':args.architecture,'sourceCommit':revision,'upstream':{'quantum':'2c071d1e6eb48d4b88da2657885d345663a0a88b','wopi':'fd64a470d3a521b0ad026f0f5307c20dd04b472f'},'patches':[{'name':p.name,'sha256':sha(p.read_bytes())} for p in sorted((ROOT/'patches/quantum').glob('*.patch'))],'depends':depends,'abi':abi,'sourceDependencies':[{'name':e['name'],'version':e['version'],'sha256':e['archive']['sha256']} for e in all_components],'executables':['bin/filebrowser','bin/files-office-addon','bin/ffmpeg','bin/ffprobe'],'files':{}}
+    manifest={'schema':1,'target':args.target,'architecture':args.architecture,'sourceCommit':revision,'upstream':{'quantum':'2c071d1e6eb48d4b88da2657885d345663a0a88b','wopi':'fd64a470d3a521b0ad026f0f5307c20dd04b472f'},'patches':[{'name':str(p.relative_to(ROOT/'patches')),'sha256':sha(p.read_bytes())} for group in ['quantum','go-ffmpeg'] for p in sorted((ROOT/'patches'/group).glob('*.patch'))],'facades':[{'name':str(p.relative_to(ROOT)),'sha256':sha(p.read_bytes())} for p in sorted((ROOT/'adapters').glob('*/*.go'))],'depends':depends,'abi':abi,'sourceDependencies':[{'name':e['name'],'version':e['version'],'sha256':e['archive']['sha256']} for e in all_components],'executables':['bin/filebrowser','bin/files-office-addon','bin/ffmpeg','bin/ffprobe'],'files':{}}
     for filename in sorted(payload.rglob('*')):
         if filename.is_file(): manifest['files'][str(filename.relative_to(payload))]={'sha256':sha(filename.read_bytes()),'mode':filename.stat().st_mode & 0o777}
     final_tree, dirty = input_state(inputs)

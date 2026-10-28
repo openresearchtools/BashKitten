@@ -1,0 +1,1020 @@
+--- a/backend/cmd/access.go
++++ b/backend/cmd/access.go
+@@ -9,7 +9,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/access"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // validateAccessRules migrates old-style access rules (without trailing slashes) to new format
+--- a/backend/cmd/cli.go
++++ b/backend/cmd/cli.go
+@@ -14,7 +14,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ var (
+--- a/backend/cmd/kong.go
++++ b/backend/cmd/kong.go
+@@ -9,7 +9,7 @@
+ 	"github.com/alecthomas/kong"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/version"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"golang.org/x/term"
+ )
+ 
+--- a/backend/cmd/migrate.go
++++ b/backend/cmd/migrate.go
+@@ -17,7 +17,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/state"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/usersidebar"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ const migrationGuideURL = "https://filebrowserquantum.com/en/docs/getting-started/v2/migration"
+--- a/backend/cmd/office.go
++++ b/backend/cmd/office.go
+@@ -4,7 +4,7 @@
+ 	"net/http"
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // healthcheck attempt to save test file against configured url
+--- a/backend/cmd/root.go
++++ b/backend/cmd/root.go
+@@ -23,7 +23,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+ 	"github.com/gtsteffaniak/filebrowser/backend/swagger/docs"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"github.com/swaggo/swag"
+ )
+ 
+--- a/backend/cmd/share.go
++++ b/backend/cmd/share.go
+@@ -4,7 +4,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/share"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/state"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // validateShareInfo migrates share links to add default sidebar links
+--- a/backend/cmd/user.go
++++ b/backend/cmd/user.go
+@@ -11,7 +11,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/state"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/usersidebar"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ var createBackup = false
+--- a/backend/go.mod
++++ b/backend/go.mod
+@@ -18,12 +18,12 @@
+ 	github.com/golang-jwt/jwt/v4 v4.5.2
+ 	github.com/google/go-cmp v0.7.0
+ 	github.com/google/uuid v1.6.0
+-	github.com/gtsteffaniak/go-cache v1.1.0
+-	github.com/gtsteffaniak/go-ffmpeg v0.5.2
+-	github.com/gtsteffaniak/go-logger v1.1.0
++	github.com/gtsteffaniak/go-ffmpeg v1.0.0
+ 	github.com/kovidgoyal/imaging v1.8.23
+ 	github.com/mattn/go-sqlite3 v1.14.52
++	github.com/patrickmn/go-cache v2.1.0+incompatible
+ 	github.com/pquerna/otp v1.5.0
++	github.com/sirupsen/logrus v1.10.2
+ 	github.com/spf13/afero v1.15.0
+ 	github.com/stretchr/testify v1.12.1
+ 	github.com/swaggo/http-swagger v1.3.4
+@@ -105,3 +105,6 @@
+ 	github.com/gtsteffaniak/go-ffmpeg v1.1.0
+ 	github.com/gtsteffaniak/go-ffmpeg v1.2.0
+ )
++
++// Only the licensed native media package is prepared; its unused logger adapter is omitted.
++replace github.com/gtsteffaniak/go-ffmpeg => ./internal/native/go-ffmpeg
+--- a/backend/go.sum
++++ b/backend/go.sum
+@@ -141,14 +141,8 @@
+ github.com/google/pprof v0.0.0-20260802141513-ef3492d7dac3/go.mod h1:jl5iWTm0/hd5PjEYEOuwAJ57L/CibdZfrqZ5XA5GrCk=
+ github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+ github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+-github.com/gtsteffaniak/go-cache v1.1.0 h1:ni/2cJpCxpGmaMZd92iTDIGOy+yUcMcxQuW7bSKhkCE=
+-github.com/gtsteffaniak/go-cache v1.1.0/go.mod h1:rHUZvf4huhMX/bnNK4/oQ3sNAE2fYC2jFpAWZiBPWac=
+-github.com/gtsteffaniak/go-ffmpeg v0.5.2 h1:KVnKM3zewY9yeZVd59Hb0/10gSbhYf01yRM5RftXGEU=
+-github.com/gtsteffaniak/go-ffmpeg v0.5.2/go.mod h1:FefhoD+KZzHWqBaUpntcKp6lXtUzdFW00F74axnENUQ=
+ github.com/gtsteffaniak/go-ffmpeg v1.0.0 h1:dUWvlZmWnkiujDtIMLGwrpfSAOnM+IOtk93HXF6HR0U=
+ github.com/gtsteffaniak/go-ffmpeg v1.0.0/go.mod h1:FefhoD+KZzHWqBaUpntcKp6lXtUzdFW00F74axnENUQ=
+-github.com/gtsteffaniak/go-logger v1.1.0 h1:baFds+iibuLLNpNLwygz32bDqdsunI6dGWcdxwMIVKI=
+-github.com/gtsteffaniak/go-logger v1.1.0/go.mod h1:rapapTju4D7bwt6h4JOdZNUXDjnp0WkTBd6TN5yWglI=
+ github.com/hashicorp/go-uuid v1.0.3 h1:2gKiV6YVmrJ1i2CKKa9obLvRieoRGviZFL26PcT/Co8=
+ github.com/hashicorp/go-uuid v1.0.3/go.mod h1:6SBZvOh/SIDV7/2o3Jml5SYk/TvGqwFJ/bN7x4byOro=
+ github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs4luLUK2k=
+@@ -191,6 +185,8 @@
+ github.com/mattn/go-sqlite3 v1.14.52/go.mod h1:6JTjA44L93a0QCyJef5YvlPoKXntQPjzWv5gtm9sB6w=
+ github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=
+ github.com/ncruces/go-strftime v1.0.0/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJmn9CehxcKcls=
++github.com/patrickmn/go-cache v2.1.0+incompatible h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=
++github.com/patrickmn/go-cache v2.1.0+incompatible/go.mod h1:3Qf8kWWT7OJRJbdiICTKqZju1ZixQ/KpMGzzAfe6+WQ=
+ github.com/philhofer/fwd v1.2.0 h1:e6DnBTl7vGY+Gz322/ASL4Gyp1FspeMvx1RNDoToZuM=
+ github.com/philhofer/fwd v1.2.0/go.mod h1:RqIHx9QI14HlwKwm98g9Re5prTQ6LdeRQn+gXJFxsJM=
+ github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e/go.mod h1:pJLUxLENpZxwdsKMEsNbx1VGcRFpLqf3715MtcvvzbA=
+@@ -206,6 +202,8 @@
+ github.com/rogpeppe/go-internal v1.16.0/go.mod h1:DrUVZyrJU+txYW5/1kwtXQSMFio52ZOxX7yM1VHvnxs=
+ github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd h1:CmH9+J6ZSsIjUK3dcGsnCnO41eRBOnY12zwkn5qVwgc=
+ github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd/go.mod h1:hPqNNc0+uJM6H+SuU8sEs5K5IQeKccPqeSjfgcKGgPk=
++github.com/sirupsen/logrus v1.10.2 h1:G2SED73/qrAu6YwbdxOD6peLkCBI3z7L+ykJFTXJBBo=
++github.com/sirupsen/logrus v1.10.2/go.mod h1:SLEg8TqYulVKKfIGHldVp2K2aYz2DKSVBq4g/H5bR7Q=
+ github.com/spf13/afero v1.15.0 h1:b/YBCLWAJdFWJTN9cLhiXXcD7mzKn9Dm86dNnfyQw1I=
+ github.com/spf13/afero v1.15.0/go.mod h1:NC2ByUVxtQs4b3sIUphxK0NioZnmxgyCrfzeuq8lxMg=
+ github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
+--- a/backend/internal/activity/recorder.go
++++ b/backend/internal/activity/recorder.go
+@@ -7,7 +7,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+ 	activitydb "github.com/gtsteffaniak/filebrowser/backend/internal/database/activity"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/sqldb"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // Store persists buffered activity entries.
+--- a/backend/internal/adapters/fs/diskcache/file_cache.go
++++ b/backend/internal/adapters/fs/diskcache/file_cache.go
+@@ -12,7 +12,7 @@
+ 	"sync"
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/fs/fileutils"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // Cache interface for caching operations
+--- a/backend/internal/adapters/fs/files/files.go
++++ b/backend/internal/adapters/fs/files/files.go
+@@ -22,7 +22,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ var reDuration = regexp.MustCompile(`^\[(?:(\d{1,2}):)?(\d{1,2}):(\d{1,2})\.(\d+)\](.*)`)
+--- a/backend/internal/adapters/fs/files/user.go
++++ b/backend/internal/adapters/fs/files/user.go
+@@ -7,7 +7,7 @@
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // MakeUserDir makes the user directory according to settings.
+--- a/backend/internal/adapters/fs/fileutils/file.go
++++ b/backend/internal/adapters/fs/fileutils/file.go
+@@ -8,7 +8,7 @@
+ 	"path/filepath"
+ 	"syscall"
+ 
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ var PermFile os.FileMode
+--- a/backend/internal/analytics/collector.go
++++ b/backend/internal/analytics/collector.go
+@@ -4,7 +4,7 @@
+ 	"fmt"
+ 	"sync"
+ 
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ var (
+--- a/backend/internal/analytics/publish.go
++++ b/backend/internal/analytics/publish.go
+@@ -10,7 +10,7 @@
+ 	"sync"
+ 	"time"
+ 
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ const (
+--- a/backend/internal/auth/jwt.go
++++ b/backend/internal/auth/jwt.go
+@@ -12,7 +12,7 @@
+ 
+ 	"github.com/golang-jwt/jwt/v4"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // MethodJwtAuth is used to identify JWT external authentication.
+--- a/backend/internal/auth/service.go
++++ b/backend/internal/auth/service.go
+@@ -9,7 +9,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/errors"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/ports"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // Service performs authentication using injected user reads. It never persists users.
+--- a/backend/internal/auth/storage.go
++++ b/backend/internal/auth/storage.go
+@@ -7,7 +7,7 @@
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"golang.org/x/crypto/pbkdf2"
+ )
+ 
+--- a/backend/internal/auth/totp.go
++++ b/backend/internal/auth/totp.go
+@@ -12,8 +12,8 @@
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+-	"github.com/gtsteffaniak/go-cache/cache"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/cache"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"github.com/pquerna/otp"
+ 	"github.com/pquerna/otp/totp"
+ )
+--- a/backend/internal/database/access/access.go
++++ b/backend/internal/database/access/access.go
+@@ -15,8 +15,8 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/errors"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-cache/cache"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/cache"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ var (
+--- a/backend/internal/database/share/storage.go
++++ b/backend/internal/database/share/storage.go
+@@ -10,7 +10,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/errors"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // StorageBackend is the interface to implement for a share storage.
+--- a/backend/internal/database/sql/index.go
++++ b/backend/internal/database/sql/index.go
+@@ -12,7 +12,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/sqlitebusy"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // IndexDB manages the SQLite database for the file index.
+--- a/backend/internal/database/sql/tempdb.go
++++ b/backend/internal/database/sql/tempdb.go
+@@ -11,7 +11,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/fs/fileutils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/sqlitebusy"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	// SQLite driver is imported in driver_cgo.go or driver_nocgo.go based on build tags
+ )
+ 
+--- a/backend/internal/database/sqldb/sqldb.go
++++ b/backend/internal/database/sqldb/sqldb.go
+@@ -8,7 +8,7 @@
+ 	"time"
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/sqlitebusy"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	// SQLite driver is imported in driver_cgo.go or driver_nocgo.go based on build tags
+ )
+ 
+--- a/backend/internal/ffmpeg/cache.go
++++ b/backend/internal/ffmpeg/cache.go
+@@ -4,7 +4,7 @@
+ 	"time"
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+-	"github.com/gtsteffaniak/go-cache/cache"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/cache"
+ )
+ 
+ var (
+--- a/backend/internal/ffmpeg/metadata.go
++++ b/backend/internal/ffmpeg/metadata.go
+@@ -69,11 +69,6 @@
+ 		return nil, err
+ 	}
+ 
+-	if err = s.Acquire(ctx); err != nil {
+-		return nil, err
+-	}
+-	defer s.Release()
+-
+ 	info, err := s.inner.ProbeStream(ctx, goffmpeg.ProbeStreamOptions{
+ 		URL:        localPath,
+ 		StreamType: goffmpeg.StreamFile,
+@@ -106,11 +101,6 @@
+ 		return duration, nil
+ 	}
+ 
+-	if err = s.Acquire(ctx); err != nil {
+-		return 0, err
+-	}
+-	defer s.Release()
+-
+ 	duration, err := s.inner.GetMediaDuration(ctx, localPath)
+ 	if err != nil {
+ 		return 0, err
+--- a/backend/internal/ffmpeg/service.go
++++ b/backend/internal/ffmpeg/service.go
+@@ -10,7 +10,7 @@
+ 	goffmpeg "github.com/gtsteffaniak/go-ffmpeg"
+ 	"github.com/gtsteffaniak/go-ffmpeg/capabilities"
+ 	"github.com/gtsteffaniak/go-ffmpeg/ops"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // Service wraps go-ffmpeg for filebrowser media operations.
+@@ -111,11 +111,6 @@
+ 	if s == nil || s.inner == nil {
+ 		return fmt.Errorf("ffmpeg service not available")
+ 	}
+-	if err := s.Acquire(ctx); err != nil {
+-		return err
+-	}
+-	defer s.Release()
+-
+ 	return s.inner.VideoPreview(ctx, w, ops.PreviewOptions{
+ 		Input:       videoPath,
+ 		SeekPercent: float64(percentageSeek),
+@@ -137,11 +132,6 @@
+ 	if content, ok := SubtitleContentCache.Get(cacheKey); ok {
+ 		return content, nil
+ 	}
+-
+-	if err = s.Acquire(ctx); err != nil {
+-		return "", err
+-	}
+-	defer s.Release()
+ 
+ 	content, err := s.inner.ExtractSubtitle(ctx, videoPath, streamIndex)
+ 	if err != nil {
+--- a/backend/internal/ffmpeg/subtitles.go
++++ b/backend/internal/ffmpeg/subtitles.go
+@@ -9,7 +9,7 @@
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	goffmpeg "github.com/gtsteffaniak/go-ffmpeg"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // DetectEmbeddedSubtitles detects embedded subtitle streams.
+--- a/backend/internal/icons/generator.go
++++ b/backend/internal/icons/generator.go
+@@ -15,7 +15,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/fs/fileutils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/preview"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"github.com/kovidgoyal/imaging"
+ )
+ 
+--- a/backend/internal/preview/doc.go
++++ b/backend/internal/preview/doc.go
+@@ -11,7 +11,7 @@
+ 	"time"
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ func docEnabled() bool {
+--- a/backend/internal/preview/heic_ffmpeg.go
++++ b/backend/internal/preview/heic_ffmpeg.go
+@@ -16,11 +16,6 @@
+ 	if ctx.Err() != nil {
+ 		return nil, ctx.Err()
+ 	}
+-
+-	if err := s.ffmpegService.Acquire(ctx); err != nil {
+-		return nil, err
+-	}
+-	defer s.ffmpegService.Release()
+ 
+ 	var quality string
+ 	switch previewSize {
+@@ -46,11 +41,6 @@
+ 		return nil, ctx.Err()
+ 	}
+ 
+-	if err := s.ffmpegService.Acquire(ctx); err != nil {
+-		return nil, err
+-	}
+-	defer s.ffmpegService.Release()
+-
+ 	var width, height int
+ 	var quality string
+ 	switch previewSize {
+--- a/backend/internal/preview/preview.go
++++ b/backend/internal/preview/preview.go
+@@ -21,7 +21,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/imagemeta"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ const minPreviewSize = 100
+--- a/backend/internal/preview/video.go
++++ b/backend/internal/preview/video.go
+@@ -6,7 +6,7 @@
+ 	"fmt"
+ 	"os"
+ 
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // GenerateVideoPreview generates a single preview image from a video using ffmpeg.
+--- a/backend/internal/state/auth_signing_key.go
++++ b/backend/internal/state/auth_signing_key.go
+@@ -10,7 +10,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/sqldb"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ const authSigningKeySetting = "auth.signingKey"
+--- a/backend/internal/state/bootstrap_admin_password.go
++++ b/backend/internal/state/bootstrap_admin_password.go
+@@ -6,7 +6,7 @@
+ 	"math/big"
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // bootstrapDefaultAdminPassword returns the plaintext password for initial admin creation.
+--- a/backend/internal/state/hashed_tokens_backfill.go
++++ b/backend/internal/state/hashed_tokens_backfill.go
+@@ -8,7 +8,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/sqldb"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // BackfillHashedTokensFromUserRecords registers SHA256(raw JWT) → user_id for stored API tokens.
+--- a/backend/internal/state/noauth_admin.go
++++ b/backend/internal/state/noauth_admin.go
+@@ -8,7 +8,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/errors"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ func isUserLookupNotFound(err error) bool {
+--- a/backend/internal/state/quick_setup.go
++++ b/backend/internal/state/quick_setup.go
+@@ -6,7 +6,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // QuickSetup creates the initial admin user on first run.
+--- a/backend/internal/state/shares.go
++++ b/backend/internal/state/shares.go
+@@ -9,7 +9,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/share"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // Share operations
+--- a/backend/internal/state/source_enforcement_sync.go
++++ b/backend/internal/state/source_enforcement_sync.go
+@@ -5,7 +5,7 @@
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // ApplyEnforcedSourcePermissionsSyncToUser applies enforced source permission defaults onto u in memory.
+--- a/backend/internal/state/state.go
++++ b/backend/internal/state/state.go
+@@ -12,7 +12,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/sqldb"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ var (
+--- a/backend/internal/state/user_cache.go
++++ b/backend/internal/state/user_cache.go
+@@ -6,7 +6,7 @@
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/errors"
+-	"github.com/gtsteffaniak/go-cache/cache"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/cache"
+ )
+ 
+ const userCacheTTL = 30 * time.Minute
+--- a/backend/internal/state/user_defaults.go
++++ b/backend/internal/state/user_defaults.go
+@@ -9,7 +9,7 @@
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ const (
+--- a/backend/internal/state/user_enforcement_sync.go
++++ b/backend/internal/state/user_enforcement_sync.go
+@@ -5,7 +5,7 @@
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // ApplyEnforcedSyncToUser applies enforced default values onto u in memory. Returns true if profile fields changed.
+--- a/backend/internal/utils/cache.go
++++ b/backend/internal/utils/cache.go
+@@ -3,7 +3,7 @@
+ import (
+ 	"time"
+ 
+-	"github.com/gtsteffaniak/go-cache/cache"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/cache"
+ )
+ 
+ var (
+--- a/backend/internal/utils/checkForUpdates.go
++++ b/backend/internal/utils/checkForUpdates.go
+@@ -9,7 +9,7 @@
+ 	"time"
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/version"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"golang.org/x/mod/semver"
+ )
+ 
+--- a/backend/internal/utils/main.go
++++ b/backend/internal/utils/main.go
+@@ -9,7 +9,7 @@
+ 	"strings"
+ 	"time"
+ 
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ func CheckErr(source string, err error) {
+--- a/backend/internal/web/access.go
++++ b/backend/internal/web/access.go
+@@ -11,7 +11,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/state"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ type GroupListResponse struct {
+--- a/backend/internal/web/analytics.go
++++ b/backend/internal/web/analytics.go
+@@ -7,7 +7,7 @@
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/analytics"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/state"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ type analyticsStatusResponse struct {
+--- a/backend/internal/web/api.go
++++ b/backend/internal/web/api.go
+@@ -13,7 +13,7 @@
+ 	activitydb "github.com/gtsteffaniak/filebrowser/backend/internal/database/activity"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/state"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // createApiTokenHandler creates an API token for the user.
+--- a/backend/internal/web/archive.go
++++ b/backend/internal/web/archive.go
+@@ -26,8 +26,8 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-cache/cache"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/cache"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"golang.org/x/time/rate"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/state"
+ 
+--- a/backend/internal/web/auth.go
++++ b/backend/internal/web/auth.go
+@@ -24,7 +24,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/errors"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/state"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // Prefer explicit ?auth= query and Authorization header over the session cookie so API
+--- a/backend/internal/web/download.go
++++ b/backend/internal/web/download.go
+@@ -13,7 +13,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"golang.org/x/time/rate"
+ )
+ 
+--- a/backend/internal/web/duplicates.go
++++ b/backend/internal/web/duplicates.go
+@@ -17,8 +17,8 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+-	"github.com/gtsteffaniak/go-cache/cache"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/cache"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/state"
+ 
+ )
+--- a/backend/internal/web/http.go
++++ b/backend/internal/web/http.go
+@@ -21,7 +21,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/preview"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-cache/cache"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/cache"
+ 	"golang.org/x/time/rate"
+ )
+ 
+--- a/backend/internal/web/httpEvents.go
++++ b/backend/internal/web/httpEvents.go
+@@ -9,7 +9,7 @@
+ 	"time"
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/events"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // Messenger streams Server-Sent Events to a client.
+--- a/backend/internal/web/ldap.go
++++ b/backend/internal/web/ldap.go
+@@ -7,7 +7,7 @@
+ 
+ 	ldap "github.com/go-ldap/ldap/v3"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+ 
+ )
+--- a/backend/internal/web/middleware.go
++++ b/backend/internal/web/middleware.go
+@@ -21,7 +21,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ type requestContext = Context
+--- a/backend/internal/web/oidc.go
++++ b/backend/internal/web/oidc.go
+@@ -15,7 +15,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"golang.org/x/oauth2"
+ )
+ 
+--- a/backend/internal/web/onlyOffice.go
++++ b/backend/internal/web/onlyOffice.go
+@@ -19,7 +19,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ const (
+--- a/backend/internal/web/preview.go
++++ b/backend/internal/web/preview.go
+@@ -18,7 +18,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ type FileCache interface {
+--- a/backend/internal/web/resource.go
++++ b/backend/internal/web/resource.go
+@@ -24,8 +24,8 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-cache/cache"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/cache"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ var pauseCache = cache.NewCache[string](1 * time.Minute)
+--- a/backend/internal/web/server.go
++++ b/backend/internal/web/server.go
+@@ -22,7 +22,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/events"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/state"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // Deps holds injected dependencies for HTTP handlers and middleware.
+--- a/backend/internal/web/session_token.go
++++ b/backend/internal/web/session_token.go
+@@ -9,7 +9,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/state"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // mintAndRegisterSessionToken creates a minimal session JWT and registers its hash for auth lookup.
+--- a/backend/internal/web/settings.go
++++ b/backend/internal/web/settings.go
+@@ -11,7 +11,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/state"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // settingsGetHandler retrieves the current system settings.
+--- a/backend/internal/web/share.go
++++ b/backend/internal/web/share.go
+@@ -21,7 +21,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // shareListHandler returns a list of all share links.
+--- a/backend/internal/web/stream.go
++++ b/backend/internal/web/stream.go
+@@ -18,7 +18,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"golang.org/x/time/rate"
+ )
+ 
+--- a/backend/internal/web/users.go
++++ b/backend/internal/web/users.go
+@@ -21,7 +21,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/usersidebar"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ type UserRequest struct {
+--- a/backend/internal/web/webdav.go
++++ b/backend/internal/web/webdav.go
+@@ -13,7 +13,7 @@
+ 	"strings"
+ 	"time"
+ 
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"golang.org/x/net/webdav"
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/activity"
+--- a/backend/pkg/indexing/indexingFiles.go
++++ b/backend/pkg/indexing/indexingFiles.go
+@@ -16,8 +16,8 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-cache/cache"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/cache"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ 	"golang.org/x/net/webdav"
+ )
+ 
+@@ -1074,9 +1074,9 @@
+ 		bound = "/"
+ 	}
+ 	cacheKey := fmt.Sprintf("realpath|scoped=%t|bound=%q|path=%q", enforceScope, bound, joinedPath)
+-	isDir, _ := IsDirCache.Get(cacheKey + ":isdir")
++	isDir, dirCached := IsDirCache.Get(cacheKey + ":isdir")
+ 	cached, ok := RealPathCache.Get(cacheKey)
+-	if ok && cached != "" {
++	if ok && dirCached && cached != "" {
+ 		return cached, isDir, nil
+ 	}
+ 	absolutePath, err := filepath.Abs(joinedPath)
+--- a/backend/pkg/indexing/indexingScanner.go
++++ b/backend/pkg/indexing/indexingScanner.go
+@@ -10,7 +10,7 @@
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ type Scanner struct {
+--- a/backend/pkg/indexing/indexingSchedule.go
++++ b/backend/pkg/indexing/indexingSchedule.go
+@@ -8,7 +8,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	indexingdb "github.com/gtsteffaniak/filebrowser/backend/internal/database/dbindex"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/events"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // scanScheduleTiers is the only set of adaptive scan intervals (index = currentSchedule tier).
+--- a/backend/pkg/indexing/indexingSchedulerLoop.go
++++ b/backend/pkg/indexing/indexingSchedulerLoop.go
+@@ -5,7 +5,7 @@
+ 	"time"
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // alignCeilToInterval rounds t up (UTC) to the next boundary where Unix time is a multiple of interval.
+--- a/backend/pkg/indexing/mutate.go
++++ b/backend/pkg/indexing/mutate.go
+@@ -9,7 +9,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // UpdateMetadata persists a completed directory listing to the index. The directory row's has_preview
+--- a/backend/pkg/indexing/search.go
++++ b/backend/pkg/indexing/search.go
+@@ -8,8 +8,8 @@
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+-	"github.com/gtsteffaniak/go-cache/cache"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/cache"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ var SearchResultsCache = cache.NewCache[[]string](15 * time.Second)
+--- a/backend/pkg/indexing/unix.go
++++ b/backend/pkg/indexing/unix.go
+@@ -8,7 +8,7 @@
+ 	"syscall"
+ 
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ func CheckWindowsHidden(realpath string) bool {
+--- a/backend/pkg/settings/auth.go
++++ b/backend/pkg/settings/auth.go
+@@ -12,7 +12,7 @@
+ 	"github.com/coreos/go-oidc/v3/oidc"
+ 	ldap "github.com/go-ldap/ldap/v3"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/version"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // userAgentTransport wraps an http.RoundTripper to add a User-Agent header
+--- a/backend/pkg/settings/config.go
++++ b/backend/pkg/settings/config.go
+@@ -21,7 +21,7 @@
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/ffmpeg"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/version"
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ const (
+--- a/backend/pkg/settings/database_paths.go
++++ b/backend/pkg/settings/database_paths.go
+@@ -4,7 +4,7 @@
+ 	"os"
+ 	"strings"
+ 
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // MigrateFromDefault resolves server.database.migrateFrom from FILEBROWSER_DATABASE or database.db.
+--- a/backend/pkg/settings/styling.go
++++ b/backend/pkg/settings/styling.go
+@@ -7,7 +7,7 @@
+ 	"regexp"
+ 	"strings"
+ 
+-	"github.com/gtsteffaniak/go-logger/logger"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/logger"
+ )
+ 
+ // Strict hex color regex: #RGB, #RGBA, #RRGGBB, #RRGGBBAA

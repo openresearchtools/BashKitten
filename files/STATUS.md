@@ -9,7 +9,8 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
   licenses/checksums; recursive Git blob inventory matched the selected stable
   source, including upstream ignored source/fixtures.
 - Native Quantum frontend and Go executable compiled independently. The three
-  named native patches apply with zero fuzz.
+  original named native patches apply with zero fuzz; the licensed dependency
+  patch and isolated FFmpeg subset are checked during preparation too.
 - Native proxy accounts, explicit source scope, prefixed ordinary HTML and source
   listing returned 200; private direct reads returned 403. Native YAML loader
   requires a `.yaml` filename even when the content is valid JSON/YAML; corrected.
@@ -88,9 +89,31 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
   artifacts remain diagnostic build outputs and cannot enter normal packages.
   The 70 npm gaps now resolve to checksum-bound original text or explicitly
   labelled exact-package SPDX declarations plus pinned canonical text. The audit
-  still rejects the three pinned `gtsteffaniak/go-cache`, `go-logger` and
-  `go-ffmpeg` modules: those pins contain no usable license declaration/text.
-  Native replacement/source review is separate; no license is inferred for them.
+  rejected the three original `gtsteffaniak/go-cache`, `go-logger` and
+  `go-ffmpeg` versions: those pins contain no usable license declaration/text.
+  No license was inferred for them.
+- The licensed native replacements now build on Linux amd64 and both Termux
+  architectures: patrickmn/go-cache 2.1.0, Logrus 1.10.2 and go-ffmpeg 1.0.0.
+  Actual prepared/linked inventories prove those versions and exclude the old
+  cache/logger modules. All 562 Linux / 564 Termux notice records have text.
+  A fresh empty Go cache resolved the actual 79-module Linux executable closure
+  from a file-only proxy containing only selected source inputs. Obsolete
+  unlicensed archives were removed from the current source bundle; pristine
+  imports remain recoverable in Git history.
+- The new Linux binary passed native page/list, private denial, PDF/video
+  thumbnails, eight concurrent previews, byte-range streaming and SQLite checks.
+  The new x86_64 binary passed the actual Termux app fixture under UID 10123 and
+  `untrusted_app_27`. Its fixture first mistook a stale socket inode for readiness;
+  waiting for an actual connection corrected that diagnostic race.
+- Native media checks exposed a file-metadata capability gap: upstream requires
+  TCP for generic `ProbeStream`, including local files. An isolated patch selects
+  the existing file-only ffprobe gate for `StreamFile`. Actual queued cancellation,
+  eight previews after cancellation, embedded subtitle extraction and local
+  metadata then passed. Network protocol support remains disabled. Evidence is
+  under `BashkittenBuild/verification/files-licensed-20261028/`.
+  These are development validations; final sealing correctly refused dirty
+  source. A clean committed rebuild and normal package collector acceptance
+  remain required, including the final capability patch.
 
 ## Remaining coverage
 

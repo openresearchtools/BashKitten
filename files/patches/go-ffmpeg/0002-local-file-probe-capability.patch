@@ -1,0 +1,17 @@
+--- a/service.go
++++ b/service.go
+@@ -177,7 +177,13 @@
+ 	if err := s.ensureDetected(ctx); err != nil {
+ 		return StreamInfo{}, err
+ 	}
+-	if err := s.require("ProbeStream"); err != nil {
++	operation := "ProbeStream"
++	if opts.StreamType == StreamFile {
++		// Local ffprobe uses the same file-only capability requirement as
++		// GetMediaDuration. Network inputs retain ProbeStream's TCP gate.
++		operation = "GetMediaDuration"
++	}
++	if err := s.require(operation); err != nil {
+ 		return StreamInfo{}, err
+ 	}
+ 	var info StreamInfo

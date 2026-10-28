@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "reason": "Replace dependencies whose pinned releases contain no license declaration with licensed native libraries. Original upstream pins and archives remain recoverable in Git history; obsolete archives are absent from the selected source tree and product graph.",
+  "removeUpstreamModules": [
+    "github.com/gtsteffaniak/go-cache",
+    "github.com/gtsteffaniak/go-logger",
+    "github.com/gtsteffaniak/go-ffmpeg"
+  ],
+  "additionalSources": "vendor/dependencies/licensed-go-sources.json",
+  "localModules": [
+    {
+      "name": "github.com/gtsteffaniak/go-ffmpeg",
+      "version": "v1.0.0",
+      "target": "backend/internal/native/go-ffmpeg",
+      "patchSeries": "patches/go-ffmpeg/series"
+    }
+  ],
+  "facades": [
+    {
+      "source": "adapters/go-cache",
+      "target": "backend/internal/adapters/cache"
+    },
+    {
+      "source": "adapters/go-logger",
+      "target": "backend/internal/adapters/logger"
+    }
+  ],
+  "requiredLinkedModules": {
+    "github.com/patrickmn/go-cache": "v2.1.0+incompatible",
+    "github.com/sirupsen/logrus": "v1.10.2",
+    "github.com/gtsteffaniak/go-ffmpeg": "v1.0.0"
+  },
+  "forbiddenLinkedModules": [
+    "github.com/gtsteffaniak/go-cache",
+    "github.com/gtsteffaniak/go-logger"
+  ]
+}

@@ -1,0 +1,89 @@
+--- a/go.mod
++++ b/go.mod
+@@ -3,7 +3,6 @@
+ go 1.25.0
+ 
+ require (
+-	github.com/gtsteffaniak/go-logger v1.0.2
+ 	golang.org/x/sys v0.46.0
+ 	golang.org/x/term v0.44.0
+ )
+--- a/go.sum
++++ b/go.sum
+@@ -1,5 +1,3 @@
+-github.com/gtsteffaniak/go-logger v1.0.2 h1:S4AgR7yDu2geD8y2D9NyJVOBqpZRnl37r2mBi7GDNR0=
+-github.com/gtsteffaniak/go-logger v1.0.2/go.mod h1:rapapTju4D7bwt6h4JOdZNUXDjnp0WkTBd6TN5yWglI=
+ golang.org/x/sys v0.46.0 h1:noSf2Fq6F8DBgS+LysIkx7rIExoNHJsxOAtPp4rthXw=
+ golang.org/x/sys v0.46.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+ golang.org/x/term v0.44.0 h1:0rLvDRCtNj0gZkyIXhCyOb2OAzEhLVqc4B+hrsBhrmc=
+--- a/gtlogger/adapt.go
++++ /dev/null
+@@ -1,29 +0,0 @@
+-// Package gtlogger adapts github.com/gtsteffaniak/go-logger for go-ffmpeg.
+-//
+-// go-logger's Logger interface already satisfies ffmpeg.Logger, so Adapt is
+-// optional documentation sugar. WithGroup is the recommended entry point when
+-// wiring a shared application logger into ffmpeg.New.
+-package gtlogger
+-
+-import (
+-	ffmpeg "github.com/gtsteffaniak/go-ffmpeg"
+-	"github.com/gtsteffaniak/go-logger/logger"
+-)
+-
+-const componentGroup = "ffmpeg"
+-
+-// Adapt returns l for use as ffmpeg.Config.Logger.
+-func Adapt(l logger.Logger) ffmpeg.Logger {
+-	if l == nil {
+-		return ffmpeg.NopLogger()
+-	}
+-	return l
+-}
+-
+-// WithGroup returns a grouped go-logger instance for ffmpeg diagnostics.
+-func WithGroup(l logger.Logger) ffmpeg.Logger {
+-	if l == nil {
+-		return ffmpeg.NopLogger()
+-	}
+-	return l.WithGroup(componentGroup)
+-}
+--- a/gtlogger/adapt_test.go
++++ /dev/null
+@@ -1,36 +0,0 @@
+-package gtlogger
+-
+-import (
+-	"testing"
+-
+-	ffmpeg "github.com/gtsteffaniak/go-ffmpeg"
+-	"github.com/gtsteffaniak/go-logger/logger"
+-)
+-
+-func TestAdaptNilReturnsNop(t *testing.T) {
+-	if Adapt(nil) == nil {
+-		t.Fatal("expected nop logger")
+-	}
+-}
+-
+-func TestWithGroupNilReturnsNop(t *testing.T) {
+-	if WithGroup(nil) == nil {
+-		t.Fatal("expected nop logger")
+-	}
+-}
+-
+-func TestAdaptSatisfiesFFmpegLogger(t *testing.T) {
+-	log, err := logger.NewLogger(logger.JsonConfig{Levels: "INFO"})
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	var _ ffmpeg.Logger = Adapt(log)
+-}
+-
+-func TestWithGroupSatisfiesFFmpegLogger(t *testing.T) {
+-	log, err := logger.NewLogger(logger.JsonConfig{Levels: "INFO"})
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	var _ ffmpeg.Logger = WithGroup(log)
+-}

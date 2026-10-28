@@ -23,8 +23,9 @@ locked-save enforcement and native settings/extension delivery. Upstream token
 issuance does not replace BashKitten authorization. OnlyOffice handlers remain
 unaltered in the pristine native Files build.
 
-`patches/quantum/series` contains the scoped launch/provider seam and configurable
-request-budget seam and native locally packaged Ace asset configuration. `patches/collabora/series` contains only the proven missing
+`patches/quantum/series` contains the scoped launch/provider seam, configurable
+request budget, native locally packaged Ace assets and licensed dependency imports.
+`patches/collabora/series` contains only the proven missing
 locked-light preference hook. Adaptation is applied to an external build copy.
 Updates must apply with zero fuzz; do not edit pristine source to make a patch fit.
 Remove our provider hook if a later selected upstream release offers the same
@@ -40,6 +41,33 @@ verify each part and the joined hash before extraction. Sources/notices are
 preserved intact, including native binary packages used only by frontend build
 tools; product MuPDF/FFmpeg are compiled from source. Full native build-tool
 source archives for esbuild and Rollup accompany their npm packages.
+
+The original Quantum dependency graph includes three module versions without
+usable licensing terms. `runtime-go.json` selects the separately imported,
+licensed native replacements from `licensed-go-sources.json`; it never assigns
+new terms to the original archives. Their obsolete ZIP/mod/info inputs are
+removed from the current source tree and source bundles; the pristine originals
+and original manifest remain recoverable in Git history. The preserved baseline
+manifest identifies those inactive hashes, while the active selection only reads
+the replacement archives. The named dependency patch routes the
+existing cache/logger calls through narrow typed/configuration facades to
+patrickmn/go-cache 2.1.0 and Logrus 1.10.2. Native TTL, sweeping, synchronization,
+formatting and output stay in those libraries. go-ffmpeg 1.0.0 retains its native
+shared service and semaphore; redundant outer slot acquisition is removed. Its
+unused gtlogger adapter and dependency are omitted by a separate subset patch.
+The second FFmpeg patch selects its existing file-only ffprobe capability gate
+for an explicitly local `StreamFile` request. The native generic stream gate
+otherwise requires TCP even for local metadata; network stream gates remain
+unchanged and our FFmpeg build keeps network protocols disabled.
+Pristine sources stay unchanged. Prepared and actual linked Go inventories must
+prove the selected versions and absence of the original cache/logger modules.
+
+`notice-sources.json` records checksum-bound supplementary notices. Original
+upstream text and declared SPDX evidence are distinguished. The latter requires
+an exact name/version/license declaration in the published package metadata and
+retains the pinned canonical template without inventing copyright attribution.
+Missing declarations cannot use that route. Legal provenance is included offline
+and reused from existing shared owners where the exact source/version matches.
 
 Native Termux reuses the already retained framework/NDK inputs under
 `agent/vendor/node` and its shared packaging toolchain owner. Only relevant
