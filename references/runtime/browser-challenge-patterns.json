@@ -1,0 +1,10 @@
+{
+  "source": "zotero10.0.6 browserRequest.js CHALLENGE_URLS",
+  "sourceSHA256": "6d80f21a28864f712bbbe8cd361ce22df6339621c11a71b380dc2c16cd23a859",
+  "matches": [
+    "://www.sciencedirect.com",
+    "://search.worldcat.org",
+    "://pmc.ncbi.nlm.nih.gov",
+    "://www.mdpi.com"
+  ]
+}

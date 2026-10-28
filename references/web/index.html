@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,interactive-widget=resizes-content"
+    />
+    <meta name="color-scheme" content="dark light" />
+    <title>References · BashKitten</title>
+    <link rel="stylesheet" href="./references.css" />
+  </head>
+  <body>
+    <div class="app" id="app" data-pane="items">
+      <header class="app-header">
+        <h1>References</h1>
+        <nav class="mobile-tabs" aria-label="Library panes">
+          <button type="button" data-pane="libraries">Libraries</button
+          ><button type="button" data-pane="items">Items</button
+          ><button type="button" data-pane="details">Details</button>
+        </nav>
+        <button id="settings" type="button">Settings</button>
+      </header>
+      <div class="library-layout">
+        <aside class="libraries" aria-label="Project libraries">
+          <h2>Project library</h2>
+          <select
+            id="projects"
+            class="projects-select"
+            aria-label="Project library"
+          ></select>
+          <div class="toolbar">
+            <button id="newCollection" type="button">New collection</button
+            ><button id="collectionMenu" type="button">Collection…</button>
+            <button id="savedSearches" type="button">Saved searches</button>
+            <button id="deletedItems" type="button">Deleted items</button>
+          </div>
+          <div id="collections" class="collection-container"></div>
+        </aside>
+        <main class="library-main">
+          <div class="toolbar" aria-label="Library actions">
+            <button id="newItem" type="button">New item</button
+            ><button id="identifiers" type="button">Add by Identifier</button
+            ><button id="attachment" type="button">Attachment</button
+            ><button id="note" type="button">Note</button
+            ><button id="openalex" type="button">OpenAlex Search</button
+            ><button id="cite" type="button">Cite…</button>
+          </div>
+          <div class="search-row">
+            <input
+              id="search"
+              type="search"
+              placeholder="All fields & tags"
+              aria-label="Search all fields and tags"
+            /><button id="refresh" type="button">Refresh</button
+            ><label class="field"
+              ><span>Multiple selection</span
+              ><input id="multiSelect" type="checkbox" /></label
+            ><select id="actions" aria-label="Selected item actions">
+              <option value="">Selected items…</option>
+              <option value="enrich">Enrich abstracts</option>
+              <option value="resolve-pdfs">Find available PDFs</option>
+              <option value="collection">Add to collection</option>
+              <option value="remove-collection">Remove from collection</option>
+              <option value="delete">Move to deleted items</option>
+              <option value="restore">Restore deleted items</option>
+            </select>
+          </div>
+          <div class="table-header" role="row">
+            <button data-sort="title" type="button">Title</button
+            ><button data-sort="creator" type="button">Creator</button
+            ><button class="record-type" data-sort="itemType" type="button">
+              Item type</button
+            ><button data-sort="year" type="button">Year</button
+            ><span title="Attachments" aria-label="Attachments">↧</span>
+          </div>
+          <div id="items" class="item-list"></div>
+        </main>
+        <aside id="details" class="item-details" aria-label="Item details">
+          <p class="empty-details">
+            Select an item to view and edit its details.
+          </p>
+        </aside>
+      </div>
+      <footer class="app-status">
+        <span id="status" role="status" aria-live="polite"
+          >Connecting to References…</span
+        >
+        <div id="jobs" class="job-list"></div>
+      </footer>
+    </div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
