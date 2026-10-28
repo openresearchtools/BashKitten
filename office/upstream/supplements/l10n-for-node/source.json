@@ -1,0 +1,13 @@
+{
+  "name": "l10n-for-node",
+  "version": "0.0.1",
+  "repository": "https://github.com/hanna-greaves/l10n.js",
+  "revision": "9861b304a2727e8873ed8ea18b0057a648f1680b",
+  "url": "https://codeload.github.com/hanna-greaves/l10n.js/tar.gz/9861b304a2727e8873ed8ea18b0057a648f1680b",
+  "archive": "source.tar.gz",
+  "sha256": "13908da5dae4899ae8d956dd249e012759d32f51f6b3757318747fa6c1e299e2",
+  "license": "MIT",
+  "licenseFile": "LICENSE.md",
+  "licenseSha256": "d4783e51cf91afd96b96e3de8abeea7cbb7dfb6a764102c556012a54ff216600",
+  "verification": "l10n.js matches the pinned released npm payload after CRLF/LF normalization; npm omits the upstream LICENSE.md."
+}

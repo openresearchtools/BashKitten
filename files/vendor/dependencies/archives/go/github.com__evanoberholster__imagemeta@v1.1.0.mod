@@ -1,0 +1,21 @@
+module github.com/evanoberholster/imagemeta
+
+go 1.27.0
+
+require (
+	github.com/klauspost/cpuid/v2 v2.3.0
+	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
+	github.com/orisano/gosax v1.1.4
+	github.com/pkg/errors v0.9.1
+	github.com/stretchr/testify v1.11.1
+	github.com/tinylib/msgp v1.6.3
+	golang.org/x/image v0.33.0
+)
+
+require (
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+)

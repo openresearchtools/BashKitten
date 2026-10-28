@@ -1,0 +1,221 @@
+{
+  "schema": 1,
+  "components": [
+    {
+      "ecosystem": "native",
+      "name": "mupdf",
+      "version": "1.28.2",
+      "url": "https://mupdf.com/downloads/archive/mupdf-1.28.2-source.tar.gz",
+      "role": "runtime-source",
+      "filename": "mupdf-1.28.2-source.tar.gz",
+      "archive": {
+        "sha256": "44075a84e329db55b9bef5f342a70fd26d69e48ad1d33cb89d9664581c641156",
+        "size": 68898646,
+        "parts": [
+          {
+            "file": "archives/native/mupdf-1.28.2-source.tar.gz.part000",
+            "sha256": "6d6079dff48e84b9943f333029e1dd15129df3dc64bb02ae7856801baaee238f",
+            "size": 33554432
+          },
+          {
+            "file": "archives/native/mupdf-1.28.2-source.tar.gz.part001",
+            "sha256": "92e23fffc12286e434b60e890edd3ac374b416e5914fc98056ff74f7d15a22bf",
+            "size": 33554432
+          },
+          {
+            "file": "archives/native/mupdf-1.28.2-source.tar.gz.part002",
+            "sha256": "0ef60f2ea0b34954529e8cfdcb13277fc4cf4d6c2270a8e1c42adcdd377083fe",
+            "size": 1789782
+          }
+        ]
+      },
+      "notices": [
+        "mupdf-1.28.2-source/COPYING",
+        "mupdf-1.28.2-source/docs/license.md",
+        "mupdf-1.28.2-source/resources/fonts/droid/NOTICE",
+        "mupdf-1.28.2-source/resources/fonts/han/LICENSE.txt",
+        "mupdf-1.28.2-source/resources/fonts/noto/COPYING",
+        "mupdf-1.28.2-source/thirdparty/brotli/LICENSE",
+        "mupdf-1.28.2-source/thirdparty/cmark-gfm/COPYING",
+        "mupdf-1.28.2-source/thirdparty/curl/COPYING",
+        "mupdf-1.28.2-source/thirdparty/curl/docs/LICENSE-MIXING.md",
+        "mupdf-1.28.2-source/thirdparty/extract/COPYING",
+        "mupdf-1.28.2-source/thirdparty/freeglut/COPYING",
+        "mupdf-1.28.2-source/thirdparty/freetype/LICENSE.TXT",
+        "mupdf-1.28.2-source/thirdparty/freetype/src/tools/no-copyright",
+        "mupdf-1.28.2-source/thirdparty/freetype/src/tools/update-copyright",
+        "mupdf-1.28.2-source/thirdparty/freetype/src/tools/update-copyright-year",
+        "mupdf-1.28.2-source/thirdparty/gumbo-parser/COPYING",
+        "mupdf-1.28.2-source/thirdparty/harfbuzz/COPYING",
+        "mupdf-1.28.2-source/thirdparty/harfbuzz/src/ms-use/COPYING",
+        "mupdf-1.28.2-source/thirdparty/jbig2dec/COPYING",
+        "mupdf-1.28.2-source/thirdparty/jbig2dec/LICENSE",
+        "mupdf-1.28.2-source/thirdparty/lcms2/LICENSE",
+        "mupdf-1.28.2-source/thirdparty/lcms2/plugins/threaded/COPYING.GPL3",
+        "mupdf-1.28.2-source/thirdparty/lcms2/utils/jpgicc/LICENSE_iccjpeg",
+        "mupdf-1.28.2-source/thirdparty/leptonica/leptonica-license.txt",
+        "mupdf-1.28.2-source/thirdparty/leptonica/src/leptonica-license.txt",
+        "mupdf-1.28.2-source/thirdparty/mujs/COPYING",
+        "mupdf-1.28.2-source/thirdparty/mujs/docs/license.html",
+        "mupdf-1.28.2-source/thirdparty/openjpeg/LICENSE",
+        "mupdf-1.28.2-source/thirdparty/tesseract/LICENSE",
+        "mupdf-1.28.2-source/thirdparty/zint/LICENSE",
+        "mupdf-1.28.2-source/thirdparty/zint/backend_qt/COPYING",
+        "mupdf-1.28.2-source/thirdparty/zint/backend_tcl/licence.txt",
+        "mupdf-1.28.2-source/thirdparty/zint/debian/copyright",
+        "mupdf-1.28.2-source/thirdparty/zint/frontend/COPYING",
+        "mupdf-1.28.2-source/thirdparty/zint/frontend_qt/COPYING",
+        "mupdf-1.28.2-source/thirdparty/zint/frontend_qt/res/LICENSE_feathericons",
+        "mupdf-1.28.2-source/thirdparty/zint/frontend_qt/res/LICENSE_lucide",
+        "mupdf-1.28.2-source/thirdparty/zlib/LICENSE",
+        "mupdf-1.28.2-source/thirdparty/zxing-cpp/LICENSE"
+      ]
+    },
+    {
+      "ecosystem": "native",
+      "name": "ffmpeg",
+      "version": "9.0.2",
+      "url": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz",
+      "role": "runtime-source",
+      "filename": "ffmpeg-9.0.2.tar.xz",
+      "archive": {
+        "sha256": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e",
+        "size": 12040788,
+        "parts": [
+          {
+            "file": "archives/native/ffmpeg-9.0.2.tar.xz",
+            "sha256": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e",
+            "size": 12040788
+          }
+        ]
+      },
+      "notices": [
+        "ffmpeg-9.0.2/COPYING.LGPLv2.1",
+        "ffmpeg-9.0.2/COPYING.GPLv2",
+        "ffmpeg-9.0.2/COPYING.LGPLv3",
+        "ffmpeg-9.0.2/COPYING.GPLv3",
+        "ffmpeg-9.0.2/tests/checkasm/ext/src/html_data/LICENSE",
+        "ffmpeg-9.0.2/tests/checkasm/ext/LICENSE",
+        "ffmpeg-9.0.2/LICENSE.md"
+      ]
+    },
+    {
+      "ecosystem": "native",
+      "name": "dav1d",
+      "version": "1.5.1",
+      "url": "https://code.videolan.org/videolan/dav1d/-/archive/1.5.1/dav1d-1.5.1.tar.gz",
+      "role": "runtime-source",
+      "filename": "dav1d-1.5.1.tar.gz",
+      "archive": {
+        "sha256": "fa635e2bdb25147b1384007c83e15de44c589582bb3b9a53fc1579cb9d74b695",
+        "size": 1710628,
+        "parts": [
+          {
+            "file": "archives/native/dav1d-1.5.1.tar.gz",
+            "sha256": "fa635e2bdb25147b1384007c83e15de44c589582bb3b9a53fc1579cb9d74b695",
+            "size": 1710628
+          }
+        ]
+      },
+      "notices": [
+        "dav1d-1.5.1/COPYING"
+      ]
+    },
+    {
+      "ecosystem": "native",
+      "name": "quantum-ffmpeg-recipe",
+      "version": "9.0.2",
+      "commit": "96791fe8c59687f265f057fb80080835b3e430a7",
+      "url": "https://codeload.github.com/gtsteffaniak/ffmpeg/tar.gz/96791fe8c59687f265f057fb80080835b3e430a7",
+      "role": "upstream-build-reference",
+      "filename": "quantum-ffmpeg-recipe-96791fe8.tar.gz",
+      "archive": {
+        "sha256": "6f54bd959c33f69af5ae0189bafa05f4af8ee3812a8276c81b12431e22d727b5",
+        "size": 45158,
+        "parts": [
+          {
+            "file": "archives/native/quantum-ffmpeg-recipe-96791fe8.tar.gz",
+            "sha256": "6f54bd959c33f69af5ae0189bafa05f4af8ee3812a8276c81b12431e22d727b5",
+            "size": 45158
+          }
+        ]
+      },
+      "notices": [
+        "ffmpeg-96791fe8c59687f265f057fb80080835b3e430a7/LICENSE"
+      ]
+    },
+    {
+      "ecosystem": "native",
+      "name": "esbuild",
+      "version": "0.25.12",
+      "url": "https://codeload.github.com/evanw/esbuild/tar.gz/refs/tags/v0.25.12",
+      "role": "frontend-build-tool-source",
+      "filename": "esbuild-0.25.12.tar.gz",
+      "archive": {
+        "sha256": "eca56e4242e68ebde6f327458c71457e614a2b0564b30a45d60fc633e0ccaab4",
+        "size": 1972062,
+        "parts": [
+          {
+            "file": "archives/native/esbuild-0.25.12.tar.gz",
+            "sha256": "eca56e4242e68ebde6f327458c71457e614a2b0564b30a45d60fc633e0ccaab4",
+            "size": 1972062
+          }
+        ]
+      },
+      "notices": [
+        "esbuild-0.25.12/LICENSE.md",
+        "esbuild-0.25.12/internal/xxhash/LICENSE.txt",
+        "esbuild-0.25.12/npm/esbuild-wasm/LICENSE.md",
+        "esbuild-0.25.12/npm/esbuild/LICENSE.md"
+      ]
+    },
+    {
+      "ecosystem": "native",
+      "name": "rollup",
+      "version": "4.63.5",
+      "url": "https://codeload.github.com/rollup/rollup/tar.gz/refs/tags/v4.63.5",
+      "role": "frontend-build-tool-source",
+      "filename": "rollup-4.63.5.tar.gz",
+      "archive": {
+        "sha256": "7b52fe27e3c1365a567b4e5d6e638b401e1f1ce90d39c3832ab34df2c45f36a1",
+        "size": 2286200,
+        "parts": [
+          {
+            "file": "archives/native/rollup-4.63.5.tar.gz",
+            "sha256": "7b52fe27e3c1365a567b4e5d6e638b401e1f1ce90d39c3832ab34df2c45f36a1",
+            "size": 2286200
+          }
+        ]
+      },
+      "notices": [
+        "rollup-4.63.5/LICENSE-CORE.md",
+        "rollup-4.63.5/LICENSE.md",
+        "rollup-4.63.5/browser/LICENSE.md",
+        "rollup-4.63.5/build-plugins/generate-license-file.ts"
+      ]
+    },
+    {
+      "ecosystem": "native",
+      "name": "nasm",
+      "version": "3.02",
+      "url": "https://www.nasm.us/pub/nasm/releasebuilds/3.02/nasm-3.02.tar.xz",
+      "filename": "nasm-3.02.tar.xz",
+      "role": "native-build-tool-source",
+      "archive": {
+        "sha256": "87336eba53b4acfe917424ab5d500d2b0054d9f5148d35c2273ccf2cfb712f0d",
+        "size": 1531636,
+        "parts": [
+          {
+            "file": "archives/native/nasm-3.02.tar.xz",
+            "size": 1531636,
+            "sha256": "87336eba53b4acfe917424ab5d500d2b0054d9f5148d35c2273ccf2cfb712f0d"
+          }
+        ]
+      },
+      "notices": [
+        "nasm-3.02/LICENSE",
+        "nasm-3.02/zlib/LICENSE"
+      ]
+    }
+  ]
+}
