@@ -468,6 +468,7 @@ def assemble(args):
         require(int(subprocess.check_output(['npm', '--version'], text=True).split('.')[0]) >= 10,
                 'Use npm >=10 for explicit target dependency selection')
         run(command)
+        run(['python3', str(ROOT / 'packaging/photon/build.py'), str(app)])
         from applications import install as install_applications
         application_components = install_applications(args, app, revision, npm_cache, checked_archive, extract)
         run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(app),

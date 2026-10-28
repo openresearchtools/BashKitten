@@ -47,6 +47,7 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
     cache = stage / 'npm-cache'
     subprocess.run(['python3', str(ROOT / 'packaging/npm-sources.py'), '--cache', str(cache)], check=True)
     subprocess.run(['npm', 'ci', '--offline', '--cache', str(cache), '--prefix', str(stage), '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--os=android', '--cpu=' + cpu], check=True)
+    subprocess.run(['python3', str(ROOT / 'packaging/photon/build.py'), str(stage)], check=True)
     subprocess.run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(stage), 'android', cpu], check=True)
     install_node(args.node_archive, stage, 'termux', args.architecture)
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()

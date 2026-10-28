@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 export const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -76,14 +77,31 @@ export async function npmLicenses(root, { piVersion, piCommit, supplementRoot = 
       : value.name.startsWith('@aws-sdk/') ? 'aws'
       : ({ 'data-uri-to-buffer': 'data-uri-to-buffer', standardwebhooks: 'standardwebhooks',
         'xml-naming': 'xml-naming', '@nodable/entities': 'entities',
-        'proxy-agent-negotiate': 'proxy-agent-negotiate', saxes: 'saxes' })[value.name];
+        'proxy-agent-negotiate': 'proxy-agent-negotiate', saxes: 'saxes',
+        'quickjs-wasi': 'quickjs-wasi' })[value.name];
+    let nativeLicense;
+    if (value.name === 'quickjs-wasi') {
+      const native = path.join(supplementRoot, supplement);
+      const pin = JSON.parse(await fs.readFile(path.join(native, 'source.json'), 'utf8'));
+      if (pin.npmName !== value.name || pin.version !== value.version) throw Error('QuickJS native license/source version changed');
+      nativeLicense = pin.licenseDescription;
+      for (const [base, files] of [[folder, pin.nativeAssets], [native, pin.licenseFiles],
+        [native, [{ path: 'NATIVE-NOTICES.txt', sha256: pin.nativeNoticeSha256 }]]]) {
+        if (!Array.isArray(files) || !files.length) throw Error('Missing QuickJS native license/source inventory');
+        for (const file of files) {
+          const relative = file.path;
+          if (path.isAbsolute(relative) || relative.split('/').includes('..') ||
+              createHash('sha256').update(await fs.readFile(path.join(base, relative))).digest('hex') !== file.sha256) throw Error('QuickJS native artifact or license changed: ' + relative);
+        }
+      }
+    }
     if (supplement) notices.push(...await texts(path.join(supplementRoot, supplement)));
     if (!notices.length) throw Error('Missing license text: ' + key);
     const pinnedPi = ['@earendil-works/chord', '@earendil-works/pi-ai', '@earendil-works/pi-agent-core',
       '@earendil-works/pi-codemode', '@earendil-works/pi-coding-agent', '@earendil-works/pi-mcp',
       '@earendil-works/pi-telemetry', '@earendil-works/pi-tui'].includes(value.name)
       && value.version === piVersion && piCommit;
-    records.push({ name: value.name, version: value.version, license: value.license || item.license || (pinnedPi ? 'MIT' : undefined),
+    records.push({ name: value.name, version: value.version, license: nativeLicense || value.license || item.license || (pinnedPi ? 'MIT' : undefined),
       source: typeof value.repository === 'string' ? value.repository : value.repository?.url,
       text: [...new Set(notices)].join('\n\n') });
   }

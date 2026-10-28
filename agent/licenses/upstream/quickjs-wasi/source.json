@@ -1,0 +1,215 @@
+{
+  "schema": 1,
+  "name": "quickjs-wasi",
+  "version": "3.6.2",
+  "npmName": "quickjs-wasi",
+  "repository": "https://github.com/vercel-labs/quickjs-wasi",
+  "revision": "5a7a0eeda87c99542f8cf3095b6d61ecfa755977",
+  "sourceSelection": "Official quickjs-wasi@3.6.2 tag; its exact QuickJS-NG gitlink and Makefile-required WASI SDK 32 release with pinned LLVM/wasi-libc submodules. Ada 3.4.3 is identified in the shipped amalgamation header.",
+  "components": [
+    {
+      "name": "quickjs-wasi",
+      "repository": "https://github.com/vercel-labs/quickjs-wasi",
+      "commit": "5a7a0eeda87c99542f8cf3095b6d61ecfa755977",
+      "url": "https://codeload.github.com/vercel-labs/quickjs-wasi/tar.gz/5a7a0eeda87c99542f8cf3095b6d61ecfa755977",
+      "file": "quickjs-wasi-5a7a0eeda87c99542f8cf3095b6d61ecfa755977.tar.gz",
+      "sha256": "cb3a2e58fd7187104b9294962e205c28433ecb7653d75771a35ef98dfdfb8484"
+    },
+    {
+      "name": "quickjs-ng",
+      "repository": "https://github.com/quickjs-ng/quickjs",
+      "commit": "6d46d07d04041b40f4f49eaa7fdebe44c314c699",
+      "url": "https://codeload.github.com/quickjs-ng/quickjs/tar.gz/6d46d07d04041b40f4f49eaa7fdebe44c314c699",
+      "file": "quickjs-ng-6d46d07d04041b40f4f49eaa7fdebe44c314c699.tar.gz",
+      "sha256": "a62cf1ff7d6d2f82b90a2d247a57e9eb56b81c03feb1f372a53923426e358cb0",
+      "size": 905853
+    },
+    {
+      "name": "quickjs-ada",
+      "version": "3.4.3",
+      "repository": "https://github.com/ada-url/ada",
+      "commit": "3c84d730f6c6395355d94c620e96e886e7026474",
+      "url": "https://codeload.github.com/ada-url/ada/tar.gz/3c84d730f6c6395355d94c620e96e886e7026474",
+      "file": "quickjs-ada-3c84d730f6c6395355d94c620e96e886e7026474.tar.gz",
+      "sha256": "f13c394e21846e93f9c65f01f6a05b0a4a2d8d780a9bf7b4167579f4f9aee76f",
+      "size": 476992
+    },
+    {
+      "name": "wasi-sdk",
+      "repository": "https://github.com/WebAssembly/wasi-sdk",
+      "commit": "249054e5427023344c1906afde0e9073714d1930",
+      "url": "https://codeload.github.com/WebAssembly/wasi-sdk/tar.gz/249054e5427023344c1906afde0e9073714d1930",
+      "file": "wasi-sdk-249054e5427023344c1906afde0e9073714d1930.tar.gz",
+      "sha256": "dd2ad7499192b88e0dc31002bf630d84016ed457b918dc345a1e8d458797f042",
+      "size": 47220
+    },
+    {
+      "name": "wasi-libc",
+      "repository": "https://github.com/WebAssembly/wasi-libc",
+      "commit": "2fc32bc81b9f07f8d9525edea59bfbaf760c06d6",
+      "url": "https://codeload.github.com/WebAssembly/wasi-libc/tar.gz/2fc32bc81b9f07f8d9525edea59bfbaf760c06d6",
+      "file": "wasi-libc-2fc32bc81b9f07f8d9525edea59bfbaf760c06d6.tar.gz",
+      "sha256": "d12a1568d9394e693e6b189277ba70446f96b81a4790c515427865a0d5412372",
+      "size": 1636483
+    },
+    {
+      "name": "wasi-llvm",
+      "repository": "https://github.com/llvm/llvm-project",
+      "commit": "4434dabb69916856b824f68a64b029c67175e532",
+      "url": "https://codeload.github.com/llvm/llvm-project/tar.gz/4434dabb69916856b824f68a64b029c67175e532",
+      "file": "wasi-llvm-4434dabb69916856b824f68a64b029c67175e532.tar.gz",
+      "sha256": "8d1c513efc817c7b4bef634156e6666e19462de2044c64e8f2df4fdd375a0600",
+      "size": 258244108
+    }
+  ],
+  "licenseFiles": [
+    {
+      "source": "quickjs-wasi",
+      "path": "quickjs-wasi/LICENSE",
+      "sourcePath": "LICENSE",
+      "sha256": "f7735da3b2531ddf451937117343cfadb853fd8054b499e7a70695dc57ffd184"
+    },
+    {
+      "source": "quickjs-wasi",
+      "path": "quickjs-wasi/extensions/crypto/mbedtls/LICENSE",
+      "sourcePath": "extensions/crypto/mbedtls/LICENSE",
+      "sha256": "9b405ef4c89342f5eae1dd828882f931747f71001cfba7d114801039b52ad09b"
+    },
+    {
+      "source": "quickjs-ng",
+      "path": "quickjs-ng/LICENSE",
+      "sourcePath": "LICENSE",
+      "sha256": "96f73f9d2a16c21a36b418f06073be26e7d6d5e7c1bc99756b21a4f2c74ef171"
+    },
+    {
+      "source": "quickjs-ada",
+      "path": "quickjs-ada/LICENSE-APACHE",
+      "sourcePath": "LICENSE-APACHE",
+      "sha256": "508d4676d4083e874df706f302d9d42e5e7f9aed3f5a7ea614dc6d2b2252a22f"
+    },
+    {
+      "source": "quickjs-ada",
+      "path": "quickjs-ada/LICENSE-MIT",
+      "sourcePath": "LICENSE-MIT",
+      "sha256": "af0d7d2cef91fc243cf4ad98570b03d1f26f5e0227cad0f5f4a7376e2feb3160"
+    },
+    {
+      "source": "wasi-sdk",
+      "path": "wasi-sdk/LICENSE",
+      "sourcePath": "LICENSE",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5"
+    },
+    {
+      "source": "wasi-libc",
+      "path": "wasi-libc/LICENSE",
+      "sourcePath": "LICENSE",
+      "sha256": "2711a8b5a5cdfef0e639f96c1aca12ae23d7d64a02d0507f1bdf14d2b27bbc3a"
+    },
+    {
+      "source": "wasi-libc",
+      "path": "wasi-libc/LICENSE-APACHE",
+      "sourcePath": "LICENSE-APACHE",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+    },
+    {
+      "source": "wasi-libc",
+      "path": "wasi-libc/LICENSE-APACHE-LLVM",
+      "sourcePath": "LICENSE-APACHE-LLVM",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5"
+    },
+    {
+      "source": "wasi-libc",
+      "path": "wasi-libc/LICENSE-MIT",
+      "sourcePath": "LICENSE-MIT",
+      "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+    },
+    {
+      "source": "wasi-libc",
+      "path": "wasi-libc/fts/musl-fts/COPYING",
+      "sourcePath": "fts/musl-fts/COPYING",
+      "sha256": "55af87e4017668f54467a3380e7ebbac5e672d8c763bfe95e6fc882a6fdc4046"
+    },
+    {
+      "source": "wasi-libc",
+      "path": "wasi-libc/fts/musl-fts/NOTICE.wasi-libc.md",
+      "sourcePath": "fts/musl-fts/NOTICE.wasi-libc.md",
+      "sha256": "6aa429513e3e883111aceab81f80f9da38613b7f74c966393ff33470c93a9daa"
+    },
+    {
+      "source": "wasi-libc",
+      "path": "wasi-libc/libc-bottom-half/cloudlibc/LICENSE",
+      "sourcePath": "libc-bottom-half/cloudlibc/LICENSE",
+      "sha256": "c8b789cf5a746611e6300a0cc7750dbf92b61912a709d04e639245f7290656d0"
+    },
+    {
+      "source": "wasi-libc",
+      "path": "wasi-libc/libc-top-half/musl/COPYRIGHT",
+      "sourcePath": "libc-top-half/musl/COPYRIGHT",
+      "sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af"
+    },
+    {
+      "source": "wasi-libc",
+      "path": "wasi-libc/tools/wasi-headers/LICENSE",
+      "sourcePath": "tools/wasi-headers/LICENSE",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5"
+    },
+    {
+      "source": "wasi-llvm",
+      "path": "wasi-llvm/compiler-rt/LICENSE.TXT",
+      "sourcePath": "compiler-rt/LICENSE.TXT",
+      "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
+    },
+    {
+      "source": "wasi-llvm",
+      "path": "wasi-llvm/libcxx/LICENSE.TXT",
+      "sourcePath": "libcxx/LICENSE.TXT",
+      "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+    },
+    {
+      "source": "wasi-llvm",
+      "path": "wasi-llvm/libcxxabi/LICENSE.TXT",
+      "sourcePath": "libcxxabi/LICENSE.TXT",
+      "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
+    },
+    {
+      "source": "wasi-llvm",
+      "path": "wasi-llvm/libunwind/LICENSE.TXT",
+      "sourcePath": "libunwind/LICENSE.TXT",
+      "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
+    },
+    {
+      "source": "wasi-llvm",
+      "path": "wasi-llvm/llvm/LICENSE.TXT",
+      "sourcePath": "llvm/LICENSE.TXT",
+      "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"
+    }
+  ],
+  "nativeNoticeSha256": "2d4eceff5af5f504b2ab805425d26f9248cc4e1ee2063db883ecf9edb67eac50",
+  "nativeAssets": [
+    {
+      "path": "quickjs.wasm",
+      "sha256": "d4c9375f2b1ca4dc95f72c8aa2982a7a9951ac8011490d79c6582df732b4bbd9"
+    },
+    {
+      "path": "extensions/crypto/crypto.so",
+      "sha256": "fa26b6fafda251c3b1442dcc4c876b3ac73689639519f4ddfc2c410ebdb5b7c2"
+    },
+    {
+      "path": "extensions/encoding/encoding.so",
+      "sha256": "d501aa2a8410ee07c196103f0d169b226ec61c922883713510fd723fe14036c3"
+    },
+    {
+      "path": "extensions/headers/headers.so",
+      "sha256": "42c847104d6aa8d4666fa41bb74d324c2ee9a4d15c2492fca013b1631232b011"
+    },
+    {
+      "path": "extensions/structured-clone/structured-clone.so",
+      "sha256": "0ac5a36c0545c659ba6f9f8de5af11862df84546d151d0f15ec5184c95fd6cb3"
+    },
+    {
+      "path": "extensions/url/url.so",
+      "sha256": "af780a79f1fb131b5e6fa1d6fedc481e265420cf2f254fe966255230f4c1bc62"
+    }
+  ],
+  "licenseDescription": "MIT for QuickJS-WASI/QuickJS-NG; original Ada URL, mbedTLS/TF-PSA-Crypto/everest, WASI libc and LLVM runtime component terms included"
+}

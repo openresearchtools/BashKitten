@@ -30,6 +30,8 @@ def fingerprint(target, legacy_verifier=None, legacy_android_module=None):
     if target.startswith('android'):
         paths += ['.github/builders/android.yml', 'auth', 'agent/native/remote', 'agent/native/phone-control',
                   'agent/packaging/android-notices.py', 'agent/packaging/build.py',
+                  'agent/packaging/photon', 'agent/packaging/machines/build.py',
+                  'agent/machines/rust-toolchain',
                   'agent/packaging/applications.py', 'references/runtime-payload.json',
                   'references/package.json', 'references/package-lock.json',
                   'references/THIRD_PARTY_NOTICES.md', 'references/vendor/*/source.json',
