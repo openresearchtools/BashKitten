@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT / 'agent/packaging/termux'))
 import native_toolchain
 
 PATCH_ROOT = ROOT / 'office/patches/termux'
+NATIVE_DEPENDENCIES = source_graph.DEPENDENCIES / 'native-termux'
 SYSTEM_PACKAGES = ['bash', 'ca-certificates', 'coreutils', 'fontconfig']
 
 
@@ -96,6 +97,51 @@ def build_environment(args):
     })
     return env, provenance
 
+
+def native_dependencies():
+    manifest = NATIVE_DEPENDENCIES / 'sources.json'
+    result = json.loads(manifest.read_text())
+    for row in result['components']:
+        for name, checksum in [('file', 'sha256'), ('licenseFile', 'licenseSha256')]:
+            path = NATIVE_DEPENDENCIES / row[name]
+            if not path.resolve().is_relative_to(NATIVE_DEPENDENCIES.resolve()):
+                raise ValueError('Native dependency input leaves its retained directory')
+            if source_graph.digest(path) != row[checksum]:
+                raise ValueError('Native dependency input changed: ' + str(path))
+    return {**result, 'manifestSha256': source_graph.digest(manifest)}
+
+
+def build_libcap(args, env):
+    """Use libcap's native library target and the retained Termux configuration."""
+    retained = native_dependencies()
+    component = next(row for row in retained['components'] if row['name'] == 'libcap')
+    work = args.work / 'native-termux'
+    source = work / ('libcap-' + component['version'])
+    command = ['make', '-C', str(source / 'libcap'), '-j' + str(args.jobs),
+               'CC=' + env['CC'], 'AR=' + env['AR'], 'RANLIB=' + env['RANLIB'],
+               'OBJCOPY=' + str(args.ndk / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objcopy'),
+               'BUILD_CC=gcc', 'BUILD_CFLAGS=-O2', 'PTHREADS=no', 'PAM_CAP=no', 'PREFIX=' + PREFIX]
+    expected = {'source': component, 'architecture': args.architecture,
+                'configuration': command[4:],
+                'flags': {key: env[key] for key in ['CFLAGS', 'CPPFLAGS', 'LDFLAGS']}}
+    stamp = work / 'libcap-inputs.json'
+    if source.exists():
+        if not stamp.is_file() or json.loads(stamp.read_text()) != expected:
+            raise ValueError('Native libcap build inputs changed; use a fresh native-termux dependency directory')
+    else:
+        work.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(NATIVE_DEPENDENCIES / component['file']) as archive:
+            archive.extractall(work, filter='data')
+        write_json(stamp, expected)
+    # BUILD_CC is supported by this release, so the donor's old hardcoded-gcc
+    # patch is unnecessary. Build only the native library target: it has no
+    # attr dependency and does not run target executables on the build host.
+    run(command, cwd=source, env=env)
+    if not (source / 'libcap/libcap.so.2').is_file():
+        raise ValueError('Native libcap shared library was not produced')
+    return source
+
+
 def configure_engine(source, args, env):
     options = [*ENGINE_OPTIONS, '--build=x86_64-pc-linux-gnu',
                '--host=' + args.architecture + '-linux', '--prefix=' + RUNTIME,
@@ -114,9 +160,18 @@ def configure_engine(source, args, env):
     return options
 
 
+def online_make_inputs(libcap, env):
+    # Online's native gbuild reloads config_host.mk from the earlier engine
+    # configure. Its existing make inputs preserve these extra library paths.
+    return ['CPPFLAGS=' + env['CPPFLAGS'] + ' -I' + str(libcap / 'libcap/include'),
+            'CAP_LIBS=-L' + str(libcap / 'libcap') + ' -lcap']
+
+
 def build_online(source, args, env):
-    native = {**env, 'CPPFLAGS': env['CPPFLAGS'] + ' -DBASHKITTEN_TERMUX_PREFIX=\\"' + PREFIX + '\\"'}
-    run(['sh', './autogen.sh'], cwd=source, env=native)
+    libcap = build_libcap(args, env)
+    native = {**env, 'CPPFLAGS': env['CPPFLAGS'] + ' -I' + str(libcap / 'libcap/include'),
+              'LDFLAGS': env['LDFLAGS'] + ' -L' + str(libcap / 'libcap')}
+    run(['bash', './autogen.sh'], cwd=source, env=native)
     run(['./configure', '--build=x86_64-pc-linux-gnu', '--host=' + args.architecture + '-linux-android',
          '--prefix=' + RUNTIME, '--sysconfdir=' + RUNTIME + '/etc', '--localstatedir=' + RUNTIME + '/var',
          '--disable-tests', '--disable-pam', '--enable-landlock', '--enable-seccomp',
@@ -124,20 +179,26 @@ def build_online(source, args, env):
          '--with-lokit-path=' + str(source / 'engine/include'), '--with-lo-path=' + RUNTIME + '/engine'],
         cwd=source, env=native)
     config = (source / 'config.h').read_text()
-    for required in ['#define MOBILEAPP 0', '#define DISABLE_SECCOMP 0', '#define DISABLE_LANDLOCK 0']:
+    for required in ['#define MOBILEAPP 0', '#define DISABLE_SECCOMP 0', '#define DISABLE_LANDLOCK 0',
+                     '#define HAVE_LIBCAP 1', '#define BASHKITTEN_TERMUX_PREFIX "' + PREFIX + '"']:
         if required not in config:
             raise ValueError('Native server/isolation configuration missing: ' + required)
-    run(['make', '-j' + str(args.jobs)], cwd=source, env=native)
+    # Online delegates its native binaries to the configured engine's gbuild.
+    # Its config_host.mk otherwise restores the earlier engine CPPFLAGS, hiding
+    # libcap behind the NDK's limited sys/capability.h. Use the existing make
+    # CPPFLAGS and CAP_LIBS inputs; CAP_LIBS is already forwarded by Online.
+    run(['make', '-j' + str(args.jobs), *online_make_inputs(libcap, env)], cwd=source, env=native)
     run(['make', 'sbom-check'], cwd=source, env=native)
 
 
 def package(source, args, env, toolchain):
+    libcap = build_libcap(args, env)
     run(['make', 'Package_instsetoo_native_setup'], cwd=source / 'engine', env=env)
     run(['make', 'LIBO_TEST_INSTALL=TRUE', 'CustomTarget_instsetoo_native/sbom'], cwd=source / 'engine', env=env)
     stage = args.work / 'stage'
     if stage.exists():
         shutil.rmtree(stage)
-    run(['make', 'DESTDIR=' + str(stage), 'install'], cwd=source, env=env)
+    run(['make', *online_make_inputs(libcap, env), 'DESTDIR=' + str(stage), 'install'], cwd=source, env=env)
     runtime = stage / RUNTIME.lstrip('/')
     shutil.copytree(source / 'engine/instdir', runtime / 'engine', symlinks=True)
     if 'buildid=' + env['SOURCE_REVISION'] not in (runtime / 'engine/program/versionrc').read_text():
@@ -146,6 +207,8 @@ def package(source, args, env, toolchain):
     triple = args.architecture + '-linux-android'
     libcxx = args.ndk / 'toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib' / triple / 'libc++_shared.so'
     shutil.copy2(libcxx, runtime / 'engine/program/libc++_shared.so')
+    for library in (libcap / 'libcap').glob('libcap.so*'):
+        shutil.copy2(library, runtime / 'engine/program' / library.name, follow_symlinks=False)
     required = ['bin/coolwsd', 'bin/coolforkit-ns', 'bin/coolforkit-caps',
                 'bin/coolwsd-systemplate-setup', 'etc/coolwsd/coolwsd.xml',
                 'engine/program/libmergedlo.so', 'share/coolwsd/browser/dist/cool.html',
@@ -171,9 +234,13 @@ def package(source, args, env, toolchain):
     notices.append({'name': 'Termux POSIX semaphore compatibility library', 'license': 'MIT',
                     'source': json.loads((PATCH_ROOT / 'donor.json').read_text())['donor']['url'],
                     'text': (source / 'engine/external/python3/termux/LICENSE').read_text()})
-    notices.append({'name': 'Termux native Python compatibility patches', 'license': 'MIT',
+    notices.append({'name': 'Termux native build configuration and Python compatibility patches', 'license': 'MIT',
                     'source': json.loads((PATCH_ROOT / 'donor.json').read_text())['donor']['url'],
                     'text': (source / 'engine/external/python3/termux/FRAMEWORK-LICENSE').read_text()})
+    for component in native_dependencies()['components']:
+        notices.append({'name': component['name'], 'version': component['version'],
+                        'license': 'BSD-3-Clause OR GPL-2.0-only', 'source': component['url'],
+                        'text': (NATIVE_DEPENDENCIES / component['licenseFile']).read_text()})
     write_json(notices_path, notices)
     # Resolve the actual ELF dependency closure against bundled libraries and
     # Android's public platform libraries, never the build host's ldconfig.
@@ -222,6 +289,7 @@ def package(source, args, env, toolchain):
                 'patchInputs': [{'file': str(path.relative_to(ROOT)), 'sha256': source_graph.digest(path)} for path in patch_inputs()],
                 'dependencyManifestSha256': source_graph.digest(source_graph.DEPENDENCIES / 'sources.json'),
                 'nativeSourceInputs': native_inputs(),
+                'nativeDependencies': native_dependencies(),
                 'files': inventory(runtime)}
     write_json(runtime / 'manifest.json', manifest)
     args.output.mkdir(parents=True, exist_ok=True)

@@ -76,11 +76,27 @@ original MPL-2.0/Apache-2.0 notices. These rebased source changes are MPL-2.0.
   environment, allowing each native host dependency to retain its own compiler
   flags. Empty recursive make command-line assignments previously overrode ICU
   include paths and C++ settings on a fresh build.
+- `0012-native-configure-prefix.patch`: declares the native prefix through
+  Online's existing generated configuration header. Escaped command-line quotes
+  had caused Clang's hardening checks to fail; the corrected native configure
+  retains FORTIFY, stack protection, PIE, Landlock and seccomp.
+- `0013-native-server-app-boundary.patch`: restricts the Android APK's singleton
+  document hooks, JNI include and logcat sink to its existing `MOBILEAPP` target.
+  The native Bionic server keeps normal server logging and document ownership;
+  genuine Android platform conditionals remain unchanged.
 
 The semaphore source, licenses and Python patch are materialized directly from
 the already retained immutable framework archive before applying the named
 delta. `donor.json` lists exact archive members and SHA-256 values. No second
 download, mutable framework checkout or anonymous source copy is a build input.
+
+The separately retained libcap 2.78 archive and original dual-license text live
+under `office/upstream/dependencies/native-termux`. Its native library target
+uses the pinned framework's `PTHREADS=no` and `PAM_CAP=no` settings. This release
+already supports `BUILD_CC`, so the donor's older host-compiler patch is not
+needed. The library target has no attr dependency; no unused attr source or
+package is added. The runtime retains real capability checks and includes the
+library in its existing ELF closure and full-notice inventory.
 
 The shared engine undo-property, extension small-screen, light-canvas and proof
 key patches are applied separately and remain owned by their respective modules.
@@ -151,3 +167,13 @@ A fresh ARM64 cross-build exposed the donor's recursive host-flag override.
 After patch 0011 and native clean/unpack of the affected host dependencies,
 ICU's complete host build and `makeconv -V` passed without stale system ICU 74
 references. Full ARM64 target compilation and runtime remain open gates.
+
+The complete x86_64 engine build passed, including the shared native UNO undo
+changes. Native Online configuration then found the retained libcap library
+while keeping `MOBILEAPP=0`, Landlock and seccomp enabled. In the actual Termux
+application, that library successfully read and reapplied the unchanged empty
+capability set. Online's gbuild uses its existing `CPPFLAGS` and `CAP_LIBS`
+inputs to retain the detected library paths. The native x86_64 server and both
+kit launchers then compiled and linked, and the upstream Online SBOM check
+passed. Full native kit/document operation and ARM64 completion remain separate
+open gates; the shared shape-undo patch is still being refined independently.

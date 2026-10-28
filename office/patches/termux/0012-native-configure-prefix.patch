@@ -1,0 +1,25 @@
+diff --git a/configure.ac b/configure.ac
+--- a/configure.ac
++++ b/configure.ac
+@@ -88,6 +88,8 @@
+ AC_DEFINE_UNQUOTED([COOLWSD_VERSION_HASH],[["$COOLWSD_VERSION_HASH"]],[Collabora Online git hash if present])
+ 
+ AC_CONFIG_SRCDIR([wsd/COOLWSD.cpp])
++
++AC_DEFINE([BASHKITTEN_TERMUX_PREFIX], ["@TERMUX_PREFIX@"], [Native Termux package prefix.])
+ 
+ AC_DEFINE_UNQUOTED([COOLWSD_BUILDCONFIG],[["$ac_configure_args"]],[Options passed to configure script])
+ 
+diff --git a/config.h.in b/config.h.in
+--- a/config.h.in
++++ b/config.h.in
+@@ -4,6 +4,9 @@
+ 
+ /* The user-visible name of the app you build. */
+ #undef APP_NAME
++
++/* Native Termux package prefix. */
++#undef BASHKITTEN_TERMUX_PREFIX
+ 
+ /* Default value of feature_lock.calc_unlock_highlights */
+ #undef CALC_UNLOCK_HIGHLIGHTS

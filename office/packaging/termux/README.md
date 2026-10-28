@@ -37,6 +37,12 @@ packaging and its build ID must match the immutable Collabora revision. The
 manifest's `depends` and `systemPackages` describe the same required Termux
 packages; native ELF dependency validation remains a separate check.
 
+The native libcap dependency is built from the separately retained and hashed
+2.78 source archive using its own library target and the selected Termux recipe's
+configuration. Its original full license and source receipt enter the runtime
+inventory. Online's normal capability detection remains required; no missing
+header is treated as permission to remove capability checks.
+
 The output root is `runtime/`, with native files, upstream SBOMs, full notices,
 resolved ELF dependencies and `manifest.json`. The existing environment owner
 launches the actual server with `COOL_FORCE_LANDLOCK=1`, the fixed Termux prefix,

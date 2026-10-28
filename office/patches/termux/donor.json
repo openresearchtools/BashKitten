@@ -161,6 +161,14 @@
     {
       "file": "packages/ca-certificates/build.sh",
       "sha256": "49346cd737c0c8f423f26cb0cb04467f93fb9d69c9c1fb1aff5840a9ea215861"
+    },
+    {
+      "file": "packages/libcap/build.sh",
+      "sha256": "c275bdba16506b5dc6547a96eed9b9835e9fb2efe52b18856cd307b8209a9aff"
+    },
+    {
+      "file": "packages/libcap/libcap-makefile.patch",
+      "sha256": "0c220a0e3eeee71813ba9ad99f52fcc02aea8205a2a8d559d855f6449fb555de"
     }
   ],
   "archiveRoot": "termux-packages-f3b242999b604dab33639c8211c3b461aad79dc9",

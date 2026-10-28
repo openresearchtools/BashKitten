@@ -1,0 +1,93 @@
+diff --git a/common/Log.hpp b/common/Log.hpp
+--- a/common/Log.hpp
++++ b/common/Log.hpp
+@@ -26,7 +26,7 @@
+ #include <string>
+ #include <thread>
+ 
+-#ifdef __ANDROID__
++#if MOBILEAPP && defined(__ANDROID__)
+ #include <android/log.h>
+ #endif
+ 
+@@ -282,7 +282,7 @@
+ 
+ #define UNIQUE_VAR(X) CONCATINATE(X, __LINE__)
+ 
+-#ifdef __ANDROID__
++#if MOBILEAPP && defined(__ANDROID__)
+ 
+ #define LOG_LOG(LVL, STR) \
+     ((void)__android_log_print(ANDROID_LOG_DEBUG, \
+diff --git a/kit/Kit.hpp b/kit/Kit.hpp
+--- a/kit/Kit.hpp
++++ b/kit/Kit.hpp
+@@ -526,7 +526,7 @@
+     std::string _jailedUrl;
+ 
+     std::shared_ptr<COKitDocument> _loKitDocument;
+-#ifdef __ANDROID__
++#if MOBILEAPP && defined(__ANDROID__)
+     static std::shared_ptr<COKitDocument> _loKitDocumentForAndroidOnly;
+     static std::weak_ptr<DocumentBroker> _documentBrokerForAndroidOnly;
+ #endif
+@@ -591,7 +591,7 @@
+     std::map<int, int> _speedCount;
+     /// For showing disconnected user info in the doc repair dialog.
+     std::map<int, UserInfo> _sessionUserInfo;
+-#ifdef __ANDROID__
++#if MOBILEAPP && defined(__ANDROID__)
+     friend std::shared_ptr<COKitDocument> getLOKDocumentForAndroidOnly();
+     friend std::shared_ptr<DocumentBroker> getDocumentBrokerForAndroidOnly();
+ #endif
+@@ -621,7 +621,7 @@
+ /// Fetch the latest monotonically incrementing wire-id
+ TileWireId getCurrentWireId(bool increment = false);
+ 
+-#ifdef __ANDROID__
++#if MOBILEAPP && defined(__ANDROID__)
+ /// For the Android app, for now, we need access to the one and only document open to perform eg. saveAs() for printing.
+ std::shared_ptr<COKitDocument> getLOKDocumentForAndroidOnly();
+ std::shared_ptr<DocumentBroker> getDocumentBrokerForAndroidOnly();
+diff --git a/kit/Kit.cpp b/kit/Kit.cpp
+--- a/kit/Kit.cpp
++++ b/kit/Kit.cpp
+@@ -2391,7 +2391,7 @@
+         LOG_DBG("Calling lokit::documentLoad(" << anonymizeUrl(url) << ", \"" << options << "\")");
+         const auto start = std::chrono::steady_clock::now();
+         _loKitDocument.reset(_loKit->documentLoadWithOptions(url, options.c_str()));
+-#ifdef __ANDROID__
++#if MOBILEAPP && defined(__ANDROID__)
+         _loKitDocumentForAndroidOnly = _loKitDocument;
+         {
+             std::unique_lock<std::mutex> docBrokersLock(DocBrokersMutex);
+@@ -3372,7 +3372,7 @@
+ 
+ #endif
+ 
+-#ifdef __ANDROID__
++#if MOBILEAPP && defined(__ANDROID__)
+ 
+ std::shared_ptr<COKitDocument> Document::_loKitDocumentForAndroidOnly = std::shared_ptr<COKitDocument>();
+ std::weak_ptr<DocumentBroker> Document::_documentBrokerForAndroidOnly;
+diff --git a/kit/ChildSession.cpp b/kit/ChildSession.cpp
+--- a/kit/ChildSession.cpp
++++ b/kit/ChildSession.cpp
+@@ -59,7 +59,7 @@
+ #include <Poco/Net/AcceptCertificateHandler.h>
+ #endif
+ 
+-#ifdef __ANDROID__
++#if MOBILEAPP && defined(__ANDROID__)
+ #include <androidapp.hpp>
+ #endif
+ 
+@@ -5594,7 +5594,7 @@
+                                       << [[document->copyFileURL path] UTF8String]);
+                           }
+                         }];
+-#elif defined(__ANDROID__)
++#elif MOBILEAPP && defined(__ANDROID__)
+                     postDirectMessage("SAVE " + payload);
+ #endif
+                 }
