@@ -20,13 +20,23 @@ export class NativeComponents {
           ? p.reject(Object.assign(Error(error.message), error))
           : p.resolve(result);
     });
-    this.worker.on("error", (e) => {
-      for (const p of this.pending.values()) {
-        p.cleanup();
-        p.reject(e);
-      }
-      this.pending.clear();
+    this.worker.on("error", (error) =>
+      this.fail("Native References worker is unavailable", error),
+    );
+    this.worker.on("exit", (code) => {
+      if (!this.closed)
+        this.fail("Native References worker exited (" + code + ")");
     });
+  }
+  fail(message, cause) {
+    this.failure ||= Object.assign(new Error(message, { cause }), {
+      status: 503,
+    });
+    for (const p of this.pending.values()) {
+      p.cleanup();
+      p.reject(this.failure);
+    }
+    this.pending.clear();
   }
   call(
     method,
@@ -36,7 +46,8 @@ export class NativeComponents {
     { waitForCancellation = false } = {},
   ) {
     signal?.throwIfAborted();
-    if (this.pending.size > 32)
+    if (this.failure) throw this.failure;
+    if (this.pending.size >= 32)
       throw Object.assign(Error("Native reference work is busy"), {
         status: 429,
       });
@@ -52,21 +63,30 @@ export class NativeComponents {
       const abort = () => {
         p.cancelled = true;
         p.abortReason = signal.reason;
-        this.worker.postMessage({ id, cancel: true });
+        try {
+          this.worker.postMessage({ id, cancel: true });
+        } catch (error) {
+          this.fail("Native References worker is unavailable", error);
+        }
         if (!waitForCancellation) reject(signal.reason);
       };
       p.cleanup = () => signal?.removeEventListener("abort", abort);
       signal?.addEventListener("abort", abort, { once: true });
       this.pending.set(id, p);
-      this.worker.postMessage({ id, method, args });
+      try {
+        this.worker.postMessage({ id, method, args });
+      } catch (error) {
+        this.pending.delete(id);
+        p.cleanup();
+        reject(Object.assign(error, { status: 400 }));
+      }
     });
   }
-  async close() {
-    for (const p of this.pending.values()) {
-      p.cleanup();
-      p.reject(Error("References stopped"));
-    }
-    this.pending.clear();
-    await this.worker.terminate();
+  close() {
+    if (this.closePromise) return this.closePromise;
+    this.closed = true;
+    this.fail("Native References stopped");
+    this.closePromise = this.worker.terminate().then(() => undefined);
+    return this.closePromise;
   }
 }

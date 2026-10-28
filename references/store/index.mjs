@@ -15,16 +15,27 @@ export class Store {
           ? p.reject(Object.assign(Error(error.message), error))
           : p.resolve(result);
     });
-    this.worker.on("error", (error) => {
-      for (const p of this.pending.values()) {
-        p.cleanup();
-        p.reject(error);
-      }
-      this.pending.clear();
+    this.worker.on("error", (error) =>
+      this.fail("References storage worker is unavailable", error),
+    );
+    this.worker.on("exit", (code) => {
+      if (!this.closed)
+        this.fail("References storage worker exited (" + code + ")");
     });
+  }
+  fail(message, cause) {
+    this.failure ||= Object.assign(new Error(message, { cause }), {
+      status: 503,
+    });
+    for (const p of this.pending.values()) {
+      p.cleanup();
+      p.reject(this.failure);
+    }
+    this.pending.clear();
   }
   call(file, operation, args = {}, signal) {
     signal?.throwIfAborted();
+    if (this.failure) throw this.failure;
     if (this.pending.size >= 64)
       throw Object.assign(
         Error("References is busy; retry after pending work finishes"),
@@ -40,15 +51,20 @@ export class Store {
       const p = { resolve, reject, cleanup, cancelled: false };
       this.pending.set(id, p);
       signal?.addEventListener("abort", abort, { once: true });
-      this.worker.postMessage({ id, file, operation, args });
+      try {
+        this.worker.postMessage({ id, file, operation, args });
+      } catch (error) {
+        this.pending.delete(id);
+        p.cleanup();
+        reject(Object.assign(error, { status: 400 }));
+      }
     });
   }
-  async close() {
-    for (const p of this.pending.values()) {
-      p.cleanup();
-      p.reject(Error("References stopped"));
-    }
-    this.pending.clear();
-    await this.worker.terminate();
+  close() {
+    if (this.closePromise) return this.closePromise;
+    this.closed = true;
+    this.fail("References storage stopped");
+    this.closePromise = this.worker.terminate().then(() => undefined);
+    return this.closePromise;
   }
 }
