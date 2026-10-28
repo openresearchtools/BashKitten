@@ -1,0 +1,12 @@
+diff --git a/engine/external/boost/UnpackedTarball_boost.mk b/engine/external/boost/UnpackedTarball_boost.mk
+--- a/engine/external/boost/UnpackedTarball_boost.mk
++++ b/engine/external/boost/UnpackedTarball_boost.mk
+@@ -50,7 +50,7 @@
+     external/boost/boost-emscripten-nowasm.patch.0 \
+ ))
+ 
+-ifeq ($(OS),ANDROID)
++ifneq ($(filter ANDROID,$(OS))$(COM_IS_BIONIC),)
+ $(eval $(call gb_UnpackedTarball_add_patches,boost,\
+     external/boost/android-x86_64-longdouble.patch.1 \
+ ))

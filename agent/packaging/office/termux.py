@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT / 'agent/packaging/termux'))
 import native_toolchain
 
 PATCH_ROOT = ROOT / 'office/patches/termux'
-SYSTEM_PACKAGES = ['bash', 'coreutils', 'fontconfig']
+SYSTEM_PACKAGES = ['bash', 'ca-certificates', 'coreutils', 'fontconfig']
 
 
 def patch_inputs():

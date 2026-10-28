@@ -1,0 +1,11 @@
+diff --git a/engine/external/openssl/ExternalProject_openssl.mk b/engine/external/openssl/ExternalProject_openssl.mk
+--- a/engine/external/openssl/ExternalProject_openssl.mk
++++ b/engine/external/openssl/ExternalProject_openssl.mk
+@@ -83,6 +83,7 @@
+ 			$(PERL) Configure, \
+ 			./config)) \
+ 			$(OPENSSL_PLATFORM) no-dso no-shared no-tests no-multilib threads \
++			$(if $(COM_IS_BIONIC),--openssldir=@TERMUX_PREFIX@/etc/tls) \
+ 			$(if $(filter-out ANDROID iOS WNT,$(OS)), \
+ 				$(if $(SYSBASE),-I$(SYSBASE)/usr/include -L$(SYSBASE)/usr/lib)) \
+ 			$(if $(filter MACOSX,$(OS)),--prefix=/@.__________________________________________________OOO) \

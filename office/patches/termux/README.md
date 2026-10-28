@@ -65,6 +65,13 @@ original MPL-2.0/Apache-2.0 notices. These rebased source changes are MPL-2.0.
 - `0008-native-libffi-executable-mappings.patch`: uses the retained Termux
   libffi recipe's executable-mapping configuration. This resolves the native
   `_ctypes` link failure while retaining callback support and existing isolation.
+- `0009-native-boost-bionic-selection.patch`: selects the pinned engine's
+  existing Android long-double patch for its native Bionic configuration. This
+  retains Boost's existing IEEE-128 implementation on Android x86_64.
+- `0010-native-openssl-trust-path.patch`: selects the retained Termux OpenSSL
+  recipe's native certificate directory through OpenSSL's own Configure option.
+  The runtime declares the existing `ca-certificates` package; normal certificate
+  validation remains enabled.
 
 The semaphore source, licenses and Python patch are materialized directly from
 the already retained immutable framework archive before applying the named
@@ -122,3 +129,16 @@ The built Python 3.14.7 runtime then passed actual Termux application checks for
 ctypes callbacks, multiprocessing semaphores, shared-memory create/reopen/unlink,
 SQLite, UUID generation and OpenSSL loading. This verifies native dependency
 execution; it does not establish complete Collabora document acceptance.
+
+The same focused Python dependency checks also passed after installing the
+patched upstream Landlock rules and unchanged upstream seccomp filter in the
+actual Termux app. The diagnostic runtime was read-only, only its private
+temporary directory was writable, and an unrelated sibling read was denied.
+This strengthens the dependency proof; it remains separate from a full native
+kit/document runtime check.
+
+The native OpenSSL/Python rebuild with patch 0010 passed. In the actual Termux
+app, the default certificate store changed from zero CAs at `/usr/local/ssl` to
+121 CAs from the installed Termux bundle, including under native Landlock and
+seccomp. This used no environment certificate override and did not bypass
+verification; external HTTPS and full Office acceptance remain separate checks.

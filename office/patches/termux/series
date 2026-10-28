@@ -6,3 +6,5 @@
 0006-native-python-cross-build.patch
 0007-native-python-semaphores.patch
 0008-native-libffi-executable-mappings.patch
+0009-native-boost-bionic-selection.patch
+0010-native-openssl-trust-path.patch

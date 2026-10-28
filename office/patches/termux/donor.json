@@ -153,6 +153,14 @@
     {
       "file": "packages/libffi/build.sh",
       "sha256": "0a7f2e44163fe2d43a48680968a5254bad0ee1032f89fe20cfcfe5dbddb2555e"
+    },
+    {
+      "file": "packages/openssl/build.sh",
+      "sha256": "4520f242c196cf19cc68b1502484fbf27606da07c04752f98e91ceba667db224"
+    },
+    {
+      "file": "packages/ca-certificates/build.sh",
+      "sha256": "49346cd737c0c8f423f26cb0cb04467f93fb9d69c9c1fb1aff5840a9ea215861"
     }
   ],
   "archiveRoot": "termux-packages-f3b242999b604dab33639c8211c3b461aad79dc9",
