@@ -144,6 +144,44 @@ release packages; missing native artifacts are not silently accepted by the
 normal release collector. Hosted builds and the remaining architecture/runtime
 coverage must still be recorded separately.
 
+### Packaged iteration and native follow-up checkpoint
+
+Linux, Termux and Android iteration packages have now passed build and package
+checks at frozen browser revision `4be2563e5e`, version `153.5.2`. Exact paths,
+hashes and the explicit `integrationIteration` designation are recorded in
+`BashkittenBuild/verification/browser-integration-4be2563e5e.json`. These packages
+include the independently installed module sources and capture boundary; native
+Files/Office payloads were explicitly unavailable in that early iteration.
+They are not complete release packages. Current module updates must retain their
+own actual source and native artifact receipts rather than claiming the frozen
+browser revision covers later changes.
+
+Three independently sealed Files archives (Linux amd64 and Termux aarch64/x86_64)
+passed the normal collector with source `12923eaccb`, `development: false` and
+599 inventoried files each. Receipts are in
+`BashkittenBuild/components/files/artifacts/sealed-receipts-20261028.json`.
+The Linux Office development artifact includes the eight shared native patches
+and full source/license inventory. The Termux port checkpoint is committed in
+`09c02b18fa`; native Python/libffi, multiprocessing and shared-memory dependency
+execution passed inside the Termux app. Full native Termux Office remains an
+active compilation/runtime gate.
+
+Updated native Office diagnostics now passed DOCX/XLSX/PPTX edits and citations
+through whole-backend shutdown, restart and reopen. A fresh DOCX also passed
+native insertion/edit undo and redo, preserving the expected occurrence ID,
+locator, rendered text and metadata revision. The actual mapped HTTPS gateway
+served editor forms, sockets, renewal and References requests at the forwarded
+origin. Native export passed through the scoped normal-browser resolver and
+returned a single-use PDF; an explicit text-citation copy had no active citations
+while the master retained its citation. Evidence is under the existing
+`apps-native-gateway-20261028` verification directory. Installed UI and actual
+Tor/Chisel-route acceptance remain distinct and pending.
+
+Fresh isolated installation preparation preserves the running host browser and
+previous acceptance profiles. The dedicated Xorg VM has the new package. A
+separate Android instance uses a fresh primary-user image with the prior image
+preserved. These are setup results, not completed user-flow checks.
+
 ## Decision and planning work
 
 The user selected Collabora Online after the temporary stock-server comparison. The active plan, AGENTS instructions and current native
