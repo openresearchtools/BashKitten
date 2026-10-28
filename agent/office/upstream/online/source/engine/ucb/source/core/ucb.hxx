@@ -1,0 +1,158 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+
+#include <com/sun/star/ucb/CheckinArgument.hpp>
+#include <com/sun/star/ucb/XUniversalContentBroker.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/util/XChangesListener.hpp>
+#include <com/sun/star/util/XChangesNotifier.hpp>
+
+#include <comphelper/interfacecontainer3.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <osl/mutex.hxx>
+#include "providermap.hxx"
+#include <ucbhelper/registerucb.hxx>
+
+#include <memory>
+
+
+namespace com::sun::star::ucb {
+    class XCommandInfo;
+    struct GlobalTransferCommandArgument2;
+}
+
+class UniversalContentBroker :
+                public cppu::WeakImplHelper<
+                    css::ucb::XUniversalContentBroker,
+                    css::lang::XServiceInfo,
+                    css::lang::XInitialization,
+                    css::util::XChangesListener>
+{
+public:
+    explicit UniversalContentBroker( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
+    virtual ~UniversalContentBroker() override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XComponent
+    virtual void
+    dispose() override;
+    virtual void
+    addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
+    virtual void
+    removeEventListener( const cpo::uno::Reference<
+                            css::lang::XEventListener >& Listener ) override;
+
+    // XInitialization
+    virtual void
+    initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+    // XContentProviderManager
+    virtual cpo::uno::Reference< css::ucb::XContentProvider >
+    registerContentProvider( const cpo::uno::Reference< css::ucb::XContentProvider >&  Provider,
+                             const OUString& Scheme,
+                             bool ReplaceExisting ) override;
+    virtual void
+    deregisterContentProvider( const cpo::uno::Reference< css::ucb::XContentProvider >&  Provider,
+                               const OUString& Scheme ) override;
+    virtual cpo::uno::Sequence< css::ucb::ContentProviderInfo >
+    queryContentProviders() override;
+    virtual cpo::uno::Reference< css::ucb::XContentProvider >
+    queryContentProvider( const OUString& Identifier ) override;
+
+    // XContentProvider
+    virtual cpo::uno::Reference< css::ucb::XContent >
+    queryContent( const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier ) override;
+    virtual sal_Int32
+    compareContentIds( const cpo::uno::Reference< css::ucb::XContentIdentifier >& Id1,
+                       const cpo::uno::Reference< css::ucb::XContentIdentifier >& Id2 ) override;
+
+    // XContentIdentifierFactory
+    virtual cpo::uno::Reference< css::ucb::XContentIdentifier >
+    createContentIdentifier( const OUString& ContentId ) override;
+
+    // XCommandProcessor
+    virtual sal_Int32
+    createCommandIdentifier() override;
+    virtual cpo::uno::Any
+    execute( const css::ucb::Command& aCommand,
+             sal_Int32 CommandId,
+             const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment ) override;
+    virtual void
+    abort( sal_Int32 CommandId ) override;
+
+    // XCommandProcessor2
+    virtual void releaseCommandIdentifier(sal_Int32 aCommandId) override;
+
+    // XChangesListener
+    virtual void changesOccurred( const css::util::ChangesEvent& Event ) override;
+
+     // XEventListener ( base of XChangesLisetenr )
+    virtual void disposing( const css::lang::EventObject& Source ) override;
+
+private:
+    cpo::uno::Reference< css::ucb::XContentProvider >
+    queryContentProvider( const OUString& Identifier,
+                          bool bResolved );
+
+    static cpo::uno::Reference< css::ucb::XCommandInfo >
+    getCommandInfo();
+
+    /// @throws cpo::uno::Exception
+    void
+    globalTransfer(
+            const css::ucb::GlobalTransferCommandArgument2 & rArg,
+            const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
+
+    /// @throws cpo::uno::Exception
+    cpo::uno::Any checkIn( const css::ucb::CheckinArgument& rArg,
+            const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
+
+
+    /// @throws cpo::uno::RuntimeException
+    void configureUcb();
+
+    bool getContentProviderData(
+            std::u16string_view rKey1,
+            std::u16string_view rKey2,
+            ucbhelper::ContentProviderDataList & rListToFill);
+
+    void prepareAndRegister( const ucbhelper::ContentProviderDataList& rData);
+
+    cpo::uno::Reference<
+        cpo::uno::XComponentContext > m_xContext;
+
+    cpo::uno::Reference<
+        css::util::XChangesNotifier > m_xNotifier;
+
+    cpo::uno::Sequence< cpo::uno::Any > m_aArguments;
+    ProviderMap_Impl m_aProviders;
+    osl::Mutex m_aMutex;
+    std::unique_ptr<comphelper::OInterfaceContainerHelper3<css::lang::XEventListener>> m_pDisposeEventListeners;
+    sal_Int32 m_nCommandId;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

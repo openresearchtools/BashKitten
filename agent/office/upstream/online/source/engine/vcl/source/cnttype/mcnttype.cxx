@@ -1,0 +1,90 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <com/sun/star/container/NoSuchElementException.hpp>
+#include <comphelper/sequence.hxx>
+#include <rtl/ustring.hxx>
+#include <tools/inetmime.hxx>
+
+#include "mcnttype.hxx"
+
+CMimeContentType::CMimeContentType( const OUString& aCntType )
+{
+    init( aCntType );
+}
+
+OUString CMimeContentType::getMediaType( )
+{
+    return m_MediaType;
+}
+
+OUString CMimeContentType::getMediaSubtype( )
+{
+    return m_MediaSubtype;
+}
+
+OUString CMimeContentType::getFullMediaType( )
+{
+    return m_MediaType + "/" + m_MediaSubtype;
+}
+
+cpo::uno::Sequence< OUString > CMimeContentType::getParameters( )
+{
+    return comphelper::mapKeysToSequence(m_ParameterMap);
+}
+
+bool CMimeContentType::hasParameter( const OUString& aName )
+{
+    return m_ParameterMap.contains( aName.toAsciiLowerCase() );
+}
+
+OUString CMimeContentType::getParameterValue( const OUString& aName )
+{
+    auto const lower = aName.toAsciiLowerCase();
+
+    if ( !hasParameter( lower ) )
+        throw css::container::NoSuchElementException( );
+
+    const auto iter = m_ParameterMap.find(lower);
+    assert(iter != m_ParameterMap.end());
+    return iter->second;
+}
+
+void CMimeContentType::init( const OUString& aCntType )
+{
+    INetContentTypeParameterList params;
+    if (INetMIME::scanContentType(aCntType, &m_MediaType, &m_MediaSubtype, &params)
+        != aCntType.getStr() + aCntType.getLength())
+    {
+        throw css::lang::IllegalArgumentException(
+            "illegal media type " + aCntType, cpo::uno::Reference<cpo::uno::XInterface>(), -1);
+    }
+    for (auto const & i: params) {
+        if (!i.second.m_bConverted) {
+            throw css::lang::IllegalArgumentException(
+                "illegal parameter value in media type " + aCntType,
+                cpo::uno::Reference<cpo::uno::XInterface>(), -1);
+        }
+        m_ParameterMap[OUString::fromUtf8(i.first)] = i.second.m_sValue;
+    }
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

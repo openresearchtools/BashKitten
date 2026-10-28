@@ -1,0 +1,195 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <framework/documentundoguard.hxx>
+
+#include <com/sun/star/document/XUndoManagerSupplier.hpp>
+
+#include <cppuhelper/implbase.hxx>
+#include <rtl/ref.hxx>
+#include <comphelper/diagnose_ex.hxx>
+
+namespace framework
+{
+
+    using ::cpo::uno::Reference;
+    using ::cpo::uno::XInterface;
+    using ::cpo::uno::UNO_QUERY;
+    using ::cpo::uno::Exception;
+    using ::com::sun::star::document::XUndoManagerSupplier;
+    using ::com::sun::star::document::XUndoManager;
+    using ::com::sun::star::document::XUndoManagerListener;
+    using ::com::sun::star::document::UndoManagerEvent;
+    using ::com::sun::star::lang::EventObject;
+
+    //= UndoManagerContextListener
+
+    typedef ::cppu::WeakImplHelper <   XUndoManagerListener
+                                    >   UndoManagerContextListener_Base;
+
+    class UndoManagerContextListener : public UndoManagerContextListener_Base
+    {
+    public:
+        explicit UndoManagerContextListener( const Reference< XUndoManager >& i_undoManager )
+            :m_xUndoManager( i_undoManager )
+            ,m_nRelativeContextDepth( 0 )
+            ,m_documentDisposed( false )
+        {
+            osl_atomic_increment( &m_refCount );
+            {
+                m_xUndoManager->addUndoManagerListener( this );
+            }
+            osl_atomic_decrement( &m_refCount );
+        }
+
+        void finish()
+        {
+            OSL_ENSURE( m_nRelativeContextDepth >= 0, "UndoManagerContextListener: more contexts left than entered?" );
+
+            if ( m_documentDisposed )
+                return;
+
+            // work with a copy of m_nRelativeContextDepth, to be independent from possible bugs in the
+            // listener notifications (where it would be decremented with every leaveUndoContext)
+            sal_Int32 nDepth = m_nRelativeContextDepth;
+            while ( nDepth-- > 0 )
+            {
+                m_xUndoManager->leaveUndoContext();
+            }
+            m_xUndoManager->removeUndoManagerListener( this );
+        }
+
+        // XUndoManagerListener
+        virtual void undoActionAdded( const UndoManagerEvent& i_event ) override;
+        virtual void actionUndone( const UndoManagerEvent& i_event ) override;
+        virtual void actionRedone( const UndoManagerEvent& i_event ) override;
+        virtual void allActionsCleared( const EventObject& i_event ) override;
+        virtual void redoActionsCleared( const EventObject& i_event ) override;
+        virtual void resetAll( const EventObject& i_event ) override;
+        virtual void enteredContext( const UndoManagerEvent& i_event ) override;
+        virtual void enteredHiddenContext( const UndoManagerEvent& i_event ) override;
+        virtual void leftContext( const UndoManagerEvent& i_event ) override;
+        virtual void leftHiddenContext( const UndoManagerEvent& i_event ) override;
+        virtual void cancelledContext( const UndoManagerEvent& i_event ) override;
+
+        // XEventListener
+        virtual void disposing( const EventObject& i_event ) override;
+
+    private:
+        Reference< XUndoManager > const m_xUndoManager;
+        oslInterlockedCount             m_nRelativeContextDepth;
+        bool                            m_documentDisposed;
+    };
+
+    void UndoManagerContextListener::undoActionAdded( const UndoManagerEvent& )
+    {
+        // not interested in
+    }
+
+    void UndoManagerContextListener::actionUndone( const UndoManagerEvent& )
+    {
+        // not interested in
+    }
+
+    void UndoManagerContextListener::actionRedone( const UndoManagerEvent& )
+    {
+        // not interested in
+    }
+
+    void UndoManagerContextListener::allActionsCleared( const EventObject& )
+    {
+        // not interested in
+    }
+
+    void UndoManagerContextListener::redoActionsCleared( const EventObject& )
+    {
+        // not interested in
+    }
+
+    void UndoManagerContextListener::resetAll( const EventObject& )
+    {
+        m_nRelativeContextDepth = 0;
+    }
+
+    void UndoManagerContextListener::enteredContext( const UndoManagerEvent& )
+    {
+        osl_atomic_increment( &m_nRelativeContextDepth );
+    }
+
+    void UndoManagerContextListener::enteredHiddenContext( const UndoManagerEvent& )
+    {
+        osl_atomic_increment( &m_nRelativeContextDepth );
+    }
+
+    void UndoManagerContextListener::leftContext( const UndoManagerEvent& )
+    {
+        osl_atomic_decrement( &m_nRelativeContextDepth );
+    }
+
+    void UndoManagerContextListener::leftHiddenContext( const UndoManagerEvent& )
+    {
+        osl_atomic_decrement( &m_nRelativeContextDepth );
+    }
+
+    void UndoManagerContextListener::cancelledContext( const UndoManagerEvent& )
+    {
+        osl_atomic_decrement( &m_nRelativeContextDepth );
+    }
+
+    void UndoManagerContextListener::disposing( const EventObject& )
+    {
+        m_documentDisposed = true;
+    }
+
+    //= DocumentUndoGuard
+
+    DocumentUndoGuard::DocumentUndoGuard( const Reference< XInterface >& i_undoSupplierComponent )
+    {
+        try
+        {
+            Reference< XUndoManagerSupplier > xUndoSupplier( i_undoSupplierComponent, UNO_QUERY );
+            if ( xUndoSupplier.is() )
+                mxUndoManager.set( xUndoSupplier->getUndoManager(), cpo::uno::UNO_SET_THROW );
+
+            if ( mxUndoManager.is() )
+                mxContextListener.set( new UndoManagerContextListener( mxUndoManager ) );
+        }
+        catch( const Exception& )
+        {
+            DBG_UNHANDLED_EXCEPTION("fwk");
+        }
+    }
+
+    DocumentUndoGuard::~DocumentUndoGuard()
+    {
+        try
+        {
+            if ( mxContextListener.is() )
+                mxContextListener->finish();
+            mxContextListener.clear();
+        }
+        catch( const Exception& )
+        {
+            DBG_UNHANDLED_EXCEPTION("fwk");
+        }
+    }
+
+} // namespace framework
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

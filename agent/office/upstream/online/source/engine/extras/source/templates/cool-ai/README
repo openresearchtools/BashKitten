@@ -1,0 +1,128 @@
+Design templates for AI slide generation
+=========================================
+
+Each subdirectory here is the unpacked source of one presentation design
+template. The build packs it into a .otp file and installs it into the
+share/cool-ai-templates directory. The AI slide assistant offers these
+templates in its picker and applies the one the user chooses to a generated
+deck.
+
+
+How templates are discovered
+-----------------------------
+
+At run time the engine looks for templates in two places, in this order:
+
+1. The bundled directory share/cool-ai-templates, where the templates in this
+   source tree end up.
+2. The integrator preset directory share/template/common/presnt.
+
+A template is any file whose name ends in .otp. The base name (the file name
+without the .otp suffix) is the name shown in the picker, so it must be at
+most 64 characters, each one a plain letter, digit, space, hyphen, or
+underscore. A file whose name does not fit is skipped.
+
+When a bundled template and a preset share the same name (compared without
+regard to letter case), the bundled one wins and the preset copy is ignored.
+
+
+How a master slide's role is decided
+-------------------------------------
+
+The assistant places each generated slide on the master that suits its part
+of the deck: an opening, a divider, a body, or a closing. To do that the
+engine has to guess what part each master in the template plays. That guess is
+a best-effort heuristic, not a contract you should design your masters around.
+
+The engine works out a master's role in two steps.
+
+First it reads the master's own name and looks for keywords, checked in a
+fixed order. It stops at the first group that matches:
+
+1. Divider, if the name contains separator, divider, section, topic, chapter,
+   agenda, or transition.
+2. Closing, if the name contains ending, closing, thank, farewell, goodbye,
+   or finale.
+3. Body, if the name contains content, outline, body, or bullet.
+4. Title, if the name contains title.
+
+The match is a plain substring match and ignores letter case. The order
+matters: many real names carry the word "title" next to a stronger word, so
+"Section Title" and "Title and Content Divider" both come out as dividers,
+while a plain "Title" or "Subtitle" falls through to the title group last. A
+name that matches nothing is left undecided for the next step.
+
+Second, for any master the name did not settle, the engine looks at the
+example slides in the template that use that master and reads the layout each
+one uses. A title-and-subtitle layout reads as an opening, a title-only or
+blank layout as a divider, and anything with body content as a body slide.
+
+Because this is only a heuristic, renaming a master or changing its example
+slides can quietly change the role it is given. That is safe: the roles stay
+inside the engine and never travel to the model or the browser, so a
+reclassification changes only which master a slide lands on, never the
+protocol. Do not treat particular master names as a stable way to pin a role.
+
+
+Declaring roles with a manifest
+-------------------------------
+
+A template can state its master roles directly instead of leaving the engine
+to guess them. It does this with a manifest: a small JSON document stored in a
+standard document property named AIDesignManifest. When a template carries a
+manifest, its declared roles take precedence and the name-and-example heuristic
+runs only for masters the manifest does not name.
+
+The manifest looks like this:
+
+    {
+      "schemaVersion": 1,
+      "masters": {
+        "Opening master name": "opening",
+        "Body master name": "body",
+        "Divider master name": "divider",
+        "Closing master name": "closing"
+      },
+      "intents": {
+        "quote": "Divider master name"
+      },
+      "artDirection": "One sentence describing the image style.",
+      "budgets": {
+        "maxSlides": 20,
+        "maxItemsPerBullets": 6,
+        "maxItemLength": 200,
+        "maxTitleLength": 200
+      }
+    }
+
+Every field except schemaVersion is optional.
+
+- schemaVersion must be 1 or more. A missing version, an older version, or a
+  document that does not parse as JSON is treated as no manifest at all, so the
+  heuristic runs as before.
+- masters maps a master's name to the part it plays: one of opening, body,
+  divider, or closing. A name that does not match a master in the template, or
+  a part that is not one of those four words, is ignored.
+- intents maps a word the assistant may attach to a slide to the master that
+  word should land on. The keys are lowercase letters and hyphens, up to
+  thirty-two characters. A value that does not name a master in the template is
+  ignored. This lets a template send, say, a quote slide to a particular master
+  without the assistant ever learning the master's name.
+- artDirection is one sentence describing the image style. It is used only to
+  compose image-generation prompts, never the chat prompt.
+- budgets are upper limits the assistant keeps within. They may only tighten
+  the server's own limits, never raise them, and a value below one is ignored.
+
+The roles the assistant infers are reported back to you as a source field on
+each master, reading declared when the part came from the manifest and inferred
+when it came from the heuristic. Use it to check your manifest was read.
+
+
+Editing and keeping the manifest
+--------------------------------
+
+The manifest is an ordinary document property, so you edit it in the
+File - Properties dialog, on the Custom Properties tab, in a property named
+AIDesignManifest. It survives an ordinary edit and save round-trip. Note that
+the "Reset Properties" button in that dialog deletes user-defined properties,
+so it removes the manifest as well.

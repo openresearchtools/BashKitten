@@ -1,0 +1,321 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#ifndef INCLUDED_O3TL_ANY_HXX
+#define INCLUDED_O3TL_ANY_HXX
+
+#include <sal/config.h>
+
+#include <cassert>
+#include <type_traits>
+#include <utility>
+
+#include <optional>
+
+#include <cpo/uno/Any.hxx>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/XInterface.hpp>
+#include <cppu/unotype.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+// Some functionality related to cpo::uno::Any that would ideally be part of
+// <cpo/uno/Any.hxx>, but (for now) cannot be for some reason.
+
+namespace o3tl {
+
+namespace detail {
+
+struct Void {};
+
+template<typename T> struct Optional { using type = T const *; };
+template<> struct Optional<void> { using type = std::optional<Void const>; };
+template<> struct Optional<bool> { using type = std::optional<bool const>; };
+template<> struct Optional<sal_Int8> {
+    using type = std::optional<sal_Int8 const>;
+};
+template<> struct Optional<sal_Int16> {
+    using type = std::optional<sal_Int16 const>;
+};
+template<> struct Optional<sal_uInt16> {
+    using type = std::optional<sal_uInt16 const>;
+};
+template<> struct Optional<sal_Int32> {
+    using type = std::optional<sal_Int32 const>;
+};
+template<> struct Optional<sal_uInt32> {
+    using type = std::optional<sal_uInt32 const>;
+};
+template<> struct Optional<sal_Int64> {
+    using type = std::optional<sal_Int64 const>;
+};
+template<> struct Optional<sal_uInt64> {
+    using type = std::optional<sal_uInt64 const>;
+};
+template<> struct Optional<float> {
+    using type = std::optional<float const>;
+};
+template<> struct Optional<double> {
+    using type = std::optional<double const>;
+};
+template<typename T> struct Optional<cpo::uno::Reference<T>> {
+    using type = std::optional<cpo::uno::Reference<T> const>;
+};
+template<> struct Optional<cpo::uno::Reference<cpo::uno::XInterface>> {
+    using type = cpo::uno::Reference<cpo::uno::XInterface> const *;
+};
+
+template<typename> struct IsDerivedReference: std::false_type {};
+template<typename T> struct IsDerivedReference<cpo::uno::Reference<T>>:
+    std::true_type
+{};
+template<> struct IsDerivedReference<cpo::uno::Reference<cpo::uno::XInterface>>:
+    std::false_type
+{};
+
+template<typename> struct IsUnoSequenceType: std::false_type {};
+template<typename T> struct IsUnoSequenceType<cppu::UnoSequenceType<T>>:
+    std::true_type
+{};
+
+template<typename T> inline std::optional<T const> tryGetConverted(
+    cpo::uno::Any const & any)
+{
+    T v;
+    return (any >>= v)
+        ? std::optional<T const>(std::move(v)) : std::optional<T const>();
+}
+
+}
+
+/** Try to access the value of a specific type stored in an Any.
+
+    In trying to obtain a value, the same set of conversions as supported by
+    ">>=" are considered.
+
+    The returned object is a proxy.  Proxies can be either positive or negative.
+    Each proxy can be contextually converted to bool, yielding true iff the
+    proxy is positive.  For a positive proxy P representing a value of requested
+    type T, for any T other than void, the expression *P yields that value of
+    type T.  (Technically, the proxy is either a plain pointer or a
+    std::optional, depending on whether a plain pointer into the given Any can
+    be returned for the specified type.)
+
+    @attention A proxy returned from this function must not outlive the
+    corresponding Any passed into this function (as it may constitute a pointer
+    into the Any's internals).  That is the reason why this function is
+    restricted to lvalue arguments (i.e., to non-temporary Any objects), to
+    avoid misuses like
+    @code
+      cpo::uno::Any f();
+
+      if (auto p = o3tl::tryAccess<css::beans::NamedValue>(f())) {
+        return p->Name;
+      }
+    @endcode
+
+    @note Ideally this would be a public member function of cpo::uno::Any.  However, as
+    std::optional (which would be needed to implement the proxies) is only
+    available since C++14, we need to use std::optional for now.  But To not
+    make every entity that includes <cpo/uno/Any.hxx> depend on
+    boost_headers, keep this here for now.
+
+    @tparam T  the C++ representation of a UNO type that can be contained in a
+    UNO ANY (i.e., any UNO type other than ANY itself).  The legacy C++
+    representations bool, cppu::UnoVoidType, cppu::UnoUnsignedShortType,
+    cppu::UnoCharType, and cppu::UnoSequenceType are not supported.  Must be a
+    complete type or void.
+
+    @param any  an Any value.
+
+    @return a positive proxy for the value of the specified type obtained from
+    the given Any, or a negative proxy if no such value can be obtained.
+*/
+template<typename T> inline
+typename std::enable_if<
+    !(detail::IsDerivedReference<T>::value
+      || detail::IsUnoSequenceType<T>::value
+      || std::is_base_of<cpo::uno::XInterface, T>::value),
+    typename detail::Optional<T>::type>::type
+tryAccess(cpo::uno::Any const & any) {
+    // CHAR, STRING, TYPE, sequence types, enum types, struct types, exception
+    // types, and cpo.uno.XInterface interface type:
+    return cppu::UnoType<T>::get().isAssignableFrom(any.getValueType())
+        ? static_cast<T const *>(any.getValue()) : nullptr;
+}
+
+template<> inline detail::Optional<void>::type tryAccess<void>(
+    cpo::uno::Any const & any)
+{
+    return any.hasValue()
+        ? std::optional<detail::Void const>()
+        : std::optional<detail::Void const>(detail::Void());
+}
+
+template<> inline detail::Optional<bool>::type tryAccess<bool>(
+    cpo::uno::Any const & any)
+{
+    return detail::tryGetConverted<bool>(any);
+}
+
+template<> inline detail::Optional<sal_Int8>::type tryAccess<sal_Int8>(
+    cpo::uno::Any const & any)
+{
+    return detail::tryGetConverted<sal_Int8>(any);
+}
+
+template<> inline detail::Optional<sal_Int16>::type tryAccess<sal_Int16>(
+    cpo::uno::Any const & any)
+{
+    return detail::tryGetConverted<sal_Int16>(any);
+}
+
+template<> inline detail::Optional<sal_uInt16>::type tryAccess<sal_uInt16>(
+    cpo::uno::Any const & any)
+{
+    return detail::tryGetConverted<sal_uInt16>(any);
+}
+
+template<> inline detail::Optional<sal_Int32>::type tryAccess<sal_Int32>(
+    cpo::uno::Any const & any)
+{
+    return detail::tryGetConverted<sal_Int32>(any);
+}
+
+template<> inline detail::Optional<sal_uInt32>::type tryAccess<sal_uInt32>(
+    cpo::uno::Any const & any)
+{
+    return detail::tryGetConverted<sal_uInt32>(any);
+}
+
+template<> inline detail::Optional<sal_Int64>::type tryAccess<sal_Int64>(
+    cpo::uno::Any const & any)
+{
+    return detail::tryGetConverted<sal_Int64>(any);
+}
+
+template<> inline detail::Optional<sal_uInt64>::type tryAccess<sal_uInt64>(
+    cpo::uno::Any const & any)
+{
+    return detail::tryGetConverted<sal_uInt64>(any);
+}
+
+template<> inline detail::Optional<float>::type tryAccess<float>(
+    cpo::uno::Any const & any)
+{
+    return detail::tryGetConverted<float>(any);
+}
+
+template<> inline detail::Optional<double>::type tryAccess<double>(
+    cpo::uno::Any const & any)
+{
+    return detail::tryGetConverted<double>(any);
+}
+
+template<> detail::Optional<cpo::uno::Any>::type tryAccess<cpo::uno::Any>(
+    cpo::uno::Any const &) = delete;
+
+/*
+
+// Already prevented by std::is_base_of<cpo::uno::XInterface, T> requiring T to
+// be complete:
+
+template<> detail::Optional<cppu::UnoVoidType>::type
+tryAccess<cppu::UnoVoidType>(cpo::uno::Any const &) = delete;
+
+template<> detail::Optional<cppu::UnoUnsignedShortType>::type
+tryAccess<cppu::UnoUnsignedShortType>(cpo::uno::Any const &) = delete;
+
+template<> detail::Optional<cppu::UnoCharType>::type
+tryAccess<cppu::UnoCharType>(cpo::uno::Any const &) = delete;
+
+*/
+
+template<typename T> inline
+typename std::enable_if<
+    detail::IsDerivedReference<T>::value,
+    typename detail::Optional<T>::type>::type
+tryAccess(cpo::uno::Any const & any) {
+    return detail::tryGetConverted<T>(any);
+}
+
+template<typename T> typename detail::Optional<T>::type tryAccess(
+    cpo::uno::Any const volatile &&) = delete;
+
+/** Access the value of a specific type stored in an Any, throwing an exception
+    on failure.
+
+    @attention A proxy returned from this function must not outlive the
+    corresponding Any passed into this function (as it may constitute a pointer
+    into the Any's internals).  However, unlike with tryAccess, the benefit of
+    allowing this function to operate on temporaries appears to outweigh its
+    dangers.
+
+    @note Ideally this would be a public member function of cpo::uno::Any.  See
+    tryAccess for details.
+
+    @tparam T  the C++ representation of a UNO type that can be contained in a
+    UNO ANY.  See tryAccess for details.
+
+    @param any  an Any value.
+
+    @return a positive proxy for the value of the specified type obtained from
+    the given Any.  See tryAccess for details.
+
+    @throws cpo::uno::RuntimeException  when a value of the requested type
+    cannot be obtained.
+*/
+template<typename T> inline typename detail::Optional<T>::type doAccess(
+    cpo::uno::Any const & any)
+{
+    auto opt = tryAccess<T>(any);
+    if (!opt) {
+        throw cpo::uno::RuntimeException(
+            OUString(
+                cppu_Any_extraction_failure_msg(
+                    &any, cppu::UnoType<T>::get().getTypeLibType()),
+                SAL_NO_ACQUIRE));
+    }
+    return opt;
+}
+
+/** Access the value of a specific type stored in an Any, knowing the Any
+    contains a value of a matching type.
+
+    @attention A proxy returned from this function must not outlive the
+    corresponding Any passed into this function (as it may constitute a pointer
+    into the Any's internals).  However, unlike with tryAccess, the benefit of
+    allowing this function to operate on temporaries appears to outweigh its
+    dangers.
+
+    @note Ideally this would be a public member function of cpo::uno::Any.  See
+    tryAccess for details.
+
+    @tparam T  the C++ representation of a UNO type that can be contained in a
+    UNO ANY.  See tryAccess for details.
+
+    @param any  an Any value.
+
+    @return a positive proxy for the value of the specified type obtained from
+    the given Any.  See tryAccess for details.
+*/
+template<typename T> inline typename detail::Optional<T>::type forceAccess(
+    cpo::uno::Any const & any)
+{
+    auto opt = tryAccess<T>(any);
+    assert(opt);
+    return opt;
+}
+
+}
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

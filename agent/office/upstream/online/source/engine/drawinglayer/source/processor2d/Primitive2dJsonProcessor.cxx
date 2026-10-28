@@ -1,0 +1,1446 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <drawinglayer/processor2d/Primitive2dJsonProcessor.hxx>
+
+#include <rtl/string.hxx>
+#include <tools/json_writer.hxx>
+
+#include <cmath>
+#include <optional>
+
+#include <drawinglayer/primitive2d/bitmapprimitive2d.hxx>
+#include <drawinglayer/primitive2d/pointarrayprimitive2d.hxx>
+#include <drawinglayer/primitive2d/drawinglayer_primitivetypes2d.hxx>
+#include <drawinglayer/primitive2d/transformprimitive2d.hxx>
+#include <drawinglayer/primitive2d/PolygonHairlinePrimitive2D.hxx>
+#include <drawinglayer/primitive2d/PolyPolygonColorPrimitive2D.hxx>
+#include <drawinglayer/primitive2d/maskprimitive2d.hxx>
+#include <drawinglayer/primitive2d/objectinfoprimitive2d.hxx>
+#include <drawinglayer/primitive2d/pagepreviewprimitive2d.hxx>
+#include <drawinglayer/primitive2d/groupprimitive2d.hxx>
+#include <drawinglayer/primitive2d/hiddengeometryprimitive2d.hxx>
+#include <drawinglayer/primitive2d/textdecoratedprimitive2d.hxx>
+#include <drawinglayer/primitive2d/textprimitive2d.hxx>
+#include <drawinglayer/primitive2d/textlayoutdevice.hxx>
+#include <drawinglayer/attribute/fontattribute.hxx>
+#include <vcl/metric.hxx>
+#include <vcl/virdev.hxx>
+#include <vcl/font.hxx>
+#include <drawinglayer/primitive2d/PolygonStrokePrimitive2D.hxx>
+#include <drawinglayer/primitive2d/PolyPolygonStrokePrimitive2D.hxx>
+#include <drawinglayer/primitive2d/PolygonStrokeArrowPrimitive2D.hxx>
+#include <drawinglayer/attribute/lineattribute.hxx>
+#include <drawinglayer/attribute/strokeattribute.hxx>
+#include <drawinglayer/primitive2d/fillgradientprimitive2d.hxx>
+#include <drawinglayer/primitive2d/PolyPolygonGradientPrimitive2D.hxx>
+#include <drawinglayer/primitive2d/fillhatchprimitive2d.hxx>
+#include <drawinglayer/primitive2d/PolyPolygonHatchPrimitive2D.hxx>
+#include <drawinglayer/attribute/fillgradientattribute.hxx>
+#include <drawinglayer/attribute/fillhatchattribute.hxx>
+#include <drawinglayer/attribute/fillgraphicattribute.hxx>
+#include <drawinglayer/primitive2d/fillgraphicprimitive2d.hxx>
+#include <drawinglayer/primitive2d/PolyPolygonGraphicPrimitive2D.hxx>
+#include <drawinglayer/primitive2d/graphicprimitive2d.hxx>
+#include <drawinglayer/primitive2d/graphicprimitivehelper2d.hxx>
+#include <drawinglayer/primitive2d/PolyPolygonRGBAPrimitive2D.hxx>
+#include <drawinglayer/primitive2d/PolyPolygonAlphaGradientPrimitive2D.hxx>
+#include <drawinglayer/primitive2d/BitmapAlphaPrimitive2D.hxx>
+#include <drawinglayer/primitive2d/patternfillprimitive2d.hxx>
+#include <drawinglayer/primitive2d/unifiedtransparenceprimitive2d.hxx>
+#include <drawinglayer/primitive2d/transparenceprimitive2d.hxx>
+#include <drawinglayer/primitive2d/modifiedcolorprimitive2d.hxx>
+#include <drawinglayer/primitive2d/shadowprimitive2d.hxx>
+#include <drawinglayer/primitive2d/glowprimitive2d.hxx>
+#include <drawinglayer/primitive2d/softedgeprimitive2d.hxx>
+#include <drawinglayer/primitive2d/svggradientprimitive2d.hxx>
+#include <drawinglayer/primitive2d/backgroundcolorprimitive2d.hxx>
+
+#include <basegfx/numeric/ftools.hxx>
+#include <basegfx/utils/bgradient.hxx>
+#include <basegfx/polygon/b2dpolypolygontools.hxx>
+#include <basegfx/vector/b2dvector.hxx>
+
+#include <vcl/graph.hxx>
+#include <vcl/gfxlink.hxx>
+#include <vcl/vectorgraphicdata.hxx>
+#include <vcl/cvtgrf.hxx>
+#include <comphelper/base64.hxx>
+#include <tools/stream.hxx>
+
+#include <unordered_map>
+
+using namespace drawinglayer::primitive2d;
+
+namespace
+{
+// TODO: Move to a tool class or maybe BColor itself and reuse elsewhere
+OString colorToHex(const basegfx::BColor& rColor)
+{
+    return "#" + Color(rColor).AsRGBHexString().toUtf8();
+}
+} // end anonymous namespace
+
+namespace drawinglayer
+{
+void Primitive2dJsonProcessor::setBitmapCache(std::unordered_map<sal_Int64, Graphic>& rCache)
+{
+    mpBitmapCache = &rCache;
+}
+
+void Primitive2dJsonProcessor::setFontCache(
+    std::unordered_map<sal_uInt64, BinaryDataContainer>& rCache,
+    std::unordered_map<OUString, ResolvedFace>& rFaceByKey)
+{
+    mpFontCache = &rCache;
+    mpFaceByKey = &rFaceByKey;
+}
+
+/// Write graphic data as base64 data URL, preferring native browser-supported formats. A graphic
+/// that cannot be encoded gets an error attribute naming the reason instead of data.
+void Primitive2dJsonProcessor::writeGraphicBase64(tools::JsonWriter& rWriter,
+                                                  const Graphic& rGraphic)
+{
+    if (rGraphic.IsGfxLink())
+    {
+        GfxLink aLink = rGraphic.GetGfxLink();
+        GfxLinkType eType = aLink.GetType();
+        const char* pMime = nullptr;
+
+        switch (eType)
+        {
+            case GfxLinkType::NativeJpg:
+                pMime = "data:image/jpeg;base64,";
+                break;
+            case GfxLinkType::NativePng:
+                pMime = "data:image/png;base64,";
+                break;
+            case GfxLinkType::NativeSvg:
+                pMime = "data:image/svg+xml;base64,";
+                break;
+            case GfxLinkType::NativeGif:
+                pMime = "data:image/gif;base64,";
+                break;
+            case GfxLinkType::NativeWebp:
+                pMime = "data:image/webp;base64,";
+                break;
+            default:
+                break;
+        }
+
+        if (pMime)
+        {
+            cpo::uno::Sequence<sal_Int8> aSequence(
+                reinterpret_cast<const sal_Int8*>(aLink.GetData()), aLink.GetDataSize());
+            OStringBuffer aBase64(pMime);
+            comphelper::Base64::encode(aBase64, aSequence);
+            rWriter.put("data", aBase64);
+            return;
+        }
+    }
+
+    // Fallback: convert to PNG
+    // Maybe we can be smarter what to do here, probably don't need to full resolution if the image is 40MP
+    SvMemoryStream aStream;
+    if (GraphicConverter::Export(aStream, rGraphic, ConvertDataFormat::PNG) == ERRCODE_NONE)
+    {
+        cpo::uno::Sequence<sal_Int8> aSequence(static_cast<const sal_Int8*>(aStream.GetData()),
+                                               aStream.Tell());
+        OStringBuffer aBase64("data:image/png;base64,");
+        comphelper::Base64::encode(aBase64, aSequence);
+        rWriter.put("data", aBase64);
+        return;
+    }
+
+    rWriter.put("error", "conversionfailed");
+}
+
+/// Write graphic: checksum + either cache or inline base64.
+void Primitive2dJsonProcessor::writeGraphicData(const Graphic& rGraphic)
+{
+    sal_Int64 nChecksum = static_cast<sal_Int64>(rGraphic.GetChecksum());
+    mrWriter.put("checksum", nChecksum);
+
+    if (mpBitmapCache)
+    {
+        mpBitmapCache->emplace(nChecksum, rGraphic);
+        return;
+    }
+
+    writeGraphicBase64(mrWriter, rGraphic);
+}
+
+/// Write bitmap data: writes the bitmap's own checksum and stores
+/// the image in the cache. The cache must be set before any bitmap
+/// primitive is serialised. Bitmaps are always referenced by
+/// checksum on the wire and never carry inline data.
+void Primitive2dJsonProcessor::writeBitmapData(const Bitmap& rBitmap)
+{
+    assert(mpBitmapCache && "bitmap cache must be set before writing bitmap primitives");
+
+    sal_Int64 nChecksum = static_cast<sal_Int64>(rBitmap.GetChecksum());
+    mrWriter.put("checksum", nChecksum);
+    mpBitmapCache->emplace(nChecksum, Graphic(rBitmap));
+}
+
+void Primitive2dJsonProcessor::writeSvgGradientCommon(
+    const drawinglayer::primitive2d::SvgGradientHelper& rGradient)
+{
+    writePathScaled(rGradient.getPolyPolygon());
+
+    switch (rGradient.getSpreadMethod())
+    {
+        case SpreadMethod::Pad:
+            mrWriter.put("spreadMethod", "pad");
+            break;
+        case SpreadMethod::Reflect:
+            mrWriter.put("spreadMethod", "reflect");
+            break;
+        case SpreadMethod::Repeat:
+            mrWriter.put("spreadMethod", "repeat");
+            break;
+    }
+
+    {
+        auto aStopsArray = mrWriter.startArray("colorStops");
+        for (const auto& rEntry : rGradient.getGradientEntries())
+        {
+            auto aStopNode = mrWriter.startStruct();
+            mrWriter.put("offset", rEntry.getOffset());
+            mrWriter.put("color", colorToHex(rEntry.getColor()));
+            if (rEntry.getOpacity() < 1.0)
+                mrWriter.put("opacity", rEntry.getOpacity());
+        }
+    }
+}
+
+void Primitive2dJsonProcessor::writeGradient(
+    const drawinglayer::attribute::FillGradientAttribute& rGradient, std::string_view sNodeName)
+{
+    auto aGradientNode = mrWriter.startNode(sNodeName);
+
+    switch (rGradient.getStyle())
+    {
+        case css::awt::GradientStyle_LINEAR:
+            mrWriter.put("style", "linear");
+            break;
+        case css::awt::GradientStyle_AXIAL:
+            mrWriter.put("style", "axial");
+            break;
+        case css::awt::GradientStyle_RADIAL:
+            mrWriter.put("style", "radial");
+            break;
+        case css::awt::GradientStyle_ELLIPTICAL:
+            mrWriter.put("style", "elliptical");
+            break;
+        case css::awt::GradientStyle_SQUARE:
+            mrWriter.put("style", "square");
+            break;
+        case css::awt::GradientStyle_RECT:
+            mrWriter.put("style", "rect");
+            break;
+        default:
+            mrWriter.put("style", "unknown");
+            break;
+    }
+
+    // Two decimal places of a degree are finer than any angle the user
+    // interface offers, and keep a whole number of degrees whole.
+    mrWriter.put("angle", std::round(basegfx::rad2deg(rGradient.getAngle()) * 100.0) / 100.0);
+    mrWriter.put("border", rGradient.getBorder());
+    mrWriter.put("offsetX", rGradient.getOffsetX());
+    mrWriter.put("offsetY", rGradient.getOffsetY());
+
+    if (rGradient.getSteps() > 0)
+        mrWriter.put("steps", sal_Int64(rGradient.getSteps()));
+
+    // Color stops
+    const basegfx::BColorStops& rStops = rGradient.getColorStops();
+    if (!rStops.empty())
+    {
+        auto aStopsArray = mrWriter.startArray("colorStops");
+        for (const auto& rStop : rStops)
+        {
+            auto aStopNode = mrWriter.startStruct();
+            mrWriter.put("offset", rStop.getStopOffset());
+            mrWriter.put("color", colorToHex(rStop.getStopColor()));
+        }
+    }
+}
+
+void Primitive2dJsonProcessor::writeRange(std::string_view sName, const basegfx::B2DRange& rRange,
+                                          double fScale)
+{
+    auto aArray = mrWriter.startArray(sName);
+    mrWriter.putSimpleValue(rRange.getMinX() * fScale);
+    mrWriter.putSimpleValue(rRange.getMinY() * fScale);
+    mrWriter.putSimpleValue(rRange.getMaxX() * fScale);
+    mrWriter.putSimpleValue(rRange.getMaxY() * fScale);
+}
+
+void Primitive2dJsonProcessor::writeHatchScaled(
+    const drawinglayer::attribute::FillHatchAttribute& rHatch)
+{
+    auto aHatchNode = mrWriter.startNode("hatch");
+
+    switch (rHatch.getStyle())
+    {
+        case drawinglayer::attribute::HatchStyle::Single:
+            mrWriter.put("style", "single");
+            break;
+        case drawinglayer::attribute::HatchStyle::Double:
+            mrWriter.put("style", "double");
+            break;
+        case drawinglayer::attribute::HatchStyle::Triple:
+            mrWriter.put("style", "triple");
+            break;
+    }
+
+    mrWriter.put("distance", rHatch.getDistance() * mfScaleFactor);
+    mrWriter.put("angle", rHatch.getAngle());
+    mrWriter.put("color", colorToHex(rHatch.getColor()));
+
+    if (rHatch.isFillBackground())
+        mrWriter.put("fillBackground", true);
+}
+
+void Primitive2dJsonProcessor::writeFillGraphic(
+    const drawinglayer::attribute::FillGraphicAttribute& rFillGraphic)
+{
+    auto aFillNode = mrWriter.startNode("fillGraphic");
+    mrWriter.put("tiling", rFillGraphic.getTiling());
+    mrWriter.put("offsetX", rFillGraphic.getOffsetX());
+    mrWriter.put("offsetY", rFillGraphic.getOffsetY());
+
+    // The graphic range is a position in the unit square of the area being
+    // filled, not a length, so it goes out at a scale of one.
+    writeRange("graphicRange", rFillGraphic.getGraphicRange(), 1.0);
+    writeGraphicData(rFillGraphic.getGraphic());
+}
+
+void Primitive2dJsonProcessor::writeLineAttributeScaled(
+    const drawinglayer::attribute::LineAttribute& rLineAttribute)
+{
+    auto aLineNode = mrWriter.startNode("line");
+    mrWriter.put("color", colorToHex(rLineAttribute.getColor()));
+    mrWriter.put("width", rLineAttribute.getWidth() * mfScaleFactor);
+
+    switch (rLineAttribute.getLineJoin())
+    {
+        case basegfx::B2DLineJoin::NONE:
+            mrWriter.put("linejoin", "none");
+            break;
+        case basegfx::B2DLineJoin::Bevel:
+            mrWriter.put("linejoin", "bevel");
+            break;
+        case basegfx::B2DLineJoin::Miter:
+            mrWriter.put("linejoin", "miter");
+            break;
+        case basegfx::B2DLineJoin::Round:
+            mrWriter.put("linejoin", "round");
+            break;
+        default:
+            mrWriter.put("linejoin", "unknown");
+            break;
+    }
+
+    switch (rLineAttribute.getLineCap())
+    {
+        case css::drawing::LineCap::LineCap_BUTT:
+            mrWriter.put("linecap", "butt");
+            break;
+        case css::drawing::LineCap::LineCap_ROUND:
+            mrWriter.put("linecap", "round");
+            break;
+        case css::drawing::LineCap::LineCap_SQUARE:
+            mrWriter.put("linecap", "square");
+            break;
+        default:
+            mrWriter.put("linecap", "unknown");
+            break;
+    }
+}
+
+void Primitive2dJsonProcessor::writeStrokeAttributeScaled(
+    const drawinglayer::attribute::StrokeAttribute& rStroke)
+{
+    if (rStroke.isDefault())
+        return;
+
+    auto aStrokeNode = mrWriter.startNode("stroke");
+    mrWriter.put("fullDotDashLen", rStroke.getFullDotDashLen() * mfScaleFactor);
+
+    const auto& rDashArray = rStroke.getDotDashArray();
+    if (!rDashArray.empty())
+    {
+        auto aDashArrayNode = mrWriter.startArray("dotDashArray");
+        for (double fValue : rDashArray)
+            mrWriter.putSimpleValue(fValue * mfScaleFactor);
+    }
+}
+
+void Primitive2dJsonProcessor::writeColorModifier(const basegfx::BColorModifier& rModifier)
+{
+    mrWriter.put("modifier", rModifier.getModifierName());
+
+    switch (rModifier.getBColorModifierType())
+    {
+        case basegfx::BColorModifierType::BCMType_replace:
+        {
+            const auto& rReplace = static_cast<const basegfx::BColorModifier_replace&>(rModifier);
+            mrWriter.put("color", colorToHex(rReplace.getBColor()));
+        }
+        break;
+
+        case basegfx::BColorModifierType::BCMType_interpolate:
+        {
+            const auto& rInterpolate
+                = static_cast<const basegfx::BColorModifier_interpolate&>(rModifier);
+            mrWriter.put("color", colorToHex(rInterpolate.getBColor()));
+            mrWriter.put("value", rInterpolate.getValue());
+        }
+        break;
+
+        case basegfx::BColorModifierType::BCMType_saturate:
+        case basegfx::BColorModifierType::BCMType_hueRotate:
+        {
+            // Both are a 3x3 matrix over red, green and blue, row by row.
+            const basegfx::B3DHomMatrix& rMatrix
+                = rModifier.getBColorModifierType() == basegfx::BColorModifierType::BCMType_saturate
+                      ? static_cast<const basegfx::BColorModifier_saturate&>(rModifier).getMatrix()
+                      : static_cast<const basegfx::BColorModifier_hueRotate&>(rModifier)
+                            .getMatrix();
+            auto aArray = mrWriter.startArray("matrix");
+            for (sal_uInt16 nRow = 0; nRow < 3; ++nRow)
+                for (sal_uInt16 nColumn = 0; nColumn < 3; ++nColumn)
+                    mrWriter.putSimpleValue(rMatrix.get(nRow, nColumn));
+        }
+        break;
+
+        case basegfx::BColorModifierType::BCMType_matrix:
+        {
+            // A 4x5 matrix over red, green, blue, alpha and one, row by row.
+            const auto& rMatrix = static_cast<const basegfx::BColorModifier_matrix&>(rModifier);
+            auto aArray = mrWriter.startArray("matrix");
+            for (double fValue : rMatrix.getVector())
+                mrWriter.putSimpleValue(fValue);
+        }
+        break;
+
+        case basegfx::BColorModifierType::BCMType_black_and_white:
+            mrWriter.put(
+                "value",
+                static_cast<const basegfx::BColorModifier_black_and_white&>(rModifier).getValue());
+            break;
+
+        case basegfx::BColorModifierType::BCMType_gamma:
+            mrWriter.put("value",
+                         static_cast<const basegfx::BColorModifier_gamma&>(rModifier).getValue());
+            break;
+
+        case basegfx::BColorModifierType::BCMType_RGBLuminanceContrast:
+        {
+            const auto& rAdjust
+                = static_cast<const basegfx::BColorModifier_RGBLuminanceContrast&>(rModifier);
+            mrWriter.put("red", rAdjust.getRed());
+            mrWriter.put("green", rAdjust.getGreen());
+            mrWriter.put("blue", rAdjust.getBlue());
+            mrWriter.put("luminance", rAdjust.getLuminance());
+            mrWriter.put("contrast", rAdjust.getContrast());
+        }
+        break;
+
+        default:
+            break;
+    }
+}
+
+void Primitive2dJsonProcessor::writeGraphicColorModifiers(const GraphicAttr& rAttributes)
+{
+    if (!rAttributes.IsAdjusted() && !rAttributes.IsSpecialDrawMode())
+        return;
+
+    // A stand-in child nests like the decomposition, draw mode innermost. The list goes out
+    // innermost first, the order the colors change in.
+    const Primitive2DContainer aEmbedded(create2DColorModifierEmbeddingsAsNeeded(
+        Primitive2DContainer{ new GroupPrimitive2D(Primitive2DContainer()) }, rAttributes));
+
+    std::vector<const basegfx::BColorModifier*> aModifiers;
+    const BasePrimitive2D* pCurrent = aEmbedded.empty() ? nullptr : aEmbedded[0].get();
+    while (auto pModified = dynamic_cast<const ModifiedColorPrimitive2D*>(pCurrent))
+    {
+        aModifiers.push_back(pModified->getColorModifier().get());
+        const Primitive2DContainer& rChildren = pModified->getChildren();
+        pCurrent = rChildren.empty() ? nullptr : rChildren[0].get();
+    }
+
+    if (aModifiers.empty())
+        return;
+
+    auto aModifierArray = mrWriter.startArray("colorModifiers");
+    for (auto it = aModifiers.rbegin(); it != aModifiers.rend(); ++it)
+    {
+        auto aModifierNode = mrWriter.startStruct();
+        writeColorModifier(**it);
+    }
+}
+
+void Primitive2dJsonProcessor::writeBoundsScaled(const BasePrimitive2D& rPrimitive)
+{
+    const basegfx::B2DRange aRange(rPrimitive.getB2DRange(maViewInformation2D));
+    if (!aRange.isEmpty())
+        writeRange("bounds", aRange, mfScaleFactor);
+}
+
+void Primitive2dJsonProcessor::writeTextPortionScaled(
+    const TextSimplePortionPrimitive2D& rPrimitive)
+{
+    writeMatrixScaled("matrix", rPrimitive.getTextTransform());
+
+    // Extract font size from the text transform matrix scale
+    const basegfx::B2DHomMatrix& rMatrix = rPrimitive.getTextTransform();
+    const double fFontScaleY = std::hypot(rMatrix.get(1, 0), rMatrix.get(1, 1)) * mfScaleFactor;
+    mrWriter.put("fontSize", fFontScaleY);
+    mrWriter.put("text", rPrimitive.getText());
+    mrWriter.put("textPosition", rPrimitive.getTextPosition());
+    mrWriter.put("textLength", rPrimitive.getTextLength());
+    mrWriter.put("fontcolor", colorToHex(rPrimitive.getFontColor()));
+
+    if (rPrimitive.getTextFillColor() != COL_TRANSPARENT)
+        mrWriter.put("fillcolor", colorToHex(rPrimitive.getTextFillColor().getBColor()));
+
+    if (rPrimitive.getLetterSpacing() != 0)
+        mrWriter.put("letterSpacing",
+                     static_cast<double>(rPrimitive.getLetterSpacing()) * mfScaleFactor);
+
+    // Font attributes
+    const drawinglayer::attribute::FontAttribute& rFontAttr = rPrimitive.getFontAttribute();
+    mrWriter.put("familyname", rFontAttr.getFamilyName());
+
+    if (!rFontAttr.getStyleName().isEmpty())
+        mrWriter.put("stylename", rFontAttr.getStyleName());
+
+    mrWriter.put("weight", rFontAttr.getWeight());
+
+    if (rFontAttr.getItalic())
+        mrWriter.put("italic", true);
+    if (rFontAttr.getOutline())
+        mrWriter.put("outline", true);
+    if (rFontAttr.getRTL())
+        mrWriter.put("rtl", true);
+    if (rFontAttr.getMonospaced())
+        mrWriter.put("monospaced", true);
+
+    // The exact face the engine resolved for this portion, named by a
+    // content-hash id. The font command serves the bytes on demand.
+    if (mpFontCache && mpFaceByKey)
+    {
+        const OUString aFontKey = rFontAttr.getFamilyName() + u"|"_ustr + rFontAttr.getStyleName()
+                                  + u"|"_ustr + OUString::number(rFontAttr.getWeight()) + u"|"_ustr
+                                  + OUString::number(rFontAttr.getItalic() ? 1 : 0) + u"|"_ustr
+                                  + rPrimitive.getLocale().Language;
+        auto aFound = mpFaceByKey->find(aFontKey);
+        ResolvedFace aFace = aFound != mpFaceByKey->end() ? aFound->second : ResolvedFace();
+        if (aFound == mpFaceByKey->end())
+        {
+            // The height is arbitrary, the font file bytes do not depend
+            // on it. A fresh device keeps the file the face was loaded
+            // from, which the shared layout device drops.
+            constexpr double fFontExtractHeight = 2000.0;
+            ScopedVclPtrInstance<VirtualDevice> pFontDevice;
+            const vcl::Font aFont = getVclFontFromFontAttribute(
+                rFontAttr, fFontExtractHeight, fFontExtractHeight, 0.0, rPrimitive.getLocale());
+            pFontDevice->SetFont(aFont);
+            const BinaryDataContainer aFontData = pFontDevice->GetCurrentFontRawData();
+            if (!aFontData.isEmpty())
+            {
+                // The id is the content hash of the font bytes, so identical
+                // faces share one cache entry.
+                aFace.mnFontId = aFontData.calculateHash();
+                mpFontCache->try_emplace(aFace.mnFontId, aFontData);
+            }
+
+            // With no bold or italic cut the resolved face is neither and the
+            // drawing adds it. The metric describes the face that was picked.
+            const FontMetric aMetric = pFontDevice->GetFontMetric();
+            aFace.mbSyntheticBold
+                = rFontAttr.getWeight() >= WEIGHT_SEMIBOLD && aMetric.GetWeight() < WEIGHT_SEMIBOLD;
+            aFace.mbSyntheticItalic = rFontAttr.getItalic() && aMetric.GetItalic() == ITALIC_NONE;
+
+            mpFaceByKey->emplace(aFontKey, aFace);
+        }
+        if (aFace.mnFontId != 0)
+        {
+            mrWriter.put("fontId", OString::number(aFace.mnFontId, 16));
+            if (aFace.mbSyntheticBold)
+                mrWriter.put("syntheticBold", true);
+            if (aFace.mbSyntheticItalic)
+                mrWriter.put("syntheticItalic", true);
+        }
+    }
+
+    // How far each glyph advances from the one before it, in whole twips. A whole twip is finer
+    // than a screen pixel, so rounding to it loses nothing a reader can see. The drawing layer
+    // measures from the start of the run instead, where the numbers reach four or five digits by
+    // the end of a line and a step stays at two or three, and the steps of one face repeat,
+    // which compresses better. Each value is the difference of the rounded distances, so adding
+    // them up gives the measured distances back in whole twips.
+    if (!rPrimitive.getDXArray().empty())
+    {
+        auto aAdvanceArray = mrWriter.startArray("advances");
+        sal_Int64 nPreviousDistance = 0;
+        for (double fValue : rPrimitive.getDXArray())
+        {
+            const sal_Int64 nDistance = std::llround(fValue * mfScaleFactor);
+            mrWriter.putSimpleValue(nDistance - nPreviousDistance);
+            nPreviousDistance = nDistance;
+        }
+    }
+
+    // The zero-based index of the paragraph this portion belongs to.
+    if (rPrimitive.getParagraph() >= 0)
+        mrWriter.put("paragraph", sal_Int64(rPrimitive.getParagraph()));
+
+    // The paragraph alignment of this portion.
+    const char* pAlign = nullptr;
+    switch (rPrimitive.getAlign())
+    {
+        case drawinglayer::primitive2d::TextPortionAlign::Left:
+            pAlign = "left";
+            break;
+        case drawinglayer::primitive2d::TextPortionAlign::Right:
+            pAlign = "right";
+            break;
+        case drawinglayer::primitive2d::TextPortionAlign::Center:
+            pAlign = "center";
+            break;
+        case drawinglayer::primitive2d::TextPortionAlign::Block:
+            pAlign = "justify";
+            break;
+        case drawinglayer::primitive2d::TextPortionAlign::Unknown:
+            break;
+    }
+    if (pAlign)
+        mrWriter.put("align", pAlign);
+
+    // The height and ascent of the line this portion sits on.
+    if (rPrimitive.getLineHeight() > 0.0)
+        mrWriter.put("lineHeight", rPrimitive.getLineHeight() * mfScaleFactor);
+    if (rPrimitive.getLineAscent() > 0.0)
+        mrWriter.put("lineAscent", rPrimitive.getLineAscent() * mfScaleFactor);
+
+    // The size of the area the text is laid out within. Lines wrap at the
+    // width.
+    if (rPrimitive.getTextAreaWidth() > 0.0)
+        mrWriter.put("textAreaWidth", rPrimitive.getTextAreaWidth() * mfScaleFactor);
+    if (rPrimitive.getTextAreaHeight() > 0.0)
+        mrWriter.put("textAreaHeight", rPrimitive.getTextAreaHeight() * mfScaleFactor);
+}
+
+// Write matrix as 6 elements. Scale all components (unit conversion).
+void Primitive2dJsonProcessor::writeMatrixScaled(std::string_view sName,
+                                                 const basegfx::B2DHomMatrix& rMatrix)
+{
+    auto aArray = mrWriter.startArray(sName);
+    mrWriter.putSimpleValue(rMatrix.get(0, 0) * mfScaleFactor);
+    mrWriter.putSimpleValue(rMatrix.get(1, 0) * mfScaleFactor);
+    mrWriter.putSimpleValue(rMatrix.get(0, 1) * mfScaleFactor);
+    mrWriter.putSimpleValue(rMatrix.get(1, 1) * mfScaleFactor);
+    mrWriter.putSimpleValue(rMatrix.get(0, 2) * mfScaleFactor);
+    mrWriter.putSimpleValue(rMatrix.get(1, 2) * mfScaleFactor);
+}
+
+// Write matrix with scale applied only to translation (e, f).
+// Use for TransformPrimitive2D / ShadowPrimitive2D where the matrix maps
+// child-space -> parent-space and both spaces are in the same units.
+// The scale/rotation components (a, b, c, d) are dimensionless ratios.
+// Only the translation needs converted.
+void Primitive2dJsonProcessor::writeMatrixTranslationScaled(std::string_view sName,
+                                                            const basegfx::B2DHomMatrix& rMatrix)
+{
+    auto aArray = mrWriter.startArray(sName);
+    mrWriter.putSimpleValue(rMatrix.get(0, 0));
+    mrWriter.putSimpleValue(rMatrix.get(1, 0));
+    mrWriter.putSimpleValue(rMatrix.get(0, 1));
+    mrWriter.putSimpleValue(rMatrix.get(1, 1));
+    mrWriter.putSimpleValue(rMatrix.get(0, 2) * mfScaleFactor);
+    mrWriter.putSimpleValue(rMatrix.get(1, 2) * mfScaleFactor);
+}
+
+basegfx::B2DPolyPolygon
+Primitive2dJsonProcessor::scalePolyPolygon(const basegfx::B2DPolyPolygon& rPolyPolygon)
+{
+    if (mfScaleFactor == 1.0)
+        return rPolyPolygon;
+
+    basegfx::B2DHomMatrix aScaleMatrix;
+    aScaleMatrix.scale(mfScaleFactor, mfScaleFactor);
+    basegfx::B2DPolyPolygon aScaled(rPolyPolygon);
+    aScaled.transform(aScaleMatrix);
+    return aScaled;
+}
+
+void Primitive2dJsonProcessor::writePathScaled(const basegfx::B2DPolyPolygon& rPolyPolygon)
+{
+    const basegfx::B2DPolyPolygon aScaled = scalePolyPolygon(rPolyPolygon);
+    mrWriter.put("path", basegfx::utils::exportToSvgD(aScaled, true, true, false));
+
+    // The polygon carries the scale factor already.
+    writeRange("bounds", aScaled.getB2DRange(), 1.0);
+}
+
+void Primitive2dJsonProcessor::decomposeAndWrite(const Primitive2DContainer& rPrimitive2DSequence)
+{
+    for (const auto& rPrimitive : rPrimitive2DSequence)
+    {
+        const BasePrimitive2D* pBasePrimitive = rPrimitive.get();
+        if (!pBasePrimitive)
+            continue;
+
+        auto aNode = mrWriter.startStruct();
+        processPrimitive(*pBasePrimitive);
+    }
+}
+
+OString Primitive2dJsonProcessor::dumpAsJson(const Primitive2DContainer& rPrimitive2DSequence)
+{
+    tools::JsonWriter aWriter;
+    Primitive2dJsonProcessor aProcessor(aWriter);
+    {
+        auto aArray = aWriter.startArray("primitives");
+        aProcessor.decomposeAndWrite(rPrimitive2DSequence);
+    }
+    return aWriter.finishAndGetAsOString();
+}
+
+void Primitive2dJsonProcessor::processPrimitive(const BasePrimitive2D& rBasePrimitive)
+{
+    sal_uInt32 nId = rBasePrimitive.getPrimitive2DID();
+
+    switch (nId)
+    {
+        case PRIMITIVE2D_ID_POLYGONHAIRLINEPRIMITIVE2D:
+        {
+            auto const& rPrimitive = static_cast<const PolygonHairlinePrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "polygonHairline");
+            mrWriter.put("color", colorToHex(rPrimitive.getBColor()));
+            const basegfx::B2DPolyPolygon aScaled
+                = scalePolyPolygon(basegfx::B2DPolyPolygon(rPrimitive.getB2DPolygon()));
+            mrWriter.put("path", basegfx::utils::exportToSvgD(aScaled, true, true, false));
+        }
+        break;
+
+        case PRIMITIVE2D_ID_POLYPOLYGONCOLORPRIMITIVE2D:
+        {
+            const auto& rPrimitive
+                = static_cast<const PolyPolygonColorPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "polyPolygonColor");
+            mrWriter.put("color", colorToHex(rPrimitive.getBColor()));
+            writePathScaled(rPrimitive.getB2DPolyPolygon());
+        }
+        break;
+
+        case PRIMITIVE2D_ID_BITMAPPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const BitmapPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "bitmap");
+            writeMatrixScaled("matrix", rPrimitive.getTransform());
+
+            const Bitmap& rBitmap = rPrimitive.getBitmap();
+            const Size aSizePixel(rBitmap.GetSizePixel());
+            mrWriter.put("width", aSizePixel.getWidth());
+            mrWriter.put("height", aSizePixel.getHeight());
+            writeBitmapData(rBitmap);
+        }
+        break;
+
+        case PRIMITIVE2D_ID_POINTARRAYPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const PointArrayPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "pointArray");
+            mrWriter.put("color", colorToHex(rPrimitive.getRGBColor()));
+            {
+                auto aPointsArray = mrWriter.startArray("points");
+                for (const auto& rPoint : rPrimitive.getPositions())
+                {
+                    auto aPointNode = mrWriter.startStruct();
+                    mrWriter.put("x", rPoint.getX() * mfScaleFactor);
+                    mrWriter.put("y", rPoint.getY() * mfScaleFactor);
+                }
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_TRANSFORMPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const TransformPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "transform");
+            writeMatrixTranslationScaled("matrix", rPrimitive.getTransformation());
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(rPrimitive.getChildren());
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_MASKPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const MaskPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "mask");
+            const basegfx::B2DPolyPolygon aScaled = scalePolyPolygon(rPrimitive.getMask());
+            mrWriter.put("clip", basegfx::utils::exportToSvgD(aScaled, true, true, false));
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(rPrimitive.getChildren());
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_GROUPPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const GroupPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "group");
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(rPrimitive.getChildren());
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_OBJECTINFOPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const ObjectInfoPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "objectInfo");
+            mrWriter.put("name", rPrimitive.getName());
+            mrWriter.put("title", rPrimitive.getTitle());
+            mrWriter.put("desc", rPrimitive.getDesc());
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(rPrimitive.getChildren());
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_HIDDENGEOMETRYPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const HiddenGeometryPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "hiddenGeometry");
+
+            // What this holds is there to be hit and to give the object its range, not to be seen,
+            // and its own decomposition is empty for that reason. The children are written out
+            // directly instead.
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(rPrimitive.getChildren());
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_TEXTSIMPLEPORTIONPRIMITIVE2D:
+        {
+            const auto& rPrimitive
+                = static_cast<const TextSimplePortionPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "textSimplePortion");
+            writeTextPortionScaled(rPrimitive);
+        }
+        break;
+
+        case PRIMITIVE2D_ID_TEXTDECORATEDPORTIONPRIMITIVE2D:
+        {
+            const auto& rPrimitive
+                = static_cast<const TextDecoratedPortionPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "textDecoratedPortion");
+            writeTextPortionScaled(rPrimitive);
+
+            // Decoration properties
+            if (rPrimitive.getFontUnderline() != TEXT_LINE_NONE)
+            {
+                mrWriter.put("underline", sal_Int32(rPrimitive.getFontUnderline()));
+                mrWriter.put("underlineColor", colorToHex(rPrimitive.getTextlineColor()));
+                if (rPrimitive.getUnderlineAbove())
+                    mrWriter.put("underlineAbove", true);
+            }
+
+            if (rPrimitive.getFontOverline() != TEXT_LINE_NONE)
+            {
+                mrWriter.put("overline", sal_Int32(rPrimitive.getFontOverline()));
+                mrWriter.put("overlineColor", colorToHex(rPrimitive.getOverlineColor()));
+            }
+
+            if (rPrimitive.getTextStrikeout() != TEXT_STRIKEOUT_NONE)
+                mrWriter.put("strikeout", sal_Int32(rPrimitive.getTextStrikeout()));
+
+            if (rPrimitive.getTextEmphasisMark() != TEXT_FONT_EMPHASIS_MARK_NONE)
+            {
+                mrWriter.put("emphasisMark", sal_Int32(rPrimitive.getTextEmphasisMark()));
+                if (rPrimitive.getEmphasisMarkAbove())
+                    mrWriter.put("emphasisMarkAbove", true);
+                if (rPrimitive.getEmphasisMarkBelow())
+                    mrWriter.put("emphasisMarkBelow", true);
+            }
+
+            if (rPrimitive.getTextRelief() != TEXT_RELIEF_NONE)
+                mrWriter.put("relief", sal_Int32(rPrimitive.getTextRelief()));
+
+            if (rPrimitive.getShadow())
+                mrWriter.put("shadow", true);
+
+            if (rPrimitive.getWordLineMode())
+                mrWriter.put("wordLineMode", true);
+        }
+        break;
+
+        case PRIMITIVE2D_ID_POLYGONSTROKEPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const PolygonStrokePrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "polygonStroke");
+            const basegfx::B2DPolyPolygon aScaled
+                = scalePolyPolygon(basegfx::B2DPolyPolygon(rPrimitive.getB2DPolygon()));
+            mrWriter.put("path", basegfx::utils::exportToSvgD(aScaled, true, true, false));
+            writeLineAttributeScaled(rPrimitive.getLineAttribute());
+            writeStrokeAttributeScaled(rPrimitive.getStrokeAttribute());
+        }
+        break;
+
+        case PRIMITIVE2D_ID_POLYPOLYGONSTROKEPRIMITIVE2D:
+        {
+            const auto& rPrimitive
+                = static_cast<const PolyPolygonStrokePrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "polyPolygonStroke");
+            writePathScaled(rPrimitive.getB2DPolyPolygon());
+            writeLineAttributeScaled(rPrimitive.getLineAttribute());
+            writeStrokeAttributeScaled(rPrimitive.getStrokeAttribute());
+        }
+        break;
+
+        case PRIMITIVE2D_ID_POLYGONSTROKEARROWPRIMITIVE2D:
+        {
+            /*
+                A line with an arrow at one end or at both. Where the arrow sits, the line is
+                drawn short of the end and the arrow is a polygon of its own, placed and turned
+                along the line, which is work of the kind a reader should not have to do. So
+                what travels is what it draws: the line as a line and each arrow as a polygon.
+            */
+            mrWriter.put("type", "polygonStrokeArrow");
+
+            Primitive2DContainer aContainer;
+            rBasePrimitive.get2DDecomposition(aContainer, maViewInformation2D);
+            if (!aContainer.empty())
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(aContainer);
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_FILLGRADIENTPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const FillGradientPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "fillGradient");
+            writeRange("outputRange", rPrimitive.getOutputRange(), mfScaleFactor);
+            writeRange("definitionRange", rPrimitive.getDefinitionRange(), mfScaleFactor);
+            writeGradient(rPrimitive.getFillGradient());
+
+            if (rPrimitive.hasAlphaGradient())
+                writeGradient(rPrimitive.getAlphaGradient(), "alphaGradient");
+
+            if (rPrimitive.hasTransparency())
+                mrWriter.put("transparency", rPrimitive.getTransparency());
+        }
+        break;
+
+        case PRIMITIVE2D_ID_POLYPOLYGONGRADIENTPRIMITIVE2D:
+        {
+            const auto& rPrimitive
+                = static_cast<const PolyPolygonGradientPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "polyPolygonGradient");
+            writePathScaled(rPrimitive.getB2DPolyPolygon());
+            writeRange("definitionRange", rPrimitive.getDefinitionRange(), mfScaleFactor);
+            writeGradient(rPrimitive.getFillGradient());
+
+            if (rPrimitive.hasAlphaGradient())
+                writeGradient(rPrimitive.getAlphaGradient(), "alphaGradient");
+
+            if (rPrimitive.hasTransparency())
+                mrWriter.put("transparency", rPrimitive.getTransparency());
+        }
+        break;
+
+        case PRIMITIVE2D_ID_FILLHATCHPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const FillHatchPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "fillHatch");
+            writeRange("outputRange", rPrimitive.getOutputRange(), mfScaleFactor);
+            writeRange("definitionRange", rPrimitive.getDefinitionRange(), mfScaleFactor);
+            mrWriter.put("backgroundColor", colorToHex(rPrimitive.getBColor()));
+            writeHatchScaled(rPrimitive.getFillHatch());
+        }
+        break;
+
+        case PRIMITIVE2D_ID_POLYPOLYGONHATCHPRIMITIVE2D:
+        {
+            const auto& rPrimitive
+                = static_cast<const PolyPolygonHatchPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "polyPolygonHatch");
+            writePathScaled(rPrimitive.getB2DPolyPolygon());
+            writeRange("definitionRange", rPrimitive.getDefinitionRange(), mfScaleFactor);
+            mrWriter.put("backgroundColor", colorToHex(rPrimitive.getBackgroundColor()));
+            writeHatchScaled(rPrimitive.getFillHatch());
+        }
+        break;
+
+        case PRIMITIVE2D_ID_FILLGRAPHICPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const FillGraphicPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "fillGraphic");
+            writeMatrixScaled("matrix", rPrimitive.getTransformation());
+            writeFillGraphic(rPrimitive.getFillGraphic());
+
+            if (rPrimitive.hasTransparency())
+                mrWriter.put("transparency", rPrimitive.getTransparency());
+        }
+        break;
+
+        case PRIMITIVE2D_ID_POLYPOLYGONGRAPHICPRIMITIVE2D:
+        {
+            const auto& rPrimitive
+                = static_cast<const PolyPolygonGraphicPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "polyPolygonGraphic");
+            writePathScaled(rPrimitive.getB2DPolyPolygon());
+            writeRange("definitionRange", rPrimitive.getDefinitionRange(), mfScaleFactor);
+            writeFillGraphic(rPrimitive.getFillGraphic());
+
+            if (rPrimitive.hasTransparency())
+                mrWriter.put("transparency", rPrimitive.getTransparency());
+        }
+        break;
+
+        case PRIMITIVE2D_ID_GRAPHICPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const GraphicPrimitive2D&>(rBasePrimitive);
+            const Graphic& rGraphic = rPrimitive.getGraphicObject().GetGraphic();
+
+            // Handle SVG images specially - send without conversion as native image data.
+            if (auto pVectorData = rGraphic.getVectorGraphicData())
+            {
+                if (pVectorData->getType() == VectorGraphicDataType::Svg)
+                {
+                    mrWriter.put("type", "graphic");
+                    writeMatrixScaled("matrix", rPrimitive.getTransform());
+                    writeGraphicColorModifiers(rPrimitive.getGraphicAttr());
+                    writeGraphicData(rGraphic);
+                    break;
+                }
+            }
+
+            // Non-SVG vector graphics should be decomposed into primitives.
+            // The decomposition already applies the graphic's transform matrix, so
+            // children are in the same coordinate space as all other primitives.
+            if (rGraphic.GetType() == GraphicType::GdiMetafile || rGraphic.getVectorGraphicData())
+            {
+                mrWriter.put("type", "graphic");
+                mrWriter.put("vector", true);
+
+                Primitive2DContainer aContainer;
+                rPrimitive.get2DDecomposition(aContainer, maViewInformation2D);
+                if (!aContainer.empty())
+                {
+                    auto aChildArray = mrWriter.startArray("children");
+                    decomposeAndWrite(aContainer);
+                }
+                break;
+            }
+
+            // Bitmap graphic: encode as image data
+            mrWriter.put("type", "graphic");
+            writeMatrixScaled("matrix", rPrimitive.getTransform());
+
+            const GraphicAttr& rAttributes = rPrimitive.getGraphicAttr();
+            if (rAttributes.IsCropped())
+            {
+                // With a unit object scale, calculateCropScaling returns the reciprocal of the
+                // preferred size left after cropping, so each crop distance becomes a fraction
+                // of the frame.
+                const basegfx::B2DVector aCropScale(
+                    rPrimitive.getGraphicObject().calculateCropScaling(
+                        1.0, 1.0, rAttributes.GetLeftCrop(), rAttributes.GetTopCrop(),
+                        rAttributes.GetRightCrop(), rAttributes.GetBottomCrop()));
+                const double fLeft(rAttributes.GetLeftCrop() * aCropScale.getX());
+                const double fTop(rAttributes.GetTopCrop() * aCropScale.getY());
+                const double fRight(rAttributes.GetRightCrop() * aCropScale.getX());
+                const double fBottom(rAttributes.GetBottomCrop() * aCropScale.getY());
+
+                // The rectangle the whole image maps onto, in the frame's unit square.
+                auto aImageRectNode = mrWriter.startNode("imageRect");
+                mrWriter.put("x", -fLeft);
+                mrWriter.put("y", -fTop);
+                mrWriter.put("width", 1.0 + fLeft + fRight);
+                mrWriter.put("height", 1.0 + fTop + fBottom);
+            }
+
+            if (rAttributes.IsTransparent())
+                mrWriter.put("alpha", sal_Int32(rAttributes.GetAlpha()));
+
+            if (rAttributes.GetRotation() != 0_deg10)
+                mrWriter.put("rotation", rAttributes.GetRotation().get());
+
+            if (rAttributes.IsMirrored())
+                mrWriter.put("mirror", sal_Int32(rAttributes.GetMirrorFlags()));
+
+            writeGraphicColorModifiers(rAttributes);
+
+            const Size aSizePixel(rGraphic.GetSizePixel());
+            mrWriter.put("width", sal_Int64(aSizePixel.getWidth()));
+            mrWriter.put("height", sal_Int64(aSizePixel.getHeight()));
+            writeGraphicData(rGraphic);
+        }
+        break;
+
+        case PRIMITIVE2D_ID_POLYPOLYGONRGBAPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const PolyPolygonRGBAPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "polyPolygonRGBA");
+            mrWriter.put("color", colorToHex(rPrimitive.getBColor()));
+            writePathScaled(rPrimitive.getB2DPolyPolygon());
+
+            if (rPrimitive.hasTransparency())
+                mrWriter.put("transparency", rPrimitive.getTransparency());
+        }
+        break;
+
+        case PRIMITIVE2D_ID_POLYPOLYGONALPHAGRADIENTPRIMITIVE2D:
+        {
+            const auto& rPrimitive
+                = static_cast<const PolyPolygonAlphaGradientPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "polyPolygonAlphaGradient");
+            mrWriter.put("color", colorToHex(rPrimitive.getBColor()));
+            writePathScaled(rPrimitive.getB2DPolyPolygon());
+            writeGradient(rPrimitive.getAlphaGradient(), "alphaGradient");
+        }
+        break;
+
+        case PRIMITIVE2D_ID_BITMAPALPHAPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const BitmapAlphaPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "bitmapAlpha");
+            writeMatrixScaled("matrix", rPrimitive.getTransform());
+
+            if (rPrimitive.hasTransparency())
+                mrWriter.put("transparency", rPrimitive.getTransparency());
+
+            const Bitmap& rBitmap = rPrimitive.getBitmap();
+            const Size aSizePixel(rBitmap.GetSizePixel());
+            mrWriter.put("width", aSizePixel.getWidth());
+            mrWriter.put("height", aSizePixel.getHeight());
+            writeBitmapData(rBitmap);
+        }
+        break;
+
+        case PRIMITIVE2D_ID_PATTERNFILLPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const PatternFillPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "patternFill");
+            writePathScaled(rPrimitive.getMask());
+
+            // The reference range is relative to the mask's bounds, which act as
+            // the unit square, so it goes out at a scale of one.
+            writeRange("referenceRange", rPrimitive.getReferenceRange(), 1.0);
+
+            const Primitive2DContainer& rChildren = rPrimitive.getChildren();
+            if (!rChildren.empty())
+            {
+                double fSavedScale = mfScaleFactor;
+                mfScaleFactor = 1.0;
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(rChildren);
+                mfScaleFactor = fSavedScale;
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_UNIFIEDTRANSPARENCEPRIMITIVE2D:
+        {
+            const auto& rPrimitive
+                = static_cast<const UnifiedTransparencePrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "unifiedTransparence");
+            mrWriter.put("transparence", rPrimitive.getTransparence());
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(rPrimitive.getChildren());
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_TRANSPARENCEPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const TransparencePrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "transparence");
+            writeBoundsScaled(rPrimitive);
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(rPrimitive.getChildren());
+            }
+            {
+                auto aTranspArray = mrWriter.startArray("transparence");
+                decomposeAndWrite(rPrimitive.getTransparence());
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_MODIFIEDCOLORPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const ModifiedColorPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "modifiedColor");
+            writeColorModifier(*rPrimitive.getColorModifier());
+            writeBoundsScaled(rPrimitive);
+
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(rPrimitive.getChildren());
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_SHADOWPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const ShadowPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "shadow");
+            mrWriter.put("color", colorToHex(rPrimitive.getShadowColor()));
+            mrWriter.put("blur", rPrimitive.getShadowBlur() * mfScaleFactor);
+            writeMatrixTranslationScaled("matrix", rPrimitive.getShadowTransform());
+            writeBoundsScaled(rPrimitive);
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(rPrimitive.getChildren());
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_GLOWPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const GlowPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "glow");
+            const Color aGlowColor(rPrimitive.getGlowColor());
+            mrWriter.put("color", colorToHex(aGlowColor.getBColor()));
+            if (aGlowColor.IsTransparent())
+                mrWriter.put("transparency", 1.0 - aGlowColor.GetAlpha() / 255.0);
+            mrWriter.put("radius", rPrimitive.getGlowRadius() * mfScaleFactor);
+            writeBoundsScaled(rPrimitive);
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(rPrimitive.getChildren());
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_SOFTEDGEPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const SoftEdgePrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "softEdge");
+            mrWriter.put("radius", rPrimitive.getRadius() * mfScaleFactor);
+            writeBoundsScaled(rPrimitive);
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(rPrimitive.getChildren());
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_SVGLINEARGRADIENTPRIMITIVE2D:
+        {
+            const auto& rPrimitive
+                = static_cast<const SvgLinearGradientPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "svgLinearGradient");
+            mrWriter.put("startX", rPrimitive.getStart().getX() * mfScaleFactor);
+            mrWriter.put("startY", rPrimitive.getStart().getY() * mfScaleFactor);
+            mrWriter.put("endX", rPrimitive.getEnd().getX() * mfScaleFactor);
+            mrWriter.put("endY", rPrimitive.getEnd().getY() * mfScaleFactor);
+            writeSvgGradientCommon(rPrimitive);
+        }
+        break;
+
+        case PRIMITIVE2D_ID_SVGRADIALGRADIENTPRIMITIVE2D:
+        {
+            const auto& rPrimitive
+                = static_cast<const SvgRadialGradientPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "svgRadialGradient");
+            mrWriter.put("centerX", rPrimitive.getStart().getX() * mfScaleFactor);
+            mrWriter.put("centerY", rPrimitive.getStart().getY() * mfScaleFactor);
+            mrWriter.put("radius", rPrimitive.getRadius() * mfScaleFactor);
+
+            if (rPrimitive.isFocalSet())
+            {
+                mrWriter.put("focalX", rPrimitive.getFocal().getX() * mfScaleFactor);
+                mrWriter.put("focalY", rPrimitive.getFocal().getY() * mfScaleFactor);
+            }
+
+            writeSvgGradientCommon(rPrimitive);
+        }
+        break;
+
+        case PRIMITIVE2D_ID_SVGLINEARATOMPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const SvgLinearAtomPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "svgLinearAtom");
+            mrWriter.put("colorA", colorToHex(rPrimitive.getColorA()));
+            mrWriter.put("colorB", colorToHex(rPrimitive.getColorB()));
+            mrWriter.put("offsetA", rPrimitive.getOffsetA());
+            mrWriter.put("offsetB", rPrimitive.getOffsetB());
+        }
+        break;
+
+        case PRIMITIVE2D_ID_SVGRADIALATOMPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const SvgRadialAtomPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "svgRadialAtom");
+            mrWriter.put("colorA", colorToHex(rPrimitive.getColorA()));
+            mrWriter.put("colorB", colorToHex(rPrimitive.getColorB()));
+            mrWriter.put("scaleA", rPrimitive.getScaleA());
+            mrWriter.put("scaleB", rPrimitive.getScaleB());
+
+            if (rPrimitive.isTranslateSet())
+            {
+                mrWriter.put("translateAX", rPrimitive.getTranslateA().getX());
+                mrWriter.put("translateAY", rPrimitive.getTranslateA().getY());
+                mrWriter.put("translateBX", rPrimitive.getTranslateB().getX());
+                mrWriter.put("translateBY", rPrimitive.getTranslateB().getY());
+            }
+        }
+        break;
+
+        case PRIMITIVE2D_ID_BACKGROUNDCOLORPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const BackgroundColorPrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "backgroundcolor");
+            mrWriter.put("color", colorToHex(rPrimitive.getBColor()));
+            if (rPrimitive.getTransparency() > 0.0)
+                mrWriter.put("transparency", rPrimitive.getTransparency());
+        }
+        break;
+
+        case PRIMITIVE2D_ID_FILLEDRECTANGLEPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const FilledRectanglePrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "filledRectangle");
+            mrWriter.put("color", colorToHex(rPrimitive.getBColor()));
+            const basegfx::B2DRange& rRange = rPrimitive.getB2DRange();
+            auto aBoundsArray = mrWriter.startArray("bounds");
+            mrWriter.putSimpleValue(rRange.getMinX() * mfScaleFactor);
+            mrWriter.putSimpleValue(rRange.getMinY() * mfScaleFactor);
+            mrWriter.putSimpleValue(rRange.getMaxX() * mfScaleFactor);
+            mrWriter.putSimpleValue(rRange.getMaxY() * mfScaleFactor);
+        }
+        break;
+
+        case PRIMITIVE2D_ID_LINERECTANGLEPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const LineRectanglePrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "lineRectangle");
+            mrWriter.put("color", colorToHex(rPrimitive.getBColor()));
+            const basegfx::B2DRange& rRange = rPrimitive.getB2DRange();
+            auto aBoundsArray = mrWriter.startArray("bounds");
+            mrWriter.putSimpleValue(rRange.getMinX() * mfScaleFactor);
+            mrWriter.putSimpleValue(rRange.getMinY() * mfScaleFactor);
+            mrWriter.putSimpleValue(rRange.getMaxX() * mfScaleFactor);
+            mrWriter.putSimpleValue(rRange.getMaxY() * mfScaleFactor);
+        }
+        break;
+
+        case PRIMITIVE2D_ID_SINGLELINEPRIMITIVE2D:
+        {
+            const auto& rPrimitive = static_cast<const SingleLinePrimitive2D&>(rBasePrimitive);
+            mrWriter.put("type", "singleLine");
+            mrWriter.put("color", colorToHex(rPrimitive.getBColor()));
+            mrWriter.put("startX", rPrimitive.getStart().getX() * mfScaleFactor);
+            mrWriter.put("startY", rPrimitive.getStart().getY() * mfScaleFactor);
+            mrWriter.put("endX", rPrimitive.getEnd().getX() * mfScaleFactor);
+            mrWriter.put("endY", rPrimitive.getEnd().getY() * mfScaleFactor);
+        }
+        break;
+
+        default:
+        {
+            const char* pTypeName = nullptr;
+            switch (nId)
+            {
+                // Text hierarchy (structural text grouping)
+                case PRIMITIVE2D_ID_TEXTHIERARCHYFIELDPRIMITIVE2D:
+                    pTypeName = "textHierarchyField";
+                    break;
+                case PRIMITIVE2D_ID_TEXTHIERARCHYLINEPRIMITIVE2D:
+                    pTypeName = "textHierarchyLine";
+                    break;
+                case PRIMITIVE2D_ID_TEXTHIERARCHYPARAGRAPHPRIMITIVE2D:
+                    pTypeName = "textHierarchyParagraph";
+                    break;
+                case PRIMITIVE2D_ID_TEXTHIERARCHYBLOCKPRIMITIVE2D:
+                    pTypeName = "textHierarchyBlock";
+                    break;
+                case PRIMITIVE2D_ID_TEXTHIERARCHYBULLETPRIMITIVE2D:
+                    pTypeName = "textHierarchyBullet";
+                    break;
+                case PRIMITIVE2D_ID_TEXTHIERARCHYEMPHASISMARKPRIMITIVE2D:
+                    pTypeName = "textHierarchyEmphasisMark";
+                    break;
+                // Other drawinglayer primitives
+                case PRIMITIVE2D_ID_EXCLUSIVEEDITVIEWPRIMITIVE2D:
+                    pTypeName = "exclusiveEditView";
+                    break;
+                default:
+                    break;
+            }
+
+            if (pTypeName)
+            {
+                mrWriter.put("type", pTypeName);
+            }
+            else
+            {
+                // Encode module and local ID so we know the origin
+                // Modules: 0=drawinglayer, 1=svx, 2=sd, 3=sw, 4=sc
+                static constexpr auto aModuleNames
+                    = std::to_array<std::string_view>({ "drawinglayer", "svx", "sd", "sw", "sc" });
+                sal_uInt32 nModule = nId >> 16;
+                sal_uInt32 nLocalId = nId & 0xFFFF;
+                std::string_view aModule
+                    = nModule < aModuleNames.size() ? aModuleNames[nModule] : "other";
+                mrWriter.put("type", rtl::Concat2View(OString::Concat(aModule) + ":"
+                                                      + OString::number(sal_Int32(nLocalId))));
+            }
+
+            // A page preview shows another page, and a field inside it reads against that page
+            // rather than the one being drawn, so its content is decomposed with the shown page
+            // as the visualized one, the way the drawing processors do it.
+            std::optional<geometry::ViewInformation2D> oOuterViewInformation;
+            if (nId == PRIMITIVE2D_ID_PAGEPREVIEWPRIMITIVE2D)
+            {
+                const auto& rPreview
+                    = static_cast<const primitive2d::PagePreviewPrimitive2D&>(rBasePrimitive);
+                oOuterViewInformation = maViewInformation2D;
+                maViewInformation2D.setVisualizedPage(rPreview.getXDrawPage());
+            }
+
+            Primitive2DContainer aContainer;
+            rBasePrimitive.get2DDecomposition(aContainer, maViewInformation2D);
+            if (!aContainer.empty())
+            {
+                auto aChildArray = mrWriter.startArray("children");
+                decomposeAndWrite(aContainer);
+            }
+
+            if (oOuterViewInformation)
+                maViewInformation2D = *oOuterViewInformation;
+        }
+        break;
+    }
+}
+
+} // end namespace drawinglayer
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,131 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/script/XAllListener.hpp>
+#include <com/sun/star/script/XEventAttacher.hpp>
+#include <com/sun/star/script/XScriptEventsAttacher.hpp>
+#include <com/sun/star/script/XScriptListener.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <com/sun/star/awt/XControl.hpp>
+#include <com/sun/star/beans/XIntrospectionAccess.hpp>
+#include <cppuhelper/implbase.hxx>
+
+#include <com/sun/star/script/XScriptEventsSupplier.hpp>
+
+#include <unordered_map>
+#include <utility>
+
+namespace dlgprov
+{
+    typedef std::unordered_map< OUString,
+        cpo::uno::Reference< css::script::XScriptListener > > ListenerHash;
+
+    typedef ::cppu::WeakImplHelper<
+        css::script::XScriptEventsAttacher > DialogEventsAttacherImpl_BASE;
+
+
+    class DialogEventsAttacherImpl : public DialogEventsAttacherImpl_BASE
+    {
+    private:
+        bool mbUseFakeVBAEvents;
+        ListenerHash listenersForTypes;
+        cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+        cpo::uno::Reference< css::script::XEventAttacher > m_xEventAttacher;
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference< css::script::XScriptListener > const & getScriptListenerForKey( const OUString& sScriptName );
+        cpo::uno::Reference< css::script::XScriptEventsSupplier > getFakeVbaEventsSupplier( const cpo::uno::Reference< css::awt::XControl>& xControl, OUString const & sCodeName );
+        void nestedAttachEvents( const cpo::uno::Sequence< cpo::uno::Reference< cpo::uno::XInterface > >& Objects, const cpo::uno::Any& Helper, OUString& sDialogCodeName );
+        void nestedAttachEvents( const cpo::uno::Reference< css::awt::XControl >& xControl, const cpo::uno::Any& Helper, OUString& sDialogCodeName );
+        void attachEventsToControl( const cpo::uno::Reference< css::awt::XControl>& xControl, const cpo::uno::Reference< css::script::XScriptEventsSupplier >& events, const cpo::uno::Any& Helper  );
+    public:
+        DialogEventsAttacherImpl( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+             const cpo::uno::Reference< css::frame::XModel >& xModel,
+             const cpo::uno::Reference< css::awt::XControl >& xControl,
+             const cpo::uno::Reference< cpo::uno::XInterface >& xHandler,
+             const cpo::uno::Reference< css::beans::XIntrospectionAccess >& xIntrospect,
+             const cpo::uno::Reference< css::script::XScriptListener >& xRTLListener ,const OUString& sDialogLibName );
+        virtual ~DialogEventsAttacherImpl() override;
+
+        // XScriptEventsAttacher
+        virtual void attachEvents( const cpo::uno::Sequence<
+            cpo::uno::Reference< cpo::uno::XInterface > >& Objects,
+            const cpo::uno::Reference<css::script::XScriptListener>&,
+            const cpo::uno::Any& Helper ) override;
+    };
+
+
+
+
+    typedef ::cppu::WeakImplHelper<
+        css::script::XAllListener > DialogAllListenerImpl_BASE;
+
+
+    class DialogAllListenerImpl : public DialogAllListenerImpl_BASE
+    {
+    private:
+        cpo::uno::Reference< css::script::XScriptListener > m_xScriptListener;
+        OUString m_sScriptType;
+        OUString m_sScriptCode;
+
+        void firing_impl( const css::script::AllEventObject& Event, cpo::uno::Any* pRet );
+
+    public:
+        DialogAllListenerImpl( const cpo::uno::Reference< css::script::XScriptListener >& rxListener,
+            OUString sScriptType, OUString sScriptCode );
+        virtual ~DialogAllListenerImpl() override;
+
+        // XEventListener
+        virtual void disposing( const css::lang::EventObject& Source ) override;
+
+        // XAllListener
+        virtual void firing( const css::script::AllEventObject& Event ) override;
+        virtual cpo::uno::Any approveFiring( const css::script::AllEventObject& Event ) override;
+    };
+
+
+
+
+    typedef ::cppu::WeakImplHelper<
+        css::script::XScriptListener > DialogScriptListenerImpl_BASE;
+
+
+    class DialogScriptListenerImpl : public DialogScriptListenerImpl_BASE
+    {
+    protected:
+        cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+        virtual void firing_impl( const css::script::ScriptEvent& aScriptEvent, cpo::uno::Any* pRet ) = 0;
+    public:
+        explicit DialogScriptListenerImpl( cpo::uno::Reference< cpo::uno::XComponentContext > xContext ) : m_xContext(std::move( xContext )) {}
+        virtual ~DialogScriptListenerImpl() override;
+
+        // XEventListener
+        virtual void disposing( const css::lang::EventObject& Source ) override;
+
+        // XScriptListener
+        virtual void firing( const css::script::ScriptEvent& aScriptEvent ) override;
+        virtual cpo::uno::Any approveFiring( const css::script::ScriptEvent& aScriptEvent ) override;
+    };
+
+
+}   // namespace dlgprov
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

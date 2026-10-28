@@ -1,0 +1,1448 @@
+/* -*- js-indent-level: 8 -*- */
+
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+/*
+ * Calc tile layer is used to display a spreadsheet document
+ */
+
+/* global app RenderManager cool CellRangeMarkerSection FocusCellSection SplitterLinesSection */
+
+window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
+	options: {
+		// TODO: sync these automatically from SAL_LOK_OPTIONS
+		sheetGeometryDataEnabled: true,
+		printTwipsMsgsEnabled: true,
+		syncSplits: true, // if false, the splits/freezes are not synced with other users viewing the same sheet.
+	},
+
+	twipsToHMM: function (twips) {
+		return (twips * 127 + 36) / 72;
+	},
+
+	newAnnotation: function (commentData) {
+		var commentList = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).sectionProperties.commentList;
+		var comment = null;
+
+		for (var i = 0; i < commentList.length; i++) {
+			if (commentList[i].sectionProperties.data.tab == this._selectedPart) {
+				if (commentList[i].sectionProperties.data.cellRange.contains(app.calc.cellAddress.toArray())) {
+					comment = commentList[i];
+					break;
+				}
+			}
+		}
+
+		if (!comment) {
+			var pixelStart = new cool.Point(app.calc.cellCursorRectangle.pX1, app.calc.cellCursorRectangle.pY1);
+			var rangeStart = this.sheetGeometry.getCellFromPos(pixelStart, 'corepixels');
+			var pixelEnd = new cool.Point(app.calc.cellCursorRectangle.pX2 - 1, app.calc.cellCursorRectangle.pY2 - 1);
+			var rangeEnd = this.sheetGeometry.getCellFromPos(pixelEnd, 'corepixels');
+
+			var newComment = {
+				cellRange: new cool.Bounds(rangeStart, rangeEnd),
+				anchorPos: app.calc.cellCursorRectangle.toArray(),
+				id: 'new',
+				tab: this._selectedPart,
+				dateTime: new Date().toISOString(),
+				author: this._map.getViewName(this._viewId),
+				threaded: commentData ? commentData.threaded : undefined,
+			};
+
+			if (app.sectionContainer.doesSectionExist('new comment')) // If adding a new comment has failed, we need to remove the leftover.
+				app.sectionContainer.removeSection('new comment');
+
+			comment = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).add(newComment);
+			comment.positionCalcComment();
+		}
+		app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).modify(comment);
+		comment.focus();
+	},
+
+	beforeAdd: function (map) {
+		map._addZoomLimit(this);
+		map.on('zoomend', this._onZoomRowColumns, this);
+		map.on('updateparts', this._onUpdateParts, this);
+		map.on('splitposchanged', this.setSplitCellFromPos, this);
+		map.on('commandstatechanged', this._onCommandStateChanged, this);
+		map.uiManager.initializeSpecializedUI('spreadsheet');
+		window.keyboard.applyOnscreenKeyboardMode();
+	},
+
+	onAdd: function (map) {
+		map.addControl(window.L.control.tabs());
+		window.L.CanvasTileLayer.prototype.onAdd.call(this, map);
+
+		app.sectionContainer.addSection(new app.definitions.CellFillMarkerSection());
+		app.sectionContainer.addSection(new SplitterLinesSection());
+
+		this._cellRangeMarkerSection = new CellRangeMarkerSection();
+		app.sectionContainer.addSection(this._cellRangeMarkerSection);
+
+		this.insertMode = false;
+		this._resetInternalState();
+		this._sheetSwitch = new cool.SheetSwitchViewRestore(map);
+		this._sheetGrid = true;
+
+		if (window.prefs.getBoolean('ColumnRowHighlightEnabled', false))
+			FocusCellSection.addFocusCellSection();
+	},
+
+	_resetInternalState: function() {
+		this._cellSelections = Array(0);
+		app.calc.cellCursorVisible = false;
+		this._gotFirstCellCursor = false;
+		this._lastColumn = 0; // with data
+		this._lastRow = 0; // with data
+		this.requestCellCursor();
+	},
+
+	_onUpdateParts: function (e) {
+		if (typeof this._prevSelectedPart === 'number' && !e.source) {
+			this.refreshViewData(undefined, false /* compatDataSrcOnly */, true /* sheetGeometryChanged */);
+			this._switchSplitPanesContext();
+		}
+	},
+
+	_onMessage: function (textMsg, img) {
+		if (textMsg.startsWith('invalidateheader: column')) {
+			this.refreshViewData({x: app.activeDocument.activeLayout.viewedRectangle.cX1, y: 0,
+				offset: {x: undefined, y: 0}}, true /* compatDataSrcOnly */);
+		} else if (textMsg.startsWith('invalidateheader: row')) {
+			this.refreshViewData({x: 0, y: app.activeDocument.activeLayout.viewedRectangle.cY1,
+				offset: {x: 0, y: undefined}}, true /* compatDataSrcOnly */);
+		} else if (textMsg.startsWith('invalidateheader: all')) {
+			this.refreshViewData({x: app.activeDocument.activeLayout.viewedRectangle.cX1, y: app.activeDocument.activeLayout.viewedRectangle.cY1,
+				offset: {x: undefined, y: undefined}}, true /* compatDataSrcOnly */);
+		} else if (this.options.sheetGeometryDataEnabled &&
+				textMsg.startsWith('invalidatesheetgeometry:')) {
+			var params = textMsg.substring('invalidatesheetgeometry:'.length).trim().split(' ');
+			var flags = {};
+			params.forEach(function (param) {
+				flags[param] = true;
+			});
+			this.requestSheetGeometryData(flags);
+		} else if (textMsg.startsWith('printranges:')) {
+			this._onPrintRangesMsg(textMsg);
+		} else {
+			window.L.CanvasTileLayer.prototype._onMessage.call(this, textMsg, img);
+		}
+	},
+
+	// This is used to read and parse printranges so that the next
+	// canvas grid paint will show the visual indication of the print range
+	// in the current sheet if any.
+	_onPrintRangesMsg: function (textMsg) {
+		textMsg = textMsg.substr('printranges:'.length);
+		var msgData = JSON.parse(textMsg);
+		if (!msgData['printranges'] || !Array.isArray(msgData['printranges']))
+			return;
+
+		if (!this._printRanges) {
+			this._printRanges = [];
+		}
+
+		msgData['printranges'].forEach(function (sheetPrintRange) {
+			if (typeof sheetPrintRange['sheet'] !== 'number' || !Array.isArray(sheetPrintRange['ranges'])) {
+				return;
+			}
+
+			this._printRanges[sheetPrintRange['sheet']] = sheetPrintRange['ranges'];
+		}, this);
+	},
+
+	_onSetPartMsg: function (textMsg) {
+		var part = parseInt(textMsg.match(/\d+/g)[0]);
+		if (!app.calc.isPartHidden(part)) {
+			this.refreshViewData(undefined, true /* compatDataSrcOnly */, false /* sheetGeometryChanged */);
+			this._replayPrintTwipsMsgAllViews('cellviewcursor');
+			this._replayPrintTwipsMsgAllViews('textviewselection');
+			// Hide previous tab's shown comment (if any).
+			let section = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
+			if (section) {
+				section.hideAllComments();
+			}
+			this._sheetSwitch.gotSetPart(part);
+			this._syncTileContainerSize();
+		}
+	},
+
+	_onZoomRowColumns: function () {
+		this._sendClientZoom();
+		if (this.sheetGeometry) {
+			this.sheetGeometry.setTileGeometryData(app.tile.size.x, app.tile.size.y,
+				RenderManager.tileSize);
+		}
+		this._restrictDocumentSize();
+		this.dontSendSplitPosToCore = true;
+		this.setSplitPosFromCell();
+		this.dontSendSplitPosToCore = false;
+		this._map.fire('zoomchanged');
+		this.refreshViewData();
+		this._replayPrintTwipsMsgs(false);
+		// refreshViewData above fetches the row and column headers and the sheet
+		// geometry; the tiles for the new zoom are requested here.
+		app.activeDocument.activeLayout.refreshTiles();
+	},
+
+	// The extent (in twips) the scrollable area should span: the data area plus a
+	// screen of margin to scroll into, up to the size of the sheet. Null when the
+	// document already spans exactly that.
+	_restrictedDocumentSize: function () {
+		if (this._documentSizeFrozen) {
+			return null;
+		}
+
+		if (!this.sheetGeometry) {
+			return null;
+		}
+
+		var maxDocSize = this.sheetGeometry.getSize('tiletwips');
+		var newDocWidth = Math.min(maxDocSize.x, app.activeDocument.fileSize.x);
+		var newDocHeight = Math.min(maxDocSize.y, app.activeDocument.fileSize.y);
+
+		var lastCellPixel = this.sheetGeometry.getCellRect(this._lastColumn, this._lastRow);
+		var isCalcRTL = this._map._docLayer.isCalcRTL();
+		lastCellPixel = isCalcRTL ? lastCellPixel.getBottomRight() : lastCellPixel.getBottomLeft();
+		var lastCellTwips = this._corePixelsToTwips(lastCellPixel);
+		var mapSizeTwips = new cool.Point(app.activeDocument.activeLayout.viewedRectangle.width, app.activeDocument.activeLayout.viewedRectangle.height);
+		var mapPosTwips = new cool.Point(app.activeDocument.activeLayout.viewedRectangle.x1, app.activeDocument.activeLayout.viewedRectangle.y1);
+
+		// margin outside data area we allow to scroll
+		// has to be bigger on mobile to allow scroll
+		// to the next place where we extend that area
+		// (allow few mobile screens down and right)
+		var limitMargin = mapSizeTwips;
+		if (!window.mode.isDesktop()) {
+			limitMargin.x *= 8;
+			limitMargin.y *= 8;
+		}
+
+		var limitWidth = mapPosTwips.x + mapSizeTwips.x < lastCellTwips.x && !this.widthShrinked;
+		var limitHeight = mapPosTwips.y + mapSizeTwips.y < lastCellTwips.y && !this.heightShrinked;
+
+		// limit to data area only (and map size for margin)
+		if (limitWidth)
+			newDocWidth = lastCellTwips.x + limitMargin.x;
+
+		if (limitHeight)
+			newDocHeight = lastCellTwips.y + limitMargin.y;
+
+		if (!limitWidth && maxDocSize.x > app.activeDocument.fileSize.x) {
+			newDocWidth = Math.min(app.activeDocument.fileSize.x + mapSizeTwips.x, maxDocSize.x);
+		}
+
+		if (!limitHeight && maxDocSize.y > app.activeDocument.fileSize.y) {
+			newDocHeight = Math.min(app.activeDocument.fileSize.y + mapSizeTwips.y, maxDocSize.y);
+		}
+
+		if (newDocWidth === app.activeDocument.fileSize.x &&
+				newDocHeight === app.activeDocument.fileSize.y) {
+			return null;
+		}
+
+		return new cool.SimplePoint(newDocWidth, newDocHeight);
+	},
+
+	_applyDocumentSize: function (size) {
+		app.activeDocument.fileSize = size;
+		app.activeDocument.activeLayout.viewSize = size.clone();
+
+		// When there will be a Intern conversion, we should use CSS pixels.
+		const sizePx = this._twipsToPixels(new cool.Point(size.x, size.y));
+		this._docPixelSize = sizePx.clone();
+		this._map.fire('scrolllimits', sizePx.clone());
+	},
+
+	_restrictDocumentSize: function () {
+		const size = this._restrictedDocumentSize();
+		if (!size)
+			return;
+
+		this._applyDocumentSize(size);
+		this._syncTileContainerSize();
+	},
+
+	// The scrollable area only reaches the cells this view has been to, so a position
+	// outside it cannot be scrolled to until the area covers it. The area grows here even
+	// while the document size is frozen, because the scroll happens right away. One grow
+	// to a given position does not lead to another, so the freeze is not needed for it.
+	extendDocumentSizeToInclude: function (position) {
+		if (!this.sheetGeometry)
+			return;
+
+		const fileSize = app.activeDocument.fileSize;
+		const maxDocumentSize = this.sheetGeometry.getSize('tiletwips');
+
+		// A frame past the position, so it can still be centered.
+		const frameSize = app.activeDocument.activeLayout.frameSize;
+		const newWidth = Math.min(maxDocumentSize.x, Math.max(fileSize.x, position.x + frameSize.x));
+		const newHeight = Math.min(maxDocumentSize.y, Math.max(fileSize.y, position.y + frameSize.y));
+
+		// A size waiting for the freeze to end replaces the current one, so it has to
+		// cover the position as well.
+		if (this._pendingDocumentSize) {
+			this._pendingDocumentSize.x = Math.max(this._pendingDocumentSize.x, newWidth);
+			this._pendingDocumentSize.y = Math.max(this._pendingDocumentSize.y, newHeight);
+		}
+
+		if (newWidth === fileSize.x && newHeight === fileSize.y)
+			return;
+
+		this._applyDocumentSize(new cool.SimplePoint(newWidth, newHeight));
+		this._syncTileContainerSize();
+	},
+
+	// While the document size is frozen, the scrollable area does not grow or
+	// shrink. A size received from the engine in the meantime is stored and
+	// applied when the freeze ends.
+	freezeDocumentSize: function () {
+		this._documentSizeFrozen = true;
+	},
+
+	unfreezeDocumentSize: function () {
+		if (!this._documentSizeFrozen)
+			return;
+
+		this._documentSizeFrozen = false;
+
+		if (this._pendingDocumentSize) {
+			this._applyDocumentSize(this._pendingDocumentSize);
+			this._pendingDocumentSize = null;
+			this._syncTileContainerSize();
+		}
+		else {
+			this._restrictDocumentSize();
+		}
+	},
+
+	_getCursorPosSize: function () {
+		var x = -1, y = -1;
+		var size = new cool.Point(0, 0);
+
+		if (app.calc.cellCursorVisible) {
+			x = app.calc.cellAddress.x + 1;
+			y = app.calc.cellAddress.y + 1;
+
+			size = { x: app.calc.cellCursorRectangle.width, y: app.calc.cellCursorRectangle.height };
+		}
+
+		return { curX: x, curY: y, width: size.x, height: size.y };
+	},
+
+	_hasPartsCountOrNamesChanged(lastStatusJSON, statusJSON) {
+		if (!lastStatusJSON)
+			return true;
+
+		if (lastStatusJSON.parts.length !== statusJSON.parts.length)
+			return true;
+		else {
+			for (let i = 0; i < statusJSON.parts.length; i++) {
+				if (statusJSON.parts[i].name !== lastStatusJSON.parts[i].name)
+					return true;
+			}
+			return false;
+		}
+	},
+
+	_refreshPartNames(statusJSON) {
+		this._partNames = [];
+
+		for (let i = 0; i < statusJSON.parts.length; i++) {
+			this._partNames.push(statusJSON.parts[i].name);
+		}
+	},
+
+	// The engine's hash of the selected sheet from the last status, undefined before the
+	// first status.
+	_selectedPartHash: function () {
+		return app.calc.partHashes ? app.calc.partHashes[this._selectedPart] : undefined;
+	},
+
+	_refreshPartHashes(statusJSON) {
+		app.calc.partHashes = [];
+
+		// The status carries the hash as a number; it is kept as a string, the form every
+		// comparison with a hash from another message uses.
+		for (let i = 0; i < statusJSON.parts.length; i++) {
+			app.calc.partHashes.push(String(statusJSON.parts[i].hash));
+		}
+	},
+
+	_getMarginPropertiesForTheMap: function() {
+		const rowHeaderSection = app.sectionContainer.getSectionWithName(app.CSections.RowHeader.name);
+		const columnHeaderSection = app.sectionContainer.getSectionWithName(app.CSections.ColumnHeader.name);
+		const rowGroupSection = app.sectionContainer.getSectionWithName(app.CSections.RowGroup.name);
+		const columnGroupSection = app.sectionContainer.getSectionWithName(app.CSections.ColumnGroup.name);
+		const scrollSection = app.sectionContainer.getSectionWithName(app.CSections.Scroll.name);
+		const scrollBarThickness = scrollSection ? scrollSection.sectionProperties.scrollBarThickness : 0;
+
+		const marginLeft = (rowHeaderSection ? rowHeaderSection.size[0] : 0) + (rowGroupSection ? rowGroupSection.size[0] : 0);
+		const marginTop = (columnHeaderSection ? columnHeaderSection.size[1] : 0) + (columnGroupSection ? columnGroupSection.size[1] : 0);
+
+		return { marginLeft, marginTop, scrollBarThickness };
+	},
+
+	_updateHeaderSections: function() {
+		if (app.sectionContainer.doesSectionExist(app.CSections.RowHeader.name)) {
+			app.sectionContainer.getSectionWithName(app.CSections.RowHeader.name)._updateCanvas();
+			app.sectionContainer.getSectionWithName(app.CSections.ColumnHeader.name)._updateCanvas();
+		}
+	},
+
+	// Size the layout spacers so the tiles (document-anchor) section shrinks to
+	// the content when the document is smaller than the frame. We no longer
+	// resize the canvas or map element here; the canvas fills the document
+	// container automatically and the tiles section expands into it, stopping at
+	// whichever spacer has a non-zero size. The spacer spans the full canvas on
+	// its cross axis so the layout engine's hit test always finds it.
+	_updateSpacerSizes: function() {
+		const rightSpacer = app.sectionContainer.getSectionWithName(app.CSections.RightSpacer.name);
+		const bottomSpacer = app.sectionContainer.getSectionWithName(app.CSections.BottomSpacer.name);
+		if (!rightSpacer || !bottomSpacer)
+			return;
+
+		const documentContainerSize = this._getDocumentContainerSize();
+		const canvasWidth = Math.round(documentContainerSize[0] * app.dpiScale);
+		const canvasHeight = Math.round(documentContainerSize[1] * app.dpiScale);
+
+		// Row/column headers, groups and the scrollbars take space the tiles
+		// section cannot use.
+		const { marginLeft, marginTop, scrollBarThickness } = this._getMarginPropertiesForTheMap();
+		const availableWidth = canvasWidth - marginLeft - scrollBarThickness;
+		const availableHeight = canvasHeight - marginTop - scrollBarThickness;
+
+		// The scrollable area (in core pixels). Smaller than the frame => leftover.
+		// On mobile in landscape with the on-screen keyboard up, the margins and the scroll bar can
+		// take more space than the document container, so the available size goes negative. Clamp
+		// the leftover to zero to keep the spacer sizes valid.
+		const viewSize = app.activeDocument.activeLayout.viewSize;
+		const leftoverX = Math.max(0, availableWidth - viewSize.pX);
+		const leftoverY = Math.max(0, availableHeight - viewSize.pY);
+
+		this.widthShrinked = leftoverX > 0;
+		this.heightShrinked = leftoverY > 0;
+
+		// In RTL Calc the content is anchored to the right edge, so the leftover
+		// horizontal space (and therefore the spacer) sits on the left.
+		rightSpacer.anchor = this.isCalcRTL() ? ['top', 'left'] : ['top', 'right'];
+
+		rightSpacer.size = [leftoverX, canvasHeight];
+		bottomSpacer.size = [canvasWidth, leftoverY];
+	},
+
+	_syncTileContainerSize: function() {
+		// Remember the frame size across the relayout.
+		const oldFrame = app.activeDocument.activeLayout.frameSize;
+
+		// Size the spacers, then let the canvas match the document container
+		// automatically: onResize(0, 0) reads the container's own size. Calc no
+		// longer computes or imposes a canvas/map size here; the tiles section
+		// shrinks to the content via the spacers during the relayout.
+		this._updateSpacerSizes();
+		app.sectionContainer.onResize(0, 0);
+
+		// The viewed rectangle spans the visible frame (the tiles section). Now
+		// that the layout has settled, rebuild it at that size from the scroll
+		// position the layout holds. Nothing else maintains the viewed rectangle
+		// on load/resize, so establishing it here is what makes the document draw
+		// on load and after a resize.
+		app.activeDocument.activeLayout.rebuildViewedRectangle();
+
+		if (this.widthShrinked || this.heightShrinked) {
+			const restrictedSize = this._restrictedDocumentSize();
+			if (restrictedSize) {
+				this._applyDocumentSize(restrictedSize);
+				this._updateSpacerSizes();
+				app.sectionContainer.onResize(0, 0);
+				app.activeDocument.activeLayout.rebuildViewedRectangle();
+			}
+		}
+
+		this._updateHeaderSections();
+
+		const frame = app.activeDocument.activeLayout.frameSize;
+		const widthIncreased = oldFrame.pX < frame.pX;
+		const heightIncreased = oldFrame.pY < frame.pY;
+
+		this._mobileChecksAfterResizeEvent(heightIncreased);
+		this._nonDesktopChecksAfterResizeEvent(heightIncreased);
+
+		// Keep the cell edit cursor in view after the relayout (was a map
+		// 'resize' listener; folded here now that resize is map-free).
+		if (app.file.textCursor.visible) this._onUpdateCursor(true /* scroll */);
+
+		app.sectionContainer.requestReDraw();
+
+		// A larger frame exposes area whose tiles may not be cached yet.
+		if (heightIncreased || widthIncreased)
+			this._map.fire('sizeincreased');
+	},
+
+	_onStatusMsg: function (textMsg) {
+		console.log('DEBUG: onStatusMsg: ' + textMsg);
+
+		const statusJSON = JSON.parse(textMsg.replace('status:', '').replace('statusupdate:', ''));
+
+		if (statusJSON.width && statusJSON.height && this._documentInfo !== textMsg) {
+			const previousStatusJSON = this._lastStatusJSON ? Object.assign({}, this._lastStatusJSON): null;
+			this._lastStatusJSON = statusJSON;
+
+			if (statusJSON.readonly && !this._documentInfo)
+				this._map.setPermission('readonly');
+
+			this._documentInfo = textMsg;
+
+			var firstSelectedPart = (typeof this._selectedPart !== 'number');
+
+			if (this._documentSizeFrozen) {
+				this._pendingDocumentSize = new cool.SimplePoint(statusJSON.width, statusJSON.height);
+			}
+			else {
+				this._applyDocumentSize(new cool.SimplePoint(statusJSON.width, statusJSON.height));
+
+				if (app.map._docLoaded)
+					this._syncTileContainerSize();
+			}
+
+			this._docType = statusJSON.type;
+			this._parts = statusJSON.partscount;
+			// The names and hashes of the sheets come first, so the check of the sheet
+			// geometry below sees the sheet that is at the selected index now.
+			this._refreshPartNames(statusJSON);
+			this._refreshPartHashes(statusJSON);
+
+			const reconnecting = app.socket._reconnecting;
+			if (reconnecting) {
+				app.socket.sendMessage('setclientpart part=' + this._selectedPart);
+				this._resetInternalState();
+				window.keyboard.applyOnscreenKeyboardMode();
+			} else {
+				// The status names the selected sheet by its part identifier,
+				// the sheet index in decimal form.
+				this._selectedPart = parseInt(statusJSON.selectedpart);
+			}
+
+			this._lastColumn = statusJSON.lastcolumn;
+			this._lastRow = statusJSON.lastrow;
+
+			const mode = (statusJSON.mode !== undefined) ? statusJSON.mode : 0;
+			app.activeDocument.activeModes = [mode];
+
+			if (reconnecting) {
+				// The server view is a new one and the sheet may have changed while the
+				// connection was down, so the whole geometry of the selected sheet is
+				// fetched again. The wait for a first response starts over with it.
+				this._sheetGeomFirstWait = false;
+				this.requestSheetGeometryData();
+			} else if (this.sheetGeometry) {
+				const selectedHash = this._selectedPartHash();
+				if (this.sheetGeometry.isSameSheet(selectedHash)) {
+					// The selected sheet only changed its index, because a sheet before
+					// it was deleted or inserted; its geometry stays as it is.
+					this.sheetGeometry.setPart(this._selectedPart);
+				} else if (!this.sheetGeometry.isForSheet(this._selectedPart, selectedHash)) {
+					// The engine switched the sheet, or another sheet took the index of
+					// the selected one, so the whole geometry of the selected sheet is
+					// fetched.
+					this.requestSheetGeometryData();
+				}
+			}
+
+			this._viewId = statusJSON.viewid;
+			app.activeDocument.setActiveViewID(this._viewId);
+
+			console.assert(this._viewId >= 0, 'Incorrect viewId received: ' + this._viewId);
+
+			this._adjustCanvasSectionsForLayoutChange();
+
+			// if the number of parts, or order has changed then refresh comment positions
+			if (this._hasPartsCountOrNamesChanged(previousStatusJSON, statusJSON))
+				app.socket.sendMessage('commandvalues command=.uno:ViewAnnotationsPosition');
+
+
+			this._map.fire('updateparts', {
+				selectedPart: this._selectedPart,
+				parts: this._parts,
+				docType: this._docType,
+				source: 'status',
+				partNames: this._partNames
+			});
+
+			RenderManager.resetPreFetching(true);
+
+			/*
+				Side note: There is a getPrintRanges function on the core side that sends the JSON inside a printranges object.
+				When we get the printranges object, we put it into another printranges object on the server side. So we have a longer path here.
+			*/
+			if (statusJSON.printranges && statusJSON.printranges.printranges) {
+				this._printRanges = [];
+				const info = statusJSON.printranges.printranges;
+				for (let i = 0; i < info.length; i++)
+					this._printRanges[info[i]['sheet']] = info[i]['ranges'];
+			}
+
+			if (firstSelectedPart || (previousStatusJSON && previousStatusJSON.selectedpart !== statusJSON.selectedpart))
+				this._switchSplitPanesContext();
+
+			this._map.fire('statusupdated');
+		} else {
+			this._adjustCanvasSectionsForLayoutChange();
+		}
+
+		var scrollSection = app.sectionContainer.getSectionWithName(app.CSections.Scroll.name);
+		scrollSection.stepByStepScrolling = true;
+	},
+
+	// This initiates a selective repainting of row/col headers and
+	// gridlines based on the settings of coordinatesData.offset. This
+	// should be called whenever the view area changes (scrolling, panning,
+	// zooming, cursor moving out of view-area etc.).  Depending on the
+	// active sheet geometry data-source, it may ask core to send current
+	// view area's data or the global data on geometry changes.
+	refreshViewData: function (coordinatesData, compatDataSrcOnly, sheetGeometryChanged) {
+
+		if (this.options.sheetGeometryDataEnabled && compatDataSrcOnly) {
+			return;
+		}
+		// There are places that call this function with no arguments to indicate that the
+		// command arguments should be the current map area coordinates.
+		if (typeof coordinatesData != 'object') {
+			coordinatesData = {};
+		}
+
+		var offset = coordinatesData.offset || {};
+
+		var topLeftPoint = new cool.Point(coordinatesData.x, coordinatesData.y);
+		// frameSize is a SimplePoint; copy its CSS pixels into a mutable Point
+		// as the code below may zero a component before converting to twips.
+		var frameSize = app.activeDocument.activeLayout.frameSize;
+		var sizePx = new cool.Point(frameSize.cX, frameSize.cY);
+
+		if (topLeftPoint.x === undefined) {
+			topLeftPoint.x = app.activeDocument.activeLayout.viewedRectangle.cX1;
+		}
+		if (topLeftPoint.y === undefined) {
+			topLeftPoint.y = app.activeDocument.activeLayout.viewedRectangle.cY1;
+		}
+
+		var updateRows = true;
+		var updateCols = true;
+
+		if (offset.x === 0) {
+			updateCols = false;
+			if (!this.options.sheetGeometryDataEnabled) {
+				topLeftPoint.x = -1;
+				sizePx.x = 0;
+			}
+		}
+		if (offset.y === 0) {
+			updateRows = false;
+			if (!this.options.sheetGeometryDataEnabled) {
+				topLeftPoint.y = -1;
+				sizePx.y = 0;
+			}
+		}
+
+		var pos = this._pixelsToTwips(topLeftPoint);
+		var size = this._pixelsToTwips(sizePx);
+
+		if (!this.options.sheetGeometryDataEnabled) {
+			this.requestViewRowColumnData(pos, size);
+			return;
+		}
+
+		if (sheetGeometryChanged || !this.sheetGeometry) {
+			this.requestSheetGeometryData(
+				{columns: updateCols, rows: updateRows});
+			return;
+		}
+
+		if (this.sheetGeometry) {
+			this.sheetGeometry.setViewArea(pos, size);
+			this._updateHeadersGridLines(undefined, updateCols, updateRows);
+		}
+	},
+
+	// This send .uno:ViewRowColumnHeaders command to core with the new view coordinates (tile-twips).
+	requestViewRowColumnData: function (pos, size) {
+
+		var payload = 'commandvalues command=.uno:ViewRowColumnHeaders?x=' + Math.round(pos.x) + '&y=' + Math.round(pos.y) +
+			'&width=' + Math.round(size.x) + '&height=' + Math.round(size.y);
+
+		app.socket.sendMessage(payload);
+	},
+
+	// sends the .uno:SheetGeometryData command optionally with arguments.
+	requestSheetGeometryData: function (flags) {
+		if (!this.sheetGeometry) {
+			// Suppress multiple requests at document load, till we get a response.
+			if (this._sheetGeomFirstWait === true) {
+				return;
+			}
+			this._sheetGeomFirstWait = true;
+		}
+		var unoCmd = '.uno:SheetGeometryData';
+		var haveArgs = (typeof flags == 'object' &&
+			(flags.columns === true || flags.rows === true || flags.all === true));
+		var payload = 'commandvalues command=' + unoCmd;
+
+		if (haveArgs) {
+			var argList = [];
+			var both = (flags.all === true);
+			if (both || flags.columns === true) {
+				argList.push('columns=1');
+			}
+			if (both || flags.rows === true) {
+				argList.push('rows=1');
+			}
+
+			var dataTypeFlagNames = ['sizes', 'hidden', 'filtered', 'groups'];
+			var dataTypesPresent = false;
+			dataTypeFlagNames.forEach(function (name) {
+				if (flags[name] === true) {
+					argList.push(name + '=1');
+					dataTypesPresent = true;
+				}
+			});
+
+			if (!dataTypesPresent) {
+				dataTypeFlagNames.forEach(function (name) {
+					argList.push(name + '=1');
+				});
+			}
+
+			payload += '?' + argList.join('&');
+		}
+
+		app.socket.sendMessage(payload);
+	},
+
+	// Sends a notification to the row/col header and gridline controls that
+	// they need repainting.
+	// viewAreaData is the parsed .uno:ViewRowColumnHeaders JSON if that source is used.
+	// else it should be undefined.
+	_updateHeadersGridLines: function (viewAreaData, updateCols, updateRows) {
+		this._map.fire('viewrowcolumnheaders', {
+			data: viewAreaData,
+			updaterows: updateRows,
+			updatecolumns: updateCols,
+			cursor: this._getCursorPosSize(),
+			context: this
+		});
+	},
+
+	_addRemoveGroupSections: function () {
+		// If there are row and column groups at the same time, add CornerGroup section.
+		if (this.sheetGeometry._rows._outlines._outlines.length > 0 && this.sheetGeometry._columns._outlines._outlines.length > 0) {
+			if (!app.sectionContainer.doesSectionExist(app.CSections.CornerGroup.name))
+				app.sectionContainer.addSection(new cool.CornerGroup());
+		}
+		else { // If not, remove CornerGroup section.
+			app.sectionContainer.removeSection(app.CSections.CornerGroup.name);
+		}
+
+		// If there are row groups, add RowGroup section.
+		if (this.sheetGeometry._rows._outlines._outlines.length > 0) {
+			if (!app.sectionContainer.doesSectionExist(app.CSections.RowGroup.name))
+				app.sectionContainer.addSection(new cool.RowGroup());
+		}
+		else { // If not, remove RowGroup section.
+			app.sectionContainer.removeSection(app.CSections.RowGroup.name);
+		}
+
+		// If there are column groups, add ColumnGroup section.
+		if (this.sheetGeometry._columns._outlines._outlines.length > 0) {
+			if (!app.sectionContainer.doesSectionExist(app.CSections.ColumnGroup.name)) {
+				app.sectionContainer.addSection(new cool.ColumnGroup());
+				app.sectionContainer.canvas.style.border = '1px solid darkgrey';
+			}
+		}
+		else { // If not, remove ColumnGroup section.
+			app.sectionContainer.removeSection(app.CSections.ColumnGroup.name);
+			app.sectionContainer.canvas.style.border = '0px solid darkgrey';
+		}
+	},
+
+	_setAnchor: function(name, section, value) {
+		if (!section) {
+			console.debug('_setAnchor: no section found: "' + name + '"');
+			return;
+		}
+
+		section.anchor = value;
+	},
+
+	_adjustCanvasSectionsForLayoutChange: function () {
+		var sheetIsRTL = app.calc.isRTL();
+		if (sheetIsRTL && this._layoutIsRTL !== true) {
+			console.log('debug: in LTR -> RTL canvas section adjustments');
+			var sectionContainer = app.sectionContainer;
+
+			var tilesSection = sectionContainer.getSectionWithName(app.CSections.Tiles.name);
+			var rowHeaderSection = sectionContainer.getSectionWithName(app.CSections.RowHeader.name);
+			var columnHeaderSection = sectionContainer.getSectionWithName(app.CSections.ColumnHeader.name);
+			var cornerHeaderSection = sectionContainer.getSectionWithName(app.CSections.CornerHeader.name);
+			var columnGroupSection = sectionContainer.getSectionWithName(app.CSections.ColumnGroup.name);
+			var rowGroupSection = sectionContainer.getSectionWithName(app.CSections.RowGroup.name);
+			var cornerGroupSection = sectionContainer.getSectionWithName(app.CSections.CornerGroup.name);
+			// Scroll section covers the entire document area, and needs RTL adjustments internally.
+
+			this._setAnchor('cornerGroupSection', cornerGroupSection, ['top', 'right']);
+
+			this._setAnchor('rowGroupSection', rowGroupSection,
+				[[app.CSections.CornerGroup.name, 'bottom', 'top'], 'right']);
+
+			this._setAnchor('columnGroupSection', columnGroupSection,
+				['top', [app.CSections.CornerGroup.name, '-left', 'right']]);
+
+			this._setAnchor('cornerHeaderSection', cornerHeaderSection,
+				[[app.CSections.ColumnGroup.name, 'bottom', 'top'], [app.CSections.RowGroup.name, '-left', 'right']]);
+
+			this._setAnchor('rowHeaderSection', rowHeaderSection,
+				[[app.CSections.CornerHeader.name, 'bottom', 'top'], [app.CSections.RowGroup.name, '-left', 'right']]);
+
+			this._setAnchor('columnHeaderSection', columnHeaderSection,
+				[[app.CSections.ColumnGroup.name, 'bottom', 'top'], [app.CSections.CornerHeader.name, '-left', 'right']]);
+			if (columnHeaderSection) columnHeaderSection.expand = ['left'];
+
+			this._setAnchor('tilesSection', tilesSection,
+				[[app.CSections.ColumnHeader.name, 'bottom', 'top'], [app.CSections.RowHeader.name, '-left', 'right']]);
+
+			// Do not set layoutIsRtl to true prematurely. If set before all sections are defined
+			// (e.g., during load with onStatusMsg), some sections may not update to their correct positions.
+			// Ensure all sections are adjusted first, then set layoutIsRtl to true to show that they have moved.
+			if (rowHeaderSection)
+				this._layoutIsRTL = true;
+
+			sectionContainer.reNewAllSections(true);
+			this._syncTileContainerSize();
+
+		} else if (!sheetIsRTL && this._layoutIsRTL === true) {
+
+			console.log('debug: in RTL -> LTR canvas section adjustments');
+			var sectionContainer = app.sectionContainer;
+
+			var tilesSection = sectionContainer.getSectionWithName(app.CSections.Tiles.name);
+			var rowHeaderSection = sectionContainer.getSectionWithName(app.CSections.RowHeader.name);
+			var columnHeaderSection = sectionContainer.getSectionWithName(app.CSections.ColumnHeader.name);
+			var cornerHeaderSection = sectionContainer.getSectionWithName(app.CSections.CornerHeader.name);
+			var columnGroupSection = sectionContainer.getSectionWithName(app.CSections.ColumnGroup.name);
+			var rowGroupSection = sectionContainer.getSectionWithName(app.CSections.RowGroup.name);
+			var cornerGroupSection = sectionContainer.getSectionWithName(app.CSections.CornerGroup.name);
+
+			if (cornerGroupSection) {
+				cornerGroupSection.anchor = ['top', 'left'];
+			}
+
+			if (rowGroupSection) {
+				rowGroupSection.anchor = [[app.CSections.CornerGroup.name, 'bottom', 'top'], 'left'];
+			}
+
+			if (columnGroupSection) {
+				columnGroupSection.anchor = ['top', [app.CSections.CornerGroup.name, 'right', 'left']];
+			}
+
+			cornerHeaderSection.anchor = [[app.CSections.ColumnGroup.name, 'bottom', 'top'], [app.CSections.RowGroup.name, 'right', 'left']];
+
+			rowHeaderSection.anchor = [[app.CSections.CornerHeader.name, 'bottom', 'top'], [app.CSections.RowGroup.name, 'right', 'left']];
+
+			columnHeaderSection.anchor = [[app.CSections.ColumnGroup.name, 'bottom', 'top'], [app.CSections.CornerHeader.name, 'right', 'left']];
+			columnHeaderSection.expand = ['right'];
+
+			if (rowHeaderSection)
+				this._layoutIsRTL = false;
+
+			tilesSection.anchor = [[app.CSections.ColumnHeader.name, 'bottom', 'top'], [app.CSections.RowHeader.name, 'right', 'left']];
+
+			sectionContainer.reNewAllSections(true);
+			this._syncTileContainerSize();
+		}
+	},
+
+	_handleSheetGeometryDataMsg: function (jsonMsgObj, differentSheet) {
+		// When an autofilter change is incoming, remember which row sits at
+		// the top of the view right now, so we can keep it there after the
+		// geometry update. The cached view range is only refreshed on header
+		// updates, not on every scroll, so read the row from the live scroll
+		// position against the current (pre-update) geometry instead.
+		let autoFilterAnchorRow = -1;
+		if (this.sheetGeometry && this.sheetGeometry.autoFilterChanged) {
+			this.sheetGeometry.setViewArea(
+				new cool.Point(app.activeDocument.activeLayout.viewedRectangle.x1, app.activeDocument.activeLayout.viewedRectangle.y1),
+				new cool.Point(app.activeDocument.activeLayout.viewedRectangle.width, app.activeDocument.activeLayout.viewedRectangle.height));
+			autoFilterAnchorRow = this.sheetGeometry.getViewRowRange().start;
+		}
+
+		if (!this.sheetGeometry) {
+			this._sheetGeomFirstWait = false;
+			this.sheetGeometry = new cool.SheetGeometry(jsonMsgObj,
+				app.tile.size.x, app.tile.size.y,
+				RenderManager.tileSize, this._selectedPart, this._selectedPartHash());
+
+			app.sectionContainer.addSection(new cool.CornerHeader());
+			app.sectionContainer.addSection(new app.definitions.rowHeader());
+			app.sectionContainer.addSection(new app.definitions.columnHeader());
+		}
+		else {
+			this.sheetGeometry.update(jsonMsgObj, /* checkCompleteness */ false, this._selectedPart,
+				this._selectedPartHash());
+		}
+
+		this._replayPrintTwipsMsgs(differentSheet);
+
+		if (this.sheetGeometry.autoFilterChanged) {
+			this.sheetGeometry.autoFilterChanged = false;
+			const targetData = this.sheetGeometry.getRowsGeometry().getElementData(autoFilterAnchorRow);
+			if (targetData) {
+				app.activeDocument.activeLayout.scrollTo(
+					app.activeDocument.activeLayout.viewedRectangle.pX1,
+					targetData.startpos);
+			}
+		} else {
+			this.sheetGeometry.setViewArea(
+				new cool.Point(app.activeDocument.activeLayout.viewedRectangle.x1, app.activeDocument.activeLayout.viewedRectangle.y1),
+				new cool.Point(app.activeDocument.activeLayout.viewedRectangle.width, app.activeDocument.activeLayout.viewedRectangle.height));
+		}
+
+		this._addRemoveGroupSections();
+
+		console.log('debug: got sheetGeometry: this._rtlParts = ' + this._rtlParts + ' this._selectedPart = ' + this._selectedPart);
+
+		this._adjustCanvasSectionsForLayoutChange();
+
+		this._updateHeadersGridLines(undefined, true /* updateCols */,
+			true /* updateRows */);
+
+		this.dontSendSplitPosToCore = true;
+		this.setSplitPosFromCell();
+		this.dontSendSplitPosToCore = false;
+
+		app.sectionContainer.reNewAllSections(true);
+		this._syncTileContainerSize();
+
+		this._map.fire('sheetgeometrychanged');
+	},
+
+	// Calculates the split position in (core-pixels) from the split-cell.
+	setSplitPosFromCell: function (forceSplittersUpdate) {
+		if (!this.sheetGeometry || !this._splitPanesContext) {
+			return;
+		}
+
+		this._splitPanesContext.setSplitPosFromCell(forceSplittersUpdate);
+	},
+
+	// Calculates the split-cell from the split position in (core-pixels).
+	setSplitCellFromPos: function () {
+
+		if (!this.sheetGeometry || !this._splitPanesContext) {
+			return;
+		}
+
+		this._splitPanesContext.setSplitCellFromPos();
+	},
+
+	_switchSplitPanesContext: function () {
+
+		if (!this.hasSplitPanesSupport()) {
+			return;
+		}
+
+		if (!this._splitPaneCache) {
+			this._splitPaneCache = {};
+		}
+
+		window.app.console.assert(typeof this._selectedPart === 'number', 'invalid selectedPart');
+
+		var spContext = this._splitPaneCache[this._selectedPart];
+		if (!spContext) {
+			spContext = new cool.CalcSplitPanesContext(this);
+			this._splitPaneCache[this._selectedPart] = spContext;
+		}
+
+		this._splitPanesContext = spContext;
+		if (this.sheetGeometry) {
+			// Force update of the splitter lines.
+			this.setSplitPosFromCell(true);
+		}
+
+		var splitPos = spContext.getSplitPos();
+		app.calc.splitCoordinate.pX = Math.round(splitPos.x * app.dpiScale);
+		app.calc.splitCoordinate.pY = Math.round(splitPos.y * app.dpiScale);
+	},
+
+	_onRowColSelCount: function (state) {
+		if (state.trim() !== '') {
+			var rowCount = parseInt(state.split(', ')[0].trim().split(' ')[0].replace(',', '').replace(',', ''));
+			var columnCount = parseInt(state.split(', ')[1].trim().split(' ')[0].replace(',', '').replace(',', ''));
+			if (rowCount === app.calc.maxRowCount)
+				this._map.wholeColumnSelected = true;
+			else
+				this._map.wholeColumnSelected = false;
+
+			if (columnCount === app.calc.maxColumnCount)
+				this._map.wholeRowSelected = true;
+			else
+				this._map.wholeRowSelected = false;
+		}
+		else {
+			this._map.wholeColumnSelected = false;
+			this._map.wholeRowSelected = false;
+		}
+	},
+
+	_onCommandStateChanged: function (e) {
+
+		if (e.commandName === '.uno:FreezePanesColumn') {
+			this._onSplitStateChanged(e, true /* isSplitCol */);
+		}
+		else if (e.commandName === '.uno:FreezePanesRow') {
+			this._onSplitStateChanged(e, false /* isSplitCol */);
+		}
+		else if (e.commandName === '.uno:RowColSelCount') {
+			// We also call the function when state is empty, because row/column variables should be set.
+			if (e.state.trim() === '' || e.state.startsWith('Selected'))
+				this._onRowColSelCount(e.state.replace('Selected:', '').replace('row', '').replace('column', '').replace('s', ''));
+		}
+		else if (e.commandName === '.uno:InsertMode') {
+			/* If we get textselection message from core:
+				When insertMode is active:  User is selecting some text.
+				When insertMode is passive: User is selecting cells.
+			*/
+			this.insertMode = e.state.trim() === '' ? false: true;
+			if (!this.insertMode) {
+				app.setCursorVisibility(false);
+				if (this._map._docLayer._cursorMarker)
+					this._map._docLayer._cursorMarker.remove();
+
+				var grid = document.getElementById('document-canvas');
+				grid.classList.add('spreadsheet-cursor');
+				grid.style.cursor = '';
+			}
+		}
+		else if (e.commandName === '.uno:ToggleSheetGrid') {
+			let trimmedState = e.state.trim();
+			// Disabled mean we don't change the sheet grid state.
+			if (trimmedState != 'disabled') {
+				let newState = trimmedState === 'true';
+				if (this._sheetGrid != newState) {
+					this._sheetGrid = newState;
+					app.sectionContainer.requestReDraw();
+				}
+			}
+		}
+		else if (e.commandName === 'AutoFilterInfo') {
+			app.calc.filterPopupCell = { 'popupId': e.state.popupId, 'row': e.state.row, 'column': e.state.column };
+		}
+		else if (e.commandName === 'AutoFilterChange')
+		{
+			this.sheetGeometry.autoFilterChanged = true;
+		}
+		else if (e.commandName === 'PivotTableFilterInfo') {
+			app.calc.filterPopupCell = { 'popupId': e.state.popupId, 'row': e.state.row, 'column': e.state.column };
+		}
+		else if (e.commandName === 'CellRangeMarker') {
+			this._onCellRangeMarkerMsg(e.state);
+		}
+		else if (e.commandName === 'CellFormulaError') {
+			this._onCellFormulaError(e.state);
+		}
+	},
+
+	// Cells the engine wants marked out. A kind of marker owns the ranges under its name, each
+	// given as "startColumn, startRow, endColumn, endRow". No ranges clears the kind.
+	_onCellRangeMarkerMsg: function (state) {
+		if (!state || !state.name)
+			return;
+
+		if (!state.cellRanges || !state.cellRanges.length) {
+			this._cellRangeMarkerSection.clearMarkers(state.name);
+			return;
+		}
+
+		const cellRanges = state.cellRanges.map(function (cellRange) {
+			return this._parseCellRange(cellRange);
+		}, this);
+
+		this._cellRangeMarkerSection.setMarkers(state.name, cellRanges, state.part, {
+			color: state.color ? '#' + state.color : undefined,
+			dashed: state.dashed,
+			fillOpacity: state.fillOpacity,
+			handleCommand: state.handleCommand });
+	},
+
+	_onSplitStateChanged: function (e, isSplitCol) {
+		if (!this._splitPanesContext) {
+			return;
+		}
+
+		if (!this._splitCellState) {
+			this._splitCellState = new cool.Point(-1, -1);
+		}
+
+		if (!e.state || e.state.length === 0) {
+			window.app.console.warn('Empty argument for ' + e.commandName);
+			return;
+		}
+
+		var values = e.state.split('/');
+		var newSplitIndex = Math.floor(parseInt(values[0]));
+		window.app.console.assert(!isNaN(newSplitIndex) && newSplitIndex >= 0, 'invalid argument for ' + e.commandName);
+
+		// This stores the current split-cell state of core, so this should not be modified.
+		this._splitCellState[isSplitCol ? 'x' : 'y'] = newSplitIndex;
+
+		if (!this.options.syncSplits) {
+			return;
+		}
+
+		var changed = isSplitCol ? this._splitPanesContext.setSplitCol(newSplitIndex) :
+			this._splitPanesContext.setSplitRow(newSplitIndex);
+
+		if (changed) {
+			// newSplitIndex just came from core, so it is already authoritative. Converting
+			// it to a pixel position and back to an index (as setSplitPosFromCell() does) can
+			// round to a different index at an exact span boundary (e.g. right after a run of
+			// hidden columns), and re-sending that rounded index would overwrite the correct
+			// one core just told us about.
+			this.dontSendSplitPosToCore = true;
+			this.setSplitPosFromCell();
+			this.dontSendSplitPosToCore = false;
+		}
+	},
+
+	sendSplitIndex: function (newSplitIndex, isSplitCol) {
+
+		if (!this._map.isEditMode() || !this._splitCellState || !this.options.syncSplits) {
+			return false;
+		}
+
+		var splitColState = this._splitCellState.x;
+		var splitRowState = this._splitCellState.y;
+		if (splitColState === -1 || splitRowState === -1) {
+			// Did not get the 'first' FreezePanesColumn/FreezePanesRow messages from core yet.
+			return false;
+		}
+
+		var currentState = isSplitCol ? splitColState : splitRowState;
+		if (currentState === newSplitIndex) {
+			return false;
+		}
+
+		var unoName = isSplitCol ? 'FreezePanesColumn' : 'FreezePanesRow';
+		var command = {};
+		command['Index'] = {
+			type: 'int32',
+			value: newSplitIndex
+		};
+
+		this._map.sendUnoCommand('.uno:' + unoName, command);
+		return true;
+	},
+
+	_onCommandValuesMsg: function (textMsg) {
+		var jsonIdx = textMsg.indexOf('{');
+		if (jsonIdx === -1)
+			return;
+
+		var values = JSON.parse(textMsg.substring(jsonIdx));
+		if (!values) {
+			return;
+		}
+
+		var comment;
+		if (values.commandName === '.uno:ViewRowColumnHeaders') {
+			this._updateHeadersGridLines(values);
+
+		} else if (values.commandName === '.uno:SheetGeometryData') {
+			var selectedHash = this._selectedPartHash();
+			if (values.hash !== undefined && selectedHash !== undefined &&
+				String(values.hash) !== String(selectedHash)) {
+				// The reply describes the sheet the server view showed when it answered,
+				// and the sheets changed since, so the selected sheet is asked for again.
+				this._sheetGeomFirstWait = false;
+				this.requestSheetGeometryData();
+				return;
+			}
+			var differentSheet = this.sheetGeometry === undefined || this._selectedPart !== this.sheetGeometry.getPart();
+			// duplicate sheet-geometry for same sheet triggers replay of other messages that
+			// disrupt the view restore during sheet switch.
+			if (this._oldSheetGeomMsg === textMsg && !differentSheet)
+				return;
+
+			this._oldSheetGeomMsg = textMsg;
+			this._handleSheetGeometryDataMsg(values, differentSheet);
+			this._syncTileContainerSize();
+		} else if (values.comments && !window.mode.isInteractivePreview()) {
+			values.comments.forEach(function(comment) {
+				comment.id = String(comment.id);
+			});
+			app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).importComments(values.comments);
+		} else if (values.commentsPos && !window.mode.isInteractivePreview()) {
+			var section = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
+			// invalidate all comments
+			section.sectionProperties.commentList.forEach(function (comment) {
+				comment.valid = false;
+			});
+			for (var index in values.commentsPos) {
+				comment = values.commentsPos[index];
+				var commentObject = section.getComment(String(comment.id));
+				if (commentObject) {
+					if (commentObject.sectionProperties.data.tab !== comment.tab) {
+						// tabs can be moved around and we need to update the tab because the id is still valid.
+						commentObject.sectionProperties.data.tab = comment.tab;
+					}
+					commentObject.valid = true;
+
+					// turn cell range string into Bounds
+					commentObject.sectionProperties.data.cellRange = this._parseCellRange(comment.cellRange);
+
+				}
+			}
+
+			section.onCommentsDataUpdate();
+
+		} else {
+			window.L.CanvasTileLayer.prototype._onCommandValuesMsg.call(this, textMsg);
+		}
+	},
+
+	_onTextSelectionMsg: function (textMsg) {
+		window.L.CanvasTileLayer.prototype._onTextSelectionMsg.call(this, textMsg);
+		// If this is a cellSelection message, user shouldn't be editing a cell. Below check is for ensuring that.
+		if ((this.insertMode === false || app.file.textCursor.visible === false) && app.calc.cellCursorVisible) {
+			// When insertMode is false, this is a cell selection message.
+			textMsg = textMsg.replace('textselection:', '').trim();
+			if (textMsg !== 'EMPTY' && textMsg !== '') {
+				this._cellSelections = this._getRawRectangles(textMsg);
+
+				this._cellSelections = this._cellSelections.map(function(element) {
+					return new cool.SimpleRectangle(element[0], element[1], element[2], element[3]);
+				});
+			}
+			else {
+				this._cellSelections = Array(0);
+			}
+			this._refreshRowColumnHeaders();
+		}
+	},
+
+	allowDrawing: function () {
+		// Drawing is disabled from CalcTileLayer construction, enable it now.
+		this._gotFirstCellCursor = true;
+	},
+
+	_onCellCursorMsg: function (textMsg) {
+		window.L.CanvasTileLayer.prototype._onCellCursorMsg.call(this, textMsg);
+		this._refreshRowColumnHeaders();
+		if (!this._gotFirstCellCursor) {
+			this.allowDrawing();
+			RenderManager.update();
+			this.enableDrawing();
+		}
+	},
+
+	_getEditCursorRectangle: function (msgObj) {
+
+		if (!this.options.printTwipsMsgsEnabled || !this.sheetGeometry ||
+			!Object.prototype.hasOwnProperty.call(msgObj, 'relrect') || !Object.prototype.hasOwnProperty.call(msgObj, 'refpoint')) {
+			// 1) non-print-twips messaging mode OR
+			// 2) the edit-cursor belongs to draw/chart objects.
+			return window.L.CanvasTileLayer.prototype._getEditCursorRectangle.call(this, msgObj);
+		}
+
+		if (typeof msgObj !== 'object') {
+			window.app.console.error('invalid edit cursor message');
+			return undefined;
+		}
+
+		var relrect = cool.Bounds.parse(msgObj.relrect);
+		var refpoint = cool.Point.parse(msgObj.refpoint);
+		refpoint = this.sheetGeometry.getTileTwipsPointFromPrint(refpoint);
+		return relrect.add(refpoint);
+	},
+
+	_getTextSelectionRectangles: function (textMsg) {
+
+		if (!this.options.printTwipsMsgsEnabled || !this.sheetGeometry) {
+			return window.L.CanvasTileLayer.prototype._getTextSelectionRectangles.call(this, textMsg);
+		}
+
+		if (typeof textMsg !== 'string') {
+			window.app.console.error('invalid text selection message');
+			return [];
+		}
+
+		var refpointDelim = '::';
+		var delimIndex = textMsg.indexOf(refpointDelim);
+		if (delimIndex === -1) {
+			// No refpoint information available, treat it as cell-range selection rectangle.
+			var rangeRectArray = cool.Bounds.parseArray(textMsg);
+			rangeRectArray = rangeRectArray.map(function (rect) {
+				return this._convertToTileTwipsSheetArea(rect);
+			}, this);
+			return rangeRectArray;
+		}
+
+		var refpoint = cool.Point.parse(textMsg.substring(delimIndex + refpointDelim.length));
+		refpoint = this.sheetGeometry.getTileTwipsPointFromPrint(refpoint);
+
+		var rectArray = cool.Bounds.parseArray(textMsg.substring(0, delimIndex));
+		rectArray.forEach(function (rect) {
+			rect._add(refpoint); // compute absolute coordinates and update in-place.
+		});
+
+		return rectArray;
+	},
+
+	getSnapDocPosX: function (docPosX, unit) {
+		if (!this.options.sheetGeometryDataEnabled) {
+			return docPosX;
+		}
+
+		unit = unit || 'corepixels';
+
+		return this.sheetGeometry.getSnapDocPosX(docPosX, unit);
+	},
+
+	getSnapDocPosY: function (docPosY, unit) {
+		if (!this.options.sheetGeometryDataEnabled) {
+			return docPosY;
+		}
+
+		unit = unit || 'corepixels';
+
+		return this.sheetGeometry.getSnapDocPosY(docPosY, unit);
+	},
+
+	getSplitPanesContext: function () {
+		if (!this.hasSplitPanesSupport()) {
+			return undefined;
+		}
+
+		return this._splitPanesContext;
+	},
+
+	getMaxDocSize: function () {
+
+		if (this.sheetGeometry) {
+			return this.sheetGeometry.getSize('corepixels');
+		}
+
+		return this._twipsToPixels(new cool.Point(app.activeDocument.fileSize.x, app.activeDocument.fileSize.y));
+	},
+
+	// Scroll by the smallest amount that brings the whole cell cursor inside one of the
+	// view panes. The view stays where it is when the cell cursor is already visible.
+	_scrollCellCursorIntoView: function () {
+		const scroll = this._calculateScrollForNewCellCursor();
+		if (scroll.x !== 0 || scroll.y !== 0) {
+			scroll.x += app.activeDocument.activeLayout.viewedRectangle.x1;
+			scroll.y += app.activeDocument.activeLayout.viewedRectangle.y1;
+			app.activeDocument.activeLayout.scrollTo(scroll.pX, scroll.pY);
+		}
+	},
+
+	_calculateScrollForNewCellCursor: function () {
+		var scroll = new cool.SimplePoint(0, 0);
+
+		if (!app.calc.cellCursorVisible) {
+			return scroll;
+		}
+
+		let paneRectangles = app.getViewRectangles(); // SimpleRectangle array.
+
+		// A1 sits inside the frozen pane whenever a row and/or column is frozen, so it
+		// always looks "contained" there below, even when the scrollable pane past the
+		// freeze is left showing a stale position from before the cursor moved there.
+		// Only force that pane back to the top for an explicit Ctrl+Home: plain
+		// navigation (e.g. paging up) can also land the cursor on A1 without the user
+		// asking to see the top of the sheet, and A1 is already visible in that case.
+		const resetFreePaneToTop = this._scrollFreePaneToTopOnA1;
+		this._scrollFreePaneToTopOnA1 = false;
+		if (resetFreePaneToTop && paneRectangles.length > 1 &&
+		    app.calc.cellAddress.x === 0 && app.calc.cellAddress.y === 0) {
+			let freePane = paneRectangles[paneRectangles.length - 1];
+			scroll.x = app.calc.splitCoordinate.x - freePane.x1;
+			scroll.y = app.calc.splitCoordinate.y - freePane.y1;
+			return scroll;
+		}
+
+		let contained = false;
+		for (let i = 0; i < paneRectangles.length; i++) {
+			if (paneRectangles[i].containsRectangle(app.calc.cellCursorRectangle.toArray()))
+				contained = true;
+		}
+
+		if (contained)
+			return scroll; // No scroll needed.
+
+		var noSplit = !this._splitPanesContext || this._splitPanesContext.getSplitPos().equals(new cool.Point(0, 0));
+
+		// No split panes. Check if target cell is bigger than screen but partially visible.
+		if (noSplit && app.calc.cellCursorRectangle.intersectsRectangle(paneRectangles[0].toArray())) {
+			if (app.calc.cellCursorRectangle.width > paneRectangles[0].width || app.calc.cellCursorRectangle.height > paneRectangles[0].height)
+				return scroll; // no scroll needed.
+		}
+
+		let freePane = paneRectangles[paneRectangles.length - 1]; // Last pane, this should be the scrollable - not frozen one.
+
+		// Horizontal split.
+		if (app.calc.cellCursorRectangle.x2 > app.calc.splitCoordinate.x) {
+			scroll.x = this._freePaneScrollForAxis(
+				app.calc.cellCursorRectangle.x1, app.calc.cellCursorRectangle.x2,
+				freePane.x1, freePane.x2);
+		}
+
+		// Vertical split.
+		if (app.calc.cellCursorRectangle.y2 > app.calc.splitCoordinate.y) {
+			scroll.y = this._freePaneScrollForAxis(
+				app.calc.cellCursorRectangle.y1, app.calc.cellCursorRectangle.y2,
+				freePane.y1, freePane.y2);
+		}
+
+		return scroll;
+	},
+
+	// How far the pane past a freeze has to move on one axis to show the cell
+	// cursor, given the cursor's and the pane's start and end on that axis.
+	_freePaneScrollForAxis: function (cellStart, cellEnd, paneStart, paneEnd) {
+		if (cellEnd - cellStart > paneEnd - paneStart) {
+			// The cell is bigger than the pane, so no scroll can show all of it.
+			// Its start edge is the one worth having on screen - that is where
+			// the content of the cell begins - but only move the view when
+			// doing so gains something.
+
+			// The start edge is on screen already.
+			if (cellStart >= paneStart && cellStart <= paneEnd)
+				return 0;
+
+			// The cell covers the whole pane, so the view sits somewhere in the
+			// middle of it. Scrolling could not bring the start edge into view
+			// without leaving the cell, and the user is reading here.
+			if (cellStart <= paneStart && cellEnd >= paneEnd)
+				return 0;
+
+			// The start edge is off screen and the cell does not fill the
+			// pane, so there is room to show it. Pull it to the near edge.
+			return cellStart - paneStart;
+		}
+
+		// The cell fits, so move by as little as brings all of it into view.
+		if (cellStart < paneStart)
+			return cellStart - paneStart;
+
+		if (cellEnd > paneEnd)
+			return cellEnd - paneEnd;
+
+		return 0;
+	},
+});

@@ -1,0 +1,104 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <osl/conditn.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <comphelper/errcode.hxx>
+
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/task/InteractionClassification.hpp>
+#include <com/sun/star/task/XInteractionHandler2.hpp>
+
+#include <COKit/COKit.hxx>
+
+namespace desktop {
+    struct COKitImpl;
+    struct COKitDocumentImpl;
+}
+
+/** InteractionHandler is an interface that provides the user with various dialogs / error messages.
+
+We need an own implementation for the COKit so that we can route the
+information easily via callbacks.
+
+TODO: the callbacks are not implemented yet, we just approve any interaction
+that we get.
+*/
+class KitInteractionHandler: public cppu::WeakImplHelper<css::lang::XServiceInfo,
+                                                         css::lang::XInitialization,
+                                                         css::task::XInteractionHandler2>
+{
+private:
+    desktop::COKitImpl * m_pKit;
+    desktop::COKitDocumentImpl * m_pKitDocument;
+
+    /// Command for which we use this interaction handler (like "load", "save", "saveas", ...)
+    OString m_command;
+
+    OUString m_Password;
+    bool m_usePassword;
+    osl::Condition m_havePassword;
+
+    KitInteractionHandler(const KitInteractionHandler&) = delete;
+    KitInteractionHandler& operator=(const KitInteractionHandler&) = delete;
+
+    /** Call the COKitCallbackType::ERROR_REPORT on the COKit document (if available) or COKit lib.
+
+        The error itself is a JSON message, like:
+        {
+            "classification": "error" | "warning" | "info"
+            "kind": "network" etc.
+            "code": 403 | 404 | ...
+            "message": freeform description
+        }
+    */
+    void postError(css::task::InteractionClassification classif, const char* kind, ErrCode code, const OUString &message);
+
+    bool handleIOException(const cpo::uno::Reference<css::task::XInteractionRequest>& rRequest);
+    bool handleNetworkException(const cpo::uno::Sequence<cpo::uno::Reference<css::task::XInteractionContinuation>> &rContinuations, const cpo::uno::Any& rRequest);
+    bool handlePasswordRequest(const cpo::uno::Sequence<cpo::uno::Reference<css::task::XInteractionContinuation>> &rContinuations, const cpo::uno::Any& rRequest);
+    static bool handleFilterOptionsRequest(const cpo::uno::Sequence<cpo::uno::Reference<css::task::XInteractionContinuation>> &rContinuations, const cpo::uno::Any& rRequest);
+
+public:
+    void SetPassword(char const* pPassword);
+
+    explicit KitInteractionHandler(
+            OString command,
+            desktop::COKitImpl *,
+            desktop::COKitDocumentImpl *pKitDocumt = nullptr);
+
+    virtual ~KitInteractionHandler() override;
+
+    virtual OUString getImplementationName() override;
+
+    virtual bool supportsService(OUString const & rServiceName) override;
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+    virtual void initialize(cpo::uno::Sequence<cpo::uno::Any > const & rArguments) override;
+
+    virtual void handle(cpo::uno::Reference<css::task::XInteractionRequest> const & rRequest) override;
+
+    virtual bool handleInteractionRequest(const cpo::uno::Reference<css::task::XInteractionRequest>& Request) override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

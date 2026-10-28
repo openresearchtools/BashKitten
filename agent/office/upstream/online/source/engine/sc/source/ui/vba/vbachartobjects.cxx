@@ -1,0 +1,209 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <com/sun/star/table/XTableChartsSupplier.hpp>
+#include <com/sun/star/table/XTableChart.hpp>
+#include <com/sun/star/script/BasicErrorException.hpp>
+#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <ooo/vba/excel/XlChartType.hpp>
+
+#include "vbachartobjects.hxx"
+#include <docuno.hxx>
+#include "vbachartobject.hxx"
+#include <docsh.hxx>
+#include <cellsuno.hxx>
+
+#include <string_view>
+#include <utility>
+#include <vector>
+#include <basic/sberrors.hxx>
+#include <comphelper/sequence.hxx>
+#include <comphelper/servicehelper.hxx>
+#include <comphelper/diagnose_ex.hxx>
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+using namespace ::ooo::vba;
+
+namespace {
+
+class ChartObjectEnumerationImpl : public EnumerationHelperImpl
+{
+    uno::Reference< drawing::XDrawPageSupplier > xDrawPageSupplier;
+
+public:
+    /// @throws uno::RuntimeException
+    ChartObjectEnumerationImpl( const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< container::XEnumeration >& xEnumeration, uno::Reference< drawing::XDrawPageSupplier >  _xDrawPageSupplier, const uno::Reference< XHelperInterface >& _xParent ) : EnumerationHelperImpl( _xParent, xContext, xEnumeration ), xDrawPageSupplier(std::move( _xDrawPageSupplier )) {}
+    virtual cpo::uno::Any nextElement(  ) override
+    {
+        cpo::uno::Any ret;
+
+        try
+        {
+            uno::Reference< table::XTableChart > xTableChart( m_xEnumeration->nextElement(), uno::UNO_QUERY_THROW );
+            // parent Object is sheet
+            ret <<= uno::Reference< excel::XChartObject > ( new ScVbaChartObject(  m_xParent, m_xContext, xTableChart, xDrawPageSupplier ) );
+        }
+        catch (const lang::WrappedTargetException&)
+        {
+            throw;
+        }
+        catch (const container::NoSuchElementException&)
+        {
+            throw;
+        }
+        catch (const cpo::uno::RuntimeException&)
+        {
+            throw;
+        }
+        catch (const cpo::uno::Exception&)
+        {
+            cpo::uno::Any anyEx(cppu::getCaughtException());
+            throw lang::WrappedTargetException(
+                    u"Error creating ScVbaChartObject!"_ustr,
+                    getXWeak(),
+                    anyEx );
+        }
+        return ret;
+    }
+};
+
+}
+
+ScVbaChartObjects::ScVbaChartObjects( const cpo::uno::Reference< ov::XHelperInterface >& _xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& _xContext, const cpo::uno::Reference< css::table::XTableCharts >& _xTableCharts, uno::Reference< drawing::XDrawPageSupplier >  _xDrawPageSupplier ) : ChartObjects_BASE(_xParent, _xContext, cpo::uno::Reference< css::container::XIndexAccess >( _xTableCharts, cpo::uno::UNO_QUERY ) ), xTableCharts( _xTableCharts ) , xDrawPageSupplier(std::move( _xDrawPageSupplier ))
+{
+
+}
+
+void
+ScVbaChartObjects::removeByName(const OUString& _sChartName)
+{
+    xTableCharts->removeByName( _sChartName );
+}
+
+cpo::uno::Sequence< OUString >
+ScVbaChartObjects::getChartObjectNames() const
+{
+    cpo::uno::Sequence< OUString > sChartNames;
+    try
+    {
+        // c++ hackery
+        uno::Reference< cpo::uno::XInterface > xIf( xDrawPageSupplier, uno::UNO_QUERY_THROW );
+        ScCellRangesBase* pUno = dynamic_cast< ScCellRangesBase* >( xIf.get() );
+        ScDocShell* pDocShell = nullptr;
+        if ( !pUno )
+            throw cpo::uno::RuntimeException(u"Failed to obtain the impl class from the drawpage"_ustr );
+        pDocShell = pUno->GetDocShell();
+        if ( !pDocShell )
+            throw cpo::uno::RuntimeException(u"Failed to obtain the docshell implclass"_ustr );
+
+        uno::Reference< sheet::XSpreadsheets > xSpreadsheets = pDocShell->GetModel()->getSheets();
+        std::vector< OUString > aChartNamesVector;
+
+        const cpo::uno::Sequence< OUString > sSheetNames = xSpreadsheets->getElementNames();
+        for (const auto& rSheetName : sSheetNames)
+        {
+            uno::Reference< table::XTableChartsSupplier > xLocTableChartsSupplier( xSpreadsheets->getByName(rSheetName), uno::UNO_QUERY_THROW );
+            const cpo::uno::Sequence< OUString > scurchartnames = xLocTableChartsSupplier->getCharts()->getElementNames();
+            aChartNamesVector.insert( aChartNamesVector.end(), scurchartnames.begin(), scurchartnames.end() );
+        }
+        sChartNames = comphelper::containerToSequence( aChartNamesVector );
+    }
+    catch (cpo::uno::Exception& )
+    {
+        throw script::BasicErrorException( OUString(), uno::Reference< cpo::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
+    }
+    return sChartNames;
+}
+
+// XChartObjects
+cpo::uno::Any
+ScVbaChartObjects::Add( double _nX, double _nY, double _nWidth, double _nHeight )
+{
+    try
+    {
+        cpo::uno::Sequence< table::CellRangeAddress > aCellRangeAddress( 1 );
+        awt::Rectangle aRectangle;
+        aRectangle.X =  Millimeter::getInHundredthsOfOneMillimeter(_nX);
+        aRectangle.Y = Millimeter::getInHundredthsOfOneMillimeter(_nY);
+        aRectangle.Width = Millimeter::getInHundredthsOfOneMillimeter(_nWidth);
+        aRectangle.Height = Millimeter::getInHundredthsOfOneMillimeter(_nHeight);
+        // Note the space at the end of the stem ("Chart "). In ChartSheets only "Chart" is the stem
+        OUString sPersistChartName = ContainerUtilities::getUniqueName( getChartObjectNames(), u"Chart "_ustr , std::u16string_view(), 1);
+        xTableCharts->addNewByName(sPersistChartName, aRectangle, aCellRangeAddress, true, false );
+        uno::Reference< excel::XChartObject > xChartObject( getItemByStringIndex( sPersistChartName ), uno::UNO_QUERY_THROW );
+        xChartObject->getChart()->setChartType(excel::XlChartType::xlColumnClustered);
+        return cpo::uno::Any( xChartObject );
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DBG_UNHANDLED_EXCEPTION("sc");
+    }
+    return aNULL();
+}
+void ScVbaChartObjects::Delete(  )
+{
+    const cpo::uno::Sequence< OUString > sChartNames = xTableCharts->getElementNames();
+    for (const auto& rChartName : sChartNames)
+        removeByName(rChartName);
+}
+
+// XEnumerationAccess
+
+uno::Reference< container::XEnumeration >
+ScVbaChartObjects::createEnumeration()
+{
+    cpo::uno::Reference< container::XEnumerationAccess > xEnumAccess( xTableCharts, uno::UNO_QUERY_THROW );
+    return new ChartObjectEnumerationImpl( mxContext, xEnumAccess->createEnumeration(), xDrawPageSupplier, getParent() /* sheet */);
+}
+
+// XElementAccess
+
+cpo::uno::Type
+ScVbaChartObjects::getElementType()
+{
+    return cppu::UnoType<excel::XChartObject>::get();
+}
+
+// ScVbaCollectionBaseImpl
+cpo::uno::Any
+ScVbaChartObjects::createCollectionObject( const cpo::uno::Any& aSource )
+{
+    uno::Reference< table::XTableChart > xTableChart( aSource, uno::UNO_QUERY_THROW );
+    // correct parent object is sheet
+    return cpo::uno::Any( uno::Reference< excel::XChartObject > ( new ScVbaChartObject( getParent(), mxContext, xTableChart, xDrawPageSupplier ) ) );
+}
+
+OUString
+ScVbaChartObjects::getServiceImplName()
+{
+    return u"ScVbaChartObjects"_ustr;
+}
+
+cpo::uno::Sequence<OUString>
+ScVbaChartObjects::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const sNames
+    {
+        u"ooo.vba.excel.ChartObjects"_ustr
+    };
+    return sNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

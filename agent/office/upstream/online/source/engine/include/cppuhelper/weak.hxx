@@ -1,0 +1,165 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_CPPUHELPER_WEAK_HXX
+#define INCLUDED_CPPUHELPER_WEAK_HXX
+
+#include <cassert>
+#include <cstddef>
+#include <osl/interlck.h>
+#include <rtl/alloc.h>
+#include <cpo/uno/XWeak.hpp>
+#include <cppuhelper/cppuhelperdllapi.h>
+
+
+namespace cppu
+{
+
+class OWeakConnectionPoint;
+
+/** Base class to implement a UNO object supporting weak references, i.e. the object can be held
+    weakly (by a cpo::uno::WeakReference).
+    This implementation copes with reference counting.  Upon last release(), the virtual dtor
+    is called.
+
+    @derive
+    Inherit from this class and delegate acquire()/ release() calls.
+*/
+class CPPUHELPER_DLLPUBLIC OWeakObject : public cpo::uno::XWeak
+{
+    friend class OWeakConnectionPoint;
+
+protected:
+    /** Virtual dtor.
+
+        @attention
+        Despite the fact that a RuntimeException is allowed to be thrown, you must not throw any
+        exception upon destruction!
+    */
+    virtual ~OWeakObject() COVERITY_NOEXCEPT_FALSE;
+
+    /** disposes and resets m_pWeakConnectionPoint
+        @pre
+            m_refCount equals 0
+    */
+    void    disposeWeakConnectionPoint();
+
+    /** reference count.
+
+        @attention
+        Don't modify manually!  Use acquire() and release().
+    */
+    oslInterlockedCount m_refCount;
+
+    /// @cond INTERNAL
+
+    /** Container of all weak reference listeners and the connection point from the weak reference.
+    */
+    OWeakConnectionPoint * m_pWeakConnectionPoint;
+
+    /** reserved for future use. do not use.
+    */
+    void * m_pReserved;
+
+    /// @endcond
+
+public:
+    /** Default Constructor.  Sets the reference count to zero.
+    */
+    OWeakObject()
+        : m_refCount( 0 )
+        , m_pWeakConnectionPoint( NULL )
+        , m_pReserved(NULL)
+        {}
+
+    /** Dummy copy constructor.  Set the reference count to zero.
+    */
+    OWeakObject( const OWeakObject & )
+        : cpo::uno::XWeak()
+        , m_refCount( 0 )
+        , m_pWeakConnectionPoint( NULL )
+        , m_pReserved(NULL)
+        {}
+    /** Dummy assignment operator. Does not affect reference count.
+
+        @return this OWeakObject
+    */
+    OWeakObject & operator = ( const OWeakObject &)
+        { return *this; }
+
+    /** Basic queryInterface() implementation supporting cpo::uno::XWeak and
+        cpo::uno::XInterface.
+
+        @param rType demanded type
+        @return demanded type or empty any
+    */
+    virtual cpo::uno::Any queryInterface(
+        const cpo::uno::Type & rType ) override;
+    /** increasing m_refCount
+    */
+    virtual void acquire()
+        noexcept override;
+    /** decreasing m_refCount
+    */
+    virtual void release()
+        noexcept override;
+
+    /** XWeak::queryAdapter() implementation
+
+        @return a cpo::uno::XAdapter reference
+    */
+    virtual cpo::uno::Reference< cpo::uno::XAdapter > queryAdapter() override;
+
+    /** Cast operator to XInterface reference.
+
+        @return XInterface reference
+    */
+    operator cpo::uno::Reference< cpo::uno::XInterface > ()
+        { return this; }
+
+    cpo::uno::XWeak* getXWeak() { return this; }
+};
+
+/// @cond INTERNAL
+/** Convenience function for constructor-based service implementations.
+
+    To be used like:
+
+    cpo::uno::XInterface * FOO_constructor_function(...) {
+        return cppu::acquire(new FOO(...));
+    }
+
+    @param instance
+    Newly created instance that should be acquired.
+*/
+static inline cpo::uno::XInterface * acquire(OWeakObject * instance)
+{
+    assert(instance != NULL);
+    instance->acquire();
+    return instance;
+}
+
+static inline cpo::uno::XWeak* getXWeak(OWeakObject* instance) { return instance; }
+/// @endcond
+
+}
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

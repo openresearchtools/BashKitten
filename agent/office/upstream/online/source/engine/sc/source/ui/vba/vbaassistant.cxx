@@ -1,0 +1,115 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <ooo/vba/office/MsoAnimationType.hpp>
+
+#include"vbaassistant.hxx"
+
+using namespace com::sun::star;
+using namespace ::cpo;
+using namespace ooo::vba;
+
+using namespace ooo::vba::office::MsoAnimationType;
+
+ScVbaAssistant::ScVbaAssistant( const uno::Reference< XHelperInterface >& rParent, const uno::Reference< cpo::uno::XComponentContext >& rContext ): ScVbaAssistantImpl_BASE(rParent, rContext)
+{
+    m_bIsVisible = false;
+    m_nPointsLeft = 795;
+    m_nPointsTop = 248;
+    m_nAnimation = msoAnimationIdle;
+}
+
+ScVbaAssistant::~ScVbaAssistant()
+{
+}
+
+bool ScVbaAssistant::getVisible()
+{
+    return m_bIsVisible;
+}
+
+void ScVbaAssistant::setVisible( bool bVisible )
+{
+    m_bIsVisible = bVisible;
+}
+
+bool ScVbaAssistant::getOn()
+{
+    return false;
+}
+
+void ScVbaAssistant::setOn( bool bOn )
+{
+    setVisible( bOn );
+}
+
+::sal_Int32
+ScVbaAssistant::getTop()
+{
+    return m_nPointsTop;
+}
+void
+ScVbaAssistant::setTop( ::sal_Int32 _top )
+{
+    m_nPointsTop = _top;
+}
+::sal_Int32
+ScVbaAssistant::getLeft()
+{
+    return m_nPointsLeft;
+}
+void
+ScVbaAssistant::setLeft( ::sal_Int32 _left )
+{
+    m_nPointsLeft = _left;
+}
+::sal_Int32
+ScVbaAssistant::getAnimation()
+{
+    return m_nAnimation;
+}
+void
+ScVbaAssistant::setAnimation( ::sal_Int32 _animation )
+{
+    m_nAnimation = _animation;
+}
+
+OUString
+ScVbaAssistant::Name(  )
+{
+    return u"Clippit"_ustr;
+}
+
+OUString
+ScVbaAssistant::getServiceImplName()
+{
+    return u"ScVbaAssistant"_ustr;
+}
+
+cpo::uno::Sequence< OUString >
+ScVbaAssistant::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.Assistant"_ustr
+    };
+    return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

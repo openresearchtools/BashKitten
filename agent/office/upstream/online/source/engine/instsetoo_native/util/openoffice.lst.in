@@ -1,0 +1,60 @@
+Globals
+{
+    Settings
+    {
+        variables
+        {
+            LIBO_VERSION_MAJOR @LIBO_VERSION_MAJOR@
+            UREPACKAGEVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@.@LIBO_VERSION_MICRO@
+            REFERENCEOOOMAJORMINOR 4.1
+            WINDOWSBASISROOTNAME Collabora Office
+            UNIXBASISROOTNAME collaboraoffice
+            HIDELICENSEDIALOG 0
+            PACKAGEPREFIX
+            BASISPACKAGEPREFIX collaboraofficebasis
+            UREPACKAGEPREFIX collaboraoffice
+            PROGRESSBARCOLOR 0,0,0
+            PROGRESSSIZE 460,6
+            PROGRESSSIZEHIGH 617,12
+            PROGRESSPOSITION 26,235
+            PROGRESSPOSITIONHIGH 46,212
+            PROGRESSFRAMECOLOR 102,102,102
+            PROGRESSTEXTBASELINE 230
+            PROGRESSTEXTCOLOR 255,255,255
+            NATIVEPROGRESS false
+            OOOVENDOR Collabora Productivity Ltd.
+        }
+    }
+}
+
+CollaboraOffice
+{
+    Settings
+    {
+        variables
+        {
+            PRODUCTNAME Collabora Office
+            PRODUCTVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
+            PRODUCTEXTENSION .@LIBO_VERSION_MICRO@.@LIBO_VERSION_PATCH@
+            POSTVERSIONEXTENSION
+            BUNDLEIDENTIFIER @MACOSX_BUNDLE_IDENTIFIER@
+            BRANDPACKAGEVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
+            USERDIRPRODUCTVERSION 4
+            BASEPRODUCTVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
+            UPDATEURL https://update.libreoffice.org/check.php
+            PACKAGEVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@.@LIBO_VERSION_MICRO@
+            PACKAGEREVISION @LIBO_VERSION_PATCH@
+            LICENSENAME @LICENSE@
+            ROOTMODULEGID gid_Module_Root
+            SPELLCHECKERFILE spellchecker_selection.txt
+            CHANGETARGETDIR 1
+        }
+        active          1
+        compression     5
+        script          setup_osl
+        downloadname    CollaboraOffice_{productversion}_{os}_install_{languages}
+        langpackdownloadname    CollaboraOffice_{productversion}_languagepack_{os}_install_{languages}
+        helppackdownloadname    CollaboraOffice_{productversion}_helppack_{os}_install_{languages}
+        include         {installscriptdir},{customtargetpath}/setup_native,{filelistpath}/PackageSet,{filelistpath}/GeneratedPackage,{filelistpath}/Package,{filelistpath}/ExtensionPackage,{filelistpath}/CustomTarget/helpcontent2/help3xsl/filelists,{extensionsdir},{licensepath},{customtargetpath}/readlicense_oo/license,{packinfopath}
+    }
+}

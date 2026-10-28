@@ -1,0 +1,123 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/io/XPersistObject.hpp>
+#include <com/sun/star/awt/XTabControllerModel.hpp>
+#include <com/sun/star/lang/XTypeProvider.hpp>
+#include <cppuhelper/weakagg.hxx>
+#include <osl/mutex.hxx>
+
+#include <vector>
+
+struct UnoControlModelEntry;
+typedef ::std::vector< UnoControlModelEntry* > UnoControlModelEntryListBase;
+
+class UnoControlModelEntryList
+{
+private:
+    UnoControlModelEntryListBase maList;
+    OUString maGroupName;
+
+public:
+                    UnoControlModelEntryList();
+                    ~UnoControlModelEntryList();
+
+    const OUString&      GetName() const                         { return maGroupName; }
+    void                        SetName( const OUString& rName ) { maGroupName = rName; }
+
+    void    Reset();
+    void    DestroyEntry( size_t nEntry );
+    size_t  size() const;
+    UnoControlModelEntry* operator[]( size_t i ) const;
+    void push_back( UnoControlModelEntry* item );
+    void insert( size_t i, UnoControlModelEntry* item );
+};
+
+struct UnoControlModelEntry
+{
+    bool        bGroup;
+    union
+    {
+        cpo::uno::Reference< css::awt::XControlModel >* pxControl;
+        UnoControlModelEntryList*   pGroup;
+    };
+};
+
+#define CONTROLPOS_NOTFOUND 0xFFFFFFFF
+
+class StdTabControllerModel final : public css::awt::XTabControllerModel,
+                                public css::lang::XServiceInfo,
+                                public css::io::XPersistObject,
+                                public css::lang::XTypeProvider,
+                                public ::cppu::OWeakAggObject
+{
+    ::osl::Mutex                maMutex;
+    UnoControlModelEntryList    maControls;
+    bool                    mbGroupControl;
+
+    ::osl::Mutex&           GetMutex() { return maMutex; }
+    sal_uInt32              ImplGetControlCount( const UnoControlModelEntryList& rList ) const;
+    void                    ImplGetControlModels( cpo::uno::Reference< css::awt::XControlModel > ** pRefs, const UnoControlModelEntryList& rList ) const;
+    static void             ImplSetControlModels( UnoControlModelEntryList& rList, const cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControlModel > >& Controls );
+    static sal_uInt32       ImplGetControlPos( const cpo::uno::Reference< css::awt::XControlModel >& rCtrl, const UnoControlModelEntryList& rList );
+
+public:
+                            StdTabControllerModel();
+                            virtual ~StdTabControllerModel() override;
+
+    // cpo::uno::XInterface
+    cpo::uno::Any  queryInterface( const cpo::uno::Type & rType ) override { return OWeakAggObject::queryInterface(rType); }
+    void                        acquire() noexcept override  { OWeakAggObject::acquire(); }
+    void                        release() noexcept override  { OWeakAggObject::release(); }
+
+    cpo::uno::Any  queryAggregation( const cpo::uno::Type & rType ) override;
+
+    // css::lang::XTypeProvider
+    cpo::uno::Sequence< cpo::uno::Type >  getTypes() override;
+    cpo::uno::Sequence< sal_Int8 >                     getImplementationId() override;
+
+    // css::awt::XTabControllerModel
+    bool getGroupControl(  ) override;
+    void setGroupControl( bool GroupControl ) override;
+    void setControlModels( const cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControlModel > >& Controls ) override;
+    cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControlModel > > getControlModels(  ) override;
+    void setGroup( const cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControlModel > >& Group, const OUString& GroupName ) override;
+    sal_Int32 getGroupCount(  ) override;
+    void getGroup( sal_Int32 nGroup, cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControlModel > >& Group, OUString& Name ) override;
+    void getGroupByName( const OUString& Name, cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControlModel > >& Group ) override;
+
+    // css::io::XPersistObject
+    OUString getServiceName(  ) override;
+    void write( const cpo::uno::Reference< css::io::XObjectOutputStream >& OutStream ) override;
+    void read( const cpo::uno::Reference< css::io::XObjectInputStream >& InStream ) override;
+
+    // XServiceInfo
+    OUString getImplementationName() override;
+
+    bool supportsService(OUString const & ServiceName) override;
+
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+};
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

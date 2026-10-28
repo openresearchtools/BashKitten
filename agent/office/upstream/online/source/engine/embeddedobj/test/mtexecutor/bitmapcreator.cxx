@@ -1,0 +1,107 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include "bitmapcreator.hxx"
+
+#include <cppuhelper/supportsservice.hxx>
+#include <vcl/bitmap.hxx>
+#include <toolkit/helper/vclunohelper.hxx>
+#include <tools/stream.hxx>
+
+using namespace ::com::sun::star;
+
+
+cpo::uno::Sequence< OUString > VCLBitmapCreator::impl_staticGetSupportedServiceNames()
+{
+    return
+    {
+        "com.sun.star.embed.BitmapCreator",
+        "com.sun.star.comp.embed.BitmapCreator"
+    };
+}
+
+
+OUString VCLBitmapCreator::impl_staticGetImplementationName()
+{
+    return OUString("com.sun.star.comp.embed.BitmapCreator");
+}
+
+
+uno::Reference< uno::XInterface > VCLBitmapCreator::impl_staticCreateSelfInstance(
+            const uno::Reference< lang::XMultiServiceFactory >& xServiceManager )
+{
+    return uno::Reference< uno::XInterface >( *new VCLBitmapCreator( xServiceManager ) );
+}
+
+
+uno::Reference< uno::XInterface > VCLBitmapCreator::createInstance()
+        throw ( uno::Exception,
+                uno::RuntimeException)
+{
+    Bitmap aBitmap;
+    uno::Reference< uno::XInterface> aResult( VCLUnoHelper::CreateBitmap( aBitmap ), uno::UNO_QUERY );
+
+    return aResult;
+}
+
+
+uno::Reference< uno::XInterface > VCLBitmapCreator::createInstanceWithArguments(
+                                                const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+        throw ( uno::Exception,
+                uno::RuntimeException)
+{
+    if ( aArguments.getLength() != 1 )
+        throw cpo::uno::Exception(); // TODO
+
+    cpo::uno::Sequence< sal_Int8 > aOrigBitmap;
+    if ( !( aArguments[0] >>= aOrigBitmap ) )
+        throw cpo::uno::Exception(); // TODO
+
+    Bitmap aBitmap;
+    SvMemoryStream aStream( aOrigBitmap.getArray(), aOrigBitmap.getLength(), StreamMode::READ );
+    aStream >> aBitmap;
+    if ( aStream.GetError() )
+        throw cpo::uno::Exception(); // TODO
+
+    uno::Reference< uno::XInterface > aResult( VCLUnoHelper::CreateBitmap( aBitmap ), uno::UNO_QUERY );
+
+    return aResult;
+}
+
+
+OUString VCLBitmapCreator::getImplementationName()
+        throw ( uno::RuntimeException )
+{
+    return impl_staticGetImplementationName();
+}
+
+bool VCLBitmapCreator::supportsService( const OUString& ServiceName )
+        throw ( uno::RuntimeException )
+{
+    return cppu::supportsService(this, ServiceName);
+}
+
+
+cpo::uno::Sequence< OUString > VCLBitmapCreator::getSupportedServiceNames()
+        throw ( uno::RuntimeException )
+{
+    return impl_staticGetSupportedServiceNames();
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

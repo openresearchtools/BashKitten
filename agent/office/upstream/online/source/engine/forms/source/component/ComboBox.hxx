@@ -1,0 +1,145 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <memory>
+#include <FormComponent.hxx>
+#include "errorbroadcaster.hxx"
+#include "entrylisthelper.hxx"
+#include "cachedrowset.hxx"
+
+#include <com/sun/star/form/ListSourceType.hpp>
+
+#include <connectivity/formattedcolumnvalue.hxx>
+
+
+namespace frm
+{
+
+class OComboBoxModel final
+            :public OBoundControlModel
+            ,public OEntryListHelper
+            ,public OErrorBroadcaster
+{
+    CachedRowSet               m_aListRowSet;          // the row set to fill the list
+    cpo::uno::Any              m_aBoundColumn;         // obsolete
+    OUString                   m_aListSource;
+    OUString                   m_aDefaultText;         // DefaultText
+    cpo::uno::Any              m_aLastKnownValue;
+
+    cpo::uno::Sequence<OUString>                          m_aDesignModeStringItems;
+
+    css::form::ListSourceType  m_eListSourceType;      // ListSource's type
+    bool                       m_bEmptyIsNull;         // Empty string is interpreted as NULL
+
+    ::std::unique_ptr< ::dbtools::FormattedColumnValue > m_pValueFormatter;
+
+    virtual cpo::uno::Sequence< cpo::uno::Type>   _getTypes() override;
+
+public:
+    OComboBoxModel(
+        const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxFactory
+    );
+    OComboBoxModel(
+        const OComboBoxModel* _pOriginal,
+        const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxFactory
+    );
+    virtual ~OComboBoxModel() override;
+
+    virtual void disposing() override;
+
+    // OPropertySetHelper
+    virtual void getFastPropertyValue(cpo::uno::Any& rValue, sal_Int32 nHandle) const override;
+    virtual void setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const cpo::uno::Any& rValue ) override;
+    virtual bool convertFastPropertyValue(
+                cpo::uno::Any& _rConvertedValue, cpo::uno::Any& _rOldValue, sal_Int32 _nHandle, const cpo::uno::Any& _rValue ) override;
+
+    // XLoadListener
+    virtual void reloaded( const css::lang::EventObject& aEvent ) override;
+
+    // XServiceInfo
+    OUString getImplementationName() override
+    { return u"com.sun.star.form.OComboBoxModel"_ustr; }
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+    // UNO
+    DECLARE_UNO3_AGG_DEFAULTS(OComboBoxModel, OBoundControlModel)
+    virtual cpo::uno::Any queryAggregation( const cpo::uno::Type& _rType ) override;
+
+    // XPersistObject
+    virtual OUString    getServiceName() override;
+    virtual void
+        write(const cpo::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream) override;
+    virtual void
+        read(const cpo::uno::Reference< css::io::XObjectInputStream>& _rxInStream) override;
+
+    // OControlModel's property handling
+    virtual void describeFixedProperties(
+        cpo::uno::Sequence< css::beans::Property >& /* [out] */ _rProps
+    ) const override;
+    virtual void describeAggregateProperties(
+        cpo::uno::Sequence< css::beans::Property >& /* [out] */ _rAggregateProps
+    ) const override;
+
+    // XEventListener
+    virtual void disposing(const css::lang::EventObject& Source) override;
+
+    // prevent method hiding
+    using OBoundControlModel::getFastPropertyValue;
+
+private:
+    // OBoundControlModel overridables
+    virtual cpo::uno::Any   translateDbColumnToControlValue( ) override;
+    virtual bool            commitControlValueToDbColumn( bool _bPostReset ) override;
+
+    virtual void            onConnectedDbColumn( const cpo::uno::Reference< cpo::uno::XInterface >& _rxForm ) override;
+    virtual void            onDisconnectedDbColumn() override;
+
+    virtual cpo::uno::Any   getDefaultForReset() const override;
+
+    virtual void            resetNoBroadcast() override;
+
+    // OEntryListHelper overridables
+    virtual void    stringItemListChanged( ControlModelLock& _rInstanceLock ) override;
+    virtual void    refreshInternalEntryList() override;
+
+    void loadData( bool _bForce );
+
+    virtual cpo::uno::Reference< css::util::XCloneable > createClone(  ) override;
+};
+
+class OComboBoxControl : public OBoundControl
+{
+public:
+    explicit OComboBoxControl(const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxContext);
+
+    // XServiceInfo
+    OUString getImplementationName() override
+    { return u"com.sun.star.form.OComboBoxControl"_ustr; }
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+};
+
+
+}
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

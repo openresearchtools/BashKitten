@@ -1,0 +1,132 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <svtools/svtdllapi.h>
+#include <com/sun/star/frame/XStatusbarController.hpp>
+#include <cppuhelper/weak.hxx>
+#include <comphelper/interfacecontainer4.hxx>
+#include <tools/gen.hxx>
+#include <unordered_map>
+#include <utility>
+
+namespace com::sun::star::awt { class XWindow; }
+namespace com::sun::star::beans { struct PropertyValue; }
+namespace com::sun::star::frame { class XDispatch; }
+namespace com::sun::star::frame { class XFrame; }
+namespace com::sun::star::ui { class XStatusbarItem; }
+namespace cpo::uno { class XComponentContext; }
+namespace com::sun::star::util { class XURLTransformer; }
+
+namespace svt
+{
+
+class SVT_DLLPUBLIC StatusbarController :
+                            public css::frame::XStatusbarController,
+                            public ::cppu::OWeakObject
+{
+    public:
+        StatusbarController( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+                             const cpo::uno::Reference< css::frame::XFrame >& xFrame,
+                             OUString aCommandURL,
+                             unsigned short       nID );
+        StatusbarController();
+        virtual ~StatusbarController() override;
+
+        cpo::uno::Reference< css::frame::XFrame > getFrameInterface() const;
+        cpo::uno::Reference< css::util::XURLTransformer > getURLTransformer() const;
+
+        ::tools::Rectangle getControlRect() const;
+
+        // XInterface
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type& aType ) override;
+        virtual void acquire() noexcept override;
+        virtual void release() noexcept override;
+
+        // XInitialization
+        virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+        // XUpdatable
+        virtual void update() override;
+
+        // XComponent
+        virtual void dispose() override;
+        virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+        virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
+
+        // XEventListener
+        virtual void disposing( const css::lang::EventObject& Source ) override;
+
+        // XStatusListener
+        virtual void statusChanged( const css::frame::FeatureStateEvent& Event ) override;
+
+        // XStatusbarController
+        virtual bool mouseButtonDown( const css::awt::MouseEvent& aMouseEvent ) override;
+        virtual bool mouseMove( const css::awt::MouseEvent& aMouseEvent ) override;
+        virtual bool mouseButtonUp( const css::awt::MouseEvent& aMouseEvent ) override;
+        virtual void command( const css::awt::Point& aPos,
+                                       ::sal_Int32 nCommand,
+                                       bool bMouseEvent,
+                                       const cpo::uno::Any& aData ) override;
+        virtual void paint( const cpo::uno::Reference< css::awt::XGraphics >& xGraphics,
+                                     const css::awt::Rectangle& rOutputRectangle,
+                                     ::sal_Int32 nStyle ) override;
+        virtual void click( const css::awt::Point& aPos ) override;
+        virtual void doubleClick( const css::awt::Point& aPos ) override;
+
+    protected:
+        struct Listener
+        {
+            Listener( css::util::URL _aURL, cpo::uno::Reference< css::frame::XDispatch > _xDispatch ) :
+                aURL(std::move( _aURL )), xDispatch(std::move( _xDispatch )) {}
+
+            css::util::URL                               aURL;
+            cpo::uno::Reference< css::frame::XDispatch > xDispatch;
+        };
+
+        typedef std::unordered_map< OUString,
+                                    cpo::uno::Reference< css::frame::XDispatch > > URLToDispatchMap;
+
+        // methods to support status forwarder, known by the old sfx2 toolbox controller implementation
+        void addStatusListener( const OUString& aCommandURL );
+        void bindListener();
+
+        // execute methods
+        // execute bound status bar controller command/execute various commands
+        void execute( const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs );
+        void execute( const OUString& aCommand, const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs );
+
+        bool                                                      m_bInitialized : 1,
+                                                                  m_bDisposed : 1;
+        unsigned short                                            m_nID;
+        cpo::uno::Reference< css::frame::XFrame >                 m_xFrame;
+        cpo::uno::Reference< css::awt::XWindow >                  m_xParentWindow;
+        cpo::uno::Reference< cpo::uno::XComponentContext >        m_xContext;
+        OUString                                                  m_aCommandURL;
+        URLToDispatchMap                                          m_aListenerMap;
+        comphelper::OInterfaceContainerHelper4<css::lang::XEventListener> m_aEventListeners;
+        mutable cpo::uno::Reference< css::util::XURLTransformer > m_xURLTransformer;
+        cpo::uno::Reference< css::ui::XStatusbarItem >            m_xStatusbarItem;
+        std::mutex m_aMutex; // for m_aEventListeners
+};
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

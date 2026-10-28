@@ -1,0 +1,68 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <com/sun/star/document/XFilter.hpp>
+#include <com/sun/star/document/XExporter.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+
+namespace sw
+{
+class IndexingExportFilter final
+    : public cppu::WeakImplHelper<css::document::XFilter, css::document::XExporter,
+                                  css::lang::XInitialization, css::lang::XServiceInfo>
+{
+private:
+    cpo::uno::Reference<css::lang::XComponent> m_xSourceDocument;
+
+public:
+    IndexingExportFilter() {}
+
+    // XFilter
+    virtual bool
+    filter(const cpo::uno::Sequence<css::beans::PropertyValue>& aDescriptor) override;
+
+    virtual void cancel() override {}
+
+    // XExporter
+    virtual void
+    setSourceDocument(const cpo::uno::Reference<css::lang::XComponent>& xDocument) override
+    {
+        m_xSourceDocument = xDocument;
+    }
+
+    // XInitialization
+    virtual void
+    initialize(const cpo::uno::Sequence<cpo::uno::Any>& /*aArguments*/) override
+    {
+    }
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override
+    {
+        return u"com.sun.star.comp.Writer.IndexingExportFilter"_ustr;
+    }
+
+    virtual bool supportsService(OUString const& rServiceName) override
+    {
+        return cppu::supportsService(this, rServiceName);
+    }
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override
+    {
+        return { u"com.sun.star.document.ExportFilter"_ustr };
+    }
+};
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

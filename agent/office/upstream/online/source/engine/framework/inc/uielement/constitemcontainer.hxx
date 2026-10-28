@@ -1,0 +1,91 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XFastPropertySet.hpp>
+#include <com/sun/star/container/XIndexAccess.hpp>
+
+#include <rtl/ustring.hxx>
+#include <rtl/ref.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/propshlp.hxx>
+
+#include <vector>
+
+namespace framework
+{
+
+class ItemContainer;
+class ConstItemContainer final : public ::cppu::WeakImplHelper<
+                                                    css::container::XIndexAccess,
+                                                    css::beans::XFastPropertySet,
+                                                    css::beans::XPropertySet >
+{
+    friend class RootItemContainer;
+    friend class ItemContainer;
+
+    public:
+        ConstItemContainer();
+        ConstItemContainer( const ItemContainer& rtemContainer );
+        ConstItemContainer( const cpo::uno::Reference< css::container::XIndexAccess >& rSourceContainer, bool bFastCopy = false );
+        virtual ~ConstItemContainer() override;
+
+        // XIndexAccess
+        virtual sal_Int32 getCount() override;
+
+        virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
+
+        // XElementAccess
+        virtual cpo::uno::Type getElementType() override
+        {
+            return cppu::UnoType<cpo::uno::Sequence< css::beans::PropertyValue >>::get();
+        }
+
+        virtual bool hasElements() override;
+
+        // XPropertySet
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+        virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+        virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+        virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+        virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+        virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+        virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+
+        // XFastPropertySet
+        virtual void setFastPropertyValue( sal_Int32 nHandle, const cpo::uno::Any& aValue ) override;
+        virtual cpo::uno::Any getFastPropertyValue( sal_Int32 nHandle ) override;
+
+    private:
+        static ::cppu::IPropertyArrayHelper& getInfoHelper();
+        static cpo::uno::Sequence< css::beans::Property > impl_getStaticPropertyDescriptor();
+
+        void copyItemContainer( const std::vector< cpo::uno::Sequence< css::beans::PropertyValue > >& rSourceVector );
+        static rtl::Reference< ConstItemContainer > deepCopyContainer( const cpo::uno::Reference< css::container::XIndexAccess >& rSubContainer );
+
+        std::vector< cpo::uno::Sequence< css::beans::PropertyValue > >       m_aItemVector;
+        OUString                                                             m_aUIName;
+};
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,94 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <sal/config.h>
+
+#include <string_view>
+
+#include <com/sun/star/i18n/XExtendedIndexEntrySupplier.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+
+namespace cpo::uno { class XComponentContext; }
+
+namespace i18npool {
+
+
+
+class IndexEntrySupplier final : public cppu::WeakImplHelper
+<
+    css::i18n::XExtendedIndexEntrySupplier,
+    css::lang::XServiceInfo
+>
+{
+public:
+    IndexEntrySupplier( const cpo::uno::Reference < cpo::uno::XComponentContext >& rxContext );
+
+    // Methods
+    virtual cpo::uno::Sequence < css::lang::Locale > getLocaleList() override;
+
+    virtual cpo::uno::Sequence < OUString > getAlgorithmList(
+        const css::lang::Locale& rLocale ) override;
+
+    virtual bool loadAlgorithm(
+        const css::lang::Locale& rLocale,
+        const OUString& SortAlgorithm, sal_Int32 collatorOptions ) override;
+
+    virtual bool usePhoneticEntry(
+        const css::lang::Locale& rLocale ) override;
+
+    virtual OUString getPhoneticCandidate( const OUString& IndexEntry,
+        const css::lang::Locale& rLocale ) override;
+
+    virtual OUString getIndexKey( const OUString& IndexEntry,
+        const OUString& PhoneticEntry, const css::lang::Locale& rLocale ) override;
+
+    virtual sal_Int16 compareIndexEntry( const OUString& IndexEntry1,
+        const OUString& PhoneticEntry1, const css::lang::Locale& rLocale1,
+        const OUString& IndexEntry2, const OUString& PhoneticEntry2,
+        const css::lang::Locale& rLocale2 ) override;
+
+    virtual OUString getIndexCharacter( const OUString& IndexEntry,
+        const css::lang::Locale& rLocale, const OUString& SortAlgorithm ) override;
+
+    virtual OUString getIndexFollowPageWord( bool MorePages,
+        const css::lang::Locale& rLocale ) override;
+
+    //XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+private:
+    cpo::uno::Reference < css::i18n::XExtendedIndexEntrySupplier > xIES;
+    cpo::uno::Reference < cpo::uno::XComponentContext > m_xContext;
+    /// @throws cpo::uno::RuntimeException
+    bool createLocaleSpecificIndexEntrySupplier(std::u16string_view name);
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference < css::i18n::XExtendedIndexEntrySupplier > const & getLocaleSpecificIndexEntrySupplier(
+        const css::lang::Locale& rLocale, const OUString& rSortAlgorithm);
+
+    css::lang::Locale aLocale;
+    OUString          aSortAlgorithm;
+};
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

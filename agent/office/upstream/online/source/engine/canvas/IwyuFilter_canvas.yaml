@@ -1,0 +1,6 @@
+---
+assumeFilename: canvas/source/cairo/cairo_canvas.cxx
+excludelist:
+    canvas/inc/base/cachedprimitivebase.hxx:
+    # base class has to be a complete type
+    - com/sun/star/lang/XServiceInfo.hpp

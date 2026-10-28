@@ -1,0 +1,861 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+
+/**************************************************************************
+                                TODO
+ **************************************************************************
+
+ Note: Configuration Management classes do not support XAggregation.
+       So I have to wrap the interesting interfaces manually.
+
+ *************************************************************************/
+#include "hierarchydatasource.hxx"
+#include <osl/diagnose.h>
+
+#include <comphelper/propertyvalue.hxx>
+#include <cppuhelper/queryinterface.hxx>
+#include <cppuhelper/weak.hxx>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/configuration/theDefaultProvider.hpp>
+#include <com/sun/star/container/XHierarchicalNameAccess.hpp>
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/util/XChangesBatch.hpp>
+#include <com/sun/star/util/XChangesNotifier.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
+#include <o3tl/string_view.hxx>
+#include <ucbhelper/macros.hxx>
+#include <mutex>
+#include <utility>
+
+using namespace com::sun::star;
+using namespace ::cpo;
+using namespace hierarchy_ucp;
+
+
+// describe path of cfg entry
+constexpr OUString CFGPROPERTY_NODEPATH = u"nodepath"_ustr;
+
+constexpr OUString READ_SERVICE_NAME = u"com.sun.star.ucb.HierarchyDataReadAccess"_ustr;
+constexpr OUString READWRITE_SERVICE_NAME = u"com.sun.star.ucb.HierarchyDataReadWriteAccess"_ustr;
+
+constexpr OUString CONFIG_DATA_ROOT_KEY =  u"/org.openoffice.ucb.Hierarchy/Root"_ustr;
+
+
+namespace hcp_impl
+{
+
+
+// HierarchyDataReadAccess Implementation.
+
+namespace {
+
+class HierarchyDataAccess : public cppu::OWeakObject,
+                            public lang::XServiceInfo,
+                            public lang::XTypeProvider,
+                            public lang::XComponent,
+                            public lang::XSingleServiceFactory,
+                            public container::XHierarchicalNameAccess,
+                            public container::XNameContainer,
+                            public util::XChangesNotifier,
+                            public util::XChangesBatch
+{
+    std::mutex m_aMutex;
+    uno::Reference< cpo::uno::XInterface > m_xConfigAccess;
+    uno::Reference< lang::XComponent >                   m_xCfgC;
+    uno::Reference< lang::XSingleServiceFactory >        m_xCfgSSF;
+    uno::Reference< container::XHierarchicalNameAccess > m_xCfgHNA;
+    uno::Reference< container::XNameContainer >          m_xCfgNC;
+    uno::Reference< container::XNameReplace >            m_xCfgNR;
+    uno::Reference< container::XNameAccess >             m_xCfgNA;
+    uno::Reference< container::XElementAccess >          m_xCfgEA;
+    uno::Reference< util::XChangesNotifier >             m_xCfgCN;
+    uno::Reference< util::XChangesBatch >                m_xCfgCB;
+    bool m_bReadOnly;
+
+public:
+    HierarchyDataAccess( uno::Reference<
+                                        cpo::uno::XInterface > xConfigAccess,
+                         bool bReadOnly );
+
+    // XInterface
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire()
+        noexcept override;
+    virtual void release()
+        noexcept override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
+
+    // XComponent
+    virtual void
+    dispose() override;
+    virtual void
+    addEventListener( const uno::Reference< lang::XEventListener > & xListener ) override;
+    virtual void
+    removeEventListener( const uno::Reference<
+                            lang::XEventListener > & aListener ) override;
+
+    // XSingleServiceFactory
+    virtual uno::Reference< cpo::uno::XInterface >
+    createInstance() override;
+    virtual uno::Reference< cpo::uno::XInterface >
+    createInstanceWithArguments( const cpo::uno::Sequence< cpo::uno::Any > & aArguments ) override;
+
+    // XHierarchicalNameAccess
+    virtual cpo::uno::Any
+    getByHierarchicalName( const OUString & aName ) override;
+    virtual bool
+    hasByHierarchicalName( const OUString & aName ) override;
+
+    // XNameContainer
+    virtual void
+    insertByName( const OUString & aName, const cpo::uno::Any & aElement ) override;
+    virtual void
+    removeByName( const OUString & Name ) override;
+
+    // XNameReplace ( base of XNameContainer )
+    virtual void
+    replaceByName( const OUString & aName, const cpo::uno::Any & aElement ) override;
+
+    // XNameAccess ( base of XNameReplace )
+    virtual cpo::uno::Any
+    getByName( const OUString & aName ) override;
+    virtual cpo::uno::Sequence< OUString >
+    getElementNames() override;
+    virtual bool
+    hasByName( const OUString & aName ) override;
+
+    // XElementAccess ( base of XNameAccess )
+    virtual cpo::uno::Type
+    getElementType() override;
+    virtual bool
+    hasElements() override;
+
+    // XChangesNotifier
+    virtual void
+    addChangesListener( const uno::Reference<
+                            util::XChangesListener > & aListener ) override;
+    virtual void
+    removeChangesListener( const uno::Reference<
+                            util::XChangesListener > & aListener ) override;
+
+    // XChangesBatch
+    virtual void
+    commitChanges() override;
+    virtual bool
+    hasPendingChanges() override;
+    virtual cpo::uno::Sequence< util::ElementChange >
+    getPendingChanges() override;
+private:
+    template<class T>
+    cpo::uno::Reference<T> ensureOrigInterface(cpo::uno::Reference<T>& x);
+};
+
+}
+
+} // namespace hcp_impl
+
+using namespace hcp_impl;
+
+
+// HierarchyDataSource Implementation.
+
+
+HierarchyDataSource::HierarchyDataSource(
+        uno::Reference< cpo::uno::XComponentContext > xContext )
+: m_xContext(std::move( xContext ))
+{
+}
+
+
+// virtual
+HierarchyDataSource::~HierarchyDataSource()
+{
+}
+
+// XServiceInfo methods.
+OUString HierarchyDataSource::getImplementationName()                       \
+{
+    return u"com.sun.star.comp.ucb.HierarchyDataSource"_ustr;
+}
+bool HierarchyDataSource::supportsService( const OUString& ServiceName )
+{
+    return cppu::supportsService( this, ServiceName );
+}
+cpo::uno::Sequence< OUString > HierarchyDataSource::getSupportedServiceNames()
+{
+    return { u"com.sun.star.ucb.DefaultHierarchyDataSource"_ustr, u"com.sun.star.ucb.HierarchyDataSource"_ustr };
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+ucb_HierarchyDataSource_get_implementation(
+    cpo::uno::XComponentContext* context , cpo::uno::Sequence<cpo::uno::Any> const&)
+{
+    return cppu::acquire(new HierarchyDataSource(context));
+}
+
+
+// XComponent methods.
+
+
+// virtual
+void HierarchyDataSource::dispose()
+{
+    std::unique_lock aGuard( m_aMutex );
+
+    if ( m_aDisposeEventListeners.getLength(aGuard) )
+    {
+        lang::EventObject aEvt;
+        aEvt.Source = static_cast< lang::XComponent * >( this );
+        m_aDisposeEventListeners.disposeAndClear( aGuard, aEvt );
+    }
+}
+
+
+// virtual
+void HierarchyDataSource::addEventListener(
+                    const uno::Reference< lang::XEventListener > & Listener )
+{
+    std::unique_lock aGuard( m_aMutex );
+
+    m_aDisposeEventListeners.addInterface( aGuard, Listener );
+}
+
+
+// virtual
+void HierarchyDataSource::removeEventListener(
+                    const uno::Reference< lang::XEventListener > & Listener )
+{
+    std::unique_lock aGuard( m_aMutex );
+
+    m_aDisposeEventListeners.removeInterface( aGuard, Listener );
+}
+
+
+// XMultiServiceFactory methods.
+
+
+// virtual
+uno::Reference< cpo::uno::XInterface >
+HierarchyDataSource::createInstance( const OUString & aServiceSpecifier )
+{
+    // Create view to root node.
+
+    beans::PropertyValue aProp = comphelper::makePropertyValue(CFGPROPERTY_NODEPATH,
+                                                               CONFIG_DATA_ROOT_KEY);
+
+    cpo::uno::Sequence< cpo::uno::Any > aArguments{ cpo::uno::Any(aProp) };
+
+    return createInstanceWithArguments( aServiceSpecifier, aArguments, false );
+}
+
+
+// virtual
+uno::Reference< cpo::uno::XInterface >
+HierarchyDataSource::createInstanceWithArguments(
+                                const OUString & ServiceSpecifier,
+                                const cpo::uno::Sequence< cpo::uno::Any > & Arguments )
+{
+    return createInstanceWithArguments( ServiceSpecifier, Arguments, true );
+}
+
+
+// virtual
+cpo::uno::Sequence< OUString >
+HierarchyDataSource::getAvailableServiceNames()
+{
+    return { READ_SERVICE_NAME, READWRITE_SERVICE_NAME };
+}
+
+
+// Non-interface methods
+
+
+uno::Reference< cpo::uno::XInterface >
+HierarchyDataSource::createInstanceWithArguments(
+                                std::u16string_view ServiceSpecifier,
+                                const cpo::uno::Sequence< cpo::uno::Any > & Arguments,
+                                bool bCheckArgs )
+{
+    // Check service specifier.
+    bool bReadOnly  = ServiceSpecifier == READ_SERVICE_NAME;
+    bool bReadWrite = !bReadOnly && ServiceSpecifier == READWRITE_SERVICE_NAME;
+
+    if ( !bReadOnly && !bReadWrite )
+    {
+        OSL_FAIL( "HierarchyDataSource::createInstanceWithArguments - "
+                    "Unsupported service specifier!" );
+        return uno::Reference< cpo::uno::XInterface >();
+    }
+
+    cpo::uno::Sequence< cpo::uno::Any > aNewArgs( Arguments );
+    auto aNewArgsRange = asNonConstRange(aNewArgs);
+
+    if ( bCheckArgs )
+    {
+        // Check arguments.
+        bool bHasNodePath = false;
+        sal_Int32 nCount = Arguments.getLength();
+        for ( sal_Int32 n = 0; n < nCount; ++n )
+        {
+            beans::PropertyValue aProp;
+            if ( Arguments[ n ] >>= aProp )
+            {
+                if ( aProp.Name == CFGPROPERTY_NODEPATH )
+                {
+                    OUString aPath;
+                    if ( aProp.Value >>= aPath )
+                    {
+                        bHasNodePath = true;
+
+                        // Create path to data inside the configuration.
+                        OUString aConfigPath;
+                        if ( !createConfigPath( aPath, aConfigPath ) )
+                        {
+                            OSL_FAIL( "HierarchyDataSource::"
+                                "createInstanceWithArguments - "
+                                "Invalid node path!" );
+                            return uno::Reference< cpo::uno::XInterface >();
+                        }
+
+                        aProp.Value <<= aConfigPath;
+
+                        // Set new path in arguments.
+                        aNewArgsRange[ n ] <<= aProp;
+
+                        break;
+                    }
+                    else
+                    {
+                        OSL_FAIL( "HierarchyDataSource::createInstanceWithArguments - "
+                            "Invalid type for property 'nodepath'!" );
+                        return uno::Reference< cpo::uno::XInterface >();
+                    }
+                }
+            }
+        }
+
+        if ( !bHasNodePath )
+        {
+            OSL_FAIL( "HierarchyDataSource::createInstanceWithArguments - "
+                        "No 'nodepath' property!" );
+            return uno::Reference< cpo::uno::XInterface >();
+        }
+    }
+
+    // Create Configuration Provider.
+    uno::Reference< lang::XMultiServiceFactory > xProv = getConfigProvider();
+    if ( !xProv.is() )
+        return uno::Reference< cpo::uno::XInterface >();
+
+    uno::Reference< cpo::uno::XInterface > xConfigAccess;
+    try
+    {
+        if ( bReadOnly )
+        {
+            // Create configuration read-only access object.
+            xConfigAccess = xProv->createInstanceWithArguments(
+                                u"com.sun.star.configuration.ConfigurationAccess"_ustr,
+                                aNewArgs );
+        }
+        else
+        {
+            // Create configuration read-write access object.
+            xConfigAccess = xProv->createInstanceWithArguments(
+                                u"com.sun.star.configuration.ConfigurationUpdateAccess"_ustr,
+                                aNewArgs );
+        }
+    }
+    catch ( cpo::uno::Exception const & )
+    {
+        OSL_FAIL( "HierarchyDataSource::createInstanceWithArguments - "
+                    "Cannot instantiate configuration access!" );
+        throw;
+    }
+
+    if ( !xConfigAccess.is() )
+    {
+        OSL_FAIL( "HierarchyDataSource::createInstanceWithArguments - "
+                    "Cannot instantiate configuration access!" );
+        return xConfigAccess;
+    }
+
+    return cppu::getXWeak(new HierarchyDataAccess(xConfigAccess, bReadOnly));
+}
+
+
+uno::Reference< lang::XMultiServiceFactory >
+HierarchyDataSource::getConfigProvider()
+{
+    std::unique_lock aGuard( m_aMutex );
+    if ( !m_xConfigProvider.is() )
+    {
+        try
+        {
+            m_xConfigProvider = configuration::theDefaultProvider::get( m_xContext );
+        }
+        catch ( cpo::uno::Exception const & )
+        {
+            OSL_FAIL( "HierarchyDataSource::getConfigProvider - "
+                           "caught exception!" );
+        }
+    }
+
+    return m_xConfigProvider;
+}
+
+
+bool HierarchyDataSource::createConfigPath(
+                std::u16string_view rInPath, OUString & rOutPath )
+{
+    if ( !rInPath.empty() )
+    {
+        if ( o3tl::starts_with( rInPath, u"/" ) )
+        {
+            OSL_FAIL( "HierarchyDataSource::createConfigPath - "
+                        "Leading slash in node path!" );
+            return false;
+        }
+
+        if ( o3tl::ends_with( rInPath, u"/" ) )
+        {
+            OSL_FAIL( "HierarchyDataSource::createConfigPath - "
+                        "Trailing slash in node path!" );
+            return false;
+        }
+
+        rOutPath = CONFIG_DATA_ROOT_KEY + "/" + rInPath;
+    }
+    else
+    {
+        rOutPath = CONFIG_DATA_ROOT_KEY;
+    }
+
+    return true;
+}
+
+
+// HierarchyDataAccess Implementation.
+
+template<class T>
+cpo::uno::Reference<T> HierarchyDataAccess::ensureOrigInterface(cpo::uno::Reference<T>& x)
+{
+    if ( x.is() )
+        return x;
+    std::scoped_lock aGuard( m_aMutex );
+    if ( !x.is() )
+       x.set( m_xConfigAccess, uno::UNO_QUERY );
+    return x;
+}
+
+
+HierarchyDataAccess::HierarchyDataAccess( uno::Reference<
+                                            cpo::uno::XInterface > xConfigAccess,
+                                          bool bReadOnly )
+: m_xConfigAccess(std::move( xConfigAccess )),
+  m_bReadOnly( bReadOnly )
+{
+}
+
+// XInterface methods.
+void HierarchyDataAccess::acquire()
+    noexcept
+{
+    OWeakObject::acquire();
+}
+
+void HierarchyDataAccess::release()
+    noexcept
+{
+    OWeakObject::release();
+}
+
+// virtual
+cpo::uno::Any HierarchyDataAccess::queryInterface( const cpo::uno::Type & aType )
+{
+    // Interfaces supported in read-only and read-write mode.
+    cpo::uno::Any aRet = cppu::queryInterface( aType,
+                static_cast< lang::XTypeProvider * >( this ),
+                static_cast< lang::XServiceInfo * >( this ),
+                static_cast< lang::XComponent * >( this ),
+                static_cast< container::XHierarchicalNameAccess * >( this ),
+                static_cast< container::XNameAccess * >( this ),
+                static_cast< container::XElementAccess * >( this ),
+                static_cast< util::XChangesNotifier * >( this ) );
+
+    // Interfaces supported only in read-write mode.
+    if ( !aRet.hasValue() && !m_bReadOnly )
+    {
+        aRet = cppu::queryInterface( aType,
+                static_cast< lang::XSingleServiceFactory * >( this ),
+                static_cast< container::XNameContainer * >( this ),
+                static_cast< container::XNameReplace * >( this ),
+                static_cast< util::XChangesBatch * >( this ) );
+    }
+
+    return aRet.hasValue() ? aRet : OWeakObject::queryInterface( aType );
+}
+
+
+// XTypeProvider methods.
+
+
+XTYPEPROVIDER_COMMON_IMPL( HierarchyDataAccess );
+
+
+// virtual
+cpo::uno::Sequence< cpo::uno::Type > HierarchyDataAccess::getTypes()
+{
+    if ( m_bReadOnly )
+    {
+        static cppu::OTypeCollection s_aReadOnlyTypes(
+                    CPPU_TYPE_REF( lang::XTypeProvider ),
+                    CPPU_TYPE_REF( lang::XServiceInfo ),
+                    CPPU_TYPE_REF( lang::XComponent ),
+                    CPPU_TYPE_REF( container::XHierarchicalNameAccess ),
+                    CPPU_TYPE_REF( container::XNameAccess ),
+                    CPPU_TYPE_REF( util::XChangesNotifier ) );
+
+        return s_aReadOnlyTypes.getTypes();
+    }
+    else
+    {
+        static cppu::OTypeCollection s_aReadWriteTypes(
+                    CPPU_TYPE_REF( lang::XTypeProvider ),
+                    CPPU_TYPE_REF( lang::XServiceInfo ),
+                    CPPU_TYPE_REF( lang::XComponent ),
+                    CPPU_TYPE_REF( lang::XSingleServiceFactory ),
+                    CPPU_TYPE_REF( container::XHierarchicalNameAccess ),
+                    CPPU_TYPE_REF( container::XNameContainer ),
+                    CPPU_TYPE_REF( util::XChangesBatch ),
+                    CPPU_TYPE_REF( util::XChangesNotifier ) );
+
+        return s_aReadWriteTypes.getTypes();
+    }
+}
+
+
+// XServiceInfo methods.
+
+OUString HierarchyDataAccess::getImplementationName()
+{
+    return u"com.sun.star.comp.ucb.HierarchyDataAccess"_ustr;
+}
+
+bool HierarchyDataAccess::supportsService( const OUString& ServiceName )
+{
+    return cppu::supportsService( this, ServiceName );
+}
+
+cpo::uno::Sequence< OUString > HierarchyDataAccess::getSupportedServiceNames()
+{
+    return { READ_SERVICE_NAME, READWRITE_SERVICE_NAME };
+}
+
+
+// XComponent methods.
+
+
+// virtual
+void HierarchyDataAccess::dispose()
+{
+    uno::Reference< lang::XComponent > xOrig
+        = ensureOrigInterface( m_xCfgC );
+
+    OSL_ENSURE( xOrig.is(),
+                "HierarchyDataAccess : Data source is not an XComponent!" );
+    xOrig->dispose();
+}
+
+
+// virtual
+void HierarchyDataAccess::addEventListener(
+                    const uno::Reference< lang::XEventListener > & xListener )
+{
+    uno::Reference< lang::XComponent > xOrig
+        = ensureOrigInterface( m_xCfgC );
+
+    OSL_ENSURE( xOrig.is(),
+                "HierarchyDataAccess : Data source is not an XComponent!" );
+    xOrig->addEventListener( xListener );
+}
+
+
+// virtual
+void HierarchyDataAccess::removeEventListener(
+                    const uno::Reference< lang::XEventListener > & aListener )
+{
+    uno::Reference< lang::XComponent > xOrig
+        = ensureOrigInterface( m_xCfgC );
+
+    OSL_ENSURE( xOrig.is(),
+                "HierarchyDataAccess : Data source is not an XComponent!" );
+    xOrig->removeEventListener( aListener );
+}
+
+
+// XHierarchicalNameAccess methods.
+
+
+// virtual
+cpo::uno::Any HierarchyDataAccess::getByHierarchicalName(
+                                                const OUString & aName )
+{
+    uno::Reference< container::XHierarchicalNameAccess > xOrig
+        = ensureOrigInterface( m_xCfgHNA );
+
+    OSL_ENSURE( xOrig.is(),
+                "HierarchyDataAccess : "
+                "Data source is not an XHierarchicalNameAccess!" );
+    return xOrig->getByHierarchicalName( aName );
+}
+
+
+// virtual
+bool HierarchyDataAccess::hasByHierarchicalName(
+                                                const OUString & aName )
+{
+    uno::Reference< container::XHierarchicalNameAccess > xOrig
+        = ensureOrigInterface( m_xCfgHNA );
+
+    OSL_ENSURE( xOrig.is(),
+                "HierarchyDataAccess : "
+                "Data source is not an XHierarchicalNameAccess!" );
+    return xOrig->hasByHierarchicalName( aName );
+}
+
+
+// XNameAccess methods.
+
+
+// virtual
+cpo::uno::Any HierarchyDataAccess::getByName( const OUString & aName )
+{
+    uno::Reference< container::XNameAccess > xOrig
+        = ensureOrigInterface( m_xCfgNA );
+
+    OSL_ENSURE( xOrig.is(),
+                "HierarchyDataAccess : Data source is not an XNameAccess!" );
+    return xOrig->getByName( aName );
+}
+
+
+// virtual
+cpo::uno::Sequence< OUString > HierarchyDataAccess::getElementNames()
+{
+    uno::Reference< container::XNameAccess > xOrig
+        = ensureOrigInterface( m_xCfgNA );
+
+    OSL_ENSURE( xOrig.is(),
+                "HierarchyDataAccess : Data source is not an XNameAccess!" );
+    return xOrig->getElementNames();
+}
+
+
+// virtual
+bool HierarchyDataAccess::hasByName( const OUString & aName )
+{
+    uno::Reference< container::XNameAccess > xOrig
+        = ensureOrigInterface( m_xCfgNA );
+
+    OSL_ENSURE( xOrig.is(),
+                "HierarchyDataAccess : Data source is not an XNameAccess!" );
+    return xOrig->hasByName( aName );
+}
+
+
+// XElementAccess methods.
+
+
+// virtual
+cpo::uno::Type HierarchyDataAccess::getElementType()
+{
+    uno::Reference< container::XElementAccess > xOrig
+        = ensureOrigInterface( m_xCfgEA );
+
+    OSL_ENSURE( xOrig.is(),
+                "HierarchyDataAccess : Data source is not an XElementAccess!" );
+    return xOrig->getElementType();
+}
+
+
+// virtual
+bool HierarchyDataAccess::hasElements()
+{
+    uno::Reference< container::XElementAccess > xOrig
+        = ensureOrigInterface( m_xCfgEA );
+
+    OSL_ENSURE( xOrig.is(),
+                "HierarchyDataAccess : Data source is not an XElementAccess!" );
+    return xOrig->hasElements();
+}
+
+
+// XChangesNotifier methods.
+
+
+// virtual
+void HierarchyDataAccess::addChangesListener(
+                const uno::Reference< util::XChangesListener > & aListener )
+{
+    uno::Reference< util::XChangesNotifier > xOrig
+        = ensureOrigInterface( m_xCfgCN );
+
+    OSL_ENSURE( xOrig.is(),
+            "HierarchyDataAccess : Data source is not an XChangesNotifier!" );
+    xOrig->addChangesListener( aListener );
+}
+
+
+// virtual
+void HierarchyDataAccess::removeChangesListener(
+                const uno::Reference< util::XChangesListener > & aListener )
+{
+    uno::Reference< util::XChangesNotifier > xOrig
+        = ensureOrigInterface( m_xCfgCN );
+
+    OSL_ENSURE( xOrig.is(),
+            "HierarchyDataAccess : Data source is not an XChangesNotifier!" );
+    xOrig->removeChangesListener( aListener );
+}
+
+
+// XSingleServiceFactory methods.
+
+
+// virtual
+uno::Reference< cpo::uno::XInterface > HierarchyDataAccess::createInstance()
+{
+    uno::Reference< lang::XSingleServiceFactory > xOrig
+        = ensureOrigInterface( m_xCfgSSF );
+
+    OSL_ENSURE( xOrig.is(),
+        "HierarchyDataAccess : Data source is not an XSingleServiceFactory!" );
+    return xOrig->createInstance();
+}
+
+
+// virtual
+uno::Reference< cpo::uno::XInterface >
+HierarchyDataAccess::createInstanceWithArguments(
+                            const cpo::uno::Sequence< cpo::uno::Any > & aArguments )
+{
+    uno::Reference< lang::XSingleServiceFactory > xOrig
+        = ensureOrigInterface( m_xCfgSSF );
+
+    OSL_ENSURE( xOrig.is(),
+        "HierarchyDataAccess : Data source is not an XSingleServiceFactory!" );
+    return xOrig->createInstanceWithArguments( aArguments );
+}
+
+
+// XNameContainer methods.
+
+
+// virtual
+void
+HierarchyDataAccess::insertByName( const OUString & aName,
+                                   const cpo::uno::Any & aElement )
+{
+    uno::Reference< container::XNameContainer > xOrig
+        = ensureOrigInterface( m_xCfgNC );
+
+    OSL_ENSURE( xOrig.is(),
+        "HierarchyDataAccess : Data source is not an XNameContainer!" );
+    xOrig->insertByName( aName, aElement );
+}
+
+
+// virtual
+void
+HierarchyDataAccess::removeByName( const OUString & Name )
+{
+    uno::Reference< container::XNameContainer > xOrig
+        = ensureOrigInterface( m_xCfgNC );
+
+    OSL_ENSURE( xOrig.is(),
+        "HierarchyDataAccess : Data source is not an XNameContainer!" );
+    xOrig->removeByName( Name );
+}
+
+
+// XNameReplace methods.
+
+
+// virtual
+void HierarchyDataAccess::replaceByName( const OUString & aName,
+                                                  const cpo::uno::Any & aElement )
+{
+    uno::Reference< container::XNameReplace > xOrig
+        = ensureOrigInterface( m_xCfgNR );
+
+    OSL_ENSURE( xOrig.is(),
+        "HierarchyDataAccess : Data source is not an XNameReplace!" );
+    xOrig->replaceByName( aName, aElement );
+}
+
+
+// XChangesBatch methods.
+
+
+// virtual
+void HierarchyDataAccess::commitChanges()
+{
+    uno::Reference< util::XChangesBatch > xOrig
+        = ensureOrigInterface( m_xCfgCB );
+
+    OSL_ENSURE( xOrig.is(),
+        "HierarchyDataAccess : Data source is not an XChangesBatch!" );
+    xOrig->commitChanges();
+}
+
+
+// virtual
+bool HierarchyDataAccess::hasPendingChanges()
+{
+    uno::Reference< util::XChangesBatch > xOrig
+        = ensureOrigInterface( m_xCfgCB );
+
+    OSL_ENSURE( xOrig.is(),
+        "HierarchyDataAccess : Data source is not an XChangesBatch!" );
+    return xOrig->hasPendingChanges();
+}
+
+
+// virtual
+cpo::uno::Sequence< util::ElementChange >
+HierarchyDataAccess::getPendingChanges()
+{
+    uno::Reference< util::XChangesBatch > xOrig
+        = ensureOrigInterface( m_xCfgCB );
+
+    OSL_ENSURE( xOrig.is(),
+        "HierarchyDataAccess : Data source is not an XChangesBatch!" );
+    return xOrig->getPendingChanges();
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

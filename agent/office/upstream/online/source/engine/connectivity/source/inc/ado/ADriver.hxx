@@ -1,0 +1,83 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/sdbc/XDriver.hpp>
+#include <com/sun/star/sdbcx/XDataDefinitionSupplier.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cppuhelper/compbase.hxx>
+#include <unotools/weakref.hxx>
+#include <connectivity/CommonTools.hxx>
+
+namespace cpo::uno { class XComponentContext; }
+
+namespace connectivity::ado
+{
+    class OConnection;
+
+    typedef ::cppu::WeakComponentImplHelper< css::sdbc::XDriver,
+                                             css::sdbcx::XDataDefinitionSupplier,
+                                             css::lang::XServiceInfo
+                                           > ODriver_BASE;
+    class ODriver : public ODriver_BASE
+    {
+        ::osl::Mutex                            m_aMutex;
+
+        std::vector<unotools::WeakReference<OConnection>>
+                                                m_xConnections; //  vector containing a list
+                                                    //  of all the Connection objects
+                                                    //  for this Driver
+        cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+
+        // to put back all the inits with COINIT_MULTITHREADED if needed
+        int mnNbCallCoInitializeExForReinit;
+
+    public:
+        ODriver(const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext);
+        ~ODriver() override;
+
+        // OComponentHelper
+        virtual void disposing() override;
+
+        cpo::uno::Reference< cpo::uno::XComponentContext > getContext() const { return m_xContext; }
+
+    private:
+        void impl_checkURL_throw(const OUString& _sUrl);
+
+        // XServiceInfo
+        virtual OUString getImplementationName(  ) override;
+        virtual bool supportsService( const OUString& ServiceName ) override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+        // XDriver
+        virtual cpo::uno::Reference< css::sdbc::XConnection > connect( const OUString& url, const cpo::uno::Sequence< css::beans::PropertyValue >& info ) override;
+        virtual bool acceptsURL( const OUString& url ) override;
+        virtual cpo::uno::Sequence< css::sdbc::DriverPropertyInfo > getPropertyInfo( const OUString& url, const cpo::uno::Sequence< css::beans::PropertyValue >& info ) override;
+        virtual sal_Int32 getMajorVersion(  ) override;
+        virtual sal_Int32 getMinorVersion(  ) override;
+
+        // XDataDefinitionSupplier
+        virtual cpo::uno::Reference< css::sdbcx::XTablesSupplier > getDataDefinitionByConnection( const cpo::uno::Reference< css::sdbc::XConnection >& connection ) override;
+    };
+
+}
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

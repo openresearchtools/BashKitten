@@ -1,0 +1,112 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <cpo/uno/Sequence.hxx>
+#include <com/sun/star/document/XDocumentRevisionListPersistence.hpp>
+#include <com/sun/star/util/RevisionTag.hpp>
+#include <com/sun/star/embed/XStorage.hpp>
+
+#include <cppuhelper/implbase.hxx>
+#include <xmloff/xmlictxt.hxx>
+#include <xmloff/xmlexp.hxx>
+#include <xmloff/xmlimp.hxx>
+#include <xmloff/xmltoken.hxx>
+
+class XMLVersionListExport final : public SvXMLExport
+{
+private:
+    const cpo::uno::Sequence < css::util::RevisionTag >& maVersions;
+public:
+    XMLVersionListExport(
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
+        const cpo::uno::Sequence < css::util::RevisionTag >& rVersions,
+        const OUString &rFileName,
+        cpo::uno::Reference< css::xml::sax::XDocumentHandler > const &rHandler );
+
+    ErrCode     exportDoc( enum ::xmloff::token::XMLTokenEnum eClass = ::xmloff::token::XML_TOKEN_INVALID ) override;
+    void        ExportAutoStyles_() override {}
+    void        ExportMasterStyles_ () override {}
+    void        ExportContent_() override {}
+};
+
+class XMLVersionListImport final : public SvXMLImport
+{
+private:
+    cpo::uno::Sequence < css::util::RevisionTag >& maVersions;
+
+    virtual SvXMLImportContext *CreateFastContext( sal_Int32 Element,
+        const ::cpo::uno::Reference< ::css::xml::sax::XFastAttributeList >& xAttrList ) override;
+
+public:
+
+    XMLVersionListImport(
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
+        cpo::uno::Sequence < css::util::RevisionTag >& rVersions );
+    virtual ~XMLVersionListImport() noexcept override;
+
+    cpo::uno::Sequence < css::util::RevisionTag >&
+        GetList() { return maVersions; }
+};
+
+class XMLVersionListContext final : public SvXMLImportContext
+{
+private:
+    XMLVersionListImport & GetImport() { return static_cast<XMLVersionListImport&>(SvXMLImportContext::GetImport()); }
+
+public:
+
+    XMLVersionListContext( XMLVersionListImport& rImport );
+
+    virtual ~XMLVersionListContext() override;
+
+    virtual cpo::uno::Reference< css::xml::sax::XFastContextHandler >
+        createFastChildContext(sal_Int32 nElement,
+            const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttribs) override;
+};
+
+class XMLVersionContext final : public SvXMLImportContext
+{
+private:
+    static bool         ParseISODateTimeString(
+                                std::u16string_view rString,
+                                css::util::DateTime& rDateTime );
+
+public:
+
+    XMLVersionContext( XMLVersionListImport& rImport,
+                          const cpo::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList );
+
+    virtual ~XMLVersionContext() override;
+};
+
+class XMLVersionListPersistence final : public ::cppu::WeakImplHelper< css::document::XDocumentRevisionListPersistence, css::lang::XServiceInfo >
+{
+public:
+    virtual cpo::uno::Sequence< css::util::RevisionTag > load( const cpo::uno::Reference< css::embed::XStorage >& Storage ) override;
+    virtual void store( const cpo::uno::Reference< css::embed::XStorage >& Storage, const cpo::uno::Sequence< css::util::RevisionTag >& List ) override;
+
+    OUString getImplementationName() override;
+
+    bool supportsService(OUString const & ServiceName) override;
+
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

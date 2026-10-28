@@ -1,0 +1,73 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/ui/XUIElementFactory.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <rtl/ustring.hxx>
+
+namespace framework
+{
+typedef ::cppu::WeakImplHelper<
+    css::lang::XServiceInfo,
+    css::ui::XUIElementFactory> MenuBarFactory_BASE;
+
+    class MenuBarFactory : public MenuBarFactory_BASE
+    {
+        public:
+            MenuBarFactory( cpo::uno::Reference< cpo::uno::XComponentContext > xContext );
+            virtual ~MenuBarFactory() override;
+
+            virtual OUString getImplementationName() override
+            {
+                return u"com.sun.star.comp.framework.MenuBarFactory"_ustr;
+            }
+
+            virtual bool supportsService(OUString const & ServiceName) override
+            {
+                return cppu::supportsService(this, ServiceName);
+            }
+
+            virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override
+            {
+                cpo::uno::Sequence< OUString > aSeq { u"com.sun.star.ui.UIElementFactory"_ustr };
+                return aSeq;
+            }
+
+            // XUIElementFactory
+            virtual cpo::uno::Reference< css::ui::XUIElement > createUIElement( const OUString& ResourceURL, const cpo::uno::Sequence< css::beans::PropertyValue >& Args ) override;
+
+            static void CreateUIElement(const OUString& ResourceURL
+                        ,const cpo::uno::Sequence< css::beans::PropertyValue >& Args
+                        ,std::u16string_view ResourceType
+                        ,const cpo::uno::Reference< css::ui::XUIElement >& _xMenuBar
+                        ,const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext);
+
+        protected:
+            cpo::uno::Reference< cpo::uno::XComponentContext >     m_xContext;
+    };
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

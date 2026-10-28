@@ -1,0 +1,73 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ */
+
+#ifndef INCLUDED_OOX_CRYPTO_STRONGENCRYPTINDATASPACE_HXX
+#define INCLUDED_OOX_CRYPTO_STRONGENCRYPTINDATASPACE_HXX
+
+#include <sal/config.h>
+
+#include <memory>
+
+#include <cppuhelper/implbase.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/packages/XPackageEncryption.hpp>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <oox/crypto/CryptoEngine.hxx>
+
+namespace cpo::uno { class XComponentContext; }
+
+namespace oox::crypto
+{
+class StrongEncryptionDataSpace final
+    : public cppu::WeakImplHelper<css::lang::XServiceInfo, css::packages::XPackageEncryption>
+{
+    cpo::uno::Reference<cpo::uno::XComponentContext> mxContext;
+    std::unique_ptr<CryptoEngine> mCryptoEngine;
+
+    cpo::uno::Reference<css::io::XInputStream>
+    getStream(const cpo::uno::Sequence<css::beans::NamedValue>& rStreams,
+              std::u16string_view sStreamName);
+
+public:
+    StrongEncryptionDataSpace(const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext);
+
+    // Decryption
+
+    virtual bool generateEncryptionKey(const OUString& rPassword) override;
+    virtual bool
+    readEncryptionInfo(const cpo::uno::Sequence<css::beans::NamedValue>& aStreams) override;
+    virtual bool
+    decrypt(const cpo::uno::Reference<css::io::XInputStream>& rxInputStream,
+            cpo::uno::Reference<css::io::XOutputStream>& rxOutputStream) override;
+
+    virtual bool checkDataIntegrity() override;
+
+    // Encryption
+
+    virtual cpo::uno::Sequence<css::beans::NamedValue>
+        encrypt(const cpo::uno::Reference<css::io::XInputStream>& rxInputStream) override;
+
+    virtual bool
+    setupEncryption(const cpo::uno::Sequence<css::beans::NamedValue>& rMediaEncData) override;
+
+    virtual cpo::uno::Sequence<css::beans::NamedValue>
+        createEncryptionData(const OUString& rPassword) override;
+
+    // com.sun.star.lang.XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& rServiceName) override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+};
+
+} // namespace oox::crypto
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

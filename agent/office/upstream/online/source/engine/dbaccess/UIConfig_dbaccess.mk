@@ -1,0 +1,51 @@
+# -*- Mode: makefile-gmake; tab-width: 4; indent-tabs-mode: t -*-
+#
+# This file is part of the Collabora Office project.
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+
+$(eval $(call gb_UIConfig_UIConfig,dbaccess))
+
+$(eval $(call gb_UIConfig_add_uifiles,dbaccess, \
+    dbaccess/uiconfig/ui/admindialog \
+    dbaccess/uiconfig/ui/applycolpage \
+    dbaccess/uiconfig/ui/autocharsetpage \
+    dbaccess/uiconfig/ui/choosedatasourcedialog \
+    dbaccess/uiconfig/ui/colcontrolbox \
+    dbaccess/uiconfig/ui/collectionviewdialog \
+    dbaccess/uiconfig/ui/colwidthdialog \
+    dbaccess/uiconfig/ui/connectionpage \
+    dbaccess/uiconfig/ui/copytablepage \
+    dbaccess/uiconfig/ui/dbaseindexdialog \
+    dbaccess/uiconfig/ui/dbasepage \
+    dbaccess/uiconfig/ui/dbtreelist \
+    dbaccess/uiconfig/ui/dbwizconnectionpage \
+    dbaccess/uiconfig/ui/directsqldialog  \
+    dbaccess/uiconfig/ui/emptypage \
+    dbaccess/uiconfig/ui/fielddialog \
+    dbaccess/uiconfig/ui/fielddescpage \
+    dbaccess/uiconfig/ui/generalpagedialog \
+    dbaccess/uiconfig/ui/generalspecialjdbcdetailspage \
+    dbaccess/uiconfig/ui/keymenu \
+    dbaccess/uiconfig/ui/ldappage \
+    dbaccess/uiconfig/ui/mysqlnativepage \
+    dbaccess/uiconfig/ui/mysqlnativesettings \
+    dbaccess/uiconfig/ui/namematchingpage \
+    dbaccess/uiconfig/ui/odbcpage \
+    dbaccess/uiconfig/ui/parametersdialog \
+    dbaccess/uiconfig/ui/queryfilterdialog \
+    dbaccess/uiconfig/ui/rowheightdialog \
+    dbaccess/uiconfig/ui/savedialog \
+    dbaccess/uiconfig/ui/savemodifieddialog \
+    dbaccess/uiconfig/ui/sortdialog \
+    dbaccess/uiconfig/ui/sqlexception \
+    dbaccess/uiconfig/ui/textconnectionsettings \
+    dbaccess/uiconfig/ui/textpage \
+    dbaccess/uiconfig/ui/typeselectpage \
+    dbaccess/uiconfig/ui/userdetailspage \
+))
+
+# vim: set noet sw=4 ts=4:

@@ -1,0 +1,46 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#ifndef INCLUDED_TEST_CONTAINER_XELEMENTACCESS_HXX
+#define INCLUDED_TEST_CONTAINER_XELEMENTACCESS_HXX
+
+#include <cpo/uno/XInterface.hpp>
+
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/Type.hxx>
+
+#include <test/testdllapi.hxx>
+
+namespace apitest
+{
+class OOO_DLLPUBLIC_TEST XElementAccess
+{
+public:
+    XElementAccess(cpo::uno::Type const& rType)
+        : m_aType(rType)
+    {
+    }
+
+    void testGetElementType();
+    void testHasElements();
+
+    virtual cpo::uno::Reference<cpo::uno::XInterface> init() = 0;
+
+protected:
+    ~XElementAccess() {}
+
+private:
+    cpo::uno::Type m_aType;
+};
+
+} // namespace apitest
+
+#endif // INCLUDED_TEST_CONTAINER_XELEMENTACCESS_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

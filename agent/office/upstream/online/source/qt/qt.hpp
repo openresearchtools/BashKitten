@@ -1,0 +1,85 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <memory>
+
+#include <QApplication>
+#include <QSslCertificate>
+#include <QSslKey>
+#include <QWebEngineProfile>
+#include "common/Prefs.hpp"
+#include "common/RecentFiles.hpp"
+
+#include <Poco/File.h>
+#include <Poco/Path.h>
+
+// lo_kit is an opaque COKit handle; a forward declaration is all this header needs
+// (matches kit/Kit.hpp).
+struct COKit;
+
+extern int coolwsd_server_socket_fd;
+extern const char* user_name;
+extern COKit* lo_kit;
+
+/// Registers the QNetworkAccessManager-based HTTP transport used by the AI proxy
+/// (AIChatSession) on the desktop. Call once at startup on the GUI thread.
+void registerAIHttpTransport();
+
+class Application
+{
+private:
+    static QWebEngineProfile* globalProfile;
+    static RecentFiles recentFiles;
+    static std::unique_ptr<Prefs> prefs;
+    /// Constructing a QSslKey or QSslCertificate reaches into Qt Network's
+    /// TLS backend registry, which is a Q_APPLICATION_STATIC, so it has to
+    /// happen after the QApplication is up.  Function-local statics keep it
+    /// out of static initialization.
+    static QSslKey& embedKeyRef();
+    static QSslCertificate& embedCertRef();
+
+public:
+    static void initialize();
+    static QWebEngineProfile* getProfile();
+    /// The saved profile of one cloud account, so each account keeps its own sign-in. An id
+    /// that is not plain letters, digits, '-' and '_' gets the shared profile instead.
+    static QWebEngineProfile* getAccountProfile(const QString& accountId);
+    /// The number of web views showing a page on the account's saved profile, 0 when the
+    /// account has no views on it yet.
+    static int countAccountProfileViews(const QString& accountId);
+    /// Delete the cookies and cache that an account's saved profile holds.
+    static void deleteAccountProfile(const QString& accountId);
+    static RecentFiles& getRecentFiles();
+    static Prefs& getPrefs();
+    /// Self-signed cert/key for the embed-mode HTTPS server.  Both
+    /// freshly generated at process start, valid for localhost /
+    /// 127.0.0.1 / ::1.  Trusted programmatically by the picker
+    /// page's certificateError handler; never installed in any
+    /// system or browser trust store.
+    static const QSslKey& getEmbedKey();
+    static const QSslCertificate& getEmbedCert();
+};
+
+namespace
+{
+inline std::string getDataDir()
+{
+    Poco::Path dir(qApp->applicationDirPath().toStdString());
+    if (Poco::File(Poco::Path(dir, "run-from-build")).exists())
+    {
+        dir.makeParent();
+        return dir.toString();
+    }
+    return COOLWSD_DATADIR;
+}
+
+inline std::string getBrowserDistDir() { return getDataDir() + "/browser/dist"; }
+} // namespace
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

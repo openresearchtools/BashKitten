@@ -1,0 +1,91 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <cppuhelper/implbase.hxx>
+#include <svtools/toolboxcontroller.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <toolkit/awt/vclxmenu.hxx>
+#include <com/sun/star/frame/XUIControllerFactory.hpp>
+#include <com/sun/star/frame/XPopupMenuController.hpp>
+#include <vcl/vclenum.hxx>
+
+namespace framework
+{
+typedef cppu::ImplInheritanceHelper<svt::ToolboxController, css::lang::XServiceInfo> ToolBarBase;
+
+class PopupMenuToolbarController : public ToolBarBase
+{
+public:
+    // WeakComponentImplHelperBase
+    using svt::ToolboxController::disposing;
+    virtual void disposing(std::unique_lock<std::mutex>& rGuard) override;
+    // XInitialization
+    virtual void initialize(const cpo::uno::Sequence<cpo::uno::Any>& aArguments) override;
+    // XToolbarController
+    virtual cpo::uno::Reference<css::awt::XWindow> createPopupWindow() override;
+    // XStatusListener
+    virtual void statusChanged(const css::frame::FeatureStateEvent& rEvent) override;
+
+protected:
+    PopupMenuToolbarController(const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext,
+                               OUString aPopupCommand = OUString());
+    virtual void functionExecuted(const OUString& rCommand);
+    virtual ToolBoxItemBits getDropDownStyle() const;
+    void createPopupMenuController();
+
+    bool m_bHasController;
+    bool m_bResourceURL;
+    OUString m_aPopupCommand;
+    rtl::Reference<VCLXPopupMenu> m_xPopupMenu;
+
+private:
+    cpo::uno::Reference<css::frame::XUIControllerFactory> m_xPopupMenuFactory;
+    cpo::uno::Reference<css::frame::XPopupMenuController> m_xPopupMenuController;
+};
+
+class GenericPopupToolbarController final : public PopupMenuToolbarController
+{
+public:
+    GenericPopupToolbarController(const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext,
+                                  const cpo::uno::Sequence<cpo::uno::Any>& rxArgs);
+
+    // XInitialization
+    virtual void initialize(const cpo::uno::Sequence<cpo::uno::Any>& rxArgs) override;
+
+    // XStatusListener
+    virtual void statusChanged(const css::frame::FeatureStateEvent& rEvent) override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+
+    virtual bool supportsService(OUString const& rServiceName) override;
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+private:
+    bool m_bSplitButton, m_bReplaceWithLast;
+    void functionExecuted(const OUString& rCommand) override;
+    ToolBoxItemBits getDropDownStyle() const override;
+};
+
+} // namespace framework
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

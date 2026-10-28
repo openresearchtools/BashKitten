@@ -1,0 +1,273 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_SW_SOURCE_UIBASE_INC_MAILMERGEHELPER_HXX
+#define INCLUDED_SW_SOURCE_UIBASE_INC_MAILMERGEHELPER_HXX
+
+#include <cpo/uno/Sequence.h>
+#include <com/sun/star/mail/XAuthenticator.hpp>
+#include <com/sun/star/mail/XConnectionListener.hpp>
+#include <cpo/uno/XCurrentContext.hpp>
+#include <com/sun/star/mail/XMailMessage.hpp>
+#include <com/sun/star/datatransfer/XTransferable.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <comphelper/compbase.hxx>
+#include <utility>
+#include <vcl/customweld.hxx>
+#include <vcl/weld.hxx>
+#include <rtl/ustring.hxx>
+#include <swdllapi.h>
+
+class SwMailMergeConfigItem;
+
+namespace com::sun::star::mail {
+    class XMailService;
+    class XSmtpService;
+}
+
+namespace SwMailMergeHelper
+{
+    SW_DLLPUBLIC OUString CallSaveAsDialog(weld::Window* pParent, OUString& rFilter);
+    SW_DLLPUBLIC bool CheckMailAddress(std::u16string_view aMailAddress);
+    SW_DLLPUBLIC cpo::uno::Reference<css::mail::XSmtpService> ConnectToSmtpServer(
+                            SwMailMergeConfigItem const & rConfigItem,
+                            cpo::uno::Reference<css::mail::XMailService>& xInMailService,
+                            const OUString& rInMailServerPassword,
+                            const OUString& rOutMailServerPassword,
+                            weld::Window* pDialogParentWindow = nullptr);
+}
+
+struct SwAddressPreview_Impl;
+
+// Preview window used to show the possible selection of address blocks
+// and also the resulting address filled with database data
+class SW_DLLPUBLIC SwAddressPreview final : public weld::CustomWidgetController
+{
+    std::unique_ptr<SwAddressPreview_Impl> m_pImpl;
+    std::unique_ptr<weld::ScrolledWindow> m_xVScrollBar;
+    Link<LinkParamNone*,void> m_aSelectHdl;
+
+    void DrawText_Impl(vcl::RenderContext& rRenderContext, std::u16string_view rAddress,
+                       const Point& rTopLeft, const Size& rSize, bool bIsSelected);
+
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&) override;
+    virtual bool MouseButtonDown( const MouseEvent& rMEvt ) override;
+    virtual bool KeyInput( const KeyEvent& rKEvt ) override;
+    void UpdateScrollBar();
+
+    DECL_DLLPRIVATE_LINK(ScrollHdl, weld::ScrolledWindow&,void);
+
+public:
+    SwAddressPreview(std::unique_ptr<weld::ScrolledWindow> xParent);
+    virtual ~SwAddressPreview() override;
+
+    /** The address string is a list of address elements separated by spaces
+    and breaks. The addresses fit into the given layout. If more addresses then
+    rows/columns should be used a scrollbar will be added.
+
+     AddAddress appends the new address to the already added ones.
+     Initially the first added address will be selected
+    */
+    void AddAddress(const OUString& rAddress);
+    //  for preview mode - replaces the currently used address by the given one
+    void SetAddress(const OUString& rAddress);
+    // removes all addresses
+    void Clear();
+
+    // returns the selected address
+    sal_uInt16 GetSelectedAddress() const;
+    void SelectAddress(sal_uInt16 nSelect);
+    void ReplaceSelectedAddress(const OUString&);
+    void RemoveSelectedAddress();
+
+    // set the number of rows and columns of addresses
+    void SetLayout(sal_uInt16 nRows, sal_uInt16 nColumns);
+    void EnableScrollBar();
+
+    // fill the actual data into a string (address block or greeting)
+    static OUString FillData(const OUString& rAddress, SwMailMergeConfigItem const & rConfigItem,
+                             const cpo::uno::Sequence<OUString>* pAssignments = nullptr);
+
+    void SetSelectHdl (const Link<LinkParamNone*,void>& rLink) { m_aSelectHdl = rLink; }
+};
+
+
+// iterate over an address block or a greeting line the iterator returns the
+// parts either as pure string or as column
+struct SwMergeAddressItem
+{
+    OUString sText;
+    bool bIsColumn;
+    bool bIsReturn;
+
+    SwMergeAddressItem()
+        : bIsColumn(false)
+        , bIsReturn(false)
+    {}
+};
+
+class SW_DLLPUBLIC SwAddressIterator
+{
+    OUString m_sAddress;
+public:
+    SwAddressIterator(OUString aAddress) :
+        m_sAddress(std::move(aAddress))
+    {}
+
+    SwMergeAddressItem  Next();
+    bool HasMore() const { return !m_sAddress.isEmpty(); }
+};
+
+class SW_DLLPUBLIC SwAuthenticator final :
+    public cppu::WeakImplHelper<css::mail::XAuthenticator>
+{
+    OUString m_aUserName;
+    OUString m_aPassword;
+    weld::Window* m_pParentWindow;
+public:
+    SwAuthenticator()
+        : m_pParentWindow(nullptr)
+    {}
+    SwAuthenticator(OUString username, OUString password, weld::Window* pParent)
+        : m_aUserName(std::move(username))
+        , m_aPassword(std::move(password))
+        , m_pParentWindow(pParent)
+    {}
+    virtual ~SwAuthenticator() override;
+
+    virtual OUString getUserName() override;
+    virtual OUString getPassword() override;
+
+};
+
+class SW_DLLPUBLIC SwConnectionContext final : public cppu::WeakImplHelper<cpo::uno::XCurrentContext>
+{
+    OUString m_sMailServer;
+    sal_Int16 m_nPort;
+    OUString m_sConnectionType;
+
+public:
+    SwConnectionContext(OUString aMailServer, sal_Int16 nPort, OUString aConnectionType);
+    virtual ~SwConnectionContext() override;
+
+    virtual cpo::uno::Any getValueByName(const OUString& Name) override;
+};
+
+class SW_DLLPUBLIC SwConnectionListener final :
+        public comphelper::WeakComponentImplHelper<css::mail::XConnectionListener>
+{
+    using comphelper::WeakComponentImplHelperBase::disposing;
+
+public:
+    virtual ~SwConnectionListener() override;
+
+    virtual void connected(const css::lang::EventObject& aEvent) override;
+
+    virtual void disconnected(const css::lang::EventObject& aEvent) override;
+
+    virtual void disposing(const css::lang::EventObject& aEvent) override;
+};
+
+class SW_DLLPUBLIC SwMailTransferable final :
+        public comphelper::WeakComponentImplHelper<css::datatransfer::XTransferable, css::beans::XPropertySet>
+{
+    OUString  m_aMimeType;
+    OUString  m_sBody;
+    OUString  m_aURL;
+    OUString  m_aName;
+    bool m_bIsBody;
+
+    public:
+    SwMailTransferable(OUString aURL, OUString aName, OUString aMimeType);
+    SwMailTransferable(OUString aBody, OUString aMimeType);
+    virtual ~SwMailTransferable() override;
+    virtual cpo::uno::Any getTransferData(const css::datatransfer::DataFlavor& aFlavor) override;
+
+    virtual cpo::uno::Sequence<css::datatransfer::DataFlavor> getTransferDataFlavors() override;
+    virtual bool isDataFlavorSupported(const css::datatransfer::DataFlavor& aFlavor) override;
+
+    //XPropertySet
+    virtual cpo::uno::Reference<css::beans::XPropertySetInfo> getPropertySetInfo() override;
+    virtual void setPropertyValue(const OUString& aPropertyName, const cpo::uno::Any& aValue) override;
+
+    virtual cpo::uno::Any getPropertyValue(const OUString& PropertyName) override;
+    virtual void addPropertyChangeListener(const OUString& aPropertyName,
+                                                    const cpo::uno::Reference<css::beans::XPropertyChangeListener>& xListener) override;
+    virtual void removePropertyChangeListener(const OUString& aPropertyName,
+                                                       const cpo::uno::Reference<css::beans::XPropertyChangeListener >& aListener) override;
+    virtual void addVetoableChangeListener(const OUString& PropertyName,
+                                                    const cpo::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
+    virtual void removeVetoableChangeListener(const OUString& PropertyName,
+                                                       const cpo::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
+
+};
+
+class SW_DLLPUBLIC SwMailMessage final :
+        public comphelper::WeakComponentImplHelper<css::mail::XMailMessage>
+{
+    OUString m_sSenderName;
+    OUString m_sSenderAddress;
+    OUString m_sReplyToAddress;
+    OUString m_sSubject;
+
+    cpo::uno::Reference<css::datatransfer::XTransferable> m_xBody;
+//  css::mail::MailMessageBody m_aBody;
+
+    cpo::uno::Sequence<OUString> m_aRecipients;
+    cpo::uno::Sequence<OUString> m_aCcRecipients;
+    cpo::uno::Sequence<OUString> m_aBccRecipients;
+//  cpo::uno::Sequence<css::mail::MailAttachmentDescriptor> m_aAttachments;
+    cpo::uno::Sequence<css::mail::MailAttachment> m_aAttachments;
+public:
+    SwMailMessage();
+    virtual ~SwMailMessage() override;
+
+    // attributes
+    virtual OUString getSenderName() override;
+    virtual OUString getSenderAddress() override;
+    virtual OUString getReplyToAddress() override;
+    virtual void setReplyToAddress( const OUString& _replytoaddress ) override;
+    virtual OUString getSubject() override;
+    virtual void setSubject(const OUString& _subject) override;
+
+    virtual cpo::uno::Reference<css::datatransfer::XTransferable> getBody() override;
+    virtual void setBody(const cpo::uno::Reference<css::datatransfer::XTransferable>& _body) override;
+
+    // methods
+    virtual void addRecipient( const OUString& sRecipientAddress ) override;
+    virtual void addCcRecipient( const OUString& sRecipientAddress ) override;
+    virtual void addBccRecipient( const OUString& sRecipientAddress ) override;
+    virtual cpo::uno::Sequence<OUString> getRecipients() override;
+    virtual cpo::uno::Sequence<OUString> getCcRecipients() override;
+    virtual cpo::uno::Sequence<OUString> getBccRecipients() override;
+    virtual void addAttachment(const css::mail::MailAttachment& aMailAttachment) override;
+    virtual cpo::uno::Sequence<css::mail::MailAttachment> getAttachments() override;
+    void SetSenderName(const OUString& rSenderName)
+    {
+        m_sSenderName = rSenderName;
+    }
+    void SetSenderAddress(const OUString& rSenderAddress)
+    {
+        m_sSenderAddress = rSenderAddress;
+    }
+};
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

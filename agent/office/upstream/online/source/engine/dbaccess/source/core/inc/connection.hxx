@@ -1,0 +1,207 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <sal/config.h>
+
+#include <atomic>
+#include <cstddef>
+#include <map>
+
+#include "querycontainer.hxx"
+#include "tablecontainer.hxx"
+#include "viewcontainer.hxx"
+#include "RefreshListener.hxx"
+
+#include <com/sun/star/container/XChild.hpp>
+#include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/sdbcx/XTablesSupplier.hpp>
+#include <com/sun/star/sdbcx/XViewsSupplier.hpp>
+#include <com/sun/star/sdbcx/XUsersSupplier.hpp>
+#include <com/sun/star/sdbcx/XGroupsSupplier.hpp>
+#include <com/sun/star/sdb/XQueriesSupplier.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/sdb/tools/XConnectionTools.hpp>
+#include <com/sun/star/sdbc/XWarningsSupplier.hpp>
+
+#include <connectivity/ConnectionWrapper.hxx>
+#include <connectivity/CommonTools.hxx>
+#include <connectivity/warningscontainer.hxx>
+#include <unotools/weakref.hxx>
+
+class OStatementBase;
+
+namespace dbaccess
+{
+
+typedef cppu::ImplInheritanceHelper<    connectivity::OConnectionWrapper
+                                    ,   css::container::XChild
+                                    ,   css::sdbcx::XTablesSupplier
+                                    ,   css::sdbcx::XViewsSupplier
+                                    ,   css::sdbc::XConnection
+                                    ,   css::sdbc::XWarningsSupplier
+                                    ,   css::sdb::XQueriesSupplier
+                                    ,   css::lang::XMultiServiceFactory
+                                    ,   css::sdbcx::XUsersSupplier
+                                    ,   css::sdbcx::XGroupsSupplier
+                                    ,   css::sdb::tools::XConnectionTools
+                                    >   OConnection_Base;
+
+class ODatabaseSource;
+// OConnection
+class OConnection final     :public OConnection_Base
+                            ,public IRefreshListener
+{
+    unotools::WeakReference<ODatabaseSource> m_xParent;
+    cpo::uno::Reference< css::sdbcx::XTablesSupplier >
+                                          m_xMasterTables; // just to avoid the recreation of the catalog
+    // contains OStatement and OPreparedStatement
+    std::vector<unotools::WeakReference<OStatementBase>>
+                                          m_aStatements;
+    rtl::Reference< OQueryContainer >     m_xQueries;
+    connectivity::OWeakRefArray           m_aComposers;
+
+    // the filter as set on the parent data link at construction of the connection
+    cpo::uno::Sequence< OUString >                                    m_aTableFilter;
+    cpo::uno::Sequence< OUString >                                    m_aTableTypeFilter;
+    cpo::uno::Reference< cpo::uno::XComponentContext >                m_aContext;
+    cpo::uno::Reference< css::sdbc::XConnection >                     m_xMasterConnection;
+    cpo::uno::Reference< css::sdb::tools::XConnectionTools >          m_xConnectionTools;
+
+    // defines the helper services for example to query the command of a view
+    // @ see com.sun.star.sdb.tools.XViewAccess
+    typedef std::map< OUString, cpo::uno::Reference< cpo::uno::XInterface> > TSupportServices;
+    TSupportServices                m_aSupportServices;
+
+    std::unique_ptr<OTableContainer> m_pTables;
+    std::unique_ptr<OViewContainer>  m_pViews;
+    ::dbtools::WarningsContainer    m_aWarnings;
+    std::atomic<std::size_t>        m_nInAppend;
+    bool                            m_bSupportsViews;       // true when the getTableTypes return "VIEW" as type
+    bool                            m_bSupportsUsers;
+    bool                            m_bSupportsGroups;
+
+    virtual ~OConnection() override;
+public:
+    OConnection(ODatabaseSource& _rDB
+                ,cpo::uno::Reference< css::sdbc::XConnection > const & _rxMaster
+                ,const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxORB);
+
+// css::lang::XTypeProvider
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
+
+// cpo::uno::XInterface
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+
+// OComponentHelper
+    virtual void disposing() override;
+
+// css::container::XChild
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getParent(  ) override;
+    virtual void setParent( const cpo::uno::Reference< cpo::uno::XInterface >& Parent ) override;
+
+// css::sdbcx::XTablesSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess > getTables(  ) override;
+// css::sdbcx::XViewsSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess > getViews(  ) override;
+
+// css::sdb::XQueriesSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess > getQueries(  ) override;
+
+// css::sdbc::XWarningsSupplier
+    virtual cpo::uno::Any getWarnings(  ) override;
+    virtual void clearWarnings(  ) override;
+
+// css::lang::XServiceInfo
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+// XConnection
+    virtual cpo::uno::Reference< css::sdbc::XStatement > createStatement(  ) override;
+    virtual cpo::uno::Reference< css::sdbc::XPreparedStatement > prepareStatement( const OUString& sql ) override;
+    virtual cpo::uno::Reference< css::sdbc::XPreparedStatement > prepareCall( const OUString& sql ) override;
+    virtual OUString nativeSQL( const OUString& sql ) override;
+    virtual void setAutoCommit( bool autoCommit ) override;
+    virtual bool getAutoCommit(  ) override;
+    virtual void commit(  ) override;
+    virtual void rollback(  ) override;
+    virtual bool isClosed(  ) override;
+    virtual cpo::uno::Reference< css::sdbc::XDatabaseMetaData > getMetaData(  ) override;
+    virtual void setReadOnly( bool readOnly ) override;
+    virtual bool isReadOnly(  ) override;
+    virtual void setCatalog( const OUString& catalog ) override;
+    virtual OUString getCatalog(  ) override;
+    virtual void setTransactionIsolation( sal_Int32 level ) override;
+    virtual sal_Int32 getTransactionIsolation(  ) override;
+    virtual cpo::uno::Reference< css::container::XNameAccess > getTypeMap(  ) override;
+    virtual void setTypeMap( const cpo::uno::Reference< css::container::XNameAccess >& typeMap ) override;
+
+// css::sdbc::XCloseable
+    virtual void close(  ) override;
+
+    // XMultiServiceFactory
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstance( const OUString& aServiceSpecifier ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstanceWithArguments( const OUString& ServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& Arguments ) override;
+    virtual cpo::uno::Sequence< OUString > getAvailableServiceNames(  ) override;
+
+    // XUsersSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess > getUsers(  ) override;
+    // XGroupsSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess > getGroups(  ) override;
+
+    // XConnectionTools
+    virtual cpo::uno::Reference< css::sdb::tools::XObjectNames > getObjectNames(  ) override;
+    virtual cpo::uno::Reference< css::container::XNameAccess > getFieldsByCommandDescriptor( ::sal_Int32 commandType, const OUString& command, cpo::uno::Reference< css::lang::XComponent >& keepFieldsAlive ) override;
+
+    // IRefreshListener
+    virtual void refresh(const cpo::uno::Reference< css::container::XNameAccess >& _rToBeRefreshed) override;
+
+private:
+    /// @throws css::lang::DisposedException
+    void checkDisposed()
+    {
+        if ( rBHelper.bDisposed || !m_xConnection.is() )
+            throw css::lang::DisposedException();
+    }
+
+    cpo::uno::Reference< css::sdbcx::XTablesSupplier > const & getMasterTables();
+
+    /** checks whether or not there are naming conflicts between tables and queries
+    */
+    void    impl_checkTableQueryNames_nothrow();
+
+    /** loads the XConnectionTools implementation which we forward the respective functionality to
+
+        @throws cpo::uno::RuntimeException
+            if the implementation cannot be loaded
+
+        @postcond
+            m_xConnectionTools is not <NULL/>
+    */
+    void    impl_loadConnectionTools_throw();
+
+    /** reads the table filter and table type filter from the datasource
+    */
+    void    impl_fillTableFilter();
+};
+
+}   // namespace dbaccess
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

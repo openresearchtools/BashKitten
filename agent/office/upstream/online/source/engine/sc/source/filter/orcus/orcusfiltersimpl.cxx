@@ -1,0 +1,125 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <orcusfiltersimpl.hxx>
+#include <orcusinterface.hxx>
+#include <orcus_utils.hxx>
+#include <tokenarray.hxx>
+
+#include <osl/thread.hxx>
+#include <osl/file.hxx>
+#include <sfx2/docfile.hxx>
+#include <sfx2/frame.hxx>
+#include <sfx2/sfxsids.hrc>
+#include <svl/itemset.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/log.hxx>
+
+#include <orcus/format_detection.hpp>
+#include <orcus/orcus_import_ods.hpp>
+#include <orcus/stream.hpp>
+#include <com/sun/star/task/XStatusIndicator.hpp>
+
+using namespace com::sun::star;
+using namespace ::cpo;
+
+namespace
+{
+uno::Reference<task::XStatusIndicator> getStatusIndicator(const SfxMedium& rMedium)
+{
+    uno::Reference<task::XStatusIndicator> xStatusIndicator;
+    const SfxUnoAnyItem* pItem
+        = rMedium.GetItemSet().GetItem<SfxUnoAnyItem>(SID_PROGRESS_STATUSBAR_CONTROL);
+    if (pItem)
+        xStatusIndicator.set(pItem->GetValue(), uno::UNO_QUERY);
+    return xStatusIndicator;
+}
+
+bool loadFileContent(SfxMedium& rMedium, orcus::iface::import_filter& filter)
+{
+    SvStream* pSrc = rMedium.GetInStream();
+    if (!pSrc)
+        return false;
+
+    try
+    {
+        // memory-map the temp file and start the import
+        CopiedTempStream aTemp(*pSrc);
+        auto input = toFileContent(aTemp.getFileName());
+        filter.read_stream(input.str());
+    }
+    catch (const std::exception& e)
+    {
+        SAL_WARN("sc", "Unable to load file via orcus filter! " << e.what());
+        return false;
+    }
+
+    return true;
+}
+}
+
+ScOrcusFilters::ImportResult ScOrcusFiltersImpl::importByName(ScDocument& rDoc, SfxMedium& rMedium,
+                                                              const OUString& rFilterName) const
+{
+    const std::unordered_map<OUString, orcus::format_t> aMap = {
+        { u"Apache Parquet Spreadsheet"_ustr, orcus::format_t::parquet },
+        { u"Gnumeric Spreadsheet"_ustr, orcus::format_t::gnumeric },
+        { u"MS Excel 2003 XML Orcus"_ustr, orcus::format_t::xls_xml },
+        { u"Orcus JSON"_ustr, orcus::format_t::json },
+        { u"Orcus XML"_ustr, orcus::format_t::xml },
+        { u"Orcus CSV"_ustr, orcus::format_t::csv },
+        { u"csv"_ustr, orcus::format_t::csv },
+        { u"gnumeric"_ustr, orcus::format_t::gnumeric },
+        { u"ods"_ustr, orcus::format_t::ods },
+        { u"parquet"_ustr, orcus::format_t::parquet },
+        { u"xls-xml"_ustr, orcus::format_t::xls_xml },
+        { u"xlsx"_ustr, orcus::format_t::xlsx },
+    };
+
+    if (auto it = aMap.find(rFilterName); it != aMap.end())
+    {
+        ScOrcusFactory aFactory(rDoc);
+        aFactory.setStatusIndicator(getStatusIndicator(rMedium));
+
+        auto filter = orcus::create_filter(it->second, &aFactory);
+        if (!filter)
+            return ImportResult::Failure;
+
+        bool res = loadFileContent(rMedium, *filter);
+        return res ? ImportResult::Success : ImportResult::Failure;
+    }
+
+    return ImportResult::NotSupported;
+}
+
+bool ScOrcusFiltersImpl::importODS_Styles(ScDocument& rDoc, OUString& aPath) const
+{
+    try
+    {
+        auto content = toFileContent(aPath);
+        ScOrcusFactory aFactory(rDoc);
+        ScOrcusStyles aStyles(aFactory);
+        orcus::import_ods::read_styles(content.str(), &aStyles);
+    }
+    catch (const std::exception& e)
+    {
+        SAL_WARN("sc", "Unable to load styles from xml file! " << e.what());
+        return false;
+    }
+
+    return true;
+}
+
+std::unique_ptr<ScOrcusXMLContext> ScOrcusFiltersImpl::createXMLContext(ScDocument& rDoc,
+                                                                        const OUString& rPath) const
+{
+    return std::make_unique<ScOrcusXMLContextImpl>(rDoc, rPath);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

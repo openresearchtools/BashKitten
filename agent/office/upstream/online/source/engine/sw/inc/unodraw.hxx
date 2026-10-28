@@ -1,0 +1,278 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_SW_INC_UNODRAW_HXX
+#define INCLUDED_SW_INC_UNODRAW_HXX
+
+#include <svl/itemprop.hxx>
+#include <svl/listener.hxx>
+#include <svx/unopage.hxx>
+#include "frmfmt.hxx"
+#include <com/sun/star/text/XTextContent.hpp>
+#include <com/sun/star/drawing/PolyPolygonBezierCoords.hpp>
+#include <com/sun/star/drawing/XShape.hpp>
+#include <com/sun/star/lang/XUnoTunnel.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/drawing/XShapes.hpp>
+#include <com/sun/star/container/XEnumerationAccess.hpp>
+#include <com/sun/star/drawing/HomogenMatrix3.hpp>
+#include <cpo/uno/XAggregation.hpp>
+#include <cppuhelper/implbase.hxx>
+
+class SdrMarkList;
+class SdrView;
+class SwDoc;
+class SwXShape;
+
+typedef cppu::ImplInheritanceHelper
+<
+    SvxDrawPage,
+    css::container::XEnumerationAccess,
+    css::beans::XPropertySet>
+        SwFmDrawPage_Base;
+
+class SW_DLLPUBLIC SwFmDrawPage final : public SwFmDrawPage_Base
+{
+    SwDoc*          m_pDoc;
+    SdrPageView*        m_pPageView;
+    std::vector<rtl::Reference<SwXShape>> m_vShapes;
+    const SfxItemPropertySet* m_pPropertySet;
+
+public:
+    SwFmDrawPage( SwDoc* pDoc, SdrPage* pPage );
+    virtual ~SwFmDrawPage() noexcept override;
+
+    const SdrMarkList&  PreGroup(const cpo::uno::Reference< css::drawing::XShapes >& rShapes);
+    void                PreUnGroup(const cpo::uno::Reference< css::drawing::XShapeGroup >& rShapeGroup);
+
+    SdrView*            GetDrawView() {return mpView.get();}
+    SdrPageView*        GetPageView();
+    void                RemovePageView();
+    static cpo::uno::Reference<css::drawing::XShape> GetShape(SdrObject* pObj);
+    static cpo::uno::Reference<css::drawing::XShapeGroup> GetShapeGroup(SdrObject* pObj);
+
+    // The following method is called when a SvxShape-object is to be created.
+    // Derived classes may obtain at this point a derivation or an object
+    // that is aggregating a SvxShape.
+    virtual cpo::uno::Reference< css::drawing::XShape >  CreateShape( SdrObject *pObj ) const override;
+    void RemoveShape(const SwXShape* pShape)
+    {
+        auto ppShape = find(m_vShapes.begin(), m_vShapes.end(), pShape);
+        if(ppShape != m_vShapes.end())
+            m_vShapes.erase(ppShape);
+    };
+
+    //XEnumerationAccess
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
+
+    //XIndexAccess
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex(sal_Int32 nIndex) override;
+
+    //XElementAccess
+    virtual cpo::uno::Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
+
+    //XShapes
+    virtual void add(const cpo::uno::Reference< css::drawing::XShape > & xShape) override;
+    virtual void remove(const cpo::uno::Reference< css::drawing::XShape > & xShape) override;
+
+    //XShapeGrouper
+    virtual cpo::uno::Reference< css::drawing::XShapeGroup >  group(const cpo::uno::Reference< css::drawing::XShapes > & xShapes) override;
+    virtual void ungroup(const cpo::uno::Reference< css::drawing::XShapeGroup > & aGroup) override;
+
+    //XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    //XPropertySet
+    virtual cpo::uno::Reference<css::beans::XPropertySetInfo> getPropertySetInfo() override;
+    virtual void setPropertyValue(const OUString& aPropertyName, const cpo::uno::Any& aValue) override;
+    virtual cpo::uno::Any getPropertyValue(const OUString& PropertyName) override;
+    virtual void addPropertyChangeListener(const OUString& aPropertyName, const cpo::uno::Reference<css::beans::XPropertyChangeListener>& xListener) override;
+    virtual void removePropertyChangeListener(const OUString& aPropertyName, const cpo::uno::Reference<css::beans::XPropertyChangeListener>& aListener) override;
+    virtual void addVetoableChangeListener(const OUString& PropertyName, const cpo::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
+    virtual void removeVetoableChangeListener(const OUString& PropertyName, const cpo::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
+
+    // renamed and outlined to detect where it's called
+    void    InvalidateSwDoc(); // {pDoc = 0;}
+};
+
+class SwShapeDescriptor_Impl;
+typedef
+cppu::WeakImplHelper
+<
+    css::beans::XPropertySet,
+    css::beans::XPropertyState,
+    css::text::XTextContent,
+    css::lang::XServiceInfo,
+    css::lang::XUnoTunnel,
+    css::drawing::XShape
+>
+SwXShapeBaseClass;
+class SwXShape : public SwXShapeBaseClass
+{
+    friend class SwXGroupShape;
+    friend class SwFmDrawPage;
+    const SwFmDrawPage* m_pPage;
+
+    cpo::uno::Reference< cpo::uno::XAggregation > m_xShapeAgg;
+    // reference to <XShape>, determined in the
+    // constructor by <queryAggregation> at <xShapeAgg>.
+    cpo::uno::Reference< css::drawing::XShape > mxShape;
+
+    const SfxItemPropertySet*           m_pPropSet;
+    std::span<const SfxItemPropertyMapEntry>      m_pPropertyMapEntries;
+    cpo::uno::Reference< css::beans::XPropertySetInfo > mxPropertySetInfo;
+
+    std::unique_ptr<SwShapeDescriptor_Impl>  m_pImpl;
+
+    bool                        m_bDescriptor;
+
+    /** method to determine top group object */
+    SdrObject* GetTopGroupObj( SvxShape* _pSvxShape = nullptr );
+
+    /** method to determine position according to the positioning attributes */
+    css::awt::Point GetAttrPosition();
+
+    /** method to convert the position (translation) of the drawing object to
+        the layout direction horizontal left-to-right. */
+    css::awt::Point ConvertPositionToHoriL2R(
+                                    const css::awt::Point& rObjPos,
+                                    const css::awt::Size& rObjSize );
+
+    /** method to convert the transformation of the drawing object to the layout
+        direction, the drawing object is in
+    */
+    css::drawing::HomogenMatrix3 ConvertTransformationToLayoutDir(
+                const css::drawing::HomogenMatrix3& rMatrixInHoriL2R );
+
+    /** method to adjust the positioning properties
+
+        @param _aPosition
+        input parameter - point representing the new shape position. The position
+        has to be given in the layout direction the shape is in and relative to
+        its position alignment areas.
+    */
+    void AdjustPositionProperties(const css::awt::Point& rPosition);
+
+    /** method to convert start or end position of the drawing object to the
+        Writer specific position, which is the attribute position in layout direction
+    */
+    css::awt::Point ConvertStartOrEndPosToLayoutDir(
+                            const css::awt::Point& aStartOrEndPos );
+
+    /** method to convert PolyPolygonBezier of the drawing object to the
+        Writer specific position, which is the attribute position in layout direction
+    */
+    css::drawing::PolyPolygonBezierCoords ConvertPolyPolygonBezierToLayoutDir(
+                    const css::drawing::PolyPolygonBezierCoords& aPath );
+
+    /** method to get property from aggregation object
+
+        @throws css::beans::UnknownPropertyException
+        @throws css::lang::WrappedTargetException
+        @throws cpo::uno::RuntimeException
+    */
+    cpo::uno::Any _getPropAtAggrObj( const OUString& _rPropertyName );
+
+protected:
+    virtual ~SwXShape() override;
+public:
+    SwXShape(cpo::uno::Reference<cpo::uno::XInterface> & xShape, SwDoc const*const pDoc);
+
+    static const cpo::uno::Sequence< sal_Int8 > & getUnoTunnelId();
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type& aType ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+
+    //XUnoTunnel
+    virtual sal_Int64 getSomething( const cpo::uno::Sequence< sal_Int8 >& aIdentifier ) override;
+
+    //XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+
+    //XPropertyState
+    virtual css::beans::PropertyState getPropertyState( const OUString& PropertyName ) override;
+    virtual cpo::uno::Sequence< css::beans::PropertyState > getPropertyStates( const cpo::uno::Sequence< OUString >& aPropertyName ) override;
+    virtual void setPropertyToDefault( const OUString& PropertyName ) override;
+    virtual cpo::uno::Any getPropertyDefault( const OUString& aPropertyName ) override;
+
+    //XTextContent
+    virtual void attach(const cpo::uno::Reference< css::text::XTextRange > & xTextRange) override;
+    virtual cpo::uno::Reference< css::text::XTextRange >  getAnchor() override;
+
+    //XComponent
+    virtual void dispose() override;
+    virtual void addEventListener(const cpo::uno::Reference< css::lang::XEventListener > & aListener) override;
+    virtual void removeEventListener(const cpo::uno::Reference< css::lang::XEventListener > & aListener) override;
+
+    //XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    virtual css::awt::Point getPosition(  ) override;
+    virtual void setPosition( const css::awt::Point& aPosition ) override;
+    virtual css::awt::Size getSize(  ) override;
+    virtual void setSize( const css::awt::Size& aSize ) override;
+    virtual OUString getShapeType(  ) override;
+
+    SwShapeDescriptor_Impl*     GetDescImpl() {return m_pImpl.get();}
+    SwFrameFormat* GetFrameFormat() const;
+    SvxShape*               GetSvxShape();
+
+    // helper
+    static void AddExistingShapeToFormat( SdrObject const & _rObj );
+};
+
+class SwXGroupShape final :
+    public SwXShape,
+    public css::drawing::XShapes
+{
+    virtual ~SwXGroupShape() override;
+public:
+    SwXGroupShape(cpo::uno::Reference<cpo::uno::XInterface> & xShape, SwDoc const* pDoc);
+
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type& aType ) override;
+    virtual void acquire(  ) noexcept override;
+    virtual void release(  ) noexcept override;
+
+    //XShapes
+    virtual void add( const cpo::uno::Reference< css::drawing::XShape >& xShape ) override;
+    virtual void remove( const cpo::uno::Reference< css::drawing::XShape >& xShape ) override;
+
+    //XIndexAccess
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex(sal_Int32 nIndex) override;
+
+    //XElementAccess
+    virtual cpo::uno::Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
+};
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

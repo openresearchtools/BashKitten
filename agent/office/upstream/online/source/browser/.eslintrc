@@ -1,0 +1,81 @@
+{
+  "extends": [
+    "eslint:recommended",
+    "plugin:compat/recommended",
+    "prettier"
+  ],
+  "rules": {
+    "no-mixed-spaces-and-tabs": [2, "smart-tabs"],
+    "no-lonely-if": 2,
+    "no-eval": 2,
+    "no-implied-eval": 2,
+    "no-new-func": 2,
+    "no-underscore-dangle": 0,
+    "no-constant-condition": 0,
+    "strict": 0,
+    "no-shadow": 0,
+    "no-console": 0,
+    "no-control-regex": 0,
+    "no-useless-escape": 0,
+    "no-redeclare": 0,
+    /// Rules that are set to warn will fail in CI but not when building for development:
+    "no-debugger": 1,
+    "no-unreachable": 1,
+    "no-unused-vars": 1,
+    "no-await-in-loop": 1,
+    "no-restricted-syntax": [2,
+      {
+        "selector": "AssignmentExpression[left.type='MemberExpression'][left.property.name=/^(innerHTML|outerHTML)$/]",
+        "message": "Set text with textContent, empty with replaceChildren() and remove with remove(). If this really is markup, say why in the disable comment."
+      },
+      {
+        "selector": "CallExpression[callee.property.name='insertAdjacentHTML']",
+        "message": "Build the nodes with JSX or DOM calls. If this really is markup, say why in the disable comment."
+      },
+      {
+        "selector": "CallExpression[callee.property.name='html'][arguments.length>0]",
+        "message": "Use .text() for text. If this really is markup, say why in the disable comment."
+      },
+      {
+        "selector": "CallExpression[callee.property.name=/^(write|writeln)$/][callee.object.name='document'], CallExpression[callee.property.name=/^(write|writeln)$/][callee.object.property.name='document'], CallExpression[callee.property.name=/^(write|writeln)$/][callee.object.callee.property.name=/Document/]",
+        "message": "Build the document with DOM calls. If this really is markup, say why in the disable comment."
+      }
+    ]
+  },
+  "globals": {
+    "L": true,
+    "module": false,
+    "define": false
+  },
+  "env": {
+    "browser": true,
+    "es6": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2017
+  },
+  "overrides": [
+    {
+      "files": ["**/*.ts"],
+      "parser": "@typescript-eslint/parser",
+      "plugins": [
+        "@typescript-eslint"
+      ],
+      "extends": [
+        "eslint:recommended",
+        "plugin:@typescript-eslint/eslint-recommended",
+        "plugin:@typescript-eslint/recommended"
+      ],
+      "rules": {
+        "@typescript-eslint/no-unused-vars": "off",
+        "@typescript-eslint/no-inferrable-types": "off",
+        "no-var": "off",
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-namespace": "off",
+        "no-inner-declarations": "off",
+        "no-constant-condition": "off",
+        "@typescript-eslint/triple-slash-reference": "off"
+      }
+    }
+  ]
+}

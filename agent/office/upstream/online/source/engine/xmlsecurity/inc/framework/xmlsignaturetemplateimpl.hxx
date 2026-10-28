@@ -1,0 +1,114 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <sal/config.h>
+#include <rtl/ustring.hxx>
+#include <cppuhelper/implbase.hxx>
+
+#include <cpo/uno/Reference.hxx>
+
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/xml/crypto/XXMLSignatureTemplate.hpp>
+
+#include <SignatureTemplateInternal.hxx>
+
+#include <vector>
+
+namespace com::sun::star::lang { class XMultiServiceFactory; }
+namespace com::sun::star::security { class XCertificate; }
+namespace com::sun::star::xml::wrapper { class XXMLElementWrapper; }
+
+class XMLSignatureTemplateImpl final : public ::cppu::WeakImplHelper<
+    css::xml::crypto::XXMLSignatureTemplate ,
+    css::lang::XServiceInfo >
+    , public xmlsecurity::ISignatureTemplateInternal
+{
+    private:
+        cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > m_xTemplate ;
+        std::vector< cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > > targets;
+        cpo::uno::Reference< css::xml::crypto::XUriBinding > m_xUriBinding;
+        css::xml::crypto::SecurityOperationStatus m_nStatus;
+        cpo::uno::Reference<css::security::XCertificate> m_xSigningCertificate;
+        cpo::uno::Reference<css::security::XCertificate> m_xVerifiedCertificate;
+
+    public:
+        explicit XMLSignatureTemplateImpl();
+        virtual ~XMLSignatureTemplateImpl() override;
+
+        void SetSigningCertificate(cpo::uno::Reference<css::security::XCertificate> const& xCertificate)
+        {
+            m_xSigningCertificate = xCertificate;
+        }
+        cpo::uno::Reference<css::security::XCertificate> const& GetVerifiedCertificate() const
+        {
+            return m_xVerifiedCertificate;
+        }
+
+        // xmlsecurity::ISignatureTemplateInternal
+        virtual cpo::uno::Reference<css::security::XCertificate> GetSigningCertificate() override;
+        virtual void SetVerifiedCertificate(cpo::uno::Reference<css::security::XCertificate> const& rCertificate) override;
+
+        //Methods from XXMLSignatureTemplate
+        virtual void setTemplate(
+            const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aXmlElement
+            ) override;
+
+        virtual cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > getTemplate(
+        ) override;
+
+        virtual void setTarget(
+            const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aXmlElement
+        ) override;
+
+        virtual cpo::uno::Sequence< cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > > getTargets(
+        ) override;
+
+        virtual void setBinding(
+            const cpo::uno::Reference< css::xml::crypto::XUriBinding >& aUriBinding ) override;
+        virtual cpo::uno::Reference< css::xml::crypto::XUriBinding >
+            getBinding(  ) override;
+
+        virtual void setStatus(
+            css::xml::crypto::SecurityOperationStatus status ) override;
+        virtual css::xml::crypto::SecurityOperationStatus
+            getStatus(  ) override;
+
+        //Methods from XServiceInfo
+        virtual OUString getImplementationName() override ;
+
+        virtual bool supportsService(
+            const OUString& ServiceName
+        ) override ;
+
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override ;
+
+        //Helper for XServiceInfo
+        static cpo::uno::Sequence< OUString > impl_getSupportedServiceNames() ;
+
+        /// @throws cpo::uno::RuntimeException
+        static OUString impl_getImplementationName() ;
+
+        //Helper for registry
+        /// @throws cpo::uno::RuntimeException
+        static cpo::uno::Reference< cpo::uno::XInterface > impl_createInstance( const cpo::uno::Reference< css::lang::XMultiServiceFactory >& aServiceManager ) ;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

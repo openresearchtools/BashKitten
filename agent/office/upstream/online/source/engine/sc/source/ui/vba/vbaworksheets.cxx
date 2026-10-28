@@ -1,0 +1,537 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#include "vbaworksheets.hxx"
+
+#include <sfx2/viewfrm.hxx>
+
+#include <cppuhelper/implbase.hxx>
+
+#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <com/sun/star/container/XEnumerationAccess.hpp>
+#include <com/sun/star/sheet/XSpreadsheet.hpp>
+#include <com/sun/star/container/XNamed.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <com/sun/star/script/XTypeConverter.hpp>
+
+#include <ooo/vba/excel/XApplication.hpp>
+#include <tabvwsh.hxx>
+
+#include "excelvbahelper.hxx"
+#include "vbaworksheet.hxx"
+#include <markdata.hxx>
+
+#include <utility>
+#include <vector>
+#include <prevwsh.hxx>
+#include <preview.hxx>
+using namespace ::ooo::vba;
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+// a map ( or hashmap ) won't do as we need also to preserve the order
+// (as added ) of the items
+typedef std::vector< uno::Reference< sheet::XSpreadsheet > >  SheetMap;
+
+// #FIXME #TODO the implementation of the Sheets collections sucks,
+// e.g. there is no support for tracking sheets added/removed from the collection
+
+namespace {
+
+class WorkSheetsEnumeration : public ::cppu::WeakImplHelper< container::XEnumeration >
+{
+    SheetMap mSheetMap;
+    SheetMap::iterator mIt;
+public:
+    explicit WorkSheetsEnumeration( SheetMap&& sMap ) : mSheetMap( std::move(sMap) ), mIt( mSheetMap.begin() ) {}
+    virtual bool hasMoreElements(  ) override
+    {
+        return ( mIt != mSheetMap.end() );
+    }
+    virtual cpo::uno::Any nextElement(  ) override
+    {
+        if ( !hasMoreElements() )
+            throw container::NoSuchElementException();
+        uno::Reference< sheet::XSpreadsheet > xSheet( *mIt++ );
+        return cpo::uno::Any( xSheet ) ;
+    }
+};
+
+class SheetCollectionHelper : public ::cppu::WeakImplHelper< container::XNameAccess,
+                                                              container::XIndexAccess,
+                                                              container::XEnumerationAccess >
+{
+    SheetMap mSheetMap;
+    SheetMap::iterator cachePos;
+public:
+    explicit SheetCollectionHelper( SheetMap&& sMap ) : mSheetMap( std::move(sMap) ), cachePos(mSheetMap.begin()) {}
+    // XElementAccess
+    virtual cpo::uno::Type getElementType(  ) override { return  cppu::UnoType<sheet::XSpreadsheet>::get(); }
+    virtual bool hasElements(  ) override { return ( !mSheetMap.empty() ); }
+    // XNameAccess
+    virtual cpo::uno::Any getByName( const OUString& aName ) override
+    {
+        if ( !hasByName(aName) )
+            throw container::NoSuchElementException();
+        return cpo::uno::Any( *cachePos );
+    }
+    virtual cpo::uno::Sequence< OUString > getElementNames(  ) override
+    {
+        cpo::uno::Sequence< OUString > sNames( mSheetMap.size() );
+        OUString* pString = sNames.getArray();
+
+        for ( const auto& rItem : mSheetMap )
+        {
+            uno::Reference< container::XNamed > xName( rItem, uno::UNO_QUERY_THROW );
+            *pString = xName->getName();
+            ++pString;
+        }
+        return sNames;
+    }
+    virtual bool hasByName( const OUString& aName ) override
+    {
+        cachePos = mSheetMap.begin();
+        SheetMap::iterator it_end = mSheetMap.end();
+        for ( ; cachePos != it_end; ++cachePos )
+        {
+            uno::Reference< container::XNamed > xName( *cachePos, uno::UNO_QUERY_THROW );
+            if ( aName == xName->getName() )
+                break;
+        }
+        return ( cachePos != it_end );
+    }
+
+    // XElementAccess
+    virtual ::sal_Int32 getCount(  ) override { return mSheetMap.size(); }
+    virtual cpo::uno::Any getByIndex( ::sal_Int32 Index ) override
+    {
+        if ( Index < 0 || Index >= getCount() )
+            throw lang::IndexOutOfBoundsException();
+
+        return cpo::uno::Any( mSheetMap[ Index ] );
+
+    }
+    // XEnumerationAccess
+    virtual uno::Reference< container::XEnumeration > createEnumeration(  ) override
+    {
+        return new WorkSheetsEnumeration( std::vector(mSheetMap) );
+    }
+};
+
+class SheetsEnumeration : public EnumerationHelperImpl
+{
+    uno::Reference< frame::XModel > m_xModel;
+public:
+    /// @throws uno::RuntimeException
+    SheetsEnumeration( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< container::XEnumeration >& xEnumeration,  uno::Reference< frame::XModel > xModel  ) : EnumerationHelperImpl( xParent, xContext, xEnumeration ), m_xModel(std::move( xModel )) {}
+
+    virtual cpo::uno::Any nextElement(  ) override
+    {
+        uno::Reference< sheet::XSpreadsheet > xSheet( m_xEnumeration->nextElement(), uno::UNO_QUERY_THROW );
+        uno::Reference< XHelperInterface > xIf = excel::getUnoSheetModuleObj( xSheet );
+        cpo::uno::Any aRet;
+        if ( !xIf.is() )
+        {
+            // if the Sheet is in a document created by the api unfortunately ( at the
+            // moment, it actually won't have the special Document modules
+            uno::Reference< excel::XWorksheet > xNewSheet( new ScVbaWorksheet( m_xParent, m_xContext, xSheet, m_xModel ) );
+            aRet <<= xNewSheet;
+        }
+        else
+            aRet <<= xIf;
+        return aRet;
+    }
+
+};
+
+}
+
+ScVbaWorksheets::ScVbaWorksheets( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext > & xContext, const uno::Reference< container::XIndexAccess >& xSheets, uno::Reference< frame::XModel > xModel ): ScVbaWorksheets_BASE( xParent, xContext,  xSheets ), mxModel(std::move( xModel )), m_xSheets( uno::Reference< sheet::XSpreadsheets >( xSheets, uno::UNO_QUERY ) )
+{
+}
+
+ScVbaWorksheets::ScVbaWorksheets( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext > & xContext, const uno::Reference< container::XEnumerationAccess >& xEnumAccess, uno::Reference< frame::XModel > xModel  ):  ScVbaWorksheets_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >( xEnumAccess, uno::UNO_QUERY ) ), mxModel(std::move(xModel))
+{
+}
+
+// XEnumerationAccess
+cpo::uno::Type
+ScVbaWorksheets::getElementType()
+{
+    return cppu::UnoType<excel::XWorksheet>::get();
+}
+
+uno::Reference< container::XEnumeration >
+ScVbaWorksheets::createEnumeration()
+{
+    if ( !m_xSheets.is() )
+    {
+        uno::Reference< container::XEnumerationAccess > xAccess( m_xIndexAccess, uno::UNO_QUERY_THROW );
+        return xAccess->createEnumeration();
+    }
+    uno::Reference< container::XEnumerationAccess > xEnumAccess( m_xSheets, uno::UNO_QUERY_THROW );
+    return new SheetsEnumeration( this, mxContext, xEnumAccess->createEnumeration(), mxModel );
+}
+
+cpo::uno::Any
+ScVbaWorksheets::createCollectionObject( const cpo::uno::Any& aSource )
+{
+    uno::Reference< sheet::XSpreadsheet > xSheet( aSource, uno::UNO_QUERY );
+    uno::Reference< XHelperInterface > xIf = excel::getUnoSheetModuleObj( xSheet );
+    cpo::uno::Any aRet;
+    if ( !xIf.is() )
+    {
+        // if the Sheet is in a document created by the api unfortunately ( at the
+        // moment, it actually won't have the special Document modules
+        uno::Reference< excel::XWorksheet > xNewSheet( new ScVbaWorksheet( getParent(), mxContext, xSheet, mxModel ) );
+        aRet <<= xNewSheet;
+    }
+    else
+        aRet <<= xIf;
+    return aRet;
+}
+
+// XWorksheets
+cpo::uno::Any
+ScVbaWorksheets::Add( const cpo::uno::Any& Before, const cpo::uno::Any& After,
+                     const cpo::uno::Any& Count, const cpo::uno::Any& Type )
+{
+    if ( isSelectedSheets() )
+        return cpo::uno::Any(); // or should we throw?
+
+    OUString aStringSheet;
+    bool bBefore(true);
+    SCTAB nSheetIndex = 0;
+    SCTAB nNewSheets = 1, nType = 0;
+    Count >>= nNewSheets;
+    Type >>= nType;
+    SCTAB nCount = 0;
+
+    uno::Reference< excel::XWorksheet > xBeforeAfterSheet;
+
+    if ( Before.hasValue() )
+    {
+        if ( Before >>= xBeforeAfterSheet )
+            aStringSheet = xBeforeAfterSheet->getName();
+        else
+            Before >>= aStringSheet;
+    }
+
+    if (aStringSheet.isEmpty() && After.hasValue() )
+    {
+        if ( After >>= xBeforeAfterSheet )
+            aStringSheet = xBeforeAfterSheet->getName();
+        else
+            After >>= aStringSheet;
+        bBefore = false;
+    }
+    if (aStringSheet.isEmpty())
+    {
+        uno::Reference< excel::XApplication > xApplication( Application(), uno::UNO_QUERY_THROW );
+        aStringSheet = xApplication->getActiveWorkbook()->getActiveSheet()->getName();
+        bBefore = true;
+    }
+    nCount = static_cast< SCTAB >( m_xIndexAccess->getCount() );
+    for (SCTAB i=0; i < nCount; i++)
+    {
+            uno::Reference< sheet::XSpreadsheet > xSheet(m_xIndexAccess->getByIndex(i), uno::UNO_QUERY);
+            uno::Reference< container::XNamed > xNamed( xSheet, uno::UNO_QUERY_THROW );
+            if (xNamed->getName() == aStringSheet)
+            {
+                nSheetIndex = i;
+                break;
+            }
+    }
+
+    if(!bBefore)
+        nSheetIndex++;
+
+    SCTAB nSheetName = nCount + 1;
+    OUString aStringBase( u"Sheet"_ustr );
+    cpo::uno::Any result;
+    for (SCTAB i=0; i < nNewSheets; i++, nSheetName++)
+    {
+        OUString aStringName = aStringBase + OUString::number(nSheetName);
+        while (m_xNameAccess->hasByName(aStringName))
+        {
+            nSheetName++;
+            aStringName = aStringBase + OUString::number(nSheetName);
+        }
+        m_xSheets->insertNewByName(aStringName, nSheetIndex + i);
+        result = getItemByStringIndex( aStringName );
+    }
+    uno::Reference< excel::XWorksheet > xNewSheet( result, uno::UNO_QUERY );
+    if ( xNewSheet.is() )
+        xNewSheet->Activate();
+    return  result;
+}
+
+void
+ScVbaWorksheets::Delete()
+{
+    // #TODO #INVESTIGATE
+    // mmm this method could be trouble if the underlying
+    // uno objects ( the m_xIndexAccess etc ) aren't aware of the
+    // contents that are deleted
+    sal_Int32 nElems = getCount();
+    for ( sal_Int32 nItem = 1; nItem <= nElems; ++nItem )
+    {
+        uno::Reference< excel::XWorksheet > xSheet( Item( cpo::uno::Any( nItem ), cpo::uno::Any() ), uno::UNO_QUERY_THROW );
+        xSheet->Delete();
+    }
+}
+
+bool
+ScVbaWorksheets::isSelectedSheets() const
+{
+    return !m_xSheets.is();
+}
+
+void
+ScVbaWorksheets::PrintOut( const cpo::uno::Any& From, const cpo::uno::Any& To, const cpo::uno::Any& Copies, const cpo::uno::Any& Preview, const cpo::uno::Any& ActivePrinter, const cpo::uno::Any& PrintToFile, const cpo::uno::Any& Collate, const cpo::uno::Any& PrToFileName )
+{
+    sal_Int32 nTo = 0;
+    sal_Int32 nFrom = 0;
+    bool bSelection = false;
+    From >>= nFrom;
+    To >>= nTo;
+
+    if ( !( nFrom || nTo ) )
+        if ( isSelectedSheets() )
+            bSelection = true;
+
+    PrintOutHelper( excel::getBestViewShell( mxModel ), From, To, Copies, Preview, ActivePrinter, PrintToFile, Collate, PrToFileName, bSelection );
+}
+
+cpo::uno::Any
+ScVbaWorksheets::getVisible()
+{
+    bool bVisible = true;
+    uno::Reference< container::XEnumeration > xEnum( createEnumeration(), uno::UNO_SET_THROW );
+    while ( xEnum->hasMoreElements() )
+    {
+        uno::Reference< excel::XWorksheet > xSheet( xEnum->nextElement(), uno::UNO_QUERY_THROW );
+        if ( xSheet->getVisible() == 0 )
+        {
+                bVisible = false;
+                break;
+        }
+    }
+    return cpo::uno::Any( bVisible );
+}
+
+void
+ScVbaWorksheets::setVisible( const cpo::uno::Any& _visible )
+{
+    bool bState = false;
+    if ( !(_visible >>= bState) )
+        throw cpo::uno::RuntimeException(u"Visible property doesn't support non boolean #FIXME"_ustr );
+
+    uno::Reference< container::XEnumeration > xEnum( createEnumeration(), uno::UNO_SET_THROW );
+    while ( xEnum->hasMoreElements() )
+    {
+        uno::Reference< excel::XWorksheet > xSheet( xEnum->nextElement(), uno::UNO_QUERY_THROW );
+        xSheet->setVisible( bState ? 1 : 0 );
+    }
+
+}
+
+void
+ScVbaWorksheets::Select( const cpo::uno::Any& Replace )
+{
+    ScTabViewShell* pViewShell = excel::getBestViewShell( mxModel );
+    if ( !pViewShell )
+        throw cpo::uno::RuntimeException(u"Cannot obtain view shell"_ustr );
+
+    ScMarkData& rMarkData = pViewShell->GetViewData().GetMarkData();
+    bool bReplace = true;
+    Replace >>= bReplace;
+    // Replace is defaulted to True, meaning this current collection
+    // becomes the Selection, if it were false then the current selection would
+    // be extended
+    bool bSelectSingle = bReplace;
+    sal_Int32 nElems = getCount();
+    for ( sal_Int32 nItem = 1; nItem <= nElems; ++nItem )
+    {
+        uno::Reference< excel::XWorksheet > xSheet( Item( cpo::uno::Any( nItem ), cpo::uno::Any() ), uno::UNO_QUERY_THROW );
+        ScVbaWorksheet* pSheet = excel::getImplFromDocModuleWrapper<ScVbaWorksheet>( xSheet );
+        if ( bSelectSingle )
+        {
+            rMarkData.SelectOneTable( static_cast< SCTAB >( pSheet->getSheetID() ) );
+            bSelectSingle = false;
+        }
+        else
+            rMarkData.SelectTable( static_cast< SCTAB >( pSheet->getSheetID() ), true );
+    }
+
+}
+
+void
+ScVbaWorksheets::Copy ( const cpo::uno::Any& Before, const cpo::uno::Any& After)
+{
+    uno::Reference<excel::XWorksheet> xSheet;
+    sal_Int32 nElems = getCount();
+    bool bAfter = After.hasValue();
+    std::vector< uno::Reference< excel::XWorksheet > > Sheets;
+    sal_Int32 nItem = 0;
+
+    for ( nItem = 1; nItem <= nElems; ++nItem)
+    {
+        uno::Reference<excel::XWorksheet> xWorksheet(Item( cpo::uno::Any( nItem ), cpo::uno::Any() ), uno::UNO_QUERY_THROW );
+        Sheets.push_back(xWorksheet);
+    }
+    bool bNewDoc = (!(Before >>= xSheet) && !(After >>=xSheet)&& !(Before.hasValue()) && !(After.hasValue()));
+
+    uno::Reference< excel::XWorksheet > xSrcSheet;
+    if ( bNewDoc )
+    {
+        bAfter = true;
+        xSrcSheet = Sheets.at(0);
+        ScVbaWorksheet* pSrcSheet = excel::getImplFromDocModuleWrapper<ScVbaWorksheet>( xSrcSheet );
+        xSheet = pSrcSheet->createSheetCopyInNewDoc(xSrcSheet->getName());
+        nItem = 1;
+    }
+    else
+    {
+        nItem=0;
+    }
+
+    for (; nItem < nElems; ++nItem )
+    {
+        xSrcSheet = Sheets[nItem];
+        ScVbaWorksheet* pSrcSheet = excel::getImplFromDocModuleWrapper<ScVbaWorksheet>( xSrcSheet );
+        if ( bAfter )
+            xSheet = pSrcSheet->createSheetCopy(xSheet, bAfter);
+        else
+            pSrcSheet->createSheetCopy(xSheet, bAfter);
+    }
+}
+
+//ScVbaCollectionBaseImpl
+cpo::uno::Any
+ScVbaWorksheets::Item(const cpo::uno::Any& Index, const cpo::uno::Any& Index2)
+{
+    if ( Index.getValueTypeClass() == cpo::uno::TypeClass_SEQUENCE )
+    {
+        const uno::Reference< script::XTypeConverter >& xConverter = getTypeConverter(mxContext);
+        cpo::uno::Any aConverted = xConverter->convertTo( Index, cppu::UnoType<cpo::uno::Sequence< cpo::uno::Any >>::get() );
+        SheetMap aSheets;
+        cpo::uno::Sequence< cpo::uno::Any > sIndices;
+        aConverted >>= sIndices;
+        for (const auto& rIndex : sIndices)
+        {
+            uno::Reference< excel::XWorksheet > xWorkSheet( ScVbaWorksheets_BASE::Item( rIndex, Index2 ), uno::UNO_QUERY_THROW );
+            ScVbaWorksheet* pWorkSheet = excel::getImplFromDocModuleWrapper<ScVbaWorksheet>( xWorkSheet );
+            uno::Reference< sheet::XSpreadsheet > xSheet( pWorkSheet->getSheet() , uno::UNO_SET_THROW );
+            uno::Reference< container::XNamed > xName( xSheet, uno::UNO_QUERY_THROW );
+            aSheets.push_back( xSheet );
+        }
+        uno::Reference< container::XIndexAccess > xIndexAccess = new SheetCollectionHelper( std::move(aSheets) );
+        uno::Reference< XCollection > xSelectedSheets(  new ScVbaWorksheets( getParent(), mxContext, xIndexAccess, mxModel ) );
+        return cpo::uno::Any( xSelectedSheets );
+    }
+    return  ScVbaWorksheets_BASE::Item( Index, Index2 );
+}
+
+OUString
+ScVbaWorksheets::getServiceImplName()
+{
+    return u"ScVbaWorksheets"_ustr;
+}
+
+cpo::uno::Sequence<OUString>
+ScVbaWorksheets::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const sNames
+    {
+        u"ooo.vba.excel.Worksheets"_ustr
+    };
+    return sNames;
+}
+
+bool ScVbaWorksheets::nameExists( const uno::Reference <sheet::XSpreadsheetDocument>& xSpreadDoc, std::u16string_view name, SCTAB& nTab )
+{
+    if (!xSpreadDoc.is())
+        throw lang::IllegalArgumentException( u"nameExists() xSpreadDoc is null"_ustr, uno::Reference< cpo::uno::XInterface  >(), 1 );
+    uno::Reference <container::XIndexAccess> xIndex( xSpreadDoc->getSheets(), uno::UNO_QUERY );
+    if ( xIndex.is() )
+    {
+        SCTAB  nCount = static_cast< SCTAB >( xIndex->getCount() );
+        for (SCTAB i=0; i < nCount; i++)
+        {
+            uno::Reference< container::XNamed > xNamed( xIndex->getByIndex(i), uno::UNO_QUERY_THROW );
+            if (xNamed->getName() == name)
+            {
+                nTab = i;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void ScVbaWorksheets::PrintPreview( const cpo::uno::Any& /*EnableChanges*/ )
+{
+    // need test, print preview current active sheet
+    // !! TODO !! get view shell from controller
+    ScTabViewShell* pViewShell = excel::getBestViewShell( mxModel );
+    SfxViewFrame* pViewFrame = nullptr;
+    if ( pViewShell )
+        pViewFrame = &pViewShell->GetViewFrame();
+    if ( !pViewFrame )
+        return;
+
+    if ( pViewFrame->GetFrame().IsInPlace() )
+        return;
+
+    dispatchExecute( pViewShell, SID_VIEWSHELL1 );
+    SfxViewShell*  pShell = SfxViewShell::Get( pViewFrame->GetFrame().GetFrameInterface()->getController() );
+
+    ScPreviewShell* pPrvShell = dynamic_cast< ScPreviewShell* >( pShell );
+    if ( !pPrvShell )
+        return;
+
+    ScPreview* pPrvView = pPrvShell->GetPreview();
+    const ScDocument& rDoc = pViewShell->GetViewData().GetDocument();
+    ScMarkData aMarkData(rDoc.GetSheetLimits());
+    sal_Int32 nElems = getCount();
+    for ( sal_Int32 nItem = 1; nItem <= nElems; ++nItem )
+    {
+        uno::Reference< excel::XWorksheet > xSheet( Item( cpo::uno::Any( nItem ), cpo::uno::Any() ), uno::UNO_QUERY_THROW );
+        ScVbaWorksheet* pSheet = excel::getImplFromDocModuleWrapper<ScVbaWorksheet>( xSheet );
+        if ( pSheet )
+            aMarkData.SelectTable(static_cast< SCTAB >( pSheet->getSheetID() ), true );
+    }
+    // save old selection, setting the selectedtabs in the preview
+    // can affect the current selection when preview has been
+    // closed
+    ScMarkData::MarkedTabsType aOldTabs = pPrvView->GetSelectedTabs();
+    pPrvView->SetSelectedTabs( aMarkData );
+    // force update
+    pPrvView->DataChanged(false);
+    // set sensible first page
+    tools::Long nPage = pPrvView->GetFirstPage( 1 );
+    pPrvView->SetPageNo( nPage );
+    WaitUntilPreviewIsClosed( pViewFrame );
+    // restore old tab selection
+    pViewShell = excel::getBestViewShell( mxModel );
+    pViewShell->GetViewData().GetMarkData().SetSelectedTabs(aOldTabs);
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

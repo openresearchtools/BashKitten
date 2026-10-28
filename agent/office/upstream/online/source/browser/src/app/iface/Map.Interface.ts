@@ -1,0 +1,270 @@
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+interface ParsedJSONResult {
+	[name: string]: any;
+}
+
+// One argument of a UNO command as carried over postMessage: the UNO value
+// type (e.g. 'string', 'int32', 'boolean') and the value itself.
+interface UnoCommandValue {
+	type: string;
+	value: string | number | boolean;
+}
+
+// Arguments for insertCommentInteractive(): the inserted comment's UNO command
+// arguments (Text, Author, ...) keyed by argument name, plus the
+// InteractiveAnchor flag that asks the browser to let the user pick the anchor
+// before the command is dispatched.
+interface InteractiveCommentArgs {
+	InteractiveAnchor?: boolean;
+	[arg: string]: UnoCommandValue | boolean | undefined;
+}
+
+interface MapInterface extends Evented {
+	_docLayer: DocLayerInterface;
+	uiManager: UIManager;
+	_textInput: {
+		debug(value: boolean): void;
+		_isDebugOn: boolean;
+		onVisibleAreaChanged?(): void;
+		update(): void;
+	};
+	addressInputField: AddressInputField;
+
+	saveState?: SaveState;
+
+	tabsControl?: {
+		openContextMenuForFocusedTab(): void;
+	};
+
+	removeLayer(layer: any): void;
+	addLayer(layer: any): void;
+
+	stateChangeHandler: {
+		getItemValue(unoCmd: string): any;
+		setItemValue(unoCmd: string, value: any): void;
+	};
+
+	sendUnoCommand(unoCmd: string, json?: any, force?: boolean): void;
+
+	getDocType(): 'text' | 'presentation' | 'spreadsheet' | 'drawing';
+	isText(): boolean;
+	isPresentationOrDrawing(): boolean;
+
+	getDocSize(): cool.Point;
+	getContainer(): Element;
+	_getCurrentFontName(): string;
+
+	_docLoadedOnce: boolean;
+	_debug: DebugManager;
+	_fatal: boolean;
+	_docPassword: string;
+	_serverLoadTimings?: { [k: string]: number };
+
+	options: {
+		timestamp: number;
+		doc: string;
+		docParams: {
+			access_token?: string;
+			access_token_ttl?: string;
+			no_auth_header?: string;
+			permission?: 'edit' | 'readonly' | 'view';
+		};
+		tileWidthTwips: number;
+		tileHeightTwips: number;
+		wopiSrc: string;
+		previousWopiSrc: string;
+		zoom: number;
+		defaultZoom: number;
+	};
+
+	wopi: {
+		resetAppLoaded(): void;
+		onRenameFile(newName: string): void;
+		DisableInactiveMessages: boolean;
+		UserCanNotWriteRelative: boolean;
+		IsOwner: boolean;
+		BaseFileName: string;
+		HideExportOption: boolean;
+		DisableAISettings: boolean;
+		AIConfigured: boolean;
+		AIModelName: string;
+		UserCanWrite: boolean;
+		HideChangeTrackingControls: boolean;
+		EnableRemoteLinkPicker: boolean;
+		EnableRemoteSlideImport: boolean;
+		EnableInsertRemoteFile: boolean;
+		HideSaveOption: boolean;
+	};
+
+	loadDocument(socket?: SockInterface): void;
+	getCurrentPartNumber(): number;
+	getNumberOfParts(): number;
+	getZoom(): number;
+	getMinZoom(): number;
+	getMaxZoom(): number;
+	showBusy(label: string, bar: boolean): void;
+	hideBusy(): void;
+
+	_clip: ClipboardInterface;
+
+	setPermission(permission: string): void;
+	onLockFailed(reason: string): void;
+	updateModificationIndicator(newModificationTime: string): void;
+	isEditMode(): boolean;
+	isReadOnlyMode(): boolean;
+	remove(): MapInterface;
+
+	welcome: WelcomeInterface;
+	_setLockProps(lockInfo: ParsedJSONResult): void;
+	_setRestrictions(restrictionInfo: ParsedJSONResult): void;
+	hideRestrictedItems(it: any, item: any, button: any): void;
+	disableLockedItem(it: any, item: any, button: any): void;
+	isLockedItem(data: any): boolean;
+	openUnlockPopup(cmd: ControlCommand): void;
+	isLockedUser(): boolean;
+	isRestrictedUser(): boolean;
+
+	focus(acceptInput?: boolean): void;
+	editorHasFocus(): boolean;
+	acceptPendingCellEdit(): void;
+
+	_fireInitComplete(condition: string): void;
+	sendInitUNOCommands(): void;
+	initTextInput(docType: string): void;
+	saveAs(filenme: string, format?: string, options?: string): void;
+
+	addControl(control: any): void;
+	removeControl(control: any): void;
+
+	_shouldStartReadOnly(): boolean;
+	_switchToEditMode(): void;
+	_proceedEditMode(): void;
+	_askForPasswordToModify(wrongPassword: boolean): void;
+
+	_permission: 'edit' | 'readonly' | 'view';
+
+	// The document has a separate password for editing.
+	_docHasPasswordToModify: boolean;
+	_modifyPasswordProvided: boolean;
+
+	toolbarUpTemplate: any;
+	menubar: Menubar;
+	userList: UserList;
+	sidebar: Sidebar;
+	notesPanel: NotesPanel;
+	getViewColor(viewId: number): number;
+
+	// TODO fix types:
+	jsdialog: any;
+	zotero: any;
+	_extensions: { [id: string]: any };
+
+	_cacheSVG: string[];
+	calcInputBarHasFocus(): boolean;
+	hasFocus(): boolean;
+	lockAccessibilityOn(): void;
+	_partsDirection: number;
+	_docLoaded: boolean;
+	contextToolbar?: ContextToolbar;
+	getSplitPanesContext(): cool.SplitPanesContext | undefined;
+	scrollingIsHandled: boolean;
+	showComments(on?: boolean): void;
+	showResolvedComments(on?: boolean): void;
+	navigator: NavigatorPanel;
+	slideImportPane: SlideImportPane;
+	slideLinks: SlideLinks;
+	slideLinkToolbar: SlideLinkToolbar;
+	paneExpander: PaneExpander;
+	paneSplitter: PaneSplitter;
+	setPart(
+		part: number | string,
+		external?: boolean,
+		calledFromSetPartHandler?: boolean,
+	): void;
+	_limitZoom(zoom: number): number;
+	isViewReadOnly(viewid: number): boolean;
+	context?: { appId: string; context: string };
+	eSignature?: cool.ESignature;
+
+	// TODO: Fix type.
+	formulabar: any;
+	backstageView: any;
+	topToolbar: any;
+	statusBar: any;
+
+	mobileSearchBar: MobileSearchBar;
+	_disableDefaultAction: Record<string, boolean>;
+	save(
+		dontTerminateEdit: boolean,
+		dontSaveIfUnmodified: boolean,
+		extendedData?: string,
+	): void;
+	_everModified: boolean;
+	print(options?: string): void;
+	openRevisionHistory(): void;
+	openShare(): void;
+	showHelp(id: string): void;
+	openSaveAs(format?: string): void;
+	downloadAs(
+		name: string,
+		format?: string,
+		options?: string | null,
+		id?: string,
+	): void;
+	insertComment(): void;
+	insertThreadedComment(): void;
+	insertCommentInteractive(command: string, args: InteractiveCommentArgs): void;
+	zoomIn(delta: number, options?: any, animate?: boolean): MapInterface;
+	zoomOut(delta: number, options?: any, animate?: boolean): MapInterface;
+	cancelSearch(): void;
+	isSearching(): boolean;
+	_onGotFocus(): void;
+	goToPage(page: string | number): void;
+	serverAuditDialog?: ServerAuditDialog;
+	_lockAccessibilityOn: boolean;
+	setAccessibilityState(enable: boolean): void;
+
+	// TODO: L.Map.Keyboard
+	keyboard: any;
+
+	onFormulaBarBlur(): void;
+	onFormulaBarFocus(): void;
+	formulabarBlur(): void;
+	formulabarFocus(): void;
+	formulabarSetDirty(): void;
+	_functionWizardData: WidgetJSON;
+
+	insertPage: ((nPos?: number) => void) & { scrollToEnd: boolean };
+	deletePage(nPos?: number): void;
+	duplicatePage(pos?: number): void;
+	slideShowPresenter?: SlideShowPresenter;
+	hideSlide(): void;
+	showSlide(): void;
+	sidebarFromNotebookbar: SidebarFromNotebookbarPanel;
+	cleanupSidebar: CleanupSidebar;
+	mobileTopBar?: MobileTopBar;
+
+	// TODO: window.L.control.lokDialog
+	dialog: any;
+	isAIConfigured?: boolean;
+	aiRequestTimeout?: number;
+	aiModelName?: string;
+	aiEthicalRating?: string;
+	// Set when a valid AI provider was just saved from the settings dialog;
+	// consumed once isAIConfigured updates to open the AI sidebar.
+	_aiJustConfigured?: boolean;
+
+	_controlCorners: Record<string, Node>;
+	_contextMenu: ContextMenuControl;
+	_saveImageToWopi: boolean;
+	tooltip?: any;
+}

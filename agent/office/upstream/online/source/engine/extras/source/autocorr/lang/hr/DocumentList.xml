@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<block-list:block-list xmlns:block-list="http://openoffice.org/2001/block-list">
+<!-- V. https://github.com/krunose/libo-acorr-hr/blob/master/dokumentacija.md#documentlistxml -->
+  <block-list:block block-list:abbreviated-name="med. Biochem." block-list:name="med. biochem."/>
+  <block-list:block block-list:abbreviated-name="med. Chem." block-list:name="med. chem."/>
+  <block-list:block block-list:abbreviated-name="med. Dent." block-list:name="med. dent."/>
+  <block-list:block block-list:abbreviated-name="med. Lab." block-list:name="med. lab."/>
+  <block-list:block block-list:abbreviated-name="med. Techn." block-list:name="med. techn."/>
+  <block-list:block block-list:abbreviated-name="med. Vet." block-list:name="med. vet."/>
+  <block-list:block block-list:abbreviated-name="%o" block-list:name="‰"/>
+  <block-list:block block-list:abbreviated-name="%oo" block-list:name="‱"/>
+</block-list:block-list>

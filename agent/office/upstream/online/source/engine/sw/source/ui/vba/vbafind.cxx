@@ -1,0 +1,438 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#include "vbafind.hxx"
+#include "vbareplacement.hxx"
+#include <ooo/vba/word/WdFindWrap.hpp>
+#include <ooo/vba/word/WdReplace.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/text/XTextRangeCompare.hpp>
+#include <doc.hxx>
+#include <docsh.hxx>
+#include <unotxdoc.hxx>
+#include "wordvbahelper.hxx"
+#include <rtl/ref.hxx>
+#include <sal/log.hxx>
+
+using namespace ::ooo::vba;
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+SwVbaFind::SwVbaFind( const uno::Reference< ooo::vba::XHelperInterface >& rParent,
+                      const uno::Reference< cpo::uno::XComponentContext >& rContext,
+                      rtl::Reference< SwXTextDocument > xModel ) :
+    SwVbaFind_BASE( rParent, rContext ),
+    mxModel( std::move(xModel) ),
+    mbReplace( false ),
+    mnReplaceType( word::WdReplace::wdReplaceOne ),
+    mnWrap( word::WdFindWrap::wdFindStop )
+{
+    mxPropertyReplace.set( mxModel->createReplaceDescriptor(), uno::UNO_QUERY_THROW );
+    mxTVC = word::getXTextViewCursor( mxModel );
+    mxSelSupp.set( mxModel->getCurrentController(), uno::UNO_QUERY_THROW );
+}
+
+SwVbaFind::~SwVbaFind()
+{
+}
+
+uno::Reference< word::XFind > SwVbaFind::GetOrCreateFind(const uno::Reference< ooo::vba::XHelperInterface >& rParent,
+                                                         const uno::Reference< cpo::uno::XComponentContext >& rContext,
+                                                         const rtl::Reference< SwXTextDocument >& xModel,
+                                                         const uno::Reference< text::XTextRange >& xTextRange)
+{
+    rtl::Reference< SwVbaFind > xFind;
+    SwDoc* pDoc = xModel->GetDocShell()->GetDoc();
+    if( pDoc )
+        xFind = dynamic_cast<SwVbaFind *>( pDoc->getVbaFind().get() );
+    if ( !xFind )
+    {
+        xFind = new SwVbaFind( rParent, rContext, xModel );
+        if ( pDoc )
+            pDoc->setVbaFind( xFind );
+    }
+    xFind->mxTextRange = xTextRange;
+
+    return xFind;
+}
+
+
+bool SwVbaFind::InRange( const uno::Reference< text::XTextRange >& xCurrentRange )
+{
+    uno::Reference< text::XTextRangeCompare > xTRC( mxTextRange->getText(), uno::UNO_QUERY_THROW );
+    return xTRC->compareRegionStarts( mxTextRange, xCurrentRange ) >= 0 && xTRC->compareRegionEnds( mxTextRange, xCurrentRange ) <= 0;
+}
+
+bool SwVbaFind::InEqualRange( const uno::Reference< text::XTextRange >& xCurrentRange )
+{
+    uno::Reference< text::XTextRangeCompare > xTRC( mxTextRange->getText(), uno::UNO_QUERY_THROW );
+    return xTRC->compareRegionStarts( mxTextRange, xCurrentRange ) == 0 && xTRC->compareRegionEnds( mxTextRange, xCurrentRange ) == 0;
+}
+
+void SwVbaFind::SetReplaceWith( const OUString& rText )
+{
+    mxPropertyReplace->setReplaceString( rText );
+    mbReplace = true;
+}
+
+OUString SwVbaFind::GetReplaceWith()
+{
+    return mxPropertyReplace->getReplaceString();
+}
+void SwVbaFind::SetReplace( sal_Int32 type )
+{
+    mnReplaceType = type;
+    mbReplace = true;
+}
+uno::Reference< text::XTextRange > SwVbaFind::FindOneElement()
+{
+    uno::Reference< text::XTextRange > xFoundOne;
+    if( !mxTVC->getString().isEmpty() )
+    {
+        if( getForward() )
+        {
+            xFoundOne.set( mxModel->findNext( mxTextRange->getStart(), uno::Reference< util::XSearchDescriptor >( mxPropertyReplace, uno::UNO_QUERY_THROW ) ), uno::UNO_QUERY );
+        }
+        else
+        {
+            xFoundOne.set( mxModel->findNext( mxTextRange->getEnd(), uno::Reference< util::XSearchDescriptor >( mxPropertyReplace, uno::UNO_QUERY_THROW ) ), uno::UNO_QUERY );
+        }
+
+        if( xFoundOne.is() && InEqualRange( xFoundOne ) )
+        {
+            xFoundOne.set( mxModel->findNext( xFoundOne, uno::Reference< util::XSearchDescriptor >( mxPropertyReplace, uno::UNO_QUERY_THROW ) ), uno::UNO_QUERY );
+        }
+        else if( xFoundOne.is() && !InRange( xFoundOne ) )
+        {
+            xFoundOne.clear();
+        }
+    }
+    else
+    {
+        xFoundOne.set( mxModel->findNext( mxTextRange, uno::Reference< util::XSearchDescriptor >( mxPropertyReplace, uno::UNO_QUERY_THROW ) ), uno::UNO_QUERY );
+    }
+
+    if( !xFoundOne.is() && ( getWrap() == word::WdFindWrap::wdFindContinue || getWrap() == word::WdFindWrap::wdFindAsk ) )
+    {
+        if( getForward() )
+        {
+            mxTVC->gotoStart(false);
+            xFoundOne.set( mxModel->findNext( mxTextRange->getStart(), uno::Reference< util::XSearchDescriptor >( mxPropertyReplace, uno::UNO_QUERY_THROW ) ), uno::UNO_QUERY );
+        }
+        else
+        {
+            mxTVC->gotoEnd( false );
+            xFoundOne.set( mxModel->findNext( mxTextRange->getEnd(), uno::Reference< util::XSearchDescriptor >( mxPropertyReplace, uno::UNO_QUERY_THROW ) ), uno::UNO_QUERY );
+
+        }
+    }
+    return xFoundOne;
+}
+
+bool SwVbaFind::SearchReplace()
+{
+    bool result = false;
+
+    // TODO: map wildcards in area to OOo wildcards
+
+    if( mbReplace )
+    {
+        switch( mnReplaceType )
+        {
+            case word::WdReplace::wdReplaceNone:
+            {
+                result = true;
+                break;
+            }
+            case word::WdReplace::wdReplaceOne:
+            {
+                uno::Reference< text::XTextRange > xFindOne = FindOneElement();
+                if( xFindOne.is() )
+                {
+                    xFindOne->setString( GetReplaceWith() );
+                    result = mxSelSupp->select( cpo::uno::Any( xFindOne ) );
+                }
+                break;
+            }
+            case word::WdReplace::wdReplaceAll:
+            {
+                uno::Reference< container::XIndexAccess > xIndexAccess = mxModel->findAll( uno::Reference< util::XSearchDescriptor >( mxPropertyReplace, uno::UNO_QUERY_THROW ) );
+                if( xIndexAccess->getCount() > 0 )
+                {
+                    for( sal_Int32 i = 0; i < xIndexAccess->getCount(); i++ )
+                    {
+                        uno::Reference< text::XTextRange > xTextRange( xIndexAccess->getByIndex( i ), uno::UNO_QUERY_THROW );
+                        if( mnWrap == word::WdFindWrap::wdFindContinue || mnWrap == word::WdFindWrap::wdFindAsk || InRange( xTextRange ) )
+                        {
+                            xTextRange->setString( GetReplaceWith() );
+                            result = true;
+                        }
+                    }
+                }
+                break;
+            }
+            default:
+            {
+                result = false;
+            }
+        }
+    }
+    else
+    {
+        uno::Reference< text::XTextRange > xFindOne = FindOneElement();
+        if( xFindOne.is() )
+            result = mxSelSupp->select( cpo::uno::Any( xFindOne ) );
+    }
+
+    return result;
+}
+
+OUString SwVbaFind::getText()
+{
+    return mxPropertyReplace->getSearchString();
+}
+
+void SwVbaFind::setText( const OUString& _text )
+{
+    mxPropertyReplace->setSearchString( _text );
+}
+
+cpo::uno::Any SwVbaFind::getReplacement()
+{
+    return cpo::uno::Any( uno::Reference< word::XReplacement >( new SwVbaReplacement( this, mxContext, mxPropertyReplace ) ) );
+}
+
+void SwVbaFind::setReplacement( const cpo::uno::Any& /*_replacement */ )
+{
+    throw cpo::uno::RuntimeException(u"Not implemented"_ustr );
+}
+
+bool SwVbaFind::getForward()
+{
+    bool bBackward = false;
+    mxPropertyReplace->getPropertyValue(u"SearchBackwards"_ustr) >>= bBackward;
+    return !bBackward;
+}
+
+void SwVbaFind::setForward( bool _forward )
+{
+    bool bBackward = !_forward;
+    mxPropertyReplace->setPropertyValue(u"SearchBackwards"_ustr, cpo::uno::Any( bBackward ) );
+}
+
+::sal_Int32 SwVbaFind::getWrap()
+{
+    // seems not supported in Writer
+    return mnWrap;
+}
+
+void SwVbaFind::setWrap( ::sal_Int32 _wrap )
+{
+    // seems not supported in Writer
+    mnWrap = _wrap;
+}
+
+bool SwVbaFind::getFormat()
+{
+    return mxPropertyReplace->getValueSearch();
+}
+
+void SwVbaFind::setFormat( bool _format )
+{
+    mxPropertyReplace->setValueSearch( _format );
+}
+
+bool SwVbaFind::getMatchCase()
+{
+    bool value = false;
+    mxPropertyReplace->getPropertyValue(u"SearchCaseSensitive"_ustr) >>= value;
+    return value;
+}
+
+void SwVbaFind::setMatchCase( bool _matchcase )
+{
+    mxPropertyReplace->setPropertyValue(u"SearchCaseSensitive"_ustr, cpo::uno::Any( _matchcase ) );
+}
+
+bool SwVbaFind::getMatchWholeWord()
+{
+    bool value = false;
+    mxPropertyReplace->getPropertyValue(u"SearchWords"_ustr) >>= value;
+    return value;
+}
+
+void SwVbaFind::setMatchWholeWord( bool _matchwholeword )
+{
+    mxPropertyReplace->setPropertyValue(u"SearchWords"_ustr, cpo::uno::Any( _matchwholeword ) );
+}
+
+bool SwVbaFind::getMatchWildcards()
+{
+    bool value = false;
+    mxPropertyReplace->getPropertyValue(u"SearchRegularExpression"_ustr) >>= value;
+    return value;
+}
+
+void SwVbaFind::setMatchWildcards( bool _matchwildcards )
+{
+    mxPropertyReplace->setPropertyValue(u"SearchRegularExpression"_ustr, cpo::uno::Any( _matchwildcards ) );
+}
+
+bool SwVbaFind::getMatchSoundsLike()
+{
+    bool value = false;
+    mxPropertyReplace->getPropertyValue(u"SearchSimilarity"_ustr) >>= value;
+    return value;
+}
+
+void SwVbaFind::setMatchSoundsLike( bool _matchsoundslike )
+{
+    // seems not accurate
+    mxPropertyReplace->setPropertyValue(u"SearchSimilarity"_ustr, cpo::uno::Any( _matchsoundslike ) );
+}
+
+bool SwVbaFind::getMatchAllWordForms()
+{
+    bool value = false;
+    mxPropertyReplace->getPropertyValue(u"SearchSimilarity"_ustr) >>= value;
+    if( value )
+        mxPropertyReplace->getPropertyValue(u"SearchSimilarityRelax"_ustr) >>= value;
+    return value;
+}
+
+void SwVbaFind::setMatchAllWordForms( bool _matchallwordforms )
+{
+    // seems not accurate
+    mxPropertyReplace->setPropertyValue(u"SearchSimilarity"_ustr, cpo::uno::Any( _matchallwordforms ) );
+    mxPropertyReplace->setPropertyValue(u"SearchSimilarityRelax"_ustr, cpo::uno::Any( _matchallwordforms ) );
+}
+
+cpo::uno::Any SwVbaFind::getStyle()
+{
+    throw cpo::uno::RuntimeException(u"Not implemented"_ustr );
+}
+
+void SwVbaFind::setStyle( const cpo::uno::Any& /*_style */ )
+{
+    throw cpo::uno::RuntimeException(u"Not implemented"_ustr );
+}
+
+bool
+SwVbaFind::Execute( const cpo::uno::Any& FindText, const cpo::uno::Any& MatchCase, const cpo::uno::Any& MatchWholeWord, const cpo::uno::Any& MatchWildcards, const cpo::uno::Any& MatchSoundsLike, const cpo::uno::Any& MatchAllWordForms, const cpo::uno::Any& Forward, const cpo::uno::Any& Wrap, const cpo::uno::Any& Format, const cpo::uno::Any& ReplaceWith, const cpo::uno::Any& Replace, const cpo::uno::Any& /*MatchKashida*/, const cpo::uno::Any& /*MatchDiacritics*/, const cpo::uno::Any& /*MatchAlefHamza*/, const cpo::uno::Any& /*MatchControl*/, const cpo::uno::Any& /*MatchPrefix*/, const cpo::uno::Any& /*MatchSuffix*/, const cpo::uno::Any& /*MatchPhrase*/, const cpo::uno::Any& /*IgnoreSpace*/, const cpo::uno::Any& /*IgnorePunct*/ )
+{
+    bool result = false;
+    if( FindText.hasValue() )
+    {
+        OUString sText;
+        FindText >>= sText;
+        setText( sText );
+    }
+
+    bool bValue = false;
+    if( MatchCase.hasValue() )
+    {
+        MatchCase >>= bValue;
+        setMatchCase( bValue );
+    }
+
+    if( MatchWholeWord.hasValue() )
+    {
+        MatchWholeWord >>= bValue;
+        setMatchWholeWord( bValue );
+    }
+
+    if( MatchWildcards.hasValue() )
+    {
+        MatchWildcards >>= bValue;
+        setMatchWildcards( bValue );
+    }
+
+    if( MatchSoundsLike.hasValue() )
+    {
+        MatchSoundsLike >>= bValue;
+        setMatchSoundsLike( bValue );
+    }
+
+    if( MatchAllWordForms.hasValue() )
+    {
+        MatchAllWordForms >>= bValue;
+        setMatchAllWordForms( bValue );
+    }
+
+    if( Forward.hasValue() )
+    {
+        Forward >>= bValue;
+        setForward( bValue );
+    }
+
+    if( Wrap.hasValue() )
+    {
+        sal_Int32 nWrapType = 0;
+        Wrap >>= nWrapType;
+        setWrap( nWrapType );
+    }
+
+    if( Format.hasValue() )
+    {
+        Format >>= bValue;
+        setFormat( bValue );
+    }
+
+    if( ReplaceWith.hasValue() )
+    {
+        OUString sValue;
+        ReplaceWith >>= sValue;
+        SetReplaceWith( sValue );
+    }
+
+    if( Replace.hasValue() )
+    {
+        sal_Int32 nValue(0);
+        Replace >>= nValue;
+        SetReplace( nValue );
+    }
+
+    result = SearchReplace();
+
+    return result;
+}
+
+void
+SwVbaFind::ClearFormatting(  )
+{
+    cpo::uno::Sequence< beans::PropertyValue >  aSearchAttribs;
+    mxPropertyReplace->setSearchAttributes( aSearchAttribs );
+}
+
+OUString
+SwVbaFind::getServiceImplName()
+{
+    return u"SwVbaFind"_ustr;
+}
+
+cpo::uno::Sequence< OUString >
+SwVbaFind::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.word.Find"_ustr
+    };
+    return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

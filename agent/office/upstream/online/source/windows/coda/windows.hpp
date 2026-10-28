@@ -1,0 +1,40 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <COKit/COKit.hxx>
+
+#include <string>
+
+extern int coolwsd_server_socket_fd;
+extern const char *user_name;
+
+// The location of the app .exe file. Note that currently that is the "program" subfolder of the top
+// directory of the app.
+extern std::string app_installation_path;
+
+// The file: URI for the above.
+extern std::string app_installation_uri;
+
+extern void load_next_document();
+void output_file_dialog_from_core(const char* suggestedURI, char* result, size_t resultLen);
+
+// Open Explorer with the given file: URI's document selected.
+void reveal_in_file_manager(const char* uri);
+
+// Install the process-global clipboard provider so the desktop app uses one shared clipboard for
+// every document. Called once, while the engine's main loop starts.
+void install_clipboard_provider(COKit& rOffice);
+
+// Install the process-global file picker provider, so a command that needs the user to pick a
+// file opens a native open dialog instead of the engine's file dialog. Called once, while the
+// engine's main loop starts.
+void install_filepicker_provider(COKit& rOffice);
+
+// Materialise all clipboard formats we have advertised
+void materialize_clipboard_formats();
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

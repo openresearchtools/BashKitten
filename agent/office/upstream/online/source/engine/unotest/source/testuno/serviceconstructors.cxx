@@ -1,0 +1,59 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <sal/config.h>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/testuno/XArgumentStore.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+
+namespace cpo::uno { class XComponentContext; }
+
+namespace
+{
+class ConstructorsTest
+    : public cppu::WeakImplHelper<css::testuno::XArgumentStore, css::lang::XServiceInfo>
+{
+public:
+    explicit ConstructorsTest(cpo::uno::Sequence<cpo::uno::Any> const& args)
+        : m_aArgs(args)
+    {
+    }
+
+    OUString getImplementationName() override
+    {
+        return u"com.sun.star.comp.testuno.Constructors"_ustr;
+    }
+
+    bool supportsService(OUString const& ServiceName) override
+    {
+        return cppu::supportsService(this, ServiceName);
+    }
+
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override
+    {
+        return { u"com.sun.star.testuno.ImplicitConstructor"_ustr,
+                 u"com.sun.star.testuno.ExplicitConstructors"_ustr };
+    }
+
+    cpo::uno::Sequence<cpo::uno::Any> getArguments() override { return m_aArgs; }
+
+private:
+    cpo::uno::Sequence<cpo::uno::Any> m_aArgs;
+};
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_testuno_Constructors_get_implementation(
+    cpo::uno::XComponentContext*, cpo::uno::Sequence<cpo::uno::Any> const& args)
+{
+    return cppu::acquire(new ConstructorsTest(args));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

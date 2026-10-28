@@ -1,0 +1,159 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <rtl/ref.hxx>
+
+#include <cppuhelper/implbase.hxx>
+
+#include <com/sun/star/document/XDocumentEventListener.hpp>
+#include <com/sun/star/embed/XStorage.hpp>
+#include <com/sun/star/frame/XModel3.hpp>
+#include <com/sun/star/frame/XModuleManager2.hpp>
+#include <com/sun/star/frame/XGlobalEventBroadcaster.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <com/sun/star/util/DateTime.hpp>
+#include <com/sun/star/util/XCloseListener.hpp>
+
+#include <map>
+#include <mutex>
+#include <unordered_map>
+#include <utility>
+
+namespace tdoc_ucp {
+
+    class ContentProvider;
+
+    struct StorageInfo
+    {
+        OUString aTitle;
+        cpo::uno::Reference< css::embed::XStorage > xStorage;
+        cpo::uno::Reference< css::frame::XModel >   xModel;
+        std::unordered_map<OUString, css::util::DateTime> streamDateModified;
+
+        StorageInfo() {}; // needed for STL map only.
+
+        StorageInfo(
+            OUString _aTitle,
+            cpo::uno::Reference< css::embed::XStorage > _xStorage,
+            cpo::uno::Reference< css::frame::XModel > _xModel )
+        : aTitle(std::move( _aTitle )), xStorage(std::move( _xStorage )), xModel(std::move( _xModel )) {}
+    };
+
+
+    typedef std::map< OUString, StorageInfo > DocumentList;
+
+
+    class OfficeDocumentsManager :
+        public cppu::WeakImplHelper< css::document::XDocumentEventListener >
+    {
+        class OfficeDocumentsCloseListener :
+           public cppu::WeakImplHelper< css::util::XCloseListener >
+
+        {
+        public:
+            explicit OfficeDocumentsCloseListener( OfficeDocumentsManager * pMgr )
+                : m_pManager( pMgr ) {}
+
+            // util::XCloseListener
+            virtual void queryClosing(
+                    const css::lang::EventObject& Source,
+                    bool GetsOwnership ) override;
+
+            virtual void notifyClosing(
+                    const css::lang::EventObject& Source ) override;
+
+            // lang::XEventListener (base of util::XCloseListener)
+            virtual void disposing(
+                    const css::lang::EventObject & Source ) override;
+
+            void Dispose() { m_pManager = nullptr; }
+
+        private:
+            OfficeDocumentsManager * m_pManager;
+        };
+
+    public:
+        OfficeDocumentsManager(
+            const cpo::uno::Reference< cpo::uno::XComponentContext > & rxContext,
+            ContentProvider * pDocEventListener );
+        virtual ~OfficeDocumentsManager() override;
+
+        void destroy();
+
+        // document::XDocumentEventListener
+        virtual void documentEventOccured(
+                const css::document::DocumentEvent & Event ) override;
+
+        // lang::XEventListener (base of document::XDocumentEventListener)
+        virtual void disposing(
+                const css::lang::EventObject & Source ) override;
+
+        // Non-interface
+        cpo::uno::Reference< css::embed::XStorage >
+        queryStorage( const OUString & rDocId );
+
+        static OUString queryDocumentId(
+            const cpo::uno::Reference< css::frame::XModel > & xModel );
+
+        cpo::uno::Reference< css::frame::XModel >
+        queryDocumentModel( const OUString & rDocId );
+
+        cpo::uno::Sequence< OUString >
+        queryDocuments();
+
+        OUString
+        queryStorageTitle( const OUString & rDocId );
+
+        css::util::DateTime queryStreamDateModified(OUString const & uri);
+
+        void updateStreamDateModified(OUString const & uri);
+
+    private:
+        void buildDocumentsList();
+
+        bool isOfficeDocument(
+            const cpo::uno::Reference< cpo::uno::XInterface > & xDoc );
+
+        static bool isDocumentPreview(
+            const cpo::uno::Reference< css::frame::XModel3 > & xModel );
+
+        static bool isWithoutOrInTopLevelFrame(
+            const cpo::uno::Reference< css::frame::XModel > & xModel );
+
+        bool
+        isBasicIDE(
+            const cpo::uno::Reference< css::frame::XModel > & xModel );
+
+        static bool isHelpDocument(
+            const cpo::uno::Reference< css::frame::XModel > & xModel );
+
+        std::mutex                                          m_aMtx;
+        cpo::uno::Reference< cpo::uno::XComponentContext >         m_xContext;
+        cpo::uno::Reference< css::frame::XGlobalEventBroadcaster > m_xDocEvtNotifier;
+        cpo::uno::Reference< css::frame::XModuleManager2 >         m_xModuleMgr;
+        DocumentList                                        m_aDocs;
+        ContentProvider * const                             m_pDocEventListener;
+        ::rtl::Reference<OfficeDocumentsCloseListener> const m_xDocCloseListener;
+    };
+
+} // namespace tdoc_ucp
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

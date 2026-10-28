@@ -1,0 +1,274 @@
+#!/usr/bin/env perl
+
+# A hook script to verify what is about to be committed.
+# Called by "git commit" with no arguments.  The hook should
+# exit with non-zero status after issuing an appropriate message
+# if it wants to stop the commit.
+
+use strict;
+
+$ENV{LC_ALL} = "C";
+
+sub check_whitespaces($)
+{
+    my ($h) = @_;
+    my $src_limited = "c|cpp|cxx|h|hpp|hrc|hxx|idl|inl|java|swift|map|MK|pmk|pl|pm|sdi|sh|src|tab|ui|xcu|xml|xsl|py";
+    my $src_full = "c|cpp|cxx|h|hpp|hrc|hxx|idl|inl|java|swift|map|mk|MK|pmk|pl|pm|sdi|sh|src|tab|ui|xcu|xml|xsl|py";
+
+    my $found_bad = 0;
+    my $filename;
+    my $reported_filename = "";
+    my $lineno;
+    sub bad_line
+    {
+        my ($why, $line, $file_filter) = @_;
+        if (!defined $file_filter || $filename =~ /\.($file_filter)$/)
+        {
+            if (!$found_bad)
+            {
+                print STDERR "*\n";
+                print STDERR "* You have some suspicious patch lines:\n";
+                print STDERR "*\n";
+                $found_bad = 1;
+            }
+            if ($reported_filename ne $filename)
+            {
+                print STDERR "* In $filename\n";
+                $reported_filename = $filename;
+            }
+            print STDERR "* $why (line $lineno)\n";
+            print STDERR "$filename:$lineno:$line\n";
+        }
+    }
+    open( FILES, "git diff-index -p -M --cached $h -- ':(top,exclude)engine/' |" ) ||  die "Cannot run git diff-index.";
+    while (<FILES>)
+    {
+        if (m|^diff --git a/(.*) b/\1$|)
+        {
+            $filename = $1;
+            next;
+        }
+        if (/^@@ -\S+ \+(\d+)/)
+        {
+            $lineno = $1 - 1;
+            next;
+        }
+        if (/^ /)
+        {
+            $lineno++;
+            next;
+        }
+        if (s/^\+//)
+        {
+            $lineno++;
+            chomp;
+            if (/\s$/)
+            {
+                bad_line("trailing whitespace", $_ , $src_limited);
+            }
+            if (/\r$/)
+            {
+                bad_line("DOS lineends", $_ , $src_limited);
+            }
+            if (/\s*	/)
+            {
+                bad_line("indent with Tab", $_, $src_limited);
+            }
+            if (/^(?:[<>=]){7}$/)
+            {
+                bad_line("unresolved merge conflict", $src_full);
+            }
+            if (/SAL_DEBUG/)
+            {
+                bad_line("temporary debug in commit", $_, $src_limited);
+            }
+            if ((/OOXMLIMPORT/) and ($filename =~ /ooxmlexport/))
+            {
+                bad_line("OOXMLIMPORT definition used in a ooxmlexport file", $_, "cxx");
+            }
+            if ((/OOXMLEXPORT/) and ($filename =~ /ooxmlimport/))
+            {
+                bad_line("OOXMLEXPORT definition used in a ooxmlimport file", $_, "cxx");
+            }
+            if (/<property name="use_markup">True<\/property>/)
+            {
+                bad_line("use font attributes instead of use-markup", $_, "ui");
+            }
+            if (/<property name="tooltip_markup"/ )
+            {
+                bad_line("use tooltip_text instead of tooltip_markup", $_, "ui");
+            }
+            if ((/translatable="yes"/) and not(/context=/))
+            {
+                bad_line("translatable .ui file line without context", $_, "ui");
+            }
+            if ((/requires/) and (/lib="gtk+/) and not (/version="3.18/))
+            {
+                bad_line("min supported version of gtk3 is 3.18", $_, "ui");
+            }
+            if ((/<interface/) and not(/domain=/))
+            {
+                bad_line(".ui file without translation domain", $_, "ui");
+            }
+        }
+    }
+    if ( $found_bad)
+    {
+        exit($found_bad);
+    }
+}
+
+sub check_author()
+{
+    my $author = `git var GIT_AUTHOR_IDENT`;
+    chomp $author;
+    if ($author =~ /^Your Name <you\@example.com>/)
+    {
+        print("ERROR: You have a suspicious author identity: '$author'\n");
+        exit(1);
+    }
+}
+
+sub check_prettier()
+{
+    # limit to the dirs the prettier target formats
+    my @staged = split(/\n/, `git diff --cached --name-only --diff-filter=ACMR -- browser/src browser/js browser/admin/src browser/mocha_tests`);
+    return unless @staged;
+
+    if (-e "browser/Makefile") {
+        # Under Git Bash/MSYS the prettier target only works if this tree was
+        # configured there too, so browser/Makefile records a native node. A
+        # tree configured under WSL/Linux records a node path (e.g.
+        # /usr/bin/node) that does not exist here; committing from Git Bash
+        # can't run the check then, so skip it instead of failing the commit -
+        # the WSL/Linux build and CI still enforce formatting.
+        if ($^O =~ /^(?:msys|MSWin32|cygwin)$/i) {
+            my $node = '';
+            if (open my $mk, '<', 'browser/Makefile') {
+                while (<$mk>) {
+                    if (/^NODE = (.+?)\s*$/) { $node = $1; last; }
+                }
+                close $mk;
+            }
+            unless ($node ne '' && $node ne 'no' && (-x $node || -x "$node.exe")) {
+                print "Skipping code formatting check (no native node configured in browser/Makefile)\n";
+                return;
+            }
+        }
+
+        # the prettier target wants paths relative to browser/
+        my @rel = map { s{^browser/}{}r } @staged;
+        my $red = "\033[0;31m";
+        my $reset = "\033[0m";
+        my $hasmake = system("which make > /dev/null 2>&1") == 0;
+        my $hasgmake = system("which gmake > /dev/null 2>&1") == 0;
+
+        my $make = $hasgmake? "gmake" : $hasmake? "make" : die  $red .
+                    "\n===============================================\n" .
+                    "  ERROR: Code formatting check failed\n" .
+                    "===============================================\n" .
+                    "Please install (gnu) make as `gmake` or `make`\n" .
+                    "===============================================\n" .
+                    $reset . "\n";
+
+        system("$make", "--no-print-directory", "-C", "browser", "prettier", "PRETTIER_TARGETS=@rel") == 0
+            or die $red .
+                    "\n===============================================\n" .
+                    "  ERROR: Code formatting check failed\n" .
+                    "===============================================\n" .
+                    "The staged files above are not properly formatted.\n" .
+                    "Please run '$make -C browser prettier-write' before committing.\n" .
+                    "===============================================\n" .
+                    $reset . "\n";
+    } else {
+        print "Skipping code formatting check, no browser/Makefile found\n"
+    }
+}
+
+# Do the work :-)
+
+my $rc = -d "engine"
+    ? system("cd engine && exec env -u GIT_DIR -u GIT_WORK_TREE ./.git-hooks/pre-commit")
+    : 0;
+if ($rc != 0) {
+    exit($rc >> 8 || 1);
+}
+
+# Initial commit: diff against an empty tree object
+my $against="4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+if ( system( "git rev-parse --verify HEAD >/dev/null 2>&1" ) == 0 )
+{
+    $against="HEAD"
+}
+
+# If you want to allow non-ascii filenames set this variable to true.
+my $allownonascii=`git config hooks.allownonascii`;
+
+# Cross platform projects tend to avoid non-ascii filenames; prevent
+# them from being added to the repository. We exploit the fact that the
+# printable range starts at the space character and ends with tilde.
+if ( $allownonascii ne "true" &&
+    # Note that the use of brackets around a tr range is ok here, (it's
+    # even required, for portability to Solaris 10's /usr/bin/tr), since
+    # the square bracket bytes happen to fall in the designated range.
+    `git diff --cached --name-only --diff-filter=A -z $against -- ':(top,exclude)engine/' | \
+     LC_ALL=C tr -d '[ -~]\\0'` ne "" )
+{
+    print <<EOM;
+Error: Attempt to add a non-ascii file name.
+
+This can cause problems if you want to work
+with people on other platforms.
+
+To be portable it is advisable to rename the file ...
+
+If you know what you are doing you can disable this
+check using:
+
+  git config hooks.allownonascii true
+
+EOM
+    exit( 1 );
+}
+
+# Block large files.
+open( FILES, "git diff --cached --name-only --diff-filter=A -z $against -- ':(top,exclude)engine/' |" ) ||  die "Cannot run git diff.";
+while (<FILES>)
+{
+    foreach my $file (split(/\0/))
+    {
+        if ($file =~ /\.ui$/) # .ui files can get large
+        {
+            next;
+        }
+        if ($file =~ /\.xsl$/) # XSLT
+        {
+            next;
+        }
+        if ($file =~ m{^browser/node_shrinkpack/}) # vendored npm package tarballs
+        {
+            next;
+        }
+        my $size = `git cat-file -s ":$file"`;
+        # For now let's say large is 500KB
+        my $limit = 500;
+        if ($size > $limit * 1024)
+        {
+            print "Error: Attempt to add a large file: $file, please try to fit into $limit KB.\n";
+            exit( 1 );
+        }
+    }
+}
+
+# fix whitespace in code
+check_whitespaces( $against);
+
+# catch missing author info
+check_author();
+
+# check prettier in code
+check_prettier();
+
+# all OK
+exit( 0 );
+# vi:set shiftwidth=4 expandtab:

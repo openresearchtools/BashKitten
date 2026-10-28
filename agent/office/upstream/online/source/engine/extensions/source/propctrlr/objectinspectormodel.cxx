@@ -1,0 +1,192 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include "pcrcommon.hxx"
+#include "inspectormodelbase.hxx"
+
+#include <com/sun/star/ucb/AlreadyInitializedException.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+
+
+namespace pcr
+{
+
+
+    using ::cpo::uno::XComponentContext;
+    using ::cpo::uno::Sequence;
+    using ::cpo::uno::Any;
+    using ::com::sun::star::inspection::PropertyCategoryDescriptor;
+    using ::cpo::uno::XInterface;
+    using ::com::sun::star::lang::IllegalArgumentException;
+    using ::com::sun::star::ucb::AlreadyInitializedException;
+
+
+    //= ObjectInspectorModel
+
+    namespace {
+
+    class ObjectInspectorModel : public ImplInspectorModel
+    {
+    private:
+        Sequence< Any >             m_aFactories;
+
+    public:
+        ObjectInspectorModel();
+
+        // XObjectInspectorModel
+        virtual Sequence< Any > getHandlerFactories() override;
+        virtual Sequence< PropertyCategoryDescriptor > describeCategories(  ) override;
+        virtual ::sal_Int32 getPropertyOrderIndex( const OUString& PropertyName ) override;
+
+        // XInitialization
+        virtual void initialize( const Sequence< Any >& aArguments ) override;
+
+        // XServiceInfo
+        virtual OUString getImplementationName(  ) override;
+        virtual Sequence< OUString > getSupportedServiceNames(  ) override;
+
+    protected:
+        void    createDefault();
+        void    createWithHandlerFactories( const Sequence< Any >& _rFactories );
+        void    createWithHandlerFactoriesAndHelpSection( const Sequence< Any >& _rFactories, sal_Int32 _nMinHelpTextLines, sal_Int32 _nMaxHelpTextLines );
+
+    private:
+        /** checks a given condition to be <TRUE/>, and throws an IllegalArgumentException if not
+        */
+        void    impl_verifyArgument_throw( bool _bCondition, sal_Int16 _nArgumentPosition );
+    };
+
+    }
+
+    //= ObjectInspectorModel
+
+    ObjectInspectorModel::ObjectInspectorModel()
+    {
+    }
+
+
+    Sequence< Any > ObjectInspectorModel::getHandlerFactories()
+    {
+        return m_aFactories;
+    }
+
+
+    Sequence< PropertyCategoryDescriptor > ObjectInspectorModel::describeCategories(  )
+    {
+        // no category info provided by this default implementation
+        return Sequence< PropertyCategoryDescriptor >( );
+    }
+
+
+    ::sal_Int32 ObjectInspectorModel::getPropertyOrderIndex( const OUString& /*PropertyName*/ )
+    {
+        // no ordering provided by this default implementation
+        return 0;
+    }
+
+
+    void ObjectInspectorModel::initialize( const Sequence< Any >& _arguments )
+    {
+        ::osl::MutexGuard aGuard( m_aMutex );
+        if ( m_aFactories.hasElements() )
+            throw AlreadyInitializedException();
+
+        if (!_arguments.hasElements())
+        {   // constructor: "createDefault()"
+            createDefault();
+            return;
+        }
+
+        Sequence< Any > factories;
+        impl_verifyArgument_throw(_arguments[0] >>= factories, 1);
+
+        if (_arguments.size() == 1)
+        {   // constructor: "createWithHandlerFactories( any[] )"
+            createWithHandlerFactories( factories );
+            return;
+        }
+
+        if (_arguments.size() == 3)
+        {   // constructor: "createWithHandlerFactoriesAndHelpSection( any[], long, long )"
+            sal_Int32 nMinHelpTextLines( 0 ), nMaxHelpTextLines( 0 );
+            impl_verifyArgument_throw(_arguments[1] >>= nMinHelpTextLines, 2);
+            impl_verifyArgument_throw(_arguments[2] >>= nMaxHelpTextLines, 3);
+            createWithHandlerFactoriesAndHelpSection( factories, nMinHelpTextLines, nMaxHelpTextLines );
+            return;
+        }
+
+        impl_verifyArgument_throw( false, 2 );
+    }
+
+
+    OUString ObjectInspectorModel::getImplementationName(  )
+    {
+        return u"org.openoffice.comp.extensions.ObjectInspectorModel"_ustr;
+    }
+
+
+    Sequence< OUString > ObjectInspectorModel::getSupportedServiceNames(  )
+    {
+        return { u"com.sun.star.inspection.ObjectInspectorModel"_ustr };
+    }
+
+
+    void ObjectInspectorModel::createDefault()
+    {
+        m_aFactories = { Any(u"com.sun.star.inspection.GenericPropertyHandler"_ustr) };
+    }
+
+
+    void ObjectInspectorModel::createWithHandlerFactories( const Sequence< Any >& _rFactories )
+    {
+        impl_verifyArgument_throw( _rFactories.hasElements(), 1 );
+        m_aFactories = _rFactories;
+    }
+
+
+    void ObjectInspectorModel::createWithHandlerFactoriesAndHelpSection( const Sequence< Any >& _rFactories, sal_Int32 _nMinHelpTextLines, sal_Int32 _nMaxHelpTextLines )
+    {
+        impl_verifyArgument_throw( _rFactories.hasElements(), 1 );
+        impl_verifyArgument_throw( _nMinHelpTextLines >= 1, 2 );
+        impl_verifyArgument_throw( _nMaxHelpTextLines >= 1, 3 );
+        impl_verifyArgument_throw( _nMinHelpTextLines <= _nMaxHelpTextLines, 2 );
+
+        m_aFactories = _rFactories;
+        enableHelpSectionProperties( _nMinHelpTextLines, _nMaxHelpTextLines );
+    }
+
+
+    void ObjectInspectorModel::impl_verifyArgument_throw( bool _bCondition, sal_Int16 _nArgumentPosition )
+    {
+        if ( !_bCondition )
+            throw IllegalArgumentException( OUString(), *this, _nArgumentPosition );
+    }
+
+
+} // namespace pcr
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+extensions_propctrlr_ObjectInspectorModel_get_implementation(
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+{
+    return cppu::acquire(new pcr::ObjectInspectorModel());
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

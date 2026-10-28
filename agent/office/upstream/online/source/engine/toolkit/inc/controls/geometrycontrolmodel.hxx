@@ -1,0 +1,247 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <comphelper/broadcasthelper.hxx>
+#include <comphelper/propagg.hxx>
+#include <comphelper/proparrhlp.hxx>
+#include <comphelper/propertycontainer.hxx>
+#include <cppuhelper/compbase2.hxx>
+#include <com/sun/star/util/XCloneable.hpp>
+#include <com/sun/star/script/XScriptEventsSupplier.hpp>
+#include <comphelper/IdPropArrayHelper.hxx>
+#include <rtl/ref.hxx>
+
+namespace com::sun::star::resource { class XStringResourceResolver; }
+
+namespace cpo::uno { class XComponentContext; }
+namespace toolkit { class ScriptEventContainer; }
+
+// namespace toolkit
+// {
+
+
+    //= OGeometryControlModel_Base
+
+    typedef ::cppu::WeakAggComponentImplHelper2 <   css::util::XCloneable
+                                                ,   css::script::XScriptEventsSupplier
+                                                >   OGCM_Base;
+    class OGeometryControlModel_Base
+        :public ::comphelper::OMutexAndBroadcastHelper
+        ,public ::comphelper::OPropertySetAggregationHelper
+        ,public ::comphelper::OPropertyContainer
+        ,public OGCM_Base
+    {
+    protected:
+        cpo::uno::Reference< cpo::uno::XAggregation >
+                    m_xAggregate;
+        rtl::Reference< toolkit::ScriptEventContainer >
+                    mxEventContainer;
+
+        // <properties>
+        sal_Int32       m_nPosX;
+        sal_Int32       m_nPosY;
+        sal_Int32       m_nWidth;
+        sal_Int32       m_nHeight;
+        OUString m_aName;
+        sal_Int16       m_nTabIndex;
+        sal_Int32       m_nStep;
+        OUString m_aTag;
+        cpo::uno::Reference< css::resource::XStringResourceResolver > m_xStrResolver;
+        // </properties>
+
+        bool        m_bCloneable;
+
+    protected:
+        static cpo::uno::Any   ImplGetDefaultValueByHandle(sal_Int32 nHandle);
+        cpo::uno::Any          ImplGetPropertyValueByHandle(sal_Int32 nHandle) const;
+        void                   ImplSetPropertyValueByHandle(sal_Int32 nHandle, const cpo::uno::Any& aValue);
+
+    protected:
+        /**
+            @param _pAggregateInstance
+                the object to be aggregated. The refcount of the instance given MUST be 0!
+        */
+        OGeometryControlModel_Base(cpo::uno::XAggregation* _pAggregateInstance);
+
+        /**
+            @param _rxAggregateInstance
+                is the object to be aggregated. Must be acquired exactly once (by the reference object given).<br/>
+                Will be reset to NULL upon leaving
+        */
+        OGeometryControlModel_Base(cpo::uno::Reference< css::util::XCloneable >& _rxAggregateInstance);
+
+        /** releases the aggregation
+            <p>Can be used if in a derived class, an exception has to be thrown after this base class here already
+            did the aggregation</p>
+        */
+        void releaseAggregation();
+
+    protected:
+        virtual ~OGeometryControlModel_Base() override;
+
+        // XAggregation
+        cpo::uno::Any queryAggregation( const cpo::uno::Type& _aType ) override;
+
+    public:
+        // XInterface
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type& aType ) override;
+        virtual void acquire(  ) noexcept override;
+        virtual void release(  ) noexcept override;
+
+    protected:
+        // XTypeProvider
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+
+        // OPropertySetHelper overridables
+        virtual bool convertFastPropertyValue(
+                cpo::uno::Any& _rConvertedValue, cpo::uno::Any& _rOldValue,
+                sal_Int32 _nHandle, const cpo::uno::Any& _rValue ) override;
+
+        virtual void setFastPropertyValue_NoBroadcast(
+                sal_Int32 _nHandle, const cpo::uno::Any& _rValue) override;
+
+        using comphelper::OPropertySetAggregationHelper::getFastPropertyValue;
+        virtual void getFastPropertyValue(
+            cpo::uno::Any& _rValue, sal_Int32 _nHandle) const override;
+
+        // OPropertyStateHelper overridables
+        virtual css::beans::PropertyState  getPropertyStateByHandle(sal_Int32 nHandle) override;
+        virtual void                                    setPropertyToDefaultByHandle(sal_Int32 nHandle) override;
+        virtual cpo::uno::Any              getPropertyDefaultByHandle(sal_Int32 nHandle) const override;
+
+        // XPropertySet
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo> getPropertySetInfo() override;
+
+        // OPropertySetAggregationHelper overridables
+        using OPropertySetAggregationHelper::getInfoHelper;
+
+        // XCloneable
+        virtual cpo::uno::Reference< css::util::XCloneable > createClone(  ) override;
+
+        //XScriptEventsSupplier
+        virtual cpo::uno::Reference< css::container::XNameContainer >
+            getEvents(  ) override;
+
+        // XCloneable implementation - to be overwritten
+        virtual rtl::Reference<OGeometryControlModel_Base> createClone_Impl(
+            cpo::uno::Reference< css::util::XCloneable >& _rxAggregateInstance) = 0;
+
+        // XComponent
+        using comphelper::OPropertySetAggregationHelper::disposing;
+        virtual void disposing() override;
+
+    private:
+        void registerProperties();
+    };
+
+
+    //= OTemplateInstanceDisambiguation
+
+    template <class CONTROLMODEL>
+    class OTemplateInstanceDisambiguation
+    {
+    };
+
+
+    //= OGeometryControlModel
+
+    /*  example for usage:
+            Reference< XAggregation > xIFace = new ::toolkit::OGeometryControlModel< UnoControlButtonModel > ();
+    */
+    template <class CONTROLMODEL>
+    class OGeometryControlModel final
+        :public OGeometryControlModel_Base
+        ,public ::comphelper::OAggregationArrayUsageHelper< OTemplateInstanceDisambiguation< CONTROLMODEL > >
+    {
+    public:
+        OGeometryControlModel( const cpo::uno::Reference< cpo::uno::XComponentContext >& i_factory );
+
+    private:
+        OGeometryControlModel(cpo::uno::Reference< css::util::XCloneable >& _rxAggregateInstance);
+
+        // OAggregationArrayUsageHelper overridables
+        virtual void fillProperties(
+            cpo::uno::Sequence< css::beans::Property >& _rProps,
+            cpo::uno::Sequence< css::beans::Property >& _rAggregateProps
+            ) const override;
+
+        // OPropertySetAggregationHelper overridables
+        virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
+
+        // OGeometryControlModel_Base
+        virtual rtl::Reference<OGeometryControlModel_Base> createClone_Impl(
+            cpo::uno::Reference< css::util::XCloneable >& _rxAggregateInstance) override;
+
+        // XTypeProvider
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+    };
+
+
+    //= OCommonGeometryControlModel
+
+    /** allows to extend an arbitrary com.sun.star.awt::UnoControlModel with geometry
+        information.
+    */
+    class OCommonGeometryControlModel final
+        :public OGeometryControlModel_Base
+        ,public ::comphelper::OIdPropertyArrayUsageHelper< OCommonGeometryControlModel >
+    {
+    private:
+        OUString m_sServiceSpecifier;        // the service specifier of our aggregate
+        sal_Int32       m_nPropertyMapId;           // our unique property info id, used to look up in s_aAggregateProperties
+
+    public:
+        /** instantiate the model
+
+            @param _rxAgg
+                the instance to aggregate. Must support the com.sun.star.awt::UnoControlModel
+                (this is not checked here)
+        */
+        OCommonGeometryControlModel(
+                    cpo::uno::Reference< css::util::XCloneable >& _rxAgg,
+            OUString _aServiceSpecifier
+        );
+
+        // OIdPropertyArrayUsageHelper overridables
+        virtual ::cppu::IPropertyArrayHelper* createArrayHelper(sal_Int32 nId) const override;
+
+        // OPropertySetAggregationHelper overridables
+        virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
+
+        // OGeometryControlModel_Base
+        virtual rtl::Reference<OGeometryControlModel_Base> createClone_Impl(
+            cpo::uno::Reference< css::util::XCloneable >& _rxAggregateInstance) override;
+
+        // XTypeProvider
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+
+    private:
+        virtual void setFastPropertyValue_NoBroadcast(
+                sal_Int32 _nHandle, const cpo::uno::Any& _rValue) override;
+    };
+
+#include <controls/geometrycontrolmodel_impl.hxx>
+
+
+// }    // namespace toolkit
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

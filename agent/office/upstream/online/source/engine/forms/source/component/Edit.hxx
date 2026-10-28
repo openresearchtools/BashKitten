@@ -1,0 +1,178 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <memory>
+#include "EditBase.hxx"
+
+#include <tools/link.hxx>
+#include <comphelper/interfacecontainer3.hxx>
+#include <cppuhelper/implbase3.hxx>
+
+#include <com/sun/star/form/XChangeBroadcaster.hpp>
+
+namespace dbtools { class FormattedColumnValue; }
+struct ImplSVEvent;
+
+namespace frm
+{
+
+class OEditModel final : public OEditBaseModel
+{
+    ::std::unique_ptr< ::dbtools::FormattedColumnValue >
+                                m_pValueFormatter;
+    bool                    m_bMaxTextLenModified : 1;  // set to <TRUE/> when we change the MaxTextLen of the aggregate
+
+    bool                    m_bWritingFormattedFake : 1; // are we writing something which should be interpreted as formatted upon reading?
+
+public:
+    OEditModel(
+        const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxFactory
+    );
+    OEditModel(
+        const OEditModel* _pOriginal,
+        const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxFactory
+    );
+    virtual ~OEditModel() override;
+
+private:
+    void enableFormattedWriteFake() { m_bWritingFormattedFake = true; }
+    void disableFormattedWriteFake() { m_bWritingFormattedFake = false; }
+    bool lastReadWasFormattedFake() const { return (getLastReadVersion() & PF_FAKE_FORMATTED_FIELD) != 0; }
+
+    friend class OFormattedFieldWrapper;
+    friend class OFormattedModel;   // temporary
+
+public:
+    virtual void disposing() override;
+
+    // XPropertySet
+    virtual void getFastPropertyValue(cpo::uno::Any& rValue, sal_Int32 nHandle ) const override;
+
+    // XPersistObject
+    virtual void write(const cpo::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream) override;
+    virtual void read(const cpo::uno::Reference< css::io::XObjectInputStream>& _rxInStream) override;
+    virtual OUString getServiceName() override;
+
+    // XPropertySet
+    using OBoundControlModel::getFastPropertyValue;
+
+    // XReset
+    virtual void reset(  ) override;
+
+    // XServiceInfo
+    OUString getImplementationName() override
+    { return u"com.sun.star.form.OEditModel"_ustr; }
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+    // OControlModel's property handling
+    virtual void describeFixedProperties(
+        cpo::uno::Sequence< css::beans::Property >& /* [out] */ _rProps
+    ) const override;
+    virtual void describeAggregateProperties(
+        cpo::uno::Sequence< css::beans::Property >& /* [out] */ _rAggregateProps
+    ) const override;
+
+    // XEventListener
+    using OBoundControlModel::disposing;
+
+private:
+    // OControlModel overridables
+    virtual void writeAggregate( const cpo::uno::Reference< css::io::XObjectOutputStream >& _rxOutStream ) const override;
+    virtual void readAggregate( const cpo::uno::Reference< css::io::XObjectInputStream >& _rxInStream ) override;
+
+    // OBoundControlModel overridables
+    virtual cpo::uno::Any   translateDbColumnToControlValue( ) override;
+    virtual bool            commitControlValueToDbColumn( bool _bPostReset ) override;
+
+    virtual cpo::uno::Any   getDefaultForReset() const override;
+
+    virtual void            onConnectedDbColumn( const cpo::uno::Reference< cpo::uno::XInterface >& _rxForm ) override;
+    virtual void            onDisconnectedDbColumn() override;
+
+    virtual bool            approveDbColumnType( sal_Int32 _nColumnType ) override;
+
+    virtual sal_uInt16 getPersistenceFlags() const override;
+
+    virtual cpo::uno::Reference< css::util::XCloneable > createClone(  ) override;
+
+    bool    implActsAsRichText( ) const;
+};
+
+
+//= OEditControl
+
+typedef ::cppu::ImplHelper3<    css::awt::XFocusListener,
+                                css::awt::XKeyListener,
+                                css::form::XChangeBroadcaster > OEditControl_BASE;
+
+class OEditControl : public OBoundControl
+                      ,public OEditControl_BASE
+{
+    ::comphelper::OInterfaceContainerHelper3<css::form::XChangeListener>
+                        m_aChangeListeners;
+
+    OUString         m_aHtmlChangeValue;
+    ImplSVEvent *    m_nKeyEvent;
+
+public:
+    explicit OEditControl(const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxContext);
+    virtual ~OEditControl() override;
+
+    DECLARE_UNO3_AGG_DEFAULTS(OEditControl, OBoundControl)
+    virtual cpo::uno::Any queryAggregation(const cpo::uno::Type& _rType) override;
+
+    virtual cpo::uno::Sequence< cpo::uno::Type> _getTypes() override;
+
+// OComponentHelper
+    virtual void disposing() override;
+
+// css::lang::XEventListener
+    virtual void disposing(const css::lang::EventObject& _rSource) override;
+
+// css::lang::XServiceInfo
+    OUString getImplementationName() override
+    { return u"com.sun.star.form.OEditControl"_ustr; }
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+// css::form::XChangeBroadcaster
+    virtual void addChangeListener(const cpo::uno::Reference< css::form::XChangeListener>& _rxListener) override;
+    virtual void removeChangeListener(const cpo::uno::Reference< css::form::XChangeListener>& _rxListener) override;
+
+// css::awt::XFocusListener
+    virtual void focusGained( const css::awt::FocusEvent& e ) override;
+    virtual void focusLost( const css::awt::FocusEvent& e ) override;
+
+// css::awt::XKeyListener
+    virtual void keyPressed(const css::awt::KeyEvent& e) override;
+    virtual void keyReleased(const css::awt::KeyEvent& e) override;
+
+    // XControl
+    using OBoundControl::createPeer;
+
+private:
+    DECL_LINK( OnKeyPressed, void*, void );
+};
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,593 @@
+name: collabora-office
+title: Collabora Office
+adopt-info: collabora-office
+summary: Collabora Office — create, edit and present with a modern UI
+description: |
+  Collabora Office brings the familiar Collabora Online experience
+  to your computer — so you can create, edit, and present with a beautiful,
+  modern UI. It delivers excellent interoperability with ODF and Microsoft
+  Office formats (DOCX/XLSX/PPTX), and exports to PDF with ease. Your
+  documents stay on your device unless you choose to share them — privacy
+  by design.
+
+  Why you'll love it:
+  * Instantly familiar: Same interface as Collabora Online — no relearning
+  * Powerful offline working: Work locally with your files, printers, and shortcuts
+  * Great compatibility: DOCX or ODF, we want to work your way, not the other way around
+  * Focused & fast: A clean, streamlined workspace designed for flow
+  * Open source & transparent: Openly developed, no hidden spyware
+
+  Key features:
+  * Writer, Calc, and Impress editing with a consistent, modern UI
+  * Excellent document interoperability; robust ODF & OOXML support
+  * Local file access; print with native system dialogs
+  * Works great alongside Collabora Online for team collaboration
+  * No cloud required
+
+icon: qt/hicolor/scalable/apps/com.collaboraoffice.Office.startcenter.svg
+contact: hello@collaboraoffice.com
+website: https://www.collaboraoffice.com
+source-code: https://gerrit.collaboraoffice.com/online
+issues: https://github.com/CollaboraOnline/online/issues
+license: MPL-2.0
+base: core24
+platforms:
+  amd64:
+  arm64:
+grade: devel
+confinement: strict
+compression: lzo
+
+# kde-neon-6 provides Qt6 (including WebEngine) from the kde-qt6-core24
+# content snap and handles desktop integration for Qt apps on core24.
+apps:
+  collabora-office:
+    extensions: [kde-neon-6]
+    # command-chain wrapper builds QTWEBENGINE_CHROMIUM_FLAGS dynamically
+    # so the Chromium sandbox is always off (incompatible with snap's
+    # seccomp filter), VA-API is suppressed, and GPU acceleration is
+    # disabled unless the user opts in via `snap set collabora-office
+    # enable-gpu=true`. See bin/set-chromium-flags for the full story.
+    command-chain: [bin/set-chromium-flags]
+    command: usr/bin/coda-qt
+    desktop: usr/share/applications/com.collaboraoffice.Office.desktop
+    common-id: com.collaboraoffice.Office
+    environment:
+      # The kde-neon-6 desktop-launch wrapper wires up the content-snap
+      # library dirs (kf6, gpu-2404, ...) but no longer adds the snap's own
+      # $SNAP/usr/lib/<triplet> to LD_LIBRARY_PATH. libhyphen and libmythes
+      # are staged there and exist nowhere else (the rest of the dictionary
+      # libs happen to also be carried by the kf6 content snap), so coda-qt's
+      # dlopen of libmergedlo.so fails with "libhyphen.so.0: cannot open
+      # shared object file". Put the arch dir back explicitly. snapd has no
+      # runtime variable for the GNU triplet, so list both supported arches;
+      # the loader ignores a path that does not exist.
+      LD_LIBRARY_PATH: $SNAP/usr/lib/collaboraoffice/program:$SNAP/usr/lib/x86_64-linux-gnu:$SNAP/usr/lib/aarch64-linux-gnu:$LD_LIBRARY_PATH
+      # Keep the user profile in the revision-independent common dir so
+      # settings persist across upgrades and reverts. The default $HOME
+      # inside the snap is the per-revision SNAP_USER_DATA, which snapd
+      # copies on every refresh and rolls back on revert. The engine
+      # derives its UserInstallation from XDG_CONFIG_HOME.
+      XDG_CONFIG_HOME: $SNAP_USER_COMMON/.config
+      XDG_DATA_HOME: $SNAP_USER_COMMON/.local/share
+      # Make Qt skip Chromium's sandbox-host and zygote setup entirely.
+      # Passing --no-sandbox is not enough: Chromium still probes whether
+      # unprivileged user namespaces are available, and the probe in
+      # sandbox/linux/services/credentials.cc PCHECKs that a failed
+      # CLONE_NEWUSER left errno in {EPERM, EUSERS, EINVAL, ENOSPC}.
+      # Under strict confinement on a host with
+      # kernel.apparmor_restrict_unprivileged_userns=1 the clone fails
+      # with EACCES instead, which is outside that set, so a path meant
+      # to degrade gracefully aborts the process. It hits about half of
+      # all launches. Not a security change: the command-chain wrapper
+      # has always disabled the Chromium sandbox, because the plain
+      # browser-support plug grants neither the AppArmor userns rule nor
+      # the seccomp unshare needed to run it. Making the sandbox genuinely
+      # usable needs browser-support with allow-sandbox: true.
+      QTWEBENGINE_DISABLE_SANDBOX: "1"
+    plugs:
+      - home
+      - network
+      - cups
+      - removable-media
+      - opengl
+      - browser-support
+      - audio-playback
+    # Coda-Qt registers the well-known DBus name com.collaboraoffice.Office
+    # for single-instance routing (open new doc in existing window). Without
+    # an explicit slot the AppArmor profile blocks the ownership and the
+    # registration fails, after which the app aborts.
+    slots:
+      - dbus-collabora-office
+
+slots:
+  dbus-collabora-office:
+    interface: dbus
+    bus: session
+    name: com.collaboraoffice.Office
+
+layout:
+  /usr/lib/collaboraoffice:
+    bind: $SNAP/usr/lib/collaboraoffice
+  /usr/share/coolwsd:
+    bind: $SNAP/usr/share/coolwsd
+  /usr/share/hunspell:
+    bind: $SNAP/usr/share/hunspell
+  /usr/share/hyphen:
+    bind: $SNAP/usr/share/hyphen
+  /usr/share/mythes:
+    bind: $SNAP/usr/share/mythes
+
+parts:
+  # Drop the command-chain wrapper at $SNAP/bin/set-chromium-flags.
+  local-parts:
+    plugin: dump
+    source: snap/local
+    source-type: local
+
+  collabora-office:
+    plugin: nil
+    source: .
+    source-type: local
+    build-snaps:
+      - kde-qt6-core24-sdk
+      - node/20/stable
+    build-environment:
+      # The engine's configure auto-detects ccache on PATH and wraps gcc.
+      # Park the cache outside parts/<name>/ so it survives snapcraft
+      # dirty-cycle rebuilds and clean operations on the part.
+      - CCACHE_DIR: /build/.ccache
+      - CCACHE_MAXSIZE: 20G
+      - CCACHE_COMPRESS: "1"
+    override-pull: |
+      craftctl default
+      # Translations live in their own gerrit repo and are gitignored in
+      # the monorepo; clone shallowly into engine/translations so the
+      # engine's --with-lang machinery can pick up .po files. Wipe any
+      # pre-existing checkout the developer may have left behind locally
+      # (and any stale state from a prior snapcraft run). Keep the
+      # language list below in sync with engine/distro-configs/Langs.conf
+      # (the top-level Makefile.am has a check-snap-langs rule).
+      rm -rf engine/translations
+      git clone --depth=1 --branch=main \
+        https://gerrit.collaboraoffice.com/translations engine/translations
+    override-build: |
+      set -e
+
+      # 1. Build the engine.
+      pushd engine
+      ./autogen.sh \
+        --prefix=$(pwd)/inst \
+        --disable-dbus \
+        --disable-dconf \
+        --disable-epm \
+        --disable-gio \
+        --disable-gtk3 \
+        --disable-gui \
+        --disable-noto-font \
+        --disable-randr \
+        --disable-sal-log \
+        --enable-cairo-rgba \
+        --enable-hardening-flags \
+        --enable-ld \
+        --enable-mergelibs \
+        --enable-python=auto \
+        --with-branding=icon-themes/galaxy/brand_cp \
+        --with-fonts \
+        --with-galleries=no \
+        "--with-lang=ar bg ca cs cy da de el en-US en-GB eo es eu fi fr ga gl he hr hu hy id is it ja kk ko lo nb nl oc pl pt pt-BR ro ru sk sl sq sv tr uk vi zh-CN zh-TW" \
+        --with-linker-hash-style=both \
+        --with-system-altlinuxhyph \
+        --with-system-curl \
+        --with-system-dicts \
+        --with-system-expat \
+        --with-system-fontconfig \
+        --with-system-freetype \
+        --without-system-graphite \
+        --without-system-harfbuzz \
+        --with-system-hunspell \
+        --with-system-icu \
+        --with-system-lcms2 \
+        --with-system-libpng \
+        --with-system-libtiff \
+        --with-system-libwebp \
+        --with-system-libxml \
+        --with-system-mythes \
+        --with-system-nss \
+        --with-system-openssl \
+        --with-system-zlib \
+        --with-system-zstd \
+        --with-theme="colibre colibre_svg" \
+        --with-vendor="Collabora Productivity Limited" \
+        --without-buildconfig-recorded \
+        --without-help \
+        --without-junit \
+        --without-lxml \
+        --without-myspell-dicts \
+        --without-system-abseil \
+        --without-system-argon2 \
+        --without-system-boost \
+        --without-system-cairo \
+        --without-system-clucene \
+        --without-system-coinmp \
+        --without-system-cppunit \
+        --without-system-dragonbox \
+        --without-system-frozen \
+        --without-system-glm \
+        --without-system-jpeg \
+        --without-system-libabw \
+        --without-system-libcdr \
+        --without-system-libcmis \
+        --without-system-libebook \
+        --without-system-libeot \
+        --without-system-libepubgen \
+        --without-system-libetonyek \
+        --without-system-libexttextcat \
+        --without-system-libfixmath \
+        --without-system-libfreehand \
+        --without-system-liblangtag \
+        --without-system-libmspub \
+        --without-system-libmwaw \
+        --without-system-libnumbertext \
+        --without-system-libodfgen \
+        --without-system-libpagemaker \
+        --without-system-libqxp \
+        --without-system-librevenge \
+        --without-system-libstaroffice \
+        --without-system-libvisio \
+        --without-system-libwpd \
+        --without-system-libwpg \
+        --without-system-libwps \
+        --without-system-libzmf \
+        --without-system-mdds \
+        --without-system-odbc \
+        --without-system-orcus \
+        --without-system-redland \
+        --without-system-sane \
+        --without-system-xmlsec \
+        --without-system-zxcvbn \
+        --without-system-zxing \
+        --without-templates
+
+      make
+      make distro-pack-install
+      popd
+
+      mkdir -p "$CRAFT_PART_INSTALL/usr/lib"
+      cp -a engine/inst/lib/collaboraoffice "$CRAFT_PART_INSTALL/usr/lib/collaboraoffice"
+
+      # 2. Build Collabora Online (the wsd/qtapp wrapper around the engine).
+      # Expose Qt6 from the kde-qt6-core24-sdk build-snap. The kde-neon-6
+      # extension auto-wires this for cmake/meson plugins but not for
+      # plugin: nil parts that use override-build.
+      QT6_SDK=/snap/kde-qt6-core24-sdk/current
+      export PATH="$QT6_SDK/usr/bin/qt6:$QT6_SDK/usr/lib/qt6/libexec:$QT6_SDK/usr/bin:$PATH"
+      export PKG_CONFIG_PATH="$QT6_SDK/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/pkgconfig:$QT6_SDK/usr/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+      # Shadow qtpaths6 with snap/qtpaths6-wrapper so configure's
+      # QT_INSTALL_LIBEXECS / QT_INSTALL_BINS lookups get the real paths
+      # instead of qtpaths6's broken multiarch defaults.
+      mkdir -p "$CRAFT_PART_BUILD/.qt6-wrapper"
+      install -m 755 "$CRAFT_PART_BUILD/snap/qtpaths6-wrapper" \
+          "$CRAFT_PART_BUILD/.qt6-wrapper/qtpaths6"
+      export PATH="$CRAFT_PART_BUILD/.qt6-wrapper:/snap/node/current/bin:$PATH"
+      # craft-parts presets CXXFLAGS to an -isystem path only, which
+      # suppresses autoconf's default -g -O2, and configure adds no -O of
+      # its own, so opt in to an optimized coda-qt here.
+      export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-O2"
+      autoreconf -vfi
+      ./configure \
+        --prefix=/usr \
+        --enable-qtapp \
+        --disable-server \
+        --enable-ld \
+        --with-lo-path=/usr/lib/collaboraoffice \
+        --with-lokit-path=$(pwd)/engine/include \
+        --with-vendor="Collabora Productivity Limited" \
+        --with-app-name="Collabora Office" \
+        --with-info-url="https://collaboraoffice.com/"
+      # craft-parts enforces set-once for project vars across the part's
+      # lifetime: if a previous build set version, re-running override-build
+      # (e.g. after a dirty stage-packages change triggers _update_build)
+      # would otherwise abort with "variable 'version' can be set only once".
+      if [ -z "$(craftctl get version 2>/dev/null)" ]; then
+        craftctl set version="$(sed -n 's/^S\["PACKAGE_VERSION"\]="\(.*\)"/\1/p' config.status)"
+      fi
+      make
+      make DESTDIR="$CRAFT_PART_INSTALL" install
+    build-packages:
+      - autoconf
+      - automake
+      - bison
+      - bzip2
+      - ca-certificates
+      - curl
+      - flex
+      - fontforge
+      - g++
+      - git
+      - gperf
+      - libcppunit-dev
+      - libcurl4-openssl-dev
+      - libexpat1-dev
+      - libfontconfig-dev
+      - libfreetype-dev
+      - libgraphite2-dev
+      - libharfbuzz-dev
+      - libhunspell-dev
+      - libhyphen-dev
+      - libicu-dev
+      - liblcms2-dev
+      - libmythes-dev
+      - libnspr4-dev
+      - libnss3-dev
+      - libpng-dev
+      - libssl-dev
+      - libtiff-dev
+      - libtool
+      - libwebp-dev
+      - libxml2-dev
+      - libxslt1-dev
+      - libzstd-dev
+      - make
+      - meson
+      - mold
+      - nasm
+      - pkg-config
+      - python3-dev
+      - python3-lxml
+      - python3-polib
+      - python3-setuptools
+      - rsync
+      - unzip
+      - uuid-runtime
+      - wget
+      - xsltproc
+      - xz-utils
+      - zip
+      - zlib1g-dev
+    stage-packages:
+      - libcurl4t64
+      - libexpat1
+      - libfontconfig1
+      - libfreetype6
+      # Qt's xcb platform plugin (libqxcb.so) links a family of libxcb-*
+      # helper libraries. The kde-neon-6 content snap stopped shipping some
+      # of them (first libxcb-cursor, then libxcb-shape), which makes the
+      # plugin fail to load and the app abort at startup. Stage the whole
+      # leaf set here so the snap no longer depends on the content snap
+      # providing any of them. Core libs (libxcb1, libxkbcommon) are left to
+      # the content snap to avoid version skew.
+      - libxcb-cursor0
+      - libxcb-icccm4
+      - libxcb-keysyms1
+      - libxcb-randr0
+      - libxcb-shape0
+      - libxcb-shm0
+      - libxcb-sync1
+      - libxcb-xfixes0
+      - libxcb-xinerama0
+      - libxcb-xkb1
+      # libharfbuzz/libgraphite2 deliberately NOT staged: the engine is
+      # configured --without-system-harfbuzz --without-system-graphite, so
+      # it builds and bundles its own copies in instdir/program/. Qt picks
+      # up harfbuzz from the kde-qt6-core24 content snap at runtime.
+      - libhunspell-1.7-0
+      - libicu74
+      - liblcms2-2
+      - libpng16-16t64
+      - libtiff6
+      - libwebp7
+      - libxml2
+      - libxslt1.1
+      - libmythes-1.2-0
+      - libnss3
+      - libnspr4
+      - libssl3t64
+      # The openssl CLI, not just the library: Application.cpp shells out
+      # to `openssl req` and to an `openssl x509 | openssl pkey |
+      # openssl dgst` pipeline to mint the ephemeral loopback cert the
+      # embedded HTTPS server serves cool.html over. Without the binary
+      # every launch logs "openssl failed generating embed cert" and the
+      # integrator embed flow has no usable certificate.
+      - openssl
+      - zlib1g
+      - libzstd1
+      - libhyphen0
+      # Spelling dictionaries matching --with-lang (no hunspell package
+      # in Ubuntu noble for cy, fi, ga, hy, ja, sq, zh-CN, zh-TW;
+      # nb is covered by the generic Norwegian *-no package).
+      - hunspell-ar
+      - hunspell-bg
+      - hunspell-ca
+      - hunspell-cs
+      - hunspell-da
+      - hunspell-de-de
+      - hunspell-el
+      - hunspell-en-us
+      - hunspell-en-gb
+      - hunspell-eo
+      - hunspell-es
+      - hunspell-eu
+      - hunspell-fr-classical
+      - hunspell-gl
+      - hunspell-he
+      - hunspell-hr
+      - hunspell-hu
+      - hunspell-id
+      - hunspell-is
+      - hunspell-it
+      - hunspell-kk
+      - hunspell-ko
+      - hunspell-lo
+      - hunspell-nl
+      - hunspell-no
+      - hunspell-oc
+      - hunspell-pl
+      - hunspell-pt-pt
+      - hunspell-pt-br
+      - hunspell-ro
+      - hunspell-ru
+      - hunspell-sk
+      - hunspell-sl
+      - hunspell-sv
+      - hunspell-tr
+      - hunspell-uk
+      - hunspell-vi
+      # Hyphenation patterns
+      - hyphen-bg
+      - hyphen-ca
+      - hyphen-cs
+      - hyphen-da
+      - hyphen-de
+      - hyphen-el
+      - hyphen-en-us
+      - hyphen-en-gb
+      - hyphen-eo
+      - hyphen-es
+      - hyphen-fi
+      - hyphen-fr
+      - hyphen-ga
+      - hyphen-gl
+      - hyphen-hr
+      - hyphen-hu
+      - hyphen-id
+      - hyphen-is
+      - hyphen-it
+      - hyphen-nl
+      - hyphen-no
+      - hyphen-pl
+      - hyphen-pt-br
+      - hyphen-pt-pt
+      - hyphen-ro
+      - hyphen-ru
+      - hyphen-sk
+      - hyphen-sl
+      - hyphen-sv
+      - hyphen-uk
+      # Thesauri
+      - mythes-ar
+      - mythes-bg
+      - mythes-ca
+      - mythes-cs
+      - mythes-da
+      - mythes-de
+      - mythes-en-us
+      - mythes-eo
+      - mythes-es
+      - mythes-fr
+      - mythes-gl
+      - mythes-hu
+      - mythes-id
+      - mythes-is
+      - mythes-it
+      - mythes-no
+      # mythes-pl is pulled in below as a separate part: its Debian
+      # packaging Depends on libreoffice-core, which would drag the
+      # entire Ubuntu office stack (and a stale libuno_sal.so.3) into
+      # stage. The .deb itself is just two data files with no real
+      # runtime tie to libreoffice.
+      - mythes-pt-br
+      - mythes-pt-pt
+      - mythes-ro
+      - mythes-ru
+      - mythes-sk
+      - mythes-sl
+      - mythes-sv
+      - mythes-uk
+    stage:
+      # Dictionary stage-packages pull in Ubuntu's libreoffice-core as a
+      # transitive dep. Excluding from stage (not just prime) is what
+      # matters: snapcraft puts $CRAFT_STAGE/usr/lib/<triplet>/ on
+      # LD_LIBRARY_PATH during build, which outranks the engine's RPATH and
+      # causes build-time tools (e.g. svidl) to load Ubuntu's older
+      # libuno_sal.so.3 instead of the one we just built, breaking any
+      # symbol added since that Ubuntu release.
+      # These are glob patterns, not shell, so match the triplet with a
+      # wildcard rather than a craft variable.
+      - -usr/lib/libreoffice
+      - -usr/lib/*-linux-gnu/libuno*
+      - -usr/share/doc/libreoffice*
+      - -usr/share/doc/libuno*
+      - -usr/share/doc/ure*
+      - -usr/share/doc/uno*
+      # branding part overrides these with branded versions (after: collabora-office)
+      - -usr/share/coolwsd/browser/dist/welcome/welcome-slideshow.odp
+      - -usr/share/coolwsd/browser/dist/welcome/welcome.svg
+    prime:
+      # Nothing here is needed at runtime. Filtered at prime rather than
+      # stage so the build environment is left exactly as it was.
+
+      # Chromium's binary spellcheck dictionaries, shipped by Ubuntu's
+      # hunspell-* packages: 62 files, about 90 MB. Nothing reads them.
+      # Spell checking is the engine's job and it uses the .dic/.aff pairs
+      # in /usr/share/hunspell (DICT_SYSTEM_DIR in the engine's configure).
+      # coda-qt never turns on QtWebEngine's spell checker, and Qt looks for
+      # .bdic files under qtwebengine_dictionaries, not here.
+      - -usr/share/hunspell-bdic
+
+      # POCO is linked statically into coda-qt, so the archives and headers
+      # left behind by its install are build output, not runtime files.
+      - -usr/include
+      - -usr/lib/libPoco*.a
+
+      # Maintainer scripts, perl and debconf machinery that came along as
+      # dependencies of the dictionary packages.
+      - -usr/bin/debconf*
+      - -usr/bin/ispell-wrapper
+      - -usr/bin/perl
+      - -usr/bin/perl5.*
+      - -usr/bin/select-default-iwrap
+      - -usr/lib/emacsen-common
+      - -usr/lib/ispell
+      - -usr/sbin
+      - -usr/share/bash-completion
+      - -usr/share/debconf
+      - -usr/share/dict
+      - -usr/share/dictionaries-common
+      - -usr/share/doc-base
+      - -usr/share/emacsen-common
+      - -usr/share/lintian
+      - -usr/share/man
+      - -usr/share/perl5
+      - -usr/share/pixmaps
+
+      # usr/share/doc/*/copyright stays: those are the licence texts of the
+      # dictionaries we redistribute. Only the rest of the directory goes.
+      - -usr/share/doc/*/AUTHORS*
+      - -usr/share/doc/*/NEWS*
+      - -usr/share/doc/*/README*
+      - -usr/share/doc/*/TODO*
+      - -usr/share/doc/*/changelog*
+  branding:
+    plugin: nil
+    source: https://www.collaboraoffice.com/downloads/collabora-office-brand/collabora-office-brand-26.04.4.3.tar.gz
+    source-checksum: sha256/ea69060440d7d8d8694f42600ccd86fa2275dfef417324f8ad3818a6bd634288
+    after: [collabora-office]
+    override-build: |
+      set -e
+      mkdir -p "$CRAFT_PART_INSTALL/usr/lib/collaboraoffice/share/theme_definitions"
+      cp -a online-theme "$CRAFT_PART_INSTALL/usr/lib/collaboraoffice/share/theme_definitions/online/"
+      mkdir -p "$CRAFT_PART_INSTALL/usr/share/coolwsd/browser/dist"
+      cp -a branding* images welcome "$CRAFT_PART_INSTALL/usr/share/coolwsd/browser/dist/"
+
+  # mythes-pl shipped as a separate part because its Ubuntu .deb declares
+  # Depends: libreoffice-core (a Debian packaging quirk, not a runtime
+  # requirement: the .deb is just two thesaurus data files). Pulling it
+  # via stage-packages would drag in the entire system office stack and
+  # its stale libuno_sal.so.3, which then wins over our freshly-built one
+  # on LD_LIBRARY_PATH. Fetching the .deb directly and extracting only
+  # the data bypasses apt's dep resolver entirely.
+  mythes-pl:
+    plugin: nil
+    override-build: |
+      set -e
+      cd "$CRAFT_PART_BUILD"
+      apt-get download mythes-pl
+      dpkg-deb -x mythes-pl_*.deb extracted
+      mkdir -p "$CRAFT_PART_INSTALL/usr/share/mythes" \
+               "$CRAFT_PART_INSTALL/usr/share/myspell/dicts" \
+               "$CRAFT_PART_INSTALL/usr/share/myspell/infos/ooo"
+      cp -a extracted/usr/share/mythes/.            "$CRAFT_PART_INSTALL/usr/share/mythes/"
+      cp -a extracted/usr/share/myspell/dicts/.     "$CRAFT_PART_INSTALL/usr/share/myspell/dicts/"
+      cp -a extracted/usr/share/myspell/infos/ooo/. "$CRAFT_PART_INSTALL/usr/share/myspell/infos/ooo/"
+      rm -rf extracted mythes-pl_*.deb

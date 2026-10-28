@@ -1,0 +1,144 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <sal/config.h>
+
+#include <string_view>
+
+#include <osl/mutex.hxx>
+#include <tools/link.hxx>
+#include <cppuhelper/compbase.hxx>
+
+#include <com/sun/star/awt/XTopWindowListener.hpp>
+#include <com/sun/star/awt/XExtendedToolkit.hpp>
+#include <com/sun/star/frame/XDesktop.hpp>
+#include <com/sun/star/frame/XTerminateListener.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+
+#include <strings.hrc>
+#include <svdata.hxx>
+
+#include <gtk/gtk.h>
+#include <gdk/gdkkeysyms.h>
+
+#define FOLDERPICKER_TITLE              500
+#define FOLDER_PICKER_DEF_DESCRIPTION   501
+#define FILE_PICKER_TITLE_OPEN          502
+#define FILE_PICKER_TITLE_SAVE          503
+#define FILE_PICKER_FILE_TYPE           504
+#define FILE_PICKER_OVERWRITE_PRIMARY   505
+#define FILE_PICKER_OVERWRITE_SECONDARY 506
+#define FILE_PICKER_ALLFORMATS          507
+
+class SalGtkPicker
+{
+    public:
+                 SalGtkPicker( cpo::uno::Reference<cpo::uno::XComponentContext> xContext );
+        virtual ~SalGtkPicker();
+    protected:
+        osl::Mutex m_rbHelperMtx;
+        GtkWidget  *m_pParentWidget;
+        GtkWidget  *m_pDialog;
+    protected:
+        /// @throws cpo::uno::RuntimeException
+        void implsetTitle( std::u16string_view aTitle );
+
+        /// @throws css::lang::IllegalArgumentException
+        /// @throws cpo::uno::RuntimeException
+        void implsetDisplayDirectory( const OUString& rDirectory );
+
+        /// @throws cpo::uno::RuntimeException
+        OUString implgetDisplayDirectory(  );
+        OUString uritounicode(const gchar *pIn) const;
+        OString unicodetouri(const OUString &rURL) const;
+
+        // to instantiate own services
+        cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+
+        static GtkWidget* GetParentWidget(const cpo::uno::Sequence<cpo::uno::Any>& rArguments);
+
+        static OUString getResString( sal_Int32 aId );
+};
+
+//Run the Gtk Dialog. Watch for any "new windows" created while we're
+//executing and consider that a CANCEL event to avoid e.g. "file cannot be opened"
+//modal dialogs and this one getting locked if some other API call causes this
+//to happen while we're opened waiting for user input, e.g.
+//https://bugzilla.redhat.com/show_bug.cgi?id=441108
+class RunDialog :
+    public cppu::WeakComponentImplHelper<
+        css::awt::XTopWindowListener,
+        css::frame::XTerminateListener >
+{
+private:
+    osl::Mutex maLock;
+    GtkWidget *mpDialog;
+    bool mbTerminateDesktop;
+    cpo::uno::Reference<css::awt::XExtendedToolkit> mxToolkit;
+    cpo::uno::Reference<css::frame::XDesktop> mxDesktop;
+    DECL_STATIC_LINK(RunDialog, TerminateDesktop, void*, void);
+public:
+
+    // XTopWindowListener
+    using cppu::WeakComponentImplHelperBase::disposing;
+    virtual void disposing( const css::lang::EventObject& ) override {}
+    virtual void windowOpened( const css::lang::EventObject& e ) override;
+    virtual void windowClosing( const css::lang::EventObject& ) override {}
+    virtual void windowClosed( const css::lang::EventObject& ) override {}
+    virtual void windowMinimized( const css::lang::EventObject& ) override {}
+    virtual void windowNormalized( const css::lang::EventObject& ) override {}
+    virtual void windowActivated( const css::lang::EventObject& ) override {}
+    virtual void windowDeactivated( const css::lang::EventObject& ) override {}
+
+    // XTerminateListener
+    virtual void queryTermination( const css::lang::EventObject& aEvent ) override;
+    virtual void notifyTermination( const css::lang::EventObject& aEvent ) override;
+public:
+    RunDialog(GtkWidget *pDialog,
+        cpo::uno::Reference<css::awt::XExtendedToolkit> xToolkit,
+        cpo::uno::Reference<css::frame::XDesktop> xDesktop);
+    virtual ~RunDialog() override;
+    gint run();
+    void cancel();
+    static GtkWindow* GetTransientFor();
+};
+
+inline OString getCancelText()
+{
+    return VclResId(SV_BUTTONTEXT_CANCEL).replace('~', '_').toUtf8();
+}
+
+inline OString getOpenText()
+{
+    return VclResId(SV_BUTTONTEXT_OPEN).replace('~', '_').toUtf8();
+}
+
+inline OString getSaveText()
+{
+    return VclResId(SV_BUTTONTEXT_SAVE).replace('~', '_').toUtf8();
+}
+
+inline OString getOKText()
+{
+    return VclResId(SV_BUTTONTEXT_OK).replace('~', '_').toUtf8();
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

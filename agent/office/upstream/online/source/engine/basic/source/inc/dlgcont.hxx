@@ -1,0 +1,141 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include "namecont.hxx"
+
+#include <com/sun/star/resource/XStringResourceSupplier.hpp>
+#include <com/sun/star/resource/XStringResourcePersistence.hpp>
+
+namespace basic
+{
+
+
+class SfxDialogLibraryContainer final : public SfxLibraryContainer
+{
+    // Methods to distinguish between different library types
+    virtual rtl::Reference<SfxLibrary> implCreateLibrary( const OUString& aName ) override;
+    virtual rtl::Reference<SfxLibrary> implCreateLibraryLink
+        ( const OUString& aName, const OUString& aLibInfoFileURL,
+          const OUString& StorageURL, bool ReadOnly ) override;
+    virtual cpo::uno::Any createEmptyLibraryElement() override;
+    virtual bool isLibraryElementValid(const cpo::uno::Any& rElement) const override;
+    virtual void writeLibraryElement
+    (
+        const cpo::uno::Reference< css::container::XNameContainer>& xLibrary,
+        const OUString& aElementName,
+        const cpo::uno::Reference< css::io::XOutputStream >& xOutput
+    ) override;
+
+    virtual cpo::uno::Any importLibraryElement
+    (
+        const cpo::uno::Reference< css::container::XNameContainer>& xLibrary,
+        const OUString& aElementName,
+        const OUString& aFile,
+        const cpo::uno::Reference< css::io::XInputStream >& xElementStream ) override;
+
+    virtual void importFromOldStorage( const OUString& aFile ) override;
+
+    virtual rtl::Reference<SfxLibraryContainer> createInstanceImpl() override;
+
+    virtual void onNewRootStorage() override;
+
+    virtual OUString getInfoFileName() const override;
+    virtual OUString getOldInfoFileName() const override;
+    virtual OUString getLibElementFileExtension() const override;
+    virtual OUString getLibrariesDir() const override;
+
+public:
+    SfxDialogLibraryContainer();
+    SfxDialogLibraryContainer( const cpo::uno::Reference< css::embed::XStorage >& xStorage );
+
+    // Methods XStorageBasedLibraryContainer
+    virtual void storeLibrariesToStorage(
+        const cpo::uno::Reference< css::embed::XStorage >& RootStorage ) override;
+
+    // Resource handling
+    cpo::uno::Reference< css::resource::XStringResourcePersistence >
+        implCreateStringResource( class SfxDialogLibrary* pDialog );
+
+    // Methods XServiceInfo
+    virtual OUString getImplementationName( ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames( ) override;
+    virtual bool HasExecutableCode(const OUString&) override;
+};
+
+
+typedef cppu::ImplInheritanceHelper<SfxLibrary, css::resource::XStringResourceSupplier
+                            >   SfxDialogLibrary_BASE;
+
+class SfxDialogLibrary final : public SfxDialogLibrary_BASE
+{
+    SfxDialogLibraryContainer*                                        m_pParent;
+    cpo::uno::Reference< css::resource::XStringResourcePersistence>   m_xStringResourcePersistence;
+    OUString                                                          m_aName;
+
+    // Provide modify state including resources
+    virtual bool isModified() override;
+    virtual void storeResources() override;
+    virtual void storeResourcesAsURL( const OUString& URL, const OUString& NewName ) override;
+    virtual void storeResourcesToURL( const OUString& URL,
+        const cpo::uno::Reference< css::task::XInteractionHandler >& xHandler  ) override;
+    virtual void storeResourcesToStorage( const cpo::uno::Reference
+        < css::embed::XStorage >& xStorage ) override;
+
+public:
+    SfxDialogLibrary
+    (
+        ModifiableHelper& _rModifiable,
+        OUString aName,
+        const cpo::uno::Reference< css::ucb::XSimpleFileAccess >& xSFI,
+        SfxDialogLibraryContainer* pParent
+    );
+
+    SfxDialogLibrary
+    (
+        ModifiableHelper& _rModifiable,
+        OUString aName,
+        const cpo::uno::Reference< css::ucb::XSimpleFileAccess >& xSFI,
+        const OUString& aLibInfoFileURL, const OUString& aStorageURL, bool ReadOnly,
+        SfxDialogLibraryContainer* pParent
+    );
+
+    // XStringResourceSupplier
+    virtual cpo::uno::Reference< css::resource::XStringResourceResolver >
+        getStringResource(  ) override;
+
+    const OUString& getName() const
+        { return m_aName; }
+
+    const cpo::uno::Reference< css::resource::XStringResourcePersistence >&
+        getStringResourcePersistence() const
+    {
+        return m_xStringResourcePersistence;
+    }
+
+    static bool containsValidDialog( const cpo::uno::Any& aElement );
+
+private:
+    virtual bool isLibraryElementValid(const cpo::uno::Any& rElement) const override;
+};
+
+}   // namespace basic
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

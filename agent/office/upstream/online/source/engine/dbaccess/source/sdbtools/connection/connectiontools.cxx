@@ -1,0 +1,113 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <connectiontools.hxx>
+#include "objectnames.hxx"
+
+#include <comphelper/namedvaluecollection.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <connectivity/dbtools.hxx>
+#include <connectivity/dbexception.hxx>
+#include <connectivity/statementcomposer.hxx>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+
+namespace sdbtools
+{
+
+    using namespace ::com::sun::star;
+    using namespace ::cpo::uno;
+using namespace cpo::uno;
+    using ::cpo::uno::Reference;
+    using ::com::sun::star::sdb::tools::XObjectNames;
+    using ::cpo::uno::Sequence;
+    using ::cpo::uno::XInterface;
+    using ::cpo::uno::Any;
+    using ::com::sun::star::sdbc::XConnection;
+    using ::com::sun::star::lang::IllegalArgumentException;
+    using ::cpo::uno::XComponentContext;
+
+    // ConnectionTools
+    ConnectionTools::ConnectionTools( const Reference<XComponentContext>& _rContext )
+        :ConnectionDependentComponent( _rContext )
+    {
+    }
+
+    ConnectionTools::~ConnectionTools()
+    {
+    }
+
+    Reference< XObjectNames > ConnectionTools::getObjectNames()
+    {
+        EntryGuard aGuard( *this );
+        return new ObjectNames( getContext(), getConnection() );
+    }
+
+    Reference< container::XNameAccess > ConnectionTools::getFieldsByCommandDescriptor( ::sal_Int32 commandType, const OUString& command, Reference< lang::XComponent >& keepFieldsAlive )
+    {
+        EntryGuard aGuard( *this );
+        ::dbtools::SQLExceptionInfo aErrorInfo;
+        Reference< container::XNameAccess > xRet = ::dbtools::getFieldsByCommandDescriptor(getConnection(),commandType,command,keepFieldsAlive,&aErrorInfo);
+        if ( aErrorInfo.isValid() )
+            aErrorInfo.doThrow();
+        return xRet;
+    }
+
+    OUString ConnectionTools::getImplementationName()
+    {
+        return u"com.sun.star.comp.dbaccess.ConnectionTools"_ustr;
+    }
+
+    bool ConnectionTools::supportsService(const OUString & ServiceName)
+    {
+        return cppu::supportsService(this, ServiceName);
+    }
+
+    Sequence< OUString > ConnectionTools::getSupportedServiceNames()
+    {
+        return  { u"com.sun.star.sdb.tools.ConnectionTools"_ustr };
+    }
+
+    void ConnectionTools::initialize(const Sequence< Any > & _rArguments)
+    {
+        ::osl::MutexGuard aGuard( getMutex() );
+
+        Reference< XConnection > xConnection;
+        if (_rArguments.getLength()==1 && (_rArguments[0] >>= xConnection))
+        {
+        }
+        else
+        {
+            ::comphelper::NamedValueCollection aArguments( _rArguments );
+            aArguments.get( u"Connection"_ustr ) >>= xConnection;
+        }
+        if ( !xConnection.is() )
+            throw IllegalArgumentException();
+
+        setWeakConnection( xConnection );
+    }
+
+} // namespace sdbtools
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_dbaccess_ConnectionTools_get_implementation(
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+{
+    return cppu::acquire(new sdbtools::ConnectionTools(context));
+}
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

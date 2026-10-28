@@ -1,0 +1,80 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_SVL_SOURCE_NUMBERS_SUPSERVS_HXX
+#define INCLUDED_SVL_SOURCE_NUMBERS_SUPSERVS_HXX
+
+#include <svl/numuno.hxx>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <memory>
+
+/**
+ * SvNumberFormatsSupplierServiceObject - a number formats supplier which
+ * - can be instantiated as a service
+ * - works with its own SvNumberFormatter instance
+ * - can be initialized (css::lang::XInitialization)
+ * with a specific language (i.e. css::lang::Locale)
+ */
+class SvNumberFormatsSupplierServiceObject final
+            :public SvNumberFormatsSupplierObj
+            ,public css::lang::XInitialization
+            ,public css::lang::XServiceInfo
+{
+    std::unique_ptr<SvNumberFormatter>                  m_pOwnFormatter;
+    cpo::uno::Reference< cpo::uno::XComponentContext >  m_xORB;
+
+    void implEnsureFormatter();
+
+public:
+    explicit SvNumberFormatsSupplierServiceObject(cpo::uno::Reference< cpo::uno::XComponentContext > _xORB);
+    virtual ~SvNumberFormatsSupplierServiceObject() override;
+
+    // XInterface
+    virtual void acquire() noexcept override { SvNumberFormatsSupplierObj::acquire(); }
+    virtual void release() noexcept override { SvNumberFormatsSupplierObj::release(); }
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type& _rType ) override
+        { return SvNumberFormatsSupplierObj::queryInterface(_rType); }
+
+    // XAggregation
+    virtual cpo::uno::Any queryAggregation( const cpo::uno::Type& _rType ) override;
+
+    // XInitialization
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+    // XNumberFormatsSupplier
+    virtual cpo::uno::Reference< css::beans::XPropertySet >
+                getNumberFormatSettings() override;
+    virtual cpo::uno::Reference< css::util::XNumberFormats >
+                getNumberFormats() override;
+
+    // XUnoTunneler
+    virtual sal_Int64 getSomething( const cpo::uno::Sequence< sal_Int8 >& aIdentifier ) override;
+};
+
+
+#endif // INCLUDED_SVL_SOURCE_NUMBERS_SUPSERVS_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

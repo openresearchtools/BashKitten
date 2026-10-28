@@ -1,0 +1,975 @@
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+import Cocoa
+#if canImport(CryptoKit)
+import CryptoKit
+#endif
+import PDFKit
+import WebKit
+
+/**
+ * Represents a document in the application.
+ */
+class Document: NSDocument {
+
+    // MARK: - Properties
+
+    /// For the COWrapper to send the messages to the right file descriptor.
+    @objc
+    var fakeClientFd: Int32 = -1
+
+    /// A connected fake-socket pair belonging to this document: closing the signal
+    /// end makes the watched end readable, which marks the end of this document's
+    /// engine connection. Both stay -1 until the connection is established.
+    @objc
+    var closeNotificationSignalFd: Int32 = -1
+    @objc
+    var closeNotificationWatchedFd: Int32 = -1
+
+    /// ID to identify the document to be able to get access to lok::Document (eg. for printing)
+    @objc
+    var appDocId: Int32 = -1
+
+    /// The webview that contains the document.
+    var webView: WKWebView!
+
+    /// True from the moment the connection to the in-process server is released until a
+    /// new one is established. The document stays loaded in the engine throughout.
+    var isDetached = false
+
+    /// The URL of the temporary directory where the document's working files are stored.
+    private var tempDirectoryURL: URL?
+
+    /// The URL of the temporary file that represents the "live" version of the document.
+    @objc
+    var tempFileURL: URL?
+
+    /// This is the welcome slideshow (that needs a special parameter when opening)
+    var isWelcome = false
+
+    /// This is a newly created document (from a template).
+    var isNewDocument = false
+
+    /// The document type (UTI) for this document, set explicitly for new documents
+    var documentType: String?
+
+    /** Parameters for a deferred Save / Save As… request. */
+    private struct PendingSave {
+        let url: URL
+        let typeName: String
+        let operation: NSDocument.SaveOperationType
+        let completion: (((any Error)?) -> Void)
+        /** Change-count token captured when the save started; used to clear only if nothing new happened. */
+        let token: Any
+    }
+
+    /** Stashed Save / Save As… request while edits are still dirty (nil when none). */
+    private var pendingSave: PendingSave?
+
+    /// Make sure the isModified access can be atomic.
+    private var modifiedLock = NSLock()
+    private var _isModified: Bool = false
+
+    /// Observe the fileURL changes, so that we can remember the window size per document.
+    private var fileURLObservation: NSKeyValueObservation?
+
+    /**
+     * Modified status mirrored from the core.
+     */
+    var isModified: Bool {
+        get {
+            modifiedLock.lock()
+            let value = _isModified
+            modifiedLock.unlock()
+
+            return value
+        }
+        set {
+            // schedule UI updates after we release the lock
+            var changeUpdate: (() -> Void)?
+
+            modifiedLock.lock()
+
+            let oldValue = _isModified
+            _isModified = newValue
+
+            // non-modified -> modified: Mark that the document became edited
+            if !oldValue && newValue {
+                updateChangeCount(.changeDone)
+            }
+            // modified -> non-modified: Clear the mark unless there is an ongoing saving operation
+            else if oldValue && !newValue && pendingSave == nil {
+                changeUpdate = {
+                    self.updateChangeCount(.changeCleared)
+                    // The content is on disk, so this document's view can be dropped now
+                    // rather than waiting for the next window to become main.
+                    LiveViewLimit.shared.schedule()
+                }
+            }
+
+            modifiedLock.unlock()
+
+            // change the "Edited" mark
+            if let changeUpdate {
+                DispatchQueue.main.async(execute: changeUpdate)
+            }
+        }
+    }
+
+    /// True while a save this document asked the engine for has not come back yet.
+    var isSaveInFlight: Bool {
+        modifiedLock.lock()
+        defer { modifiedLock.unlock() }
+        return pendingSave != nil
+    }
+
+    /**
+     * Atomically checks dirty state and, if dirty, stashes a pending save target. Returns true if pending was set.
+     */
+    private func setPendingIfModified(url: URL,
+                                      typeName: String,
+                                      saveOperation: NSDocument.SaveOperationType,
+                                      completionHandler: @escaping ((any Error)?) -> Void) -> Bool {
+        modifiedLock.lock()
+        defer { modifiedLock.unlock() }
+        if _isModified {
+            let t = self.changeCountToken(for: saveOperation)
+            pendingSave = PendingSave(url: url, typeName: typeName, operation: saveOperation, completion: completionHandler, token: t)
+            return true
+        }
+
+        return false
+    }
+
+    /** What the engine reported about a .uno:Save. */
+    enum SaveOutcome {
+        /// The engine wrote the document to tempFileURL. wasModified tells whether it
+        /// had edits to write, which only a save that was asked to write regardless
+        /// reports as false.
+        case saved(wasModified: Bool)
+        /// The engine had nothing to write, so tempFileURL already holds the current
+        /// content. This is how it answers a save of an unmodified document that was
+        /// asked to skip writing in that case.
+        case nothingToSave
+        /// The engine could not write the document.
+        case failed
+    }
+
+    /**
+     * Called with the result of a .uno:Save command from the engine; completes any pending
+     * Save / Save As…
+     *
+     * A pending request is completed by writing tempFileURL out, both when the engine
+     * wrote it and when it reported nothing to write - in the latter case the file is
+     * current from an earlier write, so its content is the one to save. Only a real
+     * failure fails the request, so the caller (and with it, for example, a quit
+     * waiting on the save) always gets an answer rather than waiting forever.
+     */
+    func triggerSave(_ outcome: SaveOutcome) {
+        // Grab and clear the pending request atomically.
+        var ps: PendingSave?
+
+        modifiedLock.lock()
+        ps = pendingSave
+        pendingSave = nil
+        modifiedLock.unlock()
+
+        COWrapper.LOG_DBG("Save result from the engine: \(outcome), pending request: \(ps != nil)")
+
+        if let ps {
+            switch outcome {
+            case .saved, .nothingToSave:
+                // Finish the original AppKit request: write the bytes and call its original completion
+                DispatchQueue.main.async {
+                    self.performPendingSave(ps)
+                }
+            case .failed:
+                DispatchQueue.main.async {
+                    ps.completion(CocoaError(.fileWriteUnknown))
+                }
+            }
+        }
+        else if case .saved(let wasModified) = outcome, wasModified {
+            // No pending AppKit request → internal/webview save: ask AppKit to Save (or show Save As… if untitled)
+            DispatchQueue.main.async {
+                self.performImplicitSave()
+            }
+        }
+    }
+
+    // MARK: - deinit
+
+    deinit {
+        fileURLObservation?.invalidate()
+    }
+
+
+    // MARK: - NSDocument Overrides
+
+    /**
+     * Enables autosaving.
+     */
+    override class var autosavesInPlace: Bool {
+        return true
+    }
+
+    /**
+     * Creates the window controllers for the document.
+     *
+     * Default to a nicer size when opening the document the 1st time, or update
+     * the window size according to what we remember (per document).
+     */
+    override func makeWindowControllers() {
+        // Load the storyboard and get the window controller.
+        let storyboard = NSStoryboard(name: "Main", bundle: nil)
+        let identifier = NSStoryboard.SceneIdentifier("DocumentWindowController")
+        guard let windowController = storyboard.instantiateController(withIdentifier: identifier) as? WindowController else {
+            fatalError("Unable to find DocumentWindowController in storyboard.")
+        }
+
+        // Assign a per-document autosave name early
+        let initialName = FrameAutosaveHelper.keyName(for: self)
+        windowController.windowFrameAutosaveName = initialName
+        windowController.shouldCascadeWindows = false
+
+        addWindowController(windowController)
+
+        if let viewController = windowController.contentViewController as? ViewController {
+            viewController.loadDocument(self)
+        }
+
+        // One more document view holds a renderer, so the limit has something new to weigh.
+        LiveViewLimit.shared.noteDocumentOpened()
+
+        // Ensure the window exists so we can apply a default if no saved frame yet
+        windowController.loadWindow()
+        if let win = windowController.window {
+            if isWelcome {
+                // Border-less Welcome screen; we can't do it truly border-less (using .borderless),
+                // because then it doesn't auto-close when the slideshow finishes.
+                win.styleMask = [.titled, .resizable, .closable, .miniaturizable, .fullSizeContentView]
+                win.titleVisibility = .hidden
+                win.titlebarAppearsTransparent = true
+                win.isMovableByWindowBackground = true
+
+                // Hide traffic lights
+                win.standardWindowButton(.closeButton)?.isHidden = true
+                win.standardWindowButton(.miniaturizeButton)?.isHidden = true
+                win.standardWindowButton(.zoomButton)?.isHidden = true
+            }
+            else {
+                // Prefer tabbed approach for documents
+                win.tabbingMode = .preferred
+                win.tabbingIdentifier = "CollaboraDocumentTab"
+            }
+
+            // Set minimum window size
+            win.minSize = NSSize(width: 800, height: 480)
+
+            if isWelcome {
+                win.maxSize = NSSize(width: 1280, height: 720)
+                FrameAutosaveHelper.applyDefaultFrame(win, widthFraction: 0.4, heightFraction: 0.4, ratio: 16.0/9.0)
+            }
+            else if !win.setFrameUsingName(initialName) {
+                FrameAutosaveHelper.applyDefaultFrame(win, widthFraction: 0.95, heightFraction: 0.95)
+            }
+
+            // Set window icon based on document type
+            let type = self.documentType ?? self.fileType ?? "org.oasis-open.opendocument.text"
+
+            // For new/untitled documents, we need to set a represented URL to make the icon button appear
+            if self.fileURL == nil && win.representedURL == nil {
+                // Create a temporary represented URL so the icon button appears
+                // Use the temp file URL if available, otherwise create a dummy one
+                if let tempURL = self.tempFileURL {
+                    win.representedURL = tempURL
+                } else {
+                    // Create a dummy URL with the appropriate extension
+                    let ext: String
+                    switch type {
+                    case let t where t.contains("spreadsheet"):
+                        ext = "ods"
+                    case let t where t.contains("presentation"):
+                        ext = "odp"
+                    case let t where t.contains("text"):
+                        ext = "odt"
+                    default:
+                        ext = "odt"
+                    }
+                    let dummyURL = URL(fileURLWithPath: "/tmp/Untitled.\(ext)")
+                    win.representedURL = dummyURL
+                }
+            }
+
+            // Set branded icon based on document type
+            if let icon = Document.iconForType(typeName: type) {
+                // General icon for the entire window
+                win.standardWindowButton(.documentIconButton)?.image = icon
+
+                // Show the icon at the right side of the tab in the tabbed view too
+                let view = PassthroughImageView(image: icon)
+                NSLayoutConstraint.activate([
+                    view.widthAnchor.constraint(equalToConstant: 24), // add some breathing space to the left and right, it's centered inside that
+                    view.heightAnchor.constraint(equalToConstant: 16),
+                ])
+                win.tab.accessoryView = view
+            }
+        }
+
+        // Observe fileURL so we can switch/migrate the autosave key after first save/rename.
+        fileURLObservation = observe(\.fileURL, options: [.new]) { [weak windowController] doc, _ in
+            guard let wc = windowController else { return }
+            let oldName = wc.windowFrameAutosaveName
+            let newName = FrameAutosaveHelper.keyName(for: doc)
+            if newName == oldName { return }
+
+            FrameAutosaveHelper.migrateSavedFrame(from: oldName, to: newName)
+            wc.windowFrameAutosaveName = newName
+
+            // If there’s already a window, try to apply the stored frame for the new key.
+            if let win = wc.window { _ = win.setFrameUsingName(newName) }
+        }
+    }
+
+    /**
+     * Called by the system when it wants to save or autosave the document.
+     */
+    override func data(ofType typeName: String) throws -> Data {
+        guard let tempFileURL = self.tempFileURL else {
+            // FIXME: handle error?
+            return Data()
+        }
+
+        // Read the latest data from the temp file
+        let data = try Data(contentsOf: tempFileURL)
+        return data
+    }
+
+    /**
+     * We save asynchronously, so that COOL can first write the file, and we can then copy it to the right location.
+     */
+    override func canAsynchronouslyWrite(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType) -> Bool {
+        return true
+    }
+
+    /**
+     * Make sure that we first save by COOL when the user chooses to Save, and only then copy the content to the resulting place.
+     */
+    override func save(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType, completionHandler: @escaping ((any Error)?) -> Void) {
+
+        if setPendingIfModified(url: url, typeName: typeName, saveOperation: saveOperation, completionHandler: completionHandler) {
+            // we have to wait for COOL to save first
+            DispatchQueue.main.async {
+                COWrapper.handleMessage(with: self, message: "save dontTerminateEdit=1 dontSaveIfUnmodified=1")
+            }
+        }
+        else {
+            // all is good, we can proceed with copying the data from COOL
+            super.save(to: url, ofType: typeName, for: saveOperation, completionHandler: completionHandler)
+        }
+    }
+
+    /**
+     * Calls super.save(...) to complete a pending Save / Save As…
+     */
+    private func performPendingSave(_ ps: PendingSave) {
+        do {
+            // Perform the actual write using NSDocument’s writing pipeline (uses data(ofType:)).
+            try self.write(to: ps.url, ofType: ps.typeName, for: ps.operation, originalContentsURL: self.fileURL)
+
+            // For Save As / first Save, adopt the new URL/type. Save To must NOT change fileURL.
+            if ps.operation == .saveAsOperation || (ps.operation == .saveOperation && self.fileURL == nil) {
+                self.fileURL = ps.url
+                self.fileType = ps.typeName
+            }
+
+            // fileModificationDate is NSDocument's record of the file's date on disk; a save
+            // that leaves it older than the file makes the next save report the file as
+            // changed by another application. The low-level write above does not maintain it
+            // (the higher-level NSDocument saving pipeline normally does), so refresh it here.
+            // Save To and autosave-elsewhere write somewhere other than the document's file
+            // and keep the record unchanged, hence the URL comparison.
+            if self.fileURL == ps.url,
+               let attributes = try? FileManager.default.attributesOfItem(atPath: ps.url.path),
+               let modificationDate = attributes[.modificationDate] as? Date {
+                self.fileModificationDate = modificationDate
+            }
+
+            // Clear edited state only if nothing new happened since this save began.
+            self.updateChangeCount(withToken: ps.token, for: ps.operation)
+
+            // Tell AppKit the *original* save request completed (this unblocks the close button flow).
+            DispatchQueue.main.async { ps.completion(nil) }
+        }
+        catch {
+            COWrapper.LOG_ERR("Writing \(ps.url.path) failed: \(error.localizedDescription)")
+            DispatchQueue.main.async { ps.completion(error) }
+        }
+    }
+
+    /**
+     * Performs an AppKit-driven save (or Save As… if the document is untitled) after a COOL-initiated flush.
+     */
+    private func performImplicitSave() {
+        // This will show the Save panel if fileURL == nil, otherwise it saves in place.
+        self.save(self)
+    }
+
+    /**
+     * Restrict Save/Save As… formats to the document's current type, we currently can't change the type (yet).
+     */
+    override func writableTypes(for saveOperation: NSDocument.SaveOperationType) -> [String] {
+        // Ask super for the default list (from Info.plist)
+        let all = super.writableTypes(for: saveOperation)
+
+        // Determine our current type name (best effort)
+        guard let current = currentTypeNameForSavePanel() else {
+            return all  // fallback: keep default list if we can't determine
+        }
+
+        // If super’s list includes it, return only that; otherwise still force just current.
+        return all.contains(current) ? [current] : [current]
+    }
+
+    /**
+     * Best-effort detection of this document’s current type name.
+     */
+    private func currentTypeNameForSavePanel() -> String? {
+        // If the doc already knows its type, use it.
+        if let t = self.fileType { return t }
+
+        // If we were opened from a URL, ask the controller to infer it from contents.
+        if let url = self.fileURL {
+            return try? NSDocumentController.shared.typeForContents(of: url)
+        }
+
+        // Or try the tempFile
+        if let url = self.tempFileURL {
+            return try? NSDocumentController.shared.typeForContents(of: url)
+        }
+
+        // Fall back to the controller’s defaultType (may be nil).
+        return NSDocumentController.shared.defaultType
+    }
+
+    /**
+     * Called by the system when the document is opened. The system provides the file contents as `Data`.
+     * We create a non-predictable temporary directory using a UUID, and store the `data` there.
+     */
+    override func read(from data: Data, ofType typeName: String) throws {
+        // Create a unique temp directory
+        let tempDirBase = FileManager.default.temporaryDirectory
+        let uniqueDirName = UUID().uuidString
+        let tempDir = tempDirBase.appendingPathComponent(uniqueDirName, isDirectory: true)
+
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
+
+        self.tempDirectoryURL = tempDir
+
+        // If fileURL is available (document opened from a file), preserve the
+        // original filename. A new document has no name yet, so give it a plain
+        // "Untitled" that reads well wherever the name is shown. The temporary
+        // directory is already unique, so the file name does not need to carry a
+        // unique suffix.
+        let fileName: String
+        if let fileURL = self.fileURL {
+            fileName = fileURL.lastPathComponent
+        }
+        else {
+            fileName = "Untitled"
+        }
+
+        let tempFile = tempDir.appendingPathComponent(fileName)
+        try data.write(to: tempFile, options: .atomic)
+
+        self.tempFileURL = tempFile
+    }
+
+    /**
+     * Implement printing.
+     */
+    override func printOperation(withSettings printSettings: [NSPrintInfo.AttributeKey : Any]) throws -> NSPrintOperation {
+        // export to a temporary PDF file
+        let tmpURL = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("pdf")
+
+        // Leave form fields and comments out of the printout, like the
+        // browser does when printing to PDF.
+        COWrapper.saveAs(with: self, url: tmpURL.absoluteString, format: "pdf",
+                         filterOptions: "{\"ExportFormFields\":{\"type\":\"boolean\",\"value\":\"false\"},"
+                             + "\"ExportNotes\":{\"type\":\"boolean\",\"value\":\"false\"}}")
+
+        // load the PDF into a PDFView
+        guard let pdfDocument = PDFDocument(url: tmpURL) else {
+            throw CocoaError(.fileReadCorruptFile, userInfo: [NSURLErrorKey: tmpURL])
+        }
+
+        // we no longer need the file
+        try? FileManager.default.removeItem(at: tmpURL)
+
+        guard let op = pdfDocument.printOperation(for: self.printInfo, scalingMode: .pageScaleNone, autoRotate: true) else {
+            throw CocoaError(.fileReadCorruptFile, userInfo: [NSURLErrorKey: tmpURL])
+        }
+
+        return op
+    }
+
+    /*
+     * Guard against double call of close().
+     */
+    private var isClosing = false
+
+    /**
+     * Clean up the temporary directory when the document closes.
+     */
+    override func close() {
+        // there is no guarrantee that close() is called just once, see
+        // https://stackoverflow.com/questions/5627267/nsdocument-subclass-close-method-called-twice
+        if isClosing { return }
+        isClosing = true
+
+        NSLog("CollaboraOffice: Closing document")
+
+        // The webview goes with the document, so stop offering it to the
+        // WebDriver clients now. Waiting for it to be deallocated would keep it
+        // on offer for as long as anything still holds the document.
+        if let webView {
+            WebDriverManager.shared.unregister(webView: webView)
+        }
+
+        COWrapper.bye(self)
+        super.close()
+        if let tempDir = self.tempDirectoryURL {
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+    }
+
+    /**
+     * Common items like "lang" or "darkTheme" and alike, that are useful for the Backstage invocation too.
+     */
+    static func addCommonCOOLQueryItems(to components: inout URLComponents) {
+        let lang = Locale.preferredLanguages.first ?? "en-US"
+        components.queryItems?.append(URLQueryItem(name: "lang", value: lang))
+        components.queryItems?.append(URLQueryItem(name: "dir", value: COWrapper.isRtlLanguage(lang) ? "rtl" : ""))
+
+        // Dark mode: the saved choice wins, otherwise follow the system appearance.
+        let systemDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let dark = COWrapper.darkMode(systemDefault: systemDark)
+        components.queryItems?.append(URLQueryItem(name: "darkTheme", value: dark ? "true" : "false"))
+    }
+
+    /**
+     * Release the connection to the in-process server after the view that used it died.
+     * The appDocId and the temporary file stay, so the document is still there under them.
+     */
+    func detachFromView() {
+        if isDetached {
+            return
+        }
+        isDetached = true
+
+        webView = nil
+        COWrapper.detach(self)
+    }
+
+    /**
+     * Initiate loading of cool.html, which also triggers loading of the document via lokit.
+     */
+    func loadDocumentInWebView(webView: WKWebView, permission: String, isWelcome: Bool) {
+        self.webView = webView
+
+        // The appDocId names the document to the in-process server for as long as the
+        // document is open. A second call re-establishes the connection to the document
+        // already loaded under this appDocId, so only the socket is fresh.
+        if self.appDocId == -1 {
+            self.appDocId = COWrapper.generateNewAppDocId()
+        }
+        self.fakeClientFd = COWrapper.fakeSocketSocket()
+        self.isDetached = false
+
+        NSLog("CollaboraOffice: load into webview with appDocId \(self.appDocId), client fd \(self.fakeClientFd), temp file \(self.tempFileURL?.absoluteString ?? "<none>")")
+
+        guard let url = Bundle.main.url(forResource: "cool", withExtension: "html") else {
+            fatalError("Resource 'cool.html' not found in the main bundle.")
+        }
+
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        let lang = Locale.preferredLanguages.first ?? "en-US"
+
+        components.queryItems = [
+            URLQueryItem(name: "file_path", value: tempFileURL!.absoluteString),
+            URLQueryItem(name: "permission", value: permission),
+            URLQueryItem(name: "appdocid", value: "\(self.appDocId)"),
+            URLQueryItem(name: "userinterfacemode", value: "notebookbar"),
+        ]
+
+        // Add lang and (potentially) darkTheme
+        Document.addCommonCOOLQueryItems(to: &components)
+
+        if !isNewDocument {
+            components.queryItems?.append(URLQueryItem(name: "startreadonly", value: "true"))
+        }
+
+        if isWelcome {
+            components.queryItems?.append(URLQueryItem(name: "welcome", value: "true"))
+        }
+
+        let finalURL = components.url!
+        let urlDir = url.deletingLastPathComponent()
+
+        guard finalURL.isFileURL else {
+            NSLog("cool.html not found in bundle")
+            webView.loadHTMLString("<p>Couldn't access <code>cool.html</code>, this build is seriously broken.</p>", baseURL: nil)
+            return
+        }
+
+        webView.loadFileURL(finalURL, allowingReadAccessTo: urlDir)
+    }
+
+    /**
+     * Abbreviated message for debugging.
+     */
+    private func abbreviatedMessage(buffer: UnsafePointer<CChar>, length: Int) -> String {
+        // Implement your logic or return a placeholder:
+        let msgData = Data(bytes: buffer, count: length)
+        let msgStr = String(data: msgData, encoding: .utf8) ?? "<non-UTF8 message>"
+        return msgStr.prefix(100) + (msgStr.count > 100 ? "..." : "")
+    }
+
+    /// The prefixes of the engine messages the save handling reads for itself.
+    private static let stateChangedPrefix = "statechanged: "
+    private static let unoCommandResultPrefix = "unocommandresult:"
+
+    /// Whether the message in the buffer starts with the given prefix.
+    private func message(_ buffer: UnsafePointer<CChar>, length: Int,
+                         hasPrefix prefix: String) -> Bool {
+        let prefixLength = prefix.utf8.count
+        return length > prefixLength && strncmp(buffer, prefix, prefixLength) == 0
+    }
+
+    /// The message in the buffer as a string.
+    private func message(_ buffer: UnsafePointer<CChar>, length: Int) -> String {
+        return String(
+            decoding: UnsafeRawBufferPointer(start: UnsafeRawPointer(buffer), count: length),
+            as: UTF8.self)
+    }
+
+    /**
+     * Reads a statechanged message's payload, that is, the message with its prefix
+     * dropped. The engine sends the state as "<command>=<value>", and as a JSON
+     * object carrying the same members for the commands whose state does not fit
+     * that form.
+     *
+     * The page reads the same payload in _onStateChangedMsg(), and this follows it:
+     * the whitespace trimming only decides whether to read the payload as JSON and
+     * is not carried into the state, and a payload that looks like JSON but does not
+     * decode still gets split on the "=".
+     */
+    private func stateChange(fromPayload payload: String) -> CommandStateChange? {
+        let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("{"), trimmed.hasSuffix("}"),
+           let change = try? JSONDecoder().decode(CommandStateChange.self,
+                                                  from: Data(trimmed.utf8)) {
+            return change
+        }
+        guard let equals = payload.firstIndex(of: "=") else {
+            return nil
+        }
+        return CommandStateChange(commandName: String(payload[payload.startIndex..<equals]),
+                                  state: String(payload[payload.index(after: equals)...]))
+    }
+
+    /**
+     * Handles a statechanged message from the engine, which is where the app takes the
+     * document's modified state and the command states from.
+     *
+     * Reading them here rather than from the page's account of them keeps the modified
+     * state in step with the save results, which are read here as well: a save started
+     * from the page then finds the state already settled, and does not ask the engine to
+     * write a second time. The command states no longer wait for the page either, which
+     * matters for a window that is not in front, whose page may be given little time to
+     * run.
+     *
+     * They are applied on the main thread, being the document's edited mark and the
+     * state of menu items.
+     */
+    private func handleStateChanged(buffer: UnsafePointer<CChar>, length: Int) {
+        let payload = String(message(buffer, length: length)
+            .dropFirst(Document.stateChangedPrefix.count))
+        guard let change = stateChange(fromPayload: payload) else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            if change.commandName == ".uno:ModifiedStatus" {
+                self.isModified = change.state == "true"
+            }
+            (self.windowControllers.first as? WindowController)?
+                .handleCommandStateChange(change)
+        }
+    }
+
+    /**
+     * Handles a unocommandresult message from the engine. The page receives the
+     * message too, but its processing runs on the page's timers and animation
+     * frames, which an occluded window's page may not run at all; a command result
+     * that something waits on - like a save during quitting - completes here even
+     * then. Only the .uno:Save result is handled so far.
+     */
+    private func handleUnoCommandResult(buffer: UnsafePointer<CChar>, length: Int) {
+        let text = message(buffer, length: length)
+        guard let brace = text.firstIndex(of: "{"),
+              let result = try? JSONDecoder().decode(
+                  CommandResult.self, from: Data(text[brace...].utf8)) else {
+            return
+        }
+
+        if result.commandName == ".uno:Save" {
+            if result.success == true {
+                triggerSave(.saved(wasModified: result.wasModified == true))
+            }
+            else if result.result?.value == "unmodified" {
+                triggerSave(.nothingToSave)
+            }
+            else {
+                triggerSave(.failed)
+            }
+        }
+    }
+
+    @objc
+    func send2JS(_ buffer: UnsafePointer<CChar>, length: Int) {
+        let abbrMsg = abbreviatedMessage(buffer: buffer, length: length)
+        COWrapper.LOG_TRC("To JS: \(abbrMsg)")
+
+        let binaryMessage = COWrapper.isBinaryMessage(buffer, length: length)
+
+        // Read what the save handling needs straight from the engine's message
+        // stream, ahead of the page hand-off below. The messages are handled in the
+        // order the engine sent them, which is what lets the state a save result is
+        // judged against be the state that came with it.
+        if !binaryMessage {
+            if message(buffer, length: length, hasPrefix: Document.unoCommandResultPrefix) {
+                handleUnoCommandResult(buffer: buffer, length: length)
+            }
+            else if message(buffer, length: length, hasPrefix: Document.stateChangedPrefix) {
+                handleStateChanged(buffer: buffer, length: length)
+            }
+        }
+
+        let pretext = binaryMessage
+            ? "window.TheFakeWebSocket.onmessage({'data': window.atob('"
+            : "window.TheFakeWebSocket.onmessage({'data': window.b64d('"
+        let posttext = "')});"
+
+        // Convert the buffer to Data
+        let payloadData = Data(bytes: buffer, count: length)
+        let encodedPayload = payloadData.base64EncodedString(options: [])
+
+        // Construct the full JavaScript string
+        let js = pretext + encodedPayload + posttext
+
+        // Truncate for logging
+        let truncatedJS = js.count > 100 ? (js.prefix(100) + "...") : js[...]
+        COWrapper.LOG_TRC("Evaluating JavaScript: \(truncatedJS)")
+
+        // Evaluate on main queue
+        DispatchQueue.main.async {
+            // A document whose view was dropped, or whose renderer died, has no page to
+            // hand this to.
+            guard let webView = self.webView else {
+                COWrapper.LOG_TRC("No view for appDocId \(self.appDocId), dropping: \(truncatedJS)")
+                return
+            }
+            webView.evaluateJavaScript(js) { (obj, error) in
+                if let error = error as NSError? {
+                    COWrapper.LOG_ERR("Error after \(truncatedJS): \(error.localizedDescription)")
+                    if let jsException = error.userInfo["WKJavaScriptExceptionMessage"] as? String {
+                        COWrapper.LOG_ERR("JavaScript exception: \(jsException)")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Returns the correct icon for a document type
+    static func iconForType(typeName: String) -> NSImage? {
+        // Use branded icons from Assets catalog
+        let iconName: String?
+        switch typeName {
+        case "org.oasis-open.opendocument.text",
+             "org.openoffice.text",
+             "com.microsoft.word.doc",
+             "org.openxmlformats.wordprocessingml.document",
+             "org.openxmlformats.wordprocessingml.document.macroEnabled",
+             "org.openxmlformats.wordprocessingml.template",
+             "org.openxmlformats.wordprocessingml.template.macroEnabled",
+             "public.rtf":
+            iconName = "DocumentIcon"
+        case "org.oasis-open.opendocument.spreadsheet",
+             "org.openoffice.spreadsheet",
+             "com.microsoft.excel.xls",
+             "org.openxmlformats.spreadsheetml.sheet",
+             "org.openxmlformats.spreadsheetml.sheet.macroEnabled",
+             "com.microsoft.excel.sheet.binary.macroEnabled",
+             "org.openxmlformats.spreadsheetml.template",
+             "org.openxmlformats.spreadsheetml.template.macroEnabled":
+            iconName = "SpreadsheetIcon"
+        case "org.oasis-open.opendocument.presentation",
+             "org.openoffice.presentation",
+             "com.microsoft.powerpoint.ppt",
+             "org.openxmlformats.presentationml.presentation",
+             "org.openxmlformats.presentationml.presentation.macroEnabled",
+             "org.openxmlformats.presentationml.template",
+             "org.openxmlformats.presentationml.template.macroEnabled":
+            iconName = "PresentationIcon"
+        case "org.oasis-open.opendocument.graphics",
+             "org.openoffice.graphics",
+             "org.libreoffice.visio-document":
+            iconName = "DrawingIcon"
+        default:
+            iconName = nil
+        }
+
+        // Load from Assets catalog
+        if let name = iconName, let image = NSImage(named: name) {
+            return image
+        }
+
+        // Fallback to app icon
+        return NSApp.applicationIconImage
+    }
+}
+
+/**
+ * A decorative image view that stays out of mouse event routing.
+ *
+ * Ignore the mouse events, this is just a decoration. When we have the events
+ * enabled, the scrolling using mouse wheel stops any time the mouse pointer
+ * appears over the icon.
+ */
+private class PassthroughImageView: NSImageView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        return nil
+    }
+}
+
+/**
+ * Helper class containing functions for handling autosaving the size of the window.
+ */
+private class FrameAutosaveHelper {
+
+
+    /**
+     * Helper function for handling Window's maxSize.
+     */
+    @inline(__always) private static func effMax(_ v: CGFloat) -> CGFloat { v > 0 ? v : .greatestFiniteMagnitude }
+
+    /**
+     * Resize window to fractions of visible width & height, and center it on the target screen.
+     */
+    static func applyDefaultFrame(_ window: NSWindow, widthFraction: CGFloat, heightFraction: CGFloat, ratio: CGFloat? = nil) {
+        // Choose the screen the window will appear on (fallback to main/first if unknown).
+        let screen = window.screen ?? NSScreen.main ?? NSScreen.screens.first!
+        let vf = screen.visibleFrame
+
+        // Fraction for width and height (ideal target before constraints)
+        let targetW = floor(vf.width * widthFraction)
+        let targetH = floor(vf.height * heightFraction)
+
+        let minSize = window.minSize
+        let maxSize = window.maxSize
+
+        let clampedW: CGFloat
+        let clampedH: CGFloat
+        if let r = ratio, r > 0 {
+            // Maintain aspect ratio r = width/height, drive by width primarily.
+            // Derive allowed width interval from BOTH width and height constraints.
+            let minAllowedW = max(minSize.width, r * minSize.height)
+            let maxAllowedW = min(effMax(maxSize.width), effMax(maxSize.height) * r)
+
+            // Start from target width; clamp into feasible interval.
+            var w = max(minAllowedW, min(maxAllowedW, targetW))
+            var h = w / r
+
+            // Defensive: after rounding, enforce height limits by nudging width accordingly (keep ratio).
+            if h < minSize.height {
+                h = minSize.height
+                w = r * h
+            }
+            else if maxSize.height > 0 && h > maxSize.height {
+                h = maxSize.height
+                w = r * h
+            }
+
+            clampedW = w
+            clampedH = h
+        }
+        else {
+            // No ratio requested -> independent clamping
+            clampedW = max(minSize.width, min(effMax(maxSize.width), targetW))
+            clampedH = max(minSize.height, min(effMax(maxSize.height), targetH))
+        }
+
+        // Position so that the window is centered
+        let x = vf.origin.x + (vf.width - clampedW) / 2.0
+        let y = vf.origin.y + (vf.height - clampedH) / 2.0
+
+        let clampedFrame = NSRect(x: x, y: y, width: clampedW, height: clampedH)
+
+        window.setFrame(clampedFrame, display: false, animate: false)
+    }
+
+    /// Stable per-doc name. Untitled docs share one bucket so they all use the default layout.
+    static func keyName(for doc: NSDocument) -> String {
+        guard let url = doc.fileURL else { return "DocWindow-untitled" }
+
+        if let stable = stableIdentityKey(for: url) {
+            return "DocWindow-\(stable)"
+        } else {
+            // Fallback: based on standardized path (won’t survive moves/renames, but deterministic)
+            return "DocWindow-path-\(hashHex(url.standardizedFileURL.path))"
+        }
+    }
+
+    /// Try to build a move/rename-resistant identity from the file + volume IDs.
+    private static func stableIdentityKey(for url: URL) -> String? {
+        do {
+            let vals = try url.resourceValues(forKeys: [.fileResourceIdentifierKey, .volumeIdentifierKey])
+            guard let fid = vals.fileResourceIdentifier, let vid = vals.volumeIdentifier else { return nil }
+            return "id-\(hashHex("\(vid)|\(fid)"))"
+        } catch { return nil }
+    }
+
+    static func migrateSavedFrame(from old: String, to new: String) {
+        let defaults = UserDefaults.standard
+        let oldKey = "NSWindow Frame \(old)"
+        let newKey = "NSWindow Frame \(new)"
+        if let v = defaults.string(forKey: oldKey) {
+            defaults.set(v, forKey: newKey)
+        }
+    }
+
+    private static func hashHex(_ s: String) -> String {
+        let data = Data(s.utf8)
+        #if canImport(CryptoKit)
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
+        #else
+        // Deterministic FNV-1a 64-bit fallback
+        var h: UInt64 = 0xcbf29ce484222325
+        for b in data { h ^= UInt64(b); h &*= 0x100000001b3 }
+        return String(format: "%016llx", h)
+        #endif
+    }
+}

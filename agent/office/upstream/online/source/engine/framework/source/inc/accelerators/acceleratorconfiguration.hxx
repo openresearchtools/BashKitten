@@ -1,0 +1,323 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <sal/config.h>
+
+#include <string_view>
+
+#include <accelerators/presethandler.hxx>
+#include <accelerators/acceleratorcache.hxx>
+
+#include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/ui/XAcceleratorConfiguration.hpp>
+
+#include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/io/XOutputStream.hpp>
+#include <com/sun/star/util/XChangesListener.hpp>
+
+// TODO use XPresetHandler interface instead if available
+#include <com/sun/star/form/XReset.hpp>
+
+#include <cppuhelper/implbase.hxx>
+
+// definition
+
+namespace framework
+{
+
+inline constexpr OUString CFG_ENTRY_PRIMARY = u"PrimaryKeys"_ustr;
+inline constexpr OUString CFG_ENTRY_GLOBAL = u"Global"_ustr;
+inline constexpr OUString CFG_ENTRY_MODULES = u"Modules"_ustr;
+
+/**
+    implements a read/write access to the accelerator configuration.
+ */
+class XMLBasedAcceleratorConfiguration : public    ::cppu::WeakImplHelper<
+                                                       css::form::XReset,                    // TODO use XPresetHandler instead if available
+                                                       css::ui::XAcceleratorConfiguration >  // => css::ui::XUIConfigurationPersistence
+                                                                                             //    css::ui::XUIConfigurationStorage
+                                                                                             //    css::ui::XUIConfiguration
+{
+
+    // member
+
+    protected:
+
+        /** the global uno service manager.
+        Must be used to create own needed services. */
+        cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+
+        /** used to:
+        i  ) copy configuration files from the share to the user layer
+        ii ) provide access to these config files
+        iii) cache all sub storages on the path from the top to the bottom(!)
+        iv ) provide commit for changes. */
+        PresetHandler m_aPresetHandler;
+
+        /** contains the cached configuration data */
+        AcceleratorCache m_aReadCache;
+
+        /** used to implement the copy on write pattern! */
+        std::unique_ptr<AcceleratorCache> m_pWriteCache;
+
+        // native interface!
+
+    public:
+
+        XMLBasedAcceleratorConfiguration( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext);
+        virtual ~XMLBasedAcceleratorConfiguration(                                                                    ) override;
+
+        // uno interface!
+
+    public:
+
+        // XAcceleratorConfiguration
+        virtual cpo::uno::Sequence< css::awt::KeyEvent > getAllKeyEvents() override;
+
+        virtual OUString getCommandByKeyEvent(const css::awt::KeyEvent& aKeyEvent) override;
+
+        virtual void setKeyEvent(const css::awt::KeyEvent& aKeyEvent,
+            const OUString&    sCommand ) override;
+
+        virtual void removeKeyEvent(const css::awt::KeyEvent& aKeyEvent) override;
+
+        virtual cpo::uno::Sequence< css::awt::KeyEvent > getKeyEventsByCommand(const OUString& sCommand) override;
+
+        virtual cpo::uno::Sequence< cpo::uno::Any > getPreferredKeyEventsForCommandList(const cpo::uno::Sequence< OUString >& lCommandList) override;
+
+        virtual void removeCommandFromAllKeyEvents(const OUString& sCommand) override;
+
+        // XUIConfigurationPersistence
+        virtual void reload() override;
+
+        virtual void store() override;
+
+        virtual void storeToStorage(const cpo::uno::Reference< css::embed::XStorage >& xStorage) override;
+
+        virtual bool isModified() override;
+
+        virtual bool isReadOnly() override;
+
+        // XUIConfigurationStorage
+        virtual void setStorage(const cpo::uno::Reference< css::embed::XStorage >& xStorage) override;
+
+        virtual bool hasStorage() override;
+
+        // XUIConfiguration
+        virtual void addConfigurationListener(const cpo::uno::Reference< css::ui::XUIConfigurationListener >& xListener) override;
+
+        virtual void removeConfigurationListener(const cpo::uno::Reference< css::ui::XUIConfigurationListener >& xListener) override;
+
+        // XReset
+        // TODO use XPresetHandler instead if available
+        virtual void reset() override;
+
+        virtual void addResetListener(const cpo::uno::Reference< css::form::XResetListener >& xListener) override;
+
+        virtual void removeResetListener(const cpo::uno::Reference< css::form::XResetListener >& xListener) override;
+
+        // called when changes occurred in the storage
+        void changesOccurred();
+
+        // helper for derived classes
+
+    protected:
+
+        /** @short  return the current office locale.
+
+        @descr  We do not cache this value, because we are not listen
+        for changes on the configuration layer ...
+
+        @return OUString
+        The current office locale as BCP47 string.
+        */
+        static OUString impl_ts_getLocale();
+
+        // helper
+
+    private:
+
+        /** @short  load a configuration set, using the given stream.
+
+        @param  xStream
+        provides the XML structure as stream.
+        */
+        void impl_ts_load(const cpo::uno::Reference< css::io::XInputStream >& xStream);
+
+        /** @short  save a configuration set, using the given stream.
+
+        @param  xStream
+        the XML structure can be written there.
+        */
+        void impl_ts_save(const cpo::uno::Reference< css::io::XOutputStream >& xStream);
+
+        /** @short  returns a reference to one of our internal cache members.
+
+        @descr  We implement the copy-on-write pattern. Doing so
+        we know two caches internally. The second one is used
+        only, if the container was changed.
+
+        This method here returns access to one of these
+        caches - depending on the change state of this
+        configuration service.
+
+        @param  bWriteAccessRequested
+        if the outside code wish to change the container
+        it must call this method with "true". So the internal
+        cache can be prepared for that (means copy-on-write ...).
+
+        @return [AcceleratorCache]
+        c++ reference(!) to one of our internal caches.
+        */
+        AcceleratorCache& impl_getCFG(bool bWriteAccessRequested = false);
+
+};
+
+class XCUBasedAcceleratorConfiguration : public  ::cppu::WeakImplHelper<
+                                                     css::util::XChangesListener,
+                                                     css::form::XReset,                    // TODO use XPresetHandler instead if available
+                                                     css::ui::XAcceleratorConfiguration >  // => css::ui::XUIConfigurationPersistence
+                                                                                           //    css::ui::XUIConfigurationStorage
+                                                                                           //    css::ui::XUIConfiguration
+{
+
+    // member
+
+    protected:
+
+        /** the global uno service manager.
+        Must be used to create own needed services. */
+        cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+
+        cpo::uno::Reference< css::container::XNameAccess > m_xCfg;
+        AcceleratorCache m_aPrimaryReadCache;
+        AcceleratorCache m_aSecondaryReadCache;
+        std::unique_ptr<AcceleratorCache> m_pPrimaryWriteCache;
+        std::unique_ptr<AcceleratorCache> m_pSecondaryWriteCache;
+
+        OUString m_sGlobalOrModules;
+        OUString m_sModuleCFG;
+
+        // native interface!
+
+    public:
+
+        XCUBasedAcceleratorConfiguration( cpo::uno::Reference< cpo::uno::XComponentContext >  xContext );
+        virtual ~XCUBasedAcceleratorConfiguration(                                                           ) override;
+
+        // uno interface!
+
+    public:
+
+        // XAcceleratorConfiguration
+        virtual cpo::uno::Sequence< css::awt::KeyEvent > getAllKeyEvents() override;
+
+        virtual OUString getCommandByKeyEvent(const css::awt::KeyEvent& aKeyEvent) override;
+
+        virtual void setKeyEvent(const css::awt::KeyEvent& aKeyEvent,
+            const OUString&    sCommand ) override;
+
+        virtual void removeKeyEvent(const css::awt::KeyEvent& aKeyEvent) override;
+
+        virtual cpo::uno::Sequence< css::awt::KeyEvent > getKeyEventsByCommand(const OUString& sCommand) override;
+
+        virtual cpo::uno::Sequence< cpo::uno::Any > getPreferredKeyEventsForCommandList(const cpo::uno::Sequence< OUString >& lCommandList) override;
+
+        virtual void removeCommandFromAllKeyEvents(const OUString& sCommand) override;
+
+        // XUIConfigurationPersistence
+        virtual void reload() override;
+
+        virtual void store() override;
+
+        virtual void storeToStorage(const cpo::uno::Reference< css::embed::XStorage >& xStorage) override;
+
+        virtual bool isModified() override;
+
+        virtual bool isReadOnly() override;
+
+        // XUIConfigurationStorage
+        virtual void setStorage(const cpo::uno::Reference< css::embed::XStorage >& xStorage) override;
+
+        virtual bool hasStorage() override;
+
+        // XUIConfiguration
+        virtual void addConfigurationListener(const cpo::uno::Reference< css::ui::XUIConfigurationListener >& xListener) override;
+
+        virtual void removeConfigurationListener(const cpo::uno::Reference< css::ui::XUIConfigurationListener >& xListener) override;
+
+        // XReset
+        // TODO use XPresetHandler instead if available
+        virtual void reset() override;
+
+        virtual void addResetListener(const cpo::uno::Reference< css::form::XResetListener >& xListener) override;
+
+        virtual void removeResetListener(const cpo::uno::Reference< css::form::XResetListener >& xListener) override;
+
+        // css.util.XChangesListener
+        virtual void changesOccurred(const css::util::ChangesEvent& aEvent) override;
+
+        // css.lang.XEventListener
+        virtual void disposing(const css::lang::EventObject& aEvent) override;
+
+        // helper for derived classes
+
+    protected:
+
+        /** @short  return the current office locale.
+
+        @descr  We do not cache this value, because we are not listen
+        for changes on the configuration layer ...
+
+        @return OUString
+        The current office locale as BCP47 string.
+        */
+        static OUString impl_ts_getLocale();
+
+        // helper
+
+    private:
+
+        void impl_ts_load(bool bPreferred, const cpo::uno::Reference< css::container::XNameAccess >& xCfg);
+        void impl_ts_save(bool bPreferred);
+
+        void insertKeyToConfiguration(const css::awt::KeyEvent& aKeyEvent, const OUString& sCommand, const bool bPreferred);
+        void removeKeyFromConfiguration(const css::awt::KeyEvent& aKeyEvent, const bool bPreferred);
+
+        void reloadChanged(const OUString& sPrimarySecondary, std::u16string_view sGlobalModules, const OUString& sModule, const OUString& sKey);
+        AcceleratorCache& impl_getCFG(bool bPreferred, bool bWriteAccessRequested = false);
+
+};
+
+/** Creates the key binding configuration of a document stored in xDocumentRoot. A binding to a
+    macro call is left out while bMacroCallsAllowed is false.
+ */
+cpo::uno::Reference< css::ui::XAcceleratorConfiguration > createDocumentAcceleratorConfiguration(
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+    const cpo::uno::Reference< css::embed::XStorage >& xDocumentRoot, bool bMacroCallsAllowed);
+
+/** Sets whether the document key binding configuration xConfig keeps its bindings to macro calls. */
+void setDocumentAcceleratorMacroCallsAllowed(
+    const cpo::uno::Reference< css::ui::XAcceleratorConfiguration >& xConfig, bool bAllowed);
+
+} // namespace framework
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

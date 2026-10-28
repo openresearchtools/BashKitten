@@ -1,0 +1,139 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/awt/XControl.hpp>
+#include <com/sun/star/awt/XDialog.hpp>
+#include <com/sun/star/awt/XDialogProvider2.hpp>
+#include <com/sun/star/awt/XUnoControlDialog.hpp>
+#include <com/sun/star/beans/XIntrospectionAccess.hpp>
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/resource/XStringResourceManager.hpp>
+#include <com/sun/star/script/XScriptListener.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+
+#include <cppuhelper/implbase.hxx>
+#include <osl/mutex.hxx>
+#include <memory>
+
+
+namespace dlgprov
+{
+
+
+    // mutex
+
+
+    ::osl::Mutex& getMutex();
+
+
+
+    cpo::uno::Reference< css::container::XNameContainer > lcl_createControlModel(const cpo::uno::Reference< cpo::uno::XComponentContext >& i_xContext);
+    cpo::uno::Reference< css::resource::XStringResourceManager > lcl_getStringResourceManager(const cpo::uno::Reference< cpo::uno::XComponentContext >& i_xContext, std::u16string_view i_sURL);
+    /// @throws cpo::uno::Exception
+    cpo::uno::Reference< css::container::XNameContainer > lcl_createDialogModel(
+                const cpo::uno::Reference< cpo::uno::XComponentContext >& i_xContext,
+                const cpo::uno::Reference< css::io::XInputStream >& xInput,
+                const cpo::uno::Reference< css::frame::XModel >& xModel,
+                const cpo::uno::Reference< css::resource::XStringResourceManager >& xStringResourceManager,
+                const cpo::uno::Any &aDialogSourceURL);
+
+    typedef ::cppu::WeakImplHelper<
+        css::lang::XServiceInfo,
+        css::lang::XInitialization,
+        css::awt::XDialogProvider2 > DialogProviderImpl_BASE;
+
+    class DialogProviderImpl : public DialogProviderImpl_BASE
+    {
+    private:
+        struct BasicRTLParams
+        {
+             cpo::uno::Reference< css::io::XInputStream >          mxInput;
+             cpo::uno::Reference< css::container::XNameContainer > mxDlgLib;
+             cpo::uno::Reference< css::script::XScriptListener >   mxBasicRTLListener;
+        };
+        std::unique_ptr< BasicRTLParams > m_BasicInfo;
+        cpo::uno::Reference< cpo::uno::XComponentContext >        m_xContext;
+        cpo::uno::Reference< css::frame::XModel >                 m_xModel;
+
+    OUString msDialogLibName;
+        cpo::uno::Reference< css::awt::XControlModel > createDialogModel( const OUString& sURL );
+
+        cpo::uno::Reference< css::awt::XUnoControlDialog > createDialogControl(
+            const cpo::uno::Reference< css::awt::XControlModel >& rxDialogModel,
+            const cpo::uno::Reference< css::awt::XWindowPeer >& xParent );
+
+        void attachControlEvents( const cpo::uno::Reference< css::awt::XControl >& rxControlContainer,
+            const cpo::uno::Reference< cpo::uno::XInterface >& rxHandler,
+            const cpo::uno::Reference< css::beans::XIntrospectionAccess >& rxIntrospectionAccess );
+        cpo::uno::Reference< css::beans::XIntrospectionAccess > inspectHandler(
+            const cpo::uno::Reference< cpo::uno::XInterface >& rxHandler );
+    // helper methods
+            /// @throws cpo::uno::Exception
+            cpo::uno::Reference< css::container::XNameContainer > createDialogModel(
+                const cpo::uno::Reference< css::io::XInputStream >& xInput,
+                const cpo::uno::Reference< css::resource::XStringResourceManager >& xStringResourceManager,
+                const cpo::uno::Any &aDialogSourceURL);
+            /// @throws cpo::uno::Exception
+            cpo::uno::Reference< css::awt::XControlModel > createDialogModelForBasic();
+
+        // XDialogProvider / XDialogProvider2 impl method
+        /// @throws css::lang::IllegalArgumentException
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference < css::awt::XControl > createDialogImpl(
+            const OUString& URL,
+            const cpo::uno::Reference< cpo::uno::XInterface >& xHandler,
+            const cpo::uno::Reference< css::awt::XWindowPeer >& xParent );
+
+    public:
+        explicit DialogProviderImpl(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
+        virtual ~DialogProviderImpl() override;
+
+        // XServiceInfo
+        virtual OUString getImplementationName(  ) override;
+        virtual bool supportsService( const OUString& ServiceName ) override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+        // XInitialization
+        virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+        // XDialogProvider
+        virtual cpo::uno::Reference < css::awt::XDialog > createDialog(
+            const OUString& URL ) override;
+
+        // XDialogProvider2
+        virtual cpo::uno::Reference < css::awt::XDialog > createDialogWithHandler(
+            const OUString& URL,
+            const cpo::uno::Reference< cpo::uno::XInterface >& xHandler ) override;
+
+        virtual cpo::uno::Reference < css::awt::XDialog > createDialogWithArguments(
+            const OUString& URL,
+            const cpo::uno::Sequence< css::beans::NamedValue >& Arguments ) override;
+     };
+
+
+}   // namespace dlgprov
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

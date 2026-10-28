@@ -1,0 +1,117 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/lang/XTypeProvider.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/ucb/XContentProviderFactory.hpp>
+#include <com/sun/star/ucb/XContentProvider.hpp>
+#include <com/sun/star/ucb/XParameterizedContentProvider.hpp>
+#include <com/sun/star/ucb/XContentProviderSupplier.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <comphelper/compbase.hxx>
+#include <cppuhelper/weak.hxx>
+
+
+
+using UcbContentProviderProxyFactory_Base = comphelper::WeakComponentImplHelper <
+                                                css::lang::XServiceInfo,
+                                                css::ucb::XContentProviderFactory >;
+class UcbContentProviderProxyFactory : public UcbContentProviderProxyFactory_Base
+{
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+
+public:
+    explicit UcbContentProviderProxyFactory(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
+    virtual ~UcbContentProviderProxyFactory() override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XContentProviderFactory
+    virtual cpo::uno::Reference< css::ucb::XContentProvider >
+    createContentProvider( const OUString& Service ) override;
+};
+
+
+
+using UcbContentProviderProxy_BASE = comphelper::WeakImplHelper<css::lang::XServiceInfo,
+                                                                css::ucb::XContentProviderSupplier,
+                                                                css::ucb::XContentProvider,
+                                                                css::ucb::XParameterizedContentProvider>;
+class UcbContentProviderProxy : public UcbContentProviderProxy_BASE
+{
+    OUString m_aService;
+    OUString m_aTemplate;
+    OUString m_aArguments;
+    bool        m_bReplace;
+    bool        m_bRegister;
+
+    cpo::uno::Reference< cpo::uno::XComponentContext >
+                                m_xContext;
+    cpo::uno::Reference< css::ucb::XContentProvider >
+                                m_xProvider;
+    cpo::uno::Reference< css::ucb::XContentProvider >
+                                m_xTargetProvider;
+
+public:
+    UcbContentProviderProxy(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+            OUString Service );
+    virtual ~UcbContentProviderProxy() override;
+
+    // XInterface
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XContentProviderSupplier
+    virtual cpo::uno::Reference<
+        css::ucb::XContentProvider >
+    getContentProvider() override;
+
+    // XContentProvider
+    virtual cpo::uno::Reference<
+        css::ucb::XContent >
+    queryContent( const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier ) override;
+    virtual sal_Int32
+    compareContentIds( const cpo::uno::Reference< css::ucb::XContentIdentifier >& Id1,
+                       const cpo::uno::Reference< css::ucb::XContentIdentifier >& Id2 ) override;
+
+    // XParameterizedContentProvider
+    virtual cpo::uno::Reference< css::ucb::XContentProvider >
+    registerInstance( const OUString& Template,
+                      const OUString& Arguments,
+                      bool ReplaceExisting ) override;
+    virtual cpo::uno::Reference< css::ucb::XContentProvider >
+    deregisterInstance( const OUString& Template,
+                        const OUString& Arguments ) override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

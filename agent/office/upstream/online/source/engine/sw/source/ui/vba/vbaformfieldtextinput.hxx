@@ -1,0 +1,68 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+#pragma once
+
+#include <ooo/vba/word/XTextInput.hpp>
+
+#include <vbahelper/vbahelperinterface.hxx>
+
+#include <IDocumentMarkAccess.hxx>
+
+typedef InheritedHelperInterfaceWeakImpl<ooo::vba::word::XTextInput> SwVbaFormFieldTextInput_BASE;
+
+class SwVbaFormFieldTextInput : public SwVbaFormFieldTextInput_BASE
+{
+private:
+    sw::mark::Fieldmark& m_rTextInput;
+
+public:
+    /// @throws cpo::uno::RuntimeException
+    SwVbaFormFieldTextInput(const cpo::uno::Reference<ooo::vba::XHelperInterface>& rParent,
+                            const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext,
+                            sw::mark::Fieldmark& rFormField);
+    ~SwVbaFormFieldTextInput() override;
+
+    // XTextInput
+    OUString getDefaultPropertyName() override;
+
+    // default member: True if the specified form field object is a valid text form field
+    bool getValid() override;
+
+    // Returns and sets the default text string of the input box
+    OUString getDefault() override;
+    void setDefault(const OUString& bSet) override;
+    // Returns the format string for the current text
+    OUString getFormat() override;
+    /*
+     * Returns the type of text form field.
+     * Possible return values are:
+     * wdCalculationText - Calculation text field,
+     * wdCurrentDateText - Current date text field,
+     * wdCurrentTimeText - Current time text field,
+     * wdDateText - Date text field,
+     * wdNumberText - Number text field,
+     * wdRegularText - Regular text field.
+     */
+    sal_Int32 getType() override;
+    // Returns and sets the width, in points
+    sal_Int32 getWidth() override;
+    void setWidth(sal_Int32 nSet) override;
+
+    // Deletes the text from the text form field.
+    void Clear() override;
+    // Sets the type, default text string, format string, and enabled status
+    void EditType(sal_Int32 nType, const cpo::uno::Any& rDefault,
+                           const cpo::uno::Any& rFormat, const cpo::uno::Any& rEnabled) override;
+
+    // XHelperInterface
+    OUString getServiceImplName() override;
+    cpo::uno::Sequence<OUString> getServiceNames() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

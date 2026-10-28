@@ -1,0 +1,39 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <sal/config.h>
+
+#include <cpo/uno/Reference.hxx>
+
+#include "servicemanager.hxx"
+
+namespace com::sun::star {
+    namespace lang { class XMultiServiceFactory; }
+}
+namespace cpo::uno { class Environment; }
+namespace cpo::uno { class XInterface; }
+
+namespace cppuhelper::detail {
+
+cpo::uno::Environment getEnvironment(
+    OUString const & name, std::u16string_view implementation);
+
+void loadSharedLibComponentFactory(
+    OUString const & uri, OUString const & environment,
+    OUString const & prefix, OUString const & implementation,
+    OUString const & constructor,
+    cpo::uno::Reference<css::lang::XMultiServiceFactory> const & serviceManager,
+    WrapperConstructorFn * constructorFunction,
+    cpo::uno::Reference<cpo::uno::XInterface> * factory);
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

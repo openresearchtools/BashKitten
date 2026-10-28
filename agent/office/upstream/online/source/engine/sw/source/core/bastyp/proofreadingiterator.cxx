@@ -1,0 +1,67 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <sal/config.h>
+
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/linguistic2/ProofreadingIterator.hpp>
+#include <com/sun/star/linguistic2/XProofreadingIterator.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/XComponentContext.hpp>
+#include <vcl/svapp.hxx>
+
+#include <proofreadingiterator.hxx>
+
+namespace
+{
+cpo::uno::Reference<css::linguistic2::XProofreadingIterator> _instance;
+bool disposed = false;
+
+void doDispose(cpo::uno::Reference<css::linguistic2::XProofreadingIterator> const& inst)
+{
+    cpo::uno::Reference<css::lang::XComponent> comp(inst, cpo::uno::UNO_QUERY);
+    if (comp.is())
+    {
+        SolarMutexReleaser r;
+        comp->dispose();
+    }
+}
+}
+
+cpo::uno::Reference<css::linguistic2::XProofreadingIterator>
+sw::proofreadingiterator::get(cpo::uno::Reference<cpo::uno::XComponentContext> const& context)
+{
+    cpo::uno::Reference<css::linguistic2::XProofreadingIterator> inst(
+        css::linguistic2::ProofreadingIterator::create(context));
+    bool disp;
+    {
+        SolarMutexGuard g;
+        _instance = inst;
+        disp = disposed;
+    }
+    if (disp)
+    {
+        doDispose(inst);
+    }
+    return inst;
+}
+
+void sw::proofreadingiterator::dispose()
+{
+    cpo::uno::Reference<css::linguistic2::XProofreadingIterator> inst;
+    {
+        SolarMutexGuard g;
+        inst = _instance;
+        _instance.clear();
+        disposed = true;
+    }
+    doDispose(inst);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

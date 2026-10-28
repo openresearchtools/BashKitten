@@ -1,0 +1,298 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <comphelper/uno3.hxx>
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/lang/EventObject.hpp>
+#include <com/sun/star/container/XEnumerationAccess.hpp>
+#include <com/sun/star/io/XPersistObject.hpp>
+#include <com/sun/star/beans/XPropertyChangeListener.hpp>
+#include <com/sun/star/beans/PropertyChangeEvent.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/script/XEventAttacherManager.hpp>
+#include <com/sun/star/script/ScriptEventDescriptor.hpp>
+#include <com/sun/star/container/XContainer.hpp>
+#include <com/sun/star/container/XIndexContainer.hpp>
+#include <com/sun/star/form/XFormComponent.hpp>
+#include <com/sun/star/util/XCloneable.hpp>
+#include <osl/mutex.hxx>
+#include <comphelper/interfacecontainer3.hxx>
+#include <cppuhelper/component.hxx>
+#include <cppuhelper/implbase1.hxx>
+#include <cppuhelper/implbase8.hxx>
+#include <unordered_map>
+
+namespace cpo::uno { class XComponentContext; }
+
+namespace frm
+{
+
+
+    struct ElementDescription
+    {
+    public:
+        cpo::uno::Reference< cpo::uno::XInterface >       xInterface;
+        cpo::uno::Reference< css::beans::XPropertySet >   xPropertySet;
+        cpo::uno::Reference< css::container::XChild >     xChild;
+        cpo::uno::Any                                     aElementTypeInterface;
+
+    public:
+        ElementDescription( );
+
+    private:
+        ElementDescription( const ElementDescription& ) = delete;
+        ElementDescription& operator=( const ElementDescription& ) = delete;
+    };
+
+typedef std::vector<cpo::uno::Reference<cpo::uno::XInterface>> OInterfaceArray;
+typedef std::unordered_multimap< OUString, cpo::uno::Reference<cpo::uno::XInterface> > OInterfaceMap;
+
+
+// OInterfaceContainer
+// implements a container for form components
+
+typedef ::cppu::ImplHelper8 <   css::container::XNameContainer
+                            ,   css::container::XIndexContainer
+                            ,   css::container::XContainer
+                            ,   css::container::XEnumerationAccess
+                            ,   css::script::XEventAttacherManager
+                            ,   css::beans::XPropertyChangeListener
+                            ,   css::io::XPersistObject
+                            ,   css::util::XCloneable
+                            > OInterfaceContainer_BASE;
+
+class OInterfaceContainer : public OInterfaceContainer_BASE
+{
+protected:
+    ::osl::Mutex&                           m_rMutex;
+
+    OInterfaceArray                         m_aItems;
+    OInterfaceMap                           m_aMap;
+    ::comphelper::OInterfaceContainerHelper3<css::container::XContainerListener> m_aContainerListeners;
+
+    const cpo::uno::Type                    m_aElementType;
+
+    cpo::uno::Reference< cpo::uno::XComponentContext>     m_xContext;
+
+
+    // EventManager
+    cpo::uno::Reference< css::script::XEventAttacherManager>  m_xEventAttacher;
+
+public:
+    OInterfaceContainer(
+        const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxFactory,
+        ::osl::Mutex& _rMutex,
+        const cpo::uno::Type& _rElementType);
+
+    OInterfaceContainer( ::osl::Mutex& _rMutex, const OInterfaceContainer& _cloneSource );
+
+    // late constructor for cloning
+    /// @throws cpo::uno::RuntimeException
+    void clonedFrom(const OInterfaceContainer& _cloneSource);
+
+protected:
+    virtual ~OInterfaceContainer();
+
+public:
+// css::io::XPersistObject
+    virtual OUString getServiceName(  ) override = 0;
+    virtual void write( const cpo::uno::Reference< css::io::XObjectOutputStream >& OutStream ) override;
+    virtual void read( const cpo::uno::Reference< css::io::XObjectInputStream >& InStream ) override;
+
+// css::lang::XEventListener
+    virtual void disposing(const css::lang::EventObject& _rSource) override;
+
+// css::beans::XPropertyChangeListener
+    virtual void propertyChange(const css::beans::PropertyChangeEvent& evt) override;
+
+// css::container::XElementAccess
+    virtual cpo::uno::Type getElementType() override ;
+    virtual bool hasElements() override;
+
+// css::container::XEnumerationAccess
+    virtual cpo::uno::Reference< css::container::XEnumeration> createEnumeration() override;
+
+// css::container::XNameAccess
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence<OUString> getElementNames(  ) override;
+    virtual bool hasByName( const OUString& aName ) override;
+
+// css::container::XNameReplace
+    virtual void replaceByName(const OUString& Name, const cpo::uno::Any& _rElement) override;
+
+// css::container::XNameContainer
+    virtual void insertByName(const OUString& Name, const cpo::uno::Any& _rElement) override;
+    virtual void removeByName(const OUString& Name) override;
+
+// css::container::XIndexAccess
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex(sal_Int32 _nIndex) override;
+
+// css::container::XIndexReplace
+    virtual void replaceByIndex(sal_Int32 _nIndex, const cpo::uno::Any& _rElement) override;
+
+// css::container::XIndexContainer
+    virtual void insertByIndex(sal_Int32 _nIndex, const cpo::uno::Any& Element) override;
+    virtual void removeByIndex(sal_Int32 _nIndex) override;
+
+// css::container::XContainer
+    virtual void addContainerListener(const cpo::uno::Reference< css::container::XContainerListener>& _rxListener) override;
+    virtual void removeContainerListener(const cpo::uno::Reference< css::container::XContainerListener>& _rxListener) override;
+
+// css::script::XEventAttacherManager
+    virtual void registerScriptEvent( sal_Int32 nIndex, const css::script::ScriptEventDescriptor& aScriptEvent ) override;
+    virtual void registerScriptEvents( sal_Int32 nIndex, const cpo::uno::Sequence< css::script::ScriptEventDescriptor >& aScriptEvents ) override;
+    virtual void revokeScriptEvent( sal_Int32 nIndex, const OUString& aListenerType, const OUString& aEventMethod, const OUString& aRemoveListenerParam ) override;
+    virtual void revokeScriptEvents( sal_Int32 nIndex ) override;
+    virtual void insertEntry( sal_Int32 nIndex ) override;
+    virtual void removeEntry( sal_Int32 nIndex ) override;
+    virtual cpo::uno::Sequence< css::script::ScriptEventDescriptor > getScriptEvents( sal_Int32 Index ) override;
+    virtual void attach( sal_Int32 nIndex, const cpo::uno::Reference< cpo::uno::XInterface >& xObject, const cpo::uno::Any& aHelper ) override;
+    virtual void detach( sal_Int32 nIndex, const cpo::uno::Reference< cpo::uno::XInterface >& xObject ) override;
+    virtual void addScriptListener( const cpo::uno::Reference< css::script::XScriptListener >& xListener ) override;
+    virtual void removeScriptListener( const cpo::uno::Reference< css::script::XScriptListener >& Listener ) override;
+
+protected:
+    // helper
+    virtual void disposing();
+    void removeElementsNoEvents();
+
+    /** to be overridden if elements which are to be inserted into the container shall be checked
+
+        <p>the ElementDescription given can be used to cache information about the object - it will be passed
+        later on to implInserted/implReplaced.</p>
+    */
+    virtual void approveNewElement(
+                    const cpo::uno::Reference< css::beans::XPropertySet >& _rxObject,
+                    ElementDescription* _pElement
+                );
+
+    virtual ElementDescription* createElementMetaData( );
+
+    /** inserts an object into our internal structures
+
+        @param _nIndex
+            the index at which position it should be inserted
+        @param _bEvents
+            if <TRUE/>, event knittings will be done
+        @param _pApprovalResult
+            must contain the result of an approveNewElement call. Can be <NULL/>, in this case, the approval
+            is done within implInsert.
+        @param _bFire
+            if <TRUE/>, a notification about the insertion will be fired
+        @throws css::lang::IllegalArgumentException
+    */
+            void implInsert(
+                sal_Int32 _nIndex,
+                const cpo::uno::Reference< css::beans::XPropertySet >& _rxObject,
+                bool _bEvents /* = true */,
+                ElementDescription* _pApprovalResult /* = NULL */ ,
+                bool _bFire /* = true */
+            );
+
+    // called after the object is inserted, but before the "real listeners" are notified
+    virtual void implInserted( const ElementDescription* _pElement );
+    // called after the object is removed, but before the "real listeners" are notified
+    virtual void implRemoved(const cpo::uno::Reference<cpo::uno::XInterface>& _rxObject);
+
+    /** called after an object was replaced. The default implementation notifies our listeners, after releasing
+        the instance lock.
+    */
+    virtual void impl_replacedElement(
+                    const css::container::ContainerEvent& _rEvent,
+                    ::osl::ClearableMutexGuard& _rInstanceLock
+                );
+
+    void writeEvents(const cpo::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream);
+    void readEvents(const cpo::uno::Reference< css::io::XObjectInputStream>& _rxInStream);
+
+    /** replace an element, specified by position
+
+        @precond <arg>_nIndex</arg> is a valid index
+        @precond our mutex is locked exactly once, by the guard specified with <arg>_rClearBeforeNotify</arg>
+
+    */
+    void implReplaceByIndex(
+            const sal_Int32 _nIndex,
+            const cpo::uno::Any& _rNewElement,
+            ::osl::ClearableMutexGuard& _rClearBeforeNotify
+        );
+
+    /** removes an element, specified by position
+
+        @precond <arg>_nIndex</arg> is a valid index
+        @precond our mutex is locked exactly once, by the guard specified with <arg>_rClearBeforeNotify</arg>
+
+    */
+    void implRemoveByIndex(
+            const sal_Int32 _nIndex,
+            ::osl::ClearableMutexGuard& _rClearBeforeNotify
+        );
+
+    /** validates the given index
+        @throws css::lang::IndexOutOfBoundsException
+            if the given index does not denote a valid position in our children array
+    */
+    void implCheckIndex( const sal_Int32 _nIndex );
+
+private:
+    // hack for Vba Events
+    void impl_addVbEvents_nolck_nothrow( const sal_Int32 i_nIndex );
+
+    void    transformEvents();
+
+    void    impl_createEventAttacher_nothrow();
+};
+
+typedef ::cppu::ImplHelper1< css::form::XFormComponent> OFormComponents_BASE;
+class OFormComponents   :public ::cppu::OComponentHelper
+                        ,public OInterfaceContainer
+                        ,public OFormComponents_BASE
+{
+protected:
+    ::osl::Mutex                               m_aMutex;
+    cpo::uno::Reference<cpo::uno::XInterface>  m_xParent;
+
+public:
+    OFormComponents(const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxFactory);
+    OFormComponents( const OFormComponents& _cloneSource );
+    virtual ~OFormComponents() override;
+
+    DECLARE_UNO3_AGG_DEFAULTS(OFormComponents, ::cppu::OComponentHelper)
+
+    virtual cpo::uno::Any queryAggregation(const cpo::uno::Type& _rType) override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+
+// OComponentHelper
+    virtual void disposing() override;
+
+// css::form::XFormComponent
+    virtual cpo::uno::Reference<cpo::uno::XInterface> getParent() override;
+    virtual void setParent(const cpo::uno::Reference<cpo::uno::XInterface>& Parent) override;
+
+    // XEventListener
+    using OInterfaceContainer::disposing;
+};
+
+}   // namespace frm
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

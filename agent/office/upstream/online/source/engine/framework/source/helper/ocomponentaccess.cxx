@@ -1,0 +1,168 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <helper/ocomponentaccess.hxx>
+#include <helper/ocomponentenumeration.hxx>
+
+#include <com/sun/star/frame/FrameSearchFlag.hpp>
+
+#include <vcl/svapp.hxx>
+#include <sal/log.hxx>
+
+namespace framework{
+
+using namespace ::com::sun::star::container;
+using namespace ::com::sun::star::frame;
+using namespace ::com::sun::star::lang;
+using namespace ::cpo::uno;
+using namespace ::cpo::uno;
+using namespace ::cppu;
+
+//  constructor
+
+OComponentAccess::OComponentAccess( const cpo::uno::Reference< XDesktop >& xOwner )
+        :   m_xOwner        ( xOwner                        )
+{
+    // Safe impossible cases
+    SAL_WARN_IF( !xOwner.is(), "fwk", "OComponentAccess::OComponentAccess(): Invalid parameter detected!" );
+}
+
+//  destructor
+
+OComponentAccess::~OComponentAccess()
+{
+}
+
+//  XEnumerationAccess
+cpo::uno::Reference< XEnumeration > OComponentAccess::createEnumeration()
+{
+    SolarMutexGuard g;
+
+    // Set default return value, if method failed.
+    // If no desktop exist and there is no task container - return an empty enumeration!
+    rtl::Reference< OComponentEnumeration > xReturn;
+
+    // Try to "lock" the desktop for access to task container.
+    cpo::uno::Reference< XInterface > xLock = m_xOwner.get();
+    if ( xLock.is() )
+    {
+        // Desktop exist => pointer to task container must be valid.
+        // Initialize a new enumeration ... if some tasks and his components exist!
+        // (OTasksEnumeration will make an assert, if we initialize the new instance without valid values!)
+
+        std::vector< cpo::uno::Reference< XComponent > > seqComponents;
+        impl_collectAllChildComponents( cpo::uno::Reference< XFramesSupplier >( xLock, UNO_QUERY ), seqComponents );
+        xReturn = new OComponentEnumeration( std::move(seqComponents) );
+    }
+
+    // Return result of this operation.
+    return xReturn;
+}
+
+//  XElementAccess
+Type OComponentAccess::getElementType()
+{
+    // Elements in list an enumeration are components!
+    // Return the uno-type of XComponent.
+    return cppu::UnoType<XComponent>::get();
+}
+
+//  XElementAccess
+bool OComponentAccess::hasElements()
+{
+    SolarMutexGuard g;
+
+    // Set default return value, if method failed.
+    bool bReturn = false;
+
+    // Try to "lock" the desktop for access to task container.
+    cpo::uno::Reference< XFramesSupplier > xLock( m_xOwner.get(), UNO_QUERY );
+    if ( xLock.is() )
+    {
+        // Ask container of owner for existing elements.
+        bReturn = xLock->getFrames()->hasElements();
+    }
+
+    // Return result of this operation.
+    return bReturn;
+}
+
+// static
+void OComponentAccess::impl_collectAllChildComponents(  const cpo::uno::Reference< XFramesSupplier >&         xNode           ,
+                                                               std::vector< cpo::uno::Reference< XComponent > >& seqComponents   )
+{
+    // If valid node was given ...
+    if( !xNode.is() )
+        return;
+
+    // ... continue collection at these.
+
+    // Get the container of current node, collect the components of existing child frames
+    // and go down to next level in tree (recursive!).
+
+    const cpo::uno::Reference< XFrames >                xContainer  = xNode->getFrames();
+    const Sequence< cpo::uno::Reference< XFrame > > seqFrames   = xContainer->queryFrames( FrameSearchFlag::CHILDREN );
+
+    const sal_Int32 nFrameCount = seqFrames.getLength();
+    for( sal_Int32 nFrame=0; nFrame<nFrameCount; ++nFrame )
+    {
+        cpo::uno::Reference< XComponent > xComponent = impl_getFrameComponent( seqFrames[nFrame] );
+        if( xComponent.is() )
+        {
+            seqComponents.push_back( xComponent );
+        }
+    }
+    // ... otherwise break a recursive path and go back at current stack!
+}
+
+// static
+cpo::uno::Reference< XComponent > OComponentAccess::impl_getFrameComponent( const cpo::uno::Reference< XFrame >& xFrame )
+{
+    // Set default return value, if method failed.
+    cpo::uno::Reference< XComponent > xComponent;
+    // Does no controller exists?
+    cpo::uno::Reference< XController > xController = xFrame->getController();
+    if ( !xController.is() )
+    {
+        // Controller not exist - use the VCL-component.
+        xComponent = xFrame->getComponentWindow();
+    }
+    else
+    {
+        // Does no model exists?
+        cpo::uno::Reference< XModel > xModel = xController->getModel();
+        if ( xModel.is() )
+        {
+            // Model exist - use the model as component.
+            xComponent = xModel;
+        }
+        else
+        {
+            // Model not exist - use the controller as component.
+            xComponent = xController;
+        }
+    }
+
+    return xComponent;
+}
+
+
+}       //  namespace framework
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

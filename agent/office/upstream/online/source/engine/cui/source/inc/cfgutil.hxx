@@ -1,0 +1,183 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <vector>
+#include <memory>
+#include <string_view>
+
+#include <rtl/ustring.hxx>
+
+#include <com/sun/star/frame/XFrame.hpp>
+#include <com/sun/star/script/browse/XBrowseNode.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <vcl/weld.hxx>
+
+enum class SfxCfgKind
+{
+    GROUP_SCRIPTCONTAINER    = 3,
+    FUNCTION_SCRIPT          = 4
+};
+
+struct SfxGroupInfo_Impl
+{
+    SfxCfgKind  nKind;
+    void*       pObject;
+    OUString    sCommand;
+    OUString    sLabel;
+    OUString    sHelpText;
+
+                SfxGroupInfo_Impl( SfxCfgKind n, void* pObj = nullptr ) :
+                    nKind( n ), pObject( pObj ) {}
+};
+
+typedef std::vector<std::unique_ptr<SfxGroupInfo_Impl> > SfxGroupInfoArr_Impl;
+
+class CuiConfigFunctionListBox
+{
+    friend class CuiConfigGroupListBox;
+    SfxGroupInfoArr_Impl aArr;
+
+    std::unique_ptr<weld::TreeView> m_xTreeView;
+    std::unique_ptr<weld::TreeIter> m_xScratchIter;
+
+public:
+    CuiConfigFunctionListBox(std::unique_ptr<weld::TreeView> xTreeView);
+    void set_sensitive(bool bSensitive) { m_xTreeView->set_sensitive(bSensitive); }
+    void connect_changed(const Link<weld::TreeView&, void>& rLink)
+    {
+        m_xTreeView->connect_selection_changed(rLink);
+    }
+    void connect_popup_menu(const Link<const CommandEvent&, bool>& rLink) { m_xTreeView->connect_popup_menu(rLink); }
+    void connect_row_activated(const Link<weld::TreeView&, bool>& rLink) { m_xTreeView->connect_row_activated(rLink); }
+    void freeze() { m_xTreeView->freeze(); }
+    void thaw() { m_xTreeView->thaw(); }
+    void append(const OUString& rId, const OUString& rStr, const weld::TreeIter* pParent = nullptr)
+    {
+        m_xTreeView->insert(pParent, -1, &rStr, &rId, nullptr, nullptr, false, nullptr);
+    }
+    void append(const OUString& rId, const OUString& rStr, const OUString& rImage, const weld::TreeIter* pParent = nullptr)
+    {
+        m_xTreeView->insert(pParent, -1, &rStr, &rId, nullptr, nullptr, false, m_xScratchIter.get());
+        m_xTreeView->set_image(*m_xScratchIter, rImage);
+    }
+    int n_children() const { return m_xTreeView->n_children(); }
+    std::unique_ptr<weld::TreeIter> make_iterator(const weld::TreeIter* pOrig = nullptr) const { return m_xTreeView->make_iterator(pOrig); }
+    OUString get_id(const weld::TreeIter& rIter) const { return m_xTreeView->get_id(rIter); }
+    bool get_selected(weld::TreeIter* pIter) const { return m_xTreeView->get_selected(pIter); }
+    OUString get_selected_text() const
+    {
+        if (!m_xTreeView->get_selected(m_xScratchIter.get()))
+            return OUString();
+        return m_xTreeView->get_text(*m_xScratchIter);
+    }
+    OUString get_selected_id() const
+    {
+        if (!m_xTreeView->get_selected(m_xScratchIter.get()))
+            return OUString();
+        return m_xTreeView->get_id(*m_xScratchIter);
+    }
+    void select(int pos) { m_xTreeView->select(pos); }
+    weld::TreeView& get_widget() { return *m_xTreeView; }
+
+    ~CuiConfigFunctionListBox();
+
+    void          ClearAll();
+    OUString      GetSelectedScriptURI() const;
+    OUString      GetCommandHelpText();
+
+    DECL_LINK(QueryTooltip, const weld::TreeIter& rIter, OUString);
+};
+
+struct SvxConfigGroupBoxResource_Impl;
+class CuiConfigGroupListBox
+{
+    std::unique_ptr<SvxConfigGroupBoxResource_Impl> xImp;
+    CuiConfigFunctionListBox* m_pFunctionListBox;
+    SfxGroupInfoArr_Impl aArr;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference< css::frame::XFrame > m_xFrame;
+    std::unique_ptr<weld::TreeView> m_xTreeView;
+    std::unique_ptr<weld::TreeIter> m_xScratchIter;
+
+    static cpo::uno::Reference< cpo::uno::XInterface  > getDocumentModel(
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & xCtx,
+        std::u16string_view docName);
+
+    void FillScriptList(const cpo::uno::Reference< css::script::browse::XBrowseNode >& xRootNode,
+                        const weld::TreeIter* pParentEntry);
+
+    DECL_LINK(ExpandingHdl, const weld::TreeIter&, bool);
+
+public:
+    CuiConfigGroupListBox(std::unique_ptr<weld::TreeView> xTreeView);
+    void set_sensitive(bool bSensitive) { m_xTreeView->set_sensitive(bSensitive); }
+    void connect_changed(const Link<weld::TreeView&, void>& rLink)
+    {
+        m_xTreeView->connect_selection_changed(rLink);
+    }
+    weld::TreeView& get_widget() { return *m_xTreeView; }
+    ~CuiConfigGroupListBox();
+    void                ClearAll();
+
+    void                Init(const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+                             const cpo::uno::Reference< css::frame::XFrame >&          xFrame);
+    void                SetFunctionListBox( CuiConfigFunctionListBox *pBox )
+                        { m_pFunctionListBox = pBox; }
+    void                GroupSelected();
+
+    static OUString GetImage(
+        const cpo::uno::Reference< css::script::browse::XBrowseNode >& node,
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & xCtx,
+        bool bIsRootNode);
+};
+
+class SvxScriptSelectorDialog : public weld::GenericDialogController
+{
+    OUString                               m_sDefaultDesc;
+
+    std::unique_ptr<weld::Label> m_xDialogDescription;
+    std::unique_ptr<CuiConfigGroupListBox> m_xCategories;
+    std::unique_ptr<CuiConfigFunctionListBox> m_xCommands;
+    std::unique_ptr<weld::Label> m_xLibraryFT;
+    std::unique_ptr<weld::Label> m_xMacronameFT;
+    std::unique_ptr<weld::Button> m_xOKButton;
+    std::unique_ptr<weld::Button> m_xCancelButton;
+    std::unique_ptr<weld::TextView> m_xDescriptionText;
+    std::unique_ptr<weld::Box> m_xDescriptionBox;
+
+    DECL_LINK(ClickHdl, weld::Button&, void);
+    DECL_LINK(SelectHdl, weld::TreeView&, void);
+    DECL_LINK(FunctionDoubleClickHdl, weld::TreeView&, bool);
+    DECL_LINK(ContextMenuHdl, const CommandEvent&, bool);
+
+    void                            UpdateUI();
+
+public:
+    SvxScriptSelectorDialog(weld::Window* pParent,
+                            const cpo::uno::Reference< css::frame::XFrame >& xFrame);
+    virtual ~SvxScriptSelectorDialog() override;
+
+    OUString    GetScriptURL() const;
+    void        SetRunLabel();
+    void        SaveLastUsedMacro();
+    void        LoadLastUsedMacro();
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

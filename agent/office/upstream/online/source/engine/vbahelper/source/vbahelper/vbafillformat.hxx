@@ -1,0 +1,66 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_VBAHELPER_SOURCE_VBAHELPER_VBAFILLFORMAT_HXX
+#define INCLUDED_VBAHELPER_SOURCE_VBAHELPER_VBAFILLFORMAT_HXX
+
+#include <com/sun/star/drawing/XShape.hpp>
+#include <com/sun/star/drawing/FillStyle.hpp>
+#include <ooo/vba/msforms/XFillFormat.hpp>
+#include <vbahelper/vbahelperinterface.hxx>
+
+typedef InheritedHelperInterfaceWeakImpl< ov::msforms::XFillFormat > ScVbaFillFormat_BASE;
+
+class ScVbaFillFormat : public ScVbaFillFormat_BASE
+{
+private:
+    cpo::uno::Reference< css::drawing::XShape > m_xShape;
+    cpo::uno::Reference< css::beans::XPropertySet > m_xPropertySet;
+    cpo::uno::Reference< ov::msforms::XColorFormat > m_xColorFormat;
+    css::drawing::FillStyle m_nFillStyle;
+    sal_Int32 m_nForeColor;
+    sal_Int16 m_nGradientAngle;
+private:
+    /// @throws cpo::uno::RuntimeException
+    void setFillStyle( css::drawing::FillStyle nFillStyle );
+protected:
+    virtual OUString getServiceImplName() override;
+    virtual cpo::uno::Sequence<OUString> getServiceNames() override;
+
+public:
+    ScVbaFillFormat( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, const cpo::uno::Reference< css::drawing::XShape >& xShape );
+
+    /// @throws cpo::uno::RuntimeException
+    void setForeColorAndInternalStyle( sal_Int32 nForeColor );
+    // Attributes
+    virtual bool getVisible() override;
+    virtual void setVisible( bool _visible ) override;
+    virtual double getTransparency() override;
+    virtual void setTransparency( double _transparency ) override;
+
+    // Methods
+    virtual void Solid() override;
+    virtual void TwoColorGradient( sal_Int32 style, sal_Int32 variant ) override;
+    virtual cpo::uno::Reference< ov::msforms::XColorFormat > BackColor() override;
+    virtual cpo::uno::Reference< ov::msforms::XColorFormat > ForeColor() override;
+
+};
+
+#endif // INCLUDED_VBAHELPER_SOURCE_VBAHELPER_VBAFILLFORMAT_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

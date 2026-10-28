@@ -1,0 +1,4043 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <sctiledrenderingtest.hxx>
+#include <sc.hrc>
+#include <drawview.hxx>
+
+#include <boost/property_tree/json_parser.hpp>
+
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <com/sun/star/table/XColumnRowRange.hpp>
+#include <com/sun/star/sheet/XSubTotalCalculatable.hpp>
+#include <com/sun/star/sheet/XSubTotalDescriptor.hpp>
+#include <com/sun/star/sheet/SubTotalColumn.hpp>
+#include <com/sun/star/sheet/GeneralFunction.hpp>
+#include <com/sun/star/sheet/XSheetOutline.hpp>
+#include <com/sun/star/table/TableOrientation.hpp>
+#include <com/sun/star/util/URLTransformer.hpp>
+
+#include <comphelper/propertysequence.hxx>
+#include <comphelper/servicehelper.hxx>
+#include <comphelper/SetFlagContextHelper.hxx>
+#include <comphelper/scopeguard.hxx>
+#include <sfx2/dispatch.hxx>
+#include <sfx2/bindings.hxx>
+#include <sfx2/viewfrm.hxx>
+#include <svl/ptitem.hxx>
+#include <svl/stritem.hxx>
+#include <svl/numformat.hxx>
+#include <svl/zformat.hxx>
+#include <COKit/COKit.hxx>
+#include <vcl/scheduler.hxx>
+#include <comphelper/kit.hxx>
+#include <comphelper/propertyvalue.hxx>
+#include <comphelper/dispatchcommand.hxx>
+#include <sfx2/msgpool.hxx>
+#include <sfx2/kit/helper.hxx>
+#include <sfx2/kit/componenthelpers.hxx>
+#include <sfx2/ipclient.hxx>
+#include <svx/svdpage.hxx>
+#include <svx/svdoole2.hxx>
+#include <svx/svdouno.hxx>
+#include <drawview.hxx>
+#include <com/sun/star/embed/EmbedVerbs.hpp>
+#include <vcl/virdev.hxx>
+#include <vcl/keycodes.hxx>
+#include <editeng/brushitem.hxx>
+#include <editeng/colritem.hxx>
+#include <editeng/editview.hxx>
+#include <editeng/eeitem.hxx>
+#include <docmodel/color/ComplexColor.hxx>
+#include <tools/json_writer.hxx>
+#include <tools/datetime.hxx>
+#include <unotools/datetime.hxx>
+#include <unotools/syslocaleoptions.hxx>
+#include <unotools/useroptions.hxx>
+
+#include <postit.hxx>
+#include <attrib.hxx>
+#include <chgtrack.hxx>
+#include <patattr.hxx>
+#include <scitems.hxx>
+#include <document.hxx>
+#include <docuno.hxx>
+#include <editutil.hxx>
+#include <tabprotection.hxx>
+#include <undomanager.hxx>
+#include <docsh.hxx>
+#include <docfunc.hxx>
+#include <tabvwsh.hxx>
+#include <gridwin.hxx>
+#include <drwlayer.hxx>
+#include <sctestviewcallback.hxx>
+#include <o3tl/unit_conversion.hxx>
+#include <cstdlib>
+#include <regex>
+
+using namespace com::sun::star;
+using namespace ::cpo;
+
+namespace
+{
+// for passing data to testInvalidateOnTextEditWithDifferentZoomLevels
+struct ColRowZoom
+{
+    SCCOL col;
+    SCROW row;
+    int zoom;
+};
+}
+
+CPPUNIT_NS_BEGIN
+namespace StringHelper
+{
+// used by CPPUNIT_TEST_PARAMETERIZED for testInvalidateOnTextEditWithDifferentZoomLevels
+template <> inline std::string toString(const ColRowZoom& item)
+{
+    std::ostringstream ss;
+    ss << "zoom level: " << item.zoom
+       << ", "
+          "col: "
+       << item.col
+       << ", "
+          "row: "
+       << item.row;
+    return ss.str();
+}
+}
+CPPUNIT_NS_END
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testJumpToLastRowInvalidation)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScViewData* pViewData = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData);
+
+    int nView1 = KitHelper::getCurrentView();
+    ScTestViewCallback aView1;
+    CPPUNIT_ASSERT(!hasEditView(*pViewData));
+
+    KitHelper::setView(nView1);
+    aView1.m_bInvalidateTiles = false;
+    aView1.m_aInvalidations.clear();
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::DOWN | KEY_MOD1);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::DOWN | KEY_MOD1);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(aView1.m_bInvalidateTiles);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aView1.m_aInvalidations.size());
+    // 261375 because we limit how far we jump into empty space in online, 267386880 if we don't limit
+    CPPUNIT_ASSERT_EQUAL(tools::Rectangle(0, 13005, 26775, 261375), aView1.m_aInvalidations[0]);
+}
+
+// We need to ensure that views are not perturbed by rendering (!?) hmm ...
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testRowColumnHeaders)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScViewData* pViewData = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData);
+
+    // view #1
+    ScTestViewCallback aView1;
+    int nView1 = KitHelper::getCurrentView();
+    CPPUNIT_ASSERT(!hasEditView(*pViewData));
+
+    // view #2
+    KitHelper::createView();
+    int nView2 = KitHelper::getCurrentView();
+    ScTestViewCallback aView2;
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+
+    // ViewRowColumnHeaders test
+    KitHelper::setView(nView1);
+    tools::JsonWriter aJsonWriter1;
+    pModelObj->getRowColumnHeaders(tools::Rectangle(65, 723, 10410, 4695), aJsonWriter1);
+    OString aHeaders1 = aJsonWriter1.finishAndGetAsOString();
+
+    KitHelper::setView(nView2);
+    // 50% zoom
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 22474, 47333));
+    pModelObj->setClientZoom(256, 256, 6636, 6636);
+    tools::JsonWriter aJsonWriter2;
+    pModelObj->getRowColumnHeaders(tools::Rectangle(65, 723, 10410, 4695), aJsonWriter2);
+    OString aHeaders2 = aJsonWriter2.finishAndGetAsOString();
+
+    // Check vs. view #1
+    KitHelper::setView(nView1);
+    tools::JsonWriter aJsonWriter3;
+    pModelObj->getRowColumnHeaders(tools::Rectangle(65, 723, 10410, 4695), aJsonWriter3);
+    OString aHeaders1_2 = aJsonWriter3.finishAndGetAsOString();
+    CPPUNIT_ASSERT_EQUAL(aHeaders1, aHeaders1_2);
+
+    // Check vs. view #2
+    KitHelper::setView(nView2);
+    tools::JsonWriter aJsonWriter4;
+    pModelObj->getRowColumnHeaders(tools::Rectangle(65, 723, 10410, 4695), aJsonWriter4);
+    OString aHeaders2_2 = aJsonWriter4.finishAndGetAsOString();
+    CPPUNIT_ASSERT_EQUAL(aHeaders2, aHeaders2_2);
+
+    KitHelper::setView(nView1);
+    SfxViewShell::Current()->setCOKitViewCallback(nullptr);
+    KitHelper::setView(nView2);
+    SfxViewShell::Current()->setCOKitViewCallback(nullptr);
+}
+
+namespace
+{
+// Helper structs for setup and testing of ScModelObj::getSheetGeometryData()
+struct SpanEntry
+{
+    size_t nVal;
+    SCCOLROW nEnd;
+};
+
+struct SheetDimData
+{
+    typedef std::vector<SpanEntry> SpanList;
+    SpanList aSizes;
+    SpanList aHidden;
+    SpanList aFiltered;
+    // TODO: Add group info too to test.
+
+    void setDataToDoc(ScDocument* pDoc, bool bCol) const
+    {
+        SCCOLROW nStart = 0;
+        // sizes
+        for (const auto& rSpan : aSizes)
+        {
+            if (bCol)
+            {
+                for (SCCOLROW nIdx = nStart; nIdx <= rSpan.nEnd; ++nIdx)
+                    pDoc->SetColWidthOnly(nIdx, 0, rSpan.nVal);
+            }
+            else
+                pDoc->SetRowHeightOnly(nStart, rSpan.nEnd, 0, rSpan.nVal);
+
+            nStart = rSpan.nEnd + 1;
+        }
+
+        nStart = 0;
+        // hidden
+        for (const auto& rSpan : aHidden)
+        {
+            if (bCol)
+                pDoc->SetColHidden(nStart, rSpan.nEnd, 0, !!rSpan.nVal);
+            else
+                pDoc->SetRowHidden(nStart, rSpan.nEnd, 0, !!rSpan.nVal);
+
+            nStart = rSpan.nEnd + 1;
+        }
+
+        // There is no ScDocument interface to set ScTable::mpFilteredCols
+        // It seems ScTable::mpFilteredCols is not really used !?
+        if (bCol)
+            return;
+
+        nStart = 0;
+        // filtered
+        for (const auto& rSpan : aFiltered)
+        {
+            pDoc->SetRowFiltered(nStart, rSpan.nEnd, 0, !!rSpan.nVal);
+            nStart = rSpan.nEnd + 1;
+        }
+    }
+
+    void testPropertyTree(const boost::property_tree::ptree& rTree, bool bCol) const
+    {
+        struct SpanListWithKey
+        {
+            OString aKey;
+            const SpanList& rSpanList;
+        };
+
+        const SpanListWithKey aPairList[] = { { "sizes"_ostr, aSizes },
+                                              { "hidden"_ostr, aHidden },
+                                              { "filtered"_ostr, aFiltered } };
+
+        for (const auto& rEntry : aPairList)
+        {
+            // There is no ScDocument interface to set ScTable::mpFilteredCols
+            // It seems ScTable::mpFilteredCols is not really used !?
+            if (bCol && rEntry.aKey == "filtered")
+                continue;
+
+            bool bBooleanValue = rEntry.aKey != "sizes";
+            OStringBuffer aExpectedEncoding;
+            bool bFirst = true;
+            for (const auto& rSpan : rEntry.rSpanList)
+            {
+                size_t nVal = rSpan.nVal;
+                if (bBooleanValue && bFirst)
+                    nVal = static_cast<size_t>(!!nVal);
+                if (!bBooleanValue || bFirst)
+                    aExpectedEncoding.append(OString::number(nVal) + ":");
+                aExpectedEncoding.append(OString::number(rSpan.nEnd) + " ");
+                bFirst = false;
+            }
+
+            // Get the tree's value for the property key ("sizes"/"hidden"/"filtered").
+            OString aTreeValue(rTree.get<std::string>(rEntry.aKey.getStr()));
+
+            CPPUNIT_ASSERT_EQUAL(aExpectedEncoding.toString(), aTreeValue);
+        }
+    }
+};
+
+class SheetGeometryData
+{
+    SheetDimData aCols;
+    SheetDimData aRows;
+
+public:
+    SheetGeometryData(const SheetDimData& rCols, const SheetDimData& rRows)
+        : aCols(rCols)
+        , aRows(rRows)
+    {
+    }
+
+    void setDataToDoc(ScDocument* pDoc) const
+    {
+        aCols.setDataToDoc(pDoc, true);
+        aRows.setDataToDoc(pDoc, false);
+    }
+
+    void parseTest(const std::string& rJSON) const
+    {
+        // Assumes all flags passed to getSheetGeometryData() are true.
+        boost::property_tree::ptree aTree;
+        std::stringstream aStream(rJSON);
+        boost::property_tree::read_json(aStream, aTree);
+
+        CPPUNIT_ASSERT_EQUAL(".uno:SheetGeometryData"_ostr,
+                             OString(aTree.get<std::string>("commandName")));
+
+        aCols.testPropertyTree(aTree.get_child("columns"), true);
+        aRows.testPropertyTree(aTree.get_child("rows"), false);
+    }
+};
+} //namespace
+
+// getSheetGeometryData() should return the exact same message
+// irrespective of client zoom and view-area. Switching views
+// should also not alter it.
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testSheetGeometryDataInvariance)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScDocument* pDoc = pModelObj->GetDocument();
+    const SheetGeometryData aSGData(
+        // cols
+        { // width spans
+          { { STD_COL_WIDTH, 20 }, { 2 * STD_COL_WIDTH, 26 }, { STD_COL_WIDTH, pDoc->MaxCol() } },
+
+          // hidden spans
+          { { 0, 5 }, { 1, 12 }, { 0, pDoc->MaxCol() } },
+
+          // filtered spans
+          { { 0, 50 }, { 1, 59 }, { 0, pDoc->MaxCol() } } },
+
+        // rows
+        { // height spans
+          { { 300, 50 }, { 600, 65 }, { 300, pDoc->MaxRow() } },
+
+          // hidden spans
+          { { 1, 100 }, { 0, 500 }, { 1, 578 }, { 0, pDoc->MaxRow() } },
+
+          // filtered spans
+          { { 0, 150 }, { 1, 159 }, { 0, pDoc->MaxRow() } } });
+
+    ScViewData* pViewData = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData);
+
+    // view #1
+    ScTestViewCallback aView1;
+    int nView1 = KitHelper::getCurrentView();
+
+    // view #2
+    KitHelper::createView();
+    int nView2 = KitHelper::getCurrentView();
+    ScTestViewCallback aView2;
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+
+    // Try with the default empty document once (nIdx = 0) and then with sheet geometry settings (nIdx = 1)
+    for (size_t nIdx = 0; nIdx < 2; ++nIdx)
+    {
+        if (nIdx)
+            aSGData.setDataToDoc(pDoc);
+
+        KitHelper::setView(nView1);
+        std::string aGeomStr1 = pModelObj->getSheetGeometryData(
+            /*bColumns*/ true, /*bRows*/ true, /*bSizes*/ true,
+            /*bHidden*/ true, /*bFiltered*/ true, /*bGroups*/ true);
+
+        KitHelper::setView(nView2);
+        pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 22474, 47333));
+        pModelObj->setClientZoom(256, 256, 6636, 6636);
+        std::string aGeomStr2 = pModelObj->getSheetGeometryData(
+            /*bColumns*/ true, /*bRows*/ true, /*bSizes*/ true,
+            /*bHidden*/ true, /*bFiltered*/ true, /*bGroups*/ true);
+
+        // Check vs. view #1
+        KitHelper::setView(nView1);
+        std::string aGeomStr1_2 = pModelObj->getSheetGeometryData(
+            /*bColumns*/ true, /*bRows*/ true, /*bSizes*/ true,
+            /*bHidden*/ true, /*bFiltered*/ true, /*bGroups*/ true);
+        CPPUNIT_ASSERT_EQUAL(aGeomStr1, aGeomStr1_2);
+
+        // Check vs. view #2
+        KitHelper::setView(nView2);
+        std::string aGeomStr2_2 = pModelObj->getSheetGeometryData(
+            /*bColumns*/ true, /*bRows*/ true, /*bSizes*/ true,
+            /*bHidden*/ true, /*bFiltered*/ true, /*bGroups*/ true);
+        CPPUNIT_ASSERT_EQUAL(aGeomStr2, aGeomStr2_2);
+    }
+
+    KitHelper::setView(nView1);
+    SfxViewShell::Current()->setCOKitViewCallback(nullptr);
+    KitHelper::setView(nView2);
+    SfxViewShell::Current()->setCOKitViewCallback(nullptr);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testSheetGeometryDataCorrectness)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScDocument* pDoc = pModelObj->GetDocument();
+    const SheetGeometryData aDefaultSGData(
+        // cols
+        { // width spans
+          { { STD_COL_WIDTH, pDoc->MaxCol() } },
+          // hidden spans
+          { { 0, pDoc->MaxCol() } },
+          // filtered spans
+          { { 0, pDoc->MaxCol() } } },
+        // rows
+        { // height spans
+          { { ScGlobal::nStdRowHeight, pDoc->MaxRow() } },
+          // hidden spans
+          { { 0, pDoc->MaxRow() } },
+          // filtered spans
+          { { 0, pDoc->MaxRow() } } });
+
+    const SheetGeometryData aSGData(
+        // cols
+        { // width spans
+          { { STD_COL_WIDTH, 20 }, { 2 * STD_COL_WIDTH, 26 }, { STD_COL_WIDTH, pDoc->MaxCol() } },
+
+          // hidden spans
+          { { 0, 5 }, { 1, 12 }, { 0, pDoc->MaxCol() } },
+
+          // filtered spans
+          { { 0, 50 }, { 1, 59 }, { 0, pDoc->MaxCol() } } },
+
+        // rows
+        { // height spans
+          { { 300, 50 }, { 600, 65 }, { 300, pDoc->MaxRow() } },
+
+          // hidden spans
+          { { 1, 100 }, { 0, 500 }, { 1, 578 }, { 0, pDoc->MaxRow() } },
+
+          // filtered spans
+          { { 0, 150 }, { 1, 159 }, { 0, pDoc->MaxRow() } } });
+
+    ScViewData* pViewData = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData);
+
+    // view #1
+    ScTestViewCallback aView1;
+
+    // with the default empty sheet and test the JSON encoding.
+    std::string aGeomDefaultStr
+        = pModelObj->getSheetGeometryData(/*bColumns*/ true, /*bRows*/ true, /*bSizes*/ true,
+                                          /*bHidden*/ true, /*bFiltered*/ true, /*bGroups*/ true);
+    aDefaultSGData.parseTest(aGeomDefaultStr);
+
+    // Apply geometry settings to the sheet and then test the resulting JSON encoding.
+    aSGData.setDataToDoc(pDoc);
+    std::string aGeomStr
+        = pModelObj->getSheetGeometryData(/*bColumns*/ true, /*bRows*/ true, /*bSizes*/ true,
+                                          /*bHidden*/ true, /*bFiltered*/ true, /*bGroups*/ true);
+    aSGData.parseTest(aGeomStr);
+
+    SfxViewShell::Current()->setCOKitViewCallback(nullptr);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testDeleteCellMultilineContent)
+{
+    ScModelObj* pModelObj = createDoc("multiline.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScViewData* pViewData = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData);
+    ScDocShell* pDocSh = dynamic_cast<ScDocShell*>(pModelObj->GetEmbeddedObject());
+    CPPUNIT_ASSERT(pDocSh);
+
+    // view #1
+    ScTestViewCallback aView1;
+    CPPUNIT_ASSERT(!hasEditView(*pViewData));
+
+    aView1.m_sInvalidateHeader = ""_ostr;
+    ScDocument& rDoc = pDocSh->GetDocument();
+    sal_uInt16 nRow1Height = rDoc.GetRowHeight(static_cast<SCROW>(0), static_cast<SCTAB>(0), false);
+
+    // delete multiline cell content in view #1
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::DOWN);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::DOWN);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::DELETE);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::DELETE);
+    Scheduler::ProcessEventsToIdle();
+
+    // check if the row header has been invalidated and if the involved row is of the expected height
+    CPPUNIT_ASSERT_EQUAL("row"_ostr, aView1.m_sInvalidateHeader);
+    sal_uInt16 nRow2Height = rDoc.GetRowHeight(static_cast<SCROW>(0), static_cast<SCTAB>(0), false);
+    CPPUNIT_ASSERT_EQUAL(nRow1Height, nRow2Height);
+    SfxViewShell::Current()->setCOKitViewCallback(nullptr);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testPasteIntoWrapTextCell)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocument* pDoc = pModelObj->GetDocument();
+
+    // Set Wrap text in A3
+    pDoc->ApplyAttr(0, 2, 0, ScLineBreakCell(true));
+    const ScLineBreakCell& rItem = pDoc->GetAttr(0, 2, 0, ATTR_LINEBREAK);
+    CPPUNIT_ASSERT(rItem.GetValue());
+
+    ScViewData* pViewData = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData);
+
+    ScTestViewCallback aView;
+    CPPUNIT_ASSERT(!hasEditView(*pViewData));
+
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+
+    // create source text in A1
+    OUString sCopyContent(u"Very long text to copy"_ustr);
+    pDoc->SetString(0, 0, 0, sCopyContent);
+
+    // copy A1
+    pView->SetCursor(0, 0);
+    Scheduler::ProcessEventsToIdle();
+    pView->GetViewFrame().GetBindings().Execute(SID_COPY);
+    Scheduler::ProcessEventsToIdle();
+
+    // verify clipboard
+    uno::Reference<datatransfer::clipboard::XClipboard> xClipboard1
+        = pView->GetViewData().GetActiveWin()->GetClipboard();
+    uno::Reference<datatransfer::XTransferable> xDataObj = xClipboard1->getContents();
+    datatransfer::DataFlavor aFlavor;
+    SotExchange::GetFormatDataFlavor(SotClipboardFormatId::STRING, aFlavor);
+    cpo::uno::Any aData = xDataObj->getTransferData(aFlavor);
+    OUString aTmpText;
+    aData >>= aTmpText;
+    CPPUNIT_ASSERT_EQUAL(sCopyContent, aTmpText.trim());
+
+    // Go to A2 and paste.
+    pView->SetCursor(0, 1);
+    Scheduler::ProcessEventsToIdle();
+    aView.m_sInvalidateSheetGeometry = ""_ostr;
+    pView->GetViewFrame().GetBindings().Execute(SID_PASTE);
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT_EQUAL(sCopyContent, pDoc->GetString(0, 1, 0));
+    CPPUNIT_ASSERT_EQUAL("rows sizes"_ostr, aView.m_sInvalidateSheetGeometry);
+
+    // create new source text in A2
+    OUString sCopyContent2(u"Very long text to copy 2"_ustr);
+    pDoc->SetString(0, 1, 0, sCopyContent2);
+    Scheduler::ProcessEventsToIdle();
+
+    // cut from A2
+    pView->GetViewFrame().GetBindings().Execute(SID_CUT);
+    Scheduler::ProcessEventsToIdle();
+
+    // verify clipboard
+    uno::Reference<datatransfer::clipboard::XClipboard> xClipboard2
+        = pView->GetViewData().GetActiveWin()->GetClipboard();
+    xDataObj = xClipboard2->getContents();
+    SotExchange::GetFormatDataFlavor(SotClipboardFormatId::STRING, aFlavor);
+    aData = xDataObj->getTransferData(aFlavor);
+    aData >>= aTmpText;
+    CPPUNIT_ASSERT_EQUAL(xClipboard1, xClipboard2);
+    CPPUNIT_ASSERT_EQUAL(sCopyContent2, aTmpText.trim());
+
+    // Go to A3 and paste.
+    pView->SetCursor(0, 2);
+    Scheduler::ProcessEventsToIdle();
+    aView.m_sInvalidateSheetGeometry = ""_ostr;
+    pView->GetViewFrame().GetBindings().Execute(SID_PASTE);
+    Scheduler::ProcessEventsToIdle();
+
+    // SG invalidations for all
+    CPPUNIT_ASSERT_EQUAL(sCopyContent2, pDoc->GetString(0, 1, 0));
+    CPPUNIT_ASSERT_EQUAL("all"_ostr, aView.m_sInvalidateSheetGeometry);
+
+    SfxViewShell::Current()->setCOKitViewCallback(nullptr);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testSortAscendingDescending)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("sort-range.ods");
+    ScDocument* pDoc = pModelObj->GetDocument();
+
+    ScTestViewCallback aView;
+
+    // select the values in the first column
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN, 551, 129, 1, MOUSE_LEFT, 0);
+    pModelObj->postMouseEvent(COKitMouseEventType::MOVE, 820, 1336, 1, MOUSE_LEFT, 0);
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP, 820, 1359, 1, MOUSE_LEFT, 0);
+    Scheduler::ProcessEventsToIdle();
+    aView.m_sInvalidateSheetGeometry = ""_ostr;
+
+    // sort ascending
+    cpo::uno::Sequence<beans::PropertyValue> aArgs;
+    dispatchCommand(mxComponent, u".uno:SortAscending"_ustr, aArgs);
+
+    // check it's sorted
+    for (SCROW r = 0; r < 6; ++r)
+    {
+        CPPUNIT_ASSERT_EQUAL(double(r + 1), pDoc->GetValue(ScAddress(0, r, 0)));
+    }
+
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL("rows"_ostr, aView.m_sInvalidateSheetGeometry);
+
+    aView.m_sInvalidateSheetGeometry = ""_ostr;
+    // sort descending
+    dispatchCommand(mxComponent, u".uno:SortDescending"_ustr, aArgs);
+
+    // check it's sorted
+    for (SCROW r = 0; r < 6; ++r)
+    {
+        CPPUNIT_ASSERT_EQUAL(double(6 - r), pDoc->GetValue(ScAddress(0, r, 0)));
+    }
+
+    // nothing else was sorted
+    CPPUNIT_ASSERT_EQUAL(double(1), pDoc->GetValue(ScAddress(1, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(double(3), pDoc->GetValue(ScAddress(1, 1, 0)));
+    CPPUNIT_ASSERT_EQUAL(double(2), pDoc->GetValue(ScAddress(1, 2, 0)));
+
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL("rows"_ostr, aView.m_sInvalidateSheetGeometry);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testAutoInputStringBlock)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+    ScDocument* pDoc = pModelObj->GetDocument();
+
+    pDoc->SetString(ScAddress(0, 3, 0), u"ABC"_ustr); // A4
+    pDoc->SetString(ScAddress(0, 4, 0), u"BAC"_ustr); // A5
+    ScFieldEditEngine& rEE = pDoc->GetEditEngine();
+    rEE.SetText(u"XYZ"_ustr);
+    pDoc->SetEditText(ScAddress(0, 5, 0), rEE.CreateTextObject()); // A6
+    pDoc->SetValue(ScAddress(0, 6, 0), 123);
+    pDoc->SetString(ScAddress(0, 7, 0), u"ZZZ"_ustr); // A8
+
+    ScAddress aA1(0, 0, 0);
+    typeCharsInCell("X", aA1.Col(), aA1.Row(), pView, pModelObj); // Type 'X' in A1
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("A1 should autocomplete", u"XYZ"_ustr, pDoc->GetString(aA1));
+
+    ScAddress aA3(0, 2, 0); // Adjacent to the string "superblock" A4:A8
+    typeCharsInCell("X", aA3.Col(), aA3.Row(), pView, pModelObj); // Type 'X' in A3
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("A3 should autocomplete", u"XYZ"_ustr, pDoc->GetString(aA3));
+
+    ScAddress aA9(0, 8, 0); // Adjacent to the string "superblock" A4:A8
+    typeCharsInCell("X", aA9.Col(), aA9.Row(), pView, pModelObj); // Type 'X' in A9
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("A9 should autocomplete", u"XYZ"_ustr, pDoc->GetString(aA9));
+
+    ScAddress aA11(0, 10, 0);
+    typeCharsInCell("X", aA11.Col(), aA11.Row(), pView, pModelObj); // Type 'X' in A11
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("A11 should autocomplete", u"XYZ"_ustr, pDoc->GetString(aA11));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testAutoInputExactMatch)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+    ScDocument* pDoc = pModelObj->GetDocument();
+
+    pDoc->SetString(ScAddress(0, 1, 0), u"Simple"_ustr); // A2
+    pDoc->SetString(ScAddress(0, 2, 0), u"Simple"_ustr); // A3
+    pDoc->SetString(ScAddress(0, 3, 0), u"Sing"_ustr); // A4
+    ScFieldEditEngine& rEE = pDoc->GetEditEngine();
+    rEE.SetText(u"Case"_ustr);
+    pDoc->SetEditText(ScAddress(0, 4, 0), rEE.CreateTextObject()); // A5
+    pDoc->SetString(ScAddress(0, 5, 0), u"Time"_ustr); // A6
+    pDoc->SetString(ScAddress(0, 6, 0), u"Castle"_ustr); // A7
+
+    ScAddress aA8(0, 7, 0);
+    typeCharsInCell("S", aA8.Col(), aA8.Row(), pView, pModelObj); // Type "S" in A8
+    // Should show the partial completion "i".
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("1: A8 should have partial completion Si", u"Si"_ustr,
+                                 pDoc->GetString(aA8));
+
+    typeCharsInCell("Si", aA8.Col(), aA8.Row(), pView, pModelObj); // Type "Si" in A8
+    // Should not show any suggestions.
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("2: A8 should not show suggestions", u"Si"_ustr,
+                                 pDoc->GetString(aA8));
+
+    typeCharsInCell("Sim", aA8.Col(), aA8.Row(), pView, pModelObj); // Type "Sim" in A8
+    // Should autocomplete to "Simple" which is the only match.
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("3: A8 should autocomplete", u"Simple"_ustr, pDoc->GetString(aA8));
+
+    typeCharsInCell("Sin", aA8.Col(), aA8.Row(), pView, pModelObj); // Type "Sin" in A8
+    // Should autocomplete to "Sing" which is the only match.
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("4: A8 should autocomplete", u"Sing"_ustr, pDoc->GetString(aA8));
+
+    typeCharsInCell("C", aA8.Col(), aA8.Row(), pView, pModelObj); // Type "C" in A8
+    // Should show the partial completion "as".
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("5: A8 should have partial completion Cas", u"Cas"_ustr,
+                                 pDoc->GetString(aA8));
+
+    typeCharsInCell("Cast", aA8.Col(), aA8.Row(), pView, pModelObj); // Type "Cast" in A8
+    // Should autocomplete to "Castle" which is the only match.
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("6: A8 should autocomplete", u"Castle"_ustr, pDoc->GetString(aA8));
+
+    typeCharsInCell("T", aA8.Col(), aA8.Row(), pView, pModelObj); // Type "T" in A8
+    // Should autocomplete to "Time" which is the only match.
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("7: A8 should autocomplete", u"Time"_ustr, pDoc->GetString(aA8));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testEditCursorBounds)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScDocument* pDoc = pModelObj->GetDocument();
+
+    ScTestViewCallback aView;
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+
+    // ~170% zoom.
+    pModelObj->setClientZoom(256, 256, 2222, 2222);
+    pModelObj->setClientVisibleArea(tools::Rectangle(7725, 379832, 16240, 6449));
+    Scheduler::ProcessEventsToIdle();
+
+    constexpr SCCOL nCol = 5;
+    constexpr SCROW nRow = 2048;
+    pDoc->SetValue(ScAddress(nCol, nRow, 0), 123);
+
+    aView.m_bOwnCursorInvalidated = false;
+    // Obtain the cell bounds via cursor.
+    pView->SetCursor(nCol, nRow);
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT(aView.m_bOwnCursorInvalidated);
+    CPPUNIT_ASSERT(!aView.m_aCellCursorBounds.IsEmpty());
+    tools::Rectangle aCellBounds(aView.m_aCellCursorBounds);
+
+    aView.m_aInvalidateCursorResult.clear();
+    // Enter edit mode in the same cell.
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::F2);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::F2);
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT(!aView.m_aInvalidateCursorResult.empty());
+    CPPUNIT_ASSERT_MESSAGE("Edit cursor must be in cell bounds!",
+                           aCellBounds.Contains(aView.m_aInvalidateCursorResult.getBounds()));
+
+    SfxViewShell::Current()->setCOKitViewCallback(nullptr);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testTextSelectionBounds)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScDocument* pDoc = pModelObj->GetDocument();
+
+    ScTestViewCallback aView;
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+
+    // ~170% zoom.
+    pModelObj->setClientZoom(256, 256, 2222, 2222);
+    pModelObj->setClientVisibleArea(tools::Rectangle(7725, 379832, 16240, 6449));
+    Scheduler::ProcessEventsToIdle();
+
+    constexpr SCCOL nCol = 5;
+    constexpr SCROW nRow = 2048;
+    pDoc->SetValue(ScAddress(nCol, nRow, 0), 123);
+
+    aView.m_bOwnCursorInvalidated = false;
+    // Obtain the cell bounds via cursor.
+    pView->SetCursor(nCol, nRow);
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT(aView.m_bOwnCursorInvalidated);
+    CPPUNIT_ASSERT(!aView.m_aCellCursorBounds.IsEmpty());
+    tools::Rectangle aCellBounds(aView.m_aCellCursorBounds);
+
+    aView.m_aTextSelectionResult.clear();
+    // Enter edit mode in the same cell and select all text.
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::F2);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::F2);
+    Scheduler::ProcessEventsToIdle();
+
+    // CTRL + A
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_MOD1 | awt::Key::A);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, KEY_MOD1 | awt::Key::A);
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT(!aView.m_aTextSelectionResult.empty());
+    CPPUNIT_ASSERT_MESSAGE(
+        "Text selections must be in cell bounds!",
+        !aCellBounds.Intersection(aView.m_aTextSelectionResult.getBounds(0)).IsEmpty());
+
+    SfxViewShell::Current()->setCOKitViewCallback(nullptr);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testMergedCellSelectedOnlyInItsOwnRow)
+{
+    // A cell that a merge covers belongs to the merge, so marking the column that K7:L7 starts
+    // in, together with the M column, selects the L column in row 7 and nowhere else.
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScDocument* pDoc = pModelObj->GetDocument();
+
+    ScTestViewCallback aView;
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+
+    constexpr SCTAB nTab = 0;
+    constexpr SCCOL nColJ = 9;
+    constexpr SCCOL nColK = 10;
+    constexpr SCCOL nColL = 11;
+    constexpr SCCOL nColM = 12;
+    constexpr SCCOL nColN = 13;
+    constexpr SCROW nMergeRow = 6;
+
+    pDoc->DoMerge(nColK, nMergeRow, nColL, nMergeRow, nTab);
+
+    // A single column header click marks one range, which is sent as one rectangle. The merge
+    // reaches the selection once the Ctrl click on the M header adds a second range.
+    pView->MarkColumns(nColK, 0);
+    Scheduler::ProcessEventsToIdle();
+
+    aView.m_aTextSelectionResult.clear();
+    pView->MarkColumns(nColM, KEY_MOD1);
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT(!aView.m_aTextSelectionResult.empty());
+
+    // The rectangles arrive in print twips, which are the coordinates the document itself uses.
+    auto isSelected = [&](SCCOL nCol, SCROW nRow)
+    {
+        const Point aCenter(pDoc->GetColOffset(nCol, nTab) + pDoc->GetColWidth(nCol, nTab) / 2,
+                            pDoc->GetRowOffset(nRow, nTab) + pDoc->GetRowHeight(nRow, nTab) / 2);
+        for (size_t nRect = 0; nRect < aView.m_aTextSelectionResult.m_aRelRects.size(); ++nRect)
+        {
+            if (aView.m_aTextSelectionResult.getBounds(nRect).Contains(aCenter))
+                return true;
+        }
+
+        return false;
+    };
+
+    // Every checked row is inside the tiled area an empty document reports, so the selection
+    // reaches all of them.
+    const SCROW aRows[] = { 0, nMergeRow - 1, nMergeRow, nMergeRow + 1, 19 };
+    for (SCROW nRow : aRows)
+    {
+        const OString aRowText = " in row " + OString::number(nRow + 1);
+        CPPUNIT_ASSERT_MESSAGE(OString("The marked K column is selected" + aRowText).getStr(),
+                               isSelected(nColK, nRow));
+        CPPUNIT_ASSERT_MESSAGE(OString("The marked M column is selected" + aRowText).getStr(),
+                               isSelected(nColM, nRow));
+
+        if (nRow == nMergeRow)
+            CPPUNIT_ASSERT_MESSAGE("The merged cell is selected with the column it starts in",
+                                   isSelected(nColL, nRow));
+        else
+            CPPUNIT_ASSERT_MESSAGE(
+                OString("The L column holds no marked cell" + aRowText).getStr(),
+                !isSelected(nColL, nRow));
+    }
+
+    CPPUNIT_ASSERT_MESSAGE("The column left of the marked ones holds no marked cell",
+                           !isSelected(nColJ, nMergeRow));
+    CPPUNIT_ASSERT_MESSAGE("The column right of the marked ones holds no marked cell",
+                           !isSelected(nColN, nMergeRow));
+
+    SfxViewShell::Current()->setCOKitViewCallback(nullptr);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testSheetViewDataCrash)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+
+    // view #1
+    int nView1 = KitHelper::getCurrentView();
+    KitHelper::setView(nView1);
+
+    // Imitate online while creating a new sheet on empty.ods.
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence(
+        { { u"Name"_ustr, cpo::uno::Any(u"NewSheet"_ustr) }, { u"Index"_ustr, cpo::uno::Any(sal_Int32(2)) } }));
+    dispatchCommand(mxComponent, u".uno:Insert"_ustr, aArgs);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::PAGEDOWN | KEY_MOD1);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::PAGEDOWN | KEY_MOD1);
+    Scheduler::ProcessEventsToIdle();
+    ScTabViewShell* pView1 = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView1);
+
+    // view #2
+    KitHelper::createView();
+    ScTabViewShell* pView2 = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView2);
+    Scheduler::ProcessEventsToIdle();
+
+    KitHelper::setView(nView1);
+    // Delete a range.
+    pView1->SetCursor(1, 1);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::DOWN | KEY_SHIFT);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::DOWN | KEY_SHIFT);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::DELETE);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::DELETE);
+    // It will crash at this point without the fix.
+    Scheduler::ProcessEventsToIdle();
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testTextBoxInsert)
+{
+    createDoc("empty.ods");
+    ScTestViewCallback aView1;
+
+    // insert textbox
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(
+        comphelper::InitPropertySequence({ { u"CreateDirectly"_ustr, cpo::uno::Any(true) } }));
+    dispatchCommand(mxComponent, u".uno:DrawText"_ustr, aArgs);
+
+    // check if we have textbox selected
+    CPPUNIT_ASSERT(!aView1.m_ShapeSelection.isEmpty());
+    CPPUNIT_ASSERT(aView1.m_ShapeSelection != "EMPTY");
+
+    Scheduler::ProcessEventsToIdle();
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCommentCellCopyPaste)
+{
+    // FIXME: Hack because previous tests do not destroy ScDocument(with annotations) on exit (?).
+    ScPostIt::mnLastPostItId = 1;
+
+    {
+        ScModelObj* pModelObj = createDoc("empty.ods");
+        ScTestViewCallback aView;
+        int nView = KitHelper::getCurrentView();
+
+        KitHelper::setView(nView);
+
+        ScTabViewShell* pTabViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+        CPPUNIT_ASSERT(pTabViewShell);
+
+        typeCharsInCell("ABC", 0, 0, pTabViewShell, pModelObj); // Type "ABC" in A1
+
+        pTabViewShell->SetCursor(1, 1);
+        pTabViewShell->SetKitAuthor(u"COKit Client"_ustr);
+
+        // Add a new comment
+        cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+            { u"Text"_ustr, cpo::uno::Any(u"COKit Comment Cell B2"_ustr) },
+        }));
+        dispatchCommand(mxComponent, u".uno:InsertAnnotation"_ustr, aArgs);
+
+        // We received a COKitCallbackType::COMMENT callback with comment 'Add' action
+        CPPUNIT_ASSERT_EQUAL(std::string("Add"),
+                             aView.m_aCommentCallbackResult.get<std::string>("action"));
+        CPPUNIT_ASSERT_EQUAL(std::string("1"),
+                             aView.m_aCommentCallbackResult.get<std::string>("id"));
+        CPPUNIT_ASSERT_EQUAL(std::string("0"),
+                             aView.m_aCommentCallbackResult.get<std::string>("tab"));
+        CPPUNIT_ASSERT_EQUAL(std::string("COKit Client"),
+                             aView.m_aCommentCallbackResult.get<std::string>("author"));
+        CPPUNIT_ASSERT_EQUAL(std::string("COKit Comment Cell B2"),
+                             aView.m_aCommentCallbackResult.get<std::string>("text"));
+
+        cpo::uno::Sequence<beans::PropertyValue> aCopyPasteArgs;
+
+        // We need separate tests for single cell copy-paste and cell-range copy-paste
+        // since they hit different code paths in ScColumn methods.
+
+        // Single cell(with comment) copy paste test
+        {
+            dispatchCommand(mxComponent, u".uno:Copy"_ustr, aCopyPasteArgs);
+
+            pTabViewShell->SetCursor(1, 49);
+            Scheduler::ProcessEventsToIdle();
+            dispatchCommand(mxComponent, u".uno:Paste"_ustr, aCopyPasteArgs); // Paste to cell B50
+
+            // We received a COKitCallbackType::COMMENT callback with comment 'Add' action
+            CPPUNIT_ASSERT_EQUAL(std::string("Add"),
+                                 aView.m_aCommentCallbackResult.get<std::string>("action"));
+            // Without the fix the id will be "1".
+            CPPUNIT_ASSERT_EQUAL(std::string("2"),
+                                 aView.m_aCommentCallbackResult.get<std::string>("id"));
+            CPPUNIT_ASSERT_EQUAL(std::string("0"),
+                                 aView.m_aCommentCallbackResult.get<std::string>("tab"));
+            CPPUNIT_ASSERT_EQUAL(std::string("COKit Client"),
+                                 aView.m_aCommentCallbackResult.get<std::string>("author"));
+            CPPUNIT_ASSERT_EQUAL(std::string("COKit Comment Cell B2"),
+                                 aView.m_aCommentCallbackResult.get<std::string>("text"));
+        }
+
+        // Cell range (with a comment) copy paste test
+        {
+            // Select range A1:C3
+            pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_HOME | KEY_MOD1);
+            pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, KEY_HOME | KEY_MOD1);
+            pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_DOWN | KEY_SHIFT);
+            pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, KEY_DOWN | KEY_SHIFT);
+            pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_DOWN | KEY_SHIFT);
+            pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, KEY_DOWN | KEY_SHIFT);
+            pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_RIGHT | KEY_SHIFT);
+            pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, KEY_RIGHT | KEY_SHIFT);
+            pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_RIGHT | KEY_SHIFT);
+            pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, KEY_RIGHT | KEY_SHIFT);
+            Scheduler::ProcessEventsToIdle();
+
+            dispatchCommand(mxComponent, u".uno:Copy"_ustr, aCopyPasteArgs);
+
+            pTabViewShell->SetCursor(3, 49);
+            Scheduler::ProcessEventsToIdle();
+            dispatchCommand(mxComponent, u".uno:Paste"_ustr, aCopyPasteArgs); // Paste to cell D50
+
+            // We received a COKitCallbackType::COMMENT callback with comment 'Add' action
+            CPPUNIT_ASSERT_EQUAL(std::string("Add"),
+                                 aView.m_aCommentCallbackResult.get<std::string>("action"));
+            // Without the fix the id will be "1".
+            CPPUNIT_ASSERT_EQUAL(std::string("3"),
+                                 aView.m_aCommentCallbackResult.get<std::string>("id"));
+            CPPUNIT_ASSERT_EQUAL(std::string("0"),
+                                 aView.m_aCommentCallbackResult.get<std::string>("tab"));
+            CPPUNIT_ASSERT_EQUAL(std::string("COKit Client"),
+                                 aView.m_aCommentCallbackResult.get<std::string>("author"));
+            CPPUNIT_ASSERT_EQUAL(std::string("COKit Comment Cell B2"),
+                                 aView.m_aCommentCallbackResult.get<std::string>("text"));
+        }
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testInvalidEntrySave)
+{
+    loadFromFile(u"validity.xlsx");
+
+    // .uno:Save modifies the original file, make a copy first
+    saveAndReload(TestFilter::XLSX);
+    ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+    CPPUNIT_ASSERT(pModelObj);
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    const ScDocument* pDoc = pModelObj->GetDocument();
+    ScTestViewCallback aView;
+    int nView = KitHelper::getCurrentView();
+
+    KitHelper::setView(nView);
+
+    ScDocShell* pDocSh = dynamic_cast<ScDocShell*>(pModelObj->GetEmbeddedObject());
+    ScTabViewShell* pTabViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pTabViewShell);
+
+    // Type partial date "7/8" of "7/8/2013" that
+    // the validation cell at A8 can accept
+    typeCharsInCell("7/8", 0, 7, pTabViewShell, pModelObj, false /* bInEdit */,
+                    false /* bCommit */); // Type "7/8" in A8
+
+    cpo::uno::Sequence<beans::PropertyValue> aArgs;
+    dispatchCommand(mxComponent, u".uno:Save"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_MESSAGE("Should not be marked modified after save", !pDocSh->IsModified());
+
+    // Complete the date in A8 by appending "/2013" and commit.
+    typeCharsInCell("/2013", 0, 7, pTabViewShell, pModelObj, true /* bInEdit */,
+                    true /* bCommit */);
+
+    // This would hang if the date entered "7/8/2013" is not acceptable.
+    Scheduler::ProcessEventsToIdle();
+
+    // Ensure that the correct date is recorded in the document.
+    CPPUNIT_ASSERT_EQUAL(double(41463), pDoc->GetValue(ScAddress(0, 7, 0)));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testUndoReordering)
+{
+    ScModelObj* pModelObj = createDoc("small.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    CPPUNIT_ASSERT(pDoc);
+    ScUndoManager* pUndoManager = pDoc->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    // view #1
+    int nView1 = KitHelper::getCurrentView();
+    ScTestViewCallback aView1;
+
+    // view #2
+    KitHelper::createView();
+    int nView2 = KitHelper::getCurrentView();
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    ScTestViewCallback aView2;
+
+    // text edit a cell in view #1
+    KitHelper::setView(nView1);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::RETURN);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::RETURN);
+    Scheduler::ProcessEventsToIdle();
+
+    // check that undo action count is not 0
+    CPPUNIT_ASSERT_EQUAL(std::size_t(1), pUndoManager->GetUndoActionCount());
+
+    // text edit a different cell in view #2
+    KitHelper::setView(nView2);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_DOWN);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, KEY_DOWN);
+    Scheduler::ProcessEventsToIdle();
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_DOWN);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, KEY_DOWN);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::RETURN);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::RETURN);
+    Scheduler::ProcessEventsToIdle();
+
+    // check that undo action count is not 1
+    CPPUNIT_ASSERT_EQUAL(std::size_t(2), pUndoManager->GetUndoActionCount());
+
+    // try to execute undo in view #1
+    KitHelper::setView(nView1);
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    // check that undo has been executed on view #1
+    CPPUNIT_ASSERT_EQUAL(std::size_t(1), pUndoManager->GetUndoActionCount());
+
+    // try to execute undo in view #2
+    KitHelper::setView(nView2);
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    // check that undo has been executed on view #2
+    CPPUNIT_ASSERT_EQUAL(std::size_t(0), pUndoManager->GetUndoActionCount());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testUndoReorderingRedo)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    CPPUNIT_ASSERT(pDoc);
+    ScUndoManager* pUndoManager = pDoc->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+    CPPUNIT_ASSERT_EQUAL(std::size_t(0), pUndoManager->GetUndoActionCount());
+
+    // view #1
+    int nView1 = KitHelper::getCurrentView();
+    SfxViewShell* pView1 = SfxViewShell::Current();
+    ScTestViewCallback aView1;
+
+    // view #2
+    KitHelper::createView();
+    int nView2 = KitHelper::getCurrentView();
+    SfxViewShell* pView2 = SfxViewShell::Current();
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    ScTestViewCallback aView2;
+
+    // text edit a cell in view #1
+    KitHelper::setView(nView1);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::RETURN);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::RETURN);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(std::size_t(1), pUndoManager->GetUndoActionCount());
+
+    // text edit another cell in view #1
+    KitHelper::setView(nView1);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'y', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'y', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'y', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'y', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::RETURN);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::RETURN);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(std::size_t(2), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u"xx"_ustr, pDoc->GetString(ScAddress(0, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"yy"_ustr, pDoc->GetString(ScAddress(0, 1, 0)));
+
+    // text edit a different cell in view #2
+    KitHelper::setView(nView2);
+    ScTabViewShell* pViewShell2 = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    pViewShell2->SetCursor(0, 2);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'C', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'C', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'C', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'C', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::RETURN);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::RETURN);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(std::size_t(3), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u"xx"_ustr, pDoc->GetString(ScAddress(0, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"yy"_ustr, pDoc->GetString(ScAddress(0, 1, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"CC"_ustr, pDoc->GetString(ScAddress(0, 2, 0)));
+
+    // View 1 presses undo, and the second cell is erased
+    KitHelper::setView(nView1);
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(std::size_t(2), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u"xx"_ustr, pDoc->GetString(ScAddress(0, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(u""_ustr, pDoc->GetString(ScAddress(0, 1, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"CC"_ustr, pDoc->GetString(ScAddress(0, 2, 0)));
+
+    // Verify that the UNDO buttons/actions are still enabled
+    {
+        SfxItemSet aSet1(pView1->GetPool(), svl::Items<SID_UNDO, SID_UNDO>);
+        SfxItemSet aSet2(pView2->GetPool(), svl::Items<SID_UNDO, SID_UNDO>);
+        pView1->GetSlotState(SID_UNDO, nullptr, &aSet1);
+        pView2->GetSlotState(SID_UNDO, nullptr, &aSet2);
+        CPPUNIT_ASSERT_EQUAL(SfxItemState::SET, aSet1.GetItemState(SID_UNDO));
+        CPPUNIT_ASSERT(dynamic_cast<const SfxStringItem*>(aSet1.GetItem(SID_UNDO)));
+        CPPUNIT_ASSERT_EQUAL(SfxItemState::SET, aSet2.GetItemState(SID_UNDO));
+        CPPUNIT_ASSERT(dynamic_cast<const SfxStringItem*>(aSet2.GetItem(SID_UNDO)));
+    }
+
+    // View 1 presses undo again, and the first cell is erased
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(std::size_t(1), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u""_ustr, pDoc->GetString(ScAddress(0, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(u""_ustr, pDoc->GetString(ScAddress(0, 1, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"CC"_ustr, pDoc->GetString(ScAddress(0, 2, 0)));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testUndoReorderingMulti)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    CPPUNIT_ASSERT(pDoc);
+    ScUndoManager* pUndoManager = pDoc->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+    CPPUNIT_ASSERT_EQUAL(std::size_t(0), pUndoManager->GetUndoActionCount());
+
+    // view #1
+    int nView1 = KitHelper::getCurrentView();
+    ScTestViewCallback aView1;
+
+    // view #2
+    KitHelper::createView();
+    int nView2 = KitHelper::getCurrentView();
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    ScTestViewCallback aView2;
+
+    // text edit a cell in view #1
+    KitHelper::setView(nView1);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::RETURN);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::RETURN);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(std::size_t(1), pUndoManager->GetUndoActionCount());
+
+    // text edit a different cell in view #2
+    KitHelper::setView(nView2);
+    ScTabViewShell* pView2 = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    pView2->SetCursor(0, 2);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'C', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'C', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'C', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'C', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::RETURN);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::RETURN);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(std::size_t(2), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u"xx"_ustr, pDoc->GetString(ScAddress(0, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"CC"_ustr, pDoc->GetString(ScAddress(0, 2, 0)));
+
+    // and another cell in view #2
+    pView2->SetCursor(0, 3);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'D', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'D', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'D', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'D', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::RETURN);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::RETURN);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(std::size_t(3), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u"xx"_ustr, pDoc->GetString(ScAddress(0, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"CC"_ustr, pDoc->GetString(ScAddress(0, 2, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"DD"_ustr, pDoc->GetString(ScAddress(0, 3, 0)));
+
+    // View 1 presses undo
+    KitHelper::setView(nView1);
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(std::size_t(2), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u""_ustr, pDoc->GetString(ScAddress(0, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"CC"_ustr, pDoc->GetString(ScAddress(0, 2, 0)));
+    CPPUNIT_ASSERT_EQUAL(u"DD"_ustr, pDoc->GetString(ScAddress(0, 3, 0)));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testGetViewRenderState)
+{
+    // Add a pair of schemes, last added is the default
+    svtools::EditableColorConfig aColorConfig;
+    aColorConfig.AddScheme(u"Dark"_ustr);
+    aColorConfig.AddScheme(u"Light"_ustr);
+
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    int nFirstViewId = KitHelper::getCurrentView();
+    ScTestViewCallback aView1;
+
+    // No leading letters: Calc starts with automatic spell checking off, and the
+    // document background is the default white one
+    CPPUNIT_ASSERT_EQUAL(";Default"_ostr, pModelObj->getViewRenderState());
+    // Create a second view
+    KitHelper::createView();
+    ScTestViewCallback aView2;
+    CPPUNIT_ASSERT_EQUAL(";Default"_ostr, pModelObj->getViewRenderState());
+    // Set second view to dark scheme
+    {
+        cpo::uno::Sequence<beans::PropertyValue> aPropertyValues
+            = comphelper::InitPropertySequence({
+                { u"NewTheme"_ustr, cpo::uno::Any(u"Dark"_ustr) },
+            });
+        dispatchCommand(mxComponent, u".uno:ChangeTheme"_ustr, aPropertyValues);
+    }
+    CPPUNIT_ASSERT_EQUAL(";Dark"_ostr, pModelObj->getViewRenderState());
+
+    // Switch back to first view and make sure it's the same
+    KitHelper::setView(nFirstViewId);
+    CPPUNIT_ASSERT_EQUAL(";Default"_ostr, pModelObj->getViewRenderState());
+}
+
+// Cell text with a dark color of its own is drawn in a light variant once the document background
+// is inverted, also when the color scheme of the view stays light
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testInvertedBackgroundLightensText)
+{
+    svtools::EditableColorConfig aColorConfig;
+    aColorConfig.AddScheme(u"Dark"_ustr);
+    aColorConfig.AddScheme(u"Light"_ustr);
+
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScTestViewCallback aView;
+
+    // The color configuration belongs to the process and every test in this file shares it, so put
+    // the document background back on the way out, whatever the assertions below do.
+    const Color aDocColorBefore = aColorConfig.GetColorValue(svtools::DOCCOLOR).nColor;
+    comphelper::ScopeGuard aRestoreDocColor(
+        [aDocColorBefore]
+        {
+            svtools::EditableColorConfig aRestore;
+            svtools::ColorConfigValue aValue;
+            aValue.nColor = aDocColorBefore;
+            aRestore.SetColorValue(svtools::DOCCOLOR, aValue);
+        });
+
+    dispatchCommand(mxComponent, u".uno:ChangeTheme"_ustr,
+                    comphelper::InitPropertySequence(
+                        { { "NewTheme", cpo::uno::Any(u"Light"_ustr) } }));
+
+    // An automatic color is resolved against the background and would stay readable on its own, so
+    // the cell needs a color of its own to show the mapping.
+    ScDocument* pDoc = pModelObj->GetDocument();
+    pDoc->SetString(ScAddress(0, 0, 0), u"Lorem ipsum"_ustr);
+    pDoc->ApplyAttr(0, 0, 0, SvxColorItem(COL_BLACK, ATTR_FONT_COLOR));
+    CPPUNIT_ASSERT_EQUAL(COL_BLACK, pDoc->GetPattern(0, 0, 0)->GetItem(ATTR_FONT_COLOR).GetValue());
+
+    // The document background is inverted on its own, the color scheme of the view stays light.
+    dispatchCommand(mxComponent, u".uno:InvertBackground"_ustr,
+                    comphelper::InitPropertySequence(
+                        { { "NewTheme", cpo::uno::Any(u"Dark"_ustr) } }));
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(
+        ScTabViewShell::GetActiveViewShell()->GetViewRenderingData().GetDocColor().IsDark());
+
+    // Without the fix the cell kept its own black, which cannot be read on the dark background.
+    model::ComplexColor aDisplayColor;
+    pDoc->GetPattern(0, 0, 0)->fillColor(aDisplayColor, ScAutoFontColorMode::Display);
+    CPPUNIT_ASSERT(!aDisplayColor.getFinalColor().IsDark());
+
+    // Saving is not affected, the stored color stays what the document says.
+    model::ComplexColor aRawColor;
+    pDoc->GetPattern(0, 0, 0)->fillColor(aRawColor, ScAutoFontColorMode::Raw);
+    CPPUNIT_ASSERT_EQUAL(COL_BLACK, aRawColor.getFinalColor());
+}
+
+// A cell with no background of its own is edited on the document background of the view that does
+// the editing, so the background another view chose after it does not decide what an automatic
+// text color has to read on
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCellEditBackgroundFollowsEditingView)
+{
+    svtools::EditableColorConfig aColorConfig;
+    aColorConfig.AddScheme(u"Dark"_ustr);
+    aColorConfig.AddScheme(u"Light"_ustr);
+
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScTestViewCallback aView1;
+    const int nFirstViewId = KitHelper::getCurrentView();
+
+    ScDocument* pDoc = pModelObj->GetDocument();
+    pDoc->SetString(ScAddress(0, 0, 0), u"Lorem ipsum"_ustr);
+
+    // The color configuration belongs to the process and every test in this file shares it, so put
+    // the document background back on the way out, whatever the assertions below do.
+    const Color aDocColorBefore = aColorConfig.GetColorValue(svtools::DOCCOLOR).nColor;
+    comphelper::ScopeGuard aRestoreDocColor(
+        [aDocColorBefore]
+        {
+            svtools::EditableColorConfig aRestore;
+            svtools::ColorConfigValue aValue;
+            aValue.nColor = aDocColorBefore;
+            aRestore.SetColorValue(svtools::DOCCOLOR, aValue);
+        });
+
+    // A second view inverts its document background, which leaves the dark color in the color
+    // configuration of the process as well.
+    KitHelper::createView();
+    ScTestViewCallback aView2;
+    dispatchCommand(mxComponent, u".uno:InvertBackground"_ustr,
+                    comphelper::InitPropertySequence(
+                        { { "NewTheme", cpo::uno::Any(u"Dark"_ustr) } }));
+    Scheduler::ProcessEventsToIdle();
+
+    // The first view keeps the light background it opened with.
+    KitHelper::setView(nFirstViewId);
+    ScTabViewShell* pViewShell = ScTabViewShell::GetActiveViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    CPPUNIT_ASSERT(!pViewShell->GetViewRenderingData().GetDocColor().IsDark());
+
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::F2);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::F2);
+    Scheduler::ProcessEventsToIdle();
+
+    ScViewData& rViewData = pViewShell->GetViewData();
+    EditView* pEditView = rViewData.GetEditView(rViewData.GetActivePart());
+    CPPUNIT_ASSERT(pEditView);
+
+    // Without the fix both of these were read from the color configuration, which the second view
+    // had turned dark, so this view edited on a dark background and its automatic text was white.
+    CPPUNIT_ASSERT(!pEditView->GetBackgroundColor().IsDark());
+    CPPUNIT_ASSERT(!pEditView->getEditEngine().GetBackgroundColor().IsDark());
+}
+
+// A cell of a table is edited with the font colour and the fill that its table style gives it,
+// so the cell keeps its look while it is edited
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testTableStyleCellEditFontAndFill)
+{
+    // Table1 is A1:E7 in TableStyleLight4 with banded rows, and Text 1 of the theme is red-brown,
+    // so is the font of Normal. H10 is outside the table, with Normal like A2.
+    loadFromURL(m_directories.getURLFromSrc(u"/sc/qa/unit/data/xlsx/",
+                                            u"tablestyle-cellstyle-excluded-font.xlsx"));
+    ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+    CPPUNIT_ASSERT(pModelObj);
+    pModelObj->initializeForTiledRendering({});
+    ScDocument* pDoc = pModelObj->GetDocument();
+    ScTabViewShell* pViewShell = ScTabViewShell::GetActiveViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+
+    // A2 is in the first data row, which has the band fill
+    const SvxBrushItem* pBandFill = pDoc->GetTableFillItem(0, 1, 0);
+    CPPUNIT_ASSERT(pBandFill);
+    const Color aBandColor = pBandFill->GetColor();
+    const SfxItemSet* pTableFont = pDoc->GetTableFormatSet(0, 1, 0);
+    CPPUNIT_ASSERT(pTableFont);
+    const Color aTableTextColor = pTableFont->Get(ATTR_FONT_COLOR).GetValue();
+    const Color aNormalColor(0x912D0A);
+    CPPUNIT_ASSERT(aTableTextColor != aNormalColor);
+
+    auto editCell = [pModelObj, pViewShell](SCCOL nCol, SCROW nRow) {
+        pViewShell->SetCursor(nCol, nRow);
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::F2);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::F2);
+        Scheduler::ProcessEventsToIdle();
+        ScViewData& rViewData = pViewShell->GetViewData();
+        EditView* pEditView = rViewData.GetEditView(rViewData.GetActivePart());
+        CPPUNIT_ASSERT(pEditView);
+        return pEditView;
+    };
+    auto getTextColor = [](EditView* pEditView) {
+        const SfxItemSet aAttribs = pEditView->getEditEngine().GetAttribs(ESelection::All());
+        return aAttribs.Get(EE_CHAR_COLOR).GetValue();
+    };
+
+    // Without the fix in place, A2 was edited in the red-brown of Normal, on white
+    EditView* pEditView = editCell(0, 1);
+    CPPUNIT_ASSERT_EQUAL(aTableTextColor, getTextColor(pEditView));
+    CPPUNIT_ASSERT_EQUAL(aBandColor, pEditView->GetBackgroundColor());
+    CPPUNIT_ASSERT_EQUAL(aBandColor, pEditView->getEditEngine().GetBackgroundColor());
+
+    // Painting a tile sets the background of the edit view again
+    getTile(pModelObj, 0, 0, 3840, 3840);
+    CPPUNIT_ASSERT_EQUAL(aBandColor, pEditView->GetBackgroundColor());
+
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::ESCAPE);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::ESCAPE);
+    Scheduler::ProcessEventsToIdle();
+
+    // E2 has the Zeit cell style, which defines a font with an automatic colour but does not apply
+    // it, so E2 is edited in the red-brown of Normal like it is painted, on the same band fill
+    pEditView = editCell(4, 1);
+    CPPUNIT_ASSERT_EQUAL(aNormalColor, getTextColor(pEditView));
+    CPPUNIT_ASSERT_EQUAL(aBandColor, pEditView->GetBackgroundColor());
+
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::ESCAPE);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::ESCAPE);
+    Scheduler::ProcessEventsToIdle();
+
+    // H10 has the same pattern as A2, but no table style, so nothing of the table may stay from
+    // the previous edits
+    pEditView = editCell(7, 9);
+    CPPUNIT_ASSERT_EQUAL(aNormalColor, getTextColor(pEditView));
+    CPPUNIT_ASSERT(pEditView->GetBackgroundColor() != aBandColor);
+}
+
+/*
+ * testInvalidateOnTextEditWithDifferentZoomLevels
+ * steps:
+ * set view 1 zoom to the passed zoom level
+ * in view 1 type a char at the passed cell address
+ * store invalidation rectangle
+ * exit from in place editing (press esc)
+ * create view 2 (keep 100% zoom)
+ * go to the same cell address used in view 1
+ * type a char into the cell
+ * get invalidation rectangle for view 1
+ * check if the invalidation rectangle is equal to the one stored previously
+*/
+class testInvalidateOnTextEditWithDifferentZoomLevels : public ScTiledRenderingTest
+{
+public:
+    void TestBody(const ColRowZoom& rData);
+    CPPUNIT_TEST_SUITE(testInvalidateOnTextEditWithDifferentZoomLevels);
+    CPPUNIT_TEST_PARAMETERIZED(TestBody, std::initializer_list<ColRowZoom>{ // zoom level 120%
+                                                                            { 0, 999, 1 },
+                                                                            { 99, 0, 1 },
+                                                                            // zoom level 40%
+                                                                            { 0, 999, -5 },
+                                                                            { 99, 0, -5 } });
+    CPPUNIT_TEST_SUITE_END();
+};
+CPPUNIT_TEST_SUITE_REGISTRATION(testInvalidateOnTextEditWithDifferentZoomLevels);
+
+void testInvalidateOnTextEditWithDifferentZoomLevels::TestBody(const ColRowZoom& rData)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    CPPUNIT_ASSERT(pDoc);
+    OUString sZoomUnoCmd = u".uno:ZoomPlus"_ustr;
+    int nZoomLevel = rData.zoom;
+    if (nZoomLevel < 0)
+    {
+        nZoomLevel = -nZoomLevel;
+        sZoomUnoCmd = u".uno:ZoomMinus"_ustr;
+    }
+    // view #1
+    ScTestViewCallback aView1;
+    // set zoom level
+    for (int i = 0; i < nZoomLevel; ++i)
+        dispatchCommand(mxComponent, sZoomUnoCmd, {});
+    Scheduler::ProcessEventsToIdle();
+    auto* pTabViewShell1 = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pTabViewShell1);
+    // enable in place editing in view 1
+    auto& rInvalidations = aView1.m_aInvalidations;
+    pTabViewShell1->SetCursor(rData.col, rData.row);
+    Scheduler::ProcessEventsToIdle();
+    aView1.m_bInvalidateTiles = false;
+    rInvalidations.clear();
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'x', 0);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(aView1.m_bInvalidateTiles);
+    CPPUNIT_ASSERT(!rInvalidations.empty());
+    tools::Rectangle aInvRect1 = rInvalidations[0];
+    // end editing
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::ESCAPE);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::ESCAPE);
+    Scheduler::ProcessEventsToIdle();
+    // view #2
+    KitHelper::createView();
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    ScTestViewCallback aView2;
+    Scheduler::ProcessEventsToIdle();
+    auto* pTabViewShell2 = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pTabViewShell2);
+    pTabViewShell2->SetCursor(rData.col, rData.row);
+    Scheduler::ProcessEventsToIdle();
+    // text edit in view #2
+    aView1.m_bInvalidateTiles = false;
+    rInvalidations.clear();
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'x', 0);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'x', 0);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(aView1.m_bInvalidateTiles);
+    CPPUNIT_ASSERT(!rInvalidations.empty());
+    tools::Rectangle aInvRect2 = rInvalidations[0];
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Invalidation rectangle is wrong.", aInvRect1, aInvRect2);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testForeignEditOutputAreaDifferentZoom)
+{
+    // When a foreign EditView fits exactly inside its cell (no text growth),
+    // the OutputArea computed for rendering it into a painter at a different
+    // zoom must equal the painter's pixel cell rect, regardless of the zoom
+    // combination. With the prior code the editing view's zoom was multiplied
+    // instead of divided, so the relation only held when zoomOther == 1.0,
+    // which made in-progress edits invisible to other views unless the editor
+    // happened to be at 100%.
+
+    // 1000x200 twip cell:
+    //   real mm100   : 1764 x 353
+    //   px at 100%   :   67 x  13
+    //   px at 150%   :  100 x  20
+    //   px at  50%   :   33 x   7
+    // px-as-mm100 (96 DPI fixed: 2540/96 ~= 26.458):
+    //   100% : 67 * 26.458 ~= 1773
+    //   150% : 100 * 26.458 ~= 2645
+    //    50% : 33 * 26.458 ~=  873
+
+    const tools::Rectangle aOrigOA(0, 0, 1764, 353);
+    const Point aOriginAbsPx(0, 0);
+
+    struct Case
+    {
+        const char* sLabel;
+        double fThis, fOther;
+        tools::Rectangle aEditPx;
+        tools::Rectangle aOtherEdit;
+    };
+    const Case cases[] = {
+        // painter 100%, editor 150% - the broken direction prior to the fix
+        { "painter=1.0 editor=1.5", 1.0, 1.5, tools::Rectangle(0, 0, 67, 13),
+          tools::Rectangle(0, 0, 2645, 529) },
+        // painter 150%, editor 100% - worked even with the prior code
+        { "painter=1.5 editor=1.0", 1.5, 1.0, tools::Rectangle(0, 0, 100, 20),
+          tools::Rectangle(0, 0, 1773, 344) },
+        // painter 100%, editor 50% - also broken prior to the fix
+        { "painter=1.0 editor=0.5", 1.0, 0.5, tools::Rectangle(0, 0, 67, 13),
+          tools::Rectangle(0, 0, 873, 172) },
+    };
+
+    for (const auto& c : cases)
+    {
+        const tools::Rectangle aResult = ScGridWindow::ComputeForeignEditOutputArea(
+            aOrigOA, o3tl::Length::mm100, c.aOtherEdit, c.aEditPx, aOriginAbsPx, c.fThis, c.fThis,
+            c.fOther, c.fOther);
+
+        // Allow +/-2 px rounding slack from the 96 DPI px<->mm100 conversion.
+        CPPUNIT_ASSERT_MESSAGE(c.sLabel, std::abs(aResult.Left() - c.aEditPx.Left()) <= 2);
+        CPPUNIT_ASSERT_MESSAGE(c.sLabel, std::abs(aResult.Top() - c.aEditPx.Top()) <= 2);
+        CPPUNIT_ASSERT_MESSAGE(c.sLabel, std::abs(aResult.Right() - c.aEditPx.Right()) <= 2);
+        CPPUNIT_ASSERT_MESSAGE(c.sLabel, std::abs(aResult.Bottom() - c.aEditPx.Bottom()) <= 2);
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testExtendEditInvalidateRectForText)
+{
+    // A foreign view sees another view's in-progress edit only through tiles, so
+    // its invalidation must cover the whole text. The cell rectangle is widened
+    // to the text width; text that fits the cell leaves it unchanged so a short
+    // edit is not over-invalidated. Before the fix the invalidation stayed at the
+    // cell and grown text was left stale in never-repainted tiles.
+    const tools::Rectangle aCell(100, 200, 1316, 405); // 1217 x 206
+
+    // Text wider than the cell: the rectangle grows rightwards to the text width,
+    // keeping the cell's top, bottom and left.
+    const tools::Rectangle aGrown = ScGridWindow::ExtendEditInvalidateRectForText(aCell, 4000);
+    CPPUNIT_ASSERT_EQUAL(aCell.Left(), aGrown.Left());
+    CPPUNIT_ASSERT_EQUAL(aCell.Top(), aGrown.Top());
+    CPPUNIT_ASSERT_EQUAL(aCell.Bottom(), aGrown.Bottom());
+    CPPUNIT_ASSERT(aGrown.GetWidth() >= 4000);
+
+    // Text that fits inside the cell: the rectangle is left unchanged.
+    CPPUNIT_ASSERT_EQUAL(aCell, ScGridWindow::ExtendEditInvalidateRectForText(aCell, 50));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testForeignEditPaintKeepsEditArea)
+{
+    // The cell range an in-place edit covers is measured against the editing view's own output
+    // area, so a second view painting that same edit into its tiles leaves the range as it is.
+    // The paint hands the editing view an area rounded to the painting view's pixels, and a
+    // single line of text in a default row already sits within about 80 units (1/100 mm) of the
+    // height at which the edit takes in the row below. Before the fix one coarse pixel of
+    // rounding was enough to take that row in, and the painting view then drew the opaque edit
+    // rectangle over the cell below the edited one.
+    ScopedVclPtrInstance<VirtualDevice> xDevice(DeviceFormat::WITHOUT_ALPHA);
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+
+    ScTabViewShell* pView1 = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView1);
+
+    // A 256 px tile holds 3840 twips at zoom 1.0, so 3072 twips per tile is zoom 1.25. The paint
+    // picks the view whose zoom matches the tile, and every zoom here divides exactly in both
+    // places, so each paint below belongs to the view it is meant for.
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 15360, 7680));
+    pModelObj->setClientZoom(256, 256, 3072, 3072);
+    pModelObj->paintTile(*xDevice, 256, 256, 0, 0, 3072, 3072);
+    Scheduler::ProcessEventsToIdle();
+
+    // a short text in a plain cell: the edit covers that one cell
+    typeCharsInCell("text", 0, 2, pView1, pModelObj, /*bInEdit*/ false, /*bCommit*/ false);
+    Scheduler::ProcessEventsToIdle();
+
+    ScViewData& rViewData1 = pView1->GetViewData();
+    CPPUNIT_ASSERT(hasEditView(rViewData1));
+    const SCROW nEditEndRow = rViewData1.GetEditEndRow();
+    const SCCOL nEditEndCol = rViewData1.GetEditEndCol();
+    const SCCOL nEditStartCol = rViewData1.GetEditStartCol();
+    CPPUNIT_ASSERT_EQUAL(rViewData1.GetEditStartRow(), nEditEndRow);
+
+    KitHelper::createView();
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+
+    // 15360 twips per 256 px tile is zoom 0.25 and 7680 is zoom 0.5, where one pixel is worth
+    // over 100 and about 53 units. The rounding direction of the area the paint hands over
+    // follows the pixel grid, so the edit is painted at both.
+    const int aCoarseTiles[] = { 15360, 7680 };
+    for (const int nTileTwips : aCoarseTiles)
+    {
+        pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, nTileTwips, nTileTwips));
+        pModelObj->setClientZoom(256, 256, nTileTwips, nTileTwips);
+        pModelObj->paintTile(*xDevice, 256, 256, 0, 0, nTileTwips, nTileTwips);
+
+        // The range is read straight after the paint, before a pending event can restart the
+        // edit and measure the range again against view 1's own output area.
+        CPPUNIT_ASSERT_MESSAGE("view 1 is still editing the cell after the foreign paint",
+                               hasEditView(rViewData1));
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("the painting view extended the edit over further rows",
+                                     nEditEndRow, rViewData1.GetEditEndRow());
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("the painting view extended the edit over further columns",
+                                     nEditEndCol, rViewData1.GetEditEndCol());
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("the painting view moved the edit's first column",
+                                     nEditStartCol, rViewData1.GetEditStartCol());
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testForeignEditInvalidatesEveryEditedRow)
+{
+    // A view that only watches another view's edit sees it through its tiles, so it has to be
+    // told to repaint every row the text of that edit reaches. Before the fix only the row of
+    // the edited cell was invalidated, and once the text grew past the tile holding that row the
+    // watching view kept showing the cells below as they were before the edit.
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    CPPUNIT_ASSERT(pDoc);
+
+    // the watching view, which does nothing but receive the invalidations
+    ScTestViewCallback aWatchingView;
+
+    KitHelper::createView();
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    Scheduler::ProcessEventsToIdle();
+    auto* pEditingViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pEditingViewShell);
+
+    // an area tall enough for the edit to grow over several rows
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 15360, 7680));
+    Scheduler::ProcessEventsToIdle();
+
+    // Ctrl+Enter breaks the line inside the cell, so the text takes in the rows below it.
+    typeCharsInCell("a", 0, 0, pEditingViewShell, pModelObj, /*bInEdit*/ false, /*bCommit*/ false);
+    for (int i = 0; i < 4; ++i)
+    {
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::RETURN | KEY_MOD1);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::RETURN | KEY_MOD1);
+        Scheduler::ProcessEventsToIdle();
+        typeCharsInCell("a", 0, 0, pEditingViewShell, pModelObj, /*bInEdit*/ true,
+                        /*bCommit*/ false);
+    }
+
+    ScViewData& rEditingViewData = pEditingViewShell->GetViewData();
+    CPPUNIT_ASSERT(hasEditView(rEditingViewData));
+    const SCROW nFirstRow = rEditingViewData.GetEditStartRow();
+    const SCROW nLastRow = rEditingViewData.GetEditEndRow();
+    CPPUNIT_ASSERT_MESSAGE("the broken lines did not grow the edit past its own row",
+                           nLastRow > nFirstRow + 1);
+
+    // One more character: what the watching view is told to repaint has to hold the whole edit.
+    aWatchingView.m_aInvalidations.clear();
+    typeCharsInCell("a", 0, 0, pEditingViewShell, pModelObj, /*bInEdit*/ true, /*bCommit*/ false);
+    CPPUNIT_ASSERT_MESSAGE("the watching view was told nothing about the edit",
+                           !aWatchingView.m_aInvalidations.empty());
+
+    // The last row of the edit begins this far below the top of the sheet, in twips.
+    const tools::Long nLastRowTop
+        = pDoc->GetRowHeight(0, nLastRow - 1, rEditingViewData.CurrentTabForData());
+    tools::Long nInvalidatedBottom = 0;
+    for (const tools::Rectangle& rInvalidation : aWatchingView.m_aInvalidations)
+    {
+        if (rInvalidation.Bottom() > nInvalidatedBottom)
+            nInvalidatedBottom = rInvalidation.Bottom();
+    }
+    CPPUNIT_ASSERT_MESSAGE("the rows the edit grew over were left out of the invalidation",
+                           nInvalidatedBottom >= nLastRowTop);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testOpenURL)
+{
+    // Given a document that has 2 views:
+    createDoc("empty.ods");
+    int nView1 = KitHelper::getCurrentView();
+    ScTestViewCallback aView1;
+    KitHelper::createView();
+    ScTestViewCallback aView2;
+
+    // When clicking on a link in view 2, but switching to view 1 before processing async events:
+    ScGlobal::OpenURL(/*aUrl=*/u"http://www.example.com/"_ustr, /*aTarget=*/u""_ustr,
+                      /*bIgnoreSettings=*/true);
+    KitHelper::setView(nView1);
+    Scheduler::ProcessEventsToIdle();
+
+    // Then make sure view 2 gets the callback, not view 1:
+    // Without the accompanying fix in place, this test would have failed, view 1 got the hyperlink
+    // callback.
+    CPPUNIT_ASSERT(aView1.m_aHyperlinkClicked.isEmpty());
+    CPPUNIT_ASSERT(!aView2.m_aHyperlinkClicked.isEmpty());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testInvalidateForSplitPanes)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+
+    ScModelObj* pModelObj = createDoc("split.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+
+    // view
+    ScTestViewCallback aView;
+
+    // move way over to the right where BP:20 exists, enough so that rows A and B
+    // would scroll off the page and not be visible, if they were not frozen
+    pModelObj->setClientVisibleArea(tools::Rectangle(73050, 0, 94019, 7034));
+    Scheduler::ProcessEventsToIdle();
+
+    ScAddress aBP20(67, 19, 0); // BP:20
+
+    pView->SetCursor(aBP20.Col(), aBP20.Row());
+    Scheduler::ProcessEventsToIdle();
+
+    aView.m_bInvalidateTiles = false;
+    aView.m_aInvalidations.clear();
+
+    typeCharsInCell("X", aBP20.Col(), aBP20.Row(), pView, pModelObj); // Type 'X' in A1
+
+    CPPUNIT_ASSERT(aView.m_bInvalidateTiles);
+
+    // missing before fix
+    tools::Rectangle aTopLeftPane(0, 500, 3817, 742);
+    bool bFoundTopLeftPane
+        = std::find(aView.m_aInvalidations.begin(), aView.m_aInvalidations.end(), aTopLeftPane)
+          != aView.m_aInvalidations.end();
+    CPPUNIT_ASSERT_MESSAGE("The cell visible in the top left pane should be redrawn",
+                           bFoundTopLeftPane);
+
+    // missing before fix
+    tools::Rectangle aBottomLeftPane(0, 500, 3817, 3242);
+    bool bFoundBottomLeftPane
+        = std::find(aView.m_aInvalidations.begin(), aView.m_aInvalidations.end(), aBottomLeftPane)
+          != aView.m_aInvalidations.end();
+    CPPUNIT_ASSERT_MESSAGE("The cell visible in the bottom left pane should be redrawn",
+                           bFoundBottomLeftPane);
+}
+
+// Saving shouldn't trigger an invalidation
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testNoInvalidateOnSave)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+
+    loadFromFile(u"invalidate-on-save.ods");
+
+    // .uno:Save modifies the original file, make a copy first
+    saveAndReload(TestFilter::ODS);
+    ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+    CPPUNIT_ASSERT(pModelObj);
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+
+    Scheduler::ProcessEventsToIdle();
+
+    // track invalidations
+    ScTestViewCallback aView;
+
+    cpo::uno::Sequence<beans::PropertyValue> aArgs;
+    dispatchCommand(mxComponent, u".uno:Save"_ustr, aArgs);
+
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT(!aView.m_bInvalidateTiles);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCellMinimalInvalidations)
+{
+    ScAddress aA8(0, 7, 0);
+    ScAddress aD4(3, 7, 0);
+    ScAddress aD13(3, 12, 0);
+    ScAddress aD17(3, 16, 0);
+
+    ScModelObj* pModelObj = createDoc("cell-invalidations.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+
+    // Changed: Minimized invalidations (bFullRow: false)
+
+    // Common case, LTR, default cell formatting
+    cellInvalidationHelper(pModelObj, pView, aA8, true, false);
+    cellInvalidationHelper(pModelObj, pView, aD4, true, false);
+    // Left-aligned merged cells
+    cellInvalidationHelper(pModelObj, pView, aD17, true, false);
+    // Delete single cell text case
+    cellInvalidationHelper(pModelObj, pView, aA8, false, false);
+    // Paste into a single cell
+    {
+        pView->SetCursor(aD4.Col(), aD4.Row());
+        cpo::uno::Sequence<beans::PropertyValue> aArgs;
+        dispatchCommand(mxComponent, u".uno:Copy"_ustr, aArgs);
+        pView->SetCursor(aA8.Col(), aA8.Row());
+        Scheduler::ProcessEventsToIdle();
+
+        ScTestViewCallback aView;
+        dispatchCommand(mxComponent, u".uno:Paste"_ustr, aArgs);
+        Scheduler::ProcessEventsToIdle();
+
+        checkSampleInvalidation(aView, false);
+    }
+
+    // Unchanged: Non-minimized invalidations (bFullRow: true)
+
+    // Centered merged cells;
+    cellInvalidationHelper(pModelObj, pView, aD13, true, true);
+
+    // switch to RTL sheet
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::PAGEDOWN | KEY_MOD1);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::PAGEDOWN | KEY_MOD1);
+    Scheduler::ProcessEventsToIdle();
+
+    cellInvalidationHelper(pModelObj, pView, aA8, true, true);
+    cellInvalidationHelper(pModelObj, pView, aD4, true, true);
+    // Delete Text
+    cellInvalidationHelper(pModelObj, pView, aA8, false, true);
+}
+
+// That we don't end up with two views on different zooms that invalidate different
+// rectangles, each should invalidate the same rectangle
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCellInvalidationDocWithExistingZoom)
+{
+    ScAddress aB7(1, 6, 0);
+    ScopedVclPtrInstance<VirtualDevice> xDevice(DeviceFormat::WITHOUT_ALPHA);
+
+    ScModelObj* pModelObj = createDoc("cell-invalidations-200zoom-settings.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+
+    // Set View #1 to initial 100% and generate a paint
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 19845, 6405));
+    pModelObj->setClientZoom(256, 256, 1536, 1536);
+    pModelObj->paintTile(*xDevice, 3328, 512, 0, 0, 19968, 3072);
+
+    Scheduler::ProcessEventsToIdle();
+
+    int nView1 = KitHelper::getCurrentView();
+    // register to track View #1 invalidations
+    ScTestViewCallback aView1;
+
+    // Create a View #2
+    KitHelper::createView();
+    int nView2 = KitHelper::getCurrentView();
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    // register to track View #1 invalidations
+    ScTestViewCallback aView2;
+
+    // Set View #2 to initial 100% and generate a paint
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 19845, 6405));
+    pModelObj->setClientZoom(256, 256, 1536, 1536);
+    pModelObj->paintTile(*xDevice, 3328, 512, 0, 0, 19968, 3072);
+
+    // Set View #1 to 50% zoom and generate a paint
+    KitHelper::setView(nView1);
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 41150, 13250));
+    pModelObj->setClientZoom(256, 256, 3185, 3185);
+    pModelObj->paintTile(*xDevice, 3328, 512, 0, 0, 41405, 6370);
+
+    Scheduler::ProcessEventsToIdle();
+
+    // Set View #2 to 200% zoom and generate a paint
+    KitHelper::setView(nView2);
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 9574, 3090));
+    pModelObj->setClientZoom(256, 256, 741, 741);
+    pModelObj->paintTile(*xDevice, 3328, 512, 0, 0, 19968, 3072);
+
+    Scheduler::ProcessEventsToIdle();
+    aView1.m_bInvalidateTiles = false;
+    aView1.m_aInvalidations.clear();
+    aView2.m_bInvalidateTiles = false;
+    aView2.m_aInvalidations.clear();
+
+    ScTabViewShell* pView2 = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView2);
+    pView2->SetCursor(aB7.Col(), aB7.Row());
+
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::DELETE);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::DELETE);
+    Scheduler::ProcessEventsToIdle();
+
+    // The problem tested for here is with two views at different zooms then a
+    // single cell invalidation resulted in the same rectangle reported as two
+    // different invalidations rectangles of different scales. While we should
+    // get the same invalidation rectangle reported.
+    //
+    // (B7 is a good choice to use in the real world to see the effect, to both
+    // avoid getting the two rects combined into one bigger one, or to have the
+    // two separated by so much space the 2nd is off-screen and not seen
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aView1.m_aInvalidations.size());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aView2.m_aInvalidations.size());
+
+    // That they don't exactly match doesn't matter, we're not checking rounding issues,
+    // what matters is that they are not utterly different rectangles
+    // Without fix result is originally:
+    // Comparing invalidation rectangles Width expected 6214742 actual 26716502 Tolerance 50
+    CPPUNIT_ASSERT_RECTANGLE_EQUAL_WITH_TOLERANCE(aView2.m_aInvalidations[0],
+                                                  aView1.m_aInvalidations[0], 50);
+    // cool#4250: zoom values
+    pModelObj->setExportZoom(150);
+
+    {
+        cpo::uno::ContextLayer aLayer(comphelper::NewFlagContext(u"IsKitExport"_ustr));
+        save(TestFilter::ODS); // .ODS
+    }
+    xmlDocUniquePtr pSettingsXml = parseExport(u"settings.xml"_ustr);
+    // Multi-user export: don't save every user's view into the exported file
+    // assertXPath(pSettingsXml, "//config:config-item[@config:name='ViewId']", 1);
+    // Use view's logic (not technical) zoom level for export
+    assertXPathContent(pSettingsXml, "//config:config-item[@config:name='ZoomValue'][1]", u"150");
+
+    save(TestFilter::XLSX); // .XLSX
+    xmlDocUniquePtr pSheet1Xml = parseExport(u"xl/worksheets/sheet1.xml"_ustr);
+    // Use view's logic (not technical) zoom level for export
+    assertXPath(pSheet1Xml, "//x:sheetViews/x:sheetView", "zoomScale", u"150");
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCellEditLayoutSettingsSameForEveryView)
+{
+    ScModelObj* pModelObj = createDoc("cell-edit-300zoom-settings.ods");
+
+    // Set View #1 to initial 150%
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 17933, 4853));
+    pModelObj->setClientZoom(256, 256, 1333, 1333);
+
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+    pView->SetCursor(0, 4); // A5
+
+    Scheduler::ProcessEventsToIdle();
+
+    // Activate edit mode in that A5 cell
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::F2);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::F2);
+    Scheduler::ProcessEventsToIdle();
+
+    const ScViewData* pViewData1 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData1);
+
+    // Get that active EditView
+    EditView* pEditView1 = pViewData1->GetEditView(SC_SPLIT_BOTTOMLEFT);
+    CPPUNIT_ASSERT(pEditView1);
+    EditEngine& rEditEngine1 = pEditView1->getEditEngine();
+    // Every view shares the edit engine of the cell that is being edited, so it lays the text
+    // out at a fixed 1:1 reference scale that no single view's zoom moves. Each view scales
+    // that laid out text to its own zoom while it paints.
+    CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("The cell edit engine keeps a fixed reference scale",
+                                         1.0, rEditEngine1.GetRefMapMode().GetScaleX(), 0.000001);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("The cell edit engine keeps a fixed reference scale",
+                                         1.0, rEditEngine1.GetRefMapMode().GetScaleY(), 0.000001);
+
+    // Create a View #2
+    KitHelper::createView();
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+
+    // Set View #2 to the same zoom as View #1
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 17933, 4853));
+    pModelObj->setClientZoom(256, 256, 1333, 1333);
+
+    ScTabViewShell* pView2 = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView2);
+    pView2->SetCursor(0, 5); // A6
+
+    Scheduler::ProcessEventsToIdle();
+
+    // Activate edit mode in that A6 cell
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::F2);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::F2);
+    Scheduler::ProcessEventsToIdle();
+
+    const ScViewData* pViewData2 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData2);
+
+    // Get the View #2 EditView
+    EditView* pEditView2 = pViewData2->GetEditView(SC_SPLIT_BOTTOMLEFT);
+    CPPUNIT_ASSERT(pEditView2);
+    EditEngine& rEditEngine2 = pEditView2->getEditEngine();
+    CPPUNIT_ASSERT(&rEditEngine1 != &rEditEngine2);
+    // Before the fix, these had different settings, resulting in the text
+    // dancing for the second user as they toggle in and out of edit mode, but
+    // each user should have the same settings.
+    CPPUNIT_ASSERT_EQUAL(rEditEngine1.GetControlWord(), rEditEngine2.GetControlWord());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCellEditSelectionSameAtEveryZoom)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocument* pDoc = pModelObj->GetDocument();
+
+    constexpr SCCOL nCol = 0;
+    constexpr SCROW nRow = 0;
+    constexpr SCTAB nTab = 0;
+
+    // The further a selection reaches into the text, the more the width of one character after
+    // another adds up, so a long text tells two layouts apart where a short one would not.
+    pDoc->SetString(nCol, nRow, nTab,
+                    u"asdasd asdaf asdasd asdaf asdasd asdaf asdasd asdaf"_ustr);
+
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+    ScTestViewCallback aView;
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 17933, 4853));
+
+    // The rectangles that highlight the whole text of the cell while it is edited at the given
+    // zoom, each of them as "left, top, width, height" in print twips.
+    auto aSelectionAtZoom = [pModelObj, pView, &aView](int nTileTwips) -> OUString
+    {
+        pModelObj->setClientZoom(256, 256, nTileTwips, nTileTwips);
+        pView->SetCursor(nCol, nRow);
+        Scheduler::ProcessEventsToIdle();
+
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::F2);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::F2);
+        Scheduler::ProcessEventsToIdle();
+
+        aView.m_aTextSelectionResult.clear();
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_MOD1 | awt::Key::A);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, KEY_MOD1 | awt::Key::A);
+        Scheduler::ProcessEventsToIdle();
+
+        CPPUNIT_ASSERT(!aView.m_aTextSelectionResult.empty());
+        OUString aSelection;
+        for (size_t nRect = 0; nRect < aView.m_aTextSelectionResult.m_aRelRects.size(); ++nRect)
+        {
+            if (nRect > 0)
+                aSelection += u"; "_ustr;
+            const tools::Rectangle aBounds = aView.m_aTextSelectionResult.getBounds(nRect);
+            aSelection += OUString::number(aBounds.Left()) + ", " + OUString::number(aBounds.Top())
+                          + ", " + OUString::number(aBounds.GetWidth()) + ", "
+                          + OUString::number(aBounds.GetHeight());
+        }
+
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::ESCAPE);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::ESCAPE);
+        Scheduler::ProcessEventsToIdle();
+
+        return aSelection;
+    };
+
+    const OUString aSelectionAtSmallZoom = aSelectionAtZoom(3185);
+    const OUString aSelectionAtLargeZoom = aSelectionAtZoom(741);
+
+    // The rectangles of a selection inside a cell that is being edited are worked out once and
+    // sent to every view, so they have to describe the same place in the document whatever the
+    // zoom of the view that edits. Without the fix the text was laid out at that view's zoom,
+    // the rectangles came out at other widths, and a view at another zoom drew the highlight
+    // over the wrong characters.
+    CPPUNIT_ASSERT_EQUAL(aSelectionAtSmallZoom, aSelectionAtLargeZoom);
+
+    SfxViewShell::Current()->setCOKitViewCallback(nullptr);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testStatusBarLocale)
+{
+    // Given 2 views, the second's locale is set to German:
+    createDoc("empty.ods");
+    int nView1 = KitHelper::getCurrentView();
+    ScTestViewCallback aView1;
+    KitHelper::createView();
+    ScTestViewCallback aView2;
+    SfxViewShell* pView2 = SfxViewShell::Current();
+    pView2->SetKitLocale(u"de-DE"_ustr);
+    {
+        SfxViewFrame& rFrame = pView2->GetViewFrame();
+        SfxSlotPool& rSlotPool = SfxSlotPool::GetSlotPool(&rFrame);
+        uno::Reference<util::XURLTransformer> xParser(util::URLTransformer::create(m_xContext));
+        util::URL aCommandURL;
+        aCommandURL.Complete = u".uno:RowColSelCount"_ustr;
+        xParser->parseStrict(aCommandURL);
+        const SfxSlot* pSlot = rSlotPool.GetUnoSlot(aCommandURL.Path);
+        rFrame.GetBindings().GetDispatch(pSlot, aCommandURL, false);
+    }
+    aView2.m_aStateChanges.clear();
+
+    // When creating a cell selection in the 2nd view and processing jobs with the 1st view set to
+    // active:
+    comphelper::dispatchCommand(u".uno:GoDownSel"_ustr, {});
+    KitHelper::setView(nView1);
+    pView2->GetViewFrame().GetBindings().GetTimer().Invoke();
+    // Once more to hit the pImpl->bMsgDirty = false case in SfxBindings::NextJob_Impl().
+    pView2->GetViewFrame().GetBindings().GetTimer().Invoke();
+
+    // Then make sure that the locale is taken into account while producing the state changed
+    // callback:
+    auto it = aView2.m_aStateChanges.find(".uno:RowColSelCount");
+    CPPUNIT_ASSERT(it != aView2.m_aStateChanges.end());
+    std::string aLocale = it->second.get<std::string>("locale");
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: de-DE
+    // - Actual  : en-US
+    // i.e. the 2nd view got its callback with the locale of the first view, which is buggy.
+    CPPUNIT_ASSERT_EQUAL(std::string("de-DE"), aLocale);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testLongFirstColumnMouseClick)
+{
+    // Document has a long first column. We want to mouse-click on the column and
+    // check the selection changed to this column.
+
+    // The issue we want to reproduce is that the click on a cell in the first column that is
+    // very long (longer than ~800px default size of GridWindow) triggers a code-path where the cell
+    // selected is the neighbouring cell even when we clicked on the area of the first cell.
+
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+
+    ScModelObj* pModelObj = createDoc("DocumentWithLongFirstColumn.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+
+    // Fetch current view data
+    ScViewData* pViewData = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData);
+    double nPPTX = pViewData->GetPPTX();
+    double nPPTY = pViewData->GetPPTX();
+
+    // Set click position
+
+    // Left side of the first cell
+    int leftCellSideX = 1 / nPPTX; // convert pixels to logical units
+
+    // Right side of the first cell. First cell is long so click somewhere more than 800px (default of GridWindow size).
+    int rightCellSideX = 1000 / nPPTX; // convert pixels to logical units
+
+    // Vertical position - doesn't matter - select the first row
+    int y = 1 / nPPTY;
+
+    // Setup view #1
+    ScTestViewCallback aView1;
+    // Set client rect to 2000 x 2000 pixels
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 2000 / nPPTX, 2000 / nPPTY));
+    Scheduler::ProcessEventsToIdle();
+
+    // Click at on the left side of A1 cell
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN, leftCellSideX, y, /*count=*/1,
+                              /*buttons=*/1, /*modifier=*/0);
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP, leftCellSideX, y, /*count=*/1,
+                              /*buttons=*/1, /*modifier=*/0);
+    Scheduler::ProcessEventsToIdle();
+
+    // Check the A1 cell is selected in view #1
+    CPPUNIT_ASSERT_EQUAL(SCCOL(0), ScDocShell::GetViewData()->GetCurX());
+    CPPUNIT_ASSERT_EQUAL(SCROW(0), ScDocShell::GetViewData()->GetCurY());
+
+    // Click at on the right side of A1 cell
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN, rightCellSideX, y, /*count=*/1,
+                              /*buttons=*/1, /*modifier=*/0);
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP, rightCellSideX, y, /*count=*/1,
+                              /*buttons=*/1, /*modifier=*/0);
+    Scheduler::ProcessEventsToIdle();
+
+    // Check the A1 cell is selected in view #1
+    CPPUNIT_ASSERT_EQUAL(SCCOL(0), ScDocShell::GetViewData()->GetCurX());
+    CPPUNIT_ASSERT_EQUAL(SCROW(0), ScDocShell::GetViewData()->GetCurY());
+
+    // Try to check the same scenario in a new view
+
+    // Setup view #2
+    KitHelper::createView();
+    int nView2 = KitHelper::getCurrentView();
+    ScTestViewCallback aView2;
+    // Set client rect to 2000 x 2000 pixels
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 2000 / nPPTX, 2000 / nPPTY));
+
+    // Let's make sure we are in view #2
+    KitHelper::setView(nView2);
+    Scheduler::ProcessEventsToIdle();
+
+    // Click at on the left side of A1 cell
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN, leftCellSideX, y, /*count=*/1,
+                              /*buttons=*/1, /*modifier=*/0);
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP, leftCellSideX, y, /*count=*/1,
+                              /*buttons=*/1, /*modifier=*/0);
+    Scheduler::ProcessEventsToIdle();
+
+    // Check the A1 cell is selected in view #2
+    CPPUNIT_ASSERT_EQUAL(SCCOL(0), ScDocShell::GetViewData()->GetCurX());
+    CPPUNIT_ASSERT_EQUAL(SCROW(0), ScDocShell::GetViewData()->GetCurY());
+
+    // Click at on the right side of A1 cell
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN, rightCellSideX, y, /*count=*/1,
+                              /*buttons=*/1, /*modifier=*/0);
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP, rightCellSideX, y, /*count=*/1,
+                              /*buttons=*/1, /*modifier=*/0);
+    Scheduler::ProcessEventsToIdle();
+
+    // Check the A1 cell is selected in view #2
+    CPPUNIT_ASSERT_EQUAL(SCCOL(0), ScDocShell::GetViewData()->GetCurX());
+    CPPUNIT_ASSERT_EQUAL(SCROW(0), ScDocShell::GetViewData()->GetCurY());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testClickInFirstColumnWidenedByOtherView)
+{
+    // A click in column A selects A even when the click lands further right than the grid
+    // window of the clicking view, which keeps the width of the document from before
+    // another view widened the column.
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    ScViewData* pViewData1 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData1);
+    ScDocument& rDoc = pViewData1->GetDocument();
+    const double fPPTX = pViewData1->GetPPTX();
+    const int nView1 = KitHelper::getCurrentView();
+    // A small viewport keeps the tiled area, and with it the grid window, narrower than the
+    // widest column the width command accepts.
+    const tools::Rectangle aVisArea(0, 0, 5000, 5000);
+    pModelObj->setClientVisibleArea(aVisArea);
+    Scheduler::ProcessEventsToIdle();
+
+    // The second view joins at the same zoom. Tiles for that zoom are painted through the
+    // first view, so the grid window of this view keeps the width it gets here.
+    KitHelper::createView();
+    const int nView2 = KitHelper::getCurrentView();
+    pModelObj->setClientVisibleArea(aVisArea);
+    Scheduler::ProcessEventsToIdle();
+    ScViewData* pViewData2 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData2);
+    const tools::Long nGridWidthPx = pViewData2->GetActiveWin()->GetSizePixel().Width();
+
+    // The first view makes column A wider than the area the second view was sized for.
+    KitHelper::setView(nView1);
+    const sal_uInt16 nWidthMm100 = 53000;
+    dispatchCommand(mxComponent, u".uno:ColumnWidth"_ustr,
+                    comphelper::InitPropertySequence(
+                        { { u"ColumnWidth"_ustr, cpo::uno::Any(nWidthMm100) },
+                          { u"Column"_ustr, cpo::uno::Any(sal_Int16(1)) } }));
+    Scheduler::ProcessEventsToIdle();
+    const sal_uInt16 nWidthTwips = rDoc.GetColWidth(0, 0);
+    CPPUNIT_ASSERT(nWidthTwips > 20000);
+    CPPUNIT_ASSERT(nGridWidthPx < ScViewData::ToPixel(nWidthTwips, fPPTX));
+
+    // A click near the right edge of A1 from the second view.
+    KitHelper::setView(nView2);
+    const int nClickX = nWidthTwips - 1000;
+    const int nClickY = 100;
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN, nClickX, nClickY, /*count=*/1,
+                              /*buttons=*/1, /*modifier=*/0);
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP, nClickX, nClickY, /*count=*/1,
+                              /*buttons=*/1, /*modifier=*/0);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(SCCOL(0), pViewData2->GetCurX());
+    CPPUNIT_ASSERT_EQUAL(SCROW(0), pViewData2->GetCurY());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testColumnsKeepPositionAfterDeleteWithFilteredRows)
+{
+    // Deleting a column on a sheet with filtered rows
+    // Browser have to be told that the column geometry changed, on the delete, its undo and its redo.
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScViewData* pViewData1 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData1);
+    ScDocument& rDoc = pViewData1->GetDocument();
+    const int nView1 = KitHelper::getCurrentView();
+
+    // A wide column A moves every column to its right by a visible amount once it is gone.
+    const sal_uInt16 nWideTwips = 4000;
+    rDoc.SetColWidth(0, 0, nWideTwips);
+    const sal_uInt16 nDefaultTwips = rDoc.GetColWidth(1, 0);
+    CPPUNIT_ASSERT(nDefaultTwips < nWideTwips);
+    // A filtered row inside the selection is what sends a whole-column delete down the
+    // multi-selection path.
+    rDoc.SetRowFiltered(3, 3, 0, true);
+    rDoc.SetRowHidden(3, 3, 0, true);
+
+    KitHelper::createView();
+    const int nView2 = KitHelper::getCurrentView();
+    ScTestViewCallback aView2;
+    ScViewData* pViewData2 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData2);
+    const tools::Rectangle aVisArea(0, 0, 20000, 5000);
+    pModelObj->setClientVisibleArea(aVisArea);
+    // The header request is how a client viewport makes the view record column position
+    // anchors for this area.
+    {
+        tools::JsonWriter aJsonWriter;
+        pModelObj->getRowColumnHeaders(aVisArea, aJsonWriter);
+        aJsonWriter.finishAndGetAsOString();
+    }
+    Scheduler::ProcessEventsToIdle();
+
+    // The view records a column position anchor at the last visible column; a probe just past
+    // it resolves from that anchor, so a stale anchor shows up as a shifted position.
+    const double fPPTX = pViewData2->GetPPTX();
+    const SCCOL nProbeCol = 14;
+    auto expectedColumnPosition = [&rDoc, fPPTX]() {
+        tools::Long nPixels = 0;
+        for (SCCOL nCol = 0; nCol < nProbeCol; ++nCol)
+            nPixels += ScViewData::ToPixel(rDoc.GetColWidth(nCol, 0), fPPTX);
+        return nPixels;
+    };
+    auto viewColumnPosition = [pViewData2]() {
+        return pViewData2->GetScrPos(nProbeCol, 0, pViewData2->GetActivePart()).X();
+    };
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(), viewColumnPosition());
+
+    // The first view deletes column A.
+    KitHelper::setView(nView1);
+    pViewData1->GetViewShell()->MarkColumns(0, 0);
+    ScRange aMarked;
+    CPPUNIT_ASSERT_EQUAL(SC_MARK_SIMPLE_FILTERED, pViewData1->GetSimpleArea(aMarked));
+    aView2.m_sInvalidateSheetGeometry = ""_ostr;
+    dispatchCommand(mxComponent, u".uno:DeleteColumns"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(nDefaultTwips, rDoc.GetColWidth(0, 0));
+
+    // The other view places the probe column where the document widths put it, and its
+    // client is told to re-read the column geometry.
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(), viewColumnPosition());
+    CPPUNIT_ASSERT_EQUAL("columns"_ostr, aView2.m_sInvalidateSheetGeometry);
+
+    aView2.m_sInvalidateSheetGeometry = ""_ostr;
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(nWideTwips, rDoc.GetColWidth(0, 0));
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(), viewColumnPosition());
+    CPPUNIT_ASSERT_EQUAL("columns"_ostr, aView2.m_sInvalidateSheetGeometry);
+
+    aView2.m_sInvalidateSheetGeometry = ""_ostr;
+    dispatchCommand(mxComponent, u".uno:Redo"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(nDefaultTwips, rDoc.GetColWidth(0, 0));
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(), viewColumnPosition());
+    CPPUNIT_ASSERT_EQUAL("columns"_ostr, aView2.m_sInvalidateSheetGeometry);
+
+    KitHelper::setView(nView2);
+    Scheduler::ProcessEventsToIdle();
+}
+
+namespace
+{
+// Makes the view record column position anchors for the area a client viewport shows.
+void requestColumnAnchors(ScModelObj* pModelObj, const tools::Rectangle& rArea)
+{
+    pModelObj->setClientVisibleArea(rArea);
+    tools::JsonWriter aJsonWriter;
+    pModelObj->getRowColumnHeaders(rArea, aJsonWriter);
+    aJsonWriter.finishAndGetAsOString();
+    Scheduler::ProcessEventsToIdle();
+}
+
+tools::Long expectedColumnPosition(const ScDocument& rDoc, double fPPTX, SCTAB nTab, SCCOL nCol)
+{
+    tools::Long nPixels = 0;
+    for (SCCOL nC = 0; nC < nCol; ++nC)
+        nPixels += ScViewData::ToPixel(rDoc.GetColWidth(nC, nTab), fPPTX);
+    return nPixels;
+}
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testColumnsKeepPositionAfterWidthUndoFromOtherSheet)
+{
+    // Undo of a column width change made on one sheet while the undoing view shows another
+    // sheet has to drop the cached column positions of the changed sheet in every view and
+    // tell the clients on that sheet that the column geometry changed.
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScViewData* pViewData1 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData1);
+    ScDocument& rDoc = pViewData1->GetDocument();
+    pViewData1->GetDocShell()->GetDocFunc().InsertTable(1, u"Second"_ustr, false, true);
+    const int nView1 = KitHelper::getCurrentView();
+
+    // The second view stays on the first sheet and resolves column positions there.
+    KitHelper::createView();
+    const int nView2 = KitHelper::getCurrentView();
+    ScTestViewCallback aView2;
+    ScViewData* pViewData2 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData2);
+    requestColumnAnchors(pModelObj, tools::Rectangle(0, 0, 20000, 5000));
+    const double fPPTX = pViewData2->GetPPTX();
+    // A probe just past the last visible column resolves from the anchor recorded there.
+    const SCCOL nProbeCol = 18;
+    auto viewColumnPosition = [pViewData2]() {
+        return pViewData2->GetScrPos(nProbeCol, 0, pViewData2->GetActivePart()).X();
+    };
+
+    KitHelper::setView(nView1);
+    const sal_uInt16 nDefaultTwips = rDoc.GetColWidth(0, 0);
+    dispatchCommand(mxComponent, u".uno:ColumnWidth"_ustr,
+                    comphelper::InitPropertySequence(
+                        { { u"ColumnWidth"_ustr, cpo::uno::Any(sal_uInt16(5000)) },
+                          { u"Column"_ustr, cpo::uno::Any(sal_Int16(1)) } }));
+    Scheduler::ProcessEventsToIdle();
+    const sal_uInt16 nWideTwips = rDoc.GetColWidth(0, 0);
+    CPPUNIT_ASSERT(nWideTwips > nDefaultTwips);
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(rDoc, fPPTX, 0, nProbeCol), viewColumnPosition());
+
+    // The first view undoes the change while showing the second sheet.
+    pViewData1->GetViewShell()->SetTabNo(1);
+    Scheduler::ProcessEventsToIdle();
+    aView2.m_sInvalidateSheetGeometry = ""_ostr;
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(nDefaultTwips, rDoc.GetColWidth(0, 0));
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(rDoc, fPPTX, 0, nProbeCol), viewColumnPosition());
+    CPPUNIT_ASSERT_EQUAL("columns sizes hidden filtered"_ostr, aView2.m_sInvalidateSheetGeometry);
+
+    // The same for redo.
+    pViewData1->GetViewShell()->SetTabNo(1);
+    Scheduler::ProcessEventsToIdle();
+    aView2.m_sInvalidateSheetGeometry = ""_ostr;
+    dispatchCommand(mxComponent, u".uno:Redo"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(nWideTwips, rDoc.GetColWidth(0, 0));
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(rDoc, fPPTX, 0, nProbeCol), viewColumnPosition());
+    CPPUNIT_ASSERT_EQUAL("columns sizes hidden filtered"_ostr, aView2.m_sInvalidateSheetGeometry);
+
+    KitHelper::setView(nView2);
+    Scheduler::ProcessEventsToIdle();
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testColumnsKeepPositionAfterWidthChangeOnSelectedSheets)
+{
+    // A column width change with several sheets selected changes the column on every selected
+    // sheet. A view showing one of the other sheets has to drop its cached column positions
+    // there, and its client has to be told that the column geometry changed, on the change,
+    // its undo and its redo.
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScViewData* pViewData1 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData1);
+    ScDocument& rDoc = pViewData1->GetDocument();
+    pViewData1->GetDocShell()->GetDocFunc().InsertTable(1, u"Second"_ustr, false, true);
+    const int nView1 = KitHelper::getCurrentView();
+
+    // The second view shows the second sheet and resolves column positions there.
+    KitHelper::createView();
+    const int nView2 = KitHelper::getCurrentView();
+    ScTestViewCallback aView2;
+    ScViewData* pViewData2 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData2);
+    pViewData2->GetViewShell()->SetTabNo(1);
+    requestColumnAnchors(pModelObj, tools::Rectangle(0, 0, 20000, 5000));
+    const double fPPTX = pViewData2->GetPPTX();
+    const SCCOL nProbeCol = 18;
+    auto viewColumnPosition = [pViewData2]() {
+        return pViewData2->GetScrPos(nProbeCol, 0, pViewData2->GetActivePart()).X();
+    };
+
+    // The first view selects both sheets and widens column A.
+    KitHelper::setView(nView1);
+    pViewData1->GetMarkData().SelectTable(1, true);
+    const sal_uInt16 nDefaultTwips = rDoc.GetColWidth(0, 1);
+    aView2.m_sInvalidateSheetGeometry = ""_ostr;
+    dispatchCommand(mxComponent, u".uno:ColumnWidth"_ustr,
+                    comphelper::InitPropertySequence(
+                        { { u"ColumnWidth"_ustr, cpo::uno::Any(sal_uInt16(5000)) },
+                          { u"Column"_ustr, cpo::uno::Any(sal_Int16(1)) } }));
+    Scheduler::ProcessEventsToIdle();
+    const sal_uInt16 nWideTwips = rDoc.GetColWidth(0, 1);
+    CPPUNIT_ASSERT(nWideTwips > nDefaultTwips);
+    CPPUNIT_ASSERT_EQUAL(nWideTwips, rDoc.GetColWidth(0, 0));
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(rDoc, fPPTX, 1, nProbeCol), viewColumnPosition());
+    CPPUNIT_ASSERT_EQUAL("columns sizes hidden filtered"_ostr, aView2.m_sInvalidateSheetGeometry);
+
+    aView2.m_sInvalidateSheetGeometry = ""_ostr;
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(nDefaultTwips, rDoc.GetColWidth(0, 1));
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(rDoc, fPPTX, 1, nProbeCol), viewColumnPosition());
+    CPPUNIT_ASSERT_EQUAL("columns sizes hidden filtered"_ostr, aView2.m_sInvalidateSheetGeometry);
+
+    aView2.m_sInvalidateSheetGeometry = ""_ostr;
+    dispatchCommand(mxComponent, u".uno:Redo"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(nWideTwips, rDoc.GetColWidth(0, 1));
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(rDoc, fPPTX, 1, nProbeCol), viewColumnPosition());
+    CPPUNIT_ASSERT_EQUAL("columns sizes hidden filtered"_ostr, aView2.m_sInvalidateSheetGeometry);
+
+    KitHelper::setView(nView2);
+    Scheduler::ProcessEventsToIdle();
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testColumnsKeepPositionAfterWholeColumnPasteUndo)
+{
+    // Pasting a whole column carries its width. Undo and redo of that paste put the width
+    // back and forth, so every view has to drop its cached column positions of that sheet
+    // each time and the clients have to be told that the column geometry changed.
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScViewData* pViewData1 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData1);
+    ScDocument& rDoc = pViewData1->GetDocument();
+    const int nView1 = KitHelper::getCurrentView();
+    const sal_uInt16 nWideTwips = 4000;
+    rDoc.SetColWidth(0, 0, nWideTwips);
+    const sal_uInt16 nDefaultTwips = rDoc.GetColWidth(2, 0);
+    CPPUNIT_ASSERT(nDefaultTwips < nWideTwips);
+
+    KitHelper::createView();
+    const int nView2 = KitHelper::getCurrentView();
+    ScTestViewCallback aView2;
+    ScViewData* pViewData2 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData2);
+    requestColumnAnchors(pModelObj, tools::Rectangle(0, 0, 20000, 5000));
+    const double fPPTX = pViewData2->GetPPTX();
+    const SCCOL nProbeCol = 18;
+    auto viewColumnPosition = [pViewData2]() {
+        return pViewData2->GetScrPos(nProbeCol, 0, pViewData2->GetActivePart()).X();
+    };
+    auto columnsWereInvalidated = [&aView2]() {
+        for (const OString& rPayload : aView2.m_aSheetGeometryInvalidations)
+            if (rPayload.startsWith("all") || rPayload.startsWith("columns"))
+                return true;
+        return false;
+    };
+
+    // The first view copies the wide column A onto column C.
+    KitHelper::setView(nView1);
+    ScTabViewShell* pView1 = pViewData1->GetViewShell();
+    pView1->MarkColumns(0, 0);
+    dispatchCommand(mxComponent, u".uno:Copy"_ustr, {});
+    pView1->MarkColumns(2, 0);
+    aView2.m_aSheetGeometryInvalidations.clear();
+    dispatchCommand(mxComponent, u".uno:Paste"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(nWideTwips, rDoc.GetColWidth(2, 0));
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(rDoc, fPPTX, 0, nProbeCol), viewColumnPosition());
+    CPPUNIT_ASSERT(columnsWereInvalidated());
+
+    aView2.m_aSheetGeometryInvalidations.clear();
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(nDefaultTwips, rDoc.GetColWidth(2, 0));
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(rDoc, fPPTX, 0, nProbeCol), viewColumnPosition());
+    CPPUNIT_ASSERT(columnsWereInvalidated());
+
+    aView2.m_aSheetGeometryInvalidations.clear();
+    dispatchCommand(mxComponent, u".uno:Redo"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(nWideTwips, rDoc.GetColWidth(2, 0));
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(rDoc, fPPTX, 0, nProbeCol), viewColumnPosition());
+    CPPUNIT_ASSERT(columnsWereInvalidated());
+
+    KitHelper::setView(nView2);
+    Scheduler::ProcessEventsToIdle();
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testRowsKeepPositionAfterClearOutlineUndo)
+{
+    // Removing all outlines shows the rows the groups had hidden, and the undo hides them
+    // again. Every view has to drop its cached row positions of that sheet each time and the
+    // clients have to be told that the row geometry changed.
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScViewData* pViewData1 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData1);
+    ScDocument& rDoc = pViewData1->GetDocument();
+    const int nView1 = KitHelper::getCurrentView();
+
+    // A hidden row group above the probe row, made through the API before any view caches
+    // positions.
+    uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<container::XIndexAccess> xSheets(xDoc->getSheets(), uno::UNO_QUERY_THROW);
+    uno::Reference<sheet::XSheetOutline> xOutline(xSheets->getByIndex(0), uno::UNO_QUERY_THROW);
+    const table::CellRangeAddress aGroup(0, 0, 1, 0, 4);
+    xOutline->group(aGroup, table::TableOrientation_ROWS);
+    xOutline->hideDetail(aGroup);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(rDoc.RowHidden(1, 0));
+    CPPUNIT_ASSERT(rDoc.RowHidden(4, 0));
+
+    KitHelper::createView();
+    const int nView2 = KitHelper::getCurrentView();
+    ScTestViewCallback aView2;
+    ScViewData* pViewData2 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData2);
+    requestColumnAnchors(pModelObj, tools::Rectangle(0, 0, 10000, 5000));
+    const double fPPTY = pViewData2->GetPPTY();
+    const SCROW nProbeRow = 25;
+    auto expectedRowPosition = [&rDoc, fPPTY]() {
+        tools::Long nPixels = 0;
+        for (SCROW nRow = 0; nRow < nProbeRow; ++nRow)
+            if (sal_uInt16 nHeight = rDoc.GetRowHeight(nRow, 0))
+                nPixels += ScViewData::ToPixel(nHeight, fPPTY);
+        return nPixels;
+    };
+    auto viewRowPosition = [pViewData2]() {
+        return pViewData2->GetScrPos(0, nProbeRow, pViewData2->GetActivePart()).Y();
+    };
+    auto rowsWereInvalidated = [&aView2]() {
+        for (const OString& rPayload : aView2.m_aSheetGeometryInvalidations)
+            if (rPayload.startsWith("all") || rPayload.startsWith("rows"))
+                return true;
+        return false;
+    };
+    CPPUNIT_ASSERT_EQUAL(expectedRowPosition(), viewRowPosition());
+
+    // The first view removes all outlines, which shows the hidden rows.
+    KitHelper::setView(nView1);
+    aView2.m_aSheetGeometryInvalidations.clear();
+    dispatchCommand(mxComponent, u".uno:ClearOutline"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(!rDoc.RowHidden(1, 0));
+    CPPUNIT_ASSERT_EQUAL(expectedRowPosition(), viewRowPosition());
+    CPPUNIT_ASSERT(rowsWereInvalidated());
+
+    aView2.m_aSheetGeometryInvalidations.clear();
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(rDoc.RowHidden(1, 0));
+    CPPUNIT_ASSERT_EQUAL(expectedRowPosition(), viewRowPosition());
+    CPPUNIT_ASSERT(rowsWereInvalidated());
+
+    aView2.m_aSheetGeometryInvalidations.clear();
+    dispatchCommand(mxComponent, u".uno:Redo"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(!rDoc.RowHidden(1, 0));
+    CPPUNIT_ASSERT_EQUAL(expectedRowPosition(), viewRowPosition());
+    CPPUNIT_ASSERT(rowsWereInvalidated());
+
+    KitHelper::setView(nView2);
+    Scheduler::ProcessEventsToIdle();
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testColumnsFollowSheetAfterWatchedSheetDeleted)
+{
+    // Deleting the sheet a view shows moves that view to the sheet that takes its index.
+    // The client of that view keeps a geometry per sheet index, so it has to be told that
+    // the geometry of its sheet changed, on the delete and on its undo.
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScViewData* pViewData1 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData1);
+    ScDocShell* pDocSh = pViewData1->GetDocShell();
+    CPPUNIT_ASSERT(pDocSh);
+    ScDocument& rDoc = pViewData1->GetDocument();
+    const int nView1 = KitHelper::getCurrentView();
+    pDocSh->GetDocFunc().InsertTable(1, u"Second"_ustr, false, true);
+    pDocSh->GetDocFunc().InsertTable(2, u"Third"_ustr, false, true);
+    // The watched sheet has a wide column A, the sheet after it keeps the default widths.
+    const sal_uInt16 nWideTwips = 4000;
+    rDoc.SetColWidth(0, 1, nWideTwips);
+    const sal_uInt16 nDefaultTwips = rDoc.GetColWidth(0, 2);
+    CPPUNIT_ASSERT(nDefaultTwips < nWideTwips);
+
+    // The second view shows the second sheet and resolves column positions there.
+    KitHelper::createView();
+    const int nView2 = KitHelper::getCurrentView();
+    ScTestViewCallback aView2;
+    ScViewData* pViewData2 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData2);
+    pViewData2->GetViewShell()->SetTabNo(1);
+    requestColumnAnchors(pModelObj, tools::Rectangle(0, 0, 20000, 5000));
+    const double fPPTX = pViewData2->GetPPTX();
+    const SCCOL nProbeCol = 18;
+    auto viewColumnPosition = [pViewData2]() {
+        return pViewData2->GetScrPos(nProbeCol, 0, pViewData2->GetActivePart()).X();
+    };
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(rDoc, fPPTX, 1, nProbeCol), viewColumnPosition());
+
+    // A third view shows the third sheet, which only moves to the index of the deleted one.
+    KitHelper::createView();
+    ScTestViewCallback aView3;
+    ScViewData* pViewData3 = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData3);
+    pViewData3->GetViewShell()->SetTabNo(2);
+    Scheduler::ProcessEventsToIdle();
+
+    // The first view deletes the second sheet; the second view lands on the former third
+    // sheet, which now has the index of the deleted one.
+    KitHelper::setView(nView1);
+    aView2.m_sInvalidateSheetGeometry = ""_ostr;
+    aView3.m_sInvalidateSheetGeometry = ""_ostr;
+    CPPUNIT_ASSERT(pDocSh->GetDocFunc().DeleteTable(1, true));
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(SCTAB(2), rDoc.GetTableCount());
+    CPPUNIT_ASSERT_EQUAL(SCTAB(1), pViewData2->GetTabNumber());
+    CPPUNIT_ASSERT_EQUAL(nDefaultTwips, rDoc.GetColWidth(0, 1));
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(rDoc, fPPTX, 1, nProbeCol), viewColumnPosition());
+    CPPUNIT_ASSERT_EQUAL("all"_ostr, aView2.m_sInvalidateSheetGeometry);
+
+    // The third view kept its sheet, so its client has nothing to fetch.
+    CPPUNIT_ASSERT_EQUAL(SCTAB(1), pViewData3->GetTabNumber());
+    CPPUNIT_ASSERT_EQUAL(""_ostr, aView3.m_sInvalidateSheetGeometry);
+
+    // Undo brings the wide sheet back at the same index.
+    aView2.m_sInvalidateSheetGeometry = ""_ostr;
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(SCTAB(3), rDoc.GetTableCount());
+    CPPUNIT_ASSERT_EQUAL(nWideTwips, rDoc.GetColWidth(0, 1));
+    CPPUNIT_ASSERT_EQUAL(expectedColumnPosition(rDoc, fPPTX, pViewData2->GetTabNumber(), nProbeCol),
+                         viewColumnPosition());
+    CPPUNIT_ASSERT_EQUAL("all"_ostr, aView2.m_sInvalidateSheetGeometry);
+
+    KitHelper::setView(nView2);
+    Scheduler::ProcessEventsToIdle();
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testSheetGeometryDataNamesItsSheet)
+{
+    // The geometry reply names the sheet it describes by index and by the hash the status
+    // lists for that sheet, so a client can tell a reply for another sheet from one for the
+    // sheet it shows.
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScViewData* pViewData = ScDocShell::GetViewData();
+    CPPUNIT_ASSERT(pViewData);
+    ScDocument& rDoc = pViewData->GetDocument();
+    pViewData->GetDocShell()->GetDocFunc().InsertTable(1, u"Second"_ustr, false, true);
+
+    auto readSheetOfReply = [pModelObj](SCTAB& rPart, OString& rHash) {
+        const std::string aReply = pModelObj->getSheetGeometryData(
+            /*bColumns=*/true, /*bRows=*/true, /*bSizes=*/true, /*bHidden=*/true,
+            /*bFiltered=*/true, /*bGroups=*/true);
+        std::stringstream aStream(aReply);
+        boost::property_tree::ptree aTree;
+        boost::property_tree::read_json(aStream, aTree);
+        rPart = aTree.get<SCTAB>("part");
+        rHash = OString(aTree.get<std::string>("hash").c_str());
+    };
+    auto expectedHash = [&rDoc](SCTAB nTab) -> OString {
+        sal_Int64 nHashCode = 0;
+        CPPUNIT_ASSERT(rDoc.GetHashCode(nTab, nHashCode));
+        return OString::number(nHashCode);
+    };
+
+    SCTAB nPart = -1;
+    OString aHash;
+    readSheetOfReply(nPart, aHash);
+    CPPUNIT_ASSERT_EQUAL(SCTAB(0), nPart);
+    CPPUNIT_ASSERT_EQUAL(expectedHash(0), aHash);
+
+    // The reply follows the sheet the view shows.
+    pViewData->GetViewShell()->SetTabNo(1);
+    readSheetOfReply(nPart, aHash);
+    CPPUNIT_ASSERT_EQUAL(SCTAB(1), nPart);
+    CPPUNIT_ASSERT_EQUAL(expectedHash(1), aHash);
+    CPPUNIT_ASSERT(expectedHash(1) != expectedHash(0));
+}
+
+// if we extend the tiled area to the right and bottom we want two resulting area
+// that don't overlap. If they overlap that typically creates an unnecessary full
+// screen invalidation.
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testExtendedAreasDontOverlap)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+
+    // Set an arbitrary initial size smaller than the final size
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 1000, 1000));
+
+    Scheduler::ProcessEventsToIdle();
+
+    // register to track View #1 invalidations
+    ScTestViewCallback aView1;
+
+    // extend to the right and bottom
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 39750, 12780));
+
+    Scheduler::ProcessEventsToIdle();
+
+    // we should get two rectangles for the two new areas
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aView1.m_aInvalidations.size());
+
+    // And those should not overlap, otherwise they would merge to form
+    // a mega rectangle, which defeats the purpose of creating two rects
+    // in the first place.
+    CPPUNIT_ASSERT_MESSAGE("Invalidations should not overlap",
+                           !aView1.m_aInvalidations[0].Overlaps(aView1.m_aInvalidations[1]));
+
+    // But they should be adjacent
+    CPPUNIT_ASSERT_EQUAL(aView1.m_aInvalidations[0].Top()
+                             + aView1.m_aInvalidations[0].GetSize().Height(),
+                         aView1.m_aInvalidations[1].Top());
+}
+
+// Ensure that editing a shape not in the topleft tile has its text shown inside the shape
+// center while editing
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testEditShapeText)
+{
+    ScModelObj* pModelObj = createDoc("edit-shape-text.ods");
+
+    // Set View to initial 100%
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, 28050, 10605));
+    pModelObj->setClientZoom(256, 256, 1920, 1920);
+
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView);
+
+    const bool bShapeSelected = pView->SelectObject(u"Shape 1");
+    CPPUNIT_ASSERT(bShapeSelected);
+
+    CPPUNIT_ASSERT(ScDocShell::GetViewData()->GetScDrawView()->GetMarkedObjectList().GetMarkCount()
+                   != 0);
+
+    Scheduler::ProcessEventsToIdle();
+
+    // Enter editing mode, shape start with no text
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::F2);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::F2);
+
+    Scheduler::ProcessEventsToIdle();
+
+    // Grab a snapshot of the center of the shape
+    Bitmap aBitmapBefore = getTile(pModelObj, 4096, 3584, 15360, 7680);
+
+    // reuse this to type into the active shape edit
+    typeCharsInCell("MMMMMMM", 0, 0, pView, pModelObj, true, false);
+
+    // Grab a new snapshot of the center of the shape
+    Bitmap aBitmapAfter = getTile(pModelObj, 4096, 3584, 15360, 7680);
+
+    // Without the fix, the text is not inside this tile and the before and
+    // after are the same.
+    CPPUNIT_ASSERT_MESSAGE("Text is not visible", aBitmapBefore != aBitmapAfter);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testNumberFormatLocaleMultiUser)
+{
+    {
+        // setup core language to FR as it will be the first session
+        SvtSysLocaleOptions aLocalOptions;
+        aLocalOptions.SetLocaleConfigString(u"fr-FR"_ustr);
+        aLocalOptions.SetUILocaleConfigString(u"fr-FR"_ustr);
+        aLocalOptions.Commit();
+
+        loadFromFile(u"numlocale.xlsx");
+
+        ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+        CPPUNIT_ASSERT(pModelObj);
+
+        pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+        ScDocument* pDoc = pModelObj->GetDocument();
+
+        int nViewFR = KitHelper::getCurrentView();
+        ScTestViewCallback aView1;
+        SfxViewShell* pViewFR = SfxViewShell::Current();
+        pViewFR->SetKitLocale(u"fr-FR"_ustr);
+
+        // modify G12 with FR and use French keywords in the format
+        KitHelper::setView(nViewFR);
+
+        sal_Int32 nCheckPos;
+        SvNumFormatType nType;
+        sal_uInt32 nFormat;
+        OUString aNumberFormat(u"JJ/MM/AAAA"_ustr);
+        SvNumberFormatter* pFormatter = pDoc->GetFormatTable();
+        pFormatter->PutEntry(aNumberFormat, nCheckPos, nType, nFormat);
+        ScAddress aCellPos1(/*nColP=*/6, /*nRowP=*/11, /*nTabP=*/0);
+        pDoc->SetNumberFormat(aCellPos1, nFormat);
+
+        Scheduler::ProcessEventsToIdle();
+    }
+
+    {
+        // now setup DE language in core
+        SvtSysLocaleOptions aLocalOptions;
+        aLocalOptions.SetLocaleConfigString(u"de-DE"_ustr);
+        aLocalOptions.SetUILocaleConfigString(u"de-DE"_ustr);
+        aLocalOptions.Commit();
+
+        // save and reopen
+        // .uno:Save modifies the original file, make a copy first
+        saveAndReload(TestFilter::XLSM);
+
+        ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+        CPPUNIT_ASSERT(pModelObj);
+
+        ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+        CPPUNIT_ASSERT(pView);
+
+        Scheduler::ProcessEventsToIdle();
+
+        cpo::uno::Sequence<beans::PropertyValue> aArgs;
+        dispatchCommand(mxComponent, u".uno:Save"_ustr, aArgs);
+
+        Scheduler::ProcessEventsToIdle();
+
+        ScDocument* pDoc = pModelObj->GetDocument();
+
+        // verify that format is correct (German), doesn't have any "string" inside
+        sal_uInt32 nNumberFormat = pDoc->GetNumberFormat(/*col=*/6, /*row=*/11, /*tab=*/0);
+        const SvNumberformat* pNumberFormat = pDoc->GetFormatTable()->GetEntry(nNumberFormat);
+        CPPUNIT_ASSERT_EQUAL(u"TT.MM.JJ"_ustr, pNumberFormat->GetFormatstring());
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testLeftOverflowEdit)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("right-aligned-with-overflow.ods");
+    ScTestViewCallback aView;
+
+    // Go to Cell B5000
+    cpo::uno::Sequence<beans::PropertyValue> aPropertyValues = {
+        comphelper::makePropertyValue(u"ToPoint"_ustr, u"$B$5000"_ustr),
+    };
+    dispatchCommand(mxComponent, u".uno:GoToCell"_ustr, aPropertyValues);
+
+    // Enter edit mode and select all text.
+    aView.m_aTextSelectionResult.clear();
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::F2);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::F2);
+    Scheduler::ProcessEventsToIdle();
+    // CTRL + A
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_MOD1 | awt::Key::A);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, KEY_MOD1 | awt::Key::A);
+    Scheduler::ProcessEventsToIdle();
+
+    // Without the accompanying fix this would fail with
+    // - Expected: 20
+    // - Actual  : 1300
+    CPPUNIT_ASSERT_EQUAL(tools::Long(20), aView.m_aTextSelectionResult.m_aRefPoint.getX());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testFreezeRowOrColumn)
+{
+    createDoc("empty.ods");
+    ScTestViewCallback aView;
+    SfxViewShell* pView = SfxViewShell::Current();
+
+    // Freeze panes on a column and receive the proper state back
+    aView.m_aStateChanges.clear();
+    cpo::uno::Sequence<beans::PropertyValue> aPropertyValues = {
+        comphelper::makePropertyValue(u"Index"_ustr, cpo::uno::Any(static_cast<sal_Int32>(8))),
+    };
+    comphelper::dispatchCommand(u".uno:FreezePanesColumn"_ustr, aPropertyValues);
+    Scheduler::ProcessEventsToIdle();
+    pView->GetViewFrame().GetBindings().GetTimer().Invoke();
+    pView->GetViewFrame().GetBindings().GetTimer().Invoke();
+    auto it = aView.m_aStateChanges.find(".uno:FreezePanesColumn");
+    CPPUNIT_ASSERT(it != aView.m_aStateChanges.end());
+    std::string values = it->second.get<std::string>("state");
+    std::string index = values.substr(0, values.find(' '));
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 8
+    // - Actual  : 1
+    CPPUNIT_ASSERT_EQUAL(std::string("8"), index);
+
+    // Freeze panes on a row and receive the proper state back
+    aView.m_aStateChanges.clear();
+    comphelper::dispatchCommand(u".uno:FreezePanesRow"_ustr, aPropertyValues);
+    Scheduler::ProcessEventsToIdle();
+    pView->GetViewFrame().GetBindings().GetTimer().Invoke();
+    pView->GetViewFrame().GetBindings().GetTimer().Invoke();
+    it = aView.m_aStateChanges.find(".uno:FreezePanesRow");
+    CPPUNIT_ASSERT(it != aView.m_aStateChanges.end());
+    values = it->second.get<std::string>("state");
+    index = values.substr(0, values.find(' '));
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 8
+    // - Actual  : 1
+    CPPUNIT_ASSERT_EQUAL(std::string("8"), index);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testFreezeStateInReadOnlyView)
+{
+    // The first row and the first column of this sheet are frozen.
+    createDoc("frozen-panes.ods");
+    SfxViewShell* pView = SfxViewShell::Current();
+    SfxBindings& rBindings = pView->GetViewFrame().GetBindings();
+    KitHelper::setViewReadOnly(KitHelper::getCurrentView(), true);
+    Scheduler::ProcessEventsToIdle();
+
+    // A read-only view has to be told where the sheet is frozen. Without the
+    // accompanying fix the state arrived empty and the client showed the sheet
+    // unfrozen. The freeze index is in X for both slots. Y holds the sheet
+    // number.
+    std::unique_ptr<SfxPoolItem> pColumn;
+    CPPUNIT_ASSERT(SfxItemState::DISABLED
+                   != rBindings.QueryState(sal_uInt16(SID_WINDOW_FIX_COL), pColumn));
+    auto pColumnPoint = dynamic_cast<SfxPointItem*>(pColumn.get());
+    CPPUNIT_ASSERT(pColumnPoint);
+    CPPUNIT_ASSERT_EQUAL(tools::Long(1), pColumnPoint->GetValue().X());
+
+    std::unique_ptr<SfxPoolItem> pRow;
+    CPPUNIT_ASSERT(SfxItemState::DISABLED
+                   != rBindings.QueryState(sal_uInt16(SID_WINDOW_FIX_ROW), pRow));
+    auto pRowPoint = dynamic_cast<SfxPointItem*>(pRow.get());
+    CPPUNIT_ASSERT(pRowPoint);
+    CPPUNIT_ASSERT_EQUAL(tools::Long(1), pRowPoint->GetValue().X());
+
+    // The freeze is shared by all the views of a sheet, so a read-only view
+    // must not be able to move it.
+    cpo::uno::Sequence<beans::PropertyValue> aPropertyValues = {
+        comphelper::makePropertyValue(u"Index"_ustr, cpo::uno::Any(static_cast<sal_Int32>(4))),
+    };
+    comphelper::dispatchCommand(u".uno:FreezePanesColumn"_ustr, aPropertyValues);
+    Scheduler::ProcessEventsToIdle();
+
+    // The sheet is still frozen at the first column.
+    pColumn.reset();
+    rBindings.QueryState(sal_uInt16(SID_WINDOW_FIX_COL), pColumn);
+    pColumnPoint = dynamic_cast<SfxPointItem*>(pColumn.get());
+    CPPUNIT_ASSERT(pColumnPoint);
+    CPPUNIT_ASSERT_EQUAL(tools::Long(1), pColumnPoint->GetValue().X());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testReadOnlyViewKeepsDocument)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScDocShell* pDocSh = dynamic_cast<ScDocShell*>(pModelObj->GetEmbeddedObject());
+    CPPUNIT_ASSERT(pDocSh);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    for (SCROW nRow = 0; nRow < 3; ++nRow)
+        pDoc->SetValue(ScAddress(0, nRow, 0), nRow + 1);
+    pDocSh->GetDocFunc().InsertTable(1, u"Second"_ustr, false, true);
+    ScDocProtection aProtection;
+    aProtection.setProtected(true);
+    pDoc->SetDocProtection(&aProtection);
+    pModelObj->setModified(false);
+    pDoc->GetUndoManager()->Clear();
+
+    cpo::uno::Sequence<beans::PropertyValue> aArgs
+        = { comphelper::makePropertyValue(u"ToPoint"_ustr, u"$A$1:$A$3"_ustr) };
+    dispatchCommand(mxComponent, u".uno:GoToCell"_ustr, aArgs);
+    KitHelper::setViewReadOnly(KitHelper::getCurrentView(), true);
+    Scheduler::ProcessEventsToIdle();
+
+    dispatchCommand(mxComponent, u".uno:DeleteRows"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:ClearContents"_ustr, {});
+    aArgs = { comphelper::makePropertyValue(u"StringName"_ustr, u"changed"_ustr) };
+    dispatchCommand(mxComponent, u".uno:EnterString"_ustr, aArgs);
+    aArgs = { comphelper::makePropertyValue(u"ScenarioName"_ustr, u"Second"_ustr) };
+    dispatchCommand(mxComponent, u".uno:DeleteScenario"_ustr, aArgs);
+    dispatchCommand(mxComponent, u".uno:ToolProtectionDocument"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+
+    for (SCROW nRow = 0; nRow < 3; ++nRow)
+        CPPUNIT_ASSERT_EQUAL(double(nRow + 1), pDoc->GetValue(ScAddress(0, nRow, 0)));
+    CPPUNIT_ASSERT_EQUAL(SCTAB(2), pDoc->GetTableCount());
+    CPPUNIT_ASSERT(pDoc->IsDocProtected());
+    CPPUNIT_ASSERT(!pDocSh->IsModified());
+    CPPUNIT_ASSERT_EQUAL(std::size_t(0), pDoc->GetUndoManager()->GetUndoActionCount());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCursorVisibilityAfterPaste)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    ScTestViewCallback aView;
+    KitHelper::createView();
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+
+    // copy text view 1
+    pView->SetCursor(0, 0); // Go to A1.
+
+    Scheduler::ProcessEventsToIdle();
+
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'B', 0); // Type B.
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'B', 0);
+    Scheduler::ProcessEventsToIdle();
+
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::TAB);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::TAB);
+    Scheduler::ProcessEventsToIdle();
+
+    pView->SetCursor(0, 0); // Go to A1.
+    Scheduler::ProcessEventsToIdle();
+
+    pView->GetViewFrame().GetBindings().Execute(SID_COPY); // Copy B.
+    Scheduler::ProcessEventsToIdle();
+
+    pView->SetCursor(0, 1); // Go to A2.
+    Scheduler::ProcessEventsToIdle();
+
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 'B', 0); // Type B.
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 'B', 0);
+    Scheduler::ProcessEventsToIdle();
+
+    cpo::uno::Sequence<beans::PropertyValue> aArgs;
+    dispatchCommand(mxComponent, u".uno:Paste"_ustr, aArgs); // Paste B.
+    Scheduler::ProcessEventsToIdle();
+
+    // Text cursor should still be visible.
+    CPPUNIT_ASSERT_EQUAL(true, aView.m_textCursorVisible);
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testAutoFilterPosition)
+{
+    ScModelObj* pModelObj = createDoc("autofilter.ods");
+    ScTestViewCallback aView;
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+
+    pView->SetCursor(0, 0); // Go to A1.
+    Scheduler::ProcessEventsToIdle();
+
+    // Use autofilter button shortcut (ALT + DOWNARROW) to avoid coordinate based click.
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::DOWN | KEY_MOD2);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::DOWN | KEY_MOD2);
+    Scheduler::ProcessEventsToIdle();
+
+    // We should have the autofilter position callback.
+    auto it = aView.m_aStateChanges.find("AutoFilterInfo");
+    CPPUNIT_ASSERT(it != aView.m_aStateChanges.end());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testPivotFilterPosition)
+{
+    ScModelObj* pModelObj = createDoc("pivotTableFilter.ods");
+    ScTestViewCallback aView;
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+
+    pView->SetCursor(1, 0); // Go to B1.
+    Scheduler::ProcessEventsToIdle();
+
+    // Use filter button shortcut (ALT + DOWNARROW) to avoid coordinate based click.
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::DOWN | KEY_MOD2);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::DOWN | KEY_MOD2);
+    Scheduler::ProcessEventsToIdle();
+
+    // We should have the autofilter position callback.
+    auto it = aView.m_aStateChanges.find("PivotTableFilterInfo");
+    CPPUNIT_ASSERT(it != aView.m_aStateChanges.end());
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testPrintRanges)
+{
+    ScModelObj* pModelObj = createDoc("PrintRanges.ods");
+    ScTestViewCallback aView;
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+
+    /*
+        Expected output: { \"printranges\": [ { \"sheet\": 0, \"ranges\": [ [ 2, 6, 2, 6]]}]}
+    */
+    std::string printRanges = pModelObj->getPrintRanges();
+    printRanges = std::regex_replace(printRanges, std::regex(" "), "");
+
+    CPPUNIT_ASSERT_EQUAL(std::string_view("{\"printranges\":[{\"sheet\":0,\"ranges\":[[2,6,2,6]]}]}"),
+                         std::string_view(printRanges));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testKitLanguageStatus)
+{
+    ScModelObj* pModelObj = createDoc("pivotfr.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocShell* pDocSh = dynamic_cast<ScDocShell*>(pModelObj->GetEmbeddedObject());
+    CPPUNIT_ASSERT(pDocSh);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    CPPUNIT_ASSERT(pDoc);
+
+    // view #1
+    SfxViewShell* pView1 = SfxViewShell::Current();
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(pView1);
+    CPPUNIT_ASSERT(pView);
+
+    {
+        // Pivot table is in the same sheet and first data row starts at A17.
+        pView->SetCursor(0, 16);
+        dispatchCommand(mxComponent, u".uno:RecalcPivotTable"_ustr, {});
+
+        // Document language is French(France), which the view must inherit.
+        CPPUNIT_ASSERT_EQUAL(u"janv."_ustr, pDoc->GetString(ScAddress(0, 16, 0)));
+    }
+
+    {
+        cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+            { u"Language"_ustr, cpo::uno::Any(u"Default_Spanish (Spain)"_ustr) },
+        }));
+        dispatchCommand(mxComponent, u".uno:LanguageStatus"_ustr, aArgs);
+
+        // Pivot table is in the same sheet and first data row starts at A17.
+        pView->SetCursor(0, 16);
+        dispatchCommand(mxComponent, u".uno:RecalcPivotTable"_ustr, {});
+
+        // view language is now Spanish(Spain)
+        CPPUNIT_ASSERT_EQUAL(u"ene"_ustr, pDoc->GetString(ScAddress(0, 16, 0)));
+    }
+
+    {
+        cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+            { u"Language"_ustr, cpo::uno::Any(u"Default_English (USA)"_ustr) },
+        }));
+        dispatchCommand(mxComponent, u".uno:LanguageStatus"_ustr, aArgs);
+
+        // Pivot table is in the same sheet and first data row starts at A17.
+        pView->SetCursor(0, 16);
+        dispatchCommand(mxComponent, u".uno:RecalcPivotTable"_ustr, {});
+
+        // view language is now English(USA).
+        CPPUNIT_ASSERT_EQUAL(u"Jan"_ustr, pDoc->GetString(ScAddress(0, 16, 0)));
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testValidationCellCrash)
+{
+    ScModelObj* pModelObj = createDoc("validationcrash.xlsx");
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocShell* pDocSh = dynamic_cast<ScDocShell*>(pModelObj->GetEmbeddedObject());
+    CPPUNIT_ASSERT(pDocSh);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    CPPUNIT_ASSERT(pDoc);
+
+    ScTestViewCallback aView1;
+    SfxViewShell* pView1 = SfxViewShell::Current();
+    ScTabViewShell* pView = dynamic_cast<ScTabViewShell*>(pView1);
+    CPPUNIT_ASSERT(pView);
+    typeCharsInCell("42", 0, 1, pView, pModelObj, false /* bInEdit */,
+                    true /* bCommit */); // Type "42" in A2.
+    // Without the fix this will crash.
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testThreadedCommentInsertAndResolve)
+{
+    // Reset the static counter so the first note gets a predictable id.
+    ScPostIt::mnLastPostItId = 1;
+
+    {
+        ScModelObj* pModelObj = createDoc("small.ods");
+        ScTestViewCallback aView1;
+
+        KitHelper::createView();
+        pModelObj->initializeForTiledRendering({});
+        ScTestViewCallback aView2;
+
+        KitHelper::setView(aView1.getViewID());
+
+        ScTabViewShell* pTabViewShell = aView1.getTabViewShell();
+        CPPUNIT_ASSERT(pTabViewShell);
+        pTabViewShell->SetCursor(2, 3);
+        pTabViewShell->SetKitAuthor(u"Kit Author"_ustr);
+
+        // 1) Insert a threaded comment via .uno:InsertThreadedComment
+        cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+            { u"Text"_ustr, cpo::uno::Any(u"Threaded comment text"_ustr) },
+        }));
+        dispatchCommand(mxComponent, u".uno:InsertThreadedComment"_ustr, aArgs);
+
+        // Both views receive COKitCallbackType::COMMENT with action "Add"
+        CPPUNIT_ASSERT_EQUAL(std::string("Add"),
+                             aView1.m_aCommentCallbackResult.get<std::string>("action"));
+        CPPUNIT_ASSERT_EQUAL(std::string("Add"),
+                             aView2.m_aCommentCallbackResult.get<std::string>("action"));
+        CPPUNIT_ASSERT_EQUAL(std::string("1"),
+                             aView1.m_aCommentCallbackResult.get<std::string>("id"));
+
+        // The callback must carry threaded-comment-specific fields
+        CPPUNIT_ASSERT_EQUAL(std::string("Threaded comment text"),
+                             aView1.m_aCommentCallbackResult.get<std::string>("text"));
+        CPPUNIT_ASSERT_EQUAL(std::string("Kit Author"),
+                             aView1.m_aCommentCallbackResult.get<std::string>("author"));
+        CPPUNIT_ASSERT_EQUAL(std::string("true"),
+                             aView1.m_aCommentCallbackResult.get<std::string>("threaded"));
+        CPPUNIT_ASSERT_EQUAL(std::string("false"),
+                             aView1.m_aCommentCallbackResult.get<std::string>("resolved"));
+        CPPUNIT_ASSERT_EQUAL(std::string("2 3 2 3"),
+                             aView1.m_aCommentCallbackResult.get<std::string>("cellRange"));
+
+        std::string aCommentId = aView1.m_aCommentCallbackResult.get<std::string>("id");
+
+        // 2) Verify getPostIts() includes threaded/resolved fields
+        {
+            tools::JsonWriter aJsonWriter;
+            pModelObj->getPostIts(aJsonWriter);
+            std::string aJson(aJsonWriter.finishAndGetAsOString());
+            std::stringstream aStream(aJson);
+            boost::property_tree::ptree aTree;
+            boost::property_tree::read_json(aStream, aTree);
+
+            auto aComments = aTree.get_child("comments");
+            CPPUNIT_ASSERT_EQUAL(size_t(1), aComments.size());
+            const auto& rComment = aComments.begin()->second;
+            CPPUNIT_ASSERT_EQUAL(std::string("Threaded comment text"),
+                                 rComment.get<std::string>("text"));
+            CPPUNIT_ASSERT_EQUAL(std::string("true"), rComment.get<std::string>("threaded"));
+            CPPUNIT_ASSERT_EQUAL(std::string("false"), rComment.get<std::string>("resolved"));
+        }
+
+        // 3) Resolve the threaded comment via .uno:ResolveComment
+        aArgs = comphelper::InitPropertySequence({
+            { u"Id"_ustr, cpo::uno::Any(OUString::createFromAscii(aCommentId)) },
+        });
+        dispatchCommand(mxComponent, u".uno:ResolveComment"_ustr, aArgs);
+
+        // Both views receive COKitCallbackType::COMMENT with action "Modify"
+        CPPUNIT_ASSERT_EQUAL(std::string("Modify"),
+                             aView1.m_aCommentCallbackResult.get<std::string>("action"));
+        CPPUNIT_ASSERT_EQUAL(std::string("Modify"),
+                             aView2.m_aCommentCallbackResult.get<std::string>("action"));
+        CPPUNIT_ASSERT_EQUAL(std::string("true"),
+                             aView1.m_aCommentCallbackResult.get<std::string>("resolved"));
+
+        // 4) Verify getPostIts() now shows resolved=true
+        {
+            tools::JsonWriter aJsonWriter;
+            pModelObj->getPostIts(aJsonWriter);
+            std::string aJson(aJsonWriter.finishAndGetAsOString());
+            std::stringstream aStream(aJson);
+            boost::property_tree::ptree aTree;
+            boost::property_tree::read_json(aStream, aTree);
+
+            const auto& rComment = aTree.get_child("comments").begin()->second;
+            CPPUNIT_ASSERT_EQUAL(std::string("true"), rComment.get<std::string>("resolved"));
+        }
+
+        // 5) Toggle resolve back (unresolve)
+        dispatchCommand(mxComponent, u".uno:ResolveComment"_ustr, aArgs);
+
+        CPPUNIT_ASSERT_EQUAL(std::string("Modify"),
+                             aView1.m_aCommentCallbackResult.get<std::string>("action"));
+        CPPUNIT_ASSERT_EQUAL(std::string("false"),
+                             aView1.m_aCommentCallbackResult.get<std::string>("resolved"));
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testThreadedCommentDocModifiedAndUndo)
+{
+    // Before the fix, .uno:InsertThreadedComment manipulated the note model
+    // directly and never set the document-modified flag or registered undo.
+    ScPostIt::mnLastPostItId = 1;
+
+    {
+        ScModelObj* pModelObj = createDoc("small.ods");
+        ScTestViewCallback aView;
+        ScDocShell* pDocSh = dynamic_cast<ScDocShell*>(pModelObj->GetEmbeddedObject());
+        CPPUNIT_ASSERT(pDocSh);
+        ScDocument* pDoc = pModelObj->GetDocument();
+        CPPUNIT_ASSERT(pDoc);
+
+        ScTabViewShell* pTabViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+        CPPUNIT_ASSERT(pTabViewShell);
+        pTabViewShell->SetCursor(2, 3);
+
+        // Fresh document: not modified, no undo actions, no note at the target cell.
+        CPPUNIT_ASSERT(!pDocSh->IsModified());
+        SfxUndoManager* pUndoMgr = pDocSh->GetUndoManager();
+        CPPUNIT_ASSERT(pUndoMgr);
+        CPPUNIT_ASSERT_EQUAL(size_t(0), pUndoMgr->GetUndoActionCount());
+        const ScAddress aPos(2, 3, 0);
+        CPPUNIT_ASSERT(!pDoc->GetNote(aPos));
+
+        // 1) Insert a threaded comment via .uno:InsertThreadedComment.
+        cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+            { u"Text"_ustr, cpo::uno::Any(u"Kit thread"_ustr) },
+            { u"Author"_ustr, cpo::uno::Any(u"Kit Author"_ustr) },
+        }));
+        aView.m_aStateChanges.clear();
+        dispatchCommand(mxComponent, u".uno:InsertThreadedComment"_ustr, aArgs);
+
+        CPPUNIT_ASSERT(pDocSh->IsModified());
+        CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoMgr->GetUndoActionCount());
+
+        // The note exists with threaded data attached.
+        const ScPostIt* pNote = pDoc->GetNote(aPos);
+        CPPUNIT_ASSERT(pNote);
+        const ScThreadedCommentData* pThreaded = pNote->GetThreadedCommentData();
+        CPPUNIT_ASSERT(pThreaded);
+        CPPUNIT_ASSERT_EQUAL(u"Kit thread"_ustr, pThreaded->maRoot.maText);
+
+        // The bindings timer broadcasts the deferred .uno:ModifiedStatus state change.
+        pTabViewShell->GetViewFrame().GetBindings().GetTimer().Invoke();
+        pTabViewShell->GetViewFrame().GetBindings().GetTimer().Invoke();
+        auto it = aView.m_aStateChanges.find(".uno:ModifiedStatus");
+        CPPUNIT_ASSERT(it != aView.m_aStateChanges.end());
+        CPPUNIT_ASSERT_EQUAL(std::string("true"), it->second.get<std::string>("state"));
+
+        // 2) Undo removes the note.
+        dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+        CPPUNIT_ASSERT(!pDoc->GetNote(aPos));
+        CPPUNIT_ASSERT_EQUAL(size_t(0), pUndoMgr->GetUndoActionCount());
+        CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoMgr->GetRedoActionCount());
+
+        // 3) Redo brings the note back, including the threaded payload. The undo
+        //    action stores a clone of ScThreadedCommentData (it lives outside
+        //    ScNoteData), so the redo path must reattach it.
+        dispatchCommand(mxComponent, u".uno:Redo"_ustr, {});
+        pNote = pDoc->GetNote(aPos);
+        CPPUNIT_ASSERT(pNote);
+        pThreaded = pNote->GetThreadedCommentData();
+        CPPUNIT_ASSERT(pThreaded);
+        CPPUNIT_ASSERT_EQUAL(u"Kit thread"_ustr, pThreaded->maRoot.maText);
+    }
+
+    // Sub-case: when Online dispatches the command with no Author arg or with
+    // an Author arg that carries an empty string, the engine must fall back to
+    // SvtUserOptions().GetFullName() (which carries the WOPI UserFriendlyName
+    // in a Kit context) rather than landing on "Unknown Author". Before the
+    // fix the slot's pAuthorItem ternary checked "was the arg sent" rather
+    // than "is the value non-empty", so an empty Author short-circuited the
+    // user-options fallback.
+    {
+        SvtUserOptions aUserOpt;
+        const OUString aSavedFirstName = aUserOpt.GetFirstName();
+        const OUString aSavedLastName = aUserOpt.GetLastName();
+        aUserOpt.SetToken(UserOptToken::FirstName, u"WOPI"_ustr);
+        aUserOpt.SetToken(UserOptToken::LastName, u"Friendly"_ustr);
+
+        ScModelObj* pModelObj = createDoc("small.ods");
+        ScDocument* pDoc = pModelObj->GetDocument();
+        CPPUNIT_ASSERT(pDoc);
+        ScTabViewShell* pTabViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+        CPPUNIT_ASSERT(pTabViewShell);
+
+        const ScAddress aPos(4, 5, 0);
+        pTabViewShell->SetCursor(aPos.Col(), aPos.Row());
+
+        // 1) No Author arg at all: pAuthorItem == nullptr in the slot.
+        cpo::uno::Sequence<beans::PropertyValue> aArgsNoAuthor(comphelper::InitPropertySequence({
+            { u"Text"_ustr, cpo::uno::Any(u"no author arg"_ustr) },
+        }));
+        dispatchCommand(mxComponent, u".uno:InsertThreadedComment"_ustr, aArgsNoAuthor);
+        const ScPostIt* pNote = pDoc->GetNote(aPos);
+        CPPUNIT_ASSERT(pNote);
+        CPPUNIT_ASSERT_EQUAL(u"WOPI Friendly"_ustr, pNote->GetAuthor());
+
+        // Roll back so the next dispatch operates on a fresh cell state.
+        dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+        CPPUNIT_ASSERT(!pDoc->GetNote(aPos));
+
+        // 2) Author arg present but empty: the regression case.
+        cpo::uno::Sequence<beans::PropertyValue> aArgsEmptyAuthor(comphelper::InitPropertySequence({
+            { u"Text"_ustr, cpo::uno::Any(u"empty author arg"_ustr) },
+            { u"Author"_ustr, cpo::uno::Any(u""_ustr) },
+        }));
+        dispatchCommand(mxComponent, u".uno:InsertThreadedComment"_ustr, aArgsEmptyAuthor);
+        pNote = pDoc->GetNote(aPos);
+        CPPUNIT_ASSERT(pNote);
+        CPPUNIT_ASSERT_EQUAL(u"WOPI Friendly"_ustr, pNote->GetAuthor());
+
+        aUserOpt.SetToken(UserOptToken::FirstName, aSavedFirstName);
+        aUserOpt.SetToken(UserOptToken::LastName, aSavedLastName);
+    }
+}
+
+namespace
+{
+void lcl_getStartDimPos(const boost::property_tree::ptree& tree, double twipsPerPixel,
+                        size_t queryIndex, size_t& displayTwips, size_t& printTwips)
+{
+    std::stringstream ss(tree.get<std::string>("sizes"));
+    size_t size = 0;
+    size_t index = 0;
+    size_t prevIndex = 0;
+    char tmp;
+    printTwips = 0;
+    displayTwips = 0;
+    while ((ss >> size) && (ss >> tmp) && (ss >> index))
+    {
+        CPPUNIT_ASSERT(index >= prevIndex);
+        size_t pxOne = size_t(size / twipsPerPixel);
+        if (queryIndex > index)
+        {
+            size_t numIndices = index - prevIndex + 1;
+            printTwips += (numIndices * size);
+            displayTwips += size_t(pxOne * numIndices * twipsPerPixel);
+            prevIndex = index + 1;
+            continue;
+        }
+
+        printTwips += ((queryIndex - prevIndex) * size);
+        displayTwips += size_t((queryIndex - prevIndex) * pxOne * twipsPerPixel);
+        return;
+    }
+    CPPUNIT_FAIL("Bad queryIndex passed to lcl_getStartDimPos()");
+}
+
+void lcl_getShapeRectangle(OString& selection, tools::Rectangle& rectangle)
+{
+    std::stringstream ss((std::string(selection)));
+    size_t x = 0, y = 0, width = 0, height = 0;
+    char tmp;
+    CPPUNIT_ASSERT_MESSAGE("Parse of graphicselection message failed!",
+                           ss >> x >> tmp >> y >> tmp >> width >> tmp >> height);
+    rectangle.SetPos(Point(x, y));
+    rectangle.SetSize(Size(width, height));
+}
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testChartSelectionCoords)
+{
+    ScModelObj* pModelObj = createDoc("chartsel.ods");
+    auto* pTabViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    ScTestViewCallback aView1;
+    std::string aJson
+        = pModelObj->getSheetGeometryData(/*bColumns*/ true, /*bRows*/ true, /*bSizes*/ true,
+                                          /*bHidden*/ true, /*bFiltered*/ true, /*bGroups*/ true);
+    boost::property_tree::ptree aTree;
+    std::stringstream ss(aJson);
+    boost::property_tree::read_json(ss, aTree);
+    auto& aCols = aTree.get_child("columns");
+    auto& aRows = aTree.get_child("rows");
+
+    constexpr double zoomFraction = 1.5;
+    constexpr size_t tilePx = 256;
+    constexpr size_t tileTwips = tilePx * 15.0 / zoomFraction;
+    constexpr double twipsPerPixel = tileTwips / static_cast<double>(tilePx);
+
+    pModelObj->setClientVisibleArea(tools::Rectangle(0, 0, tileTwips * 5, tileTwips * 5));
+    pModelObj->setClientZoom(tilePx, tilePx, tileTwips, tileTwips);
+
+    size_t x1ptwips = 0, x1dtwips = 0;
+    size_t y1ptwips = 0, y1dtwips = 0;
+    size_t x2ptwips = 0, x2dtwips = 0;
+    size_t y2ptwips = 0, y2dtwips = 0;
+
+    // Top-left of cell AT17(45, 16) is nearly the top-left of the chart.
+    // Top-left of cell BA37(52, 36) is nearly the bottom-right of the chart.
+    lcl_getStartDimPos(aCols, twipsPerPixel, 45, x1dtwips, x1ptwips);
+    lcl_getStartDimPos(aRows, twipsPerPixel, 16, y1dtwips, y1ptwips);
+    lcl_getStartDimPos(aCols, twipsPerPixel, 52, x2dtwips, x2ptwips);
+    lcl_getStartDimPos(aRows, twipsPerPixel, 36, y2dtwips, y2ptwips);
+    // Chart area in print twips.
+    tools::Rectangle aChartAreaPtwips(Point(x1ptwips, y1ptwips),
+                                      Size(x2ptwips - x1ptwips, y2ptwips - y1ptwips));
+    // Chart area in display twips.
+    tools::Rectangle aChartAreaDtwips(Point(x1dtwips, y1dtwips),
+                                      Size(x2dtwips - x1dtwips, y2dtwips - y1dtwips));
+
+    pTabViewShell->SetCursor(53, 40);
+    Scheduler::ProcessEventsToIdle();
+
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN,
+                              /*x=*/aChartAreaDtwips.Left() + 300,
+                              /*y=*/aChartAreaDtwips.Top() + 300,
+                              /*count=*/2, /*buttons=*/1, /*modifier=*/0);
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP,
+                              /*x=*/aChartAreaDtwips.Left() + 300,
+                              /*y=*/aChartAreaDtwips.Top() + 300,
+                              /*count=*/2, /*buttons=*/1, /*modifier=*/0);
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT(!aView1.m_ShapeSelection.isEmpty());
+    tools::Rectangle aActualChartRect;
+    lcl_getShapeRectangle(aView1.m_ShapeSelection, aActualChartRect);
+    CPPUNIT_ASSERT_MESSAGE("Actual chart area spills out of the expected bounds",
+                           aChartAreaPtwips.Contains(aActualChartRect));
+
+    // Click again for chart wall area.
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN,
+                              /*x=*/aChartAreaDtwips.Left() + 300,
+                              /*y=*/aChartAreaDtwips.Top() + 300,
+                              /*count=*/1, /*buttons=*/1, /*modifier=*/0);
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP,
+                              /*x=*/aChartAreaDtwips.Left() + 300,
+                              /*y=*/aChartAreaDtwips.Top() + 300,
+                              /*count=*/1, /*buttons=*/1, /*modifier=*/0);
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT(!aView1.m_ShapeSelection.isEmpty());
+    tools::Rectangle aActualChartWall;
+    lcl_getShapeRectangle(aView1.m_ShapeSelection, aActualChartWall);
+    CPPUNIT_ASSERT_MESSAGE("Actual chart wall area spills out of the expected bounds",
+                           aChartAreaPtwips.Contains(aActualChartWall));
+}
+
+namespace
+{
+// The top left corner of a cell in display twips, which is where the grid draws the cell at the
+// current zoom.
+Point lcl_getCellTileTwipsPos(const ScViewData& rViewData, SCCOL nCol, SCROW nRow)
+{
+    const Point aPixelPos = rViewData.GetScrPos(nCol, nRow, rViewData.GetActivePart(), true);
+    return Point(aPixelPos.X() / rViewData.GetPPTX(), aPixelPos.Y() / rViewData.GetPPTY());
+}
+}
+
+// A chart in edit mode stays on its anchor cell when the zoom changes while it is being edited.
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testChartEditModeFollowsZoom)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("chartsel.ods");
+    auto* pTabViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pTabViewShell);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    const ScViewData& rViewData = pTabViewShell->GetViewData();
+
+    SdrPage* pPage = pDoc->GetDrawLayer()->GetPage(0);
+    auto* pChart = dynamic_cast<SdrOle2Obj*>(pPage->GetObj(0));
+    CPPUNIT_ASSERT(pChart);
+    constexpr SCCOL nAnchorCol = 1;
+    constexpr SCROW nAnchorRow = 500;
+    const Point aAnchorPrintTwips = rViewData.GetPrintTwipsPos(nAnchorCol, nAnchorRow);
+    tools::Rectangle aLogicRect = pChart->GetLogicRect();
+    aLogicRect.SetPos(o3tl::convert(aAnchorPrintTwips, o3tl::Length::twip, o3tl::Length::mm100));
+    pChart->SetLogicRect(aLogicRect);
+    ScDrawLayer::SetCellAnchoredFromPosition(*pChart, *pDoc, 0, false);
+
+    // 256 pixel tiles cover 3840 twips at 100% zoom.
+    pModelObj->setClientZoom(256, 256, 3840, 3840);
+    pTabViewShell->ActivateObject(pChart, embed::EmbedVerbs::MS_OLEVERB_PRIMARY);
+    Scheduler::ProcessEventsToIdle();
+    SfxInPlaceClient* pClient = pTabViewShell->GetIPClient();
+    CPPUNIT_ASSERT(pClient);
+    CPPUNIT_ASSERT(pClient->IsObjectInPlaceActive());
+
+    // The tiles paint the chart at this bounding box, in tile twips.
+    KitChartHelper aChartHelper(pTabViewShell);
+    Point aChartPos = aChartHelper.GetChartBoundingBox().TopLeft();
+    Point aAnchorPos = lcl_getCellTileTwipsPos(rViewData, nAnchorCol, nAnchorRow);
+    constexpr tools::Long nTolerance = 15;
+    CPPUNIT_ASSERT_LESSEQUAL(nTolerance, std::abs(aChartPos.X() - aAnchorPos.X()));
+    CPPUNIT_ASSERT_LESSEQUAL(nTolerance, std::abs(aChartPos.Y() - aAnchorPos.Y()));
+
+    // Zoom to 120% while the chart is still in edit mode.
+    pModelObj->setClientZoom(256, 256, 3200, 3200);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(pClient->IsObjectInPlaceActive());
+
+    aChartPos = aChartHelper.GetChartBoundingBox().TopLeft();
+    aAnchorPos = lcl_getCellTileTwipsPos(rViewData, nAnchorCol, nAnchorRow);
+    CPPUNIT_ASSERT_LESSEQUAL(nTolerance, std::abs(aChartPos.X() - aAnchorPos.X()));
+    CPPUNIT_ASSERT_LESSEQUAL(nTolerance, std::abs(aChartPos.Y() - aAnchorPos.Y()));
+}
+
+// A click on a chart far down the sheet selects it, also after the zoom changed.
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testChartClickSelectsAfterZoom)
+{
+    comphelper::COKit::setCompatFlag(comphelper::COKit::Compat::scPrintTwipsMsgs);
+    ScModelObj* pModelObj = createDoc("chartsel.ods");
+    auto* pTabViewShell = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pTabViewShell);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    const ScViewData& rViewData = pTabViewShell->GetViewData();
+    ScDrawView* pDrawView = pTabViewShell->GetScDrawView();
+    CPPUNIT_ASSERT(pDrawView);
+
+    SdrPage* pPage = pDoc->GetDrawLayer()->GetPage(0);
+    auto* pChart = dynamic_cast<SdrOle2Obj*>(pPage->GetObj(0));
+    CPPUNIT_ASSERT(pChart);
+    constexpr SCCOL nAnchorCol = 1;
+    constexpr SCROW nAnchorRow = 500;
+    const Point aAnchorPrintTwips = rViewData.GetPrintTwipsPos(nAnchorCol, nAnchorRow);
+    tools::Rectangle aLogicRect = pChart->GetLogicRect();
+    aLogicRect.SetPos(o3tl::convert(aAnchorPrintTwips, o3tl::Length::twip, o3tl::Length::mm100));
+    pChart->SetLogicRect(aLogicRect);
+    ScDrawLayer::SetCellAnchoredFromPosition(*pChart, *pDoc, 0, false);
+    const Size aChartSizeTwips
+        = o3tl::convert(aLogicRect.GetSize(), o3tl::Length::mm100, o3tl::Length::twip);
+
+    // Clicks in the middle of the chart, in tile twips of the current zoom.
+    auto clickChart = [&]() {
+        const Point aAnchorPos = lcl_getCellTileTwipsPos(rViewData, nAnchorCol, nAnchorRow);
+        const Point aCenter(aAnchorPos.X() + aChartSizeTwips.Width() / 2,
+                            aAnchorPos.Y() + aChartSizeTwips.Height() / 2);
+        pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN, aCenter.X(), aCenter.Y(), 1, 1,
+                                  0);
+        pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP, aCenter.X(), aCenter.Y(), 1, 1, 0);
+        Scheduler::ProcessEventsToIdle();
+    };
+    // Clicks on the top left cell, which drops any drawing selection.
+    auto clickAwayFromChart = [&]() {
+        pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN, 100, 100, 1, 1, 0);
+        pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP, 100, 100, 1, 1, 0);
+        Scheduler::ProcessEventsToIdle();
+    };
+
+    pModelObj->setClientZoom(256, 256, 3840, 3840);
+    clickChart();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pDrawView->GetMarkedObjectList().GetMarkCount());
+    clickAwayFromChart();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), pDrawView->GetMarkedObjectList().GetMarkCount());
+
+    pModelObj->setClientZoom(256, 256, 3200, 3200);
+    clickChart();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pDrawView->GetMarkedObjectList().GetMarkCount());
+}
+
+// Filling a cell that a neighbour's text overflows across must invalidate the
+// columns that overflow covered.
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testInvalidateForOverflowingText)
+{
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocShell* pDocSh = dynamic_cast<ScDocShell*>(pModelObj->GetEmbeddedObject());
+    CPPUNIT_ASSERT(pDocSh);
+    ScTabViewShell* pView = pDocSh->GetBestViewShell(false);
+    CPPUNIT_ASSERT(pView);
+    ScDocument& rDoc = pDocSh->GetDocument();
+
+    // A long left aligned string in A1 spills across the empty cells to its right.
+    typeCharsInCell("This is an extremely long line of text that should overflow "
+                    "across very many empty columns to the right",
+                    0, 0, pView, pModelObj, false, true);
+    Scheduler::ProcessEventsToIdle();
+
+    ScTestViewCallback aView;
+
+    // Fill B1, which A1 overflows across, isolating the commit's invalidation.
+    typeCharsInCell("x", 1, 0, pView, pModelObj, false, false);
+    aView.m_bInvalidateTiles = false;
+    aView.m_aInvalidations.clear();
+    typeCharsInCell("", 1, 0, pView, pModelObj, true, true);
+
+    CPPUNIT_ASSERT(aView.m_bInvalidateTiles);
+    tools::Rectangle aInvalidation;
+    for (const auto& rRect : aView.m_aInvalidations)
+        aInvalidation.Union(rRect);
+
+    // Without the fix the invalidation was about one column wide.
+    const tools::Long nColWidth = rDoc.GetColWidth(1, 0);
+    CPPUNIT_ASSERT_GREATER(nColWidth * 4, aInvalidation.GetWidth());
+
+    // But not the whole row to the sheet edge, which the width hint avoids.
+    CPPUNIT_ASSERT_LESS(tools::Long(32212230), aInvalidation.Right());
+}
+
+#ifndef _WIN32 // osl_setTimezone has no effect on Windows
+namespace
+{
+/// The comment timezone tests put the server on UTC and the author in Kolkata, which is five and a
+/// half hours ahead of it the whole year round. Restores what it found on delete.
+class KitTimezoneSetup
+{
+    std::pair<bool, OUString> m_aOldDefaultTimezone;
+
+public:
+    KitTimezoneSetup(int nAuthorView)
+        : m_aOldDefaultTimezone(KitHelper::getDefaultTimezone())
+    {
+        KitHelper::setDefaultTimezone(true, u"UTC"_ustr);
+        comphelper::COKit::setTimezone(true, u"UTC"_ustr);
+        KitHelper::setViewTimezone(nAuthorView, true, u"Asia/Kolkata"_ustr);
+    }
+
+    ~KitTimezoneSetup()
+    {
+        KitHelper::setDefaultTimezone(m_aOldDefaultTimezone.first, m_aOldDefaultTimezone.second);
+        comphelper::COKit::setTimezone(m_aOldDefaultTimezone.first, m_aOldDefaultTimezone.second);
+    }
+
+    static tools::Time GetAuthorOffset() { return tools::Time(5, 30); }
+};
+
+/// Whether the given ISO 8601 string falls in the window the two server-clock readings bound, once
+/// the author's offset is added to both.
+bool isAuthorLocalTime(std::u16string_view rDateTime, const DateTime& rBefore, const DateTime& rAfter)
+{
+    css::util::DateTime aParsed;
+    CPPUNIT_ASSERT(utl::ISO8601parseDateTime(rDateTime, aParsed));
+    const tools::Time aOffset = KitTimezoneSetup::GetAuthorOffset();
+    return DateTime(aParsed).IsBetween(rBefore + aOffset, rAfter + aOffset);
+}
+
+/// Whether the given ISO 8601 string falls in the window the two server-clock readings bound. The
+/// server keeps UTC in these tests, so this is the test for a moment rather than a wall clock.
+bool isUtcTime(std::u16string_view rDateTime, const DateTime& rBefore, const DateTime& rAfter)
+{
+    css::util::DateTime aParsed;
+    CPPUNIT_ASSERT(utl::ISO8601parseDateTime(rDateTime, aParsed));
+    return DateTime(aParsed).IsBetween(rBefore, rAfter);
+}
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testNoteDateTimeUsesViewTimezone)
+{
+    // A new cell note is stamped with the clock of the timezone its author reads.
+    createDoc("small.ods");
+    ScTestViewCallback aView;
+    ScTabViewShell* pTabViewShell = aView.getTabViewShell();
+    CPPUNIT_ASSERT(pTabViewShell);
+    pTabViewShell->SetCursor(2, 3);
+
+    KitTimezoneSetup aTimezoneSetup(aView.getViewID());
+
+    const DateTime aBefore(DateTime::SYSTEM);
+    dispatchCommand(mxComponent, u".uno:InsertAnnotation"_ustr,
+                    comphelper::InitPropertySequence({
+                        { "Text", cpo::uno::Any(u"a note"_ustr) },
+                        { "Author", cpo::uno::Any(u"Kit Author"_ustr) },
+                    }));
+    Scheduler::ProcessEventsToIdle();
+    const DateTime aAfter(DateTime::SYSTEM);
+
+    // Without the accompanying fix in place, this test would have failed: the note carried the
+    // server's own reading of the clock, five and a half hours behind the author's.
+    const OUString aDateTime = OUString::createFromAscii(
+        aView.m_aCommentCallbackResult.get<std::string>("dateTime"));
+    CPPUNIT_ASSERT(isAuthorLocalTime(aDateTime, aBefore, aAfter));
+
+    // The moment goes out beside it, marked as UTC, so a client can show the note on the
+    // reader's own clock rather than the author's.
+    const OUString aDateTimeUtc = OUString::createFromAscii(
+        aView.m_aCommentCallbackResult.get<std::string>("dateTimeUtc"));
+    CPPUNIT_ASSERT(aDateTimeUtc.endsWith("Z"));
+    // It carries whole seconds, so the lower bound drops its fraction.
+    DateTime aFlooredBefore = aBefore;
+    aFlooredBefore.SetNanoSec(0);
+    CPPUNIT_ASSERT(isUtcTime(aDateTimeUtc, aFlooredBefore, aAfter));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testThreadedCommentDateTimeUsesViewTimezone)
+{
+    // A threaded comment carries two stamps, the note's own and the one on its root entry. Both
+    // read the clock of the timezone the author is in.
+    ScModelObj* pModelObj = createDoc("small.ods");
+    ScTestViewCallback aView;
+    ScTabViewShell* pTabViewShell = aView.getTabViewShell();
+    CPPUNIT_ASSERT(pTabViewShell);
+    pTabViewShell->SetCursor(2, 3);
+
+    KitTimezoneSetup aTimezoneSetup(aView.getViewID());
+
+    const DateTime aBefore(DateTime::SYSTEM);
+    dispatchCommand(mxComponent, u".uno:InsertThreadedComment"_ustr,
+                    comphelper::InitPropertySequence({
+                        { "Text", cpo::uno::Any(u"a comment"_ustr) },
+                        { "Author", cpo::uno::Any(u"Kit Author"_ustr) },
+                    }));
+    Scheduler::ProcessEventsToIdle();
+    const DateTime aAfter(DateTime::SYSTEM);
+
+    const OUString aDateTime = OUString::createFromAscii(
+        aView.m_aCommentCallbackResult.get<std::string>("dateTime"));
+    CPPUNIT_ASSERT(isAuthorLocalTime(aDateTime, aBefore, aAfter));
+
+    // The threaded entry holds the moment instead, which is what the slot it round-trips through
+    // asks for. Without the accompanying fix in place, this test would have failed: the entry
+    // carried the author's wall clock, five and a half hours ahead of the moment.
+    ScDocument* pDoc = pModelObj->GetDocument();
+    const ScPostIt* pNote = pDoc->GetNote(ScAddress(2, 3, 0));
+    CPPUNIT_ASSERT(pNote);
+    const ScThreadedCommentData* pThreaded = pNote->GetThreadedCommentData();
+    CPPUNIT_ASSERT(pThreaded);
+    CPPUNIT_ASSERT(isUtcTime(pThreaded->maRoot.maDateTime, aBefore, aAfter));
+}
+#endif
+
+namespace
+{
+// The state a check box control carries, 0 when it is cleared and 1 when it is ticked.
+sal_Int16 lcl_getCheckBoxState(const SdrPage* pPage, size_t nIndex)
+{
+    auto* pUnoObject = dynamic_cast<SdrUnoObj*>(pPage->GetObj(nIndex));
+    CPPUNIT_ASSERT(pUnoObject);
+    cpo::uno::Reference<beans::XPropertySet> xModel(pUnoObject->GetUnoControlModel(),
+                                                    cpo::uno::UNO_QUERY_THROW);
+    sal_Int16 nState = -1;
+    xModel->getPropertyValue(u"State"_ustr) >>= nState;
+    return nState;
+}
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testClickOnStackedCheckBoxesTicksTheTopOne)
+{
+    // Two check boxes sit on exactly the same spot, the second one on top of the first.
+    ScModelObj* pModelObj = createDoc("stacked-checkboxes.fods");
+    ScTestViewCallback aView;
+    ScTabViewShell* pTabViewShell = aView.getTabViewShell();
+    CPPUNIT_ASSERT(pTabViewShell);
+
+    ScDrawLayer* pDrawLayer = pModelObj->GetDocument()->GetDrawLayer();
+    CPPUNIT_ASSERT(pDrawLayer);
+    const SdrPage* pPage = pDrawLayer->GetPage(0);
+    CPPUNIT_ASSERT(pPage);
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pPage->GetObjCount());
+
+    // A client paints before it clicks, which is what brings the live controls into being.
+    getTile(pModelObj, 0, 0, 3840, 3840);
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(0), lcl_getCheckBoxState(pPage, 0));
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(0), lcl_getCheckBoxState(pPage, 1));
+
+    const tools::Rectangle aControlRect = o3tl::convert(
+        pPage->GetObj(1)->GetLogicRect(), o3tl::Length::mm100, o3tl::Length::twip);
+    // Only the check box glyph answers a click. Each control in the document is smaller than
+    // the glyph, so the glyph covers the whole of it and any point inside will do.
+    const Point aClickPoint = aControlRect.Center();
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONDOWN, aClickPoint.X(), aClickPoint.Y(),
+                              /*count=*/1, /*buttons=*/MOUSE_LEFT, /*modifier=*/0);
+    pModelObj->postMouseEvent(COKitMouseEventType::BUTTONUP, aClickPoint.X(), aClickPoint.Y(),
+                              /*count=*/1, /*buttons=*/MOUSE_LEFT, /*modifier=*/0);
+    Scheduler::ProcessEventsToIdle();
+
+    // Without the accompanying fix in place, this test would have failed: the click went to the
+    // check box underneath, so the one the user sees stayed cleared.
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(0), lcl_getCheckBoxState(pPage, 0));
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(1), lcl_getCheckBoxState(pPage, 1));
+}
+
+CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testTrackChangesAuthorFromView)
+{
+    // Each recorded change carries the name of the user who edited in that view.
+    ScModelObj* pModelObj = createDoc("empty.ods");
+    pModelObj->initializeForTiledRendering(
+        { comphelper::makePropertyValue(u".uno:Author"_ustr, u"Kit User1"_ustr) });
+    ScTabViewShell* pView1 = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView1);
+    int nView1 = KitHelper::getCurrentView();
+    dispatchCommand(mxComponent, u".uno:TraceChangeMode"_ustr,
+                    { comphelper::makePropertyValue(u"TraceChangeMode"_ustr, true) });
+    ScDocument* pDoc = pModelObj->GetDocument();
+    ScChangeTrack* pChangeTrack = pDoc->GetChangeTrack();
+    CPPUNIT_ASSERT(pChangeTrack);
+
+    typeCharsInCell("a", 0, 0, pView1, pModelObj);
+
+    KitHelper::createView();
+    pModelObj->initializeForTiledRendering(
+        { comphelper::makePropertyValue(u".uno:Author"_ustr, u"Kit User2"_ustr) });
+    ScTabViewShell* pView2 = dynamic_cast<ScTabViewShell*>(SfxViewShell::Current());
+    CPPUNIT_ASSERT(pView2);
+    typeCharsInCell("b", 0, 1, pView2, pModelObj);
+
+    KitHelper::setView(nView1);
+    typeCharsInCell("c", 0, 2, pView1, pModelObj);
+
+    OUString aUsers;
+    for (const ScChangeAction* pAction = pChangeTrack->GetFirst(); pAction;
+         pAction = pAction->GetNext())
+        aUsers += pAction->GetUser() + ";";
+
+    // Without the accompanying fix in place, this test would have failed: every change was
+    // recorded as Unknown Author, because only the empty user options were asked.
+    CPPUNIT_ASSERT_EQUAL(u"Kit User1;Kit User2;Kit User1;"_ustr, aUsers);
+}
+
+CPPUNIT_PLUGIN_IMPLEMENT();
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,53 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ */
+
+#ifndef INCLUDED_OOX_CRYPTO_DOCUMENTDECRYPTION_HXX
+#define INCLUDED_OOX_CRYPTO_DOCUMENTDECRYPTION_HXX
+
+#include <com/sun/star/beans/NamedValue.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/Sequence.hxx>
+#include <rtl/ustring.hxx>
+
+namespace com::sun::star {
+    namespace beans { struct NamedValue; }
+    namespace io { class XStream; }
+    namespace packages { class XPackageEncryption; }
+}
+namespace cpo::uno { class XComponentContext; }
+
+namespace oox::ole { class OleStorage; }
+
+namespace oox::crypto {
+
+class DocumentDecryption
+{
+private:
+    cpo::uno::Reference< cpo::uno::XComponentContext > mxContext;
+    oox::ole::OleStorage&                      mrOleStorage;
+    cpo::uno::Sequence<css::beans::NamedValue> maStreamsSequence;
+    cpo::uno::Reference< css::packages::XPackageEncryption > mxPackageEncryption;
+
+public:
+    DocumentDecryption(cpo::uno::Reference< cpo::uno::XComponentContext > xContext, oox::ole::OleStorage& rOleStorage);
+
+    bool decrypt(const cpo::uno::Reference< css::io::XStream >& xDocumentStream);
+    bool readEncryptionInfo();
+    bool generateEncryptionKey(const OUString& rPassword);
+
+    cpo::uno::Sequence< css::beans::NamedValue > createEncryptionData(const OUString& rPassword);
+
+};
+
+} // namespace oox::crypto
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,44 @@
+{
+  "compileOnSave": false,
+    "compilerOptions": {
+      "target": "es2022",
+      "useDefineForClassFields": false,
+      "module": "none",
+      "lib": ["dom", "es2022"],
+      "sourceMap": false,
+      "incremental": true,
+      "moduleResolution": "node",
+      "noImplicitAny": true,
+      "removeComments": false,
+      "preserveConstEnums": false,
+      "jsx": "react",
+      "jsxFactory": "h",
+      "jsxFragmentFactory": "Fragment",
+      "watch": false,
+      "plugins": [
+        {
+          "name": "typescript-strict-plugin"
+        }
+      ]
+    },
+    "exclude": [
+      "node_modules",
+      "./node_modules",
+      "./node_modules/*",
+      "js",
+      "scripts",
+      "admin",
+      "mocha_tests",
+      "docs",
+      "test",
+      "typescript_js",
+      "dist",
+      "release",
+      "debug",
+      "welcome",
+      "util",
+      "templates",
+      "introdocs",
+      "extensions"
+    ]
+  }

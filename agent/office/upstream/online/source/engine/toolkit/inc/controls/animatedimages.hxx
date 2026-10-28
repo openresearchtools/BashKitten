@@ -1,0 +1,81 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <toolkit/controls/unocontrolmodel.hxx>
+#include <com/sun/star/awt/XAnimatedImages.hpp>
+#include <cppuhelper/implbase1.hxx>
+
+namespace com::sun::star::container { class XContainerListener; }
+namespace cpo::uno { class XComponentContext; }
+
+namespace toolkit
+{
+
+
+    typedef ::cppu::AggImplInheritanceHelper1   <   UnoControlModel
+                                                ,   css::awt::XAnimatedImages
+                                                >   AnimatedImagesControlModel_Base;
+    class AnimatedImagesControlModel : public AnimatedImagesControlModel_Base
+    {
+    public:
+                                        AnimatedImagesControlModel( cpo::uno::Reference< cpo::uno::XComponentContext > const & i_factory );
+                                        AnimatedImagesControlModel( const AnimatedImagesControlModel& i_copySource );
+
+        virtual rtl::Reference<UnoControlModel> Clone() const override;
+
+        // XPropertySet
+        cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+
+        // XPersistObject
+        OUString getServiceName() override;
+
+        // XServiceInfo
+        OUString getImplementationName(  ) override;
+        cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+        // XAnimatedImages
+        virtual ::sal_Int32 getImageSetCount(  ) override;
+        virtual cpo::uno::Sequence< OUString > getImageSet( ::sal_Int32 i_index ) override;
+        virtual void insertImageSet( ::sal_Int32 i_index, const cpo::uno::Sequence< OUString >& i_imageURLs ) override;
+
+        // XAnimatedImages::XContainer
+        virtual void addContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& i_listener ) override;
+        virtual void removeContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& i_listener ) override;
+
+    protected:
+                                        virtual ~AnimatedImagesControlModel() override;
+
+        cpo::uno::Any      ImplGetDefaultValue( sal_uInt16 nPropId ) const override;
+        ::cppu::IPropertyArrayHelper& getInfoHelper() override;
+        void setFastPropertyValue_NoBroadcast(
+                    std::unique_lock<std::mutex>& rGuard,
+                    sal_Int32 nHandle, const cpo::uno::Any& rValue ) override;
+
+    private:
+        comphelper::OInterfaceContainerHelper4<css::container::XContainerListener> maContainerListeners;
+        std::vector< cpo::uno::Sequence< OUString > >    maImageSets;
+    };
+
+
+} // namespace toolkit
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

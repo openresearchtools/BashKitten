@@ -1,0 +1,95 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_VBAHELPER_VBAWINDOWBASE_HXX
+#define INCLUDED_VBAHELPER_VBAWINDOWBASE_HXX
+
+#include <cppuhelper/weakref.hxx>
+#include <cpo/uno/Any.hxx>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/Sequence.hxx>
+#include <ooo/vba/XWindowBase.hpp>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <vbahelper/vbadllapi.h>
+#include <vbahelper/vbahelper.hxx>
+#include <vbahelper/vbahelperinterface.hxx>
+
+namespace com::sun::star {
+    namespace awt { class XWindow2; }
+    namespace awt { class XWindow; }
+    namespace frame { class XController; }
+    namespace frame { class XModel; }
+}
+namespace cpo::uno { class XComponentContext; }
+
+namespace ooo::vba {
+    class XHelperInterface;
+}
+
+typedef InheritedHelperInterfaceWeakImpl< ov::XWindowBase > WindowBaseImpl_BASE;
+
+class VBAHELPER_DLLPUBLIC VbaWindowBase : public WindowBaseImpl_BASE
+{
+public:
+    /// @throws cpo::uno::RuntimeException
+    VbaWindowBase(
+        const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+        const cpo::uno::Reference< css::frame::XController >& xController );
+    /// @throws cpo::uno::RuntimeException
+    VbaWindowBase(
+        cpo::uno::Sequence< cpo::uno::Any > const& aArgs,
+        cpo::uno::Reference< cpo::uno::XComponentContext > const& xContext );
+
+    // XWindowBase
+    virtual sal_Int32 getHeight() override ;
+    virtual void setHeight( sal_Int32 _height ) override ;
+    virtual sal_Int32 getLeft() override ;
+    virtual void setLeft( sal_Int32 _left ) override ;
+    virtual sal_Int32 getTop() override ;
+    virtual void setTop( sal_Int32 _top ) override ;
+    virtual bool getVisible() override;
+    virtual void setVisible( bool _visible ) override;
+    virtual sal_Int32 getWidth() override ;
+    virtual void setWidth( sal_Int32 _width ) override ;
+
+    // XHelperInterface
+    virtual OUString getServiceImplName() override;
+    virtual cpo::uno::Sequence<OUString> getServiceNames() override;
+
+protected:
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::frame::XController > getController() const;
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::awt::XWindow > getWindow() const;
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::awt::XWindow2 > getWindow2() const;
+
+private:
+    /// @throws cpo::uno::RuntimeException
+    void construct( const cpo::uno::Reference< css::frame::XController >& xController );
+
+    cpo::uno::WeakReference< css::frame::XController > m_xController;
+    cpo::uno::WeakReference< css::awt::XWindow > m_xWindow;
+};
+
+#endif // INCLUDED_VBAHELPER_VBAWINDOWBASE_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,240 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include "pcrcommon.hxx"
+
+#include <com/sun/star/script/ScriptEventDescriptor.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/inspection/XPropertyHandler.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/frame/XFrame.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <cppuhelper/compbase.hxx>
+#include <unotools/resmgr.hxx>
+
+#include <unordered_map>
+
+namespace pcr
+{
+
+
+    //= EventDescription
+
+    typedef sal_Int32   EventId;
+    struct EventDescription
+    {
+    public:
+        OUString sDisplayName;
+        OUString sListenerClassName;
+        OUString sListenerMethodName;
+        OUString sHelpId;
+        OString  sUniqueBrowseId;
+        EventId         nId;
+
+        EventDescription()
+            :nId( 0 )
+            {
+            }
+
+        EventDescription(
+            EventId _nId,
+            std::u16string_view listenerClassName,
+            std::u16string_view listenerMethodName,
+            TranslateId pDisplayNameResId,
+            OUString _sHelpId,
+            OString _sUniqueBrowseId );
+    };
+
+    typedef std::unordered_map< OUString, EventDescription >   EventMap;
+
+
+    //= EventHandler
+
+    typedef ::cppu::WeakComponentImplHelper    <   css::inspection::XPropertyHandler
+                                                ,   css::lang::XServiceInfo
+                                                >   EventHandler_Base;
+    class EventHandler final : public EventHandler_Base
+    {
+    private:
+        mutable ::osl::Mutex    m_aMutex;
+
+        /// the context in which the instance was created
+        cpo::uno::Reference< cpo::uno::XComponentContext >  m_xContext;
+        /// the properties of the object we're handling
+        cpo::uno::Reference< css::beans::XPropertySet >     m_xComponent;
+        /// our XPropertyChangeListener(s)
+        PropertyChangeListeners                             m_aPropertyListeners;
+        /// cache of the events we found at our introspectee
+        EventMap                                            m_aEvents;
+        /// has m_aEvents been initialized?
+        bool                                                m_bEventsMapInitialized;
+        /// is our introspectee a dialog element?
+        bool                                                m_bIsDialogElement;
+            // TODO: move different handling into different derived classes?
+        /// (FormComponent) type of the grid column being inspected, or -1 if we're not inspecting a grid column
+        sal_Int16                                           m_nGridColumnType;
+
+    public:
+        explicit EventHandler(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext
+       );
+
+        virtual ~EventHandler() override;
+
+    private:
+        // XPropertyHandler overridables
+        virtual void                                         inspect( const cpo::uno::Reference< cpo::uno::XInterface >& _rxIntrospectee ) override;
+        virtual cpo::uno::Any                                getPropertyValue( const OUString& _rPropertyName ) override;
+        virtual void                                         setPropertyValue( const OUString& _rPropertyName, const cpo::uno::Any& _rValue ) override;
+        virtual cpo::uno::Any                                convertToPropertyValue( const OUString& _rPropertyName, const cpo::uno::Any& _rControlValue ) override;
+        virtual cpo::uno::Any                                convertToControlValue( const OUString& _rPropertyName, const cpo::uno::Any& _rPropertyValue, const cpo::uno::Type& _rControlValueType ) override;
+        virtual css::beans::PropertyState                    getPropertyState( const OUString& _rPropertyName ) override;
+        virtual void                                         addPropertyChangeListener( const cpo::uno::Reference< css::beans::XPropertyChangeListener >& _rxListener ) override;
+        virtual void                                         removePropertyChangeListener( const cpo::uno::Reference< css::beans::XPropertyChangeListener >& _rxListener ) override;
+        virtual cpo::uno::Sequence< css::beans::Property >   getSupportedProperties() override;
+        virtual cpo::uno::Sequence< OUString >               getSupersededProperties( ) override;
+        virtual cpo::uno::Sequence< OUString >               getActuatingProperties( ) override;
+        virtual css::inspection::LineDescriptor              describePropertyLine( const OUString& _rPropertyName, const cpo::uno::Reference< css::inspection::XPropertyControlFactory >& _rxControlFactory ) override;
+        virtual bool                                     isComposable( const OUString& _rPropertyName ) override;
+        virtual css::inspection::InteractiveSelectionResult  onInteractivePropertySelection( const OUString& _rPropertyName, bool _bPrimary, cpo::uno::Any& _rData, const cpo::uno::Reference< css::inspection::XObjectInspectorUI >& _rxInspectorUI ) override;
+        virtual void                                         actuatingPropertyChanged( const OUString& _rActuatingPropertyName, const cpo::uno::Any& _rNewValue, const cpo::uno::Any& _rOldValue, const cpo::uno::Reference< css::inspection::XObjectInspectorUI >& _rxInspectorUI, bool _bFirstTimeInit ) override;
+        virtual bool                                     suspend( bool _bSuspend ) override;
+
+        // XComponent
+        DECLARE_XCOMPONENT()
+        virtual void                                         disposing() override;
+
+        // XServiceInfo
+        virtual OUString getImplementationName(  ) override;
+        virtual bool supportsService( const OUString& ServiceName ) override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+        /** returns the script events associated with our introspectee
+            @param  _out_rEvents
+                Takes, upon successful return, the events currently associated with the introspectee
+            @precond
+                Our introspectee is a form component
+        */
+        void    impl_getFormComponentScriptEvents_nothrow(
+                    std::vector< css::script::ScriptEventDescriptor >& _out_rEvents
+                ) const;
+
+        /** returns the script events associated with our introspectee
+            @param  _out_rEvents
+                Takes, upon successful return, the events currently associated with the introspectee
+            @precond
+                Our introspectee is a dialog element
+        */
+        void    impl_getDialogElementScriptEvents_nothrow(
+                    std::vector< css::script::ScriptEventDescriptor >& _out_rEvents
+                ) const;
+
+        /** returns the script events associated with our introspectee
+            @param  _out_rEvents
+                Takes, the events currently associated with the introspectee
+        */
+        void impl_getComponentScriptEvents_nothrow(
+                    std::vector< css::script::ScriptEventDescriptor >& _out_rEvents
+                ) const
+        {
+            if ( m_bIsDialogElement )
+                impl_getDialogElementScriptEvents_nothrow( _out_rEvents );
+            else
+                impl_getFormComponentScriptEvents_nothrow( _out_rEvents );
+        }
+
+        /** returns the types of the listeners which can be registered at our introspectee
+            @param  _out_rTypes
+                Takes, upon successful return, the types of possible listeners at the introspectee
+        */
+        void    impl_getComponentListenerTypes_nothrow(
+                    std::vector< cpo::uno::Type >& _out_rTypes
+                ) const;
+
+        /** returns a secondary component to be used for event inspection
+
+            In the UI, we want to mix events for the control model with events for the control.
+            Since our introspectee is a model, this method creates a control for it (if possible).
+
+            @return
+                the secondary component whose events should be mixed with the introspectee's events
+                The caller takes the ownership of the component (if not <NULL/>).
+
+            @throws
+                if an unexpected error occurs during creation of the secondary component.
+                A <NULL/> component to be returned is not unexpected, but allowed
+
+            @precond
+                ->m_xComponent is not <NULL/>
+        */
+        cpo::uno::Reference< cpo::uno::XInterface >
+                impl_getSecondaryComponentForEventInspection_throw( ) const;
+
+        /** returns the event description for the given (programmatic) property name
+            @param  _rPropertyName
+                the name whose event description should be looked up
+            @return
+                the event description for the property name
+            @throws css::beans::UnknownPropertyException
+                if our introspectee does not have an event with the given logical name (see ->getSupportedProperties)
+        */
+        const EventDescription&
+                impl_getEventForName_throw( const OUString& _rPropertyName ) const;
+
+        /** returns the index of our component within its parent, if this parent can be
+            obtained  (XChild::getParent) and supports an ->XIndexAccess interface
+        */
+        sal_Int32   impl_getComponentIndexInParent_throw() const;
+
+        /** sets a given script event as event handler at a form component
+
+            @param  _rScriptEvent
+                the script event to set
+        */
+        void    impl_setFormComponentScriptEvent_nothrow( const css::script::ScriptEventDescriptor& _rScriptEvent );
+
+        /** sets a given script event as event handler at a dialog component
+
+            @param  _rScriptEvent
+                the script event to set
+        */
+        void    impl_setDialogElementScriptEvent_nothrow( const css::script::ScriptEventDescriptor& _rScriptEvent );
+
+        /** returns the frame associated with our context document
+        */
+        cpo::uno::Reference< css::frame::XFrame >
+                impl_getContextFrame_nothrow() const;
+
+        /** approves or denies a certain method to be included in the UI
+            @return
+                <TRUE/> if and only if the given method is allowed.
+        */
+        bool    impl_filterMethod_nothrow( const EventDescription& _rEvent ) const;
+
+        EventHandler( const EventHandler& ) = delete;
+        EventHandler& operator=( const EventHandler& ) = delete;
+    };
+
+
+} // namespace pcr
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

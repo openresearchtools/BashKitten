@@ -1,0 +1,75 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ */
+
+#pragma once
+
+#include <DevelopmentToolDockingWindow.hxx>
+
+#include <com/sun/star/frame/XController.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
+
+#include <comphelper/compbase.hxx>
+#include <utility>
+
+typedef comphelper::WeakComponentImplHelper<css::view::XSelectionChangeListener>
+    SelectionChangeHandlerInterfaceBase;
+
+/** Selection change handler to listen to document selection changes.
+ *
+ * Listens to the changes and notifies the docking window with a new
+ * selected object, when a change happens.
+ */
+class SelectionChangeHandler final : public SelectionChangeHandlerInterfaceBase
+{
+private:
+    cpo::uno::Reference<css::frame::XController> mxController;
+    VclPtr<DevelopmentToolDockingWindow> mpDockingWindow;
+
+public:
+    SelectionChangeHandler(cpo::uno::Reference<css::frame::XController> xController,
+                           DevelopmentToolDockingWindow* pDockingWindow)
+        : mxController(std::move(xController))
+        , mpDockingWindow(pDockingWindow)
+    {
+        cpo::uno::Reference<css::view::XSelectionSupplier> xSupplier(mxController,
+                                                                     cpo::uno::UNO_QUERY);
+        xSupplier->addSelectionChangeListener(this);
+    }
+
+    ~SelectionChangeHandler() { mpDockingWindow.disposeAndClear(); }
+
+    virtual void selectionChanged(const css::lang::EventObject& /*rEvent*/) override
+    {
+        cpo::uno::Reference<css::view::XSelectionSupplier> xSupplier(mxController,
+                                                                     cpo::uno::UNO_QUERY);
+        if (xSupplier.is())
+        {
+            cpo::uno::Any aAny = xSupplier->getSelection();
+            auto xInterface = aAny.get<cpo::uno::Reference<cpo::uno::XInterface>>();
+            mpDockingWindow->selectionChanged(xInterface);
+        }
+    }
+
+    void stopListening()
+    {
+        cpo::uno::Reference<css::view::XSelectionSupplier> xSupplier(mxController,
+                                                                     cpo::uno::UNO_QUERY);
+        xSupplier->removeSelectionChangeListener(this);
+    }
+
+    virtual void disposing(const css::lang::EventObject& /*rEvent*/) override {}
+    using comphelper::WeakComponentImplHelperBase::disposing;
+
+private:
+    SelectionChangeHandler(const SelectionChangeHandler&) = delete;
+    SelectionChangeHandler& operator=(const SelectionChangeHandler&) = delete;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

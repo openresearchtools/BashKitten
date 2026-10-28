@@ -1,0 +1,301 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_CPPUHELPER_IMPLBASE6_HXX
+#define INCLUDED_CPPUHELPER_IMPLBASE6_HXX
+
+#include <atomic>
+
+#include <cppuhelper/implbase_ex.hxx>
+#include <rtl/instance.hxx>
+#include <cppuhelper/weak.hxx>
+#include <cppuhelper/weakagg.hxx>
+#include <com/sun/star/lang/XTypeProvider.hpp>
+
+namespace cppu
+{
+    /// @cond INTERNAL
+
+    struct class_data6
+    {
+        sal_Int16 m_nTypes;
+        std::atomic<bool> m_storedTypeRefs;
+        type_entry m_typeEntries[ 6 + 1 ];
+    };
+
+    template< typename Ifc1, typename Ifc2, typename Ifc3, typename Ifc4, typename Ifc5, typename Ifc6, typename Impl >
+        struct SAL_WARN_UNUSED ImplClassData6
+    {
+        class_data* operator ()()
+        {
+            static class_data6 s_cd =
+            {
+                6 +1, false,
+                {
+                    CPPUHELPER_DETAIL_TYPEENTRY(Ifc1),
+                    CPPUHELPER_DETAIL_TYPEENTRY(Ifc2),
+                    CPPUHELPER_DETAIL_TYPEENTRY(Ifc3),
+                    CPPUHELPER_DETAIL_TYPEENTRY(Ifc4),
+                    CPPUHELPER_DETAIL_TYPEENTRY(Ifc5),
+                    CPPUHELPER_DETAIL_TYPEENTRY(Ifc6),
+                    CPPUHELPER_DETAIL_TYPEENTRY(css::lang::XTypeProvider)
+                }
+            };
+            return reinterpret_cast< class_data * >(&s_cd);
+        }
+    };
+
+    /// @endcond
+
+    /** Implementation helper implementing interface css::lang::XTypeProvider
+        and method XInterface::queryInterface(), but no reference counting.
+
+        @derive
+        Inherit from this class giving your interface(s) to be implemented as template argument(s).
+        Your sub class defines method implementations for these interface(s) including acquire()/
+        release() and delegates incoming queryInterface() calls to this base class.
+    */
+    template< class Ifc1, class Ifc2, class Ifc3, class Ifc4, class Ifc5, class Ifc6 >
+    class SAL_NO_VTABLE SAL_DLLPUBLIC_TEMPLATE ImplHelper6
+        : public css::lang::XTypeProvider
+        , public Ifc1, public Ifc2, public Ifc3, public Ifc4, public Ifc5, public Ifc6
+    {
+        struct cd : public rtl::StaticAggregate< class_data, ImplClassData6 < Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6, ImplHelper6<Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6> > > {};
+    public:
+        ImplHelper6() = default;
+        ImplHelper6(ImplHelper6 const &) = default;
+        ImplHelper6(ImplHelper6 &&) = default;
+        ImplHelper6 & operator =(ImplHelper6 const &) = default;
+        ImplHelper6 & operator =(ImplHelper6 &&) = default;
+
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
+            { return ImplHelper_query( rType, cd::get(), this ); }
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
+            { return ImplHelper_getTypes( cd::get() ); }
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
+            { return ImplHelper_getImplementationId( cd::get() ); }
+
+#if !defined _MSC_VER // public -> protected changes mangled names there
+    protected:
+#endif
+        ~ImplHelper6() noexcept {}
+    };
+    /** Implementation helper implementing interfaces css::lang::XTypeProvider and
+        cpo::uno::XInterface which supports weak mechanism to be held weakly
+        (supporting cpo::uno::XWeak through ::cppu::OWeakObject).
+
+        @derive
+        Inherit from this class giving your interface(s) to be implemented as template argument(s).
+        Your sub class defines method implementations for these interface(s).
+    */
+    template< class Ifc1, class Ifc2, class Ifc3, class Ifc4, class Ifc5, class Ifc6 >
+    class SAL_NO_VTABLE SAL_DLLPUBLIC_TEMPLATE WeakImplHelper6
+        : public OWeakObject
+        , public css::lang::XTypeProvider
+        , public Ifc1, public Ifc2, public Ifc3, public Ifc4, public Ifc5, public Ifc6
+    {
+        struct cd : public rtl::StaticAggregate< class_data, ImplClassData6 < Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6, WeakImplHelper6<Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6> > > {};
+    public:
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
+            { return WeakImplHelper_query( rType, cd::get(), this, static_cast<OWeakObject *>(this) ); }
+        virtual void acquire() noexcept override
+            { OWeakObject::acquire(); }
+        virtual void release() noexcept override
+            { OWeakObject::release(); }
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
+            { return WeakImplHelper_getTypes( cd::get() ); }
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
+            { return ImplHelper_getImplementationId( cd::get() ); }
+    };
+    /** Implementation helper implementing interfaces css::lang::XTypeProvider and
+        cpo::uno::XInterface which supports weak mechanism to be held weakly
+        (supporting cpo::uno::XWeak through ::cppu::OWeakAggObject).
+        In addition, it supports also aggregation meaning object of this class can be aggregated
+        (cpo::uno::XAggregation through ::cppu::OWeakAggObject).
+        If a delegator is set (this object is aggregated), then incoming queryInterface()
+        calls are delegated to the delegator object. If the delegator does not support the
+        demanded interface, it calls queryAggregation() on its aggregated objects.
+
+        @derive
+        Inherit from this class giving your interface(s) to be implemented as template argument(s).
+        Your sub class defines method implementations for these interface(s).
+    */
+    template< class Ifc1, class Ifc2, class Ifc3, class Ifc4, class Ifc5, class Ifc6 >
+    class SAL_NO_VTABLE SAL_DLLPUBLIC_TEMPLATE WeakAggImplHelper6
+        : public OWeakAggObject
+        , public css::lang::XTypeProvider
+        , public Ifc1, public Ifc2, public Ifc3, public Ifc4, public Ifc5, public Ifc6
+    {
+        struct cd : public rtl::StaticAggregate< class_data, ImplClassData6 < Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6, WeakAggImplHelper6<Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6> > > {};
+    public:
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
+            { return OWeakAggObject::queryInterface( rType ); }
+        virtual cpo::uno::Any queryAggregation( cpo::uno::Type const & rType ) override
+            { return WeakAggImplHelper_queryAgg( rType, cd::get(), this, static_cast<OWeakAggObject *>(this) ); }
+        virtual void acquire() noexcept override
+            { OWeakAggObject::acquire(); }
+        virtual void release() noexcept override
+            { OWeakAggObject::release(); }
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
+            { return WeakAggImplHelper_getTypes( cd::get() ); }
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
+            { return ImplHelper_getImplementationId( cd::get() ); }
+    };
+    /** Implementation helper implementing interfaces css::lang::XTypeProvider and
+        cpo::uno::XInterface inheriting from a BaseClass.
+        All acquire() and release() calls are delegated to the BaseClass. Upon queryInterface(),
+        if a demanded interface is not supported by this class directly, the request is
+        delegated to the BaseClass.
+
+        @attention
+        The BaseClass has to be complete in a sense, that cpo::uno::XInterface
+        and css::lang::XTypeProvider are implemented properly.  The
+        BaseClass must have at least one ctor that can be called with six or
+        fewer arguments, of which none is of non-const reference type.
+
+        @derive
+        Inherit from this class giving your additional interface(s) to be implemented as
+        template argument(s). Your sub class defines method implementations for these interface(s).
+    */
+    template< class BaseClass, class Ifc1, class Ifc2, class Ifc3, class Ifc4, class Ifc5, class Ifc6 >
+    class SAL_NO_VTABLE SAL_DLLPUBLIC_TEMPLATE ImplInheritanceHelper6
+        : public BaseClass
+        , public Ifc1, public Ifc2, public Ifc3, public Ifc4, public Ifc5, public Ifc6
+    {
+        struct cd : public rtl::StaticAggregate< class_data, ImplClassData6 < Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6, ImplInheritanceHelper6<BaseClass, Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6> > > {};
+    protected:
+        template< typename T1 >
+        explicit ImplInheritanceHelper6(T1 const & arg1): BaseClass(arg1) {}
+        template< typename T1, typename T2 >
+        ImplInheritanceHelper6(T1 const & arg1, T2 const & arg2):
+            BaseClass(arg1, arg2) {}
+        template< typename T1, typename T2, typename T3 >
+        ImplInheritanceHelper6(
+            T1 const & arg1, T2 const & arg2, T3 const & arg3):
+            BaseClass(arg1, arg2, arg3) {}
+        template< typename T1, typename T2, typename T3, typename T4 >
+        ImplInheritanceHelper6(
+            T1 const & arg1, T2 const & arg2, T3 const & arg3, T4 const & arg4):
+            BaseClass(arg1, arg2, arg3, arg4) {}
+        template<
+            typename T1, typename T2, typename T3, typename T4, typename T5 >
+        ImplInheritanceHelper6(
+            T1 const & arg1, T2 const & arg2, T3 const & arg3, T4 const & arg4,
+            T5 const & arg5):
+            BaseClass(arg1, arg2, arg3, arg4, arg5) {}
+        template<
+            typename T1, typename T2, typename T3, typename T4, typename T5,
+            typename T6 >
+        ImplInheritanceHelper6(
+            T1 const & arg1, T2 const & arg2, T3 const & arg3, T4 const & arg4,
+            T5 const & arg5, T6 const & arg6):
+            BaseClass(arg1, arg2, arg3, arg4, arg5, arg6) {}
+    public:
+        ImplInheritanceHelper6() {}
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
+            {
+                cpo::uno::Any aRet( ImplHelper_queryNoXInterface( rType, cd::get(), this ) );
+                if (aRet.hasValue())
+                    return aRet;
+                return BaseClass::queryInterface( rType );
+            }
+        virtual void acquire() noexcept override
+            { BaseClass::acquire(); }
+        virtual void release() noexcept override
+            { BaseClass::release(); }
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
+            { return ImplInhHelper_getTypes( cd::get(), BaseClass::getTypes() ); }
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
+            { return ImplHelper_getImplementationId( cd::get() ); }
+    };
+    /** Implementation helper implementing interfaces css::lang::XTypeProvider and
+        cpo::uno::XInterface inheriting from a BaseClass.
+        All acquire(),  release() and queryInterface() calls are delegated to the BaseClass.
+        Upon queryAggregation(), if a demanded interface is not supported by this class directly,
+        the request is delegated to the BaseClass.
+
+        @attention
+        The BaseClass has to be complete in a sense, that cpo::uno::XInterface,
+        cpo::uno::XAggregation and css::lang::XTypeProvider
+        are implemented properly.  The BaseClass must have at least one ctor
+        that can be called with six or fewer arguments, of which none is of
+        non-const reference type.
+
+        @derive
+        Inherit from this class giving your additional interface(s) to be implemented as
+        template argument(s). Your sub class defines method implementations for these interface(s).
+    */
+    template< class BaseClass, class Ifc1, class Ifc2, class Ifc3, class Ifc4, class Ifc5, class Ifc6 >
+    class SAL_NO_VTABLE SAL_DLLPUBLIC_TEMPLATE AggImplInheritanceHelper6
+        : public BaseClass
+        , public Ifc1, public Ifc2, public Ifc3, public Ifc4, public Ifc5, public Ifc6
+    {
+        struct cd : public rtl::StaticAggregate< class_data, ImplClassData6 < Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6, AggImplInheritanceHelper6<BaseClass, Ifc1, Ifc2, Ifc3, Ifc4, Ifc5, Ifc6> > > {};
+    protected:
+        template< typename T1 >
+        explicit AggImplInheritanceHelper6(T1 const & arg1): BaseClass(arg1) {}
+        template< typename T1, typename T2 >
+        AggImplInheritanceHelper6(T1 const & arg1, T2 const & arg2):
+            BaseClass(arg1, arg2) {}
+        template< typename T1, typename T2, typename T3 >
+        AggImplInheritanceHelper6(
+            T1 const & arg1, T2 const & arg2, T3 const & arg3):
+            BaseClass(arg1, arg2, arg3) {}
+        template< typename T1, typename T2, typename T3, typename T4 >
+        AggImplInheritanceHelper6(
+            T1 const & arg1, T2 const & arg2, T3 const & arg3, T4 const & arg4):
+            BaseClass(arg1, arg2, arg3, arg4) {}
+        template<
+            typename T1, typename T2, typename T3, typename T4, typename T5 >
+        AggImplInheritanceHelper6(
+            T1 const & arg1, T2 const & arg2, T3 const & arg3, T4 const & arg4,
+            T5 const & arg5):
+            BaseClass(arg1, arg2, arg3, arg4, arg5) {}
+        template<
+            typename T1, typename T2, typename T3, typename T4, typename T5,
+            typename T6 >
+        AggImplInheritanceHelper6(
+            T1 const & arg1, T2 const & arg2, T3 const & arg3, T4 const & arg4,
+            T5 const & arg5, T6 const & arg6):
+            BaseClass(arg1, arg2, arg3, arg4, arg5, arg6) {}
+    public:
+        AggImplInheritanceHelper6() {}
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
+            { return BaseClass::queryInterface( rType ); }
+        virtual cpo::uno::Any queryAggregation( cpo::uno::Type const & rType ) override
+            {
+                cpo::uno::Any aRet( ImplHelper_queryNoXInterface( rType, cd::get(), this ) );
+                if (aRet.hasValue())
+                    return aRet;
+                return BaseClass::queryAggregation( rType );
+            }
+        virtual void acquire() noexcept override
+            { BaseClass::acquire(); }
+        virtual void release() noexcept override
+            { BaseClass::release(); }
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
+            { return ImplInhHelper_getTypes( cd::get(), BaseClass::getTypes() ); }
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
+            { return ImplHelper_getImplementationId( cd::get() ); }
+    };
+}
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

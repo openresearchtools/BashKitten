@@ -1,0 +1,355 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <com/sun/star/frame/UnknownModuleException.hpp>
+#include <com/sun/star/frame/XFrame.hpp>
+#include <com/sun/star/frame/XController.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/frame/XModule.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/frame/XModuleManager2.hpp>
+#include <com/sun/star/container/XNameReplace.hpp>
+#include <com/sun/star/container/XContainerQuery.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <comphelper/configurationhelper.hxx>
+#include <comphelper/sequenceashashmap.hxx>
+#include <comphelper/sequence.hxx>
+#include <comphelper/enumhelper.hxx>
+#include <comphelper/configuration.hxx>
+#include <utility>
+
+namespace {
+
+class ModuleManager:
+    public cppu::WeakImplHelper<
+        css::lang::XServiceInfo,
+        css::frame::XModuleManager2,
+        css::container::XContainerQuery >
+{
+private:
+
+    /** the global uno service manager.
+        Must be used to create own needed services.
+     */
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+
+    /** points to the underlying configuration.
+        This ModuleManager does not cache - it calls directly the
+        configuration API!
+      */
+    cpo::uno::Reference< css::container::XNameAccess > m_xCFG;
+
+public:
+
+    explicit ModuleManager(cpo::uno::Reference< cpo::uno::XComponentContext >  xContext);
+
+    ModuleManager(const ModuleManager&) = delete;
+    ModuleManager& operator=(const ModuleManager&) = delete;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+
+    virtual bool supportsService(
+        OUString const & ServiceName) override;
+
+    virtual cpo::uno::Sequence< OUString >
+    getSupportedServiceNames() override;
+
+    // XModuleManager
+    virtual OUString identify(const cpo::uno::Reference< cpo::uno::XInterface >& xModule) override;
+
+    // XNameReplace
+    virtual void replaceByName(const OUString& sName ,
+                                        const cpo::uno::Any&   aValue) override;
+
+    // XNameAccess
+    virtual cpo::uno::Any getByName(const OUString& sName) override;
+
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+
+    virtual bool hasByName(const OUString& sName) override;
+
+    // XElementAccess
+    virtual cpo::uno::Type getElementType() override;
+
+    virtual bool hasElements() override;
+
+    // XContainerQuery
+    virtual cpo::uno::Reference< css::container::XEnumeration > createSubSetEnumerationByQuery(const OUString& sQuery) override;
+
+    virtual cpo::uno::Reference< css::container::XEnumeration > createSubSetEnumerationByProperties(const cpo::uno::Sequence< css::beans::NamedValue >& lProperties) override;
+
+private:
+
+    /** @short  makes the real identification of the module.
+
+        @descr  It checks for the optional but preferred interface
+                XModule first. If this module does not exists at the
+                given component it tries to use XServiceInfo instead.
+
+                Note: This method try to locate a suitable module name.
+                Nothing else. Selecting the right component and throwing suitable
+                exceptions must be done outside.
+
+        @see    identify()
+
+        @param  xComponent
+                the module for identification.
+
+        @return The identifier of the given module.
+                Can be empty if given component is not a real module !
+
+        @threadsafe
+     */
+    OUString implts_identify(const cpo::uno::Reference< cpo::uno::XInterface >& xComponent);
+};
+
+ModuleManager::ModuleManager(cpo::uno::Reference< cpo::uno::XComponentContext >  xContext)
+    : m_xContext(std::move(xContext))
+{
+    if (!comphelper::IsFuzzing())
+    {
+        m_xCFG.set( comphelper::ConfigurationHelper::openConfig(
+                    m_xContext, u"/org.openoffice.Setup/Office/Factories"_ustr,
+                    comphelper::EConfigurationModes::ReadOnly ),
+                cpo::uno::UNO_QUERY_THROW );
+    }
+}
+
+OUString ModuleManager::getImplementationName()
+{
+    return u"com.sun.star.comp.framework.ModuleManager"_ustr;
+}
+
+bool ModuleManager::supportsService(OUString const & ServiceName)
+{
+    return cppu::supportsService(this, ServiceName);
+}
+
+cpo::uno::Sequence< OUString > ModuleManager::getSupportedServiceNames()
+{
+    return { u"com.sun.star.frame.ModuleManager"_ustr };
+}
+
+OUString ModuleManager::identify(const cpo::uno::Reference< cpo::uno::XInterface >& xModule)
+{
+    // valid parameter?
+    cpo::uno::Reference< css::frame::XFrame >      xFrame     (xModule, cpo::uno::UNO_QUERY);
+    cpo::uno::Reference< css::awt::XWindow >       xWindow    (xModule, cpo::uno::UNO_QUERY);
+    cpo::uno::Reference< css::frame::XController > xController(xModule, cpo::uno::UNO_QUERY);
+    cpo::uno::Reference< css::frame::XModel >      xModel     (xModule, cpo::uno::UNO_QUERY);
+
+    if (
+        (!xFrame.is()     ) &&
+        (!xWindow.is()    ) &&
+        (!xController.is()) &&
+        (!xModel.is()     )
+       )
+    {
+        throw css::lang::IllegalArgumentException(
+                u"Given module is not a frame nor a window, controller or model."_ustr,
+                static_cast< ::cppu::OWeakObject* >(this),
+                1);
+    }
+
+    if (xFrame.is())
+    {
+        xController = xFrame->getController();
+        xWindow     = xFrame->getComponentWindow();
+    }
+    if (xController.is())
+        xModel = xController->getModel();
+
+    // modules are implemented by the deepest component in hierarchy ...
+    // Means: model -> controller -> window
+    // No fallbacks to higher components are allowed !
+    // Note : A frame provides access to module components only ... but it's not a module by himself.
+
+    OUString sModule;
+    if (xModel.is())
+        sModule = implts_identify(xModel);
+    else if (xController.is())
+        sModule = implts_identify(xController);
+    else if (xWindow.is())
+        sModule = implts_identify(xWindow);
+
+    if (sModule.isEmpty())
+        throw css::frame::UnknownModuleException(
+                u"Can not find suitable module for the given component."_ustr,
+                static_cast< ::cppu::OWeakObject* >(this));
+
+    return sModule;
+}
+
+void ModuleManager::replaceByName(const OUString& sName ,
+                                           const cpo::uno::Any&   aValue)
+{
+    ::comphelper::SequenceAsHashMap lProps(aValue);
+    if (lProps.empty() )
+    {
+        throw css::lang::IllegalArgumentException(
+                u"No properties given to replace part of module."_ustr,
+                static_cast< cppu::OWeakObject * >(this),
+                2);
+    }
+
+    // get access to the element
+    // Note: Don't use impl_getConfig() method here. Because it creates a readonly access only, further
+    // it cache it as a member of this module manager instance. If we change some props there ... but don't
+    // flush changes (because an error occurred) we will read them later. If we use a different config access
+    // we can close it without a flush... and our read data won't be affected .-)
+    cpo::uno::Reference< cpo::uno::XInterface >         xCfg      = ::comphelper::ConfigurationHelper::openConfig(
+                                                                        m_xContext,
+                                                                        u"/org.openoffice.Setup/Office/Factories"_ustr,
+                                                                        ::comphelper::EConfigurationModes::Standard);
+    cpo::uno::Reference< css::container::XNameAccess >  xModules (xCfg, cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Reference< css::container::XNameReplace > xModule  ;
+
+    xModules->getByName(sName) >>= xModule;
+    if (!xModule.is())
+    {
+        throw cpo::uno::RuntimeException(
+                u"Was not able to get write access to the requested module entry inside configuration."_ustr,
+                static_cast< cppu::OWeakObject * >(this));
+    }
+
+    for (auto const& prop : lProps)
+    {
+        // let "NoSuchElementException" out ! We support the same API ...
+        // and without a flush() at the end all changed data before will be ignored !
+        xModule->replaceByName(prop.first.maString, prop.second);
+    }
+
+    ::comphelper::ConfigurationHelper::flush(xCfg);
+}
+
+cpo::uno::Any ModuleManager::getByName(const OUString& sName)
+{
+    // get access to the element
+    cpo::uno::Reference< css::container::XNameAccess > xModule;
+    if (m_xCFG)
+        m_xCFG->getByName(sName) >>= xModule;
+    if (!xModule.is())
+    {
+        throw cpo::uno::RuntimeException(
+                u"Was not able to get write access to the requested module entry inside configuration."_ustr,
+                static_cast< cppu::OWeakObject * >(this));
+    }
+
+    // convert it to seq< PropertyValue >
+    const cpo::uno::Sequence< OUString > lPropNames = xModule->getElementNames();
+    comphelper::SequenceAsHashMap lProps;
+
+    lProps[u"ooSetupFactoryModuleIdentifier"_ustr] <<= sName;
+    for (const OUString& sPropName : lPropNames)
+    {
+        lProps[sPropName] = xModule->getByName(sPropName);
+    }
+
+    return cpo::uno::Any(lProps.getAsConstPropertyValueList());
+}
+
+cpo::uno::Sequence< OUString > ModuleManager::getElementNames()
+{
+    return m_xCFG ? m_xCFG->getElementNames() : cpo::uno::Sequence<OUString>();
+}
+
+bool ModuleManager::hasByName(const OUString& sName)
+{
+    return m_xCFG && m_xCFG->hasByName(sName);
+}
+
+cpo::uno::Type ModuleManager::getElementType()
+{
+    return cppu::UnoType<cpo::uno::Sequence< css::beans::PropertyValue >>::get();
+}
+
+bool ModuleManager::hasElements()
+{
+    return m_xCFG && m_xCFG->hasElements();
+}
+
+cpo::uno::Reference< css::container::XEnumeration > ModuleManager::createSubSetEnumerationByQuery(const OUString&)
+{
+    return cpo::uno::Reference< css::container::XEnumeration >();
+}
+
+cpo::uno::Reference< css::container::XEnumeration > ModuleManager::createSubSetEnumerationByProperties(const cpo::uno::Sequence< css::beans::NamedValue >& lProperties)
+{
+    ::comphelper::SequenceAsHashMap lSearchProps(lProperties);
+    const cpo::uno::Sequence< OUString > lModules = getElementNames();
+    ::std::vector< cpo::uno::Any > lResult;
+
+    for (const OUString& rModuleName : lModules)
+    {
+        try
+        {
+            ::comphelper::SequenceAsHashMap lModuleProps = getByName(rModuleName);
+            if (lModuleProps.match(lSearchProps))
+                lResult.push_back(cpo::uno::Any(lModuleProps.getAsConstPropertyValueList()));
+        }
+        catch(const cpo::uno::Exception&)
+        {
+        }
+    }
+
+    return new ::comphelper::OAnyEnumeration(comphelper::containerToSequence(lResult));
+}
+
+OUString ModuleManager::implts_identify(const cpo::uno::Reference< cpo::uno::XInterface >& xComponent)
+{
+    // Search for an optional (!) interface XModule first.
+    // It's used to overrule an existing service name. Used e.g. by our database form designer
+    // which uses a writer module internally.
+    cpo::uno::Reference< css::frame::XModule > xModule(xComponent, cpo::uno::UNO_QUERY);
+    if (xModule.is())
+        return xModule->getIdentifier();
+
+    // detect modules in a generic way...
+    // comparing service names with configured entries...
+    cpo::uno::Reference< css::lang::XServiceInfo > xInfo(xComponent, cpo::uno::UNO_QUERY);
+    if (!xInfo.is())
+        return OUString();
+
+    const cpo::uno::Sequence< OUString > lKnownModules = getElementNames();
+    for (const OUString& rName : lKnownModules)
+    {
+        if (xInfo->supportsService(rName))
+            return rName;
+    }
+
+    return OUString();
+}
+
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_framework_ModuleManager_get_implementation(
+    cpo::uno::XComponentContext *context,
+    cpo::uno::Sequence<cpo::uno::Any> const &)
+{
+    return cppu::acquire(new ModuleManager(context));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

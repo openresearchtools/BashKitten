@@ -1,0 +1,11002 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <sfx2/kit/helper.hxx>
+#include <sal/types.h>
+#include <svx/sdr/contact/viewcontact.hxx>
+#include <svx/svdpage.hxx>
+#include <svx/svdoashp.hxx>
+#include <svx/svdograf.hxx>
+#include <svx/svdglue.hxx>
+#include <svx/svdopath.hxx>
+#include <cmath>
+
+#include <basegfx/matrix/b2dhommatrixtools.hxx>
+#include <basegfx/numeric/ftools.hxx>
+#include <basegfx/polygon/b2dpolypolygontools.hxx>
+#include <svx/svdpagv.hxx>
+#include <config_buildconfig.h>
+#include <config_cairo_rgba.h>
+#include <config_features.h>
+#include <config_vclplug.h>
+#include <editeng/unolingu.hxx>
+#include <boost/property_tree/ptree_fwd.hpp>
+
+#if HAVE_FEATURE_QUICKJS
+#include <jsuno/jsuno.hxx>
+#endif
+
+#include <stdio.h>
+
+#ifdef IOS
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unicode/udata.h>
+#include <unicode/ucnv.h>
+#include <premac.h>
+#import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphics.h>
+#include <postmac.h>
+#endif
+
+#undef HAVE_MALLOC_TRIM
+
+#ifdef UNX
+#  include <fcntl.h>
+#endif
+#ifdef LINUX
+#if defined __GLIBC__
+#  include <malloc.h>
+#  define HAVE_MALLOC_TRIM
+#endif
+#endif
+
+#ifdef ANDROID
+#include <osl/detail/android-bootstrap.h>
+#endif
+
+#ifdef __EMSCRIPTEN__
+#include <osl/detail/emscripten-bootstrap.h>
+#endif
+
+#include <cassert>
+#include <algorithm>
+#include <limits>
+#include <memory>
+#include <vector>
+#include <iostream>
+#include <mutex>
+#include <string_view>
+#include <unordered_map>
+
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/algorithm/string.hpp>
+
+#include <COKit/COKit.hxx>
+
+#include <sal/log.hxx>
+#include <sot/exchange.hxx>
+#include <sot/formats.hxx>
+#include <utility>
+#include <vcl/commandinfoprovider.hxx>
+#include <vcl/dropcache.hxx>
+#include <vcl/errinf.hxx>
+#include <vcl/idletask.hxx>
+#include <vcl/kit.hxx>
+#include <o3tl/any.hxx>
+#include <o3tl/safeint.hxx>
+#include <o3tl/unit_conversion.hxx>
+#include <o3tl/string_view.hxx>
+#include <config_folders.h>
+
+#include <osl/file.hxx>
+#include <osl/process.h>
+#include <osl/thread.h>
+#include <rtl/bootstrap.hxx>
+#include <rtl/strbuf.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <rtl/uri.hxx>
+#include <svl/cryptosign.hxx>
+#include <linguistic/misc.hxx>
+#include <salhelper/timer.hxx>
+#include <drawinglayer/primitive2d/BufferedDecompositionFlusher.hxx>
+#include <cppuhelper/bootstrap.hxx>
+#include <comphelper/random.hxx>
+#include <comphelper/base64.hxx>
+#include <comphelper/dispatchcommand.hxx>
+#include <comphelper/docpasswordhelper.hxx>
+#include <comphelper/embeddedobjectcontainer.hxx>
+#include <comphelper/kit.hxx>
+#include <comphelper/legacyunoapinotice.hxx>
+#include <comphelper/processfactory.hxx>
+#include <comphelper/string.hxx>
+#include <comphelper/profilezone.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <comphelper/propertyvalue.hxx>
+#include <comphelper/scopeguard.hxx>
+#include <comphelper/threadpool.hxx>
+#include <comphelper/types.hxx>
+#include <comphelper/sequenceashashmap.hxx>
+#include <comphelper/xmlencode.hxx>
+
+#include <com/sun/star/connection/XConnection.hpp>
+#include <com/sun/star/document/MacroExecMode.hpp>
+#include <com/sun/star/beans/NamedValue.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/document/XTypeDetection.hpp>
+#include <com/sun/star/frame/Desktop.hpp>
+#include <com/sun/star/frame/DispatchResultEvent.hpp>
+#include <com/sun/star/frame/DispatchResultState.hpp>
+#include <com/sun/star/frame/ModuleManager.hpp>
+#include <com/sun/star/frame/XDispatchProvider.hpp>
+#include <com/sun/star/frame/XDispatchResultListener.hpp>
+#include <com/sun/star/frame/XSynchronousDispatch.hpp>
+#include <com/sun/star/frame/XStorable.hpp>
+#include <com/sun/star/lang/Locale.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
+#include <com/sun/star/util/thePathSettings.hpp>
+#include <com/sun/star/util/PathSubstitution.hpp>
+#include <com/sun/star/util/URLTransformer.hpp>
+#include <com/sun/star/util/XFlushable.hpp>
+#include <com/sun/star/configuration/theDefaultProvider.hpp>
+#include <com/sun/star/container/XHierarchicalNameAccess.hpp>
+#include <com/sun/star/configuration/Update.hpp>
+#include <com/sun/star/datatransfer/clipboard/XClipboard.hpp>
+#include <com/sun/star/datatransfer/UnsupportedFlavorException.hpp>
+#include <com/sun/star/datatransfer/XTransferable2.hpp>
+#include <com/sun/star/text/TextContentAnchorType.hpp>
+#include <com/sun/star/document/XRedlinesSupplier.hpp>
+#include <com/sun/star/ui/GlobalAcceleratorConfiguration.hpp>
+#include <com/sun/star/ui/theModuleUIConfigurationManagerSupplier.hpp>
+#include <com/sun/star/bridge/BridgeFactory.hpp>
+#include <com/sun/star/bridge/XBridgeFactory.hpp>
+#include <com/sun/star/bridge/XBridge.hpp>
+#include <cpo/uno/XNamingService.hpp>
+
+#include <com/sun/star/xml/crypto/SEInitializer.hpp>
+#include <com/sun/star/xml/crypto/XSEInitializer.hpp>
+#include <com/sun/star/xml/crypto/XSecurityEnvironment.hpp>
+#include <com/sun/star/xml/crypto/XCertificateCreator.hpp>
+#include <com/sun/star/security/XCertificate.hpp>
+
+#include <com/sun/star/linguistic2/DictionaryList.hpp>
+#include <com/sun/star/linguistic2/LinguServiceManager.hpp>
+#include <com/sun/star/linguistic2/XSpellChecker.hpp>
+#include <com/sun/star/linguistic2/XProofreader.hpp>
+#include <com/sun/star/i18n/LocaleCalendar.hpp>
+#include <com/sun/star/i18n/ScriptType.hpp>
+#include <com/sun/star/i18n/BreakIterator.hpp>
+#include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
+
+#include <editeng/acorrcfg.hxx>
+#include <editeng/flstitem.hxx>
+#ifdef IOS
+#include <sfx2/app.hxx>
+#endif
+#include <sfx2/cokitfilepicker.hxx>
+#include <sfx2/objsh.hxx>
+#include <sfx2/docfilt.hxx>
+#include <sfx2/docfile.hxx>
+#include <sfx2/ipclient.hxx>
+#include <sfx2/viewsh.hxx>
+#include <sfx2/viewfrm.hxx>
+#include <sfx2/bindings.hxx>
+#include <sfx2/msgpool.hxx>
+#include <sfx2/dispatch.hxx>
+#include <sfx2/shell.hxx>
+#include <sfx2/kit/componenthelpers.hxx>
+#include <sfx2/DocumentSigner.hxx>
+#include <sfx2/sidebar/Sidebar.hxx>
+#include <sfx2/kit/unocommandlist.hxx>
+#include <svl/numformat.hxx>
+#include <svx/dialmgr.hxx>
+#include <svx/strings.hrc>
+#include <svx/svdmodel.hxx>
+#include <svx/svdoutl.hxx>
+#include <svx/svdview.hxx>
+#include <svx/svddrag.hxx>
+#include <svx/svdhdl.hxx>
+#include <svx/svdundo.hxx>
+#include <svx/svxids.hrc>
+#include <svx/ucsubset.hxx>
+#include <vcl/vclevent.hxx>
+#include <vcl/GestureEventPan.hxx>
+#include <vcl/svapp.hxx>
+#include <unotools/resmgr.hxx>
+#include <tools/debug.hxx>
+#include <tools/fract.hxx>
+#include <tools/json_writer.hxx>
+#include <tools/urlobj.hxx>
+#include <svtools/ctrltool.hxx>
+#include <svtools/langtab.hxx>
+#include <vcl/fontcharmap.hxx>
+#ifdef IOS
+#include <vcl/sysdata.hxx>
+#endif
+#include <vcl/virdev.hxx>
+#include <vcl/ImageTree.hxx>
+#include <vcl/ITiledRenderable.hxx>
+#include <vcl/dialoghelper.hxx>
+#if defined(_WIN32) && !USE_HEADLESS_CODE
+#include <vcl/BitmapTools.hxx>
+#endif
+#include <unicode/uchar.h>
+#include <unotools/securityoptions.hxx>
+#include <unotools/confignode.hxx>
+#include <unotools/syslocaleoptions.hxx>
+#include <unotools/mediadescriptor.hxx>
+#include <unotools/pathoptions.hxx>
+#include <unotools/tempfile.hxx>
+#include <unotools/streamwrap.hxx>
+#include <osl/module.hxx>
+#include <comphelper/sequence.hxx>
+#include <sfx2/sfxbasemodel.hxx>
+#include <svl/undo.hxx>
+#include <unotools/datetime.hxx>
+#include <i18nlangtag/mslangid.hxx>
+#include <i18nlangtag/languagetag.hxx>
+#include <vcl/abstdlg.hxx>
+#include <comphelper/diagnose_ex.hxx>
+#include <vcl/uitest/uiobject.hxx>
+#include <vcl/jsdialog/executor.hxx>
+#include <vcl/scheduler.hxx>
+
+// Needed for getUndoManager()
+#include <com/sun/star/document/XUndoManager.hpp>
+#include <com/sun/star/document/XUndoManagerSupplier.hpp>
+#include <com/sun/star/document/XLinkTargetSupplier.hpp>
+#include <editeng/sizeitem.hxx>
+#include <svx/rulritem.hxx>
+#include <svx/pageitem.hxx>
+
+#include <app.hxx>
+
+#include "../app/cmdlineargs.hxx"
+// We also need to hackily be able to start the main libreoffice thread:
+#include "../app/sofficemain.h"
+#include "../app/officeipcthread.hxx"
+#include <lib/init.hxx>
+#include <lib/l10ntranslate.hxx>
+
+#include "kitinteractionhandler.hxx"
+#include "kitclipboard.hxx"
+#include <officecfg/Office/Common.hxx>
+#include <officecfg/Office/Impress.hxx>
+#include <officecfg/Office/Linguistic.hxx>
+#include <officecfg/Office/UI/ToolbarMode.hxx>
+#include <unotools/optionsdlg.hxx>
+#include <svl/ctloptions.hxx>
+#include <svtools/colorcfg.hxx>
+#include <svtools/miscopt.hxx>
+#include <unotools/cmdoptions.hxx>
+#include <unotools/lingucfg.hxx>
+#include <unotools/moduleoptions.hxx>
+#include <unotools/searchopt.hxx>
+#include <unotools/useroptions.hxx>
+#include <vcl/settings.hxx>
+
+#include <officecfg/Setup.hxx>
+#include <com/sun/star/ui/XAcceleratorConfiguration.hpp>
+#include <svtools/acceleratorexecute.hxx>
+
+#include <tools/hostfilter.hxx>
+
+using namespace css;
+using namespace vcl;
+using namespace desktop;
+using namespace utl;
+using namespace bridge;
+using namespace ::cpo;
+using namespace ::cpo::uno;
+using namespace lang;
+
+#ifdef UNX
+
+static int urandom = -1;
+
+extern "C" {
+    int SAL_JNI_EXPORT kit_open_urandom()
+    {
+        return dup(urandom);
+    }
+};
+
+#endif
+
+using LanguageToolCfg = officecfg::Office::Linguistic::GrammarChecking::LanguageTool;
+
+
+static COKitImpl *gImpl = nullptr;
+static bool cok_preinit_2_called = false;
+static bool gUseCompactFonts = false;
+static bool bInitialized = false;
+
+static void SetLastExceptionMsg(const OUString& s = OUString())
+{
+    SAL_WARN_IF(!s.isEmpty(), "kit", "kit exception '" + s + "'");
+    if (gImpl)
+        gImpl->maLastExceptionMsg = s;
+}
+
+namespace {
+
+struct ExtensionMap
+{
+    std::string_view extn;
+    OUString filterName;
+};
+
+class TraceEventDumper : public AutoTimer
+{
+    static const int dumpTimeoutMS = 5000;
+
+public:
+    TraceEventDumper() : AutoTimer( "Trace Event dumper" )
+    {
+        SetTimeout(dumpTimeoutMS);
+        Start();
+    }
+
+    virtual void Invoke() override
+    {
+        flushRecordings();
+    }
+
+    static void flushRecordings()
+    {
+        const cpo::uno::Sequence<OUString> aEvents =
+            comphelper::TraceEvent::getRecordingAndClear();
+        OStringBuffer aOutput;
+        for (const auto &s : aEvents)
+        {
+            aOutput.append(OUStringToOString(s, RTL_TEXTENCODING_UTF8)
+                + "\n");
+        }
+        if (aOutput.getLength() > 0)
+        {
+            OString aChunk = aOutput.makeStringAndClear();
+            if (gImpl && gImpl->mpCallback)
+                gImpl->mpCallback(COKitCallbackType::PROFILE_FRAME, aChunk.getStr(), gImpl->mpCallbackData);
+        }
+    }
+};
+
+TraceEventDumper *traceEventDumper = nullptr;
+
+constexpr ExtensionMap aWriterExtensionMap[] =
+{
+    { "doc",   u"MS Word 97"_ustr },
+    { "docm",  u"Office Open XML Text VBA"_ustr },
+    { "docx",  u"Office Open XML Text"_ustr },
+    { "fodt",  u"OpenDocument Text Flat XML"_ustr },
+    { "html",  u"HTML (StarWriter)"_ustr },
+    { "odt",   u"writer8"_ustr },
+    { "ott",   u"writer8_template"_ustr },
+    { "pdf",   u"writer_pdf_Export"_ustr },
+    { "epub",  u"EPUB"_ustr },
+    { "rtf",   u"Rich Text Format"_ustr },
+    { "txt",   u"Text"_ustr },
+    { "xhtml", u"XHTML Writer File"_ustr },
+    { "png",   u"writer_png_Export"_ustr },
+    { "xml",   u"writer_indexing_export"_ustr },
+    { "md",    u"Markdown"_ustr },
+};
+
+constexpr ExtensionMap aCalcExtensionMap[] =
+{
+    { "csv",   u"Text - txt - csv (StarCalc)"_ustr },
+    { "fods",  u"OpenDocument Spreadsheet Flat XML"_ustr },
+    { "html",  u"HTML (StarCalc)"_ustr },
+    { "ods",   u"calc8"_ustr },
+    { "ots",   u"calc8_template"_ustr },
+    { "pdf",   u"calc_pdf_Export"_ustr },
+    { "xhtml", u"XHTML Calc File"_ustr },
+    { "xls",   u"MS Excel 97"_ustr },
+    { "xlsm",  u"Calc Office Open XML VBA"_ustr },
+    { "xlsx",  u"Calc Office Open XML"_ustr },
+    { "png",   u"calc_png_Export"_ustr },
+};
+
+constexpr ExtensionMap aImpressExtensionMap[] =
+{
+    { "fodp",  u"OpenDocument Presentation Flat XML"_ustr },
+    { "html",  u"impress_html_Export"_ustr },
+    { "odg",   u"impress8_draw"_ustr },
+    { "odp",   u"impress8"_ustr },
+    { "otp",   u"impress8_template"_ustr },
+    { "pdf",   u"impress_pdf_Export"_ustr },
+    { "potm",  u"Impress MS PowerPoint 2007 XML Template"_ustr },
+    { "potx",  u"Impress MS PowerPoint 2007 XML Template"_ustr },
+    { "pot",   u"MS PowerPoint 97 Vorlage"_ustr },
+    { "pptm",  u"Impress MS PowerPoint 2007 XML VBA"_ustr },
+    { "ppts",  u"Impress MS PowerPoint 2007 XML AutoPlay"_ustr },
+    { "pptx",  u"Impress MS PowerPoint 2007 XML"_ustr },
+    { "pps",   u"MS PowerPoint 97 AutoPlay"_ustr },
+    { "ppt",   u"MS PowerPoint 97"_ustr },
+    { "svg",   u"impress_svg_Export"_ustr },
+    { "xhtml", u"XHTML Impress File"_ustr },
+    { "png",   u"impress_png_Export"_ustr },
+    { "bmp",   u"impress_bmp_Export"_ustr },
+    { "gif",   u"impress_gif_Export"_ustr },
+    { "tif",   u"impress_tif_Export"_ustr },
+    { "tiff",  u"impress_tif_Export"_ustr }, // tif and tiff are the same format: see https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Image_types#tiff_tagged_image_file_format
+};
+
+constexpr ExtensionMap aDrawExtensionMap[] =
+{
+    { "fodg",  u"OpenDocument Drawing Flat XML"_ustr },
+    { "html",  u"draw_html_Export"_ustr },
+    { "odg",   u"draw8"_ustr },
+    { "pdf",   u"draw_pdf_Export"_ustr },
+    { "svg",   u"draw_svg_Export"_ustr },
+    { "xhtml", u"XHTML Draw File"_ustr },
+    { "png",   u"draw_png_Export"_ustr },
+};
+
+OUString getUString(const char* pString)
+{
+    if (pString == nullptr)
+        return OUString();
+
+    return OStringToOUString(pString, RTL_TEXTENCODING_UTF8);
+}
+
+std::string_view asStringView(std::span<const unsigned char> aBytes)
+{
+    return std::string_view(reinterpret_cast<const char*>(aBytes.data()), aBytes.size());
+}
+
+// The length is carried over, so a string with an embedded \0 survives the copy.
+std::string convertOStringToStdString(const OString &rStr)
+{
+    return std::string(rStr.getStr(), rStr.getLength());
+}
+
+std::string convertOUStringToStdString(std::u16string_view aStr)
+{
+    return convertOStringToStdString(OUStringToOString(aStr, RTL_TEXTENCODING_UTF8));
+}
+
+/// Try to convert a relative URL to an absolute one, unless it already looks like a URL.
+OUString getAbsoluteURL(const char* pURL)
+{
+    OUString aURL(getUString(pURL));
+    if (aURL.isEmpty())
+        return aURL;
+
+    // convert relative paths to absolute ones
+    OUString aWorkingDir;
+    osl_getProcessWorkingDir(&aWorkingDir.pData);
+    if (!aWorkingDir.endsWith("/"))
+        aWorkingDir += "/";
+
+    try
+    {
+        return rtl::Uri::convertRelToAbs(aWorkingDir, aURL);
+    }
+    catch (const rtl::MalformedUriException &)
+    {
+    }
+
+    return OUString();
+}
+
+} // unnamed namespace
+
+std::vector<beans::PropertyValue> desktop::jsonToPropertyValuesVector(const char* pJSON)
+{
+    std::vector<beans::PropertyValue> aArguments;
+    if (pJSON && pJSON[0] != '\0')
+    {
+        aArguments = comphelper::JsonToPropertyValues(pJSON);
+    }
+    return aArguments;
+}
+
+static void extractLinks(const uno::Reference< container::XNameAccess >& xLinks, bool subcontent, tools::JsonWriter& aJson)
+{
+    for (const OUString& aLink : xLinks->getElementNames())
+    {
+        cpo::uno::Any aAny;
+
+        try
+        {
+            aAny = xLinks->getByName( aLink );
+        }
+        catch(const cpo::uno::Exception&)
+        {
+            // if the name of the target was invalid (like empty headings)
+            // no object can be provided
+            continue;
+        }
+
+        uno::Reference< beans::XPropertySet > xTarget;
+        if( aAny >>= xTarget )
+        {
+            try
+            {
+                // get name to display
+                aAny = xTarget->getPropertyValue(u"LinkDisplayName"_ustr);
+                OUString aStrDisplayname;
+                aAny >>= aStrDisplayname;
+
+                if (subcontent)
+                {
+                    aJson.put(aStrDisplayname, aLink);
+                }
+                else
+                {
+                    uno::Reference<lang::XServiceInfo> xSI(xTarget, uno::UNO_QUERY_THROW);
+                    if (xSI->supportsService(u"com.sun.star.document.LinkTarget"_ustr))
+                    {
+                        aJson.put(aStrDisplayname, aLink);
+                        continue;
+                    }
+                    else
+                    {
+                        auto aNode = aJson.startNode(
+                            OUStringToOString(aStrDisplayname, RTL_TEXTENCODING_UTF8));
+
+                        uno::Reference< document::XLinkTargetSupplier > xLTS( xTarget, uno::UNO_QUERY );
+                        if( xLTS.is() )
+                            extractLinks(xLTS->getLinks(), true, aJson);
+                    }
+                }
+            }
+            catch(...)
+            {
+                SAL_WARN("kit", "extractLinks: Exception");
+            }
+        }
+    }
+}
+
+static void unoAnyToJson(tools::JsonWriter& rJson, std::string_view pNodeName, const cpo::uno::Any& anyItem)
+{
+    auto aNode = rJson.startNode(pNodeName);
+    OUString aType = anyItem.getValueTypeName();
+    rJson.put("type", aType);
+
+    if (aType == "string")
+        rJson.put("value", anyItem.get<OUString>());
+    else if (aType == "unsigned long")
+        rJson.put("value", OString::number(anyItem.get<sal_uInt32>()));
+    else if (aType == "long")
+        rJson.put("value", OString::number(anyItem.get<sal_Int32>()));
+    else if (aType == "[]any")
+    {
+        cpo::uno::Sequence<cpo::uno::Any> aSeq;
+        if (anyItem >>= aSeq)
+        {
+            auto valueNode = rJson.startNode("value");
+
+            for (auto i = 0; i < aSeq.getLength(); ++i)
+            {
+                unoAnyToJson(rJson, OString::number(i), aSeq[i]);
+            }
+        }
+    }
+}
+
+static int lcl_getViewId(std::string_view payload);
+
+namespace desktop {
+
+RectangleAndPart RectangleAndPart::Create(const OString& rPayload)
+{
+    RectangleAndPart aRet;
+    if (rPayload.startsWith("EMPTY")) // payload starts with "EMPTY"
+    {
+        aRet.m_aRectangle = tools::Rectangle(0, 0, KitHelper::MaxTwips, KitHelper::MaxTwips);
+
+        int nSeparatorPos = rPayload.indexOf(',', 6);
+        bool bHasMode = nSeparatorPos > 0;
+        if (bHasMode)
+        {
+            aRet.m_aPart = OString(o3tl::trim(rPayload.subView(6, nSeparatorPos - 6)));
+            assert(rPayload.getLength() > nSeparatorPos);
+            aRet.m_nMode = o3tl::toInt32(rPayload.subView(nSeparatorPos + 1));
+        }
+        else
+        {
+            aRet.m_aPart = OString(o3tl::trim(rPayload.subView(6)));
+            aRet.m_nMode = 0;
+        }
+
+        return aRet;
+    }
+
+    // Read '<left>, <top>, <width>, <height>[, <part>, <mode>]'. C++ streams are simpler but slower.
+    const char* pos = rPayload.getStr();
+    const char* end = rPayload.getStr() + rPayload.getLength();
+    tools::Long nLeft = rtl_str_toInt64_WithLength(pos, 10, end - pos);
+    while (pos < end && *pos != ',')
+        ++pos;
+    if (pos < end)
+        ++pos;
+    assert(pos < end);
+    tools::Long nTop = rtl_str_toInt64_WithLength(pos, 10, end - pos);
+    while (pos < end && *pos != ',')
+        ++pos;
+    if (pos < end)
+        ++pos;
+    assert(pos < end);
+    tools::Long nWidth = rtl_str_toInt64_WithLength(pos, 10, end - pos);
+    while (pos < end && *pos != ',')
+        ++pos;
+    if (pos < end)
+        ++pos;
+    assert(pos < end);
+    tools::Long nHeight = rtl_str_toInt64_WithLength(pos, 10, end - pos);
+    tools::Long nMode = 0;
+
+    while (pos < end && *pos != ',')
+        ++pos;
+    if (pos < end)
+        ++pos;
+    assert(pos < end);
+    const char* pPartStart = pos;
+    while (pos < end && *pos != ',')
+        ++pos;
+    OString aPart(o3tl::trim(std::string_view(pPartStart, pos - pPartStart)));
+
+    if (pos < end)
+    {
+        ++pos;
+        assert(pos < end);
+        nMode = rtl_str_toInt64_WithLength(pos, 10, end - pos);
+    }
+
+    aRet.m_aRectangle = SanitizedRectangle(nLeft, nTop, nWidth, nHeight);
+    aRet.m_aPart = std::move(aPart);
+    aRet.m_nMode = nMode;
+    return aRet;
+}
+
+tools::Rectangle RectangleAndPart::SanitizedRectangle(tools::Long nLeft, tools::Long nTop, tools::Long nWidth, tools::Long nHeight)
+{
+    if (nWidth <= 0 || nHeight <= 0)
+        return tools::Rectangle();
+
+    // The top-left corner starts at (0, 0).
+    // Anything negative is invalid.
+    if (nLeft < 0)
+    {
+        nWidth += nLeft;
+        nLeft = 0;
+    }
+
+    if (nTop < 0)
+    {
+        nHeight += nTop;
+        nTop = 0;
+    }
+
+    if (nWidth > 0 && nHeight > 0)
+        return tools::Rectangle(nLeft, nTop, nLeft + nWidth, nTop + nHeight);
+    // Else set empty rect.
+    return tools::Rectangle();
+}
+
+tools::Rectangle RectangleAndPart::SanitizedRectangle(const tools::Rectangle& rect)
+{
+    return SanitizedRectangle(rect.Left(), rect.Top(), rect.getOpenWidth(), rect.getOpenHeight());
+}
+
+const OString& CallbackFlushHandler::CallbackData::getPayload() const
+{
+    if(PayloadString.isEmpty())
+    {
+        // Do to-string conversion on demand, as many calls will get dropped without
+        // needing the string.
+        if(PayloadObject.which() == 1)
+            PayloadString = getRectangleAndPart().toString();
+    }
+    return PayloadString;
+}
+
+void CallbackFlushHandler::CallbackData::updateRectangleAndPart(const RectangleAndPart& rRectAndPart)
+{
+    PayloadObject = rRectAndPart;
+    PayloadString.clear(); // will be set on demand if needed
+}
+
+const RectangleAndPart& CallbackFlushHandler::CallbackData::getRectangleAndPart() const
+{
+    // TODO: In case of unittests, they do not pass invalidations in binary but as text messages.
+    // LO core should preferably always pass binary for performance.
+    if(PayloadObject.which() != 1)
+        PayloadObject = RectangleAndPart::Create(PayloadString);
+    return boost::get<RectangleAndPart>(PayloadObject);
+}
+
+boost::property_tree::ptree& CallbackFlushHandler::CallbackData::setJson(const std::string& payload)
+{
+    boost::property_tree::ptree aTree;
+    std::stringstream aStream(payload);
+    boost::property_tree::read_json(aStream, aTree);
+
+    // Let boost normalize the payload so it always matches the cache.
+    setJson(aTree);
+
+    // Return reference to the cached object.
+    return boost::get<boost::property_tree::ptree>(PayloadObject);
+}
+
+void CallbackFlushHandler::CallbackData::setJson(const boost::property_tree::ptree& rTree)
+{
+    std::stringstream aJSONStream;
+    constexpr bool bPretty = false; // Don't waste time and bloat logs.
+    boost::property_tree::write_json(aJSONStream, rTree, bPretty);
+    PayloadString = OString(o3tl::trim(aJSONStream.str()));
+
+    PayloadObject = rTree;
+}
+
+const boost::property_tree::ptree& CallbackFlushHandler::CallbackData::getJson() const
+{
+    assert(PayloadObject.which() == 2);
+    return boost::get<boost::property_tree::ptree>(PayloadObject);
+}
+
+int CallbackFlushHandler::CallbackData::getViewId() const
+{
+    if (isCached())
+    {
+        assert(PayloadObject.which() == 3);
+        return boost::get<int>(PayloadObject);
+    }
+    return lcl_getViewId(getPayload());
+}
+
+bool CallbackFlushHandler::CallbackData::validate() const
+{
+    switch (PayloadObject.which())
+    {
+        // Not cached.
+        case 0:
+            return true;
+
+        // RectangleAndPart.
+        case 1:
+            return getRectangleAndPart().toString().getStr() == getPayload();
+
+        // Json.
+        case 2:
+        {
+            std::stringstream aJSONStream;
+            boost::property_tree::write_json(aJSONStream, getJson(), false);
+            const std::string aExpected = boost::trim_copy(aJSONStream.str());
+            return getPayload() == std::string_view(aExpected);
+        }
+
+        // View id.
+        case 3:
+            return getViewId() == lcl_getViewId( getPayload());
+
+        default:
+            assert(!"Unknown variant type; please add an entry to validate.");
+    }
+
+    return false;
+}
+
+} // namespace desktop
+
+static bool lcl_isViewCallbackType(const COKitCallbackType type)
+{
+    switch (type)
+    {
+        case COKitCallbackType::CELL_VIEW_CURSOR:
+        case COKitCallbackType::GRAPHIC_VIEW_SELECTION:
+        case COKitCallbackType::INVALIDATE_VIEW_CURSOR:
+        case COKitCallbackType::TEXT_VIEW_SELECTION:
+        case COKitCallbackType::VIEW_CURSOR_VISIBLE:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+static bool isUpdatedType(COKitCallbackType type)
+{
+    switch (type)
+    {
+        case COKitCallbackType::TEXT_SELECTION:
+        case COKitCallbackType::TEXT_SELECTION_START:
+        case COKitCallbackType::TEXT_SELECTION_END:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool isUpdatedTypePerViewId(COKitCallbackType type)
+{
+    switch (type)
+    {
+        case COKitCallbackType::INVALIDATE_VISIBLE_CURSOR:
+        case COKitCallbackType::INVALIDATE_VIEW_CURSOR:
+        case COKitCallbackType::TEXT_VIEW_SELECTION:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static int lcl_getViewId(std::string_view payload)
+{
+    // this is a cheap way how to get the viewId from a JSON message; proper
+    // parsing is terribly expensive, and we just need the viewId here
+    size_t viewIdPos = payload.find("viewId");
+    if (viewIdPos == std::string::npos)
+        return 0;
+
+    size_t numberPos = payload.find(":", viewIdPos + 6);
+    if (numberPos == std::string::npos)
+        return 0;
+
+    for (++numberPos; numberPos < payload.length(); ++numberPos)
+    {
+        if (payload[numberPos] == ',' || payload[numberPos] == '}' || (payload[numberPos] >= '0' && payload[numberPos] <= '9'))
+            break;
+    }
+
+    if (numberPos < payload.length() && payload[numberPos] >= '0' && payload[numberPos] <= '9')
+        return o3tl::toInt32(payload.substr(numberPos));
+
+    return 0;
+}
+
+// Wonder global state ...
+static uno::Reference<cpo::uno::XComponentContext> xContext;
+static uno::Reference<css::lang::XMultiServiceFactory> xSFactory;
+static uno::Reference<css::lang::XMultiComponentFactory> xFactory;
+
+namespace {
+
+OUString lcl_getCurrentDocumentMimeType(const COKitDocumentImpl* pDocument)
+{
+    SfxBaseModel* pBaseModel = dynamic_cast<SfxBaseModel*>(pDocument->mxComponent.get());
+    if (!pBaseModel)
+        return u""_ustr;
+
+    SfxObjectShell* pObjectShell = pBaseModel->GetObjectShell();
+    if (!pObjectShell)
+        return u""_ustr;
+
+    SfxMedium* pMedium = pObjectShell->GetMedium();
+    if (!pMedium)
+        return u""_ustr;
+
+    auto pFilter = pMedium->GetFilter();
+    if (!pFilter)
+        return u""_ustr;
+
+    return pFilter->GetMimeType();
+}
+
+// Gets an undo manager to enter and exit undo context. Needed by ToggleOrientation
+cpo::uno::Reference< css::document::XUndoManager > getUndoManager( const cpo::uno::Reference< css::frame::XFrame >& rxFrame )
+{
+    const cpo::uno::Reference< css::frame::XController > xController = rxFrame->getController();
+    if ( xController.is() )
+    {
+        const cpo::uno::Reference< css::frame::XModel > xModel = xController->getModel();
+        if ( xModel.is() )
+        {
+            const cpo::uno::Reference< css::document::XUndoManagerSupplier > xSuppUndo( xModel, cpo::uno::UNO_QUERY_THROW );
+            return cpo::uno::Reference< css::document::XUndoManager >( xSuppUndo->getUndoManager(), cpo::uno::UNO_SET_THROW );
+        }
+    }
+
+    return cpo::uno::Reference< css::document::XUndoManager > ();
+}
+
+// Adjusts page margins for Writer doc. Needed by ToggleOrientation
+void ExecuteMarginLRChange(
+    const tools::Long nPageLeftMargin,
+    const tools::Long nPageRightMargin,
+    SvxLongLRSpaceItem* pPageLRMarginItem)
+{
+    pPageLRMarginItem->SetLeft( nPageLeftMargin );
+    pPageLRMarginItem->SetRight( nPageRightMargin );
+    SfxViewShell* pViewSh = SfxViewShell::Current();
+    if (!pViewSh)
+        return;
+    pViewSh->GetDispatcher()->ExecuteList(SID_ATTR_PAGE_LRSPACE,
+            SfxCallMode::RECORD, { pPageLRMarginItem });
+}
+
+// Adjusts page margins for Writer doc. Needed by ToggleOrientation
+void ExecuteMarginULChange(
+        const tools::Long nPageTopMargin,
+        const tools::Long nPageBottomMargin,
+        SvxLongULSpaceItem* pPageULMarginItem)
+{
+    pPageULMarginItem->SetUpper( nPageTopMargin );
+    pPageULMarginItem->SetLower( nPageBottomMargin );
+    SfxViewShell* pViewSh = SfxViewShell::Current();
+    if (!pViewSh)
+        return;
+    pViewSh->GetDispatcher()->ExecuteList(SID_ATTR_PAGE_ULSPACE,
+            SfxCallMode::RECORD, { pPageULMarginItem });
+}
+
+// Main function which toggles page orientation of the Writer doc. Needed by ToggleOrientation
+void ExecuteOrientationChange()
+{
+    SfxViewFrame* pViewFrm = SfxViewFrame::Current();
+    if (!pViewFrm)
+        return;
+
+    std::unique_ptr<SvxPageItem> pPageItem(new SvxPageItem(SID_ATTR_PAGE));
+
+    // 1mm in twips rounded
+    // This should be in sync with MINBODY in sw/source/uibase/sidebar/PageMarginControl.hxx
+    constexpr tools::Long MINBODY = o3tl::toTwips(1, o3tl::Length::mm);
+
+    cpo::uno::Reference< css::document::XUndoManager > mxUndoManager(
+                getUndoManager( pViewFrm->GetFrame().GetFrameInterface() ) );
+
+    if ( mxUndoManager.is() )
+        mxUndoManager->enterUndoContext( u""_ustr );
+
+    SfxPoolItemHolder aResult;
+    pViewFrm->GetBindings().GetDispatcher()->QueryState(SID_ATTR_PAGE_SIZE, aResult);
+    std::unique_ptr<SvxSizeItem> pPageSizeItem(static_cast<const SvxSizeItem*>(aResult.getItem())->Clone());
+
+    pViewFrm->GetBindings().GetDispatcher()->QueryState(SID_ATTR_PAGE_LRSPACE, aResult);
+    std::unique_ptr<SvxLongLRSpaceItem> pPageLRMarginItem(static_cast<const SvxLongLRSpaceItem*>(aResult.getItem())->Clone());
+
+    pViewFrm->GetBindings().GetDispatcher()->QueryState(SID_ATTR_PAGE_ULSPACE, aResult);
+    std::unique_ptr<SvxLongULSpaceItem> pPageULMarginItem(static_cast<const SvxLongULSpaceItem*>(aResult.getItem())->Clone());
+
+    {
+        bool bIsLandscape = false;
+        if ( pPageSizeItem->GetSize().Width() > pPageSizeItem->GetSize().Height())
+            bIsLandscape = true;
+
+        // toggle page orientation
+        pPageItem->SetLandscape(!bIsLandscape);
+
+
+        // swap the width and height of the page size
+        const tools::Long nRotatedWidth = pPageSizeItem->GetSize().Height();
+        const tools::Long nRotatedHeight = pPageSizeItem->GetSize().Width();
+        pPageSizeItem->SetSize(Size(nRotatedWidth, nRotatedHeight));
+
+
+        // apply changed attributes
+        if (SfxViewShell* pCurrent = SfxViewShell::Current())
+        {
+            pCurrent->GetDispatcher()->ExecuteList(SID_ATTR_PAGE_SIZE,
+                SfxCallMode::RECORD, { pPageSizeItem.get(), pPageItem.get() });
+        }
+    }
+
+
+    // check, if margin values still fit to the changed page size.
+    // if not, adjust margin values
+    {
+        const tools::Long nML = pPageLRMarginItem->GetLeft();
+        const tools::Long nMR = pPageLRMarginItem->GetRight();
+        const tools::Long nTmpPW = nML + nMR + MINBODY;
+
+        const tools::Long nPW  = pPageSizeItem->GetSize().Width();
+
+        if ( nTmpPW > nPW )
+        {
+            if ( nML <= nMR )
+            {
+                ExecuteMarginLRChange( pPageLRMarginItem->GetLeft(), nMR - (nTmpPW - nPW ), pPageLRMarginItem.get() );
+            }
+            else
+            {
+                ExecuteMarginLRChange( nML - (nTmpPW - nPW ), pPageLRMarginItem->GetRight(), pPageLRMarginItem.get() );
+            }
+        }
+
+        const tools::Long nMT = pPageULMarginItem->GetUpper();
+        const tools::Long nMB = pPageULMarginItem->GetLower();
+        const tools::Long nTmpPH = nMT + nMB + MINBODY;
+
+        const tools::Long nPH  = pPageSizeItem->GetSize().Height();
+
+        if ( nTmpPH > nPH )
+        {
+            if ( nMT <= nMB )
+            {
+                ExecuteMarginULChange( pPageULMarginItem->GetUpper(), nMB - ( nTmpPH - nPH ), pPageULMarginItem.get() );
+            }
+            else
+            {
+                ExecuteMarginULChange( nMT - ( nTmpPH - nPH ), pPageULMarginItem->GetLower(), pPageULMarginItem.get() );
+            }
+        }
+    }
+
+    if ( mxUndoManager.is() )
+        mxUndoManager->leaveUndoContext();
+}
+
+void hideSidebar()
+{
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    SfxViewFrame* pViewFrame = pViewShell ? &pViewShell->GetViewFrame() : nullptr;
+    if (pViewFrame)
+        pViewFrame->SetChildWindow(SID_SIDEBAR, false , false );
+    else
+        SetLastExceptionMsg(u"No view shell or sidebar"_ustr);
+}
+
+cpo::uno::Sequence<css::lang::Locale> setLanguageToolConfig()
+{
+    cpo::uno::Sequence<css::lang::Locale> aLTLocales;
+
+    const char* pEnabled = ::getenv("LANGUAGETOOL_ENABLED");
+    const char* pBaseUrlString = ::getenv("LANGUAGETOOL_BASEURL");
+
+    if (pEnabled && pBaseUrlString)
+    {
+        const char* pUsername = ::getenv("LANGUAGETOOL_USERNAME");
+        const char* pApikey = ::getenv("LANGUAGETOOL_APIKEY");
+        const char* pSSLVerification = ::getenv("LANGUAGETOOL_SSL_VERIFICATION");
+        const char* pRestProtocol = ::getenv("LANGUAGETOOL_RESTPROTOCOL");
+
+        OUString aEnabled = OStringToOUString(pEnabled, RTL_TEXTENCODING_UTF8);
+        if (aEnabled != "true")
+            return aLTLocales;
+        OUString aBaseUrl = OStringToOUString(pBaseUrlString, RTL_TEXTENCODING_UTF8);
+        try
+        {
+            using LanguageToolCfg = officecfg::Office::Linguistic::GrammarChecking::LanguageTool;
+            auto batch(comphelper::ConfigurationChanges::create());
+
+            LanguageToolCfg::BaseURL::set(aBaseUrl, batch);
+            LanguageToolCfg::IsEnabled::set(true, batch);
+            if (pSSLVerification)
+            {
+                OUString aSSLVerification = OStringToOUString(pSSLVerification, RTL_TEXTENCODING_UTF8);
+                LanguageToolCfg::SSLCertVerify::set(aSSLVerification == "true", batch);
+            }
+            if (pRestProtocol)
+            {
+                OUString aRestProtocol = OStringToOUString(pRestProtocol, RTL_TEXTENCODING_UTF8);
+                LanguageToolCfg::RestProtocol::set(aRestProtocol, batch);
+            }
+            if (pUsername && pApikey)
+            {
+                OUString aUsername = OStringToOUString(pUsername, RTL_TEXTENCODING_UTF8);
+                OUString aApiKey = OStringToOUString(pApikey, RTL_TEXTENCODING_UTF8);
+                LanguageToolCfg::Username::set(aUsername, batch);
+                LanguageToolCfg::ApiKey::set(aApiKey, batch);
+            }
+            batch->commit();
+
+            uno::Reference<linguistic2::XProofreader> xGC(
+                xContext->getServiceManager()->createInstanceWithContext(u"org.openoffice.lingu.LanguageToolGrammarChecker"_ustr, xContext),
+                uno::UNO_QUERY_THROW);
+            uno::Reference<linguistic2::XSupportedLocales> xSuppLoc(xGC, uno::UNO_QUERY_THROW);
+
+            cpo::uno::Reference<css::linguistic2::XLinguServiceManager2> xLangSrv =
+                css::linguistic2::LinguServiceManager::create(xContext);
+            if (xLangSrv.is())
+            {
+                cpo::uno::Reference<css::linguistic2::XSpellChecker> xSpell = xLangSrv->getSpellChecker();
+                if (xSpell.is())
+                {
+                    Sequence<OUString> aEmpty;
+                    Sequence<css::lang::Locale> aLocales = xSpell->getLocales();
+
+                    for (int itLocale = 0; itLocale < aLocales.getLength(); itLocale++)
+                    {
+                        // turn off spell checker if LanguageTool supports the locale already
+                        if (xSuppLoc->hasLocale(aLocales[itLocale]))
+                            xLangSrv->setConfiguredServices(
+                                SN_SPELLCHECKER, aLocales[itLocale], aEmpty);
+                    }
+                }
+            }
+
+            aLTLocales = xSuppLoc->getLocales();
+        }
+        catch(cpo::uno::Exception const& rException)
+        {
+            SAL_WARN("kit", "Failed to set LanguageTool API settings: " << rException.Message);
+        }
+    }
+
+    return aLTLocales;
+}
+
+}  // end anonymous namespace
+
+// Could be anonymous in principle, but for the unit testing purposes, we
+// declare it in init.hxx.
+OUString desktop::extractParameter(OUString& rOptions, std::u16string_view rName)
+{
+    OUString aValue;
+
+    OUString aNameEquals(OUString::Concat(rName) + "=");
+    OUString aCommaNameEquals(OUString::Concat(",") + rName + "=");
+
+    int nIndex = -1;
+    if (rOptions.startsWith(aNameEquals))
+    {
+        size_t nLen = aNameEquals.getLength();
+        int nComma = rOptions.indexOf(",", nLen);
+        if (nComma >= 0)
+        {
+            aValue = rOptions.copy(nLen, nComma - nLen);
+            rOptions = rOptions.copy(nComma + 1);
+        }
+        else
+        {
+            aValue = rOptions.copy(nLen);
+            rOptions.clear();
+        }
+    }
+    else if ((nIndex = rOptions.indexOf(aCommaNameEquals)) >= 0)
+    {
+        size_t nLen = aCommaNameEquals.getLength();
+        int nComma = rOptions.indexOf(",", nIndex + nLen);
+        if (nComma >= 0)
+        {
+            aValue = rOptions.copy(nIndex + nLen, nComma - nIndex - nLen);
+            rOptions = OUString::Concat(rOptions.subView(0, nIndex)) + rOptions.subView(nComma);
+        }
+        else
+        {
+            aValue = rOptions.copy(nIndex + nLen);
+            rOptions = rOptions.copy(0, nIndex);
+        }
+    }
+
+    return aValue;
+}
+
+static bool doc_saveAs(COKitDocument* pThis, const char* pUrl, const char* pFormat, const char* pFilterOptions);
+static COKitDocumentType doc_getDocumentType(COKitDocument* pThis);
+static void doc_paintTile(COKitDocument* pThis,
+                          std::span<unsigned char> aBuffer,
+                          const int nCanvasWidth, const int nCanvasHeight,
+                          const int nTilePosX, const int nTilePosY,
+                          const int nTileWidth, const int nTileHeight);
+static void doc_paintPartTile(COKitDocument* pThis,
+                              std::span<unsigned char> aBuffer,
+                              const OString& rPart,
+                              const int nMode,
+                              const int nCanvasWidth, const int nCanvasHeight,
+                              const int nTilePosX, const int nTilePosY,
+                              const int nTileWidth, const int nTileHeight,
+                              bool bIsPreview = false);
+static int doc_createViewWithOptions(COKitDocument* pThis, const char* pOptions);
+static void doc_setView(COKitDocument* pThis, int nId);
+static int doc_getView(COKitDocument* pThis);
+static int doc_getViewsCount(COKitDocument* pThis);
+static std::vector<int> doc_getViewIds(COKitDocument* pThis);
+static COKitBitmap doc_renderFontOrientation(COKitDocument* pThis,
+                          const char *pFontName,
+                          const char *pChar,
+                          int nRequestedWidth,
+                          int nRequestedHeight,
+                          int nOrientation);
+
+static void doc_paintWindowDPI(COKitDocument* pThis, unsigned nKitWindowId,
+                               std::span<unsigned char> aBuffer,
+                               const int nX, const int nY,
+                               const int nWidth, const int nHeight,
+                               const double fDPIScale);
+
+static void doc_paintWindowForView(COKitDocument* pThis, unsigned nKitWindowId,
+                                   std::span<unsigned char> aBuffer,
+                                   const int nX, const int nY,
+                                   const int nWidth, const int nHeight,
+                                   const double fDPIScale, int viewId);
+
+static void doc_postWindow(COKitDocument* pThis, unsigned nKitWindowId,
+                           COKitWindowAction eAction, const char* pData);
+
+static int doc_getSignatureState(COKitDocument* pThis);
+
+
+namespace {
+ITiledRenderable* getTiledRenderable(COKitDocument* pThis)
+{
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+    return dynamic_cast<ITiledRenderable*>(pDocument->mxComponent.get());
+}
+
+// The identifier of the document's current part.
+OString currentPartId(ITiledRenderable* pDoc)
+{
+    return pDoc->getPartId(pDoc->getPart(), pDoc->getEditMode());
+}
+
+/*
+ * Unfortunately clipboard creation using UNO is insanely baroque.
+ * we also need to ensure that this works for the first view which
+ * has no clear 'createView' called for it (unfortunately).
+ */
+rtl::Reference<KitClipboard> forceSetClipboardForCurrentView(COKitDocument *pThis)
+{
+    ITiledRenderable* pDoc = getTiledRenderable(pThis);
+    rtl::Reference<KitClipboard> xClip(KitClipboardFactory::getClipboardForCurView());
+    if (!pDoc || !xClip.is())
+    {
+        return xClip;
+    }
+
+    SAL_INFO("kit", "Set to clipboard for view " << xClip.get());
+    // FIXME: using a hammer here - should not be necessary if all tests used createView.
+    pDoc->setClipboard(uno::Reference<datatransfer::clipboard::XClipboard>(xClip->getXI(), UNO_QUERY));
+
+    return xClip;
+}
+
+const vcl::Font* FindFont(std::u16string_view rFontName)
+{
+    SfxObjectShell* pDocSh = SfxObjectShell::Current();
+    if (!pDocSh)
+        return nullptr;
+    const SvxFontListItem* pFonts = pDocSh->GetItem(SID_ATTR_CHAR_FONTLIST);
+    const FontList* pList = pFonts ? pFonts->GetFontList() : nullptr;
+    if (pList && !rFontName.empty())
+        if (sal_Handle hMetric = pList->GetFirstFontMetric(rFontName))
+            return &FontList::GetFontMetric(hMetric);
+    return nullptr;
+}
+
+vcl::Font FindFont_FallbackToDefault(std::u16string_view rFontName)
+{
+    if (auto pFound = FindFont(rFontName))
+        return *pFound;
+
+    return OutputDevice::GetDefaultFont(DefaultFontType::SANS_UNICODE, LANGUAGE_NONE,
+                                        GetDefaultFontFlags::NONE);
+}
+
+COKitDocumentType lcl_getDocumentType (COKitDocument* pThis)
+{
+    SetLastExceptionMsg();
+
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+
+    try
+    {
+        uno::Reference<lang::XServiceInfo> xDocument(pDocument->mxComponent, uno::UNO_QUERY_THROW);
+
+        if (xDocument->supportsService(u"com.sun.star.sheet.SpreadsheetDocument"_ustr))
+        {
+            return COKitDocumentType::SPREADSHEET;
+        }
+        else if (xDocument->supportsService(u"com.sun.star.presentation.PresentationDocument"_ustr))
+        {
+            return COKitDocumentType::PRESENTATION;
+        }
+        else if (xDocument->supportsService(u"com.sun.star.drawing.DrawingDocument"_ustr))
+        {
+            return COKitDocumentType::DRAWING;
+        }
+        else if (xDocument->supportsService(u"com.sun.star.text.TextDocument"_ustr) || xDocument->supportsService(u"com.sun.star.text.WebDocument"_ustr))
+        {
+            return COKitDocumentType::TEXT;
+        }
+        else
+        {
+            SetLastExceptionMsg(u"unknown document type"_ustr);
+        }
+    }
+    catch (const cpo::uno::Exception& exception)
+    {
+        SetLastExceptionMsg("exception: " + exception.Message);
+    }
+    return COKitDocumentType::OTHER;
+}
+
+} // anonymous namespace
+
+WaitUntilIdle::WaitUntilIdle()
+    : maIdle{"COKitDocumentImpl IdleTask"}
+{
+    maIdle.SetPriority(TaskPriority::TOOLKIT_DEBUG);
+    maIdle.SetInvokeHandler(LINK(this, WaitUntilIdle, IdleHdl));
+}
+
+IMPL_LINK_NOARG(WaitUntilIdle, IdleHdl, Timer*, void)
+{
+    if (!mbFirstPass)
+    {
+        tools::JsonWriter aJson;
+        aJson.put("commandName", ".uno:ReportWhenIdle");
+        aJson.put("idleID", msIdleId);
+        mpCallbackFlushHandler->queue(COKitCallbackType::UNO_COMMAND_RESULT,
+                                      aJson.finishAndGetAsOString());
+        mpCallbackFlushHandler.reset();
+        msIdleId.clear();
+        mnViewId = -1;
+        return;
+    }
+
+    // SfxBindings defers slot updates via an AutoTimer with
+    // TIMEOUT_FIRST=300ms (DEFAULT_IDLE priority).  The vcl::Idle
+    // backing this handler runs at TOOLKIT_DEBUG and is ready
+    // immediately, so without this drain we report "idle" while the
+    // 300ms timer is still pending and a later wave of sidebar
+    // updates arrives after the reply.  Drain the bindings of every
+    // view frame belonging to the originating view's document - using
+    // SfxViewFrame::Current() would pick the globally active frame,
+    // which need not be the one that armed this idle in multi-view /
+    // multi-doc kit processes.
+    const int nViewId = mnViewId;
+    SfxViewShell* pOriginShell = SfxViewShell::GetFirst(false,
+        [nViewId](const SfxViewShell& shell) { return shell.GetViewShellId().get() == nViewId; });
+    if (pOriginShell)
+    {
+        SfxObjectShell* pDocShell = pOriginShell->GetObjectShell();
+        for (SfxViewFrame* pFrame = SfxViewFrame::GetFirst(pDocShell);
+             pFrame;
+             pFrame = SfxViewFrame::GetNext(*pFrame, pDocShell))
+        {
+            pFrame->GetBindings().Update();
+        }
+    }
+
+    // The widget updates that the drain caused go out from JSDialog idles, which run at a higher
+    // priority than this one, so reply from a second pass that runs after them.
+    mbFirstPass = false;
+    maIdle.Start();
+}
+
+COKitDocumentImpl::COKitDocumentImpl(uno::Reference <css::lang::XComponent> xComponent, int nDocumentId)
+    : mxComponent(std::move(xComponent))
+    , mnDocumentId(nDocumentId)
+    , meDocumentType(lcl_getDocumentType(this))
+{
+    assert(nDocumentId != -1 && "Cannot set mnDocumentId to -1");
+
+    forceSetClipboardForCurrentView(this);
+}
+
+bool COKitDocumentImpl::saveAs(const char* pUrl, const char* pFormat, const char* pFilterOptions)
+{
+    return doc_saveAs(this, pUrl, pFormat, pFilterOptions);
+}
+
+COKitDocumentType COKitDocumentImpl::getDocumentType()
+{
+    return doc_getDocumentType(this);
+}
+
+void COKitDocumentImpl::paintTile(std::span<unsigned char> aBuffer, const int nCanvasWidth,
+                                  const int nCanvasHeight, const int nTilePosX,
+                                  const int nTilePosY, const int nTileWidth, const int nTileHeight)
+{
+    doc_paintTile(this, aBuffer, nCanvasWidth, nCanvasHeight, nTilePosX, nTilePosY, nTileWidth,
+                  nTileHeight);
+}
+
+void COKitDocumentImpl::setView(int nId)
+{
+    doc_setView(this, nId);
+}
+
+int COKitDocumentImpl::getView()
+{
+    return doc_getView(this);
+}
+
+int COKitDocumentImpl::getViewsCount()
+{
+    return doc_getViewsCount(this);
+}
+
+void COKitDocumentImpl::paintPartTile(std::span<unsigned char> aBuffer, const char* pPart,
+                                      const int nMode, const int nCanvasWidth,
+                                      const int nCanvasHeight, const int nTilePosX,
+                                      const int nTilePosY, const int nTileWidth,
+                                      const int nTileHeight, bool bIsPreview)
+{
+    doc_paintPartTile(this, aBuffer, pPart ? OString(pPart) : OString(), nMode, nCanvasWidth,
+                      nCanvasHeight, nTilePosX, nTilePosY, nTileWidth, nTileHeight, bIsPreview);
+}
+
+std::vector<int> COKitDocumentImpl::getViewIds()
+{
+    return doc_getViewIds(this);
+}
+
+void COKitDocumentImpl::postWindow(unsigned nWindowId, COKitWindowAction eAction,
+                                    const char* pData)
+{
+    doc_postWindow(this, nWindowId, eAction, pData);
+}
+
+void COKitDocumentImpl::paintWindowDPI(unsigned nWindowId, std::span<unsigned char> aBuffer,
+                                       const int x, const int y, const int width, const int height,
+                                       const double dpiscale)
+{
+    doc_paintWindowDPI(this, nWindowId, aBuffer, x, y, width, height, dpiscale);
+}
+
+int COKitDocumentImpl::getSignatureState()
+{
+    return doc_getSignatureState(this);
+}
+
+int COKitDocumentImpl::createViewWithOptions(const char* pOptions)
+{
+    return doc_createViewWithOptions(this, pOptions);
+}
+
+COKitBitmap COKitDocumentImpl::renderFontOrientation(const char* pFontName, const char* pChar,
+                                                     int nRequestedWidth, int nRequestedHeight,
+                                                     int nOrientation)
+{
+    return doc_renderFontOrientation(this, pFontName, pChar, nRequestedWidth, nRequestedHeight, nOrientation);
+}
+
+void COKitDocumentImpl::paintWindowForView(unsigned nWindowId, std::span<unsigned char> aBuffer,
+                                           const int x, const int y, const int width,
+                                           const int height, const double dpiscale, int viewId)
+{
+    doc_paintWindowForView(this, nWindowId, aBuffer, x, y, width, height, dpiscale, viewId);
+}
+
+COKitDocumentImpl::~COKitDocumentImpl()
+{
+    comphelper::ProfileZone aZone("~COKitDocumentImpl");
+
+    SolarMutexGuard aGuard;
+
+#ifndef IOS
+    KitClipboardFactory::releaseClipboardsForDocument(mnDocumentId);
+#endif
+
+    // Drop any original-document-URL mapping recorded for this document at load.
+    // Clear it by the key we captured then, not via xModel->getURL(): the model
+    // may already be disposed by the time we get here, and getURL() on a disposed
+    // model throws DisposedException, which would escape the destructor and call
+    // std::terminate().
+    if (!maOriginalDocumentUrlKey.isEmpty())
+        comphelper::COKit::clearOriginalDocumentUrl(maOriginalDocumentUrlKey);
+
+    comphelper::COKit::clearDialogsSuppressed(ViewShellDocId(mnDocumentId));
+
+    if (comphelper::COKit::isForkedChild())
+    {
+        // Touch the least memory possible, while trying to avoid leaking files.
+        SfxBaseModel* pBaseModel = dynamic_cast<SfxBaseModel*>(mxComponent.get());
+        if (pBaseModel)
+        {
+            SfxObjectShell* pObjectShell = pBaseModel->GetObjectShell();
+            if (pObjectShell)
+                pObjectShell->InternalCloseAndRemoveFiles();
+        }
+        return;
+    }
+
+    try
+    {
+        mxComponent->dispose();
+    }
+    catch (const css::lang::DisposedException&)
+    {
+        TOOLS_WARN_EXCEPTION("kit", "failed to dispose document");
+    }
+}
+
+static OUString getGenerator()
+{
+    OUString sGenerator(
+        Translate::ExpandVariables(u"%PRODUCTNAME %PRODUCTVERSION%PRODUCTEXTENSION (%1)"_ustr));
+    OUString os(u"$_OS"_ustr);
+    ::rtl::Bootstrap::expandMacros(os);
+    return sGenerator.replaceFirst("%1", os);
+}
+
+// One of these is created per view to handle events cf. doc_registerCallback
+CallbackFlushHandler::CallbackFlushHandler(COKitDocument* pDocument, COKitCallback pCallback, void* pData)
+    : m_pDocument(pDocument),
+      m_pCallback(pCallback),
+      m_pFlushEvent(nullptr),
+      m_pData(pData),
+      m_nDisableCallbacks(0)
+{
+    // Add the states that are safe to skip duplicates on, even when
+    // not consequent (i.e. do no emit them if unchanged from last).
+    m_states.emplace(COKitCallbackType::TEXT_SELECTION, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::GRAPHIC_SELECTION, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::INVALIDATE_VISIBLE_CURSOR, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::STATE_CHANGED, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::MOUSE_POINTER, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::CELL_CURSOR, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::CELL_FORMULA, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::CELL_ADDRESS, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::CURSOR_VISIBLE, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::SET_PART, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::TABLE_SELECTED, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::TAB_STOP_LIST, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::RULER_UPDATE, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::VERTICAL_RULER_UPDATE, "NIL"_ostr);
+    m_states.emplace(COKitCallbackType::STATUS_INDICATOR_SET_VALUE, "NIL"_ostr);
+
+    std::string pViewRenderState = pDocument->getCommandValues(".uno:ViewRenderState");
+    if (!pViewRenderState.empty())
+    {
+        m_aViewRenderState = OString(pViewRenderState);
+    }
+}
+
+void CallbackFlushHandler::stop()
+{
+    if (m_pFlushEvent)
+    {
+        Application::RemoveUserEvent(m_pFlushEvent);
+        m_pFlushEvent = nullptr;
+    }
+}
+
+CallbackFlushHandler::~CallbackFlushHandler()
+{
+    stop();
+}
+
+CallbackFlushHandler::queue_type2::iterator CallbackFlushHandler::toQueue2(CallbackFlushHandler::queue_type1::iterator pos)
+{
+    int delta = std::distance(m_queue1.begin(), pos);
+    return m_queue2.begin() + delta;
+}
+
+CallbackFlushHandler::queue_type2::reverse_iterator CallbackFlushHandler::toQueue2(CallbackFlushHandler::queue_type1::reverse_iterator pos)
+{
+    int delta = std::distance(m_queue1.rbegin(), pos);
+    return m_queue2.rbegin() + delta;
+}
+
+void CallbackFlushHandler::setUpdatedType( COKitCallbackType eType, bool value )
+{
+    assert(isUpdatedType(eType));
+    const size_t nIndex = static_cast<size_t>(eType);
+    if( m_updatedTypes.size() <= nIndex )
+        m_updatedTypes.resize( nIndex + 1 ); // new are default-constructed, i.e. false
+    m_updatedTypes[ nIndex ] = value;
+    if(value)
+        scheduleFlush();
+}
+
+void CallbackFlushHandler::resetUpdatedType( COKitCallbackType eType )
+{
+    setUpdatedType( eType, false );
+}
+
+void CallbackFlushHandler::setUpdatedTypePerViewId( COKitCallbackType eType, int nViewId, int nSourceViewId, bool value )
+{
+    assert(isUpdatedTypePerViewId(eType));
+    std::vector<PerViewIdData>& types = m_updatedTypesPerViewId[ nViewId ];
+    const size_t nIndex = static_cast<size_t>(eType);
+    if( types.size() <= nIndex )
+        types.resize( nIndex + 1 ); // new are default-constructed, i.e. 'set' is false
+    types[ nIndex ] = PerViewIdData{ value, nSourceViewId };
+    if(value)
+        scheduleFlush();
+}
+
+void CallbackFlushHandler::resetUpdatedTypePerViewId( COKitCallbackType eType, int nViewId )
+{
+    assert(isUpdatedTypePerViewId(eType));
+    setUpdatedTypePerViewId( eType, nViewId, -1, false );
+}
+
+void CallbackFlushHandler::viewCallback(COKitCallbackType eType, const OString& pPayload)
+{
+    // A SET_PART payload carries the page-list index of the page the view switched to, while
+    // the boundary names parts of a presentation or drawing document by their stable page
+    // identifiers. Translate when queueing, while the page still holds that index.
+    if (eType == COKitCallbackType::SET_PART)
+    {
+        if (ITiledRenderable* pDoc = getTiledRenderable(m_pDocument))
+        {
+            const OString aPartId = pDoc->getPartId(pPayload.toInt32(), pDoc->getEditMode());
+            if (aPartId.isEmpty())
+            {
+                SAL_INFO("kit", "Skipping SET_PART for the gone part " << pPayload);
+                return;
+            }
+            CallbackData callbackData(aPartId);
+            queue(eType, callbackData);
+            return;
+        }
+    }
+
+    CallbackData callbackData(pPayload);
+    queue(eType, callbackData);
+}
+
+void CallbackFlushHandler::viewCallbackWithViewId(COKitCallbackType eType, const OString& pPayload, int nViewId)
+{
+    CallbackData callbackData(pPayload, nViewId);
+    queue(eType, callbackData);
+}
+
+void CallbackFlushHandler::viewVectorPartChanged(const OString& rPartId, int nMode)
+{
+    // Only a vector-rendering view consumes deltas, and only in a mode it
+    // asked in.
+    if (!m_bVectorRendering || rPartId.isEmpty())
+        return;
+    if (m_aVectorRenderingModes.find(nMode) == m_aVectorRenderingModes.end())
+        return;
+
+    // Repeated changes of the same part between two flushes collapse
+    // into a single delta, computed at flush time.
+    m_vectorDeltaParts.insert({ rPartId, nMode });
+    scheduleFlush();
+}
+
+void CallbackFlushHandler::flushVectorPrimitivesDeltas()
+{
+    if (m_vectorDeltaParts.empty())
+        return;
+
+    std::set<std::pair<OString, int>> aParts;
+    aParts.swap(m_vectorDeltaParts);
+
+    // A background save sends no content. The parent process pushes the
+    // deltas for the same changes, so the parts taken above are dropped.
+    if (comphelper::COKit::isForkedChild())
+    {
+        SAL_INFO("kit", "Elide vector primitives delta in background save mode");
+        return;
+    }
+
+    ITiledRenderable* pDocument = getTiledRenderable(m_pDocument);
+    if (!pDocument)
+        return;
+
+    for (const auto& [rPartId, nMode] : aParts)
+    {
+        // Computing the delta at delivery time reads the document after the change that triggered
+        // the invalidation has fully landed. The document tracks the version the part was last
+        // pushed at and writes the delta since it, so the mark advances only for a delta that is
+        // handed out.
+        //
+        // The delta describes the part, not this view. So the first handler to flush a part writes
+        // the one delta for the change, and a handler that flushes the same part after that gets
+        // an empty delta.
+        tools::JsonWriter aJsonWriter;
+        pDocument->pushVectorPrimitivesDelta(
+            aJsonWriter, std::string_view(rPartId.getStr(), rPartId.getLength()), nMode);
+        const OString aDelta = aJsonWriter.finishAndGetAsOString();
+
+        // Nothing is written when the comparison found the part unchanged since it was last
+        // pushed. That leaves an empty document, which is not worth a frame of its own.
+        if (aDelta == tools::JsonWriter::EMPTY_DOCUMENT)
+            continue;
+
+        // The part id goes on its own line ahead of the JSON, so a reader can tell which part
+        // the delta is for without parsing it.
+        const OString aPayload = rPartId + "\n" + aDelta;
+        m_pCallback(COKitCallbackType::VECTOR_PRIMITIVES_DELTA, aPayload.getStr(), m_pData);
+    }
+}
+
+void CallbackFlushHandler::viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode)
+{
+    // The invalidation carries the page-list index of the invalidated page, while the boundary
+    // names parts of a presentation or drawing document by their stable page identifiers.
+    // Translate when queueing, while the page still holds that index, so the queued rectangles
+    // merge under a key that survives page renumbering. A negative part stands for every part
+    // and passes through as "-1".
+    OString aPart;
+    if (nPart >= 0)
+    {
+        ITiledRenderable* pDoc = getTiledRenderable(m_pDocument);
+        aPart = pDoc ? pDoc->getPartId(nPart, nMode) : OString::number(nPart);
+        if (aPart.isEmpty())
+            return;
+    }
+    else
+        aPart = "-1"_ostr;
+
+    tools::Rectangle& rPaintedTiles = m_aPaintedTiles[aPart][nMode];
+
+    tools::Rectangle aRect;
+    if (m_bVectorRendering)
+    {
+        // A vector-rendered view paints no bitmap tiles, so there is no
+        // painted-tile bounding box to crop against. Forward the invalidation
+        // as-is, or invalidate everything when the rect is null. The delta
+        // push is not scheduled here: an invalidation only reaches views
+        // whose paint pipeline is active, while viewVectorPartChanged is
+        // driven from the model change and reaches every view.
+        aRect = pRect ? *pRect : RectangleAndPart::emptyAllRectangle;
+    }
+    else if (rPaintedTiles.IsEmpty())
+    {
+        // We have not sent any tiles: don't send invalidations.
+        return;
+    }
+    else if (pRect)
+    {
+        // We got an invalidate: crop it against the bbox.
+        aRect = *pRect;
+        aRect.Intersection(rPaintedTiles);
+        if (aRect.IsEmpty())
+        {
+            return;
+        }
+    }
+    else
+    {
+        // EMPTY invalidation: reset the bbox.
+        rPaintedTiles = tools::Rectangle();
+        // nullptr pRect means: invalidate everything.
+        aRect = RectangleAndPart::emptyAllRectangle;
+    }
+
+    // RectangleAndPart ctor doesn't store &aRect, so this is OK.
+    CallbackData callbackData(&aRect, aPart, nMode);
+    queue(COKitCallbackType::INVALIDATE_TILES, callbackData);
+}
+
+void CallbackFlushHandler::viewUpdatedCallback(COKitCallbackType eType)
+{
+    assert(isUpdatedType( eType ));
+    std::unique_lock<std::recursive_mutex> lock(m_mutex);
+    SAL_INFO("kit", "Updated: [" << eType << "]");
+    setUpdatedType(eType, true);
+}
+
+void CallbackFlushHandler::viewUpdatedCallbackPerViewId(COKitCallbackType eType, int nViewId, int nSourceViewId)
+{
+    assert(isUpdatedTypePerViewId( eType ));
+    std::unique_lock<std::recursive_mutex> lock(m_mutex);
+    SAL_INFO("kit", "Updated: [" << eType << "]");
+    setUpdatedTypePerViewId(eType, nViewId, nSourceViewId, true);
+}
+
+void CallbackFlushHandler::dumpState(rtl::OStringBuffer &rState)
+{
+    // NB. no locking
+    rState.append("\n    View:\t");
+    rState.append(static_cast<sal_Int32>(m_viewId));
+    rState.append("\n\tDisableCallbacks:\t");
+    rState.append(static_cast<sal_Int32>(m_nDisableCallbacks));
+    rState.append("\n\tStates:\n");
+    for (const auto &i : m_states)
+    {
+        rState.append("\n\t\t");
+        rState.append(static_cast<sal_Int32>(i.first));
+        rState.append("\t");
+        rState.append(i.second);
+    }
+}
+
+void CallbackFlushHandler::viewAddPendingInvalidateTiles()
+{
+    // Invoke() will call flushPendingKitInvalidateTiles(), so just make sure the timer is active.
+    scheduleFlush();
+}
+
+void CallbackFlushHandler::queue(const COKitCallbackType type, const OString& data)
+{
+    CallbackData callbackData(data);
+    queue(type, callbackData);
+}
+
+void CallbackFlushHandler::queue(const COKitCallbackType type, CallbackData& aCallbackData)
+{
+    comphelper::ProfileZone aZone("CallbackFlushHandler::queue");
+
+    SAL_INFO("kit", "Queue: [" << type << "]: [" << aCallbackData.getPayload() << "] on " << m_queue1.size() << " entries.");
+
+    if (comphelper::COKit::isForkedChild())
+    {
+        // In background mode - avoid any extraneous or confusing messages
+        switch (type)
+        {
+        case COKitCallbackType::INVALIDATE_TILES:
+        case COKitCallbackType::INVALIDATE_VISIBLE_CURSOR:
+        case COKitCallbackType::TEXT_SELECTION:
+        case COKitCallbackType::CURSOR_VISIBLE:
+        case COKitCallbackType::GRAPHIC_SELECTION:
+        case COKitCallbackType::TABLE_SELECTED:
+        case COKitCallbackType::SET_PART:
+        case COKitCallbackType::DOCUMENT_SIZE_CHANGED:
+        case COKitCallbackType::MOUSE_POINTER:
+        case COKitCallbackType::INVALIDATE_HEADER:
+        case COKitCallbackType::INVALIDATE_SHEET_GEOMETRY:
+            SAL_INFO("kit", "Elide event in background save mode");
+            return;
+        default:
+            break;
+        }
+    }
+
+    bool bIsChartActive = false;
+    bool bIsComment = false;
+    if (type == COKitCallbackType::GRAPHIC_SELECTION)
+    {
+        KitChartHelper aChartHelper(SfxViewShell::Current());
+        bIsChartActive = aChartHelper.GetWindow() != nullptr;
+    }
+    else if (type == COKitCallbackType::COMMENT)
+    {
+        bIsComment = true;
+    }
+    else if (type == COKitCallbackType::VIEW_RENDER_STATE)
+    {
+        m_aViewRenderState = aCallbackData.getPayload();
+    }
+
+    if (callbacksDisabled() && !bIsChartActive && !bIsComment)
+    {
+        // We drop notifications when this is set, except for important ones.
+        // When we issue a complex command (such as .uno:InsertAnnotation)
+        // there will be multiple notifications. On the first invalidation
+        // we will start painting, but other events will get fired
+        // while the complex command in question executes.
+        // We don't want to suppress everything here on the wrong assumption
+        // that no new events are fired during painting.
+        //
+        // Painting the tile of another part switches the view to that part and
+        // switches it back. The text selection reported in between belongs to
+        // that transient state and is empty, which says that the selection is
+        // gone. So the three selection types are not in the list below, and a
+        // paint reports nothing about the selection.
+        if (type != COKitCallbackType::STATE_CHANGED &&
+            type != COKitCallbackType::INVALIDATE_TILES &&
+            type != COKitCallbackType::INVALIDATE_VISIBLE_CURSOR &&
+            type != COKitCallbackType::CURSOR_VISIBLE &&
+            type != COKitCallbackType::VIEW_CURSOR_VISIBLE &&
+            type != COKitCallbackType::MEDIA_SHAPE &&
+            type != COKitCallbackType::REFERENCE_MARKS)
+        {
+            SAL_INFO("kit", "Skipping while painting [" << type << "]: [" << aCallbackData.getPayload() << "].");
+            return;
+        }
+
+        // In Writer we drop all notifications during painting.
+        if (doc_getDocumentType(m_pDocument) == COKitDocumentType::TEXT)
+            return;
+    }
+
+    // Suppress invalid payloads.
+    if (type == COKitCallbackType::INVALIDATE_VISIBLE_CURSOR &&
+        aCallbackData.getPayload().indexOf(", 0, 0, ") != -1 &&
+        aCallbackData.getPayload().indexOf("\"hyperlink\":\"\"") == -1 &&
+        aCallbackData.getPayload().indexOf("\"hyperlink\": {}") == -1)
+    {
+        // The cursor position is often the relative coordinates of the widget
+        // issuing it, instead of the absolute one that we expect.
+        // This is temporary however, and, once the control is created and initialized
+        // correctly, it eventually emits the correct absolute coordinates.
+        SAL_INFO("kit", "Skipping invalid event [" << type << "]: [" << aCallbackData.getPayload() << "].");
+        return;
+    }
+
+    std::unique_lock<std::recursive_mutex> lock(m_mutex);
+
+    // Update types should be received via the updated callbacks for performance,
+    // getting them as normal callbacks is technically not wrong, but probably should be avoided.
+    // Reset the updated flag if we get a normal message.
+    if(isUpdatedType(type))
+    {
+        SAL_INFO("kit", "Received event with updated type [" << type << "] as normal callback");
+        resetUpdatedType(type);
+    }
+    if(isUpdatedTypePerViewId(type))
+    {
+        SAL_INFO("kit", "Received event with updated type [" << type << "] as normal callback");
+        resetUpdatedTypePerViewId(type, aCallbackData.getViewId());
+    }
+
+    // drop duplicate callbacks for the listed types
+    switch (type)
+    {
+        case COKitCallbackType::TEXT_SELECTION_START:
+        case COKitCallbackType::TEXT_SELECTION_END:
+        case COKitCallbackType::TEXT_SELECTION:
+        case COKitCallbackType::GRAPHIC_SELECTION:
+        case COKitCallbackType::GRAPHIC_VIEW_SELECTION:
+        case COKitCallbackType::INVALIDATE_VISIBLE_CURSOR:
+        case COKitCallbackType::INVALIDATE_VIEW_CURSOR:
+        case COKitCallbackType::STATE_CHANGED:
+        case COKitCallbackType::MOUSE_POINTER:
+        case COKitCallbackType::CELL_CURSOR:
+        case COKitCallbackType::CELL_VIEW_CURSOR:
+        case COKitCallbackType::CELL_FORMULA:
+        case COKitCallbackType::CELL_ADDRESS:
+        case COKitCallbackType::CELL_SELECTION_AREA:
+        case COKitCallbackType::CURSOR_VISIBLE:
+        case COKitCallbackType::VIEW_CURSOR_VISIBLE:
+        case COKitCallbackType::SET_PART:
+        case COKitCallbackType::TEXT_VIEW_SELECTION:
+        case COKitCallbackType::INVALIDATE_HEADER:
+        case COKitCallbackType::WINDOW:
+        case COKitCallbackType::CALC_FUNCTION_LIST:
+        case COKitCallbackType::INVALIDATE_SHEET_GEOMETRY:
+        case COKitCallbackType::REFERENCE_MARKS:
+        case COKitCallbackType::CELL_AUTO_FILL_AREA:
+        case COKitCallbackType::A11Y_FOCUS_CHANGED:
+        case COKitCallbackType::A11Y_CARET_CHANGED:
+        case COKitCallbackType::A11Y_TEXT_SELECTION_CHANGED:
+        case COKitCallbackType::A11Y_FOCUSED_CELL_CHANGED:
+        case COKitCallbackType::COLOR_PALETTES:
+        case COKitCallbackType::A11Y_EDITING_IN_SELECTION_STATE:
+        case COKitCallbackType::A11Y_SELECTION_CHANGED:
+        {
+            const auto pos = std::find(m_queue1.rbegin(), m_queue1.rend(), type);
+            auto pos2 = toQueue2(pos);
+            if (pos != m_queue1.rend() && pos2->getPayload() == aCallbackData.getPayload())
+            {
+                SAL_INFO("kit", "Skipping queue duplicate [" << type << + "]: [" << aCallbackData.getPayload() << "].");
+                return;
+            }
+        }
+        break;
+
+        default:
+        break;
+    }
+
+    if (type == COKitCallbackType::TEXT_SELECTION && aCallbackData.isEmpty())
+    {
+        const auto posStart = std::find(m_queue1.rbegin(), m_queue1.rend(), COKitCallbackType::TEXT_SELECTION_START);
+        auto posStart2 = toQueue2(posStart);
+        if (posStart != m_queue1.rend())
+            posStart2->clear();
+
+        const auto posEnd = std::find(m_queue1.rbegin(), m_queue1.rend(), COKitCallbackType::TEXT_SELECTION_END);
+        auto posEnd2 = toQueue2(posEnd);
+        if (posEnd != m_queue1.rend())
+            posEnd2->clear();
+    }
+
+    // When payload is empty discards any previous state.
+    if (aCallbackData.isEmpty())
+    {
+        switch (type)
+        {
+            case COKitCallbackType::TEXT_SELECTION_START:
+            case COKitCallbackType::TEXT_SELECTION_END:
+            case COKitCallbackType::TEXT_SELECTION:
+            case COKitCallbackType::GRAPHIC_SELECTION:
+            case COKitCallbackType::INVALIDATE_VISIBLE_CURSOR:
+            case COKitCallbackType::INVALIDATE_TILES:
+            case COKitCallbackType::TOOLTIP:
+                if (removeAll(type))
+                    SAL_INFO("kit", "Removed dups of [" << type << "]: [" << aCallbackData.getPayload() << "].");
+                break;
+
+            default:
+                break;
+        }
+    }
+    else
+    {
+        switch (type)
+        {
+            // These are safe to use the latest state and ignore previous
+            // ones (if any) since the last overrides previous ones.
+            case COKitCallbackType::TEXT_SELECTION_START:
+            case COKitCallbackType::TEXT_SELECTION_END:
+            case COKitCallbackType::TEXT_SELECTION:
+            case COKitCallbackType::MOUSE_POINTER:
+            case COKitCallbackType::CELL_CURSOR:
+            case COKitCallbackType::CELL_FORMULA:
+            case COKitCallbackType::CELL_ADDRESS:
+            case COKitCallbackType::CURSOR_VISIBLE:
+            case COKitCallbackType::SET_PART:
+            case COKitCallbackType::STATUS_INDICATOR_SET_VALUE:
+            case COKitCallbackType::RULER_UPDATE:
+            case COKitCallbackType::VERTICAL_RULER_UPDATE:
+            case COKitCallbackType::A11Y_FOCUS_CHANGED:
+            case COKitCallbackType::A11Y_CARET_CHANGED:
+            case COKitCallbackType::A11Y_TEXT_SELECTION_CHANGED:
+            case COKitCallbackType::A11Y_FOCUSED_CELL_CHANGED:
+            case COKitCallbackType::COLOR_PALETTES:
+            case COKitCallbackType::TOOLTIP:
+            case COKitCallbackType::SHAPE_INNER_TEXT:
+            case COKitCallbackType::SHAPE_DRAG_PREVIEW:
+            {
+                if (removeAll(type))
+                    SAL_INFO("kit", "Removed dups of [" << type << "]: [" << aCallbackData.getPayload() << "].");
+            }
+            break;
+
+            // These are safe to use the latest state and ignore previous
+            // ones (if any) since the last overrides previous ones,
+            // but only if the view is the same.
+            case COKitCallbackType::INVALIDATE_VISIBLE_CURSOR:
+                // deleting the duplicate of visible cursor message can cause hyperlink popup not to show up on second/or more click on the same place.
+                // If the hyperlink is not empty we can bypass that to show the popup
+                if (aCallbackData.getPayload().indexOf("\"hyperlink\":\"\"") == -1
+                    && aCallbackData.getPayload().indexOf("\"hyperlink\": {}") == -1)
+                    break;
+                [[fallthrough]];
+            case COKitCallbackType::CELL_VIEW_CURSOR:
+            case COKitCallbackType::GRAPHIC_VIEW_SELECTION:
+            case COKitCallbackType::INVALIDATE_VIEW_CURSOR:
+            case COKitCallbackType::TEXT_VIEW_SELECTION:
+            case COKitCallbackType::VIEW_CURSOR_VISIBLE:
+            case COKitCallbackType::CALC_FUNCTION_LIST:
+            case COKitCallbackType::FORM_FIELD_BUTTON:
+            {
+                const int nViewId = aCallbackData.getViewId();
+                removeAll(type, [nViewId] (const CallbackData& elemData) {
+                        return (nViewId == elemData.getViewId());
+                    }
+                );
+            }
+            break;
+
+            case COKitCallbackType::INVALIDATE_TILES:
+                if (processInvalidateTilesEvent(type, aCallbackData))
+                    return;
+            break;
+
+            // State changes with same name override previous ones with a different value.
+            // Ex. ".uno:PageStatus=Slide 20 of 83" overwrites any previous PageStatus.
+            case COKitCallbackType::STATE_CHANGED:
+            {
+                // Compare the state name=value and overwrite earlier entries with same name.
+                const auto pos = aCallbackData.getPayload().indexOf('=');
+                if (pos != -1)
+                {
+                    const std::string_view name = aCallbackData.getPayload().subView(0, pos + 1);
+                    // This is needed because otherwise it creates some problems when
+                    // a save occurs while a cell is still edited in Calc.
+                    if (name != ".uno:ModifiedStatus=")
+                    {
+                        removeAll(type, [&name] (const CallbackData& elemData) {
+                                return elemData.getPayload().startsWith(name);
+                            }
+                        );
+                    }
+                }
+            }
+            break;
+
+            case COKitCallbackType::WINDOW:
+                if (processWindowEvent(type, aCallbackData))
+                    return;
+            break;
+
+            case COKitCallbackType::GRAPHIC_SELECTION:
+            {
+                // remove only selection ranges and 'EMPTY' messages
+                // always send 'INPLACE' and 'INPLACE EXIT' messages
+                removeAll(type, [] (const CallbackData& elemData)
+                    { return (elemData.getPayload().indexOf("INPLACE") == -1); });
+            }
+            break;
+
+            default:
+            break;
+        }
+    }
+
+    // Validate that the cached data and the payload string are identical.
+    assert(aCallbackData.validate() && "Cached callback payload object and string mismatch!");
+    m_queue1.emplace_back(type);
+    m_queue2.emplace_back(aCallbackData);
+    SAL_INFO("kit", "Queued #" << (m_queue1.size() - 1) <<
+             " [" << type << "]: [" << aCallbackData.getPayload() << "] to have " << m_queue1.size() << " entries.");
+
+#ifdef DBG_UTIL
+    {
+        // Dump the queue state and validate cached data.
+        int i = 1;
+        std::ostringstream oss;
+        if (m_queue1.empty())
+            oss << "Empty";
+        else
+            oss << m_queue1.size() << " items\n";
+        auto it1 = m_queue1.begin();
+        auto it2 = m_queue2.begin();
+        for (; it1 != m_queue1.end(); ++it1, ++it2)
+            oss << i++ << ": [" << *it1 << "] [" << it2->getPayload() << "].\n";
+        SAL_INFO("kit", "Current Queue: " << oss.str());
+        assert(
+            std::all_of(
+                m_queue2.begin(), m_queue2.end(),
+                [](const CallbackData& c) { return c.validate(); }));
+    }
+#endif
+
+    lock.unlock();
+    scheduleFlush();
+}
+
+bool CallbackFlushHandler::processInvalidateTilesEvent(COKitCallbackType type, CallbackData& aCallbackData)
+{
+    RectangleAndPart rcNew = aCallbackData.getRectangleAndPart();
+    if (rcNew.isEmpty())
+    {
+        SAL_INFO("kit", "Skipping invalid event [" << type << "]: [" << aCallbackData.getPayload() << "].");
+        return true;
+    }
+
+    // If we have to invalidate all tiles, we can skip any new tile invalidation.
+    // Find the last INVALIDATE_TILES entry, if any to see if it's invalidate-all.
+    const auto pos
+        = std::find(m_queue1.rbegin(), m_queue1.rend(), COKitCallbackType::INVALIDATE_TILES);
+    if (pos != m_queue1.rend())
+    {
+        auto pos2 = toQueue2(pos);
+        const RectangleAndPart& rcOld = pos2->getRectangleAndPart();
+        if (rcOld.isInfinite() && (rcOld.isAllParts() || rcOld.m_aPart == rcNew.m_aPart) &&
+            (rcOld.m_nMode == rcNew.m_nMode))
+        {
+            SAL_INFO("kit", "Skipping queue [" << type << "]: [" << aCallbackData.getPayload()
+                                               << "] since all tiles need to be invalidated.");
+            return true;
+        }
+
+        if ((rcOld.isAllParts() || rcOld.m_aPart == rcNew.m_aPart) && (rcOld.m_nMode == rcNew.m_nMode))
+        {
+            // If fully overlapping.
+            if (rcOld.m_aRectangle.Contains(rcNew.m_aRectangle))
+            {
+                SAL_INFO("kit", "Skipping queue [" << type << "]: [" << aCallbackData.getPayload()
+                                                   << "] since overlaps existing all-parts.");
+                return true;
+            }
+        }
+    }
+
+    if (rcNew.isInfinite())
+    {
+        SAL_INFO("kit", "Have Empty [" << type << "]: [" << aCallbackData.getPayload()
+                                       << "] so removing all with part " << rcNew.m_aPart << ".");
+        removeAll(COKitCallbackType::INVALIDATE_TILES, [&rcNew](const CallbackData& elemData) {
+            // Remove exiting if new is all-encompassing, or if of the same part.
+            return ((rcNew.isAllParts() || rcNew.m_aPart == elemData.getRectangleAndPart().m_aPart)
+                && (rcNew.m_nMode == elemData.getRectangleAndPart().m_nMode));
+        });
+    }
+    else
+    {
+        const auto rcOrig = rcNew;
+
+        SAL_INFO("kit", "Have [" << type << "]: [" << aCallbackData.getPayload() << "] so merging overlapping.");
+        removeAll(COKitCallbackType::INVALIDATE_TILES,[&rcNew](const CallbackData& elemData) {
+            const RectangleAndPart& rcOld = elemData.getRectangleAndPart();
+            if (!rcNew.isAllParts() && !rcOld.isAllParts() &&
+                (rcOld.m_aPart != rcNew.m_aPart || rcOld.m_nMode != rcNew.m_nMode))
+            {
+                SAL_INFO("kit", "Nothing to merge between new: "
+                                    << rcNew.toString() << ", and old: " << rcOld.toString());
+                return false;
+            }
+
+            if (rcNew.isAllParts())
+            {
+                // Don't merge unless fully overlapped.
+                SAL_INFO("kit", "New " << rcNew.toString() << " has " << rcOld.toString()
+                                       << "?");
+                if (rcNew.m_aRectangle.Contains(rcOld.m_aRectangle) && rcOld.m_nMode == rcNew.m_nMode)
+                {
+                    SAL_INFO("kit", "New " << rcNew.toString() << " engulfs old "
+                                           << rcOld.toString() << ".");
+                    return true;
+                }
+            }
+            else if (rcOld.isAllParts())
+            {
+                // Don't merge unless fully overlapped.
+                SAL_INFO("kit", "Old " << rcOld.toString() << " has " << rcNew.toString()
+                                       << "?");
+                if (rcOld.m_aRectangle.Contains(rcNew.m_aRectangle) && rcOld.m_nMode == rcNew.m_nMode)
+                {
+                    SAL_INFO("kit", "New " << rcNew.toString() << " engulfs old "
+                                           << rcOld.toString() << ".");
+                    return true;
+                }
+            }
+            else
+            {
+                const tools::Rectangle rcOverlap
+                    = rcNew.m_aRectangle.GetIntersection(rcOld.m_aRectangle);
+                const bool bOverlap = !rcOverlap.IsEmpty() && rcOld.m_nMode == rcNew.m_nMode;
+                SAL_INFO("kit", "Merging " << rcNew.toString() << " & " << rcOld.toString()
+                                           << " => " << rcOverlap.toString()
+                                           << " Overlap: " << bOverlap);
+                if (bOverlap)
+                {
+                    rcNew.m_aRectangle.Union(rcOld.m_aRectangle);
+                    SAL_INFO("kit", "Merged: " << rcNew.toString());
+                    return true;
+                }
+            }
+
+            // Keep others.
+            return false;
+        });
+
+        if (rcNew.m_aRectangle != rcOrig.m_aRectangle)
+        {
+            SAL_INFO("kit", "Replacing: " << rcOrig.toString() << " by " << rcNew.toString());
+            if (rcNew.m_aRectangle.GetWidth() < rcOrig.m_aRectangle.GetWidth()
+                || rcNew.m_aRectangle.GetHeight() < rcOrig.m_aRectangle.GetHeight())
+            {
+                SAL_WARN("kit", "Error: merged rect smaller.");
+            }
+        }
+    }
+
+    aCallbackData.updateRectangleAndPart(rcNew);
+    // Queue this one.
+    return false;
+}
+
+bool CallbackFlushHandler::processWindowEvent(COKitCallbackType type, CallbackData& aCallbackData)
+{
+    const OString& payload = aCallbackData.getPayload();
+
+    boost::property_tree::ptree& aTree = aCallbackData.setJson(std::string(payload));
+    const unsigned nKitWindowId = aTree.get<unsigned>("id", 0);
+    const std::string aAction = aTree.get<std::string>("action", "");
+    if (aAction == "invalidate")
+    {
+        std::string aRectStr = aTree.get<std::string>("rectangle", "");
+        // no 'rectangle' field => invalidate all of the window =>
+        // remove all previous window part invalidations
+        if (aRectStr.empty())
+        {
+            removeAll(COKitCallbackType::WINDOW,[&nKitWindowId](const CallbackData& elemData) {
+                const boost::property_tree::ptree& aOldTree = elemData.getJson();
+                if (nKitWindowId == aOldTree.get<unsigned>("id", 0)
+                    && aOldTree.get<std::string>("action", "") == "invalidate")
+                {
+                    return true;
+                }
+                return false;
+            });
+        }
+        else
+        {
+            // if we have to invalidate all of the window, ignore
+            // any part invalidation message
+            bool invAllExist = false;
+            auto it1 = m_queue1.rbegin();
+            auto it2 = m_queue2.rbegin();
+            for (;it1 != m_queue1.rend(); ++it1, ++it2)
+            {
+                if (*it1 != COKitCallbackType::WINDOW)
+                    continue;
+                const boost::property_tree::ptree& aOldTree = it2->getJson();
+                if (nKitWindowId == aOldTree.get<unsigned>("id", 0)
+                     && aOldTree.get<std::string>("action", "") == "invalidate"
+                     && aOldTree.get<std::string>("rectangle", "").empty())
+                {
+                    invAllExist = true;
+                    break;
+                }
+            }
+
+            // we found a invalidate-all window callback
+            if (invAllExist)
+            {
+                SAL_INFO("kit.dialog", "Skipping queue ["
+                                           << type << "]: [" << payload
+                                           << "] since whole window needs to be invalidated.");
+                return true;
+            }
+
+            std::istringstream aRectStream(aRectStr);
+            tools::Long nLeft, nTop, nWidth, nHeight;
+            char nComma;
+            aRectStream >> nLeft >> nComma >> nTop >> nComma >> nWidth >> nComma >> nHeight;
+            tools::Rectangle aNewRect(nLeft, nTop, nLeft + nWidth, nTop + nHeight);
+            bool currentIsRedundant = false;
+            removeAll(COKitCallbackType::WINDOW, [&aNewRect, &nKitWindowId,
+                       &currentIsRedundant](const CallbackData& elemData) {
+                const boost::property_tree::ptree& aOldTree = elemData.getJson();
+                if (aOldTree.get<std::string>("action", "") == "invalidate")
+                {
+                    // Not possible that we encounter an empty rectangle here; we already handled this case above.
+                    std::istringstream aOldRectStream(aOldTree.get<std::string>("rectangle", ""));
+                    tools::Long nOldLeft, nOldTop, nOldWidth, nOldHeight;
+                    char nOldComma;
+                    aOldRectStream >> nOldLeft >> nOldComma >> nOldTop >> nOldComma >> nOldWidth
+                        >> nOldComma >> nOldHeight;
+                    const tools::Rectangle aOldRect = tools::Rectangle(
+                        nOldLeft, nOldTop, nOldLeft + nOldWidth, nOldTop + nOldHeight);
+
+                    if (nKitWindowId == aOldTree.get<unsigned>("id", 0))
+                    {
+                        if (aNewRect == aOldRect)
+                        {
+                            SAL_INFO("kit.dialog", "Duplicate rect [" << aNewRect.toString()
+                                                                      << "]. Skipping new.");
+                            // We have a rectangle in the queue already that makes the current Callback useless.
+                            currentIsRedundant = true;
+                            return false;
+                        }
+                        // new one engulfs the old one?
+                        else if (aNewRect.Contains(aOldRect))
+                        {
+                            SAL_INFO("kit.dialog",
+                                     "New rect [" << aNewRect.toString() << "] engulfs old ["
+                                                  << aOldRect.toString() << "]. Replacing old.");
+                            return true;
+                        }
+                        // old one engulfs the new one?
+                        else if (aOldRect.Contains(aNewRect))
+                        {
+                            SAL_INFO("kit.dialog",
+                                     "Old rect [" << aOldRect.toString() << "] engulfs new ["
+                                                  << aNewRect.toString() << "]. Skipping new.");
+                            // We have a rectangle in the queue already that makes the current Callback useless.
+                            currentIsRedundant = true;
+                            return false;
+                        }
+                        else
+                        {
+                            // Overlapping rects.
+                            const tools::Rectangle aPreMergeRect = aNewRect;
+                            aNewRect.Union(aOldRect);
+                            SAL_INFO("kit.dialog", "Merging rects ["
+                                                       << aPreMergeRect.toString() << "] & ["
+                                                       << aOldRect.toString() << "] = ["
+                                                       << aNewRect.toString()
+                                                       << "]. Replacing old.");
+                            return true;
+                        }
+                    }
+                }
+
+                // keep rest
+                return false;
+            });
+
+            // Do not enqueue if redundant.
+            if (currentIsRedundant)
+                return true;
+
+            aTree.put("rectangle", aNewRect.toString().getStr());
+            aCallbackData.setJson(aTree);
+            assert(aCallbackData.validate() && "Validation after setJson failed!");
+        }
+    }
+    else if (aAction == "created")
+    {
+        // Remove all previous actions on same dialog, if we are creating it anew.
+        removeAll(COKitCallbackType::WINDOW,[&nKitWindowId](const CallbackData& elemData) {
+            const boost::property_tree::ptree& aOldTree = elemData.getJson();
+            if (nKitWindowId == aOldTree.get<unsigned>("id", 0))
+                return true;
+            return false;
+        });
+
+        VclPtr<Window> pWindow = vcl::Window::FindKitWindow(nKitWindowId);
+        if (!pWindow)
+        {
+            SetLastExceptionMsg(u"Document doesn't support dialog rendering, or window not found."_ustr);
+            return false;
+        }
+
+        auto xClip = forceSetClipboardForCurrentView(m_pDocument);
+
+        pWindow->SetClipboard(uno::Reference<datatransfer::clipboard::XClipboard>(xClip));
+    }
+    else if (aAction == "size_changed")
+    {
+        // A size change is practically re-creation of the window.
+        // But at a minimum it's a full invalidation.
+        removeAll(COKitCallbackType::WINDOW, [&nKitWindowId](const CallbackData& elemData) {
+            const boost::property_tree::ptree& aOldTree = elemData.getJson();
+            if (nKitWindowId == aOldTree.get<unsigned>("id", 0))
+            {
+                const std::string aOldAction = aOldTree.get<std::string>("action", "");
+                if (aOldAction == "invalidate")
+                    return true;
+            }
+            return false;
+        });
+    }
+
+    // Queue this one.
+    return false;
+}
+
+void CallbackFlushHandler::enqueueUpdatedTypes()
+{
+    if( m_updatedTypes.empty() && m_updatedTypesPerViewId.empty())
+        return;
+    assert(m_viewId >= 0);
+    SfxViewShell* viewShell = SfxViewShell::GetFirst( false,
+        [this](const SfxViewShell& shell) { return shell.GetViewShellId().get() == m_viewId; } );
+
+    // First move data to local structures, so that callbacks don't possibly modify it.
+    std::vector<bool> updatedTypes;
+    std::swap(updatedTypes, m_updatedTypes);
+    boost::container::flat_map<int, std::vector<PerViewIdData>> updatedTypesPerViewId;
+    std::swap(updatedTypesPerViewId, m_updatedTypesPerViewId);
+
+    // Some types must always precede other types, for example
+    // COKitCallbackType::TEXT_SELECTION_START and COKitCallbackType::TEXT_SELECTION_END
+    // must always precede COKitCallbackType::TEXT_SELECTION if present.
+    // Only these types should be present (see isUpdatedType()) and should be processed in this order.
+    static const COKitCallbackType orderedUpdatedTypes[] = {
+        COKitCallbackType::TEXT_SELECTION_START, COKitCallbackType::TEXT_SELECTION_END,
+        COKitCallbackType::TEXT_SELECTION };
+    // Only these types should be present (see isUpdatedTypePerViewId()) and (as of now)
+    // the order doesn't matter.
+    static const COKitCallbackType orderedUpdatedTypesPerViewId[] = {
+        COKitCallbackType::INVALIDATE_VISIBLE_CURSOR,
+        COKitCallbackType::INVALIDATE_VIEW_CURSOR,
+        COKitCallbackType::TEXT_VIEW_SELECTION };
+
+    if (viewShell)
+    {
+        for( COKitCallbackType type : orderedUpdatedTypes )
+        {
+            const size_t nIndex = static_cast<size_t>(type);
+            if(nIndex < updatedTypes.size() && updatedTypes[ nIndex ])
+            {
+                enqueueUpdatedType( type, viewShell, m_viewId );
+            }
+        }
+    }
+    else
+    {
+        // View removed, probably cleaning up.
+        SAL_INFO("kit", "View #" << m_viewId << " no longer found for updated events");
+    }
+
+    for( const auto& it : updatedTypesPerViewId )
+    {
+        int viewId = it.first;
+        const std::vector<PerViewIdData>& types = it.second;
+        for( COKitCallbackType type : orderedUpdatedTypesPerViewId )
+        {
+            const size_t nIndex = static_cast<size_t>(type);
+            if(nIndex < types.size() && types[ nIndex ].set)
+            {
+                SfxViewShell* sourceViewShell = viewShell;
+                const int sourceViewId = types[ nIndex ].sourceViewId;
+                if( sourceViewId != m_viewId )
+                {
+                    assert(sourceViewId >= 0);
+                    sourceViewShell = SfxViewShell::GetFirst( false,
+                    [sourceViewId](const SfxViewShell& shell) { return shell.GetViewShellId().get() == sourceViewId; } );
+                }
+                if(sourceViewShell == nullptr)
+                {
+                    SAL_INFO("kit", "View #" << sourceViewId << " no longer found for updated event [" << type << "]");
+                    continue; // View removed, probably cleaning up.
+                }
+                enqueueUpdatedType( type, sourceViewShell, viewId );
+            }
+        }
+    }
+}
+
+void CallbackFlushHandler::enqueueUpdatedType( COKitCallbackType type, const SfxViewShell* viewShell, int viewId )
+{
+    if (type == COKitCallbackType::INVALIDATE_VISIBLE_CURSOR)
+    {
+        if (const SfxViewShell* viewShell2 = KitStarMathHelper(viewShell).GetSmViewShell())
+            viewShell = viewShell2;
+    }
+    std::optional<OString> payload = viewShell->getKitPayload( type, viewId );
+    if(!payload)
+        return; // No actual payload to send.
+    CallbackData callbackData = isUpdatedTypePerViewId(type)
+        ? CallbackData(*payload, viewId) : CallbackData(*payload);
+    m_queue1.emplace_back(type);
+    m_queue2.emplace_back(callbackData);
+    SAL_INFO("kit", "Queued updated [" << type << "]: [" << callbackData.getPayload()
+        << "] to have " << m_queue1.size() << " entries.");
+}
+
+void CallbackFlushHandler::invoke()
+{
+    comphelper::ProfileZone aZone("CallbackFlushHandler::Invoke");
+
+    if (!m_pCallback)
+        return;
+
+    // Get any pending invalidate tile events. This will call our callbacks,
+    // so it must be done before taking the mutex.
+    assert(m_viewId >= 0);
+    if(SfxViewShell* viewShell = SfxViewShell::GetFirst( false,
+        [this](const SfxViewShell& shell) { return shell.GetViewShellId().get() == m_viewId; } ))
+    {
+        viewShell->flushPendingKitInvalidateTiles();
+    }
+
+    std::unique_lock<std::recursive_mutex> lock(m_mutex);
+
+    // Append messages for updated types, fetch them only now.
+    enqueueUpdatedTypes();
+
+    SAL_INFO("kit", "Flushing " << m_queue1.size() << " elements.");
+    auto it1 = m_queue1.begin();
+    auto it2 = m_queue2.begin();
+    for (; it1 != m_queue1.end(); ++it1, ++it2)
+    {
+        const COKitCallbackType type = *it1;
+        const auto& payload = it2->getPayload();
+        const int viewId = lcl_isViewCallbackType(type) ? it2->getViewId() : -1;
+
+        SAL_INFO("kit", "processing event: [" << type << ',' << viewId << "]: [" << payload << "].");
+
+        // common code-path for events on this view:
+        if (viewId == -1)
+        {
+            sal_Int32 idx;
+            // key-value pairs
+            if (type == COKitCallbackType::STATE_CHANGED &&
+                (idx = payload.indexOf('=')) != -1)
+            {
+                OString key = payload.copy(0, idx);
+                OString value = payload.copy(idx+1);
+                const auto stateIt = m_lastStateChange.find(key);
+                if (stateIt != m_lastStateChange.end())
+                {
+                    // If the value didn't change, it's safe to ignore.
+                    if (stateIt->second == value)
+                    {
+                        SAL_INFO("kit", "Skipping new state duplicate: [" << type << "]: [" << payload << "].");
+                        continue;
+                    }
+                    SAL_INFO("kit", "Replacing a state element [" << type << "]: [" << payload << "].");
+                    stateIt->second = value;
+                }
+                else
+                {
+                    SAL_INFO("kit", "Inserted a new state element: [" << type << "]: [" << payload << "]");
+                    m_lastStateChange.emplace(key, value);
+                }
+            }
+            else
+            {
+                const auto stateIt = m_states.find(type);
+                if (stateIt != m_states.end())
+                {
+                    // If the state didn't change, it's safe to ignore.
+                    if (stateIt->second == payload)
+                    {
+                        SAL_INFO("kit", "Skipping duplicate [" << type << "]: [" << payload << "].");
+                        continue;
+                    }
+                    stateIt->second = payload;
+                }
+            }
+        }
+        else // less common path for events relating to other views
+        {
+            const auto statesIt = m_viewStates.find(viewId);
+            if (statesIt != m_viewStates.end())
+            {
+                auto& states = statesIt->second;
+                const auto stateIt = states.find(type);
+                if (stateIt != states.end())
+                {
+                    // If the state didn't change, it's safe to ignore.
+                    if (stateIt->second == payload)
+                    {
+                        SAL_INFO("kit", "Skipping view duplicate [" << type << ',' << viewId << "]: [" << payload << "].");
+                        continue;
+                    }
+
+                    SAL_INFO("kit", "Replacing an element in view states [" << type << ',' << viewId << "]: [" << payload << "].");
+                    stateIt->second = payload;
+                }
+                else
+                {
+                    SAL_INFO("kit", "Inserted a new element in view states: [" << type << ',' << viewId << "]: [" << payload << "]");
+                    states.emplace(type, payload);
+
+                }
+            }
+        }
+
+        m_pCallback(type, payload.getStr(), m_pData);
+    }
+
+    // The deltas of the changed vector parts follow the queued
+    // messages, so the client sees each invalidation before the delta
+    // that answers it.
+    flushVectorPrimitivesDeltas();
+
+    m_queue1.clear();
+    m_queue2.clear();
+    stop();
+}
+
+void CallbackFlushHandler::scheduleFlush()
+{
+    if (!m_pFlushEvent)
+        m_pFlushEvent = Application::PostUserEvent(LINK(this, CallbackFlushHandler, FlushQueue));
+}
+
+IMPL_LINK_NOARG(CallbackFlushHandler, FlushQueue, void*, void)
+{
+    m_pFlushEvent = nullptr;
+    invoke();
+}
+
+bool CallbackFlushHandler::removeAll(COKitCallbackType type)
+{
+    bool bErased = false;
+    auto it1 = m_queue1.begin();
+    for(;;)
+    {
+        it1 = std::find(it1, m_queue1.end(), type);
+        if(it1 == m_queue1.end())
+            break;
+        m_queue2.erase(toQueue2(it1));
+        it1 = m_queue1.erase(it1);
+        bErased = true;
+    }
+    return bErased;
+}
+
+bool CallbackFlushHandler::removeAll(COKitCallbackType type,
+                                     const std::function<bool (const CallbackData&)>& rTestFunc)
+{
+    bool bErased = false;
+    auto it1 = m_queue1.begin();
+    for(;;)
+    {
+        it1 = std::find(it1, m_queue1.end(), type);
+        if(it1 == m_queue1.end())
+            break;
+        auto it2 = toQueue2(it1);
+        if (rTestFunc(*it2))
+        {
+            m_queue2.erase(it2);
+            it1 = m_queue1.erase(it1);
+            bErased = true;
+        }
+        else
+            ++it1;
+    }
+    return bErased;
+}
+
+void CallbackFlushHandler::addViewStates(int viewId)
+{
+    const auto result = m_viewStates.emplace(viewId, decltype(m_viewStates)::mapped_type());
+    if (!result.second && result.first != m_viewStates.end())
+    {
+        result.first->second.clear();
+    }
+}
+
+void CallbackFlushHandler::removeViewStates(int viewId)
+{
+    m_viewStates.erase(viewId);
+}
+
+void CallbackFlushHandler::tilePainted(const OString& rPart, int nMode,
+                                       const tools::Rectangle& rRectangle)
+{
+    // Painted a new tile: grow the bbox.
+    tools::Rectangle& rPaintedTiles = m_aPaintedTiles[rPart][nMode];
+    rPaintedTiles.Union(rRectangle);
+}
+
+
+static int                     lo_initialize    (COKit* pThis, const char* pInstallPath, const char* pUserProfilePath);
+static COKitDocument* lo_documentLoadWithOptions  (COKit* pThis,
+                                                           const char* pURL,
+                                                           const char* pOptions);
+static void*
+lo_startURP(COKit* pThis, void* pReceiveURPFromEngineContext, void* pSendURPToEngineContext,
+            int (*fnReceiveURPFromEngine)(void* pContext, const signed char* pBuffer, int nLen),
+            int (*fnSendURPToEngine)(void* pContext, signed char* pBuffer, int nLen));
+
+COKitImpl::COKitImpl()
+    : maThread(nullptr)
+    , mpCallback(nullptr)
+    , mpCallbackData(nullptr)
+    , mOptionalFeatures(COKitOptionalFeatures::NONE)
+{
+}
+
+COKitDocument* COKitImpl::documentLoadWithOptions(const char* pURL, const char* pOptions)
+{
+    return lo_documentLoadWithOptions(this, pURL, pOptions);
+}
+
+void* COKitImpl::startURP(
+    void* pReceiveURPFromEngineContext, void* pSendURPToEngineContext,
+    int (*fnReceiveURPFromEngine)(void* pContext, const signed char* pBuffer, int nLen),
+    int (*fnSendURPToEngine)(void* pContext, signed char* pBuffer, int nLen))
+{
+    return lo_startURP(this, pReceiveURPFromEngineContext, pSendURPToEngineContext, fnReceiveURPFromEngine,
+                       fnSendURPToEngine);
+}
+
+COKitImpl::~COKitImpl()
+{
+    SolarMutexClearableGuard aGuard;
+
+    gImpl = nullptr;
+
+    SAL_INFO("kit", "COKitImpl dtor");
+
+    comphelper::COKit::setStatusIndicatorCallback(nullptr, nullptr);
+    uno::Reference <frame::XDesktop> xDesktop = frame::Desktop::create ( ::comphelper::getProcessComponentContext() );
+    // FIXME: the terminate() call here is a no-op because it detects
+    // that COKit::isActive() and then returns early!
+    bool bSuccess = xDesktop.is() && xDesktop->terminate();
+
+    if (!bSuccess)
+    {
+        bSuccess = GetpApp() && GetpApp()->QueryExit();
+    }
+
+    if (!bSuccess)
+    {
+        Application::Quit();
+    }
+
+    aGuard.clear();
+
+    osl_joinWithThread(maThread);
+    osl_destroyThread(maThread);
+
+    bInitialized = false;
+    SAL_INFO("kit", "COKitImpl dtor done");
+}
+
+namespace
+{
+
+void setLanguageAndLocale(OUString const & aLangISO)
+{
+    SvtSysLocaleOptions aLocalOptions;
+    aLocalOptions.SetLocaleConfigString(aLangISO);
+    aLocalOptions.SetUILocaleConfigString(aLangISO);
+    aLocalOptions.Commit();
+    // A bare language tag such as "hu" has no language ID of its own and
+    // would be registered as a nameless on-the-fly ID, which the language
+    // table cannot name and the dictionaries do not match. Resolve it to its
+    // fallback locale ("hu-HU") so new documents get LANGUAGE_HUNGARIAN.
+    LanguageTag aTag(aLangISO);
+    aTag.makeFallback();
+    MsLangId::setConfiguredSystemUILanguage(aTag.getLanguageType(false));
+    LanguageTag::setConfiguredSystemLanguage(aTag.getLanguageType(false));
+}
+
+void setFormatSpecificFilterData(std::u16string_view sFormat, comphelper::SequenceAsHashMap & rFilterDataMap)
+{
+    if (sFormat == u"pdf")
+    {
+        // always export bookmarks, which is needed for annotations
+        rFilterDataMap[u"ExportBookmarks"_ustr] <<= true;
+    }
+}
+
+} // anonymous namespace
+
+COKitDocument* COKitImpl::documentLoad(const char* pURL)
+{
+    return lo_documentLoadWithOptions(this, pURL, nullptr);
+}
+
+static COKitDocument* lo_documentLoadWithOptions(COKit* pThis, const char* pURL, const char* pOptions)
+{
+    comphelper::ProfileZone aZone("lo_documentLoadWithOptions");
+
+    SolarMutexGuard aGuard;
+
+    static int nDocumentIdCounter = 0;
+
+    COKitImpl* pLib = static_cast<COKitImpl*>(pThis);
+    pLib->maLastExceptionMsg.clear();
+
+    const OUString aURL(getAbsoluteURL(pURL));
+    if (aURL.isEmpty())
+    {
+        pLib->maLastExceptionMsg = u"Filename to load was not provided."_ustr;
+        SAL_INFO("kit", "URL for load is empty");
+        return nullptr;
+    }
+
+    pLib->maLastExceptionMsg.clear();
+
+    if (!xContext.is())
+    {
+        pLib->maLastExceptionMsg = u"ComponentContext is not available"_ustr;
+        SAL_INFO("kit", "ComponentContext is not available");
+        return nullptr;
+    }
+
+    uno::Reference<frame::XDesktop> xComponentLoader = frame::Desktop::create(xContext);
+
+    if (!xComponentLoader.is())
+    {
+        pLib->maLastExceptionMsg = u"ComponentLoader is not available"_ustr;
+        SAL_INFO("kit", "ComponentLoader is not available");
+        return nullptr;
+    }
+
+    try
+    {
+        // 'Language=...' is an option that COKit consumes by itself, and does
+        // not pass it as a parameter to the filter
+        OUString aOptions = getUString(pOptions);
+        const OUString aLanguage = extractParameter(aOptions, u"Language");
+
+        if (!aLanguage.isEmpty() && LanguageTag::isValidBcp47(aLanguage, nullptr))
+        {
+            KitHelper::setDefaultLanguage(aLanguage);
+            // Set the COKit language tag, used for dialog tunneling.
+            comphelper::COKit::setLanguageTag(LanguageTag(aLanguage));
+            comphelper::COKit::setLocale(LanguageTag(aLanguage).makeFallback());
+            comphelper::COKit::setLoadLanguageTag(LanguageTag(aLanguage));
+
+            SAL_INFO("kit", "Set document language to " << aLanguage);
+            // use with care - it sets it for the entire core, not just the
+            // document
+            setLanguageAndLocale(aLanguage);
+            // Need to reset the static initialized values
+            SvNumberFormatter::resetTheCurrencyTable();
+        }
+
+        // Set the timezone, if not empty.
+        const OUString aTimezone = extractParameter(aOptions, u"Timezone");
+        if (!aTimezone.isEmpty())
+        {
+            KitHelper::setDefaultTimezone(true, aTimezone);
+        }
+        else
+        {
+            // Default to the TZ envar, if set.
+            const char* tz = ::getenv("TZ");
+            if (tz)
+            {
+                KitHelper::setDefaultTimezone(true,
+                                                 OStringToOUString(tz, RTL_TEXTENCODING_UTF8));
+            }
+            else
+            {
+                KitHelper::setDefaultTimezone(false, OUString());
+            }
+        }
+
+        const OUString aDeviceFormFactor = extractParameter(aOptions, u"DeviceFormFactor");
+        KitHelper::setDeviceFormFactor(aDeviceFormFactor);
+
+        // Batch names a document that is loaded with nobody to answer a dialog. The document is
+        // marked below, once it has an id. Until then the load itself carries the suppression,
+        // because a document has no view to belong to while it loads.
+        const OUString aBatch = extractParameter(aOptions, u"Batch");
+        const bool bSuppressDialogs = !aBatch.isEmpty();
+
+        rtl::Reference<KitInteractionHandler> const pInteraction(
+            new KitInteractionHandler("load"_ostr, pLib));
+        // Take over the interaction handler entry for this URL. A successful
+        // load keeps its entry past the load (the scope guard is dismissed
+        // below) so a view-to-edit reload can still get the password. Once that
+        // document is gone the entry is stale, so a fresh load of the same URL
+        // overwrites it instead of tripping over the leftover.
+        const OString aInteractionKey(aURL.toUtf8());
+        pLib->mInteractionMap[aInteractionKey] = pInteraction;
+        comphelper::ScopeGuard g(
+            [&]()
+            {
+                // The load failed: drop our handler, unless a later load of the
+                // same URL has already replaced it with its own.
+                auto const it = pLib->mInteractionMap.find(aInteractionKey);
+                if (it != pLib->mInteractionMap.end() && it->second == pInteraction)
+                    pLib->mInteractionMap.erase(it);
+            });
+
+        int nMacroSecurityLevel = 1;
+        const OUString aMacroSecurityLevel = extractParameter(aOptions, u"MacroSecurityLevel");
+        if (!aMacroSecurityLevel.isEmpty())
+        {
+            double nNumber;
+            sal_uInt32 nFormat = 1;
+            SvNumberFormatter aFormatter(::comphelper::getProcessComponentContext(), LANGUAGE_ENGLISH_US);
+            if (aFormatter.IsNumberFormat(aMacroSecurityLevel, nFormat, nNumber))
+                nMacroSecurityLevel = static_cast<int>(nNumber);
+        }
+        SvtSecurityOptions::SetMacroSecurityLevel(nMacroSecurityLevel);
+
+        OUString aClientVisibleArea = extractParameter(aOptions, u"ClientVisibleArea");
+        if (!aClientVisibleArea.isEmpty())
+        {
+            std::vector<OUString> aTokens = comphelper::string::split(aClientVisibleArea, ';');
+            if (aTokens.size() >= 4)
+            {
+                awt::Rectangle aRectangle;
+                aRectangle.X = aTokens[0].toInt32();
+                aRectangle.Y = aTokens[1].toInt32();
+                aRectangle.Width = aTokens[2].toInt32();
+                aRectangle.Height = aTokens[3].toInt32();
+                comphelper::COKit::setInitialClientVisibleArea(aRectangle);
+            }
+        }
+
+        // The embedder may load a working copy under a different URL than the file
+        // the user opened (the macOS app loads from a temp dir). When it tells us
+        // the original URL, remember it against this working URL so the Properties
+        // dialog can show and reveal the real location. The value was percent-escaped
+        // for the comma-separated options string, so decode it back.
+        OUString aOriginalDocumentUrlKey;
+        OUString aOriginalDocumentUrl = extractParameter(aOptions, u"OriginalDocumentUrl");
+        if (!aOriginalDocumentUrl.isEmpty())
+        {
+            aOriginalDocumentUrl = rtl::Uri::decode(aOriginalDocumentUrl, rtl_UriDecodeWithCharset,
+                                                    RTL_TEXTENCODING_UTF8);
+            // Key by the canonical main URL, matching how the Properties dialog
+            // looks it up (INetURLObject::GetMainURL with no decoding). Remember
+            // the key so the destructor can clear the mapping without dereferencing
+            // the (possibly already disposed) model.
+            aOriginalDocumentUrlKey
+                = INetURLObject(aURL).GetMainURL(INetURLObject::DecodeMechanism::NONE);
+            comphelper::COKit::setOriginalDocumentUrl(aOriginalDocumentUrlKey, aOriginalDocumentUrl);
+        }
+
+#ifdef ANDROID
+        sal_Int16 nMacroExecMode = document::MacroExecMode::USE_CONFIG;
+#else
+        const OUString aEnableMacrosExecution = extractParameter(aOptions, u"EnableMacrosExecution");
+        sal_Int16 nMacroExecMode;
+        if (aEnableMacrosExecution == "true")
+        {
+            nMacroExecMode = document::MacroExecMode::USE_CONFIG;
+        }
+        else
+        {
+            nMacroExecMode = document::MacroExecMode::NEVER_EXECUTE;
+            // also set the global flag so IsMacroDisabled() returns true,
+            // blocking share-location scripts that bypass the per-document
+            // MacroExecutionMode check. Affects this per-document process instance,
+            // may require re-visiting when/if CODA gets macro support.
+            std::shared_ptr<comphelper::ConfigurationChanges> xChanges =
+                comphelper::ConfigurationChanges::create();
+            officecfg::Office::Common::Security::Scripting::DisableMacrosExecution::set(
+                true, xChanges);
+            xChanges->commit();
+        }
+#endif
+
+        // set AsTemplate explicitly false to be able to load template files
+        // as regular files, otherwise we cannot save them; it will try
+        // to bring saveas dialog which cannot work with COKit case
+        cpo::uno::Sequence<css::beans::PropertyValue> aFilterOptions{
+            comphelper::makePropertyValue(u"FilterOptions"_ustr, aOptions),
+            comphelper::makePropertyValue(u"InteractionHandler"_ustr, uno::Reference<task::XInteractionHandler2>(pInteraction)),
+            comphelper::makePropertyValue(u"MacroExecutionMode"_ustr, nMacroExecMode),
+            comphelper::makePropertyValue(u"AsTemplate"_ustr, false),
+            comphelper::makePropertyValue(u"Silent"_ustr, !aBatch.isEmpty())
+        };
+
+        /* TODO
+        sal_Int16 nUpdateDoc = document::UpdateDocMode::ACCORDING_TO_CONFIG;
+        aFilterOptions[3].Name = "UpdateDocMode";
+        aFilterOptions[3].Value <<= nUpdateDoc;
+        */
+
+        OutputDevice::StartTrackingFontMappingUse();
+
+        if (const char* pExemptVerifyHost = ::getenv("KIT_EXEMPT_VERIFY_HOST"))
+            HostFilter::setExemptVerifyHost(OUString(pExemptVerifyHost, strlen(pExemptVerifyHost), RTL_TEXTENCODING_UTF8));
+
+        const int nThisDocumentId = nDocumentIdCounter++;
+        comphelper::COKit::setDocId(ViewShellDocId(nThisDocumentId));
+        std::optional<comphelper::COKit::SuppressDialogsLoadGuard> oSuppressDialogsGuard;
+        if (bSuppressDialogs)
+            oSuppressDialogsGuard.emplace(ViewShellDocId(nThisDocumentId));
+        uno::Reference<lang::XComponent> xComponent = xComponentLoader->loadComponentFromURL(
+                                            aURL, u"_blank"_ustr, 0,
+                                            aFilterOptions);
+
+        if (!xComponent.is())
+        {
+            pLib->maLastExceptionMsg = u"loadComponentFromURL returned an empty reference"_ustr;
+            SAL_INFO("kit", "Document can't be loaded - " << pLib->maLastExceptionMsg);
+            return nullptr;
+        }
+
+        assert(comphelper::COKit::getDocId() == ViewShellDocId(nThisDocumentId) && "incorrect docid set on document");
+
+        COKitDocumentImpl* pDocument = new COKitDocumentImpl(xComponent, nThisDocumentId);
+        pDocument->maOriginalDocumentUrlKey = aOriginalDocumentUrlKey;
+
+        if (bSuppressDialogs)
+            comphelper::COKit::setDialogsSuppressed(ViewShellDocId(nThisDocumentId));
+
+        // Type detection can resolve a load to a template-format filter for a
+        // file whose own name does not have one of that filter's extensions,
+        // for example when the file at aURL is a .potx or .dotx saved under
+        // a .pptx or .docx name (online does this when a document is created
+        // from a template). Leaving the document tied to that filter would
+        // make a later plain save write out content whose declared type
+        // disagrees with the file's own extension. Retarget the document's
+        // own storage to the matching non-template filter for aURL now, so
+        // a later save is consistent with the file's name from the start.
+        if (SfxBaseModel* pLoadedModel = dynamic_cast<SfxBaseModel*>(xComponent.get()))
+        {
+            if (SfxObjectShell* pLoadedShell = pLoadedModel->GetObjectShell())
+            {
+                SfxMedium* pLoadedMedium = pLoadedShell->GetMedium();
+                std::shared_ptr<const SfxFilter> pLoadedFilter
+                    = pLoadedMedium ? pLoadedMedium->GetFilter() : nullptr;
+                if (pLoadedFilter && pLoadedFilter->IsOwnTemplateFormat()
+                    && !pLoadedFilter->GetWildcard().Matches(aURL))
+                {
+                    OString aURLUtf8 = OUStringToOString(aURL, RTL_TEXTENCODING_UTF8);
+                    doc_saveAs(pDocument, aURLUtf8.getStr(), nullptr, "TakeOwnership,FromTemplate");
+                }
+            }
+        }
+
+        // After loading the document, its initial view is the "current" view.
+        if (!aLanguage.isEmpty() && LanguageTag::isValidBcp47(aLanguage, nullptr))
+        {
+            if (const SfxViewShell* pInitialViewShell = SfxViewShell::Current())
+            {
+                // Store the language and locale on this view too, so that switching
+                // back to it later restores its own language instead of whichever
+                // other view's language was set most recently.
+                const int nInitialViewId = KitHelper::getView(*pInitialViewShell);
+                KitHelper::setViewLanguage(nInitialViewId, aLanguage);
+                KitHelper::setViewLocale(nInitialViewId, aLanguage);
+            }
+        }
+
+        if (pLib->mpCallback)
+        {
+            int nState = doc_getSignatureState(pDocument);
+            pLib->mpCallback(COKitCallbackType::SIGNATURE_STATUS, OString::number(nState).getStr(), pLib->mpCallbackData);
+        }
+
+        auto aFontMappingUseData = OutputDevice::FinishTrackingFontMappingUse();
+
+        if (aFontMappingUseData.size() > 0)
+        {
+            SAL_INFO("kit.fontsubst", "================ Original substitutions:");
+            for (const auto &i : aFontMappingUseData)
+            {
+                SAL_INFO("kit.fontsubst", i.mOriginalFont);
+                for (const auto &j : i.mUsedFonts)
+                    SAL_INFO("kit.fontsubst", "    " << j);
+            }
+        }
+
+        // Filter out font substitutions that actually aren't any substitutions, like "Liberation
+        // Serif" -> "Liberation Serif/Regular". If even one of the "substitutions" of a font is to
+        // the same font, don't count that as a missing font.
+
+        std::erase_if
+            (aFontMappingUseData,
+                            [](OutputDevice::FontMappingUseItem x)
+                            {
+                                // If the original font had an empty style and one of its
+                                // replacement fonts has the same family name, we assume the font is
+                                // present. The root problem here is that the code that collects
+                                // font substitutions tends to get just empty styles for the font
+                                // that is being substituted, as vcl::Font::GetStyleName() tends to
+                                // return an empty string. (Italicness is instead indicated by what
+                                // vcl::Font::GetItalic() returns and boldness by what
+                                // vcl::Font::GetWeight() returns.)
+
+                                if (x.mOriginalFont.indexOf('/') == -1)
+                                    for (const auto &j : x.mUsedFonts)
+                                        if (j == x.mOriginalFont ||
+                                            j.startsWith(Concat2View(x.mOriginalFont + "/")))
+                                            return true;
+
+                                return false;
+                            });
+
+        // Filter out substitutions where a proprietary font has been substituted by a
+        // metric-compatible one. Obviously this is just a heuristic and implemented only for some
+        // well-known cases.
+
+        std::erase_if
+            (aFontMappingUseData,
+                            [](OutputDevice::FontMappingUseItem x)
+                            {
+                                // Again, handle only cases where the original font does not include
+                                // a style. Unclear whether there ever will be a style part included
+                                // in the mOriginalFont.
+
+                                if (x.mOriginalFont.indexOf('/') == -1)
+                                    for (const auto &j : x.mUsedFonts)
+                                        if ((x.mOriginalFont == "Arial" &&
+                                             j.startsWith("Liberation Sans/")) ||
+                                            (x.mOriginalFont == "Times New Roman" &&
+                                             j.startsWith("Liberation Serif/")) ||
+                                            (x.mOriginalFont == "Courier New" &&
+                                             j.startsWith("Liberation Mono/")) ||
+                                            (x.mOriginalFont == "Arial Narrow" &&
+                                             j.startsWith("Liberation Sans Narrow/")) ||
+                                            (x.mOriginalFont == "Cambria" &&
+                                             j.startsWith("Caladea/")) ||
+                                            (x.mOriginalFont == "Calibri" &&
+                                             j.startsWith("Carlito/")) ||
+                                            (x.mOriginalFont == "Palatino Linotype" &&
+                                             j.startsWith("P052/")) ||
+                                            // Perhaps a risky heuristic? If some glyphs from Symbol
+                                            // have been mapped to ones in OpenSymbol, don't warn
+                                            // that Symbol is missing.
+                                            (x.mOriginalFont == "Symbol" &&
+                                             j.startsWith("OpenSymbol/")))
+                                        {
+                                            return true;
+                                        }
+
+                                return false;
+                            });
+
+        if (aFontMappingUseData.size() > 0)
+        {
+            SAL_INFO("kit.fontsubst", "================ Pruned substitutions:");
+            for (const auto &i : aFontMappingUseData)
+            {
+                SAL_INFO("kit.fontsubst", i.mOriginalFont);
+                for (const auto &j : i.mUsedFonts)
+                    SAL_INFO("kit.fontsubst", "    " << j);
+            }
+        }
+
+        for (std::size_t i = 0; i < aFontMappingUseData.size(); ++i)
+        {
+            pDocument->maFontsMissing.insert(aFontMappingUseData[i].mOriginalFont);
+        }
+
+        SAL_INFO("kit", "lo_documentLoadWithOptions: finished @ " << osl_getGlobalTimer());
+        // Load succeeded: keep the interaction handler in mInteractionMap so a
+        // later reload (view to edit) can still deliver the password.
+        g.dismiss();
+        return pDocument;
+    }
+    catch (const cpo::uno::Exception& exception)
+    {
+        pLib->maLastExceptionMsg = exception.Message;
+        TOOLS_INFO_EXCEPTION("kit", "Document can't be loaded");
+    }
+
+    return nullptr;
+}
+
+bool COKitImpl::runMacro(const char *pURL)
+{
+    comphelper::ProfileZone aZone("COKitImpl::runMacro");
+
+    SolarMutexGuard aGuard;
+
+    maLastExceptionMsg.clear();
+
+    OUString sURL( pURL, strlen(pURL), RTL_TEXTENCODING_UTF8 );
+    if (sURL.isEmpty())
+    {
+        maLastExceptionMsg = u"Macro to run was not provided."_ustr;
+        SAL_INFO("kit", "Macro URL is empty");
+        return false;
+    }
+
+    if (!sURL.startsWith("macro://"))
+    {
+        maLastExceptionMsg = u"This doesn't look like macro URL"_ustr;
+        SAL_INFO("kit", "Macro URL is invalid");
+        return false;
+    }
+
+    maLastExceptionMsg.clear();
+
+    if (!xContext.is())
+    {
+        maLastExceptionMsg = u"ComponentContext is not available"_ustr;
+        SAL_INFO("kit", "ComponentContext is not available");
+        return false;
+    }
+
+    util::URL aURL;
+    aURL.Complete = sURL;
+
+    uno::Reference < util::XURLTransformer > xParser( util::URLTransformer::create( xContext ) );
+
+    if( xParser.is() )
+        xParser->parseStrict( aURL );
+
+    uno::Reference<frame::XDesktop> xComponentLoader = frame::Desktop::create(xContext);
+
+    if (!xComponentLoader.is())
+    {
+        maLastExceptionMsg = u"ComponentLoader is not available"_ustr;
+        SAL_INFO("kit", "ComponentLoader is not available");
+        return false;
+    }
+
+    xFactory = xContext->getServiceManager();
+
+    if (!xFactory)
+        return false;
+
+    uno::Reference<frame::XDispatchProvider> xDP;
+    xSFactory.set(xFactory, uno::UNO_QUERY_THROW);
+    xDP.set( xSFactory->createInstance(u"com.sun.star.comp.sfx2.SfxMacroLoader"_ustr), uno::UNO_QUERY );
+    uno::Reference<frame::XDispatch> xD = xDP->queryDispatch( aURL, OUString(), 0);
+
+    if (!xD.is())
+    {
+        maLastExceptionMsg = u"Macro loader is not available"_ustr;
+        SAL_INFO("kit", "Macro loader is not available");
+        return false;
+    }
+
+    uno::Reference < frame::XSynchronousDispatch > xSyncDisp( xD, uno::UNO_QUERY_THROW );
+    cpo::uno::Sequence<css::beans::PropertyValue> aEmpty;
+    css::beans::PropertyValue aErr;
+    cpo::uno::Any aRet = xSyncDisp->dispatchWithReturnValue( aURL, aEmpty );
+    aRet >>= aErr;
+
+    if (aErr.Name == "ErrorCode")
+    {
+        sal_uInt32 nErrCode = 0; // ERRCODE_NONE
+        aErr.Value >>= nErrCode;
+
+        maLastExceptionMsg = "An error occurred running macro (error code: " + OUString::number( nErrCode ) + ")";
+        SAL_INFO("kit", "Macro execution terminated with error code " << nErrCode);
+
+        return false;
+    }
+
+    return true;
+}
+
+bool COKitImpl::signDocument(const char* pURL, std::span<const unsigned char> aCertificateBinary,
+                             std::span<const unsigned char> aPrivateKeyBinary)
+{
+    comphelper::ProfileZone aZone("COKitImpl::signDocument");
+
+    OUString aURL(getAbsoluteURL(pURL));
+    if (aURL.isEmpty())
+       return false;
+
+    if (!xContext.is())
+        return false;
+
+    uno::Reference<security::XCertificate> xCertificate = KitHelper::getSigningCertificate(
+        asStringView(aCertificateBinary), asStringView(aPrivateKeyBinary));
+
+    if (!xCertificate.is())
+        return false;
+
+    sfx2::DocumentSigner aDocumentSigner(aURL);
+    if (!aDocumentSigner.signDocument(xCertificate))
+        return false;
+
+    return true;
+}
+
+
+COKitTranslateResult COKitImpl::translateDocument(const char* pInputPath, const char* pOutputPath,
+                                                  const char* pBCP47Language)
+{
+    SetLastExceptionMsg();
+    if (!pInputPath || !pOutputPath || !pBCP47Language)
+    {
+        SetLastExceptionMsg(u"translateDocument: null argument"_ustr);
+        return COKitTranslateResult::FAILED;
+    }
+
+    desktop::l10n::TranslateResult eResult = desktop::l10n::TranslateResult::Error;
+    try
+    {
+        eResult = desktop::l10n::translateDocument(
+            OUString(pInputPath, strlen(pInputPath), RTL_TEXTENCODING_UTF8),
+            OUString(pOutputPath, strlen(pOutputPath), RTL_TEXTENCODING_UTF8),
+            OUString(pBCP47Language, strlen(pBCP47Language), RTL_TEXTENCODING_UTF8));
+    }
+    catch (const std::exception& e)
+    {
+        SAL_WARN("kit", "COKitImpl::translateDocument: " << e.what());
+    }
+    switch (eResult)
+    {
+        case desktop::l10n::TranslateResult::Translated:
+            return COKitTranslateResult::TRANSLATED;
+        case desktop::l10n::TranslateResult::CopiedUntranslated:
+            return COKitTranslateResult::COPIED_UNTRANSLATED;
+        default:
+            SetLastExceptionMsg(u"translateDocument: failed"_ustr);
+            return COKitTranslateResult::FAILED;
+    }
+}
+
+std::string COKitImpl::extractRequest(const char* pFilePath)
+{
+    uno::Reference<frame::XDesktop> xComponentLoader = frame::Desktop::create(xContext);
+    uno::Reference< css::lang::XComponent > xComp;
+    OUString aURL(getAbsoluteURL(pFilePath));
+    if (!aURL.isEmpty())
+    {
+        if (xComponentLoader.is())
+        {
+            try
+            {
+                cpo::uno::Sequence<css::beans::PropertyValue> aFilterOptions(comphelper::InitPropertySequence(
+                {
+                    {u"Hidden"_ustr, cpo::uno::Any(true)},
+                    {u"ReadOnly"_ustr, cpo::uno::Any(true)}
+                }));
+                xComp = xComponentLoader->loadComponentFromURL( aURL, u"_blank"_ustr, 0, aFilterOptions );
+            }
+            catch ( const lang::IllegalArgumentException& ex )
+            {
+                SAL_WARN("kit", "COKitImpl::extractRequest: IllegalArgumentException: "
+                                << ex.Message);
+            }
+            catch (...)
+            {
+                SAL_WARN("kit", "COKitImpl::extractRequest: Exception on loadComponentFromURL,"
+                                " url= " << aURL);
+            }
+
+            if (xComp.is())
+            {
+                uno::Reference< document::XLinkTargetSupplier > xLTS( xComp, uno::UNO_QUERY );
+
+                if( xLTS.is() )
+                {
+                    tools::JsonWriter aJson;
+                    {
+                        auto aNode = aJson.startNode("Targets");
+                        extractLinks(xLTS->getLinks(), false, aJson);
+                    }
+                    return aJson.finishAndGetAsStdString();
+                }
+                xComp->dispose();
+            }
+        }
+    }
+    return "{ }";
+}
+
+std::string COKitImpl::extractDocumentStructureRequest(const char* pFilePath, const char* pFilter)
+{
+    SolarMutexGuard aGuard;
+
+    uno::Reference<frame::XDesktop> xComponentLoader = frame::Desktop::create(xContext);
+    uno::Reference< css::lang::XComponent > xComp;
+    OUString aURL(getAbsoluteURL(pFilePath));
+    if (!aURL.isEmpty())
+    {
+        if (xComponentLoader.is())
+        {
+            try
+            {
+                cpo::uno::Sequence<css::beans::PropertyValue> aFilterOptions(comphelper::InitPropertySequence(
+                {
+                    {u"Hidden"_ustr, cpo::uno::Any(true)},
+                    {u"ReadOnly"_ustr, cpo::uno::Any(true)}
+                }));
+                xComp = xComponentLoader->loadComponentFromURL( aURL, u"_blank"_ustr, 0, aFilterOptions );
+            }
+            catch ( const lang::IllegalArgumentException& ex )
+            {
+                SAL_WARN("kit", "COKitImpl::extractDocumentStructureRequest:"
+                                " IllegalArgumentException: " << ex.Message);
+            }
+            catch (...)
+            {
+                SAL_WARN("kit", "COKitImpl::extractDocumentStructureRequest: Exception on"
+                                " loadComponentFromURL, url= " << aURL);
+            }
+
+            if (xComp.is())
+            {
+                ITiledRenderable* pDoc = dynamic_cast<ITiledRenderable*>(xComp.get());
+                if (!pDoc)
+                    return {};
+
+                auto pBaseModel = dynamic_cast<SfxBaseModel*>(xComp.get());
+                if (!pBaseModel)
+                    return {};
+
+                SfxObjectShell* pObjectShell = pBaseModel->GetObjectShell();
+                if (!pObjectShell)
+                    return {};
+
+                //if it is a writer document..
+                uno::Reference<lang::XServiceInfo> xDocument(xComp, uno::UNO_QUERY_THROW);
+                if (xDocument->supportsService(u"com.sun.star.text.TextDocument"_ustr)
+                    || xDocument->supportsService(u"com.sun.star.text.WebDocument"_ustr)
+                    || xDocument->supportsService(u"com.sun.star.presentation.PresentationDocument"_ustr))
+                {
+                    tools::JsonWriter aJson;
+                    {
+                        OString aCommand = ".uno:ExtractDocumentStructure"_ostr;
+                        if (pFilter && pFilter[0])
+                        {
+                            aCommand
+                                = OString::Concat(aCommand) + "?filter="_ostr + pFilter;
+                        }
+
+                        pDoc->getCommandValues(aJson, aCommand);
+                    }
+                    return aJson.finishAndGetAsStdString();
+                }
+
+                xComp->dispose();
+            }
+        }
+    }
+    return "{ }";
+}
+
+namespace {
+
+enum class JoinThreads
+{
+    ALL,
+    RESTARTS_ON_DEMAND
+};
+
+}
+
+static bool lcl_joinThreads(JoinThreads eCategory);
+
+static void flushBufferedVOCs()
+{
+    SolarMutexGuard aGuard;
+    // Flush all buffered VOC primitives from the pages.
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    if (!pViewShell)
+        return;
+    const SdrView* pView = pViewShell->GetDrawView();
+    if (!pView)
+        return;
+    SdrPageView* pPageView = pView->GetSdrPageView();
+    if (!pPageView)
+        return;
+    SdrPage* pCurPage = pPageView->GetPage();
+    if (!pCurPage)
+        return;
+    SdrModel& sdrModel = pCurPage->getSdrModelFromSdrPage();
+    for (sal_uInt16 i = 0; i < sdrModel.GetPageCount(); ++i)
+    {
+        SdrPage* pPage = sdrModel.GetPage(i);
+        if (pPage)
+            pPage->GetViewContact().flushViewObjectContacts();
+    }
+}
+
+void COKitImpl::trimMemory(int nTarget)
+{
+    vcl::kit::trimMemory(nTarget);
+
+    if (nTarget > 2000)
+    {
+        flushBufferedVOCs();
+
+        // When more aggressively reclaiming memory then shutdown threads which
+        // will restart on demand.
+        // The SolarMutex should not be held when calling lcl_joinThreads() to avoid
+        // deadlock.
+        lcl_joinThreads(JoinThreads::RESTARTS_ON_DEMAND);
+    }
+
+    if (nTarget > 1000)
+    {
+#ifdef HAVE_MALLOC_TRIM
+        malloc_trim(0);
+#endif
+    }
+}
+
+namespace
+{
+class FunctionBasedURPInstanceProvider
+    : public ::cppu::WeakImplHelper<css::bridge::XInstanceProvider>
+{
+private:
+    cpo::uno::Reference<cpo::uno::XComponentContext> m_rContext;
+
+public:
+    FunctionBasedURPInstanceProvider(
+        const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext);
+
+    // XInstanceProvider
+    virtual cpo::uno::Reference<cpo::uno::XInterface>
+        getInstance(const OUString& aName) override;
+};
+
+// InstanceProvider
+FunctionBasedURPInstanceProvider::FunctionBasedURPInstanceProvider(
+    const Reference<XComponentContext>& rxContext)
+    : m_rContext(rxContext)
+{
+}
+
+Reference<XInterface> FunctionBasedURPInstanceProvider::getInstance(const OUString& aName)
+{
+    Reference<XInterface> rInstance;
+
+    if (aName == "StarOffice.ServiceManager")
+    {
+        rInstance.set(m_rContext->getServiceManager());
+    }
+    else if (aName == "StarOffice.ComponentContext")
+    {
+        rInstance = m_rContext;
+    }
+    else if (aName == "StarOffice.NamingService")
+    {
+        Reference<XNamingService> rNamingService(
+            m_rContext->getServiceManager()->createInstanceWithContext(
+                u"cpo.uno.NamingService"_ustr, m_rContext),
+            UNO_QUERY);
+        if (rNamingService.is())
+        {
+            rNamingService->registerObject(u"StarOffice.ServiceManager"_ustr,
+                                           m_rContext->getServiceManager());
+            rNamingService->registerObject(u"StarOffice.ComponentContext"_ustr, m_rContext);
+            rInstance = rNamingService;
+        }
+    }
+    return rInstance;
+}
+
+class FunctionBasedURPConnection : public cppu::WeakImplHelper<css::connection::XConnection>
+{
+public:
+    explicit FunctionBasedURPConnection(void*, int (*)(void* pContext, const signed char* pBuffer, int nLen),
+                                        void*, int (*)(void* pContext, signed char* pBuffer, int nLen));
+    ~FunctionBasedURPConnection();
+
+    // These overridden member functions use "read" and "write" from the point of view of engine,
+    // i.e. the opposite to how startURP() uses them.
+    virtual sal_Int32 read(Sequence<sal_Int8>& rReadBytes,
+                                    sal_Int32 nBytesToRead) override;
+    virtual void write(const Sequence<sal_Int8>& aData) override;
+    virtual void flush() override;
+    virtual void close() override;
+    virtual OUString getDescription() override;
+    void setBridge(const Reference<XBridge>&);
+    void* getContext();
+    inline static int g_connectionCount = 0;
+
+private:
+    void* m_pRecieveFromEngineContext;
+    void* m_pSendURPToEngineContext;
+    int (*m_fnReceiveURPFromEngine)(void* pContext, const signed char* pBuffer, int nLen);
+    int (*m_fnSendURPToEngine)(void* pContext, signed char* pBuffer, int nLen);
+    Reference<XBridge> m_URPBridge;
+};
+
+FunctionBasedURPConnection::FunctionBasedURPConnection(
+    void* pRecieveFromEngineContext,
+    int (*fnReceiveURPFromEngine)(void* pContext, const signed char* pBuffer, int nLen),
+    void* pSendURPToEngineContext,
+    int (*fnSendURPToEngine)(void* pContext, signed char* pBuffer, int nLen))
+    : m_pRecieveFromEngineContext(pRecieveFromEngineContext)
+    , m_pSendURPToEngineContext(pSendURPToEngineContext)
+    , m_fnReceiveURPFromEngine(fnReceiveURPFromEngine)
+    , m_fnSendURPToEngine(fnSendURPToEngine)
+{
+    g_connectionCount++;
+}
+
+FunctionBasedURPConnection::~FunctionBasedURPConnection()
+{
+    Reference<XComponent> xComp(m_URPBridge, UNO_QUERY_THROW);
+    xComp->dispose(); // TODO: check this doesn't deadlock
+}
+
+void* FunctionBasedURPConnection::getContext() { return this; }
+
+sal_Int32 FunctionBasedURPConnection::read(Sequence<sal_Int8>& rReadBytes, sal_Int32 nBytesToRead)
+{
+    if (nBytesToRead < 0)
+        return 0;
+
+    if (rReadBytes.getLength() != nBytesToRead)
+        rReadBytes.realloc(nBytesToRead);
+
+    // As with osl::StreamPipe, we must always read nBytesToRead...
+    return m_fnSendURPToEngine(m_pSendURPToEngineContext, rReadBytes.getArray(), nBytesToRead);
+}
+
+void FunctionBasedURPConnection::write(const Sequence<sal_Int8>& rData)
+{
+    m_fnReceiveURPFromEngine(m_pRecieveFromEngineContext, rData.getConstArray(), rData.getLength());
+}
+
+void FunctionBasedURPConnection::flush() {}
+
+void FunctionBasedURPConnection::close()
+{
+    SAL_INFO("kit.urp", "Requested to close FunctionBasedURPConnection");
+}
+
+OUString FunctionBasedURPConnection::getDescription() { return u""_ustr; }
+
+void FunctionBasedURPConnection::setBridge(const Reference<XBridge>& xBridge) { m_URPBridge = xBridge; }
+}
+
+static void*
+lo_startURP(COKit* /* pThis */, void* pRecieveFromEngineContext, void* pSendToEngineContext,
+            int (*fnReceiveURPFromEngine)(void* pContext, const signed char* pBuffer, int nLen),
+            int (*fnSendURPToEngine)(void* pContext, signed char* pBuffer, int nLen))
+{
+    // Here we will roughly do what desktop CO does when one passes a command-line switch like
+    // --accept=socket,port=nnnn;urp;StarOffice.ServiceManager. Except that no listening socket will
+    // be created. The communication to the URP will be through the nReceiveURPFromEngine and nSendURPToEngine
+    // functions.
+
+    rtl::Reference<FunctionBasedURPConnection> connection(
+        new FunctionBasedURPConnection(pRecieveFromEngineContext, fnReceiveURPFromEngine,
+                                       pSendToEngineContext, fnSendURPToEngine));
+
+    Reference<XBridgeFactory> xBridgeFactory = css::bridge::BridgeFactory::create(xContext);
+
+    Reference<XInstanceProvider> xInstanceProvider(new FunctionBasedURPInstanceProvider(xContext));
+
+    Reference<XBridge> xBridge(xBridgeFactory->createBridge(
+        "functionurp" + OUString::number(FunctionBasedURPConnection::g_connectionCount), u"kit.urp"_ustr,
+        connection, xInstanceProvider));
+
+    connection->setBridge(std::move(xBridge));
+
+    return connection->getContext();
+}
+
+/**
+ * Stop a function based URP connection that you started with lo_startURP above
+ *
+ * @param pSendToEngineContext a pointer to the context returned by lo_startURP */
+void COKitImpl::stopURP(void* pFunctionBasedURPConnection/* FunctionBasedURPConnection* */)
+{
+    static_cast<FunctionBasedURPConnection*>(pFunctionBasedURPConnection)->close();
+}
+
+static bool lcl_joinThreads(JoinThreads eCategory)
+{
+    DBG_TESTNOTSOLARMUTEX();
+
+    comphelper::ThreadPool &pool = comphelper::ThreadPool::getSharedOptimalPool();
+    if (!pool.joinThreadsIfIdle())
+        return false;
+
+    // Grammar checker thread
+    cpo::uno::Reference<css::linguistic2::XLinguServiceManager2> xLangSrv =
+        css::linguistic2::LinguServiceManager::create(xContext);
+
+    auto joinable = dynamic_cast<comphelper::COKit::ThreadJoinable *>(xLangSrv.get());
+    if (joinable && !joinable->joinThreads())
+        return false;
+
+    if (eCategory == JoinThreads::ALL)
+    {
+        auto ucpWebdav = xContext->getServiceManager()->createInstanceWithContext(
+            u"com.sun.star.ucb.WebDAVManager"_ustr, xContext);
+        joinable = dynamic_cast<comphelper::COKit::ThreadJoinable *>(ucpWebdav.get());
+        if (joinable && !joinable->joinThreads())
+            return false;
+
+        auto progressThread = xContext->getServiceManager()->createInstanceWithContext(
+            u"com.sun.star.task.StatusIndicatorFactory"_ustr, xContext);
+        joinable = dynamic_cast<comphelper::COKit::ThreadJoinable *>(progressThread.get());
+        if (joinable && !joinable->joinThreads())
+            return false;
+    }
+
+    // Ensure configmgr's write thread is down
+    cpo::uno::Reference< css::util::XFlushable >(
+        css::configuration::theDefaultProvider::get(
+            comphelper::getProcessComponentContext()),
+        cpo::uno::UNO_QUERY_THROW)->flush();
+
+    drawinglayer::primitive2d::BufferedDecompositionFlusher::shutdown();
+
+    if (eCategory == JoinThreads::ALL)
+        salhelper::Timer::joinThread();
+
+    return true;
+}
+
+bool COKitImpl::joinThreads()
+{
+    return lcl_joinThreads(JoinThreads::ALL);
+}
+
+void COKitImpl::startThreads()
+{
+    salhelper::Timer::startThread();
+
+    auto ucpWebdav = xContext->getServiceManager()->createInstanceWithContext(
+        u"com.sun.star.ucb.WebDAVManager"_ustr, xContext);
+    auto joinable = dynamic_cast<comphelper::COKit::ThreadJoinable *>(ucpWebdav.get());
+    if (joinable)
+        joinable->startThreads();
+
+    auto progressThread = xContext->getServiceManager()->createInstanceWithContext(
+        u"com.sun.star.task.StatusIndicatorFactory"_ustr, xContext);
+    joinable = dynamic_cast<comphelper::COKit::ThreadJoinable *>(progressThread.get());
+    if (joinable)
+        joinable->startThreads();
+}
+
+void COKitImpl::setForkedChild(bool bIsChild)
+{
+    comphelper::COKit::setForkedChild(bIsChild);
+    if (bIsChild)
+        Application::UpdateMainThread();
+}
+
+void COKitImpl::registerCallback(COKitCallback pCallback, void* pData)
+{
+    SolarMutexGuard aGuard;
+
+    Application* pApp = GetpApp();
+    assert(pApp);
+
+    maLastExceptionMsg.clear();
+
+    pApp->m_pCallback = mpCallback = pCallback;
+    pApp->m_pCallbackData = mpCallbackData = pData;
+}
+
+static SfxObjectShell* getSfxObjectShell(COKitDocument* pThis)
+{
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+    if (!pDocument)
+        return nullptr;
+
+    SfxBaseModel* pBaseModel = dynamic_cast<SfxBaseModel*>(pDocument->mxComponent.get());
+    if (!pBaseModel)
+        return nullptr;
+
+    return pBaseModel->GetObjectShell();
+}
+
+/// The filter that writes this document out in the given format, empty when the document
+/// type has no filter for it.
+static OUString getFilterNameForFormat(COKitDocument* pThis, std::u16string_view rFormat)
+{
+    std::span<const ExtensionMap> pMap;
+
+    switch (doc_getDocumentType(pThis))
+    {
+        case COKitDocumentType::SPREADSHEET:
+            pMap = aCalcExtensionMap;
+            break;
+        case COKitDocumentType::PRESENTATION:
+            pMap = aImpressExtensionMap;
+            break;
+        case COKitDocumentType::DRAWING:
+            pMap = aDrawExtensionMap;
+            break;
+        case COKitDocumentType::TEXT:
+            pMap = aWriterExtensionMap;
+            break;
+        case COKitDocumentType::OTHER:
+        default:
+            return {};
+    }
+
+    for (const auto& item : pMap)
+    {
+        if (o3tl::equalsIgnoreAsciiCase(rFormat, item.extn))
+            return item.filterName;
+    }
+
+    return {};
+}
+
+static bool doc_saveAs(COKitDocument* pThis, const char* sUrl, const char* pFormat, const char* pFilterOptions)
+{
+    comphelper::ProfileZone aZone("doc_saveAs");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+
+    OUString sFormat = getUString(pFormat);
+    OUString aURL(getAbsoluteURL(sUrl));
+
+    uno::Reference<frame::XStorable> xStorable(pDocument->mxComponent, uno::UNO_QUERY_THROW);
+
+    if (aURL.isEmpty())
+    {
+        SetLastExceptionMsg(u"Filename to save to was not provided."_ustr);
+        SAL_INFO("kit", "URL for save is empty");
+        return false;
+    }
+
+    try
+    {
+        if (pFormat == nullptr)
+        {
+            // sniff from the extension
+            sal_Int32 idx = aURL.lastIndexOf(".");
+            if( idx > 0 )
+            {
+                sFormat = aURL.copy( idx + 1 );
+            }
+            else
+            {
+                SetLastExceptionMsg("input URL '" + aURL + "' lacks a suffix");
+                return false;
+            }
+        }
+
+        const OUString aFilterName = getFilterNameForFormat(pThis, sFormat);
+        if (aFilterName.isEmpty())
+        {
+            SetLastExceptionMsg(u"no output filter found for provided suffix"_ustr);
+            return false;
+        }
+
+        OUString aFilterOptions = getUString(pFilterOptions);
+
+        // Check if watermark for pdf is passed by filteroptions...
+        // It is not a real filter option so it must be filtered out.
+        OUString watermarkText;
+        std::u16string_view sFullSheetPreview;
+        int aIndex = -1;
+        if ((aIndex = aFilterOptions.indexOf(",Watermark=")) >= 0)
+        {
+            int bIndex = aFilterOptions.indexOf("WATERMARKEND");
+            watermarkText = aFilterOptions.subView(aIndex+11, bIndex-(aIndex+11));
+            aFilterOptions = OUString::Concat(aFilterOptions.subView(0, aIndex)) + aFilterOptions.subView(bIndex+12);
+        }
+
+        if ((aIndex = aFilterOptions.indexOf(",FullSheetPreview=")) >= 0)
+        {
+            int bIndex = aFilterOptions.indexOf("FULLSHEETPREVEND");
+            sFullSheetPreview = aFilterOptions.subView(aIndex+18, bIndex-(aIndex+18));
+            aFilterOptions = OUString::Concat(aFilterOptions.subView(0, aIndex)) + aFilterOptions.subView(bIndex+16);
+        }
+
+        bool bFullSheetPreview = sFullSheetPreview == u"true";
+
+        OUString filePassword;
+        if ((aIndex = aFilterOptions.indexOf(",Password=")) >= 0)
+        {
+            int bIndex = aFilterOptions.indexOf("PASSWORDEND");
+            filePassword = aFilterOptions.subView(aIndex + 10, bIndex - (aIndex + 10));
+            aFilterOptions = OUString::Concat(aFilterOptions.subView(0, aIndex))
+                             + aFilterOptions.subView(bIndex + 11);
+        }
+        OUString filePasswordToModify;
+        if ((aIndex = aFilterOptions.indexOf(",PasswordToModify=")) >= 0)
+        {
+            int bIndex = aFilterOptions.indexOf("PASSWORDTOMODIFYEND");
+            filePassword = aFilterOptions.subView(aIndex + 18, bIndex - (aIndex + 18));
+            aFilterOptions = OUString::Concat(aFilterOptions.subView(0, aIndex))
+                             + aFilterOptions.subView(bIndex + 19);
+        }
+
+        // Select a pdf version if specified a valid one. If not specified then ignore.
+        // If invalid then fail.
+        sal_Int32 pdfVer = 0;
+        if ((aIndex = aFilterOptions.indexOf(",PDFVer=")) >= 0)
+        {
+            int bIndex = aFilterOptions.indexOf("PDFVEREND");
+            std::u16string_view sPdfVer = aFilterOptions.subView(aIndex+8, bIndex-(aIndex+8));
+            aFilterOptions = OUString::Concat(aFilterOptions.subView(0, aIndex)) + aFilterOptions.subView(bIndex+9);
+
+            if (o3tl::equalsIgnoreAsciiCase(sPdfVer, u"PDF/A-1b"))
+                pdfVer = 1;
+            else if (o3tl::equalsIgnoreAsciiCase(sPdfVer, u"PDF/A-2b"))
+                pdfVer = 2;
+            else if (o3tl::equalsIgnoreAsciiCase(sPdfVer, u"PDF/A-3b"))
+                pdfVer = 3;
+            else if (o3tl::equalsIgnoreAsciiCase(sPdfVer, u"PDF/A-4"))
+                pdfVer = 4;
+            else if (o3tl::equalsIgnoreAsciiCase(sPdfVer, u"PDF-1.5"))
+                pdfVer = 15;
+            else if (o3tl::equalsIgnoreAsciiCase(sPdfVer, u"PDF-1.6"))
+                pdfVer = 16;
+            else if (o3tl::equalsIgnoreAsciiCase(sPdfVer, u"PDF-1.7"))
+                pdfVer = 17;
+            else if (o3tl::equalsIgnoreAsciiCase(sPdfVer, u"PDF-2.0"))
+                pdfVer = 20;
+            else
+            {
+                SetLastExceptionMsg(u"wrong PDF version"_ustr);
+                return false;
+            }
+        }
+
+        // 'TakeOwnership' == this is a 'real' SaveAs (that is, the document
+        // gets a new name).  When this is not provided, the meaning of
+        // saveAs() is more like save-a-copy, which allows saving to any
+        // random format like PDF or PNG.
+        // It is not a real filter option, so we have to filter it out.
+        // Preserve CSV filter options structure: don't drop empty tokens or add spaces.
+        // Just scan for and remove special non-filter keywords.
+        // (Using convertCommaSeparated() would drop empty tokens and add spaces,
+        // which breaks CSV filter options where token position matters.)
+        bool bTakeOwnership = false;
+        bool bCreateFromTemplate = false;
+        comphelper::SequenceAsHashMap aSaveMediaDescriptor;
+        if (!aFilterOptions.startsWith("{"))
+        {
+            // Token-based filter options: scan for and remove special keywords.
+            // JSON options pass through unchanged — no keywords expected, and
+            // splitting on commas would needlessly mangle the JSON string.
+            OUStringBuffer aFilteredBuf;
+            sal_Int32 nIndex = 0;
+            bool bFirst = true;
+            do
+            {
+                const OUString aToken(o3tl::getToken(aFilterOptions, 0, ',', nIndex));
+                const OUString aTrimmed = aToken.trim();
+
+                if (aTrimmed == "TakeOwnership")
+                    bTakeOwnership = true;
+                else if (aTrimmed == "NoFileSync")
+                    aSaveMediaDescriptor[u"NoFileSync"_ustr] <<= true;
+                else if (aTrimmed == "FromTemplate")
+                    bCreateFromTemplate = true;
+                else
+                {
+                    if (!bFirst)
+                        aFilteredBuf.append(u',');
+                    aFilteredBuf.append(aToken);
+                    bFirst = false;
+                }
+            } while (nIndex >= 0);
+            aFilterOptions = aFilteredBuf.makeStringAndClear();
+        }
+
+        if (bCreateFromTemplate && bTakeOwnership)
+        {
+            if (SfxObjectShell* pObjectShell = getSfxObjectShell(pThis))
+            {
+                DateTime now( ::DateTime::SYSTEM );
+                pObjectShell->getDocProperties()->setCreationDate(now.GetUNODateTime());
+            }
+        }
+
+        aSaveMediaDescriptor[u"Overwrite"_ustr] <<= true;
+        aSaveMediaDescriptor[u"FilterName"_ustr] <<= aFilterName;
+
+        aSaveMediaDescriptor[MediaDescriptor::PROP_FILTEROPTIONS] <<= aFilterOptions;
+
+        comphelper::SequenceAsHashMap aFilterDataMap;
+
+        // If filter options is JSON string, then make sure aFilterDataMap stays empty, otherwise we
+        // would ignore the filter options.
+        if (!aFilterOptions.startsWith("{"))
+        {
+            setFormatSpecificFilterData(sFormat, aFilterDataMap);
+        }
+
+        if (!watermarkText.isEmpty())
+            aFilterDataMap[u"TiledWatermark"_ustr] <<= watermarkText;
+
+        if (bFullSheetPreview)
+            aFilterDataMap[u"SinglePageSheets"_ustr] <<= true;
+
+        if (pdfVer)
+            aFilterDataMap[u"SelectPdfVersion"_ustr] <<= pdfVer;
+
+        if (!aFilterDataMap.empty())
+        {
+            aSaveMediaDescriptor[u"FilterData"_ustr] <<= aFilterDataMap.getAsConstPropertyValueList();
+        }
+        if (!filePassword.isEmpty())
+            aSaveMediaDescriptor[u"Password"_ustr] <<= filePassword;
+        if (!filePasswordToModify.isEmpty())
+            aSaveMediaDescriptor[u"PasswordToModify"_ustr] <<= filePasswordToModify;
+
+        // add interaction handler too
+        if (gImpl)
+        {
+            // gImpl does not have to exist when running from a unit test
+            rtl::Reference<KitInteractionHandler> const pInteraction(
+                    new KitInteractionHandler("saveas"_ostr, gImpl, pDocument));
+
+            aSaveMediaDescriptor[MediaDescriptor::PROP_INTERACTIONHANDLER] <<= uno::Reference<task::XInteractionHandler2>(pInteraction);
+        }
+
+        if (bTakeOwnership)
+            xStorable->storeAsURL(aURL, aSaveMediaDescriptor.getAsConstPropertyValueList());
+        else
+            xStorable->storeToURL(aURL, aSaveMediaDescriptor.getAsConstPropertyValueList());
+
+        return true;
+    }
+    catch (const cpo::uno::Exception& exception)
+    {
+        SetLastExceptionMsg("exception: " + exception.Message);
+    }
+    return false;
+}
+
+/**
+ * Initialize UNO commands, in the sense that from now on, the COKit client gets updates for status
+ * changes of these commands. This is necessary, because (unlike in the desktop case) there are no
+ * toolbars hosting widgets these UNO commands, so no such status updates would be sent to the
+ * headless COKit clients out of the box.
+ */
+static void doc_iniUnoCommands ()
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    util::URL aCommandURL;
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    SfxViewFrame* pViewFrame = pViewShell ? &pViewShell->GetViewFrame() : nullptr;
+
+    // check if Frame-Controller were created.
+    if (!pViewFrame)
+    {
+        SAL_WARN("kit", "iniUnoCommands: No Frame-Controller created.");
+        return;
+    }
+
+    if (!xContext.is())
+        xContext = comphelper::getProcessComponentContext();
+    if (!xContext.is())
+    {
+        SAL_WARN("kit", "iniUnoCommands: Component context is not available");
+        return;
+    }
+
+#if !defined IOS && !defined ANDROID && !defined __EMSCRIPTEN__
+    uno::Reference<xml::crypto::XSEInitializer> xSEInitializer = xml::crypto::SEInitializer::create(xContext);
+    if (!xSEInitializer.is())
+    {
+        SAL_WARN("kit", "iniUnoCommands: XSEInitializer is not available");
+        return;
+    }
+
+    uno::Reference<xml::crypto::XXMLSecurityContext> xSecurityContext =
+        xSEInitializer->createSecurityContext(OUString());
+    if (!xSecurityContext.is())
+    {
+        SAL_WARN("kit", "iniUnoCommands: failed to create security context");
+    }
+#endif
+
+    SfxSlotPool& rSlotPool = SfxSlotPool::GetSlotPool(pViewFrame);
+    uno::Reference<util::XURLTransformer> xParser(util::URLTransformer::create(xContext));
+
+    const std::map<std::u16string_view, KitUnoCommand>& rUnoCommandList = GetKitUnoCommandList();
+    for (const auto& aUnoCommand : rUnoCommandList)
+    {
+        if (aUnoCommand.second.initializeForStatusUpdates)
+        {
+            aCommandURL.Complete = u".uno:"_ustr + aUnoCommand.first;
+            xParser->parseStrict(aCommandURL);
+
+            // when null, this command is not supported by the given component
+            // (like eg. Calc does not have ".uno:DefaultBullet" etc.)
+            if (const SfxSlot* pSlot = rSlotPool.GetUnoSlot(aCommandURL.Path))
+            {
+                // Initialize slot to dispatch .uno: Command.
+                pViewFrame->GetBindings().GetDispatch(pSlot, aCommandURL, false);
+            }
+
+        }
+    }
+}
+
+static COKitDocumentType doc_getDocumentType (COKitDocument* pThis)
+{
+    comphelper::ProfileZone aZone("doc_getDocumentType");
+
+    return static_cast<COKitDocumentImpl*>(pThis)->meDocumentType;
+}
+
+int COKitDocumentImpl::getParts()
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getParts");
+
+    SolarMutexGuard aGuard;
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return 0;
+    }
+
+    return pDoc->getParts();
+}
+
+std::string COKitDocumentImpl::getPart()
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getPart");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return "0";
+    }
+
+    const OString aPartId = currentPartId(pDoc);
+    return std::string(aPartId.getStr(), aPartId.getLength());
+}
+
+static void doc_setPartIndexImpl(COKitDocument* pThis, int nPartIndex, bool bAllowChangeFocus = true)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setPart");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(pThis);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    pDoc->setPart( nPartIndex, bAllowChangeFocus );
+}
+
+static void doc_setPartImpl(COKitDocument* pThis, std::string_view rPart,
+                            bool bAllowChangeFocus = true)
+{
+    SolarMutexGuard aGuard;
+
+    ITiledRenderable* pDoc = getTiledRenderable(pThis);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    // The identifier of a part that is gone, or a malformed identifier, selects nothing.
+    const int nIndex = pDoc->getPartIndex(rPart, pDoc->getEditMode());
+    if (nIndex < 0)
+    {
+        SAL_INFO("kit", "setPart names the gone part " << rPart);
+        return;
+    }
+
+    doc_setPartIndexImpl(pThis, nIndex, bAllowChangeFocus);
+}
+
+void COKitDocumentImpl::setPart(const char* pPart)
+{
+    doc_setPartImpl(this, pPart ? std::string_view(pPart) : std::string_view(), true);
+}
+
+std::string COKitDocumentImpl::getPartInfo(int nPart)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getPartInfo");
+
+    SolarMutexGuard aGuard;
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    return pDoc->getPartInfo(nPart);
+}
+
+std::string COKitDocumentImpl::getPartId(int nPart, int nMode)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getPartId");
+
+    SolarMutexGuard aGuard;
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return std::string();
+    }
+
+    const OString aPartId = pDoc->getPartId(nPart, nMode);
+    return std::string(aPartId.getStr(), aPartId.getLength());
+}
+
+int COKitDocumentImpl::getPartIndex(const char* pPart, int nMode)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getPartIndex");
+
+    SolarMutexGuard aGuard;
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc || !pPart)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return -1;
+    }
+
+    return pDoc->getPartIndex(pPart, nMode);
+}
+
+void COKitDocumentImpl::selectPart(const char* pPart, int nSelect)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc || !pPart)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    // The identifier of a part that is gone, or a malformed identifier, selects nothing.
+    const int nIndex = pDoc->getPartIndex(pPart, pDoc->getEditMode());
+    if (nIndex < 0)
+    {
+        SAL_INFO("kit", "selectPart names the gone part " << pPart);
+        return;
+    }
+
+    pDoc->selectPart( nIndex, nSelect );
+}
+
+void COKitDocumentImpl::moveSelectedParts(int nPosition, bool bDuplicate, int nIntoSection)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    pDoc->moveSelectedParts(nPosition, bDuplicate, nIntoSection);
+}
+
+std::string COKitDocumentImpl::getWriterPageRectangles()
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getWriterPageRectangles");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    return pDoc->getWriterPageRectangles();
+}
+
+std::string COKitDocumentImpl::getA11yFocusedParagraph()
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    if (SfxViewShell* pViewShell = SfxViewShell::Current())
+    {
+        return pViewShell->getA11yFocusedParagraph();
+
+    }
+    return {};
+}
+
+int COKitDocumentImpl::getA11yCaretPosition()
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return -1;
+    }
+    if (SfxViewShell* pViewShell = SfxViewShell::Current())
+    {
+        return pViewShell->getA11yCaretPosition();
+
+    }
+    return -1;
+
+}
+
+std::string COKitDocumentImpl::getPartName(int nPart)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getPartName");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    return convertOUStringToStdString(pDoc->getPartName(nPart));
+}
+
+void COKitDocumentImpl::setPartMode(COKitPartMode eMode)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setPartMode");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+
+    int nCurrentPart = pDoc->getPart();
+
+    pDoc->setPartMode(eMode);
+
+    // We need to make sure the internal state is updated, just changing the mode
+    // might not update the relevant shells (i.e. impress will keep rendering the
+    // previous mode unless we do this).
+    // TODO: we might want to do this within the relevant components rather than
+    // here, but that's also dependent on how we implement embedded object
+    // rendering I guess?
+    // TODO: we could be clever and e.g. set to 0 when we change to/from
+    // embedded object mode, and not when changing between slide/notes/combined
+    // modes?
+    // TODO: Also now see ViewShellBase::setEditMode for a similar case
+    if ( nCurrentPart < pDoc->getParts() )
+    {
+        pDoc->setPart( nCurrentPart );
+    }
+    else
+    {
+        pDoc->setPart( 0 );
+    }
+}
+
+int COKitDocumentImpl::getEditMode()
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getEditMode");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return 0;
+    }
+
+    return pDoc->getEditMode();
+}
+
+static void doc_paintTile(COKitDocument* pThis,
+                          std::span<unsigned char> aBuffer,
+                          const int nCanvasWidth, const int nCanvasHeight,
+                          const int nTilePosX, const int nTilePosY,
+                          const int nTileWidth, const int nTileHeight)
+{
+    comphelper::ProfileZone aZone("doc_paintTile");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    SAL_INFO( "kit.tiledrendering", "paintTile: painting [" << nTileWidth << "x" << nTileHeight <<
+              "]@(" << nTilePosX << ", " << nTilePosY << ") to [" <<
+              nCanvasWidth << "x" << nCanvasHeight << "]px" );
+
+    ITiledRenderable* pDoc = getTiledRenderable(pThis);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+#if defined(UNX) || defined(_WIN32)
+
+    // Painting of zoomed or HiDPI spreadsheets is special, we actually draw everything at 100%,
+    // and only set cairo's (or CoreGraphic's, in the iOS case) scale factor accordingly, so that
+    // everything is painted bigger or smaller. This is different to what Calc's internal scaling
+    // would do - because that one is trying to fit the lines between cells to integer multiples of
+    // pixels.
+    comphelper::ScopeGuard dpiScaleGuard([]() { comphelper::COKit::setDPIScale(1.0); });
+
+#if defined(IOS)
+    double fDPIScale = 1.0;
+
+    // Online uses COKitTileMode::RGBA by default so flip the normal flags
+    // to kCGImageAlphaPremultipliedLast | kCGImageByteOrder32Big
+    CGContextRef pCGContext = CGBitmapContextCreate(aBuffer.data(), nCanvasWidth, nCanvasHeight, 8,
+                                                    nCanvasWidth * 4, CGColorSpaceCreateDeviceRGB(),
+                                                    uint32_t(kCGImageAlphaPremultipliedLast) | uint32_t(kCGImageByteOrder32Big));
+
+    CGContextTranslateCTM(pCGContext, 0, nCanvasHeight);
+    CGContextScaleCTM(pCGContext, fDPIScale, -fDPIScale);
+
+    SAL_INFO( "kit.tiledrendering", "doc_paintTile: painting [" << nTileWidth << "x" << nTileHeight <<
+              "]@(" << nTilePosX << ", " << nTilePosY << ") to [" <<
+              nCanvasWidth << "x" << nCanvasHeight << "]px" );
+
+    Size aCanvasSize(nCanvasWidth, nCanvasHeight);
+
+    SystemGraphicsData aData;
+    aData.rCGContext = reinterpret_cast<CGContextRef>(pCGContext);
+
+    ScopedVclPtrInstance<VirtualDevice> pDevice(aData, Size(1, 1), DeviceFormat::WITHOUT_ALPHA);
+    pDevice->SetBackground(Wallpaper(COL_TRANSPARENT));
+    pDevice->SetOutputSizePixel(aCanvasSize);
+    pDoc->paintTile(*pDevice, aCanvasSize.Width(), aCanvasSize.Height(),
+                    nTilePosX, nTilePosY, nTileWidth, nTileHeight);
+
+    CGContextRelease(pCGContext);
+#else
+    ScopedVclPtrInstance< VirtualDevice > pDevice(DeviceFormat::WITHOUT_ALPHA);
+
+    // Set background to transparent by default.
+    pDevice->SetBackground(Wallpaper(COL_TRANSPARENT));
+
+    pDevice->SetOutputSizePixelScaleOffsetAndKitBuffer(
+                Size(nCanvasWidth, nCanvasHeight), 1.0, Point(),
+                aBuffer.data());
+
+    pDoc->paintTile(*pDevice, nCanvasWidth, nCanvasHeight,
+                    nTilePosX, nTilePosY, nTileWidth, nTileHeight);
+
+    static bool bDebug = getenv("KIT_DEBUG_TILES") != nullptr;
+    if (bDebug)
+    {
+        // Draw a small red rectangle in the top left corner so that it's easy to see where a new tile begins.
+        tools::Rectangle aRect(0, 0, 5, 5);
+        aRect = pDevice->PixelToLogic(aRect);
+        auto popIt = pDevice->ScopedPush(PushFlags::FILLCOLOR | PushFlags::LINECOLOR);
+        pDevice->SetFillColor(COL_LIGHTRED);
+        pDevice->SetLineColor();
+        pDevice->DrawRect(aRect);
+    }
+
+#if defined(_WIN32) && !USE_HEADLESS_CODE
+    // aBuffer was not used there
+    pDevice->EnableMapMode(false);
+    Bitmap aBmp(pDevice->GetBitmap({ 0, 0 }, { nCanvasWidth, nCanvasHeight }));
+    vcl::bitmap::fillWithData(aBuffer.data(), aBmp);
+#endif
+#endif
+
+#else
+    (void) aBuffer;
+#endif
+
+    // Inform all views with the same view render state about the paint, so they know if makes sense
+    // to invalidate those areas later.
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+    int nOrigViewId = doc_getView(pThis);
+    // The painted-tile bookkeeping is keyed by the part identifier the boundary names the
+    // current part by.
+    const OString aPart = currentPartId(pDoc);
+    int nMode = pDoc->getEditMode();
+    tools::Rectangle aRectangle{Point(nTilePosX, nTilePosY), Size(nTileWidth, nTileHeight)};
+    pDocument->updateViewsForPaintedTile(nOrigViewId, aPart, nMode, aRectangle);
+}
+
+inline static ITiledRenderable* getDocumentPointer(COKitDocument* pThis)
+{
+    ITiledRenderable* pDoc = getTiledRenderable(pThis);
+
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return nullptr;
+    }
+    return pDoc;
+}
+
+inline static void writeInfoLog(const OString& rPart, const int nMode,
+    const int nTileWidth, const int nTileHeight, const int nTilePosX, const int nTilePosY,
+    const int nCanvasWidth, const int nCanvasHeight)
+{
+    SAL_INFO( "kit.tiledrendering", "paintPartTile: painting @ " << rPart << " : " << nMode << " ["
+               << nTileWidth << "x" << nTileHeight << "]@("
+               << nTilePosX << ", " << nTilePosY << ") to ["
+               << nCanvasWidth << "x" << nCanvasHeight << "]px" );
+}
+
+inline static int getFirstViewIdAsFallback(COKitDocument* pThis)
+{
+    // tile painting always needs a SfxViewShell::Current(), but actually
+    // it does not really matter which one - all of them should paint the
+    // same thing. It's important to get a view for the correct document,
+    // though.
+    // doc_getViewsCount() returns the count of views for the document in the current view.
+    int viewCount = doc_getViewsCount(pThis);
+
+    if (viewCount == 0) return -1;
+
+    const std::vector<int> viewIds = doc_getViewIds(pThis);
+
+    int result = viewIds[0];
+    doc_setView(pThis, result);
+
+    SAL_WARN("kit.tiledrendering", "Why is this happening? A call to paint without setting a view?");
+
+    return result;
+}
+
+inline static void disableViewCallbacks(COKitDocumentImpl* pDocument, const int viewId)
+{
+    const auto handlerIt = pDocument->mpCallbackFlushHandlers.find(viewId);
+    if (handlerIt != pDocument->mpCallbackFlushHandlers.end())
+        handlerIt->second->disableCallbacks();
+}
+
+inline static void enableViewCallbacks(COKitDocumentImpl* pDocument, const int viewId)
+{
+    const auto handlerIt = pDocument->mpCallbackFlushHandlers.find(viewId);
+    if (handlerIt != pDocument->mpCallbackFlushHandlers.end())
+        handlerIt->second->enableCallbacks();
+}
+
+inline static int getAlternativeViewForPaint(COKitDocument* pThis, ITiledRenderable* pDoc, const SfxViewShell* pCurrentViewShell,
+    const std::string_view &sCurrentViewRenderState, const int nPartIndex, const int nMode)
+{
+    // The painted tile belongs to a single document. When several documents
+    // live in one process, other documents may have a view sitting on the
+    // requested part, so the candidate view must belong to this document.
+    const ViewShellDocId aThisDocId(static_cast<COKitDocumentImpl*>(pThis)->mnDocumentId);
+
+    SfxViewShell* pViewShell = SfxViewShell::GetFirst();
+    while (pViewShell)
+    {
+        bool bIsInEdit = pViewShell->GetDrawView() && pViewShell->GetDrawView()->GetTextEditOutliner();
+
+        if (!bIsInEdit && pViewShell != pCurrentViewShell && pViewShell->GetDocId() == aThisDocId)
+        {
+            if (pViewShell->getPart() == nPartIndex && pViewShell->getEditMode() == nMode)
+            {
+                OString sNewRenderState = pDoc->getViewRenderState(pViewShell);
+
+                if (sCurrentViewRenderState == sNewRenderState)
+                {
+                    const int nViewId = pViewShell->GetViewShellId().get();
+                    doc_setView(pThis, nViewId);
+                    return nViewId;
+                }
+            }
+        }
+
+        pViewShell = SfxViewShell::GetNext(*pViewShell);
+    }
+
+    return -1;
+}
+
+static void doc_paintPartTile(COKitDocument* pThis,
+                              std::span<unsigned char> aBuffer,
+                              const OString& rPart,
+                              const int nMode,
+                              const int nCanvasWidth, const int nCanvasHeight,
+                              const int nTilePosX, const int nTilePosY,
+                              const int nTileWidth, const int nTileHeight,
+                              bool bIsPreview)
+{
+    static bool bFirst = true;
+    if (bFirst)
+    {
+        bFirst = false;
+        SAL_INFO("kit", "doc_paintPartTile: first tile @ " << osl_getGlobalTimer());
+    }
+    comphelper::ProfileZone aZone("doc_paintPartTile");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    writeInfoLog(rPart, nMode, nTileWidth, nTileHeight, nTilePosX, nTilePosY, nCanvasWidth, nCanvasHeight);
+
+    ITiledRenderable* pDoc = getDocumentPointer(pThis);
+    if (!pDoc)
+        return;
+
+    // Resolve the requested part identifier to the index the page holds when it paints, so
+    // the pixels are of the requested page even if the pages were renumbered after the
+    // request was sent; the solar mutex is held for the whole call, so the index stays valid
+    // throughout. A part that is gone has nothing to paint, and so does a malformed
+    // identifier.
+    const int nPartIndex = pDoc->getPartIndex(rPart, nMode);
+    if (nPartIndex < 0)
+    {
+        SAL_INFO("kit", "paintPartTile names the gone part " << rPart);
+        return;
+    }
+
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+
+    int nOrigViewId = doc_getView(pThis);
+
+    if (nOrigViewId < 0)
+        nOrigViewId = getFirstViewIdAsFallback(pThis);
+
+    if (nOrigViewId == -1)
+        return;
+
+    // Data validity checks end here.
+
+    // Disable callbacks while we are painting.
+    disableViewCallbacks(pDocument, nOrigViewId);
+
+    try
+    {
+        // Text documents have a single coordinate system; don't change part.
+        int nOrigPart = 0;
+        const COKitDocumentType aType = doc_getDocumentType(pThis);
+        const bool isText = (aType == COKitDocumentType::TEXT);
+        int nOrigEditMode = 0;
+        bool bPaintTextEdit = true;
+        int nViewId = nOrigViewId;
+        SfxViewShell* pCurrentViewShell = SfxViewShell::Current();
+        const OString sCurrentViewRenderState = pDoc->getViewRenderState(pCurrentViewShell);
+
+        // When rendering another part's tile we switch the view page, this
+        // clears the current selections (marked objects).
+        // Remember the selections here and restore it after switching back.
+        std::vector<SdrObject*> aSavedMarkedObjects;
+
+        // The grid is a per-view display setting, not a per-page one, so a
+        // preview painted through this view would otherwise carry the grid
+        // along, even one of the page the view is already editing. Remember
+        // it here and hide it for the duration of a preview render.
+        bool bGridWasVisible = false;
+
+        // Check if just switching to another view is enough, that has less side-effects.
+        // Render state is sometimes empty, don't risk it.
+        if ((nPartIndex != pDoc->getPart() || nMode != pDoc->getEditMode()) && !sCurrentViewRenderState.isEmpty())
+        {
+            nViewId = getAlternativeViewForPaint(pThis, pDoc, pCurrentViewShell, sCurrentViewRenderState, nPartIndex, nMode);
+
+            if (nViewId == -1)
+                nViewId = nOrigViewId; // Couldn't find an alternative view.
+            // else -> We found an alternative view and already switched to that.
+        }
+
+        // Disable callbacks while we are painting - after setting the view
+        if (nViewId != nOrigViewId)
+            disableViewCallbacks(pDocument, nViewId);
+        else
+        {
+            // If we are here, we couldn't find an alternative view. We need to check the part and mode.
+            nOrigEditMode = pDoc->getEditMode();
+
+            if (!isText)
+            {
+                nOrigPart = pDoc->getPart();
+
+                // A preview reuses this view even when it already sits on the
+                // requested part, so hide the grid for the render whether or
+                // not the part below actually needs to change.
+                if (bIsPreview)
+                {
+                    if (SdrView* pPreviewView = pCurrentViewShell ? pCurrentViewShell->GetDrawView() : nullptr)
+                    {
+                        bGridWasVisible = pPreviewView->IsGridVisible();
+                        pPreviewView->SetGridVisible(false);
+                    }
+                }
+
+                if (nPartIndex != nOrigPart || nMode != nOrigEditMode)
+                {
+                    if (SdrView* pSaveView = pCurrentViewShell ? pCurrentViewShell->GetDrawView() : nullptr)
+                    {
+                        const SdrMarkList& rMarks = pSaveView->GetMarkedObjectList();
+                        for (size_t i = 0; i < rMarks.GetMarkCount(); ++i)
+                            aSavedMarkedObjects.push_back(rMarks.GetMark(i)->GetMarkedSdrObj());
+                    }
+                }
+            }
+
+            // The mode comes first: each mode addresses its own page list, so setting it lands the
+            // view on a page of the new list, and the part that follows names a page of that same
+            // list. The restore below takes the two back in the same order.
+            if (nOrigEditMode != nMode)
+                KitHelper::setEditMode(nMode, pDoc);
+
+            if (!isText && (nPartIndex != nOrigPart || nMode != nOrigEditMode))
+                doc_setPartIndexImpl(pThis, nPartIndex, false);
+        }
+
+        if (!isText)
+        {
+            bPaintTextEdit = (nPartIndex == nOrigPart && nMode == nOrigEditMode);
+            pDoc->setPaintTextEdit(bPaintTextEdit);
+        }
+
+        doc_paintTile(pThis, aBuffer, nCanvasWidth, nCanvasHeight, nTilePosX, nTilePosY,
+                      nTileWidth, nTileHeight);
+
+        if (!isText)
+        {
+            pDoc->setPaintTextEdit(true);
+        }
+
+        if (nViewId == nOrigViewId)
+        {
+            // We didn't find an alternative view, set the part and mode back to their initial values if needed.
+            if (nMode != nOrigEditMode)
+                KitHelper::setEditMode(nOrigEditMode, pDoc);
+
+            if (!isText)
+            {
+                if (nPartIndex != nOrigPart || nMode != nOrigEditMode)
+                {
+                    doc_setPartIndexImpl(pThis, nOrigPart, false);
+
+                    // Re-apply the selections cleared during the view page switching.
+                    if (!aSavedMarkedObjects.empty())
+                    {
+                        if (SdrView* pRestoreView = pCurrentViewShell ? pCurrentViewShell->GetDrawView() : nullptr)
+                        {
+                            if (SdrPageView* pPageView = pRestoreView->GetSdrPageView())
+                            {
+                                for (SdrObject* pObj : aSavedMarkedObjects)
+                                {
+                                    if (pObj)
+                                        pRestoreView->MarkObj(pObj, pPageView);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (bIsPreview)
+                {
+                    if (SdrView* pRestoreView = pCurrentViewShell ? pCurrentViewShell->GetDrawView() : nullptr)
+                        pRestoreView->SetGridVisible(bGridWasVisible);
+                }
+            }
+        }
+        else
+        {
+            // We found an alternative view and used it. Enable its callbacks again and turn back to our original view.
+            enableViewCallbacks(pDocument, nViewId);
+            doc_setView(pThis, nOrigViewId);
+        }
+    }
+    catch (const std::exception&)
+    {
+        // Nothing to do but restore the PartTilePainting flag.
+    }
+
+    enableViewCallbacks(pDocument, nOrigViewId);
+
+    // Inform all views with the same view render state about the paint, so they know if makes sense
+    // to invalidate those areas later.
+    tools::Rectangle aRectangle{Point(nTilePosX, nTilePosY), Size(nTileWidth, nTileHeight)};
+    pDocument->updateViewsForPaintedTile(nOrigViewId, rPart, nMode, aRectangle);
+}
+
+void COKitDocumentImpl::updateViewsForPaintedTile(int nOrigViewId, const OString& rPart, int nMode,
+                                                  const tools::Rectangle& rRectangle)
+{
+    auto it = mpCallbackFlushHandlers.find(nOrigViewId);
+    if (it == mpCallbackFlushHandlers.end())
+    {
+        return;
+    }
+
+    // Update info about painted tiles in other views that have the same CanonicalViewId.
+    const OString& rViewRenderState = it->second->getViewRenderState();
+    for (const auto& rHandler : mpCallbackFlushHandlers)
+    {
+        if (rHandler.second->getViewRenderState() != rViewRenderState)
+        {
+            continue;
+        }
+        rHandler.second->tilePainted(rPart, nMode, rRectangle);
+    }
+}
+
+COKitTileMode COKitDocumentImpl::getTileMode()
+{
+    SetLastExceptionMsg();
+#if ENABLE_CAIRO_RGBA || defined IOS
+    return COKitTileMode::RGBA;
+#else
+    return COKitTileMode::BGRA;
+#endif
+}
+
+COKitSize COKitDocumentImpl::getDocumentSize()
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getDocumentSize");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    const Size aDocumentSize = pDoc->getDocumentSize();
+    return { aDocumentSize.Width(), aDocumentSize.Height() };
+}
+
+COKitDataArea COKitDocumentImpl::getDataArea(long nTab)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getDataArea");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    const Size aDataArea = pDoc->getDataArea(nTab);
+    return { aDataArea.Width(), aDataArea.Height() };
+}
+
+void COKitDocumentImpl::initializeForRendering(const char* pArguments)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::initializeForRendering");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (pDoc)
+    {
+        doc_iniUnoCommands();
+        std::vector<beans::PropertyValue> aArgs = jsonToPropertyValuesVector(pArguments);
+        OString aSignatureCert;
+        OString aSignatureKey;
+        for (const auto& rArg : aArgs)
+        {
+            if (rArg.Name == ".uno:SignatureCert" && rArg.Value.has<OUString>())
+            {
+                aSignatureCert = rArg.Value.get<OUString>().toUtf8();
+            }
+            else if (rArg.Name == ".uno:SignatureKey" && rArg.Value.has<OUString>())
+            {
+                aSignatureKey = rArg.Value.get<OUString>().toUtf8();
+            }
+            else if (rArg.Name == ".uno:SignatureCa" && rArg.Value.has<OUString>())
+            {
+                OString aSignatureCa(rArg.Value.get<OUString>().toUtf8());
+                KitHelper::addCertificates(aSignatureCa);
+            }
+        }
+        if (!aSignatureCert.isEmpty() && !aSignatureKey.isEmpty())
+        {
+            if (SfxViewShell* pViewShell = SfxViewShell::Current())
+            {
+                svl::crypto::CertificateOrName aCertificateOrName;
+                aCertificateOrName.m_xCertificate = KitHelper::getSigningCertificate(aSignatureCert, aSignatureKey);
+                pViewShell->SetSigningCertificate(aCertificateOrName);
+            }
+        }
+
+        pDoc->initializeForTiledRendering(comphelper::containerToSequence(aArgs));
+    }
+}
+
+void COKitDocumentImpl::registerCallback(COKitCallback pCallback, void* pData)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    const int nView = KitHelper::getViewId(mnDocumentId);
+    SfxViewShell* pViewShell = KitHelper::getViewOfId(nView);
+    if (!pViewShell)
+        return;
+    assert(nView == pViewShell->GetViewShellId().get() && "otherwise we couldn't have found it");
+
+    const size_t nId = nView;
+    if (pCallback != nullptr)
+    {
+        for (auto& pair : mpCallbackFlushHandlers)
+        {
+            if (pair.first == nId)
+                continue;
+
+            pair.second->addViewStates(nView);
+        }
+    }
+    else
+    {
+        for (auto& pair : mpCallbackFlushHandlers)
+        {
+            if (pair.first == nId)
+                continue;
+
+            pair.second->removeViewStates(nView);
+        }
+
+        auto* viewShellCallback = pViewShell->getCOKitViewCallback();
+        for (auto* pShell = SfxViewShell::GetFirst(); pShell != nullptr;
+             pShell = SfxViewShell::GetNext(*pShell))
+        {
+            if (pShell->getCOKitViewCallback() == viewShellCallback)
+            {
+                pShell->setCOKitViewCallback(nullptr);
+            }
+        }
+
+        const auto it = mpCallbackFlushHandlers.find(nView);
+        if (it != mpCallbackFlushHandlers.end())
+        {
+            const auto& pHandler = it->second;
+
+            // The view is going, so add the area it painted to what the document holds.
+            // Add rather than replace. An EMPTY invalidation clears a view's area, so
+            // this one can hold less than the document already has.
+            auto& rTarget = maPaintedAreaByRenderState[pHandler->getViewRenderState()];
+            for (const auto& [rPartId, rAreaByPartMode] : pHandler->getPaintedTiles())
+            {
+                for (const auto& [nPartMode, rArea] : rAreaByPartMode)
+                    rTarget[rPartId][nPartMode].Union(rArea);
+            }
+
+            pHandler->setViewId(-1);
+            mpCallbackFlushHandlers.erase(it);
+        }
+
+        // With the last such reader gone there is nothing to broadcast for.
+        const bool bAnyDrawsFromModel = std::any_of(
+            mpCallbackFlushHandlers.begin(), mpCallbackFlushHandlers.end(),
+            [](const auto& rEntry) { return rEntry.second && rEntry.second->isVectorRendering(); });
+        if (!bAnyDrawsFromModel)
+        {
+            if (ITiledRenderable* pDoc = getTiledRenderable(this))
+                pDoc->setDrawnFromModel(false);
+        }
+        return;
+    }
+
+    std::shared_ptr<CallbackFlushHandler> pOldCallbackFlushHandler;
+    if (auto it = mpCallbackFlushHandlers.find(nView); it != mpCallbackFlushHandlers.end())
+        pOldCallbackFlushHandler = it->second;
+
+    auto pCallbackFlushHandler = std::make_shared<CallbackFlushHandler>(this, pCallback, pData);
+    mpCallbackFlushHandlers[nView] = pCallbackFlushHandler;
+
+    if (pOldCallbackFlushHandler)
+    {
+        CoKitCallbackInterface* pNewCallback = pCallback ? pCallbackFlushHandler.get() : nullptr;
+        for (SfxViewShell* pOther = SfxViewShell::GetFirst(false); pOther;
+             pOther = SfxViewShell::GetNext(*pOther, false))
+        {
+            if (pOther != pViewShell
+                && pOther->getCOKitViewCallback() == pOldCallbackFlushHandler.get())
+                pOther->setCOKitViewCallback(pNewCallback);
+        }
+    }
+
+    if (pCallback != nullptr)
+    {
+        for (const auto& pair : mpCallbackFlushHandlers)
+        {
+            if (pair.first == nId)
+                continue;
+
+            mpCallbackFlushHandlers[nView]->addViewStates(pair.first);
+        }
+
+        mpCallbackFlushHandlers[nView]->setViewId(nView);
+        pViewShell->setCOKitViewCallback(mpCallbackFlushHandlers[nView].get());
+
+        // The context broadcast that fires while the document's starting cursor
+        // position is set up runs before this callback exists, so a document whose
+        // cursor starts inside a context-specific area (a table, for example) never
+        // reaches this view until the user leaves and re-enters that area. Resend it
+        // now that a callback is here to receive it, but only for a shell more specific
+        // than the view's own base shell: the base shell's own starting context needs
+        // no resend, and resending it anyway was found to race with the view's other
+        // startup notifications and leave the notebookbar stuck without its styles.
+        if (SfxDispatcher* pDispatcher = pViewShell->GetViewFrame().GetDispatcher())
+        {
+            SfxShell* pShell = pDispatcher->GetShell(0);
+            if (pShell && pShell != static_cast<SfxShell*>(pViewShell))
+                pShell->BroadcastContextForActivation(/*bIsActivated=*/true);
+        }
+
+        if (!maFontsMissing.empty())
+        {
+            OStringBuffer sPayload("{ \"fontsmissing\": [ ");
+            bool bFirst = true;
+            for (const auto &f : maFontsMissing)
+            {
+                if (bFirst)
+                    bFirst = false;
+                else
+                    sPayload.append(", ");
+                sPayload.append("\"" + f.toUtf8() + "\"");
+            }
+            sPayload.append(" ] }");
+            pCallback(COKitCallbackType::FONTS_MISSING, sPayload.toString().getStr(), pData);
+            maFontsMissing.clear();
+        }
+
+        // Try to take info about already painted tiles from another view that has the same
+        // CanonicalViewId.
+        const OString& rViewRenderState = pCallbackFlushHandler->getViewRenderState();
+        bool bFoundLiveView = false;
+        for (const auto& rHandler : mpCallbackFlushHandlers)
+        {
+            if (rHandler.second->getViewRenderState() == rViewRenderState && rHandler.first != nId)
+            {
+                pCallbackFlushHandler->setPaintedTiles(rHandler.second->getPaintedTiles());
+                bFoundLiveView = true;
+                break;
+            }
+        }
+
+        // No live view to copy from, so this document was loaded with none. Take
+        // what it kept instead. A view with no painted area gets no invalidations
+        // at all, not even for its own edits.
+        if (!bFoundLiveView)
+        {
+            const auto it = maPaintedAreaByRenderState.find(rViewRenderState);
+            if (it != maPaintedAreaByRenderState.end())
+                pCallbackFlushHandler->setPaintedTiles(it->second);
+        }
+    }
+}
+
+/// Returns the JSON representation of all the comments in the document
+static std::string getPostIts(COKitDocument* pThis)
+{
+    SetLastExceptionMsg();
+    ITiledRenderable* pDoc = getTiledRenderable(pThis);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+    tools::JsonWriter aJsonWriter;
+    pDoc->getPostIts(aJsonWriter);
+    return aJsonWriter.finishAndGetAsStdString();
+}
+
+/// Returns the JSON representation of the positions of all the comments in the document
+static std::string getPostItsPos(COKitDocument* pThis)
+{
+    SetLastExceptionMsg();
+    ITiledRenderable* pDoc = getTiledRenderable(pThis);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+    tools::JsonWriter aJsonWriter;
+    pDoc->getPostItsPos(aJsonWriter);
+    return aJsonWriter.finishAndGetAsStdString();
+}
+
+static std::string getRulerState(COKitDocument* pThis)
+{
+    SetLastExceptionMsg();
+    ITiledRenderable* pDoc = getTiledRenderable(pThis);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+    tools::JsonWriter aJsonWriter;
+    pDoc->getRulerState(aJsonWriter);
+    return aJsonWriter.finishAndGetAsStdString();
+}
+
+static std::string getAllPartSize(COKitDocument* pThis)
+{
+    SetLastExceptionMsg();
+    ITiledRenderable* pDoc = getTiledRenderable(pThis);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+    tools::JsonWriter aJsonWriter;
+    pDoc->getAllPartSize(aJsonWriter);
+    return aJsonWriter.finishAndGetAsStdString();
+}
+
+void COKitDocumentImpl::postKeyEvent(COKitKeyEventType eType, int nCharCode, int nKeyCode)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::postKeyEvent");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    try
+    {
+        pDoc->postKeyEvent(eType, nCharCode, nKeyCode);
+    }
+    catch (const cpo::uno::Exception& exception)
+    {
+        SetLastExceptionMsg(exception.Message);
+        SAL_INFO("kit", "Failed to postKeyEvent " << exception.Message);
+    }
+}
+
+void COKitDocumentImpl::setBlockedCommandList(int nViewId, const char* blockedCommandList)
+{
+    SolarMutexGuard aGuard;
+    KitHelper::setBlockedCommandList(nViewId, blockedCommandList);
+}
+
+void COKitDocumentImpl::postWindowExtTextInputEvent(unsigned nWindowId,
+                                                    COKitExtTextInputType eType, const char* pText)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::postWindowExtTextInputEvent");
+
+    SolarMutexGuard aGuard;
+    VclPtr<vcl::Window> pWindow;
+    if (nWindowId == 0)
+    {
+        ITiledRenderable* pDoc = getTiledRenderable(this);
+        if (!pDoc)
+        {
+            SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+            return;
+        }
+        pWindow = pDoc->getDocWindow();
+    }
+    else
+    {
+        pWindow = vcl::Window::FindKitWindow(nWindowId);
+    }
+
+    if (!pWindow)
+    {
+        SetLastExceptionMsg("No window found for window id: " + OUString::number(nWindowId));
+        return;
+    }
+
+    KitHelper::postExtTextEventAsync(pWindow, eType,
+                                     OUString::fromUtf8(std::string_view(pText, strlen(pText))));
+}
+
+void COKitDocumentImpl::removeTextContext(unsigned nKitWindowId, int nCharBefore, int nCharAfter)
+{
+    SolarMutexGuard aGuard;
+
+    if (SfxViewShell::IsCurrentKitViewReadOnly())
+        return;
+
+    VclPtr<vcl::Window> pWindow;
+    if (nKitWindowId == 0)
+    {
+        ITiledRenderable* pDoc = getTiledRenderable(this);
+        if (!pDoc)
+        {
+            SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+            return;
+        }
+        pWindow = pDoc->getDocWindow();
+    }
+    else
+    {
+        pWindow = vcl::Window::FindKitWindow(nKitWindowId);
+    }
+
+    if (!pWindow)
+    {
+        SetLastExceptionMsg("No window found for window id: " + OUString::number(nKitWindowId));
+        return;
+    }
+
+    // Annoyingly - backspace and delete are handled in the apps via an accelerator
+    // which are PostMessage'd by SfxViewShell::ExecKey_Impl so to stay in the same
+    // order we do this synchronously here, unless we're in a dialog.
+    if (nCharBefore > 0)
+    {
+        // backspace
+        if (nKitWindowId == 0)
+        {
+            KeyEvent aEvt(8, KEY_BACKSPACE);
+            for (int i = 0; i < nCharBefore; ++i)
+                pWindow->KeyInput(aEvt);
+        }
+        else
+            KitHelper::postKeyEventAsync(pWindow, COKitKeyEventType::DOWN, 8, KEY_BACKSPACE, nCharBefore - 1);
+    }
+
+    if (nCharAfter > 0)
+    {
+        // delete (forward)
+        if (nKitWindowId == 0)
+        {
+            KeyEvent aEvt(46, KEY_DELETE);
+            for (int i = 0; i < nCharAfter; ++i)
+                pWindow->KeyInput(aEvt);
+        }
+        else
+            KitHelper::postKeyEventAsync(pWindow, COKitKeyEventType::DOWN, 46, KEY_DELETE, nCharAfter - 1);
+    }
+}
+
+void COKitDocumentImpl::postWindowKeyEvent(unsigned nKitWindowId, COKitKeyEventType eType,
+                                           int nCharCode, int nKeyCode)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::postWindowKeyEvent");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    VclPtr<Window> pWindow = vcl::Window::FindKitWindow(nKitWindowId);
+    if (!pWindow)
+    {
+        SetLastExceptionMsg(u"Document doesn't support dialog rendering, or window not found."_ustr);
+        return;
+    }
+
+    KeyEvent aEvent(nCharCode, nKeyCode, 0);
+
+    switch (eType)
+    {
+        case COKitKeyEventType::DOWN:
+            Application::PostKeyEvent(VclEventId::WindowKeyInput, pWindow, &aEvent);
+            break;
+        case COKitKeyEventType::UP:
+            Application::PostKeyEvent(VclEventId::WindowKeyUp, pWindow, &aEvent);
+            break;
+        default:
+            assert(false);
+            break;
+    }
+}
+
+// To be an exportable selection, there must be something selected and that
+// selection can't be "ScCellObj" which doesn't can't provide a svg.
+//
+// Typically a problem arises when double clicking a shape in calc. The 1st
+// click selects the shape, triggering generation of a preview, but the second
+// shape enters into edit mode before doc_renderShapeSelection has a chance to
+// fire, at which point the shape is no longer selected. Rather than generate
+// an error just return a 0 length result if there is no shape selected, so we
+// continue to generate an error if a shape is selected, but could not provide
+// an svg.
+static bool doc_hasShapeSelection(const cpo::uno::Reference<css::lang::XComponent>& rComponent)
+{
+    uno::Reference<frame::XModel> xModel(rComponent, uno::UNO_QUERY);
+    if (!xModel.is())
+        return false;
+
+    uno::Reference<frame::XController> xController(xModel->getCurrentController());
+    if (!xController.is())
+        return false;
+
+    uno::Reference<view::XSelectionSupplier> xSelectionSupplier(xController, uno::UNO_QUERY);
+    if (!xSelectionSupplier.is())
+        return false;
+
+    Any selection = xSelectionSupplier->getSelection();
+    uno::Reference<lang::XServiceInfo> xSelection;
+    selection >>= xSelection;
+
+    return xSelection && xSelection->getImplementationName() != "ScCellObj";
+}
+
+std::vector<char> COKitDocumentImpl::renderShapeSelection()
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::renderShapeSelection");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    // In Calc and Impress, double-clicking a shape leaves the shape in edit
+    // mode while the parent doc's selection becomes invalid (Calc selects
+    // the cell, Impress drops the shape selection).  Bail out to avoid
+    // rendering during that transition.  Writer's chart wizard differs: it
+    // inserts the chart and enters edit mode immediately, but the chart
+    // frame remains selected at the Writer level as a TextEmbeddedObject,
+    // and writer_svg_Export's embedded-object path can render the
+    // replacement graphic even while the chart is still in edit mode.
+    if (doc_getDocumentType(this) != COKitDocumentType::TEXT)
+    {
+        KitChartHelper aChartHelper(SfxViewShell::Current());
+        if (aChartHelper.GetWindow())
+            return {};
+    }
+
+    try
+    {
+
+        if (!doc_hasShapeSelection(mxComponent))
+            return {};
+
+        uno::Reference<frame::XStorable> xStorable(mxComponent, uno::UNO_QUERY_THROW);
+
+        SvMemoryStream aOutStream;
+        uno::Reference<io::XOutputStream> xOut = new utl::OOutputStreamWrapper(aOutStream);
+
+        comphelper::SequenceAsHashMap aMediaDescriptor;
+        switch (doc_getDocumentType(this))
+        {
+            case COKitDocumentType::PRESENTATION:
+                aMediaDescriptor[u"FilterName"_ustr] <<= u"impress_svg_Export"_ustr;
+                break;
+            case COKitDocumentType::DRAWING:
+                aMediaDescriptor[u"FilterName"_ustr] <<= u"draw_svg_Export"_ustr;
+                break;
+            case COKitDocumentType::TEXT:
+                aMediaDescriptor[u"FilterName"_ustr] <<= u"writer_svg_Export"_ustr;
+                break;
+            case COKitDocumentType::SPREADSHEET:
+                aMediaDescriptor[u"FilterName"_ustr] <<= u"calc_svg_Export"_ustr;
+                break;
+            default:
+                SAL_WARN("kit", "Failed to render shape selection: Document type is not supported");
+        }
+        aMediaDescriptor[u"SelectionOnly"_ustr] <<= true;
+        aMediaDescriptor[u"OutputStream"_ustr] <<= xOut;
+        aMediaDescriptor[u"IsPreview"_ustr] <<= true; // will down-scale graphics
+
+        // Pin the shared draw outliner's background to the requesting
+        // view's DOCCOLOR so automatic font colors resolve against the
+        // user's per-view theme.  Otherwise multi-user dark/light setups
+        // produce inverse-mode auto color text in the SVG drag preview.
+        SdrOutliner* pPinnedOutliner = nullptr;
+        Color aSavedOutlinerBg(COL_AUTO);
+        if (SfxViewShell* pViewShell = SfxViewShell::Current())
+        {
+            if (SdrView* pDrawView = pViewShell->GetDrawView())
+            {
+                pPinnedOutliner = &pDrawView->GetModel().GetDrawOutliner();
+                aSavedOutlinerBg = pPinnedOutliner->GetBackgroundColor();
+                pPinnedOutliner->SetBackgroundColor(
+                    pViewShell->GetColorConfigColor(svtools::DOCCOLOR));
+            }
+        }
+        comphelper::ScopeGuard aRestoreOutlinerBg([&]() {
+            if (pPinnedOutliner)
+                pPinnedOutliner->SetBackgroundColor(aSavedOutlinerBg);
+        });
+
+        xStorable->storeToURL(u"private:stream"_ustr, aMediaDescriptor.getAsConstPropertyValueList());
+
+        const size_t nOutputSize = aOutStream.GetEndOfData();
+        const char* pSrc = static_cast<const char*>(aOutStream.GetData());
+        return std::vector<char>(pSrc, pSrc + nOutputSize);
+    }
+    catch (const cpo::uno::Exception& exception)
+    {
+        cpo::uno::Any exAny( cppu::getCaughtException() );
+        SetLastExceptionMsg(exception.Message);
+        SAL_WARN("kit", "Failed to render shape selection: " << exceptionToString(exAny));
+    }
+
+    return {};
+}
+
+namespace {
+
+/** Class to react on finishing of a dispatched command.
+
+    This will call a KIT_COMMAND_FINISHED callback when postUnoCommand was
+    called with the parameter requesting the notification.
+
+    @see COKitCallbackType::COKitCallbackType::UNO_COMMAND_RESULT.
+*/
+class DispatchResultListener : public cppu::WeakImplHelper<css::frame::XDispatchResultListener>
+{
+    const OString maCommand; ///< Command for which this is the result.
+    const std::shared_ptr<CallbackFlushHandler> mpCallback; ///< Callback to call.
+    const std::chrono::steady_clock::time_point mSaveTime; //< The time we started saving.
+    const bool mbWasModified; //< Whether or not the document was modified before saving.
+    const cpo::uno::Reference<css::lang::XComponent> mxComponent; //< The document the command ran on.
+
+public:
+    DispatchResultListener(const char* pCommand, std::shared_ptr<CallbackFlushHandler> pCallback,
+                           bool bWasModified, cpo::uno::Reference<css::lang::XComponent> xComponent)
+        : maCommand(pCommand)
+        , mpCallback(std::move(pCallback))
+        , mSaveTime(std::chrono::steady_clock::now())
+        , mbWasModified(bWasModified)
+        , mxComponent(std::move(xComponent))
+    {
+        assert(mpCallback);
+    }
+
+    virtual void dispatchFinished(const css::frame::DispatchResultEvent& rEvent) override
+    {
+        tools::JsonWriter aJson;
+        aJson.put("commandName", maCommand);
+
+        if (rEvent.State != frame::DispatchResultState::DONTKNOW)
+        {
+            bool bSuccess = (rEvent.State == frame::DispatchResultState::SUCCESS);
+            aJson.put("success", bSuccess);
+        }
+
+        // A failed save comes back with a void result, so the reason the store gave would be lost.
+        // The store recorded its reason on the document shell as it failed, so carry that as the
+        // result instead.
+        OUString aStoreError;
+        if (SfxObjectShell* pShell = SfxObjectShell::GetShellFromComponent(mxComponent))
+            aStoreError = pShell->GetLastStoreErrorMessage();
+        if (maCommand == ".uno:Save" && rEvent.State == frame::DispatchResultState::FAILURE
+            && !rEvent.Result.hasValue() && !aStoreError.isEmpty())
+        {
+            auto resultNode = aJson.startNode("result");
+            aJson.put("type", "string");
+            aJson.put("value", aStoreError.toUtf8());
+        }
+        else
+            unoAnyToJson(aJson, "result", rEvent.Result);
+        aJson.put("wasModified", mbWasModified);
+        aJson.put("startUnixTimeMics",
+                  std::chrono::time_point_cast<std::chrono::microseconds>(mSaveTime)
+                      .time_since_epoch()
+                      .count());
+        aJson.put("saveDurationMics", std::chrono::duration_cast<std::chrono::microseconds>(
+                                          std::chrono::steady_clock::now() - mSaveTime)
+                                          .count());
+        mpCallback->queue(COKitCallbackType::UNO_COMMAND_RESULT, aJson.finishAndGetAsOString());
+    }
+
+    virtual void disposing(const css::lang::EventObject&) override {}
+};
+
+} // anonymous namespace
+
+
+static void lcl_sendDialogEvent(unsigned long long int nWindowId, const char* pArguments)
+{
+    SolarMutexGuard aGuard;
+
+    const StringMap aMap(jsdialog::jsonToStringMap(pArguments));
+    auto aIdIter = aMap.find(u"id"_ustr);
+
+    if (aIdIter == aMap.end() || aIdIter->second.isEmpty())
+    {
+        SAL_WARN("kit", "sendDialogEvent: no widget id set");
+        assert(false);
+        return;
+    }
+
+    const sal_uInt64 nCurrentShellId = reinterpret_cast<sal_uInt64>(SfxViewShell::Current());
+
+    try
+    {
+        const OUString sControlId = aIdIter->second;
+        OUString sWindowId = OUString::number(nWindowId);
+        const OUString sCurrentShellId = OUString::number(nCurrentShellId);
+
+        // special values for window id
+        if (nWindowId == static_cast<unsigned long long int>(-1))
+            sWindowId = sCurrentShellId + "sidebar";
+        if (nWindowId == static_cast<unsigned long long int>(-2))
+            sWindowId = sCurrentShellId + "notebookbar";
+        if (nWindowId == static_cast<unsigned long long int>(-3))
+            sWindowId = sCurrentShellId + "formulabar";
+        if (nWindowId == static_cast<unsigned long long int>(-4))
+            sWindowId = sCurrentShellId + "addressinputfield";
+        if (nWindowId == static_cast<unsigned long long int>(-5))
+            sWindowId = sCurrentShellId + "quickfind";
+        if (nWindowId == static_cast<unsigned long long int>(-6))
+            sWindowId = sCurrentShellId + "notespanel";
+
+        // dialogs send own id but notebookbar and sidebar controls are remembered by SfxViewShell id
+        if (jsdialog::ExecuteAction(sWindowId, sControlId, aMap))
+            return;
+
+        if (jsdialog::ExecuteAction(sCurrentShellId + "sidebar", sControlId, aMap))
+            return;
+        if (jsdialog::ExecuteAction(sCurrentShellId + "navigator", sControlId, aMap))
+            return;
+        if (jsdialog::ExecuteAction(sCurrentShellId + "quickfind", sControlId, aMap))
+            return;
+        if (jsdialog::ExecuteAction(sCurrentShellId + "notebookbar", sControlId, aMap))
+            return;
+        if (jsdialog::ExecuteAction(sCurrentShellId + "formulabar", sControlId, aMap))
+            return;
+        if (jsdialog::ExecuteAction(sCurrentShellId + "addressinputfield", sControlId, aMap))
+            return;
+        if (jsdialog::ExecuteAction(sCurrentShellId + "notespanel", sControlId, aMap))
+            return;
+        // this is needed for dialogs shown before document is loaded: MacroWarning dialog, etc...
+        // these dialogs are created with WindowId "0"
+        if (!SfxViewShell::Current() && jsdialog::ExecuteAction(u"0"_ustr, sControlId, aMap))
+            return;
+
+        SAL_WARN(
+            "kit",
+            "sendDialogEvent: no widget for id '" << sControlId << "' on shell "
+                << sCurrentShellId << " or window " << sWindowId);
+    }
+    catch (std::out_of_range& e)
+    {
+        SAL_WARN("kit", "jsdialog::ExecuteAction syntax error - field not found in '" << e.what() << "'");
+        assert(false);
+    }
+    catch (...) {}
+
+}
+
+
+void COKitDocumentImpl::sendDialogEvent(unsigned long long int nWindowId, const char* pArguments)
+{
+    lcl_sendDialogEvent(nWindowId, pArguments);
+}
+
+void COKitImpl::sendDialogEvent(unsigned long long int nWindowId, const char* pArguments)
+{
+    lcl_sendDialogEvent(nWindowId, pArguments);
+}
+
+static void reInitDictionaryList()
+{
+    uno::Reference<css::linguistic2::XSearchableDictionaryList> xDicList
+        = LinguMgr::GetDictionaryList();
+    if (xDicList.is())
+    {
+        uno::Reference<lang::XInitialization> xReInitDictionaryList(xDicList, uno::UNO_QUERY_THROW);
+        xReInitDictionaryList->initialize({});
+    }
+};
+
+/// Whether the OrganizationPaths of a named path already hold a directory.
+static bool organizationPathHolds(const OUString& rPathName, std::u16string_view rDirectoryUrl)
+{
+    try
+    {
+        const cpo::uno::Reference<css::container::XHierarchicalNameAccess> xPaths(
+            css::configuration::theDefaultProvider::get(comphelper::getProcessComponentContext())
+                ->createInstanceWithArguments(
+                    u"com.sun.star.configuration.ConfigurationAccess"_ustr,
+                    { cpo::uno::Any(css::beans::NamedValue(
+                        u"nodepath"_ustr, cpo::uno::Any(u"/org.openoffice.Office.Paths/Paths"_ustr))) }),
+            cpo::uno::UNO_QUERY_THROW);
+
+        const cpo::uno::Reference<css::beans::XPropertySet> xPath(xPaths->getByHierarchicalName(rPathName),
+                                                                 cpo::uno::UNO_QUERY_THROW);
+        cpo::uno::Sequence<OUString> aPaths;
+        xPath->getPropertyValue(u"OrganizationPaths"_ustr) >>= aPaths;
+        return std::find(aPaths.begin(), aPaths.end(), rDirectoryUrl) != aPaths.end();
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("kit", "Failed to read back the " << rPathName << " path");
+        return false;
+    }
+}
+
+/// Adds one directory to the OrganizationPaths of a named path of org.openoffice.Office.Paths.
+/// The shared extension layer holds the entry, so it ranks above the shipped defaults and below
+/// the settings of the individual user.
+static void addOrganizationPath(const OUString& rPathName, const OUString& rDirectoryUrl)
+{
+    OUString aXcuUrl;
+    oslFileHandle aHandle = nullptr;
+    if (osl::FileBase::createTempFile(nullptr, &aHandle, &aXcuUrl) != osl::FileBase::E_None)
+    {
+        SAL_WARN("kit", "Failed to create a file for the " << rPathName << " path entry");
+        return;
+    }
+
+    const OUString aContent
+        = OUString::Concat(R"(<?xml version="1.0" encoding="UTF-8"?>)"
+                           R"(<oor:component-data xmlns:oor="http://openoffice.org/2001/registry")"
+                           R"( oor:name="Paths" oor:package="org.openoffice.Office">)"
+                           R"(<node oor:name="Paths"><node oor:name=")")
+          + comphelper::string::encodeForXml(rPathName)
+          + R"(" oor:op="fuse"><prop oor:name="OrganizationPaths")"
+            R"( oor:type="oor:string-list"><value>)"
+          + comphelper::string::encodeForXml(rDirectoryUrl)
+          + R"(</value></prop></node></node></oor:component-data>)";
+
+    const OString aXcu = OUStringToOString(aContent, RTL_TEXTENCODING_UTF8);
+
+    sal_uInt64 nWritten = 0;
+    const bool bWritten
+        = osl_writeFile(aHandle, aXcu.getStr(), aXcu.getLength(), &nWritten) == osl_File_E_None
+          && nWritten == static_cast<sal_uInt64>(aXcu.getLength());
+    osl_closeFile(aHandle);
+
+    if (!bWritten)
+    {
+        SAL_WARN("kit", "Failed to write the " << rPathName << " path entry to " << aXcuUrl);
+        osl::File::remove(aXcuUrl);
+        return;
+    }
+
+    // The file stays for the life of the process. The configuration holds the layer under the
+    // URL it was read from.
+    try
+    {
+        css::configuration::Update::get(comphelper::getProcessComponentContext())
+            ->insertExtensionXcuFile(aXcuUrl);
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("kit", "Failed to add " << rDirectoryUrl << " to the " << rPathName
+                                                    << " path");
+        return;
+    }
+
+    // Read it back rather than trust the write. The layer this goes into is named in the
+    // environment, so a change there takes the entry away without any error: the insert
+    // above reports a layer that was never declared, but a layer that is declared in the
+    // wrong place simply loses to the shipped defaults.
+    if (!organizationPathHolds(rPathName, rDirectoryUrl))
+    {
+        SAL_WARN("kit", "The " << rPathName << " path did not take " << rDirectoryUrl
+                               << ": the shared configuration layer is missing from "
+                                  "CONFIGURATION_LAYERS or ranks below the defaults");
+        return;
+    }
+
+    SAL_INFO("kit", "Added " << rDirectoryUrl << " to the " << rPathName << " path");
+}
+
+/// Registers the preset groups of one configuration as organization paths. The directory is the
+/// one the presets are readable at now, which is not always where they are staged.
+static void addSharedPresetPaths(std::u16string_view rPresetsUrl)
+{
+    // Not every group is a configured path: the ones whose consumers dir-scan the group
+    // themselves (SPIF security-label policies) need the root, so record it.
+    comphelper::COKit::setSharedPresetsDir(OUString(rPresetsUrl));
+
+    addOrganizationPath(u"AutoText"_ustr, OUString::Concat(rPresetsUrl) + "/autotext");
+    addOrganizationPath(u"Dictionary"_ustr, OUString::Concat(rPresetsUrl) + "/wordbook");
+    // The templates sit in a group subdirectory of this directory, so this is the root.
+    addOrganizationPath(u"Template"_ustr, OUString::Concat(rPresetsUrl) + "/template");
+
+    // The dictionary list is a scan of the Dictionary path, so it has to be taken again now
+    // that the path has one more root.
+    reInitDictionaryList();
+}
+
+static void updateConfig(const OUString& rConfigPath)
+{
+    osl::Directory aScanRootDir(rConfigPath);
+    if (aScanRootDir.open() != osl::Directory::E_None)
+    {
+        SAL_WARN("kit", "Failed to open config URL: " << rConfigPath);
+        return;
+    }
+    osl::DirectoryItem item;
+    while (aScanRootDir.getNextItem(item) == ::osl::File::E_None)
+    {
+        osl::FileStatus stat(osl_FileStatus_Mask_FileName | osl_FileStatus_Mask_FileURL);
+        if (item.getFileStatus(stat) != osl::FileBase::E_None)
+        {
+            SAL_WARN("kit", "Failed to get directory item info");
+            continue;
+        }
+
+        OUString sFileName = stat.getFileName();
+        if (sFileName == "xcu")
+        {
+            osl::Directory aXCURootDir(stat.getFileURL());
+            if (aXCURootDir.open() != osl::Directory::E_None)
+            {
+                SAL_WARN("kit", "Failed to open XCU URL: " << stat.getFileURL());
+                continue;
+            }
+
+            auto xUpdate(css::configuration::Update::get(comphelper::getProcessComponentContext()));
+
+            osl::DirectoryItem xcu;
+            while (aXCURootDir.getNextItem(xcu) == ::osl::File::E_None)
+            {
+                osl::FileStatus xcustat(osl_FileStatus_Mask_FileName | osl_FileStatus_Mask_FileURL);
+                if (xcu.getFileStatus(xcustat) != osl::FileBase::E_None)
+                {
+                    SAL_WARN("kit", "Failed to get xcu item info");
+                    continue;
+                }
+
+                SAL_INFO("kit", "Installing XCU Item: " << xcustat.getFileName());
+                // Filter xcu to a subset of options to allow (apply side of
+                // the COOL officecfg round-trip).
+                //
+                // !!! KEEP IN SYNC with getUploadableXcuPaths() in online's
+                // wsd/DocumentBroker.cpp (the upload side). No shared symbol
+                // exists across the kit<->wsd boundary, so edits here need
+                // the mirror edit there.
+                const cpo::uno::Sequence<OUString> aAllowedSubset{
+                    u"/org.openoffice.Office.Calc/Grid"_ustr,
+                    u"/org.openoffice.Office.Calc/Print"_ustr,
+                    u"/org.openoffice.Office.Calc/Content/Display/ObjectGraphic"_ustr,
+                    u"/org.openoffice.Office.Calc/Content/Display/FormulaMark"_ustr,
+
+                    u"/org.openoffice.Office.Draw/Grid"_ustr,
+                    u"/org.openoffice.Office.Draw/Print"_ustr,
+
+                    u"/org.openoffice.Office.Impress/Grid"_ustr,
+                    u"/org.openoffice.Office.Impress/Print"_ustr,
+
+                    u"/org.openoffice.Office.Writer/Grid"_ustr,
+                    u"/org.openoffice.Office.Writer/Print"_ustr,
+                    u"/org.openoffice.Office.Writer/Content/Display/GraphicObject"_ustr,
+                    u"/org.openoffice.Office.Writer/Content/Display/ShowBoundaries"_ustr,
+                    u"/org.openoffice.Office.Writer/Content/NonprintingCharacter"_ustr,
+                    u"/org.openoffice.Office.Common/BulletsNumbering"_ustr,
+                    u"/org.openoffice.Office.Common/I18N/CTL"_ustr,
+
+                    // Only the sentence-checking subtree: its sibling
+                    // GrammarChecking/LanguageTool holds an API key and a
+                    // user name, which must not round-trip to the host.
+                    u"/org.openoffice.Office.Linguistic/GrammarChecking/SentenceChecking"_ustr
+                };
+                xUpdate->insertModificationXcuFile(xcustat.getFileURL(), aAllowedSubset, {});
+            }
+        }
+        else if (sFileName == "wordbook")
+        {
+            reInitDictionaryList();
+        }
+    }
+}
+
+void COKitImpl::setOption(const char *pOption, const char* pValue)
+{
+    static char* pCurrentSalLogOverride = nullptr;
+
+    if (strcmp(pOption, "traceeventrecording") == 0)
+    {
+        if (strcmp(pValue, "start") == 0)
+        {
+            comphelper::TraceEvent::setBufferSizeAndCallback(100, TraceEventDumper::flushRecordings);
+            comphelper::TraceEvent::startRecording();
+            if (traceEventDumper == nullptr)
+                traceEventDumper = new TraceEventDumper();
+        }
+        else if (strcmp(pValue, "stop") == 0)
+            comphelper::TraceEvent::stopRecording();
+    }
+    else if (strcmp(pOption, "sallogoverride") == 0)
+    {
+        if (pCurrentSalLogOverride != nullptr)
+            free(pCurrentSalLogOverride);
+        if (pValue == nullptr)
+            pCurrentSalLogOverride = nullptr;
+        else
+            pCurrentSalLogOverride = strdup(pValue);
+
+        if (pCurrentSalLogOverride == nullptr || pCurrentSalLogOverride[0] == '\0')
+            sal_detail_set_log_selector(nullptr);
+        else
+            sal_detail_set_log_selector(pCurrentSalLogOverride);
+    }
+    else if (strcmp(pOption, "allowlinkupdate") == 0)
+    {
+        SolarMutexGuard aGuard;
+        if (SfxObjectShell* pDocSh = SfxObjectShell::Current())
+            pDocSh->AllowLinkUpdate();
+    }
+    else if (strcmp(pOption, "addconfig") == 0)
+    {
+        const OUString aConfigPath(pValue, strlen(pValue), RTL_TEXTENCODING_UTF8);
+        updateConfig(aConfigPath);
+        // The per-session call (the per-user tree) arrives last and wins.
+        comphelper::COKit::setUserConfigDir(aConfigPath);
+    }
+    else if (strcmp(pOption, "addsharedpresetpaths") == 0)
+    {
+        const OUString aPresetsUrl(pValue, strlen(pValue), RTL_TEXTENCODING_UTF8);
+        addSharedPresetPaths(aPresetsUrl);
+    }
+    else if (strcmp(pOption, "userpersistence") == 0)
+    {
+        // Wire contract: exactly "true" or "false"; anything else (including
+        // null) is treated as false - never promise persistence without an
+        // explicit opt-in.
+        const bool bAvailable = pValue && strcmp(pValue, "true") == 0;
+        comphelper::COKit::setUserSettingsPersistenceAvailable(bAvailable);
+    }
+#ifdef LINUX
+    else if (strcmp(pOption, "addfont") == 0)
+    {
+        if (memcmp(pValue, "file://", 7) == 0)
+            pValue += 7;
+
+        int fd = open(pValue, O_RDONLY);
+        if (fd == -1)
+        {
+            std::cerr << "Could not open font file '" << pValue << "': " << strerror(errno) << std::endl;
+            return;
+        }
+
+        OUString sMagicFileName = "file:///:FD:/" + OUString::number(fd);
+
+        SolarMutexGuard aGuard;
+        OutputDevice *pDevice = Application::GetDefaultDevice();
+        OutputDevice::ImplClearAllFontData(true);
+        const bool bAdded = pDevice->AddTempDevFont(sMagicFileName, u""_ustr);
+        OutputDevice::ImplRefreshAllFontData(true);
+        if (!bAdded)
+            std::cerr << "Could not read a font from font file '" << pValue
+                      << "', so it is not in the font list" << std::endl;
+    }
+#endif
+}
+
+std::string COKitImpl::dumpState(std::string_view /* aOptions */)
+{
+    // NB. no SolarMutexGuard since this may be caused in some extremis / deadlock
+    SetLastExceptionMsg();
+
+    OStringBuffer aState(4096*256);
+
+
+    dumpState(aState);
+
+    return convertOStringToStdString(aState.makeStringAndClear());
+}
+
+void COKitImpl::dumpState(rtl::OStringBuffer &rState)
+{
+    rState.append("COKit state:"
+                  "\n\tLastExceptionMsg:\t");
+    rState.append(rtl::OUStringToOString(maLastExceptionMsg, RTL_TEXTENCODING_UTF8));
+    rState.append("\n\tUnipoll:\t");
+    rState.append(vcl::kit::isUnipoll() ? "yes" : "no: events on thread");
+    rState.append("\n\tOptionalFeatures:\t0x");
+    rState.append(static_cast<sal_Int64>(mOptionalFeatures), 16);
+    rState.append("\n\tCallbackData:\t0x");
+    rState.append(reinterpret_cast<sal_Int64>(mpCallback), 16);
+    rState.append("\n\tIsModified:\t");
+    if (const SfxObjectShell* pObjSh = SfxObjectShell::Current())
+        rState.append(pObjSh->IsModified() ? "modified" : "unmodified");
+    else
+        rState.append("noshell");
+    // TODO: dump mInteractionMap
+    KitHelper::dumpState(rState);
+    vcl::kit::dumpState(rState);
+}
+
+// We have special handling for some uno commands and it seems we need to check for readonly state.
+static bool isCommandAllowed(std::u16string_view command)
+{
+    // The freeze position of a sheet is shared by every view, so a read-only view is told where the
+    // sheet is frozen but cannot move it.
+    static constexpr std::u16string_view denyList[]
+        = { u".uno:FreezePanesColumn", u".uno:FreezePanesRow", u".uno:SidebarShow",
+            u".uno:SidebarHide" };
+
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    if (!pViewShell || !pViewShell->IsKitReadOnlyView())
+        return true;
+
+    if (command == u".uno:Save")
+    {
+        return pViewShell->IsAllowChangeComments() || pViewShell->IsAllowManageRedlines();
+    }
+
+    if (command == u".uno:TransformDialog")
+    {
+        // If the just added signature line shape is selected, allow moving it.
+        return pViewShell->GetSignPDFCertificate().Is();
+    }
+
+    return std::find(std::begin(denyList), std::end(denyList), command) == std::end(denyList);
+}
+
+static void lcl_reportSaveResult(COKitDocumentImpl* pDocument, int nView, const OString& rResult)
+{
+    // Report result to the provided view
+    auto handlerIt = pDocument->mpCallbackFlushHandlers.find(nView);
+    if (handlerIt != pDocument->mpCallbackFlushHandlers.end() && handlerIt->second)
+    {
+        handlerIt->second->queue(COKitCallbackType::UNO_COMMAND_RESULT, rResult);
+        return;
+    }
+
+    // Fallback to reporting to at least some view, if possible, of the result
+    for (const auto& rPair : pDocument->mpCallbackFlushHandlers)
+    {
+        if (rPair.second)
+        {
+            rPair.second->queue(COKitCallbackType::UNO_COMMAND_RESULT, rResult);
+            return;
+        }
+    }
+
+    SAL_WARN("kit", "Could not report .uno:Save result: no callback handler");
+}
+
+/// Whether the document carries a separate password required to modify it.
+static bool hasPasswordToModify(const SfxObjectShell* pObjectShell)
+{
+    return pObjectShell->GetModifyPasswordHash() // binary DOC/XLS/PPT formats
+           || pObjectShell->GetModifyPasswordInfo().hasElements(); // ODF/OOXML
+}
+
+/// Whether the document has a password to modify that has not been entered yet.
+static bool hasPendingPasswordToModify(const SfxObjectShell* pObjectShell)
+{
+    return hasPasswordToModify(pObjectShell) && !pObjectShell->IsModifyPasswordEntered();
+}
+
+/// Removes the DontSaveIfUnmodified argument from the save arguments and returns its value.
+static bool extractDontSaveIfUnmodified(std::vector<beans::PropertyValue>& rArguments)
+{
+    bool bDontSaveIfUnmodified = false;
+    std::erase_if(rArguments, [&bDontSaveIfUnmodified](const beans::PropertyValue& rItem) {
+        if (rItem.Name == "DontSaveIfUnmodified")
+        {
+            bDontSaveIfUnmodified = rItem.Value.get<bool>();
+            return true;
+        }
+        return false;
+    });
+    return bDontSaveIfUnmodified;
+}
+
+void COKitDocumentImpl::postUnoCommand(const char* pCommand, const char* pArguments,
+                                       bool bNotifyWhenFinished)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::postUnoCommand");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    OUString aCommand(pCommand, strlen(pCommand), RTL_TEXTENCODING_UTF8);
+
+    if (!isCommandAllowed(aCommand))
+    {
+        if (aCommand == ".uno:Save")
+        {
+            tools::JsonWriter aJson;
+            aJson.put("commandName", pCommand);
+            aJson.put("success", false);
+
+            std::vector<beans::PropertyValue> aSaveArguments(
+                jsonToPropertyValuesVector(pArguments));
+            SfxViewShell* pViewShell = SfxViewShell::Current();
+            const SfxObjectShell* pObjectShell = pViewShell ? pViewShell->GetObjectShell() : nullptr;
+            // A save that may skip an unchanged document gets the same answer the skip gives:
+            // unmodified.
+            if (extractDontSaveIfUnmodified(aSaveArguments) && pObjectShell
+                && !pObjectShell->IsModified())
+            {
+                auto resultNode = aJson.startNode("result");
+                aJson.put("type", "string");
+                aJson.put("value", "unmodified");
+            }
+
+            lcl_reportSaveResult(this,
+                                 KitHelper::getViewId(mnDocumentId),
+                                 aJson.finishAndGetAsOString());
+        }
+
+        return;
+    }
+
+    if (gImpl && aCommand == ".uno:None")
+        return;
+
+
+    std::vector<beans::PropertyValue> aPropertyValuesVector(jsonToPropertyValuesVector(pArguments));
+
+    if (!vcl::kit::isUnipoll())
+    {
+        beans::PropertyValue aSynchronMode;
+        aSynchronMode.Name = u"SynchronMode"_ustr;
+        aSynchronMode.Value <<= false;
+        aPropertyValuesVector.push_back(aSynchronMode);
+    }
+
+    const int nView = KitHelper::getViewId(mnDocumentId);
+    SfxViewShell* pViewShell = KitHelper::getViewOfId(nView);
+    if (!pViewShell)
+    {
+        if (aCommand == ".uno:Save")
+        {
+            tools::JsonWriter aJson;
+            aJson.put("commandName", pCommand);
+            aJson.put("success", false);
+            lcl_reportSaveResult(this, nView, aJson.finishAndGetAsOString());
+        }
+        return;
+    }
+    assert(nView == pViewShell->GetViewShellId().get() && "otherwise we couldn't have found it");
+    SfxObjectShell* pDocSh = pViewShell->GetObjectShell();
+
+    KitHelper::ensureCommandAuthor(pViewShell, aCommand, aPropertyValuesVector);
+
+    if (gImpl && aCommand == ".uno:ToggleOrientation")
+    {
+        ExecuteOrientationChange();
+        return;
+    }
+
+    // handle potential interaction
+    if (gImpl && aCommand == ".uno:Save")
+    {
+        // Drop any message left by an earlier store so a success does not report a stale one.
+        if (pDocSh)
+            pDocSh->SetLastStoreErrorMessage(OUString());
+
+        // Check if saving a PDF file
+        OUString aMimeType = lcl_getCurrentDocumentMimeType(this);
+        if (pDocSh && pDocSh->IsModified() && aMimeType == "application/pdf")
+        {
+            // If we have a PDF file (for saving annotations for example), we need
+            // to run save-as to the same file as the opened document. Plain save
+            // doesn't work as the PDF is not a "native" format.
+            uno::Reference<frame::XStorable> xStorable(mxComponent, uno::UNO_QUERY_THROW);
+            OUString aURL = xStorable->getLocation();
+            OString aURLUtf8 = OUStringToOString(aURL, RTL_TEXTENCODING_UTF8);
+            bool bResult = doc_saveAs(this, aURLUtf8.getStr(), "pdf", nullptr);
+
+            // Send the result of save
+            tools::JsonWriter aJson;
+            aJson.put("commandName", pCommand);
+            aJson.put("success", bResult);
+            lcl_reportSaveResult(this, nView, aJson.finishAndGetAsOString());
+            return;
+        }
+
+
+        rtl::Reference<KitInteractionHandler> const pInteraction(
+            new KitInteractionHandler("save"_ostr, gImpl, this));
+
+        beans::PropertyValue aValue;
+        aValue.Name = u"InteractionHandler"_ustr;
+        aValue.Value <<= uno::Reference<task::XInteractionHandler2>(pInteraction);
+        aPropertyValuesVector.push_back(aValue);
+
+        const bool bDontSaveIfUnmodified = extractDontSaveIfUnmodified(aPropertyValuesVector);
+
+        // skip saving and tell the result via UNO_COMMAND_RESULT
+        if (bDontSaveIfUnmodified && (!pDocSh || !pDocSh->IsModified()))
+        {
+            tools::JsonWriter aJson;
+            aJson.put("commandName", pCommand);
+            aJson.put("success", false);
+            // Add the reason for not saving
+            {
+                auto resultNode = aJson.startNode("result");
+                aJson.put("type", "string");
+                aJson.put("value", "unmodified");
+            }
+            lcl_reportSaveResult(this, nView, aJson.finishAndGetAsOString());
+            return;
+        }
+    }
+    else if (gImpl && aCommand == ".uno:TransformDialog")
+    {
+        bool bNeedConversion = false;
+        KitChartHelper aChartHelper(pViewShell);
+
+        if (aChartHelper.GetWindow() )
+        {
+            bNeedConversion = true;
+        }
+        else if (const SdrView* pView = pViewShell->GetDrawView())
+        {
+            if (OutputDevice* pOutputDevice = pView->GetFirstOutputDevice())
+            {
+                bNeedConversion = (pOutputDevice->GetMapMode().GetMapUnit() == MapUnit::Map100thMM);
+            }
+        }
+
+        if (bNeedConversion)
+        {
+            sal_Int32 value;
+            for (beans::PropertyValue& rPropValue: aPropertyValuesVector)
+            {
+                if (rPropValue.Name == "TransformPosX"
+                        || rPropValue.Name == "TransformPosY"
+                        || rPropValue.Name == "TransformWidth"
+                        || rPropValue.Name == "TransformHeight"
+                        || rPropValue.Name == "TransformRotationX"
+                        || rPropValue.Name == "TransformRotationY")
+                {
+                    rPropValue.Value >>= value;
+                    value = o3tl::convert(value, o3tl::Length::twip, o3tl::Length::mm100);
+                    rPropValue.Value <<= value;
+                }
+            }
+        }
+
+        if (aChartHelper.GetWindow() && aPropertyValuesVector.size() > 0)
+        {
+            if (aPropertyValuesVector[0].Name != "Action")
+            {
+                // The position is in print twips.
+                tools::Rectangle aChartBB = aChartHelper.GetChartBoundingBox(false);
+
+                int nLeft = o3tl::convert(aChartBB.Left(), o3tl::Length::twip, o3tl::Length::mm100);
+                int nTop = o3tl::convert(aChartBB.Top(), o3tl::Length::twip, o3tl::Length::mm100);
+
+                for (beans::PropertyValue& rPropValue: aPropertyValuesVector)
+                {
+                    if (rPropValue.Name == "TransformPosX" || rPropValue.Name == "TransformRotationX")
+                    {
+                        auto const value = *o3tl::doAccess<sal_Int32>(rPropValue.Value);
+                        rPropValue.Value <<= value - nLeft;
+                    }
+                    else if (rPropValue.Name == "TransformPosY" || rPropValue.Name == "TransformRotationY")
+                    {
+                        auto const value = *o3tl::doAccess<sal_Int32>(rPropValue.Value);
+                        rPropValue.Value <<= value - nTop;
+                    }
+                }
+            }
+            aChartHelper.Dispatch(u".uno:KitTransform"_ustr,
+                                  comphelper::containerToSequence(aPropertyValuesVector));
+            return;
+        }
+    }
+    else if (gImpl && aCommand == ".uno:InsertAnnotation")
+    {
+        // Online sends PositionX/PositionY/Width/Height in twips. The slot's
+        // native unit matches the doc's map mode; convert twip -> mm/100 for
+        // mm/100 docs (Draw/Impress) and leave the values as-is otherwise.
+        bool bNeedConversion = false;
+        if (const SdrView* pView = pViewShell->GetDrawView())
+        {
+            if (OutputDevice* pOutputDevice = pView->GetFirstOutputDevice())
+            {
+                bNeedConversion = (pOutputDevice->GetMapMode().GetMapUnit() == MapUnit::Map100thMM);
+            }
+        }
+
+        if (bNeedConversion)
+        {
+            sal_Int32 value;
+            for (beans::PropertyValue& rPropValue: aPropertyValuesVector)
+            {
+                if (rPropValue.Name == "PositionX" || rPropValue.Name == "PositionY"
+                    || rPropValue.Name == "Width" || rPropValue.Name == "Height")
+                {
+                    rPropValue.Value >>= value;
+                    value = o3tl::convert(value, o3tl::Length::twip, o3tl::Length::mm100);
+                    rPropValue.Value <<= value;
+                }
+            }
+        }
+    }
+    else if (gImpl && aCommand == ".uno:KitSidebarWriterPage")
+    {
+        if (!sfx2::sidebar::Sidebar::Setup(u"WriterPageDeck"))
+        {
+            SetLastExceptionMsg(u"failed to set up sidebar"_ustr);
+        }
+        return;
+    }
+    else if (gImpl && aCommand == ".uno:SidebarShow")
+    {
+        if (!sfx2::sidebar::Sidebar::Setup(u""))
+        {
+            SetLastExceptionMsg(u"failed to set up sidebar"_ustr);
+        }
+        return;
+    }
+    else if (gImpl && aCommand == ".uno:SidebarHide")
+    {
+        hideSidebar();
+        return;
+    }
+    else if (gImpl && aCommand == ".uno:UICoverage")
+    {
+        bool report(true), linguisticDataAvailable(true);
+        std::optional<bool> applyTracking;
+
+        for (const beans::PropertyValue& rPropValue : aPropertyValuesVector)
+        {
+            if (rPropValue.Name == "Report")
+                rPropValue.Value >>= report;
+            else if (rPropValue.Name == "LinguisticDataAvailable")
+                rPropValue.Value >>= linguisticDataAvailable;
+            else if (rPropValue.Name == "Track")
+            {
+                bool track(false);
+                rPropValue.Value >>= track;
+                applyTracking = track;
+            }
+        }
+
+        if (report)
+        {
+            tools::JsonWriter aJson;
+            aJson.put("commandName", aCommand);
+            aJson.put("success", true);
+            Application::UICoverageReport(aJson, lcl_getDocumentType(this), linguisticDataAvailable);
+            mpCallbackFlushHandlers[nView]->queue(COKitCallbackType::UNO_COMMAND_RESULT, aJson.finishAndGetAsOString());
+        }
+
+        if (applyTracking)
+            Application::EnableUICoverage(*applyTracking);
+
+        return;
+    }
+    else if (gImpl && aCommand == ".uno:ReportWhenIdle")
+    {
+        assert(maIdleHelper.msIdleId.isEmpty() && "idle id should be uset");
+        maIdleHelper.mpCallbackFlushHandler = mpCallbackFlushHandlers[nView];
+        maIdleHelper.mnViewId = nView;
+        maIdleHelper.mbFirstPass = true;
+
+        for (const beans::PropertyValue& rPropValue : aPropertyValuesVector)
+        {
+            if (rPropValue.Name == "idleID")
+            {
+                rPropValue.Value >>= maIdleHelper.msIdleId;
+            }
+        }
+
+        assert(!maIdleHelper.msIdleId.isEmpty() && "idle id should be set");
+
+        maIdleHelper.maIdle.Start();
+        return;
+    }
+
+    if (aCommand != ".uno:Save")
+    {
+        if (KitChartHelper aChartHelper(SfxViewShell::Current()); aChartHelper.GetWindow())
+        {
+            aChartHelper.Dispatch(aCommand, comphelper::containerToSequence(aPropertyValuesVector));
+            return;
+        }
+        if (KitStarMathHelper aMathHelper(SfxViewShell::Current()); aMathHelper.GetGraphicWindow())
+        {
+            aMathHelper.Dispatch(aCommand, comphelper::containerToSequence(aPropertyValuesVector));
+            return;
+        }
+    }
+    bool bResult = false;
+    if (bNotifyWhenFinished && mpCallbackFlushHandlers.count(nView))
+    {
+        bResult = comphelper::dispatchCommand(aCommand, comphelper::containerToSequence(aPropertyValuesVector),
+                new DispatchResultListener(pCommand, mpCallbackFlushHandlers[nView],
+                                           pDocSh && pDocSh->IsModified(),
+                                           mxComponent));
+    }
+    else
+        bResult = comphelper::dispatchCommand(aCommand, comphelper::containerToSequence(aPropertyValuesVector));
+
+    if (!bResult)
+    {
+        SetLastExceptionMsg("Failed to dispatch " + aCommand);
+    }
+}
+
+void COKitDocumentImpl::postMouseEvent(COKitMouseEventType eType, int nX, int nY, int nCount,
+                                       int nButtons, int nModifier)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::postMouseEvent");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+    try
+    {
+        pDoc->postMouseEvent(eType, nX, nY, nCount, nButtons, nModifier);
+    }
+    catch (const cpo::uno::Exception& exception)
+    {
+        SetLastExceptionMsg(exception.Message);
+        SAL_INFO("kit", "Failed to postMouseEvent " << exception.Message);
+    }
+}
+
+void COKitDocumentImpl::postWindowMouseEvent(unsigned nKitWindowId, COKitMouseEventType eType,
+                                             int nX, int nY, int nCount, int nButtons,
+                                             int nModifier)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::postWindowMouseEvent");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    VclPtr<Window> pWindow = vcl::Window::FindKitWindow(nKitWindowId);
+    if (!pWindow)
+    {
+        SetLastExceptionMsg(u"Document doesn't support dialog rendering, or window not found."_ustr);
+        return;
+    }
+
+    const Point aPos(nX, nY);
+
+    MouseEvent aEvent(aPos, nCount, MouseEventModifiers::SIMPLECLICK, nButtons, nModifier);
+
+    vcl::EnableDialogInput(pWindow);
+
+    switch (eType)
+    {
+        case COKitMouseEventType::BUTTONDOWN:
+            Application::PostMouseEvent(VclEventId::WindowMouseButtonDown, pWindow, &aEvent);
+            break;
+        case COKitMouseEventType::BUTTONUP:
+            Application::PostMouseEvent(VclEventId::WindowMouseButtonUp, pWindow, &aEvent);
+            break;
+        case COKitMouseEventType::MOVE:
+            Application::PostMouseEvent(VclEventId::WindowMouseMove, pWindow, &aEvent);
+            break;
+        default:
+            assert(false);
+            break;
+    }
+}
+
+void COKitDocumentImpl::postWindowGestureEvent(unsigned nKitWindowId, const char* pType, int nX,
+                                               int nY, int nOffset)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::postWindowGestureEvent");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    VclPtr<Window> pWindow = vcl::Window::FindKitWindow(nKitWindowId);
+    if (!pWindow)
+    {
+        SetLastExceptionMsg(u"Document doesn't support dialog rendering, or window not found."_ustr);
+        return;
+    }
+
+    OString aType(pType);
+    GestureEventPanType eEventType = GestureEventPanType::Update;
+
+    if (aType == "panBegin")
+        eEventType = GestureEventPanType::Begin;
+    else if (aType == "panEnd")
+        eEventType = GestureEventPanType::End;
+
+    GestureEventPan aEvent {
+        sal_Int32(nX),
+        sal_Int32(nY),
+        eEventType,
+        sal_Int32(nOffset),
+        PanningOrientation::Vertical,
+    };
+
+    vcl::EnableDialogInput(pWindow);
+
+    Application::PostGestureEvent(VclEventId::WindowGestureEvent, pWindow, &aEvent);
+}
+
+void COKitDocumentImpl::setTextSelection(COKitSetTextSelectionType eType, int nX, int nY)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setTextSelection");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    pDoc->setTextSelection(eType, nX, nY);
+}
+
+void COKitDocumentImpl::setWindowTextSelection(unsigned nKitWindowId, bool swap, int nX, int nY)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setWindowTextSelection");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    VclPtr<Window> pWindow = vcl::Window::FindKitWindow(nKitWindowId);
+    if (!pWindow)
+    {
+        SetLastExceptionMsg(u"Document doesn't support dialog rendering, or window not found."_ustr);
+        return;
+    }
+
+
+    Size aOffset(pWindow->GetOutOffXPixel(), pWindow->GetOutOffYPixel());
+    Point aCursorPos(nX, nY);
+    aCursorPos.Move(aOffset);
+    sal_uInt16 nModifier = swap ? KEY_MOD1 + KEY_MOD2 : KEY_SHIFT;
+
+    MouseEvent aCursorEvent(aCursorPos, 1, MouseEventModifiers::SIMPLECLICK, 0, nModifier);
+    Application::PostMouseEvent(VclEventId::WindowMouseButtonDown, pWindow, &aCursorEvent);
+    Application::PostMouseEvent(VclEventId::WindowMouseButtonUp, pWindow, &aCursorEvent);
+}
+
+std::string COKitDocumentImpl::getPresentationInfo()
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    bool bAllyState = false;
+    const int nView = KitHelper::getViewId(mnDocumentId);
+    SfxViewShell* pViewShell = KitHelper::getViewOfId(nView);
+    if (pViewShell)
+    {
+        bAllyState = pViewShell->GetKitAccessibilityState();
+    }
+
+    return pDoc->getPresentationInfo(bAllyState);
+}
+
+std::optional<COKitPixelSize> COKitDocumentImpl::createSlideRenderer(const char* pSlideHash,
+                                                                     int nSlideNumber,
+                                                                     COKitPixelSize aMaximumSize,
+                                                                     bool bRenderBackground,
+                                                                     bool bRenderMasterPage)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    OString sSlideHash(pSlideHash);
+    sal_Int32 nViewWidth = aMaximumSize.nWidth;
+    sal_Int32 nViewHeight = aMaximumSize.nHeight;
+    if (!pDoc->createSlideRenderer(
+                    sSlideHash,
+                    nSlideNumber, nViewWidth, nViewHeight,
+                    bRenderBackground, bRenderMasterPage))
+        return {};
+
+    return COKitPixelSize{ static_cast<unsigned>(nViewWidth),
+                           static_cast<unsigned>(nViewHeight) };
+}
+
+void COKitDocumentImpl::postSlideshowCleanup()
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+}
+
+COKitSlideLayer COKitDocumentImpl::renderNextSlideLayer(std::span<unsigned char> aBuffer,
+                                                        double fScale)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    COKitSlideLayer aLayer;
+    aLayer.fScale = fScale;
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        aLayer.bIsDone = true;
+        return aLayer;
+    }
+
+    aLayer.bIsDone = pDoc->renderNextSlideLayer(aBuffer.data(), aLayer.bIsBitmapLayer,
+                                                aLayer.fScale, aLayer.aJsonMessage);
+    return aLayer;
+}
+
+void COKitDocumentImpl::selectObjects(const char* pObjectIds)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::selectObjects");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    SdrView* pView = pViewShell ? pViewShell->GetDrawView() : nullptr;
+    SdrPageView* pPageView = pView ? pView->GetSdrPageView() : nullptr;
+
+    if (!pPageView)
+    {
+        SetLastExceptionMsg(u"The view shows no page to select objects on"_ustr);
+        return;
+    }
+
+    // The objects to mark are gathered first, so that putting the marks on can report the change
+    // once, at its last step, rather than once per object.
+    const OString aObjectIds(pObjectIds ? pObjectIds : "");
+    const SdrObjList* pLevel = nullptr;
+    std::vector<SdrObject*> aWanted;
+
+    for (sal_Int32 nPosition = 0; nPosition >= 0;)
+    {
+        const OString aId(aObjectIds.getToken(0, ',', nPosition));
+        if (aId.isEmpty())
+            continue;
+
+        const SdrPage* pPage = pPageView->GetPage();
+        SdrObject* pObject = pPage ? pPage->FindObjectByUniqueID(aId.toUInt64()) : nullptr;
+        if (!pObject || !pView->IsObjMarkable(pObject, pPageView))
+        {
+            SAL_WARN("kit", "selectObjects: nothing to mark for the id " << aId);
+            continue;
+        }
+
+        // The objects of one selection sit at one level, so the first object says which level
+        // that is and an object from anywhere else is left out.
+        if (aWanted.empty())
+            pLevel = pObject->getParentSdrObjListFromSdrObject();
+        else if (pObject->getParentSdrObjListFromSdrObject() != pLevel)
+        {
+            SAL_WARN("kit", "selectObjects: the object " << aId << " sits at another level");
+            continue;
+        }
+
+        aWanted.push_back(pObject);
+    }
+
+    const SdrMarkList& rMarkList = pView->GetMarkedObjectList();
+    std::vector<SdrObject*> aMarked;
+    for (size_t nMark = 0; nMark < rMarkList.GetMarkCount(); ++nMark)
+        aMarked.push_back(rMarkList.GetMark(nMark)->GetMarkedSdrObj());
+
+    // The objects asked for are the ones already marked, so the selection stands as it is and
+    // nothing is reported.
+    if (aMarked == aWanted)
+        return;
+
+    if (aWanted.empty())
+    {
+        // Unmarking reports the empty selection itself.
+        pView->UnmarkAllObj(pPageView);
+        return;
+    }
+
+    // The marks that go are taken off without a word, and the last mark that arrives reports what
+    // the selection is now, so one change is one message.
+    for (SdrObject* pMarked : aMarked)
+        pView->MarkObj(pMarked, pPageView, /*bUnmark*/ true, /*bDoNoSetMarkHdl*/ true);
+
+    for (size_t nObject = 0; nObject < aWanted.size(); ++nObject)
+        pView->MarkObj(aWanted[nObject], pPageView, /*bUnmark*/ false,
+                       /*bDoNoSetMarkHdl*/ nObject + 1 < aWanted.size());
+}
+
+/*
+    Makes the curve run through a point the way it is said to run: a point a curve goes smoothly
+    through has its two weights on one line, and one it goes symmetrically through has them the
+    same length as well. The weight that was moved stays where it was put, and the other one gives
+    way.
+
+    A polygon holds no continuity of its own, only numbers that happen to line up or not, so the
+    one that is wanted is told rather than measured and is set here exactly. A point whose numbers
+    had drifted a little off the line comes out of this lying on it.
+*/
+static void lcl_makeTheCurveRunThatWay(basegfx::B2DPolygon& rPolygon, sal_uInt32 nPoint,
+                                       basegfx::B2VectorContinuity eWanted,
+                                       bool bMovedTheOneComingIn)
+{
+    if (basegfx::B2VectorContinuity::NONE == eWanted)
+        return;
+
+    const basegfx::B2DPoint aPoint(rPolygon.getB2DPoint(nPoint));
+    const basegfx::B2DPoint aMoved(bMovedTheOneComingIn ? rPolygon.getPrevControlPoint(nPoint)
+                                                        : rPolygon.getNextControlPoint(nPoint));
+    basegfx::B2DVector aAway(aMoved - aPoint);
+
+    if (aAway.equalZero())
+        return;
+
+    const basegfx::B2DPoint aOther(bMovedTheOneComingIn ? rPolygon.getNextControlPoint(nPoint)
+                                                        : rPolygon.getPrevControlPoint(nPoint));
+    const double fLength(basegfx::B2VectorContinuity::C2 == eWanted
+                             ? aAway.getLength()
+                             : basegfx::B2DVector(aOther - aPoint).getLength());
+
+    basegfx::B2DVector aBack(-aAway);
+    aBack.setLength(fLength);
+
+    if (bMovedTheOneComingIn)
+        rPolygon.setNextControlPoint(nPoint, aPoint + aBack);
+    else
+        rPolygon.setPrevControlPoint(nPoint, aPoint + aBack);
+}
+
+/*
+    Moves points of the path an object is drawn along. A client that draws the document from the
+    objects it holds edits the path it was given and says what moved, so a path of many thousand
+    points travels neither way and nothing that was not touched can change.
+
+    The changes arrive in twips as "polygon,point,part,x,y,continuity", several of them separated
+    by ";", where the part is 0 for the point itself, 1 for the weight of the curve coming into it
+    and 2 for the weight of the one going out, and the continuity is 0 for a corner, 1 for a point
+    the curve runs smoothly through and 2 for one it runs symmetrically through.
+*/
+void COKitDocumentImpl::setObjectPoints(unsigned long long nObjectId,
+                                        const char* pChanges)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setObjectPoints");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    SdrView* pView = pViewShell ? pViewShell->GetDrawView() : nullptr;
+    SdrPageView* pPageView = pView ? pView->GetSdrPageView() : nullptr;
+    const SdrPage* pPage = pPageView ? pPageView->GetPage() : nullptr;
+
+    if (!pPage)
+    {
+        SetLastExceptionMsg(u"The view shows no page to move a point on"_ustr);
+        return;
+    }
+
+    SdrPathObj* pPathObject = dynamic_cast<SdrPathObj*>(pPage->FindObjectByUniqueID(nObjectId));
+
+    if (!pPathObject)
+    {
+        SetLastExceptionMsg(u"No object of that id is drawn along a path"_ustr);
+        return;
+    }
+
+    // The changes arrive in twips and the model holds the path in its own unit.
+    const double fToModel(o3tl::convert(1.0, o3tl::Length::twip, o3tl::Length::mm100));
+    basegfx::B2DPolyPolygon aPath(pPathObject->GetPathPoly());
+    bool bMoved(false);
+
+    const OString aChanges(pChanges ? pChanges : "");
+    for (sal_Int32 nAt = 0; nAt >= 0;)
+    {
+        const OString aChange(aChanges.getToken(0, ';', nAt));
+        if (aChange.isEmpty())
+            continue;
+
+        sal_Int32 nField = 0;
+        const sal_uInt32 nPolygon(o3tl::toUInt32(o3tl::getToken(aChange, 0, ',', nField)));
+        const sal_uInt32 nPoint(
+            nField < 0 ? 0 : o3tl::toUInt32(o3tl::getToken(aChange, 0, ',', nField)));
+        const sal_Int32 nPart(nField < 0 ? 0
+                                         : o3tl::toInt32(o3tl::getToken(aChange, 0, ',', nField)));
+        const double fX(
+            nField < 0 ? 0.0 : o3tl::toDouble(o3tl::getToken(aChange, 0, ',', nField)) * fToModel);
+        const double fY(
+            nField < 0 ? 0.0 : o3tl::toDouble(o3tl::getToken(aChange, 0, ',', nField)) * fToModel);
+        const sal_Int32 nContinuity(
+            nField < 0 ? 0 : o3tl::toInt32(o3tl::getToken(aChange, 0, ',', nField)));
+
+        if (nPolygon >= aPath.count())
+            continue;
+
+        basegfx::B2DPolygon aPolygon(aPath.getB2DPolygon(nPolygon));
+        if (nPoint >= aPolygon.count())
+            continue;
+
+        const basegfx::B2DPoint aWhereTo(fX, fY);
+
+        // The client draws the curve at the point the way it says here, and that is the way the
+        // model is made to hold it.
+        const basegfx::B2VectorContinuity eWanted(
+            1 == nContinuity ? basegfx::B2VectorContinuity::C1
+                             : (2 == nContinuity ? basegfx::B2VectorContinuity::C2
+                                                 : basegfx::B2VectorContinuity::NONE));
+
+        if (0 == nPart)
+        {
+            // A weight is held as the way from its point to it, so both of them travel with the
+            // point as it moves.
+            aPolygon.setB2DPoint(nPoint, aWhereTo);
+        }
+        else
+        {
+            const bool bComingIn(1 == nPart);
+
+            if (bComingIn)
+                aPolygon.setPrevControlPoint(nPoint, aWhereTo);
+            else
+                aPolygon.setNextControlPoint(nPoint, aWhereTo);
+
+            lcl_makeTheCurveRunThatWay(aPolygon, nPoint, eWanted, bComingIn);
+        }
+
+        aPath.setB2DPolygon(nPolygon, aPolygon);
+        bMoved = true;
+    }
+
+    if (!bMoved)
+        return;
+
+    SdrModel& rModel(pPathObject->getSdrModelFromSdrObject());
+    rModel.BegUndo(SvxResId(STR_DragMethMove));
+    rModel.AddUndo(rModel.GetSdrUndoFactory().CreateUndoGeoObject(*pPathObject));
+    pPathObject->SetPathPoly(aPath);
+    rModel.EndUndo();
+}
+
+/*
+    Moves one of the points a drawing object was given for a connector to tie itself to. The place
+    is given on the object, 0 and 0 being its upper left corner and 1 and 1 its lower right one,
+    which is how such a point travels to the client. The object holds it either as a share of its
+    own size or as a distance of its own, and it keeps the way it holds it.
+*/
+void COKitDocumentImpl::setObjectGluePoint(unsigned long long nObjectId, int nAt,
+                                           double fX, double fY)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setObjectGluePoint");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    SdrView* pView = pViewShell ? pViewShell->GetDrawView() : nullptr;
+    SdrPageView* pPageView = pView ? pView->GetSdrPageView() : nullptr;
+    const SdrPage* pPage = pPageView ? pPageView->GetPage() : nullptr;
+
+    if (!pPage)
+    {
+        SetLastExceptionMsg(u"The view shows no page to move a point on"_ustr);
+        return;
+    }
+
+    SdrObject* pObject = pPage->FindObjectByUniqueID(nObjectId);
+    SdrGluePointList* pGluePoints = pObject ? pObject->ForceGluePointList() : nullptr;
+
+    if (!pGluePoints || nAt < 0 || nAt >= static_cast<int>(pGluePoints->GetCount()))
+    {
+        SetLastExceptionMsg(u"No object of that id has a point of that number"_ustr);
+        return;
+    }
+
+    // The place on the object becomes a place on the page through the object's own mapping.
+    basegfx::B2DHomMatrix aOfTheObject;
+    basegfx::B2DPolyPolygon aOutline;
+    pObject->TRGetBaseGeometry(aOfTheObject, aOutline);
+
+    const basegfx::B2DPoint aOnThePage(aOfTheObject * basegfx::B2DPoint(fX, fY));
+    const Point aWhereTo(basegfx::fround<tools::Long>(aOnThePage.getX()),
+                         basegfx::fround<tools::Long>(aOnThePage.getY()));
+
+    SdrModel& rModel(pObject->getSdrModelFromSdrObject());
+    rModel.BegUndo(SvxResId(STR_DragMethMove));
+    rModel.AddUndo(rModel.GetSdrUndoFactory().CreateUndoGeoObject(*pObject));
+    (*pGluePoints)[static_cast<sal_uInt16>(nAt)].SetAbsolutePos(aWhereTo, *pObject);
+    pObject->SetChanged();
+    pObject->BroadcastObjectChange();
+    rModel.EndUndo();
+}
+
+/*
+    The same mapping with its shear turned over. The base geometry of an object holds the shear
+    one way and the object lays itself out with it the other way round, so whoever crosses between
+    the two goes through here. A mapping without shear comes back as it went in.
+*/
+static basegfx::B2DHomMatrix lcl_turnTheShearOver(const basegfx::B2DHomMatrix& rMatrix)
+{
+    basegfx::B2DTuple aScale;
+    basegfx::B2DTuple aTranslate;
+    double fRotate(0.0);
+    double fShearX(0.0);
+    rMatrix.decompose(aScale, aTranslate, fRotate, fShearX);
+
+    if (basegfx::fTools::equalZero(fShearX))
+        return rMatrix;
+
+    return basegfx::utils::createScaleShearXRotateTranslateB2DHomMatrix(aScale, -fShearX, fRotate,
+                                                                        aTranslate);
+}
+
+/*
+    Lays a change over drawing objects: the client works out what a drag does and hands over the
+    change itself, rather than asking for a handle to be moved. Every object keeps what it is and
+    only its place, its size, its turn and its shear follow the change, all of it in one step to
+    undo.
+*/
+void COKitDocumentImpl::setObjectTransform(const char* pMappings,
+                                           const char* pWhat)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setObjectTransform");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    SdrView* pView = pViewShell ? pViewShell->GetDrawView() : nullptr;
+    SdrPageView* pPageView = pView ? pView->GetSdrPageView() : nullptr;
+    const SdrPage* pPage = pPageView ? pPageView->GetPage() : nullptr;
+
+    if (!pPage)
+    {
+        SetLastExceptionMsg(u"The view shows no page to change an object on"_ustr);
+        return;
+    }
+
+    const OString aWhat(pWhat ? pWhat : "");
+    const TranslateId aStep(aWhat == "turn"    ? STR_DragMethRotate
+                            : aWhat == "scale" ? STR_DragMethResize
+                                               : STR_DragMethMove);
+
+    // The mappings arrive in twips and the model holds the page in its own unit. A mapping takes
+    // the object's own square, which has no unit of its own, so all six numbers are lengths.
+    const double fToModel(o3tl::convert(1.0, o3tl::Length::twip, o3tl::Length::mm100));
+
+    SdrModel* pModel = nullptr;
+    bool bBegun = false;
+
+    const OString aAll(pMappings ? pMappings : "");
+    for (sal_Int32 nAt = 0; nAt >= 0;)
+    {
+        const OString aOne(aAll.getToken(0, ';', nAt));
+        if (aOne.isEmpty())
+            continue;
+
+        sal_Int32 nField = 0;
+        const OString aId(aOne.getToken(0, ',', nField));
+        double aNumber[6] = { 1.0, 0.0, 0.0, 1.0, 0.0, 0.0 };
+        bool bWholeMapping = true;
+
+        for (double& rNumber : aNumber)
+        {
+            if (nField < 0)
+            {
+                bWholeMapping = false;
+                break;
+            }
+
+            rNumber = o3tl::toDouble(o3tl::getToken(aOne, 0, ',', nField)) * fToModel;
+        }
+
+        SdrObject* pObject = bWholeMapping ? pPage->FindObjectByUniqueID(aId.toUInt64()) : nullptr;
+        if (!pObject)
+            continue;
+
+        const basegfx::B2DHomMatrix aWanted(aNumber[0], aNumber[2], aNumber[4], aNumber[1],
+                                            aNumber[3], aNumber[5]);
+
+        basegfx::B2DHomMatrix aOfTheObject;
+        basegfx::B2DPolyPolygon aOutline;
+        const bool bCarriesItsOwnOutline(pObject->TRGetBaseGeometry(aOfTheObject, aOutline));
+
+        /*
+            An object holds the shear the other way round from the way it is drawn, and the
+            mapping arrives in the way it is drawn, so it is turned over before the object is
+            given it.
+        */
+        const basegfx::B2DHomMatrix aReached(lcl_turnTheShearOver(aWanted));
+
+        /*
+            What the object allows is asked before anything is done to it: a turn where it says
+            it cannot be turned, a mirror where it cannot be turned over, and a resize with two
+            different factors where it allows a resize in ratio only, are refused. The client
+            keeps to the same rules while a drag runs, so a mapping refused here is one that was
+            not meant.
+        */
+        {
+            SdrObjTransformInfoRec aAllows;
+            pObject->TakeObjInfo(aAllows);
+
+            basegfx::B2DTuple aScaleWas;
+            basegfx::B2DTuple aScaleBecomes;
+            basegfx::B2DTuple aTranslate;
+            double fRotateWas(0.0);
+            double fRotateBecomes(0.0);
+            double fShearWas(0.0);
+            double fShearBecomes(0.0);
+            aOfTheObject.decompose(aScaleWas, aTranslate, fRotateWas, fShearWas);
+            aReached.decompose(aScaleBecomes, aTranslate, fRotateBecomes, fShearBecomes);
+
+            const bool bTurns(!basegfx::fTools::equal(
+                basegfx::normalizeToRange(fRotateWas, 2.0 * M_PI),
+                basegfx::normalizeToRange(fRotateBecomes, 2.0 * M_PI), 0.0001));
+            // A mapping that turns the object over has a determinant below zero.
+            const auto determinantOf = [](const basegfx::B2DHomMatrix& rMatrix) {
+                return rMatrix.get(0, 0) * rMatrix.get(1, 1)
+                       - rMatrix.get(0, 1) * rMatrix.get(1, 0);
+            };
+            const bool bTurnsOver((determinantOf(aOfTheObject) < 0.0)
+                                  != (determinantOf(aReached) < 0.0));
+            const bool bShears(!basegfx::fTools::equal(fShearWas, fShearBecomes, 0.0001));
+
+            if (bTurns && !aAllows.bRotateFreeAllowed)
+            {
+                SetLastExceptionMsg(u"The object cannot be turned"_ustr);
+                SAL_WARN("sd", "setobjecttransform left the object alone: it cannot be turned");
+                continue;
+            }
+            if (bTurnsOver && !aAllows.bMirrorFreeAllowed)
+            {
+                SetLastExceptionMsg(u"The object cannot be turned over"_ustr);
+                SAL_WARN("sd",
+                         "setobjecttransform left the object alone: it cannot be turned over");
+                continue;
+            }
+            // A mapping that brings a shear in is refused by an object that cannot hold one. A
+            // resize of such an object in its own frame has none and passes, whatever the
+            // factors. A resize of a group it stands turned in brings one, and is refused.
+            if (bShears && !aAllows.bShearAllowed)
+            {
+                SetLastExceptionMsg(u"The object cannot be sheared"_ustr);
+                SAL_WARN("sd", "setobjecttransform left the object alone: it cannot be sheared");
+                continue;
+            }
+        }
+
+        /*
+            An object that carries an outline of its own is given that outline at the size it is
+            to have: the size in the mapping is not read for such an object, the outline is what
+            says how large it is. So the outline is made larger or smaller by as much as the
+            mapping grew.
+        */
+        if (bCarriesItsOwnOutline)
+        {
+            basegfx::B2DTuple aWas;
+            basegfx::B2DTuple aBecomes;
+            basegfx::B2DTuple aTranslate;
+            double fRotate(0.0);
+            double fShearX(0.0);
+            aOfTheObject.decompose(aWas, aTranslate, fRotate, fShearX);
+            aReached.decompose(aBecomes, aTranslate, fRotate, fShearX);
+
+            /*
+                How much larger the object became, without the sign: an object that is turned
+                over has a size that counts backwards, and the mirroring is done by the object
+                itself when it is given the mapping, so doing it to the outline as well would
+                turn it over twice.
+            */
+            const double fAcross(basegfx::fTools::equalZero(aWas.getX())
+                                     ? 1.0
+                                     : std::abs(aBecomes.getX() / aWas.getX()));
+            const double fDown(basegfx::fTools::equalZero(aWas.getY())
+                                   ? 1.0
+                                   : std::abs(aBecomes.getY() / aWas.getY()));
+
+            if (!basegfx::fTools::equal(fAcross, 1.0) || !basegfx::fTools::equal(fDown, 1.0))
+                aOutline.transform(basegfx::utils::createScaleB2DHomMatrix(fAcross, fDown));
+        }
+
+        if (!bBegun)
+        {
+            pModel = &pObject->getSdrModelFromSdrObject();
+            pModel->BegUndo(SvxResId(aStep));
+            bBegun = true;
+        }
+
+        pModel->AddUndo(pModel->GetSdrUndoFactory().CreateUndoGeoObject(*pObject));
+
+        // The way a shape says it faces is kept among its attributes rather than in its
+        // geometry, so putting it back takes an undo of its own.
+        if (nullptr != dynamic_cast<const SdrObjCustomShape*>(pObject))
+            pModel->AddUndo(pModel->GetSdrUndoFactory().CreateUndoAttrObject(*pObject));
+
+        /*
+            A shape keeps the way it faces apart from its mapping, and being given a mapping does
+            not reliably take that off again. It is taken off here, so that the mapping is read
+            as the whole of where the shape stands rather than on top of the way it already
+            faced: the shape is turned back about its own middle, and then told that it faces
+            the plain way, whichever of the two the turning back left behind.
+
+            The points to tie a connector to are turned along with the shape, and the mapping
+            that follows turns them a second time, about a line of its own. The shape wants both
+            turns and the points want neither, so they are put back as they stood and left to
+            the mapping alone.
+        */
+        if (auto* pFacingShape = dynamic_cast<SdrObjCustomShape*>(pObject))
+        {
+            if (pFacingShape->IsMirroredX() || pFacingShape->IsMirroredY())
+            {
+                std::optional<SdrGluePointList> aPointsAsTheyStood;
+                if (const SdrGluePointList* pPoints = pFacingShape->GetGluePointList())
+                    aPointsAsTheyStood = *pPoints;
+
+                const Point aMiddle(pFacingShape->GetSnapRect().Center());
+
+                if (pFacingShape->IsMirroredX())
+                {
+                    pFacingShape->NbcMirror(aMiddle, Point(aMiddle.X(), aMiddle.Y() + 1000));
+                    pFacingShape->SetMirroredX(false);
+                }
+
+                if (pFacingShape->IsMirroredY())
+                {
+                    pFacingShape->NbcMirror(aMiddle, Point(aMiddle.X() + 1000, aMiddle.Y()));
+                    pFacingShape->SetMirroredY(false);
+                }
+
+                if (aPointsAsTheyStood)
+                {
+                    if (SdrGluePointList* pPoints = pFacingShape->ForceGluePointList())
+                        *pPoints = *aPointsAsTheyStood;
+                }
+            }
+        }
+
+        /*
+            A connector that holds on to an object with an end keeps that end where the object
+            is, whatever mapping arrives for it: the mapping moves its free ends, and the run is
+            laid out anew between them. The mapping arrives as the whole new place of the
+            connector's box, so what moved is read against the box as it stood.
+        */
+        if (auto* pConnector = dynamic_cast<SdrEdgeObj*>(pObject))
+        {
+            const bool bTiedAtStart(nullptr != pConnector->GetConnectedNode(true));
+            const bool bTiedAtEnd(nullptr != pConnector->GetConnectedNode(false));
+            basegfx::B2DHomMatrix aBack(aOfTheObject);
+
+            if ((bTiedAtStart || bTiedAtEnd) && aBack.invert())
+            {
+                const basegfx::B2DHomMatrix aChange(aReached * aBack);
+
+                for (sal_uInt32 nEnd = 0; nEnd < 2; ++nEnd)
+                {
+                    if (0 == nEnd ? bTiedAtStart : bTiedAtEnd)
+                        continue;
+
+                    const Point aWas(pConnector->GetPoint(nEnd));
+                    const basegfx::B2DPoint aMoved(aChange
+                                                   * basegfx::B2DPoint(aWas.X(), aWas.Y()));
+                    pConnector->NbcSetPoint(Point(basegfx::fround<tools::Long>(aMoved.getX()),
+                                                  basegfx::fround<tools::Long>(aMoved.getY())),
+                                            nEnd);
+                }
+
+                // Moving an end lays the run out anew, as the drag of an end does in the
+                // office, so a run that was set from outside is let go of here as well.
+                pConnector->ForgetUserDefinedEdgeTrack();
+                pConnector->SetEdgeTrackDirty();
+
+                pObject->SetChanged();
+                pObject->BroadcastObjectChange();
+                continue;
+            }
+        }
+
+        pObject->TRSetBaseGeometry(aReached, aOutline);
+
+        /*
+            A mapping that turns the object over can be read in two ways - as mirrored across the
+            one axis, or as mirrored across the other and turned half way round - and the object
+            is rebuilt from a rectangle at the corner, so the two do not put it in the same place.
+            Which of the two is chosen is not ours to say, so the object is asked where it ended
+            up and moved by what is missing. The middle is what is compared, since it is the one
+            place that does not depend on which corner the mapping starts from.
+        */
+        basegfx::B2DHomMatrix aEnded;
+        basegfx::B2DPolyPolygon aEndedOutline;
+        pObject->TRGetBaseGeometry(aEnded, aEndedOutline);
+
+        const basegfx::B2DPoint aWantedMiddle(aWanted * basegfx::B2DPoint(0.5, 0.5));
+        const basegfx::B2DPoint aEndedMiddle(lcl_turnTheShearOver(aEnded)
+                                             * basegfx::B2DPoint(0.5, 0.5));
+        const basegfx::B2DVector aMissing(aWantedMiddle - aEndedMiddle);
+
+        if (!aMissing.equalZero())
+            pObject->Move(Size(basegfx::fround<tools::Long>(aMissing.getX()),
+                               basegfx::fround<tools::Long>(aMissing.getY())));
+
+        // The object is laid out again, and whoever holds it is told that it changed.
+        pObject->SetChanged();
+        pObject->BroadcastObjectChange();
+    }
+
+    if (bBegun)
+        pModel->EndUndo();
+    else
+        SetLastExceptionMsg(u"No object of those ids is on the page"_ustr);
+}
+
+/*
+    Moves one of the points a custom shape is shaped by. The shape reads such a point as the value
+    it shapes itself from, and holds it to whatever that value may be, so the place asked for here
+    is a wish and the shape says what comes of it.
+*/
+void COKitDocumentImpl::setObjectControlPoint(unsigned long long nObjectId,
+                                              int nAt, int nX, int nY, bool bWithTheShape)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setObjectControlPoint");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    SdrView* pView = pViewShell ? pViewShell->GetDrawView() : nullptr;
+    SdrPageView* pPageView = pView ? pView->GetSdrPageView() : nullptr;
+    const SdrPage* pPage = pPageView ? pPageView->GetPage() : nullptr;
+
+    if (!pPage)
+    {
+        SetLastExceptionMsg(u"The view shows no page to shape an object on"_ustr);
+        return;
+    }
+
+    SdrObjCustomShape* pShape
+        = dynamic_cast<SdrObjCustomShape*>(pPage->FindObjectByUniqueID(nObjectId));
+
+    if (!pShape || nAt < 0)
+    {
+        SetLastExceptionMsg(u"No object of that id is a shape with points to shape it by"_ustr);
+        return;
+    }
+
+    // The place arrives in twips and the model holds the page in its own unit.
+    const Point aWhereTo(o3tl::convert(tools::Long(nX), o3tl::Length::twip, o3tl::Length::mm100),
+                         o3tl::convert(tools::Long(nY), o3tl::Length::twip, o3tl::Length::mm100));
+
+    SdrModel& rModel(pShape->getSdrModelFromSdrObject());
+    rModel.BegUndo(SvxResId(STR_DragMethMove));
+    rModel.AddUndo(rModel.GetSdrUndoFactory().CreateUndoAttrObject(*pShape));
+    rModel.AddUndo(rModel.GetSdrUndoFactory().CreateUndoGeoObject(*pShape));
+
+    pShape->DragMoveCustomShapeHdl(aWhereTo, static_cast<sal_uInt16>(nAt), bWithTheShape);
+    pShape->SetBoundAndSnapRectsDirty();
+    pShape->InvalidateRenderGeometry();
+    pShape->SetChanged();
+    pShape->BroadcastObjectChange();
+
+    rModel.EndUndo();
+}
+
+/*
+    Crops a picture by naming it and the window it is to show, by the window's upper left and
+    lower right corners in twips on the page. The picture works the crop out itself in its
+    graphic's own units, and the window moves with it, so the graphic stays where it was on the
+    page.
+*/
+void COKitDocumentImpl::cropObject(unsigned long long nObjectId, int nUpperLeftX,
+                                   int nUpperLeftY, int nLowerRightX, int nLowerRightY)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::cropObject");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    SdrView* pView = pViewShell ? pViewShell->GetDrawView() : nullptr;
+    SdrPageView* pPageView = pView ? pView->GetSdrPageView() : nullptr;
+    const SdrPage* pPage = pPageView ? pPageView->GetPage() : nullptr;
+
+    if (!pPage)
+    {
+        SetLastExceptionMsg(u"The view shows no page to crop a picture on"_ustr);
+        return;
+    }
+
+    SdrGrafObj* pPicture = dynamic_cast<SdrGrafObj*>(pPage->FindObjectByUniqueID(nObjectId));
+
+    if (!pPicture)
+    {
+        SetLastExceptionMsg(u"No picture of that id is on the page"_ustr);
+        return;
+    }
+
+    if (pPicture->IsResizeProtect())
+    {
+        SetLastExceptionMsg(u"The picture is held against being changed"_ustr);
+        return;
+    }
+
+    // The corners arrive in twips and the model holds the page in its own unit.
+    const auto inModelUnit = [](int nX, int nY) {
+        return basegfx::B2DPoint(
+            o3tl::convert(tools::Long(nX), o3tl::Length::twip, o3tl::Length::mm100),
+            o3tl::convert(tools::Long(nY), o3tl::Length::twip, o3tl::Length::mm100));
+    };
+
+    SdrGrafCropChange aChange;
+    if (!pPicture->cropChangeForWindow(inModelUnit(nUpperLeftX, nUpperLeftY),
+                                       inModelUnit(nLowerRightX, nLowerRightY), aChange))
+    {
+        SetLastExceptionMsg(
+            u"The window has no width or no height"_ustr);
+        return;
+    }
+
+    // A crop changes the geometry and the crop values both, so both are put back by an undo.
+    SdrModel& rModel(pPicture->getSdrModelFromSdrObject());
+    rModel.BegUndo(SvxResId(STR_DragMethCrop));
+    rModel.AddUndo(rModel.GetSdrUndoFactory().CreateUndoGeoObject(*pPicture));
+    rModel.AddUndo(rModel.GetSdrUndoFactory().CreateUndoAttrObject(*pPicture));
+
+    const bool bCropped(pPicture->applyCropChange(aChange));
+
+    rModel.EndUndo();
+
+    if (bCropped)
+    {
+        pPicture->SetChanged();
+        pPicture->BroadcastObjectChange();
+    }
+}
+
+/** Moves one handle of an object to where it was let go, by naming the object and the handle
+    rather than by what a view has selected.
+
+    The object reads such a move its own way - a corner radius, an angle, the offset of a
+    measurement - and the drawing layer reaches all of that through the drag the object does
+    itself. So that drag is run here, from the handle's own place to the place asked for, with
+    nothing selected anywhere.
+ */
+void COKitDocumentImpl::setObjectHandle(unsigned long long nObjectId, int nKind,
+                                        int nPolygon, int nPoint, int nAt, int nX, int nY)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setObjectHandle");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    SdrView* pView = pViewShell ? pViewShell->GetDrawView() : nullptr;
+    SdrPageView* pPageView = pView ? pView->GetSdrPageView() : nullptr;
+    const SdrPage* pPage = pPageView ? pPageView->GetPage() : nullptr;
+
+    if (!pPage)
+    {
+        SetLastExceptionMsg(u"The view shows no page to move a handle on"_ustr);
+        SAL_WARN("sd", "setobjecthandle did nothing: the view shows no page");
+        return;
+    }
+
+    SdrObject* pObject = pPage->FindObjectByUniqueID(nObjectId);
+
+    if (!pObject)
+    {
+        SetLastExceptionMsg(u"No object of that id is on the page"_ustr);
+        SAL_WARN("sd", "setobjecthandle did nothing: no object of that id");
+        return;
+    }
+
+    // The object's handles as it makes them, so that the one named can be found again. They are
+    // this list's own and go with it. The view has none of them.
+    SdrHdlList aHandles(nullptr);
+    pObject->AddToHdlList(aHandles);
+
+    SdrHdl* pHandle = nullptr;
+    for (size_t nHandle = 0; nHandle < aHandles.GetHdlCount(); ++nHandle)
+    {
+        SdrHdl* pOne = aHandles.GetHdl(nHandle);
+
+        if (nullptr == pOne || static_cast<int>(pOne->GetKind()) != nKind)
+            continue;
+        if (static_cast<int>(pOne->GetPolyNum()) != nPolygon
+            || static_cast<int>(pOne->GetPointNum()) != nPoint)
+            continue;
+        if (nAt >= 0 && static_cast<int>(pOne->GetObjHdlNum()) != nAt)
+            continue;
+
+        pHandle = pOne;
+
+        // The view gives every handle it collects its object and its number in the object's
+        // list, and a handle reads both when it is dragged: a connector's line handle asks its
+        // connector which way the line runs, and answers for a handle without one as if the
+        // line ran upright. The handle gets both here, once it is the one that is meant.
+        pHandle->SetObj(pObject);
+        pHandle->SetObjHdlNum(static_cast<sal_uInt32>(nHandle));
+        break;
+    }
+
+    if (!pHandle)
+    {
+        SetLastExceptionMsg(u"The object has no handle of that name"_ustr);
+        SAL_WARN("sd", "setobjecthandle did nothing: no handle of that name");
+        return;
+    }
+
+    /*
+        A point a custom shape is shaped by is not moved this way. The shape reads such a drag
+        through the method that is driving it, to see whether a modifier is held down, and there
+        is no such method here. It has a command of its own, which says that in the command
+        instead of leaving it to be read off a drag.
+    */
+    if (SdrHdlKind::CustomShape1 == pHandle->GetKind())
+    {
+        SetLastExceptionMsg(
+            u"A point a custom shape is shaped by is moved by setobjectcontrolpoint"_ustr);
+        SAL_WARN("sd", "setobjecthandle did nothing: a custom shape point goes by "
+                       "setobjectcontrolpoint");
+        return;
+    }
+
+    if (pObject->IsResizeProtect())
+    {
+        SetLastExceptionMsg(u"The object is held against being changed"_ustr);
+        SAL_WARN("sd", "setobjecthandle did nothing: the object is held against being changed");
+        return;
+    }
+
+    // The place arrives in twips and the model holds the page in its own unit.
+    const Point aWhereTo(o3tl::convert(tools::Long(nX), o3tl::Length::twip, o3tl::Length::mm100),
+                         o3tl::convert(tools::Long(nY), o3tl::Length::twip, o3tl::Length::mm100));
+
+    SdrDragStat aDrag;
+    aDrag.Reset(pHandle->GetPos());
+    aDrag.SetView(pView);
+    aDrag.SetPageView(pPageView);
+    aDrag.SetHdl(pHandle);
+    aDrag.SetNoSnap();
+
+    if (!pObject->beginSpecialDrag(aDrag))
+    {
+        SetLastExceptionMsg(u"The object will not have that handle dragged"_ustr);
+        SAL_WARN("sd", "setobjecthandle did nothing: the object will not have that handle dragged");
+        return;
+    }
+
+    // The drag holds its points in a list, and a move replaces the last of them. With the one
+    // point the reset left there, the start would move along and the drag would read no
+    // distance, which is what a connector's line handle goes by. So a second point is opened
+    // for the move, and the first stays where the handle was.
+    aDrag.NextPoint();
+    aDrag.NextMove(aWhereTo);
+
+    /*
+        What has to be put back to undo the move is the object's own business as well: most of
+        them change their geometry, while one that changes an attribute - the corner radius is
+        kept among the attributes - says so on the drag. A connector says so only while its drag
+        runs, which is after this, and its drag changes its run and its items both ways, so
+        both are recorded for it.
+    */
+    SdrModel& rModel(pObject->getSdrModelFromSdrObject());
+    SdrUndoFactory& rFactory(rModel.GetSdrUndoFactory());
+    std::unique_ptr<SdrUndoAction> pAttributes;
+    std::unique_ptr<SdrUndoAction> pGeometry;
+
+    if (nullptr != dynamic_cast<const SdrEdgeObj*>(pObject))
+    {
+        pAttributes = rFactory.CreateUndoAttrObject(*pObject);
+        pGeometry = rFactory.CreateUndoGeoObject(*pObject);
+    }
+    else if (aDrag.IsEndDragChangesAttributes())
+    {
+        pAttributes = rFactory.CreateUndoAttrObject(*pObject);
+
+        if (aDrag.IsEndDragChangesGeoAndAttributes())
+            pGeometry = rFactory.CreateUndoGeoObject(*pObject);
+    }
+    else
+    {
+        pGeometry = rFactory.CreateUndoGeoObject(*pObject);
+    }
+
+    rModel.BegUndo(pAttributes ? pAttributes->GetComment() : pGeometry->GetComment());
+
+    if (pObject->applySpecialDrag(aDrag))
+    {
+        if (pAttributes)
+            rModel.AddUndo(std::move(pAttributes));
+        if (pGeometry)
+            rModel.AddUndo(std::move(pGeometry));
+
+        pObject->SetChanged();
+        pObject->BroadcastObjectChange();
+    }
+
+    rModel.EndUndo();
+}
+
+void COKitDocumentImpl::setViewOption(const char* pOption, const char* pValue)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setViewOption");
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    const OUString sOption = getUString(pOption);
+    if (sOption == "mousepointer")
+    {
+        // A client that works out the pointer from what it holds says "off" and is sent none.
+        if (SfxViewShell* pViewShell = SfxViewShell::Current())
+            pViewShell->setCallbackWanted(COKitCallbackType::MOUSE_POINTER,
+                                          getUString(pValue) != "off");
+    }
+    else if (sOption == "zoom")
+    {
+        const int nZoom = getUString(pValue).toInt32();
+
+        if (nZoom)
+        {
+            pDoc->setExportZoom(nZoom);
+
+            // Remember the current page zoom in Impress
+            pDoc->setPageZoom(nZoom);
+        }
+    }
+}
+
+/// Whether the location is one of the schemes pages may be read from: a file of the caller's
+/// own or a document of the web. Any other scheme is refused, so that the loader does not read
+/// what a UNO or package location names.
+static bool isReadablePagesUrl(const char* pUrl)
+{
+    if (!pUrl || !*pUrl)
+        return false;
+
+    const std::string_view aUrl(pUrl);
+    return aUrl.starts_with("file://") || aUrl.starts_with("http://")
+           || aUrl.starts_with("https://");
+}
+
+bool COKitDocumentImpl::insertPagesFromFile(const char* pUrl, const char* pJsonOptions)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    if (SfxViewShell::IsCurrentKitViewReadOnly())
+        return false;
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return false;
+    }
+
+    if (!isReadablePagesUrl(pUrl))
+    {
+        SetLastExceptionMsg(
+            u"Pages are read from a file or from the web and from nowhere else"_ustr);
+        return false;
+    }
+
+    return pDoc->insertPagesFromFile(getUString(pUrl),
+                                     pJsonOptions ? OString(pJsonOptions) : OString());
+}
+
+std::string COKitDocumentImpl::getSlideLinks()
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    tools::JsonWriter aJsonWriter;
+    const bool bWritten = pDoc->getSlideLinks(aJsonWriter);
+    // A JsonWriter checks at destruction that its data was extracted, so finish it even when
+    // nothing was written; the partial data is discarded.
+    OString aLinks = aJsonWriter.finishAndGetAsOString();
+    if (!bWritten)
+        return {};
+
+    return convertOStringToStdString(aLinks);
+}
+
+int COKitDocumentImpl::refreshSlideLinks(const char* pSourceName, const char* pUrl,
+                                         const char* pLastModifiedTime, std::string* pNotUpdated,
+                                         const char* pPart)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    if (SfxViewShell::IsCurrentKitViewReadOnly())
+        return -1;
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return -1;
+    }
+
+    // A linked page is a standard page, and the boundary names it by its page identifier. No part
+    // at all stands for every page linked to the source.
+    int nIndex = -1;
+    if (pPart && *pPart)
+    {
+        nIndex = pDoc->getPartIndex(pPart, 0);
+        if (nIndex < 0)
+            return -1;
+    }
+
+    std::vector<OString> aNotUpdated;
+    const sal_Int32 nRefreshed
+        = pDoc->refreshSlideLinks(getUString(pSourceName), getUString(pUrl),
+                                  getUString(pLastModifiedTime), &aNotUpdated, nIndex);
+    if (nRefreshed < 0 || !pNotUpdated)
+        return nRefreshed;
+
+    OStringBuffer aSlides("[");
+    for (size_t nSlide = 0; nSlide < aNotUpdated.size(); ++nSlide)
+    {
+        if (nSlide)
+            aSlides.append(',');
+        aSlides.append('"');
+        aSlides.append(aNotUpdated[nSlide]);
+        aSlides.append('"');
+    }
+    aSlides.append(']');
+
+    *pNotUpdated = convertOStringToStdString(aSlides.makeStringAndClear());
+    return nRefreshed;
+}
+
+bool COKitDocumentImpl::breakSlideLink(const char* pPart)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    if (SfxViewShell::IsCurrentKitViewReadOnly())
+        return false;
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return false;
+    }
+
+    // A linked page is a standard page, and the boundary names it by its page identifier.
+    const int nIndex = pPart ? pDoc->getPartIndex(pPart, 0) : -1;
+    if (nIndex < 0)
+        return false;
+
+    return pDoc->breakSlideLink(nIndex);
+}
+
+bool COKitDocumentImpl::exportPages(const char* pParts, const char* pUrl)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return false;
+    }
+
+    // The pages are written to a file of the caller's own and to nothing else, so that a UNO
+    // or package location names nothing that can be written to.
+    if (!pUrl || !std::string_view(pUrl).starts_with("file://"))
+    {
+        SetLastExceptionMsg(u"Pages are written to a file and to nowhere else"_ustr);
+        return false;
+    }
+
+    // The pages are named the way the boundary names the parts of this document, which for a
+    // presentation is the page identifier of each page, or the identifier a page keeps in ODF,
+    // which is a braced GUID string. A token that names no page of the document names no page at
+    // all.
+    std::vector<sal_Int32> aPages;
+    const std::string_view aParts(pParts ? pParts : "");
+    sal_Int32 nTokenPos = aParts.empty() ? -1 : 0;
+    bool bByGuid = false;
+    while (nTokenPos >= 0)
+    {
+        const std::string_view aPart = o3tl::getToken(aParts, 0, ',', nTokenPos);
+
+        if (!aPart.empty() && aPart.front() == '{')
+        {
+            bByGuid = true;
+            const sal_Int32 nGuidIndex = pDoc->getSlideIndexOfGuid(
+                OStringToOUString(aPart, RTL_TEXTENCODING_UTF8));
+            if (nGuidIndex >= 0)
+                aPages.push_back(nGuidIndex);
+
+            continue;
+        }
+
+        const int nIndex = pDoc->getPartIndex(aPart, 0);
+        if (nIndex < 0)
+            return false;
+
+        aPages.push_back(nIndex);
+    }
+
+    if (bByGuid && aPages.empty())
+        return false;
+
+    return pDoc->exportPages(aPages, getUString(pUrl));
+}
+
+static bool getFromTransferable(
+    const cpo::uno::Reference<css::datatransfer::XTransferable> &xTransferable,
+    std::string_view aInMimeType, OString &aRet);
+
+static bool encodeImageAsHTML(
+    const cpo::uno::Reference<css::datatransfer::XTransferable> &xTransferable,
+    std::string_view aMimeType, OString &aRet)
+{
+    if (!getFromTransferable(xTransferable, aMimeType, aRet))
+        return false;
+
+    // Encode in base64.
+    auto aSeq = Sequence<sal_Int8>(reinterpret_cast<const sal_Int8*>(aRet.getStr()),
+                                   aRet.getLength());
+    OStringBuffer aBase64Data;
+    comphelper::Base64::encode(aBase64Data, aSeq);
+
+    // Embed in HTML.
+    aRet = "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">\n"
+        "<html><head>"
+        "<meta http-equiv=\"content-type\" content=\"text/html; charset=utf-8\"/><meta "
+        "name=\"generator\" content=\""
+        + getGenerator().toUtf8()
+        + "\"/>"
+        "</head><body><img src=\"data:" + aMimeType + ";base64,"
+        + aBase64Data + "\"/></body></html>";
+
+    return true;
+}
+
+static bool encodeTextAsHTML(
+    const cpo::uno::Reference<css::datatransfer::XTransferable> &xTransferable,
+    std::string_view aMimeType, OString &aRet)
+{
+    if (!getFromTransferable(xTransferable, aMimeType, aRet))
+        return false;
+
+    // Embed in HTML - FIXME: needs some escaping.
+    aRet = "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">\n"
+        "<html><head>"
+        "<meta http-equiv=\"content-type\" content=\"text/html; charset=utf-8\"/><meta "
+        "name=\"generator\" content=\""
+        + getGenerator().toUtf8()
+        + "\"/></head><body><pre>" + aRet + "</pre></body></html>";
+
+    return true;
+}
+
+static bool getFromTransferable(
+    const cpo::uno::Reference<css::datatransfer::XTransferable> &xTransferable,
+    std::string_view aInMimeType, OString &aRet)
+{
+    OString aMimeType(aInMimeType);
+
+    // Take care of UTF-8 text here.
+    bool bConvert = false;
+    sal_Int32 nIndex = 0;
+    OString aBaseType(o3tl::getToken(aMimeType, 0, ';', nIndex));
+    if (aBaseType == "text/plain")
+    {
+        if (o3tl::getToken(aMimeType, 0, ';', nIndex) == "charset=utf-8")
+        {
+            aMimeType = "text/plain;charset=utf-16"_ostr;
+            bConvert = true;
+        }
+    }
+    else if (aBaseType == "text/markdown")
+    {
+        aMimeType = "text/markdown"_ostr;
+        bConvert = true;
+    }
+    else if (aBaseType == "application/x-libreoffice-markdown-annotated")
+    {
+        bConvert = true;
+    }
+
+    datatransfer::DataFlavor aFlavor;
+    aFlavor.MimeType = OUString::fromUtf8(aMimeType);
+    if (aMimeType == "text/plain;charset=utf-16" || aMimeType == "text/markdown"
+        || aMimeType == "application/x-libreoffice-markdown-annotated")
+        aFlavor.DataType = cppu::UnoType<OUString>::get();
+    else
+        aFlavor.DataType = cppu::UnoType< cpo::uno::Sequence<sal_Int8> >::get();
+
+    if (!xTransferable->isDataFlavorSupported(aFlavor))
+    {
+        // Try harder for HTML it is our copy/paste meta-file format
+        if (aInMimeType == "text/html")
+        {
+            // Desperate measures - convert text to HTML instead.
+            if (encodeTextAsHTML(xTransferable, "text/plain;charset=utf-8"_ostr, aRet))
+                return true;
+            // If html is not supported, might be a graphic-selection,
+            if (encodeImageAsHTML(xTransferable, "image/png"_ostr, aRet))
+                return true;
+        }
+
+        SetLastExceptionMsg("Flavor " + aFlavor.MimeType + " is not supported");
+        return false;
+    }
+
+    cpo::uno::Any aAny;
+    try
+    {
+        aAny = xTransferable->getTransferData(aFlavor);
+    }
+    catch (const css::datatransfer::UnsupportedFlavorException& e)
+    {
+        SetLastExceptionMsg("Unsupported flavor " + aFlavor.MimeType + " exception " + e.Message);
+        return false;
+    }
+    catch (const cpo::uno::Exception& e)
+    {
+        SetLastExceptionMsg("Exception getting " + aFlavor.MimeType + " exception " + e.Message);
+        return false;
+    }
+
+    if (aFlavor.DataType == cppu::UnoType<OUString>::get())
+    {
+        OUString aString;
+        aAny >>= aString;
+        if (bConvert)
+            aRet = OUStringToOString(aString, RTL_TEXTENCODING_UTF8);
+        else
+            aRet = OString(reinterpret_cast<const char *>(aString.getStr()), aString.getLength() * sizeof(sal_Unicode));
+    }
+    else
+    {
+        cpo::uno::Sequence<sal_Int8> aSequence;
+        aAny >>= aSequence;
+        aRet = OString(reinterpret_cast<const char*>(aSequence.getConstArray()), aSequence.getLength());
+    }
+
+    return true;
+}
+
+std::string COKitDocumentImpl::getTextSelection(std::string_view aMimeType)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getTextSelection");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    cpo::uno::Reference<css::datatransfer::XTransferable> xTransferable = pDoc->getSelection();
+    if (!xTransferable)
+    {
+        SetLastExceptionMsg(u"No selection available"_ustr);
+        return {};
+    }
+
+    OString aType
+        = !aMimeType.empty() ? OString(aMimeType) : "text/plain;charset=utf-8"_ostr;
+
+    OString aRet;
+    bool bSuccess = getFromTransferable(xTransferable, aType, aRet);
+    if (!bSuccess)
+        return {};
+
+    return std::string(aRet);
+}
+
+COKitSelectionType COKitDocumentImpl::getSelectionType()
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getSelectionType");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return COKitSelectionType::NONE;
+    }
+
+    cpo::uno::Reference<css::datatransfer::XTransferable> xTransferable = pDoc->getSelection();
+    if (!xTransferable)
+    {
+        SetLastExceptionMsg(u"No selection available"_ustr);
+        return COKitSelectionType::NONE;
+    }
+
+    cpo::uno::Reference<css::datatransfer::XTransferable2> xTransferable2(xTransferable, cpo::uno::UNO_QUERY);
+    if (xTransferable2.is() && xTransferable2->isComplex())
+        return COKitSelectionType::COMPLEX;
+
+    OString aRet;
+    bool bSuccess = getFromTransferable(xTransferable, "text/plain;charset=utf-8"_ostr, aRet);
+    if (!bSuccess)
+        return COKitSelectionType::NONE;
+
+    if (aRet.getLength() > 10000)
+        return COKitSelectionType::COMPLEX;
+
+    return !aRet.isEmpty() ? COKitSelectionType::TEXT : COKitSelectionType::NONE;
+}
+
+COKitSelection COKitDocumentImpl::getSelectionTypeAndText(const char* pMimeType)
+{
+    // The purpose of this function is to avoid double call to pDoc->getSelection(),
+    // which may be expensive.
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getSelectionTypeAndText");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    cpo::uno::Reference<css::datatransfer::XTransferable> xTransferable = pDoc->getSelection();
+    if (!xTransferable)
+    {
+        SetLastExceptionMsg(u"No selection available"_ustr);
+        return {};
+    }
+
+    cpo::uno::Reference<css::datatransfer::XTransferable2> xTransferable2(xTransferable, cpo::uno::UNO_QUERY);
+    if (xTransferable2.is() && xTransferable2->isComplex())
+        return { COKitSelectionType::COMPLEX, {} };
+
+    OString aType
+        = pMimeType && pMimeType[0] != '\0' ? OString(pMimeType) : "text/plain;charset=utf-8"_ostr;
+
+    OString aRet;
+    bool bSuccess = getFromTransferable(xTransferable, aType, aRet);
+    if (!bSuccess)
+        return {};
+
+    if (aRet.getLength() > 10000)
+        return { COKitSelectionType::COMPLEX, {} };
+
+    if (aRet.isEmpty())
+        return {};
+
+    return { COKitSelectionType::TEXT, std::string(aRet) };
+}
+
+// True for the EMF, WMF and BMP renderings. Each one holds the same picture as the metafile or the
+// bitmap it was made from, and only a native system clipboard reads them. They are also the
+// slowest formats to produce, because each one draws the page once more.
+static bool isDuplicateRendering(const css::datatransfer::DataFlavor& rFlavor)
+{
+    const SotClipboardFormatId eFormat = SotExchange::GetFormat(rFlavor);
+    return eFormat == SotClipboardFormatId::EMF || eFormat == SotClipboardFormatId::WMF
+           || eFormat == SotClipboardFormatId::BMP;
+}
+
+// Serialize the current clipboard's contents into the out parameters. The
+// caller holds the solar mutex and has already zeroed the out parameters. The
+// clipboard is whichever getClipboardForCurView returns: the per-view one on
+// the collaborative server, or the single shared one in the desktop app.
+// Returns true on success, false when there is nothing on the clipboard.
+static std::vector<COKitClipboardItem> fetchClipboardContents(const char **pMimeTypes,
+                                                              bool bSkipDuplicateRenderings = false)
+{
+    rtl::Reference<KitClipboard> xClip(KitClipboardFactory::getClipboardForCurView());
+    if (!xClip.is())
+    {
+        SetLastExceptionMsg(u"No clipboard available"_ustr);
+        return {};
+    }
+
+    cpo::uno::Reference<css::datatransfer::XTransferable> xTransferable = xClip->getContents();
+    SAL_INFO("kit", "Got from clip: " << xClip.get() << " transferable: " << xTransferable);
+    if (!xTransferable)
+    {
+        SetLastExceptionMsg(u"No clipboard content available"_ustr);
+        return {};
+    }
+
+    std::vector<OString> aMimeTypes;
+    if (!pMimeTypes) // everything
+    {
+        const cpo::uno::Sequence< css::datatransfer::DataFlavor > flavors = xTransferable->getTransferDataFlavors();
+        if (!flavors.getLength())
+        {
+            SetLastExceptionMsg(u"Flavourless selection"_ustr);
+            return {};
+        }
+        for (const auto &it : flavors)
+        {
+            if (bSkipDuplicateRenderings && isDuplicateRendering(it))
+                continue;
+            aMimeTypes.push_back(OUStringToOString(it.MimeType, RTL_TEXTENCODING_UTF8));
+        }
+    }
+    else
+    {
+        for (size_t i = 0; pMimeTypes[i]; ++i)
+            aMimeTypes.push_back(OString(pMimeTypes[i]));
+    }
+
+    std::vector<COKitClipboardItem> aItems(aMimeTypes.size());
+    for (size_t i = 0; i < aMimeTypes.size(); ++i)
+    {
+        if (aMimeTypes[i] == "text/plain;charset=utf-16")
+            aItems[i].aMimeType = "text/plain;charset=utf-8";
+        else
+            aItems[i].aMimeType = aMimeTypes[i];
+
+        OString aRet;
+        bool bSuccess = getFromTransferable(xTransferable, aItems[i].aMimeType, aRet);
+        if (bSuccess && aRet.getLength() >= 1)
+            aItems[i].aData = std::vector<char>(aRet.getStr(), aRet.getStr() + aRet.getLength());
+    }
+
+    return aItems;
+}
+
+std::vector<COKitClipboardItem> COKitDocumentImpl::getClipboard(const char **pMimeTypes,
+                                                                bool bSkipDuplicateRenderings)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getClipboard");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    return fetchClipboardContents(pMimeTypes, bSkipDuplicateRenderings);
+}
+
+// Office-level clipboard read for the desktop app's one shared clipboard. It
+// needs no document, because the shared clipboard is process-global. The
+// per-document doc_getClipboard stays for the collaborative server, where the
+// clipboard is per view.
+bool COKitImpl::getGlobalClipboard(const char **pMimeTypes,
+                                   std::vector<std::string>& rOutMimeTypes,
+                                   std::vector<std::vector<char>>& rOutStreams)
+{
+    comphelper::ProfileZone aZone("COKitImpl::getGlobalClipboard");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    const std::vector<COKitClipboardItem> aItems = fetchClipboardContents(pMimeTypes);
+    if (aItems.empty())
+        return false;
+
+    rOutMimeTypes.reserve(aItems.size());
+    rOutStreams.reserve(aItems.size());
+    for (const auto& rItem : aItems)
+    {
+        rOutMimeTypes.push_back(rItem.aMimeType);
+        rOutStreams.push_back(rItem.aData);
+    }
+    return true;
+}
+
+bool COKitDocumentImpl::setClipboard(const size_t   nInCount, const char   **pInMimeTypes,
+                                     const size_t  *pInSizes, const char   **pInStreams)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setClipboard");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return false;
+    }
+
+    uno::Reference<datatransfer::XTransferable> xTransferable(new KitTransferable(nInCount, pInMimeTypes, pInSizes, pInStreams));
+
+    auto xClip = forceSetClipboardForCurrentView(this);
+    xClip->setContents(xTransferable, uno::Reference<datatransfer::clipboard::XClipboardOwner>());
+
+    SAL_INFO("kit", "Set clip: " << xClip.get() << " to: " << xTransferable);
+
+    if (!pDoc->isMimeTypeSupported())
+    {
+        SetLastExceptionMsg(u"Document doesn't support this mime type"_ustr);
+        return false;
+    }
+
+    return true;
+}
+
+// Office-level: install one process-global provider and switch the kit to a
+// single shared clipboard for every view and document (the desktop app).
+void COKitImpl::installClipboardProvider(const COKitClipboardProvider* pProvider)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    KitClipboardFactory::installGlobalProvider(pProvider);
+}
+
+// Office-level: remember the desktop app's native file picker. A command that needs
+// the user to pick a file then asks the app instead of opening a file dialog.
+void COKitImpl::installFilePickerProvider(const COKitFilePickerProvider* pProvider)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    sfx2::COKitFilePicker::installProvider(pProvider);
+}
+
+// Renders the shared clipboard's formats now, so its contents survive the close
+// of the document that produced them. Operates on the process-global shared
+// clipboard, so the document argument only serves to reach this call.
+void COKitDocumentImpl::flushClipboard()
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::flushClipboard");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    KitClipboardFactory::flushSharedClipboard();
+}
+
+// See COKit's Document::transferClipboardFromView(); the caller must have
+// already made the destination the current view.
+void COKitDocumentImpl::transferClipboardFromView(int nSourceViewId)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::transferClipboardFromView");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    rtl::Reference<KitClipboard> xFrom
+        = KitClipboardFactory::getExistingClipboardForView(nSourceViewId);
+    if (!xFrom.is())
+    {
+        SAL_INFO("kit", "transferClipboardFromView: no clipboard for source view " << nSourceViewId);
+        return;
+    }
+    uno::Reference<datatransfer::XTransferable> xContents = xFrom->getContents();
+    if (!xContents.is())
+    {
+        SAL_INFO("kit", "transferClipboardFromView: source view " << nSourceViewId
+                                                                  << " has an empty clipboard");
+        return;
+    }
+
+    auto xClip = forceSetClipboardForCurrentView(this);
+    xClip->setContents(xContents, uno::Reference<datatransfer::clipboard::XClipboardOwner>());
+
+    SAL_INFO("kit", "Shared clipboard from view " << nSourceViewId
+                                                  << " into current view by reference");
+}
+
+bool COKitDocumentImpl::paste(const char* pMimeType, const char* pData, size_t nSize)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::paste");
+
+    SolarMutexGuard aGuard;
+
+    const char *pInMimeTypes[1];
+    const char *pInStreams[1];
+    size_t pInSizes[1];
+    pInMimeTypes[0] = pMimeType;
+    pInSizes[0] = nSize;
+    pInStreams[0] = pData;
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return false;
+    }
+
+    uno::Reference<datatransfer::XTransferable> xTransferable(
+        new KitTransferable(1, pInMimeTypes, pInSizes, pInStreams,
+                            /*bSynthesizeMarkdown=*/false));
+
+    rtl::Reference<KitClipboard> xClip = forceSetClipboardForCurrentView(this);
+    xClip->setContents(xTransferable, uno::Reference<datatransfer::clipboard::XClipboardOwner>());
+
+    if (!pDoc->isMimeTypeSupported())
+    {
+        SetLastExceptionMsg(u"Document doesn't support this mime type"_ustr);
+        return false;
+    }
+
+    cpo::uno::Sequence<beans::PropertyValue> aPropertyValues(comphelper::InitPropertySequence(
+    {
+        {u"AnchorType"_ustr, cpo::uno::Any(static_cast<sal_uInt16>(css::text::TextContentAnchorType_AS_CHARACTER))},
+        {u"IgnoreComments"_ustr, cpo::uno::Any(true)},
+        // The MIME type is specified explicitly, don't guess.
+        {u"SkipDetection"_ustr, cpo::uno::Any(true)},
+    }));
+    if (!comphelper::dispatchCommand(u".uno:Paste"_ustr, aPropertyValues))
+    {
+        SetLastExceptionMsg(u"Failed to dispatch the .uno: command"_ustr);
+        return false;
+    }
+
+    return true;
+}
+
+void COKitDocumentImpl::setGraphicSelection(COKitSetGraphicSelectionType eType, int nX, int nY)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setGraphicSelection");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    pDoc->setGraphicSelection(eType, nX, nY);
+}
+
+void COKitDocumentImpl::setInPlaceObjectArea(int nX, int nY, int nWidth, int nHeight)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setInPlaceObjectArea");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    SfxViewShell* pViewShell = SfxViewShell::Current();
+    if (pViewShell && pViewShell->IsKitReadOnlyView())
+        return;
+
+    SfxInPlaceClient* pIPClient = pViewShell ? pViewShell->GetIPClient() : nullptr;
+
+    // GetIPClient() also answers for an object activated out of place, which has no area
+    // on the page to move.
+    if (!pIPClient || !pIPClient->IsObjectInPlaceActive())
+    {
+        SetLastExceptionMsg(u"No object is active for in-place editing"_ustr);
+        return;
+    }
+
+    // The area is reported with tools::Rectangle::toString(), whose width is right - left,
+    // so take the edges from the width rather than going through a Size, which would knock
+    // a unit off every request.
+    pIPClient->RequestCOKitObjectArea(
+        tools::Rectangle(nX, nY, nX + nWidth, nY + nHeight));
+}
+
+void COKitDocumentImpl::resetSelection()
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::resetSelection");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    pDoc->resetSelection();
+}
+
+// The sentence checking rule packages that are installed, so the Options
+// dialog can offer a panel for each of them and none for the rest. Each
+// package's id is its rule file's name, which is also the name of its group
+// in the configuration.
+static std::string getSentenceCheckingPackages()
+{
+    // Which languages the checker will actually serve. It applies the kit's
+    // language allowlist, so a package whose language is missing here is one
+    // whose options would do nothing, and is not worth a panel.
+    std::set<OUString> aLanguages;
+    try
+    {
+        cpo::uno::Reference<linguistic2::XSupportedLocales> xChecker(
+            comphelper::getProcessServiceFactory()->createInstance(
+                u"cpo.lingu.Lightproof"_ustr),
+            uno::UNO_QUERY);
+        if (xChecker.is())
+            for (const lang::Locale& rLocale : xChecker->getLocales())
+                aLanguages.insert(rLocale.Language);
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("kit", "cannot ask the sentence checker for its locales");
+    }
+
+    tools::JsonWriter aJson;
+    aJson.put("commandName", ".uno:SentenceCheckingPackages");
+    std::vector<OUString> aIds;
+
+    OUString aDir(u"$BRAND_BASE_DIR/" LIBO_SHARE_FOLDER "/lightproof"_ustr);
+    rtl::Bootstrap::expandMacros(aDir);
+
+    osl::Directory aRules(aDir);
+    if (aRules.open() == osl::FileBase::E_None)
+    {
+        osl::DirectoryItem aItem;
+        while (aRules.getNextItem(aItem) == osl::FileBase::E_None)
+        {
+            osl::FileStatus aStatus(osl_FileStatus_Mask_FileName);
+            if (aItem.getFileStatus(aStatus) != osl::FileBase::E_None)
+                continue;
+            const OUString aName = aStatus.getFileName();
+            if (!aName.endsWithIgnoreAsciiCase(u".lpr"))
+                continue;
+
+            const OUString aId = aName.copy(0, aName.getLength() - 4);
+            // The id is the package name, "en" or "pt_BR", so the part in
+            // front of the underscore is the language it checks.
+            const OUString aLanguage = aId.getToken(0, '_');
+            if (aLanguages.find(aLanguage) == aLanguages.end())
+                continue;
+
+            aIds.push_back(aId);
+        }
+    }
+
+    // A directory is read back in whatever order it happens to be in, so say
+    // the same thing every time instead. The dialog puts its panels in the
+    // order the reader's own language names sort in, which this is not, but a
+    // stable answer is one less thing that differs between two machines.
+    std::sort(aIds.begin(), aIds.end());
+
+    {
+        auto aPackages = aJson.startArray("commandValues");
+        for (const OUString& rId : aIds)
+        {
+            auto aPackage = aJson.startStruct();
+            aJson.put("id", rId);
+        }
+    }
+    return aJson.finishAndGetAsStdString();
+}
+
+static std::string getDocReadOnly(COKitDocument* pThis)
+{
+    SfxObjectShell* pObjectShell = getSfxObjectShell(pThis);
+    if (!pObjectShell)
+        return {};
+
+    bool bReadOnly = pObjectShell->IsLoadReadonly() || hasPendingPasswordToModify(pObjectShell);
+    if (!bReadOnly && hasPasswordToModify(pObjectShell))
+    {
+        const SfxViewShell* pViewShell = SfxViewShell::Current();
+        bReadOnly = pViewShell && pViewShell->IsKitReadOnlyView();
+    }
+
+    boost::property_tree::ptree aTree;
+    aTree.put("commandName", ".uno:ReadOnly");
+    aTree.put("success", bReadOnly);
+
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, aTree, false /* pretty */);
+    return aStream.str();
+}
+
+static std::string getDocHasPasswordToModify(COKitDocument* pThis)
+{
+    SfxObjectShell* pObjectShell = getSfxObjectShell(pThis);
+    if (!pObjectShell)
+        return {};
+
+    boost::property_tree::ptree aTree;
+    aTree.put("commandName", ".uno:HasPasswordToModify");
+    aTree.put("success", hasPendingPasswordToModify(pObjectShell));
+
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, aTree, false /* pretty */);
+    return aStream.str();
+}
+
+static std::string getExportRaisesDialog(COKitDocument* pThis, std::u16string_view rFormat)
+{
+    ITiledRenderable* pDoc = getTiledRenderable(pThis);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    const OUString aFilterName = getFilterNameForFormat(pThis, rFormat);
+
+    boost::property_tree::ptree aTree;
+    aTree.put("commandName", ".uno:ExportRaisesDialog");
+    aTree.put("raisesDialog", !aFilterName.isEmpty() && pDoc->exportRaisesDialog(aFilterName));
+
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, aTree, false /* pretty */);
+    return aStream.str();
+}
+
+static std::string verifyDocPasswordToModify(COKitDocument* pThis, std::u16string_view rPassword)
+{
+    SfxObjectShell* pObjectShell = getSfxObjectShell(pThis);
+    if (!pObjectShell)
+        return {};
+
+    const cpo::uno::Sequence<css::beans::PropertyValue> aInfo
+        = pObjectShell->GetModifyPasswordInfo();
+
+    bool bCorrect = false;
+    if (aInfo.hasElements()) // ODF/OOXML
+    {
+        bCorrect = comphelper::DocPasswordHelper::IsModifyPasswordCorrect(rPassword, aInfo);
+    }
+    else if (pObjectShell->GetModifyPasswordHash()) // binary DOC/XLS/PPT formats
+    {
+        const SfxMedium* pMedium = pObjectShell->GetMedium();
+        const std::shared_ptr<const SfxFilter> pFilter
+            = pMedium ? pMedium->GetFilter() : nullptr;
+        if (pFilter)
+        {
+            const bool bWriter = pFilter->GetServiceName() == "com.sun.star.text.TextDocument";
+            bCorrect = SfxMedium::CreatePasswordToModifyHash(rPassword, bWriter)
+                       == pObjectShell->GetModifyPasswordHash();
+        }
+    }
+
+    boost::property_tree::ptree aTree;
+    aTree.put("commandName", ".uno:VerifyPasswordToModify");
+    aTree.put("success", bCorrect);
+
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, aTree, false /* pretty */);
+    return aStream.str();
+}
+
+static std::string getExternalLinksDisabled(COKitDocument* pThis)
+{
+    SfxObjectShell* pObjectShell = getSfxObjectShell(pThis);
+    if (!pObjectShell)
+        return {};
+
+    // True when the document has external links currently held back because
+    // link updates are not allowed for it yet.
+    const bool bDisabled
+        = !pObjectShell->getEmbeddedObjectContainer().getUserAllowsLinkUpdate()
+          && pObjectShell->HasUpdatableLinks();
+
+    boost::property_tree::ptree aTree;
+    aTree.put("commandName", ".uno:ExternalLinksDisabled");
+    aTree.put("disabled", bDisabled);
+
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, aTree, false /* pretty */);
+    return aStream.str();
+}
+
+static void addLocale(boost::property_tree::ptree& rValues, css::lang::Locale const & rLocale)
+{
+    boost::property_tree::ptree aChild;
+    const LanguageTag aLanguageTag( rLocale );
+    OUString sLanguage = SvtLanguageTable::GetLanguageString(aLanguageTag.getLanguageType());
+    if (sLanguage.endsWith("}"))
+        return;
+
+    sLanguage += ";" + aLanguageTag.getBcp47(false);
+    aChild.put("", sLanguage.toUtf8());
+    rValues.push_back(std::make_pair("", aChild));
+}
+
+static std::string getLanguages(const char* pCommand)
+{
+    cpo::uno::Sequence< css::lang::Locale > aLocales;
+    cpo::uno::Sequence< css::lang::Locale > aGrammarLocales;
+
+    if (xContext.is())
+    {
+        // SpellChecker
+        cpo::uno::Reference<css::linguistic2::XLinguServiceManager2> xLangSrv = css::linguistic2::LinguServiceManager::create(xContext);
+        if (xLangSrv.is())
+        {
+            cpo::uno::Reference<css::linguistic2::XSpellChecker> xSpell = xLangSrv->getSpellChecker();
+            if (xSpell.is())
+                aLocales = xSpell->getLocales();
+        }
+
+        // LanguageTool
+        if (LanguageToolCfg::IsEnabled::get())
+        {
+            uno::Reference< linguistic2::XProofreader > xGC(
+                    xContext->getServiceManager()->createInstanceWithContext(u"org.openoffice.lingu.LanguageToolGrammarChecker"_ustr, xContext),
+                    uno::UNO_QUERY_THROW );
+            uno::Reference< linguistic2::XSupportedLocales > xSuppLoc( xGC, uno::UNO_QUERY_THROW );
+            aGrammarLocales = xSuppLoc->getLocales();
+        }
+    }
+
+    boost::property_tree::ptree aTree;
+    aTree.put("commandName", pCommand);
+    boost::property_tree::ptree aValues;
+    for (css::lang::Locale const& rLocale : aLocales)
+        addLocale(aValues, rLocale);
+    for (css::lang::Locale const& rLocale : aGrammarLocales)
+        addLocale(aValues, rLocale);
+    aTree.add_child("commandValues", aValues);
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, aTree, false /* pretty */);
+    return aStream.str();
+}
+
+namespace
+{
+class FontListCache final : public CacheOwner
+{
+    std::unordered_map<OString, std::string> maCache;
+    sal_uInt64 mnGeneration = 0;
+
+public:
+    const std::string* find(const OString& rKey)
+    {
+        const sal_uInt64 nGeneration = OutputDevice::GetFontDataGeneration();
+        if (mnGeneration != nGeneration)
+        {
+            maCache.clear();
+            mnGeneration = nGeneration;
+        }
+        const auto it = maCache.find(rKey);
+        return it != maCache.end() ? &it->second : nullptr;
+    }
+
+    void store(const OString& rKey, const std::string& rValue) { maCache.emplace(rKey, rValue); }
+
+    bool dropCaches() override
+    {
+        maCache.clear();
+        return true;
+    }
+
+    void dumpState(rtl::OStringBuffer& rState) override
+    {
+        rState.append("\nFontListCache:\t");
+        rState.append(static_cast<sal_Int32>(maCache.size()));
+    }
+
+    OUString getCacheName() const override { return u"FontListCache"_ustr; }
+};
+}
+
+static std::string getFonts (const char* pCommand, const bool bBloatWithRepeatedSizes)
+{
+    DBG_TESTSOLARMUTEX();
+
+    // Cache the serialised JSON per (pCommand, layout) and hand out a
+    // fresh copy on a hit. getFonts runs only from doc_getCommandValues,
+    // which holds the SolarMutex, so this static cache needs no lock of
+    // its own. The font list is not immutable: it grows when a font is
+    // added (addfont) or a document's embedded fonts are activated, both
+    // of which advance OutputDevice's font-data generation under that
+    // same mutex. Drop the cache whenever the generation moves so a stale
+    // list is never served.
+    static FontListCache aFontsCache;
+
+    const OString aCacheKey = OString::Concat(pCommand) + (bBloatWithRepeatedSizes ? "|b" : "|c");
+    if (const std::string* pHit = aFontsCache.find(aCacheKey))
+        return *pHit;
+
+    SfxObjectShell* pDocSh = SfxObjectShell::Current();
+    if (!pDocSh)
+        return {};
+    const SvxFontListItem* pFonts = pDocSh->GetItem(SID_ATTR_CHAR_FONTLIST);
+    const FontList* pList = pFonts ? pFonts->GetFontList() : nullptr;
+
+    std::string aResult;
+    if (!bBloatWithRepeatedSizes)
+    {
+        tools::JsonWriter aJson;
+        aJson.put("commandName", pCommand);
+        if (pList)
+        {
+            auto aFontNames = aJson.startArray("FontNames");
+
+            sal_uInt16 nFontCount = pList->GetFontNameCount();
+            for (sal_uInt16 i = 0; i < nFontCount; ++i)
+                aJson.putSimpleValue(pList->GetFontName(i).GetFamilyName());
+        }
+        {
+            auto aFontSizes = aJson.startArray("FontSizes");
+            const int* pAry = FontList::GetStdSizeAry();
+            for (sal_uInt16 i = 0; pAry[i]; ++i)
+                aJson.putSimpleValue(OUString::number(static_cast<float>(pAry[i]) / 10));
+        }
+        aResult = aJson.finishAndGetAsStdString();
+    }
+    else // FIXME: remove nonsensical legacy version
+    {
+        boost::property_tree::ptree aTree;
+        aTree.put("commandName", pCommand);
+        boost::property_tree::ptree aValues;
+        if ( pList )
+        {
+            sal_uInt16 nFontCount = pList->GetFontNameCount();
+            for (sal_uInt16 i = 0; i < nFontCount; ++i)
+            {
+                boost::property_tree::ptree aChildren;
+                const FontMetric& rFontMetric = pList->GetFontName(i);
+                const int* pAry = FontList::GetStdSizeAry();
+                sal_uInt16 nSizeCount = 0;
+                while (pAry[nSizeCount])
+                {
+                    boost::property_tree::ptree aChild;
+                    aChild.put("", static_cast<float>(pAry[nSizeCount]) / 10);
+                    aChildren.push_back(std::make_pair("", aChild));
+                    nSizeCount++;
+                }
+                aValues.add_child(rFontMetric.GetFamilyName().toUtf8().getStr(), aChildren);
+            }
+        }
+        aTree.add_child("commandValues", aValues);
+        std::stringstream aStream;
+        boost::property_tree::write_json(aStream, aTree, false /* pretty */);
+        aResult = aStream.str();
+    }
+
+    aFontsCache.store(aCacheKey, aResult);
+    return aResult;
+}
+
+static std::string getFontSubset (std::string_view aFontName)
+{
+    OUString aFoundFont(::rtl::Uri::decode(OStringToOUString(aFontName, RTL_TEXTENCODING_UTF8), rtl_UriDecodeStrict, RTL_TEXTENCODING_UTF8));
+
+    boost::property_tree::ptree aTree;
+    aTree.put("commandName", ".uno:FontSubset");
+    boost::property_tree::ptree aValues;
+
+    if (const vcl::Font* pFont = FindFont(aFoundFont))
+    {
+        FontCharMapRef xFontCharMap (new FontCharMap());
+        ScopedVclPtrInstance<VirtualDevice> aDevice(DeviceFormat::WITHOUT_ALPHA);
+
+        aDevice->SetFont(*pFont);
+        aDevice->GetFontCharMap(xFontCharMap);
+        SubsetMap aSubMap(xFontCharMap);
+
+        for (auto const& subset : aSubMap.GetSubsetMap())
+        {
+            boost::property_tree::ptree aChild;
+            aChild.put("", static_cast<int>(ublock_getCode(subset.GetRangeMin())));
+            aValues.push_back(std::make_pair("", aChild));
+        }
+    }
+
+    aTree.add_child("commandValues", aValues);
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, aTree, false /* pretty */);
+    return aStream.str();
+}
+
+// Append one style to the command-values list as { text, id }, where text is the
+// localized display name (so the client toolbar/notebookbar can show it directly
+// without re-translating) and id is the programmatic name used to apply the style.
+static void addStyleEntry(boost::property_tree::ptree& rChildren,
+                          const uno::Reference<container::XNameAccess>& xStyleFamily,
+                          const OUString& rStyle)
+{
+    OUString aDisplayName = rStyle;
+    try
+    {
+        uno::Reference<beans::XPropertySet> xProperty(xStyleFamily->getByName(rStyle), uno::UNO_QUERY);
+        OUString aName;
+        if (xProperty.is()
+            && (xProperty->getPropertyValue(u"DisplayName"_ustr) >>= aName)
+            && !aName.isEmpty())
+        {
+            aDisplayName = aName;
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+    }
+
+    boost::property_tree::ptree aChild;
+    aChild.put("text", aDisplayName.toUtf8());
+    aChild.put("id", rStyle.toUtf8());
+    rChildren.push_back(std::make_pair("", aChild));
+}
+
+static std::string getComponentStyles(const cpo::uno::Reference<css::lang::XComponent>& rComponent,
+                                COKitDocumentType docType, const char* pCommand)
+{
+    boost::property_tree::ptree aTree;
+    aTree.put("commandName", pCommand);
+    uno::Reference<css::style::XStyleFamiliesSupplier> xStyleFamiliesSupplier(rComponent, uno::UNO_QUERY);
+    const uno::Reference<container::XNameAccess> xStyleFamilies = xStyleFamiliesSupplier->getStyleFamilies();
+    if (!xStyleFamilies.is())
+    {
+        return {};
+    }
+    const cpo::uno::Sequence<OUString> aStyleFamilies = xStyleFamilies->getElementNames();
+
+    static constexpr OUString aWriterStyles[] =
+    {
+        u"Text body"_ustr,
+        u"Quotations"_ustr,
+        u"Title"_ustr,
+        u"Subtitle"_ustr,
+        u"Heading 1"_ustr,
+        u"Heading 2"_ustr,
+        u"Heading 3"_ustr,
+    };
+
+    // We need to keep a list of the default style names
+    // in order to filter these out later when processing
+    // the full list of styles.
+    std::set<OUString> aDefaultStyleNames;
+
+    boost::property_tree::ptree aValues;
+    for (OUString const & sStyleFam : aStyleFamilies)
+    {
+        boost::property_tree::ptree aChildren;
+        uno::Reference<container::XNameAccess> xStyleFamily(xStyleFamilies->getByName(sStyleFam), uno::UNO_QUERY);
+
+        // Writer provides a huge number of styles, we have a list of 7 "default" styles which
+        // should be shown in the normal dropdown, which we should add to the start of the list
+        // to simplify their selection.
+        if (sStyleFam == "ParagraphStyles"
+            && docType == COKitDocumentType::TEXT)
+        {
+            for (const OUString& rStyle: aWriterStyles)
+            {
+                aDefaultStyleNames.insert( rStyle );
+                addStyleEntry(aChildren, xStyleFamily, rStyle);
+            }
+        }
+
+        const cpo::uno::Sequence<OUString> aStyles = xStyleFamily->getElementNames();
+        for (const OUString& rStyle: aStyles )
+        {
+            // Filter out the default styles - they are already at the top
+            // of the list
+            if (aDefaultStyleNames.find(rStyle) == aDefaultStyleNames.end() ||
+                (sStyleFam != "ParagraphStyles" || docType != COKitDocumentType::TEXT) )
+            {
+                addStyleEntry(aChildren, xStyleFamily, rStyle);
+            }
+        }
+
+        // Swap into an empty child instead of `add_child(key, aChildren)`;
+        // the latter deep-copies, which is O(n^2) for a large style family and
+        // dominates load time for documents with thousands of cell styles.
+        aValues.add_child(sStyleFam.toUtf8().getStr(), boost::property_tree::ptree())
+            .swap(aChildren);
+    }
+
+    // Header & Footer Styles
+    {
+        boost::property_tree::ptree aChild;
+        boost::property_tree::ptree aChildren;
+        static constexpr OUString sPageStyles(u"PageStyles"_ustr);
+        uno::Reference<beans::XPropertySet> xProperty;
+        uno::Reference<container::XNameContainer> xContainer;
+
+        if (xStyleFamilies->hasByName(sPageStyles) && (xStyleFamilies->getByName(sPageStyles) >>= xContainer))
+        {
+            const cpo::uno::Sequence<OUString> aSeqNames = xContainer->getElementNames();
+            for (OUString const & sName : aSeqNames)
+            {
+                bool bIsPhysical;
+                xProperty.set(xContainer->getByName(sName), uno::UNO_QUERY);
+                if (xProperty.is() && (xProperty->getPropertyValue(u"IsPhysical"_ustr) >>= bIsPhysical) && bIsPhysical)
+                {
+                    OUString displayName;
+                    xProperty->getPropertyValue(u"DisplayName"_ustr) >>= displayName;
+                    aChild.put("", displayName.toUtf8());
+                    aChildren.push_back(std::make_pair("", aChild));
+                }
+            }
+            aValues.add_child("HeaderFooter", boost::property_tree::ptree()).swap(aChildren);
+        }
+    }
+
+    {
+        boost::property_tree::ptree aCommandList;
+
+        {
+            boost::property_tree::ptree aChild;
+
+            OUString sClearFormat = SvxResId(RID_SVXSTR_CLEARFORM);
+
+            boost::property_tree::ptree aName;
+            aName.put("", sClearFormat.toUtf8());
+            aChild.push_back(std::make_pair("text", aName));
+
+            boost::property_tree::ptree aCommand;
+            aCommand.put("", ".uno:ResetAttributes");
+            aChild.push_back(std::make_pair("id", aCommand));
+
+            aCommandList.push_back(std::make_pair("", aChild));
+        }
+
+        aValues.add_child("Commands", boost::property_tree::ptree()).swap(aCommandList);
+    }
+
+    aTree.add_child("commandValues", boost::property_tree::ptree()).swap(aValues);
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, aTree, false /* pretty */);
+    return aStream.str();
+}
+
+static std::string getStyles(COKitDocument* pThis, const char* pCommand)
+{
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+    return getComponentStyles(pDocument->mxComponent, doc_getDocumentType(pThis), pCommand);
+}
+
+namespace {
+
+enum class UndoOrRedo
+{
+    UNDO,
+    REDO
+};
+
+}
+
+/// Returns the JSON representation of either an undo or a redo stack.
+static std::string getUndoOrRedo(COKitDocument* pThis, UndoOrRedo eCommand)
+{
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+
+    auto pBaseModel = dynamic_cast<SfxBaseModel*>(pDocument->mxComponent.get());
+    if (!pBaseModel)
+        return {};
+
+    SfxObjectShell* pObjectShell = pBaseModel->GetObjectShell();
+    if (!pObjectShell)
+        return {};
+
+    SfxUndoManager* pUndoManager = pObjectShell->GetUndoManager();
+    if (!pUndoManager)
+        return {};
+
+    if (eCommand == UndoOrRedo::UNDO)
+        return pUndoManager->GetUndoActionsInfo();
+    else
+        return pUndoManager->GetRedoActionsInfo();
+}
+
+/// Returns the JSON representation of print ranges in the document
+static std::string getPrintRanges(COKitDocument* pThis)
+{
+    ITiledRenderable* pDoc = getTiledRenderable(pThis);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    return pDoc->getPrintRanges();
+}
+
+/// Returns only the number of the undo or redo elements
+static std::string getUndoOrRedoCount(COKitDocument* pThis, UndoOrRedo eCommand)
+{
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+
+    auto pBaseModel = dynamic_cast<SfxBaseModel*>(pDocument->mxComponent.get());
+    if (!pBaseModel)
+        return {};
+
+    SfxObjectShell* pObjectShell = pBaseModel->GetObjectShell();
+    if (!pObjectShell)
+        return {};
+
+    SfxUndoManager* pUndoManager = pObjectShell->GetUndoManager();
+    if (!pUndoManager)
+        return {};
+
+    sal_Int32 nCount;
+    if (eCommand == UndoOrRedo::UNDO)
+        nCount = pUndoManager->GetUndoActionCount();
+    else
+        nCount = pUndoManager->GetRedoActionCount();
+
+    return std::string(OString::number(nCount));
+}
+
+/// Returns the JSON representation of the redline stack.
+static std::string getTrackedChanges(COKitDocument* pThis)
+{
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+
+    uno::Reference<document::XRedlinesSupplier> xRedlinesSupplier(pDocument->mxComponent, uno::UNO_QUERY);
+    tools::JsonWriter aJson;
+    // We want positions of the track changes also which is not possible from
+    // UNO. Enable positioning information for text documents only for now, so
+    // construct the tracked changes JSON from inside the sw/, not here using UNO
+    if (doc_getDocumentType(pThis) != COKitDocumentType::TEXT && xRedlinesSupplier.is())
+    {
+        auto redlinesNode = aJson.startArray("redlines");
+        uno::Reference<container::XEnumeration> xRedlines = xRedlinesSupplier->getRedlines()->createEnumeration();
+        for (size_t nIndex = 0; xRedlines->hasMoreElements(); ++nIndex)
+        {
+            uno::Reference<beans::XPropertySet> xRedline(xRedlines->nextElement(), uno::UNO_QUERY);
+            auto redlineNode = aJson.startStruct();
+            aJson.put("index", static_cast<sal_Int32>(nIndex));
+
+            OUString sAuthor;
+            xRedline->getPropertyValue(u"RedlineAuthor"_ustr) >>= sAuthor;
+            aJson.put("author", sAuthor);
+
+            OUString sType;
+            xRedline->getPropertyValue(u"RedlineType"_ustr) >>= sType;
+            aJson.put("type", sType);
+
+            OUString sComment;
+            xRedline->getPropertyValue(u"RedlineComment"_ustr) >>= sComment;
+            aJson.put("comment", sComment);
+
+            OUString sDescription;
+            xRedline->getPropertyValue(u"RedlineDescription"_ustr) >>= sDescription;
+            aJson.put("description", sDescription);
+
+            util::DateTime aDateTime;
+            xRedline->getPropertyValue(u"RedlineDateTime"_ustr) >>= aDateTime;
+            OUString sDateTime = utl::toISO8601(aDateTime);
+            aJson.put("dateTime", sDateTime);
+        }
+    }
+    else
+    {
+        ITiledRenderable* pDoc = getTiledRenderable(pThis);
+        if (!pDoc)
+        {
+            SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+            return {};
+        }
+        pDoc->getTrackedChanges(aJson);
+    }
+
+    return aJson.finishAndGetAsStdString();
+}
+
+
+/// Returns the JSON representation of the redline author table.
+static std::string getTrackedChangeAuthors(COKitDocument* pThis)
+{
+    ITiledRenderable* pDoc = getTiledRenderable(pThis);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+    tools::JsonWriter aJsonWriter;
+    pDoc->getTrackedChangeAuthors(aJsonWriter);
+    return aJsonWriter.finishAndGetAsStdString();
+}
+
+std::string COKitDocumentImpl::getCommandValues(const char* pCommand)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::getCommandValues");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    const std::string_view aCommand(pCommand);
+    static constexpr std::string_view aViewRowColumnHeaders(".uno:ViewRowColumnHeaders");
+    static constexpr std::string_view aSheetGeometryData(".uno:SheetGeometryData");
+    static constexpr std::string_view aFontSubset(".uno:FontSubset&name=");
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    if (aCommand.starts_with(".uno:VectorPrimitives"))
+    {
+        // Record on the view's callback handler that it renders from vector
+        // primitives, and in which mode. No mode named means the slides.
+        const std::map<OUString, OUString> aParameters
+            = KitHelper::parseCommandParameters(OUString::fromUtf8(aCommand));
+        sal_Int32 nRequestedMode = 0;
+        if (auto aModeIterator = aParameters.find(u"mode"_ustr); aModeIterator != aParameters.end())
+            nRequestedMode = aModeIterator->second.toInt32();
+
+        if (SfxViewShell* pViewShell = SfxViewShell::Current())
+        {
+            auto it = mpCallbackFlushHandlers.find(pViewShell->GetViewShellId().get());
+            if (it != mpCallbackFlushHandlers.end() && it->second)
+                it->second->setVectorRendering(nRequestedMode);
+
+            // Such a view draws the page from the objects it holds, which decides among other
+            // things how the handles of a selection of several objects are laid out.
+            pViewShell->setDrawsFromObjects(true);
+
+            /*
+                How long a cursor stays shown and then hidden here, as the desktop of the person
+                using it says. A client that draws something of its own that blinks - the handle
+                the keyboard works on - reads it, so that everything on the page blinks together
+                and at the speed that person set.
+            */
+            const sal_uInt64 nBlinkTime
+                = Application::GetSettings().GetStyleSettings().GetCursorBlinkTime();
+            if (nBlinkTime != STYLE_CURSOR_NOBLINKTIME)
+            {
+                pViewShell->viewCallback(COKitCallbackType::STATE_CHANGED,
+                                         ".uno:CursorBlinkTime=" + OString::number(nBlinkTime));
+            }
+        }
+    }
+
+    if (aCommand == ".uno:ReadOnly")
+    {
+        return getDocReadOnly(this);
+    }
+    else if (aCommand == ".uno:SentenceCheckingPackages")
+    {
+        return getSentenceCheckingPackages();
+    }
+    else if (aCommand == ".uno:HasPasswordToModify")
+    {
+        return getDocHasPasswordToModify(this);
+    }
+    else if (aCommand.starts_with(".uno:ExportRaisesDialog"))
+    {
+        static constexpr std::string_view aPrefix = ".uno:ExportRaisesDialog?format=";
+        if (!aCommand.starts_with(aPrefix))
+        {
+            SetLastExceptionMsg(u"Missing format parameter for .uno:ExportRaisesDialog"_ustr);
+            return {};
+        }
+
+        return getExportRaisesDialog(this, OUString::fromUtf8(aCommand.substr(aPrefix.size())));
+    }
+    else if (aCommand.starts_with(".uno:VerifyPasswordToModify"))
+    {
+        // The password parameter is URL-encoded, so it can contain any character.
+        static constexpr std::string_view aPrefix = ".uno:VerifyPasswordToModify?password=";
+        if (!aCommand.starts_with(aPrefix))
+        {
+            SetLastExceptionMsg(u"Missing password parameter for .uno:VerifyPasswordToModify"_ustr);
+            return {};
+        }
+
+        const OUString sEncoded = OUString::fromUtf8(aCommand.substr(aPrefix.size()));
+        const OUString sPassword
+            = rtl::Uri::decode(sEncoded, rtl_UriDecodeWithCharset, RTL_TEXTENCODING_UTF8);
+        return verifyDocPasswordToModify(this, sPassword);
+    }
+    else if (aCommand == ".uno:ExternalLinksDisabled")
+    {
+        return getExternalLinksDisabled(this);
+    }
+    else if (aCommand == ".uno:LanguageStatus")
+    {
+        return getLanguages(pCommand);
+    }
+    else if (aCommand == ".uno:CharFontName")
+    {
+        return getFonts(pCommand, !gUseCompactFonts);
+    }
+    else if (aCommand == ".uno:StyleApply")
+    {
+        return getStyles(this, pCommand);
+    }
+    else if (aCommand == ".uno:Undo")
+    {
+        return getUndoOrRedo(this, UndoOrRedo::UNDO);
+    }
+    else if (aCommand == ".uno:Redo")
+    {
+        return getUndoOrRedo(this, UndoOrRedo::REDO);
+    }
+    else if (aCommand == ".uno:DefinePrintArea")
+    {
+        return getPrintRanges(this);
+    }
+    else if (aCommand == ".uno:UndoCount")
+    {
+        return getUndoOrRedoCount(this, UndoOrRedo::UNDO);
+    }
+    else if (aCommand == ".uno:RedoCount")
+    {
+        return getUndoOrRedoCount(this, UndoOrRedo::REDO);
+    }
+    else if (aCommand == ".uno:AcceptTrackedChanges")
+    {
+        return getTrackedChanges(this);
+    }
+    else if (aCommand == ".uno:TrackedChangeAuthors")
+    {
+        return getTrackedChangeAuthors(this);
+    }
+    else if (aCommand == ".uno:ViewAnnotations")
+    {
+        return getPostIts(this);
+    }
+    else if (aCommand == ".uno:ViewAnnotationsPosition")
+    {
+        return getPostItsPos(this);
+    }
+    else if (aCommand == ".uno:RulerState")
+    {
+        return getRulerState(this);
+    }
+    else if (aCommand == ".uno:ViewRenderState")
+    {
+        return convertOStringToStdString(pDoc->getViewRenderState());
+    }
+    else if (aCommand == ".uno:AllPageSize")
+    {
+        return getAllPartSize(this);
+    }
+    else if (aCommand.starts_with(aViewRowColumnHeaders))
+    {
+        tools::Rectangle aRectangle;
+        if (aCommand.size() > aViewRowColumnHeaders.size())
+        {
+            // Command has parameters.
+            int nX = 0;
+            int nY = 0;
+            int nWidth = 0;
+            int nHeight = 0;
+            std::string_view aArguments = aCommand.substr(aViewRowColumnHeaders.size() + 1);
+            sal_Int32 nParamIndex = 0;
+            do
+            {
+                std::string_view aParamToken = o3tl::getToken(aArguments, 0, '&', nParamIndex);
+                sal_Int32 nIndex = 0;
+                std::string_view aKey;
+                std::string_view aValue;
+                do
+                {
+                    std::string_view aToken = o3tl::getToken(aParamToken, 0, '=', nIndex);
+                    if (aKey.empty())
+                        aKey = aToken;
+                    else
+                        aValue = aToken;
+                }
+                while (nIndex >= 0);
+                if (aKey == "x")
+                    nX = o3tl::toInt32(aValue);
+                else if (aKey == "y")
+                    nY = o3tl::toInt32(aValue);
+                else if (aKey == "width")
+                    nWidth = o3tl::toInt32(aValue);
+                else if (aKey == "height")
+                    nHeight = o3tl::toInt32(aValue);
+            }
+            while (nParamIndex >= 0);
+
+            aRectangle = tools::Rectangle(nX, nY, nX + nWidth, nY + nHeight);
+        }
+
+        tools::JsonWriter aJsonWriter;
+        pDoc->getRowColumnHeaders(aRectangle, aJsonWriter);
+        return aJsonWriter.finishAndGetAsStdString();
+    }
+    else if (aCommand.starts_with(aSheetGeometryData))
+    {
+        bool bColumns = true;
+        bool bRows = true;
+        bool bSizes = true;
+        bool bHidden = true;
+        bool bFiltered = true;
+        bool bGroups = true;
+        if (aCommand.size() > aSheetGeometryData.size())
+        {
+            bColumns = bRows = bSizes = bHidden = bFiltered = bGroups = false;
+
+            std::string_view aArguments = aCommand.substr(aSheetGeometryData.size() + 1);
+            sal_Int32 nParamIndex = 0;
+            do
+            {
+                std::string_view aParamToken = o3tl::getToken(aArguments, 0, '&', nParamIndex);
+                sal_Int32 nIndex = 0;
+                std::string_view aKey;
+                std::string_view aValue;
+                do
+                {
+                    std::string_view aToken = o3tl::getToken(aParamToken, 0, '=', nIndex);
+                    if (aKey.empty())
+                        aKey = aToken;
+                    else
+                        aValue = aToken;
+
+                } while (nIndex >= 0);
+
+                bool bEnableFlag = aValue.empty() ||
+                    o3tl::equalsIgnoreAsciiCase(aValue, "true") || o3tl::toInt32(aValue) > 0;
+                if (!bEnableFlag)
+                    continue;
+
+                if (aKey == "columns")
+                    bColumns = true;
+                else if (aKey == "rows")
+                    bRows = true;
+                else if (aKey == "sizes")
+                    bSizes = true;
+                else if (aKey == "hidden")
+                    bHidden = true;
+                else if (aKey == "filtered")
+                    bFiltered = true;
+                else if (aKey == "groups")
+                    bGroups = true;
+
+            } while (nParamIndex >= 0);
+        }
+
+        return pDoc->getSheetGeometryData(bColumns, bRows, bSizes, bHidden, bFiltered, bGroups);
+    }
+    else if (aCommand.starts_with(".uno:CellCursor"))
+    {
+        // Ignore command's deprecated parameters.
+        tools::JsonWriter aJsonWriter;
+        pDoc->getCellCursor(aJsonWriter);
+        return aJsonWriter.finishAndGetAsStdString();
+    }
+    else if (aCommand.starts_with(aFontSubset))
+    {
+        return getFontSubset(aCommand.substr(aFontSubset.size()));
+    }
+    else if (pDoc->supportsCommand(INetURLObject(OUString::fromUtf8(aCommand)).GetURLPath()))
+    {
+        tools::JsonWriter aJsonWriter;
+        pDoc->getCommandValues(aJsonWriter, aCommand);
+        return aJsonWriter.finishAndGetAsStdString();
+    }
+    else if (KitHelper::supportsCommand(INetURLObject(OUString::fromUtf8(aCommand)).GetURLPath()))
+    {
+        tools::JsonWriter aJsonWriter;
+        KitHelper::getCommandValues(aJsonWriter, aCommand);
+        return aJsonWriter.finishAndGetAsStdString();
+    }
+    else
+    {
+        SetLastExceptionMsg(OUString::fromUtf8(aCommand) + u" : Unknown command, no values returned"_ustr);
+        return {};
+    }
+}
+
+void COKitDocumentImpl::setClientZoom(int nTilePixelWidth, int nTilePixelHeight,
+                                      int nTileTwipWidth, int nTileTwipHeight)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setClientZoom");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    pDoc->setClientZoom(nTilePixelWidth, nTilePixelHeight, nTileTwipWidth, nTileTwipHeight);
+}
+
+void COKitDocumentImpl::setClientVisibleArea(int nX, int nY, int nWidth, int nHeight)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setClientVisibleArea");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    tools::Rectangle aRectangle(Point(nX, nY), Size(nWidth, nHeight));
+    pDoc->setClientVisibleArea(aRectangle);
+}
+
+void COKitDocumentImpl::setOutlineState(bool bColumn, int nLevel, int nIndex, bool bHidden)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setOutlineState");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    pDoc->setOutlineState(bColumn, nLevel, nIndex, bHidden);
+}
+
+static int doc_createViewWithOptions(COKitDocument* pThis,
+                                     const char* pOptions)
+{
+    comphelper::ProfileZone aZone("doc_createView");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    OUString aOptions = getUString(pOptions);
+    const OUString aLanguage = extractParameter(aOptions, u"Language");
+
+    const OUString aDeviceFormFactor = extractParameter(aOptions, u"DeviceFormFactor");
+    KitHelper::setDeviceFormFactor(aDeviceFormFactor);
+
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+    const int nId = KitHelper::createView(pDocument->mnDocumentId);
+
+    if (!aLanguage.isEmpty())
+    {
+        // Store the language and locale on this view, so that switching back to it
+        // later restores its own language instead of the document's default one.
+        KitHelper::setViewLanguage(nId, aLanguage);
+        KitHelper::setViewLocale(nId, aLanguage);
+    }
+
+    vcl::kit::numberOfViewsChanged(KitHelper::getViewsCount(pDocument->mnDocumentId));
+
+    forceSetClipboardForCurrentView(pThis);
+
+    return nId;
+}
+
+int COKitDocumentImpl::createView()
+{
+    return doc_createViewWithOptions(this, nullptr); // No options.
+}
+
+void COKitDocumentImpl::destroyView(int nId)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::destroyView");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+#ifndef IOS
+    KitClipboardFactory::releaseClipboardForView(nId);
+#endif
+
+    KitHelper::destroyView(nId);
+
+    vcl::kit::numberOfViewsChanged(KitHelper::getViewsCount(mnDocumentId));
+}
+
+static void doc_setView(SAL_UNUSED_PARAMETER COKitDocument* /*pThis*/, int nId)
+{
+    comphelper::ProfileZone aZone("doc_setView");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    KitHelper::setView(nId);
+}
+
+static int doc_getView(SAL_UNUSED_PARAMETER COKitDocument* pThis)
+{
+    comphelper::ProfileZone aZone("doc_getView");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+    return KitHelper::getViewId(pDocument->mnDocumentId);
+}
+
+static int doc_getViewsCount(SAL_UNUSED_PARAMETER COKitDocument* pThis)
+{
+    comphelper::ProfileZone aZone("doc_getViewsCount");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+    return KitHelper::getViewsCount(pDocument->mnDocumentId);
+}
+
+static std::vector<int> doc_getViewIds(SAL_UNUSED_PARAMETER COKitDocument* pThis)
+{
+    comphelper::ProfileZone aZone("doc_getViewsIds");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+    std::vector<int> aIds;
+    // A false return leaves the list empty, which is what the caller sees anyway.
+    KitHelper::getViewIds(pDocument->mnDocumentId, aIds);
+    return aIds;
+}
+
+void COKitDocumentImpl::setViewLanguage(int nId, const char* language)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setViewLanguage");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    OUString sLanguage = OStringToOUString(language, RTL_TEXTENCODING_UTF8);
+    KitHelper::setViewLanguage(nId, sLanguage);
+    KitHelper::setViewLocale(nId, sLanguage);
+}
+
+COKitBitmap doc_renderFontOrientation(SAL_UNUSED_PARAMETER COKitDocument* /*pThis*/,
+                              const char* pFontName,
+                              const char* pChar,
+                              int nRequestedWidth,
+                              int nRequestedHeight,
+                              int nOrientation)
+{
+    comphelper::ProfileZone aZone("doc_renderFont");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    const int nDefaultFontSize = 25;
+
+    auto aFont = FindFont_FallbackToDefault(OStringToOUString(pFontName, RTL_TEXTENCODING_UTF8));
+
+    OUString aText(OStringToOUString(pChar, RTL_TEXTENCODING_UTF8));
+    if (aText.isEmpty())
+        aText = aFont.GetFamilyName();
+
+    ScopedVclPtrInstance<VirtualDevice> aDevice(DeviceFormat::WITHOUT_ALPHA);
+    ::tools::Rectangle aRect;
+    aFont.SetFontSize(Size(0, nDefaultFontSize));
+    aFont.SetOrientation(Degree10(nOrientation));
+    aDevice->SetFont(aFont);
+    aDevice->GetTextBoundRect(aRect, aText);
+    if (aRect.IsEmpty())
+        return {};
+
+    int nFontWidth = aRect.Right() + 1;
+    int nFontHeight = aRect.Bottom() + 1;
+
+    if (nFontWidth <= 0 || nFontHeight <= 0)
+        return {};
+
+    if (nRequestedWidth > 0 && nRequestedHeight > 0)
+    {
+        double fScaleX = nRequestedWidth / static_cast<double>(nFontWidth) / 1.5;
+        double fScaleY = nRequestedHeight / static_cast<double>(nFontHeight) / 1.5;
+
+        double fScale = std::min(fScaleX, fScaleY);
+
+        if (fScale >= 1.0)
+        {
+            int nFontSize = fScale * nDefaultFontSize;
+            aFont.SetFontSize(Size(0, nFontSize));
+            aDevice->SetFont(aFont);
+        }
+
+        aRect = tools::Rectangle(0, 0, nRequestedWidth, nRequestedHeight);
+
+        nFontWidth = nRequestedWidth;
+        nFontHeight = nRequestedHeight;
+
+    }
+
+    std::vector<unsigned char> aPixels(4 * nFontWidth * nFontHeight, 0);
+
+    aDevice->SetBackground(Wallpaper(COL_TRANSPARENT));
+    aDevice->SetOutputSizePixelScaleOffsetAndKitBuffer(
+                Size(nFontWidth, nFontHeight), 1.0, Point(),
+                aPixels.data());
+
+    if (nRequestedWidth > 0 && nRequestedHeight > 0)
+    {
+        DrawTextFlags const nStyle =
+                DrawTextFlags::Center
+                | DrawTextFlags::VCenter
+                | DrawTextFlags::MultiLine
+                | DrawTextFlags::WordBreak;// | DrawTextFlags::WordBreakHyphenation ;
+
+        aDevice->DrawText(aRect, aText, nStyle);
+    }
+    else
+    {
+        aDevice->DrawText(Point(0,0), aText);
+    }
+
+    return { std::move(aPixels), nFontWidth, nFontHeight };
+}
+
+
+void COKitDocumentImpl::paintWindow(unsigned nKitWindowId, std::span<unsigned char> aBuffer,
+                                    const int nX, const int nY, const int nWidth, const int nHeight)
+{
+    doc_paintWindowDPI(this, nKitWindowId, aBuffer, nX, nY, nWidth, nHeight, 1.0);
+}
+
+static void doc_paintWindowDPI(COKitDocument* pThis, unsigned nKitWindowId,
+                               std::span<unsigned char> aBuffer,
+                               const int nX, const int nY,
+                               const int nWidth, const int nHeight,
+                               const double fDPIScale)
+{
+    doc_paintWindowForView(pThis, nKitWindowId, aBuffer, nX, nY, nWidth, nHeight, fDPIScale, -1);
+}
+
+static void doc_paintWindowForView(COKitDocument* pThis, unsigned nKitWindowId,
+                                   std::span<unsigned char> aBuffer, const int nX, const int nY,
+                                   const int nWidth, const int nHeight,
+                                   const double fDPIScale, int viewId)
+{
+    comphelper::ProfileZone aZone("doc_paintWindowDPI");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    VclPtr<Window> pWindow = vcl::Window::FindKitWindow(nKitWindowId);
+    if (!pWindow)
+    {
+        SetLastExceptionMsg(u"Document doesn't support dialog rendering, or window not found."_ustr);
+        return;
+    }
+
+    // Used to avoid work in setView if set.
+    comphelper::COKit::setDialogPainting(true);
+
+    if (viewId >= 0)
+        doc_setView(pThis, viewId);
+
+    // Setup cairo (or CoreGraphics, in the iOS case) to draw with the changed DPI scale (and return
+    // back to 1.0 when the painting finishes)
+    comphelper::ScopeGuard dpiScaleGuard([]() { comphelper::COKit::setDPIScale(1.0); });
+    comphelper::COKit::setDPIScale(fDPIScale);
+
+#if defined(IOS)
+    // Online uses COKitTileMode::RGBA by default so flip the normal flags
+    // to kCGImageAlphaNoneSkipLast | kCGImageByteOrder32Big
+    CGContextRef cgc = CGBitmapContextCreate(aBuffer.data(), nWidth, nHeight, 8, nWidth*4, CGColorSpaceCreateDeviceRGB(), uint32_t(kCGImageAlphaNoneSkipLast) | uint32_t(kCGImageByteOrder32Big));
+
+    CGContextTranslateCTM(cgc, 0, nHeight);
+    CGContextScaleCTM(cgc, fDPIScale, -fDPIScale);
+
+    SystemGraphicsData aData;
+    aData.rCGContext = cgc;
+
+    ScopedVclPtrInstance<VirtualDevice> pDevice(aData, Size(1, 1), DeviceFormat::WITHOUT_ALPHA);
+    pDevice->SetBackground(Wallpaper(COL_TRANSPARENT));
+
+    pDevice->SetOutputSizePixel(Size(nWidth, nHeight));
+
+    MapMode aMapMode(pDevice->GetMapMode());
+    aMapMode.SetOrigin(Point(-(nX / fDPIScale), -(nY / fDPIScale)));
+    pDevice->SetMapMode(aMapMode);
+
+    pWindow->PaintToDevice(pDevice.get(), Point(0, 0));
+
+    CGContextRelease(cgc);
+
+#else
+
+    ScopedVclPtrInstance<VirtualDevice> pDevice(DeviceFormat::WITHOUT_ALPHA);
+    pDevice->SetBackground(Wallpaper(COL_TRANSPARENT));
+
+    pDevice->SetOutputSizePixelScaleOffsetAndKitBuffer(Size(nWidth, nHeight), 1.0, Point(),
+                                                       aBuffer.data());
+
+    MapMode aMapMode(pDevice->GetMapMode());
+    aMapMode.SetOrigin(Point(-(nX / fDPIScale), -(nY / fDPIScale)));
+    pDevice->SetMapMode(aMapMode);
+
+    pWindow->PaintToDevice(pDevice.get(), Point(0, 0));
+#endif
+
+    comphelper::COKit::setDialogPainting(false);
+}
+
+static void doc_postWindow(COKitDocument* /*pThis*/, unsigned nKitWindowId,
+                           COKitWindowAction eAction, const char* pData)
+{
+    comphelper::ProfileZone aZone("doc_postWindow");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    VclPtr<Window> pWindow = vcl::Window::FindKitWindow(nKitWindowId);
+    if (!pWindow)
+    {
+        SetLastExceptionMsg(u"Document doesn't support dialog rendering, or window not found."_ustr);
+        return;
+    }
+
+    if (eAction == COKitWindowAction::CLOSE)
+    {
+        vcl::CloseTopLevel(pWindow);
+    }
+    else if (eAction == COKitWindowAction::PASTE)
+    {
+#ifndef IOS
+        OUString aMimeType;
+        cpo::uno::Sequence<sal_Int8> aData;
+        std::vector<beans::PropertyValue> aArgs(jsonToPropertyValuesVector(pData));
+        {
+            aArgs.size() == 2 &&
+            aArgs[0].Name == "MimeType" && (aArgs[0].Value >>= aMimeType) &&
+            aArgs[1].Name == "Data" && (aArgs[1].Value >>= aData);
+        }
+
+        if (!aMimeType.isEmpty() && aData.hasElements())
+        {
+            uno::Reference<datatransfer::XTransferable> xTransferable(new KitTransferable(aMimeType, aData));
+            uno::Reference<datatransfer::clipboard::XClipboard> xClipboard(new KitClipboard);
+            xClipboard->setContents(xTransferable, uno::Reference<datatransfer::clipboard::XClipboardOwner>());
+            pWindow->SetClipboard(xClipboard);
+
+            KeyEvent aEvent(0, KEY_PASTE, 0);
+            Application::PostKeyEvent(VclEventId::WindowKeyInput, pWindow, &aEvent);
+        }
+        else
+            SetLastExceptionMsg(u"Window command 'paste': wrong parameters."_ustr);
+#else
+        (void) pData;
+        assert(!"doc_postWindow() with COKitWindowAction::PASTE should not be called on iOS");
+#endif
+    }
+}
+
+// CERTIFICATE AND DOCUMENT SIGNING
+bool COKitDocumentImpl::insertCertificate(std::span<const unsigned char> aCertificateBinary,
+                                          std::span<const unsigned char> aPrivateKeyBinary)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::insertCertificate");
+
+    if (!xContext.is())
+        return false;
+
+
+    if (!mxComponent.is())
+        return false;
+
+    SfxBaseModel* pBaseModel = dynamic_cast<SfxBaseModel*>(mxComponent.get());
+    if (!pBaseModel)
+        return false;
+
+    SfxObjectShell* pObjectShell = pBaseModel->GetObjectShell();
+
+    if (!pObjectShell)
+        return false;
+
+    uno::Reference<security::XCertificate> xCertificate = KitHelper::getSigningCertificate(
+        asStringView(aCertificateBinary), asStringView(aPrivateKeyBinary));
+    if (!xCertificate.is())
+        return false;
+
+    SolarMutexGuard aGuard;
+
+    svl::crypto::SigningContext aSigningContext;
+    aSigningContext.m_xCertificate = std::move(xCertificate);
+    return pObjectShell->SignDocumentContentUsingCertificate(aSigningContext);
+}
+
+bool COKitDocumentImpl::addCertificate(std::span<const unsigned char> aCertificateBinary)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::addCertificate");
+
+    if (!xContext.is())
+        return false;
+
+
+    if (!mxComponent.is())
+        return false;
+
+    SfxBaseModel* pBaseModel = dynamic_cast<SfxBaseModel*>(mxComponent.get());
+    if (!pBaseModel)
+        return false;
+
+    SfxObjectShell* pObjectShell = pBaseModel->GetObjectShell();
+
+    if (!pObjectShell)
+        return false;
+
+    uno::Reference<xml::crypto::XSEInitializer> xSEInitializer = xml::crypto::SEInitializer::create(xContext);
+    uno::Reference<xml::crypto::XXMLSecurityContext> xSecurityContext = xSEInitializer->createSecurityContext(OUString());
+    if (!xSecurityContext.is())
+        return false;
+
+    uno::Reference<xml::crypto::XSecurityEnvironment> xSecurityEnvironment = xSecurityContext->getSecurityEnvironment();
+    uno::Reference<xml::crypto::XCertificateCreator> xCertificateCreator(xSecurityEnvironment, uno::UNO_QUERY);
+
+    if (!xCertificateCreator.is())
+        return false;
+
+    cpo::uno::Sequence<sal_Int8> aCertificateSequence;
+
+    std::string_view aCertificateBase64String
+        = KitHelper::extractCertificate(asStringView(aCertificateBinary));
+    if (!aCertificateBase64String.empty())
+    {
+        comphelper::Base64::decode(aCertificateSequence, aCertificateBase64String);
+    }
+    else
+    {
+        aCertificateSequence.realloc(aCertificateBinary.size());
+        std::copy(aCertificateBinary.begin(), aCertificateBinary.end(),
+                  aCertificateSequence.getArray());
+    }
+
+    uno::Reference<security::XCertificate> xCertificate = KitHelper::addCertificate(xCertificateCreator, aCertificateSequence);
+
+    if (!xCertificate.is())
+        return false;
+
+    SAL_INFO("kit", "Certificate Added = IssuerName: " << xCertificate->getIssuerName() << " SubjectName: " << xCertificate->getSubjectName());
+
+    return true;
+}
+
+static int doc_getSignatureState(COKitDocument* pThis)
+{
+    comphelper::ProfileZone aZone("doc_getSignatureState");
+
+    COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
+
+    if (!pDocument->mxComponent.is())
+        return int(SignatureState::UNKNOWN);
+
+    SfxBaseModel* pBaseModel = dynamic_cast<SfxBaseModel*>(pDocument->mxComponent.get());
+    if (!pBaseModel)
+        return int(SignatureState::UNKNOWN);
+
+    SfxObjectShell* pObjectShell = pBaseModel->GetObjectShell();
+    if (!pObjectShell)
+        return int(SignatureState::UNKNOWN);
+
+    SolarMutexGuard aGuard;
+
+    pObjectShell->RecheckSignature(false);
+
+    return int(pObjectShell->GetDocumentSignatureState());
+}
+
+void COKitDocumentImpl::resizeWindow(unsigned nKitWindowId, const int nWidth, const int nHeight)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    VclPtr<Window> pWindow = vcl::Window::FindKitWindow(nKitWindowId);
+    if (!pWindow)
+    {
+        SetLastExceptionMsg(u"Document doesn't support dialog resizing, or window not found."_ustr);
+        return;
+    }
+
+    pWindow->SetSizePixel(Size(nWidth, nHeight));
+}
+
+void COKitDocumentImpl::completeFunction(const char* pFunctionName)
+{
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    pDoc->completeFunction(OUString::fromUtf8(pFunctionName));
+}
+
+
+void COKitDocumentImpl::sendFormFieldEvent(const char* pArguments)
+{
+    SolarMutexGuard aGuard;
+
+    // Supported in Writer only
+    if (doc_getDocumentType(this) != COKitDocumentType::TEXT)
+            return;
+
+    StringMap aMap(jsdialog::jsonToStringMap(pArguments));
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering!"_ustr);
+        return;
+    }
+
+    // Sanity check
+    if (!aMap.contains(u"type"_ustr) || !aMap.contains(u"cmd"_ustr))
+    {
+        SetLastExceptionMsg(u"Wrong arguments for sendFormFieldEvent!"_ustr);
+        return;
+    }
+
+    pDoc->executeFromFieldEvent(aMap);
+}
+
+COKitBitmap COKitDocumentImpl::renderSearchResult(const char* pSearchResult)
+{
+    if (doc_getDocumentType(this) != COKitDocumentType::TEXT)
+        return {};
+
+    if (!pSearchResult || pSearchResult[0] == '\0')
+        return {};
+
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return {};
+    }
+
+    auto aRectangleVector = pDoc->getSearchResultRectangles(pSearchResult);
+
+    // combine into a rectangle union
+    basegfx::B2DRange aRangeUnion;
+    for (basegfx::B2DRange const & rRange : aRectangleVector)
+    {
+        aRangeUnion.expand(rRange);
+    }
+
+    int aPixelWidth = o3tl::convert(aRangeUnion.getWidth(), o3tl::Length::twip, o3tl::Length::px);
+    int aPixelHeight = o3tl::convert(aRangeUnion.getHeight(), o3tl::Length::twip, o3tl::Length::px);
+
+    const size_t nByteSize = aPixelWidth * aPixelHeight * 4;
+
+    std::vector<unsigned char> aPixels(nByteSize);
+
+    doc_paintTile(this, aPixels,
+        aPixelWidth, aPixelHeight,
+        aRangeUnion.getMinX(), aRangeUnion.getMinY(),
+        aRangeUnion.getWidth(), aRangeUnion.getHeight());
+
+    return { std::move(aPixels), aPixelWidth, aPixelHeight };
+}
+
+void COKitDocumentImpl::sendContentControlEvent(const char* pArguments)
+{
+    SolarMutexGuard aGuard;
+
+    // Supported in Writer only
+    if (doc_getDocumentType(this) != COKitDocumentType::TEXT)
+    {
+        return;
+    }
+
+    if (SfxViewShell::IsCurrentKitViewReadOnly())
+        return;
+
+    StringMap aMap(jsdialog::jsonToStringMap(pArguments));
+    ITiledRenderable* pDoc = getTiledRenderable(this);
+    if (!pDoc)
+    {
+        SetLastExceptionMsg(u"Document doesn't support tiled rendering"_ustr);
+        return;
+    }
+
+    // Sanity check
+    if (!aMap.contains(u"type"_ustr))
+    {
+        SetLastExceptionMsg(u"Missing 'type' argument for sendContentControlEvent"_ustr);
+        return;
+    }
+
+    pDoc->executeContentControlEvent(aMap);
+}
+
+void COKitDocumentImpl::setViewTimezone(int nId, const char* pTimezone)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setViewTimezone");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    // Leave the default if we get a null timezone.
+    if (pTimezone)
+    {
+        OUString sTimezone = OStringToOUString(pTimezone, RTL_TEXTENCODING_UTF8);
+        KitHelper::setViewTimezone(nId, true, sTimezone);
+    }
+}
+
+void COKitDocumentImpl::setViewReadOnly(int nId, const bool readOnly)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setViewReadOnly");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    KitHelper::setViewReadOnly(nId, readOnly);
+}
+
+void COKitDocumentImpl::setAllowChangeComments(int nId, const bool allow)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setAllowChangeComments");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    KitHelper::setAllowChangeComments(nId, allow);
+}
+
+void COKitDocumentImpl::setAllowManageRedlines(int nId, bool allow)
+{
+    comphelper::ProfileZone aZone("COKitDocumentImpl::setAllowManageRedlines");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    KitHelper::setAllowManageRedlines(nId, allow);
+}
+
+void COKitDocumentImpl::setAccessibilityState(int nId, bool nEnabled)
+{
+    SolarMutexGuard aGuard;
+
+    COKitDocumentType eDocType = lcl_getDocumentType(this);
+    if (!(eDocType == COKitDocumentType::TEXT || eDocType == COKitDocumentType::PRESENTATION
+          || eDocType == COKitDocumentType::SPREADSHEET))
+        return;
+
+    KitHelper::setAccessibilityState(nId, nEnabled);
+}
+
+void COKitDocumentImpl::setColorPreviewState(int nId, bool bEnabled)
+{
+    SolarMutexGuard aGuard;
+    KitHelper::setColorPreviewState(nId, bEnabled);
+}
+
+COKitScriptResult COKitImpl::executeScript(
+    char const * script, std::string_view source, int line,
+    std::function<void(void * data, std::string_view level, std::string_view message)>
+        consoleCallback,
+    void * consoleCallbackData,
+    void (*proxyCallback) (void * data, char const * payload), void * proxyCallbackData)
+{
+    comphelper::ProfileZone zone("lo_executeScript");
+    SolarMutexGuard guard;
+    SetLastExceptionMsg();
+    COKitScriptResult aScriptResult;
+#if HAVE_FEATURE_QUICKJS
+    std::function<void(OUString const&)> hook;
+    if (proxyCallback != nullptr) {
+        hook = [proxyCallback, proxyCallbackData](OUString const & payload) {
+            OString const utf8(payload.toUtf8());
+            proxyCallback(proxyCallbackData, utf8.getStr());
+        };
+    }
+    try {
+        OUString value = jsuno::execute(
+            OUString::fromUtf8(script), OUString::fromUtf8(source), line,
+            [consoleCallback, consoleCallbackData](OUString const & level, OUString const & message)
+            { consoleCallback(consoleCallbackData, level.toUtf8(), message.toUtf8()); },
+            std::move(hook), &aScriptResult.bUsedLegacyUnoApi);
+        if (!value.isEmpty()) {
+            aScriptResult.oResult = convertOUStringToStdString(value);
+        }
+    } catch (jsuno::Exception const & exception) {
+        // Ship as a JSON object; the receiver (ChildSession::executeScript) recognises the leading
+        // '{' and splices it in as a JSON value rather than an escaped string.
+        SetLastExceptionMsg(exception.message);
+        tools::JsonWriter w;
+        w.put("message", exception.message);
+        w.put("name", exception.name);
+        {
+            auto const frames = w.startArray("stack");
+            for (auto const & f: exception.stack) {
+                auto const obj = w.startStruct();
+                w.put("source", f.source);
+                w.put("line", f.line);
+                w.put("column", f.column);
+                w.put("functionName", f.functionName);
+            }
+        }
+        aScriptResult.oError = convertOStringToStdString(w.finishAndGetAsOString());
+    } catch (cpo::uno::Exception const & exception) {
+        SetLastExceptionMsg(exception.Message);
+        aScriptResult.oError = convertOUStringToStdString(exception.Message);
+    }
+#else
+    (void) script;
+    (void) source;
+    (void) line;
+    (void) consoleCallback;
+    (void) consoleCallbackData;
+    (void) proxyCallback;
+    (void) proxyCallbackData;
+    static constexpr auto msg = u"executeScript: QuickJS support is not enabled in this build"_ustr;
+    SetLastExceptionMsg(msg);
+    aScriptResult.oError = convertOUStringToStdString(msg);
+#endif
+    return aScriptResult;
+}
+
+void COKitImpl::deliverProxyResult(char const * callId, char const * jsonValue)
+{
+    comphelper::ProfileZone zone("lo_deliverProxyResult");
+    SolarMutexGuard guard;
+    SetLastExceptionMsg();
+#if HAVE_FEATURE_QUICKJS
+    jsuno::deliverProxyResult(OUString::fromUtf8(callId), OUString::fromUtf8(jsonValue));
+#else
+    (void) callId;
+    (void) jsonValue;
+#endif
+}
+
+void COKitImpl::cancelProxyCall(char const * callId)
+{
+    comphelper::ProfileZone zone("lo_cancelProxyCall");
+    // jsuno owns its own locks for the call hook and pending-results map, so no SolarMutex:
+#if HAVE_FEATURE_QUICKJS
+    jsuno::cancelProxyCall(OUString::fromUtf8(callId));
+#else
+    (void) callId;
+#endif
+}
+
+bool COKitImpl::isExpectedReentry()
+{
+    return vcl::kit::isExpectedReentry();
+}
+
+bool COKitImpl::takeLegacyUnoApiUseFlag()
+{
+    return comphelper::takeLegacyUnoApiUseFlag();
+}
+
+std::string COKitImpl::getError()
+{
+    comphelper::ProfileZone aZone("COKitImpl::getError");
+
+    SolarMutexGuard aGuard;
+
+    return convertOUStringToStdString(maLastExceptionMsg);
+}
+
+void COKitImpl::setOptionalFeatures(COKitOptionalFeatures const features)
+{
+    comphelper::ProfileZone aZone("COKitImpl::setOptionalFeatures");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    mOptionalFeatures = features;
+    if ((features & COKitOptionalFeatures::RANGE_HEADERS)
+        != COKitOptionalFeatures::NONE)
+        comphelper::COKit::setRangeHeaders(true);
+}
+
+void COKitImpl::setDocumentPassword(const char* pURL, const char* pPassword)
+{
+    comphelper::ProfileZone aZone("COKitImpl::setDocumentPassword");
+
+    SolarMutexGuard aGuard;
+    SetLastExceptionMsg();
+
+    assert(pURL);
+    std::map<OString, rtl::Reference<KitInteractionHandler>>::const_iterator const it
+        = mInteractionMap.find(OString(pURL));
+    assert(it != mInteractionMap.end());
+    if (it != mInteractionMap.end())
+        it->second->SetPassword(pPassword);
+    else
+        SetLastExceptionMsg(
+            u"COKitImpl::setDocumentPassword: no interaction handler for the given URL"_ustr);
+}
+
+std::string COKitImpl::getVersionInfo()
+{
+    SetLastExceptionMsg();
+    return convertOUStringToStdString(ReplaceStringHookProc(
+        u"{ "
+        "\"ProductName\": \"%PRODUCTNAME\", "
+        "\"ProductVersion\": \"%PRODUCTVERSION\", "
+        "\"ProductExtension\": \"%PRODUCTEXTENSION\", "
+        "\"BuildId\": \"%BUILDID\""
+#if BUILDCONFIG_RECORDED
+        ", \"BuildConfig\": \"" BUILDCONFIG "\""
+#endif
+        " }"_ustr));
+}
+
+static void aBasicErrorFunc(const OUString& rError, const OUString& rAction)
+{
+    OString aBuffer = "Unexpected dialog: " +
+        OUStringToOString(rAction, RTL_TEXTENCODING_ASCII_US) +
+        " Error: " +
+        OUStringToOString(rError, RTL_TEXTENCODING_ASCII_US);
+
+    fprintf(stderr, "Unexpected basic error dialog '%s'\n", aBuffer.getStr());
+}
+
+static bool initialize_uno(const OUString& aAppProgramURL)
+{
+    // Honor explicit overrides so that embedders (e.g. LibreOfficeKit
+    // consumers) can relocate fundamentalrc/unorc outside the install dir.
+    // Check the process environment directly first because initialize_uno is
+    // invoked before the rtl bootstrap has loaded any ini file.
+    const char* pBootstrapEnv = getenv("URE_BOOTSTRAP");
+    const bool bHasBootstrapOverride = pBootstrapEnv && *pBootstrapEnv;
+#ifdef IOS
+    const char* pUnoIniEnv = getenv("URE_UNO_INI_URI");
+    const bool bHasUnoIniOverride = pUnoIniEnv && *pUnoIniEnv;
+    if (!bHasBootstrapOverride)
+    {
+        rtl::Bootstrap::setIniFilename(aAppProgramURL + "/" SAL_CONFIGFILE("fundamental"));
+    }
+    if (bHasUnoIniOverride)
+    {
+        // Fall through to the no-arg overload so that getUnoIniUri() (and
+        // thus the URE_UNO_INI_URI override) is honored.
+        xContext = cppu::defaultBootstrap_InitialComponentContext();
+    }
+    else
+    {
+        xContext = cppu::defaultBootstrap_InitialComponentContext(aAppProgramURL + "/rc");
+    }
+#elif defined MACOSX
+    if (!bHasBootstrapOverride)
+        rtl::Bootstrap::setIniFilename(aAppProgramURL + "/../Resources/" SAL_CONFIGFILE("soffice"));
+    xContext = cppu::defaultBootstrap_InitialComponentContext();
+#else
+    if (!bHasBootstrapOverride)
+        rtl::Bootstrap::setIniFilename(aAppProgramURL + "/" SAL_CONFIGFILE("soffice"));
+    xContext = cppu::defaultBootstrap_InitialComponentContext();
+#endif
+
+    if (!xContext.is())
+    {
+        SetLastExceptionMsg(u"XComponentContext could not be created"_ustr);
+        SAL_INFO("kit", "XComponentContext could not be created");
+        return false;
+    }
+
+    xFactory = xContext->getServiceManager();
+    if (!xFactory.is())
+    {
+        SetLastExceptionMsg(u"XMultiComponentFactory could not be created"_ustr);
+        SAL_INFO("kit", "XMultiComponentFactory could not be created");
+        return false;
+    }
+
+    xSFactory.set(xFactory, uno::UNO_QUERY_THROW);
+    comphelper::setProcessServiceFactory(xSFactory);
+
+    SAL_INFO("kit", "Uno initialized  - " <<  xContext.is());
+
+    // set UserInstallation to user profile dir in test/user-template
+//    rtl::Bootstrap aDefaultVars;
+//    aDefaultVars.set(OUString("UserInstallation"), aAppProgramURL + "../registry" );
+    // configmgr setup ?
+
+    return true;
+}
+
+// pre-unipoll version.
+static void lo_startmain(void*)
+{
+    osl_setThreadName("lo_startmain");
+
+    if (comphelper::SolarMutex::get())
+        Application::GetSolarMutex().tryToAcquire();
+
+    Application::UpdateMainThread();
+
+    soffice_main();
+
+    Application::ReleaseSolarMutex();
+}
+
+// unipoll version.
+void COKitImpl::runLoop(COKitPollCallback pPollCallback, COKitWakeCallback pWakeCallback,
+                        void* pData)
+{
+#if defined(IOS) || defined(ANDROID)
+    Application::GetSolarMutex().acquire();
+#endif
+
+    {
+        SolarMutexGuard aGuard;
+
+        vcl::kit::registerPollCallbacks(pPollCallback, pWakeCallback, pData);
+        KitHelper::registerViewCallbacks();
+        Application::UpdateMainThread();
+        soffice_main();
+    }
+#if defined(IOS) || defined(ANDROID)
+    vcl::kit::unregisterPollCallbacks();
+    Application::ReleaseSolarMutex();
+#endif
+}
+
+void COKitImpl::registerAnyInputCallback(COKitAnyInputCallback pAnyInputCallback, void* pData)
+{
+    SolarMutexGuard aGuard;
+    comphelper::COKit::setAnyInputCallback(pAnyInputCallback, pData, []() -> int {
+        return Scheduler::GetMostUrgentTaskPriority();
+    });
+}
+
+void COKitImpl::registerFileSaveDialogCallback(COKitFileSaveDialogCallback pFileSaveDialogCallback)
+{
+    SolarMutexGuard aGuard;
+    comphelper::COKit::setFileSaveDialogCallback(pFileSaveDialogCallback);
+}
+
+void COKitImpl::registerRevealInFileManagerCallback(
+    COKitRevealInFileManagerCallback pRevealInFileManagerCallback)
+{
+    SolarMutexGuard aGuard;
+    comphelper::COKit::setRevealInFileManagerCallback(pRevealInFileManagerCallback);
+}
+
+int COKitImpl::getDocsCount()
+{
+    SolarMutexGuard aGuard;
+    return KitHelper::getDocsCount();
+
+}
+
+static void lo_status_indicator_callback(void *data, comphelper::COKit::statusIndicatorCallbackType type, int percent, const char* pText)
+{
+    COKitImpl* pLib = static_cast<COKitImpl*>(data);
+
+    if (!pLib->mpCallback)
+        return;
+
+    switch (type)
+    {
+    case comphelper::COKit::statusIndicatorCallbackType::Start:
+        pLib->mpCallback(COKitCallbackType::STATUS_INDICATOR_START, pText, pLib->mpCallbackData);
+        break;
+    case comphelper::COKit::statusIndicatorCallbackType::SetValue:
+        pLib->mpCallback(COKitCallbackType::STATUS_INDICATOR_SET_VALUE,
+            OUString(OUString::number(percent)).toUtf8().getStr(), pLib->mpCallbackData);
+        break;
+    case comphelper::COKit::statusIndicatorCallbackType::Finish:
+        pLib->mpCallback(COKitCallbackType::STATUS_INDICATOR_FINISH, nullptr, pLib->mpCallbackData);
+        break;
+    }
+}
+
+/// Used by preloadData (COKit) for providing different shortcuts for different languages.
+static void preLoadShortCutAccelerators()
+{
+    std::unordered_map<OUString, cpo::uno::Reference<css::ui::XAcceleratorConfiguration>>& acceleratorConfs = KitHelper::getAcceleratorConfs();
+    cpo::uno::Sequence<OUString> installedLocales(officecfg::Setup::Office::InstalledLocales::get()->getElementNames());
+    OUString actualLang = officecfg::Setup::L10N::ooLocale::get();
+
+    for (sal_Int32 i = 0; i < installedLocales.getLength(); i++)
+    {
+        // Set the UI language to current one, before creating the accelerator.
+        std::shared_ptr<comphelper::ConfigurationChanges> batch(comphelper::ConfigurationChanges::create());
+        officecfg::Setup::L10N::ooLocale::set(installedLocales[i], batch);
+        batch->commit();
+
+        // Supported module names: Writer, Calc, Draw, Impress
+        static constexpr OUString supportedModuleNames[] = {
+            u"com.sun.star.text.TextDocument"_ustr,
+            u"com.sun.star.sheet.SpreadsheetDocument"_ustr,
+            u"com.sun.star.drawing.DrawingDocument"_ustr,
+            u"com.sun.star.presentation.PresentationDocument"_ustr,
+        };
+        // Create the accelerators.
+        for (const OUString& supportedModuleName : supportedModuleNames)
+        {
+            OUString key = supportedModuleName + installedLocales[i];
+            acceleratorConfs[key] = svt::AcceleratorExecute::kit_createNewAcceleratorConfiguration(::comphelper::getProcessComponentContext(), supportedModuleName);
+        }
+    }
+
+    // Set the UI language back to default one.
+    std::shared_ptr<comphelper::ConfigurationChanges> batch(comphelper::ConfigurationChanges::create());
+    officecfg::Setup::L10N::ooLocale::set(actualLang, batch);
+    batch->commit();
+}
+
+static void preLoadTypeDetection()
+{
+    uno::Reference<document::XTypeDetection> xTypeDetection(
+        xFactory->createInstanceWithContext(u"com.sun.star.document.TypeDetection"_ustr, xContext),
+        uno::UNO_QUERY);
+    if (xTypeDetection)
+    {
+        SvMemoryStream aMemory;
+        // just enough to check zip based type detection
+        const sal_uInt8 aMinimalZip[30] = { 0x50, 0x4b, 0x03, 0x04,
+                                            0x14, 0x00, 0x00, 0x08 };
+        aMemory.WriteBytes(aMinimalZip, std::size(aMinimalZip));
+        uno::Reference<io::XStream> xInputStream = new utl::OStreamWrapper(aMemory);
+
+        cpo::uno::Sequence<beans::PropertyValue> aMediaDesc(2);
+        auto pArgs = aMediaDesc.getArray();
+        pArgs[0].Name = u"URL"_ustr;
+        pArgs[0].Value <<= u"private:stream"_ustr;
+        pArgs[1].Name = u"InputStream"_ustr;
+        pArgs[1].Value <<= xInputStream;
+
+        xTypeDetection->queryTypeByDescriptor(aMediaDesc, true);
+    }
+}
+
+/// Used only by COKit when used by Online to pre-initialize
+static void preloadData()
+{
+    comphelper::ProfileZone aZone("preload data");
+
+    // Preload against a scratch profile, so whatever is warmed up here does
+    // not leave anything behind in the one the kits will use.
+    OUString sUserPath;
+    rtl::Bootstrap::get(u"UserInstallation"_ustr, sUserPath);
+    utl::TempFileNamed aTempDir(nullptr, true);
+    aTempDir.EnableKillingFile();
+    rtl::Bootstrap::set(u"UserInstallation"_ustr, aTempDir.GetURL());
+
+    // Nothing ships as an extension, so nothing has to be registered as one.
+    // Make sure nothing goes looking either: the walk is pure cost, and it
+    // writes into the profile it walks.
+    ::rtl::Bootstrap::set( u"DISABLE_EXTENSION_SYNCHRONIZATION"_ustr, u"true"_ustr);
+
+    std::cerr << "Preload textencodings"; // sal_textenc
+    // Use RTL_TEXTENCODING_MS_1250 to trigger Impl_getTextEncodingData
+    // to dlopen sal_textenclo
+    (void)OUStringToOString(u"arbitrary string", RTL_TEXTENCODING_MS_1250);
+    std::cerr << "\n";
+
+    // setup LanguageTool config before spell checking init
+    cpo::uno::Sequence<css::lang::Locale> aLTLocales = setLanguageToolConfig();
+    if (aLTLocales.getLength())
+    {
+        std::cerr << "Remote linguistic service languages: ";
+        for (auto &it : std::as_const(aLTLocales))
+            std::cerr << LanguageTag::convertToBcp47(it) << " ";
+        std::cerr << "\n";
+    }
+
+    // preload all available dictionaries
+    linguistic2::DictionaryList::create(comphelper::getProcessComponentContext());
+    cpo::uno::Reference<css::linguistic2::XLinguServiceManager> xLngSvcMgr =
+        css::linguistic2::LinguServiceManager::create(comphelper::getProcessComponentContext());
+    cpo::uno::Reference<linguistic2::XSpellChecker> xSpellChecker(xLngSvcMgr->getSpellChecker());
+
+    std::cerr << "Preloading local dictionaries: ";
+    cpo::uno::Reference<linguistic2::XSupportedLocales> xSpellLocales(xSpellChecker, cpo::uno::UNO_QUERY_THROW);
+    cpo::uno::Sequence< css::lang::Locale > aLocales = xSpellLocales->getLocales();
+    for (const auto& it : aLocales)
+    {
+        std::cerr << LanguageTag::convertToBcp47(it) << " ";
+        css::beans::PropertyValues aNone;
+        xSpellChecker->isValid(u"forcefed"_ustr, it, aNone);
+    }
+    std::cerr << "\n";
+
+    // Hack to load and cache the module liblocaledata_others.so which is not loaded normally
+    // (when loading dictionaries of just non-Asian locales). Creating a XCalendar of one Asian locale
+    // will cheaply load this missing "others" locale library. Appending an Asian locale in
+    // KIT_ALLOWLIST_LANGUAGES env-var also works but at the cost of loading that dictionary.
+    cpo::uno::Reference< css::i18n::XCalendar > xCal = css::i18n::LocaleCalendar::create(comphelper::getProcessComponentContext());
+    css::lang::Locale aAsianLocale = { u"hi"_ustr, u"IN"_ustr, {} };
+    xCal->loadDefaultCalendar(aAsianLocale);
+
+    // preload all available thesauri
+    cpo::uno::Reference<linguistic2::XThesaurus> xThesaurus(xLngSvcMgr->getThesaurus());
+    cpo::uno::Reference<linguistic2::XSupportedLocales> xThesLocales(xThesaurus, cpo::uno::UNO_QUERY_THROW);
+    aLocales = xThesLocales->getLocales();
+    std::cerr << "Preloading local thesauri: ";
+    for (const auto& it : aLocales)
+    {
+        std::cerr << LanguageTag::convertToBcp47(it) << " ";
+        css::beans::PropertyValues aNone;
+        xThesaurus->queryMeanings(u"forcefed"_ustr, it, aNone);
+    }
+    std::cerr << "\n";
+
+    // preload all available hyphenators
+    cpo::uno::Reference<linguistic2::XHyphenator> xHyphenator(xLngSvcMgr->getHyphenator());
+    cpo::uno::Reference<linguistic2::XSupportedLocales> xHyphLocales(xHyphenator, cpo::uno::UNO_QUERY_THROW);
+    aLocales = xHyphLocales->getLocales();
+    std::cerr << "Preloading local hyphenators: ";
+    for (auto &it : std::as_const(aLocales))
+    {
+        std::cerr << LanguageTag::convertToBcp47(it) << " ";
+        css::beans::PropertyValues aNone;
+        xHyphenator->createPossibleHyphens(u"forcefed"_ustr, it, aNone);
+    }
+    std::cerr << "\n";
+
+    std::cerr << "Preloading breakiterator\n";
+    if (aLocales.getLength())
+    {
+        cpo::uno::Reference< css::i18n::XBreakIterator > xBreakIterator = css::i18n::BreakIterator::create(xContext);
+        css::i18n::LineBreakUserOptions aUserOptions;
+        css::i18n::LineBreakHyphenationOptions aHyphOptions( LinguMgr::GetHyphenator(), cpo::uno::Sequence<beans::PropertyValue>(), 1 );
+        xBreakIterator->getLineBreak(u""_ustr, /*nMaxBreakPos*/0, aLocales[0], /*nMinBreakPos*/0, aHyphOptions, aUserOptions);
+    }
+
+    cpo::uno::Reference< css::ui::XAcceleratorConfiguration > xGlobalCfg = css::ui::GlobalAcceleratorConfiguration::create(
+        comphelper::getProcessComponentContext());
+    xGlobalCfg->getAllKeyEvents();
+
+    std::cerr << "Preload icons\n";
+    ImageTree &images = ImageTree::get();
+    images.getImageUrl(u"forcefed.png"_ustr, u"style"_ustr, u"FO_oo"_ustr);
+
+    std::cerr << "Preload short cut accelerators\n";
+    preLoadShortCutAccelerators();
+
+    std::cerr << "Preload languages\n";
+
+    // force load language singleton
+    SvtLanguageTable::HasLanguageType(LANGUAGE_SYSTEM);
+    (void)LanguageTag::isValidBcp47(u"foo"_ustr, nullptr);
+
+    std::cerr << "Preload fonts\n";
+
+    // Initialize fonts.
+    cpo::uno::Reference<css::linguistic2::XLinguServiceManager2> xLangSrv = css::linguistic2::LinguServiceManager::create(xContext);
+    if (xLangSrv.is())
+    {
+        cpo::uno::Reference<css::linguistic2::XSpellChecker> xSpell = xLangSrv->getSpellChecker();
+        if (xSpell.is())
+            aLocales = xSpell->getLocales();
+    }
+
+    for (const auto& aLocale : aLocales)
+    {
+        //TODO: Add more types and cache more aggressively. For now this initializes the fontcache.
+        using namespace ::com::sun::star::i18n::ScriptType;
+        LanguageType nLang;
+        nLang = MsLangId::resolveSystemLanguageByScriptType(LanguageTag::convertToLanguageType(aLocale, false), LATIN);
+        OutputDevice::GetDefaultFont(DefaultFontType::LATIN_SPREADSHEET, nLang, GetDefaultFontFlags::OnlyOne);
+        nLang = MsLangId::resolveSystemLanguageByScriptType(LanguageTag::convertToLanguageType(aLocale, false), ASIAN);
+        OutputDevice::GetDefaultFont(DefaultFontType::CJK_SPREADSHEET, nLang, GetDefaultFontFlags::OnlyOne);
+        nLang = MsLangId::resolveSystemLanguageByScriptType(LanguageTag::convertToLanguageType(aLocale, false), COMPLEX);
+        OutputDevice::GetDefaultFont(DefaultFontType::CTL_SPREADSHEET, nLang, GetDefaultFontFlags::OnlyOne);
+    }
+
+    std::cerr << "Preload module UI configuration\n";
+    try
+    {
+        uno::Reference<css::ui::XModuleUIConfigurationManagerSupplier> xUICfgSupplier =
+            css::ui::theModuleUIConfigurationManagerSupplier::get(xContext);
+        uno::Reference<container::XNameAccess> xModules(
+            css::frame::ModuleManager::create(xContext), uno::UNO_QUERY_THROW);
+        for (const OUString& rModule : xModules->getElementNames())
+        {
+            try
+            {
+                xUICfgSupplier->getUIConfigurationManager(rModule);
+            }
+            catch (const cpo::uno::Exception&)
+            {
+            }
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+    }
+
+    std::cerr << "Preload config\n";
+#if defined __GNUC__ || defined __clang__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#endif
+    static SvtOptionsDialogOptions aDialogOptions;
+    static SvtCTLOptions aSvtCTLOptions;
+    static svtools::ColorConfig aColorConfig;
+    static SvtMiscOptions aSvtMiscOptions;
+    static SvtCommandOptions aSvtCommandOptions;
+    static SvtLinguConfig aSvtLinguConfig;
+    static SvtModuleOptions aSvtModuleOptions;
+    static SvtPathOptions aSvtPathOptions;
+    static SvtSearchOptions aSvtSearchOptions;
+    static SvtSysLocaleOptions aSvtSysLocaleOptions;
+    static SvtUserOptions aSvtUserOptions;
+    //static SvtViewOptions aSvtViewOptions;
+    static AllSettings aAllSettings;
+#if defined __GNUC__ || defined __clang__
+#pragma GCC diagnostic pop
+#endif
+
+    struct PreloadComponent
+    {
+        OUString factory;
+        OUString sampleImage;
+    };
+
+    static constexpr PreloadComponent preloadComponents[] = {
+        { u"private:factory/swriter"_ustr, u".uno:StyleApply"_ustr },
+        { u"private:factory/scalc"_ustr, u".uno:NumberFormatCurrency"_ustr },
+        { u"private:factory/simpress"_ustr, u".uno:MoveSlideLast"_ustr },
+        { u"private:factory/sdraw"_ustr, u".uno:MovePageLast"_ustr }
+    };
+    // getting the remote LibreOffice service manager
+    uno::Reference<frame::XDesktop> xCompLoader(frame::Desktop::create(xContext));
+
+    // Preload and close each of the main components once to initialize global state
+    cpo::uno::Sequence<css::beans::PropertyValue> szEmptyArgs(0);
+    for (const auto& component : preloadComponents)
+    {
+        auto xComp = xCompLoader->loadComponentFromURL(component.factory, u"_blank"_ustr, 0, szEmptyArgs);
+
+        if (component.factory == "private:factory/swriter")
+        {
+            // Query document styles to initialize writer's on-demand created table style globals
+            getComponentStyles(xComp, COKitDocumentType::TEXT, ".uno:StyleApply");
+        }
+
+        uno::Reference<frame::XModel> xModel(xComp, uno::UNO_QUERY);
+        cpo::uno::Reference<css::frame::XController> xController(xModel ? xModel->getCurrentController() : nullptr);
+        cpo::uno::Reference<css::frame::XFrame> xFrame(xController ? xController->getFrame() : nullptr);
+        SAL_WARN_IF(!xFrame, "kit", "Unable to get ImageList for:" << component.factory);
+        if (xFrame)
+        {
+            // Query for some image specific to this module to load all the modules command images.
+            vcl::CommandInfoProvider::GetXGraphicForCommand(component.sampleImage, xFrame);
+            // Query for some image that is in the global command list of commands to populate that
+            // separate cache
+            vcl::CommandInfoProvider::GetXGraphicForCommand(u".uno:CharFontName"_ustr, xFrame);
+        }
+
+        xComp->dispose();
+    }
+
+    // Preload typedetection
+    preLoadTypeDetection();
+
+    // Set user profile's path back to the original one
+    rtl::Bootstrap::set(u"UserInstallation"_ustr, sUserPath);
+
+    // Note that unotools::Bootstrap has initialized from the temp UserInstallation at this point
+    // see Bootstrap::reloadData for when it gets resynced
+}
+
+namespace {
+
+void activateNotebookbar(std::u16string_view rApp)
+{
+    OUString aPath = OUString::Concat("org.openoffice.Office.UI.ToolbarMode/Applications/") + rApp;
+
+    const utl::OConfigurationTreeRoot aAppNode(xContext, aPath, true);
+
+    if (aAppNode.isValid())
+    {
+        aAppNode.setNodeValue(u"Active"_ustr, Any(u"notebookbar_online.ui"_ustr));
+        aAppNode.commit();
+    }
+}
+
+void setHelpRootURL()
+{
+    const char* pHelpRootURL = ::getenv("KIT_HELP_URL");
+    if (pHelpRootURL)
+    {
+        OUString aHelpRootURL = OStringToOUString(pHelpRootURL, RTL_TEXTENCODING_UTF8);
+        try
+        {
+            std::shared_ptr<comphelper::ConfigurationChanges> batch(comphelper::ConfigurationChanges::create());
+            officecfg::Office::Common::Help::HelpRootURL::set(aHelpRootURL, batch);
+            batch->commit();
+        }
+        catch (cpo::uno::Exception const& rException)
+        {
+            SAL_WARN("kit", "Failed to set the help root URL: " << rException.Message);
+        }
+    }
+}
+
+void setCertificateDir()
+{
+    const char* pEnvVarString = ::getenv("LO_CERTIFICATE_DATABASE_PATH");
+    if (pEnvVarString)
+    {
+        OUString aCertificateDatabasePath = OStringToOUString(pEnvVarString, RTL_TEXTENCODING_UTF8);
+        try
+        {
+            std::shared_ptr<comphelper::ConfigurationChanges> pBatch(comphelper::ConfigurationChanges::create());
+            officecfg::Office::Common::Security::Scripting::CertDir::set(aCertificateDatabasePath, pBatch);
+            officecfg::Office::Common::Security::Scripting::ManualCertDir::set(aCertificateDatabasePath, pBatch);
+            pBatch->commit();
+        }
+        catch (cpo::uno::Exception const& rException)
+        {
+            SAL_WARN("kit", "Failed to set the NSS certificate database directory: " << rException.Message);
+        }
+    }
+}
+
+void setDeeplConfig()
+{
+    const char* pAPIUrlString = ::getenv("DEEPL_API_URL");
+    const char* pAuthKeyString = ::getenv("DEEPL_AUTH_KEY");
+    if (pAPIUrlString && pAuthKeyString)
+    {
+        OUString aAPIUrl = OStringToOUString(pAPIUrlString, RTL_TEXTENCODING_UTF8);
+        OUString aAuthKey = OStringToOUString(pAuthKeyString, RTL_TEXTENCODING_UTF8);
+        try
+        {
+            std::shared_ptr<comphelper::ConfigurationChanges> batch(comphelper::ConfigurationChanges::create());
+            officecfg::Office::Linguistic::Translation::Deepl::ApiURL::set(aAPIUrl, batch);
+            officecfg::Office::Linguistic::Translation::Deepl::AuthKey::set(aAuthKey, batch);
+            batch->commit();
+        }
+        catch(cpo::uno::Exception const& rException)
+        {
+            SAL_WARN("kit", "Failed to set Deepl API settings: " << rException.Message);
+        }
+    }
+}
+
+}
+
+static int lo_initialize(COKit* pThis, const char* pAppPath, const char* pUserProfileUrl)
+{
+    enum {
+        PRE_INIT,     // setup shared data in master process
+        SECOND_INIT,  // complete init. after fork
+        FULL_INIT     // do a standard complete init.
+    } eStage;
+
+    // Did we do a pre-initialize
+    static bool bPreInited = false;
+    static bool bUnipoll = false;
+    static bool bProfileZones = false;
+    static bool bNotebookbar = false;
+
+    { // cf. string lifetime for preinit
+        std::vector<OUString> aOpts;
+
+        // ':' delimited options - avoiding ABI change for new parameters
+        const char *pOptions = getenv("SAL_KIT_OPTIONS");
+        if (pOptions)
+            aOpts = comphelper::string::split(OUString(pOptions, strlen(pOptions), RTL_TEXTENCODING_UTF8), ':');
+        for (const auto &it : aOpts)
+        {
+            if (it == "unipoll")
+                bUnipoll = true;
+            if (it == "compact_fonts")
+                gUseCompactFonts = true;
+            else if (it == "profile_events")
+                bProfileZones = true;
+            else if (it == "sc_no_grid_bg")
+                comphelper::COKit::setCompatFlag(
+                    comphelper::COKit::Compat::scNoGridBackground);
+            else if (it == "sc_print_twips_msgs")
+                comphelper::COKit::setCompatFlag(
+                    comphelper::COKit::Compat::scPrintTwipsMsgs);
+            else if (it == "notebookbar")
+                bNotebookbar = true;
+        }
+    }
+
+#ifdef LINUX
+    // Enforce SAL_ALLOWED_PATHS:
+    rtl_alloc_preInit(2);
+#endif
+
+    if (const char* pAllowlist = ::getenv("KIT_HOST_ALLOWLIST"))
+        HostFilter::setAllowedHosts(pAllowlist);
+
+    if (const char* pHostExemptVerifyHost = ::getenv("KIT_HOST_ALLOWLIST_EXEMPT_VERIFY_HOST"))
+        HostFilter::setAllowedHostsExemptVerifyHost(strncmp(pHostExemptVerifyHost,"1", 1) == 0);
+
+    if (const char* pExtRefPaths = ::getenv("KIT_ALLOWED_EXTREF_PATHS"))
+        HostFilter::setAllowedExtRefPaths(pExtRefPaths);
+
+    // What stage are we at ?
+    if (pThis == nullptr)
+    {
+        eStage = PRE_INIT;
+        if (cok_preinit_2_called)
+        {
+            SAL_INFO("kit", "Create libreoffice object");
+            gImpl = new COKitImpl();
+        }
+    }
+    else if (bPreInited)
+        eStage = SECOND_INIT;
+    else
+        eStage = FULL_INIT;
+
+    COKitImpl* pLib = static_cast<COKitImpl*>(pThis);
+
+    if (bInitialized)
+        return 1;
+
+    // Turn profile zones on early
+    if (bProfileZones && eStage == SECOND_INIT)
+    {
+        comphelper::TraceEvent::startRecording();
+        traceEventDumper = new TraceEventDumper();
+    }
+
+    comphelper::ProfileZone aZone("kit-init");
+
+    if (eStage == PRE_INIT)
+    {
+        rtl_alloc_preInit(1);
+
+        // Set the default timezone to the TZ envar, if set.
+        const char* tz = ::getenv("TZ");
+        KitHelper::setDefaultTimezone(!!tz, tz ? OStringToOUString(tz, RTL_TEXTENCODING_UTF8)
+                                                  : OUString());
+#ifdef UNX
+        if (urandom < 0)
+            urandom = open("/dev/urandom", O_RDONLY);
+#endif
+    }
+
+    if (eStage != SECOND_INIT)
+        comphelper::COKit::setActive();
+
+    if (eStage != PRE_INIT)
+        comphelper::COKit::setStatusIndicatorCallback(lo_status_indicator_callback, pLib);
+
+    OUString aAppPath;
+    if (pAppPath)
+    {
+        aAppPath = OUString(pAppPath, strlen(pAppPath), RTL_TEXTENCODING_UTF8);
+    }
+    else
+    {
+#if defined ANDROID || defined __EMSCRIPTEN__
+        if (const char* pAppDataDir = lo_get_app_data_dir())
+        {
+            aAppPath = OUString::fromUtf8(pAppDataDir) + "/program";
+        }
+        else
+#endif
+        {
+            // Fun conversion dance back and forth between URLs and system paths...
+            OUString aAppURL;
+            (void)::osl::Module::getUrlFromAddress(reinterpret_cast<oslGenericFunction>(lo_initialize),
+                                                   aAppURL);
+            osl::FileBase::getSystemPathFromFileURL( aAppURL, aAppPath );
+        }
+
+#ifdef IOS
+        // The above gives something like
+        // "/private/var/containers/Bundle/Application/953AA851-CC15-4C60-A2CB-C2C6F24E6F71/Foo.app/Foo",
+        // and we want to drop the final component (the binary name).
+        sal_Int32 lastSlash = aAppPath.lastIndexOf('/');
+        assert(lastSlash > 0);
+        aAppPath = aAppPath.copy(0, lastSlash);
+#endif
+    }
+
+    OUString aAppURL;
+    if (osl::FileBase::getFileURLFromSystemPath(aAppPath, aAppURL) != osl::FileBase::E_None)
+        return 0;
+
+    if (pUserProfileUrl)
+    {
+        OUString url(
+            pUserProfileUrl, strlen(pUserProfileUrl), RTL_TEXTENCODING_UTF8);
+        OUString path;
+        if (url.startsWithIgnoreAsciiCase("vnd.sun.star.pathname:", &path))
+        {
+            OUString url2;
+            osl::FileBase::RC e = osl::FileBase::getFileURLFromSystemPath(
+                path, url2);
+            if (e == osl::FileBase::E_None)
+                url = url2;
+            else
+                SAL_WARN("kit", "resolving <" << url << "> failed with " << +e);
+        }
+
+        rtl::Bootstrap::set(u"UserInstallation"_ustr, url);
+        rtl::Bootstrap::set(u"BRAND_BASE_DIR"_ustr, aAppURL + "/..");
+        if (eStage == SECOND_INIT)
+        {
+            comphelper::rng::reseed();
+
+            utl::Bootstrap::reloadData();
+
+            // Now that bootstrap User/Shared installation paths have been (re)set to the final
+            // location, reinitialize the PathSubstitution rules and PathSettings so that
+            // $(userurl)/$(instdir) path variables will be expanded using these newly set
+            // paths and not the paths detected during preinit which used unorthodox throwaway
+            // temp locations
+
+            // First reinitialize the PathSubstitution rules
+            uno::Reference<css::util::XStringSubstitution> xPathSubst(util::PathSubstitution::create(xContext));
+            uno::Reference<lang::XInitialization> xReInitSubstitution(xPathSubst, uno::UNO_QUERY_THROW);
+            xReInitSubstitution->initialize({});
+
+            // PathSettings depend on PathSubstitution rules
+            uno::Reference<css::util::XPathSettings> xPathSettings = util::thePathSettings::get(xContext);
+            uno::Reference<lang::XInitialization> xReInitSettings(xPathSettings, uno::UNO_QUERY_THROW);
+            xReInitSettings->initialize({});
+            reInitDictionaryList();
+            SvxAutoCorrCfg::Get().ReloadPaths();
+        }
+    }
+
+#ifdef IOS
+    // A LibreOffice-using iOS app should have the ICU data file in the app bundle. Initialize ICU
+    // to use that.
+    NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
+
+    // ...or use the path from LIBREOFFICE_ICU_DATA when the embedder wants ICU.dat to live
+    // outside the app bundle (e.g. inside a framework's resource directory).
+    const char *icuDataEnv = ::getenv("LIBREOFFICE_ICU_DATA");
+    const char *icuDataPath = icuDataEnv
+        ? icuDataEnv
+        : [[bundlePath stringByAppendingPathComponent:@"ICU.dat"] UTF8String];
+
+    int fd = open(icuDataPath, O_RDONLY);
+    if (fd == -1)
+        NSLog(@"Could not open ICU data file %s", icuDataPath);
+    else
+    {
+        struct stat st;
+        if (fstat(fd, &st) == -1)
+            NSLog(@"fstat on ICU data file failed: %s", strerror(errno));
+        else
+        {
+            void *icudata = mmap(0, (size_t) st.st_size, PROT_READ, MAP_FILE|MAP_PRIVATE, fd, 0);
+            if (icudata == MAP_FAILED)
+                NSLog(@"mmap failed: %s", strerror(errno));
+            else
+            {
+                UErrorCode icuStatus = U_ZERO_ERROR;
+                udata_setCommonData(icudata, &icuStatus);
+                if (U_FAILURE(icuStatus))
+                    NSLog(@"udata_setCommonData failed");
+                else
+                {
+                    // Quick test that ICU works...
+                    UConverter *cnv = ucnv_open("iso-8859-3", &icuStatus);
+                    if (U_SUCCESS(icuStatus))
+                        ucnv_close(cnv);
+                    else
+                        NSLog(@"ucnv_open() failed: %s", u_errorName(icuStatus));
+                }
+            }
+        }
+        close(fd);
+    }
+#endif
+
+    try
+    {
+        if (eStage != SECOND_INIT)
+        {
+            SAL_INFO("kit", "Attempting to initialize UNO");
+
+            if (!initialize_uno(aAppURL))
+                return 0;
+
+            // Force headless -- this is only for bitmap rendering.
+            rtl::Bootstrap::set(u"SAL_USE_VCLPLUGIN"_ustr, u"svp"_ustr);
+
+            // We specifically need to make sure we have the "headless"
+            // command arg set (various code specifically checks via
+            // CommandLineArgs):
+            desktop::Desktop::GetCommandLineArgs().setHeadless();
+
+#ifdef IOS
+            if (InitVCL())
+            {
+                static bool bFirstTime = true;
+                if (bFirstTime)
+                {
+                    Application::GetSolarMutex().release();
+                    bFirstTime = false;
+                }
+            }
+            SfxApplication::GetOrCreate();
+#endif
+
+
+            // Configure system language early, before InitVCL() and service
+            // manager preload trigger locale-dependent code paths.
+            MsLangId::setConfiguredSystemUILanguage(LANGUAGE_ENGLISH_US);
+            LanguageTag::setConfiguredSystemLanguage(LANGUAGE_ENGLISH_US);
+
+            if (eStage == PRE_INIT)
+            {
+                {
+                    comphelper::ProfileZone aInit("Init vcl");
+                    std::cerr << "Init vcl\n";
+                    InitVCL();
+                }
+
+                // pre-load all component libraries.
+                if (!xContext.is())
+                    throw cpo::uno::DeploymentException(u"preInit: XComponentContext is not created"_ustr);
+
+                cpo::uno::Reference< cpo::uno::XInterface > xService;
+                xContext->getValueByName(u"/singletons/com.sun.star.lang.theServiceManager"_ustr) >>= xService;
+                if (!xService.is())
+                    throw cpo::uno::DeploymentException(u"preInit: XMultiComponentFactory is not created"_ustr);
+
+                cpo::uno::Reference<css::lang::XInitialization> aService(
+                    xService, cpo::uno::UNO_QUERY_THROW);
+
+                // pre-requisites:
+                // In order to load implementations and invoke
+                // component factory it is required:
+                // 1) defaultBootstrap_InitialComponentContext()
+                // 2) comphelper::setProcessServiceFactory(xSFactory);
+                // 3) InitVCL()
+                {
+                    comphelper::ProfileZone aInit("preload");
+                    aService->initialize({cpo::uno::Any(u"preload"_ustr)});
+                }
+                { // Force load some modules
+                    comphelper::ProfileZone aInit("preload modules");
+                    VclBuilderPreload();
+                    VclAbstractDialogFactory::Create();
+                }
+
+                setLanguageAndLocale(u"en-US"_ustr);
+
+                preloadData();
+
+                // Release Solar Mutex, lo_startmain thread should acquire it.
+                Application::ReleaseSolarMutex();
+            }
+            else
+                setLanguageAndLocale(u"en-US"_ustr);
+        }
+
+        if (eStage != PRE_INIT)
+        {
+            SAL_INFO("kit", "Re-initialize temp paths");
+            SvtPathOptions aOptions;
+            OUString aNewTemp;
+            osl::FileBase::getTempDirURL(aNewTemp);
+            aOptions.SetTempPath(aNewTemp);
+            // The work path has to be somewhere that exists inside the jail
+            aOptions.SetWorkPath(aNewTemp);
+            desktop::Desktop::CreateTemporaryDirectory();
+
+            // The RequestHandler is specifically set to be ready when all the other
+            // init in Desktop::Main (run from soffice_main) is done. We can enable
+            // the RequestHandler here (without starting any IPC thread;
+            // shortcutting the invocation in Desktop::Main that would start the IPC
+            // thread), and can then use it to wait until we're definitely ready to
+            // continue.
+
+            SAL_INFO("kit", "Enabling RequestHandler");
+            RequestHandler::Enable(false);
+            SAL_INFO("kit", "Starting soffice_main");
+            RequestHandler::SetReady(false);
+            if (!bUnipoll)
+            {
+                // Start the main thread only in non-unipoll mode (i.e. multithreaded).
+                pLib->maThread = osl_createThread(lo_startmain, nullptr);
+                SAL_INFO("kit", "Waiting for RequestHandler");
+                RequestHandler::WaitForReady();
+                SAL_INFO("kit", "RequestHandler ready -- continuing");
+            }
+            else
+                InitVCL();
+        }
+
+        if (eStage != SECOND_INIT)
+            ErrorRegistry::RegisterDisplay(aBasicErrorFunc);
+
+        SAL_INFO("kit", "COKit Initialized");
+        if (eStage == PRE_INIT)
+            bPreInited = true;
+        else
+            bInitialized = true;
+    }
+    catch (cpo::uno::Exception& exception)
+    {
+        fprintf(stderr, "Bootstrapping exception '%s'\n",
+                 OUStringToOString(exception.Message, RTL_TEXTENCODING_UTF8).getStr());
+    }
+
+    if (eStage == PRE_INIT)
+    {
+        comphelper::ThreadPool::getSharedOptimalPool().shutdown();
+    }
+
+// Turn off quick editing on iOS, Android and Emscripten
+#if defined IOS || defined ANDROID || defined __EMSCRIPTEN__
+    if (officecfg::Office::Impress::Misc::TextObject::QuickEditing::get())
+    {
+        std::shared_ptr<comphelper::ConfigurationChanges> batch(comphelper::ConfigurationChanges::create());
+        officecfg::Office::Impress::Misc::TextObject::QuickEditing::set(false, batch);
+        batch->commit();
+    }
+#endif
+
+
+    setHelpRootURL();
+    setCertificateDir();
+    setDeeplConfig();
+    setLanguageToolConfig();
+
+    if (bNotebookbar)
+    {
+        std::shared_ptr<comphelper::ConfigurationChanges> batch(comphelper::ConfigurationChanges::create());
+        officecfg::Office::UI::ToolbarMode::ActiveWriter::set(u"notebookbar_online.ui"_ustr, batch);
+        officecfg::Office::UI::ToolbarMode::ActiveCalc::set(u"notebookbar_online.ui"_ustr, batch);
+        officecfg::Office::UI::ToolbarMode::ActiveImpress::set(u"notebookbar_online.ui"_ustr, batch);
+        officecfg::Office::UI::ToolbarMode::ActiveDraw::set(u"notebookbar_online.ui"_ustr, batch);
+        batch->commit();
+
+        activateNotebookbar(u"Writer");
+        activateNotebookbar(u"Calc");
+        activateNotebookbar(u"Impress");
+        activateNotebookbar(u"Draw");
+    }
+
+    // staticize all strings.
+    if (eStage == PRE_INIT)
+        rtl_alloc_preInit(0);
+
+    return bInitialized ? 1 : 0;
+}
+
+extern "C" {
+
+SAL_JNI_EXPORT
+COKit *cokit_hook_2(const char* install_path, const char* user_profile_url)
+{
+    static bool alreadyCalled = false;
+
+    if ((!cok_preinit_2_called && !gImpl) || (cok_preinit_2_called && !alreadyCalled))
+    {
+        alreadyCalled = true;
+
+        if (!cok_preinit_2_called)
+        {
+            SAL_INFO("kit", "Create libreoffice object");
+            gImpl = new COKitImpl();
+        }
+
+        if (!lo_initialize(gImpl, install_path, user_profile_url))
+        {
+            delete gImpl;
+        }
+    }
+    return static_cast<COKit*>(gImpl);
+}
+
+SAL_JNI_EXPORT
+COKit *cokit_hook(const char* install_path)
+{
+    return cokit_hook_2(install_path, nullptr);
+}
+
+SAL_JNI_EXPORT
+int cok_preinit(const char* install_path, const char* user_profile_url)
+{
+    return lo_initialize(nullptr, install_path, user_profile_url);
+}
+
+SAL_JNI_EXPORT
+int cok_preinit_2(const char* install_path, const char* user_profile_url, COKit** kit)
+{
+    cok_preinit_2_called = true;
+    int result = lo_initialize(nullptr, install_path, user_profile_url);
+    if (kit != nullptr)
+        *kit = gImpl;
+    return result;
+}
+
+} // extern "C"
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

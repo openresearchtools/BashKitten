@@ -1,0 +1,70 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <connectiondependent.hxx>
+
+#include <com/sun/star/sdb/tools/XObjectNames.hpp>
+
+#include <cppuhelper/implbase.hxx>
+
+#include <memory>
+
+namespace sdbtools
+{
+
+    // ObjectNames
+    typedef ::cppu::WeakImplHelper<   css::sdb::tools::XObjectNames
+                                  >   ObjectNames_Base;
+    /** default implementation for XObjectNames
+    */
+    class ObjectNames   :public ObjectNames_Base
+                        ,public ConnectionDependentComponent
+    {
+    public:
+        /** constructs the instance
+
+            @param _rContext
+                the component's context
+            @param  _rxConnection
+                the connection to work with. Will be held weak. Must not be <NULL/>.
+
+            @throws css::lang::NullPointerException
+                if _rxConnection is <NULL/>
+        */
+        ObjectNames(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& _rContext,
+            const cpo::uno::Reference< css::sdbc::XConnection >& _rxConnection
+        );
+
+        // XObjectNames
+        virtual void checkNameForCreate( ::sal_Int32 CommandType, const OUString& Name ) override;
+
+    protected:
+        virtual ~ObjectNames() override;
+
+    private:
+        ObjectNames( const ObjectNames& ) = delete;
+        ObjectNames& operator=( const ObjectNames& ) = delete;
+    };
+
+} // namespace sdbtools
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,9 @@
+fontconfig/cypress-fonts.conf
+node_modules
+cypress
+package-lock.json
+workdir
+support/commands.js
+coverage
+.nyc_output
+integration_tests/snapshots/actual

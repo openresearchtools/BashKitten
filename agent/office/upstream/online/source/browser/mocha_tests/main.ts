@@ -1,0 +1,84 @@
+/* -*- js-indent-level: 8 -*- */
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+// Load the interfaces first.
+/// <reference path="../src/control/jsdialog/Definitions.Types.ts" />
+/// <reference path="../src/app/iface/Clipboard.Interface.ts" />
+/// <reference path="../src/app/iface/Control.Interface.ts" />
+/// <reference path="../src/app/iface/DocLayer.Interface.ts" />
+/// <reference path="../src/app/iface/Map.Interface.ts" />
+/// <reference path="../src/app/iface/MapZoom.Interface.ts" />
+/// <reference path="../src/app/iface/SocketTypes.Interface.ts" />
+/// <reference path="../src/app/iface/TraceEvents.Interface.ts" />
+/// <reference path="../src/app/iface/Welcome.Interface.ts" />
+/// <reference path="../src/global.d.ts" />
+
+/// <reference path="./refs/globals.ts" />
+/// <reference path="./sources.ts" />
+/// <reference path="./helper/canvasContainerSetup.ts" />
+/// <reference path="./helper/matchMediaMock.ts" />
+/// <reference path="./helper/fakeClock.ts" />
+/// <reference path="./helper/rectUtil.ts" />
+/// <reference path="./helper/Events.ts"/>
+/// <reference path="./helper/util.ts"/>
+/// <reference path="./helper/CanvasRecorder.ts"/>
+/// <reference path="./helper/ScratchCanvasStub.ts"/>
+/// <reference path="./helper/Path2DRecorder.ts"/>
+/// <reference path="./helper/ImageRecorder.ts"/>
+/// <reference path="./helper/VectorRenderingReference.ts"/>
+/// <reference path="./data/LOUtilTestData.ts"/>
+/// <reference path="./data/SheetGeometryTestData.ts" />
+
+/// <reference path="./DPIChangeListener.test.ts" />
+/// <reference path="./CanvasSectionContainer.test.ts" />
+/// <reference path="./CBounds.test.ts" />
+/// <reference path="./CleanupSidebar.test.ts" />
+/// <reference path="./SlideAvatars.test.ts" />
+/// <reference path="./CPointSet.test.ts" />
+/// <reference path="./Events.test.ts" />
+/// <reference path="./LOUtil.test.ts" />
+/// <reference path="./Rectangle.test.ts" />
+/// <reference path="./SheetGeometry.test.ts" />
+/// <reference path="./Util.test.ts" />
+/// <reference path="./ViewLayout.test.ts" />
+/// <reference path="./ServerCommand.test.ts" />
+/// <reference path="./DomUtil.test.ts" />
+/// <reference path="./Shortcuts.test.ts" />
+/// <reference path="./VectorPrimitiveRenderer.test.ts" />
+/// <reference path="./Matrix2D.test.ts" />
+/// <reference path="./Point.test.ts" />
+/// <reference path="./Range2D.test.ts" />
+/// <reference path="./VectorGradientFrame.test.ts" />
+/// <reference path="./VectorColorModifiers.test.ts" />
+/// <reference path="./VectorColorFilters.test.ts" />
+/// <reference path="./VectorModifiedImages.test.ts" />
+/// <reference path="./VectorGradientPrimitives.test.ts" />
+/// <reference path="./VectorHatchPrimitives.test.ts" />
+/// <reference path="./VectorImageFillPrimitives.test.ts" />
+/// <reference path="./VectorPatternFillPrimitives.test.ts" />
+/// <reference path="./VectorEffectPrimitives.test.ts" />
+/// <reference path="./VectorResourceWalker.test.ts" />
+/// <reference path="./VectorArrowPrimitives.test.ts" />
+/// <reference path="./InternUtil.test.ts" />
+/// <reference path="./Plural.test.ts" />
+/// <reference path="./VectorManager.test.ts" />
+/// <reference path="./RenderGeometrySection.test.ts" />
+/// <reference path="./DocDispatcherExtensions.test.ts" />
+/// <reference path="./ContributedNotebookbarTabs.test.ts" />
+/// <reference path="./CDarkOverlay.test.ts" />
+/// <reference path="./AIChatMessageCodes.test.ts" />
+/// <reference path="./OtherViewCursorSection.test.ts" />
+/// <reference path="./SlideLinks.test.ts" />
+/// <reference path="./SlideLinkToolbar.test.ts" />
+/// <reference path="./ExportFormats.test.ts" />
+/// <reference path="./Tooltip.test.ts" />
+/// <reference path="./CollabNotices.test.ts" />
+// NOTE: reference new tests here ...

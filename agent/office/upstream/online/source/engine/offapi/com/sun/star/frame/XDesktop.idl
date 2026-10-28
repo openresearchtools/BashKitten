@@ -1,0 +1,172 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+
+
+ module com {  module sun {  module star {  module frame {
+
+/** This is the main interface of a desktop service.
+
+    <p>
+    A desktop is an environment for components which can be viewed in
+    frames. Frames are like frames in HTML framesets. This does not imply
+    that a desktop can handle framesets; the frames may be top frames
+    only.
+    </p>
+
+    @see Desktop
+ */
+published interface XDesktop
+{
+    /** provides access to dispatchers for the frame.
+
+        <p>
+        What kind of URLs a frame accepts in the calls to XDispatchProvider::queryDispatch(),
+        and how the returned dispatcher handles dispatches is completely implementation dependent
+        (though of course the restrictions of XDispatchProvider must be met).
+        Frame implementations may (optionally) support special targets in the call to
+        XDispatchProvider::queryDispatch().
+        Such special targets are passed as target frame name. They may, in addition,
+        require special frame search flags (see FrameSearchFlag), or,
+        in opposite, limit the set of allowed flags.<br>
+        Common special targets include:
+        <ul>
+                        <li><b>_blank</b><br> is used to create a new frame when dispatching the URL.</li>
+            <li><b>_default</b><br> is used to recycle empty or create a new frame when dispatching the URL.</li>
+            <li><b>_self</b><br> forces the frame to dispatch the URL into itself. ("" means the same)</li>
+                        <li><b>_parent</b><br> dispatches the URL into the parent frame.</li>
+                        <li><b>_top</b><br> dispatches the URL into the top level frame, the frame where this is invoked belongs to.</li>
+        </ul>
+        </p>
+
+        @see XDispatch
+        @see XFrame::findFrame()
+    */
+    interface XDispatchProvider;
+
+    /** supports interception mechanism for dispatched URLs
+
+        <p>
+        Registered objects can intercept, suppress or reroute dispatched URLs.
+        If they support another interface too (XInterceptorInfo)
+        it's possible to perform it by directly calling of right interceptor without
+        using list of all registered ones.
+        </p>
+     */
+    interface XDispatchProviderInterception;
+
+    /** provides access to sub frames within this frame
+     */
+    interface XFramesSupplier;
+
+    /** supports simple API for loading components into the frame environment
+     */
+    interface XComponentLoader;
+
+    /** tries to terminate the desktop.
+
+        <p>
+        First, every terminate listener is called by his XTerminateListener::queryTermination() method.
+        Throwing of a TerminationVetoException can break the termination process and the listener how has
+        done that will be the new "controller" of the desktop lifetime. He should try to terminate it by himself after
+        his own processes will be finished.
+        If nobody disagree with the termination request, every listener will be called by his
+        XTerminateListener::notifyTermination() method.
+        </p>
+
+        @return
+            `TRUE` If all listeners agree with this request
+            <br>
+            `FALSE` Otherwise
+
+        @see XTerminateListener
+        @see TerminationVetoException
+     */
+    boolean terminate();
+
+    /** registers an event listener to the desktop, which is called
+        when the desktop is queried to terminate, and when it really
+        terminates.
+
+        @param Listener
+            listener for termination events
+
+        @see XDesktop::removeTerminateListener()
+     */
+    void addTerminateListener( [in] XTerminateListener Listener );
+
+    /** unregisters an event listener for termination events.
+
+        @param Listener
+            listener which wishes to be deregistered
+
+        @see XDesktop::addTerminateListener()
+     */
+    void removeTerminateListener( [in] XTerminateListener Listener );
+
+    /** provides read access to collection of all currently loaded components
+        inside the frame tree
+
+        <p>
+        The component is, by definition, the model of the control which
+        is loaded into a frame, or if no model exists, into the control
+        itself.
+        The service Components which is available from this
+        method is a collection of all components of the desktop which are open
+        within a frame of the desktop.
+        </p>
+
+        @returns
+            the collection of all components
+
+        @see Components
+     */
+    com::sun::star::container::XEnumerationAccess getComponents();
+
+    /** provides read access to the component inside the tree which has the UI focus
+
+        <p>
+        Normally, the component is the model part of the
+        active component. If no model exists it is the active controller
+        (view) itself.
+        </p>
+
+        @returns
+            the component within the desktop environment which has the UI focus.
+
+        @see XDesktop::getCurrentFrame()
+     */
+    com::sun::star::lang::XComponent getCurrentComponent();
+
+    /** provides read access to the frame which contains the current component
+
+        @returns
+            the frame of the component which has the
+            UI focus within this desktop environment
+
+        @see XDesktop::getCurrentComponent()
+     */
+    XFrame getCurrentFrame();
+
+};
+
+
+}; }; }; };
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

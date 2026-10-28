@@ -1,0 +1,229 @@
+# -*- Mode: makefile-gmake; tab-width: 4; indent-tabs-mode: t -*-
+#
+#
+# This file is part of the Collabora Office project.
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+
+
+$(eval $(call gb_Module_Module,libreoffice))
+
+# This makefile needs to be read first because some variables like T_LIBS
+# for libmerged are cleared there and then later we append stuff to it
+# through e.g. gb_Library_use_external for various libraries in libmerged.
+ifneq ($(MERGELIBS),)
+$(eval $(call gb_Module_add_targets,libreoffice,\
+	Library_merged \
+))
+endif
+
+# WASM_CHART change
+ifneq ($(ENABLE_WASM_STRIP_CHART),TRUE)
+$(eval $(call gb_Module_add_moduledirs,libreoffice,\
+	chart2 \
+))
+endif
+
+# WASM_CANVAS change
+ifneq ($(ENABLE_WASM_STRIP_CANVAS),TRUE)
+$(eval $(call gb_Module_add_moduledirs,libreoffice,\
+	canvas \
+))
+endif
+
+ifneq ($(ENABLE_WASM_STRIP_DBACCESS),TRUE)
+$(eval $(call gb_Module_add_moduledirs,libreoffice,\
+	$(call gb_Helper_optional,DBCONNECTIVITY,dbaccess) \
+))
+endif
+
+# Read online's own gbuild module from online/gbuild/, only once online is configured, and only when
+# the command line names one of its own targets (a bare engine build shall leave online alone):
+ifneq ($(filter Executable_% StaticLibrary_% Module_gbuild%,$(MAKECMDGOALS)),)
+ifneq ($(wildcard $(or $(ONLINE.BUILDDIR),$(realpath $(BUILDDIR)/..))/config.h),)
+gb_Module_MODULELOCATIONS += online:$(SRCDIR)/..
+$(eval $(call gb_Module_add_moduledir,online,gbuild))
+endif
+endif
+
+$(eval $(call gb_Module_add_moduledirs,libreoffice,\
+	android \
+    $(if $(ENABLE_WASM_STRIP_BASIC_DRAW_MATH_IMPRESS),, \
+	animations \
+    ) \
+	avmedia \
+	$(if $(ENABLE_WASM_STRIP_CALC),, \
+	basctl \
+	) \
+	basegfx \
+	basic \
+	bean \
+	binaryurp \
+	bridges \
+    codemaker \
+	$(call gb_Helper_optional,COFFICEOTRON,cofficeotron) \
+	comphelper \
+	configmgr \
+	connectivity \
+	cppu \
+	cppuhelper \
+	cpputools \
+	cui \
+	desktop \
+	$(call gb_Helper_optional,DICTIONARIES,dictionaries) \
+	docmodel\
+	drawinglayer \
+	editeng \
+	embeddedobj \
+	embedserv \
+	eventattacher \
+	extensions \
+	external \
+	extras \
+	filter \
+	$(call gb_Helper_optional,DBCONNECTIVITY,forms) \
+	formula \
+	$(call gb_Helper_optional,DESKTOP,fpicker) \
+	framework \
+    $(call gb_Helper_optionals_or,HELPTOOLS XMLHELP,helpcompiler) \
+	$(call gb_Helper_optional,HELP,helpcontent2) \
+	hwpfilter \
+	i18nlangtag \
+	i18npool \
+	i18nutil \
+	idl \
+	instsetoo_native \
+	io \
+	javaunohelper \
+	$(call gb_Helper_optional,QUICKJS,jsuno) \
+	jurt \
+	jvmaccess \
+	jvmfwk \
+	$(call gb_Helper_optional,LIBRELOGO,librelogo) \
+	kit \
+	lingucomponent \
+	linguistic \
+	$(call gb_Helper_optional,DESKTOP,l10ntools) \
+	o3tl \
+	offapi \
+	officecfg \
+	oovbaapi \
+	oox \
+	$(call gb_Helper_optional,OPENCL,opencl) \
+	package \
+	pch \
+	postprocess \
+	$(call gb_Helper_optional,PYUNO,pyuno) \
+	$(call gb_Helper_optional,QADEVOOO,qadevOOo) \
+	readlicense_oo \
+	registry \
+	remotebridges \
+	ridljar \
+	rust_uno \
+	sal \
+	salhelper \
+	sax \
+	$(if $(ENABLE_WASM_STRIP_CALC),, \
+	sc \
+	scaddins \
+	) \
+	$(call gb_Helper_optional,DESKTOP,scp2) \
+	scripting \
+	scriptinterop \
+    $(if $(ENABLE_WASM_STRIP_BASIC_DRAW_MATH_IMPRESS),, \
+	sd \
+	sdext \
+    ) \
+	$(call gb_Helper_optional,DESKTOP,setup_native) \
+	sfx2 \
+	shell \
+	solenv \
+	soltools \
+	sot \
+    $(if $(ENABLE_WASM_STRIP_BASIC_DRAW_MATH_IMPRESS),, \
+	starmath \
+    ) \
+    $(if $(ENABLE_CUSTOMTARGET_COMPONENTS),static) \
+	stoc \
+	store \
+	svl \
+	svtools \
+	svgio \
+	emfio \
+	svx \
+	$(if $(ENABLE_WASM_STRIP_WRITER),, \
+	sw \
+	) \
+	sysui \
+	test \
+	testtools \
+	toolkit \
+	tools \
+	ucb \
+	ucbhelper \
+	udkapi \
+	$(call gb_Helper_optional,PYUNO,uitest) \
+	UnoControls \
+	unoil \
+	unoidl \
+	unotest \
+	unotools \
+	unoxml \
+	ure \
+	uui \
+	vbahelper \
+	vcl \
+	writerperfect \
+    $(call gb_Helper_optional,XMLHELP,xmlhelp) \
+	xmloff \
+	xmlreader \
+	xmlscript \
+	xmlsecurity \
+))
+
+ifeq (,$(DISABLE_DYNLOADING))
+# Especially when building everything with symbols, the linking of the largest
+# libraries takes enormous amounts of RAM.	To prevent annoying OOM situations
+# etc., try to prevent linking these in parallel by adding artificial build
+# order dependencies here.
+# Do this only if a linker is not explicitly set, as this should only apply
+# to the BFD linker and any decently modern linker presumably performs better.
+ifeq (,$(USE_LD))
+define repositorymodule_serialize1
+$(call gb_Library_get_linktarget_target,$(1)) :| $(foreach lib,$(2),$(call gb_Library_get_target,$(lib)))
+endef
+else
+define repositorymodule_serialize1
+endef
+endif
+
+define repositorymodule_serialize
+$(if $(filter-out 0 1,$(words $(1))),\
+$(call repositorymodule_serialize1,$(firstword $(1)),$(wordlist 2,$(words $(1)),$(1))))
+$(if $(strip $(1)),\
+$(call repositorymodule_serialize,$(wordlist 2,$(words $(1)),$(1))))
+endef
+
+# DO NOT SORT ALPHABETICALLY: the libraries must be listed in dependency order,
+# otherwise cyclic dependencies ruin everything.
+# do not serialize on a partial build as that may fail due to missing deps.
+# the default goal is build (see Module.mk)
+ifeq (,$(filter-out build check unitcheck slowcheck screenshot subsequentcheck uicheck coverage,$(MAKECMDGOALS)))
+$(eval $(call repositorymodule_serialize,\
+	$(call gb_Helper_optional,SCRIPTING,vbaobj) \
+	sc \
+	$(call gb_Helper_optional,DESKTOP,swui) \
+	sw \
+	$(if $(MERGELIBS), merged, \
+		sd \
+		$(call gb_Helper_optional,DBCONNECTIVITY,dbu) \
+		cui \
+		chart2 oox svx svxcore xo sfx fwk svt vcl) \
+))
+endif
+endif # !$(DISABLE_DYNLOADING)
+
+# vim: set noet sw=4 ts=4:

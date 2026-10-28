@@ -1,0 +1,170 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/linguistic2/XDictionary.hpp>
+#include <com/sun/star/frame/XStorable.hpp>
+
+#include <cppuhelper/implbase.hxx>
+#include <comphelper/interfacecontainer3.hxx>
+#include <i18nlangtag/lang.h>
+#include <comphelper/errcode.hxx>
+
+#include "defs.hxx"
+
+#define DIC_MAX_ENTRIES SAL_MAX_INT32
+
+sal_Int16 ReadDicVersion( SvStream& rStream, LanguageType &nLng, bool &bNeg, OUString &aDicName );
+
+class DictionaryNeo :
+    public ::cppu::WeakImplHelper
+    <
+        css::linguistic2::XDictionary,
+        css::frame::XStorable
+    >
+{
+
+    ::comphelper::OInterfaceContainerHelper3<css::linguistic2::XDictionaryEventListener> aDicEvtListeners;
+    std::vector< cpo::uno::Reference< css::linguistic2::XDictionaryEntry > >
+                                                                aEntries;
+    OUString                                                    aDicName;
+    OUString                                                    aMainURL;
+    css::linguistic2::DictionaryType                            eDicType;
+    LanguageType                                                nLanguage;
+    sal_Int16                                                   nDicVersion;
+    bool                                                        bNeedEntries;
+    bool                                                        bIsModified;
+    bool                                                        bIsActive;
+    bool                                                        bIsReadonly;
+
+    DictionaryNeo(const DictionaryNeo &) = delete;
+    DictionaryNeo & operator = (const DictionaryNeo &) = delete;
+
+    void                    launchEvent(sal_Int16 nEvent,
+                                        const cpo::uno::Reference< css::linguistic2::XDictionaryEntry >& xEntry);
+
+    ErrCode                     loadEntries(const OUString &rMainURL);
+    ErrCode                     saveEntries(const OUString &rMainURL);
+    static int                  cmpDicEntry(std::u16string_view rWord1,
+                                        std::u16string_view rWord2,
+                                        bool bSimilarOnly = false);
+    bool                        seekEntry(std::u16string_view rWord, sal_Int32 *pPos,
+                                        bool bSimilarOnly = false);
+    bool                        isSorted();
+
+    bool                        addEntry_Impl(const cpo::uno::Reference< css::linguistic2::XDictionaryEntry >& rDicEntry,
+                                          bool bIsLoadEntries = false);
+
+public:
+    DictionaryNeo(OUString aName, LanguageType nLang,
+                    css::linguistic2::DictionaryType eType,
+                    const OUString &rMainURL,
+                    bool bWriteable );
+    virtual ~DictionaryNeo() override;
+
+    // XNamed
+    virtual OUString
+        getName() override;
+    virtual void
+        setName( const OUString& aName ) override;
+
+    // XDictionary
+    virtual css::linguistic2::DictionaryType
+        getDictionaryType() override;
+    virtual void
+        setActive( bool bActivate ) override;
+    virtual bool
+        isActive() override;
+    virtual sal_Int32
+        getCount() override;
+    virtual css::lang::Locale
+        getLocale() override;
+    virtual void
+        setLocale( const css::lang::Locale& aLocale ) override;
+    virtual cpo::uno::Reference<
+            css::linguistic2::XDictionaryEntry >
+        getEntry( const OUString& aWord ) override;
+    virtual bool
+        addEntry( const cpo::uno::Reference<
+                css::linguistic2::XDictionaryEntry >& xDicEntry ) override;
+    virtual bool
+        add( const OUString& aWord, bool bIsNegative,
+                const OUString& aRplcText ) override;
+    virtual bool
+        remove( const OUString& aWord ) override;
+    virtual bool
+        isFull() override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::linguistic2::XDictionaryEntry > >
+        getEntries() override;
+    virtual void
+        clear() override;
+    virtual bool
+        addDictionaryEventListener( const cpo::uno::Reference< css::linguistic2::XDictionaryEventListener >& xListener ) override;
+    virtual bool
+        removeDictionaryEventListener( const cpo::uno::Reference< css::linguistic2::XDictionaryEventListener >& xListener ) override;
+
+    // XStorable
+    virtual bool
+        hasLocation() override;
+    virtual OUString
+        getLocation() override;
+    virtual bool
+        isReadonly() override;
+    virtual void
+        store() override;
+    virtual void
+        storeAsURL( const OUString& aURL,
+                const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs ) override;
+    virtual void
+        storeToURL( const OUString& aURL,
+                const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs ) override;
+};
+
+
+class DicEntry :
+    public cppu::WeakImplHelper< css::linguistic2::XDictionaryEntry >
+{
+    OUString aDicWord,       // including hyphen positions represented by "="
+                    aReplacement;   // including hyphen positions represented by "="
+    bool            bIsNegativ;
+
+    DicEntry(const DicEntry &) = delete;
+    DicEntry & operator = (const DicEntry &) = delete;
+
+    static void            splitDicFileWord(const OUString &rDicFileWord,
+                                     OUString &rDicWord,
+                                     OUString &rReplacement);
+
+public:
+    DicEntry(const OUString &rDicFileWord, bool bIsNegativ);
+    DicEntry(OUString aDicWord, bool bIsNegativ,
+             OUString aRplcText);
+    virtual ~DicEntry() override;
+
+    // XDictionaryEntry
+    virtual OUString
+        getDictionaryWord() override;
+    virtual bool
+        isNegative() override;
+    virtual OUString
+        getReplacementText() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

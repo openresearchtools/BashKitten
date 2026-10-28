@@ -1,0 +1,88 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/frame/XDispatch.hpp>
+#include <com/sun/star/frame/XLayoutManager.hpp>
+#include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/ui/XUIConfigurationManager.hpp>
+
+#include <svtools/popupmenucontrollerbase.hxx>
+#include <rtl/ustring.hxx>
+#include <unotools/intlwrapper.hxx>
+
+#include <vector>
+
+namespace framework
+{
+    class ToolbarsMenuController final : public svt::PopupMenuControllerBase
+    {
+        using svt::PopupMenuControllerBase::disposing;
+
+        public:
+            ToolbarsMenuController( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
+            virtual ~ToolbarsMenuController() override;
+
+            /* interface XServiceInfo */
+            virtual OUString getImplementationName() override;
+            virtual bool supportsService( const OUString& sServiceName ) override;
+            virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+            // XPopupMenuController
+            virtual void setPopupMenu( const cpo::uno::Reference< css::awt::XPopupMenu >& PopupMenu ) override;
+
+            // XStatusListener
+            virtual void statusChanged( const css::frame::FeatureStateEvent& Event ) override;
+
+            // XMenuListener
+            virtual void itemSelected( const css::awt::MenuEvent& rEvent ) override;
+            virtual void itemActivated( const css::awt::MenuEvent& rEvent ) override;
+
+            // XEventListener
+            virtual void disposing( const css::lang::EventObject& Source ) override;
+
+            struct ExecuteInfo
+            {
+                cpo::uno::Reference< css::frame::XDispatch >     xDispatch;
+                css::util::URL                                   aTargetURL;
+            };
+
+            DECL_STATIC_LINK( ToolbarsMenuController, ExecuteHdl_Impl, void*, void );
+
+        private:
+            // XInitialization
+            virtual void initializeImpl( std::unique_lock<std::mutex>& rGuard, const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+            void fillPopupMenu( cpo::uno::Reference< css::awt::XPopupMenu > const & rPopupMenu );
+            static cpo::uno::Sequence< cpo::uno::Sequence< css::beans::PropertyValue > > getLayoutManagerToolbars( const cpo::uno::Reference< css::frame::XLayoutManager >& rLayoutManager );
+            cpo::uno::Reference< css::frame::XDispatch > getDispatchFromCommandURL( const OUString& rCommandURL );
+            void addCommand( cpo::uno::Reference< css::awt::XPopupMenu > const & rPopupMenu, const OUString& rCommandURL, const OUString& aLabel );
+
+            cpo::uno::Reference< cpo::uno::XComponentContext >        m_xContext;
+            cpo::uno::Reference< css::container::XNameAccess >        m_xPersistentWindowState;
+            cpo::uno::Reference< css::ui::XUIConfigurationManager >   m_xModuleCfgMgr;
+            cpo::uno::Reference< css::ui::XUIConfigurationManager >   m_xDocCfgMgr;
+            bool                                                      m_bResetActive;
+            std::vector< OUString >                                   m_aCommandVector;
+            IntlWrapper                                               m_aIntlWrapper;
+    };
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

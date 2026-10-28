@@ -1,0 +1,112 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_SVX_UNOMODEL_HXX
+#define INCLUDED_SVX_UNOMODEL_HXX
+
+#include <config_options.h>
+#include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/ucb/XAnyCompareFactory.hpp>
+#include <com/sun/star/io/XOutputStream.hpp>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <sfx2/sfxbasemodel.hxx>
+#include <svx/fmdmod.hxx>
+#include <svx/svxdllapi.h>
+#include <cppuhelper/weakref.hxx>
+#include <unotools/weakref.hxx>
+
+class SdrModel;
+class SvxUnoDrawPagesAccess;
+
+class UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) SvxUnoDrawingModel
+:   public SfxBaseModel, // implements SfxListener, OWEAKOBJECT & other
+    public SvxFmMSFactory,
+    public css::drawing::XDrawPagesSupplier,
+    public css::lang::XServiceInfo,
+    public css::ucb::XAnyCompareFactory
+{
+    friend class SvxUnoDrawPagesAccess;
+
+private:
+    SdrModel* mpDoc;
+
+    unotools::WeakReference< SvxUnoDrawPagesAccess > mxDrawPagesAccess;
+
+    cpo::uno::Reference< cpo::uno::XInterface > mxDashTable;
+    cpo::uno::Reference< cpo::uno::XInterface > mxGradientTable;
+    cpo::uno::Reference< cpo::uno::XInterface > mxHatchTable;
+    cpo::uno::Reference< cpo::uno::XInterface > mxBitmapTable;
+    cpo::uno::Reference< cpo::uno::XInterface > mxTransGradientTable;
+    cpo::uno::Reference< cpo::uno::XInterface > mxMarkerTable;
+
+    cpo::uno::Sequence< cpo::uno::Type > maTypeSequence;
+
+protected:
+    // SvxUnoDrawMSFactory
+    virtual SdrModel& getSdrModelFromUnoModel() const override;
+
+public:
+    SvxUnoDrawingModel( SdrModel* pDoc ) noexcept;
+    virtual ~SvxUnoDrawingModel() noexcept override;
+
+    SdrModel* GetDoc() const { return mpDoc; }
+
+    // XInterface
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire() noexcept override
+    {  SfxBaseModel::acquire(); }
+    virtual void release() noexcept override
+    {  SfxBaseModel::release(); }
+
+    // XModel
+    virtual void lockControllers(  ) override;
+    virtual void unlockControllers(  ) override;
+    virtual bool hasControllersLocked(  ) override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+
+    // XDrawPagesSupplier
+    virtual cpo::uno::Reference< css::drawing::XDrawPages > getDrawPages(  ) override;
+
+    // XMultiServiceFactory ( SvxFmMSFactory )
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstance( const OUString& aServiceSpecifier ) override;
+    virtual cpo::uno::Sequence< OUString > getAvailableServiceNames(  ) override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XAnyCompareFactory
+    virtual cpo::uno::Reference< css::ucb::XAnyCompare > createAnyCompareByName( const OUString& PropertyName ) override;
+};
+
+SVXCORE_DLLPUBLIC extern bool SvxDrawingLayerExport( SdrModel* pModel, const cpo::uno::Reference<css::io::XOutputStream>& xOut );
+extern bool SvxDrawingLayerExport( SdrModel* pModel, const cpo::uno::Reference<css::io::XOutputStream>& xOut, const cpo::uno::Reference< css::lang::XComponent >& xComponent );
+SVXCORE_DLLPUBLIC extern bool SvxDrawingLayerExport( SdrModel* pModel, const cpo::uno::Reference<css::io::XOutputStream>& xOut, const cpo::uno::Reference< css::lang::XComponent >& xComponent, const char* pExportService  );
+SVXCORE_DLLPUBLIC extern bool SvxDrawingLayerImport( SdrModel* pModel, const cpo::uno::Reference<css::io::XInputStream>& xInputStream );
+extern bool SvxDrawingLayerImport( SdrModel* pModel, const cpo::uno::Reference<css::io::XInputStream>& xInputStream, const cpo::uno::Reference< css::lang::XComponent >& xComponent  );
+SVXCORE_DLLPUBLIC extern bool SvxDrawingLayerImport( SdrModel* pModel, const cpo::uno::Reference<css::io::XInputStream>& xInputStream, const cpo::uno::Reference< css::lang::XComponent >& xComponent, const char* pImportService );
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

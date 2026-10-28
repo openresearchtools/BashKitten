@@ -1,0 +1,108 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_SW_SOURCE_UI_VBA_VBAFIND_HXX
+#define INCLUDED_SW_SOURCE_UI_VBA_VBAFIND_HXX
+
+#include <ooo/vba/word/XFind.hpp>
+#include <vbahelper/vbahelperinterface.hxx>
+#include <com/sun/star/text/XTextRange.hpp>
+#include <com/sun/star/util/XReplaceable.hpp>
+#include <com/sun/star/util/XPropertyReplace.hpp>
+#include <com/sun/star/text/XTextViewCursor.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
+#include <rtl/ref.hxx>
+
+class SwXTextDocument;
+
+typedef InheritedHelperInterfaceWeakImpl< ooo::vba::word::XFind > SwVbaFind_BASE;
+
+class SwVbaFind : public SwVbaFind_BASE
+{
+private:
+    rtl::Reference< SwXTextDocument > mxModel;
+    cpo::uno::Reference< css::text::XTextRange > mxTextRange;
+    cpo::uno::Reference< css::util::XPropertyReplace> mxPropertyReplace;
+    cpo::uno::Reference< css::text::XTextViewCursor> mxTVC;
+    cpo::uno::Reference< css::view::XSelectionSupplier> mxSelSupp;
+    bool mbReplace;
+    sal_Int32 mnReplaceType;
+    sal_Int32 mnWrap;
+
+private:
+    /// @throws cpo::uno::RuntimeException
+    bool InRange( const cpo::uno::Reference< css::text::XTextRange >& xCurrentRange );
+    /// @throws cpo::uno::RuntimeException
+    bool InEqualRange( const cpo::uno::Reference< css::text::XTextRange >& xCurrentRange );
+    void SetReplace( sal_Int32 type );
+    /// @throws cpo::uno::RuntimeException
+    void SetReplaceWith( const OUString& rText );
+    /// @throws cpo::uno::RuntimeException
+    OUString GetReplaceWith();
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::text::XTextRange > FindOneElement();
+    /// @throws cpo::uno::RuntimeException
+    bool SearchReplace();
+
+    /// @throws cpo::uno::RuntimeException
+    SwVbaFind( const cpo::uno::Reference< ooo::vba::XHelperInterface >& rParent,
+               const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
+               rtl::Reference< SwXTextDocument > xModel );
+public:
+    static cpo::uno::Reference< ooo::vba::word::XFind > GetOrCreateFind(
+                const cpo::uno::Reference< ooo::vba::XHelperInterface >& rParent,
+                const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
+                const rtl::Reference< SwXTextDocument >& xModel,
+                const cpo::uno::Reference< css::text::XTextRange >& xTextRange);
+    virtual ~SwVbaFind() override;
+
+    // Attributes
+    virtual OUString getText() override;
+    virtual void setText( const OUString& _text ) override;
+    virtual cpo::uno::Any getReplacement() override;
+    virtual void setReplacement( const cpo::uno::Any& _replacement ) override;
+    virtual bool getForward() override;
+    virtual void setForward( bool _forward ) override;
+    virtual ::sal_Int32 getWrap() override;
+    virtual void setWrap( ::sal_Int32 _wrap ) override;
+    virtual bool getFormat() override;
+    virtual void setFormat( bool _format ) override;
+    virtual bool getMatchCase() override;
+    virtual void setMatchCase( bool _matchcase ) override;
+    virtual bool getMatchWholeWord() override;
+    virtual void setMatchWholeWord( bool _matchwholeword ) override;
+    virtual bool getMatchWildcards() override;
+    virtual void setMatchWildcards( bool _matchwildcards ) override;
+    virtual bool getMatchSoundsLike() override;
+    virtual void setMatchSoundsLike( bool _matchsoundslike ) override;
+    virtual bool getMatchAllWordForms() override;
+    virtual void setMatchAllWordForms( bool _matchallwordforms ) override;
+    virtual cpo::uno::Any getStyle() override;
+    virtual void setStyle( const cpo::uno::Any& _style ) override;
+
+    // Methods
+    virtual bool Execute( const cpo::uno::Any& FindText, const cpo::uno::Any& MatchCase, const cpo::uno::Any& MatchWholeWord, const cpo::uno::Any& MatchWildcards, const cpo::uno::Any& MatchSoundsLike, const cpo::uno::Any& MatchAllWordForms, const cpo::uno::Any& Forward, const cpo::uno::Any& Wrap, const cpo::uno::Any& Format, const cpo::uno::Any& ReplaceWith, const cpo::uno::Any& Replace, const cpo::uno::Any& MatchKashida, const cpo::uno::Any& MatchDiacritics, const cpo::uno::Any& MatchAlefHamza, const cpo::uno::Any& MatchControl, const cpo::uno::Any& MatchPrefix, const cpo::uno::Any& MatchSuffix, const cpo::uno::Any& MatchPhrase, const cpo::uno::Any& IgnoreSpace, const cpo::uno::Any& IgnorePunct ) override;
+    virtual void ClearFormatting(  ) override;
+
+    // XHelperInterface
+    virtual OUString getServiceImplName() override;
+    virtual cpo::uno::Sequence<OUString> getServiceNames() override;
+};
+#endif // INCLUDED_SW_SOURCE_UI_VBA_VBAFIND_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

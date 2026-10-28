@@ -1,0 +1,265 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_SW_INC_UNOPARAGRAPH_HXX
+#define INCLUDED_SW_INC_UNOPARAGRAPH_HXX
+
+#include <memory>
+#include <optional>
+
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/beans/XMultiPropertySet.hpp>
+#include <com/sun/star/beans/XTolerantMultiPropertySet.hpp>
+#include <com/sun/star/container/XEnumerationAccess.hpp>
+#include <com/sun/star/container/XContentEnumerationAccess.hpp>
+#include <com/sun/star/text/XTextContent.hpp>
+#include <com/sun/star/text/XTextRange.hpp>
+
+#include <comphelper/interfacecontainer4.hxx>
+#include <cppuhelper/implbase.hxx>
+
+#include <sfx2/Metadatable.hxx>
+#include <svl/listener.hxx>
+
+#include "unobaseclass.hxx"
+
+class SfxItemPropertySet;
+class SfxItemSet;
+struct SfxItemPropertyMapEntry;
+class SwPaM;
+class SwUnoCursor;
+class SwTextNode;
+class SwTableBox;
+class SwXText;
+class SwXTextPortionEnumeration;
+
+typedef ::cppu::ImplInheritanceHelper
+<   ::sfx2::MetadatableMixin
+,   css::lang::XServiceInfo
+,   css::beans::XPropertySet
+,   css::beans::XPropertyState
+,   css::beans::XMultiPropertySet
+,   css::beans::XTolerantMultiPropertySet
+,   css::container::XEnumerationAccess
+,   css::container::XContentEnumerationAccess
+,   css::text::XTextContent
+,   css::text::XTextRange
+> SwXParagraph_Base;
+
+class SwXParagraph final
+    : public SwXParagraph_Base
+{
+
+private:
+
+    virtual ~SwXParagraph() override;
+
+    SwXParagraph(cpo::uno::Reference< SwXText > const & xParent,
+            SwTextNode & rTextNode,
+            const sal_Int32 nSelStart, const sal_Int32 nSelEnd);
+
+    /// descriptor
+    SwXParagraph();
+
+    /// @throws beans::UnknownPropertyException
+    /// @throws beans::PropertyVetoException
+    /// @throws lang::IllegalArgumentException
+    /// @throws lang::WrappedTargetException
+    /// @throws uno::RuntimeException
+    void SetPropertyValues_Impl(
+        const cpo::uno::Sequence< OUString >& rPropertyNames,
+        const cpo::uno::Sequence< cpo::uno::Any >& rValues );
+    /// @throws beans::UnknownPropertyException
+    /// @throws lang::WrappedTargetException
+    /// @throws uno::RuntimeException
+    cpo::uno::Sequence< cpo::uno::Any > GetPropertyValues_Impl(
+            const cpo::uno::Sequence< OUString >& rPropertyNames);
+    SwTextNode& GetTextNodeOrThrow();
+    /// @throws uno::RuntimeException
+    static void GetSinglePropertyValue_Impl(
+        const SfxItemPropertyMapEntry& rEntry,
+        const SfxItemSet& rSet,
+        cpo::uno::Any& rAny );
+    /// @throws uno::RuntimeException
+    cpo::uno::Sequence< css::beans::GetDirectPropertyTolerantResult >
+        GetPropertyValuesTolerant_Impl(
+            const cpo::uno::Sequence< OUString >& rPropertyNames,
+            bool bDirectValuesOnly);
+
+public:
+
+    static rtl::Reference<SwXParagraph>
+        CreateXParagraph(SwDoc & rDoc, SwTextNode * pTextNode,
+            cpo::uno::Reference<SwXText> const& xParentText,
+            const sal_Int32 nSelStart = -1, const sal_Int32 nSelEnd = - 1);
+
+    const SwTextNode * GetTextNode() const { return m_pTextNode; }
+    bool            IsDescriptor() const { return m_bIsDescriptor; }
+    /// make rPaM select the paragraph
+    bool SelectPaM(SwPaM & rPaM);
+    /// for SwXText
+    void attachToText(SwXText & rParent, SwTextNode & rTextNode);
+
+    // MetadatableMixin
+    virtual ::sfx2::Metadatable* GetCoreObject() override;
+    virtual cpo::uno::Reference< css::frame::XModel >
+        GetModel() override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(
+            const OUString& rServiceName) override;
+    virtual cpo::uno::Sequence< OUString >
+        getSupportedServiceNames() override;
+
+    // XComponent
+    virtual void dispose() override;
+    virtual void addEventListener(
+            const cpo::uno::Reference< css::lang::XEventListener > & xListener) override;
+    virtual void removeEventListener(
+            const cpo::uno::Reference< css::lang::XEventListener > & xListener) override;
+
+    // XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+        getPropertySetInfo() override;
+    virtual void setPropertyValue(
+            const OUString& rPropertyName,
+            const cpo::uno::Any& rValue) override;
+    virtual cpo::uno::Any getPropertyValue(
+            const OUString& rPropertyName) override;
+    virtual void addPropertyChangeListener(
+            const OUString& rPropertyName,
+            const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener) override;
+    virtual void removePropertyChangeListener(
+            const OUString& rPropertyName,
+            const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener) override;
+    virtual void addVetoableChangeListener(
+            const OUString& rPropertyName,
+            const cpo::uno::Reference< css::beans::XVetoableChangeListener >& xListener) override;
+    virtual void removeVetoableChangeListener(
+            const OUString& rPropertyName,
+            const cpo::uno::Reference< css::beans::XVetoableChangeListener >& xListener) override;
+
+    // XPropertyState
+    virtual css::beans::PropertyState
+        getPropertyState(const OUString& rPropertyName) override;
+    virtual cpo::uno::Sequence< css::beans::PropertyState >
+        getPropertyStates(
+            const cpo::uno::Sequence< OUString >& rPropertyNames) override;
+    virtual void setPropertyToDefault(
+            const OUString& rPropertyName) override;
+    virtual cpo::uno::Any getPropertyDefault(
+            const OUString& rPropertyName) override;
+
+    // XMultiPropertySet
+    virtual void setPropertyValues(
+            const cpo::uno::Sequence< OUString >&      rPropertyNames,
+            const cpo::uno::Sequence< cpo::uno::Any >& rValues) override;
+    virtual cpo::uno::Sequence< cpo::uno::Any >
+        getPropertyValues(
+            const cpo::uno::Sequence< OUString >&  rPropertyNames) override;
+    virtual void addPropertiesChangeListener(
+            const cpo::uno::Sequence< OUString >&         rPropertyNames,
+            const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener) override;
+    virtual void removePropertiesChangeListener(
+            const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener) override;
+    virtual void firePropertiesChangeEvent(
+            const cpo::uno::Sequence< OUString >&        rPropertyNames,
+            const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener) override;
+
+    // XTolerantMultiPropertySet
+    virtual cpo::uno::Sequence< css::beans::SetPropertyTolerantFailed >
+        setPropertyValuesTolerant(
+            const cpo::uno::Sequence< OUString >&      rPropertyNames,
+            const cpo::uno::Sequence< cpo::uno::Any >& rValues) override;
+    virtual cpo::uno::Sequence< css::beans::GetPropertyTolerantResult >
+        getPropertyValuesTolerant(
+            const cpo::uno::Sequence< OUString >& rPropertyNames) override;
+    virtual cpo::uno::Sequence<
+            css::beans::GetDirectPropertyTolerantResult >
+        getDirectPropertyValuesTolerant(
+            const cpo::uno::Sequence< OUString >& rPropertyNames) override;
+
+    // XElementAccess
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
+
+    // XEnumerationAccess
+    virtual cpo::uno::Reference< css::container::XEnumeration >
+        createEnumeration() override;
+
+    // XContentEnumerationAccess
+    virtual cpo::uno::Reference< css::container::XEnumeration >
+        createContentEnumeration(const OUString& rServiceName) override;
+    virtual cpo::uno::Sequence< OUString >
+        getAvailableServiceNames() override;
+
+    // XTextContent
+    virtual void attach(
+            const cpo::uno::Reference< css::text::XTextRange > & xTextRange) override;
+    virtual cpo::uno::Reference< css::text::XTextRange > getAnchor() override;
+
+    // XTextRange
+    virtual cpo::uno::Reference< css::text::XText >
+        getText() override;
+    virtual cpo::uno::Reference< css::text::XTextRange > getStart() override;
+    virtual cpo::uno::Reference< css::text::XTextRange > getEnd() override;
+    virtual OUString getString() override;
+    virtual void setString(const OUString& rString) override;
+
+    /// tries to return less data, but may return more than just text fields
+    rtl::Reference<SwXTextPortionEnumeration> createTextFieldsEnumeration();
+
+private:
+    std::mutex m_Mutex; // just for OInterfaceContainerHelper4
+    ::comphelper::OInterfaceContainerHelper4<css::lang::XEventListener> m_EventListeners;
+    SfxItemPropertySet const& m_rPropSet;
+    bool m_bIsDescriptor;
+    bool m_bDeleteWithoutCorrection = false;
+    sal_Int32 m_nSelectionStartPos;
+    sal_Int32 m_nSelectionEndPos;
+    OUString m_sText;
+    cpo::uno::Reference<SwXText> m_xParentText;
+    SwTextNode* m_pTextNode;
+    struct MySvtListener : public SvtListener
+    {
+        SwXParagraph& m_rThis;
+        MySvtListener(SwXParagraph& rThis) : m_rThis(rThis) {}
+        virtual void Notify(const SfxHint& rHint) override;
+    };
+    std::optional<MySvtListener> moSvtListener;
+};
+
+
+struct SwXParagraphEnumeration
+    : public SwSimpleEnumeration_Base
+{
+    static rtl::Reference<SwXParagraphEnumeration> Create(
+        cpo::uno::Reference< css::text::XText > const & xParent,
+        const std::shared_ptr<SwUnoCursor>& pCursor,
+        const CursorType eType,
+        /// only for CursorType::TableText
+        SwTableBox const*const pTableBox = nullptr);
+};
+
+#endif // INCLUDED_SW_INC_UNOPARAGRAPH_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

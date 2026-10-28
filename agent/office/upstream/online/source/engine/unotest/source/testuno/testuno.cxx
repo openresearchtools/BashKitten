@@ -1,0 +1,1604 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <sal/config.h>
+
+#include <cstdlib>
+#include <iostream>
+#include <source_location>
+
+#include <com/sun/star/beans/NamedValue.hpp>
+#include <com/sun/star/beans/Optional.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/task/XJob.hpp>
+#include <com/sun/star/task/XJobExecutor.hpp>
+#include <com/sun/star/testuno/Enum.hpp>
+#include <com/sun/star/testuno/Exception.hpp>
+#include <com/sun/star/testuno/Struct.hpp>
+#include <com/sun/star/testuno/StructLong.hpp>
+#include <com/sun/star/testuno/StructString.hpp>
+#include <com/sun/star/testuno/Template.hpp>
+#include <com/sun/star/testuno/Test.hpp>
+#include <com/sun/star/testuno/XTest.hpp>
+#include <cpo/uno/Any.hxx>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/Sequence.hxx>
+#include <cpo/uno/Type.hxx>
+#include <cpo/uno/XInterface.hpp>
+#include <cppu/unotype.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <cppuhelper/weak.hxx>
+#include <o3tl/any.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <salhelper/thread.hxx>
+#include <tools/debug.hxx>
+#include <uno/dispatcher.hxx>
+#include <uno/environment.h>
+#include <uno/environment.hxx>
+#include <uno/mapping.hxx>
+#include <vcl/svapp.hxx>
+
+namespace cpo::uno { class XComponentContext; }
+
+namespace
+{
+void verify(bool value, std::source_location const& location = std::source_location::current())
+{
+    if (!value)
+    {
+        std::cerr << "Verification failed in " << location.function_name() << " at "
+                  << location.file_name() << ":" << location.line() << ":" << location.column()
+                  << "\n";
+        std::abort();
+    }
+}
+
+bool checkAnyVoid(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<void>::get();
+}
+
+bool checkAnyBoolean(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<bool>::get() && *o3tl::forceAccess<bool>(value);
+}
+
+bool checkAnyByte(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<sal_Int8>::get()
+           && *o3tl::forceAccess<sal_Int8>(value) == -12;
+}
+
+bool checkAnyShort(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<sal_Int16>::get()
+           && *o3tl::forceAccess<sal_Int16>(value) == -1234;
+}
+
+bool checkAnyUnsignedShort(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<sal_uInt16>::get()
+           && *o3tl::forceAccess<sal_uInt16>(value) == 54321;
+}
+
+bool checkAnyLong(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<sal_Int32>::get()
+           && *o3tl::forceAccess<sal_Int32>(value) == -123456;
+}
+
+bool checkAnyUnsignedLong(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<sal_uInt32>::get()
+           && *o3tl::forceAccess<sal_uInt32>(value) == 3456789012;
+}
+
+bool checkAnyHyper(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<sal_Int64>::get()
+           && *o3tl::forceAccess<sal_Int64>(value) == -123456789;
+}
+
+bool checkAnyUnsignedHyper(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<sal_uInt64>::get()
+           && *o3tl::forceAccess<sal_uInt64>(value) == 9876543210;
+}
+
+bool checkAnyFloat(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<float>::get()
+           && *o3tl::forceAccess<float>(value) == -10.25;
+}
+
+bool checkAnyDouble(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<double>::get()
+           && *o3tl::forceAccess<double>(value) == 100.5;
+}
+
+bool checkAnyChar(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<sal_Unicode>::get()
+           && *o3tl::forceAccess<sal_Unicode>(value) == u'Ö';
+}
+
+bool checkAnyString(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<OUString>::get()
+           && *o3tl::forceAccess<OUString>(value) == u"hä";
+}
+
+bool checkAnyType(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<cpo::uno::Type>::get()
+           && *o3tl::forceAccess<cpo::uno::Type>(value) == cppu::UnoType<sal_Int32>::get();
+}
+
+bool checkAnySequence(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<cpo::uno::Sequence<OUString>>::get()
+           && *o3tl::forceAccess<cpo::uno::Sequence<OUString>>(value)
+                  == cpo::uno::Sequence<OUString>{ u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr };
+}
+
+bool checkAnyEnum(cpo::uno::Any const& value)
+{
+    return value.getValueType() == cppu::UnoType<css::testuno::Enum>::get()
+           && *o3tl::forceAccess<css::testuno::Enum>(value) == css::testuno::Enum_E_2;
+}
+
+bool checkAnyStruct(cpo::uno::Any const& value,
+                    cpo::uno::Reference<cpo::uno::XInterface> const& object)
+{
+    return value.getValueType() == cppu::UnoType<css::testuno::Struct>::get()
+           && *o3tl::forceAccess<css::testuno::Struct>(value)
+                  == css::testuno::Struct{ true,
+                                           -12,
+                                           -1234,
+                                           54321,
+                                           -123456,
+                                           3456789012,
+                                           -123456789,
+                                           9876543210,
+                                           -10.25,
+                                           100.5,
+                                           u'Ö',
+                                           u"hä"_ustr,
+                                           cppu::UnoType<sal_Int32>::get(),
+                                           cpo::uno::Any(sal_Int32(-123456)),
+                                           { u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr },
+                                           css::testuno::Enum_E_2,
+                                           { -123456 },
+                                           { { u"foo"_ustr },
+                                             -123456,
+                                             cpo::uno::Any(sal_Int32(-123456)),
+                                             { u"barr"_ustr } },
+                                           object };
+}
+
+bool checkAnyException(cpo::uno::Any const& value)
+{
+    if (value.getValueType() != cppu::UnoType<css::testuno::Exception>::get())
+    {
+        return false;
+    }
+    auto const& e = *o3tl::forceAccess<css::testuno::Exception>(value);
+    return e.Message.startsWith("error") && !e.Context.is() && e.m1 == -123456 && e.m2 == 100.5
+           && e.m3 == u"hä";
+}
+
+bool checkAnyInterface(cpo::uno::Any const& value,
+                       cpo::uno::Reference<css::testuno::XTest> const& object)
+{
+    return value.getValueType() == cppu::UnoType<css::testuno::XTest>::get()
+           && *o3tl::forceAccess<cpo::uno::Reference<css::testuno::XTest>>(value) == object;
+}
+
+void doExecuteTest(cpo::uno::Reference<css::testuno::XTest> const& test)
+{
+    {
+        bool const val = test->getBoolean();
+        verify(val);
+        bool const ok = test->isBoolean(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getByte();
+        verify(val == -12);
+        bool const ok = test->isByte(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getShort();
+        verify(val == -1234);
+        bool const ok = test->isShort(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getUnsignedShort();
+        verify(val == 54321);
+        bool const ok = test->isUnsignedShort(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getLong();
+        verify(val == -123456);
+        bool const ok = test->isLong(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getUnsignedLong();
+        verify(val == 3456789012);
+        bool const ok = test->isUnsignedLong(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getHyper();
+        verify(val == -123456789);
+        bool const ok = test->isHyper(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getUnsignedHyper();
+        verify(val == 9876543210);
+        bool const ok = test->isUnsignedHyper(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getFloat();
+        verify(val == -10.25);
+        bool const ok = test->isFloat(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getDouble();
+        verify(val == 100.5);
+        bool const ok = test->isDouble(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getChar();
+        verify(val == u'Ö');
+        bool const ok = test->isChar(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getString();
+        verify(val == u"hä"_ustr);
+        bool const ok = test->isString(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getType();
+        verify(val == cppu::UnoType<sal_Int32>::get());
+        bool const ok = test->isType(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getEnum();
+        verify(val == css::testuno::Enum_E_2);
+        bool const ok = test->isEnum(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getStruct();
+        verify(val
+               == css::testuno::Struct{ true,
+                                        -12,
+                                        -1234,
+                                        54321,
+                                        -123456,
+                                        3456789012,
+                                        -123456789,
+                                        9876543210,
+                                        -10.25,
+                                        100.5,
+                                        u'Ö',
+                                        u"hä"_ustr,
+                                        cppu::UnoType<sal_Int32>::get(),
+                                        cpo::uno::Any(sal_Int32(-123456)),
+                                        { u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr },
+                                        css::testuno::Enum_E_2,
+                                        { -123456 },
+                                        { { u"foo"_ustr },
+                                          -123456,
+                                          cpo::uno::Any(sal_Int32(-123456)),
+                                          { u"barr"_ustr } },
+                                        test });
+        bool const ok = test->isStruct(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getStructLong();
+        verify(val == css::testuno::StructLong{ -123456 });
+        bool const ok = test->isStructLong(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getStructString();
+        verify(val == css::testuno::StructString{ u"hä"_ustr });
+        bool const ok = test->isStructString(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyVoid();
+        verify(checkAnyVoid(val));
+        bool const ok = test->isAnyVoid(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyBoolean();
+        verify(checkAnyBoolean(val));
+        bool const ok = test->isAnyBoolean(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyByte();
+        verify(checkAnyByte(val));
+        bool const ok = test->isAnyByte(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyShort();
+        verify(checkAnyShort(val));
+        bool const ok = test->isAnyShort(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyUnsignedShort();
+        verify(checkAnyUnsignedShort(val));
+        bool const ok = test->isAnyUnsignedShort(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyLong();
+        verify(checkAnyLong(val));
+        bool const ok = test->isAnyLong(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyUnsignedLong();
+        verify(checkAnyUnsignedLong(val));
+        bool const ok = test->isAnyUnsignedLong(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyHyper();
+        verify(checkAnyHyper(val));
+        bool const ok = test->isAnyHyper(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyUnsignedHyper();
+        verify(checkAnyUnsignedHyper(val));
+        bool const ok = test->isAnyUnsignedHyper(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyFloat();
+        verify(checkAnyFloat(val));
+        bool const ok = test->isAnyFloat(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyDouble();
+        verify(checkAnyDouble(val));
+        bool const ok = test->isAnyDouble(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyChar();
+        verify(checkAnyChar(val));
+        bool const ok = test->isAnyChar(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyString();
+        verify(checkAnyString(val));
+        bool const ok = test->isAnyString(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyType();
+        verify(checkAnyType(val));
+        bool const ok = test->isAnyType(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnySequence();
+        verify(checkAnySequence(val));
+        bool const ok = test->isAnySequence(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyEnum();
+        verify(checkAnyEnum(val));
+        bool const ok = test->isAnyEnum(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyStruct();
+        verify(checkAnyStruct(val, test));
+        bool const ok = test->isAnyStruct(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyException();
+        verify(checkAnyException(val));
+        bool const ok = test->isAnyException(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getAnyInterface();
+        verify(checkAnyInterface(val, test));
+        bool const ok = test->isAnyInterface(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceBoolean();
+        verify(val == cpo::uno::Sequence<bool>{ true, true, false });
+        bool const ok = test->isSequenceBoolean(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceByte();
+        verify(val == cpo::uno::Sequence<sal_Int8>{ -12, 1, 12 });
+        bool const ok = test->isSequenceByte(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceShort();
+        verify(val == cpo::uno::Sequence<sal_Int16>{ -1234, 1, 1234 });
+        bool const ok = test->isSequenceShort(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceUnsignedShort();
+        verify(val == cpo::uno::Sequence<sal_uInt16>{ 1, 10, 54321 });
+        bool const ok = test->isSequenceUnsignedShort(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceLong();
+        verify(val == cpo::uno::Sequence<sal_Int32>{ -123456, 1, 123456 });
+        bool const ok = test->isSequenceLong(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceUnsignedLong();
+        verify(val == cpo::uno::Sequence<sal_uInt32>{ 1, 10, 3456789012 });
+        bool const ok = test->isSequenceUnsignedLong(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceHyper();
+        verify(val == cpo::uno::Sequence<sal_Int64>{ -123456789, 1, 123456789 });
+        bool const ok = test->isSequenceHyper(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceUnsignedHyper();
+        verify(val == cpo::uno::Sequence<sal_uInt64>{ 1, 10, 9876543210 });
+        bool const ok = test->isSequenceUnsignedHyper(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceFloat();
+        verify(val == cpo::uno::Sequence<float>{ -10.25, 1.5, 10.75 });
+        bool const ok = test->isSequenceFloat(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceDouble();
+        verify(val == cpo::uno::Sequence<double>{ -100.5, 1.25, 100.75 });
+        bool const ok = test->isSequenceDouble(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceChar();
+        verify(val == cpo::uno::Sequence<sal_Unicode>{ 'a', 'B', u'Ö' });
+        bool const ok = test->isSequenceChar(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceString();
+        verify(val == cpo::uno::Sequence<OUString>{ u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr });
+        bool const ok = test->isSequenceString(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceType();
+        verify(val
+               == cpo::uno::Sequence<cpo::uno::Type>{
+                      cppu::UnoType<sal_Int32>::get(), cppu::UnoType<void>::get(),
+                      cppu::UnoType<cpo::uno::Sequence<css::testuno::Enum>>::get() });
+        bool const ok = test->isSequenceType(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceAny();
+        verify(
+            val
+            == cpo::uno::Sequence<cpo::uno::Any>{
+                   cpo::uno::Any(sal_Int32(-123456)), cpo::uno::Any(),
+                   cpo::uno::Any(cpo::uno::Sequence<css::testuno::Enum>{
+                       css::testuno::Enum_E_2, css::testuno::Enum_E3, css::testuno::Enum_E_10 }) });
+        bool const ok = test->isSequenceAny(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceSequenceString();
+        verify(val
+               == cpo::uno::Sequence<cpo::uno::Sequence<OUString>>{
+                      {}, { u"foo"_ustr, u"barr"_ustr }, { u"baz"_ustr } });
+        bool const ok = test->isSequenceSequenceString(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceEnum();
+        verify(val
+               == cpo::uno::Sequence<css::testuno::Enum>{
+                      css::testuno::Enum_E_2, css::testuno::Enum_E3, css::testuno::Enum_E_10 });
+        bool const ok = test->isSequenceEnum(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getSequenceStruct();
+        verify(
+            val
+            == cpo::uno::Sequence<css::testuno::Struct>{
+                   { true,
+                     -12,
+                     -1234,
+                     1,
+                     -123456,
+                     1,
+                     -123456789,
+                     1,
+                     -10.25,
+                     -100.5,
+                     'a',
+                     u"hä"_ustr,
+                     cppu::UnoType<sal_Int32>::get(),
+                     cpo::uno::Any(sal_Int32(-123456)),
+                     {},
+                     css::testuno::Enum_E_2,
+                     { -123456 },
+                     { { u"foo"_ustr },
+                       -123456,
+                       cpo::uno::Any(sal_Int32(-123456)),
+                       { u"barr"_ustr } },
+                     test },
+                   { true,
+                     1,
+                     1,
+                     10,
+                     1,
+                     10,
+                     1,
+                     10,
+                     1.5,
+                     1.25,
+                     'B',
+                     u"barr"_ustr,
+                     cppu::UnoType<void>::get(),
+                     cpo::uno::Any(),
+                     { u"foo"_ustr, u"barr"_ustr },
+                     css::testuno::Enum_E3,
+                     { 1 },
+                     { { u"baz"_ustr }, 1, cpo::uno::Any(), { u"foo"_ustr } },
+                     nullptr },
+                   { false,
+                     12,
+                     1234,
+                     54321,
+                     123456,
+                     3456789012,
+                     123456789,
+                     9876543210,
+                     10.75,
+                     100.75,
+                     u'Ö',
+                     u"bazzz"_ustr,
+                     cppu::UnoType<cpo::uno::Sequence<css::testuno::Enum>>::get(),
+                     cpo::uno::Any(cpo::uno::Sequence<css::testuno::Enum>{
+                         css::testuno::Enum_E_2, css::testuno::Enum_E3, css::testuno::Enum_E_10 }),
+                     { u"baz"_ustr },
+                     css::testuno::Enum_E_10,
+                     { 123456 },
+                     { { u"barr"_ustr },
+                       123456,
+                       cpo::uno::Any(cpo::uno::Sequence<css::testuno::Enum>{
+                           css::testuno::Enum_E_2, css::testuno::Enum_E3,
+                           css::testuno::Enum_E_10 }),
+                       { u"bazz"_ustr } },
+                     test } });
+        bool const ok = test->isSequenceStruct(val);
+        verify(ok);
+    }
+    {
+        auto const val = test->getNull();
+        verify(val == cpo::uno::Reference<css::testuno::XTest>());
+        bool const ok = test->isNull(val);
+        verify(ok);
+    }
+    {
+        bool value1;
+        sal_Int8 value2;
+        sal_Int16 value3;
+        sal_uInt16 value4;
+        sal_Int32 value5;
+        sal_uInt32 value6;
+        sal_Int64 value7;
+        sal_uInt64 value8;
+        float value9;
+        double value10;
+        sal_Unicode value11;
+        OUString value12;
+        cpo::uno::Type value13;
+        cpo::uno::Any value14;
+        cpo::uno::Sequence<OUString> value15;
+        css::testuno::Enum value16;
+        css::testuno::Struct value17;
+        cpo::uno::Reference<css::testuno::XTest> value18;
+        test->getOut(value1, value2, value3, value4, value5, value6, value7, value8, value9,
+                     value10, value11, value12, value13, value14, value15, value16, value17,
+                     value18);
+        verify(value1);
+        verify(value2 == -12);
+        verify(value3 == -1234);
+        verify(value4 == 54321);
+        verify(value5 == -123456);
+        verify(value6 == 3456789012);
+        verify(value7 == -123456789);
+        verify(value8 == 9876543210);
+        verify(value9 == -10.25);
+        verify(value10 == 100.5);
+        verify(value11 == u'Ö');
+        verify(value12 == u"hä"_ustr);
+        verify(value13 == cppu::UnoType<sal_Int32>::get());
+        verify(value14 == cpo::uno::Any(sal_Int32(-123456)));
+        verify(value15 == cpo::uno::Sequence<OUString>{ u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr });
+        verify(value16 == css::testuno::Enum_E_2);
+        verify(value17
+               == css::testuno::Struct{ true,
+                                        -12,
+                                        -1234,
+                                        54321,
+                                        -123456,
+                                        3456789012,
+                                        -123456789,
+                                        9876543210,
+                                        -10.25,
+                                        100.5,
+                                        u'Ö',
+                                        u"hä"_ustr,
+                                        cppu::UnoType<sal_Int32>::get(),
+                                        cpo::uno::Any(sal_Int32(-123456)),
+                                        { u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr },
+                                        css::testuno::Enum_E_2,
+                                        { -123456 },
+                                        { { u"foo"_ustr },
+                                          -123456,
+                                          cpo::uno::Any(sal_Int32(-123456)),
+                                          { u"barr"_ustr } },
+                                        test });
+        verify(value18 == test);
+    }
+    try
+    {
+        test->throwRuntimeException();
+        verify(false);
+    }
+    catch (cpo::uno::RuntimeException& e)
+    {
+        verify(e.Message.startsWith("test"));
+    }
+}
+
+class TestThread : public salhelper::Thread
+{
+public:
+    TestThread()
+        : Thread("testuno")
+    {
+    }
+
+    bool value = false;
+
+private:
+    void execute() override
+    {
+        SolarMutexGuard g;
+        value = true;
+    }
+};
+
+class JobExecutorThread : public salhelper::Thread
+{
+public:
+    JobExecutorThread(cpo::uno::Reference<css::task::XJobExecutor> const& object)
+        : Thread("jobexecutor")
+        , object_(object)
+    {
+    }
+
+private:
+    void execute() override { object_->trigger(u"executor thread"_ustr); }
+
+    cpo::uno::Reference<css::task::XJobExecutor> object_;
+};
+
+class Test : public cppu::WeakImplHelper<css::lang::XServiceInfo, css::testuno::XTest>
+{
+    OUString getImplementationName() override
+    {
+        return u"com.sun.star.comp.testuno.Test"_ustr;
+    }
+
+    bool supportsService(OUString const& ServiceName) override
+    {
+        return cppu::supportsService(this, ServiceName);
+    }
+
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override
+    {
+        return { u"com.sun.star.testuno.Test"_ustr };
+    }
+
+    bool getBoolean() override { return true; }
+
+    bool isBoolean(bool value) override { return value; }
+
+    sal_Int8 getByte() override { return -12; }
+
+    bool isByte(sal_Int8 value) override { return value == -12; }
+
+    sal_Int16 getShort() override { return -1234; }
+
+    bool isShort(sal_Int16 value) override { return value == -1234; }
+
+    sal_uInt16 getUnsignedShort() override { return 54321; }
+
+    bool isUnsignedShort(sal_uInt16 value) override { return value == 54321; }
+
+    sal_Int32 getLong() override { return -123456; }
+
+    bool isLong(sal_Int32 value) override { return value == -123456; }
+
+    sal_uInt32 getUnsignedLong() override { return 3456789012; }
+
+    bool isUnsignedLong(sal_uInt32 value) override { return value == 3456789012; }
+
+    sal_Int64 getHyper() override { return -123456789; }
+
+    bool isHyper(sal_Int64 value) override { return value == -123456789; }
+
+    sal_uInt64 getUnsignedHyper() override { return 9876543210; }
+
+    bool isUnsignedHyper(sal_uInt64 value) override { return value == 9876543210; }
+
+    float getFloat() override { return -10.25; }
+
+    bool isFloat(float value) override { return value == -10.25; }
+
+    double getDouble() override { return 100.5; }
+
+    bool isDouble(double value) override { return value == 100.5; }
+
+    sal_Unicode getChar() override { return u'Ö'; }
+
+    bool isChar(sal_Unicode value) override { return value == u'Ö'; }
+
+    OUString getString() override { return u"hä"_ustr; }
+
+    bool isString(OUString const& value) override { return value == u"hä"; }
+
+    cpo::uno::Type getType() override { return cppu::UnoType<sal_Int32>::get(); }
+
+    bool isType(cpo::uno::Type const& value) override
+    {
+        return value == cppu::UnoType<sal_Int32>::get();
+    }
+
+    css::testuno::Enum getEnum() override { return css::testuno::Enum_E_2; }
+
+    bool isEnum(css::testuno::Enum value) override
+    {
+        return value == css::testuno::Enum_E_2;
+    }
+
+    css::testuno::Struct getStruct() override
+    {
+        return { true,
+                 -12,
+                 -1234,
+                 54321,
+                 -123456,
+                 3456789012,
+                 -123456789,
+                 9876543210,
+                 -10.25,
+                 100.5,
+                 u'Ö',
+                 u"hä"_ustr,
+                 cppu::UnoType<sal_Int32>::get(),
+                 cpo::uno::Any(sal_Int32(-123456)),
+                 { u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr },
+                 css::testuno::Enum_E_2,
+                 { -123456 },
+                 { { u"foo"_ustr }, -123456, cpo::uno::Any(sal_Int32(-123456)), { u"barr"_ustr } },
+                 static_cast<OWeakObject*>(this) };
+    }
+
+    bool isStruct(css::testuno::Struct const& value) override
+    {
+        return value
+               == css::testuno::Struct{ true,
+                                        -12,
+                                        -1234,
+                                        54321,
+                                        -123456,
+                                        3456789012,
+                                        -123456789,
+                                        9876543210,
+                                        -10.25,
+                                        100.5,
+                                        u'Ö',
+                                        u"hä"_ustr,
+                                        cppu::UnoType<sal_Int32>::get(),
+                                        cpo::uno::Any(sal_Int32(-123456)),
+                                        { u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr },
+                                        css::testuno::Enum_E_2,
+                                        { -123456 },
+                                        { { u"foo"_ustr },
+                                          -123456,
+                                          cpo::uno::Any(sal_Int32(-123456)),
+                                          { u"barr"_ustr } },
+                                        static_cast<OWeakObject*>(this) };
+    }
+
+    css::testuno::StructLong getStructLong() override { return { -123456 }; }
+
+    bool isStructLong(css::testuno::StructLong const& value) override
+    {
+        return value.m == -123456;
+    }
+
+    css::testuno::StructString getStructString() override { return { u"hä"_ustr }; }
+
+    bool isStructString(css::testuno::StructString const& value) override
+    {
+        return value.m == u"hä";
+    }
+
+    css::testuno::Template<cpo::uno::Any, css::testuno::StructString>
+        getTemplate() override
+    {
+        return { { u"foo"_ustr }, -123456, cpo::uno::Any(sal_Int32(-123456)), { u"barr"_ustr } };
+    }
+
+    bool isTemplate(
+        css::testuno::Template<cpo::uno::Any, css::testuno::StructString> const& value) override
+    {
+        return value
+               == css::testuno::Template<cpo::uno::Any, css::testuno::StructString>{
+                      { u"foo"_ustr }, -123456, cpo::uno::Any(sal_Int32(-123456)), { u"barr"_ustr }
+                  };
+    }
+
+    cpo::uno::Any getAnyVoid() override { return {}; }
+
+    bool isAnyVoid(cpo::uno::Any const& value) override { return checkAnyVoid(value); }
+
+    cpo::uno::Any getAnyBoolean() override { return cpo::uno::Any(true); }
+
+    bool isAnyBoolean(cpo::uno::Any const& value) override
+    {
+        return checkAnyBoolean(value);
+    }
+
+    cpo::uno::Any getAnyByte() override { return cpo::uno::Any(sal_Int8(-12)); }
+
+    bool isAnyByte(cpo::uno::Any const& value) override { return checkAnyByte(value); }
+
+    cpo::uno::Any getAnyShort() override { return cpo::uno::Any(sal_Int16(-1234)); }
+
+    bool isAnyShort(cpo::uno::Any const& value) override { return checkAnyShort(value); }
+
+    cpo::uno::Any getAnyUnsignedShort() override
+    {
+        return cpo::uno::Any(sal_uInt16(54321));
+    }
+
+    bool isAnyUnsignedShort(cpo::uno::Any const& value) override
+    {
+        return checkAnyUnsignedShort(value);
+    }
+
+    cpo::uno::Any getAnyLong() override { return cpo::uno::Any(sal_Int32(-123456)); }
+
+    bool isAnyLong(cpo::uno::Any const& value) override { return checkAnyLong(value); }
+
+    cpo::uno::Any getAnyUnsignedLong() override
+    {
+        return cpo::uno::Any(sal_uInt32(3456789012));
+    }
+
+    bool isAnyUnsignedLong(cpo::uno::Any const& value) override
+    {
+        return checkAnyUnsignedLong(value);
+    }
+
+    cpo::uno::Any getAnyHyper() override { return cpo::uno::Any(sal_Int64(-123456789)); }
+
+    bool isAnyHyper(cpo::uno::Any const& value) override { return checkAnyHyper(value); }
+
+    cpo::uno::Any getAnyUnsignedHyper() override
+    {
+        return cpo::uno::Any(sal_uInt64(9876543210));
+    }
+
+    bool isAnyUnsignedHyper(cpo::uno::Any const& value) override
+    {
+        return checkAnyUnsignedHyper(value);
+    }
+
+    cpo::uno::Any getAnyFloat() override { return cpo::uno::Any(-10.25f); }
+
+    bool isAnyFloat(cpo::uno::Any const& value) override { return checkAnyFloat(value); }
+
+    cpo::uno::Any getAnyDouble() override { return cpo::uno::Any(100.5); }
+
+    bool isAnyDouble(cpo::uno::Any const& value) override { return checkAnyDouble(value); }
+
+    cpo::uno::Any getAnyChar() override { return cpo::uno::Any(u'Ö'); }
+
+    bool isAnyChar(cpo::uno::Any const& value) override { return checkAnyChar(value); }
+
+    cpo::uno::Any getAnyString() override { return cpo::uno::Any(u"hä"_ustr); }
+
+    bool isAnyString(cpo::uno::Any const& value) override { return checkAnyString(value); }
+
+    cpo::uno::Any getAnyType() override
+    {
+        return cpo::uno::Any(cppu::UnoType<sal_Int32>::get());
+    }
+
+    bool isAnyType(cpo::uno::Any const& value) override { return checkAnyType(value); }
+
+    cpo::uno::Any getAnySequence() override
+    {
+        return cpo::uno::Any(cpo::uno::Sequence{ u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr });
+    }
+
+    bool isAnySequence(cpo::uno::Any const& value) override
+    {
+        return checkAnySequence(value);
+    }
+
+    cpo::uno::Any getAnyEnum() override { return cpo::uno::Any(css::testuno::Enum_E_2); }
+
+    bool isAnyEnum(cpo::uno::Any const& value) override { return checkAnyEnum(value); }
+
+    cpo::uno::Any getAnyStruct() override
+    {
+        return cpo::uno::Any(css::testuno::Struct{
+            true,
+            -12,
+            -1234,
+            54321,
+            -123456,
+            3456789012,
+            -123456789,
+            9876543210,
+            -10.25,
+            100.5,
+            u'Ö',
+            u"hä"_ustr,
+            cppu::UnoType<sal_Int32>::get(),
+            cpo::uno::Any(sal_Int32(-123456)),
+            { u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr },
+            css::testuno::Enum_E_2,
+            { -123456 },
+            { { u"foo"_ustr }, -123456, cpo::uno::Any(sal_Int32(-123456)), { u"barr"_ustr } },
+            static_cast<OWeakObject*>(this) });
+    }
+
+    bool isAnyStruct(cpo::uno::Any const& value) override
+    {
+        return checkAnyStruct(value, static_cast<OWeakObject*>(this));
+    }
+
+    cpo::uno::Any getAnyException() override
+    {
+        return cpo::uno::Any(
+            css::testuno::Exception{ u"error"_ustr, {}, -123456, 100.5, u"hä"_ustr });
+    }
+
+    bool isAnyException(cpo::uno::Any const& value) override
+    {
+        return checkAnyException(value);
+    }
+
+    cpo::uno::Any getAnyInterface() override
+    {
+        return cpo::uno::Any(cpo::uno::Reference<css::testuno::XTest>(this));
+    }
+
+    bool isAnyInterface(cpo::uno::Any const& value) override
+    {
+        return checkAnyInterface(value, this);
+    }
+
+    cpo::uno::Sequence<bool> getSequenceBoolean() override
+    {
+        return { true, true, false };
+    }
+
+    bool isSequenceBoolean(cpo::uno::Sequence<bool> const& value) override
+    {
+        return value == cpo::uno::Sequence<bool>{ true, true, false };
+    }
+
+    cpo::uno::Sequence<sal_Int8> getSequenceByte() override { return { -12, 1, 12 }; }
+
+    bool isSequenceByte(cpo::uno::Sequence<sal_Int8> const& value) override
+    {
+        return value == cpo::uno::Sequence<sal_Int8>{ -12, 1, 12 };
+    }
+
+    cpo::uno::Sequence<sal_Int16> getSequenceShort() override
+    {
+        return { -1234, 1, 1234 };
+    }
+
+    bool isSequenceShort(cpo::uno::Sequence<sal_Int16> const& value) override
+    {
+        return value == cpo::uno::Sequence<sal_Int16>{ -1234, 1, 1234 };
+    }
+
+    cpo::uno::Sequence<sal_uInt16> getSequenceUnsignedShort() override
+    {
+        return { 1, 10, 54321 };
+    }
+
+    bool isSequenceUnsignedShort(cpo::uno::Sequence<sal_uInt16> const& value) override
+    {
+        return value == cpo::uno::Sequence<sal_uInt16>{ 1, 10, 54321 };
+    }
+
+    cpo::uno::Sequence<sal_Int32> getSequenceLong() override
+    {
+        return { -123456, 1, 123456 };
+    }
+
+    bool isSequenceLong(cpo::uno::Sequence<sal_Int32> const& value) override
+    {
+        return value == cpo::uno::Sequence<sal_Int32>{ -123456, 1, 123456 };
+    }
+
+    cpo::uno::Sequence<sal_uInt32> getSequenceUnsignedLong() override
+    {
+        return { 1, 10, 3456789012 };
+    }
+
+    bool isSequenceUnsignedLong(cpo::uno::Sequence<sal_uInt32> const& value) override
+    {
+        return value == cpo::uno::Sequence<sal_uInt32>{ 1, 10, 3456789012 };
+    }
+
+    cpo::uno::Sequence<sal_Int64> getSequenceHyper() override
+    {
+        return { -123456789, 1, 123456789 };
+    }
+
+    bool isSequenceHyper(cpo::uno::Sequence<sal_Int64> const& value) override
+    {
+        return value == cpo::uno::Sequence<sal_Int64>{ -123456789, 1, 123456789 };
+    }
+
+    cpo::uno::Sequence<sal_uInt64> getSequenceUnsignedHyper() override
+    {
+        return { 1, 10, 9876543210 };
+    }
+
+    bool isSequenceUnsignedHyper(cpo::uno::Sequence<sal_uInt64> const& value) override
+    {
+        return value == cpo::uno::Sequence<sal_uInt64>{ 1, 10, 9876543210 };
+    }
+
+    cpo::uno::Sequence<float> getSequenceFloat() override
+    {
+        return { -10.25, 1.5, 10.75 };
+    }
+
+    bool isSequenceFloat(cpo::uno::Sequence<float> const& value) override
+    {
+        return value == cpo::uno::Sequence<float>{ -10.25, 1.5, 10.75 };
+    }
+
+    cpo::uno::Sequence<double> getSequenceDouble() override
+    {
+        return { -100.5, 1.25, 100.75 };
+    }
+
+    bool isSequenceDouble(cpo::uno::Sequence<double> const& value) override
+    {
+        return value == cpo::uno::Sequence<double>{ -100.5, 1.25, 100.75 };
+    }
+
+    cpo::uno::Sequence<sal_Unicode> getSequenceChar() override
+    {
+        return { 'a', 'B', u'Ö' };
+    }
+
+    bool isSequenceChar(cpo::uno::Sequence<sal_Unicode> const& value) override
+    {
+        return value == cpo::uno::Sequence<sal_Unicode>{ 'a', 'B', u'Ö' };
+    }
+
+    cpo::uno::Sequence<OUString> getSequenceString() override
+    {
+        return { u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr };
+    }
+
+    bool isSequenceString(cpo::uno::Sequence<OUString> const& value) override
+    {
+        return value == cpo::uno::Sequence<OUString>{ u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr };
+    }
+
+    cpo::uno::Sequence<cpo::uno::Type> getSequenceType() override
+    {
+        return { cppu::UnoType<sal_Int32>::get(), cppu::UnoType<void>::get(),
+                 cppu::UnoType<cpo::uno::Sequence<css::testuno::Enum>>::get() };
+    }
+
+    bool isSequenceType(cpo::uno::Sequence<cpo::uno::Type> const& value) override
+    {
+        return value
+               == cpo::uno::Sequence<cpo::uno::Type>{
+                      cppu::UnoType<sal_Int32>::get(), cppu::UnoType<void>::get(),
+                      cppu::UnoType<cpo::uno::Sequence<css::testuno::Enum>>::get()
+                  };
+    }
+
+    cpo::uno::Sequence<cpo::uno::Any> getSequenceAny() override
+    {
+        return { cpo::uno::Any(sal_Int32(-123456)), cpo::uno::Any(),
+                 cpo::uno::Any(cpo::uno::Sequence<css::testuno::Enum>{
+                     css::testuno::Enum_E_2, css::testuno::Enum_E3, css::testuno::Enum_E_10 }) };
+    }
+
+    bool isSequenceAny(cpo::uno::Sequence<cpo::uno::Any> const& value) override
+    {
+        return value
+               == cpo::uno::Sequence<cpo::uno::Any>{
+                      cpo::uno::Any(sal_Int32(-123456)), cpo::uno::Any(),
+                      cpo::uno::Any(cpo::uno::Sequence<css::testuno::Enum>{
+                          css::testuno::Enum_E_2, css::testuno::Enum_E3, css::testuno::Enum_E_10 })
+                  };
+    }
+
+    cpo::uno::Sequence<cpo::uno::Sequence<OUString>> getSequenceSequenceString() override
+    {
+        return { {}, { u"foo"_ustr, u"barr"_ustr }, { u"baz"_ustr } };
+    }
+
+    bool
+    isSequenceSequenceString(cpo::uno::Sequence<cpo::uno::Sequence<OUString>> const& value) override
+    {
+        return value
+               == cpo::uno::Sequence<cpo::uno::Sequence<OUString>>{ {},
+                                                                    { u"foo"_ustr, u"barr"_ustr },
+                                                                    { u"baz"_ustr } };
+    }
+
+    cpo::uno::Sequence<css::testuno::Enum> getSequenceEnum() override
+    {
+        return { css::testuno::Enum_E_2, css::testuno::Enum_E3, css::testuno::Enum_E_10 };
+    }
+
+    bool isSequenceEnum(cpo::uno::Sequence<css::testuno::Enum> const& value) override
+    {
+        return value
+               == cpo::uno::Sequence<css::testuno::Enum>{ css::testuno::Enum_E_2,
+                                                          css::testuno::Enum_E3,
+                                                          css::testuno::Enum_E_10 };
+    }
+
+    cpo::uno::Sequence<css::testuno::Struct> getSequenceStruct() override
+    {
+        return {
+            { true,
+              -12,
+              -1234,
+              1,
+              -123456,
+              1,
+              -123456789,
+              1,
+              -10.25,
+              -100.5,
+              'a',
+              u"hä"_ustr,
+              cppu::UnoType<sal_Int32>::get(),
+              cpo::uno::Any(sal_Int32(-123456)),
+              {},
+              css::testuno::Enum_E_2,
+              { -123456 },
+              { { u"foo"_ustr }, -123456, cpo::uno::Any(sal_Int32(-123456)), { u"barr"_ustr } },
+              static_cast<OWeakObject*>(this) },
+            { true,
+              1,
+              1,
+              10,
+              1,
+              10,
+              1,
+              10,
+              1.5,
+              1.25,
+              'B',
+              u"barr"_ustr,
+              cppu::UnoType<void>::get(),
+              cpo::uno::Any(),
+              { u"foo"_ustr, u"barr"_ustr },
+              css::testuno::Enum_E3,
+              { 1 },
+              { { u"baz"_ustr }, 1, cpo::uno::Any(), { u"foo"_ustr } },
+              nullptr },
+            { false,
+              12,
+              1234,
+              54321,
+              123456,
+              3456789012,
+              123456789,
+              9876543210,
+              10.75,
+              100.75,
+              u'Ö',
+              u"bazzz"_ustr,
+              cppu::UnoType<cpo::uno::Sequence<css::testuno::Enum>>::get(),
+              cpo::uno::Any(cpo::uno::Sequence<css::testuno::Enum>{
+                  css::testuno::Enum_E_2, css::testuno::Enum_E3, css::testuno::Enum_E_10 }),
+              { u"baz"_ustr },
+              css::testuno::Enum_E_10,
+              { 123456 },
+              { { u"barr"_ustr },
+                123456,
+                cpo::uno::Any(cpo::uno::Sequence<css::testuno::Enum>{
+                    css::testuno::Enum_E_2, css::testuno::Enum_E3, css::testuno::Enum_E_10 }),
+                { u"bazz"_ustr } },
+              static_cast<OWeakObject*>(this) }
+        };
+    }
+
+    bool isSequenceStruct(cpo::uno::Sequence<css::testuno::Struct> const& value) override
+    {
+        return value
+               == cpo::uno::Sequence<css::testuno::Struct>{
+                      { true,
+                        -12,
+                        -1234,
+                        1,
+                        -123456,
+                        1,
+                        -123456789,
+                        1,
+                        -10.25,
+                        -100.5,
+                        'a',
+                        u"hä"_ustr,
+                        cppu::UnoType<sal_Int32>::get(),
+                        cpo::uno::Any(sal_Int32(-123456)),
+                        {},
+                        css::testuno::Enum_E_2,
+                        { -123456 },
+                        { { u"foo"_ustr },
+                          -123456,
+                          cpo::uno::Any(sal_Int32(-123456)),
+                          { u"barr"_ustr } },
+                        static_cast<OWeakObject*>(this) },
+                      { true,
+                        1,
+                        1,
+                        10,
+                        1,
+                        10,
+                        1,
+                        10,
+                        1.5,
+                        1.25,
+                        'B',
+                        u"barr"_ustr,
+                        cppu::UnoType<void>::get(),
+                        cpo::uno::Any(),
+                        { u"foo"_ustr, u"barr"_ustr },
+                        css::testuno::Enum_E3,
+                        { 1 },
+                        { { u"baz"_ustr }, 1, cpo::uno::Any(), { u"foo"_ustr } },
+                        nullptr },
+                      { false,
+                        12,
+                        1234,
+                        54321,
+                        123456,
+                        3456789012,
+                        123456789,
+                        9876543210,
+                        10.75,
+                        100.75,
+                        u'Ö',
+                        u"bazzz"_ustr,
+                        cppu::UnoType<cpo::uno::Sequence<css::testuno::Enum>>::get(),
+                        cpo::uno::Any(cpo::uno::Sequence<css::testuno::Enum>{
+                            css::testuno::Enum_E_2, css::testuno::Enum_E3,
+                            css::testuno::Enum_E_10 }),
+                        { u"baz"_ustr },
+                        css::testuno::Enum_E_10,
+                        { 123456 },
+                        { { u"barr"_ustr },
+                          123456,
+                          cpo::uno::Any(cpo::uno::Sequence<css::testuno::Enum>{
+                              css::testuno::Enum_E_2, css::testuno::Enum_E3,
+                              css::testuno::Enum_E_10 }),
+                          { u"bazz"_ustr } },
+                        static_cast<OWeakObject*>(this) }
+                  };
+    }
+
+    cpo::uno::Reference<css::testuno::XTest> getNull() override { return {}; }
+
+    bool isNull(cpo::uno::Reference<css::testuno::XTest> const& value) override
+    {
+        return !value;
+    }
+
+    void getOut(bool& value1, sal_Int8& value2, sal_Int16& value3, sal_uInt16& value4,
+                         sal_Int32& value5, sal_uInt32& value6, sal_Int64& value7,
+                         sal_uInt64& value8, float& value9, double& value10, sal_Unicode& value11,
+                         OUString& value12, cpo::uno::Type& value13, cpo::uno::Any& value14,
+                         cpo::uno::Sequence<OUString>& value15, css::testuno::Enum& value16,
+                         css::testuno::Struct& value17,
+                         cpo::uno::Reference<css::testuno::XTest>& value18) override
+    {
+        value1 = true;
+        value2 = -12;
+        value3 = -1234;
+        value4 = 54321;
+        value5 = -123456;
+        value6 = 3456789012;
+        value7 = -123456789;
+        value8 = 9876543210;
+        value9 = -10.25;
+        value10 = 100.5;
+        value11 = u'Ö';
+        value12 = u"hä"_ustr;
+        value13 = cppu::UnoType<sal_Int32>::get();
+        value14 <<= sal_Int32(-123456);
+        value15 = { u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr };
+        value16 = css::testuno::Enum_E_2;
+        value17
+            = { true,
+                -12,
+                -1234,
+                54321,
+                -123456,
+                3456789012,
+                -123456789,
+                9876543210,
+                -10.25,
+                100.5,
+                u'Ö',
+                u"hä"_ustr,
+                cppu::UnoType<sal_Int32>::get(),
+                cpo::uno::Any(sal_Int32(-123456)),
+                { u"foo"_ustr, u"barr"_ustr, u"bazzz"_ustr },
+                css::testuno::Enum_E_2,
+                { -123456 },
+                { { u"foo"_ustr }, -123456, cpo::uno::Any(sal_Int32(-123456)), { u"barr"_ustr } },
+                static_cast<OWeakObject*>(this) };
+        value18 = this;
+    }
+
+    OUString getOverloadedNoArgs() override { return u"foo"_ustr; }
+
+    sal_Int32 getOverloadedOneArg(sal_Int32 value) override { return value; }
+
+    OUString getOverloadedString(OUString const & value) override { return value; }
+
+    sal_Int32 getOverloadedBytes(cpo::uno::Sequence<sal_Int8> const & data) override {
+        return data.getLength();
+    }
+
+    OUString getOverloadedAny(cpo::uno::Any const &) override { return u"any"_ustr; }
+
+    OUString getOverloadedAnyString(cpo::uno::Any const &, OUString const &) override {
+        return u"anystring"_ustr;
+    }
+
+    OUString getOverloadedStringAny(OUString const &, cpo::uno::Any const &) override {
+        return u"stringany"_ustr;
+    }
+
+    css::beans::Optional<OUString> getOptionalString(bool present) override {
+        return {present, present ? u"hello"_ustr : u""_ustr};
+    }
+
+    OUString unwrapOptionalString(css::beans::Optional<OUString> const & value) override {
+        return value.IsPresent ? value.Value : u"absent"_ustr;
+    }
+
+    OUString unwrapOptionalStructString(
+        css::beans::Optional<css::testuno::StructString> const & value) override
+    {
+        return value.IsPresent ? value.Value.m : u"absent"_ustr;
+    }
+
+    void throwRuntimeException() override
+    {
+        throw cpo::uno::RuntimeException(u"test"_ustr);
+    }
+
+    void passJob(cpo::uno::Reference<css::task::XJob> const& object) override
+    {
+        try
+        {
+            object->execute({});
+        }
+        catch (cpo::uno::RuntimeException& e)
+        {
+            object->execute({ { u"name"_ustr, cpo::uno::Any(e.Message) } });
+        }
+    }
+
+    void passJobExecutor(cpo::uno::Reference<css::task::XJobExecutor> const& object,
+                                  bool newThread) override
+    {
+        if (newThread)
+        {
+            rtl::Reference<JobExecutorThread> t(new JobExecutorThread(object));
+            t->launch();
+            t->join();
+        }
+        else
+        {
+            object->trigger(u"executor"_ustr);
+        }
+    }
+
+    void passInterface(cpo::uno::Reference<cpo::uno::XInterface> const& object) override
+    {
+        cpo::uno::Reference<css::task::XJob>(object, cpo::uno::UNO_QUERY_THROW)
+            ->execute({ { u"name"_ustr, cpo::uno::Any(u"queried job"_ustr) } });
+        cpo::uno::Reference<css::task::XJobExecutor>(object, cpo::uno::UNO_QUERY_THROW)
+            ->trigger(u"queried executor"_ustr);
+    }
+
+    bool
+    checkAttributes(cpo::uno::Reference<css::testuno::XAttributes> const& object) override
+    {
+        auto const ok1 = object->getLongAttribute() == 789;
+        verify(ok1);
+        auto const ok2 = object->getStringAttribute() == u"foo"_ustr;
+        verify(ok2);
+        bool const ok3 = object->getReadOnlyAttribute();
+        verify(ok3);
+        return ok1 && ok2 && ok3;
+    }
+
+    OUString getStringAttribute() override { return stringAttribute_; }
+
+    void setStringAttribute(OUString const& value) override { stringAttribute_ = value; }
+
+    bool testSolarMutex() override
+    {
+        DBG_TESTNOTSOLARMUTEX();
+        rtl::Reference t(new TestThread);
+        t->launch();
+        t->join();
+        SolarMutexGuard g;
+        return t->value;
+    }
+
+    void executeTest(cpo::uno::Reference<css::testuno::XTest> const& test) override
+    {
+        doExecuteTest(test);
+    }
+
+    OUString stringAttribute_ = u"hä"_ustr;
+};
+
+class BridgeTest : public cppu::WeakImplHelper<css::task::XJob>
+{
+public:
+    explicit BridgeTest(cpo::uno::Reference<cpo::uno::XComponentContext> const& context)
+        : context_(context)
+    {
+    }
+
+private:
+    cpo::uno::Any
+    execute(cpo::uno::Sequence<css::beans::NamedValue> const& Arguments) override
+    {
+        if (Arguments.hasElements())
+        {
+            throw css::lang::IllegalArgumentException(u"BridgeTest execute args not empty"_ustr, {},
+                                                      0);
+        }
+        auto const envCppOrig = cpo::uno::Environment::getCurrent();
+        cpo::uno::Environment envUno;
+        uno_createEnvironment(reinterpret_cast<uno_Environment**>(&envUno),
+                              u"" UNO_LB_UNO ""_ustr.pData, nullptr);
+        cpo::uno::Mapping cpp2uno(envCppOrig.get(), envUno.get());
+        cpo::uno::Environment envCpp;
+        if (!cpp2uno.is())
+        {
+            throw cpo::uno::RuntimeException(u"cannot get C++ to UNO mapping"_ustr);
+        }
+        uno_createEnvironment(reinterpret_cast<uno_Environment**>(&envCpp),
+                              envCppOrig.getTypeName().pData, nullptr);
+        cpo::uno::Mapping uno2cpp(envUno.get(), envCpp.get());
+        if (!uno2cpp.is())
+        {
+            throw cpo::uno::RuntimeException(u"cannot get UNO to C++ mapping"_ustr);
+        }
+        cpo::uno::UnoInterfaceReference ifcUno;
+        cpp2uno.mapInterface(reinterpret_cast<void**>(&ifcUno.m_pUnoI),
+                             css::testuno::Test::create(context_).get(),
+                             cppu::UnoType<css::testuno::XTest>::get());
+        if (!ifcUno.is())
+        {
+            throw cpo::uno::RuntimeException(u"cannot map from C++ to UNO"_ustr);
+        }
+        cpo::uno::Reference<css::testuno::XTest> ifcCpp;
+        uno2cpp.mapInterface(reinterpret_cast<void**>(&ifcCpp), ifcUno.get(),
+                             cppu::UnoType<css::testuno::XTest>::get());
+        if (!ifcCpp.is())
+        {
+            throw cpo::uno::RuntimeException(u"cannot map from UNO to C++"_ustr);
+        }
+        doExecuteTest(ifcCpp);
+        {
+            auto const val1 = ifcCpp->getStringAttribute();
+            verify(val1 == u"hä"_ustr);
+            ifcCpp->setStringAttribute(u"foo"_ustr);
+            auto const val2 = ifcCpp->getStringAttribute();
+            verify(val2 == u"foo"_ustr);
+        }
+        return cpo::uno::Any(true);
+    }
+
+    cpo::uno::Reference<cpo::uno::XComponentContext> context_;
+};
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_testuno_BridgeTest_get_implementation(cpo::uno::XComponentContext* context,
+                                                        cpo::uno::Sequence<cpo::uno::Any> const&)
+{
+    return cppu::acquire(new BridgeTest(context));
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_testuno_Test_get_implementation(cpo::uno::XComponentContext*,
+                                                  cpo::uno::Sequence<cpo::uno::Any> const&)
+{
+    return cppu::acquire(new Test);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

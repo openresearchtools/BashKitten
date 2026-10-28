@@ -1,0 +1,1544 @@
+/* global describe it cy require beforeEach expect */
+
+var helper = require('../../common/helper');
+var desktopHelper = require('../../common/desktop_helper');
+
+describe(['tagdesktop'], 'Annotation Tests', function() {
+
+	beforeEach(function() {
+		cy.viewport(1400, 600);
+		helper.setupAndLoadDocument('writer/annotation.odt');
+		desktopHelper.switchUIToNotebookbar();
+		desktopHelper.sidebarToggle();
+		desktopHelper.selectZoomLevel('50', false);
+		cy.getFrameWindow().then((win) => {
+			this.win = win;
+		});
+	});
+
+	it('Insert', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain','some text0');
+	});
+
+	it('Modify', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain','some text0');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
+		cy.cGet('#annotation-modify-textarea-1').type('{end}, some other text');
+		cy.cGet('#annotation-save-1').click();
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain','some text0, some other text');
+	});
+
+	it('Paste keeps no formatting', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
+		cy.cGet('#annotation-modify-textarea-1').should('exist');
+
+		cy.getFrameWindow().then(function(win) {
+			var editable = win.document.getElementById('annotation-modify-textarea-1');
+			editable.focus();
+
+			// put the caret after the existing text
+			var range = win.document.createRange();
+			range.selectNodeContents(editable);
+			range.collapse(false);
+			var selection = win.getSelection();
+			selection.removeAllRanges();
+			selection.addRange(range);
+
+			var clipboardData = new win.DataTransfer();
+			clipboardData.setData('text/plain', ', bold text');
+			clipboardData.setData('text/html', '<b>, bold text</b>');
+			editable.dispatchEvent(new win.ClipboardEvent('paste', {
+				clipboardData: clipboardData, bubbles: true, cancelable: true
+			}));
+		});
+
+		cy.cGet('#annotation-modify-textarea-1').should('have.text', 'some text0, bold text');
+		cy.cGet('#annotation-modify-textarea-1').find('b').should('not.exist');
+
+		cy.cGet('#annotation-save-1').click();
+		cy.cGet('#annotation-content-area-1').should('contain', 'some text0, bold text');
+		cy.cGet('#annotation-content-area-1').find('b').should('not.exist');
+	});
+
+	it('Reply', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain','some text');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-1').type('some reply text');
+		cy.cGet('#annotation-reply-1').click();
+		cy.cGet('#annotation-content-area-2').should('contain','some reply text');
+	});
+
+	it('Remove', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('.cool-annotation-content > div').should('contain','some text');
+		cy.cGet('.cool-annotation-menu').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Remove').click();
+		cy.cGet('.cool-annotation-content-wrapper').should('not.exist');
+	});
+
+	it('Click on comment emits Clicked_Comment postMessage', function() {
+		desktopHelper.insertComment();
+
+		// This will record usage of window.postMessage (called from
+		// _postMessage in browser/src/map/handler/Map.WOPI.js
+		cy.getFrameWindow().then(win => {
+			cy.stub(win.parent, 'postMessage').as('postMessage');
+		});
+
+		// <div class="cool-annotation-content-wrapper" ...> is the topmost element of the comment
+		cy.cGet('.cool-annotation-content-wrapper').should('be.visible');
+		cy.cGet('.cool-annotation-content-wrapper').click();
+
+		cy.get('@postMessage').should(stub => {
+			const found = stub.getCalls().some(call => {
+				const msg = JSON.parse(call.args[0]);
+				return msg.MessageId === 'Clicked_Comment'
+					&& msg.Values && msg.Values.Id !== undefined;
+			});
+			expect(found, "Clicked_Comment was not posted").to.be.true;
+		});
+	});
+
+	it('Insert emits Inserted_Comment postMessage of type annotation', function() {
+		// Capture host messages before inserting so the notification is recorded.
+		cy.getFrameWindow().then(win => {
+			cy.stub(win.parent, 'postMessage').as('postMessage');
+		});
+
+		desktopHelper.insertComment();
+
+		// The host is told a plain comment was inserted, with the engine id.
+		cy.get('@postMessage').should(stub => {
+			const found = stub.getCalls().some(call => {
+				const msg = JSON.parse(call.args[0]);
+				return msg.MessageId === 'Inserted_Comment'
+					&& msg.Values && msg.Values.Id !== undefined
+					&& msg.Values.Type === 'annotation'
+					&& msg.Values.Parent === '0';
+			});
+			expect(found, "Inserted_Comment of type annotation was not posted").to.be.true;
+		});
+	});
+
+	it('Reply emits Inserted_Comment postMessage of type reply', function() {
+		desktopHelper.insertComment();
+		cy.cGet('#annotation-content-area-1').should('contain', 'some text0');
+
+		// Capture host messages before replying so the notification is recorded.
+		cy.getFrameWindow().then(win => {
+			cy.stub(win.parent, 'postMessage').as('postMessage');
+		});
+
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-1').type('some reply text');
+		cy.cGet('#annotation-reply-1').click();
+		cy.cGet('#annotation-content-area-2').should('contain', 'some reply text');
+
+		// A reply is reported as type reply and points at its parent.
+		cy.get('@postMessage').should(stub => {
+			const found = stub.getCalls().some(call => {
+				const msg = JSON.parse(call.args[0]);
+				return msg.MessageId === 'Inserted_Comment'
+					&& msg.Values && msg.Values.Id !== undefined
+					&& msg.Values.Type === 'reply'
+					&& msg.Values.Parent !== '0';
+			});
+			expect(found, "Inserted_Comment of type reply was not posted").to.be.true;
+		});
+	});
+
+	it('Action_ResolveComment postMessage resolves a comment', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('be.visible');
+		cy.cGet('.cool-annotation-content-resolved').should('have.text', '');
+
+		// Send Action_ResolveComment postMessage with the comment's Id
+		cy.getFrameWindow().then(win => {
+			const message = {
+				'MessageId': 'Action_ResolveComment',
+				'Values': {'Id': '1'}
+			};
+			win.postMessage(JSON.stringify(message), '*');
+		});
+
+		// The comment should now show as resolved
+		cy.cGet('.cool-annotation-content-resolved').should('have.text', 'Resolved');
+	});
+
+	it('Toggle Resolved/Unresolved', function() {
+		desktopHelper.insertComment("unresolved comment", true);
+		cy.cGet('#comment-container-1').should('exist');
+		/*
+			after the last `insertComment` call the insert tab is selected.
+			if we don't change the tab and call `insertComment` again, then
+			it will collapse the notebookbar (clicking on the same tab twice).
+			to avoid the 'collapsed notebookbar' state, we click on the home
+			tab to 'reset' the state for the next `insertComment` call.
+		*/
+		cy.cGet('#Home-tab-label').click();
+
+		desktopHelper.insertComment("resolved comment", true);
+		cy.cGet('body').type('focus out of comments');
+		cy.cGet('#comment-container-2').should('exist');
+		cy.cGet('#comment-annotation-menu-2').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Resolve').click();
+		cy.cGet('.cool-annotation-content-resolved').should('exist');
+
+		/* scenario 1:
+		 *   - hide all comments -> both hidden, and the resolved choice goes off
+		 *                          with them
+		 *   - show all comments -> only the unresolved comment comes back
+		 */
+		desktopHelper.toggleComments();
+		cy.cGet('#comment-container-1').should('be.not.visible');
+		cy.cGet('#comment-container-2').should('be.not.visible');
+		desktopHelper.toggleComments();
+		cy.cGet('#comment-container-1').should('be.visible');
+		cy.cGet('#comment-container-2').should('be.not.visible');
+
+		/* scenario 2:
+		 *   - show resolved comments -> both visible
+		 */
+		desktopHelper.toggleComments(/*resolved = */ true);
+		cy.cGet('#comment-container-1').should('be.visible');
+		cy.cGet('#comment-container-2').should('be.visible');
+
+		/* scenario 3:
+		 *   - hide all comments      -> both hidden
+		 *   - show resolved comments -> the comments come back on with them, so
+		 *                              both are visible
+		 */
+		desktopHelper.toggleComments();
+		cy.cGet('#comment-container-1').should('be.not.visible');
+		cy.cGet('#comment-container-2').should('be.not.visible');
+		desktopHelper.toggleComments(/*resolved = */ true);
+		cy.cGet('#comment-container-1').should('be.visible');
+		cy.cGet('#comment-container-2').should('be.visible');
+	});
+
+	it('Visibility at Different Zoom Levels', function() {
+		/*
+			1. insert comment at 50% zoom level
+			2. then keep increasing the zoom level and assert comment visibility.
+			3. visible at 100% and 120%, and hidden (collapsed) at 150%
+		*/
+		desktopHelper.selectZoomLevel('100', false);
+		desktopHelper.insertComment('test comment', true);
+		cy.cGet('#comment-container-1').should('exist');
+		cy.cGet('#comment-container-1').should('be.visible');
+
+		desktopHelper.selectZoomLevel('120', false);
+		cy.cGet('#comment-container-1').should('be.visible');
+
+		desktopHelper.selectZoomLevel('150', false);
+		cy.cGet('#comment-container-1').should('be.not.visible');
+	});
+
+	it.skip('Visibility at Different Window Widths (increasing)', function () {
+		/*
+			1. start with collapsed comment and increase window width
+			2. cy.viewport(1400, 600); at 150% comment is collapsed
+			3. increase width by 20 and assert visibility
+		*/
+		desktopHelper.insertComment('test comment', true);
+		cy.cGet('#comment-container-1').should('exist');
+		cy.cGet('#comment-container-1').should('be.visible');
+
+		desktopHelper.selectZoomLevel('150', false);
+		cy.cGet('#comment-container-1').should('be.not.visible');
+
+		for (let width = 1420; width < 1500; width += 20) {
+			cy.viewport(width, 600);
+			cy.cGet('#comment-container-1').should('be.visible');
+		}
+
+		for (let width = 1500; width < 1620; width += 20) {
+			cy.viewport(width, 600);
+			cy.cGet('#comment-container-1').should('be.visible');
+		}
+	});
+
+	it('Visibility at Different Window Widths (decreasing)', function() {
+		/*
+			1. start with wide window (== zoomed out document) and reduce window width
+			2. cy.viewport(1400, 600); at 100% comments are visible
+			3. decrease width by 10 and assert visibility
+		*/
+		desktopHelper.insertComment('test comment', true);
+		cy.cGet('#comment-container-1').should('exist');
+		cy.cGet('#comment-container-1').should('be.visible');
+
+		desktopHelper.selectZoomLevel('120', false);
+		cy.cGet('#comment-container-1').should('be.visible');
+
+		for (let width = 1420; width > 1260; width -= 20) {
+			cy.viewport(width, 600);
+			cy.cGet('#comment-container-1').should('be.visible');
+		}
+	});
+
+	it('Visibility on Small Resizes (1px width increase/decrease)', function() {
+		desktopHelper.insertComment('test comment', true);
+		cy.cGet('#comment-container-1').should('exist');
+		cy.cGet('#comment-container-1').should('be.visible');
+
+		desktopHelper.selectZoomLevel('120', false);
+		cy.cGet('#comment-container-1').should('be.visible');
+
+		for (let width = 1420; width > 1300; width -= 1) {
+			cy.viewport(width, 600);
+			cy.cGet('#comment-container-1').should('be.visible');
+		}
+
+		for (let width = 1300; width < 1420; width += 1) {
+			cy.viewport(width, 600);
+			cy.cGet('#comment-container-1').should('be.visible');
+		}
+	});
+
+	it('Collapse/Expand On Last 1px Resize', function() {
+		desktopHelper.insertComment('test comment', true);
+		cy.cGet('#comment-container-1').should('exist');
+		cy.cGet('#comment-container-1').should('be.visible');
+
+		desktopHelper.selectZoomLevel('120', false);
+		cy.cGet('#comment-container-1').should('be.visible');
+
+		/*
+			at this point, the space on the left of the document and the
+			space on the right of the document (without moving the document
+			to the left) is same, equal to half of the comment width;
+		*/
+		cy.viewport(1285, 600);
+		cy.cGet('#comment-container-1').should('be.visible');
+
+		/*
+			we reduce the width by just one pixel at this point, and
+			`haveEnoughLeftMarginForMove` becomes false in
+			`ViewLayoutWriter.documentCanMoveLeft(...)` and thus document
+			can't move left anymore, so we collapse the comments.
+		*/
+		cy.viewport(1284, 600);
+		cy.cGet('#comment-container-1').should('be.visible');
+
+		cy.viewport(1285, 600);
+		cy.cGet('#comment-container-1').should('be.visible');
+	});
+
+	it('Tab Navigation', function() {
+		desktopHelper.insertComment(undefined, false);
+
+		cy.cGet('.annotation-button-autosaved').should('not.exist');
+		cy.cGet('.annotation-button-delete').should('not.exist');
+		cy.realPress('Tab');
+		cy.cGet('.annotation-button-autosaved').should('not.exist');
+		cy.cGet('.annotation-button-delete').should('not.exist');
+		cy.cGet('#annotation-cancel-new:focus-visible');
+
+		cy.realPress('Tab');
+		cy.cGet('#annotation-save-new:focus-visible');
+		cy.cGet('.annotation-button-autosaved').should('not.exist');
+		cy.cGet('.annotation-button-delete').should('not.exist');
+
+		// Tab past the last button cycles back to the text area instead of
+		// leaving the comment popup.
+		cy.realPress('Tab');
+		cy.cGet('#annotation-modify-textarea-new:focus-visible');
+		cy.cGet('.annotation-button-autosaved').should('not.exist');
+		cy.cGet('.annotation-button-delete').should('not.exist');
+
+		// Shift+Tab cycles backward the same way.
+		cy.realPress(['Shift', 'Tab']);
+		cy.cGet('#annotation-save-new:focus-visible');
+	});
+
+	it('Global opreations without doc focused', function () {
+		cy.getFrameWindow().then(function (win) {
+			cy.spy(win.app.socket, 'sendMessage').as('sendMessage');
+		});
+		cy.getFrameWindow().then(function (win) {
+			cy.stub(win, 'open').as('windowOpen');
+		});
+
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').click();
+
+		cy.getFrameWindow().then(function(win) {
+			win.document.dispatchEvent(new win.KeyboardEvent('keydown', {
+				key: 'p', code: 'KeyP', keyCode: 80,
+				ctrlKey: true, bubbles: true, cancelable: true
+			}));
+		});
+
+
+		const downloadAsMessage = 'downloadas ' +
+			'name=print.pdf ' +
+			'id=print ' +
+			'format=pdf ' +
+			'options={\"ExportFormFields\":{\"type\":\"boolean\",\"value\":\"false\"},' +
+			'\"ExportNotes\":{\"type\":\"boolean\",\"value\":\"false\"}}';
+		cy.get('@sendMessage').should('have.been.calledWith', downloadAsMessage);
+		cy.get('@windowOpen').should('be.called');
+	});
+
+	it('Action_GoToComment postMessage navigates to a comment', function() {
+		// Type identifiable text on the first line where the comment will be.
+		helper.typeIntoDocument('COMMENT_ANCHOR_LINE');
+
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('be.visible');
+		cy.cGet('#annotation-content-area-1').should('contain', 'some text0');
+
+		// Type lots of paragraph breaks so the document scrolls well past the comment.
+		helper.typeIntoDocument('{ctrl}{end}');
+		helper.typeIntoDocument('{enter}'.repeat(80) + 'BOTTOM_OF_DOCUMENT');
+
+		// The comment should now be scrolled out of view.
+		cy.cGet('#comment-container-1').should('not.be.visible');
+
+		// Stub postMessage to capture the response.
+		cy.getFrameWindow().then(win => {
+			cy.stub(win.parent, 'postMessage').as('postMessage');
+		});
+
+		// Send Action_GoToComment postMessage with the comment's Id.
+		cy.getFrameWindow().then(win => {
+			var message = {
+				'MessageId': 'Action_GoToComment',
+				'Values': { 'Id': '1' }
+			};
+			win.postMessage(JSON.stringify(message), '*');
+		});
+
+		// Verify the response postMessage was sent with success and no error.
+		cy.get('@postMessage').should(stub => {
+			var calls = stub.getCalls().filter(call => {
+				try {
+					var msg = typeof call.args[0] === 'string' ? JSON.parse(call.args[0]) : call.args[0];
+					return msg.MessageId === 'Action_GoToComment_Resp';
+				} catch (e) { return false; }
+			});
+			expect(calls.length, 'Action_GoToComment_Resp was not posted').to.be.greaterThan(0);
+			var resp = typeof calls[0].args[0] === 'string' ? JSON.parse(calls[0].args[0]) : calls[0].args[0];
+			expect(resp.Values.success, 'Action_GoToComment_Resp reported error: ' + resp.Values.errorMsg).to.be.true;
+			expect(resp.Values.Id).to.equal('1');
+		});
+
+		// After GoToComment, the comment should be scrolled back into view.
+		cy.cGet('#comment-container-1').should('be.visible');
+		// The cursor should be at the end of the first paragraph (the comment anchor).
+		// #clipboard-area has a copy of current cursor's node text (including anchor character):
+		cy.cGet('#clipboard-area').should('have.prop', 'textContent', 'COMMENT_ANCHOR_LINE\uFFFC');
+		cy.getFrameWindow().then(win => {
+			var textInput = win.app.map._textInput;
+			expect(textInput._lastSelectionStart).to.equal(20);
+			expect(textInput._lastSelectionEnd).to.equal(20);
+		});
+	});
+
+	it('Drag inside commented region forwards mouse events to core', function() {
+		// A Writer comment overlays the commented passage with a
+		// CommentSection that used to swallow mouse events. That blocked
+		// users from starting a text selection by mouse-dragging from
+		// inside the highlighted passage - core never saw the drag.
+		// CommentSection now delegates onMouseDown/Move/Up to MouseControl
+		// when a drag is active; this test exercises that path.
+
+		// 50% zoom (set in beforeEach) makes the highlight too small for a
+		// reliable drag, so switch to 100%.
+		desktopHelper.selectZoomLevel('100', false);
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+
+		// Lay down a passage and select a slice of it so the comment is
+		// anchored to a real range and ends up with a meaningful
+		// highlight rectangle to drag inside.
+		helper.typeIntoDocument('Hello world from this test document for drag testing.{enter}');
+		helper.typeIntoDocument('{ctrl}{home}');
+		for (var i = 0; i < 17; ++i)
+			helper.typeIntoDocument('{shift}{rightArrow}');
+		helper.textSelectionShouldExist();
+
+		desktopHelper.insertComment('drag-test', true);
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+
+		// Spy on MouseControl - if the new delegation works, the drag we
+		// dispatch below must reach these methods.
+		cy.getFrameWindow().then(function(win) {
+			cy.spy(win.app.activeDocument.mouseControl, 'onMouseDown').as('mcDown');
+			cy.spy(win.app.activeDocument.mouseControl, 'onMouseMove').as('mcMove');
+			cy.spy(win.app.activeDocument.mouseControl, 'onMouseUp').as('mcUp');
+		});
+
+		cy.getFrameWindow().then(function(win) {
+			var commentList = win.app.sectionContainer.getSectionWithName(
+				win.app.CSections.CommentList.name);
+			var comment = commentList.sectionProperties.commentList[0];
+			expect(comment, 'comment must exist').to.exist;
+			expect(comment.sectionProperties.data.rectangles,
+				'comment must own a highlight rectangle').to.exist;
+			var rects = comment.sectionProperties.data.rectangles;
+			expect(rects.length, 'at least one rectangle').to.be.greaterThan(0);
+			var rect = rects[0];
+
+			var canvas = win.document.getElementById('document-canvas');
+			var bounds = canvas.getBoundingClientRect();
+
+			// v1X/v1Y are view pixels inside the canvas (viewport offset
+			// baked in); /dpiScale -> CSS pixels.
+			var cssCenterX = ((rect.v1X + rect.v2X) / 2) / win.app.dpiScale;
+			var cssCenterY = ((rect.v1Y + rect.v4Y) / 2) / win.app.dpiScale;
+			var startX = bounds.left + cssCenterX - 10;
+			var startY = bounds.top + cssCenterY;
+			var endX = startX + 30;
+			var endY = startY;
+
+			// mouseenter primes mouseIsInside; the container's mousedown
+			// short-circuits otherwise.
+			canvas.dispatchEvent(new win.MouseEvent('mouseenter', {
+				clientX: startX, clientY: startY, button: 0, bubbles: true,
+			}));
+			canvas.dispatchEvent(new win.MouseEvent('mousedown', {
+				clientX: startX, clientY: startY, button: 0, bubbles: true,
+			}));
+			// mousemove and mouseup are wired on document, not canvas.
+			win.document.dispatchEvent(new win.MouseEvent('mousemove', {
+				clientX: endX, clientY: endY, button: 0, buttons: 1, bubbles: true,
+			}));
+			win.document.dispatchEvent(new win.MouseEvent('mouseup', {
+				clientX: endX, clientY: endY, button: 0, bubbles: true,
+			}));
+		});
+
+		// Each phase must have flowed through MouseControl. Without the
+		// CommentSection delegation, the spies stay silent because the
+		// section consumed the events.
+		cy.get('@mcDown').should('have.been.called');
+		cy.get('@mcMove').should('have.been.called');
+		cy.get('@mcUp').should('have.been.called');
+
+		// And core must have responded with a real text selection.
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+		helper.textSelectionShouldExist();
+	});
+
+	it('Right-click inside commented region opens the context menu', function() {
+		// A Writer comment overlays the commented passage with a
+		// CommentSection. A right-click there must be forwarded to
+		// MouseControl so core produces the document context menu, instead
+		// of the section swallowing the event. This exercises
+		// Comment.onContextMenu's delegation to MouseControl.onContextMenu.
+
+		// 50% zoom (set in beforeEach) makes the highlight too small for a
+		// reliable click, so switch to 100%.
+		desktopHelper.selectZoomLevel('100', false);
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+
+		// Lay down a passage and select a word so the comment anchors to a
+		// real range with a usable highlight rectangle.
+		helper.typeIntoDocument('Hello world from this test document.{enter}');
+		helper.typeIntoDocument('{ctrl}{home}');
+		for (var i = 0; i < 5; ++i)
+			helper.typeIntoDocument('{shift}{rightArrow}');
+		helper.textSelectionShouldExist();
+
+		desktopHelper.insertComment('context-menu-test', true);
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+
+		// Spy on MouseControl - the right-click must be delegated here.
+		cy.getFrameWindow().then(function(win) {
+			cy.spy(win.app.activeDocument.mouseControl, 'onContextMenu').as('mcContext');
+		});
+
+		cy.getFrameWindow().then(function(win) {
+			var commentList = win.app.sectionContainer.getSectionWithName(
+				win.app.CSections.CommentList.name);
+			var comment = commentList.sectionProperties.commentList[0];
+			expect(comment, 'comment must exist').to.exist;
+			expect(comment.sectionProperties.data.rectangles,
+				'comment must own a highlight rectangle').to.exist;
+			var rects = comment.sectionProperties.data.rectangles;
+			expect(rects.length, 'at least one rectangle').to.be.greaterThan(0);
+			var rect = rects[0];
+
+			var canvas = win.document.getElementById('document-canvas');
+			var bounds = canvas.getBoundingClientRect();
+
+			// v1X/v1Y are view pixels inside the canvas (viewport offset
+			// baked in); /dpiScale -> CSS pixels.
+			var cssCenterX = ((rect.v1X + rect.v2X) / 2) / win.app.dpiScale;
+			var cssCenterY = ((rect.v1Y + rect.v4Y) / 2) / win.app.dpiScale;
+			var clientX = bounds.left + cssCenterX;
+			var clientY = bounds.top + cssCenterY;
+
+			// First a plain click on the commented word, so the mouse
+			// cursor is placed inside the highlight before we right-click.
+			// mouseenter primes mouseIsInside; the container's mousedown
+			// short-circuits otherwise.
+			canvas.dispatchEvent(new win.MouseEvent('mouseenter', {
+				clientX: clientX, clientY: clientY, button: 0, bubbles: true,
+			}));
+			canvas.dispatchEvent(new win.MouseEvent('mousedown', {
+				clientX: clientX, clientY: clientY, button: 0, bubbles: true,
+			}));
+			win.document.dispatchEvent(new win.MouseEvent('mouseup', {
+				clientX: clientX, clientY: clientY, button: 0, bubbles: true,
+			}));
+
+			// Now right-click the same spot. The canvas oncontextmenu
+			// handler routes this to the CommentSection.
+			canvas.dispatchEvent(new win.MouseEvent('contextmenu', {
+				clientX: clientX, clientY: clientY, button: 2, bubbles: true,
+				cancelable: true,
+			}));
+		});
+
+		// The right-click must have flowed through MouseControl. Without
+		// the CommentSection delegation, the spy stays silent because the
+		// section consumed the event.
+		cy.get('@mcContext').should('have.been.called');
+
+		// And core must have produced the document context menu.
+		cy.cGet('#jsd-context-menu-dropdown-overlay').should('be.visible');
+	});
+
+    it('Hover inside commented region forwards mouse move to core', function() {
+		// A Writer comment overlays the commented passage with a
+		// CommentSection. It used to forward mouse moves to MouseControl
+		// only while a drag was active, so a plain hover over the
+		// highlighted passage never reached core. That meant core never
+		// requested a tooltip there - e.g. a tracked change that is also
+		// covered by a comment showed no track-change info popup.
+		// CommentSection now forwards hover moves too; this test exercises
+		// that path.
+
+		// 50% zoom (set in beforeEach) makes the highlight too small for a
+		// reliable hover target, so switch to 100%.
+		desktopHelper.selectZoomLevel('100', false);
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+
+		// Lay down a passage and select a slice of it so the comment is
+		// anchored to a real range with a meaningful highlight rectangle.
+		helper.typeIntoDocument('Hello world from this test document for hover testing.{enter}');
+		helper.typeIntoDocument('{ctrl}{home}');
+		for (var i = 0; i < 17; ++i)
+			helper.typeIntoDocument('{shift}{rightArrow}');
+		helper.textSelectionShouldExist();
+
+		desktopHelper.insertComment('hover-test', true);
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+
+		// Spy on MouseControl - if the new hover forwarding works, the plain
+		// mouse move we dispatch below must reach onMouseMove.
+		cy.getFrameWindow().then(function(win) {
+			cy.spy(win.app.activeDocument.mouseControl, 'onMouseMove').as('mcMove');
+		});
+
+		cy.getFrameWindow().then(function(win) {
+			var commentList = win.app.sectionContainer.getSectionWithName(
+				win.app.CSections.CommentList.name);
+			var comment = commentList.sectionProperties.commentList[0];
+			expect(comment, 'comment must exist').to.exist;
+			expect(comment.sectionProperties.data.rectangles,
+				'comment must own a highlight rectangle').to.exist;
+			var rects = comment.sectionProperties.data.rectangles;
+			expect(rects.length, 'at least one rectangle').to.be.greaterThan(0);
+			var rect = rects[0];
+
+			var canvas = win.document.getElementById('document-canvas');
+			var bounds = canvas.getBoundingClientRect();
+
+			// v1X/v1Y are view pixels inside the canvas (viewport offset
+			// baked in); /dpiScale -> CSS pixels.
+			var cssCenterX = ((rect.v1X + rect.v2X) / 2) / win.app.dpiScale;
+			var cssCenterY = ((rect.v1Y + rect.v4Y) / 2) / win.app.dpiScale;
+			var hoverX = bounds.left + cssCenterX;
+			var hoverY = bounds.top + cssCenterY;
+
+			// A plain hover: no button pressed, no preceding mousedown.
+			// Prime mouseIsInside on the section container, otherwise its
+			// onMouseMove early-exits before reaching any section.
+			var enterEvent = new win.MouseEvent('mouseenter', {
+				clientX: hoverX, clientY: hoverY, button: 0, bubbles: true,
+			});
+			canvas.dispatchEvent(enterEvent);
+			win.app.sectionContainer.onMouseEnter(enterEvent);
+			win.document.dispatchEvent(new win.MouseEvent('mousemove', {
+				clientX: hoverX, clientY: hoverY, button: 0, buttons: 0, bubbles: true,
+			}));
+		});
+
+		// The hover must have flowed through MouseControl. Without the
+		// CommentSection hover forwarding, the spy stays silent because the
+		// section consumed the event while no drag was active.
+		cy.get('@mcMove').should('have.been.called');
+	});
+
+	it('Action_GoToComment postMessage returns error for invalid comment', function() {
+		// Stub postMessage to capture the response.
+		cy.getFrameWindow().then(win => {
+			cy.stub(win.parent, 'postMessage').as('postMessage');
+		});
+
+		// Send Action_GoToComment with a non-existent comment Id.
+		cy.getFrameWindow().then(win => {
+			var message = {
+				'MessageId': 'Action_GoToComment',
+				'Values': { 'Id': '999' }
+			};
+			win.postMessage(JSON.stringify(message), '*');
+		});
+
+		// Verify error response was sent.
+		cy.get('@postMessage').should(stub => {
+			var found = stub.getCalls().some(call => {
+				try {
+					var msg = typeof call.args[0] === 'string' ? JSON.parse(call.args[0]) : call.args[0];
+					return msg.MessageId === 'Action_GoToComment_Resp'
+						&& msg.Values && msg.Values.success === false
+						&& msg.Values.Id === '999';
+				} catch (e) { return false; }
+			});
+			expect(found, 'Action_GoToComment_Resp with failure was not posted').to.be.true;
+		});
+	});
+
+	it('Annotation minimum width', function () {
+		cy.viewport(1920, 1080); // Let's have plenty of space
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain', 'some text');
+
+		// Add several nested replies to create a deep thread
+		const replyCount = 5;
+		for (let i = 1; i <= replyCount; i++) {
+			cy.cGet('#comment-annotation-menu-' + i).click();
+			cy.cGet('body').contains('.ui-combobox-entry', 'Reply').click();
+			cy.cGet('#annotation-reply-textarea-' + i).type('reply ' + i);
+			cy.cGet('#annotation-reply-' + i).click();
+			cy.cGet('#annotation-content-area-' + (i + 1)).should('contain', 'reply ' + i);
+		}
+
+		// Check that the last reply content is wide enough
+		cy.cGet('#comment-container-' + (replyCount + 1) + ' .cool-annotation-content')
+			.should(el => expect(el.width()).gte(200));
+	});
+
+	it('Get_Comments postMessage returns all comments', function() {
+		desktopHelper.insertComment('first comment');
+		cy.cGet('#annotation-content-area-1').should('contain', 'first comment');
+
+		// Avoid notebookbar collapse before the second insertComment.
+		cy.cGet('#Home-tab-label').click();
+		helper.typeIntoDocument('{end}{enter}');
+
+		desktopHelper.insertComment('second comment');
+		cy.cGet('#annotation-content-area-2').should('contain', 'second comment');
+
+		// Stub postMessage to capture the response.
+		cy.getFrameWindow().then(win => {
+			cy.stub(win.parent, 'postMessage').as('postMessage');
+		});
+
+		// Send Get_Comments postMessage.
+		cy.getFrameWindow().then(win => {
+			const message = { 'MessageId': 'Get_Comments' };
+			win.postMessage(JSON.stringify(message), '*');
+		});
+
+		// Verify the response contains both comments.
+		cy.get('@postMessage').should(stub => {
+			const calls = stub.getCalls().filter(call => {
+				try {
+					const msg = typeof call.args[0] === 'string' ? JSON.parse(call.args[0]) : call.args[0];
+					return msg.MessageId === 'Get_Comments_Resp';
+				} catch (e) { return false; }
+			});
+			expect(calls.length, 'Get_Comments_Resp was not posted').to.be.greaterThan(0);
+			const resp = typeof calls[0].args[0] === 'string' ? JSON.parse(calls[0].args[0]) : calls[0].args[0];
+			const comments = resp.Values.Comments;
+			expect(comments.length).to.equal(2);
+			expect(comments[0].Id).to.equal('1');
+			expect(comments[0].Text).to.equal('first comment');
+			expect(comments[0]).to.have.property('Author');
+			expect(comments[0]).to.have.property('DateTime');
+			expect(comments[0].Resolved).to.equal('false');
+			expect(comments[0].Parent).to.equal('0');
+			expect(comments[1].Id).to.equal('2');
+			expect(comments[1].Text).to.equal('second comment');
+		});
+	});
+
+	it('Reply focuses the reply textbox', function () {
+		desktopHelper.insertComment();
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-1').should('have.focus');
+	});
+
+	it('A reply outlives the comment it answered', function () {
+		desktopHelper.insertComment('first comment');
+		addReply(this.win, 1, 'middle');
+		addReply(this.win, 2, 'last');
+
+		cy.cGet('#comment-container-3').then(function (card) {
+			const before = card[0].getBoundingClientRect().top;
+
+			cy.cGet('#comment-annotation-menu-2').click();
+			cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Remove').click();
+			cy.cGet('#comment-container-2').should('not.exist');
+
+			// It is still laid out, so it takes the place the removed comment left.
+			cy.cGet('#comment-container-3').should(function (moved) {
+				expect(moved[0].getBoundingClientRect().top, 'top of the surviving reply')
+					.to.be.lessThan(before);
+			});
+		});
+
+		// It is still a working comment, so it answers a click.
+		cy.cGet('#comment-container-3').click();
+		cy.cGet('#comment-container-3').should('have.class', 'annotation-active');
+	});
+
+	// Opens the Reply pane on a comment, writes in it and posts it. The reply that comes back
+	// is the next comment in the thread, and it is in its laid out place when this returns.
+	function addReply(win, id, text) {
+		cy.cGet('#comment-annotation-menu-' + id).click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-' + id).should('have.focus').type(text);
+		cy.cGet('#annotation-reply-' + id).click();
+		helper.processToIdle(win);
+	}
+
+	it('Reply box stays in view when the comment is long', function () {
+		// Long enough that the card would run past the bottom of the view once the
+		// reply pane is added to it. The text has no trailing space, which would not
+		// survive being typed into the comment.
+		desktopHelper.insertComment('lorem ipsum dolor sit amet.'.repeat(25));
+
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-1').should('have.focus');
+
+		cy.cGet('#document-container').then(function (container) {
+			const view = container[0].getBoundingClientRect();
+
+			cy.cGet('#annotation-reply-textarea-1').should(function (textarea) {
+				expect(textarea[0].getBoundingClientRect().top).to.be.at.least(view.top);
+			});
+			cy.cGet('#annotation-reply-1').should(function (button) {
+				expect(button[0].getBoundingClientRect().bottom).to.be.at.most(view.bottom);
+			});
+		});
+	});
+
+	// The card and the line drawn to the text it points at, in viewport pixels. The check is
+	// retried until it holds, because the layout runs after the click that asks for it.
+	function cardAndConnector(id, check) {
+		cy.cGet('#comment-arrow-container line').should('exist');
+		cy.cGet('#comment-container-' + id).should(function (card) {
+			const line = card[0].ownerDocument.querySelector('#comment-arrow-container line');
+			check(card[0].getBoundingClientRect(), line.getBoundingClientRect());
+		});
+	}
+
+	it('A selected comment sits level with the text it points at', function () {
+		// Long enough that the card used to be moved up the view and away from its text.
+		// The card is taller than the view, so its middle is off screen, and its author
+		// row is the part of it that stays in view.
+		desktopHelper.insertComment('lorem ipsum dolor sit amet.'.repeat(25));
+		cy.cGet('#comment-container-1 .cool-annotation-author-header').click();
+
+		cardAndConnector(1, function (card, connector) {
+			expect(card.top, 'card top against the line to its text')
+				.to.be.closeTo(connector.top, 40);
+		});
+	});
+
+	it('A reply answers a click while its thread is selected', function () {
+		desktopHelper.insertComment('first comment');
+		addReply(this.win, 1, 'a reply');
+
+		// The card's box reaches down past its reply, so its middle is over the reply.
+		// Its author row is the part of it that is drawn.
+		cy.cGet('#comment-container-1 .cool-annotation-author-header').click();
+
+		cy.cGet('#comment-annotation-menu-2').should(function (menu) {
+			const box = menu[0].getBoundingClientRect();
+			const front = menu[0].ownerDocument.elementFromPoint(box.left + box.width / 2,
+				box.top + box.height / 2);
+			expect(front && front.id, 'what a click on the reply menu reaches')
+				.to.equal('comment-annotation-menu-2');
+		});
+	});
+
+	it('Modify focuses the modify textbox', function () {
+		desktopHelper.insertComment();
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
+		cy.cGet('#annotation-modify-textarea-1').should('have.focus');
+	});
+
+	it('Resolve/Unresolve Thread on partially resolved thread', function () {
+		desktopHelper.insertComment();
+		cy.cGet('#comment-container-1').should('exist');
+
+		// Reply to create a thread (root id 1, reply id 2).
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-1').type('reply text');
+		cy.cGet('#annotation-reply-1').click();
+		cy.cGet('#annotation-content-area-2').should('contain', 'reply text');
+
+		// Resolve only the reply, leaving the root unresolved.
+		cy.cGet('#comment-annotation-menu-2').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Resolve').click();
+		cy.cGet('#comment-container-2 .cool-annotation-content-resolved').should('have.text', 'Resolved');
+		cy.cGet('#comment-container-1 .cool-annotation-content-resolved').should('have.text', '');
+
+		// Root menu must offer 'Resolve Thread' since the thread is not fully resolved.
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Resolve Thread').should('be.visible');
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Unresolve Thread').should('not.exist');
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Resolve Thread').click();
+
+		// All comments in the thread are now resolved.
+		cy.cGet('#comment-container-1 .cool-annotation-content-resolved').should('have.text', 'Resolved');
+		cy.cGet('#comment-container-2 .cool-annotation-content-resolved').should('have.text', 'Resolved');
+
+		// Root menu now offers 'Unresolve Thread'.
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Unresolve Thread').should('be.visible');
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Unresolve Thread').click();
+
+		// All comments in the thread are unresolved again.
+		cy.cGet('#comment-container-1 .cool-annotation-content-resolved').should('have.text', '');
+		cy.cGet('#comment-container-2 .cool-annotation-content-resolved').should('have.text', '');
+	});
+
+	it('Preserves thread layout on copy paste', function() {
+		// Two threads make four comment boxes, more than the 600px viewport the
+		// other tests share leaves below the notebookbar.
+		cy.viewport(1400, 1080);
+		desktopHelper.selectZoomLevel('100', false);
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+
+		helper.typeIntoDocument('Hello');
+		helper.typeIntoDocument('{home}');
+		for (var i = 0; i < 5; i++)
+			helper.typeIntoDocument('{shift}{rightArrow}');
+		helper.textSelectionShouldExist();
+
+		desktopHelper.insertComment('root comment');
+		cy.cGet('#annotation-content-area-1').should('contain', 'root comment');
+
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-1').type('reply text');
+		cy.cGet('#annotation-reply-1').click();
+		cy.cGet('#annotation-content-area-2').should('contain', 'reply text');
+
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+
+		helper.typeIntoDocument('{home}');
+		helper.typeIntoDocument('{shift}{end}');
+
+		cy.getFrameWindow().then(function(win) {
+			win.app.socket.sendMessage('uno .uno:Copy');
+		});
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+
+		helper.typeIntoDocument('{end}{enter}');
+
+		cy.getFrameWindow().then(function(win) {
+			win.app.socket.sendMessage('uno .uno:Paste');
+		});
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+
+		cy.cGet('.cool-annotation-content-wrapper').should('have.length', 4);
+
+		cy.cGet('.cool-annotation-content-wrapper').each(function($el) {
+			cy.wrap($el).should('be.visible');
+		});
+
+		cy.getFrameWindow().then(function(win) {
+			var commentSection = win.app.sectionContainer.getSectionWithName(
+				win.app.CSections.CommentList.name);
+			var comments = commentSection.sectionProperties.commentList;
+
+			var threadsFound = 0;
+			for (var i = 0; i < comments.length; i++) {
+				var comment = comments[i];
+				if (comment.sectionProperties.children.length > 0) {
+					threadsFound++;
+					var parentY = comment.getContainerPosY();
+					var parentHeight = comment.getCommentHeight(false);
+					for (var j = 0; j < comment.sectionProperties.children.length; j++) {
+						var child = comment.sectionProperties.children[j];
+						var childY = child.getContainerPosY();
+						expect(childY - parentY,
+							'child ' + child.sectionProperties.data.id +
+							' too far from parent ' + comment.sectionProperties.data.id
+						).to.be.lessThan(parentHeight + 200);
+					}
+				}
+			}
+			expect(threadsFound, 'should have at least 2 comment threads').to.be.at.least(2);
+		});
+	});
+});
+
+describe(['tagdesktop'], 'Collapsed Annotation Tests', function() {
+	var newFilePath;
+
+	beforeEach(function() {
+		newFilePath = helper.setupAndLoadDocument('writer/annotation.odt');
+		desktopHelper.switchUIToNotebookbar();
+		desktopHelper.sidebarToggle();
+	});
+
+	it('Insert', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain','some text0');
+	});
+
+	it('Modify', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain','some text0');
+		cy.cGet('.cool-annotation-img').click();
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
+		cy.cGet('#annotation-modify-textarea-1').type('{end}, some other text');
+		cy.cGet('#annotation-save-1').click();
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain','some text0, some other text');
+	});
+
+	it('Reply', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain','some text');
+		cy.cGet('.cool-annotation-img').click();
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-1').type('some reply text');
+		cy.cGet('#annotation-reply-1').click();
+		cy.cGet('#annotation-content-area-2').should('contain','some reply text');
+	});
+
+	it('Remove', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('.cool-annotation-content > div').should('contain','some text');
+		cy.cGet('.cool-annotation-img').click();
+		cy.cGet('.cool-annotation-menu').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Remove').click();
+		cy.cGet('.cool-annotation-content-wrapper').should('not.exist');
+	});
+
+	it('Autosave Collapse', function() {
+		desktopHelper.selectZoomLevel('100', false);
+		helper.typeIntoDocument('placeholder text');
+		desktopHelper.insertComment(undefined, false);
+		cy.cGet('#map').focus();
+		helper.typeIntoDocument('{home}');
+		cy.cGet('.cool-annotation-info-collapsed').should('have.text','!');
+		cy.cGet('.cool-annotation-info-collapsed').should('be.not.visible');
+		cy.cGet('.cool-annotation-img').click();
+		cy.cGet('.annotation-button-autosaved').should('be.visible');
+		cy.cGet('.annotation-button-delete').should('be.visible');
+		cy.cGet('#annotation-save-1').click();
+		helper.typeIntoDocument('{home}');
+		cy.cGet('.cool-annotation-img').click();
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('.annotation-button-autosaved').should('be.not.visible');
+		cy.cGet('.annotation-button-delete').should('be.not.visible');
+		cy.cGet('.cool-annotation-info-collapsed').should('not.have.text','!');
+		cy.cGet('#map').focus();
+		helper.typeIntoDocument('{home}');
+		cy.cGet('.cool-annotation-info-collapsed').should('be.not.visible');
+
+		helper.reloadDocument(newFilePath);
+		desktopHelper.ensureSidebarHidden();
+		cy.cGet('.cool-annotation-img').click();
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('.cool-annotation-info-collapsed').should('be.not.visible');
+	})
+
+});
+
+describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
+	var newFilePath;
+
+	beforeEach(function() {
+		cy.viewport(1400, 600);
+		newFilePath = helper.setupAndLoadDocument('writer/annotation.odt');
+		desktopHelper.switchUIToNotebookbar();
+		// TODO: skip sidebar detection on reload
+		// desktopHelper.sidebarToggle();
+		desktopHelper.selectZoomLevel('50', false);
+	});
+
+	it('Insert autosave', function() {
+		desktopHelper.insertComment(undefined, false);
+		cy.cGet('#map').focus();
+		cy.cGet('.annotation-button-autosaved').should('be.visible');
+		cy.cGet('.annotation-button-delete').should('be.visible');
+		cy.cGet('.cool-annotation-edit.modify-annotation').should('be.visible');
+
+		helper.reloadDocument(newFilePath);
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+	});
+
+	it('Insert autosave save', function() {
+		desktopHelper.insertComment(undefined, false);
+		cy.cGet('#map').focus();
+		cy.cGet('.annotation-button-autosaved').should('be.visible');
+		cy.cGet('.annotation-button-delete').should('be.visible');
+		cy.cGet('.cool-annotation-edit.modify-annotation').should('be.visible');
+		cy.cGet('#annotation-save-1').click();
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('.annotation-button-autosaved').should('be.not.visible');
+		cy.cGet('.annotation-button-delete').should('be.not.visible');
+
+		helper.reloadDocument(newFilePath);
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+	});
+
+	it('Insert autosave cancel', function() {
+		desktopHelper.insertComment(undefined, false);
+		cy.cGet('#map').focus();
+		cy.cGet('.annotation-button-autosaved').should('be.visible');
+		cy.cGet('.annotation-button-delete').should('be.visible');
+		cy.cGet('.cool-annotation-edit.modify-annotation').should('be.visible');
+		cy.cGet('#annotation-cancel-1').click();
+		cy.cGet('#comment-container-1').should('not.exist');
+		cy.cGet('.annotation-button-autosaved').should('not.exist');
+		cy.cGet('.annotation-button-delete').should('not.exist');
+
+		helper.reloadDocument(newFilePath);
+		cy.cGet('.cool-annotation-content-wrapper').should('not.exist');
+		cy.cGet('#comment-container-1').should('not.exist');
+	});
+
+	it('Modify autosave', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
+		cy.cGet('#annotation-modify-textarea-1').type('{end}, some other text');
+		cy.cGet('#map').focus();
+		cy.cGet('.annotation-button-autosaved').should('be.visible');
+		cy.cGet('.annotation-button-delete').should('be.visible');
+		cy.cGet('.cool-annotation-edit.modify-annotation').should('be.visible');
+
+		helper.reloadDocument(newFilePath);
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0, some other text');
+	});
+
+	it('Modify autosave save', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
+		cy.cGet('#annotation-modify-textarea-1').type('{end}, some other text');
+		cy.cGet('#map').focus();
+		cy.cGet('.annotation-button-autosaved').should('be.visible');
+		cy.cGet('.annotation-button-delete').should('be.visible');
+		cy.cGet('.cool-annotation-edit.modify-annotation').should('be.visible');
+		cy.cGet('#annotation-save-1').click();
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0, some other text');
+		cy.cGet('.annotation-button-autosaved').should('be.not.visible');
+		cy.cGet('.annotation-button-delete').should('be.not.visible');
+
+		helper.reloadDocument(newFilePath);
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0, some other text');
+	});
+
+	it('Modify autosave cancel', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
+		cy.cGet('#annotation-modify-textarea-1').type('some other text, ');
+		cy.cGet('#map').focus();
+		cy.cGet('.annotation-button-autosaved').should('be.visible');
+		cy.cGet('.annotation-button-delete').should('be.visible');
+		cy.cGet('.cool-annotation-edit.modify-annotation').should('be.visible');
+		cy.cGet('#annotation-cancel-1').click();
+		cy.cGet('.cool-annotation-edit.modify-annotation').should('be.not.visible');
+		cy.cGet('.annotation-button-autosaved').should('be.not.visible');
+		cy.cGet('.annotation-button-delete').should('be.not.visible');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+
+		helper.reloadDocument(newFilePath);
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+	});
+
+	it('Reply autosave', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-1').type('some reply text');
+		cy.cGet('#map').focus();
+		cy.cGet('.annotation-button-autosaved').should('be.visible');
+		cy.cGet('.annotation-button-delete').should('be.visible');
+		cy.cGet('#annotation-modify-textarea-2').should('be.visible');
+
+		helper.reloadDocument(newFilePath);
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-2').should('have.text','some reply text');
+	});
+
+	it('Reply autosave save', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-1').type('some reply text');
+		cy.cGet('#map').focus();
+		cy.cGet('.annotation-button-autosaved').should('be.visible');
+		cy.cGet('.annotation-button-delete').should('be.visible');
+		cy.cGet('#annotation-modify-textarea-2').should('be.visible');
+		cy.cGet('#annotation-modify-textarea-2').should('have.text','some reply text');
+		cy.cGet('#annotation-save-2').click();
+		cy.cGet('#annotation-modify-textarea-2').should('be.not.visible');
+		cy.cGet('.annotation-button-autosaved').should('be.not.visible');
+		cy.cGet('.annotation-button-delete').should('be.not.visible');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('#annotation-content-area-2').should('have.text','some reply text');
+
+		helper.reloadDocument(newFilePath);
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-2').should('have.text','some reply text');
+	});
+
+	it('Reply autosave cancel', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-1').type('some reply text');
+		cy.cGet('#map').focus();
+		cy.cGet('.annotation-button-autosaved').should('be.visible');
+		cy.cGet('.annotation-button-delete').should('be.visible');
+		cy.cGet('#annotation-modify-textarea-2').should('be.visible');
+		cy.cGet('#annotation-modify-textarea-2').should('have.text','some reply text');
+		cy.cGet('#annotation-cancel-2').click();
+		cy.cGet('#annotation-modify-textarea-2').should('not.exist');
+		cy.cGet('.annotation-button-autosaved').should('not.exist');
+		cy.cGet('.annotation-button-delete').should('not.exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('#annotation-content-area-2').should('not.exist');
+		cy.cGet('#comment-container-1 .annotation-button-autosaved').should('not.exist');
+		cy.cGet('#comment-container-1 .annotation-button-delete').should('not.exist');
+		cy.cGet('#comment-container-2 .annotation-button-autosaved').should('not.exist');
+		cy.cGet('#comment-container-2 .annotation-button-delete').should('not.exist');
+
+		helper.reloadDocument(newFilePath);
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
+		cy.cGet('#annotation-content-area-2').should('not.exist');
+	});
+});
+
+describe(['tagdesktop'], 'Annotation with @mention', function() {
+	beforeEach(function() {
+		cy.viewport(1400, 600);
+		helper.setupAndLoadDocument('writer/annotation.odt');
+		desktopHelper.switchUIToNotebookbar();
+		desktopHelper.sidebarToggle();
+		desktopHelper.selectZoomLevel('50', false);
+	});
+
+	it('Insert comment with mention', function() {
+		desktopHelper.insertComment('some text0', false);
+
+		cy.cGet('.cool-annotation').find('#annotation-modify-textarea-new').type(' @Ale');
+		cy.cGet('#mentionPopup').should('be.visible');
+		cy.cGet('#mentionPopupList .ui-treeview-entry:nth-child(1)').click();
+
+		cy.cGet('#annotation-modify-textarea-new a').should('exist');
+		cy.cGet('#annotation-modify-textarea-new a').should('have.text', '@Alexandra');
+		cy.cGet('#annotation-modify-textarea-new a').should('have.attr', 'href', 'https://github.com/CollaboraOnline/online');
+		cy.cGet('#annotation-modify-textarea-new').should('have.text','some text0 @Alexandra\u00A0');
+
+		cy.cGet('#annotation-save-new').click();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1 a').should('exist');
+		cy.cGet('#annotation-content-area-1 a').should('have.text', '@Alexandra');
+		cy.cGet('#annotation-content-area-1 a').should('have.attr', 'href', 'https://github.com/CollaboraOnline/online');
+		cy.cGet('#annotation-content-area-1').should('have.text','some text0 @Alexandra ');
+	});
+
+	it('Modify comment by adding mention', function () {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain', 'some text0');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
+
+		cy.cGet('#annotation-modify-textarea-1').type('{end}');
+		cy.cGet('#annotation-modify-textarea-1').type(' @Ale');
+		cy.cGet('#mentionPopup').should('be.visible');
+		cy.cGet('#mentionPopupList .ui-treeview-entry:nth-child(1)').click();
+
+		cy.cGet('#annotation-modify-textarea-1 a').should('exist');
+		cy.cGet('#annotation-modify-textarea-1 a').should('have.text', '@Alexandra');
+		cy.cGet('#annotation-modify-textarea-1 a').should('have.attr', 'href', 'https://github.com/CollaboraOnline/online');
+		cy.cGet('#annotation-modify-textarea-1').should('have.text', 'some text0 @Alexandra\u00A0');
+
+		cy.cGet('#annotation-save-1').click();
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+
+		cy.cGet('#annotation-content-area-1 a').should('exist');
+		cy.cGet('#annotation-content-area-1 a').should('have.text', '@Alexandra');
+		cy.cGet('#annotation-content-area-1 a').should('have.attr', 'href', 'https://github.com/CollaboraOnline/online');
+		cy.cGet('#annotation-content-area-1').should('have.text', 'some text0 @Alexandra ');
+	})
+
+	it('Reply to parent comment by adding mention', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain','some text0');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+
+		cy.cGet('#annotation-reply-textarea-1').type('some reply text @Ale');
+
+		cy.cGet('#mentionPopup').should('be.visible');
+		cy.cGet('#mentionPopupList .ui-treeview-entry:nth-child(1)').click();
+
+		cy.cGet('#annotation-reply-textarea-1 a').should('exist');
+		cy.cGet('#annotation-reply-textarea-1 a').should('have.text', '@Alexandra');
+		cy.cGet('#annotation-reply-textarea-1 a').should('have.attr', 'href', 'https://github.com/CollaboraOnline/online');
+		cy.cGet('#annotation-reply-textarea-1').should('have.text', 'some reply text @Alexandra\u00A0');
+
+		cy.cGet('#annotation-reply-1').click();
+		cy.cGet('#annotation-content-area-2').should('contain','some reply text @Alexandra ');
+	});
+
+	it('Reply to reply comment by adding mention', function() {
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain','some text0');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+
+		cy.cGet('#annotation-reply-textarea-1').type('some reply text @Ale');
+
+		cy.cGet('#mentionPopup').should('be.visible');
+		cy.cGet('#mentionPopupList .ui-treeview-entry:nth-child(1)').type('{enter}');
+
+		cy.cGet('#annotation-reply-textarea-1 a').should('exist');
+		cy.cGet('#annotation-reply-textarea-1 a').should('have.text', '@Alexandra');
+		cy.cGet('#annotation-reply-textarea-1 a').should('have.attr', 'href', 'https://github.com/CollaboraOnline/online');
+		cy.cGet('#annotation-reply-textarea-1').should('have.text', 'some reply text @Alexandra\u00A0');
+
+		cy.cGet('#annotation-reply-1').click();
+		cy.cGet('#annotation-content-area-2').should('contain','some reply text @Alexandra ');
+
+		cy.cGet('#comment-annotation-menu-2').should('exist').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
+		cy.cGet('#annotation-reply-textarea-2').type('some reply to reply text @Ale');
+
+		cy.cGet('#mentionPopup').should('be.visible');
+		cy.cGet('#mentionPopupList .ui-treeview-entry:nth-child(1)').type('{enter}');
+
+		cy.cGet('#annotation-reply-textarea-2 a').should('exist');
+		cy.cGet('#annotation-reply-textarea-2 a').should('have.text', '@Alexandra');
+		cy.cGet('#annotation-reply-textarea-2 a').should('have.attr', 'href', 'https://github.com/CollaboraOnline/online');
+		cy.cGet('#annotation-reply-textarea-2').should('have.text', 'some reply to reply text @Alexandra\u00A0');
+
+		cy.cGet('#annotation-reply-2').click();
+		cy.cGet('#annotation-content-area-3').should('contain','some reply to reply text @Alexandra ');
+	});
+
+	it('Escape should close the mentionPopup, comment should be in focus', function() {
+		desktopHelper.insertComment('some text0', false);
+
+		cy.cGet('.cool-annotation').find('#annotation-modify-textarea-new').type(' @Ale');
+		cy.cGet('#mentionPopup').should('be.visible');
+		helper.typeIntoDocument('{esc}');
+
+		cy.cGet('#mentionPopup').should('not.exist');
+		cy.cGet('#annotation-modify-textarea-new').should('have.focus');
+	});
+
+	it('Typing email address should not show mention popup', function() {
+		desktopHelper.insertComment('collaboraonline@al', false);
+
+		cy.cGet('#mentionPopup').should('not.exist');
+		cy.cGet('#annotation-modify-textarea-new').should('have.focus');
+	});
+
+	it('Special characters should not close the mention popup', function() {
+		desktopHelper.insertComment('some text0', false);
+
+		cy.cGet('.cool-annotation').find('#annotation-modify-textarea-new').type(' @Ale');
+		cy.cGet('#mentionPopup').should('be.visible');
+		cy.cGet('#mentionPopupList .ui-treeview-entry:nth-child(1)').should('exist');
+
+		// the popup covers the comment textarea, so keep typing with force
+		// a special character only narrows the search, it must not dismiss the popup
+		cy.cGet('#annotation-modify-textarea-new').type('*', {force: true});
+		cy.cGet('#mentionPopupfixedtext').should('be.visible').should('have.text', 'No search results found!');
+
+		// ... and further special characters keep it up as well
+		cy.cGet('#annotation-modify-textarea-new').type('#', {force: true});
+		cy.cGet('#mentionPopupfixedtext').should('be.visible');
+
+		// removing them brings the suggestions back
+		cy.cGet('#annotation-modify-textarea-new').type('{backspace}{backspace}', {force: true});
+		cy.cGet('#mentionPopupList .ui-treeview-entry:nth-child(1)').should('exist');
+	});
+
+	it('Unselect comment on scroll', function() {
+		desktopHelper.insertComment('test comment');
+		cy.cGet('#comment-container-1').should('exist');
+		cy.cGet('#comment-container-1').should('exist').should('not.have.class', 'annotation-active');
+		cy.cGet('#comment-container-1').click();
+		cy.cGet('#comment-container-1').should('exist').should('have.class', 'annotation-active');
+		cy.getFrameWindow().then(function(win) { win.app.sectionContainer.getSectionWithName('scroll').scrollVerticalWithOffset(10); });
+		cy.cGet('#comment-container-1').should('exist').should('not.have.class', 'annotation-active');
+	})
+
+	it('Keep full view comment on scroll', function() {
+		// Given a full-view comment in a document:
+		desktopHelper.insertComment('test comment');
+		cy.cGet('#comment-container-1').should('exist');
+		cy.cGet('#comment-container-1').click();
+		cy.cGet('#comment-container-1').should('have.class', 'annotation-active');
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Open in full view').click();
+		cy.cGet('#comment-container-1').should('have.class', 'annotation-pop-up');
+
+		// When scrolling:
+		cy.getFrameWindow().then(function(win) { win.app.sectionContainer.getSectionWithName('scroll').scrollVerticalWithOffset(10); });
+
+		// Then make sure the comment is still in full-view:
+		// Without the accompanying fix in place, this test would have failed with:
+		// AssertionError: Timed out retrying after 60000ms: expected '<div#comment-container-1.cool-annotation.cool-annotation-collapsed-show>' to have class 'annotation-active'
+		// i.e. the annotation's active state was lost for a full-view comment on scroll.
+		cy.cGet('#comment-container-1').should('have.class', 'annotation-active');
+		cy.cGet('#comment-container-1').should('have.class', 'annotation-pop-up');
+	})
+});
+
+describe(['tagdesktop'], 'Large Annotation Tests', function() {
+	beforeEach(function() {
+		cy.viewport(1920, 1080);
+		helper.setupAndLoadDocument('writer/annotation-large.odt');
+		desktopHelper.switchUIToNotebookbar();
+		desktopHelper.sidebarToggle();
+		// A cursor update from core closes any comment the cursor is not in.
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+	});
+
+	it('Full view fits in viewport', function() {
+		// Given a large comment in a document:
+		cy.cGet('#comment-container-1').should('exist');
+		cy.cGet('#comment-container-1').click();
+		cy.cGet('#comment-container-1').should('have.class', 'annotation-active');
+
+		// When opening it in full view:
+		cy.cGet('#comment-annotation-menu-1').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Open in full view').click();
+		cy.cGet('#comment-container-1').should('have.class', 'annotation-pop-up');
+
+		// Then make sure the card's wrapper fits inside the document area:
+		cy.cGet('#document-container').then(function($doc) {
+			var docBottom = $doc[0].getBoundingClientRect().bottom;
+			cy.cGet('#comment-container-1 .cool-annotation-content-wrapper').should(function($el) {
+				var wrapperBottom = $el[0].getBoundingClientRect().bottom;
+				// Without the accompanying fix in place, this test would have failed with:
+				// AssertionError: Timed out retrying after 60000ms: wrapper bottom vs document bottom: expected 1080 to be at most 1047
+				// i.e. the comment bottom was cut off and you couldn't scroll down
+				// further.
+				expect(wrapperBottom, 'wrapper bottom vs document bottom').to.be.at.most(docBottom);
+			});
+		});
+	})
+});

@@ -1,0 +1,107 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <unotools/optionsdlg.hxx>
+#include <unotools/configitem.hxx>
+#include <unotools/configmgr.hxx>
+#include <cpo/uno/Any.hxx>
+#include <cpo/uno/Sequence.hxx>
+
+#include <cassert>
+
+using namespace com::sun::star::beans;
+using namespace ::cpo::uno;
+using namespace cpo::uno;
+
+constexpr OUString ROOT_NODE = u"OptionsDialogGroups"_ustr;
+constexpr OUString PAGES_NODE = u"Pages"_ustr;
+
+namespace {
+    enum NodeType{ NT_Group, NT_Option };
+}
+constexpr OUString g_sPathDelimiter = u"/"_ustr;
+static void ReadNode(
+        const Reference<css::container::XHierarchicalNameAccess>& xHierarchyAccess,
+        SvtOptionsDialogOptions::OptionNodeList & aOptionNodeList,
+        std::u16string_view _rNode, NodeType _eType );
+
+
+SvtOptionsDialogOptions::SvtOptionsDialogOptions()
+{
+    Reference<css::container::XHierarchicalNameAccess> xHierarchyAccess = utl::ConfigManager::acquireTree(u"Office.OptionsDialog");
+    const Sequence< OUString > aNodeSeq = utl::ConfigItem::GetNodeNames( xHierarchyAccess, ROOT_NODE, utl::ConfigNameFormat::LocalNode);
+    OUString sNode( ROOT_NODE + g_sPathDelimiter );
+    for ( const auto& rNode : aNodeSeq )
+    {
+        OUString sSubNode( sNode + rNode );
+        ReadNode( xHierarchyAccess, m_aOptionNodeList, sSubNode, NT_Group );
+    }
+}
+
+
+static void ReadNode(
+        const Reference<css::container::XHierarchicalNameAccess>& xHierarchyAccess,
+        SvtOptionsDialogOptions::OptionNodeList & aOptionNodeList,
+        std::u16string_view _rNode, NodeType _eType )
+{
+    OUString sNode( _rNode + g_sPathDelimiter );
+    OUString sSet;
+    sal_Int32 nLen = 0;
+    switch ( _eType )
+    {
+        case NT_Group :
+        {
+            sSet = PAGES_NODE;
+            nLen = 2;
+            break;
+        }
+
+        case NT_Option :
+        {
+            nLen = 1;
+            break;
+        }
+    }
+
+    assert(nLen > 0);
+
+    Sequence< OUString > lResult( nLen );
+    auto plResult = lResult.getArray();
+    plResult[0] = sNode + "Hide";
+    if ( _eType != NT_Option )
+        plResult[1] = sNode + sSet;
+
+    Sequence< Any > aValues = utl::ConfigItem::GetProperties( xHierarchyAccess, lResult, /*bAllLocales*/false );
+    bool bHide = false;
+    if ( aValues[0] >>= bHide )
+        aOptionNodeList.emplace( sNode, bHide );
+
+    if ( _eType != NT_Option )
+    {
+        OUString sNodes( sNode + sSet );
+        const Sequence< OUString > aNodes = utl::ConfigItem::GetNodeNames( xHierarchyAccess, sNodes, utl::ConfigNameFormat::LocalNode );
+        for ( const auto& rNode : aNodes )
+        {
+            OUString sSubNodeName( sNodes + g_sPathDelimiter + rNode );
+            ReadNode( xHierarchyAccess, aOptionNodeList, sSubNodeName, NT_Option );
+        }
+    }
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,237 @@
+/* global describe it cy require Cypress */
+
+var helper = require('../../common/helper');
+var calcHelper = require('../../common/calc_helper');
+var desktopHelper = require('../../common/desktop_helper');
+
+describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Sheet Operations.', { testIsolation: false }, function () {
+
+	desktopHelper.shareDocumentAcrossTests('calc/sheet_operation.ods');
+
+	// Wait one Chrome repaint cycle (two requestAnimationFrame) so a focus
+	// change is applied before we sample it or send the next key - no
+	// server round-trip.
+	function waitAFrame() {
+		cy.getFrameWindow().then(function (win) {
+			return new Cypress.Promise(function (resolve) {
+				win.requestAnimationFrame(function () {
+					win.requestAnimationFrame(resolve);
+				});
+			});
+		});
+	}
+
+	it('Insert sheet', function () {
+		calcHelper.assertNumberofSheets(1);
+		cy.cGet('#spreadsheet-toolbar #insertsheet').click();
+		calcHelper.assertNumberofSheets(2);
+	});
+
+	it('Insert sheet rapidly keeps order', function () {
+		calcHelper.assertNumberofSheets(1);
+		// Fire the clicks synchronously, in one tick, so none of them can be
+		// separated by a status round-trip from the server - that's what
+		// "rapidly" means for the bug this guards against. Six clicks is
+		// enough to run past the tab strip's own divider elements, which
+		// would otherwise mask the very first couple of clicks going stale.
+		cy.cGet('#spreadsheet-toolbar #insertsheet').then(function ($el) {
+			for (var i = 0; i < 6; i++) {
+				$el[0].click();
+			}
+		});
+		calcHelper.assertNumberofSheets(7);
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet1');
+		cy.cGet('#spreadsheet-tab1').should('have.text', 'Sheet2');
+		cy.cGet('#spreadsheet-tab2').should('have.text', 'Sheet3');
+		cy.cGet('#spreadsheet-tab3').should('have.text', 'Sheet4');
+		cy.cGet('#spreadsheet-tab4').should('have.text', 'Sheet5');
+		cy.cGet('#spreadsheet-tab5').should('have.text', 'Sheet6');
+		cy.cGet('#spreadsheet-tab6').should('have.text', 'Sheet7');
+		cy.cGet('#spreadsheet-tab6').should('have.class', 'spreadsheet-tab-selected');
+	});
+
+	it.skip('Switching sheet sets the view that contains cell-cursor', function () {
+		calcHelper.assertNumberofSheets(1);
+		helper.typeIntoInputField(helper.addressInputSelector, 'A1');
+		calcHelper.ensureViewContainsCellCursor();
+		cy.cGet('#spreadsheet-toolbar #insertsheet').click();
+		calcHelper.assertNumberofSheets(2);
+		cy.cGet('#spreadsheet-tab1').click();
+		calcHelper.ensureViewContainsCellCursor();
+		helper.typeIntoInputField(helper.addressInputSelector, 'A200');
+		calcHelper.ensureViewContainsCellCursor();
+		cy.cGet('#spreadsheet-tab0').click();
+		calcHelper.ensureViewContainsCellCursor();
+	});
+
+	it('Insert sheet before', function () {
+		calcHelper.assertNumberofSheets(1);
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet1');
+		calcHelper.selectOptionFromContextMenu('Insert sheet before this');
+		calcHelper.assertNumberofSheets(2);
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet2');
+		cy.cGet('#spreadsheet-tab1').should('have.text', 'Sheet1');
+	});
+
+	it('Insert sheet after', function () {
+		calcHelper.assertNumberofSheets(1);
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet1');
+		calcHelper.selectOptionFromContextMenu('Insert sheet after this');
+		calcHelper.assertNumberofSheets(2);
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet1');
+		cy.cGet('#spreadsheet-tab1').should('have.text', 'Sheet2');
+	});
+
+	it('Duplicate sheet', function () {
+		calcHelper.assertNumberofSheets(1);
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet1');
+		calcHelper.selectOptionFromContextMenu('Duplicate Sheet');
+		calcHelper.assertNumberofSheets(2);
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet1');
+		cy.cGet('#spreadsheet-tab1').should('have.text', 'Sheet1_2');
+	});
+
+	it('Delete sheet', function () {
+		calcHelper.assertNumberofSheets(1);
+		cy.cGet('#spreadsheet-toolbar #insertsheet').click();
+		calcHelper.assertNumberofSheets(2);
+		calcHelper.selectOptionFromContextMenu('Delete Sheet...');
+		cy.cGet('#delete-sheet-modal-response').click();
+		calcHelper.assertNumberofSheets(1);
+	});
+
+	it('Rename sheet', function () {
+		calcHelper.assertNumberofSheets(1);
+		cy.cGet('.spreadsheet-tab.spreadsheet-tab-selected').should('have.text', 'Sheet1');
+		calcHelper.selectOptionFromContextMenu('Rename Sheet...');
+		cy.cGet('#modal-dialog-rename-calc-sheet').should('exist');
+		cy.cGet('#input-modal-input').type('{selectall}{backspace}renameSheet');
+		cy.cGet('#response-ok').click();
+		cy.cGet('.spreadsheet-tab.spreadsheet-tab-selected').should('have.text', 'renameSheet');
+	});
+
+	it('Rename sheet using keyboard only', function () {
+		calcHelper.assertNumberofSheets(1);
+		cy.cGet('.spreadsheet-tab.spreadsheet-tab-selected').should('have.text', 'Sheet1');
+		calcHelper.selectOptionFromContextMenu('Rename Sheet...');
+		cy.cGet('#modal-dialog-rename-calc-sheet').should('exist');
+		cy.cGet('#input-modal-input').should('have.focus').type('{selectall}{backspace}renameSheet{Enter}');
+		cy.cGet('#modal-dialog-rename-calc-sheet').should('not.exist');
+		cy.cGet('.spreadsheet-tab.spreadsheet-tab-selected').should('have.text', 'renameSheet');
+	});
+
+	it('Navigate sheet tab context menu with arrow keys', function () {
+		calcHelper.assertNumberofSheets(1);
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet1');
+		cy.cGet('#spreadsheet-tab0').focus().should('have.focus');
+		cy.realPress(['Shift', 'F10']);
+		waitAFrame();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Insert sheet before this')
+			.should('have.focus');
+		// Arrow Down moves focus to the next entry, Enter activates it.
+		cy.realPress('ArrowDown');
+		waitAFrame();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Insert sheet after this')
+			.should('have.focus');
+		cy.realPress('Enter');
+		cy.getFrameWindow().then(function (win) { return helper.processToIdle(win); });
+		calcHelper.assertNumberofSheets(2);
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet1');
+		cy.cGet('#spreadsheet-tab1').should('have.text', 'Sheet2');
+	});
+
+	it('Shift+F10 opens the menu for the focused tab, not the selected one', function () {
+		calcHelper.assertNumberofSheets(1);
+		cy.cGet('#spreadsheet-toolbar #insertsheet').click();
+		calcHelper.assertNumberofSheets(2);
+		cy.cGet('#spreadsheet-tab0').click();
+		cy.cGet('#spreadsheet-tab0').should('have.class', 'spreadsheet-tab-selected');
+		cy.cGet('#spreadsheet-tab1').focus().should('have.focus');
+		cy.realPress(['Shift', 'F10']);
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Insert sheet before this').click();
+		calcHelper.assertNumberofSheets(3);
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet1');
+		cy.cGet('#spreadsheet-tab2').should('have.text', 'Sheet2');
+	});
+
+	it('Open the cell context menu with Shift+F10', function () {
+		// With focus on a data cell (not a sheet tab), Shift+F10 must open the
+		// cell context menu.
+		calcHelper.clickOnFirstCell();
+		cy.realPress(['Shift', 'F10']);
+		// The cell context menu is the long one; the sheet tab menu is not shown
+		// in this overlay.
+		helper.getContextMenuItemList().its('length').should('be.greaterThan', 10);
+	});
+
+	it('Shift+F10 on a whole selected column opens the column header menu', function () {
+		calcHelper.clickOnFirstCell();
+		cy.realPress(['Control', 'Space']);
+		cy.getFrameWindow().then(function(win) { return helper.processToIdle(win); });
+		cy.realPress(['Shift', 'F10']);
+
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Insert Columns Before')
+			.should('be.visible');
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Delete selected columns')
+			.should('exist');
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Column Width')
+			.should('exist');
+	});
+
+	it('Shift+F10 on a whole selected row opens the row header menu', function () {
+		calcHelper.clickOnFirstCell();
+		cy.realPress(['Shift', 'Space']);
+		cy.getFrameWindow().then(function(win) { return helper.processToIdle(win); });
+		cy.realPress(['Shift', 'F10']);
+
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Insert Rows Above')
+			.should('be.visible');
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Delete Rows')
+			.should('exist');
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Row Height')
+			.should('exist');
+	});
+
+	it('Hide/Show sheet', function () {
+		calcHelper.assertNumberofSheets(1);
+		cy.cGet('#spreadsheet-toolbar #insertsheet').click();
+		calcHelper.assertNumberofSheets(2);
+		//hide sheet
+		calcHelper.selectOptionFromContextMenu('Hide Sheet');
+		calcHelper.assertNumberofSheets(1);
+		//show sheet
+		calcHelper.selectOptionFromContextMenu('Show Sheet');
+		cy.cGet('#show-sheets-modal').should('exist');
+		cy.cGet('#hidden-part-checkbox-0-input').check();
+		cy.cGet('#show-sheets-modal-response-button').click();
+		calcHelper.assertNumberofSheets(2);
+	});
+
+	it('Move sheet left/right', function () {
+		calcHelper.assertNumberofSheets(1);
+		cy.cGet('#spreadsheet-toolbar #insertsheet').click();
+		calcHelper.assertNumberofSheets(2);
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet1');
+		//left
+		calcHelper.selectOptionFromContextMenu('Move Sheet Left');
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet2');
+		//right
+		calcHelper.selectOptionFromContextMenu('Move Sheet Right');
+		cy.cGet('#spreadsheet-tab0').should('have.text', 'Sheet1');
+	});
+
+	it('Open sheet list and select a sheet', function () {
+		calcHelper.assertNumberofSheets(1);
+		cy.cGet('#spreadsheet-toolbar #insertsheet').click();
+		calcHelper.assertNumberofSheets(2);
+		// Open sheet list popup
+		cy.cGet('#spreadsheet-toolbar #sheetlist').click();
+		cy.cGet('#sheetlist-dropdown').should('be.visible');
+		cy.cGet('#sheetlist-dropdown #sheetlist-entries .ui-combobox-entry ').should('have.length', 2);
+		cy.cGet('#sheetlist-dropdown #sheetlist-entries .ui-combobox-entry ').eq(1).should('have.class', 'selected');
+		// Select first sheet
+		cy.cGet('#sheetlist-dropdown #sheetlist-entries .ui-combobox-entry ').eq(0).click();
+		cy.cGet('#sheetlist-dropdown').should('not.exist');
+		cy.cGet('#spreadsheet-tab0').should('have.class', 'spreadsheet-tab-selected');
+	});
+});

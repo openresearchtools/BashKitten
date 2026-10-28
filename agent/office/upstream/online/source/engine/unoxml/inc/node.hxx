@@ -1,0 +1,298 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <libxml/tree.h>
+
+#include <sal/types.h>
+#include <rtl/ref.hxx>
+#include <rtl/string.hxx>
+#include <rtl/ustring.hxx>
+
+#include <cppuhelper/implbase.hxx>
+
+#include <sax/fastattribs.hxx>
+
+#include <cpo/uno/Reference.h>
+#include <cpo/uno/Sequence.h>
+#include <com/sun/star/xml/dom/XNode.hpp>
+#include <com/sun/star/xml/dom/XNodeList.hpp>
+#include <com/sun/star/xml/dom/XNamedNodeMap.hpp>
+#include <com/sun/star/xml/dom/NodeType.hpp>
+#include <com/sun/star/xml/dom/events/XEventTarget.hpp>
+#include <com/sun/star/xml/dom/events/XEvent.hpp>
+#include <com/sun/star/xml/sax/XDocumentHandler.hpp>
+#include <com/sun/star/xml/sax/XFastDocumentHandler.hpp>
+
+#include <unordered_map>
+
+namespace DOM
+{
+    struct Context
+    {
+        Context( const cpo::uno::Reference< css::xml::sax::XFastDocumentHandler >& i_xHandler,
+                 sax_fastparser::FastTokenHandlerBase* pTokenHandler ) :
+            maNamespaces( 1, std::vector<Namespace>() ),
+            maNamespaceMap(101),
+            mxAttribList(new sax_fastparser::FastAttributeList(pTokenHandler)),
+            mxCurrentHandler(i_xHandler),
+            mxDocHandler(i_xHandler),
+            mxTokenHandler(pTokenHandler)
+        {}
+
+        struct Namespace
+        {
+            OString     maPrefix;
+            sal_Int32   mnToken;
+
+            const OString& getPrefix() const { return maPrefix; }
+        };
+
+        typedef std::vector< std::vector<Namespace> > NamespaceVectorType;
+        typedef std::unordered_map< OUString, sal_Int32 > NamespaceMapType;
+
+        /// outer vector: xml context; inner vector: current NS
+        NamespaceVectorType                 maNamespaces;
+        NamespaceMapType                    maNamespaceMap;
+        ::rtl::Reference<sax_fastparser::FastAttributeList> mxAttribList;
+        cpo::uno::Reference<css::xml::sax::XFastContextHandler>      mxCurrentHandler;
+        cpo::uno::Reference<css::xml::sax::XFastDocumentHandler>     mxDocHandler;
+        rtl::Reference<sax_fastparser::FastTokenHandlerBase>         mxTokenHandler;
+    };
+
+    void pushContext(Context& io_rContext);
+    void popContext(Context& io_rContext);
+
+    sal_Int32 getTokenWithPrefix( const Context& rContext, const char* xPrefix, const char* xName );
+    sal_Int32 getToken( const Context& rContext, const char* xName );
+
+    /// add namespaces on this node to context
+    void addNamespaces(Context& io_rContext, xmlNodePtr pNode);
+
+    class CDocument;
+
+    class SAL_LOPLUGIN_ANNOTATE("crosscast") CNode
+        : public cppu::WeakImplHelper< css::xml::dom::XNode, css::xml::dom::events::XEventTarget >
+    {
+        friend class CDocument;
+        friend class CElement;
+        friend class CAttributesMap;
+
+    private:
+        bool m_bUnlinked; /// node has been removed from document
+
+    protected:
+        css::xml::dom::NodeType const m_aNodeType;
+        /// libxml node; NB: not const, because invalidate may reset it to 0!
+        xmlNodePtr m_aNodePtr;
+
+        ::rtl::Reference< CDocument > const m_xDocument;
+        ::osl::Mutex & m_rMutex;
+
+        // for initialization by classes derived through ImplInheritanceHelper
+        CNode(CDocument const& rDocument, ::osl::Mutex const& rMutex,
+                css::xml::dom::NodeType const& reNodeType, xmlNodePtr const& rpNode);
+        void invalidate();
+
+        void dispatchSubtreeModified();
+
+        void checkNoParent(cpo::uno::Reference< css::xml::dom::XNode >const& xNode);
+
+        static void checkNoParent(const xmlNodePtr pNode);
+
+        void checkSameOwner(cpo::uno::Reference< css::xml::dom::XNode >const& xNode);
+
+    public:
+
+        virtual ~CNode() override;
+
+        xmlNodePtr GetNodePtr() { return m_aNodePtr; }
+
+        virtual CDocument & GetOwnerDocument();
+
+        // recursively create SAX events
+        virtual void saxify(const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& i_xHandler);
+
+        // recursively create SAX events
+        virtual void fastSaxify( Context& io_rContext );
+
+        // constrains child relationship between nodes based on type
+        virtual bool IsChildTypeAllowed(css::xml::dom::NodeType nodeType,
+                css::xml::dom::NodeType const* pReplacedNodeType);
+
+        // ---- DOM interfaces
+
+        /**
+        Adds the node newChild to the end of the list of children of this node.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XNode >
+            appendChild(cpo::uno::Reference< css::xml::dom::XNode > const& xNewChild) override;
+
+        /**
+        Returns a duplicate of this node, i.e., serves as a generic copy
+        constructor for nodes.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XNode > cloneNode(bool deep) override;
+
+        /**
+        A NamedNodeMap containing the attributes of this node
+        (if it is an Element) or null otherwise.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XNamedNodeMap > getAttributes() override;
+
+        /**
+        A NodeList that contains all children of this node.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XNodeList > getChildNodes() override;
+
+        /**
+        The first child of this node.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XNode > getFirstChild() override;
+
+        /**
+        The last child of this node.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XNode > getLastChild() override;
+
+        /**
+        Returns the local part of the qualified name of this node.
+        */
+        virtual OUString getLocalName() override;
+
+        /**
+        The namespace URI of this node, or null if it is unspecified.
+        */
+        virtual OUString getNamespaceURI() override;
+
+        /**
+        The node immediately following this node.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XNode > getNextSibling() override;
+
+        /**
+        The name of this node, depending on its type; see the table above.
+        -- virtual implemented by actual node types
+        */
+        virtual OUString getNodeName() override;
+
+        /**
+        A code representing the type of the underlying object, as defined above.
+        */
+        virtual css::xml::dom::NodeType getNodeType() override;
+
+        /**
+        The value of this node, depending on its type; see the table above.
+        -- virtual implemented by actual node types
+        */
+        virtual OUString getNodeValue() override;
+
+        /**
+        The Document object associated with this node.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XDocument > getOwnerDocument() override;
+
+        /**
+        The parent of this node.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XNode > getParentNode() override;
+
+        /**
+        The namespace prefix of this node, or null if it is unspecified.
+        */
+        virtual OUString getPrefix() override;
+
+        /**
+        The node immediately preceding this node.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XNode > getPreviousSibling() override;
+
+        /**
+        Returns whether this node (if it is an element) has any attributes.
+        */
+        virtual bool hasAttributes() override;
+
+        /**
+        Returns whether this node has any children.
+        */
+        virtual bool hasChildNodes() override;
+
+        /**
+        Inserts the node newChild before the existing child node refChild.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XNode > insertBefore(
+                const cpo::uno::Reference< css::xml::dom::XNode >& newChild, const cpo::uno::Reference< css::xml::dom::XNode >& refChild) override;
+
+        /**
+        Tests whether the DOM implementation implements a specific feature and
+        that feature is supported by this node.
+        */
+        virtual bool isSupported(const OUString& feature, const OUString& ver) override;
+
+        /**
+        Puts all Text nodes in the full depth of the sub-tree underneath this
+        Node, including attribute nodes, into a "normal" form where only structure
+        (e.g., elements, comments, processing instructions, CDATA sections, and
+        entity references) separates Text nodes, i.e., there are neither adjacent
+        Text nodes nor empty Text nodes.
+        */
+        virtual void normalize() override;
+
+        /**
+        Removes the child node indicated by oldChild from the list of children,
+        and returns it.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XNode > removeChild(const cpo::uno::Reference< css::xml::dom::XNode >& oldChild) override;
+
+        /**
+        Replaces the child node oldChild with newChild in the list of children,
+        and returns the oldChild node.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XNode > replaceChild(
+                const cpo::uno::Reference< css::xml::dom::XNode >& newChild, const cpo::uno::Reference< css::xml::dom::XNode >& oldChild) override;
+
+        /**
+        The value of this node, depending on its type; see the table above.
+        */
+        virtual void setNodeValue(const OUString& nodeValue) override;
+
+        /**
+        The namespace prefix of this node, or null if it is unspecified.
+        */
+        virtual void setPrefix(const OUString& prefix) override;
+
+
+        // --- XEventTarget
+        virtual void addEventListener(const OUString& eventType,
+            const cpo::uno::Reference< css::xml::dom::events::XEventListener >& listener,
+            bool useCapture) override;
+
+        virtual void removeEventListener(const OUString& eventType,
+            const cpo::uno::Reference< css::xml::dom::events::XEventListener >& listener,
+            bool useCapture) override;
+
+        virtual bool dispatchEvent(const cpo::uno::Reference< css::xml::dom::events::XEvent >& evt) override;
+    };
+
+    /// eliminate redundant namespace declarations
+    void nscleanup(const xmlNodePtr aNode, const xmlNodePtr aParent);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

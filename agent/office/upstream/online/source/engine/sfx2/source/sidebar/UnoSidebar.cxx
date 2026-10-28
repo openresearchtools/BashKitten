@@ -1,0 +1,97 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ */
+
+#include <sidebar/UnoSidebar.hxx>
+#include <sidebar/Tools.hxx>
+
+#include <sfx2/sidebar/SidebarController.hxx>
+#include <sidebar/UnoDecks.hxx>
+
+#include <com/sun/star/frame/XDispatch.hpp>
+
+#include <utility>
+#include <vcl/svapp.hxx>
+
+using namespace ::cpo;
+using namespace css;
+using namespace ::sfx2::sidebar;
+
+using ::cpo::uno::RuntimeException;
+
+SfxUnoSidebar::SfxUnoSidebar(uno::Reference<frame::XFrame> _xFrame)
+    : xFrame(std::move(_xFrame))
+{
+}
+
+SidebarController* SfxUnoSidebar::getSidebarController()
+{
+    return SidebarController::GetSidebarControllerForFrame(xFrame);
+}
+
+void SfxUnoSidebar::showDecks(const bool bVisible)
+{
+    SolarMutexGuard aGuard;
+
+    SidebarController* pSidebarController = getSidebarController();
+
+    if (pSidebarController)
+    {
+        if (bVisible)
+            pSidebarController->RequestOpenDeck();
+        else
+            pSidebarController->RequestCloseDeck();
+    }
+}
+
+void SfxUnoSidebar::setVisible(const bool bVisible)
+{
+    SolarMutexGuard aGuard;
+
+    SidebarController* pSidebarController = getSidebarController();
+
+    if ((bVisible && !pSidebarController) || (!bVisible && pSidebarController))
+    {
+        const util::URL aURL(Tools::GetURL(u".uno:Sidebar"_ustr));
+        uno::Reference<frame::XDispatch> xDispatch(Tools::GetDispatch(xFrame, aURL));
+        if (xDispatch.is())
+            xDispatch->dispatch(aURL, cpo::uno::Sequence<beans::PropertyValue>());
+    }
+}
+
+bool SfxUnoSidebar::isVisible()
+{
+    SolarMutexGuard aGuard;
+
+    SidebarController* pSidebarController = getSidebarController();
+
+    return pSidebarController != nullptr;
+}
+
+uno::Reference<frame::XFrame> SfxUnoSidebar::getFrame()
+{
+    SolarMutexGuard aGuard;
+
+    if (!xFrame.is())
+        throw cpo::uno::RuntimeException();
+
+    return xFrame;
+}
+
+uno::Reference<ui::XDecks> SfxUnoSidebar::getDecks()
+{
+    SolarMutexGuard aGuard;
+
+    uno::Reference<ui::XDecks> decks = new SfxUnoDecks(xFrame);
+    return decks;
+}
+
+uno::Reference<ui::XSidebar> SfxUnoSidebar::getSidebar() { return getSidebarController(); }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,49 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+#pragma once
+
+#include <ooo/vba/word/XListEntries.hpp>
+#include <ooo/vba/word/XListEntry.hpp>
+
+#include <vbahelper/vbacollectionimpl.hxx>
+
+#include "vbaformfielddropdownlistentries.hxx"
+#include "vbaformfielddropdownlistentry.hxx"
+
+typedef CollTestImplHelper<ooo::vba::word::XListEntries> SwVbaFormFieldDropDownListEntries_BASE;
+
+class SwVbaFormFieldDropDownListEntries : public SwVbaFormFieldDropDownListEntries_BASE
+{
+private:
+    sw::mark::DropDownFieldmark& m_rDropDown;
+
+public:
+    /// @throws cpo::uno::RuntimeException
+    SwVbaFormFieldDropDownListEntries(
+        const cpo::uno::Reference<ov::XHelperInterface>& xParent,
+        const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext,
+        sw::mark::DropDownFieldmark& m_rDropDown);
+
+    // XListEntries
+    cpo::uno::Reference<ooo::vba::word::XListEntry>
+        Add(const OUString& rName, const cpo::uno::Any& rIndex) override;
+    void Clear() override;
+    sal_Int32 getCount() override;
+
+    // XEnumerationAccess
+    cpo::uno::Type getElementType() override;
+    cpo::uno::Reference<css::container::XEnumeration> createEnumeration() override;
+
+    // SwVbaFormFieldDropDownListEntries_BASE
+    cpo::uno::Any createCollectionObject(const cpo::uno::Any& aSource) override;
+    OUString getServiceImplName() override;
+    cpo::uno::Sequence<OUString> getServiceNames() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

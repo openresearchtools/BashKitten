@@ -1,0 +1,101 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <cppuhelper/implbase.hxx>
+#include <ooo/vba/excel/XGraphicObjects.hpp>
+#include <vbahelper/vbacollectionimpl.hxx>
+#include <rtl/ref.hxx>
+
+namespace com::sun::star {
+    namespace frame { class XModel; }
+    namespace sheet { class XSpreadsheet; }
+}
+
+class ScVbaObjectContainer;
+typedef ::rtl::Reference< ScVbaObjectContainer > ScVbaObjectContainerRef;
+
+typedef CollTestImplHelper< ov::XCollection > ScVbaSheetObjects_BASE;
+
+/** Base class for collections containing a specific type of drawing object
+    embedded in a sheet (worksheet, chart sheet, or dialog sheet).
+ */
+class ScVbaSheetObjectsBase : public ScVbaSheetObjects_BASE
+{
+public:
+    /// @throws cpo::uno::RuntimeException
+    explicit ScVbaSheetObjectsBase( const ScVbaObjectContainerRef& rxContainer );
+    virtual ~ScVbaSheetObjectsBase() override;
+
+    /** Updates the collection by fetching all shapes from the draw page.
+
+        @throws cpo::uno::RuntimeException
+    */
+    void collectShapes();
+
+    // XEnumerationAccess
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
+
+    // XElementAccess
+    virtual cpo::uno::Type getElementType() override;
+
+    // ScVbaCollectionBase
+    virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& rSource ) override;
+    virtual cpo::uno::Any getItemByStringIndex( const OUString& rIndex ) override;
+
+protected:
+    ScVbaObjectContainerRef mxContainer;
+};
+
+typedef ::cppu::ImplInheritanceHelper< ScVbaSheetObjectsBase, ov::excel::XGraphicObjects > ScVbaGraphicObjects_BASE;
+
+/** Base class for collections containing a specific type of graphic object
+    from a sheet.
+ */
+class ScVbaGraphicObjectsBase : public ScVbaGraphicObjects_BASE
+{
+public:
+    /// @throws cpo::uno::RuntimeException
+    explicit ScVbaGraphicObjectsBase( const ScVbaObjectContainerRef& rxContainer );
+
+    // XGraphicObjects
+    virtual cpo::uno::Any Add(
+        const cpo::uno::Any& rLeft,
+        const cpo::uno::Any& rTop,
+        const cpo::uno::Any& rWidth,
+        const cpo::uno::Any& rHeight ) override;
+};
+
+/** Collection containing all button controls from a sheet (not ActiveX controls). */
+class ScVbaButtons : public ScVbaGraphicObjectsBase
+{
+public:
+    /// @throws cpo::uno::RuntimeException
+    explicit ScVbaButtons(
+        const cpo::uno::Reference< ov::XHelperInterface >& rxParent,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+        const cpo::uno::Reference< css::frame::XModel >& rxModel,
+        const cpo::uno::Reference< css::sheet::XSpreadsheet >& rxSheet,
+        bool bOptionButtons);
+
+    VBAHELPER_DECL_XHELPERINTERFACE
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,92 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <com/sun/star/text/XDefaultNumberingProvider.hpp>
+#include <com/sun/star/text/XNumberingFormatter.hpp>
+#include <com/sun/star/text/XNumberingTypeInfo.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <rtl/ref.hxx>
+#include <map>
+
+namespace com::sun::star::container { class XHierarchicalNameAccess; }
+namespace cpo::uno { class XComponentContext; }
+namespace i18npool {
+    class TransliterationImpl;
+    class NativeNumberSupplierService;
+    struct Supported_NumberingType;
+}
+
+namespace i18npool {
+
+class DefaultNumberingProvider final : public cppu::WeakImplHelper
+<
+    css::text::XDefaultNumberingProvider,
+    css::text::XNumberingFormatter,
+    css::text::XNumberingTypeInfo,
+    css::lang::XServiceInfo
+>
+{
+public:
+    DefaultNumberingProvider(
+        const cpo::uno::Reference < cpo::uno::XComponentContext >& rxContext );
+    virtual ~DefaultNumberingProvider() override;
+
+    //XDefaultNumberingProvider
+    virtual cpo::uno::Sequence< cpo::uno::Reference<
+        css::container::XIndexAccess > >
+        getDefaultOutlineNumberings( const css::lang::Locale& aLocale ) override;
+
+    virtual cpo::uno::Sequence< cpo::uno::Sequence<
+        css::beans::PropertyValue > >
+        getDefaultContinuousNumberingLevels( const css::lang::Locale& aLocale ) override;
+
+    //XNumberingFormatter
+    virtual OUString makeNumberingString(
+        const cpo::uno::Sequence<
+        css::beans::PropertyValue >& aProperties,
+        const css::lang::Locale& aLocale ) override;
+
+    //XNumberingTypeInfo
+    virtual cpo::uno::Sequence< sal_Int16 > getSupportedNumberingTypes(  ) override;
+    virtual sal_Int16 getNumberingType( const OUString& NumberingIdentifier ) override;
+    virtual bool hasNumberingType( const OUString& NumberingIdentifier ) override;
+    virtual OUString getNumberingIdentifier( sal_Int16 NumberingType ) override;
+
+    //XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+private:
+    cpo::uno::Reference < cpo::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference < css::container::XHierarchicalNameAccess > xHierarchicalNameAccess;
+    rtl::Reference<TransliterationImpl> translit;
+    rtl::Reference<NativeNumberSupplierService> mxNatNum;
+    std::map<OUString, const Supported_NumberingType*> maSupportedTypesCache;
+
+    /// @throws cpo::uno::RuntimeException
+    OUString makeNumberingIdentifier( sal_Int16 index );
+    /// @throws cpo::uno::RuntimeException
+    bool isScriptFlagEnabled(const OUString& aName );
+};
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

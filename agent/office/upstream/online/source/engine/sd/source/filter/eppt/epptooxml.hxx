@@ -1,0 +1,275 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/vml/vmldrawing.hxx>
+#include <oox/export/shapes.hxx>
+#include <unotools/securityoptions.hxx>
+#include <xmloff/autolayout.hxx>
+#include "epptbase.hxx"
+
+using ::sax_fastparser::FSHelperPtr;
+
+namespace model
+{
+class Theme;
+}
+
+namespace oox::core {
+
+struct LayoutInfo
+{
+    std::vector< sal_Int32 > mnFileIdArray;
+};
+
+enum PlaceholderType
+{
+    None,
+    SlideImage,
+    Notes,
+    Header,
+    Footer,
+    SlideNumber,
+    DateAndTime,
+    Outliner,
+    Title,
+    Subtitle,
+    Picture,
+    Media
+};
+
+class PowerPointShapeExport;
+
+class PowerPointExport final : public XmlFilterBase, public PPTWriterBase
+{
+    friend class PowerPointShapeExport;
+public:
+
+    PowerPointExport(const cpo::uno::Reference<cpo::uno::XComponentContext> & rContext, const cpo::uno::Sequence<cpo::uno::Any>& rArguments);
+
+    virtual ~PowerPointExport() override;
+
+    // from FilterBase
+    virtual bool importDocument() noexcept override;
+    virtual bool exportDocument() override;
+
+    // only needed for import, leave them empty, refactor later XmlFilterBase to export and import base?
+    virtual oox::vml::Drawing* getVmlDrawing() override { return nullptr; }
+    virtual const oox::drawingml::Theme* getCurrentTheme() const override { return nullptr; }
+    virtual oox::drawingml::table::TableStyleListPtr getTableStyles() override { return oox::drawingml::table::TableStyleListPtr(); }
+    virtual oox::drawingml::chart::ChartConverter* getChartConverter() override { return nullptr; }
+
+    static const char* GetSideDirection( sal_uInt8 nDirection );
+    static const char* GetCornerDirection( sal_uInt8 nDirection );
+    static const char* Get8Direction( sal_uInt8 nDirection );
+
+    sal_Int32 GetShapeID(const cpo::uno::Reference<css::drawing::XShape>& rXShape);
+    sal_Int32 GetNextAnimationNodeID();
+
+    void embedEffectAudio(const FSHelperPtr& pFS, const OUString& sUrl, OUString& sRelId, OUString& sName);
+
+private:
+
+    virtual void ImplWriteSlide( sal_uInt32 nPageNum, sal_uInt32 nMasterNum, sal_uInt16 nMode,
+                                 bool bHasBackground, cpo::uno::Reference< css::beans::XPropertySet > const & aXBackgroundPropSet ) override;
+    virtual void ImplWriteNotes( sal_uInt32 nPageNum ) override;
+    virtual void ImplWriteSlideMaster( sal_uInt32 nPageNum, cpo::uno::Reference< css::beans::XPropertySet > const & aXBackgroundPropSet ) override;
+    void ImplWritePPTXLayoutWithContent(
+        sal_Int32 nOffset, sal_uInt32 nMasterNum, const OUString& aSlideName,
+        cpo::uno::Reference<css::beans::XPropertySet> const& aXBackgroundPropSet);
+    void WriteLayoutClrMapOvr(const ::sax_fastparser::FSHelperPtr& pFS, sal_uInt32 nMasterNum);
+    static void WriteDefaultColorSchemes(const FSHelperPtr& pFS);
+    void WriteTheme( sal_Int32 nThemeNum, const model::Theme* pTheme );
+
+    virtual bool ImplCreateDocument() override;
+    virtual bool ImplCreateMainNotes() override;
+    virtual ::oox::ole::VbaProject* implCreateVbaProject() const override;
+    void WriteNotesMaster();
+    void WritePageGuidExtLst( const FSHelperPtr& pFS,
+                              const cpo::uno::Reference< css::beans::XPropertySet >& rXPropSet );
+
+    bool WriteComments( sal_uInt32 nPageNum );
+    /** Writes the comments of one slide into the newer comment part.
+
+        Returns true when the slide had any comments.
+     */
+    bool WriteModernComments(sal_uInt32 nPageNum);
+    void ImplWriteBackground( const ::sax_fastparser::FSHelperPtr& pFS, const cpo::uno::Reference< css::beans::XPropertySet >& aXBackgroundPropSet );
+    void WriteTransition( const ::sax_fastparser::FSHelperPtr& pFS );
+
+    sal_Int32 GetLayoutFileId( sal_Int32 nOffset, sal_uInt32 nMasterNum );
+
+    // shapes
+    void WriteShapeTree( const ::sax_fastparser::FSHelperPtr& pFS, PageType ePageType, bool bMaster,
+                         bool bSlideMasterPart = false, sal_uInt32 nMasterNum = 0 );
+
+    sal_uInt32 GetNewSlideId() { return mnSlideIdMax ++; }
+    sal_uInt32 GetNewSlideMasterId() { return mnSlideMasterIdMax ++; }
+    sal_Int32 GetAuthorIdAndLastIndex( const OUString& sAuthor, const OUString& sInitials, sal_Int32& nLastIndex );
+
+    // Write docProps/core.xml and docprops/custom.xml and docprops/app.xml
+    void writeDocumentProperties();
+
+    void WriteCustomSlideShow();
+    void WriteSections();
+
+    void AddLayoutIdAndRelation( const ::sax_fastparser::FSHelperPtr& pFS, sal_Int32 nLayoutFileId );
+
+    virtual OUString getImplementationName() override;
+
+    /** The placeholder index of a master placeholder shape, allocating one on first use
+
+        @param rXShape Master placeholder shape
+        @returns Placeholder index
+    */
+    sal_Int32 GetOrCreatePlaceholderIndex(const cpo::uno::Reference<css::drawing::XShape>& rXShape);
+    cpo::uno::Reference<css::drawing::XShape> GetReferencedPlaceholderXShape(const PlaceholderType eType, PageType ePageType) const;
+    void WritePlaceholderReferenceShapes(PowerPointShapeExport& rDML, PageType ePageType);
+    /** Writes the master page's content placeholders into the layout they belong on */
+    void WriteLayoutContentPlaceholders(PowerPointShapeExport& rDML);
+    /** Writes the placeholders a slide master holds that the page standing for it has none of */
+    void WriteMasterOwnPlaceholders(PowerPointShapeExport& rDML, sal_uInt32 nMasterNum);
+
+    /// The form controls of the page being written, which go out after its shapes.
+    std::vector<cpo::uno::Reference<css::drawing::XShape>> maControlShapes;
+    sal_Int32 mnActiveXControls = 0;
+    sal_Int32 mnVmlDrawings = 0;
+
+    /// Writes the form controls collected while the shapes of the page were written.
+    void WriteControls(const ::sax_fastparser::FSHelperPtr& pFS);
+
+    /// Writes the text styles a master holds for its title and for the nine outline levels.
+    void WriteTextStyles(const ::sax_fastparser::FSHelperPtr& pFS);
+
+    void FindEquivalentMasterPages();
+    sal_uInt32 GetEquivalentMasterPage(sal_uInt32 nMasterPage);
+    /** How many of a page's leading shapes belong to the slide master of its group
+
+        A PPTX master and one of its layouts collapse onto one Impress master page, so for an
+        imported deck the leading shapes every page of a group shares are the ones from the master
+        they share. An ODF deck has no such master, and moving them is then a choice: it paints
+        the same, and the slide master holds the shape once for all its layouts.
+
+        @param nMasterPage Any master page, in a group or not
+        @returns How many leading shapes the group's slide master owns, 0 for a page in no group
+    */
+    size_t GetMasterOwnShapeCount(sal_uInt32 nMasterPage);
+
+    /// Should we export as .pptm, ie. do we contain macros?
+    bool mbPptm;
+
+    // Export as a template
+    bool mbExportTemplate;
+
+    // Export as a slideshow (PPSX/PPSM)
+    bool mbSlideShow;
+
+    ::sax_fastparser::FSHelperPtr mPresentationFS;
+
+    LayoutInfo mLayoutInfo[AUTOLAYOUT_END];
+    // Pairs of masters and layouts as used by Impress
+    std::vector<std::pair<SdrPage*, sal_Int32>> maMastersLayouts;
+    // For each Impress master, which master will represent it on the exported file (SAL_MAX_UINT32 if not in an equivalency group)
+    std::vector<sal_uInt32> maEquivalentMasters;
+    // How many shapes a slide master owns, per equivalency group; every master in no group
+    // shares the SAL_MAX_UINT32 entry. See GetMasterOwnShapeCount
+    std::unordered_map<sal_uInt32, size_t> maMasterOwnShapeCounts;
+    std::unique_ptr<SvtSecurityMapPersonalInfo> mpAuthorIDs; // map authors to remove personal info
+    std::vector< ::sax_fastparser::FSHelperPtr > mpSlidesFSArray;
+    sal_Int32 mnLayoutFileIdMax;
+
+    sal_uInt32 mnSlideIdMax;
+    sal_uInt32 mnSlideMasterIdMax;
+    sal_uInt32 mnAnimationNodeIdMax;
+    sal_uInt32 mnThemeIdMax;
+
+    sal_Int32 mnDiagramId;
+
+    std::vector<OUString> maRelId;
+    std::vector<sal_uInt32> maSlideIdsInOrder;
+
+    bool mbCreateNotes;
+
+    ::oox::drawingml::ShapeExport::ShapeHashMap maShapeMap;
+
+    sal_Int32 mnPlaceholderIndexMax; ///< Last used placeholder index
+    /// Map of placeholder indexes for Master placeholders
+    std::unordered_map< cpo::uno::Reference<css::drawing::XShape>, sal_Int32 > maPlaceholderShapeToIndexMap;
+
+    // Get author id to remove personal info
+    size_t GetInfoID( const OUString& sPersonalInfo ) const { return mpAuthorIDs->GetInfoID(sPersonalInfo); }
+    struct AuthorComments {
+        sal_Int32 nId;
+        sal_Int32 nLastIndex;
+        OUString sInitials;
+        /// Identifier of this author in the newer comment part, assigned on first use.
+        OUString sGuid;
+
+        AuthorComments()
+            : nId(0)
+            , nLastIndex(0)
+        {
+        }
+        AuthorComments(sal_Int32 nId_, sal_Int32 nLastIndex_, OUString sInitials_)
+            : nId(nId_)
+            , nLastIndex(nLastIndex_)
+            , sInitials(std::move(sInitials_))
+        {
+        }
+    };
+    typedef std::unordered_map< OUString, struct AuthorComments > AuthorsMap;
+    AuthorsMap maAuthors;
+
+    void WriteAuthors();
+    /// Writes the author list the newer comment parts refer to.
+    void WriteModernAuthors();
+    /** The identifier of an author in the newer comment part, assigned on first use.
+
+        Creates the author entry when it is not there yet, and leaves the index the older part
+        counts alone.
+     */
+    OUString GetAuthorGuid(const OUString& sAuthor, const OUString& sInitials);
+
+    void WritePresentationProps();
+
+    /// If this is PPTM, output the VBA stream.
+    void WriteVBA();
+
+    void WriteModifyVerifier();
+
+    /// Embedded font related members
+    bool mbEmbedFonts = false;
+    bool mbEmbedUsedOnly = false;
+    bool mbEmbedLatinScript = true;
+    bool mbEmbedAsianScript = true;
+    bool mbEmbedComplexScript = true;
+
+    /// Write the embedded font list element
+    void WriteEmbeddedFontList();
+
+    /// Get the font names that are used in the document (and styles)
+    std::unordered_set<OUString> getUsedFontList();
+};
+
+}
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

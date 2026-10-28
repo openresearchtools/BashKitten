@@ -1,0 +1,83 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <comphelper/interfacecontainer4.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <memory>
+#include <mutex>
+#include <string_view>
+
+
+namespace hierarchy_ucp {
+
+
+class HierarchyDataSource : public cppu::WeakImplHelper<
+                                css::lang::XServiceInfo,
+                                css::lang::XComponent,
+                                css::lang::XMultiServiceFactory>
+{
+    std::mutex m_aMutex;
+    cpo::uno::Reference< cpo::uno::XComponentContext >     m_xContext;
+    cpo::uno::Reference< css::lang::XMultiServiceFactory >  m_xConfigProvider;
+    comphelper::OInterfaceContainerHelper4<css::lang::XEventListener> m_aDisposeEventListeners;
+
+public:
+    explicit HierarchyDataSource( cpo::uno::Reference< cpo::uno::XComponentContext > xContext );
+    virtual ~HierarchyDataSource() override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XComponent
+    virtual void dispose() override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener > & xListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener > & aListener ) override;
+
+    // XMultiServiceFactory
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstance( const OUString & aServiceSpecifier ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstanceWithArguments( const OUString & ServiceSpecifier,
+                                 const cpo::uno::Sequence<
+                                    cpo::uno::Any > & Arguments ) override;
+    virtual cpo::uno::Sequence< OUString > getAvailableServiceNames() override;
+
+    // Non-Interface methods
+
+private:
+    /// @throws cpo::uno::Exception
+    cpo::uno::Reference< cpo::uno::XInterface > createInstanceWithArguments( std::u16string_view ServiceSpecifier,
+                                 const cpo::uno::Sequence<
+                                    cpo::uno::Any > & Arguments,
+                                 bool bCheckArgs );
+
+    cpo::uno::Reference< css::lang::XMultiServiceFactory > getConfigProvider();
+
+    static bool createConfigPath( std::u16string_view rInPath, OUString & rOutPath );
+};
+
+} // namespace hierarchy_ucp
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

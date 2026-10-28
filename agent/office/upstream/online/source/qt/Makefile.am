@@ -1,0 +1,224 @@
+MAINTAINERCLEANFILES = Makefile.in
+
+bin_PROGRAMS = coda-qt
+
+include_paths = -I${top_srcdir}/common -I${top_srcdir}/net -I${top_srcdir}/kit -I${top_srcdir}/wsd -I${top_srcdir} ${ZSTD_CFLAGS} ${QT6_CFLAGS}
+
+warning_flags = -Wall -Werror -Wno-parentheses -Wno-sign-compare -Wno-unused-variable
+
+define_flags = -DMOBILEAPP=1 -DENABLE_CHILDROOTS=0
+
+AM_CPPFLAGS = -pthread \
+              -DCOOLWSD_DATADIR='"'@COOLWSD_DATADIR@'"' \
+              -DQTAPP \
+              ${define_flags} \
+              ${warning_flags} \
+              ${include_paths}
+
+if !ENABLE_DEBUG
+AM_CPPFLAGS += -DNDEBUG
+endif
+
+# In the server build ${PNG_LIBS} / $(ZSTD_LIBS) are the engine's static
+# liblibpng.a / libzstd.a (system shared libraries in the Flatpak and Snap
+# builds).  The static libpng pulls in zlib symbols, so it must precede
+# $(ZLIB_LIBS) on the link line for the linker to resolve them.
+AM_LDFLAGS = -pthread ${QT6_LIBS} -ldl ${PNG_LIBS} $(ZSTD_LIBS) $(ZLIB_LIBS)
+
+# Android's CMakefile list re-worked:
+
+cmake_list= \
+            ../common/SettingsStorage.cpp \
+            ../common/Crypto-stub.cpp \
+            ../common/MobileApp.cpp \
+            ../common/Prefs.cpp \
+            ../common/SigUtil-mobile.cpp \
+            ../common/Unit-mobile.cpp \
+            ../common/Util-mobile.cpp \
+            ../common/RecentFiles.cpp \
+            ../kit/ChildSession.cpp \
+            ../kit/DeltaSimd.c \
+            ../kit/Kit.cpp \
+            ../kit/KitWebSocket.cpp \
+            ../net/FakeSocket.cpp \
+            ../wsd/ClientSession.cpp \
+            ../wsd/DocumentBroker.cpp \
+            ../wsd/COOLWSD.cpp \
+            ../wsd/ClientRequestDispatcher.cpp \
+            ../wsd/RequestVettingStation.cpp \
+            ../wsd/Storage.cpp \
+            ../wsd/WSDGlobals.cpp \
+            ../wsd/coolwsd-fork.cpp
+
+
+# Sources that will be created by Qt's MOC
+BUILT_SOURCES = bridge.moc.cpp DBusService.moc.cpp IntegratorFilePicker.moc.cpp TabManager.moc.cpp TabShellBridge.moc.cpp TabbedWindow.moc.cpp
+bridge.moc.cpp: bridge.hpp
+	$(MOC) $(MOCFLAGS) -o $@ $<
+DBusService.moc.cpp: DBusService.hpp
+	$(MOC) $(MOCFLAGS) -o $@ $<
+IntegratorFilePicker.moc.cpp: IntegratorFilePicker.hpp
+	$(MOC) $(MOCFLAGS) -o $@ $<
+TabManager.moc.cpp: TabManager.hpp
+	$(MOC) $(MOCFLAGS) -o $@ $<
+TabShellBridge.moc.cpp: TabShellBridge.hpp
+	$(MOC) $(MOCFLAGS) -o $@ $<
+TabbedWindow.moc.cpp: TabbedWindow.hpp
+	$(MOC) $(MOCFLAGS) -o $@ $<
+
+CLEANFILES = $(BUILT_SOURCES)
+
+coda_qt_CXXFLAGS = $(AM_CXXFLAGS)
+if X86
+if !CXX_CLANG
+coda_qt_CXXFLAGS += -mno-direct-extern-access
+endif
+endif
+
+# SIMD is on tree-wide in the combined build, so kit/DeltaSimd.c takes the AVX2
+# path and needs the flags libsimd gets. Empty in a pure qtapp build.
+coda_qt_CFLAGS = $(AM_CFLAGS) $(SIMD_CFLAGS)
+
+coda_qt_SOURCES = coda-qt.cpp Application.cpp AIHttpTransport.cpp Bridge.cpp CODocumentBroker.cpp CoolUrlSchemeHandler.cpp CursorFix.cpp QtClipboard.cpp DocumentOperations.cpp WebView.cpp DBusService.cpp Document.cpp QtFileManager.cpp QtFilePicker.cpp IntegratorFilePicker.cpp RemoteOpen.cpp StandaloneWindow.cpp TabbedWindow.cpp TabManager.cpp TabShellBridge.cpp WindowUtils.cpp $(cmake_list)
+nodist_coda_qt_SOURCES = $(BUILT_SOURCES)
+
+GBUILD_SHARED_LIB = $(ENGINE_BUILDDIR)/workdir/LinkTarget/StaticLibrary/libshared.a
+GBUILD_WSD_LIB = $(ENGINE_BUILDDIR)/workdir/LinkTarget/StaticLibrary/libwsd.a
+# The engine archives are C++20 builds, so they carry weak copies of the
+# std::string members that libstdc++ instantiates itself only for C++17 and
+# older. A C++17 static library on the link line (POCO in the snap) references
+# those members from libstdc++, and the linker would otherwise take them from
+# the first archive member that has them, extracting server-only objects that
+# collide with the mobile copies of the same sources built above. Naming
+# libstdc++ first resolves them from the shared runtime instead.
+# The engine's static Poco archives come after the gbuild libraries that reference them.
+coda_qt_LDADD = -lstdc++ $(GBUILD_WSD_LIB) $(GBUILD_SHARED_LIB) $(POCO_LIBS)
+EXTRA_coda_qt_DEPENDENCIES = $(GBUILD_WSD_LIB) $(GBUILD_SHARED_LIB) Makefile
+
+if ENABLE_SSL
+coda_qt_LDADD += $(OPENSSL_LIBS)
+endif
+
+metainfodir = $(datadir)/metainfo
+metainfo_DATA = com.collaboraoffice.Office.metainfo.xml
+
+desktopdir = $(datadir)/applications
+desktop_DATA = com.collaboraoffice.Office.desktop
+
+iconsdir = $(datadir)/icons
+nobase_dist_icons_DATA = \
+	hicolor/16x16/apps/com.collaboraoffice.Office.startcenter.png \
+	hicolor/24x24/apps/com.collaboraoffice.Office.startcenter.png \
+	hicolor/32x32/apps/com.collaboraoffice.Office.startcenter.png \
+	hicolor/48x48/apps/com.collaboraoffice.Office.startcenter.png \
+	hicolor/64x64/apps/com.collaboraoffice.Office.startcenter.png \
+	hicolor/128x128/apps/com.collaboraoffice.Office.startcenter.png \
+	hicolor/256x256/apps/com.collaboraoffice.Office.startcenter.png \
+	hicolor/512x512/apps/com.collaboraoffice.Office.startcenter.png \
+	hicolor/scalable/apps/com.collaboraoffice.Office.startcenter.svg
+
+EXTRA_DIST = tools/add-release.py
+
+### --- Qt translations integration begin ---
+
+# The shipped languages come from engine/distro-configs/Langs.conf, the single
+# curated list - edit that file to add or drop a language. Qt catalog names use
+# the underscore form (pt_BR, zh_CN), and English is the source language, so it
+# has no catalog. In a dist tarball the engine is absent, so fall back to the
+# catalogs we ship.
+LANGS_CONF = $(abs_top_srcdir)/engine/distro-configs/Langs.conf
+CONF_LANGS = $(shell test ! -f "$(LANGS_CONF)" || sed -n 's/^--with-lang=//p' "$(LANGS_CONF)" | tr ' ' '\n' | grep -v '^en-' | tr '-' '_')
+
+# The catalogs we actually have. A language added to Langs.conf ships no Qt
+# translation until "make update-translations" has created its catalog.
+CATALOG_LANGS = $(patsubst $(srcdir)/translations/coda_%.ts,%,$(wildcard $(srcdir)/translations/coda_*.ts))
+LANGS = $(if $(CONF_LANGS),$(filter $(CONF_LANGS),$(CATALOG_LANGS)),$(CATALOG_LANGS))
+
+# Translation source (.ts) and compiled (.qm) files
+TS_FILES = $(addprefix translations/coda_,$(addsuffix .ts,$(LANGS)))
+QM_FILES = $(TS_FILES:.ts=.qm)
+
+# Rule: generate .qm from .ts
+%.qm: %.ts
+	mkdir -p $(dir $@)
+	@$(LRELEASE) $< -qm $@
+
+# Update .ts files from source code. Creates a catalog for any language in
+# Langs.conf that has none yet; -no-obsolete drops the entries of strings that
+# are gone from the source instead of keeping them as vanished, and -locations
+# none leaves out the source file and line of each string, which neither
+# lrelease nor CODA-W needs and which would otherwise change in every catalog
+# on every edit of the source. CODA-W takes its strings from the same
+# catalogs, so its source is scanned too. It marks them with
+# translate("Context", "...") calls, which lupdate recognises in a file that
+# does not use Qt; a string that CODA-Q shows too uses the context it has there.
+update-translations:
+	@$(LUPDATE) -no-obsolete -locations none $(srcdir) $(top_srcdir)/windows/coda/CODA -ts $(addprefix $(srcdir)/translations/coda_,$(addsuffix .ts,$(CONF_LANGS)))
+
+# Build all translations
+translations: $(QM_FILES)
+
+# Include translations in normal build and install
+all-local: translations
+install-data-local: translations
+
+# Where to install translations
+translationsdir = $(datadir)/coda-qt/translations
+translations_DATA = $(QM_FILES)
+
+# Distribute sources and clean up generated files
+EXTRA_DIST += $(addprefix translations/coda_,$(addsuffix .ts,$(CATALOG_LANGS))) run-from-build.in
+CLEANFILES += $(QM_FILES)
+
+### --- Qt translations integration end ---
+
+### --- WebdriverIO test integration begin ---
+
+TEST_DIR = test
+
+if ENABLE_QTAPP_TESTS
+
+$(TEST_DIR)/node_modules: $(TEST_DIR)/package.json
+	cd $(TEST_DIR) && npm install
+	@touch $(TEST_DIR)/node_modules
+
+# Run Qt app tests
+check-qtapp: coda-qt $(TEST_DIR)/node_modules
+	@echo "Running WebdriverIO tests..."
+	cd $(TEST_DIR) && AT_SPI_DRIVER_PATH='@AT_SPI_DRIVER_PATH@' \
+	    CODA_QT_BINARY=$(abs_builddir)/coda-qt \
+	    ./run-tests.sh
+
+# Clean test artifacts
+clean-local:
+	rm -rf $(TEST_DIR)/node_modules
+	rm -f $(TEST_DIR)/package-lock.json
+
+endif ENABLE_QTAPP_TESTS
+
+# Distribute test files regardless of ENABLE_QTAPP_TESTS
+EXTRA_DIST += \
+	$(TEST_DIR)/README.md \
+	$(TEST_DIR)/package.json \
+	$(TEST_DIR)/tsconfig.json \
+	$(TEST_DIR)/wdio.conf.ts \
+	$(TEST_DIR)/wdio.d.ts \
+	$(TEST_DIR)/run-tests.sh \
+	$(TEST_DIR)/lib/coda-qt.service.ts \
+	$(TEST_DIR)/lib/webview.ts \
+	$(TEST_DIR)/lib/file-dialog.ts \
+	$(TEST_DIR)/fixtures/simple.odt \
+	$(TEST_DIR)/fixtures/slide_navigation.odp \
+	$(TEST_DIR)/fixtures/empty-presentation.odp \
+	$(TEST_DIR)/fixtures/readonly-source.odp \
+	$(TEST_DIR)/fixtures/popout-dialog.odt \
+	$(TEST_DIR)/specs/harness.spec.ts \
+	$(TEST_DIR)/specs/document-lifecycle.spec.ts \
+	$(TEST_DIR)/specs/open-file.spec.ts \
+	$(TEST_DIR)/specs/slide-copy-paste.spec.ts \
+	$(TEST_DIR)/specs/popout-dialog.spec.ts
+
+### --- WebdriverIO test integration end ---
+
+distclean-local:
+	rm -rf .deps

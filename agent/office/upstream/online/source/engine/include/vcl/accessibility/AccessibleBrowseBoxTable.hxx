@@ -1,0 +1,117 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+
+#pragma once
+
+#include <vcl/accessibility/AccessibleBrowseBoxTableBase.hxx>
+
+
+/** This class represents the accessible object of the data table of a
+    BrowseBox control. */
+class AccessibleBrowseBoxTable : public AccessibleBrowseBoxTableBase
+{
+public:
+    AccessibleBrowseBoxTable(
+        const cpo::uno::Reference< css::accessibility::XAccessible >& rxParent,
+        ::vcl::IAccessibleTableProvider& rBrowseBox );
+
+protected:
+    virtual ~AccessibleBrowseBoxTable() override;
+
+public:
+    // XAccessibleContext
+
+    /** @return  The XAccessible interface of the specified child. */
+    virtual cpo::uno::Reference< css::accessibility::XAccessible >
+    getAccessibleChild( sal_Int64 nChildIndex ) override;
+
+    /** @return  The index of this object among the parent's children. */
+    virtual sal_Int64 getAccessibleIndexInParent() override;
+
+    // XAccessibleComponent
+
+    /** @return  The accessible child rendered under the given point. */
+    virtual cpo::uno::Reference< css::accessibility::XAccessible >
+    getAccessibleAtPoint( const css::awt::Point& rPoint ) override;
+
+    /** Grabs the focus to (the current cell of) the data table. */
+    virtual void grabFocus() override;
+
+    // XAccessibleTable
+
+    /** @return  The description text of the specified row. */
+    virtual OUString getAccessibleRowDescription( sal_Int32 nRow ) override;
+
+    /** @return  The description text of the specified column. */
+    virtual OUString getAccessibleColumnDescription( sal_Int32 nColumn ) override;
+
+    /** @return  The XAccessibleTable interface of the row header bar. */
+    virtual cpo::uno::Reference< css::accessibility::XAccessibleTable >
+    getAccessibleRowHeaders() override;
+
+    /** @return  The XAccessibleTable interface of the column header bar. */
+    virtual cpo::uno::Reference< css::accessibility::XAccessibleTable >
+    getAccessibleColumnHeaders() override;
+
+    /** @return  An index list of completely selected rows. */
+    virtual cpo::uno::Sequence< sal_Int32 >
+    getSelectedAccessibleRows() override;
+
+    /** @return  An index list of completely selected columns. */
+    virtual cpo::uno::Sequence< sal_Int32 >
+    getSelectedAccessibleColumns() override;
+
+    /** @return  TRUE, if the specified row is completely selected. */
+    virtual bool isAccessibleRowSelected( sal_Int32 nRow ) override;
+
+    /** @return  TRUE, if the specified column is completely selected. */
+    virtual bool isAccessibleColumnSelected( sal_Int32 nColumn ) override;
+
+    /** @return The XAccessible interface of the cell object at the specified
+                cell position. */
+    virtual cpo::uno::Reference< css::accessibility::XAccessible >
+    getAccessibleCellAt( sal_Int32 nRow, sal_Int32 nColumn ) override;
+
+    /** @return  TRUE, if the specified cell is selected. */
+    virtual bool isAccessibleSelected( sal_Int32 nRow, sal_Int32 nColumn ) override;
+
+    // XServiceInfo
+
+    /** @return  The name of this class. */
+    virtual OUString getImplementationName() override;
+
+protected:
+    // internal virtual methods
+
+    /** @attention  This method requires locked mutex's and a living object.
+        @return  The bounding box (VCL rect.) relative to the parent window. */
+    virtual tools::Rectangle implGetBoundingBox() override;
+
+    // internal helper methods
+
+    /** @attention  This method requires a locked mutex.
+        @return  The XAccessibleTable interface of the specified header bar.
+        @throws cpo::uno::RuntimeException
+    */
+    cpo::uno::Reference< css::accessibility::XAccessibleTable >
+    implGetHeaderBar( sal_Int32 nChildIndex );
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

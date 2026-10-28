@@ -1,0 +1,74 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <rtl/ustring.hxx>
+#include <rtl/ref.hxx>
+#include <cppuhelper/implbase.hxx>
+
+#include <cpo/uno/XComponentContext.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+
+#include <com/sun/star/script/provider/XScriptProviderFactory.hpp>
+#include <com/sun/star/script/provider/XScriptProvider.hpp>
+
+#include "ActiveMSPList.hxx"
+
+namespace func_provider
+{
+
+class MasterScriptProviderFactory :
+    public ::cppu::WeakImplHelper <
+        css::script::provider::XScriptProviderFactory,
+        css::lang::XServiceInfo >
+{
+private:
+
+    mutable rtl::Reference< ActiveMSPList > m_MSPList;
+
+    const cpo::uno::Reference< cpo::uno::XComponentContext > m_xComponentContext;
+
+    const rtl::Reference< ActiveMSPList > & getActiveMSPList() const;
+
+protected:
+    virtual ~MasterScriptProviderFactory() override;
+
+public:
+    explicit MasterScriptProviderFactory(
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & xComponentContext );
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+
+    virtual bool
+        supportsService( OUString const & serviceName ) override;
+
+    virtual cpo::uno::Sequence< OUString >
+        getSupportedServiceNames() override;
+
+    // XScriptProviderFactory
+    virtual cpo::uno::Reference< css::script::provider::XScriptProvider >
+        createScriptProvider( const cpo::uno::Any& context ) override;
+};
+
+
+} // namespace func_provider
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

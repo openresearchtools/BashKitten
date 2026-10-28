@@ -1,0 +1,760 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_SW_INC_UNOTXDOC_HXX
+#define INCLUDED_SW_INC_UNOTXDOC_HXX
+
+#include "swdllapi.h"
+#include <sfx2/sfxbasemodel.hxx>
+
+#include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
+#include <com/sun/star/style/XAutoStylesSupplier.hpp>
+#include <com/sun/star/document/XLinkTargetSupplier.hpp>
+#include <com/sun/star/document/XRedlinesSupplier.hpp>
+#include <com/sun/star/text/XNumberingRulesSupplier.hpp>
+#include <com/sun/star/text/XFootnotesSupplier.hpp>
+#include <com/sun/star/text/XEndnotesSupplier.hpp>
+#include <com/sun/star/text/XContentControlsSupplier.hpp>
+#include <com/sun/star/text/XTextSectionsSupplier.hpp>
+#include <com/sun/star/text/XLineNumberingProperties.hpp>
+#include <com/sun/star/text/XChapterNumberingSupplier.hpp>
+#include <com/sun/star/text/XPagePrintable.hpp>
+#include <com/sun/star/text/XTextFieldsSupplier.hpp>
+#include <com/sun/star/text/XTextGraphicObjectsSupplier.hpp>
+#include <com/sun/star/text/XTextTablesSupplier.hpp>
+#include <com/sun/star/text/XDocumentIndexesSupplier.hpp>
+#include <com/sun/star/text/XBookmarksSupplier.hpp>
+#include <com/sun/star/text/XTextDocument.hpp>
+#include <com/sun/star/text/XTextEmbeddedObjectsSupplier.hpp>
+#include <com/sun/star/text/XReferenceMarksSupplier.hpp>
+#include <com/sun/star/text/XTextFramesSupplier.hpp>
+#include <com/sun/star/drawing/XDrawPageSupplier.hpp>
+#include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
+#include <com/sun/star/util/XReplaceable.hpp>
+#include <com/sun/star/util/XRefreshable.hpp>
+#include <com/sun/star/util/XLinkUpdate.hpp>
+#include <com/sun/star/view/XRenderable.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/xforms/XFormsSupplier.hpp>
+#include <com/sun/star/text/XFlatParagraphIteratorProvider.hpp>
+#include <com/sun/star/document/XDocumentLanguages.hpp>
+#include <com/sun/star/util/XCloneable.hpp>
+#include <o3tl/deleter.hxx>
+#include <rtl/ref.hxx>
+#include <svx/fmdmod.hxx>
+#include <editeng/UnoForbiddenCharsTable.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <vcl/ITiledRenderable.hxx>
+#include <com/sun/star/text/XPasteBroadcaster.hpp>
+
+#include "unobaseclass.hxx"
+#include "viewopt.hxx"
+
+#include <deque>
+
+class SwDoc;
+class SwDocShell;
+class SwXBodyText;
+class SwFmDrawPage;
+class SwUnoCursor;
+class SwXDocumentPropertyHelper;
+class SfxViewFrame;
+class SfxViewShell;
+class SwPrintUIOptions;
+class SwPrintData;
+class SwRenderData;
+class SwViewShell;
+class SfxItemPropertySet;
+class SwXTextTables;
+class SwXTextFrames;
+class SwXTextGraphicObjects;
+class SwXTextEmbeddedObjects;
+class SwXTextFieldTypes;
+class SwXTextFieldMasters;
+class SwXTextSections;
+class SwXNumberingRulesCollection;
+class SwXFootnote;
+class SwXFootnotes;
+class SwXContentControls;
+class SwXDocumentIndexes;
+class SwXStyleFamilies;
+class SwXStyle;
+class SwXAutoStyles;
+class SwXBookmarks;
+class SwXChapterNumbering;
+class SwXFootnoteProperties;
+class SwXEndnoteProperties;
+class SwXLineNumberingProperties;
+class SwXReferenceMarks;
+class SwXLinkTargetSupplier;
+class SwXRedlines;
+class SwXDocumentSettings;
+class SwXTextDefaults;
+class SwXBookmark;
+class SwXTextSection;
+class SwXTextField;
+class SwXLineBreak;
+class SwXTextFrame;
+class SwXTextGraphicObject;
+class SwXPageStyle;
+class SwXContentControl;
+class SwXTextEmbeddedObject;
+class SvXMLEmbeddedObjectHelper;
+class SwXFieldmark;
+class SwXSection;
+class SwXFieldMaster;
+class SwXDocumentIndex;
+class SvNumberFormatsSupplierObj;
+namespace com::sun::star::frame { class XController; }
+
+/// Returns the canonical display name of an outline node, as used by the
+/// XLinkTargetSupplier name access and surfaced through extract_link_targets.
+SW_DLLPUBLIC OUString SwGetOutlineLinkName(const size_t nIndex, const SwDoc* pDoc);
+
+typedef cppu::ImplInheritanceHelper
+<
+    SfxBaseModel,
+    css::text::XTextDocument,
+    css::text::XLineNumberingProperties,
+    css::text::XChapterNumberingSupplier,
+    css::text::XNumberingRulesSupplier,
+    css::text::XFootnotesSupplier,
+    css::text::XEndnotesSupplier,
+    css::text::XContentControlsSupplier,
+    css::util::XReplaceable,
+    css::text::XPagePrintable,
+    css::text::XReferenceMarksSupplier,
+    css::text::XTextTablesSupplier,
+    css::text::XTextFramesSupplier,
+    css::text::XBookmarksSupplier,
+    css::text::XTextSectionsSupplier,
+    css::text::XTextGraphicObjectsSupplier,
+    css::text::XTextEmbeddedObjectsSupplier,
+    css::text::XTextFieldsSupplier,
+    css::style::XStyleFamiliesSupplier,
+    css::style::XAutoStylesSupplier,
+    css::lang::XServiceInfo,
+    css::drawing::XDrawPageSupplier,
+    css::drawing::XDrawPagesSupplier,
+    css::text::XDocumentIndexesSupplier,
+    css::beans::XPropertySet,
+    css::beans::XPropertyState,
+    css::document::XLinkTargetSupplier,
+    css::document::XRedlinesSupplier,
+    css::util::XRefreshable,
+    css::util::XLinkUpdate,
+    css::view::XRenderable,
+    css::xforms::XFormsSupplier,
+    css::text::XFlatParagraphIteratorProvider,
+    css::document::XDocumentLanguages,
+    css::util::XCloneable,
+    css::text::XPasteBroadcaster
+>
+SwXTextDocumentBaseClass;
+
+class SW_DLLPUBLIC SwXTextDocument final : public SwXTextDocumentBaseClass,
+    public SvxFmMSFactory,
+    public vcl::ITiledRenderable
+{
+private:
+    class Impl;
+    ::sw::UnoImplPtr<Impl> m_pImpl;
+
+    std::deque<std::unique_ptr<UnoActionContext, o3tl::default_delete<UnoActionContext>>> maActionArr;
+
+    const SfxItemPropertySet* m_pPropSet;
+
+    SwDocShell*             m_pDocShell;
+
+    rtl::Reference<SwFmDrawPage>                                m_xDrawPage;
+
+    rtl::Reference<SwXBodyText>                                 m_xBodyText;
+    rtl::Reference< SvNumberFormatsSupplierObj >                m_xNumFormatAgg;
+
+    rtl::Reference<SwXNumberingRulesCollection>                 mxXNumberingRules;
+    rtl::Reference<SwXFootnotes>                                mxXFootnotes;
+    rtl::Reference<SwXFootnoteProperties>                       mxXFootnoteSettings;
+    rtl::Reference<SwXFootnotes>                                mxXEndnotes;
+    rtl::Reference<SwXEndnoteProperties>                        mxXEndnoteSettings;
+    rtl::Reference<SwXContentControls>                          mxXContentControls;
+    rtl::Reference<SwXReferenceMarks>                           mxXReferenceMarks;
+    rtl::Reference<SwXTextFieldTypes>                           mxXTextFieldTypes;
+    rtl::Reference<SwXTextFieldMasters>                         mxXTextFieldMasters;
+    rtl::Reference<SwXTextSections>                             mxXTextSections;
+    rtl::Reference<SwXBookmarks>                                mxXBookmarks;
+    rtl::Reference<SwXTextTables>                               mxXTextTables;
+    rtl::Reference<SwXTextFrames>                               mxXTextFrames;
+    rtl::Reference<SwXTextGraphicObjects>                       mxXGraphicObjects;
+    rtl::Reference<SwXTextEmbeddedObjects>                      mxXEmbeddedObjects;
+    rtl::Reference<SwXStyleFamilies>                            mxXStyleFamilies;
+    mutable rtl::Reference<SwXAutoStyles>                       mxXAutoStyles;
+    rtl::Reference<SwXChapterNumbering>                         mxXChapterNumbering;
+    rtl::Reference<SwXDocumentIndexes>                          mxXDocumentIndexes;
+
+    rtl::Reference<SwXLineNumberingProperties>                  mxXLineNumberingProperties;
+    rtl::Reference<SwXLinkTargetSupplier>                       mxLinkTargetSupplier;
+    rtl::Reference<SwXRedlines>                                 mxXRedlines;
+
+    //temporary frame to enable PDF export if no valid view is available
+    SfxViewFrame*                                   m_pHiddenViewFrame;
+    rtl::Reference<SwXDocumentPropertyHelper>       mxPropertyHelper;
+
+    std::unique_ptr<SwPrintUIOptions>               m_pPrintUIOptions;
+    std::unique_ptr<SwRenderData>                   m_pRenderData;
+
+    void                    GetNumberFormatter();
+
+    cpo::uno::Reference<cpo::uno::XInterface> create(
+        OUString const & rServiceName,
+        cpo::uno::Sequence<cpo::uno::Any> const * arguments);
+
+    // used for XRenderable implementation
+    SfxViewShell *  GuessViewShell( /* out */ bool &rbIsSwSrcView, const cpo::uno::Reference< css::frame::XController >& rController = cpo::uno::Reference< css::frame::XController >() );
+    SwDoc *         GetRenderDoc( SfxViewShell *&rpView, const cpo::uno::Any& rSelection, bool bIsPDFExport );
+    SfxViewShell *  GetRenderView( bool &rbIsSwSrcView, const cpo::uno::Sequence< css::beans::PropertyValue >& rxOptions, bool bIsPDFExport );
+
+    OUString           maBuildId;
+
+    // boolean for XPagePrintable
+    // set in XPagePrintable::printPages(..) to indicate that the PagePrintSettings
+    // has to be applied in XRenderable::getRenderer(..) through which the printing
+    // is implemented.
+    bool m_bApplyPagePrintSettingsFromXPagePrintable;
+
+    /** abstract SdrModel provider */
+    virtual SdrModel& getSdrModelFromUnoModel() const override;
+
+    virtual ~SwXTextDocument() override;
+
+    void ThrowIfInvalid() const;
+    SwDoc& GetDocOrThrow() const;
+    bool partHasComments() const;
+
+public:
+    SwXTextDocument(SwDocShell* pShell);
+
+    void NotifyRefreshListeners();
+    virtual     cpo::uno::Any queryInterface( const cpo::uno::Type& aType ) override;
+    virtual void acquire(  ) noexcept override;
+    virtual void release(  ) noexcept override;
+
+    //XWeak
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+
+    static const cpo::uno::Sequence< sal_Int8 > & getUnoTunnelId();
+
+    //XUnoTunnel
+    virtual sal_Int64 getSomething( const cpo::uno::Sequence< sal_Int8 >& aIdentifier ) override;
+
+    //XTextDocument
+    virtual cpo::uno::Reference< css::text::XText >  getText() override;
+    rtl::Reference< SwXBodyText > getBodyText();
+    virtual void reformat() override;
+
+    using SfxBaseModel::addEventListener;
+    using SfxBaseModel::removeEventListener;
+
+    //XModel
+    virtual bool attachResource( const OUString& aURL, const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs ) override;
+    virtual OUString getURL(  ) override;
+    virtual cpo::uno::Sequence< css::beans::PropertyValue > getArgs(  ) override;
+    virtual void connectController( const cpo::uno::Reference< css::frame::XController >& xController ) override;
+    virtual void disconnectController( const cpo::uno::Reference< css::frame::XController >& xController ) override;
+    virtual void lockControllers(  ) override;
+    virtual void unlockControllers(  ) override;
+    virtual bool hasControllersLocked(  ) override;
+    virtual cpo::uno::Reference< css::frame::XController > getCurrentController(  ) override;
+    virtual void setCurrentController( const cpo::uno::Reference< css::frame::XController >& xController ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getCurrentSelection(  ) override;
+
+    //XComponent
+    virtual void dispose() override;
+    virtual void addEventListener(const cpo::uno::Reference< css::lang::XEventListener > & aListener) override;
+    virtual void removeEventListener(const cpo::uno::Reference< css::lang::XEventListener > & aListener) override;
+
+    //XCloseable
+    virtual void close( bool bDeliverOwnership ) override;
+
+    //XLineNumberingProperties
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getLineNumberingProperties() override;
+
+    //XChapterNumberingSupplier
+    virtual cpo::uno::Reference< css::container::XIndexReplace >  getChapterNumberingRules() override;
+
+    //XNumberingRulesSupplier
+    virtual cpo::uno::Reference< css::container::XIndexAccess > getNumberingRules() override;
+
+    //XFootnotesSupplier
+    virtual cpo::uno::Reference< css::container::XIndexAccess >  getFootnotes() override;
+    virtual cpo::uno::Reference< css::beans::XPropertySet >  getFootnoteSettings() override;
+
+    //XEndnotesSupplier
+    virtual cpo::uno::Reference< css::container::XIndexAccess >  getEndnotes() override;
+    virtual cpo::uno::Reference< css::beans::XPropertySet >  getEndnoteSettings() override;
+
+    // XContentControlsSupplier
+    cpo::uno::Reference<css::container::XIndexAccess> getContentControls() override;
+
+    //XReplaceable
+    virtual cpo::uno::Reference< css::util::XReplaceDescriptor >  createReplaceDescriptor() override;
+    virtual sal_Int32 replaceAll(const cpo::uno::Reference< css::util::XSearchDescriptor > & xDesc) override;
+
+    //XSearchable
+    virtual cpo::uno::Reference< css::util::XSearchDescriptor >  createSearchDescriptor() override;
+    virtual cpo::uno::Reference< css::container::XIndexAccess >  findAll(const cpo::uno::Reference< css::util::XSearchDescriptor > & xDesc) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface >  findFirst(const cpo::uno::Reference< css::util::XSearchDescriptor > & xDesc) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface >  findNext(const cpo::uno::Reference< cpo::uno::XInterface > & xStartAt, const cpo::uno::Reference< css::util::XSearchDescriptor > & xDesc) override;
+
+    //XPagePrintable
+    virtual cpo::uno::Sequence< css::beans::PropertyValue > getPagePrintSettings() override;
+    virtual void setPagePrintSettings(const cpo::uno::Sequence< css::beans::PropertyValue >& aSettings) override;
+    virtual void printPages(const cpo::uno::Sequence< css::beans::PropertyValue >& xOptions) override;
+
+    //XReferenceMarksSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess >  getReferenceMarks() override;
+
+    // css::text::XTextFieldsSupplier
+    virtual cpo::uno::Reference< css::container::XEnumerationAccess >  getTextFields() override;
+    virtual cpo::uno::Reference< css::container::XNameAccess >  getTextFieldMasters() override;
+
+    // css::text::XTextEmbeddedObjectsSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess >  getEmbeddedObjects() override;
+
+    // css::text::XBookmarksSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess >  getBookmarks() override;
+
+    // css::text::XTextSectionsSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess >  getTextSections() override;
+
+    // css::text::XTextTablesSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess >  getTextTables() override;
+
+    // css::text::XTextGraphicObjectsSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess >  getGraphicObjects() override;
+
+    // css::text::XTextFramesSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess >  getTextFrames() override;
+
+    //XStyleFamiliesSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess >  getStyleFamilies() override;
+
+    //XAutoStylesSupplier
+    virtual cpo::uno::Reference< css::style::XAutoStyles > getAutoStyles(  ) override;
+
+    //XMultiServiceFactory
+    virtual cpo::uno::Reference< cpo::uno::XInterface >  createInstance(const OUString& ServiceSpecifier) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface >  createInstanceWithArguments(const OUString& ServiceSpecifier,
+                const cpo::uno::Sequence< cpo::uno::Any >& Arguments) override;
+    virtual cpo::uno::Sequence< OUString > getAvailableServiceNames() override;
+
+    //XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // css::drawing::XDrawPageSupplier
+    virtual cpo::uno::Reference< css::drawing::XDrawPage >  getDrawPage() override;
+
+    // css::drawing::XDrawPagesSupplier
+    virtual cpo::uno::Reference< css::drawing::XDrawPages > getDrawPages() override;
+
+    // css::text::XDocumentIndexesSupplier
+    virtual cpo::uno::Reference< css::container::XIndexAccess >  getDocumentIndexes() override;
+
+    //XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+
+    //XPropertyState
+    virtual css::beans::PropertyState getPropertyState( const OUString& rPropertyName ) override;
+    virtual cpo::uno::Sequence< css::beans::PropertyState > getPropertyStates( const cpo::uno::Sequence< OUString >& rPropertyNames ) override;
+    virtual void setPropertyToDefault( const OUString& rPropertyName ) override;
+    virtual cpo::uno::Any getPropertyDefault( const OUString& rPropertyName ) override;
+
+    //XLinkTargetSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess >  getLinks() override;
+
+    //XRedlinesSupplier
+    virtual cpo::uno::Reference< css::container::XEnumerationAccess > getRedlines(  ) override;
+
+    // css::util::XRefreshable
+    virtual void refresh() override;
+    virtual void addRefreshListener(const cpo::uno::Reference< css::util::XRefreshListener > & l) override;
+    virtual void removeRefreshListener(const cpo::uno::Reference< css::util::XRefreshListener > & l) override;
+
+    // css::util::XLinkUpdate,
+    virtual void updateLinks(  ) override;
+
+    // css::view::XRenderable
+    virtual sal_Int32 getRendererCount( const cpo::uno::Any& aSelection, const cpo::uno::Sequence< css::beans::PropertyValue >& xOptions ) override;
+    virtual cpo::uno::Sequence< css::beans::PropertyValue > getRenderer( sal_Int32 nRenderer, const cpo::uno::Any& aSelection, const cpo::uno::Sequence< css::beans::PropertyValue >& xOptions ) override;
+    virtual void render( sal_Int32 nRenderer, const cpo::uno::Any& aSelection, const cpo::uno::Sequence< css::beans::PropertyValue >& xOptions ) override;
+
+    // css::xforms::XFormsSupplier
+    virtual cpo::uno::Reference< css::container::XNameContainer > getXForms(  ) override;
+
+    // css::document::XDocumentLanguages
+    virtual cpo::uno::Sequence< css::lang::Locale > getDocumentLanguages( ::sal_Int16 nScriptTypes, ::sal_Int16 nCount ) override;
+
+    // css::text::XFlatParagraphIteratorProvider:
+    virtual cpo::uno::Reference< css::text::XFlatParagraphIterator > getFlatParagraphIterator(::sal_Int32 nTextMarkupType, bool bAutomatic ) override;
+
+    // css::util::XCloneable
+    virtual cpo::uno::Reference< css::util::XCloneable > createClone(  ) override;
+
+    // css::text::XPasteBroadcaster
+    void addPasteEventListener(
+        const ::cpo::uno::Reference<::css::text::XPasteListener>& xListener) override;
+    void removePasteEventListener(
+        const ::cpo::uno::Reference<::css::text::XPasteListener>& xListener) override;
+
+    /// @see vcl::ITiledRenderable::paintTile().
+    virtual void paintTile( VirtualDevice &rDevice,
+                            int nOutputWidth,
+                            int nOutputHeight,
+                            int nTilePosX,
+                            int nTilePosY,
+                            tools::Long nTileWidth,
+                            tools::Long nTileHeight ) override;
+    /// @see vcl::ITiledRenderable::getDocumentSize().
+    virtual Size getDocumentSize() override;
+    /// @see vcl::ITiledRenderable::setPart().
+    virtual void setPart(int nPart, bool bAllowChangeFocus = true) override;
+    /// @see vcl::ITiledRenderable::getParts().
+    virtual int getParts() override;
+    /// @see vcl::ITiledRenderable::getPart().
+    virtual int getPart() override;
+    /// @see vcl::ITiledRenderable::getPartName().
+    virtual OUString getPartName(int nPart) override;
+    /// @see vcl::ITiledRenderable::getPartHash().
+    virtual OUString getPartHash(int nPart) override;
+    /// @see vcl::ITiledRenderable::getDocWindow().
+    virtual VclPtr<vcl::Window> getDocWindow() override;
+    /// @see vcl::ITiledRenderable::initializeForTiledRendering().
+    virtual void initializeForTiledRendering(const cpo::uno::Sequence<css::beans::PropertyValue>& rArguments) override;
+    /// @see vcl::ITiledRenderable::postKeyEvent().
+    virtual void postKeyEvent(COKitKeyEventType eType, int nCharCode, int nKeyCode) override;
+    /// @see vcl::ITiledRenderable::postMouseEvent().
+    virtual void postMouseEvent(COKitMouseEventType eType, int nX, int nY, int nCount, int nButtons,
+                                int nModifier) override;
+    /// @see vcl::ITiledRenderable::setTextSelection().
+    virtual void setTextSelection(COKitSetTextSelectionType eType, int nX, int nY) override;
+    /// @see vcl::ITiledRenderable::getSelection().
+    virtual cpo::uno::Reference<css::datatransfer::XTransferable> getSelection() override;
+    /// @see vcl::ITiledRenderable::setGraphicSelection().
+    virtual void setGraphicSelection(COKitSetGraphicSelectionType eType, int nX, int nY) override;
+    /// @see vcl::ITiledRenderable::resetSelection().
+    virtual void resetSelection() override;
+    /// @see vcl::ITiledRenderable::getWriterPageRectangles().
+    virtual std::string getWriterPageRectangles() override;
+    /// @see vcl::ITiledRenderable::setClipboard().
+    virtual void setClipboard(const cpo::uno::Reference<css::datatransfer::clipboard::XClipboard>& xClipboard) override;
+    /// @see vcl::ITiledRenderable::isMimeTypeSupported().
+    virtual bool isMimeTypeSupported() override;
+    /// @see vcl::ITiledRenderable::setClientVisibleArea().
+    virtual void setClientVisibleArea(const tools::Rectangle& rRectangle) override;
+    /// @see vcl::ITiledRenderable::setClientZoom.
+    virtual void setClientZoom(int nTilePixelWidth_, int nTilePixelHeight_, int nTileTwipWidth_, int nTileTwipHeight_) override;
+    /// @see vcl::ITiledRenderable::getPointer().
+    virtual PointerStyle getPointer() override;
+    /// @see vcl::ITiledRenderable::getTrackedChanges().
+    void getTrackedChanges(tools::JsonWriter&) override;
+    /// @see vcl::ITiledRenderable::getTrackedChangeAuthors().
+    void getTrackedChangeAuthors(tools::JsonWriter& rJsonWriter) override;
+
+    void getRulerState(tools::JsonWriter& rJsonWriter) override;
+    /// @see vcl::ITiledRenderable::getPostIts().
+    void getPostIts(tools::JsonWriter& rJsonWriter) override;
+
+    /// @see vcl::ITiledRenderable::executeFromFieldEvent().
+    virtual void executeFromFieldEvent(const StringMap& aArguments) override;
+
+    /// @see vcl::ITiledRenderable::getSearchResultRectangles().
+    std::vector<basegfx::B2DRange> getSearchResultRectangles(const char* pPayload) override;
+
+    /// @see vcl::ITiledRenderable::executeContentControlEvent().
+    void executeContentControlEvent(const StringMap& aArguments) override;
+
+    /// @see vcl::ITiledRenderable::getCommandValues().
+    void getCommandValues(tools::JsonWriter& rJsonWriter, std::string_view rCommand) override;
+
+    /// @see vcl::ITiledRenderable::getViewRenderState().
+    OString getViewRenderState(const SfxViewShell* pViewShell = nullptr) override;
+
+    /// @see vcl::ITiledRenderable::supportsCommand().
+    bool supportsCommand(std::u16string_view rCommand) override;
+
+    /// @see vcl::ITiledRenderable::getEditMode().
+    int getEditMode() override;
+    /// @see vcl::ITiledRenderable::setEditMode().
+    void setEditMode(int nEditMode) override;
+    /// @see vcl::ITiledRenderable::getPartInfo().
+    std::string getPartInfo(int nPart) override;
+
+    void                        Invalidate();
+    void                        Reactivate(SwDocShell* pNewDocShell);
+    SwXDocumentPropertyHelper * GetPropertyHelper ();
+
+    void                        InitNewDoc();
+
+    SwUnoCursor* CreateCursorForSearch(cpo::uno::Reference< css::text::XTextCursor > & xCursor);
+    SwUnoCursor* FindAny(const cpo::uno::Reference< css::util::XSearchDescriptor > & xDesc,
+                                            cpo::uno::Reference< css::text::XTextCursor > & xCursor, bool bAll,
+                                            sal_Int32& nResult,
+                                            cpo::uno::Reference< cpo::uno::XInterface > const & xLastResult);
+
+    SwDocShell*                 GetDocShell() {return m_pDocShell;}
+
+    rtl::Reference<SwXDocumentIndexes> getSwDocumentIndexes();
+    rtl::Reference<SwXTextTables> getSwTextTables();
+    rtl::Reference<SwFmDrawPage> getSwDrawPage();
+    rtl::Reference<SwXFootnotes> getSwXFootnotes();
+    rtl::Reference<SwXFootnotes> getSwXEndnotes();
+    rtl::Reference<SwXTextFieldMasters> getSwXTextFieldMasters();
+    rtl::Reference<SwXFieldMaster> createFieldMaster(std::u16string_view sServiceName);
+    rtl::Reference<SwXTextField> createTextField(std::u16string_view sServiceName);
+    rtl::Reference<SwXFieldmark> createFieldmark(std::u16string_view sServiceName);
+    rtl::Reference<SwXDocumentIndex> createDocumentIndex(std::u16string_view sServiceName);
+    /// returns either SwXDocumentIndex or SwXTextSection
+    rtl::Reference<SwXSection> createSection(std::u16string_view rObjectType);
+    rtl::Reference<SwXDocumentSettings> createDocumentSettings();
+    rtl::Reference<SwXTextDefaults> createTextDefaults();
+    rtl::Reference<SwXBookmark> createBookmark();
+    rtl::Reference<SwXFieldmark> createFieldmark();
+    rtl::Reference<SwXTextSection> createTextSection();
+    rtl::Reference<SwXTextField> createFieldAnnotation();
+    rtl::Reference<SwXLineBreak> createLineBreak();
+    rtl::Reference<SwXTextFrame> createTextFrame();
+    rtl::Reference<SwXTextGraphicObject> createTextGraphicObject();
+    rtl::Reference<SwXStyle> createNumberingStyle();
+    rtl::Reference<SwXStyle> createCharacterStyle();
+    rtl::Reference<SwXStyle> createParagraphStyle();
+    rtl::Reference<SwXPageStyle> createPageStyle();
+    rtl::Reference<SwXContentControl> createContentControl();
+    rtl::Reference<SwXFootnote> createFootnote();
+    rtl::Reference<SwXFootnote> createEndnote();
+    rtl::Reference<SwXTextEmbeddedObject> createTextEmbeddedObject();
+    rtl::Reference<SvXMLEmbeddedObjectHelper> createEmbeddedObjectResolver();
+    rtl::Reference< SwXStyleFamilies > getSwStyleFamilies();
+    const rtl::Reference< SwXRedlines > & getSwRedlines();
+    rtl::Reference<SwXTextFieldTypes> getSwTextFields();
+    rtl::Reference<SwXTextFrames> getSwTextFrames();
+    rtl::Reference<SwXTextSections> getSwTextSections();
+    rtl::Reference<SwXChapterNumbering> getSwChapterNumberingRules();
+    rtl::Reference< SwXLineNumberingProperties > getSwLineNumberingProperties();
+    rtl::Reference< SwXBookmarks > getSwBookmarks();
+};
+
+class SwXLinkTargetSupplier final : public cppu::WeakImplHelper
+<
+    css::container::XNameAccess,
+    css::lang::XServiceInfo
+>
+{
+    SwXTextDocument* m_pxDoc;
+    OUString m_sTables;
+    OUString m_sFrames;
+    OUString m_sGraphics;
+    OUString m_sOLEs;
+    OUString m_sSections;
+    OUString m_sOutlines;
+    OUString m_sBookmarks;
+    OUString m_sDrawingObjects;
+
+public:
+    SwXLinkTargetSupplier(SwXTextDocument& rxDoc);
+    virtual ~SwXLinkTargetSupplier() override;
+
+    //XNameAccess
+    virtual cpo::uno::Any getByName(const OUString& Name) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool hasByName(const OUString& Name) override;
+
+    //XElementAccess
+    virtual cpo::uno::Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
+
+    //XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    void    Invalidate() {m_pxDoc = nullptr;}
+};
+
+class SwXLinkNameAccessWrapper final : public cppu::WeakImplHelper
+<
+    css::beans::XPropertySet,
+    css::container::XNameAccess,
+    css::lang::XServiceInfo,
+    css::document::XLinkTargetSupplier
+>
+{
+    cpo::uno::Reference< css::container::XNameAccess >    m_xRealAccess;
+    const SfxItemPropertySet*                             m_pPropSet;
+    const OUString                                        m_sLinkSuffix;
+    const OUString                                        m_sLinkDisplayName;
+    SwXTextDocument*                                      m_pxDoc;
+
+public:
+    SwXLinkNameAccessWrapper(cpo::uno::Reference< css::container::XNameAccess >  const & xAccess,
+            OUString aLinkDisplayName, OUString  sSuffix);
+    SwXLinkNameAccessWrapper(SwXTextDocument& rxDoc,
+            OUString aLinkDisplayName, OUString sSuffix);
+    virtual ~SwXLinkNameAccessWrapper() override;
+
+    //XNameAccess
+    virtual cpo::uno::Any getByName(const OUString& Name) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool hasByName(const OUString& Name) override;
+
+    //XElementAccess
+    virtual cpo::uno::Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
+
+    //XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+
+    //XLinkTargetSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess >  getLinks() override;
+
+    //XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+};
+
+class SwXOutlineTarget final : public cppu::WeakImplHelper
+<
+    css::beans::XPropertySet,
+    css::lang::XServiceInfo
+>
+{
+    const SfxItemPropertySet*   m_pPropSet;
+    OUString                    m_sOutlineText;
+    OUString                    m_sActualText;
+    const sal_Int32             m_nOutlineLevel;
+
+public:
+    SwXOutlineTarget(OUString aOutlineText, OUString aActualText,
+                     const sal_Int32 nOutlineLevel);
+    virtual ~SwXOutlineTarget() override;
+
+    //XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+
+    //XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+};
+
+class SwXDrawingObjectTarget final : public cppu::WeakImplHelper
+<
+    css::beans::XPropertySet,
+    css::lang::XServiceInfo
+>
+{
+    const SfxItemPropertySet*   m_pPropSet;
+    OUString                    m_sDrawingObjectText;
+
+public:
+    SwXDrawingObjectTarget(OUString aDrawingObjectText);
+    virtual ~SwXDrawingObjectTarget() override;
+
+    //XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+
+    //XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+};
+
+
+enum class SwCreateDrawTable {
+    Dash = 1, Gradient, Hatch, Bitmap, TransGradient, Marker, Defaults
+};
+
+class SwXDocumentPropertyHelper final : public SvxUnoForbiddenCharsTable
+{
+    cpo::uno::Reference < cpo::uno::XInterface > m_xDashTable;
+    cpo::uno::Reference < cpo::uno::XInterface > m_xGradientTable;
+    cpo::uno::Reference < cpo::uno::XInterface > m_xHatchTable;
+    cpo::uno::Reference < cpo::uno::XInterface > m_xBitmapTable;
+    cpo::uno::Reference < cpo::uno::XInterface > m_xTransGradientTable;
+    cpo::uno::Reference < cpo::uno::XInterface > m_xMarkerTable;
+    cpo::uno::Reference < cpo::uno::XInterface > m_xDrawDefaults;
+
+    SwDoc*  m_pDoc;
+public:
+    SwXDocumentPropertyHelper(SwDoc& rDoc);
+    virtual ~SwXDocumentPropertyHelper() override;
+    cpo::uno::Reference<cpo::uno::XInterface> GetDrawTable(SwCreateDrawTable nWhich);
+    void Invalidate();
+
+    virtual void onChange() override;
+};
+
+// The class SwViewOptionAdjust_Impl is used to adjust the SwViewOption of
+// the current SwViewShell so that fields are not printed as commands and
+// hidden characters are always invisible. Hidden text and place holders
+// should be printed according to the current print options.
+// After printing the view options are restored
+class SwViewOptionAdjust_Impl
+{
+    SwViewShell *   m_pShell;
+    SwViewOption    m_aOldViewOptions;
+public:
+    SwViewOptionAdjust_Impl( SwViewShell& rSh, const SwViewOption &rViewOptions );
+    ~SwViewOptionAdjust_Impl();
+    void AdjustViewOptions( SwPrintData const* const pPrtOptions, bool setShowPlaceHoldersInPDF );
+    bool checkShell( const SwViewShell& rCompare ) const
+    { return &rCompare == m_pShell; }
+    void DontTouchThatViewShellItSmellsFunny() { m_pShell = nullptr; }
+};
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

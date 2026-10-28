@@ -1,0 +1,116 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_CONNECTIVITY_SDBCX_VCOLUMN_HXX
+#define INCLUDED_CONNECTIVITY_SDBCX_VCOLUMN_HXX
+
+#include <com/sun/star/sdbcx/XDataDescriptorFactory.hpp>
+#include <com/sun/star/container/XNamed.hpp>
+#include <comphelper/IdPropArrayHelper.hxx>
+#include <cppuhelper/compbase.hxx>
+#include <cppuhelper/implbase1.hxx>
+#include <connectivity/CommonTools.hxx>
+#include <cppuhelper/basemutex.hxx>
+#include <connectivity/sdbcx/VDescriptor.hxx>
+#include <connectivity/dbtoolsdllapi.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+
+namespace connectivity::sdbcx
+{
+    class OColumn;
+    typedef ::comphelper::OIdPropertyArrayUsageHelper<OColumn> OColumn_PROP;
+
+    typedef ::cppu::WeakComponentImplHelper< css::container::XNamed,
+                                             css::lang::XServiceInfo> OColumnDescriptor_BASE;
+    typedef ::cppu::ImplHelper1< css::sdbcx::XDataDescriptorFactory > OColumn_BASE;
+
+
+    class OOO_DLLPUBLIC_DBTOOLS OColumn :
+                                public cppu::BaseMutex,
+                                public OColumn_BASE,
+                                public OColumnDescriptor_BASE,
+                                public OColumn_PROP,
+                                public ODescriptor
+    {
+    protected:
+        OUString        m_TypeName;
+        OUString        m_Description;
+        OUString        m_DefaultValue;
+
+        sal_Int32       m_IsNullable;
+        sal_Int32       m_Precision;
+        sal_Int32       m_Scale;
+        sal_Int32       m_Type;
+
+        bool            m_IsAutoIncrement;
+        bool            m_IsRowVersion;
+        bool            m_IsCurrency;
+
+        OUString       m_CatalogName;
+        OUString       m_SchemaName;
+        OUString       m_TableName;
+
+        using OColumnDescriptor_BASE::rBHelper;
+        virtual ::cppu::IPropertyArrayHelper* createArrayHelper( sal_Int32 _nId) const override;
+        virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
+
+        virtual ~OColumn() override;
+    public:
+        virtual void    acquire() noexcept override;
+        virtual void    release() noexcept override;
+
+        OColumn(    bool _bCase);
+        OColumn(    const OUString& Name,
+                    OUString TypeName,
+                    OUString DefaultValue,
+                    OUString Description,
+                    sal_Int32       IsNullable,
+                    sal_Int32       Precision,
+                    sal_Int32       Scale,
+                    sal_Int32       Type,
+                    bool            IsAutoIncrement,
+                    bool            IsRowVersion,
+                    bool            IsCurrency,
+                    bool            _bCase,
+                    OUString CatalogName,
+                    OUString SchemaName,
+                    OUString TableName);
+
+        DECLARE_SERVICE_INFO();
+        //XInterface
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+        //XTypeProvider
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+        // ODescriptor
+        virtual void construct() override;
+        // ::cppu::OComponentHelper
+        virtual void disposing() override;
+        // XPropertySet
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+        // XNamed
+        virtual OUString getName(  ) override;
+        virtual void setName( const OUString& aName ) override;
+        // XDataDescriptorFactory
+        virtual cpo::uno::Reference< css::beans::XPropertySet > createDataDescriptor(  ) override;
+    };
+
+}
+
+#endif // INCLUDED_CONNECTIVITY_SDBCX_VCOLUMN_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,244 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <memory>
+#include <svx/sidebar/LinePropertyPanelBase.hxx>
+#include <LineEndStyleBoxes.hxx>
+#include <sfx2/weldutils.hxx>
+#include <svx/linectrl.hxx>
+#include <svx/xlnwtit.hxx>
+#include <svx/xlntrit.hxx>
+#include <svx/xlncapit.hxx>
+#include <svx/xlinjoit.hxx>
+#include <com/sun/star/beans/PropertyValue.hpp>
+
+using namespace css;
+using namespace ::cpo;
+using namespace ::cpo::uno;
+
+constexpr OUString SELECTWIDTH = u"SelectWidth"_ustr;
+
+namespace svx::sidebar {
+
+// trigger disabling the arrows if the none line style is selected
+class LineStyleNoneChange
+{
+private:
+    LinePropertyPanelBase& m_rPanel;
+
+public:
+    LineStyleNoneChange(LinePropertyPanelBase& rPanel)
+        : m_rPanel(rPanel)
+    {
+    }
+
+    void operator()(bool bLineStyleNone)
+    {
+        m_rPanel.SetNoneLineStyle(bLineStyleNone);
+    }
+};
+
+namespace
+{
+    SvxLineStyleToolBoxControl* getLineStyleToolBoxControl(const ToolbarUnoDispatcher& rToolBoxColor)
+    {
+        cpo::uno::Reference<css::frame::XToolbarController> xController = rToolBoxColor.GetControllerForCommand(u".uno:XLineStyle"_ustr);
+        SvxLineStyleToolBoxControl* pToolBoxLineStyleControl = dynamic_cast<SvxLineStyleToolBoxControl*>(xController.get());
+        return pToolBoxLineStyleControl;
+    }
+}
+
+
+LinePropertyPanelBase::LinePropertyPanelBase(
+    weld::Widget* pParent,
+    const uno::Reference<css::frame::XFrame>& rxFrame)
+:   PanelLayout(pParent, u"LinePropertyPanel"_ustr, u"svx/ui/sidebarline.ui"_ustr),
+    mxTBColor(m_xBuilder->weld_toolbar(u"color"_ustr)),
+    mxColorDispatch(new ToolbarUnoDispatcher(*mxTBColor, *m_xBuilder, rxFrame)),
+    mxLineStyleTB(m_xBuilder->weld_toolbar(u"linestyle"_ustr)),
+    mxLineStyleDispatch(new ToolbarUnoDispatcher(*mxLineStyleTB, *m_xBuilder, rxFrame)),
+    mnWidthCoreValue(0),
+    mxFTWidth(m_xBuilder->weld_label(u"widthlabel"_ustr)),
+    mxTBWidth(m_xBuilder->weld_toolbar(u"width"_ustr)),
+    mxFTTransparency(m_xBuilder->weld_label(u"translabel"_ustr)),
+    mxMFTransparent(m_xBuilder->weld_metric_spin_button(u"linetransparency"_ustr, FieldUnit::PERCENT)),
+    mxArrowStyles(new svx::LineEndStyleBoxes(
+        m_xBuilder->weld_label(u"startarrowlabel"_ustr),
+        m_xBuilder->weld_combo_box(u"startarrowstyle"_ustr),
+        m_xBuilder->weld_label(u"endarrowlabel"_ustr),
+        m_xBuilder->weld_combo_box(u"endarrowstyle"_ustr),
+        [this](const XLineStartItem& rItem) { setLineStart(rItem); },
+        [this](const XLineEndItem& rItem) { setLineEnd(rItem); }, rxFrame)),
+    mxLineWidthPopup(new LineWidthPopup(mxTBWidth.get(), *this)),
+    mxLineStyleNoneChange(new LineStyleNoneChange(*this)),
+    mnTrans(0),
+    meMapUnit(MapUnit::MapMM),
+    mbWidthValuable(true),
+    mbArrowSupported(true),
+    mbNoneLineStyle(false)
+{
+    Initialize();
+}
+
+LinePropertyPanelBase::~LinePropertyPanelBase()
+{
+    mxLineWidthPopup.reset();
+    mxFTWidth.reset();
+    mxTBWidth.reset();
+    mxColorDispatch.reset();
+    mxTBColor.reset();
+    mxFTTransparency.reset();
+    mxMFTransparent.reset();
+    mxLineStyleDispatch.reset();
+    mxLineStyleTB.reset();
+    mxArrowStyles.reset();
+}
+
+void LinePropertyPanelBase::Initialize()
+{
+    mxTBWidth->set_item_popover(SELECTWIDTH, mxLineWidthPopup->getTopLevel());
+
+    mxTBWidth->connect_clicked(LINK(this, LinePropertyPanelBase, ToolboxWidthSelectHdl));
+    mxTBWidth->connect_menu_toggled(LINK(this, LinePropertyPanelBase, ToolboxWidthToggleMenuHdl));
+
+    mxMFTransparent->connect_value_changed(LINK(this, LinePropertyPanelBase, ChangeTransparentHdl));
+
+    SvxLineStyleToolBoxControl* pLineStyleControl = getLineStyleToolBoxControl(*mxLineStyleDispatch);
+    pLineStyleControl->setLineStyleIsNoneFunction(*mxLineStyleNoneChange);
+}
+
+void LinePropertyPanelBase::updateLineTransparence(bool bDisabled, bool bSetOrDefault,
+        const SfxPoolItem* pState)
+{
+    if(bDisabled)
+    {
+        mxFTTransparency->set_sensitive(false);
+        mxMFTransparent->set_sensitive(false);
+    }
+    else
+    {
+        mxFTTransparency->set_sensitive(true);
+        mxMFTransparent->set_sensitive(true);
+    }
+
+    if(bSetOrDefault)
+    {
+        if (const XLineTransparenceItem* pItem = dynamic_cast<const XLineTransparenceItem*>(pState))
+        {
+            mnTrans = pItem->GetValue();
+            mxMFTransparent->set_value(mnTrans, FieldUnit::PERCENT);
+            return;
+        }
+    }
+
+    mxMFTransparent->set_value(0, FieldUnit::PERCENT);//add
+    mxMFTransparent->set_text(OUString());
+}
+
+void LinePropertyPanelBase::updateLineWidth(bool bDisabled, bool bSetOrDefault,
+        const SfxPoolItem* pState)
+{
+    if(bDisabled)
+    {
+        mxTBWidth->set_sensitive(false);
+        mxFTWidth->set_sensitive(false);
+    }
+    else
+    {
+        mxTBWidth->set_sensitive(true);
+        mxFTWidth->set_sensitive(true);
+    }
+
+    if(bSetOrDefault)
+    {
+        if (const XLineWidthItem* pItem = dynamic_cast<const XLineWidthItem*>(pState))
+        {
+            mnWidthCoreValue = pItem->GetValue();
+            mbWidthValuable = true;
+            return;
+        }
+    }
+
+    mbWidthValuable = false;
+}
+
+IMPL_LINK_NOARG(LinePropertyPanelBase, ToolboxWidthSelectHdl, const OUString&, void)
+{
+    mxTBWidth->set_menu_item_active(SELECTWIDTH, !mxTBWidth->get_menu_item_active(SELECTWIDTH));
+}
+
+IMPL_LINK_NOARG(LinePropertyPanelBase, ToolboxWidthToggleMenuHdl, const OUString&, void)
+{
+    if (mxTBWidth->get_menu_item_active(SELECTWIDTH))
+        mxLineWidthPopup->SetWidthSelect(mnWidthCoreValue, mbWidthValuable, meMapUnit);
+}
+
+void LinePropertyPanelBase::EndLineWidthPopup()
+{
+    mxTBWidth->set_menu_item_active(SELECTWIDTH, false);
+}
+
+IMPL_LINK_NOARG( LinePropertyPanelBase, ChangeTransparentHdl, weld::MetricSpinButton&, void )
+{
+    sal_uInt16 nVal = static_cast<sal_uInt16>(mxMFTransparent->get_value(FieldUnit::PERCENT));
+    XLineTransparenceItem aItem( nVal );
+
+    setLineTransparency(aItem);
+}
+
+void LinePropertyPanelBase::SetWidth(tools::Long nWidth)
+{
+    mnWidthCoreValue = nWidth;
+    mbWidthValuable = true;
+    mxLineWidthPopup->SetWidthSelect(mnWidthCoreValue, mbWidthValuable, meMapUnit);
+}
+
+void LinePropertyPanelBase::ActivateControls()
+{
+    mxArrowStyles->set_sensitive(!mbNoneLineStyle);
+    mxArrowStyles->set_visible(mbArrowSupported);
+}
+
+bool LinePropertyPanelBase::updateLineEnds(sal_uInt16 nSId, SfxItemState eState,
+                                           const SfxPoolItem* pState)
+{
+    return mxArrowStyles->NotifyItemUpdate(nSId, eState, pState);
+}
+
+void LinePropertyPanelBase::setMapUnit(MapUnit eMapUnit)
+{
+    meMapUnit = eMapUnit;
+    mxLineWidthPopup->SetWidthSelect(mnWidthCoreValue, mbWidthValuable, meMapUnit);
+}
+
+void LinePropertyPanelBase::disableArrowHead()
+{
+    mbArrowSupported = false;
+    ActivateControls();
+}
+
+void LinePropertyPanelBase::enableArrowHead()
+{
+    mbArrowSupported = true;
+    ActivateControls();
+}
+
+} // end of namespace svx::sidebar
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

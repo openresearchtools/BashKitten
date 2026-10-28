@@ -1,0 +1,144 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include "rangelst.hxx"
+#include <rtl/ref.hxx>
+#include <svl/lstner.hxx>
+
+#include <com/sun/star/table/XTableChart.hpp>
+#include <com/sun/star/table/XTableCharts.hpp>
+#include <com/sun/star/document/XEmbeddedObjectSupplier.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/container/XEnumerationAccess.hpp>
+#include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/container/XNamed.hpp>
+
+#include <comphelper/propcontainerimplhelper.hxx>
+#include <cppuhelper/implbase.hxx>
+
+class ScDocShell;
+class ScChartObj;
+
+class ScChartsObj final : public cppu::WeakImplHelper<
+                            css::table::XTableCharts,
+                            css::container::XEnumerationAccess,
+                            css::container::XIndexAccess,
+                            css::lang::XServiceInfo >,
+                        public SfxListener
+{
+private:
+    ScDocShell*             pDocShell;
+    SCTAB                   nTab;           // Charts are per sheet
+
+    rtl::Reference<ScChartObj> GetObjectByIndex_Impl(tools::Long nIndex) const;
+    rtl::Reference<ScChartObj> GetObjectByName_Impl(const OUString& aName) const;
+
+public:
+                            ScChartsObj(ScDocShell* pDocSh, SCTAB nT);
+    virtual                 ~ScChartsObj() override;
+
+    virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
+
+                            // XTableCharts
+    virtual void   addNewByName( const OUString& aName,
+                                    const css::awt::Rectangle& aRect,
+                                    const cpo::uno::Sequence< css::table::CellRangeAddress >& aRanges,
+                                    bool bColumnHeaders, bool bRowHeaders ) override;
+    virtual void   removeByName( const OUString& aName ) override;
+
+                            // XNameAccess
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool hasByName( const OUString& aName ) override;
+
+                            // XIndexAccess
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
+
+                            // XEnumerationAccess
+    virtual cpo::uno::Reference< css::container::XEnumeration >
+                            createEnumeration() override;
+
+                            // XElementAccess
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
+
+                            // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+};
+
+using ScChartObj_Base = comphelper::OPropertyContainerImplHelper<
+          comphelper::WeakComponentImplHelper<
+              css::table::XTableChart,
+              css::document::XEmbeddedObjectSupplier,
+              css::container::XNamed,
+              css::lang::XServiceInfo>,
+          class ScChartObj>;
+class ScChartObj final
+    : public ScChartObj_Base,
+      public SfxListener
+{
+private:
+    ScDocShell*             pDocShell;
+    SCTAB                   nTab;           // Charts are per sheet
+    OUString                aChartName;
+
+    void    Update_Impl( const ScRangeListRef& rRanges, bool bColHeaders, bool bRowHeaders );
+    void    GetData_Impl( ScRangeListRef& rRanges, bool& rColHeaders, bool& rRowHeaders ) const;
+
+    // ::comphelper::OPropertyImplHelper
+    virtual ::cppu::IPropertyArrayHelper* createArrayHelper() const override;
+    virtual void setFastPropertyValue_NoBroadcast( std::unique_lock<std::mutex>& rGuard, sal_Int32 nHandle, const cpo::uno::Any& rValue ) override;
+    using ScChartObj_Base::getFastPropertyValue;
+    virtual void getFastPropertyValue( std::unique_lock<std::mutex>& rGuard, cpo::uno::Any& rValue, sal_Int32 nHandle ) const override;
+
+public:
+                            ScChartObj(ScDocShell* pDocSh, SCTAB nT, OUString aN);
+    virtual                 ~ScChartObj() override;
+
+    virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
+
+                            // XTableChart
+    virtual bool getHasColumnHeaders() override;
+    virtual void   setHasColumnHeaders( bool bHasColumnHeaders ) override;
+    virtual bool getHasRowHeaders() override;
+    virtual void   setHasRowHeaders( bool bHasRowHeaders ) override;
+    virtual cpo::uno::Sequence< css::table::CellRangeAddress >
+                            getRanges(  ) override;
+    virtual void   setRanges( const cpo::uno::Sequence< css::table::CellRangeAddress >& aRanges ) override;
+
+                            // XEmbeddedObjectSupplier
+    virtual cpo::uno::Reference< css::lang::XComponent >
+                            getEmbeddedObject() override;
+
+                            // XNamed
+    virtual OUString getName() override;
+    virtual void   setName( const OUString& aName ) override;
+
+                            // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

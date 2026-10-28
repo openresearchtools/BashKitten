@@ -1,0 +1,130 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <config_options.h>
+#include "OPropertySet.hxx"
+#include <cppuhelper/implbase.hxx>
+#include <comphelper/uno3.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/chart2/XCoordinateSystem.hpp>
+#include <com/sun/star/chart2/XChartTypeContainer.hpp>
+#include <com/sun/star/util/XCloneable.hpp>
+#include "ModifyListenerHelper.hxx"
+
+#include <vector>
+
+namespace chart
+{
+class Axis;
+class ChartType;
+
+namespace impl
+{
+typedef ::cppu::WeakImplHelper
+    < css::lang::XServiceInfo,
+      css::chart2::XCoordinateSystem,
+      css::chart2::XChartTypeContainer,
+      css::util::XCloneable,
+      css::util::XModifyBroadcaster,
+      css::util::XModifyListener >
+    BaseCoordinateSystem_Base;
+}
+
+class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) BaseCoordinateSystem :
+        public impl::BaseCoordinateSystem_Base,
+        public ::property::OPropertySet
+{
+public:
+    BaseCoordinateSystem( sal_Int32 nDimensionCount );
+    explicit BaseCoordinateSystem( const BaseCoordinateSystem & rSource );
+    virtual ~BaseCoordinateSystem() override;
+
+    // ____ OPropertySet ____
+    virtual void GetDefaultValue( sal_Int32 nHandle, cpo::uno::Any& rAny ) const override;
+
+    virtual ::cppu::IPropertyArrayHelper & getInfoHelper() override;
+
+    // ____ XPropertySet ____
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+        getPropertySetInfo() override;
+
+    /// merge XInterface implementations
+     DECLARE_XINTERFACE()
+    /// merge XTypeProvider implementations
+     DECLARE_XTYPEPROVIDER()
+
+    // ____ XCoordinateSystem ____
+    virtual ::sal_Int32 getDimension() override;
+    virtual void setAxisByDimension(
+        ::sal_Int32 nDimension,
+        const cpo::uno::Reference< css::chart2::XAxis >& xAxis,
+        ::sal_Int32 nIndex ) override;
+    virtual cpo::uno::Reference< css::chart2::XAxis > getAxisByDimension(
+        ::sal_Int32 nDimension, ::sal_Int32 nIndex ) override;
+    virtual ::sal_Int32 getMaximumAxisIndexByDimension( ::sal_Int32 nDimension ) override;
+
+    // ____ XChartTypeContainer ____
+    virtual void addChartType(
+        const cpo::uno::Reference< css::chart2::XChartType >& aChartType ) override;
+    virtual void removeChartType(
+        const cpo::uno::Reference< css::chart2::XChartType >& aChartType ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::chart2::XChartType > > getChartTypes() override;
+    virtual void setChartTypes(
+        const cpo::uno::Sequence< cpo::uno::Reference< css::chart2::XChartType > >& aChartTypes ) final override;
+
+    // ____ XModifyBroadcaster ____
+    virtual void addModifyListener(
+        const cpo::uno::Reference< css::util::XModifyListener >& aListener ) override;
+    virtual void removeModifyListener(
+        const cpo::uno::Reference< css::util::XModifyListener >& aListener ) override;
+
+    void setAxisByDimension( sal_Int32 nDimension, const rtl::Reference< ::chart::Axis >& xAxis, sal_Int32 nIndex );
+    const rtl::Reference< ::chart::Axis > & getAxisByDimension2(sal_Int32 nDimension, sal_Int32 nIndex ) const;
+
+    void setChartTypes( const std::vector< rtl::Reference< ::chart::ChartType > >& aChartTypes );
+    const std::vector< rtl::Reference<::chart::ChartType > > & getChartTypes2() const { return m_aChartTypes; }
+
+protected:
+
+    // ____ XModifyListener ____
+    virtual void modified(
+        const css::lang::EventObject& aEvent ) override;
+
+    // ____ XEventListener (base of XModifyListener) ____
+    virtual void disposing(
+        const css::lang::EventObject& Source ) override;
+
+    // ____ OPropertySet ____
+    virtual void firePropertyChangeEvent() override;
+    using OPropertySet::disposing;
+
+    void fireModifyEvent();
+
+private:
+    rtl::Reference<ModifyEventForwarder> m_xModifyEventForwarder;
+    sal_Int32                                             m_nDimensionCount;
+    typedef std::vector< std::vector< rtl::Reference< ::chart::Axis > > > tAxisVecVecType;
+    tAxisVecVecType m_aAllAxis; //outer sequence is the dimension; inner sequence is the axis index that indicates main or secondary axis
+    std::vector< rtl::Reference<::chart::ChartType > >          m_aChartTypes;
+};
+
+} //  namespace chart
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

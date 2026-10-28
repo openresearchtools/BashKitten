@@ -1,0 +1,198 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <limits>
+#include <map>
+#include <optional>
+#include <unordered_map>
+#include <vector>
+
+#include <rtl/ref.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/compbase.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
+#include <com/sun/star/datatransfer/clipboard/XSystemClipboard.hpp>
+#include <COKit/COKit.hxx>
+
+/// A clipboard implementation for COKit.
+class KitClipboard final
+    : public cppu::WeakComponentImplHelper<css::datatransfer::clipboard::XSystemClipboard,
+                                           css::lang::XServiceInfo>
+{
+    osl::Mutex m_aMutex;
+    cpo::uno::Reference<css::datatransfer::XTransferable> m_xTransferable;
+    cpo::uno::Reference<css::datatransfer::clipboard::XClipboardOwner> m_aOwner;
+    std::vector<cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener>> m_aListeners;
+    /// The document this view belongs to, cached so the clipboard can be
+    /// released on document destroy even after the view shell is gone.
+    int m_nDocId = -1;
+    /**
+     * When set, the app does the raw platform clipboard input and output for this
+     * view: copies advertise through it and external pastes read through it.
+     */
+    std::optional<COKitClipboardProvider> m_oProvider;
+
+public:
+    KitClipboard();
+    ~KitClipboard();
+
+    void setDocId(int nDocId) { m_nDocId = nDocId; }
+    int getDocId() const { return m_nDocId; }
+
+    /**
+     * Install (or, with nullptr, remove) the app's platform clipboard backend.
+     */
+    void setProvider(const COKitClipboardProvider* pProvider);
+
+    /**
+     * Render every advertised format now so a lazy transferable (Writer,
+     * Impress) builds its own clip document and stays readable after its source
+     * document is closed. A self-contained transferable (Calc) is unaffected.
+     */
+    void flushContents();
+
+    /// get an XInterface easily.
+    cpo::uno::Reference<cpo::uno::XInterface> getXI()
+    {
+        return { static_cast<cppu::OWeakObject*>(this) };
+    }
+
+    // XServiceInfo
+    OUString getImplementationName() override;
+    bool supportsService(const OUString& ServiceName) override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+    static cpo::uno::Sequence<OUString> getSupportedServiceNames_static();
+
+    // XClipboard
+    cpo::uno::Reference<css::datatransfer::XTransferable> getContents() override;
+    void setContents(const cpo::uno::Reference<css::datatransfer::XTransferable>& xTransferable,
+                     const cpo::uno::Reference<css::datatransfer::clipboard::XClipboardOwner>&
+                         xClipboardOwner) override;
+    OUString getName() override { return u"CLIPBOARD"_ustr; }
+
+    // XClipboardNotifier
+    void addClipboardListener(
+        const cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener>& listener)
+        override;
+    void removeClipboardListener(
+        const cpo::uno::Reference<css::datatransfer::clipboard::XClipboardListener>& listener)
+        override;
+};
+
+/// Represents the contents of KitClipboard.
+class KitTransferable : public cppu::WeakImplHelper<css::datatransfer::XTransferable>
+{
+    cpo::uno::Sequence<css::datatransfer::DataFlavor> m_aFlavors;
+    std::vector<cpo::uno::Any> m_aContent;
+
+public:
+    /**
+     * Fill a DataFlavor from a wire MIME type, picking the UNO DataType (string
+     * vs byte sequence) the engine expects for it.
+     */
+    static void initFlavourFromMime(css::datatransfer::DataFlavor& rFlavor, OUString aMimeType);
+
+    KitTransferable();
+    KitTransferable(size_t nInCount, const char** pInMimeTypes, const size_t* pInSizes,
+                    const char** pInStreams, bool bSynthesizeMarkdown = true);
+    KitTransferable(const OUString& sMimeType, const cpo::uno::Sequence<sal_Int8>& aSequence);
+
+    cpo::uno::Any getTransferData(const css::datatransfer::DataFlavor& rFlavor) override;
+
+    cpo::uno::Sequence<css::datatransfer::DataFlavor> getTransferDataFlavors() override;
+
+    bool isDataFlavorSupported(const css::datatransfer::DataFlavor& rFlavor) override;
+};
+
+/**
+ * Clipboard contents that live on the platform clipboard. It advertises the
+ * flavors the platform offers (asked of the provider once, no bytes) and fetches
+ * the bytes for a single flavor only when the engine actually pulls it, so a
+ * paste renders only the one format the engine chose. The provider's pUserData
+ * is owned by the KitClipboard that handed it over, not by this object.
+ */
+class KitProviderTransferable : public cppu::WeakImplHelper<css::datatransfer::XTransferable>
+{
+    COKitClipboardProvider m_aProvider;
+    cpo::uno::Sequence<css::datatransfer::DataFlavor> m_aFlavors;
+    mutable std::map<OUString, cpo::uno::Any> m_aCache;
+
+public:
+    explicit KitProviderTransferable(const COKitClipboardProvider& rProvider);
+
+    cpo::uno::Any getTransferData(const css::datatransfer::DataFlavor& rFlavor) override;
+    cpo::uno::Sequence<css::datatransfer::DataFlavor> getTransferDataFlavors() override;
+    bool isDataFlavorSupported(const css::datatransfer::DataFlavor& rFlavor) override;
+};
+
+/// Theoretically to hook into the (horrible) vcl dtranscomp.cxx code.
+class KitClipboardFactory : public ::cppu::WeakComponentImplHelper<css::lang::XSingleServiceFactory>
+{
+    static osl::Mutex gMutex;
+
+    /// The clipboards by view id, or nullptr once the registry is gone. See the
+    /// definition for why it is reached through a function.
+    static std::unordered_map<int, rtl::Reference<KitClipboard>>* getClipboards();
+
+    /// Frees the registry; a later request builds a new one.
+    static void freeClipboards();
+
+    /// True while a process-global clipboard provider is installed, which the
+    /// in-process desktop apps do and the collaborative server does not. The kit
+    /// then serves one shared clipboard for all views and documents, instead of
+    /// one clipboard per view.
+    static bool gHasGlobalProvider;
+
+    /// Map key for the single shared clipboard; chosen so it never collides
+    /// with a real view id.
+    static constexpr int SHARED_VIEW_KEY = std::numeric_limits<int>::min();
+
+public:
+    KitClipboardFactory()
+        : cppu::WeakComponentImplHelper<css::lang::XSingleServiceFactory>(gMutex)
+    {
+    }
+
+    cpo::uno::Reference<cpo::uno::XInterface> createInstance() override
+    {
+        return createInstanceWithArguments(cpo::uno::Sequence<cpo::uno::Any>());
+    }
+    cpo::uno::Reference<cpo::uno::XInterface>
+    createInstanceWithArguments(const cpo::uno::Sequence<cpo::uno::Any>& /* rArgs */) override;
+
+    /// Fetch clipboard from the global pool.
+    static rtl::Reference<KitClipboard> getClipboardForCurView();
+
+    static rtl::Reference<KitClipboard> getExistingClipboardForView(int nViewId);
+
+    /// Release the clipboard of a single view as that view is destroyed.
+    static void releaseClipboardForView(int nViewId);
+
+    /// Release the clipboards of every view of one document as it is destroyed.
+    /// Other documents open in the same engine keep their clipboards.
+    static void releaseClipboardsForDocument(int nDocId);
+
+    /// Install a process-global clipboard provider and switch to one shared
+    /// clipboard for all views. Pass nullptr to remove it and return to
+    /// per-view clipboards.
+    static void installGlobalProvider(const COKitClipboardProvider* pProvider);
+
+    /// Clears the contents of every clipboard and frees the registry, which a
+    /// later request builds again. The unit-test teardown uses this.
+    static void clearAllContentsAndFree();
+
+    /// Render the shared clipboard's formats now, so its contents survive the
+    /// close of the document that produced them (see KitClipboard::flushContents).
+    static void flushSharedClipboard();
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

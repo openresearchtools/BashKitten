@@ -1,0 +1,48 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+#pragma once
+
+#include <ooo/vba/word/XListEntry.hpp>
+
+#include <vbahelper/vbahelperinterface.hxx>
+
+#include <IDocumentMarkAccess.hxx>
+
+typedef InheritedHelperInterfaceWeakImpl<ooo::vba::word::XListEntry>
+    SwVbaFormFieldDropDownListEntry_BASE;
+
+class SwVbaFormFieldDropDownListEntry : public SwVbaFormFieldDropDownListEntry_BASE
+{
+private:
+    sw::mark::DropDownFieldmark& m_rDropDown;
+    // All LO and internal UNO functions are 0-based. Convert to 1-based when sending to VBA
+    const sal_Int32 m_nZIndex;
+
+public:
+    /// @throws cpo::uno::RuntimeException
+    SwVbaFormFieldDropDownListEntry(
+        const cpo::uno::Reference<ooo::vba::XHelperInterface>& rParent,
+        const cpo::uno::Reference<cpo::uno::XComponentContext>& rContext,
+        sw::mark::DropDownFieldmark& rFormField, sal_Int32 nZIndex);
+    ~SwVbaFormFieldDropDownListEntry() override;
+
+    // XListEntry
+    sal_Int32 getIndex() override;
+
+    OUString getName() override;
+    void setName(const OUString& sSet) override;
+
+    void Delete() override;
+
+    // XHelperInterface
+    OUString getServiceImplName() override;
+    cpo::uno::Sequence<OUString> getServiceNames() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

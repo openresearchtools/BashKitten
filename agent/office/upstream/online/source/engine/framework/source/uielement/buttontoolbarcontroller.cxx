@@ -1,0 +1,274 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <uielement/buttontoolbarcontroller.hxx>
+
+#include <com/sun/star/util/URLTransformer.hpp>
+#include <com/sun/star/frame/XDispatchProvider.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+
+#include <cppuhelper/queryinterface.hxx>
+#include <comphelper/processfactory.hxx>
+#include <comphelper/propertyvalue.hxx>
+#include <utility>
+#include <vcl/svapp.hxx>
+#include <vcl/toolbox.hxx>
+
+using namespace ::com::sun::star;
+using namespace css::awt;
+using namespace ::cpo;
+using namespace ::cpo::uno;
+using namespace css::beans;
+using namespace css::lang;
+using namespace css::frame;
+using namespace css::util;
+
+namespace framework
+{
+
+ButtonToolbarController::ButtonToolbarController(
+    uno::Reference< cpo::uno::XComponentContext >  xContext,
+    ToolBox*                                            pToolBar,
+    OUString                                 aCommand ) :
+    m_bInitialized( false ),
+    m_bDisposed( false ),
+    m_aCommandURL(std::move( aCommand )),
+    m_xContext(std::move( xContext )),
+    m_pToolbar( pToolBar )
+{
+}
+
+ButtonToolbarController::~ButtonToolbarController()
+{
+}
+
+        // XInterface
+cpo::uno::Any ButtonToolbarController::queryInterface( const cpo::uno::Type& rType )
+{
+    Any a = ::cppu::queryInterface(
+                rType ,
+                static_cast< frame::XStatusListener* >( this ),
+                static_cast< frame::XToolbarController* >( this ),
+                static_cast< lang::XInitialization* >( this ),
+                static_cast< lang::XComponent* >( this ),
+                static_cast< util::XUpdatable* >( this ));
+
+    if ( a.hasValue() )
+        return a;
+
+    return cppu::OWeakObject::queryInterface( rType );
+}
+
+void ButtonToolbarController::acquire() noexcept
+{
+    cppu::OWeakObject::acquire();
+}
+
+void ButtonToolbarController::release() noexcept
+{
+    cppu::OWeakObject::release();
+}
+
+// XInitialization
+void ButtonToolbarController::initialize(
+    const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+{
+    SolarMutexGuard aSolarMutexGuard;
+
+    if ( m_bDisposed )
+        throw DisposedException();
+
+    if ( m_bInitialized )
+        return;
+
+    m_bInitialized = true;
+
+    PropertyValue aPropValue;
+    for ( const cpo::uno::Any& rArg : aArguments )
+    {
+        if ( rArg >>= aPropValue )
+        {
+            if ( aPropValue.Name == "Frame" )
+                m_xFrame.set(aPropValue.Value,UNO_QUERY);
+            else if ( aPropValue.Name == "CommandURL" )
+                aPropValue.Value >>= m_aCommandURL;
+            else if ( aPropValue.Name == "ServiceManager" )
+            {
+                Reference<XMultiServiceFactory> xServiceManager(aPropValue.Value,UNO_QUERY);
+                m_xContext = comphelper::getComponentContext(xServiceManager);
+            }
+        }
+    }
+}
+
+// XComponent
+void ButtonToolbarController::dispose()
+{
+    Reference< XComponent > xThis = this;
+
+    {
+        SolarMutexGuard aSolarMutexGuard;
+        if ( m_bDisposed )
+            return;
+
+        m_xContext.clear();
+        m_xURLTransformer.clear();
+        m_xFrame.clear();
+        m_pToolbar.reset();
+        m_bDisposed = true;
+    }
+}
+
+void ButtonToolbarController::addEventListener(
+    const cpo::uno::Reference< css::lang::XEventListener >& )
+{
+    // do nothing
+}
+
+void ButtonToolbarController::removeEventListener(
+    const cpo::uno::Reference< css::lang::XEventListener >& )
+{
+    // do nothing
+}
+
+// XUpdatable
+void ButtonToolbarController::update()
+{
+    SolarMutexGuard aSolarMutexGuard;
+    if ( m_bDisposed )
+        throw DisposedException();
+}
+
+// XEventListener
+void ButtonToolbarController::disposing(
+    const css::lang::EventObject& Source )
+{
+    uno::Reference< cpo::uno::XInterface > xSource( Source.Source );
+
+    SolarMutexGuard aSolarMutexGuard;
+
+    if ( m_bDisposed )
+        return;
+
+    uno::Reference< cpo::uno::XInterface > xIfac( m_xFrame, uno::UNO_QUERY );
+    if ( xIfac == xSource )
+        m_xFrame.clear();
+}
+
+void ButtonToolbarController::statusChanged( const css::frame::FeatureStateEvent& )
+{
+    // do nothing
+    if ( m_bDisposed )
+        throw DisposedException();
+}
+
+// XToolbarController
+void ButtonToolbarController::execute( sal_Int16 KeyModifier )
+{
+    uno::Reference< frame::XDispatch >      xDispatch;
+    uno::Reference< frame::XFrame >         xFrame;
+    uno::Reference< util::XURLTransformer > xURLTransformer;
+    OUString                           aCommandURL;
+    css::util::URL             aTargetURL;
+
+    {
+        SolarMutexGuard aSolarMutexGuard;
+
+        if ( m_bDisposed )
+            throw DisposedException();
+
+        if ( m_bInitialized &&
+             m_xFrame.is() &&
+             m_xContext.is() &&
+             !m_aCommandURL.isEmpty() )
+        {
+            if ( !m_xURLTransformer.is() )
+            {
+                m_xURLTransformer = util::URLTransformer::create( m_xContext );
+            }
+
+            xFrame          = m_xFrame;
+            aCommandURL     = m_aCommandURL;
+            xURLTransformer = m_xURLTransformer;
+        }
+    }
+
+    uno::Reference< frame::XDispatchProvider > xDispatchProvider( xFrame, uno::UNO_QUERY );
+    if ( xDispatchProvider.is() )
+    {
+        aTargetURL.Complete = aCommandURL;
+        xURLTransformer->parseStrict( aTargetURL );
+        xDispatch = xDispatchProvider->queryDispatch( aTargetURL, OUString(), 0 );
+    }
+
+    if ( !xDispatch.is() )
+        return;
+
+    try
+    {
+        // Provide key modifier information to dispatch function
+        Sequence<PropertyValue> aArgs{ comphelper::makePropertyValue(u"KeyModifier"_ustr, KeyModifier) };
+
+        xDispatch->dispatch( aTargetURL, aArgs );
+    }
+    catch ( const DisposedException& )
+    {
+    }
+}
+
+void ButtonToolbarController::click()
+{
+    SolarMutexGuard aSolarMutexGuard;
+
+    if ( m_bDisposed )
+        throw DisposedException();
+
+    sal_Int16   nKeyModifier( static_cast<sal_Int16>(m_pToolbar->GetModifier()) );
+    execute( nKeyModifier );
+}
+
+void ButtonToolbarController::doubleClick()
+{
+    // do nothing
+    if ( m_bDisposed )
+        throw DisposedException();
+}
+
+uno::Reference< awt::XWindow > ButtonToolbarController::createPopupWindow()
+{
+    if ( m_bDisposed )
+        throw DisposedException();
+
+    return uno::Reference< awt::XWindow >();
+}
+
+uno::Reference< awt::XWindow > ButtonToolbarController::createItemWindow(
+    const cpo::uno::Reference< css::awt::XWindow >& )
+{
+    if ( m_bDisposed )
+        throw DisposedException();
+
+    return uno::Reference< awt::XWindow >();
+}
+
+} // namespace
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

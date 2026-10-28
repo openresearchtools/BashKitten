@@ -1,0 +1,305 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+
+#pragma once
+
+#include <memory>
+#include <list>
+#include <rtl/ref.hxx>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
+#include <com/sun/star/ucb/XContentCreator.hpp>
+#include <ucbhelper/contenthelper.hxx>
+#include "DAVResourceAccess.hxx"
+#include "PropertyMap.hxx"
+
+namespace com::sun::star::beans {
+    struct Property;
+    struct PropertyValue;
+}
+
+namespace com::sun::star::io {
+    class XInputStream;
+}
+
+namespace com::sun::star::sdbc {
+    class XRow;
+}
+
+namespace com::sun::star::ucb {
+    struct OpenCommandArgument3;
+    struct PropertyCommandArgument;
+    struct PostCommandArgument2;
+    struct TransferInfo;
+}
+
+namespace http_dav_ucp
+{
+
+
+// UNO service name for the content.
+inline constexpr OUString WEBDAV_CONTENT_SERVICE_NAME = u"com.sun.star.ucb.WebDAVContent"_ustr;
+
+
+class ContentProvider;
+class ContentProperties;
+class CachableContentProperties;
+
+class Content : public ::ucbhelper::ContentImplHelper,
+                public css::ucb::XContentCreator
+{
+    enum ResourceType
+    {
+        UNKNOWN,    // the type of the Web resource is unknown
+        NOT_FOUND,  // the Web resource does not exists
+        NON_DAV,    // the Web resource exists but it's not DAV
+        DAV,        // the type of the Web resource is DAV with lock/unlock available
+        DAV_NOLOCK  // the type of the Web resource is DAV with no lock/unlock available
+    };
+
+    std::unique_ptr< DAVResourceAccess > m_xResAccess;
+    std::unique_ptr< CachableContentProperties > m_xCachedProps; // locally cached props
+    OUString     m_aEscapedTitle;
+    // resource type for general DAV methods
+    ResourceType      m_eResourceType;
+    // resource type for general LOCK method only
+    ResourceType      m_eResourceTypeForLocks;
+    ContentProvider*  m_pProvider; // No need for a ref, base class holds object
+    bool              m_bTransient;
+    bool const        m_bCollection;
+    bool              m_bDidGetOrHead;
+    std::vector< OUString > m_aFailedPropNames;
+    // Options Cache lifetime
+    // for web site implementing OPTIONS, but not dav
+    sal_uInt32 m_nOptsCacheLifeImplWeb;
+    // for WebDAV site where OPTIONS is mandatory
+    sal_uInt32 m_nOptsCacheLifeDAV;
+    // same as above, but when the resource is locked by us
+    sal_uInt32 m_nOptsCacheLifeDAVLocked;
+// For web site not implementing OPTIONS
+    // during this time we assume the site doesn't turn to WebDAV
+    // but remains a simple Web
+    sal_uInt32 m_nOptsCacheLifeNotImpl;
+    // When resource is not found
+    // may be the resource is unavailable only briefly?
+    // so better have this small
+    sal_uInt32 m_nOptsCacheLifeNotFound;
+
+    void initOptsCacheLifeTime();
+
+private:
+    virtual cpo::uno::Sequence< css::beans::Property >
+    getProperties( const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv ) override;
+    virtual cpo::uno::Sequence< css::ucb::CommandInfo >
+    getCommands( const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv ) override;
+    virtual OUString getParentURL() override;
+
+    /// @throws cpo::uno::Exception
+    bool isFolder( const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
+
+    /// @throws cpo::uno::Exception
+    cpo::uno::Reference< css::sdbc::XRow >
+    getPropertyValues( const cpo::uno::Sequence< css::beans::Property >& rProperties,
+                       const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
+
+    /// @throws cpo::uno::Exception
+    cpo::uno::Sequence< cpo::uno::Any >
+    setPropertyValues( const cpo::uno::Sequence< css::beans::PropertyValue >& rValues,
+                       const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
+
+    typedef rtl::Reference< Content > ContentRef;
+    typedef std::vector< ContentRef > ContentRefList;
+    void queryChildren( ContentRefList& rChildren);
+
+    bool
+    exchangeIdentity( const cpo::uno::Reference< css::ucb::XContentIdentifier >& xNewId );
+
+    OUString
+    getBaseURI( const std::unique_ptr< DAVResourceAccess > & rResAccess );
+
+    /// @throws cpo::uno::Exception
+    ResourceType
+    getResourceType( const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
+
+    /// @throws cpo::uno::Exception
+    ResourceType
+    getResourceType( const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv,
+                     const std::unique_ptr< DAVResourceAccess > & rResAccess,
+                     bool * networkAccessAllowed = nullptr );
+
+    // Command "open"
+    /// @throws cpo::uno::Exception
+    cpo::uno::Any open(
+                const css::ucb::OpenCommandArgument3 & rArg,
+                const cpo::uno::Reference<
+                    css::ucb::XCommandEnvironment > & xEnv );
+
+    // Command "post"
+    /// @throws cpo::uno::Exception
+    void post( const css::ucb::PostCommandArgument2 & rArg,
+               const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+
+    // Command "insert"
+    /// @throws cpo::uno::Exception
+    void insert( const cpo::uno::Reference< css::io::XInputStream > & xInputStream,
+                 bool bReplaceExisting,
+                 const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment );
+
+    // Command "transfer"
+    /// @throws cpo::uno::Exception
+    void transfer( const css::ucb::TransferInfo & rArgs,
+                   const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment );
+
+    // Command "delete"
+    /// @throws cpo::uno::Exception
+    void destroy( bool bDeletePhysical );
+
+    // Command "lock"
+    /// @throws cpo::uno::Exception
+    void lock( const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment );
+
+    // Command "unlock"
+    /// @throws cpo::uno::Exception
+    void unlock( const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment );
+
+    cpo::uno::Any MapDAVException( const DAVException & e,
+                                                bool bWrite );
+    /// @throws cpo::uno::Exception
+    void cancelCommandExecution(
+                    const DAVException & e,
+                    const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv,
+                    bool bWrite = false );
+
+    static bool shouldAccessNetworkAfterException( const DAVException & e );
+
+    ResourceType resourceTypeForLocks(
+        const cpo::uno::Reference< css::ucb::XCommandEnvironment >& rEnvironment,
+        const std::unique_ptr< DAVResourceAccess > & rResAccess );
+
+    ResourceType resourceTypeForLocks(
+        const cpo::uno::Reference< css::ucb::XCommandEnvironment >& rEnvironment );
+
+    // XPropertyContainer replacement
+    /// @throws css::beans::PropertyExistException
+    /// @throws css::beans::IllegalTypeException
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws cpo::uno::RuntimeException
+    void addProperty( const css::ucb::PropertyCommandArgument &aCmdArg,
+                      const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment );
+
+    /// @throws css::beans::PropertyExistException
+    /// @throws css::beans::NotRemoveableException
+    /// @throws cpo::uno::RuntimeException
+    void removeProperty( const OUString& Name,
+                         const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment );
+public:
+    /// @throws css::ucb::ContentCreationException
+    Content( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+             ContentProvider* pProvider,
+             const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
+             rtl::Reference< DAVSessionFactory > const & rSessionFactory );
+    /// @throws css::ucb::ContentCreationException
+    Content( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+             ContentProvider* pProvider,
+             const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
+             rtl::Reference< DAVSessionFactory > const & rSessionFactory,
+             bool isCollection );
+    virtual ~Content() override;
+
+    // XInterface
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire()
+        noexcept override;
+    virtual void release()
+        noexcept override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
+
+    // XServiceInfo
+    virtual OUString
+    getImplementationName() override;
+
+    virtual cpo::uno::Sequence< OUString >
+    getSupportedServiceNames() override;
+
+    // XContent
+    virtual OUString
+    getContentType() override;
+
+    // XCommandProcessor
+    virtual cpo::uno::Any
+    execute( const css::ucb::Command& aCommand,
+             sal_Int32 CommandId,
+             const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment ) override;
+    virtual void
+    abort( sal_Int32 CommandId ) override;
+
+    // XPropertyContainer
+    virtual void
+    addProperty( const OUString& Name,
+                 sal_Int16 Attributes,
+                 const cpo::uno::Any& DefaultValue ) override;
+
+    virtual void
+    removeProperty( const OUString& Name ) override;
+
+
+    // Additional interfaces
+
+
+    // XContentCreator
+    virtual cpo::uno::Sequence< css::ucb::ContentInfo >
+   queryCreatableContentsInfo() override;
+    virtual cpo::uno::Reference< css::ucb::XContent >
+    createNewContent( const css::ucb::ContentInfo& Info ) override;
+
+
+    // Non-interface methods.
+
+
+    DAVResourceAccess & getResourceAccess() { return *m_xResAccess; }
+
+    // Called from resultset data supplier.
+    static cpo::uno::Reference< css::sdbc::XRow >
+    getPropertyValues( const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
+                       const cpo::uno::Sequence< css::beans::Property >& rProperties,
+                       const ContentProperties& rData,
+                       const rtl::Reference< ::ucbhelper::ContentProviderImplHelper >& rProvider,
+                       const OUString& rContentId );
+
+    /// Use OPTIONS method to retrieve the type of the Web resource
+    /// @throws cpo::uno::Exception
+    void getResourceOptions( const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv,
+                             DAVOptions& rDAVOptions,
+                             const std::unique_ptr< DAVResourceAccess > & rResAccess,
+                             bool * networkAccessAllowed = nullptr);
+
+    static bool isResourceAvailable( const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv,
+                             const std::unique_ptr< DAVResourceAccess > & rResAccess,
+                                     DAVOptions& rDAVOptions );
+
+    static void removeCachedPropertyNames( const OUString & rURL );
+
+};
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

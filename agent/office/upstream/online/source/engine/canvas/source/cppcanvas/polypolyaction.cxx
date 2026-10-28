@@ -1,0 +1,338 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+
+#include <sal/types.h>
+
+#include <basegfx/range/b2drectangle.hxx>
+#include <basegfx/utils/canvastools.hxx>
+#include <basegfx/polygon/b2dpolypolygon.hxx>
+#include <basegfx/polygon/b2dpolypolygontools.hxx>
+#include <com/sun/star/rendering/StrokeAttributes.hpp>
+#include <RenderState.hxx>
+#include <canvastools.hxx>
+#include <osl/diagnose.h>
+#include <sal/log.hxx>
+
+#include "cachedprimitivebase.hxx"
+#include "polypolyaction.hxx"
+#include "outdevstate.hxx"
+#include <utility>
+#include "mtftools.hxx"
+#include <canvas.hxx>
+#include <Texture.hxx>
+
+using namespace ::com::sun::star;
+
+namespace cppcanvas
+{
+        namespace
+        {
+            class PolyPolyAction : public CachedPrimitiveBase
+            {
+            public:
+                PolyPolyAction( const ::basegfx::B2DPolyPolygon&,
+                                const OutDevState&,
+                                bool bFill,
+                                bool bStroke );
+                PolyPolyAction( const ::basegfx::B2DPolyPolygon&,
+                                const OutDevState&,
+                                bool bFill,
+                                bool bStroke,
+                                int nTransparency );
+
+                virtual sal_Int32 getActionCount() const override;
+
+            private:
+                using Action::render;
+                virtual bool renderPrimitive( vclcanvas::Canvas& rCanvas,
+                                              const vclcanvas::ViewState& rViewState,
+                                              rtl::Reference< vclcanvas::CachedBitmap >& rCachedPrimitive,
+                                              const ::basegfx::B2DHomMatrix&                 rTransformation ) const override;
+
+                const basegfx::B2DPolyPolygon                       mxPolyPoly;
+
+                // stroke color is now implicit: the maState.DeviceColor member
+                vclcanvas::RenderState                              maState;
+
+                std::optional<::Color>                              maFillColor;
+            };
+
+            PolyPolyAction::PolyPolyAction( const ::basegfx::B2DPolyPolygon&    rPolyPoly,
+                                            const OutDevState&                  rState,
+                                            bool                                bFill,
+                                            bool                                bStroke ) :
+                CachedPrimitiveBase( false ),
+                mxPolyPoly( rPolyPoly )
+            {
+                cppcanvastools::initRenderState(maState,rState);
+
+                if( bFill )
+                    maFillColor = rState.fillColor;
+
+                if( bStroke )
+                    maState.DeviceColor = rState.lineColor;
+            }
+
+            PolyPolyAction::PolyPolyAction( const ::basegfx::B2DPolyPolygon&    rPolyPoly,
+                                            const OutDevState&                  rState,
+                                            bool                                bFill,
+                                            bool                                bStroke,
+                                            int                                 nTransparency ) :
+                CachedPrimitiveBase( false ),
+                mxPolyPoly( rPolyPoly )
+            {
+                cppcanvastools::initRenderState(maState,rState);
+
+                if( bFill )
+                {
+                    maFillColor = rState.fillColor.value_or(COL_BLACK);
+
+                    // TODO(F1): Color management
+                    // adapt fill color transparency
+                    maFillColor->SetAlpha(255 - (255 * nTransparency / 100.0));
+                }
+
+                if( bStroke )
+                {
+                    if (rState.lineColor.has_value())
+                        maState.DeviceColor = *rState.lineColor;
+                    else
+                        maState.DeviceColor = COL_BLACK;
+
+                    // TODO(F1): Color management
+                    // adapt fill color transparency
+                    maState.DeviceColor->SetAlpha(255 - (255 * nTransparency / 100.0));
+                }
+            }
+
+            bool PolyPolyAction::renderPrimitive( vclcanvas::Canvas& rCanvas,
+                                                  const vclcanvas::ViewState& rViewState,
+                                                  rtl::Reference< vclcanvas::CachedBitmap >& rCachedPrimitive,
+                                                  const ::basegfx::B2DHomMatrix&                 rTransformation ) const
+            {
+                SAL_INFO( "cppcanvas.emf", "::cppcanvas::PolyPolyAction::renderPrimitive()" );
+                SAL_INFO( "cppcanvas.emf", "::cppcanvas::PolyPolyAction: 0x" << std::hex << this );
+
+                vclcanvas::RenderState aLocalState( maState );
+                aLocalState.AffineTransform = rTransformation * aLocalState.AffineTransform;
+
+                if( maFillColor.has_value() )
+                {
+                    // TODO(E3): Use DBO's finalizer here,
+                    // fillPolyPolygon() might throw
+                    ::Color aTmpColor( *aLocalState.DeviceColor );
+                    aLocalState.DeviceColor = maFillColor;
+
+                    rCachedPrimitive = rCanvas.fillPolyPolygon( mxPolyPoly,
+                                                                  rViewState,
+                                                                  aLocalState );
+
+                    aLocalState.DeviceColor = std::move(aTmpColor);
+                }
+
+                if( aLocalState.DeviceColor.has_value() )
+                {
+                    rCanvas.drawPolyPolygon( mxPolyPoly,
+                                              rViewState,
+                                              aLocalState );
+                }
+
+                return true;
+            }
+
+            sal_Int32 PolyPolyAction::getActionCount() const
+            {
+                // TODO(F1): Split up poly-polygon into polygons, or even
+                // line segments, when subsets are requested.
+                return 1;
+            }
+
+
+            class TexturedPolyPolyAction : public CachedPrimitiveBase
+            {
+            public:
+                TexturedPolyPolyAction( const ::basegfx::B2DPolyPolygon& rPoly,
+                                        const OutDevState&               rState,
+                                        const vclcanvas::Texture&        rTexture );
+
+                virtual sal_Int32 getActionCount() const override;
+
+            private:
+                using Action::render;
+                virtual bool renderPrimitive( vclcanvas::Canvas& rCanvas,
+                                              const vclcanvas::ViewState& rViewState,
+                                              rtl::Reference< vclcanvas::CachedBitmap >& rCachedPrimitive,
+                                              const ::basegfx::B2DHomMatrix&                 rTransformation ) const override;
+
+                const basegfx::B2DPolyPolygon                       mxPolyPoly;
+
+                // stroke color is now implicit: the maState.DeviceColor member
+                vclcanvas::RenderState                              maState;
+                const vclcanvas::Texture                            maTexture;
+            };
+
+            TexturedPolyPolyAction::TexturedPolyPolyAction( const ::basegfx::B2DPolyPolygon& rPolyPoly,
+                                                            const OutDevState&               rState,
+                                                            const vclcanvas::Texture&        rTexture ) :
+                CachedPrimitiveBase( true ),
+                mxPolyPoly( rPolyPoly ),
+                maTexture( rTexture )
+            {
+                cppcanvastools::initRenderState(maState,rState);
+            }
+
+            bool TexturedPolyPolyAction::renderPrimitive( vclcanvas::Canvas& rCanvas,
+                                                          const vclcanvas::ViewState& rViewState,
+                                                          rtl::Reference< vclcanvas::CachedBitmap >& rCachedPrimitive,
+                                                          const ::basegfx::B2DHomMatrix&                 rTransformation ) const
+            {
+                SAL_INFO( "cppcanvas.emf", "::cppcanvas::PolyPolyAction::renderPrimitive()" );
+                SAL_INFO( "cppcanvas.emf", "::cppcanvas::PolyPolyAction: 0x" << std::hex << this );
+
+                vclcanvas::RenderState aLocalState( maState );
+                aLocalState.AffineTransform = rTransformation * aLocalState.AffineTransform;
+
+                std::vector< vclcanvas::Texture > aSeq { maTexture };
+
+                rCachedPrimitive = rCanvas.fillTexturedPolyPolygon( mxPolyPoly,
+                                                                  rViewState,
+                                                                  aLocalState,
+                                                                  aSeq );
+                return true;
+            }
+
+            sal_Int32 TexturedPolyPolyAction::getActionCount() const
+            {
+                // TODO(F1): Split up poly-polygon into polygons, or even
+                // line segments, when subsets are requested.
+                return 1;
+            }
+
+
+            class StrokedPolyPolyAction : public CachedPrimitiveBase
+            {
+            public:
+                StrokedPolyPolyAction( const ::basegfx::B2DPolyPolygon&     rPoly,
+                                       const OutDevState&                   rState,
+                                       rendering::StrokeAttributes          aStrokeAttributes );
+
+                virtual sal_Int32 getActionCount() const override;
+
+            private:
+                using Action::render;
+                virtual bool renderPrimitive( vclcanvas::Canvas& rCanvas,
+                                              const vclcanvas::ViewState& rViewState,
+                                              rtl::Reference< vclcanvas::CachedBitmap >& rCachedPrimitive,
+                                              const ::basegfx::B2DHomMatrix&                 rTransformation ) const override;
+
+                const basegfx::B2DPolyPolygon                       mxPolyPoly;
+                vclcanvas::RenderState                              maState;
+                const rendering::StrokeAttributes                   maStrokeAttributes;
+            };
+
+            StrokedPolyPolyAction::StrokedPolyPolyAction( const ::basegfx::B2DPolyPolygon&      rPolyPoly,
+                                                          const OutDevState&                    rState,
+                                                          rendering::StrokeAttributes           aStrokeAttributes ) :
+                CachedPrimitiveBase( false ),
+                mxPolyPoly( rPolyPoly ),
+                maStrokeAttributes(std::move( aStrokeAttributes ))
+            {
+                cppcanvastools::initRenderState(maState,rState);
+                maState.DeviceColor = rState.lineColor;
+            }
+
+            bool StrokedPolyPolyAction::renderPrimitive( vclcanvas::Canvas& rCanvas,
+                                                         const vclcanvas::ViewState& rViewState,
+                                                         rtl::Reference< vclcanvas::CachedBitmap >& /*rCachedPrimitive*/,
+                                                         const ::basegfx::B2DHomMatrix&                 rTransformation ) const
+            {
+                SAL_INFO( "cppcanvas.emf", "::cppcanvas::PolyPolyAction::renderPrimitive()" );
+                SAL_INFO( "cppcanvas.emf", "::cppcanvas::PolyPolyAction: 0x" << std::hex << this );
+
+                vclcanvas::RenderState aLocalState( maState );
+                aLocalState.AffineTransform = rTransformation * aLocalState.AffineTransform;
+
+                rCanvas.strokePolyPolygon( mxPolyPoly,
+                                            rViewState,
+                                            aLocalState,
+                                            maStrokeAttributes );
+                return true;
+            }
+
+            sal_Int32 StrokedPolyPolyAction::getActionCount() const
+            {
+                // TODO(F1): Split up poly-polygon into polygons, or even
+                // line segments, when subsets are requested.
+                return 1;
+            }
+        }
+
+        std::shared_ptr<Action> PolyPolyActionFactory::createPolyPolyAction( const ::basegfx::B2DPolyPolygon& rPoly,
+                                                                     const OutDevState&               rState    )
+        {
+            OSL_ENSURE( rState.isLineColorSet || rState.isFillColorSet,
+                        "PolyPolyActionFactory::createPolyPolyAction() with empty line and fill color" );
+            return std::make_shared<PolyPolyAction>( rPoly, rState,
+                                                     rState.isFillColorSet,
+                                                     rState.isLineColorSet );
+        }
+
+        std::shared_ptr<Action> PolyPolyActionFactory::createPolyPolyAction( const ::basegfx::B2DPolyPolygon&   rPoly,
+                                                                     const OutDevState&                 rState,
+                                                                     const vclcanvas::Texture&          rTexture )
+        {
+            return std::make_shared<TexturedPolyPolyAction>( rPoly, rState, rTexture );
+        }
+
+        std::shared_ptr<Action> PolyPolyActionFactory::createLinePolyPolyAction( const ::basegfx::B2DPolyPolygon& rPoly,
+                                                                         const OutDevState&               rState )
+        {
+            OSL_ENSURE( rState.isLineColorSet,
+                        "PolyPolyActionFactory::createLinePolyPolyAction() called with empty line color" );
+
+            return std::make_shared<PolyPolyAction>( rPoly, rState,
+                                                     false,
+                                                     rState.isLineColorSet );
+        }
+
+        std::shared_ptr<Action> PolyPolyActionFactory::createPolyPolyAction( const ::basegfx::B2DPolyPolygon&   rPoly,
+                                                                     const OutDevState&                 rState,
+                                                                     const rendering::StrokeAttributes& rStrokeAttributes )
+        {
+            OSL_ENSURE( rState.isLineColorSet,
+                        "PolyPolyActionFactory::createPolyPolyAction() for strokes called with empty line color" );
+            return std::make_shared<StrokedPolyPolyAction>( rPoly, rState, rStrokeAttributes );
+        }
+
+        std::shared_ptr<Action> PolyPolyActionFactory::createPolyPolyAction( const ::basegfx::B2DPolyPolygon& rPoly,
+                                                                     const OutDevState&               rState,
+                                                                     int                              nTransparency     )
+        {
+            OSL_ENSURE( rState.isLineColorSet || rState.isFillColorSet,
+                        "PolyPolyActionFactory::createPolyPolyAction() with empty line and fill color" );
+            return std::make_shared<PolyPolyAction>( rPoly, rState,
+                                                     rState.isFillColorSet,
+                                                     rState.isLineColorSet,
+                                                     nTransparency );
+        }
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

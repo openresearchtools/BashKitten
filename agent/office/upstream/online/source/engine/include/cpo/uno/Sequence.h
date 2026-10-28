@@ -1,0 +1,226 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <typelib/typedescription.h>
+#include <uno/sequence2.h>
+#include <cpo/uno/Type.h>
+#include <rtl/alloc.h>
+
+#include <cassert>
+#include <initializer_list>
+#include <new>
+
+namespace rtl
+{
+class ByteSequence;
+}
+
+namespace cpo::uno
+{
+
+/** Template C++ class representing an IDL sequence. Template argument is the
+    sequence element type.  C++ Sequences are reference counted and shared,
+    so the sequence keeps a handle to its data.  To keep value semantics,
+    copies are only generated if the sequence is to be modified (new handle).
+
+    @tparam E element type of sequence
+*/
+template< class E >
+class SAL_WARN_UNUSED SAL_DLLPUBLIC_RTTI Sequence
+{
+    /** sequence handle
+    */
+    uno_Sequence * _pSequence;
+
+public:
+    /// @cond INTERNAL
+
+    /** Static pointer to typelib type of sequence.
+        Don't use directly, call getCppuType().
+    */
+    static typelib_TypeDescriptionReference * s_pType;
+
+    /// @endcond
+
+    /** typedefs the element type of the sequence
+    */
+    typedef E ElementType;
+
+    /** Default constructor: Creates an empty sequence.
+    */
+    inline Sequence();
+
+    /** Copy constructor: Creates a copy of given sequence.
+
+        @param rSeq another sequence of same type
+    */
+    inline Sequence( const Sequence & rSeq );
+
+    /** Constructor: Takes over ownership of given sequence.
+
+        @param pSequence a sequence
+        @param dummy SAL_NO_ACQUIRE to force obvious distinction to other
+        constructors
+    */
+    inline Sequence( uno_Sequence * pSequence, __sal_NoAcquire dummy );
+
+    /** Constructor: Creates a copy of given elements.
+
+        @param pElements an array of elements
+        @param len length of array
+    */
+    inline Sequence( const E * pElements, sal_Int32 len );
+
+    /** Constructor: Creates a default constructed sequence of given length.
+
+        @param len initial sequence length
+    */
+    inline explicit Sequence( sal_Int32 len );
+
+    /** Create a sequence with the given elements.
+
+        @param init an initializer_list
+     */
+    inline Sequence(std::initializer_list<E> init);
+
+    /** Destructor: Releases sequence handle. Last handle will destruct
+        elements and free memory.
+    */
+    inline ~Sequence();
+
+    /** Assignment operator: Acquires given sequence handle and releases
+        previously set handle.
+
+        @param rSeq another sequence of same type
+        @return this sequence
+    */
+    inline Sequence & operator = ( const Sequence & rSeq );
+
+    inline Sequence & operator =(Sequence && other);
+
+    /** Gets length of the sequence.
+
+        @return length of sequence
+    */
+    sal_Int32 getLength() const
+        { return _pSequence->nElements; }
+
+    /** Tests whether the sequence has elements, i.e. elements count is
+        greater than zero.
+
+        @return true, if elements count is greater than zero
+    */
+    bool hasElements() const
+        { return (_pSequence->nElements > 0); }
+
+    /** This function allows to use Sequence in cases where  std::size is needed, and the like.
+    */
+    sal_uInt32 size() const
+        { assert(getLength() >= 0); return static_cast<sal_uInt32>(getLength()); }
+
+    /** Gets a pointer to elements array for reading.
+        If the sequence has a length of 0, then the returned pointer is
+        undefined.
+
+        @return pointer to elements array
+    */
+    const E * getConstArray() const
+        { return reinterpret_cast< const E * >( _pSequence->elements ); }
+
+    /** Gets a pointer to elements array for reading and writing.
+        In general if the sequence has a handle acquired by other sequences
+        (reference count > 1), then a new sequence is created copy constructing
+        all elements to keep value semantics!
+        If the sequence has a length of 0, then the returned pointer is
+        undefined.
+
+        @return pointer to elements array
+    */
+    inline E * getArray();
+
+    /** This function allows to use Sequence in standard algorithms, like std::find
+        and others.
+    */
+    inline E const * begin() const;
+
+    /** This function allows to use Sequence in standard algorithms, like std::find
+        and others.
+    */
+    inline E const * end() const;
+
+    /** Const index operator: Obtains a reference to element indexed at
+        given position.  The implementation does not check for array bounds!
+
+        @param nIndex index
+        @return const C++ reference to element
+    */
+    inline const E & operator [] ( sal_Int32 nIndex ) const;
+
+    /** Equality operator: Compares two sequences.
+
+        @param rSeq another sequence of same type (right side)
+        @return true if both sequences are equal, false otherwise
+    */
+    inline bool operator == ( const Sequence & rSeq ) const;
+
+    /** Inequality operator: Compares two sequences.
+
+        @param rSeq another sequence of same type (right side)
+        @return false if both sequences are equal, true otherwise
+    */
+    inline bool operator != ( const Sequence & rSeq ) const;
+
+    /** Reallocates sequence to new length.
+        If the new length is smaller than the former, then upper elements will
+        be destructed (and their memory freed).  If the new length is greater
+        than the former, then upper (new) elements are default constructed.
+        If the sequence has a handle acquired by other sequences
+        (reference count > 1), then the remaining elements are copy constructed
+        to a new sequence handle to keep value semantics!
+
+        @param nSize new size of sequence
+    */
+    inline void realloc( sal_Int32 nSize );
+
+    /** Provides UNacquired sequence handle.
+
+        @return UNacquired sequence handle
+    */
+    uno_Sequence * get() const
+        { return _pSequence; }
+
+    /** Swaps sequences efficiently exchanging their underlying representations.
+
+        @param other another sequence of same type
+    */
+    inline void swap(Sequence& other);
+};
+
+/** Creates a UNO byte sequence from a SAL byte sequence.
+
+    @param rByteSequence a byte sequence
+    @return a UNO byte sequence
+*/
+inline ::cpo::uno::Sequence< sal_Int8 > toUnoSequence(
+    const ::rtl::ByteSequence & rByteSequence );
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

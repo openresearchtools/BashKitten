@@ -1,0 +1,209 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include "vbatable.hxx"
+#include "vbarange.hxx"
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/text/XTextViewCursorSupplier.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
+#include <com/sun/star/text/XTextTable.hpp>
+#include <com/sun/star/table/XTableRows.hpp>
+#include <com/sun/star/container/XNamed.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/table/TableBorderDistances.hpp>
+#include <utility>
+#include "vbaborders.hxx"
+#include "vbapalette.hxx"
+#include "vbarows.hxx"
+#include "vbacolumns.hxx"
+#include "vbaapplication.hxx"
+#include <unotxdoc.hxx>
+#include <unotbl.hxx>
+
+#include <tools/UnitConversion.hxx>
+
+#include <sal/log.hxx>
+
+using namespace ::ooo::vba;
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+SwVbaTable::SwVbaTable(  const uno::Reference< ooo::vba::XHelperInterface >& rParent,
+                         const uno::Reference< cpo::uno::XComponentContext >& rContext,
+                         rtl::Reference< SwXTextDocument > xDocument,
+                         const rtl::Reference< SwXTextTable >& xTextTable)
+: SwVbaTable_BASE( rParent, rContext ),
+  mxTextDocument(std::move( xDocument ))
+{
+    mxTextTable = xTextTable;
+}
+
+uno::Reference< word::XRange >
+SwVbaTable::Range(  )
+{
+    return new SwVbaRange( mxParent, mxContext, mxTextDocument, mxTextTable->getAnchor() );
+}
+
+void
+SwVbaTable::Select(  )
+{
+    uno::Reference< frame::XController > xController = mxTextDocument->getCurrentController();
+
+    uno::Reference< text::XTextViewCursorSupplier > xViewCursorSupplier( xController, uno::UNO_QUERY_THROW );
+    uno::Reference< view::XSelectionSupplier > xSelectionSupplier( xController, uno::UNO_QUERY_THROW );
+
+    // set the view cursor to the start of the table.
+    xSelectionSupplier->select( cpo::uno::Any( uno::Reference<text::XTextTable>(mxTextTable) ) );
+
+    // go to the end of the table and span the view
+    uno::Reference< text::XTextViewCursor > xCursor = xViewCursorSupplier->getViewCursor();
+    xCursor->gotoEnd(true);
+
+}
+
+void
+SwVbaTable::Delete(  )
+{
+    uno::Reference< table::XTableRows > xRows( mxTextTable->getRows() );
+    xRows->removeByIndex( 0, xRows->getCount() );
+}
+
+OUString
+SwVbaTable::getName(  )
+{
+    return mxTextTable->getName();
+}
+
+cpo::uno::Any
+SwVbaTable::Borders( const cpo::uno::Any& index )
+{
+    uno::Reference< table::XCellRange > aCellRange( mxTextTable );
+    VbaPalette aPalette;
+    uno::Reference< XCollection > xCol( new SwVbaBorders( this, mxContext, aCellRange, aPalette ) );
+    if ( index.hasValue() )
+        return xCol->Item( index, cpo::uno::Any() );
+    return cpo::uno::Any( xCol );
+}
+
+float
+SwVbaTable::getBottomPadding()
+{
+    table::TableBorderDistances aTableBorderDistances;
+    mxTextTable->getPropertyValue(u"TableBorderDistances"_ustr) >>= aTableBorderDistances;
+    return convertMm100ToPoint<double>(aTableBorderDistances.BottomDistance);
+}
+
+void
+SwVbaTable::setBottomPadding( float fValue )
+{
+    table::TableBorderDistances aTableBorderDistances;
+    aTableBorderDistances.IsBottomDistanceValid = true;
+    aTableBorderDistances.BottomDistance = convertPointToMm100(fValue);
+    mxTextTable->setPropertyValue( u"TableBorderDistances"_ustr, cpo::uno::Any( aTableBorderDistances ) );
+}
+
+float
+SwVbaTable::getLeftPadding()
+{
+    table::TableBorderDistances aTableBorderDistances;
+    mxTextTable->getPropertyValue(u"TableBorderDistances"_ustr) >>= aTableBorderDistances;
+    return convertMm100ToPoint<double>(aTableBorderDistances.LeftDistance);
+}
+
+void
+SwVbaTable::setLeftPadding( float fValue )
+{
+    table::TableBorderDistances aTableBorderDistances;
+    aTableBorderDistances.IsLeftDistanceValid = true;
+    aTableBorderDistances.LeftDistance = convertPointToMm100(fValue);
+    mxTextTable->setPropertyValue( u"TableBorderDistances"_ustr, cpo::uno::Any( aTableBorderDistances ) );
+}
+
+float
+SwVbaTable::getRightPadding()
+{
+    table::TableBorderDistances aTableBorderDistances;
+    mxTextTable->getPropertyValue(u"TableBorderDistances"_ustr) >>= aTableBorderDistances;
+    return convertMm100ToPoint<double>(aTableBorderDistances.RightDistance);
+}
+
+void
+SwVbaTable::setRightPadding( float fValue )
+{
+    table::TableBorderDistances aTableBorderDistances;
+    aTableBorderDistances.IsRightDistanceValid = true;
+    aTableBorderDistances.RightDistance = convertPointToMm100(fValue);
+    mxTextTable->setPropertyValue( u"TableBorderDistances"_ustr, cpo::uno::Any( aTableBorderDistances ) );
+}
+
+float
+SwVbaTable::getTopPadding()
+{
+    table::TableBorderDistances aTableBorderDistances;
+    mxTextTable->getPropertyValue(u"TableBorderDistances"_ustr) >>= aTableBorderDistances;
+    return convertMm100ToPoint<double>(aTableBorderDistances.TopDistance);
+}
+
+void
+SwVbaTable::setTopPadding( float fValue )
+{
+    table::TableBorderDistances aTableBorderDistances;
+    aTableBorderDistances.IsTopDistanceValid = true;
+    aTableBorderDistances.TopDistance = convertPointToMm100(fValue);
+    mxTextTable->setPropertyValue( u"TableBorderDistances"_ustr, cpo::uno::Any( aTableBorderDistances ) );
+}
+
+cpo::uno::Any
+SwVbaTable::Rows( const cpo::uno::Any& index )
+{
+    uno::Reference< table::XTableRows > xTableRows( mxTextTable->getRows(), uno::UNO_SET_THROW );
+    uno::Reference< XCollection > xCol( new SwVbaRows( this, mxContext, mxTextTable, xTableRows ) );
+    if ( index.hasValue() )
+        return xCol->Item( index, cpo::uno::Any() );
+    return cpo::uno::Any( xCol );
+}
+
+cpo::uno::Any
+SwVbaTable::Columns( const cpo::uno::Any& index )
+{
+    uno::Reference< table::XTableColumns > xTableColumns( mxTextTable->getColumns(), uno::UNO_SET_THROW );
+    uno::Reference< XCollection > xCol( new SwVbaColumns( this, mxContext, mxTextTable, xTableColumns ) );
+    if ( index.hasValue() )
+        return xCol->Item( index, cpo::uno::Any() );
+    return cpo::uno::Any( xCol );
+}
+
+// XHelperInterface
+OUString
+SwVbaTable::getServiceImplName()
+{
+    return u"SwVbaTable"_ustr;
+}
+
+cpo::uno::Sequence<OUString>
+SwVbaTable::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.word.Table"_ustr
+    };
+    return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

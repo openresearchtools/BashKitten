@@ -1,0 +1,65 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_COMPHELPER_BASE64_HXX
+#define INCLUDED_COMPHELPER_BASE64_HXX
+
+#include <sal/config.h>
+
+#include <cstddef>
+
+#include <comphelper/comphelperdllapi.h>
+
+#include <sal/types.h>
+#include <rtl/ustrbuf.hxx>
+#include <rtl/strbuf.hxx>
+
+namespace cpo::uno
+{
+template <class E> class Sequence;
+}
+
+namespace comphelper
+{
+class COMPHELPER_DLLPUBLIC Base64
+{
+public:
+    /** encodes the given byte sequence into Base64 */
+    static void encode(OUStringBuffer& aStrBuffer, const cpo::uno::Sequence<sal_Int8>& aPass);
+
+    static void encode(OStringBuffer& aStrBuffer, const cpo::uno::Sequence<sal_Int8>& aPass);
+
+    // Decode a base 64 encoded string into a sequence of bytes. The two differ
+    // only in the return value. decode() returns nothing and logs a warning if
+    // any input is left unconsumed; use it for a complete value (an attribute,
+    // or element content buffered in full). decodeSomeChars() returns the
+    // number of characters consumed, so a caller decoding incrementally (e.g.
+    // per SAX characters() call) can carry an unconsumed trailing partial group
+    // to the next call.
+    static void decode(cpo::uno::Sequence<sal_Int8>& aPass, std::u16string_view sBuffer);
+    static void decode(cpo::uno::Sequence<sal_Int8>& aPass, std::string_view sBuffer);
+
+    static std::size_t decodeSomeChars(cpo::uno::Sequence<sal_Int8>& aPass,
+                                       std::u16string_view sBuffer);
+};
+}
+
+#endif // INCLUDED_COMPHELPER_BASE64_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

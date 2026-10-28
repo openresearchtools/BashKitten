@@ -1,0 +1,1617 @@
+/* -*- js-indent-level: 8 -*- */
+
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * window.L.Control.JSDialog - class which creates and updates dialogs, popups, snackbar
+ */
+
+/* global JSDialog JSDialogModelState Hammer app _ cool AutoCompleteDialogId GraphicSelection */
+window.L.Control.JSDialog = window.L.Control.extend({
+	options: {},
+	dialogs: {},
+	openTabRequests: {},
+	fillTypes: {},
+	draggingObject: null,
+
+	onAdd: function (map) {
+		this.map = map;
+
+		this.map.on('jsdialog', this.onJSDialog, this);
+		this.map.on('jsdialogupdate', this.onJSUpdate, this);
+		this.map.on('jsdialogaction', this.onJSAction, this);
+		this.map.on('zoomend', this.onZoomEnd, this);
+		this.map.on('closealldialogs', this.onCloseAll, this);
+		this.map.on('closeAutoFilterDialog', this.closePopupsOnTabChange, this);
+		window.L.DomEvent.on(window.document, 'keyup', this.onKeyUp, this);
+
+	},
+
+	onRemove: function() {
+		this.map.off('jsdialog', this.onJSDialog, this);
+		this.map.off('jsdialogupdate', this.onJSUpdate, this);
+		this.map.off('jsdialogaction', this.onJSAction, this);
+		this.map.off('zoomend', this.onZoomEnd, this);
+		this.map.off('closealldialogs', this.onCloseAll, this);
+		this.map.off('closeAutoFilterDialog', this.closePopupsOnTabChange, this);
+		window.L.DomEvent.off(window.document, 'keyup', this.onKeyUp, this);
+
+	},
+
+	hasDialogOpened: function() {
+		var dialogs = this.dialogs;
+		return Object.keys(dialogs)
+			.filter((key) => {
+				return key != 'snackbar'
+					&& dialogs[key].isDropdown !== true
+					&& !this.isAutoCompleteId(key);
+			})
+			.length > 0;
+	},
+
+	hasDropdownOpened: function() {
+		return Object.values(this.dialogs)
+			.filter(function (dialog) { return dialog.isDropdown === true; })
+			.length > 0;
+	},
+
+	hasSnackbarOpened: function() {
+		return Object.keys(this.dialogs)
+			.filter(function (key) { return key == 'snackbar'; })
+			.length > 0;
+	},
+
+	isAutoCompleteId: function(dialogId) {
+		return Object.values(AutoCompleteDialogId).includes(dialogId);
+	},
+
+	clearDialog: function(id) {
+		JSDialog.ClosePopoutWindow(id);
+
+		const dialogInfo = this.dialogs[id];
+		const builder = dialogInfo.builder;
+
+		// The open task attaches this instance's container, replacing the one
+		// already on screen when this is a rebuild. If it has not run yet,
+		// cancel it and remove that on-screen container here, because this
+		// instance's own container is not attached yet. A popup reopened under
+		// the same id in the same message batch then gets a fresh entry with
+		// nothing left to remove it.
+		if (dialogInfo.openLayoutingTaskId != null) {
+			app.layoutingService.cancelLayoutingTask(dialogInfo.openLayoutingTaskId);
+			dialogInfo.openLayoutingTaskId = null;
+
+			if (dialogInfo.replacedContainer)
+				window.L.DomUtil.remove(dialogInfo.replacedContainer);
+		}
+
+		window.L.DomUtil.remove(dialogInfo.container);
+
+		if (dialogInfo.overlay && !dialogInfo.isSubmenu)
+			window.L.DomUtil.remove(dialogInfo.overlay);
+
+		delete this.dialogs[id];
+		delete this.openTabRequests[id];
+		delete this.fillTypes[id];
+
+		return builder;
+	},
+
+	close: function(id, sendCloseEvent, focusHandled) {
+		if (id !== undefined && this.dialogs[id]) {
+			const dialog = this.dialogs[id];
+
+			if (dialog.timeoutId)
+				clearTimeout(dialog.timeoutId);
+
+			if (dialog.isPopup)
+				this.closePopover(id, sendCloseEvent, focusHandled);
+			else
+				this.closeDialog(id, sendCloseEvent);
+			return true;
+		}
+		return false;
+	},
+
+	closeAll: function(leaveSnackbar, leaveAlert) {
+		var alertId = JSDialog.generateModalId('cool_alert');
+		var dialogs = Object.keys(this.dialogs);
+		for (var i = 0; i < dialogs.length; i++) {
+			if (leaveSnackbar && dialogs[i] && dialogs[i] === 'snackbar')
+				continue;
+			if (leaveAlert && dialogs[i] === alertId)
+				continue;
+
+			this.close(dialogs[i], app.idleHandler._active);
+		}
+	},
+
+	closeAllDropdowns: function() {
+		const dialogs = Object.values(this.dialogs);
+		const dialogKeys = Object.keys(this.dialogs);
+		const hadDialogsOpened = dialogs.length > 0;
+		let closedAny = false;
+		for (let dialog of dialogs) {
+			// We close only content-anchored popups and widget's dropdowns
+			// Keep snackbar or modalpopups (error dialogs) on screen
+			if (dialog && !(dialog.isDropdown || dialog.isDocumentAreaPopup))
+				continue;
+			const closed = this.close(dialog.id, !dialog.isDropdown);
+			closedAny = closedAny | closed;
+		}
+
+		if (closedAny)
+			this.focusAfterClose(hadDialogsOpened, dialogKeys);
+	},
+
+	closeDialog: function(id, sendCloseEvent) {
+		if (id === undefined || !this.dialogs[id]) {
+			app.console.warn('missing dialog data');
+			return;
+		}
+
+		this.focusToLastElement(id);
+
+		var builder = this.clearDialog(id);
+
+		// Special case: this dialog can be opened by toolbutton
+		if (builder.dialogId == 'BulletsAndNumberingDialog')
+		{
+			const toolButtons = document.querySelectorAll('.unotoolbutton[modelid="SetOutline"] .unobutton');
+
+			toolButtons.forEach(btn => {
+				if (btn.hasAttribute('aria-expanded'))
+					btn.setAttribute('aria-expanded', 'false');
+			});
+		}
+		else if (builder.dialogId == 'CharacterPropertiesDialog')
+		{
+			const toolButtons = document.querySelectorAll('.unotoolbutton[modelid="Spacing"] .unobutton');
+
+			toolButtons.forEach(btn => {
+				if (btn.hasAttribute('aria-expanded'))
+					btn.setAttribute('aria-expanded', 'false');
+			});
+		}
+
+		if (sendCloseEvent !== false && builder)
+			builder.callback('dialog', 'close', {id: '__DIALOG__'}, null, builder);
+	},
+
+	// sendCloseEvent means that we only send a command to the server
+	// we want to kill HTML popup when we receive feedback from the server
+	closePopover: function(id, sendCloseEvent, focusHandled) {
+		if (id === undefined || !this.dialogs[id]) {
+			app.console.warn('missing popover data');
+			return;
+		}
+
+		var clickToCloseElement = this.dialogs[id].clickToCloseElement;
+		var builder = this.dialogs[id].builder;
+
+		// The element lives in the popup's parent (a toolbar for example) and a
+		// later update can rebuild that parent and replace the node, leaving this
+		// reference detached. Acting on a detached node does nothing, so treat it
+		// as absent and close through the builder instead, which dismisses the
+		// popup and lets its state be cleaned up so it can be opened again.
+		// Re-resolving the id would find a fresh node from the rebuild, but acting
+		// on it is unreliable: a menubutton click is not a plain close (it opens a
+		// menu-driven dropdown, or sends a toggle whose result the server decides),
+		// so the outcome depends on the popup type. The builder close below is a
+		// single close that behaves the same way for every popup.
+		if (clickToCloseElement && !clickToCloseElement.isConnected)
+			clickToCloseElement = null;
+
+		if (sendCloseEvent) {
+			// first try to close the dropdown if exists
+			if (clickToCloseElement && typeof clickToCloseElement.closeDropdown === 'function')
+				clickToCloseElement.closeDropdown();
+			if (clickToCloseElement && window.L.DomUtil.hasClass(clickToCloseElement, 'menubutton'))
+				clickToCloseElement.click();
+			else if (builder)
+				builder.callback('popover', 'close', {id: '__POPOVER__'}, null, builder);
+			else
+				app.console.warn('closePopover: no builder');
+		}
+		else {
+			// Close handler for Dropdown which requires to setup aria properties
+			const popupParent = this.dialogs[id].popupParent;
+			if (popupParent && typeof popupParent._onDropDown === 'function')
+				popupParent._onDropDown(false);
+
+			// Need to change focus to last element before we clear the current dialog
+			if (!focusHandled)
+				this.focusToLastElement(id);
+			this.clearDialog(id);
+			return;
+		}
+
+		if (!focusHandled)
+			this.focusToLastElement(id);
+	},
+
+	onCloseAll: function() {
+		this.closeAll(/*leaveSnackbar*/ true, /*leaveAlert*/ this.map._fatal);
+		// should also close all dropdowns on close all dialogs
+		this.closeAllDropdowns();
+	},
+
+	focusToLastElement: function(id) {
+		if (id === undefined)
+			return;
+
+		const dialog = this.dialogs[id];
+		if (!dialog)
+			return;
+
+		app.layoutingService.appendLayoutingTask(() => {
+			if (!dialog.lastFocusedElement || dialog.lastFocusedElement === document.body) {
+				this.map.focus();
+				return;
+			}
+
+			try {
+				if (dialog.lastFocusedElement.isConnected) {
+					dialog.lastFocusedElement.focus();
+				} else {
+					var focusId = dialog.lastFocusedElementId ?
+						document.getElementById(dialog.lastFocusedElementId) : null;
+					if (focusId) {
+						focusId.focus();
+					} else {
+						this.map.focus();
+					}
+				}
+			}
+			catch (error) {
+				app.console.debug('Cannot focus last element in dialog with id: ' + id);
+				this.map.focus();
+			}
+		});
+	},
+
+	// Manage focus after a close
+	// hadOpenedDialog: whether there were dialogs open before the close
+	// dialogKeys: snapshot of dialog keys taken before the close
+	focusAfterClose: function(hadOpenedDialog, dialogKeys) {
+		if (hadOpenedDialog && dialogKeys.length) {
+			var lastKey = dialogKeys[dialogKeys.length - 1];
+			const lastDialog = this.dialogs[lastKey];
+			const lastContainer = lastDialog ? lastDialog.container : null;
+			if (lastDialog && lastDialog.canHaveFocus && lastContainer) {
+				var initialFocusElement = this._getFocusablesForInitialFocus(lastContainer);
+				if (initialFocusElement && initialFocusElement.length)
+					initialFocusElement[0].focus();
+				else
+					lastContainer.focus();
+			}
+		} else if (hadOpenedDialog) {
+			this.map.focus();
+		}
+	},
+
+	setTabs: function() {
+		app.console.error('setTabs: not implemented in dialogs.');
+	},
+
+	selectedTab: function() {
+		// nothing to do here
+	},
+
+	rememberOpenTab: function(dialogId, tabControlId, index) {
+		this.openTabRequests[dialogId] = { id: tabControlId, index: index };
+	},
+
+	takeOpenTab: function(dialogId, tabControlId) {
+		const request = this.openTabRequests[dialogId];
+		if (!request || request.id !== tabControlId)
+			return undefined;
+
+		delete this.openTabRequests[dialogId];
+		return request.index;
+	},
+
+	// The fill types of each dialog, by notebook id: the one shown last, and how to open one.
+	_getFillType: function(dialogId, notebookId) {
+		if (!this.fillTypes[dialogId])
+			this.fillTypes[dialogId] = {};
+		if (!this.fillTypes[dialogId][notebookId])
+			this.fillTypes[dialogId][notebookId] = { lastIndex: undefined, open: null };
+		return this.fillTypes[dialogId][notebookId];
+	},
+
+	rememberFillType: function(dialogId, notebookId, index) {
+		this._getFillType(dialogId, notebookId).lastIndex = index;
+	},
+
+	lastFillType: function(dialogId, notebookId) {
+		return this._getFillType(dialogId, notebookId).lastIndex;
+	},
+
+	setFillTypeOpener: function(dialogId, notebookId, open) {
+		this._getFillType(dialogId, notebookId).open = open;
+	},
+
+	openFillType: function(dialogId, notebookId, index) {
+		const open = this._getFillType(dialogId, notebookId).open;
+		if (!open)
+			return false;
+		open(index);
+		return true;
+	},
+
+	_getDefaultButtonId: function(widgets) {
+		for (var i in widgets) {
+			if (widgets[i].type === 'pushbutton' || widgets[i].type === 'okbutton') {
+				if (widgets[i].has_default === true)
+					return widgets[i].id;
+			}
+
+			if (widgets[i].children) {
+				var found = this._getDefaultButtonId(widgets[i].children);
+				if (found)
+					return found;
+			}
+		}
+
+		return null;
+	},
+
+	fadeOutDialog: function(instance) {
+		if (!instance.id)
+			return;
+
+		const dialogInfo = this.dialogs[instance.id];
+		if (!dialogInfo)
+			return;
+
+		const container = dialogInfo.container;
+
+		app.layoutingService.appendLayoutingTask(() => {
+			window.L.DomUtil.addClass(container, 'fadeout');
+
+			let timeoutId = null;
+			const finallyClose = () => {
+				instance.that.close(instance.id, false);
+				app.timerRegistry.clearTimeout(timeoutId);
+			};
+
+			container.onanimationend = finallyClose;
+			// be sure it will be removed if onanimationend will not be executed
+			timeoutId = app.timerRegistry.setTimeout(
+				'jsdialog-deferred',
+				finallyClose,
+				700,
+			);
+		});
+	},
+
+	// The document a dialog lives in: the one its container is part of, which for a
+	// popped-out dialog is that window's own document. Before the container is built,
+	// the document it will be created in, from containerParent.
+	getOwnerDocument: function(instance) {
+		if (instance.container)
+			return instance.container.ownerDocument;
+		if (instance.containerParent)
+			return instance.containerParent.ownerDocument;
+		return document;
+	},
+
+	getOrCreateOverlay: function(instance) {
+		// Submenu is created inside the same overlay as parent dropdown
+		if (instance.isDropdown && instance.isSubmenu) {
+			// use the last instance
+			const overlayRoot = this.getOwnerDocument(instance).body;
+			const allOverlays = overlayRoot.querySelectorAll('.jsdialog-overlay');
+			instance.overlay = allOverlays.length ? allOverlays[allOverlays.length - 1] : null;
+			return;
+		}
+
+		// Dialogue overlay which will allow automatic positioning and cancellation of the dialogue if cancellable.
+		var overlay = window.L.DomUtil.get(instance.id + '-overlay');
+		if (!overlay) {
+
+			if (instance.noOverlay)
+				return;
+
+			overlay = window.L.DomUtil.create('div', 'jsdialog-overlay ' + (instance.cancellable && !instance.hasOverlay ? 'cancellable' : ''), instance.containerParent);
+			overlay.id = instance.id + '-overlay';
+			if (instance.cancellable) {
+				overlay.onclick = () => {
+					// dropdowns are online-only components, don't exist in core
+					var hasToNotifyServer = !instance.isDropdown;
+					if (instance.isDropdown) {
+						// multi-level leftovers
+						instance.builder.callback('dropdown', 'hidedropdown', {id: instance.id}, null, instance.builder);
+					}
+					this.close(instance.id, hasToNotifyServer); };
+			}
+		}
+		instance.overlay = overlay;
+	},
+
+	isOnlyChild: function(instance) {
+		const isMenu = instance.children && instance.children.length
+			&& instance.children[0].id === '__MENU__';
+		const isOnlyChild = instance.children && instance.children.length &&
+			instance.children[0].children && instance.children[0].children.length === 1;
+		return isMenu || isOnlyChild;
+	},
+
+	createContainer: function(instance, documentFragment) {
+		// it has to be form to handle default button
+		instance.container = window.L.DomUtil.create('div', 'jsdialog-window', documentFragment);
+		instance.container.id = instance.id;
+
+		instance.form = window.L.DomUtil.create('form', 'jsdialog-container ui-dialog ui-widget-content lokdialog_container', instance.container);
+		instance.form.setAttribute('role', 'dialog');
+		// aria-modal tells screen readers to ignore everything outside this dialog while it is open.
+		// Apply to real modal dialogs only. Skip popup-style jsdialog instances that share this code path but aren't modal:
+		// dropdowns, snackbars, document-area popovers, autocomplete popups and autofill preview tooltips.
+		if (!instance.isDropdown
+			&& !instance.isSnackbar
+			&& !instance.isDocumentAreaPopup
+			&& !instance.isAutoCompletePopup
+			&& !instance.isAutoFillPreviewTooltip)
+			instance.form.setAttribute('aria-modal', 'true');
+		instance.form.setAttribute('autocomplete', 'off');
+		// Prevent overlay from getting the click, except if we want click to dismiss
+		// Like in the case of the inactivity message.
+		// https://github.com/CollaboraOnline/online/issues/7403
+		if (!instance.clickToDismiss) {
+			instance.container.onclick = function(e) { e.stopPropagation(); };
+		}
+
+		if (instance.collapsed && (instance.collapsed === 'true' || instance.collapsed === true))
+			window.L.DomUtil.addClass(instance.container, 'collapsed');
+
+		// prevent from reloading
+		instance.form.addEventListener('submit', (event) => { event.preventDefault(); });
+
+		instance.defaultButtonId = this._getDefaultButtonId(instance.children);
+
+		if (this.isOnlyChild(instance))
+			instance.isOnlyChild = true;
+
+		// it has to be first button in the form
+		var defaultButton = window.L.DomUtil.createWithId('button', 'default-button', instance.form);
+		defaultButton.style.display = 'none';
+		defaultButton.onclick = function() {
+			if (instance.defaultButtonId) {
+				const button = instance.form.querySelector('#' + instance.defaultButtonId + ' button');
+				if (button)
+					button.click();
+			}
+		};
+
+		if (instance.haveTitlebar) {
+			instance.titlebar = window.L.DomUtil.create('div', 'ui-dialog-titlebar ui-corner-all ui-widget-header ui-helper-clearfix', instance.form);
+			let title = window.L.DomUtil.create('h2', 'ui-dialog-title', instance.titlebar);
+			// an id, not the title text: aria-labelledby splits its value at spaces
+			title.setAttribute('id', instance.id + '-title');
+			title.innerText = instance.title;
+			instance.form.setAttribute('aria-labelledby', title.id);
+			instance.titleCloseButton = window.L.DomUtil.create('button', 'ui-button ui-corner-all ui-widget ui-button-icon-only ui-dialog-titlebar-close', instance.titlebar);
+			const titleCloseButtonText = _('Close dialog');
+			instance.titleCloseButton.setAttribute('aria-label', titleCloseButtonText);
+			instance.titleCloseButton.setAttribute('title', titleCloseButtonText);
+			instance.titleCloseButton.tabIndex = '0';
+			window.L.DomUtil.create('span', 'ui-button-icon ui-icon ui-icon-closethick', instance.titleCloseButton);
+		}
+
+		if (instance.isModalPopUp || instance.isDocumentAreaPopup || instance.isSnackbar)
+			window.L.DomUtil.addClass(instance.container, 'modalpopup');
+
+		if (instance.isMessageBox)
+			window.L.DomUtil.addClass(instance.container, 'messagebox');
+
+		if (instance.popoutWindow) {
+			window.L.DomUtil.addClass(instance.container, 'jsdialog-popout');
+			// The dialog is measured at the size its own content wants, and
+			// stretched to cover its window only once the shell has been
+			// told what size to open at.
+			window.L.DomUtil.addClass(instance.container, 'jsdialog-popout-measuring');
+		}
+
+		if (instance.isAutofilter) {
+			// The submenus (Sort/Filter by Color, Filter by Condition) open as their own popups, so they get their own class.
+			window.L.DomUtil.addClass(instance.container, this.isChildAutoFilter(instance) ?
+				'autofilter-submenu-popup' : 'autofilter-popup');
+		}
+
+		if (instance.isModalPopUp && !instance.popupParent) // Special case for menu popups (they are also modal dialogues).
+			instance.overlay.classList.add('dimmed');
+
+		if (instance.isSnackbar) {
+			window.L.DomUtil.addClass(instance.container, 'snackbar');
+			window.L.DomUtil.addClass(instance.form, 'snackbar');
+		}
+
+		instance.content = window.L.DomUtil.create('div', 'jsdialog lokdialog ui-dialog-content ui-widget-content' + (instance.isOnlyChild ? ' one-child-popup' : ''), instance.form);
+
+		this.dialogs[instance.id] = {};
+	},
+
+	createDialog: function(instance) {
+		instance.builder = new window.L.control.jsDialogBuilder(
+			{
+				windowId: instance.id,
+				mobileWizard: this,
+				map: this.map,
+				cssClass: 'jsdialog' + (instance.isAutoPopup ? ' autofilter' : '') + (instance.isOnlyChild ? ' one-child-popup' : ''),
+				callback: instance.callback,
+				suffix: 'dialog',
+				isMessageBox: instance.isMessageBox,
+			});
+
+		instance.builder.build(instance.content, [instance]);
+		instance.builder.setContainer(instance.content);
+		var primaryBtn = instance.content.querySelector('#' + instance.defaultButtonId + ' button');
+		if (primaryBtn) {
+			window.L.DomUtil.addClass(primaryBtn, 'button');
+			window.L.DomUtil.addClass(primaryBtn, 'button-primary');
+		}
+	},
+
+	addFocusHandler: function(instance) {
+		if (!instance.canHaveFocus)
+			return;
+
+		const elementToFocus = instance.init_focus_id
+			? instance.container.querySelector('[id=\'' + instance.init_focus_id + '\']')
+			: null;
+
+		if (instance.init_focus_id === 'input-modal-input' && elementToFocus) {
+			elementToFocus.select();
+		}
+
+		const failedToFindFocus = () => {
+			if (elementToFocus)
+				elementToFocus.focus();
+			else {
+				app.console.error('There is no focusable element in the modal. Either focusId should be given or modal should have a response button.');
+				instance.that.close(instance.id, true);
+				instance.that.map.focus();
+			}
+		};
+
+		JSDialog.MakeFocusCycle(instance.container, failedToFindFocus);
+	},
+
+	addHandlers: function(instance) {
+		var onInput = (ev) => {
+			if (ev.isFirst)
+				instance.that.draggingObject = instance.that.dialogs[instance.id];
+
+			if (ev.isFinal && instance.that.draggingObject
+				&& instance.that.draggingObject.translateX
+				&& instance.that.draggingObject.translateY) {
+				instance.that.draggingObject.startX = instance.that.draggingObject.translateX;
+				instance.that.draggingObject.startY = instance.that.draggingObject.translateY;
+				instance.that.draggingObject.translateX = 0;
+				instance.that.draggingObject.translateY = 0;
+				instance.that.draggingObject = null;
+			}
+		};
+
+		if (instance.haveTitlebar) {
+			instance.titleCloseButton.onclick = () => {
+				instance.that.close(instance.id, true);
+			};
+		}
+
+		if (instance.nonModal && instance.haveTitlebar && !instance.popoutWindow) {
+			instance.titleCloseButton.onclick = () => {
+				var newestDialog = Math.max.apply(null,
+					Object.keys(instance.that.dialogs).map(function(i) { return parseInt(i);}));
+				if (newestDialog > parseInt(instance.id))
+					return;
+
+				instance.that.closeDialog(instance.id, true);
+			};
+
+			var hammerTitlebar = new Hammer(instance.titlebar);
+			hammerTitlebar.add(new Hammer.Pan({ threshold: 20, pointers: 0 }));
+
+			hammerTitlebar.on('panstart', this.onPan.bind(this));
+			hammerTitlebar.on('panmove', this.onPan.bind(this));
+			hammerTitlebar.on('hammer.input', onInput);
+		}
+
+		var popupParent = instance.popupParent ? window.L.DomUtil.get(instance.popupParent) : null;
+
+		this.addFocusHandler(instance); // Loop focus for all dialogues.
+
+		// Track focus inside the dialog so we can restore it across full-dialog rebuilds.
+		instance.container.addEventListener('focusin', (ev) => {
+			if (ev.target && ev.target.id)
+				instance.lastFocusedInDialogId = ev.target.id;
+		});
+
+		var clickToCloseId = instance.clickToClose ? window.L.Util.sanitizeElementId(instance.clickToClose) : null;
+		const sanitizedPrefix = window.L.Util.sanitizeElementId('.uno:');
+		if (clickToCloseId && clickToCloseId.indexOf(sanitizedPrefix) === 0)
+			clickToCloseId = clickToCloseId.substr(sanitizedPrefix.length);
+
+		var clickToCloseElement = null;
+		if (clickToCloseId && popupParent) {
+			clickToCloseElement = popupParent.querySelector('[id=\'' + clickToCloseId + '\']');
+			// we avoid duplicated ids in unotoolbuttons - try with class
+			if (!clickToCloseElement)
+				clickToCloseElement = popupParent.querySelector('.uno' + clickToCloseId);
+			// might be treeview entry
+			if (!clickToCloseElement)
+				instance.clickToCloseText = instance.clickToClose;
+		} else if (clickToCloseId) {
+			// fallback
+			clickToCloseElement = window.L.DomUtil.get(clickToCloseId);
+		}
+		// Keep instance.clickToClose as the raw string from the JSON and store
+		// the resolved DOM element separately, so readers never have to tell a
+		// string id apart from an element.
+		instance.clickToCloseElement = clickToCloseElement;
+
+		app.layoutingService.appendLayoutingTask(() => { this.setupInitialFocus(instance); });
+
+		if (instance.isDropdown && instance.isSubmenu) {
+			instance.container.addEventListener('mouseleave', (event) => {
+				// Close the submenu only when the mouse leaves the parent
+				// entry. Ignore the event when relatedTarget is the parent
+				// entry element or one of its children. This covers the case
+				// where the user moves back to the parent entry, and the case
+				// where the browser fires a synthetic mouseleave because the
+				// container was repositioned after being placed in the DOM.
+				const parentEntry = instance.popupParent;
+				if (parentEntry && event.relatedTarget instanceof Node
+						&& (parentEntry === event.relatedTarget
+							|| parentEntry.contains(event.relatedTarget)))
+					return;
+				instance.builder.callback('combobox', 'hidedropdown', {id: instance.id}, null, instance.builder);
+			});
+		}
+	},
+
+	// Focusables with the titlebar close (X) button demoted to the lowest
+	// priority - used only when nothing else in the dialog is focusable.
+	_getFocusablesForInitialFocus: function(container) {
+		const focusables = JSDialog.GetFocusableElements(container);
+		if (!focusables) return focusables;
+		const isClose = el => el.classList.contains('ui-dialog-titlebar-close');
+		return focusables.sort((a, b) => isClose(a) - isClose(b));
+	},
+
+	setupInitialFocus: function(instance) {
+		// Restore focus preserved across a full-dialog rebuild before falling back to default.
+		if (instance.preservedFocusId) {
+			const restored = instance.container.querySelector('[id=\'' + instance.preservedFocusId + '\']');
+			instance.preservedFocusId = null;
+			if (restored && JSDialog.IsFocusable(restored)) {
+				restored.focus({preventScroll: true});
+				return;
+			}
+		}
+
+		// setup initial focus and helper elements for closing popup
+		var initialFocusElement = this._getFocusablesForInitialFocus(instance.container);
+
+		if (instance.canHaveFocus && initialFocusElement && initialFocusElement.length)
+			initialFocusElement[0].focus({preventScroll: true});
+
+		// pass the current instance and get the tabcontrol object if it exist
+		// this will only search in current instance and not in whole document
+		const tabControlWidget = this.findTabControl(instance);
+
+		let focusWidget, firstFocusableElement;
+
+		if (tabControlWidget && !instance.init_focus_id) {
+			// get DOM element of tabControl from current instance
+			focusWidget = instance.content.querySelector('[id="' + tabControlWidget.id + '"]');
+			firstFocusableElement = JSDialog.GetFocusableElements(focusWidget);
+
+		} else {
+			// will directly set element of focusable element based on init focus id
+			// If init_id is not defined, select the first focusable element from the container
+			firstFocusableElement = instance.init_focus_id ? instance.container.querySelector('[id=\'' + instance.init_focus_id + '\']') : null;
+
+			// If the candidate from init_focus_id can't itself take focus
+			// (e.g. a container div), descend into it for a focusable child.
+			if (firstFocusableElement && !JSDialog.IsFocusable(firstFocusableElement)) {
+				firstFocusableElement = JSDialog.FindFocusableWithin(firstFocusableElement, 'next');
+			}
+
+			// Still no target (no init_focus_id, or it resolved to a dead end):
+			// pick the first element in the dialog that can take focus.
+			if (!firstFocusableElement) {
+				const focusables = this._getFocusablesForInitialFocus(instance.container);
+				if (focusables && focusables.length) firstFocusableElement = focusables[0];
+			}
+
+			// Nothing tabbable: a listbox option carries tabindex="-1" and takes
+			// the focus from its container instead.
+			if (!firstFocusableElement)
+				firstFocusableElement = JSDialog.FindFocusableWithin(instance.container, 'next');
+
+			// A dialog whose only content is a message has nothing to focus. With
+			// no title to be labelled by, it carries the message as its name. It
+			// takes the focus itself when it can have focus at all.
+			if (!firstFocusableElement && instance.form) {
+				if (!instance.form.hasAttribute('aria-labelledby')) {
+					const message = instance.form.innerText.trim();
+					if (message) instance.form.setAttribute('aria-label', message);
+				}
+				if (instance.canHaveFocus) {
+					instance.form.tabIndex = -1;
+					firstFocusableElement = instance.form;
+				}
+			}
+		}
+
+		if (firstFocusableElement && document.activeElement !== firstFocusableElement && !instance.isAutoCompletePopup) {
+			// for tab control case we have more then 1 element that can be focusable so select the first tab for the list
+			if (Array.isArray(firstFocusableElement))
+				firstFocusableElement = firstFocusableElement[0];
+			firstFocusableElement.focus({preventScroll: true});
+		}
+		else if (instance.canHaveFocus !== false && instance.init_focus_id)
+			app.console.error('JSDialog: Cannot get focus for dialog: "' + instance.id + '" with initial id: "' + instance.init_focus_id + '"');
+	},
+
+	 findTabControl: function(obj) {
+		if (obj.type === 'tabcontrol') {
+			// this return the main tabcontrol object
+			return obj;
+		}
+		if (obj.children && obj.children.length > 0) {
+			for (let child of obj.children) {
+				const result = this.findTabControl(child); // Recursively search in children
+				if (result) return result; // If found, return the tabcontrol
+			}
+		}
+		return null; // Return null if tabcontrol is not found
+	},
+
+	/// if you use updatePos - instance param is bound automatically
+	setPosition: function(instance, updatedPos) {
+		var calculated = false;
+		var isRTL = document.documentElement.dir === 'rtl';
+		// A popup anchored to a widget inside a popped-out dialog clamps against
+		// that dialog window's bounds, not the main window's.
+		const ownerWindow = this.getOwnerDocument(instance).defaultView || window;
+
+		if (instance.isSnackbar) {
+			calculated = true;
+			instance.posx = ownerWindow.innerWidth/2 - instance.form.offsetWidth/2;
+			instance.posy = ownerWindow.innerHeight - instance.form.offsetHeight - 40;
+		} else if (instance.nonModal || instance.popupParent) {
+			// in case of toolbox we want to create popup positioned by toolitem not toolbox
+			if (updatedPos) {
+				calculated = true;
+				instance.posx = updatedPos.x;
+				instance.posy = updatedPos.y;
+			}
+			var parent = window.L.DomUtil.get(instance.popupParent);
+			if (!parent && typeof instance.popupParent === 'string')
+				parent = JSDialog.FindInPopoutWindows(instance.popupParent);
+
+			if (instance.clickToCloseElement && parent) {
+				// anchor the popup to the element that closes it, which was
+				// already resolved when the popup was built
+				parent = instance.clickToCloseElement;
+			} else if (instance.clickToCloseText && parent) {
+				var matchingElements;
+				if ((matchingElements = parent.querySelectorAll('span.ui-treeview-cell-text')).length) {// treeview entry for context menu
+					parent = Array.from(matchingElements).find(
+						(value) => {
+							if (value.innerText === instance.clickToCloseText) // text entry
+								return true;
+							// custom render: the rendered <img> may sit either as
+							// firstChild of the cell span, or - once OnDemandRenderer
+							// has replaced the placeholder - as a sibling inside the
+							// outer cell span. Match either case.
+							const img = value.querySelector('img');
+							return img && img.alt === instance.clickToCloseText;
+						});
+				} else if ((matchingElements = parent.querySelectorAll('div.ui-iconview-entry > img')).length) {// iconview entry for context menu
+					parent = Array.from(matchingElements).find((img) => img.title === instance.clickToCloseText);
+				}
+			}
+
+			if (!parent && instance.popupParent === '_POPOVER_') {
+				// popup was trigerred not by toolbar or menu button, probably on tile area
+				if (instance.isAutoPopup) {
+					// we are already done
+					return;
+				}
+				else {
+					app.console.warn('other popup than autofilter in the document area');
+				}
+			}
+
+			if (parent) {
+				calculated = true;
+				const parentRect = parent.getBoundingClientRect();
+				instance.posx = parentRect.left;
+				instance.posy = parentRect.bottom;
+
+				if (instance.popupAnchor && instance.popupAnchor.indexOf('top') >= 0)
+					instance.posy = parentRect.top;
+
+				else if (instance.popupAnchor && instance.popupAnchor.indexOf('bottom') >= 0)
+					instance.posy -= instance.content.clientHeight;
+
+				// 'above' puts the whole popup, title bar included, over the parent,
+				// its bottom edge on the top edge of the parent, and no higher than
+				// the top of the window.
+				else if (instance.popupAnchor && instance.popupAnchor.indexOf('above') >= 0)
+					instance.posy = Math.max(0, parentRect.top - instance.container.offsetHeight);
+
+				var anchor = parent;
+				if (parent.classList.contains('ui-combobox-whole-width-preview')) {
+					var field = parent.querySelector(':scope > .ui-combobox-content');
+					if (field)
+						anchor = field;
+				}
+				// A popup is at least as wide as the element it opens from, unless it asks
+				// for the width of its content.
+				if (!instance.fitContent)
+					instance.container.style.minWidth = anchor.getBoundingClientRect().width + 'px';
+
+				if (isRTL)
+					instance.posx = ownerWindow.innerWidth - instance.posx;
+
+				// 'end' puts the popup beside the parent on its inline-end side. A submenu
+				// moves 15 px back over its parent menu so the two read as one.
+				if (instance.popupAnchor && instance.popupAnchor.indexOf('end') >= 0)
+					instance.posx += (isRTL ? 0 : 1) * (parent.clientWidth) - (instance.isSubmenu ? 15 : 0);
+
+				// 'start' puts the popup beside the parent on its inline-start
+				// side, so the two do not overlap. posx is the inline-start margin:
+				// from the left edge of the window in a left-to-right page, where
+				// it moves back by the width of the whole popup, and from the right
+				// edge in a right-to-left page, where it moves back by the parent
+				// and popup widths. The popup stays inside the window.
+				if (instance.popupAnchor && instance.popupAnchor.indexOf('start') >= 0)
+					instance.posx = Math.max(0, instance.posx - instance.container.offsetWidth - (isRTL ? parent.clientWidth : 0));
+
+				if (instance.content.clientWidth > ownerWindow.innerWidth)
+					instance.container.style.maxWidth = (ownerWindow.innerWidth - instance.posx - 20) + 'px';
+				else if (instance.posx + instance.content.clientWidth > ownerWindow.innerWidth) {
+					if (instance.isDropdown && instance.isSubmenu && !isRTL) {
+						// Flip to the left side of the parent entry rather than
+						// nudging leftward. Nudging lands the submenu on top of the
+						// parent dropdown, blocking access to other entries.
+						const leftPos = parent.getBoundingClientRect().left
+							- instance.content.clientWidth;
+						instance.posx = leftPos >= 0 ? leftPos
+							: instance.posx - (instance.posx + instance.content.clientWidth + 10 - ownerWindow.innerWidth);
+					} else {
+						instance.posx -= instance.posx + instance.content.clientWidth + 10 - ownerWindow.innerWidth;
+					}
+				}
+
+				if (instance.content.clientHeight > ownerWindow.innerHeight)
+					instance.container.style.maxHeight = (ownerWindow.innerHeight - instance.posy - 20) + 'px';
+				else if (instance.posy + instance.content.clientHeight > ownerWindow.innerHeight)
+					instance.posy -= instance.posy + instance.content.clientHeight + 10 - ownerWindow.innerHeight;
+			}
+			else {
+				var height = instance.form.getBoundingClientRect().height;
+				if (instance.posy + height > instance.containerParent.getBoundingClientRect().height) {
+					calculated = true;
+					var newTopPosition = instance.posy - height;
+					if (newTopPosition < 0)
+						newTopPosition = 0;
+					instance.posy = newTopPosition;
+				}
+
+				var width = instance.form.getBoundingClientRect().width;
+				if (isRTL)
+					width = width * -1;
+
+				if (instance.posx + width > instance.containerParent.getBoundingClientRect().width) {
+					calculated = true;
+					var newLeftPosition = instance.posx - width;
+					if (newLeftPosition < 0)
+						newLeftPosition = 0;
+					instance.posx = newLeftPosition;
+				}
+			}
+		}
+
+		var positionNotSet = !instance.container.style || !instance.container.style.marginInlineStart;
+		if (calculated || positionNotSet)
+			this.setNewPosition(instance.container, instance.posx, instance.posy);
+	},
+
+	centerDialogPosition: function (instance) {
+		var isRTL = document.documentElement.dir === 'rtl';
+		var height = instance.form.getBoundingClientRect().height;
+		var width = instance.form.getBoundingClientRect().width;
+		instance.startX = instance.posx = (window.innerWidth - (isRTL ? (-1 * width) : width)) / 2;
+		instance.startY = instance.posy = (window.innerHeight - height) / 2;
+		instance.updatePos({x: instance.posx, y: instance.posy});
+	},
+
+	parentAutofilter : null,
+
+	calculateAutoFilterPosition: function(instance) {
+		// this is autofilter popup
+
+		// RTL mode: only difference is when file is RTL not UI
+		// var isViewRTL = document.documentElement.dir === 'rtl';
+		// var isSpreadsheetRTL = this.map._docLayer.isCalcRTL();
+
+		if (this.isChildAutoFilter(instance)) {
+			this.calculateSubmenuAutoFilterPosition(instance, this.parentAutofilter);
+			return;
+		}
+
+		if (!app.map._docLayer.sheetGeometry)
+			return;
+
+		/*
+			AutoFilter, pivot table filter and Cell Dropdown dialogs all use this function.
+			A filter popup carries its own id, and core reports the cell that popup belongs to
+			under the same id, so the two are matched here.
+			Cell DropDown (Data->Validity) reports no cell before opening.
+			But Cell DropDown can not be opened without first clicking on the cell. Therefore we can use current cell's rectangle for positioning of the dialog.
+		*/
+		let cellRectangle;
+
+		this.parentAutofilter = instance.form;
+
+		const filterPopupCell = app.calc.filterPopupCell;
+		const popupId = this.getPopupId(instance);
+
+		if (filterPopupCell && popupId !== undefined && filterPopupCell.popupId === popupId) {
+			// This is a filter popup. We have the row and column indexes. Get cell rectangle with this info.
+			cellRectangle = app.map._docLayer.sheetGeometry.getCellSimpleRectangle(filterPopupCell.column, filterPopupCell.row);
+		}
+		else if (GraphicSelection.hasDarkOverlay()) {
+			// Autofilter style menu from Chart edit mode (pivot-chart).
+			cellRectangle = new cool.SimpleRectangle(0, 0, 300, 300);
+			cellRectangle.pX1 += instance.startX;
+			cellRectangle.pY1 += instance.startY;
+		}
+		else {
+			// This is a Cell DropDown. We will use current cell's rectangle.
+			cellRectangle = app.calc.cellCursorRectangle.clone();
+		}
+
+		const documentAnchor = app.sectionContainer.getDocumentAnchor();
+		const layout = app.activeDocument.activeLayout;
+		const isRTL = app.map._docLayer.isCalcRTL();
+
+		const trailingPoint = new cool.SimplePoint(cellRectangle.x2, cellRectangle.y2);
+
+		let canvasTrailX;
+		if (app.isXOrdinateInFrozenPane(cellRectangle.pX1)) {
+			canvasTrailX = isRTL
+				? documentAnchor[0] + app.sectionContainer.getDocumentAnchorSection().size[0] - trailingPoint.pX
+				: trailingPoint.pX + documentAnchor[0];
+		} else {
+			canvasTrailX = layout.documentToViewX(trailingPoint);
+		}
+
+		let canvasTrailY;
+		if (app.isYOrdinateInFrozenPane(cellRectangle.pY1)) {
+			canvasTrailY = trailingPoint.pY + documentAnchor[1];
+		} else {
+			canvasTrailY = layout.documentToViewY(trailingPoint);
+		}
+
+		const canvasEl = this.map._docLayer._canvas.getBoundingClientRect();
+		instance.posy = canvasTrailY / app.dpiScale + canvasEl.top;
+		instance.posx = canvasTrailX / app.dpiScale + canvasEl.left;
+		if (!isRTL)
+			instance.posx -= instance.container.offsetWidth;
+
+		this.updateAutoPopPosition(instance.container, instance.posx, instance.posy);
+	},
+
+	// A filter popup reports its own id. The popup's container widget contributes it, so it
+	// arrives one level below the message root.
+	getPopupId: function(instance) {
+		if (instance.popupId !== undefined)
+			return instance.popupId;
+
+		const children = instance.children;
+		if (children && children.length && children[0].popupId !== undefined)
+			return children[0].popupId;
+
+		return undefined;
+	},
+
+	isChildAutoFilter: function(instance) {
+		// JSON structure suggests that if children array's first element has id='menu' and widgetType = 'treelistbox' then it will definitely be a child autofilter popup
+		var rootChild = instance.children[0];
+		if (rootChild) {
+			var firstWidget = rootChild.children[0];
+			return firstWidget ? (firstWidget.id === 'menu' && firstWidget.type === 'treelistbox') : false;
+		}
+		return false;
+	},
+
+	// Tag the check list's ancestor chain in the JSON with .autofilter-fill so
+	// the builder applies it at build time and CSS can flex the list to fill the
+	// resized popup without a :has() selector scanning the list. Must run before
+	// the dialog is built. The synthetic wrappers the builder inserts (the
+	// top-level root-container/vertical and the scrollwindow content div) have no
+	// JSON node and are matched by class in jsdialogs.css instead.
+	markAutofilterFillChain: function(instance) {
+		// Depth-first search for the listbox node, tagging each ancestor
+		// container on the way back up. Returns true once found on this branch.
+		function tagChain(node) {
+			if (!node)
+				return false;
+
+			// The list itself is handled by an id rule, so stop without tagging it.
+			if (node.id === 'check_list_box' || node.id === 'check_tree_box')
+				return true;
+
+			var children = node.children;
+			if (!children)
+				return false;
+
+			for (var i = 0; i < children.length; i++) {
+				if (tagChain(children[i])) {
+					node.cssClass = node.cssClass
+						? node.cssClass + ' autofilter-fill'
+						: 'autofilter-fill';
+					return true;
+				}
+			}
+			return false;
+		}
+
+		// instance is the root node (its element is content, handled by its own
+		// rule); start from its children so content itself is not tagged.
+		var children = instance.children;
+		if (!children)
+			return;
+
+		for (var i = 0; i < children.length; i++)
+			tagChain(children[i]);
+	},
+
+	calculateSubmenuAutoFilterPosition: function(instance, parentAutofilter) {
+		var parentAutofilter = parentAutofilter.getElementsByClassName("ui-treeview-entry selected")[0].getBoundingClientRect();
+		instance.posx = parentAutofilter.right;
+		instance.posy = parentAutofilter.top;
+
+		// set margin start for child popup in rtl mode
+		var isSpreadsheetRTL = this.map._docLayer.isCalcRTL();
+		if (isSpreadsheetRTL) {
+			var rtlPosx = parentAutofilter.left - instance.form.getBoundingClientRect().width;
+			instance.posx = rtlPosx < 0 ? 0 : rtlPosx;
+		}
+		// set posx of instance (submenufilter) based on window width
+		var width = instance.content.clientWidth;
+		if (instance.posx + width > window.innerWidth)
+			instance.posx -= instance.posx + width - window.innerWidth;
+
+		// submenu filter popup should not go below toolbar element. Adjust height according to window height and bottom toolbar element so it will not overlap with each other
+		var height = instance.form.getBoundingClientRect().height;
+		if (instance.posy + height > window.innerHeight)
+			instance.posy = window.innerHeight - height;
+
+		this.updateAutoPopPosition(instance.container, instance.posx, instance.posy);
+	},
+
+	closePopupsOnTabChange: function() {
+		//this.dialogs is an object
+		var dialogKeys = Object.keys(this.dialogs);
+
+		for (var i = 0; i < dialogKeys.length; i++) {
+			var autoFilterDialogId = dialogKeys[i];
+			var dialog = this.dialogs[autoFilterDialogId];
+
+			// Check if the current dialog has the isAutoPopup (Autofilter or AutoPopup) property set to true
+			if (dialog.isAutoPopup) {
+				// Call this.close(key, true) for the current dialog
+				this.close(autoFilterDialogId, true);
+			}
+		}
+	},
+
+	getAutoPopupParentContainer(instance) {
+		// A popup anchored to an element inside a popped-out dialog
+		// belongs in that dialog's window.
+		const anchor = instance.popupParent;
+		if (anchor && typeof anchor !== 'string'
+			&& anchor.ownerDocument && anchor.ownerDocument !== document)
+			return anchor.ownerDocument.body;
+		if (typeof anchor === 'string' && !window.L.DomUtil.get(anchor)) {
+			const popoutAnchor = JSDialog.FindInPopoutWindows(anchor);
+			if (popoutAnchor)
+				return popoutAnchor.ownerDocument.body;
+		}
+
+		// Parent container will
+		if (instance.isAutofilter || instance.isAutoCompletePopup || !instance.isDocumentAreaPopup) {
+			const fullscreenElement = document.fullscreenElement;
+			if (instance.isModalPopUp && fullscreenElement
+				&& !fullscreenElement.contains(document.body))
+				return fullscreenElement;
+			return document.body;
+		}
+		return document.getElementById('document-container');
+	},
+
+	// True for instances that render as their own native window in the Qt
+	// shell: real dialogs, modal or non-modal. The feature is turned off:
+	// nothing in the application sets enablePopoutDialogs, so every dialog
+	// renders in the page. The Qt app tests set the flag to keep the
+	// separate-window path working while it is off.
+	canPopout: function(instance) {
+		return window.enablePopoutDialogs
+			&& window.ThisIsTheQtApp
+			&& !instance.isDropdown
+			&& !instance.isSnackbar
+			&& !instance.isDocumentAreaPopup
+			&& !instance.isAutoCompletePopup
+			&& !instance.isAutoFillPreviewTooltip
+			&& !instance.popupParent
+			&& instance.id !== 'busypopup'
+			&& (instance.nonModal || instance.isModalPopUp || instance.isMessageBox);
+	},
+
+	openPopoutIfWanted: function(instance) {
+		if (!this.canPopout(instance))
+			return null;
+
+		const win = JSDialog.GetPopoutWindow(instance.id);
+		if (win)
+			return win;
+
+		// The callback outlives this dialog instance, since rebuilds for the
+		// same id reuse the window. Capture only the id, so a superseded
+		// instance is not kept alive by the window's handlers.
+		const dialogId = instance.id;
+		return JSDialog.OpenPopoutWindow(
+			dialogId,
+			instance.isModalPopUp || instance.isMessageBox,
+			instance.title || '',
+			() => { this.close(dialogId, true); });
+	},
+
+	onJSDialog: function(e) {
+		/*
+			Dialog types:
+				* Modal (isModalPopUp = true): non-movable + overlay + dimmed background.
+				* Nonmodal: movable + no dim + no overlay (user can interact with the document).
+				* Popup (Non-dialog) (isDocumentAreaPopup = true): overlay + no dim.
+		*/
+
+		// We will pass this here and there, so we can split the code into smaller functions.
+		// Then we will save this into this.dialogs[].
+		var instance = e.data;
+		if (JSDialog.verbose) app.console.debug(instance);
+
+		// Save last focused element, we will set the focus back to this element after this popup is closed.
+		if (this.dialogs[instance.id] && this.dialogs[instance.id].lastFocusedElement) {
+			instance.lastFocusedElement = this.dialogs[instance.id].lastFocusedElement;
+			instance.lastFocusedElementId = this.dialogs[instance.id].lastFocusedElementId;
+		} else if (!this.dialogs[instance.id] || !this.dialogs[instance.id].lastFocusedElement) { // Avoid to reset while updates.
+			var activeElement = document.activeElement;
+			if (activeElement && activeElement !== document.body) {
+				instance.lastFocusedElement = activeElement;
+				instance.lastFocusedElementId = activeElement.id;
+			}
+		}
+
+		instance.callback = e.callback;
+		instance.isSnackbar = e.data.type === 'snackbar';
+		instance.isDropdown = e.data.type === 'dropdown';
+		instance.isModalPopUp = e.data.type === 'modalpopup' || instance.isDropdown;
+		instance.isMessageBox = e.data.type === 'messagebox';
+		instance.snackbarTimeout = e.data.timeout;
+		instance.isOnlyChild = false;
+		instance.that = this;
+		instance.startX = e.data.posx;
+		instance.startY = e.data.posy;
+		instance.updatePos = null;
+		instance.canHaveFocus = !instance.isSnackbar && instance.id !== 'busypopup' && !instance.isAutoCompletePopup;
+		instance.isDocumentAreaPopup = instance.popupParent === '_POPOVER_' && instance.posx !== undefined && instance.posy !== undefined;
+		instance.isPopup = instance.isModalPopUp || instance.isDocumentAreaPopup || instance.isSnackbar;
+		instance.isAutoPopup = instance.isDocumentAreaPopup && this.map._docLayer.isCalc();
+		instance.isAutofilter = instance.isAutoPopup && !instance.isAutoFillPreviewTooltip && !instance.isAutoCompletePopup;// separate the autofilter case
+		instance.containerParent = this.getAutoPopupParentContainer(instance);
+		instance.hasClose = !!instance.hasClose; // default is true
+		instance.haveTitlebar = instance.hasClose
+			|| (!instance.isModalPopUp && !instance.isSnackbar && instance.hasClose)
+			|| (instance.title && instance.title !== '');
+		instance.nonModal = !instance.isModalPopUp && !instance.isDocumentAreaPopup && !instance.isSnackbar;
+
+		// Make a better separation between popups and modals.
+		if (instance.isDocumentAreaPopup)
+			instance.isModalPopUp = false;
+
+		// Check.
+		if (instance.popupParent === '_POPOVER_' && (instance.posx === undefined || instance.posy === undefined))
+			app.console.error('There is a POPOVER dialogue without position information.');
+
+		if (instance.action === 'fadeout')
+		{
+			app.console.debug('JSDialog: fadeout "' + (instance ? instance.id : '-') + '"');
+			this.fadeOutDialog(instance);
+		}
+		else if (instance.action === 'close')
+		{
+			app.console.debug('JSDialog: close "' + (instance ? instance.id : '-') + '"');
+			const dialogs = Object.keys(this.dialogs);
+			const hadOpenedDialog = dialogs.length > 0;
+
+			const didClose = this.close(instance.id, false, instance.focusHandled);
+
+			if (didClose && !instance.focusHandled) {
+				// Manage focus
+				this.focusAfterClose(hadOpenedDialog, dialogs);
+			}
+		}
+		else {
+			app.console.debug('JSDialog: full dialog "' + (instance ? instance.id : '-') + '"');
+
+			// There is no action, so we create a new dialogue.
+			if (instance.isModalPopUp || instance.isDocumentAreaPopup)
+				this.getOrCreateOverlay(instance);
+
+			// Sometimes we get another full update for the same dialog
+			const existingNode = this.dialogs[instance.id];
+
+			// Don't rebuild dialog while inline cell editing is active;
+			// the backend will send an up-to-date state after editend.
+			if (existingNode && existingNode.container
+				&& existingNode.container.querySelector('.ui-treeview-inline-edit'))
+				return;
+
+			if (existingNode) {
+				// A previous open for this id may still be queued and not yet on
+				// screen. This update takes its place, so drop that pending open
+				// to stop it attaching an orphan container once it runs.
+				if (existingNode.openLayoutingTaskId != null) {
+					app.layoutingService.cancelLayoutingTask(existingNode.openLayoutingTaskId);
+					existingNode.openLayoutingTaskId = null;
+				}
+
+				instance.posx = existingNode.startX;
+				instance.posy = existingNode.startY;
+
+				// Preserve keyboard focus across a full-dialog rebuild (tdf#169006 follow-up).
+				// Multiple FullUpdates may arrive back-to-back before any of the
+				// associated layouting tasks (which attach the new container) run, so
+				// the live activeElement may already be detached from the previous
+				// existingNode. Try in order:
+				//   1. live activeElement inside the previous container,
+				//   2. the previous container's recorded focusin id,
+				//   3. an unconsumed preservedFocusId from a still-pending rebuild.
+				const activeEl = document.activeElement;
+				if (activeEl && activeEl.id
+					&& existingNode.container
+					&& existingNode.container.contains(activeEl)) {
+					instance.preservedFocusId = activeEl.id;
+				} else if (existingNode.lastFocusedInDialogId) {
+					instance.preservedFocusId = existingNode.lastFocusedInDialogId;
+				} else if (existingNode.preservedFocusId) {
+					instance.preservedFocusId = existingNode.preservedFocusId;
+				}
+			}
+
+			// We show some dialogs such as Macro Security Warning Dialog and Text Import Dialog (csv)
+			// They are displayed before the document is loaded
+			// Spinning should be happening until the 1st interaction with the user
+			// which is the dialog opening in this case
+			if (this.map && !instance.isDropdown)
+				this.map._progressBar.end();
+
+			instance.popoutWindow = this.openPopoutIfWanted(instance);
+
+			let dialogDomParent = instance.overlay ? instance.overlay : instance.containerParent;
+			if (instance.popoutWindow)
+				dialogDomParent = instance.popoutWindow.document.body;
+			const documentFragment = new DocumentFragment(); // do not modify dom yet
+
+			this.createContainer(instance, documentFragment);
+
+			// Tag the fill chain in the JSON before building so the builder
+			// applies the class as it creates the widgets.
+			if (instance.isAutofilter && !this.isChildAutoFilter(instance))
+				this.markAutofilterFillChain(instance);
+
+			this.createDialog(instance);
+
+			const modifyCallback = JSDialog.getDialogModificationCallback(instance.dialogid);
+			if (modifyCallback) modifyCallback(instance);
+
+			// FIXME: remove this auto-bound instance so it will be clear what is passed
+			instance.updatePos = this.setPosition.bind(this, instance);
+
+			// Container already on screen that this rebuild supersedes, or null
+			// on a fresh open. When the predecessor is itself still pending (its
+			// own container not attached yet), carry its superseded container
+			// forward so the on-screen one stays reachable across a run of
+			// rebuilds that arrive before any of them are shown.
+			instance.replacedContainer = !existingNode
+				? null
+				: existingNode.container && existingNode.container.isConnected
+					? existingNode.container
+					: existingNode.replacedContainer;
+
+			instance.openLayoutingTaskId = app.layoutingService.appendLayoutingTask(() => {
+				// The popup is about to be attached to the document, so from here
+				// on it counts as shown and can no longer be cancelled as a
+				// not-yet-shown open.
+				instance.openLayoutingTaskId = null;
+
+				app.console.debug('JSDialog: put items inside container for "' + instance.id + '"');
+
+				// dialog built - add to DOM now. Replace the container currently
+				// on screen, which replacedContainer tracks even across a run of
+				// rebuilds that arrive before any of them is shown, so a rebuild
+				// never leaves an earlier container orphaned. With nothing on
+				// screen yet, append fresh.
+				if (instance.replacedContainer && instance.replacedContainer.isConnected) {
+					instance.replacedContainer.replaceWith(instance.container);
+				} else {
+					instance.container.classList.add('fadein');
+					// Pre-position before append so the container appears at the
+					// correct location immediately rather than jumping from the CSS
+					// default position.
+					if (instance.isDropdown && instance.isSubmenu)
+						instance.updatePos();
+					dialogDomParent.append(instance.container);
+				}
+
+				// Equalize widths of widgets in the same GTK size group.
+				instance.builder.equalizeSizeGroups(instance.content);
+
+				// do in task to apply correct focus when already shown
+				this.addHandlers(instance);
+
+				// A popped-out dialog is positioned and sized by the shell;
+				// in-page coordinates do not apply to it.
+				if (instance.popoutWindow) {
+					JSDialog.FitPopoutToContent(instance.id, instance.form);
+				} else if (instance.nonModal && !(instance.startX && instance.startY)) {
+					// Core does not send initial coordinates for non-modal
+					// dialogues, so center them.
+					this.centerDialogPosition(instance);
+				} else {
+					instance.updatePos();
+				}
+
+				// AutoPopup  will calculate popup position for Autofilter Popup
+				if (instance.isAutofilter && !instance.isAutoFillPreviewTooltip)
+					this.calculateAutoFilterPosition(instance);
+				else if (instance.isAutoFillPreviewTooltip || instance.isAutoCompletePopup){
+					this.updateAutoPopPosition(instance.container, instance.posx, instance.posy);
+				}
+			});
+
+			// Keep a model of the built content next to the instance. It holds
+			// the JSON for the whole dialog and stays in sync with later widget
+			// updates and actions, so old values can be read from it without
+			// touching the DOM.
+			instance.model = new JSDialogModelState('dialog-' + instance.id);
+			instance.model.fullUpdate(instance);
+
+			this.dialogs[instance.id] = instance;
+
+			if (instance.isSnackbar && instance.snackbarTimeout > 0) {
+				instance.timeoutId = setTimeout(() => { app.map.uiManager.closeSnackbar(); }, instance.snackbarTimeout);
+			}
+		}
+	},
+
+	onJSUpdate: function (e) {
+		var data = e.data;
+
+		if (data.jsontype !== 'dialog' && data.jsontype !== 'popup')
+			return;
+
+		var dialog = this.dialogs[data.id] ? this.dialogs[data.id].container : null;
+		if (!dialog)
+			return;
+
+		const model = this.dialogs[data.id].model;
+
+		// An update carries one widget and none of its ancestors, so a tabcontrol cannot work
+		// out its own layout again. Take what the previous build left in the model.
+		const previousData = model && data.control ? model.getById(data.control.id) : null;
+		if (previousData) {
+			if (data.control.tabControlDepth === undefined)
+				data.control.tabControlDepth = previousData.tabControlDepth;
+			if (data.control.hasEmptyTabPage === undefined)
+				data.control.hasEmptyTabPage = previousData.hasEmptyTabPage;
+		}
+
+		if (model)
+			model.applyUpdate(data);
+
+		var builder = new window.L.control.jsDialogBuilder({windowId: data.id,
+			mobileWizard: this,
+			map: this.map,
+			cssClass: 'jsdialog',
+			callback: e.callback,
+			suffix: 'dialog',
+			isMessageBox: this.dialogs[data.id].builder && this.dialogs[data.id].builder.options.isMessageBox,
+		});
+
+		builder.updateWidget(dialog, data.control);
+
+		const dialogInfos = this.dialogs;
+
+		// after widget update we might have bigger content and need to center the dialog again
+		app.layoutingService.appendLayoutingTask(() => {
+			var dialogInfo = dialogInfos[data.id];
+			if (!dialogInfo) {
+				app.console.debug('JSDialog: dialog info with id: "' + data.id + '" not found.');
+				if (dialog) app.console.debug('JSDialog: old data was: ' + JSON.stringify(dialog));
+				return;
+			}
+			if (dialogInfo.popoutWindow) {
+				JSDialog.FitPopoutToContent(data.id, dialogInfo.form);
+				return;
+			}
+			if (dialogInfo.isDocumentAreaPopup) {
+				// In case of AutocompletePopup's update data would have posx, posy
+				dialogInfo.updatePos(new cool.Point(data.posx, data.posy));
+			} else {
+				dialogInfo.updatePos();
+			}
+		});
+	},
+
+	onJSAction: function (e) {
+		var data = e.data;
+		var innerData = data.data;
+
+		if (data.jsontype === 'formulabar' && innerData && innerData.separator)
+			app.calc.decimalSeparator = innerData.separator;
+
+		if (data.jsontype !== 'dialog' && data.jsontype !== 'popup')
+			return;
+
+		var dialog = this.dialogs[data.id];
+		if (!dialog)
+			return;
+
+		if (dialog.model)
+			dialog.model.widgetAction(data);
+
+		var builder = dialog.builder;
+		if (!builder)
+			return;
+
+		var dialogContainer = dialog.container;
+		if (!dialogContainer)
+			return;
+
+		const entryChanges = data.jsontype === 'popup' && innerData.action_type && innerData.action_type === 'rendered_entry';
+
+		// focus on element outside view will move viewarea leaving blank space on the bottom
+		if (innerData.action_type === 'grab_focus' && !dialog.popoutWindow) {
+			app.layoutingService.appendLayoutingTask(() => {
+				var control = dialogContainer.querySelector('[id=\'' + innerData.control_id + '\']');
+				var controlPosition = control ? control.getBoundingClientRect() : null;
+				if (controlPosition && (controlPosition.bottom > window.innerHeight ||
+					controlPosition.right > window.innerWidth)) {
+					this.centerDialogPosition(dialog); // will center it
+				}
+			});
+		}
+
+		builder.executeAction(dialogContainer, innerData);
+
+		if (entryChanges) {
+			app.layoutingService.appendLayoutingTask(() => {
+				// After entry changes we might have bigger/smaller content and need to reposition the dialog.
+				dialog.updatePos(dialog);
+			});
+		}
+	},
+
+	_clamp: function(value, min, max) {
+		return Math.min(Math.max(value, min), max);
+	},
+
+	onPan: function (ev) {
+		const target = this.draggingObject;
+		if (target) {
+			const isRTL = document.documentElement.dir === 'rtl';
+
+			const dialogBounds = target.form.getBoundingClientRect();
+			const width = dialogBounds.width;
+			const height = dialogBounds.height;
+
+			const startX = target.startX ? target.startX : 0;
+			const startY = target.startY ? target.startY : 0;
+
+			let newX = startX + ev.deltaX * (isRTL ? -1 : 1);
+			let newY = startY + ev.deltaY;
+
+			// We want to allow dragging the dialog offscreen iff it also drags another part of the dialog onscreen
+			if (newX < 0 && newX + width < window.innerWidth) {
+				newX = Math.min(0, window.innerWidth - width);
+			}
+
+			if (newX + width > window.innerWidth && newX > 0) {
+				newX = Math.max(window.innerWidth - width, 0);
+			}
+
+			// Happily for us, jsdialogs scroll in the y direction if the screen is too small anyway which lets us not worry about the title bar going fully offscreen
+			newY = this._clamp(newY, 0, window.innerHeight - height);
+
+			target.translateX = newX;
+			target.translateY = newY;
+
+			this.setNewPosition(target.container, newX, newY);
+		}
+	},
+
+	updateAutoPopPosition: function (target, newX, newY) {
+		var width = target.getBoundingClientRect().width;
+		var dialogBottom = newY + target.getBoundingClientRect().height;
+		var windowBottom = window.innerHeight;
+		if (newX + width > window.innerWidth)
+			newX = window.innerWidth - width;
+		else if (newX < 10)
+			newX = 10
+
+		// at this point we have un updated potion of autofilter instance.
+		// so to handle overlapping case of autofilter and toolbar we need some complex calculation
+		if (dialogBottom > windowBottom)
+			newY = newY - (dialogBottom - windowBottom + 10);
+
+		this.setNewPosition(target, newX, newY);
+	},
+
+	setNewPosition(target, newX, newY) {
+		target.style.marginInlineStart = newX + 'px';
+		target.style.marginTop = newY + 'px';
+	},
+
+	handleKeyEvent: function (event) {
+		var keyCode = event.keyCode;
+
+		switch (keyCode) {
+		case 27:
+			// ESC
+			var dialogKeys = Object.keys(this.dialogs);
+			if (dialogKeys.length) {
+				var lastKey = dialogKeys[dialogKeys.length - 1];
+				var sendCloseToServer = this.dialogs[lastKey].isDropdown !== true;
+				this.close(lastKey, sendCloseToServer);
+				return true;
+			}
+			break;
+		case 18:
+			if (app.map && app.map.jsdialog && app.map.jsdialog.hasDialogOpened()) {
+				document.body.classList.add('activate-underlines');
+			}
+		}
+
+		return false;
+	},
+	onKeyUp: function(ev) {
+		if ((ev.keyCode === 18) && app.map && app.map.jsdialog && app.map.jsdialog.hasDialogOpened()) {
+			document.body.classList.remove('activate-underlines');
+		}
+	},
+
+	onZoomEnd: function () {
+		JSDialog.CloseAllDropdowns();
+	},
+});
+
+window.L.control.jsDialog = function (options) {
+	return new window.L.Control.JSDialog(options);
+};

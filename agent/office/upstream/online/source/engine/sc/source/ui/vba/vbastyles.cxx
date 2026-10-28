@@ -1,0 +1,202 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#include "vbastyles.hxx"
+#include "vbastyle.hxx"
+#include <basic/sberrors.hxx>
+#include <cppuhelper/exc_hlp.hxx>
+#include <ooo/vba/excel/XRange.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <utility>
+#include <docuno.hxx>
+
+using namespace ::ooo::vba;
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+static cpo::uno::Any
+lcl_createAPIStyleToVBAObject( const cpo::uno::Any& aObject, const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const rtl::Reference<ScModelObj>& xModel )
+{
+    uno::Reference< beans::XPropertySet > xStyleProps( aObject, uno::UNO_QUERY_THROW );
+    uno::Reference< excel::XStyle > xStyle( new ScVbaStyle( xParent, xContext, xStyleProps, xModel ) );
+    return cpo::uno::Any( xStyle );
+}
+
+ScVbaStyles::ScVbaStyles( const uno::Reference< XHelperInterface >& xParent,
+                          const uno::Reference< cpo::uno::XComponentContext > & xContext,
+                          ScModelObj* pModel )
+: ScVbaStyles_BASE( xParent,
+                    xContext,
+                    uno::Reference< container::XIndexAccess >( ScVbaStyle::getStylesNameContainer( pModel ), uno::UNO_QUERY_THROW ) ),
+  mxModel( pModel )
+{
+    try
+    {
+        mxMSF = mxModel;
+        mxNameContainerCellStyles.set( m_xNameAccess, uno::UNO_QUERY_THROW );
+    }
+    catch (cpo::uno::Exception& )
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+}
+
+cpo::uno::Sequence< OUString >
+ScVbaStyles::getStyleNames()
+{
+    return mxNameContainerCellStyles->getElementNames();
+}
+
+cpo::uno::Any
+ScVbaStyles::createCollectionObject(const cpo::uno::Any& aObject)
+{
+    return lcl_createAPIStyleToVBAObject( aObject, mxParent, mxContext, mxModel );
+}
+
+cpo::uno::Type
+ScVbaStyles::getElementType()
+{
+    return cppu::UnoType<excel::XStyle>::get();
+}
+
+namespace {
+
+class EnumWrapper : public EnumerationHelper_BASE
+{
+        uno::Reference<container::XIndexAccess > m_xIndexAccess;
+        uno::Reference<XHelperInterface > m_xParent;
+        uno::Reference<cpo::uno::XComponentContext > m_xContext;
+        rtl::Reference<ScModelObj > m_xModel;
+
+        sal_Int32 nIndex;
+public:
+        EnumWrapper( uno::Reference< container::XIndexAccess > xIndexAccess, uno::Reference<XHelperInterface > xParent, uno::Reference<cpo::uno::XComponentContext > xContext, rtl::Reference<ScModelObj > xModel ) : m_xIndexAccess(std::move( xIndexAccess )), m_xParent(std::move( xParent )), m_xContext(std::move( xContext )), m_xModel(std::move( xModel )), nIndex( 0 ) {}
+        virtual bool hasMoreElements(  ) override
+        {
+                return ( nIndex < m_xIndexAccess->getCount() );
+        }
+        virtual cpo::uno::Any nextElement(  ) override
+        {
+            try
+            {
+                if ( nIndex < m_xIndexAccess->getCount() )
+                        return lcl_createAPIStyleToVBAObject( m_xIndexAccess->getByIndex( nIndex++ ), m_xParent, m_xContext, m_xModel );
+            }
+            catch (const container::NoSuchElementException&)
+            {
+                throw;
+            }
+            catch (const lang::WrappedTargetException&)
+            {
+                throw;
+            }
+            catch (const cpo::uno::RuntimeException&)
+            {
+                throw;
+            }
+            catch (const cpo::uno::Exception& e)
+            {
+                cpo::uno::Any a(cppu::getCaughtException());
+                throw css::lang::WrappedTargetException(
+                    "wrapped Exception " + e.Message,
+                    cpo::uno::Reference<cpo::uno::XInterface>(), a);
+            }
+            throw container::NoSuchElementException();
+        }
+};
+
+}
+
+uno::Reference< container::XEnumeration >
+ScVbaStyles::createEnumeration()
+{
+    return new EnumWrapper( m_xIndexAccess, mxParent, mxContext, mxModel );
+}
+
+uno::Reference< excel::XStyle >
+ScVbaStyles::Add( const OUString& _sName, const cpo::uno::Any& _aBasedOn )
+{
+    uno::Reference< excel::XStyle > aRet;
+    try
+    {
+        OUString sParentCellStyleName(u"Default"_ustr);
+        if ( _aBasedOn.hasValue() )
+        {
+            uno::Reference< excel::XRange > oRange;
+            if ( _aBasedOn >>= oRange)
+            {
+                uno::Reference< excel::XStyle > oStyle( oRange->getStyle(), uno::UNO_QUERY_THROW );
+                sParentCellStyleName = oStyle->getName();
+            }
+            else
+            {
+                DebugHelper::basicexception(ERRCODE_BASIC_BAD_ARGUMENT, {});
+            }
+        }
+
+        uno::Reference< style::XStyle > xStyle( mxMSF->createInstance(u"com.sun.star.style.CellStyle"_ustr), uno::UNO_QUERY_THROW );
+
+        if (!mxNameContainerCellStyles->hasByName(_sName))
+        {
+            mxNameContainerCellStyles->insertByName(_sName, cpo::uno::Any( xStyle) );
+        }
+        if (sParentCellStyleName != "Default")
+        {
+            xStyle->setParentStyle( sParentCellStyleName );
+        }
+        aRet.set( Item( cpo::uno::Any( _sName ), cpo::uno::Any() ), uno::UNO_QUERY_THROW );
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+    return aRet;
+}
+
+void
+ScVbaStyles::Delete(const OUString& _sStyleName)
+{
+    try
+    {
+        if (mxNameContainerCellStyles->hasByName( _sStyleName ) )
+            mxNameContainerCellStyles->removeByName( _sStyleName );
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+}
+
+OUString
+ScVbaStyles::getServiceImplName()
+{
+    return u"ScVbaStyles"_ustr;
+}
+
+cpo::uno::Sequence< OUString >
+ScVbaStyles::getServiceNames()
+{
+        static cpo::uno::Sequence< OUString > const aServiceNames
+        {
+            u"ooo.vba.excel.XStyles"_ustr
+        };
+        return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,120 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <i18npool/breakiterator.hxx>
+
+#include <utility>
+#include <vector>
+
+namespace cpo::uno { class XComponentContext; }
+
+namespace i18npool {
+
+class BreakIteratorImpl : public BreakIterator
+{
+public:
+    BreakIteratorImpl( const cpo::uno::Reference < cpo::uno::XComponentContext >& rxContext );
+    BreakIteratorImpl();
+    virtual ~BreakIteratorImpl() override;
+
+    virtual sal_Int32 nextCharacters( const OUString& Text, sal_Int32 nStartPos,
+        const css::lang::Locale& rLocale, sal_Int16 nCharacterIteratorMode, sal_Int32 nCount,
+        sal_Int32& nDone ) override;
+    virtual sal_Int32 previousCharacters( const OUString& Text, sal_Int32 nStartPos,
+        const css::lang::Locale& nLocale, sal_Int16 nCharacterIteratorMode, sal_Int32 nCount,
+        sal_Int32& nDone ) override;
+
+    virtual css::i18n::Boundary previousWord( const OUString& Text, sal_Int32 nStartPos,
+        const css::lang::Locale& nLocale, sal_Int16 WordType) override;
+    virtual css::i18n::Boundary nextWord( const OUString& Text, sal_Int32 nStartPos,
+        const css::lang::Locale& nLocale, sal_Int16 WordType) override;
+    virtual css::i18n::Boundary getWordBoundary( const OUString& Text, sal_Int32 nPos,
+        const css::lang::Locale& nLocale, sal_Int16 WordType, bool bDirection ) override;
+
+    virtual bool isBeginWord( const OUString& Text, sal_Int32 nPos,
+        const css::lang::Locale& nLocale, sal_Int16 WordType ) override;
+    virtual bool isEndWord( const OUString& Text, sal_Int32 nPos,
+        const css::lang::Locale& nLocale, sal_Int16 WordType ) override;
+    virtual sal_Int16 getWordType( const OUString& Text, sal_Int32 nPos,
+        const css::lang::Locale& nLocale ) override;
+
+    virtual sal_Int32 beginOfSentence( const OUString& Text, sal_Int32 nStartPos,
+        const css::lang::Locale& nLocale ) override;
+    virtual sal_Int32 endOfSentence( const OUString& Text, sal_Int32 nStartPos,
+        const css::lang::Locale& nLocale ) override;
+
+    virtual css::i18n::LineBreakResults getLineBreak( const OUString& Text, sal_Int32 nStartPos,
+        const css::lang::Locale& nLocale, sal_Int32 nMinBreakPos,
+        const css::i18n::LineBreakHyphenationOptions& hOptions,
+        const css::i18n::LineBreakUserOptions& bOptions ) override;
+
+    virtual sal_Int16 getScriptType( const OUString& Text, sal_Int32 nPos ) override;
+    virtual sal_Int32 beginOfScript( const OUString& Text, sal_Int32 nStartPos,
+        sal_Int16 ScriptType ) override;
+    virtual sal_Int32 endOfScript( const OUString& Text, sal_Int32 nStartPos,
+        sal_Int16 ScriptType ) override;
+    virtual sal_Int32 previousScript( const OUString& Text, sal_Int32 nStartPos,
+        sal_Int16 ScriptType ) override;
+    virtual sal_Int32 nextScript( const OUString& Text, sal_Int32 nStartPos,
+        sal_Int16 ScriptType ) override;
+
+    virtual sal_Int32 beginOfCharBlock( const OUString& Text, sal_Int32 nStartPos,
+        const css::lang::Locale& nLocale, sal_Int16 CharType ) override;
+    virtual sal_Int32 endOfCharBlock( const OUString& Text, sal_Int32 nStartPos,
+        const css::lang::Locale& nLocale, sal_Int16 CharType ) override;
+    virtual sal_Int32 previousCharBlock( const OUString& Text, sal_Int32 nStartPos,
+        const css::lang::Locale& nLocale, sal_Int16 CharType ) override;
+    virtual sal_Int32 nextCharBlock( const OUString& Text, sal_Int32 nStartPos,
+        const css::lang::Locale& nLocale, sal_Int16 CharType ) override;
+
+    //XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    virtual sal_Int32 endOfScript( std::u16string_view Text, sal_Int32 nStartPos, sal_Int16 ScriptType ) override;
+    virtual sal_Int32 beginOfScript( std::u16string_view Text, sal_Int32 nStartPos, sal_Int16 ScriptType ) override;
+
+    static sal_Int16 getScriptClass(sal_uInt32 currentChar);
+protected:
+    css::i18n::Boundary result; // for word break iterator
+
+private:
+
+    struct lookupTableItem {
+        lookupTableItem(css::lang::Locale _aLocale, cpo::uno::Reference < XBreakIterator > _xBI) : aLocale(std::move(_aLocale)), xBI(std::move(_xBI)) {};
+        css::lang::Locale aLocale;
+        cpo::uno::Reference < XBreakIterator > xBI;
+    };
+    std::vector<lookupTableItem>                        lookupTable;
+    css::lang::Locale                                   aLocale;
+    cpo::uno::Reference < XBreakIterator >              xBI;
+    cpo::uno::Reference < cpo::uno::XComponentContext > m_xContext;
+
+    /// @throws cpo::uno::RuntimeException
+    bool createLocaleSpecificBreakIterator( const OUString& aLocaleName );
+    /// @throws cpo::uno::RuntimeException
+    const cpo::uno::Reference < XBreakIterator > & getLocaleSpecificBreakIterator( const css::lang::Locale& rLocale );
+
+};
+
+} // i18npool
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

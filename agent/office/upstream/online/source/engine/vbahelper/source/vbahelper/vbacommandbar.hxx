@@ -1,0 +1,91 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <ooo/vba/XCommandBar.hpp>
+
+#include <vbahelper/vbahelperinterface.hxx>
+#include "vbacommandbarhelper.hxx"
+
+typedef InheritedHelperInterfaceWeakImpl< ov::XCommandBar > CommandBar_BASE;
+
+class ScVbaCommandBar : public CommandBar_BASE
+{
+private:
+    VbaCommandBarHelperRef pCBarHelper;
+    cpo::uno::Reference< css::container::XIndexAccess > m_xBarSettings;
+    OUString    m_sResourceUrl;
+    bool        m_bIsMenu;
+
+public:
+    /// @throws cpo::uno::RuntimeException
+    ScVbaCommandBar( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, VbaCommandBarHelperRef pHelper, cpo::uno::Reference< css::container::XIndexAccess > xBarSettings, OUString sResourceUrl, bool bIsMenu );
+
+    // Attributes
+    virtual OUString getName() override;
+    virtual void setName( const OUString& _name ) override;
+    virtual bool getVisible() override;
+    virtual void setVisible( bool _visible ) override;
+    virtual bool getEnabled() override;
+    virtual void setEnabled( bool _enabled ) override;
+
+    // Methods
+    virtual void Delete(  ) override;
+    virtual cpo::uno::Any Controls( const cpo::uno::Any& aIndex ) override;
+    virtual sal_Int32 Type(  ) override;
+    virtual cpo::uno::Any FindControl( const cpo::uno::Any& aType, const cpo::uno::Any& aId, const cpo::uno::Any& aTag, const cpo::uno::Any& aVisible, const cpo::uno::Any& aRecursive ) override;
+
+    // XHelperInterface
+    virtual OUString getServiceImplName() override;
+    virtual cpo::uno::Sequence<OUString> getServiceNames() override;
+};
+
+/** Dummy command bar implementation. Does nothing but provide its name. */
+class VbaDummyCommandBar : public CommandBar_BASE
+{
+public:
+    /// @throws cpo::uno::RuntimeException
+    VbaDummyCommandBar(
+            const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+            OUString aName );
+
+    // Attributes
+    virtual OUString getName() override;
+    virtual void setName( const OUString& _name ) override;
+    virtual bool getVisible() override;
+    virtual void setVisible( bool _visible ) override;
+    virtual bool getEnabled() override;
+    virtual void setEnabled( bool _enabled ) override;
+
+    // Methods
+    virtual void Delete(  ) override;
+    virtual cpo::uno::Any Controls( const cpo::uno::Any& aIndex ) override;
+    virtual sal_Int32 Type(  ) override;
+    virtual cpo::uno::Any FindControl( const cpo::uno::Any& aType, const cpo::uno::Any& aId, const cpo::uno::Any& aTag, const cpo::uno::Any& aVisible, const cpo::uno::Any& aRecursive ) override;
+
+    // XHelperInterface
+    virtual OUString getServiceImplName() override;
+    virtual cpo::uno::Sequence<OUString> getServiceNames() override;
+
+private:
+    OUString maName;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

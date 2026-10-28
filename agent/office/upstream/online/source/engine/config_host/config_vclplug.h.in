@@ -1,0 +1,27 @@
+/*
+
+Settings about which desktops have support enabled.
+
+*/
+
+#ifndef CONFIG_VCLPLUG_H
+#define CONFIG_VCLPLUG_H
+
+/**
+ * Set, if the platform uses X11 code.
+ */
+#define USING_X11 0
+
+/**
+ * Set the enabled platform plugins
+ */
+#define ENABLE_GEN 0
+#define ENABLE_GTK3 0
+#define ENABLE_HEADLESS 0
+
+/**
+ * Additional settings for the plugins
+ */
+#define USE_HEADLESS_CODE 0
+
+#endif

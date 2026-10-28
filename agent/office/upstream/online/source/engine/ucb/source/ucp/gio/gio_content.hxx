@@ -1,0 +1,187 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/io/XOutputStream.hpp>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
+#include <com/sun/star/ucb/OpenCommandArgument2.hpp>
+#include <com/sun/star/ucb/TransferInfo.hpp>
+#include <com/sun/star/ucb/XContentCreator.hpp>
+#include <ucbhelper/contenthelper.hxx>
+#include <gio/gio.h>
+
+#include <vector>
+
+namespace com::sun::star {
+    namespace beans {
+        struct Property;
+        struct PropertyValue;
+    }
+    namespace sdbc {
+        class XRow;
+    }
+}
+namespace ucbhelper
+{
+    class Content;
+}
+
+
+namespace gio
+{
+
+
+inline constexpr OUString GIO_FILE_TYPE = u"application/vnd.sun.staroffice.gio-file"_ustr;
+inline constexpr OUString GIO_FOLDER_TYPE = u"application/vnd.sun.staroffice.gio-folder"_ustr;
+
+cpo::uno::Any convertToException(GError *pError,
+    const cpo::uno::Reference< cpo::uno::XInterface >& rContext, bool bThrow=true);
+/// @throws css::io::IOException
+/// @throws cpo::uno::RuntimeException
+void convertToIOException(GError *pError,
+    const cpo::uno::Reference< cpo::uno::XInterface >& rContext);
+
+class ContentProvider;
+class Content : public ::ucbhelper::ContentImplHelper, public css::ucb::XContentCreator
+{
+private:
+    ContentProvider  *m_pProvider;
+    GFile* mpFile;
+    GFileInfo *mpInfo;
+    bool mbTransient;
+
+    GFileInfo *getGFileInfo(const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv,
+        GError **ppError=nullptr);
+    bool isFolder(const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv);
+
+    cpo::uno::Any mapGIOError( GError *error );
+    cpo::uno::Any getBadArgExcept();
+
+    cpo::uno::Reference< css::sdbc::XRow >
+        getPropertyValues(
+            const cpo::uno::Sequence< css::beans::Property >& rProperties,
+            const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
+private:
+    typedef rtl::Reference< Content > ContentRef;
+    typedef std::vector< ContentRef > ContentRefList;
+
+    void queryChildren( ContentRefList& rChildren );
+
+    bool doSetFileInfo ( GFileInfo *pNewInfo );
+
+    /// @throws cpo::uno::Exception
+    cpo::uno::Any open(const css::ucb::OpenCommandArgument2 & rArg,
+        const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+
+    /// @throws cpo::uno::Exception
+    void transfer( const css::ucb::TransferInfo& rTransferInfo,
+        const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+
+    /// @throws cpo::uno::Exception
+    void insert( const cpo::uno::Reference< css::io::XInputStream > & xInputStream,
+        bool bReplaceExisting, const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv );
+
+    /// @throws cpo::uno::Exception
+    void destroy( bool bDeletePhysical );
+
+    static void copyData( const cpo::uno::Reference< css::io::XInputStream >& xIn,
+        const cpo::uno::Reference< css::io::XOutputStream >& xOut );
+
+    cpo::uno::Sequence< cpo::uno::Any >
+        setPropertyValues( const cpo::uno::Sequence<
+            css::beans::PropertyValue >& rValues,
+            const cpo::uno::Reference<
+            css::ucb::XCommandEnvironment >& xEnv );
+
+    bool feedSink( const cpo::uno::Reference< cpo::uno::XInterface>& aSink );
+
+    bool exchangeIdentity(const cpo::uno::Reference< css::ucb::XContentIdentifier >&  xNewId);
+
+    void getFileInfo(
+        cpo::uno::Reference<css::ucb::XCommandEnvironment> const & env, GFileInfo ** info,
+        bool fail);
+
+public:
+    /// @throws css::ucb::ContentCreationException
+    Content( const cpo::uno::Reference<
+        cpo::uno::XComponentContext >& rxContext, ContentProvider *pProvider,
+        const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier);
+
+    /// @throws css::ucb::ContentCreationException
+    Content( const cpo::uno::Reference<
+        cpo::uno::XComponentContext >& rxContext, ContentProvider *pProvider,
+        const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
+        bool bIsFolder);
+
+    virtual ~Content() override;
+
+    virtual cpo::uno::Sequence< css::beans::Property >
+        getProperties( const cpo::uno::Reference<
+            css::ucb::XCommandEnvironment > & xEnv ) override;
+
+    virtual cpo::uno::Sequence< css::ucb::CommandInfo >
+        getCommands( const cpo::uno::Reference<
+            css::ucb::XCommandEnvironment > & xEnv ) override;
+
+    virtual OUString getParentURL() override;
+
+    // XInterface
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire()
+        noexcept override;
+    virtual void release()
+        noexcept override;
+
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
+
+    virtual OUString
+    getImplementationName() override;
+
+    virtual cpo::uno::Sequence< OUString >
+    getSupportedServiceNames() override;
+
+    virtual OUString
+    getContentType() override;
+
+    virtual cpo::uno::Any
+        execute( const css::ucb::Command& aCommand,
+        sal_Int32 CommandId,
+        const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment ) override;
+
+    virtual void abort( sal_Int32 CommandId ) override;
+
+    virtual cpo::uno::Sequence< css::ucb::ContentInfo >
+        queryCreatableContentsInfo() override;
+    virtual cpo::uno::Reference< css::ucb::XContent >
+        createNewContent( const css::ucb::ContentInfo& Info ) override;
+
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Sequence< css::ucb::ContentInfo >
+        queryCreatableContentsInfo(
+        const cpo::uno::Reference< css::ucb::XCommandEnvironment >& xEnv);
+
+    GFile* getGFile();
+};
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

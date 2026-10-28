@@ -1,0 +1,490 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <common/FileUtil.hpp>
+#include <common/Session.hpp>
+#include <kit/Kit.hpp>
+#include <kit/StateRecorder.hpp>
+#include <kit/Watermark.hpp>
+
+#include <chrono>
+#include <mutex>
+#include <optional>
+#include <queue>
+#include <set>
+#include <string>
+#include <string_view>
+#include <vector>
+
+class Document;
+class ChildSession;
+
+struct LogUiCommandsLine {
+    std::chrono::steady_clock::time_point _timeStart;
+    std::chrono::steady_clock::time_point _timeEnd;
+    int _repeat = 0;
+    int _undoChange = 0;
+    std::string _cmd;
+    std::string _subCmd;
+};
+
+class LogUiCommands {
+public:
+    ChildSession& _session;
+    int _lastUndoCount = 0;
+    const StringVector* _tokens;
+    LogUiCommands(ChildSession& session, const StringVector* tokens);
+    LogUiCommands(ChildSession& session) : _session(session),_tokens(nullptr) {}
+    ~LogUiCommands();
+    void logSaveLoad(std::string cmd, const std::string & path, std::chrono::steady_clock::time_point timeStart);
+private:
+    std::weak_ptr<COKitDocument> _document;
+    // list the commands to log here.
+    std::set<std::string> _cmdToLog = {
+        "uno", "key", "mouse", "textinput", "removetextcontext",
+        "paste", "insertfile", "dialogevent" };
+    // list the the uno commands here, that are not to log. It will search these strings as a prefixes
+    std::set<std::string> _unoCmdToNotLog = {
+        ".uno:SidebarShow", ".uno:ToolbarMode" };
+    void logLine(LogUiCommandsLine &line, bool isUndoChange=false);
+};
+
+enum class LokEventTargetEnum: std::uint8_t
+{
+    Document,
+    Window
+};
+
+class SlideCompressor;
+
+/// Represents a session to the WSD process, in a Kit process. Note that this is not a singleton.
+class ChildSession final : public Session
+{
+public:
+    static bool NoCapsForKit;
+
+    /// Create a new ChildSession
+    /// jailId The JailID of the jail root directory,
+    //         used by downloadas to construct jailed path.
+    ChildSession(
+        const std::shared_ptr<ProtocolHandlerInterface> &protocol,
+        const std::string& id,
+        const std::string& jailId,
+        const std::string& jailRoot,
+        Document& document);
+    virtual ~ChildSession();
+
+    bool getStatus();
+    bool getPartStatus();
+    int getViewId() const { return _viewId; }
+    void setViewId(const int viewId) { _viewId = viewId; }
+    const std::string& getCurrentPartId() const { return _currentPartId; }
+    const std::string& getViewUserId() const { return getUserId(); }
+    const std::string& getViewUserName() const { return getUserName(); }
+    const std::string& getViewUserExtraInfo() const { return getUserExtraInfo(); }
+    const std::string& getViewUserPrivateInfo() const { return getUserPrivateInfo(); }
+    void updateSpeed();
+    int getSpeed();
+    bool isDocLoaded() const { return _isDocLoaded; }
+
+    /// Whether this view has entered the correct password to modify the document.
+    bool isDocPasswordToModifyEntered() const { return _isDocPasswordToModifyEntered; }
+
+    void loKitCallback(COKitCallbackType type, const std::string& payload);
+
+    /// Initializes the watermark support, if enabled and required.
+    /// Returns true if watermark is enabled and initialized.
+    bool initWatermark()
+    {
+        if (hasWatermark())
+        {
+            _docWatermark = std::make_shared<Watermark>(getLOKitDocument(), getWatermarkText(),
+                                                        getWatermarkOpacity());
+        }
+
+        return _docWatermark != nullptr;
+    }
+
+    const std::shared_ptr<Watermark>& watermark() const { return _docWatermark; };
+
+    bool sendTextFrame(const char* buffer, int length) override
+    {
+        if (_docManager == nullptr)
+        {
+
+            LOG_TRC("No DocManager; dropping message to client-"
+                    << getId() << ": " << std::string_view(buffer, length));
+
+            return false;
+        }
+        const auto msg = "client-" + getId() + ' ' + std::string(buffer, length);
+        return _docManager->sendFrame(msg, WSOpCode::Text);
+    }
+
+    bool sendBinaryFrame(const char* buffer, int length) override
+    {
+        if (_docManager == nullptr)
+        {
+            LOG_TRC("No DocManager; dropping binary to client-" << getId());
+
+            return false;
+        }
+        const auto msg = "client-" + getId() + ' ' + std::string(buffer, length);
+        return _docManager->sendFrame(msg, WSOpCode::Binary);
+    }
+
+    bool sendProgressFrame(const char* id, const std::string& jsonProps,
+                           const std::string& forcedID = "");
+
+    using Session::sendTextFrame;
+
+    bool getClipboard(const StringVector& tokens);
+
+    void resetDocManager()
+    {
+        disconnect();
+        _docManager = nullptr;
+    }
+
+    // Only called by kit.
+    void setCanonicalViewId(CanonicalViewId viewId) { _canonicalViewId = viewId; }
+
+    CanonicalViewId getCanonicalViewId() const { return _canonicalViewId; }
+
+    void setViewRenderState(const std::string& state) { _viewRenderState = state; }
+
+    bool getDumpTiles() const { return _isDumpingTiles; }
+
+    void setDumpTiles(bool dumpTiles) { _isDumpingTiles = dumpTiles; }
+
+    const std::string& getViewRenderState() const { return _viewRenderState; }
+
+    TilePrioritizer::Priority getTilePriority(const TileDesc &desc) const;
+
+    void saveLogUiBackground();
+
+    /// One "download as" export: where in the jail the copy is written, the format and
+    /// filter options to write it in, and the id and file name the client's reply has to
+    /// carry back.
+    struct DownloadAsRequest
+    {
+        FileUtil::DownloadJailPath _path;
+        std::string _id;
+        std::string _filename;
+        std::string _format;
+        std::string _filterOptions;
+    };
+
+    /// Reply to the client for the export that ran in a forked process.
+    void sendBackgroundDownloadAsResult(bool success);
+
+    /// Run the export that was handed to a forked process here instead, because core asked
+    /// the person something that only this process can put in front of them.
+    void downloadAsInForeground();
+
+private:
+    /// Parses the "load" command as coolwsd writes it for the kit.
+    void parseLoadCommand(const StringVector& tokens, std::string& part);
+    bool loadDocument(const StringVector& tokens);
+    bool saveDocumentBackground(const StringVector &tokens);
+
+    bool getCommandValues(const StringVector& tokens);
+
+    bool clientZoom(const StringVector& tokens);
+    bool clientVisibleArea(const StringVector& tokens);
+    bool outlineState(const StringVector& tokens);
+
+    /// Says whether this client wants to be told the mouse pointer the document asks for.
+    bool reportMousePointer(const StringVector& tokens);
+
+    /// Marks the objects the client names, which it worked out from the geometry it holds. An
+    /// empty list marks nothing, which is how the client asks for no selection at all.
+    bool selectObjects(const StringVector& tokens);
+    /// Moves the points of a drawing object's path which the client names, and leaves the rest
+    /// of the path as it stands.
+    bool setObjectPoints(const StringVector& tokens);
+
+    /// Moves one of the points a drawing object was given for a connector to tie itself to.
+    bool setObjectGluePoint(const StringVector& tokens);
+
+    /// Gives the drawing objects the client names the mapping they are to be drawn by, which
+    /// moves, scales or turns them.
+    bool setObjectTransform(const StringVector& tokens);
+
+    /// Moves one of the points a custom shape is shaped by.
+    bool setObjectControlPoint(const StringVector& tokens);
+    bool setObjectHandle(const StringVector& tokens);
+    bool cropObject(const StringVector& tokens);
+    bool downloadAs(const StringVector& tokens);
+    /// Whether core will put a question to the person while writing the document out in
+    /// this format.
+    bool exportRaisesDialog(const std::string& format);
+    /// Write a copy of the document to a path in the jail, without adopting it.
+    bool exportCopy(const std::string& path, const std::string& format,
+                    const std::string& filterOptions);
+    bool downloadAsBackground(const DownloadAsRequest& request);
+    /// Export in this process, holding off everything else on the document while it runs.
+    bool downloadAsHere(const DownloadAsRequest& request);
+    void sendDownloadAsResult(const DownloadAsRequest& request, bool success);
+    bool getChildId();
+    bool getTextSelection(const StringVector& tokens);
+    bool setClipboard(const StringVector& tokens);
+    std::string getTextSelectionInternal(const std::string& mimeType);
+    bool paste(const char* buffer, int length, const StringVector& tokens);
+    bool insertPastedGif(const char* data, int size);
+    std::string writeFileToJail(const std::string& path, const char* data, std::size_t size);
+    void postInsertCommand(const std::string& type, const std::string& url, int multimedia_width,
+                           int multimedia_height);
+    bool insertFile(const StringVector& tokens);
+    /// Writes the given pages of this document out as a presentation staged in its own jail.
+    bool exportSlides(const StringVector& tokens);
+    bool slideImportInsert(const StringVector& tokens);
+    bool slideLink(const StringVector& tokens);
+    bool slideLinkList();
+    bool slideLinkUpdate(const StringVector& tokens);
+    bool slideLinkBreak(const StringVector& tokens);
+    /// The pages of the document that are linked to a source document, as the
+    /// JSON body of a slidelinks: message; an empty list for a document that
+    /// reports none.
+    std::string getSlideLinksJson();
+    bool keyEvent(const StringVector& tokens, LokEventTargetEnum target);
+    bool extTextInputEvent(const StringVector& tokens);
+    bool dialogKeyEvent(const char* buffer, int length, const std::vector<std::string>& tokens);
+    bool mouseEvent(const StringVector& tokens, LokEventTargetEnum target);
+    bool gestureEvent(const StringVector& tokens);
+    bool dialogEvent(const StringVector& tokens);
+    bool completeFunction(const StringVector& tokens);
+    bool unoCommand(const StringVector& tokens);
+    bool unoSignatureCommand(std::string_view commandName);
+    /// Adds the SignatureCert/SignatureKey properties from the session's user
+    /// private info to the given UNO command arguments. Returns true if both
+    /// were present and added.
+    bool addSignatureArguments(Poco::JSON::Object::Ptr& argumentsObj);
+    bool editWithPassword(const StringVector& tokens);
+    bool selectText(const StringVector& tokens, LokEventTargetEnum target);
+    bool selectGraphic(const StringVector& tokens);
+    bool setInPlaceObjectArea(const StringVector& tokens);
+    bool renderNextSlideLayer(SlideCompressor& scomp, unsigned width, unsigned height,
+                              double devicePixelRatio, bool& done, const std::string& cacheKey,
+                              bool isCompressed);
+    bool renderSlide(const StringVector& tokens);
+    bool renderWindow(const StringVector& tokens);
+    bool resizeWindow(const StringVector& tokens);
+    bool resetSelection(const StringVector& tokens);
+    bool saveAs(const StringVector& tokens);
+    bool exportAs(const StringVector& tokens);
+    bool setClientPart(const StringVector& tokens);
+    bool selectClientPart(const StringVector& tokens);
+    bool moveSelectedClientParts(const StringVector& tokens);
+    bool setPage(const StringVector& tokens);
+    bool sendWindowCommand(const StringVector& tokens);
+    /// Compress data with zstd and send it as a binary frame: the
+    /// newline-terminated name header followed by the compressed bytes.
+    /// Returns false if the data could not be compressed and sent.
+    bool sendZstdFrame(std::string_view headerName, const char* data, size_t size);
+
+public:
+    /// The frame a zstd-compressed payload travels in: the header name, then the compressed
+    /// bytes. Empty when the compression failed.
+    static std::vector<char> zstdFrame(std::string_view headerName, const char* data, size_t size);
+
+    /// True when a vector primitives response served this session the part with the given id.
+    bool holdsVectorPart(const std::string& partId) const
+    {
+        return _isVectorRendering && _vectorParts.contains(partId);
+    }
+
+    /// Sends a vector primitives delta: the compressed frame when there is one, otherwise the
+    /// payload as a command values text frame.
+    void sendVectorDelta(const std::vector<char>& frame, const std::string& payload);
+
+private:
+    bool askSignatureStatus(const char* buffer, int length, const StringVector& tokens);
+    bool renderShapeSelection(const StringVector& tokens);
+    bool removeTextContext(const StringVector& tokens);
+#if ENABLE_FEATURE_LOCK || ENABLE_FEATURE_RESTRICTION || ENABLE_DEBUG
+    bool updateBlockingCommandStatus(const StringVector& tokens);
+    static std::string getBlockedCommandType(const std::string& command);
+#endif
+    bool handleZoteroMessage(const StringVector& tokens);
+    bool formFieldEvent(const char* buffer, int length, const StringVector& tokens);
+    bool contentControlEvent(const StringVector& tokens);
+    bool renderSearchResult(const char* buffer, int length, const StringVector& tokens);
+    bool setAccessibilityState(bool enable);
+    bool getA11yFocusedParagraph();
+    bool getA11yCaretPosition();
+    bool getPresentationInfo();
+    bool executeScript(char const * buffer, int length, StringVector const & tokens);
+    bool proxyReturn(char const * buffer, int length);
+    bool getSlideSections();
+
+    void rememberEventsForInactiveUser(COKitCallbackType type, const std::string& payload);
+
+    virtual void disconnect() override;
+    virtual bool _handleInput(const char* buffer, int length) override;
+
+    static void dumpRecordedUnoCommands();
+
+    std::shared_ptr<COKitDocument> getLOKitDocument() const
+    {
+        return _docManager->getLOKitDocument();
+    }
+
+    std::shared_ptr<COKit> getLOKit() const
+    {
+        return _docManager->getLOKit();
+    }
+
+    std::string getLOKitLastError() const
+    {
+        return _docManager->getLOKit()->getError();
+    }
+
+    void updateCursorPosition(const std::string &rect);
+    void updateCursorPositionJSON(const std::string &payload);
+    std::string getJailDocRoot() const;
+    static std::string getZoomPercent(const std::string &payload);
+
+public:
+    // simple one line for priming
+    std::string getActivityState()
+    {
+        std::stringstream ss;
+        ss << "view: " << _viewId
+           << ", session " << getId()
+           << (isReadOnly() ? ", ro": ", rw")
+           << ", user: '" << getUserNameAnonym() << "'"
+              ", load" << (_isDocLoaded ? "ed" : "ing")
+           << ", type: " << _docType
+           << ", lang: " << getLang();
+        return ss.str();
+    }
+
+    void dumpState(std::ostream& oss) override
+    {
+        Session::dumpState(oss);
+
+        oss << "\n\tviewId: " << _viewId
+            << "\n\tpartId: " << _currentPartId
+            << "\n\tcursor: " << _cursorPosition.toString()
+            << "\n\tcanonicalViewId: " << _canonicalViewId
+            << "\n\tisDocLoaded: " << _isDocLoaded
+            << "\n\tisDocPasswordToModifyEntered: " << _isDocPasswordToModifyEntered
+            << "\n\tisVectorRendering: " << _isVectorRendering
+            << "\n\tvectorParts: " << _vectorParts.size()
+            << "\n\tdocType: " << _docType
+            << "\n\tcopyingToClipboard: " << _copyToClipboard
+            << "\n\tdocType: " << _docType
+            // FIXME: _pixmapCache
+            << "\n\texportAsWopiUrl: " << _exportAsWopiUrl
+            << "\n\tviewRenderedState: " << _viewRenderState
+            << "\n\tisDumpingTiles: " <<_isDumpingTiles
+            << "\n\tclientVisibleArea: " << _clientVisibleArea.toString()
+            << "\n\thasURP: " << _hasURP
+            << "\n\tURPContext?: " << (_urpContext == nullptr)
+            << "\n\tpendingProxyCallIds: " << pendingProxyCallCount()
+            << "\n\tbackgroundDownloadAs: "
+            << (_downloadAs ? _downloadAs->_path.tmpDir : std::string("none"))
+            << '\n';
+
+        _stateRecorder.dumpState(oss);
+    }
+
+private:
+    const std::string _jailId;
+    const std::string _jailRoot;
+    Document* _docManager;
+
+    std::shared_ptr<Watermark> _docWatermark;
+
+    std::queue<std::chrono::steady_clock::time_point> _cursorInvalidatedEvent;
+    static constexpr std::chrono::seconds EventStorageInterval{ 15 };
+
+    /// View ID, returned by createView() or 0 by default.
+    int _viewId;
+
+    /// The currently visible part, by the identifier the client uses: the page's
+    /// GUID as a braced string for a presentation or drawing document, the part
+    /// index in decimal form for the other document types. Empty before any part
+    /// is known.
+    std::string _currentPartId;
+
+    /// Last known position of a cursor for prioritizing rendering
+    Util::Rectangle _cursorPosition;
+
+    /// Whether document has been opened successfully
+    bool _isDocLoaded;
+
+    /// Whether this view has entered the correct password to modify the document
+    bool _isDocPasswordToModifyEntered;
+
+    /// True once this client has asked for vector primitives. Such a client draws the document
+    /// from them rather than from bitmap tiles.
+    bool _isVectorRendering = false;
+    /// The ids of the vector parts a primitives response served this session.
+    std::set<std::string> _vectorParts;
+
+    std::string _docType;
+
+    StateRecorder _stateRecorder;
+
+    /// If we are copying to clipboard.
+    bool _copyToClipboard;
+
+    std::vector<uint64_t> _pixmapCache;
+
+    /// How many sessions / clients we have
+    static size_t NumSessions;
+
+    /// stores wopi url for export as operation
+    std::string _exportAsWopiUrl;
+
+    /// stores info about the view
+    std::string _viewRenderState;
+
+    /// the canonical id unique to the set of rendering properties of this session
+    CanonicalViewId _canonicalViewId;
+
+    /// whether we are dumping tiles as they are being drawn
+    bool _isDumpingTiles;
+
+    Util::Rectangle _clientVisibleArea;
+
+    void* _urpContext;
+
+    /// whether there is a URP session created for this ChildSession
+    bool _hasURP;
+
+    /// The export running in a forked process, empty when none is.
+    std::optional<DownloadAsRequest> _downloadAs;
+
+    /// The IDs of the proxy calls that this session sent to its client, whose results have not
+    /// arrived yet:
+    std::mutex _pendingProxyCallIdsMutex;
+    std::set<std::string> _pendingProxyCallIds;
+
+    // When state is added - please update dumpState above.
+
+    std::size_t pendingProxyCallCount() {
+        std::scoped_lock lock(_pendingProxyCallIdsMutex);
+        return _pendingProxyCallIds.size();
+    }
+
+    friend class LogUiCommands;
+    int _lastUiCmdLinesLoggedCount = 0;
+    LogUiCommandsLine _lastUiCmdLinesLogged[2];
+    std::chrono::steady_clock::time_point _logUiSaveBackGroundTimeStart;
+    std::chrono::steady_clock::time_point _logUiDownloadBackGroundTimeStart;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,439 @@
+/* global describe it cy before beforeEach expect require */
+
+var helper = require('../../common/helper');
+var desktopHelper = require('../../common/desktop_helper');
+var calcHelper = require('../../common/calc_helper');
+
+describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Scroll through document', { testIsolation: false }, function() {
+
+	desktopHelper.shareDocumentAcrossTests('calc/scrolling.ods');
+
+	// Switching to the compact toolbar holds for the whole file.
+	before(function() {
+		desktopHelper.switchUIToCompact();
+	});
+
+	beforeEach(function() {
+		cy.getFrameWindow().then((win) => {
+			this.win = win;
+		});
+
+		// The scrollbar positions these tests check are the positions of a sheet shown
+		// from its top left corner with A2 as the current cell, which is where the
+		// document opens.
+		helper.typeIntoInputField(helper.addressInputSelector, 'A2');
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+	});
+
+	it('Scrolling to bottom/top', function() {
+		desktopHelper.assertScrollbarPosition('vertical', 25, 40);
+		desktopHelper.pressKey(3,'pagedown');
+		desktopHelper.assertScrollbarPosition('vertical', 110, 135);
+		desktopHelper.pressKey(3,'pageup');
+		desktopHelper.assertScrollbarPosition('vertical', 50, 105);
+		desktopHelper.pressKey(3,'downArrow');
+		desktopHelper.assertScrollbarPosition('vertical', 25, 40);
+	});
+
+	it('Scroll while selecting vertically', function() {
+		desktopHelper.assertScrollbarPosition('vertical', 25, 40);
+		desktopHelper.assertScrollbarPosition('horizontal', 48, 50);
+
+		// Click on a cell near the edge of the view
+		cy.cGet('#map')
+		.then(function(items) {
+			expect(items).to.have.lengthOf(1);
+			var XPos = items[0].getBoundingClientRect().right - 280;
+			var YPos = items[0].getBoundingClientRect().bottom - 60;
+			cy.cGet('body').click(XPos, YPos);
+		});
+
+		// Select cells downwards with shift + arrow
+		for (let i = 0; i < 10; ++i) {
+			helper.typeIntoDocument('{shift}{downArrow}');
+		}
+
+		// Document should scroll
+		desktopHelper.assertScrollbarPosition('vertical', 180, 300);
+		// Document should not scroll horizontally
+		desktopHelper.assertScrollbarPosition('horizontal', 48, 50);
+	});
+
+	it('Scroll while selecting horizontally', function() {
+		desktopHelper.assertScrollbarPosition('horizontal', 48, 60);
+
+		// Click on a cell near the edge of the view
+		cy.cGet('#map')
+		.then(function(items) {
+			expect(items).to.have.lengthOf(1);
+			var XPos = items[0].getBoundingClientRect().right - 280;
+			var YPos = items[0].getBoundingClientRect().bottom - 60;
+			cy.cGet('body').click(XPos, YPos);
+		});
+
+		// Select cells to the right with shift + arrow
+		for (let i = 0; i < 10; ++i) {
+			helper.typeIntoDocument('{shift}{rightArrow}');
+		}
+
+		// Document should scroll. The off-map view lands the follow-scroll a few
+		// pixels further than the old map-based path, so allow a little more.
+		desktopHelper.assertScrollbarPosition('horizontal', 80, 195);
+	});
+
+	it('Scroll while selecting with mouse', function () {
+		cy.cGet(helper.addressInputSelector).should('have.value', 'A2');
+
+		// Click on the bottom left cell and hold
+		cy.cGet('#document-container')
+			.then(function (items) {
+				expect(items).to.have.lengthOf(1);
+				var yPos = items[0].getBoundingClientRect().height - 60;
+				cy.cGet('#document-container').realMouseDown({ pointer: 'mouse', button: 'left', x: 30, y: yPos, scrollBehavior: false });
+			});
+		// Drag some cells to the right
+		cy.cGet('#document-container').realMouseMove(-280, -60, { position: 'bottomRight', scrollBehavior: false });
+		// Drag to the bottom edge
+		cy.cGet('#document-container').realMouseMove(-280, 0, { position: 'bottomRight', scrollBehavior: false });
+		helper.processToIdle(this.win);
+		// Wait for autoscroll and lift the button
+		helper.waitForTimers(this.win, 'autoscroll');
+		cy.cGet('#document-container').realMouseUp({ pointer: 'mouse', button: 'left' });
+
+		// Allow the change to propagate to core and it to update the addressInputSelector
+		helper.processToIdle(this.win);
+		// Without the fix, the selected range is of the form A17:A22, instead of A17:D22
+		// It's better not to check the exact range because it can easily change in different executions
+		cy.cGet(helper.addressInputSelector).invoke('val').should('contain', 'D');
+	});
+
+	it('Dragging the vertical scroll bar does not grow the document', function () {
+		desktopHelper.assertScrollbarPosition('vertical', 25, 40);
+		helper.processToIdle(this.win);
+
+		let initialDocHeight;
+		let thumbX, thumbY;
+
+		cy.cGet('#document-canvas').then((items) => {
+			expect(items).to.have.lengthOf(1);
+			const layout = this.win.app.activeDocument.activeLayout;
+			const scrollProps = layout.scrollProperties;
+			const dpiScale = this.win.app.dpiScale;
+
+			initialDocHeight = layout.viewSize.y;
+
+			// Grab the middle of the vertical scroll bar thumb.
+			thumbX = Math.round(items[0].getBoundingClientRect().width) - 8;
+			thumbY = Math.round((scrollProps.startY + scrollProps.verticalScrollSize * 0.5) / dpiScale);
+		});
+
+		cy.then(() => {
+			cy.cGet('#document-canvas').realMouseDown({ pointer: 'mouse', button: 'left', x: thumbX, y: thumbY, scrollBehavior: false });
+
+			// Drag the thumb far past the end of the scroll bar.
+			for (let i = 1; i <= 6; i++) {
+				cy.cGet('#document-canvas').realMouseMove(thumbX, thumbY + i * 100, { scrollBehavior: false });
+			}
+		});
+
+		// While the mouse button is held down, the thumb stays pinned to the end
+		// of the scroll bar and the scrollable area keeps its size. Before the
+		// fix every arrival at the end grew the document by another screen, so
+		// the thumb kept shrinking and jumping up and the document grew without
+		// limit.
+		cy.cGet('#test-div-vertical-scrollbar').should(() => {
+			const layout = this.win.app.activeDocument.activeLayout;
+			const scrollProps = layout.scrollProperties;
+			const railEnd = scrollProps.yOffset + scrollProps.verticalScrollLength;
+			expect(scrollProps.startY + scrollProps.verticalScrollSize).to.be.closeTo(railEnd, 3);
+			expect(layout.viewSize.y).to.equal(initialDocHeight);
+		});
+
+		cy.cGet('#document-canvas').realMouseUp({ pointer: 'mouse', button: 'left' });
+	});
+
+	it('Scroll while selecting with mouse - outside the canvas', function () {
+		cy.cGet(helper.addressInputSelector).should('have.value', 'A2');
+
+		// Click on the bottom left cell and hold
+		cy.cGet('#document-container')
+			.then(function (items) {
+				expect(items).to.have.lengthOf(1);
+				const right = items[0].getBoundingClientRect().right;
+				const bottom = items[0].getBoundingClientRect().bottom;
+				const horizontalCenter = Math.round(right * 0.5);
+
+				helper.processToIdle(this.win);
+				cy.cGet('body').realMouseDown(horizontalCenter, Math.round(bottom * 0.5));
+
+				cy.cGet('body').realMouseMove(horizontalCenter, bottom - 50);
+
+				// We should have initiated a selection by now. Move the mouse to where the horizontal scroll bar must be (this tests a fix).
+				cy.cGet('body').realMouseMove(horizontalCenter, bottom - 5);
+
+				// Wait for autoscroll to start at the edge before moving outside
+				helper.processToIdle(this.win);
+
+				// Move the mouse pointer outside the document (button still held). The
+				// edge autoscroll timer now scrolls the view on its own, and the drag
+				// position is re-sent on each scroll, so the selection keeps growing
+				// under the stationary pointer. Retry reading the Name Box until the
+				// selection has grown well past the row the assertion below checks.
+				const endRow = (val) => parseInt(String(val).split(':').pop().replace(/[^0-9]/g, ''), 10);
+				cy.cGet('body').realMouseMove(horizontalCenter, bottom + 30);
+				cy.cGet(helper.addressInputSelector, { timeout: 20000 }).invoke('val').should((val) => {
+					expect(endRow(val)).to.be.greaterThan(26);
+				});
+
+				// Release the mouse button to stop autoscroll
+				cy.cGet('body').realMouseUp();
+				helper.processToIdle(this.win);
+				helper.waitForTimers(this.win, 'autoscroll');
+
+				// Click on the ~center of the window.
+				cy.cGet('body').click(horizontalCenter, Math.round(right * 0.5));
+				cy.cGet(helper.addressInputSelector).then((item) => {
+					const addressInput = item[0];
+					const rowNumber = parseInt(addressInput.value.substring(1, addressInput.value.length));
+					cy.expect(rowNumber).to.be.greaterThan(22);
+				});
+			}
+		);
+	});
+
+	it('Scroll while selecting extends the selection without moving the mouse', function () {
+		cy.cGet(helper.addressInputSelector).should('have.value', 'A2');
+
+		// The end row of the selection, taken from the far corner of the range
+		// shown in the Name Box (for example the 8 in "B4:C8").
+		const endRow = (val) => {
+			const parts = String(val).split(':');
+			return parseInt(parts[parts.length - 1].replace(/[^0-9]/g, ''), 10);
+		};
+
+		// Press and hold on a cell well inside the grid (clear of the row and
+		// column headers), then make one small downward move to begin a
+		// cell-range drag. The pointer stays put after this.
+		cy.cGet('#document-container').realMouseDown({ pointer: 'mouse', button: 'left', x: 250, y: 150, scrollBehavior: false });
+		cy.cGet('#document-container').realMouseMove(250, 260, { position: 'topLeft', scrollBehavior: false });
+		helper.processToIdle(this.win);
+
+		// The selection end row before scrolling, still near the top of the sheet.
+		let rowBeforeScroll;
+		cy.cGet(helper.addressInputSelector).invoke('val').then((val) => {
+			rowBeforeScroll = endRow(val);
+		});
+
+		// Scroll the view down while the button stays held and the pointer does
+		// not move. A mouse wheel or a scrollbar drag reaches core through this
+		// same layout scroll; driving it directly keeps the test free of
+		// wheel-animation timing.
+		const SCROLL_PIXELS = 10000;
+		cy.then(() => {
+			const layout = this.win.app.activeDocument.activeLayout;
+			const beforeTop = layout.viewedRectangle.pY1;
+			layout.scroll(0, SCROLL_PIXELS, true);
+			// The document must really scroll for the test to mean anything.
+			expect(layout.viewedRectangle.pY1).to.be.greaterThan(beforeTop);
+		});
+		helper.processToIdle(this.win);
+
+		cy.cGet('#document-container').realMouseUp({ pointer: 'mouse', button: 'left' });
+		helper.processToIdle(this.win);
+
+		// With the fix, the scroll re-sends the drag position, so the selection
+		// grows to the cell now under the stationary pointer. Without the fix in
+		// place this test would have failed, with the selection still ending near
+		// the row where the pointer last moved.
+		cy.cGet(helper.addressInputSelector).invoke('val').should((val) => {
+			expect(endRow(val)).to.be.greaterThan(rowBeforeScroll + 3);
+		});
+	});
+
+	// While a formula is being edited, the cell ranges it refers to are drawn on
+	// the overlay canvas from their positions in the sheet. The overlay has to
+	// be told which part of the sheet is on screen, so that what it draws moves
+	// with the view. Before the fix the overlay kept the area the sheet showed
+	// when it loaded, and everything drawn on it stayed behind by however far
+	// the view had scrolled.
+	it('Formula reference marks follow the view when it scrolls', function() {
+		// The highlight of the ranges a formula refers to is built when editing
+		// starts on a formula the cell already holds, so the formula goes in
+		// first and the cell is then reopened for editing.
+		helper.typeIntoInputField(helper.addressInputSelector, 'A1');
+		helper.typeIntoDocument('=SUM(A5:A10){enter}');
+		helper.processToIdle(this.win);
+
+		calcHelper.dblClickOnFirstCell();
+		helper.processToIdle(this.win);
+
+		cy.cGet('#document-canvas').should(() => {
+			expect(this.win.app.map._docLayer._referencesAll,
+				'reference marks while a formula is edited').to.have.length.greaterThan(0);
+		});
+
+		// A mouse wheel or a scroll bar drag reaches core through this same
+		// layout scroll; driving it directly keeps the test free of
+		// wheel-animation timing.
+		cy.then(() => {
+			this.win.app.activeDocument.activeLayout.scroll(0, 500, true);
+		});
+		helper.processToIdle(this.win);
+
+		cy.cGet('#document-canvas').should(() => {
+			const layout = this.win.app.activeDocument.activeLayout;
+			const overlayBounds = this.win.app.map._docLayer._canvasOverlay.getBounds();
+
+			// The document must really have scrolled for the test to mean anything.
+			expect(layout.viewedRectangle.pY1, 'the view scrolled').to.be.greaterThan(0);
+
+			expect(overlayBounds.min.x, 'overlay left edge').to.equal(layout.viewedRectangle.pX1);
+			expect(overlayBounds.min.y, 'overlay top edge').to.equal(layout.viewedRectangle.pY1);
+		});
+
+		// Leave the cell and take the formula back out of the sheet, so the
+		// tests below start from the document as it was loaded.
+		helper.typeIntoDocument('{esc}');
+		helper.processToIdle(this.win);
+		helper.typeIntoDocument('{ctrl}z');
+		helper.processToIdle(this.win);
+	});
+
+	// A formula takes the addresses of the cells the user clicks. To reach a cell that is
+	// not on screen the user scrolls the sheet first, and the view then stays where it was
+	// scrolled to while the cell is clicked. The click puts the address in the formula and
+	// moves the caret inside the edited cell, which is now off screen, so before the fix the
+	// view followed that caret back to the edited cell.
+	it('The view stays where it was scrolled while a formula reference is clicked', function() {
+		helper.typeIntoDocument('=');
+		helper.processToIdle(this.win);
+
+		cy.cGet('#document-canvas').should(() => {
+			expect(this.win.app.file.textCursor.visible, 'the cell is being edited')
+				.to.equal(true);
+		});
+
+		// A mouse wheel or a scroll bar drag reaches core through this same layout scroll;
+		// driving it directly keeps the test free of wheel-animation timing. A whole frame
+		// height takes the edited cell off screen.
+		cy.then(() => {
+			const layout = this.win.app.activeDocument.activeLayout;
+			layout.scroll(0, layout.frameSize.pY, true);
+		});
+		helper.processToIdle(this.win);
+
+		let scrolledTop;
+		cy.then(() => {
+			scrolledTop = this.win.app.activeDocument.activeLayout.viewedRectangle.pY1;
+			expect(scrolledTop, 'the view scrolled').to.be.greaterThan(0);
+			expect(this.win.app.calc.cellCursorRectangle.pY2,
+				'the edited cell is off screen').to.be.lessThan(scrolledTop);
+		});
+
+		// Click a cell in the middle of the part of the sheet the view now shows.
+		// A Cypress click on the canvas moves the browser focus, and the client
+		// saves the pending cell edit when the window loses focus, so the click
+		// goes to the section that handles it instead.
+		cy.then(() => {
+			const mouseControl = this.win.app.sectionContainer
+				.getSectionWithName('mouse-control');
+			const frame = this.win.app.activeDocument.activeLayout.frameSize;
+			const middleOfTheView = this.win.cool.SimplePoint.fromCorePixels(
+				[frame.pX / 2, frame.pY / 2]);
+
+			mouseControl.onClick(middleOfTheView,
+				new this.win.MouseEvent('click', { buttons: 1 }));
+		});
+		helper.processToIdle(this.win);
+
+		cy.cGet('#document-canvas').should(() => {
+			expect(this.win.app.file.textCursor.visible, 'the cell edit goes on')
+				.to.equal(true);
+			expect(this.win.app.map._docLayer._references.empty(),
+				'the clicked cell is marked as a reference').to.equal(false);
+			expect(this.win.app.activeDocument.activeLayout.viewedRectangle.pY1,
+				'the view after the click').to.equal(scrolledTop);
+		});
+
+		// Leave the cell without writing the formula into the sheet, so the tests below
+		// start from the document as it was loaded.
+		helper.typeIntoDocument('{esc}');
+		helper.processToIdle(this.win);
+	});
+
+	// The view scrolls by itself to keep a selection that grows past the bottom edge in
+	// sight. The cell cursor stays on the cell the selection started from, so that scroll
+	// takes it off screen, but the user did not scroll away from it, so the view keeps
+	// following it.
+	it('The view keeps following the cell cursor when a keyboard selection scrolls it away', function() {
+		// Click on a cell near the bottom edge of the view.
+		cy.cGet('#map')
+		.then(function(items) {
+			expect(items).to.have.lengthOf(1);
+			var XPos = items[0].getBoundingClientRect().right - 280;
+			var YPos = items[0].getBoundingClientRect().bottom - 60;
+			cy.cGet('body').click(XPos, YPos);
+		});
+		helper.processToIdle(this.win);
+
+		helper.typeIntoDocument('{shift}{pagedown}');
+		helper.processToIdle(this.win);
+
+		cy.then(() => {
+			const app = this.win.app;
+			expect(app.calc.cellCursorRectangle.pY2, 'the cell cursor is above the view')
+				.to.be.lessThan(app.activeDocument.activeLayout.viewedRectangle.pY1);
+			// Without the fix in place, this test would have failed with following turned off.
+			expect(app.isFollowingOff(), 'following after the selection').to.be.false;
+		});
+	});
+
+	// The scrollbar positions the tests above check are pixel positions of the thumb,
+	// which the thumb takes from how much of the sheet can be scrolled. Jumping to the
+	// last used column here changes that for the rest of the file, so this test sits
+	// below the others. It stays above the frozen column test, whose freeze the undo
+	// does not lift.
+	it('Scrolling to left/right', function() {
+		desktopHelper.selectZoomLevel('200');
+		helper.typeIntoDocument('{home}');
+		desktopHelper.assertScrollbarPosition('horizontal', 48, 60);
+		helper.typeIntoDocument('{end}');
+		cy.getFrameWindow().then(function(win) {
+			return helper.processToIdle(win);
+		});
+		desktopHelper.assertScrollbarPosition('horizontal', 180, 320);
+
+		// The zoom belongs to the view and the undo does not touch it, so it goes back
+		// to 100 percent here for the test below.
+		desktopHelper.resetZoomLevel();
+	});
+
+	it('Horizontal scroll bar spans full width with a frozen column', function() {
+		// Freeze column A, sending the uno command directly so the test
+		// does not depend on which toolbar UI mode is active.
+		cy.then(() => {
+			this.win.app.map.sendUnoCommand('.uno:FreezePanesColumn');
+		});
+		helper.processToIdle(this.win);
+
+		cy.cGet('#document-canvas').should(() => {
+			const layout = this.win.app.activeDocument.activeLayout;
+			const scrollProps = layout.scrollProperties;
+			const documentAnchor = this.win.app.sectionContainer.getDocumentAnchorSection();
+
+			// The railway is drawn across the whole document anchor, so the
+			// frozen column does not leave a gap in it.
+			expect(scrollProps.horizontalScrollRailwayOffset).to.equal(documentAnchor.myTopLeft[0]);
+			expect(scrollProps.horizontalScrollRailwayLength).to.equal(
+				documentAnchor.size[0] - scrollProps.horizontalScrollRightOffset);
+
+			// The thumb still only travels past the frozen column, since that
+			// part of the view never scrolls.
+			expect(scrollProps.xOffset).to.be.greaterThan(documentAnchor.myTopLeft[0]);
+			expect(scrollProps.horizontalScrollLength).to.be.lessThan(
+				scrollProps.horizontalScrollRailwayLength);
+		});
+	});
+});

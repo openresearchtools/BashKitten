@@ -1,0 +1,177 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <config_options.h>
+#include <cpo/uno/Reference.hxx>
+#include <com/sun/star/frame/XTitle.hpp>
+#include <com/sun/star/frame/XTitleChangeBroadcaster.hpp>
+#include <com/sun/star/frame/XFrameActionListener.hpp>
+#include <com/sun/star/document/XDocumentEventListener.hpp>
+
+#include <cppuhelper/weakref.hxx>
+#include <comphelper/compbase.hxx>
+#include <comphelper/interfacecontainer4.hxx>
+
+#include <rtl/ustrbuf.hxx>
+
+#include <framework/fwkdllapi.h>
+
+namespace com::sun::star::frame { class XController; }
+namespace com::sun::star::frame { class XFrame; }
+namespace com::sun::star::frame { class XModel3; }
+namespace com::sun::star::frame { class XUntitledNumbers; }
+namespace cpo::uno { class XComponentContext; }
+namespace cpo::uno { class XInterface; }
+
+
+namespace framework{
+
+
+/** @short  can be used as implementation helper of interface css.frame.XTitle
+
+    @threadsafe
+ */
+class UNLESS_MERGELIBS(FWK_DLLPUBLIC) TitleHelper final :
+                  public  ::comphelper::WeakImplHelper< css::frame::XTitle                 ,
+                                                     css::frame::XTitleChangeBroadcaster,
+                                                     css::frame::XTitleChangeListener   ,
+                                                     css::frame::XFrameActionListener   ,
+                                                     css::document::XDocumentEventListener >
+{
+
+    // interface
+    public:
+
+
+        /** set an outside component which uses this container and must be set
+            as source of all broadcasted messages, exceptions.
+
+            It's held weak only so we do not need any complex dispose sessions.
+
+            Note: Passing NULL as parameter will be allowed. It will reset the internal
+            member reference only.
+
+            @param  xOwner
+                    the new owner of this collection.
+            @param  xNumbers
+                    provides the right string and number for  an untitled component.
+         */
+        TitleHelper(cpo::uno::Reference< cpo::uno::XComponentContext > xContext,
+            const cpo::uno::Reference< cpo::uno::XInterface >& xOwner,
+            const cpo::uno::Reference< css::frame::XUntitledNumbers >& xNumbers);
+
+        /** @short  free all internally used resources.
+         */
+        virtual ~TitleHelper() override;
+
+
+        /** @see XTitle */
+        virtual OUString getTitle() override;
+
+
+        /** @see XTitle */
+        virtual void setTitle(const OUString& sTitle) override;
+
+
+        /** @see XTitleChangeBroadcaster */
+        virtual void addTitleChangeListener(const cpo::uno::Reference< css::frame::XTitleChangeListener >& xListener) override;
+
+
+        /** @see XTitleChangeBroadcaster */
+        virtual void removeTitleChangeListener(const cpo::uno::Reference< css::frame::XTitleChangeListener >& xListener) override;
+
+
+        /** @see XTitleChangeListener */
+        virtual void titleChanged(const css::frame::TitleChangedEvent& aEvent) override;
+
+
+        /** @see css.document.XDocumentEventListener */
+        virtual void documentEventOccured(const css::document::DocumentEvent& aEvent) override;
+
+
+        /** @see css.lang.XEventListener */
+        virtual void disposing(const css::lang::EventObject& aEvent) override;
+
+
+        /** @see css.frame.XFrameActionListener */
+        virtual void frameAction(const css::frame::FrameActionEvent& aEvent) override;
+
+
+    // internal
+    private:
+
+        void impl_sendTitleChangedEvent ();
+
+        void impl_updateTitle (bool init = false);
+        void impl_updateTitleForModel (const cpo::uno::Reference< css::frame::XModel3 >& xModel, bool init);
+        void impl_updateTitleForController (const cpo::uno::Reference< css::frame::XController >& xController, bool init);
+        void impl_updateTitleForFrame (const cpo::uno::Reference< css::frame::XFrame >& xFrame, bool init);
+
+        void impl_startListeningForModel (const cpo::uno::Reference< css::frame::XModel >& xModel);
+        void impl_startListeningForController (const cpo::uno::Reference< css::frame::XController >& xController);
+        void impl_startListeningForFrame (const cpo::uno::Reference< css::frame::XFrame >& xFrame);
+        void impl_updateListeningForFrame (const cpo::uno::Reference< css::frame::XFrame >& xFrame);
+
+        static void impl_appendComponentTitle (      OUStringBuffer&                       sTitle    ,
+                                        const cpo::uno::Reference< cpo::uno::XInterface >& xComponent);
+        static void impl_appendProductName (OUStringBuffer& sTitle);
+        void impl_appendModuleName (OUStringBuffer& sTitle);
+        static void impl_appendDebugVersion (OUStringBuffer& sTitle);
+
+        void impl_setSubTitle (const cpo::uno::Reference< css::frame::XTitle >& xSubTitle);
+
+        static OUString impl_convertURL2Title(std::u16string_view sURL);
+
+
+    // member
+    private:
+
+        /** points to the global uno service manager. */
+        cpo::uno::Reference< cpo::uno::XComponentContext> m_xContext;
+
+        /** reference to the outside UNO class using this helper. */
+        cpo::uno::WeakReference< cpo::uno::XInterface > m_xOwner;
+
+        /** used to know how an "Untitled X" string can be created right :-) */
+        cpo::uno::WeakReference< css::frame::XUntitledNumbers > m_xUntitledNumbers;
+
+        /** provides parts of our own title and we listen there for changes too. */
+        cpo::uno::WeakReference< css::frame::XTitle > m_xSubTitle;
+
+        /** if it's set to true the member m_sTitle has not to be changed internally.
+            It was set from outside and so outside code has to make sure it will be
+            updated.
+         */
+        bool m_bExternalTitle;
+
+        /** the actual title value */
+        OUString m_sTitle;
+
+        /** knows the leased number which must be used for untitled components. */
+        ::sal_Int32 m_nLeasedNumber;
+
+        /** contains all title change listener */
+        comphelper::OInterfaceContainerHelper4<css::frame::XTitleChangeListener> m_aTitleChangeListeners;
+};
+
+} // namespace framework
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

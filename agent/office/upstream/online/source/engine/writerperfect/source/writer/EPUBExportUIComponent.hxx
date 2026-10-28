@@ -1,0 +1,83 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <com/sun/star/beans/XPropertyAccess.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/ui/dialogs/XAsynchronousExecutableDialog.hpp>
+#include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
+#include <com/sun/star/document/XExporter.hpp>
+#include <com/sun/star/awt/XWindow.hpp>
+
+#include <comphelper/sequenceashashmap.hxx>
+#include <cppuhelper/implbase.hxx>
+
+namespace weld
+{
+class DialogController;
+}
+
+namespace cpo::uno { class XComponentContext; }
+
+namespace writerperfect
+{
+/// EPUB export UI component implementation.
+class EPUBExportUIComponent
+    : public cppu::WeakImplHelper<css::beans::XPropertyAccess, css::lang::XInitialization,
+                                  css::lang::XServiceInfo, css::ui::dialogs::XExecutableDialog,
+                                  css::ui::dialogs::XAsynchronousExecutableDialog,
+                                  css::document::XExporter>
+{
+public:
+    EPUBExportUIComponent(cpo::uno::Reference<cpo::uno::XComponentContext> xContext);
+
+    // XPropertyAccess
+    cpo::uno::Sequence<css::beans::PropertyValue> getPropertyValues() override;
+    void
+    setPropertyValues(const cpo::uno::Sequence<css::beans::PropertyValue>& rProperties) override;
+
+    // XServiceInfo
+    OUString getImplementationName() override;
+    bool supportsService(const OUString& rServiceName) override;
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+    // XExecutableDialog
+    void setTitle(const OUString& rTitle) override;
+    sal_Int16 execute() override;
+
+    // XAsynchronousExecutableDialog
+    void setDialogTitle(const OUString& aTitle) override;
+
+    void startExecuteModal(
+        const cpo::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener) override;
+
+    // XExporter
+    void
+    setSourceDocument(const cpo::uno::Reference<css::lang::XComponent>& xDocument) override;
+
+    // XInitialization
+    void initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
+
+private:
+    /// The full set of property values.
+    comphelper::SequenceAsHashMap maMediaDescriptor;
+    /// The filter data key.
+    comphelper::SequenceAsHashMap maFilterData;
+    /// UNO context.
+    cpo::uno::Reference<cpo::uno::XComponentContext> mxContext;
+    cpo::uno::Reference<css::lang::XComponent> mxSourceDocument;
+    cpo::uno::Reference<css::awt::XWindow> mxDialogParent;
+    std::shared_ptr<weld::DialogController> mxAsyncDialog;
+};
+
+} // namespace writerperfect
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

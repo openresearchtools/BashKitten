@@ -1,0 +1,2074 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <officecfg/Office/Common.hxx>
+
+#include "sdmodeltestbase.hxx"
+
+#include <cpo/uno/Reference.hxx>
+
+#include <com/sun/star/awt/Gradient.hpp>
+#include <com/sun/star/drawing/FillStyle.hpp>
+#include <com/sun/star/drawing/TextVerticalAdjust.hpp>
+#include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
+#include <com/sun/star/drawing/XDrawPages.hpp>
+#include <com/sun/star/drawing/XDrawPage.hpp>
+#include <com/sun/star/drawing/XShapes.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
+#include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/table/XTable.hpp>
+#include <com/sun/star/table/XMergeableCellRange.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
+
+#include <set>
+
+#include <comphelper/sequence.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <svl/style.hxx>
+#include <DrawDocShell.hxx>
+#include <drawdoc.hxx>
+#include <vcl/scheduler.hxx>
+#include <svx/sdr/table/tablecontroller.hxx>
+#include <sfx2/request.hxx>
+#include <svx/svdpagv.hxx>
+#include <svx/svxids.hrc>
+#include <editeng/eeitem.hxx>
+#include <editeng/adjustitem.hxx>
+#include <editeng/outlobj.hxx>
+#include <editeng/editobj.hxx>
+#include <comphelper/base64.hxx>
+#include <docmodel/uno/UnoGradientTools.hxx>
+#include <undo/undomanager.hxx>
+#include <GraphicViewShell.hxx>
+#include <sdpage.hxx>
+#include <glob.hxx>
+#include <strings.hxx>
+#include <app.hrc>
+#include <DrawViewShell.hxx>
+#include <LayerTabBar.hxx>
+#include <vcl/event.hxx>
+#include <vcl/keycodes.hxx>
+#include <svx/svdoashp.hxx>
+#include <tools/gen.hxx>
+#include <svx/view3d.hxx>
+#include <svx/scene3d.hxx>
+#include <svx/sdmetitm.hxx>
+#include <svx/xfillit0.hxx>
+#include <svx/xflclit.hxx>
+#include <svx/xbtmpit.hxx>
+#include <test/commontesttools.hxx>
+#include <unomodel.hxx>
+#include <editeng/editeng.hxx>
+#include <editeng/editview.hxx>
+#include <editeng/outliner.hxx>
+#include <svx/svdotext.hxx>
+#include <unotools/tempfile.hxx>
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+/// Impress miscellaneous tests.
+class SdMiscTest : public SdModelTestBase
+{
+public:
+    SdMiscTest()
+        : SdModelTestBase(u"/sd/qa/unit/data/"_ustr)
+    {
+    }
+
+    void testTdf99396();
+    void testTableObjectUndoTest();
+    void testSubtitleWithParaAnimationSave();
+    void testFillColor();
+    void testFillGradient();
+    void testTdf44774();
+    void testTdf38225();
+    void testTdf101242_ODF_no_settings();
+    void testTdf101242_ODF_add_settings();
+    void testTdf101242_settings_keep();
+    void testTdf101242_settings_remove();
+    void testTdf119392();
+    void testTdf67248();
+    void testTdf119956();
+    void testTdf120527();
+    void testTextColumns();
+    void testTdf98839_ShearVFlipH();
+    void testTdf130988();
+    void testTdf131033();
+    void testTdf129898LayerDrawnInSlideshow();
+    void testTdf136956();
+    void testTdf39519();
+    void testTdf164284();
+    void testEncodedTableStyles();
+    void testTdf157117();
+    void testPageBackgroundImages();
+    void testCanvasSlideExportODP();
+    void testDuplicateAndMove();
+    void testEmptyPresObjSetOnObjectWithoutText();
+    void testPageGuids();
+    void testPageGuidCutPaste();
+    void testPageGuidMergedMasters();
+    void testInsertFileAsPageKeepsMasterBackground();
+    void testInsertFileAsPageAdoptDesign();
+    void testInsertFileAsPageAdoptDesignAtStart();
+    void testInsertFileAsPageKeepDesign();
+    void testInsertFileAsPageKeepDesignSameMasterName();
+    void testInsertFileAsPageKeepDesignSameMasterNameAndDesign();
+    void testSlideImportRoundTripKeepsMasterBackground();
+    void testInsertFileAsPageKeepDesignTwiceSharesMaster();
+    void testInsertFileAsPageKeepDesignRenamedKeepsNotesMaster();
+    void testInsertFileAsPageKeepDesignTwoDesignsOfOneName();
+    void testInsertFileAsPageLinkRecordsSource();
+    void testInsertFileAsPageLinkWithoutSourceRecordsMedium();
+    void testInsertWholeFileAsPagesLinkRecordsSource();
+    void testSlideLinkKeepsOnlyAReadableSourceGuid();
+    void testSlideLinkKeepsOnlyAReadableSourceTime();
+
+private:
+    SdDrawDocument* loadSlideImportDocs();
+
+public:
+
+    CPPUNIT_TEST_SUITE(SdMiscTest);
+    CPPUNIT_TEST(testTdf99396);
+    CPPUNIT_TEST(testTableObjectUndoTest);
+    CPPUNIT_TEST(testSubtitleWithParaAnimationSave);
+    CPPUNIT_TEST(testFillColor);
+    CPPUNIT_TEST(testFillGradient);
+    CPPUNIT_TEST(testTdf44774);
+    CPPUNIT_TEST(testTdf38225);
+    CPPUNIT_TEST(testTdf101242_ODF_no_settings);
+    CPPUNIT_TEST(testTdf101242_ODF_add_settings);
+    CPPUNIT_TEST(testTdf101242_settings_keep);
+    CPPUNIT_TEST(testTdf101242_settings_remove);
+    CPPUNIT_TEST(testTdf119392);
+    CPPUNIT_TEST(testTdf67248);
+    CPPUNIT_TEST(testTdf119956);
+    CPPUNIT_TEST(testTdf120527);
+    CPPUNIT_TEST(testTextColumns);
+    CPPUNIT_TEST(testTdf98839_ShearVFlipH);
+    CPPUNIT_TEST(testTdf130988);
+    CPPUNIT_TEST(testTdf131033);
+    CPPUNIT_TEST(testTdf129898LayerDrawnInSlideshow);
+    CPPUNIT_TEST(testTdf136956);
+    CPPUNIT_TEST(testTdf39519);
+    CPPUNIT_TEST(testTdf164284);
+    CPPUNIT_TEST(testEncodedTableStyles);
+    CPPUNIT_TEST(testTdf157117);
+    CPPUNIT_TEST(testPageBackgroundImages);
+    CPPUNIT_TEST(testCanvasSlideExportODP);
+    CPPUNIT_TEST(testDuplicateAndMove);
+    CPPUNIT_TEST(testEmptyPresObjSetOnObjectWithoutText);
+    CPPUNIT_TEST(testPageGuids);
+    CPPUNIT_TEST(testPageGuidCutPaste);
+    CPPUNIT_TEST(testPageGuidMergedMasters);
+    CPPUNIT_TEST(testInsertFileAsPageKeepsMasterBackground);
+    CPPUNIT_TEST(testInsertFileAsPageAdoptDesign);
+    CPPUNIT_TEST(testInsertFileAsPageAdoptDesignAtStart);
+    CPPUNIT_TEST(testInsertFileAsPageKeepDesign);
+    CPPUNIT_TEST(testInsertFileAsPageKeepDesignSameMasterName);
+    CPPUNIT_TEST(testInsertFileAsPageKeepDesignSameMasterNameAndDesign);
+    CPPUNIT_TEST(testSlideImportRoundTripKeepsMasterBackground);
+    CPPUNIT_TEST(testInsertFileAsPageKeepDesignTwiceSharesMaster);
+    CPPUNIT_TEST(testInsertFileAsPageKeepDesignRenamedKeepsNotesMaster);
+    CPPUNIT_TEST(testInsertFileAsPageKeepDesignTwoDesignsOfOneName);
+    CPPUNIT_TEST(testInsertFileAsPageLinkRecordsSource);
+    CPPUNIT_TEST(testInsertFileAsPageLinkWithoutSourceRecordsMedium);
+    CPPUNIT_TEST(testInsertWholeFileAsPagesLinkRecordsSource);
+    CPPUNIT_TEST(testSlideLinkKeepsOnlyAReadableSourceGuid);
+    CPPUNIT_TEST(testSlideLinkKeepsOnlyAReadableSourceTime);
+    CPPUNIT_TEST_SUITE_END();
+};
+
+void SdMiscTest::testTdf99396()
+{
+    // Load the document and select the table.
+    createSdImpressDoc("tdf99396.odp");
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+
+    SdPage* pPage = pViewShell->GetActualPage();
+    SdrObject* pObject = pPage->GetObj(0);
+    SdrView* pView = pViewShell->GetView();
+    pView->MarkObj(pObject, pView->GetSdrPageView());
+
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    // Make sure that the undo stack is empty.
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), pDoc->GetUndoManager()->GetUndoActionCount());
+
+    // Set the vertical alignment of the cells to bottom.
+    sdr::table::SvxTableController* pTableController
+        = dynamic_cast<sdr::table::SvxTableController*>(pView->getSelectionController().get());
+    CPPUNIT_ASSERT(pTableController);
+    SfxRequest aRequest(*pViewShell->GetViewFrame(), SID_TABLE_VERT_BOTTOM);
+    pTableController->Execute(aRequest);
+    // This was 0, it wasn't possible to undo a vertical alignment change.
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pDoc->GetUndoManager()->GetUndoActionCount());
+}
+
+void SdMiscTest::testTableObjectUndoTest()
+{
+    // See tdf#99396 for the issue
+
+    // Load the document and select the table.
+    createSdImpressDoc("tdf99396.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pPage = pViewShell->GetActualPage();
+    auto pTableObject = dynamic_cast<sdr::table::SdrTableObj*>(pPage->GetObj(0));
+    CPPUNIT_ASSERT(pTableObject);
+    SdrView* pView = pViewShell->GetView();
+    pView->MarkObj(pTableObject, pView->GetSdrPageView());
+
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    // Make sure that the undo stack is empty.
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), pDoc->GetUndoManager()->GetUndoActionCount());
+
+    // Set horizontal and vertical adjustment during text edit.
+    pView->SdrBeginTextEdit(pTableObject);
+    CPPUNIT_ASSERT(pView->GetTextEditObject());
+    {
+        SfxRequest aRequest(*pViewShell->GetViewFrame(), SID_ATTR_PARA_ADJUST_RIGHT);
+        SfxItemSet aEditAttr(pDoc->GetPool());
+        pView->GetAttributes(aEditAttr);
+        SfxItemSet aNewAttr(*(aEditAttr.GetPool()), aEditAttr.GetRanges());
+        aNewAttr.Put(SvxAdjustItem(SvxAdjust::Right, EE_PARA_JUST));
+        aRequest.Done(aNewAttr);
+        const SfxItemSet* pArgs = aRequest.GetArgs();
+        pView->SetAttributes(*pArgs);
+    }
+    const auto& pLocalUndoManager = pView->getViewLocalUndoManager();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pLocalUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u"Apply attributes"_ustr, pLocalUndoManager->GetUndoActionComment());
+    {
+        auto pTableController
+            = dynamic_cast<sdr::table::SvxTableController*>(pView->getSelectionController().get());
+        CPPUNIT_ASSERT(pTableController);
+        SfxRequest aRequest(*pViewShell->GetViewFrame(), SID_TABLE_VERT_BOTTOM);
+        pTableController->Execute(aRequest);
+    }
+    // Global change "Format cell" is applied only - Change the vertical alignment to "Bottom"
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pDoc->GetUndoManager()->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u"Format cell"_ustr, pDoc->GetUndoManager()->GetUndoActionComment());
+
+    pView->SdrEndTextEdit();
+
+    // End of text edit, so the text edit action is added to the undo stack
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pDoc->GetUndoManager()->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u"Edit text of Table"_ustr,
+                         pDoc->GetUndoManager()->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(u"Format cell"_ustr, pDoc->GetUndoManager()->GetUndoActionComment(1));
+
+    // Check that the result is what we expect.
+    {
+        uno::Reference<table::XTable> xTable = pTableObject->getTable();
+        uno::Reference<beans::XPropertySet> xCell(xTable->getCellByPosition(0, 0), uno::UNO_QUERY);
+        drawing::TextVerticalAdjust eAdjust = xCell->getPropertyValue(u"TextVerticalAdjust"_ustr)
+                                                  .get<drawing::TextVerticalAdjust>();
+        CPPUNIT_ASSERT_EQUAL(int(drawing::TextVerticalAdjust_BOTTOM), static_cast<int>(eAdjust));
+    }
+    {
+        const EditTextObject& rEdit
+            = pTableObject->getText(0)->GetOutlinerParaObject()->GetTextObject();
+        const SfxItemSet& rParaAttribs = rEdit.GetParaAttribs(0);
+        auto pAdjust = rParaAttribs.GetItem(EE_PARA_JUST);
+        CPPUNIT_ASSERT_EQUAL(SvxAdjust::Right, pAdjust->GetAdjust());
+    }
+
+    // Now undo.
+    pXImpressDocument->GetDocShell()->GetUndoManager()->Undo();
+
+    // Undoing the last action - one left
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pDoc->GetUndoManager()->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u"Format cell"_ustr, pDoc->GetUndoManager()->GetUndoActionComment(0));
+
+    // Check again that the result is what we expect.
+    {
+        uno::Reference<table::XTable> xTable = pTableObject->getTable();
+        uno::Reference<beans::XPropertySet> xCell(xTable->getCellByPosition(0, 0), uno::UNO_QUERY);
+        drawing::TextVerticalAdjust eAdjust = xCell->getPropertyValue(u"TextVerticalAdjust"_ustr)
+                                                  .get<drawing::TextVerticalAdjust>();
+        // This failed: Undo() did not change it from drawing::TextVerticalAdjust_BOTTOM.
+        CPPUNIT_ASSERT_EQUAL(int(drawing::TextVerticalAdjust_TOP), static_cast<int>(eAdjust));
+    }
+    {
+        const EditTextObject& rEdit
+            = pTableObject->getText(0)->GetOutlinerParaObject()->GetTextObject();
+        const SfxItemSet& rParaAttribs = rEdit.GetParaAttribs(0);
+        auto pAdjust = rParaAttribs.GetItem(EE_PARA_JUST);
+        CPPUNIT_ASSERT_EQUAL(SvxAdjust::Center, pAdjust->GetAdjust());
+    }
+
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pDoc->GetUndoManager()->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u"Format cell"_ustr, pDoc->GetUndoManager()->GetUndoActionComment(0));
+
+    /*
+     * now test tdf#103950 - Undo does not revert bundled font size changes for table cells
+     */
+    pTableObject = dynamic_cast<sdr::table::SdrTableObj*>(pPage->GetObj(0));
+    pView->MarkObj(pTableObject, pView->GetSdrPageView()); // select table
+    {
+        SfxRequest aRequest(*pViewShell->GetViewFrame(), SID_GROW_FONT_SIZE);
+        static_cast<sd::DrawViewShell*>(pViewShell)->ExecChar(aRequest);
+    }
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), pDoc->GetUndoManager()->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(u"Apply attributes to Table"_ustr,
+                         pDoc->GetUndoManager()->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(u"Grow font size"_ustr, pDoc->GetUndoManager()->GetUndoActionComment(1));
+    CPPUNIT_ASSERT_EQUAL(u"Format cell"_ustr, pDoc->GetUndoManager()->GetUndoActionComment(2));
+}
+
+void SdMiscTest::testSubtitleWithParaAnimationSave()
+{
+    createSdImpressDoc("pptx/subtitle-animation-save.pptx");
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    SdPage* pPage = pViewShell->GetActualPage();
+    CPPUNIT_ASSERT(pPage);
+
+    // Object 0 is the title, object 1 is the animated subtitle.
+    auto* pTextObj = dynamic_cast<SdrTextObj*>(pPage->GetObj(1));
+    CPPUNIT_ASSERT(pTextObj);
+    CPPUNIT_ASSERT_EQUAL(u"Original subtitle"_ustr,
+                         pTextObj->GetOutlinerParaObject()->GetTextObject().GetText(0));
+
+    SdrView* pView = pViewShell->GetView();
+    pView->MarkObj(pTextObj, pView->GetSdrPageView());
+    pView->SdrBeginTextEdit(pTextObj);
+    CPPUNIT_ASSERT(pView->IsTextEdit());
+    auto* pOutlinerView = pView->GetTextEditOutlinerView();
+    CPPUNIT_ASSERT(pOutlinerView);
+    EditView& rEditView = pOutlinerView->GetEditView();
+    rEditView.SetSelection(ESelection(0, 0));
+    rEditView.InsertText(u"edited "_ustr);
+    pView->SdrEndTextEdit();
+    Scheduler::ProcessEventsToIdle();
+
+    saveAndReload(TestFilter::PPTX);
+
+    // The whole edited text must survive; before the fix the frozen marker
+    // truncated it at the imported length ("edited Original s").
+    uno::Reference<text::XText> xText(
+        uno::Reference<text::XTextRange>(getShapeFromPage(1, 0), uno::UNO_QUERY_THROW)->getText());
+    CPPUNIT_ASSERT_EQUAL(u"edited Original subtitle"_ustr, xText->getString());
+}
+
+void SdMiscTest::testFillColor()
+{
+    // Test if setting the shape fill color from color to transparent automatically turns off the fill style to none
+    createSdImpressDoc();
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPages> xDrawPages = xDrawPagesSupplier->getDrawPages();
+    // Insert a new page.
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPages->insertNewByIndex(0),
+                                                 uno::UNO_SET_THROW);
+    uno::Reference<drawing::XShapes> xShapes(xDrawPage, uno::UNO_QUERY_THROW);
+    // Create a rectangle
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xFactory.is());
+    uno::Reference<drawing::XShape> xShape1(
+        xFactory->createInstance(u"com.sun.star.drawing.RectangleShape"_ustr),
+        uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xPropSet(xShape1, uno::UNO_QUERY_THROW);
+    // Set FillStyle and FillColor
+    xPropSet->setPropertyValue(u"FillStyle"_ustr, cpo::uno::Any(drawing::FillStyle_SOLID));
+    xPropSet->setPropertyValue(u"FillColor"_ustr, cpo::uno::Any(COL_RED));
+    // Add the rectangle to the page.
+    xShapes->add(xShape1);
+
+    // Retrieve the shape and check FillStyle and FillGradient
+    uno::Reference<container::XIndexAccess> xIndexAccess(xDrawPage, uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xPropSet2(xIndexAccess->getByIndex(0),
+                                                  uno::UNO_QUERY_THROW);
+    drawing::FillStyle eFillStyle;
+    Color aColor;
+    CPPUNIT_ASSERT(xPropSet2->getPropertyValue(u"FillStyle"_ustr) >>= eFillStyle);
+    CPPUNIT_ASSERT_EQUAL(int(drawing::FillStyle_SOLID), static_cast<int>(eFillStyle));
+    CPPUNIT_ASSERT(xPropSet2->getPropertyValue(u"FillColor"_ustr) >>= aColor);
+
+    CPPUNIT_ASSERT_EQUAL(COL_RED, aColor);
+
+    // Setup transparent color and check fill styles
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<view::XSelectionSupplier> xSelectionSupplier(xModel->getCurrentController(),
+                                                                uno::UNO_QUERY);
+
+    xSelectionSupplier->select(cpo::uno::Any(xShape1));
+    CPPUNIT_ASSERT(xSelectionSupplier->getSelection().hasValue());
+
+    const char arguments[] = "{"
+                             "\"FillColor.Color\":{"
+                             "\"type\":\"long\","
+                             "\"value\":-1"
+                             "}}";
+
+    dispatchCommand(mxComponent, u".uno:FillColor"_ustr,
+                    comphelper::containerToSequence(comphelper::JsonToPropertyValues(arguments)));
+
+    uno::Reference<container::XIndexAccess> xIndexAccess2(xDrawPage, uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xPropSet3(xIndexAccess2->getByIndex(0),
+                                                  uno::UNO_QUERY_THROW);
+    drawing::FillStyle eFillStyle2;
+    CPPUNIT_ASSERT(xPropSet3->getPropertyValue(u"FillStyle"_ustr) >>= eFillStyle2);
+    CPPUNIT_ASSERT_EQUAL(int(drawing::FillStyle_NONE), static_cast<int>(eFillStyle2));
+}
+
+void SdMiscTest::testFillGradient()
+{
+    createSdImpressDoc();
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPages> xDrawPages = xDrawPagesSupplier->getDrawPages();
+    // Insert a new page.
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPages->insertNewByIndex(0),
+                                                 uno::UNO_SET_THROW);
+    uno::Reference<drawing::XShapes> xShapes(xDrawPage, uno::UNO_QUERY_THROW);
+    // Create a rectangle
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xFactory.is());
+    uno::Reference<drawing::XShape> xShape1(
+        xFactory->createInstance(u"com.sun.star.drawing.RectangleShape"_ustr),
+        uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xPropSet(xShape1, uno::UNO_QUERY_THROW);
+    // Set FillStyle and FillGradient
+    awt::Gradient aGradient;
+    aGradient.StartColor = sal_Int32(COL_LIGHTRED);
+    aGradient.EndColor = sal_Int32(COL_LIGHTGREEN);
+    xPropSet->setPropertyValue(u"FillStyle"_ustr, cpo::uno::Any(drawing::FillStyle_GRADIENT));
+    xPropSet->setPropertyValue(u"FillGradient"_ustr, cpo::uno::Any(aGradient));
+    // Add the rectangle to the page.
+    xShapes->add(xShape1);
+
+    // Retrieve the shape and check FillStyle and FillGradient
+    uno::Reference<container::XIndexAccess> xIndexAccess(xDrawPage, uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xPropSet2(xIndexAccess->getByIndex(0),
+                                                  uno::UNO_QUERY_THROW);
+    drawing::FillStyle eFillStyle;
+    awt::Gradient2 aGradient2;
+    CPPUNIT_ASSERT(xPropSet2->getPropertyValue(u"FillStyle"_ustr) >>= eFillStyle);
+    CPPUNIT_ASSERT_EQUAL(int(drawing::FillStyle_GRADIENT), static_cast<int>(eFillStyle));
+    CPPUNIT_ASSERT(xPropSet2->getPropertyValue(u"FillGradient"_ustr) >>= aGradient2);
+
+    // MCGR: Use the completely imported gradient to check for correctness
+    const basegfx::BColorStops aColorStops
+        = model::gradient::getColorStopsFromUno(aGradient2.ColorStops);
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+    CPPUNIT_ASSERT_EQUAL(0.0, aColorStops.getStopOffset(0));
+    CPPUNIT_ASSERT_EQUAL(COL_LIGHTRED, Color(aColorStops.getStopColor(0)));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops.getStopOffset(1), 1.0));
+    CPPUNIT_ASSERT_EQUAL(COL_LIGHTGREEN, Color(aColorStops.getStopColor(1)));
+}
+
+void SdMiscTest::testTdf44774()
+{
+    createSdDrawDoc();
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    sd::DrawDocShell* pDocShell = pXImpressDocument->GetDocShell();
+
+    SfxStyleSheetBasePool* pSSPool = pDocShell->GetStyleSheetPool();
+
+    // Create a new style with an empty name, like what happens in UI when creating a new style
+    SfxStyleSheetBase& rStyleA
+        = pSSPool->Make(u""_ustr, SfxStyleFamily::Para, SfxStyleSearchBits::UserDefined);
+    // Assign a new name, which does not yet set its ApiName
+    rStyleA.SetName(u"StyleA"_ustr);
+    // Create another style
+    SfxStyleSheetBase& rStyleB
+        = pSSPool->Make(u"StyleB"_ustr, SfxStyleFamily::Para, SfxStyleSearchBits::UserDefined);
+    // ... and set its parent to the first one
+    rStyleB.SetParent(u"StyleA"_ustr);
+
+    // Now save the file and reload
+    saveAndReload(TestFilter::ODG);
+    pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pDocShell = pXImpressDocument->GetDocShell();
+    pSSPool = pDocShell->GetStyleSheetPool();
+
+    SfxStyleSheetBase* pStyle = pSSPool->Find(u"StyleB"_ustr, SfxStyleFamily::Para);
+    CPPUNIT_ASSERT(pStyle);
+    // The parent set in StyleB used to reset, because parent style's msApiName was empty
+    CPPUNIT_ASSERT_EQUAL(u"StyleA"_ustr, pStyle->GetParent());
+}
+
+void SdMiscTest::testTdf38225()
+{
+    createSdImpressDoc();
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    sd::DrawDocShell* pDocShell = pXImpressDocument->GetDocShell();
+
+    SfxStyleSheetBasePool* pSSPool = pDocShell->GetStyleSheetPool();
+
+    // Create a new style with a name
+    pSSPool->Make(u"StyleWithName1"_ustr, SfxStyleFamily::Para, SfxStyleSearchBits::UserDefined);
+
+    // Now save the file and reload
+    saveAndReload(TestFilter::ODG);
+    pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pDocShell = pXImpressDocument->GetDocShell();
+    pSSPool = pDocShell->GetStyleSheetPool();
+
+    SfxStyleSheetBase* pStyle = pSSPool->Find(u"StyleWithName1"_ustr, SfxStyleFamily::Para);
+    CPPUNIT_ASSERT(pStyle);
+
+    // Rename the style
+    CPPUNIT_ASSERT(pStyle->SetName(u"StyleWithName2"_ustr));
+
+    // Save the file and reload again
+    saveAndReload(TestFilter::ODG);
+    pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    pDocShell = pXImpressDocument->GetDocShell();
+    pSSPool = pDocShell->GetStyleSheetPool();
+
+    // The problem was that the style kept the old name upon reloading
+    pStyle = pSSPool->Find(u"StyleWithName1"_ustr, SfxStyleFamily::Para);
+    CPPUNIT_ASSERT(!pStyle);
+    pStyle = pSSPool->Find(u"StyleWithName2"_ustr, SfxStyleFamily::Para);
+    CPPUNIT_ASSERT(pStyle);
+}
+
+void SdMiscTest::testTdf120527()
+{
+    createSdImpressDoc();
+
+    // Load a bitmap into the bitmap table.
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xFactory.is());
+    uno::Reference<container::XNameContainer> xBitmaps(
+        xFactory->createInstance(u"com.sun.star.drawing.BitmapTable"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xBitmaps.is());
+    OUString aGraphicURL = createFileURL(u"tdf120527.jpg");
+    xBitmaps->insertByName(u"test"_ustr, cpo::uno::Any(aGraphicURL));
+
+    // Create a graphic.
+    uno::Reference<drawing::XShape> xShape(
+        xFactory->createInstance(u"com.sun.star.drawing.GraphicObjectShape"_ustr), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xShape.is());
+    uno::Reference<beans::XPropertySet> xShapeProperySet(xShape, uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xShapeProperySet.is());
+    xShapeProperySet->setPropertyValue(u"GraphicURL"_ustr, xBitmaps->getByName(u"test"_ustr));
+
+    // Insert it.
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xDrawPagesSupplier.is());
+    uno::Reference<drawing::XDrawPages> xDrawPages = xDrawPagesSupplier->getDrawPages();
+    CPPUNIT_ASSERT(xDrawPages.is());
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPages->getByIndex(0), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xDrawPage.is());
+    // This failed with a lang.IllegalArgumentException.
+    xDrawPage->add(xShape);
+
+    // Verify that the graphic was actually consumed.
+    uno::Reference<graphic::XGraphic> xGraphic;
+    xShapeProperySet->getPropertyValue(u"Graphic"_ustr) >>= xGraphic;
+    CPPUNIT_ASSERT(xGraphic.is());
+}
+
+// Testing document model part of editengine-columns
+void SdMiscTest::testTextColumns()
+{
+    createSdImpressDoc();
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPages> xDrawPages = xDrawPagesSupplier->getDrawPages();
+    // Insert a new page.
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPages->insertNewByIndex(0),
+                                                 uno::UNO_SET_THROW);
+    uno::Reference<drawing::XShapes> xShapes(xDrawPage, uno::UNO_QUERY_THROW);
+
+    {
+        // Create a text shape
+        uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY);
+        CPPUNIT_ASSERT(xFactory.is());
+        uno::Reference<drawing::XShape> xShape(
+            xFactory->createInstance(u"com.sun.star.drawing.TextShape"_ustr), uno::UNO_QUERY_THROW);
+        uno::Reference<beans::XPropertySet> xPropSet(xShape, uno::UNO_QUERY_THROW);
+
+        // Add the shape to the page.
+        xShapes->add(xShape);
+
+        // Set up columns
+        auto pTextObj = DynCastSdrTextObj(SdrObject::getSdrObjectFromXShape(xShape));
+        CPPUNIT_ASSERT(pTextObj);
+        pTextObj->SetMergedItem(SfxInt16Item(SDRATTR_TEXTCOLUMNS_NUMBER, 2));
+        pTextObj->SetMergedItem(SdrMetricItem(SDRATTR_TEXTCOLUMNS_SPACING, 1000));
+    }
+
+    {
+        // Retrieve the shape and check columns
+        uno::Reference<container::XIndexAccess> xIndexAccess(xDrawPage, uno::UNO_QUERY_THROW);
+        uno::Reference<drawing::XShape> xShape(xIndexAccess->getByIndex(0), uno::UNO_QUERY_THROW);
+
+        auto pTextObj = DynCastSdrTextObj(SdrObject::getSdrObjectFromXShape(xShape));
+        CPPUNIT_ASSERT(pTextObj);
+
+        CPPUNIT_ASSERT_EQUAL(sal_Int16(2), pTextObj->GetTextColumnsNumber());
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(1000), pTextObj->GetTextColumnsSpacing());
+    }
+}
+
+/// Draw miscellaneous tests.
+
+// Since LO 6.2 the visible/printable/locked information for layers is always
+// written as ODF attributes draw:display and draw:protected. It is only read from
+// there, if the config items VisibleLayers, PrintableLayers and LockedLayers do
+// not exist. The user option WriteLayerStateAsConfigItem can be set to 'true' to
+// write these config items in addition to the ODF attributes for to produce
+// documents for older LO versions or Apache OpenOffice. With value 'false' no
+// config items are written. The 'testTdf101242_xyz' tests combine source
+// files with and without config items with option values 'true' and 'false'.
+
+void SdMiscTest::testTdf101242_ODF_add_settings()
+{
+    // Loads a document, which has the visible/printable/locked information for layers
+    // only in the ODF attributes draw:display and draw:protected. The resaved document
+    // should still have the ODF attributes and in addition the config items in settings.xml.
+    // "Load" is needed for to handle layers, simple "loadURL" does not work.
+    createSdDrawDoc("tdf101242_ODF.odg");
+
+    // Saving including items in settings.xml
+    ScopedConfigValue<officecfg::Office::Common::Misc::WriteLayerStateAsConfigItem> aCfg(true);
+    save(TestFilter::ODG);
+
+    // Verify, that the saved document still has the ODF attributes
+    xmlDocUniquePtr pXmlDoc = parseExport(u"styles.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'styles.xml'", pXmlDoc);
+    static constexpr OString sPathStart(
+        "/office:document-styles/office:master-styles/draw:layer-set/draw:layer"_ostr);
+    assertXPath(pXmlDoc,
+                sPathStart + "[@draw:name='backgroundobjects' and @draw:protected='true']");
+    assertXPath(pXmlDoc, sPathStart + "[@draw:name='controls' and @draw:display='screen']");
+    assertXPath(pXmlDoc, sPathStart + "[@draw:name='measurelines' and @draw:display='printer']");
+
+    // Verify, that the saved document has got the items in settings.xml
+    xmlDocUniquePtr pXmlDoc2 = parseExport(u"settings.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'settings.xml'", pXmlDoc2);
+    static constexpr OString sPathStart2("/office:document-settings/office:settings/"
+                                         "config:config-item-set[@config:name='ooo:view-settings']/"
+                                         "config:config-item-map-indexed[@config:name='Views']/"
+                                         "config:config-item-map-entry"_ostr);
+    // Value is a bitfield with first Byte in order '* * * measurelines controls backgroundobjects background layout'
+    // The first three bits depend on initialization and may change. The values in file are Base64 encoded.
+    OUString sBase64;
+    cpo::uno::Sequence<sal_Int8> aDecodedSeq;
+    sBase64 = getXPathContent(pXmlDoc2,
+                              sPathStart2 + "/config:config-item[@config:name='VisibleLayers']");
+    CPPUNIT_ASSERT_MESSAGE("Item VisibleLayers does not exists.", !sBase64.isEmpty());
+    comphelper::Base64::decode(aDecodedSeq, sBase64);
+    CPPUNIT_ASSERT_EQUAL(0x0F, static_cast<sal_uInt8>(aDecodedSeq[0]) & 0x1F);
+
+    sBase64 = getXPathContent(pXmlDoc2,
+                              sPathStart2 + "/config:config-item[@config:name='PrintableLayers']");
+    CPPUNIT_ASSERT_MESSAGE("Item PrintableLayers does not exists.", !sBase64.isEmpty());
+    comphelper::Base64::decode(aDecodedSeq, sBase64);
+    CPPUNIT_ASSERT_EQUAL(0x17, static_cast<sal_uInt8>(aDecodedSeq[0]) & 0x1F);
+
+    sBase64 = getXPathContent(pXmlDoc2,
+                              sPathStart2 + "/config:config-item[@config:name='LockedLayers']");
+    CPPUNIT_ASSERT_MESSAGE("Item LockedLayers does not exists.", !sBase64.isEmpty());
+    comphelper::Base64::decode(aDecodedSeq, sBase64);
+    CPPUNIT_ASSERT_EQUAL(0x04, static_cast<sal_uInt8>(aDecodedSeq[0]) & 0x1F);
+}
+
+void SdMiscTest::testTdf101242_ODF_no_settings()
+{
+    // Loads a document, which has the visible/printable/locked information for layers
+    // only in the ODF attributes draw:display and draw:protected. The resave document
+    // should have only the ODF attributes and no config items in settings.xml.
+    createSdDrawDoc("tdf101242_ODF.odg");
+
+    // Saving without items in settings.xml
+    ScopedConfigValue<officecfg::Office::Common::Misc::WriteLayerStateAsConfigItem> aCfg(false);
+    save(TestFilter::ODG);
+
+    // Verify, that the saved document still has the ODF attributes
+    xmlDocUniquePtr pXmlDoc = parseExport(u"styles.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'styles.xml'", pXmlDoc);
+    static constexpr OString sPathStart(
+        "/office:document-styles/office:master-styles/draw:layer-set/draw:layer"_ostr);
+    assertXPath(pXmlDoc,
+                sPathStart + "[@draw:name='backgroundobjects' and @draw:protected='true']");
+    assertXPath(pXmlDoc, sPathStart + "[@draw:name='controls' and @draw:display='screen']");
+    assertXPath(pXmlDoc, sPathStart + "[@draw:name='measurelines' and @draw:display='printer']");
+
+    // Verify, that the saved document has no layer items in settings.xml
+    xmlDocUniquePtr pXmlDoc2 = parseExport(u"settings.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'settings.xml'", pXmlDoc2);
+    static constexpr OString sPathStart2("/office:document-settings/office:settings/"
+                                         "config:config-item-set[@config:name='ooo:view-settings']/"
+                                         "config:config-item-map-indexed[@config:name='Views']/"
+                                         "config:config-item-map-entry"_ostr);
+    assertXPath(pXmlDoc2, sPathStart2 + "/config:config-item[@config:name='VisibleLayers']", 0);
+    assertXPath(pXmlDoc2, sPathStart2 + "/config:config-item[@config:name='PrintableLayers']", 0);
+    assertXPath(pXmlDoc2, sPathStart2 + "/config:config-item[@config:name='LockedLayers']", 0);
+}
+
+void SdMiscTest::testTdf101242_settings_keep()
+{
+    // Loads a document, which has the visible/printable/locked information for layers
+    // only in the config items in settings.xml. That is the case for all old documents.
+    // The resaved document should have the ODF attributes draw:display and draw:protected
+    // and should still have these config items in settings.xml.
+    createSdDrawDoc("tdf101242_settings.odg");
+
+    // Saving including items in settings.xml
+    ScopedConfigValue<officecfg::Office::Common::Misc::WriteLayerStateAsConfigItem> aCfg(true);
+    save(TestFilter::ODG);
+
+    // Verify, that the saved document has the ODF attributes
+    xmlDocUniquePtr pXmlDoc = parseExport(u"styles.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'styles.xml'", pXmlDoc);
+    static constexpr OString sPathStart(
+        "/office:document-styles/office:master-styles/draw:layer-set/draw:layer"_ostr);
+    assertXPath(pXmlDoc,
+                sPathStart + "[@draw:name='backgroundobjects' and @draw:protected='true']");
+    assertXPath(pXmlDoc, sPathStart + "[@draw:name='controls' and @draw:display='screen']");
+    assertXPath(pXmlDoc, sPathStart + "[@draw:name='measurelines' and @draw:display='printer']");
+
+    // Verify, that the saved document still has the items in settings.xml
+    xmlDocUniquePtr pXmlDoc2 = parseExport(u"settings.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'settings.xml'", pXmlDoc2);
+    static constexpr OString sPathStart2("/office:document-settings/office:settings/"
+                                         "config:config-item-set[@config:name='ooo:view-settings']/"
+                                         "config:config-item-map-indexed[@config:name='Views']/"
+                                         "config:config-item-map-entry"_ostr);
+    // Value is a bitfield with first Byte in order '* * * measurelines controls backgroundobjects background layout'
+    // The first three bits depend on initialization and may change. The values in file are Base64 encoded.
+    OUString sBase64;
+    cpo::uno::Sequence<sal_Int8> aDecodedSeq;
+    sBase64 = getXPathContent(pXmlDoc2,
+                              sPathStart2 + "/config:config-item[@config:name='VisibleLayers']");
+    CPPUNIT_ASSERT_MESSAGE("Item VisibleLayers does not exists.", !sBase64.isEmpty());
+    comphelper::Base64::decode(aDecodedSeq, sBase64);
+    CPPUNIT_ASSERT_EQUAL(0x0F, static_cast<sal_uInt8>(aDecodedSeq[0]) & 0x1F);
+
+    sBase64 = getXPathContent(pXmlDoc2,
+                              sPathStart2 + "/config:config-item[@config:name='PrintableLayers']");
+    CPPUNIT_ASSERT_MESSAGE("Item PrintableLayers does not exists.", !sBase64.isEmpty());
+    comphelper::Base64::decode(aDecodedSeq, sBase64);
+    CPPUNIT_ASSERT_EQUAL(0x17, static_cast<sal_uInt8>(aDecodedSeq[0]) & 0x1F);
+
+    sBase64 = getXPathContent(pXmlDoc2,
+                              sPathStart2 + "/config:config-item[@config:name='LockedLayers']");
+    CPPUNIT_ASSERT_MESSAGE("Item LockedLayers does not exists.", !sBase64.isEmpty());
+    comphelper::Base64::decode(aDecodedSeq, sBase64);
+    CPPUNIT_ASSERT_EQUAL(0x04, static_cast<sal_uInt8>(aDecodedSeq[0]) & 0x1F);
+}
+
+void SdMiscTest::testTdf101242_settings_remove()
+{
+    // Loads a document, which has the visible/printable/locked information for layers
+    // only in the config items in settings.xml. That is the case for all old documents.
+    // The resaved document should have only the ODF attributes draw:display and draw:protected
+    // and should have no config items in settings.xml.
+    createSdDrawDoc("tdf101242_settings.odg");
+
+    // Saving without config items in settings.xml
+    ScopedConfigValue<officecfg::Office::Common::Misc::WriteLayerStateAsConfigItem> aCfg(false);
+    save(TestFilter::ODG);
+
+    // Verify, that the saved document has the ODF attributes
+    xmlDocUniquePtr pXmlDoc = parseExport(u"styles.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'styles.xml'", pXmlDoc);
+    static constexpr OString sPathStart(
+        "/office:document-styles/office:master-styles/draw:layer-set/draw:layer"_ostr);
+    assertXPath(pXmlDoc,
+                sPathStart + "[@draw:name='backgroundobjects' and @draw:protected='true']");
+    assertXPath(pXmlDoc, sPathStart + "[@draw:name='controls' and @draw:display='screen']");
+    assertXPath(pXmlDoc, sPathStart + "[@draw:name='measurelines' and @draw:display='printer']");
+
+    // Verify, that the saved document has no layer items in settings.xml
+    xmlDocUniquePtr pXmlDoc2 = parseExport(u"settings.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'settings.xml'", pXmlDoc2);
+    static constexpr OString sPathStart2("/office:document-settings/office:settings/"
+                                         "config:config-item-set[@config:name='ooo:view-settings']/"
+                                         "config:config-item-map-indexed[@config:name='Views']/"
+                                         "config:config-item-map-entry"_ostr);
+    assertXPath(pXmlDoc2, sPathStart2 + "/config:config-item[@config:name='VisibleLayers']", 0);
+    assertXPath(pXmlDoc2, sPathStart2 + "/config:config-item[@config:name='PrintableLayers']", 0);
+    assertXPath(pXmlDoc2, sPathStart2 + "/config:config-item[@config:name='LockedLayers']", 0);
+}
+
+void SdMiscTest::testTdf119392()
+{
+    // Loads a document which has two user layers "V--" and "V-L". Inserts a new layer "-P-" between them.
+    // Checks, that the bitfields in the saved file have the bits in the correct order, in case
+    // option WriteLayerAsConfigItem is true and the config items are written.
+    ScopedConfigValue<officecfg::Office::Common::Misc::WriteLayerStateAsConfigItem> aCfg(true);
+
+    createSdDrawDoc("tdf119392_InsertLayer.odg");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    // Insert layer "-P-", not visible, printable, not locked
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+    pView->InsertNewLayer(u"-P-"_ustr, 6); // 0..4 standard layer, 5 layer "V--"
+    SdrPageView* pPageView = pView->GetSdrPageView();
+    pPageView->SetLayerVisible(u"-P-"_ustr, false);
+    pPageView->SetLayerPrintable(u"-P-"_ustr, true);
+    pPageView->SetLayerLocked(u"-P-"_ustr, false);
+    save(TestFilter::ODG);
+
+    // Verify correct bit order in bitfield in the config items in settings.xml
+    xmlDocUniquePtr pXmlDoc = parseExport(u"settings.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'settings.xml'", pXmlDoc);
+    static constexpr OString sPathStart("/office:document-settings/office:settings/"
+                                        "config:config-item-set[@config:name='ooo:view-settings']/"
+                                        "config:config-item-map-indexed[@config:name='Views']/"
+                                        "config:config-item-map-entry"_ostr);
+    // First Byte is in order 'V-L -P- V-- measurelines controls backgroundobjects background layout'
+    // Bits need to be: visible=10111111=0xbf=191 printable=01011111=0x5f=95 locked=10000000=0x80=128
+    // The values in file are Base64 encoded.
+    OUString sBase64;
+    cpo::uno::Sequence<sal_Int8> aDecodedSeq;
+    sBase64 = getXPathContent(pXmlDoc,
+                              sPathStart + "/config:config-item[@config:name='VisibleLayers']");
+    CPPUNIT_ASSERT_MESSAGE("Item VisibleLayers does not exists.", !sBase64.isEmpty());
+    comphelper::Base64::decode(aDecodedSeq, sBase64);
+    CPPUNIT_ASSERT_EQUAL(0xbF,
+                         static_cast<sal_uInt8>(aDecodedSeq[0])
+                             & 0xff); // & 0xff forces unambiguous types for CPPUNIT_ASSERT_EQUAL
+
+    sBase64 = getXPathContent(pXmlDoc,
+                              sPathStart + "/config:config-item[@config:name='PrintableLayers']");
+    CPPUNIT_ASSERT_MESSAGE("Item PrintableLayers does not exists.", !sBase64.isEmpty());
+    comphelper::Base64::decode(aDecodedSeq, sBase64);
+    CPPUNIT_ASSERT_EQUAL(0x5f, static_cast<sal_uInt8>(aDecodedSeq[0]) & 0xff);
+
+    sBase64
+        = getXPathContent(pXmlDoc, sPathStart + "/config:config-item[@config:name='LockedLayers']");
+    CPPUNIT_ASSERT_MESSAGE("Item LockedLayers does not exists.", !sBase64.isEmpty());
+    comphelper::Base64::decode(aDecodedSeq, sBase64);
+    CPPUNIT_ASSERT_EQUAL(0x80, static_cast<sal_uInt8>(aDecodedSeq[0]) & 0xff);
+}
+
+void SdMiscTest::testTdf67248()
+{
+    // The document tdf67248.odg has been created with a German UI. It has a user layer named "Background".
+    // On opening the user layer must still exists. The error was, that it was merged into the standard
+    // layer "background".
+    createSdDrawDoc("tdf67248.odg");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    SdrLayerAdmin& rLayerAdmin = pDoc->GetLayerAdmin();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(6), rLayerAdmin.GetLayerCount());
+}
+
+void SdMiscTest::testTdf119956()
+{
+    createSdDrawDoc("tdf119956.odg");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+
+    sd::GraphicViewShell* pGraphicViewShell = static_cast<sd::GraphicViewShell*>(pViewShell);
+    CPPUNIT_ASSERT(pGraphicViewShell);
+    sd::LayerTabBar* pLayerTabBar = pGraphicViewShell->GetLayerTabControl();
+    CPPUNIT_ASSERT(pLayerTabBar);
+    pLayerTabBar->StateChanged(StateChangedType::InitShow);
+
+    // Alt+Click sets a tab in edit mode, so that you can rename it.
+    // The error was, that Alt+Click on a tab, which was not the current tab, did not set the clicked tab
+    // as current tab. As a result, the entered text was applied to the wrong tab.
+
+    // The test document has the layer tabs "layout", "controls", "measurelines" and "Layer4" in this order
+    // The "pagePos" is 0, 1, 2, 3
+    // Make sure, that tab "layout" is the current tab.
+    MouseEvent aSyntheticMouseEvent;
+    if (pLayerTabBar->GetCurPagePos() != 0)
+    {
+        sal_uInt16 nIdOfTabPos0(pLayerTabBar->GetPageId(0));
+        tools::Rectangle aTabPos0Rect(pLayerTabBar->GetPageRect(nIdOfTabPos0));
+        aSyntheticMouseEvent
+            = MouseEvent(aTabPos0Rect.Center(), 1, MouseEventModifiers::SYNTHETIC, MOUSE_LEFT, 0);
+        pLayerTabBar->MouseButtonDown(aSyntheticMouseEvent);
+    }
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(0), pLayerTabBar->GetCurPagePos());
+
+    // Alt+Click on tab "Layer4"
+    sal_uInt16 nIdOfTabPos3(pLayerTabBar->GetPageId(3));
+    tools::Rectangle aTabPos3Rect(pLayerTabBar->GetPageRect(nIdOfTabPos3));
+    aSyntheticMouseEvent = MouseEvent(aTabPos3Rect.Center(), 1, MouseEventModifiers::SYNTHETIC,
+                                      MOUSE_LEFT, KEY_MOD2);
+    pLayerTabBar->MouseButtonDown(aSyntheticMouseEvent);
+
+    // Make sure, tab 3 is current tab now.
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pLayerTabBar->GetCurPagePos());
+}
+
+void SdMiscTest::testTdf98839_ShearVFlipH()
+{
+    // Loads a document with a sheared shape and mirrors it
+    createSdDrawDoc("tdf98839_ShearVFlipH.odg");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pPage = pViewShell->GetActualPage();
+    SdrObjCustomShape* pShape = static_cast<SdrObjCustomShape*>(pPage->GetObj(0));
+    pShape->Mirror(Point(4000, 2000), Point(4000, 10000));
+
+    // Save and examine attribute draw:transform
+    save(TestFilter::ODG);
+    xmlDocUniquePtr pXmlDoc = parseExport(u"content.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'content.xml'", pXmlDoc);
+    static constexpr OString sPathStart(
+        "/office:document-content/office:body/office:drawing/draw:page"_ostr);
+    assertXPath(pXmlDoc, sPathStart);
+    const OUString sTransform = getXPath(pXmlDoc, sPathStart + "/draw:custom-shape", "transform");
+
+    // Error was, that the shear angle had a wrong sign.
+    CPPUNIT_ASSERT_MESSAGE("expected: draw:transform='skewX (-0.64350...)",
+                           sTransform.startsWith("skewX (-"));
+}
+
+void SdMiscTest::testTdf130988()
+{
+    createSdDrawDoc("tdf130988_3D_create_lathe.odg");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+
+    //emulate command .uno:ConvertInto3DLathe
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    E3dView* pView = pViewShell->GetView();
+    pView->MarkNextObj();
+    pView->ConvertMarkedObjTo3D(false, basegfx::B2DPoint(8000.0, -3000.0),
+                                basegfx::B2DPoint(3000.0, -8000.0));
+    E3dScene* pObj
+        = dynamic_cast<E3dScene*>(pView->GetMarkedObjectList().GetMark(0)->GetMarkedSdrObj());
+    CPPUNIT_ASSERT(pObj);
+
+    // Error was, that the created 3D object had a wrong path. Instead examining
+    // the path directly, I use the scene distance, because that is easier. The
+    // scene distance is calculated from the object while creating.
+    const double fDistance = pObj->GetDistance();
+    CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("D3DSceneDistance", 7071.0, fDistance, 0.5);
+}
+
+void SdMiscTest::testTdf131033()
+{
+    createSdDrawDoc("tdf131033_3D_SceneSizeIn2d.odg");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+
+    // The document contains a polygon, so that emulate command .uno:ConvertInto3DLathe
+    // by direct call of ConvertMarkedObjTo3D works.
+    // It produces a rotation around a vertical axis, which is far away from the
+    // generating shape.
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    E3dView* pView = pViewShell->GetView();
+    pView->MarkNextObj();
+    pView->ConvertMarkedObjTo3D(false, basegfx::B2DPoint(11000.0, -5000.0),
+                                basegfx::B2DPoint(11000.0, -9000.0));
+    E3dScene* pObj
+        = dynamic_cast<E3dScene*>(pView->GetMarkedObjectList().GetMark(0)->GetMarkedSdrObj());
+    CPPUNIT_ASSERT(pObj);
+
+    // Error was, that the 2D representation of the scene did not contain the default 20°
+    // rotation of the new scene around x-axis and therefore was not high enough.
+    const double fSnapRectHeight = pObj->GetSnapRect().getOpenHeight();
+    CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("2D height", 7096.0, fSnapRectHeight, 1.0);
+}
+
+void SdMiscTest::testTdf129898LayerDrawnInSlideshow()
+{
+    // Versions LO 6.2 to 6.4 have produced files, where the layer DrawnInSlideshow has
+    // got visible=false and printable=false attributes. Those files should be repaired now.
+    createSdImpressDoc("tdf129898_faulty_DrawnInSlideshow.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // Verify model
+    static constexpr OUString sName = u"DrawnInSlideshow"_ustr;
+    SdrLayerAdmin& rLayerAdmin = pDoc->GetLayerAdmin();
+    SdrLayer* pLayer = rLayerAdmin.GetLayer(sName);
+    CPPUNIT_ASSERT_MESSAGE("No layer DrawnInSlideshow", pLayer);
+    CPPUNIT_ASSERT(pLayer->IsVisibleODF());
+    CPPUNIT_ASSERT(pLayer->IsPrintableODF());
+
+    // Verify view
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrPageView* pPageView = pViewShell->GetView()->GetSdrPageView();
+    CPPUNIT_ASSERT(pPageView->IsLayerVisible(sName));
+    CPPUNIT_ASSERT(pPageView->IsLayerPrintable(sName));
+}
+
+void SdMiscTest::testTdf136956()
+{
+    createSdImpressDoc("odp/cellspan.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    const SdrPage* pPage = pDoc->GetPage(1);
+    sdr::table::SdrTableObj* pTableObj = dynamic_cast<sdr::table::SdrTableObj*>(pPage->GetObj(0));
+    CPPUNIT_ASSERT(pTableObj);
+    uno::Reference<table::XTable> xTable(pTableObj->getTable(), uno::UNO_SET_THROW);
+
+    uno::Reference<css::table::XMergeableCellRange> xRange(
+        xTable->createCursorByRange(xTable->getCellRangeByPosition(0, 0, 3, 2)),
+        uno::UNO_QUERY_THROW);
+
+    // 4x3 Table before merge.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(4), xTable->getColumnCount());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), xTable->getRowCount());
+
+    xRange->merge();
+
+    // 1x1 Table after merge.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xTable->getColumnCount());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xTable->getRowCount());
+
+    pXImpressDocument->GetDocShell()->GetUndoManager()->Undo();
+
+    // 4x3 Table after undo. Undo crashed before.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(4), xTable->getColumnCount());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), xTable->getRowCount());
+}
+
+void SdMiscTest::testTdf39519()
+{
+    createSdImpressDoc();
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+
+    // Change the name of the first page in the newly created document
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    SdPage* pPage = static_cast<SdPage*>(pDoc->GetPage(1));
+    pPage->SetName(u"Test"_ustr);
+
+    // Insert a bookmark as a new page using the same name
+    std::vector<OUString> aBookmarkList = { u"Test"_ustr };
+    pDoc->CopyOrMovePagesWithinDocument(aBookmarkList, 2, false);
+
+    // Check if the copied page has a different name
+    SdPage* pCopiedPage = static_cast<SdPage*>(pDoc->GetPage(2));
+    // Without the fix in place, the names of the pages would not be different
+    CPPUNIT_ASSERT(pCopiedPage->GetName() != pPage->GetName());
+}
+
+void SdMiscTest::testTdf164284()
+{
+    createSdImpressDoc();
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+
+    // Change the name of the first page in the newly created document
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    SdPage* pPage = static_cast<SdPage*>(pDoc->GetPage(1));
+    pPage->SetName(u"Test"_ustr);
+
+    // Move a bookmark as a page using the same name
+    pDoc->DoMakePageObjectsNamesUnique(false);
+    std::vector<OUString> aBookmarkList = { u"Test"_ustr };
+    pDoc->CopyOrMovePagesWithinDocument(aBookmarkList, 2, true);
+
+    // Check if the moved page has the same name
+    SdPage* pMovedPage = static_cast<SdPage*>(pDoc->GetPage(2));
+    // Without the fix in place, the names of the pages would be different
+    CPPUNIT_ASSERT_EQUAL(pPage->GetName(), pMovedPage->GetName());
+}
+
+void SdMiscTest::testEncodedTableStyles()
+{
+    // Silence unrelated failure:
+    // Error: element "table:table-template" is missing "first-row-start-column" attribute
+    skipValidation();
+
+    createSdDrawDoc();
+
+    {
+        uno::Reference<style::XStyleFamiliesSupplier> xStyleFamiliesSupplier(mxComponent,
+                                                                             uno::UNO_QUERY_THROW);
+        uno::Reference<css::lang::XSingleServiceFactory> xTableStyleFamily(
+            xStyleFamiliesSupplier->getStyleFamilies()->getByName(u"table"_ustr),
+            uno::UNO_QUERY_THROW);
+        uno::Reference<css::lang::XSingleServiceFactory> xCellStyleFamily(
+            xStyleFamiliesSupplier->getStyleFamilies()->getByName(u"cell"_ustr),
+            uno::UNO_QUERY_THROW);
+
+        uno::Reference<style::XStyle> xTableStyle(xTableStyleFamily->createInstance(),
+                                                  uno::UNO_QUERY_THROW);
+        uno::Reference<style::XStyle> xCellStyle(xCellStyleFamily->createInstance(),
+                                                 uno::UNO_QUERY_THROW);
+
+        uno::Reference<container::XNameContainer>(xTableStyleFamily, uno::UNO_QUERY_THROW)
+            ->insertByName(u"table_1"_ustr, cpo::uno::Any(xTableStyle));
+        uno::Reference<container::XNameContainer>(xCellStyleFamily, uno::UNO_QUERY_THROW)
+            ->insertByName(u"table-body_1"_ustr, cpo::uno::Any(xCellStyle));
+        uno::Reference<container::XNameReplace>(xTableStyle, uno::UNO_QUERY_THROW)
+            ->replaceByName(u"body"_ustr, cpo::uno::Any(xCellStyle));
+    }
+
+    saveAndReload(TestFilter::ODG);
+
+    {
+        uno::Reference<style::XStyleFamiliesSupplier> xStyleFamiliesSupplier(mxComponent,
+                                                                             uno::UNO_QUERY_THROW);
+        uno::Reference<container::XNameAccess> xTableStyleFamily(
+            xStyleFamiliesSupplier->getStyleFamilies()->getByName(u"table"_ustr),
+            uno::UNO_QUERY_THROW);
+        // Such style used to be exported as "table_5f_1" instead.
+        CPPUNIT_ASSERT(xTableStyleFamily->hasByName(u"table_1"_ustr));
+
+        uno::Reference<container::XNameAccess> xTableStyle(
+            xTableStyleFamily->getByName(u"table_1"_ustr), uno::UNO_QUERY_THROW);
+        uno::Reference<style::XStyle> xCellStyle(xTableStyle->getByName(u"body"_ustr),
+                                                 uno::UNO_QUERY);
+        // Such style used to not be found by the table style, as it was
+        // searching for "table-body_5f_1" instead of "table-body_1".
+        CPPUNIT_ASSERT(xCellStyle.is());
+        CPPUNIT_ASSERT_EQUAL(u"table-body_1"_ustr, xCellStyle->getName());
+    }
+}
+
+void SdMiscTest::testTdf157117()
+{
+    createSdImpressDoc();
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+
+    // insert two pages to make a total of 3 pages
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+
+    // assert the document has 3 standard pages
+    SdDrawDocument* pDocument = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDocument->GetSdPageCount(PageKind::Standard));
+
+    // alternate page insert method
+    //    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    //    uno::Reference<drawing::XDrawPages> xDrawPages = xDrawPagesSupplier->getDrawPages();
+    //    xDrawPages->insertNewByIndex(0);
+    //    xDrawPages->insertNewByIndex(0);
+    //    CPPUNIT_ASSERT_EQUAL(xDrawPages->getCount(), 3);
+
+    // move to the last page
+    dispatchCommand(mxComponent, u".uno:LastPage"_ustr, {});
+
+    SdPage* pPage = pViewShell->GetActualPage();
+    auto nPageNum = pPage->GetPageNum();
+    // assert move to last page
+    CPPUNIT_ASSERT_EQUAL(2, (nPageNum - 1) / 2);
+
+    // delete the last page
+    dispatchCommand(mxComponent, u".uno:DeletePage"_ustr, {});
+    pPage = pViewShell->GetActualPage();
+    nPageNum = pPage->GetPageNum();
+
+    // Check that the new last page is moved to. Before, the first page was always moved to when
+    // the last page was deleted.
+    CPPUNIT_ASSERT_EQUAL(1, (nPageNum - 1) / 2);
+}
+
+void SdMiscTest::testPageBackgroundImages()
+{
+    // Create empty document
+    createSdDrawDoc();
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+
+    auto* pDrawViewShell = dynamic_cast<sd::DrawViewShell*>(pViewShell);
+    CPPUNIT_ASSERT(pDrawViewShell);
+
+    SdDrawDocument* pDocument = pXImpressDocument->GetDocShell()->GetDoc();
+    CPPUNIT_ASSERT(pDocument);
+
+    // Check we have 1 Page
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1), pDocument->GetSdPageCount(PageKind::Standard));
+
+    // Add 3 pages
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+
+    // Check we have 4 Pages now
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), pDocument->GetSdPageCount(PageKind::Standard));
+
+    // Add a background graphic to page 1
+    {
+        CPPUNIT_ASSERT_EQUAL(true, pDrawViewShell->SwitchPage(0));
+        cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+            { u"FileName"_ustr, cpo::uno::Any(createFileURL(u"TestImage1.png")) },
+        }));
+
+        dispatchCommand(mxComponent, u".uno:SelectBackground"_ustr, aArgs);
+    }
+
+    // Add a background graphic to page 2
+    {
+        CPPUNIT_ASSERT_EQUAL(true, pDrawViewShell->SwitchPage(1));
+        cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+            { u"FileName"_ustr, cpo::uno::Any(createFileURL(u"TestImage2.png")) },
+        }));
+
+        dispatchCommand(mxComponent, u".uno:SelectBackground"_ustr, aArgs);
+    }
+
+    // Add a background graphic to page 3
+    {
+        CPPUNIT_ASSERT_EQUAL(true, pDrawViewShell->SwitchPage(2));
+        cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+            { u"FileName"_ustr, cpo::uno::Any(createFileURL(u"TestImage3.png")) },
+        }));
+
+        dispatchCommand(mxComponent, u".uno:SelectBackground"_ustr, aArgs);
+    }
+
+    // Add a background graphic to page 4
+    {
+        CPPUNIT_ASSERT_EQUAL(true, pDrawViewShell->SwitchPage(3));
+        cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+            { u"FileName"_ustr, cpo::uno::Any(createFileURL(u"TestImage4.png")) },
+        }));
+
+        dispatchCommand(mxComponent, u".uno:SelectBackground"_ustr, aArgs);
+    }
+
+    // Store graphic names
+    std::unordered_set<OUString> aGraphicNames;
+
+    // Check page 1
+    {
+        CPPUNIT_ASSERT_EQUAL(true, pDrawViewShell->SwitchPage(0));
+        SdPage* pPage = pViewShell->GetActualPage();
+
+        SfxItemSetFixed<XATTR_FILL_FIRST, XATTR_FILL_LAST> aMergedAttr(pDocument->GetPool());
+        SdStyleSheet* pStyleSheet = pPage->getPresentationStyle(HID_PSEUDOSHEET_BACKGROUND);
+        sd::MergePageBackgroundFilling(pPage, pStyleSheet, false, aMergedAttr);
+
+        // Style should be "BITMAP"
+        CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_BITMAP,
+                             aMergedAttr.Get(XATTR_FILLSTYLE).GetValue());
+        auto aItem = aMergedAttr.Get<XFillBitmapItem>(XATTR_FILLBITMAP);
+        aGraphicNames.insert(aItem.GetName());
+    }
+
+    // Check page 2
+    {
+        CPPUNIT_ASSERT_EQUAL(true, pDrawViewShell->SwitchPage(1));
+        SdPage* pPage = pViewShell->GetActualPage();
+
+        // Style should be "BITMAP"
+        SfxItemSetFixed<XATTR_FILL_FIRST, XATTR_FILL_LAST> aMergedAttr(pDocument->GetPool());
+        SdStyleSheet* pStyleSheet = pPage->getPresentationStyle(HID_PSEUDOSHEET_BACKGROUND);
+        sd::MergePageBackgroundFilling(pPage, pStyleSheet, false, aMergedAttr);
+
+        CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_BITMAP,
+                             aMergedAttr.Get(XATTR_FILLSTYLE).GetValue());
+        auto aItem = aMergedAttr.Get<XFillBitmapItem>(XATTR_FILLBITMAP);
+        aGraphicNames.insert(aItem.GetName());
+    }
+
+    // Check page 3
+    {
+        CPPUNIT_ASSERT_EQUAL(true, pDrawViewShell->SwitchPage(2));
+        SdPage* pPage = pViewShell->GetActualPage();
+
+        // Style should be "BITMAP"
+        SfxItemSetFixed<XATTR_FILL_FIRST, XATTR_FILL_LAST> aMergedAttr(pDocument->GetPool());
+        SdStyleSheet* pStyleSheet = pPage->getPresentationStyle(HID_PSEUDOSHEET_BACKGROUND);
+        sd::MergePageBackgroundFilling(pPage, pStyleSheet, false, aMergedAttr);
+
+        CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_BITMAP,
+                             aMergedAttr.Get(XATTR_FILLSTYLE).GetValue());
+        auto aItem = aMergedAttr.Get<XFillBitmapItem>(XATTR_FILLBITMAP);
+        aGraphicNames.insert(aItem.GetName());
+    }
+
+    // Check page 4
+    {
+        CPPUNIT_ASSERT_EQUAL(true, pDrawViewShell->SwitchPage(3));
+        SdPage* pPage = pViewShell->GetActualPage();
+
+        SfxItemSetFixed<XATTR_FILL_FIRST, XATTR_FILL_LAST> aMergedAttr(pDocument->GetPool());
+        SdStyleSheet* pStyleSheet = pPage->getPresentationStyle(HID_PSEUDOSHEET_BACKGROUND);
+        sd::MergePageBackgroundFilling(pPage, pStyleSheet, false, aMergedAttr);
+
+        // Style should be "BITMAP"
+        CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_BITMAP,
+                             aMergedAttr.Get(XATTR_FILLSTYLE).GetValue());
+        auto aItem = aMergedAttr.Get<XFillBitmapItem>(XATTR_FILLBITMAP);
+        aGraphicNames.insert(aItem.GetName());
+    }
+
+    // Size of graphic names should be 4 - this means each page has a unique name
+    CPPUNIT_ASSERT_EQUAL(size_t(4), aGraphicNames.size());
+    // Check none of the graphic names is empty
+    for (OUString const& rName : aGraphicNames)
+        CPPUNIT_ASSERT(!rName.isEmpty());
+}
+
+void SdMiscTest::testCanvasSlideExportODP()
+{
+    createSdImpressDoc();
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+
+    // insert canvas page to make a total of 2 pages
+    dispatchCommand(mxComponent, u".uno:InsertCanvasSlide"_ustr, {});
+
+    // assert the document has 2 standard pages
+    SdDrawDocument* pDocument = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDocument->GetSdPageCount(PageKind::Standard));
+
+    // saving with config items in settings.xml
+    ScopedConfigValue<officecfg::Office::Common::Misc::WriteLayerStateAsConfigItem> aCfg(true);
+    save(TestFilter::ODP);
+
+    // Verify if the "HasCanvasPage" item is true
+    xmlDocUniquePtr pXmlDoc = parseExport(u"settings.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'settings.xml'", pXmlDoc);
+    static constexpr OString sPathStart("/office:document-settings/office:settings/"
+                                        "config:config-item-set[@config:name='ooo:view-settings']/"
+                                        "config:config-item-map-indexed[@config:name='Views']/"
+                                        "config:config-item-map-entry"_ostr);
+    assertXPathContent(pXmlDoc, sPathStart + "/config:config-item[@config:name='HasCanvasPage']",
+                       u"true");
+}
+
+void SdMiscTest::testDuplicateAndMove()
+{
+    createSdImpressDoc("slide_with_text.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+
+    SdPage* pFirstPage = pViewShell->GetActualPage();
+
+    dispatchCommand(mxComponent, u".uno:DuplicatePage"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:DuplicatePage"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:DuplicatePage"_ustr, {});
+    pXImpressDocument->setPart(2);
+    dispatchCommand(mxComponent, u".uno:MovePageLast"_ustr, {});
+
+    pXImpressDocument->setPart(3);
+    SdPage* pLastPage = pViewShell->GetActualPage();
+    // Without the fix in place, the textbox changes size
+    // - Expected: 25200x2630@(1400,628)
+    // - Actual  : 19799x11137@(600,2257)
+    CPPUNIT_ASSERT_EQUAL(pFirstPage->GetObj(0)->GetSnapRect(), pLastPage->GetObj(0)->GetSnapRect());
+}
+
+void SdMiscTest::testEmptyPresObjSetOnObjectWithoutText()
+{
+    // Given an empty picture placeholder, which holds no outliner text at all:
+    createSdImpressDoc("pptx/tdfpictureplaceholder.pptx");
+    uno::Reference<beans::XPropertySet> xShape(getShapeFromPage(0, 0));
+    bool bEmpty = false;
+    CPPUNIT_ASSERT(xShape->getPropertyValue(u"IsEmptyPresentationObject"_ustr) >>= bEmpty);
+    CPPUNIT_ASSERT(bEmpty);
+
+    // Then saying it is not empty and empty again must go through. Setting it back read the
+    // object's text to take a style from it without checking that there is any, so this crashed -
+    // a macro can reach it, and so can anything else that sets the property twice.
+    xShape->setPropertyValue(u"IsEmptyPresentationObject"_ustr, cpo::uno::Any(false));
+    xShape->setPropertyValue(u"IsEmptyPresentationObject"_ustr, cpo::uno::Any(true));
+
+    CPPUNIT_ASSERT(xShape->getPropertyValue(u"IsEmptyPresentationObject"_ustr) >>= bEmpty);
+    CPPUNIT_ASSERT(bEmpty);
+}
+
+void SdMiscTest::testPageGuids()
+{
+    // Every page of a document holds a globally unique identifier, and a page copied next to
+    // its source gets one of its own.
+    createSdImpressDoc("slide_with_text.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    // The file stores no identifier, so loading it generated a distinct one for every page and
+    // every master page, and each of them can be looked up by it.
+    std::set<OUString> aSeenGuids;
+    for (sal_uInt16 nPage = 0; nPage < pDoc->GetPageCount(); ++nPage)
+    {
+        SdPage* pPage = static_cast<SdPage*>(pDoc->GetPage(nPage));
+        CPPUNIT_ASSERT(!pPage->GetGuid().isEmpty());
+        CPPUNIT_ASSERT(aSeenGuids.insert(pPage->GetGuid().getOUString()).second);
+        CPPUNIT_ASSERT_EQUAL(pPage, pDoc->GetPageByGuid(pPage->GetGuid()));
+    }
+    for (sal_uInt16 nPage = 0; nPage < pDoc->GetMasterPageCount(); ++nPage)
+    {
+        SdPage* pPage = static_cast<SdPage*>(pDoc->GetMasterPage(nPage));
+        CPPUNIT_ASSERT(!pPage->GetGuid().isEmpty());
+        CPPUNIT_ASSERT(aSeenGuids.insert(pPage->GetGuid().getOUString()).second);
+        CPPUNIT_ASSERT_EQUAL(pPage, pDoc->GetPageByGuid(pPage->GetGuid()));
+    }
+
+    // A duplicated slide keeps the content of its source but gets an identifier of its own.
+    SdPage* pFirstPage = pDoc->GetSdPage(0, PageKind::Standard);
+    const OUString sFirstGuid = pFirstPage->GetGuid().getOUString();
+    dispatchCommand(mxComponent, u".uno:DuplicatePage"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+    SdPage* pSecondPage = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sFirstGuid, pFirstPage->GetGuid().getOUString());
+    CPPUNIT_ASSERT(!pSecondPage->GetGuid().isEmpty());
+    CPPUNIT_ASSERT(pSecondPage->GetGuid() != pFirstPage->GetGuid());
+
+    // The identifier is readable over the page's property set.
+    uno::Reference<beans::XPropertySet> xSecondPage(getPage(1), uno::UNO_QUERY_THROW);
+    OUString sSecondGuid;
+    CPPUNIT_ASSERT(xSecondPage->getPropertyValue(u"Guid"_ustr) >>= sSecondGuid);
+    CPPUNIT_ASSERT_EQUAL(pSecondPage->GetGuid().getOUString(), sSecondGuid);
+
+    // Writing an identifier another page of the document holds leaves the page as it is.
+    xSecondPage->setPropertyValue(u"Guid"_ustr, cpo::uno::Any(sFirstGuid));
+    CPPUNIT_ASSERT_EQUAL(sSecondGuid, pSecondPage->GetGuid().getOUString());
+
+    // A value that is not a GUID is refused.
+    bool bCaught = false;
+    try
+    {
+        xSecondPage->setPropertyValue(u"Guid"_ustr, cpo::uno::Any(u"not-a-guid"_ustr));
+    }
+    catch (const lang::IllegalArgumentException&)
+    {
+        bCaught = true;
+    }
+    CPPUNIT_ASSERT(bCaught);
+    CPPUNIT_ASSERT_EQUAL(sSecondGuid, pSecondPage->GetGuid().getOUString());
+
+    // A fresh valid value is taken over.
+    tools::Guid aFreshGuid(tools::Guid::Generate);
+    xSecondPage->setPropertyValue(u"Guid"_ustr, cpo::uno::Any(aFreshGuid.getOUString()));
+    CPPUNIT_ASSERT_EQUAL(aFreshGuid.getOUString(), pSecondPage->GetGuid().getOUString());
+}
+
+void SdMiscTest::testPageGuidCutPaste()
+{
+    // A slide moved through the clipboard keeps its identifier: the copy is taken while the
+    // page is still in the document, and it is inserted only after the page was deleted.
+    createSdImpressDoc("slide_with_text.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    // A second slide, so the document keeps a slide while the moved one is out of it.
+    dispatchCommand(mxComponent, u".uno:DuplicatePage"_ustr, {});
+    SdPage* pSecondPage = pDoc->GetSdPage(1, PageKind::Standard);
+    const OUString sGuid = pSecondPage->GetGuid().getOUString();
+    const sal_uInt16 nPagePosition = pSecondPage->GetPageNum();
+
+    SdrPage& rSecondPage = *pSecondPage;
+    rtl::Reference<SdrPage> xClipboardPage = rSecondPage.CloneSdrPage(*pDoc);
+    CPPUNIT_ASSERT_EQUAL(sGuid,
+                         static_cast<SdPage*>(xClipboardPage.get())->GetGuid().getOUString());
+
+    SdrModel& rModel = *pDoc;
+    rtl::Reference<SdrPage> xRemovedPage = rModel.RemovePage(nPagePosition);
+    rModel.InsertPage(xClipboardPage.get(), nPagePosition);
+
+    SdPage* pPastedPage = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sGuid, pPastedPage->GetGuid().getOUString());
+    CPPUNIT_ASSERT_EQUAL(pPastedPage, pDoc->GetPageByGuid(pPastedPage->GetGuid()));
+}
+
+void SdMiscTest::testPageGuidMergedMasters()
+{
+    // Master pages arrive through a model merge without passing the insert methods, and a
+    // merged master holding the identifier of an existing master gets one of its own.
+    createSdImpressDoc("slide_with_text.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+    const OUString sMasterGuid
+        = pDoc->GetMasterSdPage(0, PageKind::Standard)->GetGuid().getOUString();
+
+    // A saved copy of the document holds the same identifiers the document does.
+    save(TestFilter::ODP);
+    uno::Reference<lang::XComponent> xSourceComponent = loadFromDesktop(maTempFile.GetURL());
+    auto* pSourceXImpressDocument = dynamic_cast<SdXImpressDocument*>(xSourceComponent.get());
+    CPPUNIT_ASSERT(pSourceXImpressDocument);
+    SdDrawDocument* pSourceDoc = pSourceXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pSourceDoc);
+    CPPUNIT_ASSERT_EQUAL(
+        sMasterGuid, pSourceDoc->GetMasterSdPage(0, PageKind::Standard)->GetGuid().getOUString());
+
+    // Merge the master pages of the copy, and none of the pages.
+    const sal_uInt16 nMastersBefore = pDoc->GetMasterPageCount();
+    SdrModel& rModel = *pDoc;
+    rModel.Merge(*pSourceDoc, SDRPAGE_NOTFOUND, SDRPAGE_NOTFOUND, pDoc->GetPageCount(),
+                 /*bMergeMasterPages=*/true, /*bAllMasterPages=*/true,
+                 /*bUndo=*/false, /*bTreadSourceAsConst=*/true);
+    CPPUNIT_ASSERT(pDoc->GetMasterPageCount() > nMastersBefore);
+
+    // Every master of the document holds an identifier of its own, and the document's own
+    // master kept the one it had.
+    std::set<OUString> aSeenGuids;
+    for (sal_uInt16 nPage = 0; nPage < pDoc->GetMasterPageCount(); ++nPage)
+    {
+        SdPage* pPage = static_cast<SdPage*>(pDoc->GetMasterPage(nPage));
+        CPPUNIT_ASSERT(aSeenGuids.insert(pPage->GetGuid().getOUString()).second);
+    }
+    CPPUNIT_ASSERT_EQUAL(sMasterGuid,
+                         pDoc->GetMasterSdPage(0, PageKind::Standard)->GetGuid().getOUString());
+
+    xSourceComponent->dispose();
+}
+
+// Loads the slide-import target document and opens the source presentation
+// as its bookmark document, the same way the insert-pages-from-file flow
+// does when the user has picked a file.
+SdDrawDocument* SdMiscTest::loadSlideImportDocs()
+{
+    createSdImpressDoc("slide-import-target.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    SdDrawDocument* pBookmarkDoc
+        = pDoc->OpenBookmarkDoc(createFileURL(u"slide-import-source.odp"));
+    CPPUNIT_ASSERT(pBookmarkDoc);
+
+    return pDoc;
+}
+
+void SdMiscTest::testInsertFileAsPageKeepsMasterBackground()
+{
+    // Inserting pages from another presentation brings their master pages
+    // along; the master background fill must arrive with them.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    const sal_uInt16 nMasterCountBefore = pDoc->GetMasterPageCount();
+
+    std::vector<OUString> aBookmarkList{ u"SourceA"_ustr };
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr, /*bLink=*/false, 3, nullptr,
+                                          /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_GREATER(nMasterCountBefore, pDoc->GetMasterPageCount());
+
+    // The imported master serves its background fill from the background
+    // style copied into this document's pool.
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pInserted->TRG_HasMasterPage());
+    SdPage& rNewMaster = static_cast<SdPage&>(pInserted->TRG_GetMasterPage());
+    SfxStyleSheet* pBackgroundSheet = rNewMaster.getSdrPageProperties().GetStyleSheet();
+    CPPUNIT_ASSERT(pBackgroundSheet);
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_SOLID,
+                         pBackgroundSheet->GetItemSet().Get(XATTR_FILLSTYLE).GetValue());
+    CPPUNIT_ASSERT_EQUAL(Color(0xff0000),
+                         pBackgroundSheet->GetItemSet().Get(XATTR_FILLCOLOR).GetColorValue());
+}
+
+void SdMiscTest::testInsertFileAsPageAdoptDesign()
+{
+    // Pages inserted from another presentation are bound to the design of the
+    // destination document when the options ask for it.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    const sal_uInt16 nMasterCountBefore = pDoc->GetMasterPageCount();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+
+    // The source page named TargetOne collides with an existing page name.
+    std::vector<OUString> aBookmarkList{ u"SourceA"_ustr, u"TargetOne"_ustr };
+    // Insert between the two slides of the destination document.
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                          InsertBookmarkOptions::ForSlideImport(
+                                              /*bKeepDesign=*/false),
+                                          3, nullptr, /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), pDoc->GetSdPageCount(PageKind::Standard));
+    // The source design stayed behind: no new master pages and no source
+    // layout styles in the destination pool.
+    CPPUNIT_ASSERT_EQUAL(nMasterCountBefore, pDoc->GetMasterPageCount());
+    CPPUNIT_ASSERT(
+        !pDoc->GetStyleSheetPool()->Find(u"SourceDesign" + SD_LT_SEPARATOR + STR_LAYOUT_TITLE, SfxStyleFamily::Page));
+
+    for (sal_uInt16 nSdPage = 1; nSdPage <= 2; ++nSdPage)
+    {
+        SdPage* pInserted = pDoc->GetSdPage(nSdPage, PageKind::Standard);
+        CPPUNIT_ASSERT_EQUAL(u"TargetDesign"_ustr,
+                             SdDrawDocument::GetBaseLayoutName(pInserted->GetLayoutName()));
+        CPPUNIT_ASSERT(pInserted->TRG_HasMasterPage());
+        CPPUNIT_ASSERT_EQUAL(u"TargetDesign"_ustr,
+                             SdDrawDocument::GetBaseLayoutName(
+                                 static_cast<SdPage&>(pInserted->TRG_GetMasterPage())
+                                     .GetLayoutName()));
+    }
+
+    // The colliding page name was replaced with a generated one.
+    CPPUNIT_ASSERT(pDoc->GetSdPage(2, PageKind::Standard)->GetName() != "TargetOne");
+
+
+    // The whole insertion is one undo step.
+    pDoc->GetDocSh()->GetUndoManager()->Undo();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCountBefore, pDoc->GetMasterPageCount());
+    pDoc->GetDocSh()->GetUndoManager()->Redo();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCountBefore, pDoc->GetMasterPageCount());
+}
+
+void SdMiscTest::testInsertFileAsPageAdoptDesignAtStart()
+{
+    // An insert in front of the first slide also binds the inserted pages to
+    // the destination design, taken from the page that follows them.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    const sal_uInt16 nMasterCountBefore = pDoc->GetMasterPageCount();
+
+    std::vector<OUString> aBookmarkList{ u"SourceA"_ustr };
+    // Position 0 is the handout page slot; the insert lands before slide 1.
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                          InsertBookmarkOptions::ForSlideImport(
+                                              /*bKeepDesign=*/false),
+                                          0, nullptr, /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCountBefore, pDoc->GetMasterPageCount());
+
+    SdPage* pInserted = pDoc->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pInserted->GetName());
+    CPPUNIT_ASSERT_EQUAL(u"TargetDesign"_ustr,
+                         SdDrawDocument::GetBaseLayoutName(pInserted->GetLayoutName()));
+    CPPUNIT_ASSERT(pInserted->TRG_HasMasterPage());
+    CPPUNIT_ASSERT_EQUAL(u"TargetDesign"_ustr,
+                         SdDrawDocument::GetBaseLayoutName(
+                             static_cast<SdPage&>(pInserted->TRG_GetMasterPage())
+                                 .GetLayoutName()));
+}
+
+
+// Checks that the master pages of rDoc come as the handout master followed by pairs of a slide
+// master and a notes master, and that the two pages of each pair carry the same layout name.
+static void assertMasterPagesPaired(SdDrawDocument& rDoc)
+{
+    const sal_uInt16 nMasterCount = rDoc.GetMasterPageCount();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1), static_cast<sal_uInt16>(nMasterCount % 2));
+    CPPUNIT_ASSERT_EQUAL(PageKind::Handout,
+                         static_cast<SdPage*>(rDoc.GetMasterPage(0))->GetPageKind());
+
+    for (sal_uInt16 nMaster = 1; nMaster < nMasterCount; nMaster += 2)
+    {
+        SdPage* pSlideMaster = static_cast<SdPage*>(rDoc.GetMasterPage(nMaster));
+        SdPage* pNotesMaster = static_cast<SdPage*>(rDoc.GetMasterPage(nMaster + 1));
+        CPPUNIT_ASSERT_EQUAL(PageKind::Standard, pSlideMaster->GetPageKind());
+        CPPUNIT_ASSERT_EQUAL(PageKind::Notes, pNotesMaster->GetPageKind());
+        CPPUNIT_ASSERT_EQUAL(pSlideMaster->GetLayoutName(), pNotesMaster->GetLayoutName());
+    }
+}
+
+void SdMiscTest::testInsertFileAsPageKeepDesignRenamedKeepsNotesMaster()
+{
+    // Both presentations name their master page "Default" and the designs differ, so the
+    // inserted design arrives under a new name. Its notes master arrives under that name too,
+    // and the notes page of the inserted slide uses it. The second insert from the same
+    // presentation finds the design the first one brought and keeps the same pairing.
+    createSdImpressDoc("slide-import-same-master-name-target.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    std::vector<OUString> aBookmarkList{ u"SourceRed"_ustr };
+    for (sal_uInt16 nRun = 0; nRun < 2; ++nRun)
+    {
+        CPPUNIT_ASSERT(
+            pDoc->OpenBookmarkDoc(createFileURL(u"slide-import-same-master-name-source.odp")));
+        CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                              InsertBookmarkOptions::ForSlideImport(
+                                                  /*bKeepDesign=*/true),
+                                              3, nullptr, /*oScaleObjects=*/true));
+        pDoc->CloseBookmarkDoc();
+
+        assertMasterPagesPaired(*pDoc);
+
+        SdPage* pSlide = pDoc->GetSdPage(1, PageKind::Standard);
+        SdPage* pNotes = pDoc->GetSdPage(1, PageKind::Notes);
+        CPPUNIT_ASSERT(pNotes->TRG_HasMasterPage());
+        SdPage& rNotesMaster = static_cast<SdPage&>(pNotes->TRG_GetMasterPage());
+        CPPUNIT_ASSERT_EQUAL(PageKind::Notes, rNotesMaster.GetPageKind());
+        CPPUNIT_ASSERT_EQUAL(pSlide->GetLayoutName(), rNotesMaster.GetLayoutName());
+    }
+}
+
+void SdMiscTest::testInsertFileAsPageKeepDesignTwoDesignsOfOneName()
+{
+    // Three presentations name their master page "Default", each with a design of its own:
+    // green here, red and blue in the two the slides come from. A slide from each keeps its
+    // design, and every design arrives with its notes master, so the n-th slide master is
+    // still the master page at position 2n+1 after both inserts.
+    createSdImpressDoc("slide-import-same-master-name-target.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    for (const char16_t* pSource : { u"slide-import-same-master-name-source.odp",
+                                     u"slide-import-same-master-name-source-blue.odp" })
+    {
+        CPPUNIT_ASSERT(pXImpressDocument->insertPagesFromFile(
+            createFileURL(pSource), "{\"slides\":[0],\"at\":1,\"keepDesign\":true}"_ostr));
+
+        assertMasterPagesPaired(*pDoc);
+        const sal_uInt16 nSlideMasters = pDoc->GetMasterSdPageCount(PageKind::Standard);
+        for (sal_uInt16 nMaster = 0; nMaster < nSlideMasters; ++nMaster)
+            CPPUNIT_ASSERT_EQUAL(
+                static_cast<sal_uInt16>(2 * nMaster + 1),
+                pDoc->GetMasterSdPage(nMaster, PageKind::Standard)->GetPageNum());
+    }
+
+    // The target design and the two that arrived.
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetSdPageCount(PageKind::Standard));
+}
+
+void SdMiscTest::testInsertFileAsPageKeepDesign()
+{
+    // Pages inserted from another presentation keep their own design when the
+    // options ask for it: the source master pages come along.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    const sal_uInt16 nMasterCountBefore = pDoc->GetMasterPageCount();
+
+    std::vector<OUString> aBookmarkList{ u"SourceA"_ustr };
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                          InsertBookmarkOptions::ForSlideImport(
+                                              /*bKeepDesign=*/true),
+                                          3, nullptr, /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetSdPageCount(PageKind::Standard));
+    // The source design arrived with the page.
+    CPPUNIT_ASSERT_GREATER(nMasterCountBefore, pDoc->GetMasterPageCount());
+    CPPUNIT_ASSERT(
+        pDoc->GetStyleSheetPool()->Find(u"SourceDesign" + SD_LT_SEPARATOR + STR_LAYOUT_TITLE, SfxStyleFamily::Page));
+
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"SourceDesign"_ustr,
+                         SdDrawDocument::GetBaseLayoutName(pInserted->GetLayoutName()));
+
+
+
+    // Undo removes the page together with the imported master pages.
+    pDoc->GetDocSh()->GetUndoManager()->Undo();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCountBefore, pDoc->GetMasterPageCount());
+}
+
+void SdMiscTest::testInsertFileAsPageKeepDesignSameMasterName()
+{
+    // Both presentations name their master page "Default", and the two designs differ. A page
+    // that keeps its own design shows the background of the presentation it came from.
+    createSdImpressDoc("slide-import-same-master-name-target.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(
+        pDoc->OpenBookmarkDoc(createFileURL(u"slide-import-same-master-name-source.odp")));
+
+    std::vector<OUString> aBookmarkList{ u"SourceRed"_ustr };
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                          InsertBookmarkOptions::ForSlideImport(
+                                              /*bKeepDesign=*/true),
+                                          3, nullptr, /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pInserted->TRG_HasMasterPage());
+    SdPage& rInsertedMaster = static_cast<SdPage&>(pInserted->TRG_GetMasterPage());
+    SdPage& rOwnMaster
+        = static_cast<SdPage&>(pDoc->GetSdPage(0, PageKind::Standard)->TRG_GetMasterPage());
+    CPPUNIT_ASSERT(&rInsertedMaster != &rOwnMaster);
+
+    SfxStyleSheet* pInsertedBackground = rInsertedMaster.getSdrPageProperties().GetStyleSheet();
+    CPPUNIT_ASSERT(pInsertedBackground);
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_SOLID,
+                         pInsertedBackground->GetItemSet().Get(XATTR_FILLSTYLE).GetValue());
+    CPPUNIT_ASSERT_EQUAL(Color(0xff0000),
+                         pInsertedBackground->GetItemSet().Get(XATTR_FILLCOLOR).GetColorValue());
+
+    // The presentation's own slide keeps the background it had.
+    SfxStyleSheet* pOwnBackground = rOwnMaster.getSdrPageProperties().GetStyleSheet();
+    CPPUNIT_ASSERT(pOwnBackground);
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_SOLID,
+                         pOwnBackground->GetItemSet().Get(XATTR_FILLSTYLE).GetValue());
+    CPPUNIT_ASSERT_EQUAL(Color(0x00ff00),
+                         pOwnBackground->GetItemSet().Get(XATTR_FILLCOLOR).GetColorValue());
+}
+
+void SdMiscTest::testInsertFileAsPageKeepDesignSameMasterNameAndDesign()
+{
+    // The two presentations carry the same design under the same name, so the inserted page
+    // shares the master page that is already there and no second one is added.
+    createSdImpressDoc("slide-import-same-master-name-source.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(
+        pDoc->OpenBookmarkDoc(createFileURL(u"slide-import-same-master-name-source.odp")));
+
+    const sal_uInt16 nMasterCountBefore = pDoc->GetMasterPageCount();
+
+    std::vector<OUString> aBookmarkList{ u"SourceRed"_ustr };
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                          InsertBookmarkOptions::ForSlideImport(
+                                              /*bKeepDesign=*/true),
+                                          3, nullptr, /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCountBefore, pDoc->GetMasterPageCount());
+
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pInserted->TRG_HasMasterPage());
+    CPPUNIT_ASSERT_EQUAL(u"Default"_ustr,
+                         SdDrawDocument::GetBaseLayoutName(pInserted->GetLayoutName()));
+}
+
+void SdMiscTest::testSlideImportRoundTripKeepsMasterBackground()
+{
+    // A slide travels to another presentation in a file written out of its own deck. Its
+    // background comes from the master page, and it shows the same background at the far end,
+    // although both presentations name their master page "Default".
+    createSdImpressDoc("slide-import-same-master-name-source.odp");
+    SdXImpressDocument* pSource = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pSource);
+    SdDrawDocument* pSourceDoc = pSource->GetDoc();
+
+    utl::TempFileNamed aStaged(u"", true, u".odp");
+    aStaged.EnableKillingFile();
+    CPPUNIT_ASSERT(pSource->exportPages({ 0 }, aStaged.GetURL()));
+
+    // Writing the file leaves the presentation the slide came from as it was.
+    CPPUNIT_ASSERT_EQUAL(u"Default"_ustr,
+                         pSourceDoc->GetMasterSdPage(0, PageKind::Standard)->GetName());
+
+    createSdImpressDoc("slide-import-same-master-name-target.odp");
+    SdXImpressDocument* pDestination = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pDestination);
+    SdDrawDocument* pDoc = pDestination->GetDoc();
+    CPPUNIT_ASSERT(pDestination->insertPagesFromFile(
+        aStaged.GetURL(),
+        "{\"slides\":[0],\"at\":1,\"keepDesign\":true,\"link\":true,"
+        "\"source\":\"deck.odp\"}"_ostr));
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT(pInserted->TRG_HasMasterPage());
+    SfxStyleSheet* pBackground
+        = pInserted->TRG_GetMasterPage().getSdrPageProperties().GetStyleSheet();
+    CPPUNIT_ASSERT(pBackground);
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_SOLID,
+                         pBackground->GetItemSet().Get(XATTR_FILLSTYLE).GetValue());
+    CPPUNIT_ASSERT_EQUAL(Color(0xff0000),
+                         pBackground->GetItemSet().Get(XATTR_FILLCOLOR).GetColorValue());
+
+    // The presentation's own slide keeps the background it had.
+    SfxStyleSheet* pOwnBackground = pDoc->GetSdPage(0, PageKind::Standard)
+                                        ->TRG_GetMasterPage()
+                                        .getSdrPageProperties()
+                                        .GetStyleSheet();
+    CPPUNIT_ASSERT(pOwnBackground);
+    CPPUNIT_ASSERT_EQUAL(Color(0x00ff00),
+                         pOwnBackground->GetItemSet().Get(XATTR_FILLCOLOR).GetColorValue());
+}
+
+void SdMiscTest::testInsertFileAsPageKeepDesignTwiceSharesMaster()
+{
+    // Inserting from the same presentation a second time uses the design that the first insert
+    // brought over, so the two pages share one master page.
+    createSdImpressDoc("slide-import-same-master-name-target.odp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    const sal_uInt16 nMasterCountBefore = pDoc->GetMasterPageCount();
+    std::vector<OUString> aBookmarkList{ u"SourceRed"_ustr };
+
+    for (int nRun = 0; nRun < 2; ++nRun)
+    {
+        CPPUNIT_ASSERT(
+            pDoc->OpenBookmarkDoc(createFileURL(u"slide-import-same-master-name-source.odp")));
+        CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                              InsertBookmarkOptions::ForSlideImport(
+                                                  /*bKeepDesign=*/true),
+                                              3, nullptr, /*oScaleObjects=*/true));
+        pDoc->CloseBookmarkDoc();
+    }
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetSdPageCount(PageKind::Standard));
+
+    // One design arrived as a slide master and a notes master, and the second insert added no
+    // master page of its own.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(nMasterCountBefore + 2),
+                         pDoc->GetMasterPageCount());
+
+    SdPage& rFirst = static_cast<SdPage&>(
+        pDoc->GetSdPage(1, PageKind::Standard)->TRG_GetMasterPage());
+    SdPage& rSecond = static_cast<SdPage&>(
+        pDoc->GetSdPage(2, PageKind::Standard)->TRG_GetMasterPage());
+    CPPUNIT_ASSERT_EQUAL(&rFirst, &rSecond);
+
+    SfxStyleSheet* pBackground = rFirst.getSdrPageProperties().GetStyleSheet();
+    CPPUNIT_ASSERT(pBackground);
+    CPPUNIT_ASSERT_EQUAL(Color(0xff0000),
+                         pBackground->GetItemSet().Get(XATTR_FILLCOLOR).GetColorValue());
+}
+
+void SdMiscTest::testInsertFileAsPageLinkRecordsSource()
+{
+    // A page inserted as a link records the source document the caller named,
+    // rather than the file the pages were read from. The name a caller passes
+    // is one that still finds the source document the next time the document
+    // is opened, which the file a copy was read from need not be.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    const OUString aSource = u"vnd.collabora.slide-source:Sales%20deck.odp"_ustr;
+    InsertBookmarkOptions aOptions = InsertBookmarkOptions::ForFileInsert(/*bLinkPages=*/true);
+    aOptions.aLinkSourceUrl = aSource;
+
+    std::vector<OUString> aBookmarkList{ u"SourceA"_ustr };
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr, aOptions, 3, nullptr,
+                                          /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(aSource, pInserted->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pInserted->GetBookmarkName());
+
+    // Saving keeps the link on the page, as a reference to the source slide.
+    save(TestFilter::ODP);
+    xmlDocUniquePtr pXmlDoc = parseExport(u"content.xml"_ustr);
+    CPPUNIT_ASSERT_MESSAGE("Failed to get 'content.xml'", pXmlDoc);
+    CPPUNIT_ASSERT_EQUAL(
+        OUString(aSource + u"#SourceA"),
+        getXPath(pXmlDoc,
+                 "/office:document-content/office:body/office:presentation/draw:page[2]"_ostr,
+                 "href"));
+
+    // The saved reference names the same source document and page after the
+    // document is opened again, which is what a page keeps a link for.
+    loadFromURL(maTempFile.GetURL());
+    SdXImpressDocument* pReloaded = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pReloaded);
+    SdPage* pLinked = pReloaded->GetDoc()->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(aSource, pLinked->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pLinked->GetBookmarkName());
+}
+
+void SdMiscTest::testInsertFileAsPageLinkWithoutSourceRecordsMedium()
+{
+    // An insertion that names no source keeps the older behaviour: the pages
+    // record the file they were read from.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    std::vector<OUString> aBookmarkList{ u"SourceA"_ustr };
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage(aBookmarkList, nullptr,
+                                          InsertBookmarkOptions::ForFileInsert(
+                                              /*bLinkPages=*/true),
+                                          3, nullptr, /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    SdPage* pInserted = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(createFileURL(u"slide-import-source.odp"), pInserted->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"SourceA"_ustr, pInserted->GetBookmarkName());
+}
+
+void SdMiscTest::testInsertWholeFileAsPagesLinkRecordsSource()
+{
+    // Inserting a whole file, rather than pages picked from it, records the
+    // named source on every page it brings in.
+    SdDrawDocument* pDoc = loadSlideImportDocs();
+
+    const OUString aSource = u"vnd.collabora.slide-source:Sales%20deck.odp"_ustr;
+    InsertBookmarkOptions aOptions = InsertBookmarkOptions::ForFileInsert(/*bLinkPages=*/true);
+    aOptions.aLinkSourceUrl = aSource;
+
+    // An empty list of page names asks for the whole file.
+    CPPUNIT_ASSERT(pDoc->InsertFileAsPage({}, nullptr, aOptions, 5, nullptr,
+                                          /*oScaleObjects=*/true));
+    pDoc->CloseBookmarkDoc();
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), pDoc->GetSdPageCount(PageKind::Standard));
+    for (sal_uInt16 nSdPage = 2; nSdPage <= 3; ++nSdPage)
+    {
+        SdPage* pInserted = pDoc->GetSdPage(nSdPage, PageKind::Standard);
+        CPPUNIT_ASSERT_EQUAL(aSource, pInserted->GetFileName());
+        CPPUNIT_ASSERT(!pInserted->GetBookmarkName().isEmpty());
+    }
+}
+
+void SdMiscTest::testSlideLinkKeepsOnlyAReadableSourceGuid()
+{
+    // A file names the slide a linked page came from by the identifier of that slide. The file
+    // read here names one slide by an identifier and the next by a value of another shape, which
+    // names no slide: the page is left with none and the presentation opens as any other does.
+    createSdImpressDoc("slide-link-bad-guid.fodp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), pDoc->GetSdPageCount(PageKind::Standard));
+
+    SdPage* pRead = pDoc->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pRead->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"{11111111-1111-1111-1111-111111111111}"_ustr,
+                         pRead->GetSourcePageGuid());
+
+    // The source document the page came from and the time it was last modified are what the file
+    // holds, so the page keeps them whatever the identifier beside them came to.
+    SdPage* pUnread = pDoc->GetSdPage(1, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pUnread->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"2021-01-01T00:00:00Z"_ustr, pUnread->GetSourceModifiedTime());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pUnread->GetSourcePageGuid());
+
+    // An identifier is kept in the form a page writes its own (uppercase)
+    SdPage* pLowercase = pDoc->GetSdPage(2, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"{ABCDEF01-2345-6789-ABCD-EF0123456789}"_ustr,
+                         pLowercase->GetSourcePageGuid());
+}
+
+void SdMiscTest::testSlideLinkKeepsOnlyAReadableSourceTime()
+{
+    // The fourth page of the file records a time the source was last modified that is far
+    // longer than any time stamp: the page is left with no time, and keeps the rest of what
+    // it records.
+    createSdImpressDoc("slide-link-bad-guid.fodp");
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pXImpressDocument);
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), pDoc->GetSdPageCount(PageKind::Standard));
+
+    SdPage* pPage = pDoc->GetSdPage(3, PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(u"vnd.collabora.slide-source:Q3%20deck.odp"_ustr, pPage->GetFileName());
+    CPPUNIT_ASSERT_EQUAL(u"{22222222-2222-2222-2222-222222222222}"_ustr,
+                         pPage->GetSourcePageGuid());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pPage->GetSourceModifiedTime());
+}
+
+CPPUNIT_TEST_SUITE_REGISTRATION(SdMiscTest);
+
+CPPUNIT_PLUGIN_IMPLEMENT();
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

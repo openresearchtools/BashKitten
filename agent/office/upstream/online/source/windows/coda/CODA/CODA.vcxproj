@@ -1,0 +1,281 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|ARM64">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64">
+      <Configuration>Release</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{01e897c1-3460-4aa1-a374-98a8dcd58a7c}</ProjectGuid>
+    <RootNamespace>CODA</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <ResolveNuGetPackages>false</ResolveNuGetPackages>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>ClangCL</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>ClangCL</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>ClangCL</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>ClangCL</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(SolutionDir)config.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(SolutionDir)config.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(SolutionDir)config.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(SolutionDir)config.props" />
+  </ImportGroup>
+  <PropertyGroup>
+    <TargetName>$(APP_NAME)</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\program\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\program\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\program\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\program\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;POCO_STATIC;POCO_NO_AUTOMATIC_LIBS;NOMINMAX;_CRT_SECURE_NO_WARNINGS;COOLWSD_LOGLEVEL="debug";APP_VENDOR="$(APP_VENDOR)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(OnlineBuildDir);..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(EngineLibDir)\zlib.lib;$(EngineLibDir)\zstd.lib;$(EngineLibDir)\libpng.lib;$(EngineLibDir)\PocoNet.lib;$(EngineLibDir)\PocoUtil.lib;$(EngineLibDir)\PocoJSON.lib;$(EngineLibDir)\PocoXML.lib;$(EngineLibDir)\PocoFoundation.lib;$(EngineLibDir)\expat.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;winhttp.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;POCO_STATIC;POCO_NO_AUTOMATIC_LIBS;NOMINMAX;_CRT_SECURE_NO_WARNINGS;COOLWSD_LOGLEVEL="debug";APP_VENDOR="$(APP_VENDOR)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(OnlineBuildDir);..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(EngineLibDir)\zlib.lib;$(EngineLibDir)\zstd.lib;$(EngineLibDir)\libpng.lib;$(EngineLibDir)\PocoNet.lib;$(EngineLibDir)\PocoUtil.lib;$(EngineLibDir)\PocoJSON.lib;$(EngineLibDir)\PocoXML.lib;$(EngineLibDir)\PocoFoundation.lib;$(EngineLibDir)\expat.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;winhttp.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;POCO_STATIC;POCO_NO_AUTOMATIC_LIBS;NOMINMAX;_CRT_SECURE_NO_WARNINGS;COOLWSD_LOGLEVEL="warning";APP_VENDOR="$(APP_VENDOR)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(OnlineBuildDir);..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(EngineLibDir)\zlib.lib;$(EngineLibDir)\zstd.lib;$(EngineLibDir)\libpng.lib;$(EngineLibDir)\PocoNet.lib;$(EngineLibDir)\PocoUtil.lib;$(EngineLibDir)\PocoJSON.lib;$(EngineLibDir)\PocoXML.lib;$(EngineLibDir)\PocoFoundation.lib;$(EngineLibDir)\expat.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;winhttp.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;POCO_STATIC;POCO_NO_AUTOMATIC_LIBS;NOMINMAX;_CRT_SECURE_NO_WARNINGS;COOLWSD_LOGLEVEL="warning";APP_VENDOR="$(APP_VENDOR)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(OnlineBuildDir);..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(EngineLibDir)\zlib.lib;$(EngineLibDir)\zstd.lib;$(EngineLibDir)\libpng.lib;$(EngineLibDir)\PocoNet.lib;$(EngineLibDir)\PocoUtil.lib;$(EngineLibDir)\PocoJSON.lib;$(EngineLibDir)\PocoXML.lib;$(EngineLibDir)\PocoFoundation.lib;$(EngineLibDir)\expat.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;winhttp.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup>
+    <PostBuildEvent>
+      <Command>
+        robocopy $(OnlineBuildDir)\browser\dist $(OutDir)..\cool *.* /E /XF debug.html framed.doc.html framed.html load.doc.html multidocs.html tsconfig.tsbuildinfo l10n-all.js wasm.html $(CoolSrcExclude) /NFL /NDL /NJH /NJS /NP
+        xcopy $(OnlineBuildDir)\browser\dist\src\layer\tile\CanvasTileUtils.js $(OutDir)..\cool\src\layer\tile\ /q /y
+        xcopy $(OnlineBuildDir)\browser\dist\src\app\TaskWorker.js $(OutDir)..\cool\src\app\ /q /y
+        xcopy $(LO_PATH) $(OutDir)..\ /s /q /y /exclude:..\xcopy.excludes
+        del $(OutDir)*.com
+        del $(OutDir)..\..\Release\program\gengal.exe
+        del $(OutDir)..\..\Release\program\regview.exe
+        del $(OutDir)..\..\Release\program\senddoc.exe
+        del $(OutDir)..\..\Release\program\soffice.exe
+        del $(OutDir)..\..\Release\program\soffice_safe.exe
+        del $(OutDir)..\..\Release\program\twain32shim.exe
+        del $(OutDir)..\..\Release\program\uno.exe
+        del $(OutDir)..\..\Release\program\unoinfo.exe
+        rem Delete the libmerged stub DLLs. Their real code is linked into
+        rem mergedlo.dll, so each stub file is exactly 21 bytes. Matching that exact
+        rem size rather than a fixed name list stays correct when a different set of
+        rem libraries is merged on another branch or build config - a real component
+        rem DLL is never removed, only the 21-byte stubs.
+        for %%F in ("$(OutDir)..\..\Release\program\*.dll") do if %%~zF EQU 21 ( echo Removing merge stub %%~nxF &amp; del "%%F" )
+        xcopy ..\..\..\browser\templates $(OutDir)..\templates\ /s /q /y
+        xcopy ..\..\..\qt\translations\*.ts $(OutDir)translations\ /q /y
+      </Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\common\AIHttpTransport.cpp" />
+    <ClCompile Include="..\..\..\common\Authorization.cpp" />
+    <ClCompile Include="..\..\..\common\ConfigUtil.cpp" />
+    <ClCompile Include="..\..\..\common\Crypto-stub.cpp" />
+    <ClCompile Include="..\..\..\common\FileUtil-windows.cpp" />
+    <ClCompile Include="..\..\..\common\FileUtil.cpp" />
+    <ClCompile Include="..\..\..\common\Log-common.cpp" />
+    <ClCompile Include="..\..\..\common\Log-windows.cpp" />
+    <ClCompile Include="..\..\..\common\MobileApp.cpp" />
+    <ClCompile Include="..\..\..\common\ProcUtil.cpp" />
+    <ClCompile Include="..\..\..\common\Protocol.cpp" />
+    <ClCompile Include="..\..\..\common\RecentFiles.cpp" />
+    <ClCompile Include="..\..\..\common\RegexUtil.cpp" />
+    <ClCompile Include="..\..\..\common\Session.cpp" />
+    <ClCompile Include="..\..\..\common\SettingsStorage.cpp" />
+    <ClCompile Include="..\..\..\common\SigUtil-mobile.cpp" />
+    <ClCompile Include="..\..\..\common\Simd.cpp" />
+    <ClCompile Include="..\..\..\common\SpookyV2.cpp" />
+    <ClCompile Include="..\..\..\common\StringVector.cpp" />
+    <ClCompile Include="..\..\..\common\TraceEvent.cpp" />
+    <ClCompile Include="..\..\..\common\Unit-mobile.cpp" />
+    <ClCompile Include="..\..\..\common\Unit.cpp" />
+    <ClCompile Include="..\..\..\common\Uri.cpp" />
+    <ClCompile Include="..\..\..\common\Util-mobile.cpp" />
+    <ClCompile Include="..\..\..\common\Util-windows.cpp" />
+    <ClCompile Include="..\..\..\common\Util.cpp" />
+    <ClCompile Include="..\..\..\kit\ChildSession.cpp" />
+    <ClCompile Include="..\..\..\kit\DeltaSimd.c" />
+    <ClCompile Include="..\..\..\kit\Kit.cpp" />
+    <ClCompile Include="..\..\..\kit\KitQueue.cpp" />
+    <ClCompile Include="..\..\..\kit\KitWebSocket.cpp" />
+    <ClCompile Include="..\..\..\kit\LogUI.cpp" />
+    <ClCompile Include="..\..\..\common\Watchdog-windows.cpp" />
+    <ClCompile Include="..\..\..\net\FakeSocket.cpp" />
+    <ClCompile Include="..\..\..\net\HttpRequest.cpp" />
+    <ClCompile Include="..\..\..\net\Socket-windows.cpp" />
+    <ClCompile Include="..\..\..\net\Socket.cpp" />
+    <ClCompile Include="..\..\..\wsd\AIChatSession.cpp" />
+    <ClCompile Include="..\..\..\wsd\AIUtil.cpp" />
+    <ClCompile Include="..\..\..\wsd\COOLWSD.cpp" />
+    <ClCompile Include="..\..\..\wsd\ClientRequestDispatcher.cpp" />
+    <ClCompile Include="..\..\..\wsd\ClientSession.cpp" />
+    <ClCompile Include="..\..\..\wsd\DeckSpec.cpp" />
+    <ClCompile Include="..\..\..\wsd\DocumentBroker.cpp" />
+    <ClCompile Include="..\..\..\wsd\Extensions.cpp" />
+    <ClCompile Include="..\..\..\wsd\dumpWsdState.cpp" />
+    <ClCompile Include="..\..\..\wsd\RequestDetails.cpp" />
+    <ClCompile Include="..\..\..\wsd\RequestVettingStation.cpp" />
+    <ClCompile Include="..\..\..\wsd\SlideCache.cpp" />
+    <ClCompile Include="..\..\..\wsd\Storage.cpp" />
+    <ClCompile Include="..\..\..\wsd\TileCache.cpp" />
+    <ClCompile Include="..\..\..\wsd\WSDGlobals.cpp" />
+    <ClCompile Include="..\..\..\wsd\coolwsd-fork.cpp" />
+    <ClCompile Include="CODA.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="CODA.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="CODA.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3719.77" GeneratePathProperty="true" />
+    <PackageReference Include="Microsoft.Windows.ImplementationLibrary" Version="1.0.260126.7" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+  <!--
+    Place WebView2Loader.dll next to the executable. The exe imports it at
+    load time, so it must sit in the output (program) directory. With the
+    PackageReference build the WebView2 package only deposits it under the
+    RID subtree (runtimes\win-<arch>\native\), so copy it flat ourselves.
+  -->
+  <PropertyGroup>
+    <WebView2Rid Condition="'$(Platform)'=='x64'">win-x64</WebView2Rid>
+    <WebView2Rid Condition="'$(Platform)'=='ARM64'">win-arm64</WebView2Rid>
+  </PropertyGroup>
+  <Target Name="CopyWebView2Loader" AfterTargets="Build"
+          Inputs="$(PkgMicrosoft_Web_WebView2)\runtimes\$(WebView2Rid)\native\WebView2Loader.dll"
+          Outputs="$(OutDir)WebView2Loader.dll">
+    <Copy SourceFiles="$(PkgMicrosoft_Web_WebView2)\runtimes\$(WebView2Rid)\native\WebView2Loader.dll"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

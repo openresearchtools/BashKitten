@@ -1,0 +1,87 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_SW_SOURCE_CORE_INC_FINALTHREADMANAGER_HXX
+#define INCLUDED_SW_SOURCE_CORE_INC_FINALTHREADMANAGER_HXX
+
+#include <sal/config.h>
+#include <cppuhelper/implbase.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/util/XJobManager.hpp>
+#include <com/sun/star/frame/XTerminateListener2.hpp>
+#include <o3tl/deleter.hxx>
+#include <osl/mutex.hxx>
+#include <list>
+#include <memory>
+
+namespace cpo::uno { class XComponentContext; }
+
+class CancelJobsThread;
+class TerminateOfficeThread;
+class SwPauseThreadStarting;
+
+class FinalThreadManager final : public ::cppu::WeakImplHelper< css::lang::XServiceInfo,
+                                                           css::util::XJobManager,
+                                                           css::frame::XTerminateListener2 >
+{
+public:
+    explicit FinalThreadManager(cpo::uno::Reference< cpo::uno::XComponentContext > context);
+
+    // css::lang::XServiceInfo:
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString & ServiceName) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // css::util::XJobManager:
+    virtual void registerJob(const cpo::uno::Reference< css::util::XCancellable > & Job) override;
+    virtual void releaseJob(const cpo::uno::Reference< css::util::XCancellable > & Job) override;
+    virtual void cancelAllJobs() override;
+
+    // css::frame::XTerminateListener2
+    virtual void cancelTermination( const css::lang::EventObject& Event ) override;
+
+    // css::frame::XTerminateListener (inherited via css::frame::XTerminateListener2)
+    virtual void queryTermination( const css::lang::EventObject& Event ) override;
+    virtual void notifyTermination( const css::lang::EventObject& Event ) override;
+
+    // ::com::sun::star::lang::XEventListener (inherited via css::frame::XTerminateListener)
+    virtual void disposing( const css::lang::EventObject& Source ) override;
+
+private:
+    FinalThreadManager(FinalThreadManager const &) = delete;
+    void operator =(FinalThreadManager const &) = delete;
+
+    virtual ~FinalThreadManager() override;
+
+    void registerAsListenerAtDesktop();
+
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+
+    osl::Mutex maMutex;
+
+    std::list< cpo::uno::Reference< css::util::XCancellable > > maThreads;
+    std::unique_ptr<CancelJobsThread> mpCancelJobsThread;
+    TerminateOfficeThread* mpTerminateOfficeThread;
+    std::unique_ptr<SwPauseThreadStarting, o3tl::default_delete<SwPauseThreadStarting>> mpPauseThreadStarting;
+
+    bool mbRegisteredAtDesktop;
+};
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

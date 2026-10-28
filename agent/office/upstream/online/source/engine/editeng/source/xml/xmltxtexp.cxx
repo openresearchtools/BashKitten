@@ -1,0 +1,345 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+
+/** this file implements an export of a selected EditEngine content into
+    a xml stream. See editeng/source/inc/xmledit.hxx for interface */
+#include <memory>
+#include <com/sun/star/lang/Locale.hpp>
+#include <com/sun/star/xml/sax/Writer.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <svl/itemprop.hxx>
+#include <cpo/uno/Sequence.hxx>
+#include <comphelper/processfactory.hxx>
+#include <comphelper/diagnose_ex.hxx>
+#include <unotools/streamwrap.hxx>
+#include <xmloff/xmlexp.hxx>
+#include <editeng/unoedsrc.hxx>
+#include <editeng/unofored.hxx>
+#include <editeng/unotext.hxx>
+#include <editeng/unoprnms.hxx>
+#include <editeng/unofield.hxx>
+#include <editeng/editeng.hxx>
+#include "editsource.hxx"
+#include <editxml.hxx>
+#include <editeng/unonrule.hxx>
+#include <editeng/unoipset.hxx>
+#include <unomodel.hxx>
+
+using namespace com::sun::star;
+using namespace com::sun::star::container;
+using namespace ::cpo;
+using namespace ::cpo::uno;
+using namespace com::sun::star::lang;
+using namespace com::sun::star::xml::sax;
+using namespace cppu;
+
+class SvxEditEngineSourceImpl : public salhelper::SimpleReferenceObject
+{
+private:
+    EditEngine*                        mpEditEngine;
+    std::unique_ptr<SvxTextForwarder>  mpTextForwarder;
+
+    virtual ~SvxEditEngineSourceImpl() override;
+
+public:
+    explicit SvxEditEngineSourceImpl( EditEngine* pEditEngine );
+
+    SvxTextForwarder*       GetTextForwarder();
+};
+
+SvxEditEngineSourceImpl::SvxEditEngineSourceImpl( EditEngine* pEditEngine )
+: mpEditEngine( pEditEngine )
+{
+}
+
+SvxEditEngineSourceImpl::~SvxEditEngineSourceImpl()
+{
+}
+
+SvxTextForwarder* SvxEditEngineSourceImpl::GetTextForwarder()
+{
+    if (!mpTextForwarder)
+        mpTextForwarder.reset( new SvxEditEngineForwarder( *mpEditEngine ) );
+
+    return mpTextForwarder.get();
+}
+
+// SvxTextEditSource
+SvxEditEngineSource::SvxEditEngineSource( EditEngine* pEditEngine )
+   : mxImpl( new SvxEditEngineSourceImpl( pEditEngine ) )
+{
+}
+
+SvxEditEngineSource::SvxEditEngineSource( SvxEditEngineSourceImpl* pImpl )
+   : mxImpl(pImpl)
+{
+}
+
+SvxEditEngineSource::~SvxEditEngineSource()
+{
+}
+
+std::unique_ptr<SvxEditSource> SvxEditEngineSource::Clone() const
+{
+    return std::unique_ptr<SvxEditSource>(new SvxEditEngineSource( mxImpl.get() ));
+}
+
+SvxTextForwarder* SvxEditEngineSource::GetTextForwarder()
+{
+    return mxImpl->GetTextForwarder();
+}
+
+
+void SvxEditEngineSource::UpdateData()
+{
+}
+
+
+SvxSimpleUnoModel::SvxSimpleUnoModel()
+{
+}
+
+// XMultiServiceFactory ( SvxFmMSFactory )
+uno::Reference< cpo::uno::XInterface > SvxSimpleUnoModel::createInstance( const OUString& aServiceSpecifier )
+{
+    if( aServiceSpecifier == "com.sun.star.text.NumberingRules" )
+    {
+        return uno::Reference< cpo::uno::XInterface >(
+            SvxCreateNumRule(), uno::UNO_QUERY );
+    }
+    if (   aServiceSpecifier == "com.sun.star.text.textfield.DateTime"
+        || aServiceSpecifier == "com.sun.star.text.TextField.DateTime"
+       )
+    {
+        return cppu::getXWeak(new SvxUnoTextField( text::textfield::Type::DATE ));
+    }
+
+    if( aServiceSpecifier == "com.sun.star.text.TextField.URL" )
+    {
+        return cppu::getXWeak(new SvxUnoTextField(text::textfield::Type::URL));
+    }
+
+    return SvxUnoTextCreateTextField( aServiceSpecifier );
+
+}
+
+uno::Reference< cpo::uno::XInterface > SvxSimpleUnoModel::createInstanceWithArguments( const OUString& ServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& )
+{
+    return createInstance( ServiceSpecifier );
+}
+
+Sequence< OUString > SvxSimpleUnoModel::getAvailableServiceNames(  )
+{
+    Sequence< OUString > aSeq;
+    return aSeq;
+}
+
+// XAnyCompareFactory
+uno::Reference< css::ucb::XAnyCompare > SvxSimpleUnoModel::createAnyCompareByName( const OUString& )
+{
+    return SvxCreateNumRuleCompare();
+}
+
+// XStyleFamiliesSupplier
+uno::Reference< container::XNameAccess > SvxSimpleUnoModel::getStyleFamilies(  )
+{
+    uno::Reference< container::XNameAccess > xStyles;
+    return xStyles;
+}
+
+// XModel
+bool SvxSimpleUnoModel::attachResource( const OUString&, const cpo::uno::Sequence< css::beans::PropertyValue >& )
+{
+    return false;
+}
+
+OUString SvxSimpleUnoModel::getURL(  )
+{
+    return OUString();
+}
+
+cpo::uno::Sequence< css::beans::PropertyValue > SvxSimpleUnoModel::getArgs(  )
+{
+    Sequence< beans::PropertyValue > aSeq;
+    return aSeq;
+}
+
+void SvxSimpleUnoModel::connectController( const cpo::uno::Reference< css::frame::XController >& )
+{
+}
+
+void SvxSimpleUnoModel::disconnectController( const cpo::uno::Reference< css::frame::XController >& )
+{
+}
+
+void SvxSimpleUnoModel::lockControllers(  )
+{
+}
+
+void SvxSimpleUnoModel::unlockControllers(  )
+{
+}
+
+bool SvxSimpleUnoModel::hasControllersLocked(  )
+{
+    return true;
+}
+
+cpo::uno::Reference< css::frame::XController > SvxSimpleUnoModel::getCurrentController(  )
+{
+    uno::Reference< frame::XController > xRet;
+    return xRet;
+}
+
+void SvxSimpleUnoModel::setCurrentController( const cpo::uno::Reference< css::frame::XController >& )
+{
+}
+
+cpo::uno::Reference< cpo::uno::XInterface > SvxSimpleUnoModel::getCurrentSelection(  )
+{
+    uno::Reference< XInterface > xRet;
+    return xRet;
+}
+
+
+// XComponent
+void SvxSimpleUnoModel::dispose(  )
+{
+}
+
+void SvxSimpleUnoModel::addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& )
+{
+}
+
+void SvxSimpleUnoModel::removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& )
+{
+}
+
+namespace {
+
+class SvxXMLTextExportComponent : public SvXMLExport
+{
+public:
+    SvxXMLTextExportComponent(
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext,
+        EditEngine* pEditEngine,
+        const ESelection& rSel,
+        const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& rHandler );
+
+    // methods without content:
+    virtual void ExportAutoStyles_() override;
+    virtual void ExportMasterStyles_() override;
+    virtual void ExportContent_() override;
+
+private:
+    rtl::Reference< SvxUnoText > mxText;
+};
+
+}
+
+SvxXMLTextExportComponent::SvxXMLTextExportComponent(
+    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+    EditEngine* pEditEngine,
+    const ESelection& rSel,
+    const cpo::uno::Reference< css::xml::sax::XDocumentHandler > & xHandler)
+:   SvXMLExport( xContext, u""_ustr, /*rFileName*/u""_ustr, xHandler, static_cast<frame::XModel*>(new SvxSimpleUnoModel()), FieldUnit::CM,
+    SvXMLExportFlags::OASIS  |  SvXMLExportFlags::AUTOSTYLES  |  SvXMLExportFlags::CONTENT  |  SvXMLExportFlags::EMBEDDED )
+{
+    SvxEditEngineSource aEditSource( pEditEngine );
+
+    static const SfxItemPropertyMapEntry SvxXMLTextExportComponentPropertyMap[] =
+    {
+        SVX_UNOEDIT_CHAR_PROPERTIES,
+        SVX_UNOEDIT_FONT_PROPERTIES,
+        { UNO_NAME_NUMBERING_RULES,        EE_PARA_NUMBULLET,  cppu::UnoType<css::container::XIndexReplace>::get(), 0, 0 },
+        { UNO_NAME_NUMBERING,              EE_PARA_BULLETSTATE,cppu::UnoType<bool>::get(), 0, 0 },
+        { UNO_NAME_NUMBERING_LEVEL,        EE_PARA_OUTLLEVEL,  ::cppu::UnoType<sal_Int16>::get(), 0, 0 },
+        SVX_UNOEDIT_PARA_PROPERTIES,
+    };
+    static SvxItemPropertySet aSvxXMLTextExportComponentPropertySet( SvxXMLTextExportComponentPropertyMap, EditEngine::GetGlobalItemPool() );
+
+    mxText = new SvxUnoText( &aEditSource, &aSvxXMLTextExportComponentPropertySet, mxText );
+    mxText->SetSelection(rSel);
+}
+
+void SvxWriteXML( EditEngine& rEditEngine, SvStream& rStream, const ESelection& rSel )
+{
+    try
+    {
+        do
+        {
+            // create service factory
+            const uno::Reference<cpo::uno::XComponentContext>& xContext( ::comphelper::getProcessComponentContext() );
+
+            // create document handler
+            uno::Reference< xml::sax::XWriter > xWriter = xml::sax::Writer::create( xContext );
+
+            // create output stream and active data source
+            uno::Reference<io::XOutputStream> xOut( new utl::OOutputStreamWrapper( rStream ) );
+
+/* testcode
+            static constexpr OUStringLiteral aURL( u"file:///e:/test.xml" );
+            SvFileStream aStream(aURL, StreamMode::WRITE | StreamMode::TRUNC);
+            xOut = new utl::OOutputStreamWrapper(aStream);
+*/
+
+
+            xWriter->setOutputStream( xOut );
+
+            // export text
+
+            // SvxXMLTextExportComponent aExporter( &rEditEngine, rSel, aName, xHandler );
+            uno::Reference< xml::sax::XDocumentHandler > xHandler(xWriter, UNO_QUERY_THROW);
+            rtl::Reference< SvxXMLTextExportComponent > xExporter( new SvxXMLTextExportComponent( xContext, &rEditEngine, rSel, xHandler ) );
+
+            xExporter->exportDoc();
+
+/* testcode
+            aStream.Close();
+*/
+
+        }
+        while( false );
+    }
+    catch( const cpo::uno::Exception& )
+    {
+        TOOLS_WARN_EXCEPTION("editeng", "exception during xml export");
+    }
+}
+
+// methods without content:
+void SvxXMLTextExportComponent::ExportAutoStyles_()
+{
+    rtl::Reference< XMLTextParagraphExport > xTextExport( GetTextParagraphExport() );
+
+    xTextExport->collectTextAutoStyles( mxText );
+    xTextExport->exportTextAutoStyles();
+}
+
+void SvxXMLTextExportComponent::ExportContent_()
+{
+    rtl::Reference< XMLTextParagraphExport > xTextExport( GetTextParagraphExport() );
+
+    xTextExport->exportText( mxText );
+}
+
+void SvxXMLTextExportComponent::ExportMasterStyles_() {}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,358 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <sal/config.h>
+
+#include <cassert>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XPropertySetInfo.hpp>
+#include <com/sun/star/container/XContentEnumerationAccess.hpp>
+#include <com/sun/star/container/XSet.hpp>
+#include <com/sun/star/lang/XEventListener.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XMultiComponentFactory.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <compbase2.hxx>
+#include <rtl/ustring.hxx>
+#include <boost/container/small_vector.hpp>
+
+namespace com::sun::star::lang {
+    class XSingleComponentFactory;
+}
+namespace cppu { struct ContextEntry_Init; }
+namespace com::sun::star::lang { class XSingleServiceFactory; }
+namespace cpo::uno { class XComponentContext; }
+
+class RegistryKey;
+
+namespace cppuhelper {
+
+extern "C" {
+
+typedef cpo::uno::XInterface * ImplementationConstructorFn(
+    cpo::uno::XComponentContext *, cpo::uno::Sequence<cpo::uno::Any> const &);
+
+}
+
+typedef std::function<cpo::uno::XInterface * (cpo::uno::XComponentContext *, cpo::uno::Sequence<cpo::uno::Any> const&)> WrapperConstructorFn;
+
+typedef WeakComponentImplHelper2<
+    css::lang::XServiceInfo, css::lang::XMultiServiceFactory,
+    css::lang::XMultiComponentFactory, css::container::XSet,
+    css::container::XContentEnumerationAccess, css::beans::XPropertySet,
+    css::beans::XPropertySetInfo, css::lang::XEventListener,
+    css::lang::XInitialization>
+ServiceManagerBase;
+
+class ServiceManager : public ServiceManagerBase
+{
+public:
+    struct Data {
+        Data() = default;
+        Data(const Data&) = delete;
+        const Data& operator=(const Data&) = delete;
+
+        struct Implementation {
+            Implementation(
+                OUString theName, OUString theLoader,
+                OUString theUri, OUString theEnvironment,
+                OUString theConstructorName,
+                OUString thePrefix,
+                bool theIsSingleInstance,
+                cpo::uno::Reference< cpo::uno::XComponentContext > theAlienContext,
+                OUString theRdbFile):
+                name(std::move(theName)), loader(std::move(theLoader)), uri(std::move(theUri)), environment(std::move(theEnvironment)),
+                constructorName(std::move(theConstructorName)), prefix(std::move(thePrefix)),
+                isSingleInstance(theIsSingleInstance),
+                alienContext(std::move(theAlienContext)), rdbFile(std::move(theRdbFile)),
+                constructorFn(nullptr), status(STATUS_NEW), dispose(true)
+            {}
+
+            Implementation(
+                OUString theName,
+                cpo::uno::Reference< css::lang::XSingleComponentFactory >
+                    const & theFactory1,
+                cpo::uno::Reference< css::lang::XSingleServiceFactory > const &
+                    theFactory2,
+                cpo::uno::Reference< css::lang::XComponent > theComponent):
+                name(std::move(theName)), isSingleInstance(false), constructorFn(nullptr),
+                factory1(theFactory1), factory2(theFactory2),
+                component(std::move(theComponent)), status(STATUS_LOADED), dispose(true)
+            { assert(theFactory1.is() || theFactory2.is()); }
+
+            Implementation(const Implementation&) = delete;
+            const Implementation& operator=(const Implementation&) = delete;
+
+            cpo::uno::Reference<cpo::uno::XInterface> createInstance(
+                cpo::uno::Reference<cpo::uno::XComponentContext> const &
+                    context,
+                bool singletonRequest);
+
+            cpo::uno::Reference<cpo::uno::XInterface>
+            createInstanceWithArguments(
+                cpo::uno::Reference<cpo::uno::XComponentContext> const &
+                    context,
+                bool singletonRequest,
+                cpo::uno::Sequence<cpo::uno::Any> const & arguments);
+
+            bool shallDispose() const { return isSingleInstance || !singletons.empty(); }
+
+            enum Status { STATUS_NEW, STATUS_WRAPPER, STATUS_LOADED };
+
+            // Logically, exactly one of constructorFn, factory1, factory2 should
+            // be set.  However, there are two exceptions:  For one, when
+            // constructorFn is set, ServiceManager::createContentEnumeration will
+            // store the necessary ImplementationWrapper in factory1 (so that
+            // multiple calls to createContentEnumeration will return the same
+            // wrapper).  For another, when factory1 should be set but status is
+            // STATUS_NEW, factory1 is not yet set (and when status is
+            // STATUS_WRAPPER, factory1 is merely set to an
+            // ImplementationWrapper---also due to a
+            // ServiceManager::createContentEnumeration call---and will be
+            // loaded later).
+            OUString name;
+            OUString loader;
+            OUString uri;
+            OUString environment;
+            OUString constructorName;
+            OUString prefix;
+            bool isSingleInstance;
+            cpo::uno::Reference< cpo::uno::XComponentContext > alienContext;
+            OUString rdbFile;
+            std::vector< OUString > services;
+            std::vector< OUString > singletons;
+            WrapperConstructorFn constructorFn;
+            cpo::uno::Reference< css::lang::XSingleComponentFactory > factory1;
+            cpo::uno::Reference< css::lang::XSingleServiceFactory > factory2;
+            cpo::uno::Reference< css::lang::XComponent > component;
+            Status status;
+
+            std::mutex mutex;
+            cpo::uno::Reference<cpo::uno::XInterface> singleInstance;
+            cpo::uno::Reference< css::lang::XComponent > disposeInstance;
+            bool dispose;
+
+        private:
+            cpo::uno::Reference<cpo::uno::XInterface> doCreateInstance(
+                cpo::uno::Reference<cpo::uno::XComponentContext> const & context);
+
+            cpo::uno::Reference<cpo::uno::XInterface> doCreateInstanceWithArguments(
+                cpo::uno::Reference<cpo::uno::XComponentContext> const & context,
+                cpo::uno::Sequence<cpo::uno::Any> const & arguments);
+
+            void updateDisposeInstance(
+                bool singletonRequest,
+                cpo::uno::Reference<cpo::uno::XInterface> const & instance);
+        };
+
+        typedef std::unordered_map< OUString, std::shared_ptr< Implementation > >
+            NamedImplementations;
+
+        typedef
+            std::unordered_map<
+                cpo::uno::Reference< css::lang::XServiceInfo >,
+                std::shared_ptr< Implementation > >
+            DynamicImplementations;
+
+        typedef
+            std::unordered_map<
+                OUString,
+                boost::container::small_vector< std::shared_ptr< Implementation >, 2 > >
+            ImplementationMap;
+
+        NamedImplementations namedImplementations;
+        DynamicImplementations dynamicImplementations;
+        ImplementationMap services;
+        ImplementationMap singletons;
+    };
+
+    ServiceManager() {}
+
+    ServiceManager(const ServiceManager&) = delete;
+    const ServiceManager& operator=(const ServiceManager&) = delete;
+
+    using ServiceManagerBase::acquire;
+    using ServiceManagerBase::release;
+
+    void init(std::u16string_view rdbUris);
+
+    void setContext(
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context)
+    {
+        assert(context.is());
+        assert(!context_.is());
+        context_ = context;
+    }
+
+    void addSingletonContextEntries(
+        std::vector< cppu::ContextEntry_Init > * entries);
+
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & getContext()
+        const
+    {
+        assert(context_.is());
+        return context_;
+    }
+
+    void loadImplementation(
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context,
+        std::shared_ptr< Data::Implementation > const & implementation);
+
+private:
+    virtual ~ServiceManager() override;
+
+    virtual void disposing(std::unique_lock<std::mutex>&) override;
+
+    virtual OUString getImplementationName() override;
+
+    virtual bool supportsService(OUString const & ServiceName) override;
+
+    virtual cpo::uno::Sequence< OUString >
+    getSupportedServiceNames() override;
+
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstance(
+        OUString const & aServiceSpecifier) override;
+
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
+    createInstanceWithArguments(
+        OUString const & ServiceSpecifier,
+        cpo::uno::Sequence< cpo::uno::Any > const & Arguments) override;
+
+    virtual cpo::uno::Sequence< OUString >
+    getAvailableServiceNames() override;
+
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
+    createInstanceWithContext(
+        OUString const & aServiceSpecifier,
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & Context) override;
+
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
+    createInstanceWithArgumentsAndContext(
+        OUString const & ServiceSpecifier,
+        cpo::uno::Sequence< cpo::uno::Any > const & Arguments,
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & Context) override;
+
+    virtual cpo::uno::Type getElementType() override;
+
+    virtual bool hasElements() override;
+
+    virtual cpo::uno::Reference< css::container::XEnumeration >
+    createEnumeration() override;
+
+    virtual bool has(cpo::uno::Any const & aElement) override;
+
+    virtual void insert(cpo::uno::Any const & aElement) override;
+
+    virtual void remove(cpo::uno::Any const & aElement) override;
+
+    virtual cpo::uno::Reference< css::container::XEnumeration >
+    createContentEnumeration(OUString const & aServiceName) override;
+
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+    getPropertySetInfo() override;
+
+    virtual void setPropertyValue(
+        OUString const & aPropertyName, cpo::uno::Any const & aValue) override;
+
+    virtual cpo::uno::Any getPropertyValue(
+        OUString const & PropertyName) override;
+
+    virtual void addPropertyChangeListener(
+        OUString const & aPropertyName,
+        cpo::uno::Reference< css::beans::XPropertyChangeListener > const &
+            xListener) override;
+
+    virtual void removePropertyChangeListener(
+        OUString const & aPropertyName,
+        cpo::uno::Reference< css::beans::XPropertyChangeListener > const &
+            aListener) override;
+
+    virtual void addVetoableChangeListener(
+        OUString const & PropertyName,
+        cpo::uno::Reference< css::beans::XVetoableChangeListener > const &
+            aListener) override;
+
+    virtual void removeVetoableChangeListener(
+        OUString const & PropertyName,
+        cpo::uno::Reference< css::beans::XVetoableChangeListener > const &
+            aListener) override;
+
+    virtual cpo::uno::Sequence< css::beans::Property > getProperties() override;
+
+    virtual css::beans::Property getPropertyByName(
+        OUString const & aName) override;
+
+    virtual bool hasPropertyByName(OUString const & Name) override;
+
+    virtual void disposing(css::lang::EventObject const & Source) override;
+
+    virtual void initialize(
+        cpo::uno::Sequence<cpo::uno::Any> const & aArguments)
+        override;
+
+    void removeEventListenerFromComponent(
+        cpo::uno::Reference< css::lang::XComponent > const & component);
+
+    void readRdbDirectory(std::u16string_view uri, bool optional);
+
+    void readRdbFile(OUString const & uri, bool optional);
+
+    bool readLegacyRdbFile(OUString const & uri);
+
+    OUString readLegacyRdbString(
+        std::u16string_view uri, RegistryKey & key,
+        OUString const & path);
+
+    void readLegacyRdbStrings(
+        std::u16string_view uri, RegistryKey & key,
+        OUString const & path, std::vector< OUString > * strings);
+
+    void insertRdbFiles(
+        std::vector< OUString > const & uris,
+        cpo::uno::Reference< cpo::uno::XComponentContext > const &
+            alientContext);
+
+    void insertLegacyFactory(
+        cpo::uno::Reference< css::lang::XServiceInfo > const & factoryInfo);
+
+    bool insertExtraData(Data const & extra);
+
+    void removeRdbFiles(std::vector< OUString > const & uris);
+
+    bool removeLegacyFactory(
+        cpo::uno::Reference< css::lang::XServiceInfo > const & factoryInfo,
+        bool removeListener);
+
+    void removeImplementation(const OUString & name);
+
+    std::shared_ptr< Data::Implementation > findServiceImplementation(
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & context,
+        OUString const & specifier);
+
+    void preloadImplementations();
+
+    cpo::uno::Reference< cpo::uno::XComponentContext > context_;
+    Data data_;
+};
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

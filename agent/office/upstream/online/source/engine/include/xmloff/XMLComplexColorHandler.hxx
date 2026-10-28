@@ -1,0 +1,43 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <xmloff/dllapi.h>
+#include <xmloff/xmlprhdl.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
+
+class XMLOFF_DLLPUBLIC XMLComplexColorHandler final : public XMLPropertyHandler
+{
+public:
+    bool importXML(const OUString& /*rStrImpValue*/, cpo::uno::Any& /*rValue*/,
+                   const SvXMLUnitConverter&) const override final
+    {
+        return false;
+    }
+
+    bool exportXML(OUString& /*rStrExpValue*/, const cpo::uno::Any& /*rValue*/,
+                   const SvXMLUnitConverter&) const override final
+    {
+        return false;
+    }
+
+    bool equals(const cpo::uno::Any& rAny1, const cpo::uno::Any& rAny2) const override final
+    {
+        cpo::uno::Reference<css::util::XComplexColor> xComplexColor1;
+        cpo::uno::Reference<css::util::XComplexColor> xComplexColor2;
+        rAny1 >>= xComplexColor1;
+        rAny2 >>= xComplexColor2;
+        model::ComplexColor aComplexColor1 = model::color::getFromXComplexColor(xComplexColor1);
+        model::ComplexColor aComplexColor2 = model::color::getFromXComplexColor(xComplexColor2);
+        return aComplexColor1 == aComplexColor2;
+    }
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

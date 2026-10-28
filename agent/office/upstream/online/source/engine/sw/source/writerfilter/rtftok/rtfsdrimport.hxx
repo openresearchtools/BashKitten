@@ -1,0 +1,110 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <stack>
+#include <vector>
+
+#include <dmapper/GraphicZOrderHelper.hxx>
+#include <tools/ref.hxx>
+#include <rtl/ref.hxx>
+
+class SwXTextDocument;
+namespace com::sun::star
+{
+namespace beans
+{
+class XPropertySet;
+struct PropertyValue;
+}
+namespace drawing
+{
+class XShape;
+class XShapes;
+}
+namespace lang
+{
+class XComponent;
+}
+}
+
+namespace writerfilter::rtftok
+{
+class RTFDocumentImpl;
+class RTFShape;
+
+/// Handles the import of drawings using RTF markup.
+class RTFSdrImport final : public virtual SvRefBase
+{
+public:
+    RTFSdrImport(RTFDocumentImpl& rDocument, rtl::Reference<SwXTextDocument> const& xDstDoc);
+    ~RTFSdrImport() override;
+
+    enum ShapeOrPict
+    {
+        SHAPE,
+        PICT
+    };
+    void resolve(RTFShape& rShape, bool bClose, ShapeOrPict shapeOrPict);
+    /// Send the start of a shape to the dmapper. It stays open there until its end is sent.
+    void open(cpo::uno::Reference<css::drawing::XShape> const& xShape);
+    void close();
+    void append(std::u16string_view aKey, std::u16string_view aValue);
+    /// Append property on the current parent.
+    void appendGroupProperty(std::u16string_view aKey, std::u16string_view aValue);
+    void resolveDhgt(cpo::uno::Reference<css::beans::XPropertySet> const& xPropertySet,
+                     sal_Int32 nZOrder, bool bOldStyle);
+    /// Set line color and line width on the shape, using the relevant API depending on if the shape is a text frame or not.
+    static void
+    resolveLineColorAndWidth(bool bTextFrame,
+                             const cpo::uno::Reference<css::beans::XPropertySet>& xPropertySet,
+                             cpo::uno::Any const& rLineColor, cpo::uno::Any const& rLineWidth);
+    static void resolveFLine(cpo::uno::Reference<css::beans::XPropertySet> const& xPropertySet,
+                             sal_Int32 nFLine);
+    /**
+     * These are the default in Word, but not in Writer.
+     *
+     * @param bNew if the frame is new-style or old-style.
+     */
+    static std::vector<css::beans::PropertyValue> getTextFrameDefaults(bool bNew);
+    /// Push a new group shape to the parent stack.
+    void pushParent(cpo::uno::Reference<css::drawing::XShapes> const& xParent);
+    /// Pop the current group shape from the parent stack.
+    void popParent();
+    cpo::uno::Reference<css::drawing::XShape> const& getCurrentShape() const { return m_xShape; }
+    bool isFakePict() const { return m_bFakePict; }
+    bool isOpenInMapper() const { return m_bOpenInMapper; }
+    bool isTextGraphicObject() const { return m_bTextGraphicObject; }
+
+private:
+    void createShape(const OUString& rService, cpo::uno::Reference<css::drawing::XShape>& xShape,
+                     cpo::uno::Reference<css::beans::XPropertySet>& xPropertySet);
+    void applyProperty(cpo::uno::Reference<css::drawing::XShape> const& xShape,
+                       std::u16string_view aKey, std::u16string_view aValue) const;
+    int initShape(cpo::uno::Reference<css::drawing::XShape>& o_xShape,
+                  cpo::uno::Reference<css::beans::XPropertySet>& o_xPropSet, bool& o_rIsCustomShape,
+                  RTFShape const& rShape, bool bClose, ShapeOrPict shapeOrPict);
+
+    RTFDocumentImpl& m_rImport;
+    std::stack<cpo::uno::Reference<css::drawing::XShapes>> m_aParents;
+    cpo::uno::Reference<css::drawing::XShape> m_xShape;
+    /// If m_xShape is imported as a Writer text frame (instead of a drawinglayer rectangle).
+    bool m_bTextFrame;
+    /// If m_xShape is imported as a Writer text graphic object (instead of a drawinglayer shape).
+    bool m_bTextGraphicObject;
+    /// if inside \pict, but actually it's a shape (not a picture)
+    bool m_bFakePict;
+    /// If a shape start has gone to the dmapper and its end has not.
+    bool m_bOpenInMapper;
+    std::stack<writerfilter::dmapper::GraphicZOrderHelper> m_aGraphicZOrderHelpers;
+};
+} // namespace writerfilter::rtftok
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

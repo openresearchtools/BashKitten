@@ -1,0 +1,1051 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+
+ module com {  module sun {  module star {  module sdbc {
+
+ published interface XResultSet;
+ published interface XConnection;
+
+/** provides comprehensive information about the database as a whole.
+
+    <p>Many of the methods here return lists of information in
+    the form of
+    com::sun::star::sdbc::XResultSet
+    objects.
+    You can use the normal com::sun::star::sdbc::XRow
+    (or com::sun::star::sdb::XColumn)
+    methods such as
+    com::sun::star::sdbc::XRow::getString()
+    and
+    com::sun::star::sdbc::XRow::getInt()
+    to retrieve the data from these XResultSets. If a given form of
+    metadata is not available, these methods should throw a
+    com::sun::star::sdbc::SQLException.
+    After calling one of the getXXX() methods,
+    one can check whether that value is `NULL`
+    with the method com::sun::star::sdbc::XRow::wasNull().
+    In the text only "(may be `NULL`)" is mentioned for this case.
+    </p>
+    <p>Some of these methods take arguments that are String patterns. These
+    arguments all have names such as fooPattern. Within a pattern String, "%"
+    means match any substring of 0 or more characters, and "_" means match
+    any one character. Only metadata entries matching the search pattern
+    are returned. If a search pattern argument is set to `VOID`,
+    that argument's criteria will be dropped from the search.
+    </p>
+    <p>
+    A
+    com::sun::star::sdbc::SQLException
+    will be thrown if a driver does not support
+    a metadata method. In the case of methods that return an XResultSet,
+    either an XResultSet (which may be empty) is returned or a
+    SQLException is thrown.</p>
+ */
+published interface XDatabaseMetaData: cpo::uno::XInterface
+{
+
+    /** returns the URL for the database connection
+     */
+    string getURL() raises (SQLException);
+
+    /** returns the user name from this database connection.
+     */
+    string getUserName() raises (SQLException);
+
+    /** checks if the database in read-only mode.
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean isReadOnly() raises (SQLException);
+
+    /** returns the name of the database product.
+     */
+    string getDatabaseProductName() raises (SQLException);
+
+    /** use the database local files to save the tables.
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean usesLocalFiles() raises (SQLException);
+
+    /** use the database one local file to save for each table.
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean usesLocalFilePerTable() raises (SQLException);
+
+    /** Does the database treat mixed case quoted SQL identifiers as
+        case sensitive and as a result store them in mixed case?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsMixedCaseQuotedIdentifiers() raises (SQLException);
+
+    /** Does the database treat mixed case quoted SQL identifiers as
+        case insensitive and store them in mixed case?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean storesMixedCaseQuotedIdentifiers() raises (SQLException);
+
+    /** What's the string used to quote SQL identifiers?
+        This returns a space " " if identifier quoting is not supported.
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    string getIdentifierQuoteString() raises (SQLException);
+
+    /** gets all the "extra" characters that can be used in unquoted
+        identifier names (those beyond a-z, A-Z, 0-9 and _).
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    string getExtraNameCharacters() raises (SQLException);
+
+    /** support the Database "ALTER TABLE" with add column?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsAlterTableWithAddColumn() raises (SQLException);
+
+    /** support the Database  "ALTER TABLE" with drop column?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsAlterTableWithDropColumn() raises (SQLException);
+
+    /** Can an "ORDER BY" clause use columns not in the SELECT statement?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsOrderByUnrelated() raises (SQLException);
+
+    /** Can a "GROUP BY" clause use columns not in the SELECT?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsGroupByUnrelated() raises (SQLException);
+
+    /** Are multiple XResultSets from a single execute supported?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsMultipleResultSets() raises (SQLException);
+    /** Can columns be defined as non-nullable?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsNonNullableColumns() raises (SQLException);
+
+    /** `TRUE`, if the database supports ODBC Core SQL grammar,
+            otherwise `FALSE`.
+            @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsCoreSQLGrammar() raises (SQLException);
+
+    /** @returns
+            `TRUE`, if the database supports ANSI92 entry level SQL grammar,
+            otherwise `FALSE`.
+            @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsANSI92EntryLevelSQL() raises (SQLException);
+
+    /** returns
+            `TRUE`, if the Database supports SQL Integrity Enhancement Facility,
+            otherwise `FALSE`.
+            @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsIntegrityEnhancementFacility() raises (SQLException);
+
+    /** @returns
+            `TRUE`, if full nested outer joins are supported,
+            otherwise `FALSE`.
+            @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsFullOuterJoins() raises (SQLException);
+
+    /** Does a catalog appear at the start of a qualified table name?
+        (Otherwise it appears at the end)
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean isCatalogAtStart() raises (SQLException);
+
+    /** return the separator between catalog and table name
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    string getCatalogSeparator() raises (SQLException);
+
+    /** Can a schema name be used in a data manipulation statement?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsSchemasInDataManipulation() raises (SQLException);
+
+    /** Can a schema name be used in a procedure call statement?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsSchemasInProcedureCalls() raises (SQLException);
+
+    /** Can a schema name be used in a table definition statement?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsSchemasInTableDefinitions() raises (SQLException);
+
+    /** Can a schema name be used in an index definition statement?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsSchemasInIndexDefinitions() raises (SQLException);
+
+    /** Can a schema name be used in a privilege definition statement?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsSchemasInPrivilegeDefinitions()
+        raises (SQLException);
+
+    /** Can a catalog name be used in a data manipulation statement?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsCatalogsInDataManipulation() raises (SQLException);
+
+    /** Can a catalog name be used in a procedure call statement?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsCatalogsInProcedureCalls() raises (SQLException);
+
+    /** Can a catalog name be used in a table definition statement?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsCatalogsInTableDefinitions() raises (SQLException);
+
+    /** Can a catalog name be used in an index definition statement?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsCatalogsInIndexDefinitions() raises (SQLException);
+
+    /** Can a catalog name be used in a privilege definition statement?
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsCatalogsInPrivilegeDefinitions()
+        raises (SQLException);
+
+    /** return the limit on column name length
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    long getMaxColumnNameLength() raises (SQLException);
+
+    /** return the maximal number of open active statements at one time to this database
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    long getMaxStatements() raises (SQLException);
+
+    /** return the maximum length of a table name
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    long getMaxTableNameLength() raises (SQLException);
+
+    /** return the maximum number of tables in a SELECT statement
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    long getMaxTablesInSelect() raises (SQLException);
+
+    /** gets a description of tables available in a catalog.
+
+        <p>Only table descriptions matching the catalog, schema, table
+        name, and type criteria are returned. They are ordered by
+        TABLE_TYPE, TABLE_SCHEM, and TABLE_NAME.
+        </p>
+        <p>Each table description has the following columns:
+        </p>
+        <ol>
+        <li>
+        <b>TABLE_CAT</b> string => table catalog (may be `NULL`)
+        </li>
+        <li>
+        <b>TABLE_SCHEM</b> string => table schema (may be `NULL`)
+        </li>
+        <li>
+        <b>TABLE_NAME</b> string => table name
+        </li>
+        <li>
+        <b>TABLE_TYPE</b> string => table type. Typical types are "TABLE",
+        "VIEW", "SYSTEM TABLE", "GLOBAL TEMPORARY",
+        "LOCAL TEMPORARY", "ALIAS", "SYNONYM".
+        </li>
+        <li>
+        <b>REMARKS</b> string => explanatory comment on the table
+        </li>
+        </ol>
+        <p>
+        <b>Note:</b> Some databases may not return information for
+        all tables.
+        </p>
+        @param catalog
+            a catalog name; "" retrieves those without a catalog; `VOID` means drop catalog name from the selection criteria
+        @param schemaPattern
+            a schema name pattern; "" retrieves those without a schema
+        @param tableNamePattern
+            a table name pattern
+        @param types
+            a list of table types to include
+        @returns
+            each row is a table description
+        @throws SQLException
+            if a database access error occurs.
+     */
+    XResultSet getTables([in]any catalog, [in]string schemaPattern,
+        [in]string tableNamePattern, [in]sequence<string> types)
+        raises (SQLException);
+
+    /** gets the table types available in this database. The results
+        are ordered by table type.
+
+        <p>The table type is:
+        </p>
+        <ol>
+        <li>
+        <b>TABLE_TYPE</b> string => table type. Typical types are "TABLE",
+        "VIEW", "SYSTEM TABLE", "GLOBAL TEMPORARY",
+        "LOCAL TEMPORARY", "ALIAS", "SYNONYM".
+        </li>
+        </ol>
+        @returns
+            each row has a single String column that is a table type
+        @throws SQLException
+            if a database access error occurs.
+     */
+    XResultSet getTableTypes() raises (SQLException);
+
+    /** gets a description of table columns available in
+        the specified catalog.
+
+        <p>Only column descriptions matching the catalog, schema, table
+        and column name criteria are returned. They are ordered by
+        TABLE_SCHEM, TABLE_NAME, and ORDINAL_POSITION.
+        </p>
+        <p>Each column description has the following columns:
+        </p>
+        <ol>
+        <li>
+        <b>TABLE_CAT</b> string => table catalog (may be `NULL`)
+        </li>
+        <li>
+        <b>TABLE_SCHEM</b> string => table schema (may be `NULL`)
+        </li>
+        <li>
+        <b>TABLE_NAME</b> string => table name
+        </li>
+        <li>
+        <b>COLUMN_NAME</b> string => column name
+        </li>
+        <li>
+        <b>DATA_TYPE</b> short => SQL type from java.sql.Types
+        </li>
+        <li>
+        <b>TYPE_NAME</b> string => Data source dependent type name,
+        for a UDT the type name is fully qualified
+        </li>
+        <li>
+        <b>COLUMN_SIZE</b> long => column size. For char or date
+        types this is the maximum number of characters, for numeric or
+        decimal types this is precision.
+        </li>
+        <li>
+        <b>BUFFER_LENGTH</b> is not used.
+        </li>
+        <li>
+        <b>DECIMAL_DIGITS</b> long => the number of fractional digits
+        </li>
+        <li>
+        <b>NUM_PREC_RADIX</b> long => Radix (typically either 10 or 2)
+        </li>
+        <li>
+        <b>NULLABLE</b> long => is NULL allowed?
+        <ul>
+        <li> NO_NULLS - might not allow NULL values
+        </li>
+        <li> NULLABLE - definitely allows NULL values
+        </li>
+        <li> NULLABLE_UNKNOWN - nullability unknown
+        </li>
+        </ul>
+        </li>
+        <li>
+        <b>REMARKS</b> string => comment describing column (may be `NULL`)
+        </li>
+        <li>
+        <b>COLUMN_DEF</b> string => default value (may be `NULL`)
+        </li>
+        <li>
+        <b>SQL_DATA_TYPE</b> long => unused
+        </li>
+        <li>
+        <b>SQL_DATETIME_SUB</b> long => unused
+        </li>
+        <li>
+        <b>CHAR_OCTET_LENGTH</b> long => for char types the
+        maximum number of bytes in the column
+        </li>
+        <li>
+        <b>ORDINAL_POSITION</b> int => index of column in table
+        (starting at 1)
+        </li>
+        <li>
+        <b>IS_NULLABLE</b> string => "NO" means column definitely
+        does not allow NULL values; "YES" means the column might
+        allow NULL values. An empty string means nobody knows.
+        </li>
+        </ol>
+        @param catalog
+            a catalog name; "" retrieves those without a catalog; `VOID` means drop catalog name from the selection criteria
+        @param schemaPattern
+            a schema name pattern; "" retrieves those without a schema
+        @param tableNamePattern
+            a table name pattern
+        @param columnNamePattern
+            a column name pattern
+        @returns
+            each row is a column description
+        @throws SQLException
+            if a database access error occurs.
+     */
+    XResultSet getColumns([in]any catalog, [in]string schemaPattern,
+        [in]string tableNamePattern, [in]string columnNamePattern)
+                    raises (SQLException);
+
+    /** gets a description of the access rights for a table's columns.
+
+        <p>
+        Only privileges matching the column name criteria are
+        returned. They are ordered by COLUMN_NAME and PRIVILEGE.
+        </p>
+        <p>Each privilege description has the following columns:
+        </p>
+        <ol>
+        <li>
+        <b>TABLE_CAT</b> string => table catalog (may be `NULL`)
+        </li>
+        <li>
+        <b>TABLE_SCHEM</b> string => table schema (may be `NULL`)
+        </li>
+        <li>
+        <b>TABLE_NAME</b> string => table name
+        </li>
+        <li>
+        <b>COLUMN_NAME</b> string => column name
+        </li>
+        <li>
+        <b>GRANTOR</b> => granter of access (may be `NULL`)
+        </li>
+        <li>
+        <b>GRANTEE</b> string => grantee of access
+        </li>
+        <li>
+        <b>PRIVILEGE</b> string => name of access (SELECT,
+        INSERT, UPDATE, REFERENCES, ...)
+        </li>
+        <li>
+        <b>IS_GRANTABLE</b> string => "YES" if grantee is permitted
+        to grant to others; "NO" if not; `NULL` if unknown
+        </li>
+        </ol>
+        @param catalog
+            a catalog name; "" retrieves those without a catalog; `VOID` means drop catalog name from the selection criteria
+        @param schema
+            a schema name ; "" retrieves those without a schema
+        @param table
+            a table name
+        @param columnNamePattern
+            a column name pattern
+        @returns
+            each row is a column privilege description
+        @throws SQLException
+            if a database access error occurs.
+     */
+    XResultSet getColumnPrivileges([in]any catalog, [in]string schema,
+        [in]string table, [in]string columnNamePattern) raises (SQLException);
+
+    /** gets a description of the access rights for each table available
+        in a catalog. Note that a table privilege applies to one or
+        more columns in the table. It would be wrong to assume that
+        this privilege applies to all columns (this may be `TRUE` for
+        some systems but is not `TRUE` for all.)
+
+        <p>Only privileges matching the schema and table name
+        criteria are returned. They are ordered by TABLE_SCHEM,
+        TABLE_NAME, and PRIVILEGE.
+        </p>
+        <p>Each privilege description has the following columns:
+        </p>
+        <ol>
+        <li>
+        <b>TABLE_CAT</b> string => table catalog (may be `NULL`)
+        </li>
+        <li>
+        <b>TABLE_SCHEM</b> string => table schema (may be `NULL`)
+        </li>
+        <li>
+        <b>TABLE_NAME</b> string => table name
+        </li>
+        <li>
+        <b>GRANTOR</b> => granter of access (may be `NULL`)
+        </li>
+        <li>
+        <b>GRANTEE</b> string => grantee of access
+        </li>
+        <li>
+        <b>PRIVILEGE</b> string => name of access (SELECT,
+        INSERT, UPDATE, REFERENCES, ...)
+        </li>
+        <li>
+        <b>IS_GRANTABLE</b> string => "YES" if grantee is permitted
+        to grant to others; "NO" if not; `NULL` if unknown
+        </li>
+        </ol>
+        @param catalog
+            a catalog name; "" retrieves those without a catalog; `VOID` means drop catalog name from the selection criteria
+        @param schemaPattern
+            a schema name pattern; "" retrieves those without a schema
+        @param tableNamePattern
+            a table name pattern
+        @returns
+            each row is a table privilege description
+        @throws SQLException
+            if a database access error occurs.
+     */
+    XResultSet getTablePrivileges([in]any catalog, [in]string schemaPattern,
+                [in]string tableNamePattern) raises (SQLException);
+
+
+    /** gets a description of a table's columns that are automatically
+        updated when any value in a row is updated. They are
+        unordered.
+
+        <p>Each column description has the following columns:
+        </p>
+        <ol>
+        <li>
+        <b>SCOPE</b> short => is not used
+        </li>
+        <li>
+        <b>COLUMN_NAME</b> string => column name
+        </li>
+        <li>
+        <b>DATA_TYPE</b> short => SQL data type from java.sql.Types
+        </li>
+        <li>
+        <b>TYPE_NAME</b> string => Data source dependent type name
+        </li>
+        <li>
+        <b>COLUMN_SIZE</b> long => precision
+        </li>
+        <li>
+        <b>BUFFER_LENGTH</b> long => length of column value in bytes
+        </li>
+        <li>
+        <b>DECIMAL_DIGITS</b> short  => scale
+        </li>
+        <li>
+        <b>PSEUDO_COLUMN</b> short => is this a pseudo column
+        like an Oracle ROWID
+        <ul>
+        <li> UNKNOWN - may or may not be pseudo column
+        </li>
+        <li> NOT_PSEUDO - is NOT a pseudo column
+        </li>
+        <li> PSEUDO - is a pseudo column
+        </li>
+        </ul>
+        </li>
+        </ol>
+        @param catalog
+            a catalog name; "" retrieves those without a catalog; `VOID` means drop catalog name from the selection criteria
+        @param schema
+            a schema name; "" retrieves those without a schema
+        @param table
+            a table name
+        @returns
+            each row is a column description
+        @throws SQLException
+            if a database access error occurs.
+     */
+    XResultSet getVersionColumns([in]any catalog, [in]string schema,
+                [in]string table) raises (SQLException);
+
+    /** gets a description of a table's primary key columns. They
+        are ordered by COLUMN_NAME.
+
+        <p>Each primary key column description has the following columns:
+        </p>
+        <ol>
+        <li>
+        <b>TABLE_CAT</b> string => table catalog (may be `NULL`)
+        </li>
+        <li>
+        <b>TABLE_SCHEM</b> string => table schema (may be `NULL`)
+        </li>
+        <li>
+        <b>TABLE_NAME</b> string => table name
+        </li>
+        <li>
+        <b>COLUMN_NAME</b> string => column name
+        </li>
+        <li>
+        <b>KEY_SEQ</b> short => sequence number within primary key
+        </li>
+        <li>
+        <b>PK_NAME</b> string => primary key name (may be `NULL`)
+        </li>
+        </ol>
+        @param catalog
+            a catalog name; "" retrieves those without a catalog; `VOID` means drop catalog name from the selection criteria
+        @param schema
+            a schema name; "" retrieves those without a schema
+        @param table
+            a table name
+        @returns
+            each row is a primary key column description
+        @throws SQLException
+            if a database access error occurs.
+     */
+    XResultSet getPrimaryKeys([in]any catalog, [in]string schema,
+                [in]string table) raises (SQLException);
+
+    /** gets a description of the primary key columns that are
+        referenced by a table's foreign key columns (the primary keys
+        imported by a table). They are ordered by PKTABLE_CAT,
+        PKTABLE_SCHEM, PKTABLE_NAME, and KEY_SEQ.
+
+        <p>Each primary key column description has the following columns:
+        </p>
+        <ol>
+        <li>
+        <b>PKTABLE_CAT</b> string => primary key table catalog
+        being imported (may be `NULL`)
+        </li>
+        <li>
+        <b>PKTABLE_SCHEM</b> string => primary key table schema
+        being imported (may be `NULL`)
+        </li>
+        <li>
+        <b>PKTABLE_NAME</b> string => primary key table name
+        being imported
+        </li>
+        <li>
+        <b>PKCOLUMN_NAME</b> string => primary key column name
+        being imported
+        </li>
+        <li>
+        <b>FKTABLE_CAT</b> string => foreign key table catalog (may be `NULL`)
+        </li>
+        <li>
+        <b>FKTABLE_SCHEM</b> string => foreign key table schema (may be `NULL`)
+        </li>
+        <li>
+        <b>FKTABLE_NAME</b> string => foreign key table name
+        </li>
+        <li>
+        <b>FKCOLUMN_NAME</b> string => foreign key column name
+        </li>
+        <li>
+        <b>KEY_SEQ</b> short => sequence number within foreign key
+        </li>
+        <li>
+        <b>UPDATE_RULE</b> short => What happens to
+        foreign key when primary is updated:
+        <ul>
+        <li> importedNoAction - do not allow update of primary
+        key if it has been imported
+        </li>
+        <li> importedKeyCascade - change imported key to agree
+        with primary key update
+        </li>
+        <li> importedKeySetNull - change imported key to NULL if
+        its primary key has been updated
+        </li>
+        <li> importedKeySetDefault - change imported key to default values
+        if its primary key has been updated
+        </li>
+        <li> importedKeyRestrict - same as importedKeyNoAction
+        (for ODBC 2.x compatibility)
+        </li>
+        </ul>
+        </li>
+        <li>
+        <b>DELETE_RULE</b> short => What happens to
+        the foreign key when primary is deleted.
+        <ul>
+        <li> importedKeyNoAction - do not allow delete of primary
+        key if it has been imported
+        </li>
+        <li> importedKeyCascade - delete rows that import a deleted key
+        </li>
+        <li> importedKeySetNull - change imported key to NULL if
+        its primary key has been deleted
+        </li>
+        <li> importedKeyRestrict - same as importedKeyNoAction
+        (for ODBC 2.x compatibility)
+        </li>
+        <li> importedKeySetDefault - change imported key to default if
+        its primary key has been deleted
+        </li>
+        </ul>
+        </li>
+        <li>
+        <b>FK_NAME</b> string => foreign key name (may be `NULL`)
+        </li>
+        <li>
+        <b>PK_NAME</b> string => primary key name (may be `NULL`)
+        </li>
+        <li>
+        <b>DEFERRABILITY</b> short => can the evaluation of foreign key
+        constraints be deferred until commit
+        <ul>
+        <li> importedKeyInitiallyDeferred - see SQL92 for definition
+        </li>
+        <li> importedKeyInitiallyImmediate - see SQL92 for definition
+        </li>
+        <li> importedKeyNotDeferrable - see SQL92 for definition
+        </li>
+        </ul>
+        </li>
+        </ol>
+        @param catalog
+            a catalog name; "" retrieves those without a catalog; `VOID` means drop catalog name from the selection criteria
+        @param schema
+            a schema name; "" retrieves those without a schema
+        @param table
+            a table name
+        @returns
+            each row is a primary key column description
+        @throws SQLException
+            if a database access error occurs.
+     */
+    XResultSet getImportedKeys([in]any catalog, [in]string schema,
+                [in]string table) raises (SQLException);
+
+
+    /** gets a description of all the standard SQL types supported by
+        this database. They are ordered by DATA_TYPE and then by how
+        closely the data type maps to the corresponding SDBC SQL type.
+
+        <p>Each type description has the following columns:
+        </p>
+        <ol>
+        <li>
+        <b>TYPE_NAME</b> string => Type name
+        </li>
+        <li>
+        <b>DATA_TYPE</b> short => SQL data type from java.sql.Types
+        </li>
+        <li>
+        <b>PRECISION</b> long => maximum precision
+        </li>
+        <li>
+        <b>LITERAL_PREFIX</b> string => prefix used to quote a literal
+        (may be `NULL`)
+        </li>
+        <li>
+        <b>LITERAL_SUFFIX</b> string => suffix used to quote a literal
+        (may be `NULL`)
+        </li>
+        <li>
+        <b>CREATE_PARAMS</b> string => parameters used in creating
+        the type (may be `NULL`)
+        </li>
+        <li>
+        <b>NULLABLE</b> short => can you use NULL for this type?
+        <ul>
+        <li> NO_NULLS - does not allow NULL values
+        </li>
+        <li> NULLABLE - allows NULL values
+        </li>
+        <li> NULLABLE_UNKNOWN - nullability unknown
+        </li>
+        </ul>
+        </li>
+        <li>
+        <b>CASE_SENSITIVE</b> boolean=> is it case sensitive?
+        </li>
+        <li>
+        <b>SEARCHABLE</b> short => can you use "WHERE" based on this type:
+        <ul>
+        <li> NONE - No support
+        </li>
+        <li> CHAR - Only supported with WHERE .. LIKE
+        </li>
+        <li> BASIC - Supported except for WHERE .. LIKE
+        </li>
+        <li> FULL - Supported for all WHERE ..
+        </li>
+        </ul>
+        </li>
+        <li>
+        <b>UNSIGNED_ATTRIBUTE</b> boolean => is it unsigned?
+        </li>
+        <li>
+        <b>FIXED_PREC_SCALE</b> boolean => can it be a money value?
+        </li>
+        <li>
+        <b>AUTO_INCREMENT</b> boolean => can it be used for an
+        auto-increment value?
+        </li>
+        <li>
+        <b>LOCAL_TYPE_NAME</b> string => localized version of type name
+        (may be `NULL`)
+        </li>
+        <li>
+        <b>MINIMUM_SCALE</b> short => minimum scale supported
+        </li>
+        <li>
+        <b>MAXIMUM_SCALE</b> short => maximum scale supported
+        </li>
+        <li>
+        <b>SQL_DATA_TYPE</b> long => unused
+        </li>
+        <li>
+        <b>SQL_DATETIME_SUB</b> long => unused
+        </li>
+        <li>
+        <b>NUM_PREC_RADIX</b> long => usually 2 or 10
+        </li>
+        </ol>
+        @returns
+            each row is a SQL type description
+        @throws SQLException
+            if a database access error occurs.
+     */
+    XResultSet getTypeInfo() raises (SQLException);
+
+    /** gets a description of a table's indices and statistics. They are
+        ordered by NON_UNIQUE, TYPE, INDEX_NAME, and ORDINAL_POSITION.
+
+        <p>Each index column description has the following columns:
+        </p>
+        <ol>
+        <li>
+        <b>TABLE_CAT</b> string => table catalog (may be `NULL`)
+        </li>
+        <li>
+        <b>TABLE_SCHEM</b> string => table schema (may be `NULL`)
+        </li>
+        <li>
+        <b>TABLE_NAME</b> string => table name
+        </li>
+        <li>
+        <b>NON_UNIQUE</b> boolean => Can index values be non-unique?
+        `FALSE` when TYPE is tableIndexStatistic
+        </li>
+        <li>
+        <b>INDEX_QUALIFIER</b> string => index catalog (may be `NULL`);
+        `NULL` when TYPE is tableIndexStatistic
+        </li>
+        <li>
+        <b>INDEX_NAME</b> string => index name; `NULL` when TYPE is
+        tableIndexStatistic
+        </li>
+        <li>
+        <b>TYPE</b> short => index type:
+        <ul>
+        <li> 0 - this identifies table statistics that are
+        returned in conjunction with a table's index descriptions
+        </li>
+        <li> CLUSTERED - this is a clustered index
+        </li>
+        <li> HASHED - this is a hashed index
+        </li>
+        <li> OTHER - this is some other style of index
+        </li>
+        </ul>
+        </li>
+        <li>
+        <b>ORDINAL_POSITION</b> short => column sequence number
+        within index; zero when TYPE is tableIndexStatistic
+        </li>
+        <li>
+        <b>COLUMN_NAME</b> string => column name; `NULL` when TYPE is
+        tableIndexStatistic
+        </li>
+        <li>
+        <b>ASC_OR_DESC</b> string => column sort sequence, "A" => ascending,
+        "D" => descending, may be `NULL` if sort sequence is not supported;
+        `NULL` when TYPE is tableIndexStatistic
+        </li>
+        <li>
+        <b>CARDINALITY</b> long => When TYPE is tableIndexStatistic, then
+        this is the number of rows in the table; otherwise, it is the
+        number of unique values in the index.
+        </li>
+        <li>
+        <b>PAGES</b> long => When TYPE is  tableIndexStatistic then
+        this is the number of pages used for the table, otherwise it
+        is the number of pages used for the current index.
+        </li>
+        <li>
+        <b>FILTER_CONDITION</b> string => Filter condition, if any.
+        (may be `NULL`)
+        </li>
+        </ol>
+        @param catalog
+            a catalog name; "" retrieves those without a catalog; `VOID` means drop catalog name from the selection criteria
+        @param schema
+            a schema name; "" retrieves those without a schema
+        @param table
+            the table name that exports the key
+        @param unique
+            when `TRUE`, return only indices for unique values; when `FALSE`, return indices regardless of whether unique or not
+        @param approximate
+            when `TRUE`, result is allowed to reflect approximate or out of data values; when `FALSE`, results are requested to be accurate
+        @returns
+            each row is an index column description
+        @throws SQLException
+            if a database access error occurs.
+     */
+    XResultSet getIndexInfo([in]any catalog, [in]string schema, [in]string table,
+            [in]boolean unique, [in]boolean approximate)
+                    raises (SQLException);
+
+    /** Does the database support the given result set type?
+        @param setType
+            defined in
+            com::sun::star::sdbc::ResultSetType
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsResultSetType([in]long setType) raises (SQLException);
+
+    /** Does the database support the concurrency type in combination
+        with the given result set type?
+        @param setType
+            defined in
+            com::sun::star::sdbc::ResultSetType
+        @param concurrency
+            defined in
+            com::sun::star::sdbc::ResultSetConcurrency
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsResultSetConcurrency([in]long setType,
+                                                  [in]long concurrency)
+      raises (SQLException);
+
+    /** indicates whether the driver supports batch updates.
+        @returns
+            `TRUE` if so
+        @throws SQLException
+            if a database access error occurs.
+     */
+    boolean supportsBatchUpdates() raises (SQLException);
+
+    /** retrieves the connection that produced this metadata object.
+        @returns
+            the Connection object
+        @throws SQLException
+            if a database access error occurs.
+     */
+    XConnection getConnection() raises (SQLException);
+};
+
+
+}; }; }; };
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

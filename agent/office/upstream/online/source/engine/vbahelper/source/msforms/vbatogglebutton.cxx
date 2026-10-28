@@ -1,0 +1,165 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include "vbatogglebutton.hxx"
+#include "vbanewfont.hxx"
+#include <sal/log.hxx>
+
+using namespace com::sun::star;
+using namespace ::cpo;
+using namespace ooo::vba;
+
+ScVbaToggleButton::ScVbaToggleButton( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< cpo::uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper )
+    : ToggleButtonImpl_BASE( xParent, xContext, xControl, xModel, std::move(pGeomHelper) )
+{
+    SAL_INFO("vbahelper", "ScVbaToggleButton(ctor)");
+    m_xProps->setPropertyValue( u"Toggle"_ustr, cpo::uno::Any( true ) );
+}
+
+ScVbaToggleButton::~ScVbaToggleButton()
+{
+    SAL_INFO("vbahelper", "~ScVbaToggleButton(dtor)");
+}
+
+// Attributes
+OUString
+ScVbaToggleButton::getCaption()
+{
+    OUString Label;
+    m_xProps->getPropertyValue( u"Label"_ustr ) >>= Label;
+    return Label;
+}
+
+void
+ScVbaToggleButton::setCaption( const OUString& _caption )
+{
+    m_xProps->setPropertyValue( u"Label"_ustr, cpo::uno::Any( _caption ) );
+}
+
+cpo::uno::Any
+ScVbaToggleButton::getValue()
+{
+    sal_Int16 nState = 0;
+    m_xProps->getPropertyValue( u"State"_ustr ) >>= nState;
+    return cpo::uno::Any( nState ? sal_Int16( -1 ) : sal_Int16( 0 ) );
+}
+
+
+void
+ScVbaToggleButton::setValue( const cpo::uno::Any& _value )
+{
+    sal_Int16 nState = 0;
+    if ( ! ( _value >>= nState ) )
+    {
+        bool bState = false;
+        _value >>= bState;
+        if ( bState )
+            nState = -1;
+    }
+    SAL_INFO("vbahelper", "nState - " << nState );
+    nState = ( nState == -1 ) ?  1 : 0;
+    SAL_INFO("vbahelper", "nState - " << nState );
+    m_xProps->setPropertyValue( u"State"_ustr, cpo::uno::Any(   nState ) );
+}
+
+bool ScVbaToggleButton::getAutoSize()
+{
+    return ScVbaControl::getAutoSize();
+}
+
+void ScVbaToggleButton::setAutoSize( bool bAutoSize )
+{
+    ScVbaControl::setAutoSize( bAutoSize );
+}
+
+bool ScVbaToggleButton::getCancel()
+{
+    // #STUB
+    return false;
+}
+
+void ScVbaToggleButton::setCancel( bool /*bCancel*/ )
+{
+    // #STUB
+}
+
+bool ScVbaToggleButton::getDefault()
+{
+    // #STUB
+    return false;
+}
+
+void ScVbaToggleButton::setDefault( bool /*bDefault*/ )
+{
+    // #STUB
+}
+
+sal_Int32 ScVbaToggleButton::getBackColor()
+{
+    return ScVbaControl::getBackColor();
+}
+
+void ScVbaToggleButton::setBackColor( sal_Int32 nBackColor )
+{
+    ScVbaControl::setBackColor( nBackColor );
+}
+
+sal_Int32 ScVbaToggleButton::getForeColor()
+{
+    // #STUB
+    return 0;
+}
+
+void ScVbaToggleButton::setForeColor( sal_Int32 /*nForeColor*/ )
+{
+    // #STUB
+}
+
+uno::Reference< msforms::XNewFont > ScVbaToggleButton::getFont()
+{
+    return new VbaNewFont( m_xProps );
+}
+
+bool ScVbaToggleButton::getLocked()
+{
+    return ScVbaControl::getLocked();
+}
+
+void ScVbaToggleButton::setLocked( bool bLocked )
+{
+    ScVbaControl::setLocked( bLocked );
+}
+
+OUString
+ScVbaToggleButton::getServiceImplName()
+{
+    return u"ScVbaToggleButton"_ustr;
+}
+
+cpo::uno::Sequence< OUString >
+ScVbaToggleButton::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.msforms.ToggleButton"_ustr
+    };
+    return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

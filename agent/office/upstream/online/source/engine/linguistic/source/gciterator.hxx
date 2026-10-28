@@ -1,0 +1,228 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/i18n/XBreakIterator.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XEventListener.hpp>
+#include <com/sun/star/linguistic2/XProofreadingIterator.hpp>
+#include <com/sun/star/linguistic2/XLinguServiceEventListener.hpp>
+#include <com/sun/star/linguistic2/XLinguServiceEventBroadcaster.hpp>
+#include <com/sun/star/util/XChangesBatch.hpp>
+
+#include <cppuhelper/implbase.hxx>
+#include <osl/mutex.hxx>
+#include <osl/conditn.hxx>
+#include <osl/thread.h>
+
+#include <cpo/uno/Any.hxx>
+#include <comphelper/kit.hxx>
+#include <comphelper/interfacecontainer3.hxx>
+#include <i18nlangtag/lang.h>
+
+#include <map>
+#include <vector>
+#include <optional>
+#include <utility>
+#include <deque>
+
+#include "defs.hxx"
+
+
+struct FPEntry
+{
+    // flat paragraph iterator
+    cpo::uno::Reference< css::text::XFlatParagraphIterator > m_xParaIterator;
+
+    // flat paragraph
+    cpo::uno::Reference< css::text::XFlatParagraph > m_xPara;
+
+    // document ID to identify different documents
+    OUString        m_aDocId;
+
+    // the starting position to be checked
+    sal_Int32       m_nStartIndex;
+
+    // the flag to identify whether the document does automatic grammar checking
+    bool            m_bAutomatic;
+
+    FPEntry()
+        : m_aDocId()
+        , m_nStartIndex( 0 )
+        , m_bAutomatic( false )
+    {
+    }
+};
+
+
+class GrammarCheckingIterator:
+    public cppu::WeakImplHelper
+    <
+        css::linguistic2::XProofreadingIterator,
+        css::linguistic2::XLinguServiceEventListener,
+        css::linguistic2::XLinguServiceEventBroadcaster,
+        css::lang::XComponent,
+        css::lang::XServiceInfo
+    >,
+    public LinguDispatcher,
+    public comphelper::COKit::ThreadJoinable
+{
+    //the queue is keeping track of all sentences to be checked
+    //every element of this queue is a FlatParagraphEntry struct-object
+    typedef std::deque< FPEntry > FPQueue_t;
+
+    // queue for entries to be processed
+    FPQueue_t       m_aFPEntriesQueue;
+
+    // the flag to end the endless loop
+    bool        m_bEnd;
+
+    // Note that it must be the pointer and not the uno-reference to check if it is the same implementation object
+    typedef std::map< XComponent *, OUString > DocMap_t;
+    DocMap_t        m_aDocIdMap;
+
+
+    // BCP-47 language tag -> implname mapping
+    // Every service the configuration names for a language, in order. Only
+    // one of them ends up checking it, but which one depends on the locales
+    // each reports, which cannot be known before they are instantiated.
+    typedef std::map< OUString, std::vector< OUString > > GCImplNames_t;
+    GCImplNames_t   m_aGCImplNamesByLang;
+
+    // implname -> UNO reference mapping
+    typedef std::map< OUString, cpo::uno::Reference< css::linguistic2::XProofreader > > GCReferences_t;
+    GCReferences_t  m_aGCReferencesByService;
+
+    // Last GetGrammarChecker result cached
+    css::lang::Locale m_aLastGCLocale;
+    cpo::uno::Reference< css::linguistic2::XProofreader > m_xLastGC;
+    std::optional<OUString> m_oLastGCFallback;
+
+    OUString m_aCurCheckedDocId;
+    bool        m_bGCServicesChecked;
+    sal_Int32       m_nDocIdCounter;
+    osl::Condition  m_aWakeUpThread;
+    oslThread       m_thread;
+
+    //! beware of initialization order!
+    static osl::Mutex& MyMutex();
+    comphelper::OInterfaceContainerHelper3<css::lang::XEventListener>  m_aEventListeners;
+    comphelper::OInterfaceContainerHelper3<css::linguistic2::XLinguServiceEventListener>  m_aNotifyListeners;
+
+    cpo::uno::Reference< css::i18n::XBreakIterator > m_xBreakIterator;
+    mutable cpo::uno::Reference< css::util::XChangesBatch >  m_xUpdateAccess;
+
+    void TerminateThread();
+
+    sal_Int32 NextDocId();
+    OUString GetOrCreateDocId( const cpo::uno::Reference< css::lang::XComponent > &xComp );
+
+    void AddEntry(
+            const cpo::uno::Reference< css::text::XFlatParagraphIterator >& xFlatParaIterator,
+            const cpo::uno::Reference< css::text::XFlatParagraph >& xFlatPara,
+            const OUString &rDocId, sal_Int32 nStartIndex, bool bAutomatic );
+
+    void ProcessResult( const css::linguistic2::ProofreadingResult &rRes,
+            const cpo::uno::Reference< css::text::XFlatParagraphIterator > &rxFlatParagraphIterator,
+            bool bIsAutomaticChecking );
+
+    sal_Int32 GetSuggestedEndOfSentence( const OUString &rText, sal_Int32 nSentenceStartPos, const css::lang::Locale &rLocale );
+
+    void GetConfiguredGCSvcs_Impl();
+    cpo::uno::Reference< css::linguistic2::XProofreader > GetGrammarChecker( css::lang::Locale & rLocale );
+
+    cpo::uno::Reference< css::util::XChangesBatch > const & GetUpdateAccess() const;
+
+    GrammarCheckingIterator( const GrammarCheckingIterator & ) = delete;
+    GrammarCheckingIterator & operator = ( const GrammarCheckingIterator & ) = delete;
+
+    // Gets the grammar checker service, using fallback locales if necessary,
+    // and the BCP-47 tag for the updated locale, if the fallback was used.
+    // Precondition: MyMutex() is locked.
+    std::pair<std::vector<OUString>, std::optional<OUString>>
+    getServiceForLocale(const css::lang::Locale& rLocale) const;
+
+public:
+
+    void DequeueAndCheck();
+
+    explicit GrammarCheckingIterator();
+    virtual ~GrammarCheckingIterator() override;
+
+    // XProofreadingIterator
+    virtual void startProofreading( const cpo::uno::Reference< cpo::uno::XInterface >& xDocument, const cpo::uno::Reference< css::text::XFlatParagraphIteratorProvider >& xIteratorProvider ) override;
+    virtual css::linguistic2::ProofreadingResult checkSentenceAtPosition( const cpo::uno::Reference< cpo::uno::XInterface >& xDocument, const cpo::uno::Reference< css::text::XFlatParagraph >& xFlatParagraph, const OUString& aText, const css::lang::Locale& aLocale, ::sal_Int32 nStartOfSentencePosition, ::sal_Int32 nSuggestedBehindEndOfSentencePosition, ::sal_Int32 nErrorPositionInParagraph ) override;
+    virtual void resetIgnoreRules(  ) override;
+    virtual bool isProofreading( const cpo::uno::Reference< cpo::uno::XInterface >& xDocument ) override;
+
+    // XLinguServiceEventListener
+    virtual void processLinguServiceEvent( const css::linguistic2::LinguServiceEvent& aLngSvcEvent ) override;
+
+    // XLinguServiceEventBroadcaster
+    virtual bool addLinguServiceEventListener( const cpo::uno::Reference< css::linguistic2::XLinguServiceEventListener >& xLstnr ) override;
+    virtual bool removeLinguServiceEventListener( const cpo::uno::Reference< css::linguistic2::XLinguServiceEventListener >& xLstnr ) override;
+
+    // XComponent
+    virtual void dispose(  ) override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
+
+    // XEventListener
+    virtual void disposing( const css::lang::EventObject& Source ) override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+    // LinguDispatcher
+    virtual void SetServiceList( const css::lang::Locale &rLocale, const cpo::uno::Sequence< OUString > &rSvcImplNames ) override;
+    virtual cpo::uno::Sequence< OUString > GetServiceList( const css::lang::Locale &rLocale ) const override;
+
+    // comphelper::COKit::ThreadJoinable
+    virtual bool joinThreads() override;
+};
+
+
+/** Implementation of the css::container::XStringKeyMap interface
+ */
+class LngXStringKeyMap : public ::cppu::WeakImplHelper<css::container::XStringKeyMap>
+{
+public:
+    LngXStringKeyMap();
+
+    virtual cpo::uno::Any getValue(const OUString& aKey) override;
+    virtual bool hasValue(const OUString& aKey) override;
+    virtual void insertValue(const OUString& aKey, const cpo::uno::Any& aValue) override;
+    virtual ::sal_Int32 getCount() override;
+    virtual OUString getKeyByIndex(::sal_Int32 nIndex) override;
+    virtual cpo::uno::Any getValueByIndex(::sal_Int32 nIndex) override;
+
+private:
+    LngXStringKeyMap(LngXStringKeyMap const &) = delete;
+    void operator=(LngXStringKeyMap const &) = delete;
+
+    ~LngXStringKeyMap() override{};
+
+    std::map<OUString, cpo::uno::Any> maMap;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

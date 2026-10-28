@@ -1,0 +1,356 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/registry/XSimpleRegistry.hpp>
+#include <osl/file.hxx>
+
+#include <cppuhelper/servicefactory.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <osl/diagnose.h>
+#include <com/sun/star/ui/dialogs/XFilePicker.hpp>
+#include <com/sun/star/ui/dialogs/XFilterManager.hpp>
+
+#include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <com/sun/star/ui/dialogs/XFilePickerListener.hpp>
+#include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
+#include <com/sun/star/ui/dialogs/XFilePickerNotifier.hpp>
+#include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
+#include <com/sun/star/ui/dialogs/CommonFilePickerElementIds.hpp>
+#include <com/sun/star/ui/dialogs/ExtendedFilePickerElementIds.hpp>
+#include <com/sun/star/ui/dialogs/ListboxControlActions.hpp>
+#include <com/sun/star/ui/dialogs/XFilePreview.hpp>
+
+#include <osl/thread.h>
+
+#include <stdio.h>
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
+#include "..\FPServiceInfo.hxx"
+
+
+//  namespaces
+
+
+using namespace ::cppu                  ;
+using namespace ::cpo::uno   ;
+using namespace ::com::sun::star::lang  ;
+using namespace ::com::sun::star::ui::dialogs   ;
+using namespace ::com::sun::star::ui::dialogs::TemplateDescription;
+
+using namespace ::com::sun::star::ui::dialogs::CommonFilePickerElementIds;
+using namespace ::com::sun::star::ui::dialogs::ExtendedFilePickerElementIds;
+using namespace ::com::sun::star::ui::dialogs::ListboxControlActions;
+
+using namespace std                     ;
+
+// forward
+
+void TestFilterManager( Reference< XFilePicker > xFilePicker );
+
+
+#define RDB_SYSPATH "D:\\Projects\\gsl\\sysui\\wntmsci7\\bin\\applicat.rdb"
+
+
+//  global variables
+
+
+Reference< XMultiServiceFactory >   g_xFactory;
+
+static constexpr OUStringLiteral BMP_EXTENSION( u"bmp" );
+
+
+// a test client
+
+
+class FilePickerListener : public WeakImplHelper< XFilePickerListener >
+{
+public:
+
+    // XEventListener
+    virtual void disposing( const css::lang::EventObject& Source )
+        throw(cpo::uno::RuntimeException);
+
+    // XFilePickerListener
+    virtual void fileSelectionChanged( const css::ui::dialogs::FilePickerEvent& aEvent )
+        throw(cpo::uno::RuntimeException);
+
+    virtual void directoryChanged( const css::ui::dialogs::FilePickerEvent& aEvent )
+        throw(cpo::uno::RuntimeException);
+
+    virtual OUString helpRequested( const css::ui::dialogs::FilePickerEvent& aEvent )
+        throw(cpo::uno::RuntimeException);
+
+    virtual void controlStateChanged( const css::ui::dialogs::FilePickerEvent& aEvent )
+        throw(cpo::uno::RuntimeException);
+
+    virtual void dialogSizeChanged(  )
+        throw (cpo::uno::RuntimeException);
+};
+
+void FilePickerListener::disposing( const css::lang::EventObject& Source )
+    throw(cpo::uno::RuntimeException)
+{
+}
+
+void FilePickerListener::fileSelectionChanged( const css::ui::dialogs::FilePickerEvent& aEvent )
+    throw(cpo::uno::RuntimeException)
+{
+    try
+    {
+        Reference< XFilePicker > rXFilePicker( aEvent.Source, UNO_QUERY );
+        Reference< XFilePreview > rXFilePreview( rXFilePicker, UNO_QUERY );
+
+        if ( !rXFilePreview.is( ) )
+            return;
+
+        Sequence< OUString > aFileList = rXFilePicker->getFiles( );
+        if ( 1 == aFileList.getLength( ) )
+        {
+            OUString FilePath = aFileList[0];
+
+            // detect file extension
+            sal_Int32 nIndex = FilePath.lastIndexOf( BMP_EXTENSION );
+            if ( (FilePath.getLength( ) - 3) == nIndex )
+            {
+                 OUString FileSysPath;
+                ::osl::FileBase::getSystemPathFromFileURL(
+                    FilePath, FileSysPath );
+
+                 HANDLE hFile = CreateFileW(
+                     FileSysPath.getStr( ),
+                     GENERIC_READ, FILE_SHARE_READ, NULL,
+                     OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL) ;
+
+                 if (hFile == INVALID_HANDLE_VALUE)
+                      return;
+
+                 DWORD dwHighSize;
+                 DWORD dwFileSize = GetFileSize (hFile, &dwHighSize) ;
+
+                 if (dwHighSize)
+                 {
+                      CloseHandle (hFile) ;
+                      return;
+                 }
+
+                 Sequence< sal_Int8 > aDIB( dwFileSize );
+
+                 DWORD dwBytesRead;
+                 bool bSuccess = ReadFile (hFile, aDIB.getArray( ), dwFileSize, &dwBytesRead, NULL) ;
+                 CloseHandle (hFile);
+
+                 BITMAPFILEHEADER* pbmfh = (BITMAPFILEHEADER*)aDIB.getConstArray( );
+                 if (!bSuccess || (dwBytesRead != dwFileSize)
+                               || (pbmfh->bfType != * (WORD *) "BM")
+                               || (pbmfh->bfSize != dwFileSize))
+                 {
+                    return;
+                 }
+
+                Any aAny;
+
+                aAny <<= aDIB;
+                rXFilePreview->setImage( 1, aAny );
+            }
+        }
+    }
+    catch( IllegalArgumentException&  )
+    {
+    }
+}
+
+void FilePickerListener::directoryChanged( const css::ui::dialogs::FilePickerEvent& aEvent )
+    throw(cpo::uno::RuntimeException)
+{
+    Reference< XFilePickerControlAccess > rFilePickerCtrlAccess( aEvent.Source, UNO_QUERY );
+}
+
+OUString FilePickerListener::helpRequested( const css::ui::dialogs::FilePickerEvent& aEvent )
+    throw(cpo::uno::RuntimeException)
+{
+    return OUString( );
+}
+
+void FilePickerListener::controlStateChanged( const css::ui::dialogs::FilePickerEvent& aEvent )
+    throw(cpo::uno::RuntimeException)
+{
+    try
+    {
+        Reference< XFilePickerControlAccess > rFPCtrlAccess( aEvent.Source, UNO_QUERY );
+
+        Any aValue;
+
+        OUString lbString( L"Ein Eintrag 1" );
+        aValue <<= lbString;
+        rFPCtrlAccess->setValue( LISTBOX_VERSION, ADD_ITEM, aValue );
+
+        lbString = L"Ein Eintrag 2";
+        aValue <<= lbString;
+        rFPCtrlAccess->setValue( LISTBOX_VERSION, ADD_ITEM, aValue );
+
+        lbString =  L"Ein Eintrag 3";
+        aValue <<= lbString;
+        rFPCtrlAccess->setValue( LISTBOX_VERSION, ADD_ITEM, aValue );
+
+        sal_Int16 nSel = 1;
+        aValue <<= nSel;
+        rFPCtrlAccess->setValue( LISTBOX_VERSION, SET_SELECT_ITEM, aValue );
+
+        sal_Int32 nDel = 0;
+        aValue <<= nDel;
+        rFPCtrlAccess->setValue( LISTBOX_VERSION, DELETE_ITEM, aValue );
+    }
+    catch( ... )
+    {
+    }
+}
+
+void FilePickerListener::dialogSizeChanged( )
+    throw(cpo::uno::RuntimeException)
+{
+}
+
+
+//  main
+
+
+int main(int nArgc, char* Argv[], char* Env[]  )
+{
+    printf("Starting test of FPS-Service\n");
+
+
+    // get the global service-manager
+
+
+    // Get global factory for uno services.
+    Reference< XMultiServiceFactory > g_xFactory( createRegistryServiceFactory( RDB_SYSPATH ) );
+
+    // Print a message if an error occurred.
+    if ( g_xFactory.is() == false )
+    {
+        OSL_FAIL("Can't create RegistryServiceFactory");
+        return(-1);
+    }
+
+
+    // try to get an Interface to a XFilePicker Service
+
+
+    Sequence< Any > arguments(1);
+    arguments[0] = makeAny( FILEOPEN_READONLY_VERSION );
+
+    Reference< XFilePicker > xFilePicker(
+        g_xFactory->createInstanceWithArguments(
+            "com.sun.star.ui.dialogs.SystemFilePicker", arguments ), UNO_QUERY );
+
+        // install a FilePicker notifier
+        Reference< XFilePickerListener > xFPListener(
+            static_cast< XFilePickerListener* >( new FilePickerListener()), UNO_QUERY );
+
+        Reference< XFilePickerNotifier > xFPNotifier( xFilePicker, UNO_QUERY );
+        if ( xFPNotifier.is( ) )
+            xFPNotifier->addFilePickerListener( xFPListener );
+
+        xFilePicker->setTitle( OUString("FileOpen Simple..."));
+        xFilePicker->setMultiSelectionMode( true );
+        xFilePicker->setDefaultName( OUString("d:\\test2.sxw"));
+
+        OUString aDirURL;
+        OUString aSysPath = OStringToOUString( "d:\\ueaeoe", osl_getThreadTextEncoding( ) );
+        ::osl::FileBase::getFileURLFromSystemPath( aSysPath, aDirURL );
+        xFilePicker->setDisplayDirectory( aDirURL );
+
+        Reference< XFilterManager > xFilterMgr( xFilePicker, UNO_QUERY );
+        if ( xFilterMgr.is( ) )
+        {
+            xFilterMgr->appendFilter( L"Alle", L"*.*" );
+            xFilterMgr->appendFilter( L"BMP", L"*.bmp" );
+            xFilterMgr->appendFilter( L"SDW", L"*.sdw;*.sdc;*.sdi" );
+            xFilterMgr->appendFilter( L"SXW", L"*.sxw;*.sxi" );
+        }
+
+        Reference< XFilePickerControlAccess > xFPControlAccess( xFilePicker, UNO_QUERY );
+
+        Any aAny;
+        bool bChkState = false;
+
+        aAny.setValue( &bChkState, cppu::UnoType<bool>::get());
+        xFPControlAccess->setValue( CHECKBOX_AUTOEXTENSION, 0, aAny );
+
+        OUString aVersion( L"Version 1" );
+        aAny <<= aVersion;
+        xFPControlAccess->setValue( LISTBOX_VERSION, ADD_ITEM, aAny );
+        xFPControlAccess->setValue( LISTBOX_VERSION, ADD_ITEM, aAny );
+        xFPControlAccess->setValue( LISTBOX_VERSION, ADD_ITEM, aAny );
+
+        xFilePicker->execute( );
+
+        bool bCheckState;
+        aAny = xFPControlAccess->getValue( CHECKBOX_AUTOEXTENSION, 0 );
+        if ( aAny.hasValue( ) )
+            bCheckState = *reinterpret_cast< const bool* >( aAny.getValue( ) );
+
+        aAny = xFPControlAccess->getValue( CHECKBOX_READONLY, 0 );
+        if ( aAny.hasValue( ) )
+            bCheckState = *reinterpret_cast< const bool* >( aAny.getValue( ) );
+
+        aAny = xFPControlAccess->getValue( LISTBOX_VERSION, GET_SELECTED_ITEM );
+        sal_Int32 nSel;
+        if ( aAny.hasValue( ) )
+            aAny >>= nSel;
+
+        aDirURL = xFilePicker->getDisplayDirectory( );
+        Sequence< OUString > aFileList = xFilePicker->getFiles( );
+        for ( int i = 0; i < aFileList.getLength( ); i++ )
+        {
+            OUString nextPath = aFileList[i];
+        }
+
+        if ( xFPNotifier.is( ) )
+            xFPNotifier->removeFilePickerListener( xFPListener );
+
+
+    // shutdown
+
+
+    // Cast factory to XComponent
+    Reference< XComponent > xComponent( g_xFactory, UNO_QUERY );
+
+    // Print a message if an error occurred.
+    if ( xComponent.is() == false )
+    {
+        OSL_FAIL("Error shutting down");
+    }
+
+    // Dispose and clear factory
+    xComponent->dispose();
+    g_xFactory.clear();
+
+    printf("Test successful\n");
+
+    return 0;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

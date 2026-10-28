@@ -1,0 +1,480 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <vbahelper/vbaapplicationbase.hxx>
+#include <sal/macros.h>
+
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/bridge/oleautomation/Date.hpp>
+#include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/lang/XMultiComponentFactory.hpp>
+#include <com/sun/star/frame/XLayoutManager.hpp>
+#include <com/sun/star/awt/XWindow2.hpp>
+
+#include <filter/msfilter/msvbahelper.hxx>
+#include <rtl/ref.hxx>
+#include <tools/datetime.hxx>
+#include <vcl/timer.hxx>
+#include <vcl/svapp.hxx>
+
+#include <basic/sbstar.hxx>
+#include <basic/sbmeth.hxx>
+#include <basic/sbmod.hxx>
+#include <basic/vbahelper.hxx>
+
+#include <comphelper/asyncquithandler.hxx>
+
+#include "vbacommandbars.hxx"
+
+#include <o3tl/hash_combine.hxx>
+#include <o3tl/string_view.hxx>
+#include <unordered_map>
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+using namespace ::ooo::vba;
+
+typedef ::std::pair< OUString, ::std::pair< double, double > > VbaTimerInfo;
+
+namespace {
+
+class VbaTimer
+{
+    Timer m_aTimer;
+    VbaTimerInfo m_aTimerInfo;
+    ::rtl::Reference< VbaApplicationBase > m_xBase;
+
+public:
+    VbaTimer() : m_aTimer("VbaTimer")
+    {}
+
+    ~VbaTimer()
+    {
+        m_aTimer.Stop();
+    }
+
+    VbaTimer(const VbaTimer&) = delete;
+    VbaTimer& operator=(const VbaTimer&) = delete;
+
+    static double GetNow()
+    {
+        DateTime aNow( DateTime::SYSTEM );
+        Date aRefDate(1899'12'30);
+        tools::Long nDiffDays = aNow - aRefDate;
+
+        tools::Long nDiffSeconds = aNow.GetHour() * 3600 + aNow.GetMin() * 60 + aNow.GetSec();
+        return static_cast<double>(nDiffDays) + static_cast<double>(nDiffSeconds)/double(24*3600);
+    }
+
+    static sal_Int32 GetTimerMilliseconds( double nFrom, double nTo )
+    {
+        double nResult = nTo - nFrom;
+        if ( nResult > 0 )
+            nResult *= 24*3600*1000;
+        else
+            nResult = 50;
+
+        return static_cast<sal_Int32>(nResult);
+    }
+
+    void Start( const ::rtl::Reference< VbaApplicationBase >& xBase, const OUString& aFunction, double nFrom, double nTo )
+    {
+        if ( !xBase.is() || aFunction.isEmpty() )
+            throw cpo::uno::RuntimeException( u"Unexpected arguments!"_ustr );
+
+        m_xBase = xBase;
+        m_aTimerInfo = VbaTimerInfo( aFunction, ::std::pair< double, double >( nFrom, nTo ) );
+        m_aTimer.SetInvokeHandler( LINK( this, VbaTimer, MacroCallHdl ) );
+        m_aTimer.SetTimeout( GetTimerMilliseconds( GetNow(), nFrom ) );
+        m_aTimer.Start();
+    }
+
+    DECL_LINK( MacroCallHdl, Timer*, void );
+};
+
+}
+
+IMPL_LINK_NOARG(VbaTimer, MacroCallHdl, Timer *, void)
+{
+    if ( m_aTimerInfo.second.second == 0 || GetNow() < m_aTimerInfo.second.second )
+    {
+        cpo::uno::Any aDummyArg;
+        try
+        {
+            m_xBase->Run( m_aTimerInfo.first, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg, aDummyArg );
+        }
+        catch( cpo::uno::Exception& )
+        {}
+    }
+
+    // must be the last call in the method since it deletes the timer
+    try
+    {
+        m_xBase->OnTime( cpo::uno::Any( m_aTimerInfo.second.first ), m_aTimerInfo.first, cpo::uno::Any( m_aTimerInfo.second.second ), cpo::uno::Any( false ) );
+    } catch( cpo::uno::Exception& )
+    {}
+}
+
+namespace {
+
+struct VbaTimerInfoHash
+{
+    size_t operator()( const VbaTimerInfo& rTimerInfo ) const
+    {
+        std::size_t seed = 0;
+        o3tl::hash_combine(seed, rTimerInfo.first.hashCode());
+        o3tl::hash_combine(seed, rTimerInfo.second.first);
+        o3tl::hash_combine(seed, rTimerInfo.second.second);
+        return seed;
+    }
+};
+
+}
+
+typedef std::unordered_map< VbaTimerInfo, std::unique_ptr<VbaTimer>, VbaTimerInfoHash > VbaTimerHashMap;
+
+struct VbaApplicationBase_Impl final
+{
+    VbaTimerHashMap m_aTimerHash;
+    bool mbVisible;
+    OUString msCaption;
+
+    VbaApplicationBase_Impl() : mbVisible( true ) {}
+};
+
+VbaApplicationBase::VbaApplicationBase( const uno::Reference< cpo::uno::XComponentContext >& xContext )
+                    : ApplicationBase_BASE( uno::Reference< XHelperInterface >(), xContext )
+                    , m_pImpl( new VbaApplicationBase_Impl )
+{
+}
+
+VbaApplicationBase::~VbaApplicationBase()
+{
+}
+
+bool
+VbaApplicationBase::getScreenUpdating()
+{
+    uno::Reference< frame::XModel > xModel = getCurrentDocument();
+    if (!xModel.is())
+        return true;
+    return !xModel->hasControllersLocked();
+}
+
+void
+VbaApplicationBase::setScreenUpdating(bool bUpdate)
+{
+    uno::Reference< frame::XModel > xModel( getCurrentDocument(), uno::UNO_SET_THROW );
+    // #163808# use helper from module "basic" to lock all documents of this application
+    ::basic::vba::lockControllersOfAllDocuments( xModel, !bUpdate );
+}
+
+bool
+VbaApplicationBase::getDisplayStatusBar()
+{
+    uno::Reference< frame::XModel > xModel( getCurrentDocument(), uno::UNO_SET_THROW );
+    uno::Reference< frame::XFrame > xFrame( xModel->getCurrentController()->getFrame(), uno::UNO_SET_THROW );
+    uno::Reference< beans::XPropertySet > xProps( xFrame, uno::UNO_QUERY_THROW );
+
+    uno::Reference< frame::XLayoutManager > xLayoutManager( xProps->getPropertyValue( u"LayoutManager"_ustr), uno::UNO_QUERY_THROW );
+    if( xLayoutManager->isElementVisible( u"private:resource/statusbar/statusbar"_ustr ) ){
+        return true;
+    }
+    return false;
+}
+
+void
+VbaApplicationBase::setDisplayStatusBar(bool bDisplayStatusBar)
+{
+    uno::Reference< frame::XModel > xModel( getCurrentDocument(), uno::UNO_SET_THROW );
+    uno::Reference< frame::XFrame > xFrame( xModel->getCurrentController()->getFrame(), uno::UNO_SET_THROW );
+    uno::Reference< beans::XPropertySet > xProps( xFrame, uno::UNO_QUERY_THROW );
+
+    uno::Reference< frame::XLayoutManager > xLayoutManager( xProps->getPropertyValue( u"LayoutManager"_ustr ), uno::UNO_QUERY_THROW );
+    OUString url( u"private:resource/statusbar/statusbar"_ustr );
+    if( bDisplayStatusBar && !xLayoutManager->isElementVisible( url ) ){
+        if( !xLayoutManager->showElement( url ) )
+            xLayoutManager->createElement( url );
+        return;
+    }
+    else if( !bDisplayStatusBar && xLayoutManager->isElementVisible( url ) ){
+        xLayoutManager->hideElement( url );
+        return;
+    }
+}
+
+bool VbaApplicationBase::getInteractive()
+{
+    uno::Reference< frame::XModel > xModel = getCurrentDocument();
+    if (!xModel.is())
+        return true;
+
+    uno::Reference< frame::XController > xController( xModel->getCurrentController() );
+    if (!xController.is())
+        return true;
+
+    uno::Reference< frame::XFrame > xFrame( xController->getFrame() );
+    if (!xFrame.is())
+        return true;
+
+    uno::Reference< awt::XWindow2 > xWindow( xFrame->getContainerWindow(), uno::UNO_QUERY );
+    if (!xWindow.is())
+        return true;
+
+    return xWindow->isEnabled();
+}
+
+void VbaApplicationBase::setInteractive( bool bInteractive )
+{
+    uno::Reference< frame::XModel > xModel( getCurrentDocument(), uno::UNO_SET_THROW );
+    // #163808# use helper from module "basic" to enable/disable all container windows of all documents of this application
+    ::basic::vba::enableContainerWindowsOfAllDocuments( xModel, bInteractive );
+}
+
+bool VbaApplicationBase::getVisible()
+{
+    return m_pImpl->mbVisible;    // dummy implementation
+}
+
+void VbaApplicationBase::setVisible( bool bVisible )
+{
+    m_pImpl->mbVisible = bVisible;  // dummy implementation
+}
+
+OUString VbaApplicationBase::getCaption()
+{
+    SbMethod* pMeth = StarBASIC::GetActiveMethod();
+    if (!pMeth)
+    {
+        // When called from Automation clients, we don't even try, as there doesn't seem to be any
+        // good way to get at the actual "caption" (title) of the application's window (any of them,
+        // if there are several). We just keep a copy of a fake caption in the VbaApplicationBase_Impl.
+        return m_pImpl->msCaption;
+    }
+
+    // No idea if this code, which uses APIs that apparently are related to StarBasic (check
+    // getCurrentDoc() in vbahelper.cxx), actually works any better.
+    uno::Reference< frame::XModel > xModel( getCurrentDocument(), uno::UNO_SET_THROW );
+    uno::Reference< frame::XFrame > xFrame( xModel->getCurrentController()->getFrame(), uno::UNO_SET_THROW );
+    return xFrame->getName();
+}
+
+void VbaApplicationBase::setCaption( const OUString& sCaption )
+{
+    // See comments in getCaption().
+
+    SbMethod* pMeth = StarBASIC::GetActiveMethod();
+    if (!pMeth)
+    {
+        m_pImpl->msCaption = sCaption;
+        return;
+    }
+
+    uno::Reference< frame::XModel > xModel( getCurrentDocument(), uno::UNO_SET_THROW );
+    uno::Reference< frame::XFrame > xFrame( xModel->getCurrentController()->getFrame(), uno::UNO_SET_THROW );
+    xFrame->setName( sCaption );
+}
+
+void
+VbaApplicationBase::OnKey( const OUString& Key, const cpo::uno::Any& Procedure )
+{
+    // parse the Key & modifiers
+    awt::KeyEvent aKeyEvent = parseKeyEvent( Key );
+    OUString MacroName;
+    Procedure >>= MacroName;
+    uno::Reference< frame::XModel > xModel;
+    SbMethod* pMeth = StarBASIC::GetActiveMethod();
+    if ( pMeth )
+    {
+        SbModule* pMod = dynamic_cast< SbModule* >( pMeth->GetParent() );
+        if ( pMod )
+            xModel = StarBASIC::GetModelFromBasic( pMod );
+    }
+
+    if ( !xModel.is() )
+        xModel = getCurrentDocument();
+
+    applyShortCutKeyBinding( xModel, aKeyEvent, MacroName );
+}
+
+cpo::uno::Any
+VbaApplicationBase::CommandBars( const cpo::uno::Any& aIndex )
+{
+    uno::Reference< XCommandBars > xCommandBars( new ScVbaCommandBars( this, mxContext, uno::Reference< container::XIndexAccess >(), getCurrentDocument() ) );
+    if( aIndex.hasValue() )
+        return xCommandBars->Item( aIndex, cpo::uno::Any() );
+    return cpo::uno::Any( xCommandBars );
+}
+
+OUString
+VbaApplicationBase::getVersion()
+{
+    return u"11.0"_ustr;
+}
+
+cpo::uno::Any VbaApplicationBase::Run( const OUString& MacroName, const cpo::uno::Any& varg1, const cpo::uno::Any& varg2, const cpo::uno::Any& varg3, const cpo::uno::Any& varg4, const cpo::uno::Any& varg5, const cpo::uno::Any& varg6, const cpo::uno::Any& varg7, const cpo::uno::Any& varg8, const cpo::uno::Any& varg9, const cpo::uno::Any& varg10, const cpo::uno::Any& varg11, const cpo::uno::Any& varg12, const cpo::uno::Any& varg13, const cpo::uno::Any& varg14, const cpo::uno::Any& varg15, const cpo::uno::Any& varg16, const cpo::uno::Any& varg17, const cpo::uno::Any& varg18, const cpo::uno::Any& varg19, const cpo::uno::Any& varg20, const cpo::uno::Any& varg21, const cpo::uno::Any& varg22, const cpo::uno::Any& varg23, const cpo::uno::Any& varg24, const cpo::uno::Any& varg25, const cpo::uno::Any& varg26, const cpo::uno::Any& varg27, const cpo::uno::Any& varg28, const cpo::uno::Any& varg29, const cpo::uno::Any& varg30 )
+{
+    OUString aMacroName = MacroName.trim();
+    if( aMacroName.startsWith("!") )
+        aMacroName = o3tl::trim(aMacroName.subView(1));
+
+    uno::Reference< frame::XModel > xModel;
+    SbMethod* pMeth = StarBASIC::GetActiveMethod();
+    if ( pMeth )
+    {
+        SbModule* pMod = dynamic_cast< SbModule* >( pMeth->GetParent() );
+        if ( pMod )
+            xModel = StarBASIC::GetModelFromBasic( pMod );
+    }
+
+    if ( !xModel.is() )
+        xModel = getCurrentDocument();
+
+    MacroResolvedInfo aMacroInfo = resolveVBAMacro( getSfxObjShell( xModel ), aMacroName );
+    if( !aMacroInfo.mbFound )
+    {
+        throw cpo::uno::RuntimeException( u"The macro doesn't exist"_ustr );
+    }
+
+    // handle the arguments
+    const cpo::uno::Any* aArgsPtrArray[] = { &varg1, &varg2, &varg3, &varg4, &varg5, &varg6, &varg7, &varg8, &varg9, &varg10, &varg11, &varg12, &varg13, &varg14, &varg15, &varg16, &varg17, &varg18, &varg19, &varg20, &varg21, &varg22, &varg23, &varg24, &varg25, &varg26, &varg27, &varg28, &varg29, &varg30 };
+
+    int nArg = SAL_N_ELEMENTS( aArgsPtrArray );
+    cpo::uno::Sequence< cpo::uno::Any > aArgs( nArg );
+    auto pArgs = aArgs.getArray();
+
+    const cpo::uno::Any** pArg = aArgsPtrArray;
+    const cpo::uno::Any** pArgEnd = aArgsPtrArray + nArg;
+
+    sal_Int32 nArgProcessed = 0;
+
+    for ( ; pArg != pArgEnd; ++pArg, ++nArgProcessed )
+        pArgs[ nArgProcessed ] =  **pArg;
+
+    // resize array to position of last param with value
+    aArgs.realloc( nArgProcessed + 1 );
+
+    cpo::uno::Any aRet;
+    cpo::uno::Any aDummyCaller;
+    executeMacro( aMacroInfo.mpDocContext, aMacroInfo.msResolvedMacro, aArgs, aRet, aDummyCaller );
+
+    return aRet;
+}
+
+void VbaApplicationBase::OnTime( const cpo::uno::Any& aEarliestTime, const OUString& aFunction, const cpo::uno::Any& aLatestTime, const cpo::uno::Any& aSchedule )
+{
+    if ( aFunction.isEmpty() )
+        throw cpo::uno::RuntimeException( u"Unexpected function name!"_ustr );
+
+    auto getTime = [](const cpo::uno::Any& aTime)
+    {
+        if (double nTime; aTime >>= nTime)
+            return nTime;
+        if (css::bridge::oleautomation::Date date; aTime >>= date)
+            return date.Value;
+        throw cpo::uno::RuntimeException(u"Invalid type of argument"_ustr);
+    };
+
+    double nEarliestTime = getTime(aEarliestTime);
+    double nLatestTime = aLatestTime.hasValue() ? getTime(aLatestTime) : 0;
+
+    bool bSetTimer = true;
+    aSchedule >>= bSetTimer;
+
+    VbaTimerInfo aTimerIndex( aFunction, ::std::pair< double, double >( nEarliestTime, nLatestTime ) );
+
+    VbaTimerHashMap::iterator aIter = m_pImpl->m_aTimerHash.find( aTimerIndex );
+    if ( aIter != m_pImpl->m_aTimerHash.end() )
+    {
+        m_pImpl->m_aTimerHash.erase( aIter );
+    }
+
+    if ( bSetTimer )
+    {
+        VbaTimer* pTimer = new VbaTimer;
+        m_pImpl->m_aTimerHash[ aTimerIndex ].reset(pTimer);
+        pTimer->Start( this, aFunction, nEarliestTime, nLatestTime );
+    }
+}
+
+cpo::uno::Any VbaApplicationBase::getVBE()
+{
+    try // return empty object on error
+    {
+        // "VBE" object does not have a parent, but pass document model to be able to determine application type
+        cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(uno::Reference(getCurrentDocument())) };
+        uno::Reference< lang::XMultiComponentFactory > xServiceManager( mxContext->getServiceManager(), uno::UNO_SET_THROW );
+        uno::Reference< cpo::uno::XInterface > xVBE = xServiceManager->createInstanceWithArgumentsAndContext(
+            u"ooo.vba.vbide.VBE"_ustr , aArgs, mxContext );
+        return cpo::uno::Any( xVBE );
+    }
+    catch( const cpo::uno::Exception& )
+    {
+    }
+    return cpo::uno::Any();
+}
+
+OUString
+VbaApplicationBase::getServiceImplName()
+{
+    return u"VbaApplicationBase"_ustr;
+}
+
+cpo::uno::Sequence<OUString>
+VbaApplicationBase::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.VbaApplicationBase"_ustr
+    };
+    return aServiceNames;
+}
+
+void VbaApplicationBase::Undo()
+{
+    uno::Reference< frame::XModel > xModel( getCurrentDocument(), uno::UNO_SET_THROW );
+    dispatchRequests( xModel, u".uno:Undo"_ustr );
+}
+
+void VbaApplicationBase::Quit()
+{
+    // need to stop basic
+    SbMethod* pMeth = StarBASIC::GetActiveMethod();
+    if ( pMeth )
+    {
+        SbModule* pMod = dynamic_cast< SbModule* >( pMeth->GetParent() );
+        if ( pMod )
+        {
+            StarBASIC* pBasic = dynamic_cast< StarBASIC* >( pMod->GetParent() );
+            if ( pBasic )
+                pBasic->QuitAndExitApplication();
+        }
+    }
+    else
+    {
+        // This is the case of a call from an (OLE) Automation client.
+
+        // TODO: Probably we should just close any document windows open by the "application"
+        // (Writer or Calc) the call being handled is for. And only then, if no document windows
+        // are left open, quit the actual LibreOffice application.
+        Application::PostUserEvent( LINK( &AsyncQuitHandler::instance(), AsyncQuitHandler, OnAsyncQuit ) );
+    }
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

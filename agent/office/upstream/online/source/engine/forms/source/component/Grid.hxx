@@ -1,0 +1,198 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include "errorbroadcaster.hxx"
+#include <FormComponent.hxx>
+#include <formcontrolfont.hxx>
+#include <InterfaceContainer.hxx>
+
+#include <com/sun/star/form/XGridColumnFactory.hpp>
+#include <com/sun/star/sdb/XRowSetSupplier.hpp>
+#include <com/sun/star/sdb/XRowSetChangeBroadcaster.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
+
+#include <comphelper/interfacecontainer3.hxx>
+#include <cppuhelper/implbase7.hxx>
+
+
+namespace frm
+{
+
+// OGridControlModel
+
+typedef ::cppu::ImplHelper7 <   css::awt::XControlModel
+                            ,   css::form::XGridColumnFactory
+                            ,   css::form::XReset
+                            ,   css::view::XSelectionSupplier
+                            ,   css::sdb::XSQLErrorListener
+                            ,   css::sdb::XRowSetSupplier
+                            ,   css::sdb::XRowSetChangeBroadcaster
+                            >   OGridControlModel_BASE;
+
+class OGridControlModel final :public OControlModel
+                        ,public OInterfaceContainer
+                        ,public OErrorBroadcaster
+                        ,public FontControlModel
+                        ,public OGridControlModel_BASE
+{
+    ::comphelper::OInterfaceContainerHelper3<css::view::XSelectionChangeListener> m_aSelectListeners;
+    ::comphelper::OInterfaceContainerHelper3<css::form::XResetListener> m_aResetListeners;
+    ::comphelper::OInterfaceContainerHelper3<css::sdb::XRowSetChangeListener> m_aRowSetChangeListeners;
+
+// [properties]
+    cpo::uno::Any                    m_aRowHeight; // Row height
+    cpo::uno::Any                    m_aTabStop;
+    cpo::uno::Any                    m_aBackgroundColor;
+    cpo::uno::Any                    m_aCursorColor; // transient
+    cpo::uno::Any                    m_aBorderColor;
+    OUString                         m_aDefaultControl;
+    OUString                         m_sHelpText;
+// [properties]
+
+    cpo::uno::Reference< css::beans::XPropertySet >       m_xSelection;
+
+// [properties]
+    OUString                m_sHelpURL;                 // URL
+    sal_Int16               m_nBorder;
+    sal_Int16               m_nWritingMode;
+    sal_Int16               m_nContextWritingMode;
+    bool                    m_bEnableVisible    : 1;
+    bool                    m_bEnable           : 1;
+    bool                    m_bNavigation       : 1;
+    bool                    m_bRecordMarker     : 1;
+    bool                    m_bPrintable        : 1;
+    bool                    m_bAlwaysShowCursor : 1;    // transient
+    bool                    m_bDisplaySynchron  : 1;    // transient
+// [properties]
+
+    void _reset();
+
+public:
+    OGridControlModel(
+        const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxFactory
+    );
+    OGridControlModel(
+        const OGridControlModel* _pOriginal,
+        const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxFactory
+    );
+    virtual ~OGridControlModel() override;
+
+    // UNO Binding
+    DECLARE_UNO3_AGG_DEFAULTS(OGridControlModel, OControlModel)
+    virtual cpo::uno::Any queryAggregation( const cpo::uno::Type& _rType ) override;
+
+    // XChild
+    virtual void setParent(const cpo::uno::Reference<cpo::uno::XInterface>& Parent) override;
+
+    // XServiceInfo
+    OUString getImplementationName() override
+    { return u"com.sun.star.form.OGridControlModel"_ustr; }
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+
+    // OComponentHelper
+    virtual void disposing() override;
+
+    // XEventListener
+    virtual void disposing(const css::lang::EventObject& _rSource) override;
+
+    // XReset
+    virtual void reset() override;
+    virtual void addResetListener(const cpo::uno::Reference< css::form::XResetListener>& _rxListener) override;
+    virtual void removeResetListener(const cpo::uno::Reference< css::form::XResetListener>& _rxListener) override;
+
+    // XSelectionSupplier
+    virtual bool select(const cpo::uno::Any& aElement) override;
+    virtual cpo::uno::Any getSelection() override;
+    virtual void addSelectionChangeListener(const cpo::uno::Reference< css::view::XSelectionChangeListener >& xListener) override;
+    virtual void removeSelectionChangeListener(const cpo::uno::Reference< css::view::XSelectionChangeListener >& xListener) override;
+
+    // XGridColumnFactory
+    virtual cpo::uno::Reference< css::beans::XPropertySet> createColumn(const OUString& ColumnType) override;
+    virtual cpo::uno::Sequence<OUString> getColumnTypes() override;
+
+    // XPersistObject
+    virtual OUString getServiceName() override;
+    virtual void write(const cpo::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream) override;
+    virtual void read(const cpo::uno::Reference< css::io::XObjectInputStream>& _rxInStream) override;
+
+    // XPropertySet
+    virtual void getFastPropertyValue(cpo::uno::Any& rValue, sal_Int32 nHandle ) const override;
+    virtual bool convertFastPropertyValue(cpo::uno::Any& rConvertedValue, cpo::uno::Any& rOldValue,
+                                          sal_Int32 nHandle, const cpo::uno::Any& rValue ) override;
+    virtual void setFastPropertyValue_NoBroadcast(sal_Int32 nHandle, const cpo::uno::Any& rValue) override;
+
+    // XPropertyState
+    virtual cpo::uno::Any getPropertyDefaultByHandle( sal_Int32 nHandle ) const override;
+
+    // XSQLErrorListener
+    virtual void errorOccured( const css::sdb::SQLErrorEvent& _rEvent ) override;
+
+    // XRowSetSupplier
+    virtual cpo::uno::Reference< css::sdbc::XRowSet > getRowSet(  ) override;
+    virtual void setRowSet( const cpo::uno::Reference< css::sdbc::XRowSet >& xDataSource ) override;
+
+    // XRowSetChangeBroadcaster
+    virtual void addRowSetChangeListener( const cpo::uno::Reference< css::sdb::XRowSetChangeListener >& i_Listener ) override;
+    virtual void removeRowSetChangeListener( const cpo::uno::Reference< css::sdb::XRowSetChangeListener >& i_Listener ) override;
+
+    // OControlModel's property handling
+    virtual void describeFixedProperties(
+        cpo::uno::Sequence< css::beans::Property >& /* [out] */ _rProps
+    ) const override;
+
+    // prevent method hiding
+    using OControlModel::disposing;
+    using OControlModel::getFastPropertyValue;
+
+private:
+    virtual cpo::uno::Reference< css::util::XCloneable > createClone(  ) override;
+
+    virtual void approveNewElement(
+            const cpo::uno::Reference< css::beans::XPropertySet >& _rxObject,
+            ElementDescription* _pElement
+        ) override;
+
+    rtl::Reference<OGridColumn> createColumnById(sal_Int32 nTypeId) const;
+
+    virtual ElementDescription* createElementMetaData( ) override;
+
+    virtual void implRemoved(const cpo::uno::Reference<cpo::uno::XInterface>& _rxObject) override;
+    virtual void implInserted( const ElementDescription* _pElement ) override;
+    virtual void impl_replacedElement(
+                    const css::container::ContainerEvent& _rEvent,
+                    ::osl::ClearableMutexGuard& _rInstanceLock
+                ) override;
+
+    void gotColumn(const cpo::uno::Reference< cpo::uno::XInterface >& _rxColumn);
+    void lostColumn(const cpo::uno::Reference< cpo::uno::XInterface >& _rxColumn);
+
+    void cloneColumns( const OGridControlModel* _pOriginalContainer );
+};
+
+
+}   // namespace frm
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

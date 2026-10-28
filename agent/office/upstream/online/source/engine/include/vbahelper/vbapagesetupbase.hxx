@@ -1,0 +1,75 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_VBAHELPER_VBAPAGESETUPBASE_HXX
+#define INCLUDED_VBAHELPER_VBAPAGESETUPBASE_HXX
+
+#include <cpo/uno/Reference.hxx>
+#include <ooo/vba/XPageSetupBase.hpp>
+#include <sal/types.h>
+#include <vbahelper/vbadllapi.h>
+#include <vbahelper/vbahelper.hxx>
+#include <vbahelper/vbahelperinterface.hxx>
+
+namespace com::sun::star {
+    namespace beans { class XPropertySet; }
+    namespace frame { class XModel; }
+}
+namespace cpo::uno { class XComponentContext; }
+
+namespace ooo::vba {
+    class XHelperInterface;
+}
+
+typedef InheritedHelperInterfaceWeakImpl< ooo::vba::XPageSetupBase > VbaPageSetupBase_BASE;
+
+class VBAHELPER_DLLPUBLIC VbaPageSetupBase :  public VbaPageSetupBase_BASE
+{
+protected:
+    cpo::uno::Reference< css::beans::XPropertySet > mxPageProps;
+    sal_Int32 mnOrientLandscape;
+    sal_Int32 mnOrientPortrait;
+
+    /// @throws cpo::uno::RuntimeException
+    VbaPageSetupBase( const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+                    const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
+public:
+
+    // Attribute
+    virtual double getTopMargin() override;
+    virtual void setTopMargin( double margin ) override;
+    virtual double getBottomMargin() override;
+    virtual void setBottomMargin( double margin ) override;
+    virtual double getRightMargin() override;
+    virtual void setRightMargin( double margin ) override;
+    virtual double getLeftMargin() override;
+    virtual void setLeftMargin( double margin ) override;
+    /// @throws cpo::uno::RuntimeException
+    virtual double getHeaderMargin();
+    /// @throws cpo::uno::RuntimeException
+    virtual void setHeaderMargin( double margin );
+    /// @throws cpo::uno::RuntimeException
+    virtual double getFooterMargin();
+    /// @throws cpo::uno::RuntimeException
+    virtual void setFooterMargin( double margin );
+    virtual sal_Int32 getOrientation() override;
+    virtual void setOrientation( sal_Int32 orientation ) override;
+};
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

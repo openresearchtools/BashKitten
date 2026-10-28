@@ -1,0 +1,276 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <sal/config.h>
+
+#include <stack>
+
+#include <DropTarget.hxx>
+#include <unx/salinst.h>
+#include <unx/gensys.h>
+#include <headless/svpinst.hxx>
+#include <com/sun/star/datatransfer/DataFlavor.hpp>
+#include <com/sun/star/datatransfer/dnd/XDragSource.hpp>
+#include <com/sun/star/datatransfer/dnd/XDropTarget.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/awt/XWindow.hpp>
+#include <cppuhelper/compbase.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/weldutils.hxx>
+#include <gtk/gtk.h>
+
+vcl::Font pango_to_vcl(const PangoFontDescription* font, const css::lang::Locale& rLocale);
+
+class GenPspGraphics;
+class GtkYieldMutex final : public SalYieldMutex
+{
+    thread_local static std::stack<sal_uInt32> yieldCounts;
+
+public:
+         GtkYieldMutex() {}
+    void ThreadsEnter();
+    void ThreadsLeave();
+};
+
+class GtkSalFrame;
+
+
+struct VclToGtkHelper
+{
+    std::vector<css::datatransfer::DataFlavor> aInfoToFlavor;
+    std::vector<GtkTargetEntry> FormatsToGtk(const cpo::uno::Sequence<css::datatransfer::DataFlavor> &rFormats);
+    void setSelectionData(const cpo::uno::Reference<css::datatransfer::XTransferable> &rTrans,
+                          GtkSelectionData *selection_data, guint info);
+private:
+    GtkTargetEntry makeGtkTargetEntry(const css::datatransfer::DataFlavor& rFlavor);
+};
+
+class GtkTransferable : public cppu::WeakImplHelper<css::datatransfer::XTransferable>
+{
+protected:
+    std::map<OUString, GdkAtom> m_aMimeTypeToGtkType;
+
+    std::vector<css::datatransfer::DataFlavor> getTransferDataFlavorsAsVector(GdkAtom *targets, gint n_targets);
+
+public:
+    virtual cpo::uno::Any getTransferData(const css::datatransfer::DataFlavor& rFlavor) override = 0;
+    virtual std::vector<css::datatransfer::DataFlavor> getTransferDataFlavorsAsVector() = 0;
+    virtual cpo::uno::Sequence<css::datatransfer::DataFlavor> getTransferDataFlavors() override;
+    virtual bool isDataFlavorSupported(const css::datatransfer::DataFlavor& rFlavor) override;
+};
+
+class GtkDnDTransferable;
+
+class GtkInstDropTarget final
+    : public cppu::ImplInheritanceHelper<DropTarget, css::lang::XServiceInfo>
+{
+    GtkSalFrame* m_pFrame;
+    GtkDnDTransferable* m_pFormatConversionRequest;
+    bool m_bInDrag;
+
+public:
+    GtkInstDropTarget();
+    GtkInstDropTarget(GtkSalFrame* pFrame);
+    virtual ~GtkInstDropTarget() override;
+
+    void deinitialize();
+
+    OUString getImplementationName() override;
+
+    bool supportsService(OUString const & ServiceName) override;
+
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+    void SetFormatConversionRequest(GtkDnDTransferable *pRequest)
+    {
+        m_pFormatConversionRequest = pRequest;
+    }
+
+    gboolean signalDragMotion(GtkWidget* pWidget, GdkDragContext* context, gint x, gint y, guint time);
+    gboolean signalDragDrop(GtkWidget* pWidget, GdkDragContext* context, gint x, gint y, guint time);
+
+    void signalDragLeave(GtkWidget* pWidget);
+
+    void signalDragDropReceived(GtkWidget* pWidget, GdkDragContext* context, gint x, gint y, GtkSelectionData* data, guint ttype, guint time);
+};
+
+class GtkInstDragSource final
+    : public cppu::WeakComponentImplHelper<css::datatransfer::dnd::XDragSource,
+                                           css::lang::XServiceInfo>
+{
+    osl::Mutex m_aMutex;
+    GtkSalFrame* m_pFrame;
+    cpo::uno::Reference<css::datatransfer::dnd::XDragSourceListener> m_xListener;
+    cpo::uno::Reference<css::datatransfer::XTransferable> m_xTrans;
+    VclToGtkHelper m_aConversionHelper;
+public:
+    GtkInstDragSource()
+        : WeakComponentImplHelper(m_aMutex)
+        , m_pFrame(nullptr)
+    {
+    }
+    GtkInstDragSource(GtkSalFrame* pFrame);
+
+    void set_datatransfer(const cpo::uno::Reference<css::datatransfer::XTransferable>& rTrans,
+                          const cpo::uno::Reference<css::datatransfer::dnd::XDragSourceListener>& rListener);
+
+    std::vector<GtkTargetEntry> FormatsToGtk(const cpo::uno::Sequence<css::datatransfer::DataFlavor> &rFormats);
+
+    void setActiveDragSource();
+
+    virtual ~GtkInstDragSource() override;
+
+    // XDragSource
+    virtual bool    isDragImageSupported() override;
+    virtual sal_Int32   getDefaultCursor(sal_Int8 dragAction) override;
+    virtual void        startDrag(
+        const css::datatransfer::dnd::DragGestureEvent& trigger, sal_Int8 sourceActions, sal_Int32 cursor, sal_Int32 image,
+        const cpo::uno::Reference< css::datatransfer::XTransferable >& transferable,
+        const cpo::uno::Reference< css::datatransfer::dnd::XDragSourceListener >& listener) override;
+
+    void deinitialize();
+
+    OUString getImplementationName() override;
+
+    bool supportsService(OUString const & ServiceName) override;
+
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+    void dragFailed();
+    void dragDelete();
+    void dragEnd(GdkDragContext* context);
+    void dragDataGet(GtkSelectionData *data, guint info);
+
+    // For LibreOffice internal D&D we provide the Transferable without Gtk
+    // intermediaries as a shortcut, see tdf#100097 for how dbaccess depends on this
+    static GtkInstDragSource* g_ActiveDragSource;
+    cpo::uno::Reference<css::datatransfer::XTransferable> const & GetTransferable() const { return m_xTrans; }
+};
+
+enum SelectionType { SELECTION_CLIPBOARD = 0, SELECTION_PRIMARY = 1 };
+
+class GtkSalTimer;
+class GtkInstance final : public SvpSalInstance
+{
+public:
+            GtkInstance( std::unique_ptr<SalYieldMutex> pMutex );
+    virtual ~GtkInstance() override;
+    void    EnsureInit();
+    virtual void AfterAppInit() override;
+
+    virtual SalFrame*           CreateFrame( SalFrame* pParent, SalFrameStyleFlags nStyle ) override;
+    virtual SalFrame*           CreateChildFrame( SystemParentData* pParent, SalFrameStyleFlags nStyle ) override;
+    virtual SalObject*          CreateObject( SalFrame* pParent, SystemWindowData* pWindowData, bool bShow ) override;
+    virtual SalSystem*          CreateSalSystem() override;
+    virtual SalInfoPrinter*     CreateInfoPrinter(SalPrinterQueueInfo* pPrinterQueueInfo, ImplJobSetup* pJobSetup) override;
+    virtual std::unique_ptr<SalPrinter> CreatePrinter( SalInfoPrinter* pInfoPrinter ) override;
+    virtual std::unique_ptr<SalMenu>     CreateMenu( bool, Menu* ) override;
+    virtual std::unique_ptr<SalMenuItem> CreateMenuItem( const SalItemParams& ) override;
+    virtual SalTimer*           CreateSalTimer() override;
+    virtual void                AddToRecentDocumentList(const OUString& rFileUrl, const OUString& rMimeType, const OUString& rDocumentService) override;
+    virtual std::unique_ptr<SalVirtualDevice>
+                                CreateVirtualDevice( SalGraphics&,
+                                                     tools::Long nDX, tools::Long nDY,
+                                                     DeviceFormat eFormat,
+                                                     bool bAlphaMaskTransparent = false ) override;
+    virtual std::unique_ptr<SalVirtualDevice>
+                                CreateVirtualDevice( SalGraphics&,
+                                                     tools::Long &nDX, tools::Long &nDY,
+                                                     DeviceFormat eFormat,
+                                                     const SystemGraphicsData& ) override;
+    virtual std::shared_ptr<SalBitmap> CreateSalBitmap() override;
+
+    virtual bool                DoYield(bool bWait, bool bHandleAllCurrentEvents) override;
+    virtual bool                AnyInput( VclInputFlags nType ) override;
+    // impossible to handle correctly, as "main thread" depends on the dispatch mutex
+    virtual bool                IsMainThread() const override { return false; }
+
+    virtual std::unique_ptr<GenPspGraphics> CreatePrintGraphics() override;
+
+    virtual cpo::uno::Reference< css::ui::dialogs::XFilePicker >
+        createFilePicker( const cpo::uno::Reference< cpo::uno::XComponentContext >& ) override;
+    virtual cpo::uno::Reference< css::ui::dialogs::XFolderPicker >
+        createFolderPicker( const cpo::uno::Reference< cpo::uno::XComponentContext >& ) override;
+
+    virtual cpo::uno::Reference<css::datatransfer::clipboard::XClipboard>
+    CreateClipboard(const cpo::uno::Sequence<cpo::uno::Any>& i_rArguments) override;
+    virtual cpo::uno::Reference<css::datatransfer::dnd::XDragSource>
+    ImplCreateDragSource(const SystemEnvData& rSysEnv) override;
+    virtual cpo::uno::Reference<css::datatransfer::dnd::XDropTarget>
+    ImplCreateDropTarget(const SystemEnvData& rSysEnv) override;
+    virtual std::unique_ptr<weld::Builder> CreateBuilder(weld::Widget* pParent, const OUString& rUIRoot, const OUString& rUIFile) override;
+    virtual std::unique_ptr<weld::Builder> CreateInterimBuilder(vcl::Window* pParent, const OUString& rUIRoot, const OUString& rUIFile,
+                                                bool bAllowCycleFocusOut, sal_uInt64 nKitWindowId = 0) override;
+    virtual std::unique_ptr<weld::MessageDialog> CreateMessageDialog(weld::Widget* pParent, VclMessageType eMessageType, VclButtonsType eButtonType, const OUString &rPrimaryMessage) override;
+    virtual weld::Window* GetFrameWeld(const cpo::uno::Reference<css::awt::XWindow>& rWindow) override;
+
+    virtual const cairo_font_options_t* GetCairoFontOptions() override;
+            const cairo_font_options_t* GetLastSeenCairoFontOptions() const;
+                                   void ResetLastSeenCairoFontOptions(const cairo_font_options_t* pOptions);
+
+    void                        RemoveTimer ();
+
+private:
+    GtkSalTimer *m_pTimer;
+    cpo::uno::Reference<css::datatransfer::clipboard::XClipboard> m_aClipboards[2];
+    bool                        IsTimerExpired();
+    bool                        bNeedsInit;
+    cairo_font_options_t*       m_pLastCairoFontOptions;
+};
+
+inline GtkInstance* GetGtkInstance() { return static_cast<GtkInstance*>(GetSalInstance()); }
+
+class SalGtkXWindow final : public weld::TransportAsXWindow
+{
+private:
+    weld::Window* m_pWeldWidget;
+    GtkWidget* m_pWidget;
+public:
+
+    SalGtkXWindow(weld::Window* pWeldWidget, GtkWidget* pWidget)
+        : TransportAsXWindow(pWeldWidget)
+        , m_pWeldWidget(pWeldWidget)
+        , m_pWidget(pWidget)
+    {
+    }
+
+    virtual void clear() override
+    {
+        m_pWeldWidget = nullptr;
+        m_pWidget = nullptr;
+        TransportAsXWindow::clear();
+    }
+
+    GtkWidget* getGtkWidget() const
+    {
+        return m_pWidget;
+    }
+
+    weld::Window* getFrameWeld() const
+    {
+        return m_pWeldWidget;
+    }
+};
+
+GdkPixbuf* load_icon_by_name(const OUString& rIconName);
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

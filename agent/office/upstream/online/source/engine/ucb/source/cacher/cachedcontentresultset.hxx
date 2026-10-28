@@ -1,0 +1,384 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include "contentresultsetwrapper.hxx"
+#include <cpo/uno/XComponentContext.hpp>
+#include <com/sun/star/lang/XTypeProvider.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/ucb/XFetchProvider.hpp>
+#include <com/sun/star/ucb/XFetchProviderForContentAccess.hpp>
+#include <com/sun/star/ucb/FetchResult.hpp>
+#include <com/sun/star/ucb/XContentIdentifierMapping.hpp>
+#include <com/sun/star/ucb/XCachedContentResultSetFactory.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <rtl/ref.hxx>
+
+#include <optional>
+
+namespace com::sun::star::script {
+    class XTypeConverter;
+}
+
+class CCRS_PropertySetInfo;
+class CachedContentResultSet
+                : public ContentResultSetWrapper
+                , public css::lang::XTypeProvider
+                , public css::lang::XServiceInfo
+{
+
+
+    class CCRS_Cache
+    {
+    private:
+        std::optional<css::ucb::FetchResult>
+                                         m_pResult;
+        cpo::uno::Reference< css::ucb::XContentIdentifierMapping >
+                                         m_xContentIdentifierMapping;
+        std::optional<cpo::uno::Sequence< bool >>  m_pMappedReminder;
+
+    private:
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Any&
+        getRowAny( sal_Int32 nRow );
+
+        void clear();
+
+
+        void remindMapped( sal_Int32 nRow );
+        bool isRowMapped( sal_Int32 nRow );
+        cpo::uno::Sequence< bool >& getMappedReminder();
+
+    public:
+        CCRS_Cache( const cpo::uno::Reference<
+                css::ucb::XContentIdentifierMapping > & xMapping );
+        ~CCRS_Cache();
+
+        void loadData(
+            const css::ucb::FetchResult& rResult );
+
+        bool
+        hasRow( sal_Int32 nRow ) const;
+
+        bool
+        hasCausedException( sal_Int32 nRow ) const;
+
+        sal_Int32
+        getMaxRow() const;
+
+        bool
+        hasKnownLast() const;
+
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        const cpo::uno::Any&
+        getAny( sal_Int32 nRow, sal_Int32 nColumnIndex );
+
+        /// @throws cpo::uno::RuntimeException
+        OUString const &
+        getContentIdentifierString( sal_Int32 nRow );
+
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference< css::ucb::XContentIdentifier >
+        getContentIdentifier( sal_Int32 nRow );
+
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference< css::ucb::XContent >
+        getContent( sal_Int32 nRow );
+    };
+
+    //members
+
+    cpo::uno::Reference< cpo::uno::XComponentContext >
+                            m_xContext;
+
+    //different Interfaces from Origin:
+    cpo::uno::Reference< css::ucb::XFetchProvider >
+                            m_xFetchProvider; //XFetchProvider-interface from m_xOrigin
+
+    cpo::uno::Reference< css::ucb::XFetchProviderForContentAccess >
+                            m_xFetchProviderForContentAccess; //XFetchProviderForContentAccess-interface from m_xOrigin
+
+    rtl::Reference< CCRS_PropertySetInfo >
+                            m_xMyPropertySetInfo;
+
+
+    cpo::uno::Reference< css::ucb::XContentIdentifierMapping >
+                            m_xContentIdentifierMapping;// can be used for remote optimized ContentAccess
+
+    //some Properties and helping variables
+    sal_Int32               m_nRow;
+    bool                    m_bAfterLast; // TRUE, if m_nRow is after final count; can be TRUE without knowing the exact final count
+
+    sal_Int32               m_nLastAppliedPos;
+    bool                    m_bAfterLastApplied;
+
+    sal_Int32               m_nKnownCount; // count we know from the Origin
+    bool                    m_bFinalCount; // TRUE if the Origin has reached final count and we got that count in m_nKnownCount
+
+    sal_Int32               m_nFetchSize;
+    sal_Int32               m_nFetchDirection;
+
+    bool                    m_bLastReadWasFromCache;
+    bool                    m_bLastCachedReadWasNull;
+
+    //cache:
+    CCRS_Cache              m_aCache;
+    CCRS_Cache              m_aCacheContentIdentifierString;
+    CCRS_Cache              m_aCacheContentIdentifier;
+    CCRS_Cache              m_aCacheContent;
+
+
+private:
+
+    //helping XPropertySet methods.
+    virtual void impl_initPropertySetInfo(std::unique_lock<std::mutex>& rGuard) override;
+
+    /// @throws css::sdbc::SQLException
+    /// @throws cpo::uno::RuntimeException
+    bool
+    applyPositionToOrigin( std::unique_lock<std::mutex>& rGuard, sal_Int32 nRow );
+
+    /// @throws cpo::uno::RuntimeException
+    void
+    impl_fetchData( std::unique_lock<std::mutex>& rGuard, sal_Int32 nRow, sal_Int32 nCount
+                    , sal_Int32 nFetchDirection );
+
+    bool
+    impl_isKnownValidPosition( std::unique_lock<std::mutex>& rGuard, sal_Int32 nRow ) const;
+
+    bool
+    impl_isKnownInvalidPosition( std::unique_lock<std::mutex>& rGuard, sal_Int32 nRow ) const;
+
+    void
+    impl_changeRowCount( std::unique_lock<std::mutex>& rGuard, sal_Int32 nOld, sal_Int32 nNew );
+
+    void
+    impl_changeIsRowCountFinal( std::unique_lock<std::mutex>& rGuard, bool bOld, bool bNew );
+
+public:
+    CachedContentResultSet(
+                        const cpo::uno::Reference< cpo::uno::XComponentContext > &         rxContext,
+                        const cpo::uno::Reference< css::sdbc::XResultSet > &               xOrigin,
+                        const cpo::uno::Reference< css::ucb::XContentIdentifierMapping > & xContentIdentifierMapping );
+
+    virtual ~CachedContentResultSet() override;
+
+
+    // XInterface
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire()
+        noexcept override;
+    virtual void release()
+        noexcept override;
+
+    // XTypeProvider
+
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XPropertySet inherited
+
+
+    virtual void
+    setPropertyValueImpl( std::unique_lock<std::mutex>& rGuard, const OUString& aPropertyName,
+                      const cpo::uno::Any& aValue ) override;
+
+    virtual cpo::uno::Any
+    getPropertyValue( const OUString& PropertyName ) override;
+
+
+    // own inherited
+
+    virtual void
+    impl_disposing( const css::lang::EventObject& Source ) override;
+
+    virtual void
+    impl_propertyChange( const css::beans::PropertyChangeEvent& evt ) override;
+
+    virtual void
+    impl_vetoableChange( const css::beans::PropertyChangeEvent& aEvent ) override;
+
+
+    // XContentAccess inherited
+
+    virtual OUString
+    queryContentIdentifierStringImpl(std::unique_lock<std::mutex>& rGuard) override;
+
+    virtual cpo::uno::Reference<css::ucb::XContentIdentifier>
+    queryContentIdentifierImpl(std::unique_lock<std::mutex>& rGuard) override;
+
+    virtual cpo::uno::Reference<css::ucb::XContent>
+    queryContentImpl(std::unique_lock<std::mutex>& rGuard) override;
+
+
+    // XResultSet inherited
+
+    virtual bool
+    next() override;
+    virtual bool
+    isBeforeFirst() override;
+    virtual bool
+    isAfterLast() override;
+    virtual bool
+    isFirst() override;
+    virtual bool
+    isLast() override;
+    virtual void
+    beforeFirst() override;
+    virtual void
+    afterLast() override;
+    virtual bool
+    first() override;
+    virtual bool
+    last() override;
+    virtual sal_Int32
+    getRow() override;
+    virtual bool
+    absolute( sal_Int32 row ) override;
+    virtual bool
+    relative( sal_Int32 rows ) override;
+    virtual bool
+    previous() override;
+    virtual void
+    refreshRow() override;
+    virtual bool
+    rowUpdated() override;
+    virtual bool
+    rowInserted() override;
+    virtual bool
+    rowDeleted() override;
+    virtual cpo::uno::Reference<
+                cpo::uno::XInterface >
+    getStatement() override;
+
+
+    // XRow inherited
+
+    virtual bool
+    wasNull() override;
+
+    virtual OUString
+    getString( sal_Int32 columnIndex ) override;
+
+    virtual bool
+    getBoolean( sal_Int32 columnIndex ) override;
+
+    virtual sal_Int8
+    getByte( sal_Int32 columnIndex ) override;
+
+    virtual sal_Int16
+    getShort( sal_Int32 columnIndex ) override;
+
+    virtual sal_Int32
+    getInt( sal_Int32 columnIndex ) override;
+
+    virtual sal_Int64
+    getLong( sal_Int32 columnIndex ) override;
+
+    virtual float
+    getFloat( sal_Int32 columnIndex ) override;
+
+    virtual double
+    getDouble( sal_Int32 columnIndex ) override;
+
+    virtual cpo::uno::Sequence< sal_Int8 >
+    getBytes( sal_Int32 columnIndex ) override;
+
+    virtual css::util::Date
+    getDate( sal_Int32 columnIndex ) override;
+
+    virtual css::util::Time
+    getTime( sal_Int32 columnIndex ) override;
+
+    virtual css::util::DateTime
+    getTimestamp( sal_Int32 columnIndex ) override;
+
+    virtual cpo::uno::Reference< css::io::XInputStream >
+    getBinaryStream( sal_Int32 columnIndex ) override;
+
+    virtual cpo::uno::Reference< css::io::XInputStream >
+    getCharacterStream( sal_Int32 columnIndex ) override;
+
+    virtual cpo::uno::Any
+    getObject( sal_Int32 columnIndex,
+               const cpo::uno::Reference< css::container::XNameAccess >& typeMap ) override;
+
+    virtual cpo::uno::Reference< css::sdbc::XRef >
+    getRef( sal_Int32 columnIndex ) override;
+
+    virtual cpo::uno::Reference< css::sdbc::XBlob >
+    getBlob( sal_Int32 columnIndex ) override;
+
+    virtual cpo::uno::Reference< css::sdbc::XClob >
+    getClob( sal_Int32 columnIndex ) override;
+
+    virtual cpo::uno::Reference< css::sdbc::XArray >
+    getArray( sal_Int32 columnIndex ) override;
+
+
+    // Type Converter support
+
+
+private:
+    bool m_bTriedToGetTypeConverter;
+    cpo::uno::Reference< css::script::XTypeConverter > m_xTypeConverter;
+
+    const cpo::uno::Reference<
+        css::script::XTypeConverter >& getTypeConverter(std::unique_lock<std::mutex>& rGuard);
+
+    template<typename T> T rowOriginGet(
+        T (css::sdbc::XRow::* f)(sal_Int32), sal_Int32 columnIndex);
+};
+
+
+class CachedContentResultSetFactory final :
+                public cppu::WeakImplHelper<
+                    css::lang::XServiceInfo,
+                    css::ucb::XCachedContentResultSetFactory>
+{
+    cpo::uno::Reference< cpo::uno::XComponentContext >    m_xContext;
+
+public:
+
+    CachedContentResultSetFactory( const cpo::uno::Reference< cpo::uno::XComponentContext > & rxContext);
+
+    virtual ~CachedContentResultSetFactory() override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XCachedContentResultSetFactory
+
+    virtual cpo::uno::Reference< css::sdbc::XResultSet >
+    createCachedContentResultSet(
+            const cpo::uno::Reference< css::sdbc::XResultSet > & xSource,
+            const cpo::uno::Reference< css::ucb::XContentIdentifierMapping > & xMapping ) override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

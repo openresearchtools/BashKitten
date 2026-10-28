@@ -1,0 +1,230 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <memory>
+#include <sal/config.h>
+#include <osl/diagnose.h>
+
+#include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/task/XInteractionHandler2.hpp>
+#include <cpo/uno/RuntimeException.hpp>
+
+#include "iahndl.hxx"
+#include <comphelper/namedvaluecollection.hxx>
+#include <cppuhelper/exc_hlp.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+
+using namespace com::sun::star;
+using namespace ::cpo;
+
+namespace {
+
+class UUIInteractionHandler:
+    public cppu::WeakImplHelper<css::lang::XServiceInfo,
+                                css::lang::XInitialization,
+                                css::task::XInteractionHandler2,
+                                css::beans::XPropertySet>
+{
+private:
+    UUIInteractionHelper m_pImpl;
+
+public:
+    explicit UUIInteractionHandler(cpo::uno::Reference< cpo::uno::XComponentContext > const & rxContext);
+
+    UUIInteractionHandler(const UUIInteractionHandler&) = delete;
+    UUIInteractionHandler& operator=(const UUIInteractionHandler&) = delete;
+
+    virtual OUString getImplementationName() override;
+
+    virtual bool supportsService(OUString const & rServiceName) override;
+
+    virtual cpo::uno::Sequence< OUString >
+    getSupportedServiceNames() override;
+
+    virtual void
+    initialize(
+        cpo::uno::Sequence< cpo::uno::Any > const & rArguments) override;
+
+    virtual void
+    handle(cpo::uno::Reference< css::task::XInteractionRequest > const & rRequest) override;
+
+    virtual bool
+        handleInteractionRequest(
+            const cpo::uno::Reference< css::task::XInteractionRequest >& Request
+        ) override;
+
+    virtual void
+        addPropertyChangeListener( const OUString& /*aPropertyName*/, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& /*xListener*/ ) override
+    {
+        throw cpo::uno::RuntimeException(
+            u"UUIInteractionHandler addPropertyChangeListener is not supported"_ustr);
+    }
+
+    virtual void
+        removePropertyChangeListener( const OUString& /*aPropertyName*/, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& /*xListener*/ ) override
+    {
+        throw cpo::uno::RuntimeException(
+            u"UUIInteractionHandler removePropertyChangeListener is not supported"_ustr);
+    }
+
+    virtual void
+        addVetoableChangeListener( const OUString& /*aPropertyName*/, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& /*xListener*/ ) override
+    {
+        throw cpo::uno::RuntimeException(
+            u"UUIInteractionHandler addVetoableChangeListener is not supported"_ustr);
+    }
+
+    virtual void
+        removeVetoableChangeListener( const OUString& /*aPropertyName*/, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& /*xListener*/ ) override
+    {
+        throw cpo::uno::RuntimeException(
+            u"UUIInteractionHandler removeVetoableChangeListener is not supported"_ustr);
+    }
+
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+        getPropertySetInfo() override
+    {
+        return nullptr;
+    }
+
+    virtual void setPropertyValue(const OUString& rPropertyName, const cpo::uno::Any& rValue) override
+    {
+        if (rPropertyName == "ParentWindow")
+        {
+            cpo::uno::Reference<css::awt::XWindow> xWindow;
+            rValue >>= xWindow;
+            m_pImpl.SetParentWindow(xWindow);
+            return;
+        }
+        throw css::beans::UnknownPropertyException(rPropertyName);
+    }
+
+    virtual cpo::uno::Any getPropertyValue(const OUString& rPropertyName) override
+    {
+        if (rPropertyName == "ParentWindow")
+        {
+            return cpo::uno::Any(m_pImpl.GetParentWindow());
+        }
+        throw css::beans::UnknownPropertyException(rPropertyName);
+    }
+};
+
+UUIInteractionHandler::UUIInteractionHandler(
+    uno::Reference< cpo::uno::XComponentContext > const & rxContext)
+        : m_pImpl(rxContext)
+{
+}
+
+OUString UUIInteractionHandler::getImplementationName()
+{
+    return u"com.sun.star.comp.uui.UUIInteractionHandler"_ustr;
+}
+
+bool
+UUIInteractionHandler::supportsService(OUString const & rServiceName)
+{
+    return cppu::supportsService(this, rServiceName);
+}
+
+cpo::uno::Sequence< OUString >
+UUIInteractionHandler::getSupportedServiceNames()
+{
+    return { u"com.sun.star.task.InteractionHandler"_ustr,
+ // added to indicate support for configuration.backend.MergeRecoveryRequest
+             u"com.sun.star.configuration.backend.InteractionHandler"_ustr,
+    // for backwards compatibility
+             u"com.sun.star.uui.InteractionHandler"_ustr };
+}
+
+void
+UUIInteractionHandler::initialize(
+    cpo::uno::Sequence< cpo::uno::Any > const & rArguments)
+{
+    // The old-style InteractionHandler service supported a sequence of
+    // PropertyValue, while the new-style service now uses constructors to pass
+    // in Parent and Context values; for backwards compatibility, keep support
+    // for a PropertyValue sequence, too:
+    uno::Reference< awt::XWindow > xWindow;
+    OUString aContext;
+    if (!((rArguments.getLength() == 1 && (rArguments[0] >>= xWindow)) ||
+          (rArguments.getLength() == 2 && (rArguments[0] >>= xWindow) &&
+           (rArguments[1] >>= aContext))))
+    {
+        ::comphelper::NamedValueCollection aProperties( rArguments );
+        if ( aProperties.has( u"Parent"_ustr ) )
+        {
+            OSL_VERIFY( aProperties.get( u"Parent"_ustr ) >>= xWindow );
+        }
+        if ( aProperties.has( u"Context"_ustr ) )
+        {
+            OSL_VERIFY( aProperties.get( u"Context"_ustr ) >>= aContext );
+        }
+    }
+
+    m_pImpl.SetParentWindow(xWindow);
+    m_pImpl.setContext(aContext);
+}
+
+void
+UUIInteractionHandler::handle(
+    uno::Reference< task::XInteractionRequest > const & rRequest)
+{
+    try
+    {
+        m_pImpl.handleRequest(rRequest);
+    }
+    catch (cpo::uno::RuntimeException const & ex)
+    {
+        cpo::uno::Any anyEx = cppu::getCaughtException();
+        throw css::lang::WrappedTargetRuntimeException( ex.Message,
+                *this, anyEx );
+    }
+}
+
+bool UUIInteractionHandler::handleInteractionRequest(
+    const uno::Reference< task::XInteractionRequest >& Request )
+{
+    try
+    {
+        return m_pImpl.handleRequest( Request );
+    }
+    catch (cpo::uno::RuntimeException const & ex)
+    {
+        cpo::uno::Any anyEx = cppu::getCaughtException();
+        throw css::lang::WrappedTargetRuntimeException( ex.Message,
+                *this, anyEx );
+    }
+}
+
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_uui_UUIInteractionHandler_get_implementation(
+    cpo::uno::XComponentContext *context,
+    cpo::uno::Sequence<cpo::uno::Any> const &)
+{
+    return cppu::acquire(new UUIInteractionHandler(context));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

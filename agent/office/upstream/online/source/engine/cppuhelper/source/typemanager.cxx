@@ -1,0 +1,2334 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <sal/config.h>
+
+#include <cassert>
+#include <cstddef>
+#include <cstdlib>
+#include <cstring>
+#include <mutex>
+#include <set>
+#include <stack>
+#include <string_view>
+#include <utility>
+#include <vector>
+#include <algorithm>
+
+#include <com/sun/star/beans/Optional.hpp>
+#include <com/sun/star/container/NoSuchElementException.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <com/sun/star/reflection/Annotation.hpp>
+#include <com/sun/star/reflection/NoSuchTypeNameException.hpp>
+#include <com/sun/star/reflection/TypeDescriptionSearchDepth.hpp>
+#include <com/sun/star/reflection/XAnnotations.hpp>
+#include <com/sun/star/reflection/XConstantTypeDescription.hpp>
+#include <com/sun/star/reflection/XConstantsTypeDescription.hpp>
+#include <com/sun/star/reflection/XEnumTypeDescription.hpp>
+#include <com/sun/star/reflection/XIndirectTypeDescription.hpp>
+#include <com/sun/star/reflection/XInterfaceAttributeTypeDescription2.hpp>
+#include <com/sun/star/reflection/XInterfaceMethodTypeDescription.hpp>
+#include <com/sun/star/reflection/XInterfaceTypeDescription2.hpp>
+#include <com/sun/star/reflection/XModuleTypeDescription.hpp>
+#include <com/sun/star/reflection/XPublished.hpp>
+#include <com/sun/star/reflection/XServiceTypeDescription2.hpp>
+#include <com/sun/star/reflection/XSingletonTypeDescription2.hpp>
+#include <com/sun/star/reflection/XStructTypeDescription.hpp>
+#include <com/sun/star/reflection/XTypeDescription.hpp>
+#include <cpo/uno/Any.hxx>
+#include <cpo/uno/DeploymentException.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/Sequence.hxx>
+#include <cpo/uno/Type.hxx>
+#include <cpo/uno/TypeClass.hpp>
+#include <cppu/unotype.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <osl/file.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/log.hxx>
+#include <sal/types.h>
+#include <o3tl/string_view.hxx>
+
+#include <unoidl/unoidl.hxx>
+
+#include "paths.hxx"
+#include "typemanager.hxx"
+
+namespace {
+
+OUString makePrefix(OUString const & name) {
+    return name.isEmpty() ? name : name + ".";
+}
+
+cpo::uno::Any resolveTypedefs(cpo::uno::Any const & type) {
+    for (cpo::uno::Any t(type);;) {
+        cpo::uno::Reference< css::reflection::XIndirectTypeDescription > ind(
+            t, cpo::uno::UNO_QUERY);
+        if (!ind.is() || ind->getTypeClass() != cpo::uno::TypeClass_TYPEDEF) {
+            return t;
+        }
+        t <<= ind->getReferencedType();
+    }
+}
+
+class SimpleTypeDescription:
+    public cppu::WeakImplHelper< css::reflection::XTypeDescription >
+{
+public:
+    SimpleTypeDescription(
+        cpo::uno::TypeClass typeClass, OUString name):
+        typeClass_(typeClass), name_(std::move(name))
+    {}
+
+private:
+    virtual ~SimpleTypeDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return typeClass_; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    cpo::uno::TypeClass typeClass_;
+    OUString name_;
+};
+
+class SequenceTypeDescription:
+    public cppu::WeakImplHelper< css::reflection::XIndirectTypeDescription >
+{
+public:
+    SequenceTypeDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name, OUString componentType):
+        manager_(manager), name_(std::move(name)), componentType_(std::move(componentType))
+    { assert(manager.is()); }
+
+private:
+    virtual ~SequenceTypeDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_SEQUENCE; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getReferencedType() override
+    { return manager_->resolve(componentType_); }
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    OUString componentType_;
+};
+
+class AnnotatedDescription: public cppu::WeakImplHelper<css::reflection::XAnnotations> {
+protected:
+    explicit AnnotatedDescription(std::vector<OUString> annotations):
+        annotations_(std::move(annotations)) {}
+
+    virtual ~AnnotatedDescription() override {}
+
+private:
+    virtual cpo::uno::Sequence<css::reflection::Annotation> getAnnotations() override {
+        assert(annotations_.size() <= SAL_MAX_INT32);
+        cpo::uno::Sequence<css::reflection::Annotation> s(
+            static_cast<sal_Int32>(annotations_.size()));
+        auto r = asNonConstRange(s);
+        for (sal_Int32 i = 0; i != s.getLength(); ++i) {
+            auto const & entry = annotations_[i];
+            auto const eq = entry.indexOf('=');
+            if (eq == -1) {
+                r[i].Name = entry;
+            } else {
+                r[i].Name = entry.copy(0, eq);
+                r[i].Value.IsPresent = true;
+                r[i].Value.Value = entry.copy(eq + 1);
+            }
+        }
+        return s;
+    }
+
+    std::vector<OUString> annotations_;
+};
+
+class PublishableDescription:
+    public cppu::ImplInheritanceHelper< AnnotatedDescription, css::reflection::XPublished >
+{
+protected:
+    explicit PublishableDescription(std::vector<OUString> annotations, bool published):
+        ImplInheritanceHelper(std::move(annotations)), published_(published) {}
+
+    virtual ~PublishableDescription() override {}
+
+private:
+    virtual bool isPublished() override
+    { return published_; }
+
+    bool published_;
+};
+
+class ModuleDescription:
+    public cppu::WeakImplHelper< css::reflection::XModuleTypeDescription >
+{
+public:
+    ModuleDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        rtl::Reference< unoidl::ModuleEntity > const & entity):
+        manager_(manager), name_(std::move(name)), entity_(entity)
+    { assert(manager.is()); assert(entity.is()); }
+
+private:
+    virtual ~ModuleDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_MODULE; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > >
+    getMembers() override;
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    rtl::Reference< unoidl::ModuleEntity > entity_;
+};
+
+cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XTypeDescription > >
+ModuleDescription::getMembers() {
+    try {
+        std::vector< OUString > names(entity_->getMemberNames());
+        assert(names.size() <= SAL_MAX_INT32);
+        sal_Int32 n = static_cast< sal_Int32 >(names.size());
+        cpo::uno::Sequence<
+            cpo::uno::Reference< css::reflection::XTypeDescription > > s(n);
+        auto r = asNonConstRange(s);
+        for (sal_Int32 i = 0; i != n; ++i) {
+            r[i] = manager_->resolve(makePrefix(name_) + names[i]);
+        }
+        return s;
+    } catch (unoidl::FileFormatException & e) {
+        throw cpo::uno::DeploymentException(
+            e.getUri() + ": " + e.getDetail(),
+            static_cast< cppu::OWeakObject * >(this));
+    }
+}
+
+typedef cppu::ImplInheritanceHelper<
+    PublishableDescription, css::reflection::XEnumTypeDescription >
+EnumTypeDescription_Base;
+
+class EnumTypeDescription: public EnumTypeDescription_Base {
+public:
+    EnumTypeDescription(
+        OUString name,
+        rtl::Reference< unoidl::EnumTypeEntity > const & entity):
+        EnumTypeDescription_Base(entity->getAnnotations(), entity->isPublished()),
+        name_(std::move(name)),
+        entity_(entity)
+    { assert(entity.is()); }
+
+private:
+    virtual ~EnumTypeDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_ENUM; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual sal_Int32 getDefaultEnumValue() override
+    { return entity_->getMembers()[0].value; }
+
+    virtual cpo::uno::Sequence< OUString > getEnumNames() override;
+
+    virtual cpo::uno::Sequence< sal_Int32 > getEnumValues() override;
+
+    OUString name_;
+    rtl::Reference< unoidl::EnumTypeEntity > entity_;
+};
+
+cpo::uno::Sequence< OUString > EnumTypeDescription::getEnumNames()
+{
+    assert(entity_->getMembers().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getMembers().size());
+    cpo::uno::Sequence< OUString > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = entity_->getMembers()[i].name;
+    }
+    return s;
+}
+
+cpo::uno::Sequence< sal_Int32 > EnumTypeDescription::getEnumValues()
+{
+    assert(entity_->getMembers().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getMembers().size());
+    cpo::uno::Sequence< sal_Int32 > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = entity_->getMembers()[i].value;
+    }
+    return s;
+}
+
+typedef cppu::ImplInheritanceHelper<
+    PublishableDescription, css::reflection::XStructTypeDescription >
+PlainStructTypeDescription_Base;
+
+class PlainStructTypeDescription: public PlainStructTypeDescription_Base {
+public:
+    PlainStructTypeDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        rtl::Reference< unoidl::PlainStructTypeEntity > const & entity):
+        PlainStructTypeDescription_Base(entity->getAnnotations(), entity->isPublished()),
+        manager_(manager), name_(std::move(name)), entity_(entity)
+    { assert(manager.is()); assert(entity.is()); }
+
+private:
+    virtual ~PlainStructTypeDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_STRUCT; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getBaseType() override {
+        return entity_->getDirectBase().isEmpty()
+            ? cpo::uno::Reference< css::reflection::XTypeDescription >()
+            : manager_->resolve(entity_->getDirectBase());
+    }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > >
+    getMemberTypes() override;
+
+    virtual cpo::uno::Sequence< OUString > getMemberNames() override;
+
+    virtual cpo::uno::Sequence< OUString > getTypeParameters() override
+    { return cpo::uno::Sequence< OUString >(); }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > >
+    getTypeArguments() override {
+        return cpo::uno::Sequence<
+            cpo::uno::Reference< css::reflection::XTypeDescription > >();
+    }
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    rtl::Reference< unoidl::PlainStructTypeEntity > entity_;
+};
+
+cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XTypeDescription > >
+PlainStructTypeDescription::getMemberTypes()
+{
+    assert(entity_->getDirectMembers().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getDirectMembers().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = manager_->resolve(entity_->getDirectMembers()[i].type);
+    }
+    return s;
+}
+
+cpo::uno::Sequence< OUString > PlainStructTypeDescription::getMemberNames()
+{
+    assert(entity_->getDirectMembers().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getDirectMembers().size());
+    cpo::uno::Sequence< OUString > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = entity_->getDirectMembers()[i].name;
+    }
+    return s;
+}
+
+class ParameterizedMemberTypeDescription:
+    public cppu::WeakImplHelper< css::reflection::XTypeDescription >
+{
+public:
+    explicit ParameterizedMemberTypeDescription(
+        OUString typeParameterName):
+        typeParameterName_(std::move(typeParameterName))
+    {}
+
+private:
+    virtual ~ParameterizedMemberTypeDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_UNKNOWN; }
+
+    virtual OUString getName() override
+    { return typeParameterName_; }
+
+    OUString typeParameterName_;
+};
+
+typedef cppu::ImplInheritanceHelper<
+    PublishableDescription, css::reflection::XStructTypeDescription >
+PolymorphicStructTypeTemplateDescription_Base;
+
+class PolymorphicStructTypeTemplateDescription:
+    public PolymorphicStructTypeTemplateDescription_Base
+{
+public:
+    PolymorphicStructTypeTemplateDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        rtl::Reference< unoidl::PolymorphicStructTypeTemplateEntity > const &
+            entity):
+        PolymorphicStructTypeTemplateDescription_Base(
+            entity->getAnnotations(), entity->isPublished()),
+        manager_(manager), name_(std::move(name)), entity_(entity)
+    { assert(manager.is()); assert(entity.is()); }
+
+private:
+    virtual ~PolymorphicStructTypeTemplateDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_STRUCT; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getBaseType() override
+    { return cpo::uno::Reference< css::reflection::XTypeDescription >(); }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > >
+    getMemberTypes() override;
+
+    virtual cpo::uno::Sequence< OUString > getMemberNames() override;
+
+    virtual cpo::uno::Sequence< OUString > getTypeParameters() override;
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > >
+    getTypeArguments() override {
+        return cpo::uno::Sequence<
+            cpo::uno::Reference< css::reflection::XTypeDescription > >();
+    }
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    rtl::Reference< unoidl::PolymorphicStructTypeTemplateEntity > entity_;
+};
+
+cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XTypeDescription > >
+PolymorphicStructTypeTemplateDescription::getMemberTypes()
+{
+    assert(entity_->getMembers().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getMembers().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = entity_->getMembers()[i].parameterized
+            ? new ParameterizedMemberTypeDescription(
+                entity_->getMembers()[i].type)
+            : manager_->resolve(entity_->getMembers()[i].type);
+    }
+    return s;
+}
+
+cpo::uno::Sequence< OUString >
+PolymorphicStructTypeTemplateDescription::getMemberNames()
+{
+    assert(entity_->getMembers().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getMembers().size());
+    cpo::uno::Sequence< OUString > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = entity_->getMembers()[i].name;
+    }
+    return s;
+}
+
+cpo::uno::Sequence< OUString >
+PolymorphicStructTypeTemplateDescription::getTypeParameters()
+{
+    assert(entity_->getTypeParameters().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getTypeParameters().size());
+    cpo::uno::Sequence< OUString > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = entity_->getTypeParameters()[i];
+    }
+    return s;
+}
+
+class InstantiatedPolymorphicStructTypeDescription:
+    public cppu::WeakImplHelper< css::reflection::XStructTypeDescription >
+{
+public:
+    InstantiatedPolymorphicStructTypeDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        rtl::Reference< unoidl::PolymorphicStructTypeTemplateEntity > const &
+            entity,
+        std::vector< OUString >&& arguments):
+        manager_(manager), name_(std::move(name)), entity_(entity), arguments_(std::move(arguments))
+    {
+        assert(manager.is());
+        assert(entity.is());
+        assert(arguments_.size() == entity->getTypeParameters().size());
+    }
+
+private:
+    virtual ~InstantiatedPolymorphicStructTypeDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_STRUCT; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getBaseType() override
+    { return cpo::uno::Reference< css::reflection::XTypeDescription >(); }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > >
+    getMemberTypes() override;
+
+    virtual cpo::uno::Sequence< OUString > getMemberNames() override;
+
+    virtual cpo::uno::Sequence< OUString > getTypeParameters() override
+    { return cpo::uno::Sequence< OUString >(); }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > >
+    getTypeArguments() override;
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    rtl::Reference< unoidl::PolymorphicStructTypeTemplateEntity > entity_;
+    std::vector< OUString > arguments_;
+};
+
+cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XTypeDescription > >
+InstantiatedPolymorphicStructTypeDescription::getMemberTypes()
+{
+    assert(entity_->getMembers().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getMembers().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        OUString type(entity_->getMembers()[i].type);
+        if (entity_->getMembers()[i].parameterized) {
+            auto j = std::find(entity_->getTypeParameters().begin(), entity_->getTypeParameters().end(), type);
+            if (j != entity_->getTypeParameters().end()) {
+                type = arguments_[j - entity_->getTypeParameters().begin()];
+                goto found;
+            }
+            assert(false); // this cannot happen                         //TODO!
+        found:;
+        }
+        r[i] = manager_->resolve(type);
+    }
+    return s;
+}
+
+cpo::uno::Sequence< OUString >
+InstantiatedPolymorphicStructTypeDescription::getMemberNames()
+{
+    assert(entity_->getMembers().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getMembers().size());
+    cpo::uno::Sequence< OUString > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = entity_->getMembers()[i].name;
+    }
+    return s;
+}
+cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XTypeDescription > >
+InstantiatedPolymorphicStructTypeDescription::getTypeArguments()
+{
+    assert(arguments_.size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(arguments_.size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = manager_->resolve(arguments_[i]);
+    }
+    return s;
+}
+
+typedef cppu::ImplInheritanceHelper<
+    PublishableDescription, css::reflection::XCompoundTypeDescription >
+ExceptionTypeDescription_Base;
+
+class ExceptionTypeDescription: public ExceptionTypeDescription_Base {
+public:
+    ExceptionTypeDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        rtl::Reference< unoidl::ExceptionTypeEntity > const & entity):
+        ExceptionTypeDescription_Base(entity->getAnnotations(), entity->isPublished()),
+        manager_(manager),
+        name_(std::move(name)), entity_(entity)
+    { assert(manager.is()); assert(entity.is()); }
+
+private:
+    virtual ~ExceptionTypeDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_EXCEPTION; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getBaseType() override {
+        return entity_->getDirectBase().isEmpty()
+            ? cpo::uno::Reference< css::reflection::XTypeDescription >()
+            : manager_->resolve(entity_->getDirectBase());
+    }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > >
+    getMemberTypes() override;
+
+    virtual cpo::uno::Sequence< OUString > getMemberNames() override;
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    rtl::Reference< unoidl::ExceptionTypeEntity > entity_;
+};
+
+cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XTypeDescription > >
+ExceptionTypeDescription::getMemberTypes() {
+    assert(entity_->getDirectMembers().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getDirectMembers().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = manager_->resolve(entity_->getDirectMembers()[i].type);
+    }
+    return s;
+}
+
+cpo::uno::Sequence< OUString > ExceptionTypeDescription::getMemberNames()
+{
+    assert(entity_->getDirectMembers().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getDirectMembers().size());
+    cpo::uno::Sequence< OUString > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = entity_->getDirectMembers()[i].name;
+    }
+    return s;
+}
+
+class AttributeDescription:
+    public cppu::ImplInheritanceHelper<
+        AnnotatedDescription, css::reflection::XInterfaceAttributeTypeDescription2 >
+{
+public:
+    AttributeDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        unoidl::InterfaceTypeEntity::Attribute  attribute,
+        sal_Int32 position):
+        ImplInheritanceHelper(attribute.annotations),
+        manager_(manager), name_(std::move(name)), attribute_(std::move(attribute)),
+        position_(position)
+    { assert(manager.is()); }
+
+private:
+    virtual ~AttributeDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_INTERFACE_ATTRIBUTE; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual OUString getMemberName() override
+    { return attribute_.name; }
+
+    virtual sal_Int32 getPosition() override
+    { return position_; }
+
+    virtual bool isReadOnly() override
+    { return attribute_.readOnly; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getType() override
+    { return manager_->resolve(attribute_.type); }
+
+    virtual bool isBound() override
+    { return attribute_.bound; }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XCompoundTypeDescription > >
+    getGetExceptions() override;
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XCompoundTypeDescription > >
+    getSetExceptions() override;
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    unoidl::InterfaceTypeEntity::Attribute attribute_;
+    sal_Int32 position_;
+};
+
+cpo::uno::Sequence<
+    cpo::uno::Reference< css::reflection::XCompoundTypeDescription > >
+AttributeDescription::getGetExceptions() {
+    assert(attribute_.getExceptions.size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(attribute_.getExceptions.size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XCompoundTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i].set(
+            manager_->resolve(attribute_.getExceptions[i]),
+            cpo::uno::UNO_QUERY_THROW);
+    }
+    return s;
+}
+
+cpo::uno::Sequence<
+    cpo::uno::Reference< css::reflection::XCompoundTypeDescription > >
+AttributeDescription::getSetExceptions() {
+    assert(attribute_.setExceptions.size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(attribute_.setExceptions.size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XCompoundTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i].set(
+            manager_->resolve(attribute_.setExceptions[i]),
+            cpo::uno::UNO_QUERY_THROW);
+    }
+    return s;
+}
+
+class MethodParameter:
+    public cppu::WeakImplHelper< css::reflection::XMethodParameter >
+{
+public:
+    MethodParameter(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        unoidl::InterfaceTypeEntity::Method::Parameter parameter,
+        sal_Int32 position):
+        manager_(manager), parameter_(std::move(parameter)), position_(position)
+    { assert(manager.is()); }
+
+private:
+    virtual ~MethodParameter() override {}
+
+    virtual OUString getName() override
+    { return parameter_.name; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getType() override
+    { return manager_->resolve(parameter_.type); }
+
+    virtual bool isIn() override {
+        return
+            (parameter_.direction
+             == unoidl::InterfaceTypeEntity::Method::Parameter::DIRECTION_IN)
+            || (parameter_.direction
+                == unoidl::InterfaceTypeEntity::Method::Parameter::
+                    DIRECTION_IN_OUT);
+    }
+
+    virtual bool isOut() override {
+        return
+            (parameter_.direction
+             == unoidl::InterfaceTypeEntity::Method::Parameter::DIRECTION_OUT)
+            || (parameter_.direction
+                == unoidl::InterfaceTypeEntity::Method::Parameter::
+                    DIRECTION_IN_OUT);
+    }
+
+    virtual sal_Int32 getPosition() override
+    { return position_; }
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    unoidl::InterfaceTypeEntity::Method::Parameter parameter_;
+    sal_Int32 position_;
+};
+
+class MethodDescription:
+    public cppu::ImplInheritanceHelper<
+        AnnotatedDescription, css::reflection::XInterfaceMethodTypeDescription >
+{
+public:
+    MethodDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        unoidl::InterfaceTypeEntity::Method method, sal_Int32 position):
+        ImplInheritanceHelper(method.annotations),
+        manager_(manager), name_(std::move(name)), method_(std::move(method)), position_(position)
+    { assert(manager.is()); }
+
+private:
+    virtual ~MethodDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_INTERFACE_METHOD; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual OUString getMemberName() override
+    { return method_.name; }
+
+    virtual sal_Int32 getPosition() override
+    { return position_; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getReturnType() override
+    { return manager_->resolve(method_.returnType); }
+
+    virtual bool isOneway() override
+    { return false; }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XMethodParameter > >
+    getParameters() override;
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > >
+    getExceptions() override;
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    unoidl::InterfaceTypeEntity::Method method_;
+    sal_Int32 position_;
+};
+
+cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XMethodParameter > >
+MethodDescription::getParameters() {
+    assert(method_.parameters.size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(method_.parameters.size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XMethodParameter > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = new MethodParameter(manager_, method_.parameters[i], i);
+    }
+    return s;
+}
+
+cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XTypeDescription > >
+MethodDescription::getExceptions() {
+    assert(method_.exceptions.size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(method_.exceptions.size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = manager_->resolve(method_.exceptions[i]);
+    }
+    return s;
+}
+
+class BaseOffset {
+public:
+    explicit BaseOffset(
+        cpo::uno::Reference< css::reflection::XInterfaceTypeDescription2 >
+            const & description);
+
+    BaseOffset(const BaseOffset&) = delete;
+    const BaseOffset& operator=(const BaseOffset&) = delete;
+
+    sal_Int32 get() const { return offset_; }
+
+private:
+    void calculateBases(
+        cpo::uno::Reference< css::reflection::XInterfaceTypeDescription2 >
+            const & description);
+
+    void calculate(
+        cpo::uno::Reference< css::reflection::XInterfaceTypeDescription2 >
+            const & description);
+
+    std::set< OUString > set_;
+    sal_Int32 offset_;
+};
+
+BaseOffset::BaseOffset(
+    cpo::uno::Reference< css::reflection::XInterfaceTypeDescription2 > const &
+        description):
+    offset_(0)
+{
+    calculateBases(description);
+}
+
+void BaseOffset::calculateBases(
+    cpo::uno::Reference< css::reflection::XInterfaceTypeDescription2 > const &
+        description)
+{
+    const cpo::uno::Sequence<
+        cpo::uno::Reference < css::reflection::XTypeDescription > > bases(
+            description->getBaseTypes());
+    for (const auto & i : bases) {
+        calculate(
+            cpo::uno::Reference< css::reflection::XInterfaceTypeDescription2 >(
+                resolveTypedefs(cpo::uno::Any(i)),
+                cpo::uno::UNO_QUERY_THROW));
+    }
+}
+
+void BaseOffset::calculate(
+    cpo::uno::Reference< css::reflection::XInterfaceTypeDescription2 > const &
+        description)
+{
+    if (set_.insert(description->getName()).second) {
+        calculateBases(description);
+        offset_ += description->getMembers().getLength();
+    }
+}
+
+typedef cppu::ImplInheritanceHelper<
+    PublishableDescription, css::reflection::XInterfaceTypeDescription2 >
+InterfaceTypeDescription_Base;
+
+class InterfaceTypeDescription: public InterfaceTypeDescription_Base {
+public:
+    InterfaceTypeDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        rtl::Reference< unoidl::InterfaceTypeEntity > const & entity):
+        InterfaceTypeDescription_Base(entity->getAnnotations(), entity->isPublished()),
+        manager_(manager),
+        name_(std::move(name)), entity_(entity)
+    { assert(manager.is()); assert(entity.is()); }
+
+private:
+    virtual ~InterfaceTypeDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_INTERFACE; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getBaseType() override {
+        return entity_->getDirectMandatoryBases().empty()
+            ? cpo::uno::Reference< css::reflection::XTypeDescription >()
+            : manager_->resolve(entity_->getDirectMandatoryBases()[0].name);
+    }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference<
+             css::reflection::XInterfaceMemberTypeDescription > >
+    getMembers() override;
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > >
+    getBaseTypes() override;
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > >
+    getOptionalBaseTypes() override;
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    rtl::Reference< unoidl::InterfaceTypeEntity > entity_;
+};
+
+cpo::uno::Sequence<
+    cpo::uno::Reference< css::reflection::XInterfaceMemberTypeDescription > >
+InterfaceTypeDescription::getMembers() {
+    assert(
+        entity_->getDirectAttributes().size() <= SAL_MAX_INT32
+        && (entity_->getDirectMethods().size()
+            <= SAL_MAX_INT32 - entity_->getDirectAttributes().size()));
+    sal_Int32 n1 = static_cast< sal_Int32 >(
+        entity_->getDirectAttributes().size());
+    sal_Int32 n2 = static_cast< sal_Int32 >(entity_->getDirectMethods().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference<
+            css::reflection::XInterfaceMemberTypeDescription > > s(n1 + n2);
+    auto r = asNonConstRange(s);
+    sal_Int32 off = BaseOffset(this).get();
+    for (sal_Int32 i = 0; i != n1; ++i) {
+        r[i] = new AttributeDescription(
+            manager_, name_ + "::" + entity_->getDirectAttributes()[i].name,
+            entity_->getDirectAttributes()[i], off + i);
+    }
+    for (sal_Int32 i = 0; i != n2; ++i) {
+        r[n1 + i] = new MethodDescription(
+            manager_, name_ + "::" + entity_->getDirectMethods()[i].name,
+            entity_->getDirectMethods()[i], off + n1 + i);
+    }
+    return s;
+}
+
+cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XTypeDescription > >
+InterfaceTypeDescription::getBaseTypes() {
+    assert(entity_->getDirectMandatoryBases().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(
+        entity_->getDirectMandatoryBases().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = manager_->resolve(entity_->getDirectMandatoryBases()[i].name);
+    }
+    return s;
+}
+
+cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XTypeDescription > >
+InterfaceTypeDescription::getOptionalBaseTypes()
+{
+    assert(entity_->getDirectOptionalBases().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(
+        entity_->getDirectOptionalBases().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = manager_->resolve(entity_->getDirectOptionalBases()[i].name);
+    }
+    return s;
+}
+
+class ConstantDescription:
+    public cppu::WeakImplHelper< css::reflection::XConstantTypeDescription >
+{
+public:
+    ConstantDescription(
+        OUString const & constantGroupName,
+        unoidl::ConstantGroupEntity::Member const & member);
+
+private:
+    virtual ~ConstantDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_CONSTANT; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual cpo::uno::Any getConstantValue() override
+    { return value_; }
+
+    OUString name_;
+    cpo::uno::Any value_;
+};
+
+ConstantDescription::ConstantDescription(
+    OUString const & constantGroupName,
+    unoidl::ConstantGroupEntity::Member const & member):
+    name_(makePrefix(constantGroupName) + member.name)
+{
+    switch (member.value.type) {
+    case unoidl::ConstantValue::TYPE_BOOLEAN:
+        value_ <<= member.value.booleanValue;
+        break;
+    case unoidl::ConstantValue::TYPE_BYTE:
+        value_ <<= member.value.byteValue;
+        break;
+    case unoidl::ConstantValue::TYPE_SHORT:
+        value_ <<= member.value.shortValue;
+        break;
+    case unoidl::ConstantValue::TYPE_UNSIGNED_SHORT:
+        value_ <<= member.value.unsignedShortValue;
+        break;
+    case unoidl::ConstantValue::TYPE_LONG:
+        value_ <<= member.value.longValue;
+        break;
+    case unoidl::ConstantValue::TYPE_UNSIGNED_LONG:
+        value_ <<= member.value.unsignedLongValue;
+        break;
+    case unoidl::ConstantValue::TYPE_HYPER:
+        value_ <<= member.value.hyperValue;
+        break;
+    case unoidl::ConstantValue::TYPE_UNSIGNED_HYPER:
+        value_ <<= member.value.unsignedHyperValue;
+        break;
+    case unoidl::ConstantValue::TYPE_FLOAT:
+        value_ <<= member.value.floatValue;
+        break;
+    case unoidl::ConstantValue::TYPE_DOUBLE:
+        value_ <<= member.value.doubleValue;
+        break;
+    default:
+        for (;;) { std::abort(); } // this cannot happen
+    }
+}
+
+typedef cppu::ImplInheritanceHelper<
+    PublishableDescription, css::reflection::XConstantsTypeDescription >
+ConstantGroupDescription_Base;
+
+class ConstantGroupDescription: public ConstantGroupDescription_Base {
+public:
+    ConstantGroupDescription(
+        OUString name,
+        rtl::Reference< unoidl::ConstantGroupEntity > const & entity):
+        ConstantGroupDescription_Base(entity->getAnnotations(), entity->isPublished()),
+        name_(std::move(name)),
+        entity_(entity)
+    { assert(entity.is()); }
+
+private:
+    virtual ~ConstantGroupDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_CONSTANTS; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XConstantTypeDescription > >
+    getConstants() override;
+
+    OUString name_;
+    rtl::Reference< unoidl::ConstantGroupEntity > entity_;
+};
+
+cpo::uno::Sequence<
+    cpo::uno::Reference< css::reflection::XConstantTypeDescription > >
+ConstantGroupDescription::getConstants() {
+    assert(entity_->getMembers().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getMembers().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XConstantTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = new ConstantDescription(name_, entity_->getMembers()[i]);
+    }
+    return s;
+}
+
+typedef cppu::ImplInheritanceHelper<
+    PublishableDescription, css::reflection::XIndirectTypeDescription >
+TypedefDescription_Base;
+
+class TypedefDescription: public TypedefDescription_Base {
+public:
+    TypedefDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        rtl::Reference< unoidl::TypedefEntity > const & entity):
+        TypedefDescription_Base(entity->getAnnotations(), entity->isPublished()), manager_(manager),
+        name_(std::move(name)), entity_(entity)
+    { assert(manager.is()); assert(entity.is()); }
+
+private:
+    virtual ~TypedefDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_TYPEDEF; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getReferencedType() override
+    { return manager_->resolve(entity_->getType()); }
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    rtl::Reference< unoidl::TypedefEntity > entity_;
+};
+
+class ConstructorParameter:
+    public cppu::WeakImplHelper< css::reflection::XParameter >
+{
+public:
+    ConstructorParameter(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        unoidl::SingleInterfaceBasedServiceEntity::Constructor::Parameter parameter,
+        sal_Int32 position):
+        manager_(manager), parameter_(std::move(parameter)), position_(position)
+    { assert(manager.is()); }
+
+private:
+    virtual ~ConstructorParameter() override {}
+
+    virtual OUString getName() override
+    { return parameter_.name; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getType() override
+    { return manager_->resolve(parameter_.type); }
+
+    virtual bool isIn() override
+    { return true; }
+
+    virtual bool isOut() override
+    { return false; }
+
+    virtual sal_Int32 getPosition() override
+    { return position_; }
+
+    virtual bool isRestParameter() override
+    { return parameter_.rest; }
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    unoidl::SingleInterfaceBasedServiceEntity::Constructor::Parameter
+        parameter_;
+    sal_Int32 position_;
+};
+
+class ConstructorDescription:
+    public cppu::WeakImplHelper<
+        css::reflection::XServiceConstructorDescription >
+{
+public:
+    ConstructorDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        unoidl::SingleInterfaceBasedServiceEntity::Constructor constructor):
+        manager_(manager), constructor_(std::move(constructor))
+    { assert(manager.is()); }
+
+private:
+    virtual ~ConstructorDescription() override {}
+
+    virtual bool isDefaultConstructor() override
+    { return constructor_.defaultConstructor; }
+
+    virtual OUString getName() override
+    { return constructor_.name; }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XParameter > >
+    getParameters() override;
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XCompoundTypeDescription > >
+    getExceptions() override;
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    unoidl::SingleInterfaceBasedServiceEntity::Constructor constructor_;
+};
+
+cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XParameter > >
+ConstructorDescription::getParameters() {
+    assert(constructor_.parameters.size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(constructor_.parameters.size());
+    cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XParameter > > s(
+        n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = new ConstructorParameter(
+            manager_, constructor_.parameters[i], i);
+    }
+    return s;
+}
+
+cpo::uno::Sequence<
+    cpo::uno::Reference< css::reflection::XCompoundTypeDescription > >
+ConstructorDescription::getExceptions() {
+    assert(constructor_.exceptions.size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(constructor_.exceptions.size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XCompoundTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i].set(
+            manager_->resolve(constructor_.exceptions[i]),
+            cpo::uno::UNO_QUERY_THROW);
+    }
+    return s;
+}
+
+typedef cppu::ImplInheritanceHelper<
+    PublishableDescription, css::reflection::XServiceTypeDescription2 >
+SingleInterfaceBasedServiceDescription_Base;
+
+class SingleInterfaceBasedServiceDescription:
+    public SingleInterfaceBasedServiceDescription_Base
+{
+public:
+    SingleInterfaceBasedServiceDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        rtl::Reference< unoidl::SingleInterfaceBasedServiceEntity > const &
+            entity):
+        SingleInterfaceBasedServiceDescription_Base(
+            entity->getAnnotations(), entity->isPublished()),
+        manager_(manager), name_(std::move(name)), entity_(entity)
+    { assert(manager.is()); assert(entity.is()); }
+
+private:
+    virtual ~SingleInterfaceBasedServiceDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_SERVICE; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XServiceTypeDescription > >
+    getMandatoryServices() override
+    {
+        return cpo::uno::Sequence<
+            cpo::uno::Reference< css::reflection::XServiceTypeDescription > >();
+    }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XServiceTypeDescription > >
+    getOptionalServices() override
+    {
+        return cpo::uno::Sequence<
+            cpo::uno::Reference< css::reflection::XServiceTypeDescription > >();
+    }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XInterfaceTypeDescription > >
+    getMandatoryInterfaces() override
+    {
+        return cpo::uno::Sequence<
+            cpo::uno::Reference<
+                css::reflection::XInterfaceTypeDescription > >();
+    }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XInterfaceTypeDescription > >
+    getOptionalInterfaces() override
+    {
+        return cpo::uno::Sequence<
+            cpo::uno::Reference<
+                css::reflection::XInterfaceTypeDescription > >();
+    }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XPropertyTypeDescription > >
+    getProperties() override
+    {
+        return cpo::uno::Sequence<
+            cpo::uno::Reference<
+                css::reflection::XPropertyTypeDescription > >();
+    }
+
+    virtual bool isSingleInterfaceBased() override
+    { return true; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getInterface() override
+    { return manager_->resolve(entity_->getBase()); }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XServiceConstructorDescription > >
+    getConstructors() override;
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    rtl::Reference< unoidl::SingleInterfaceBasedServiceEntity > entity_;
+};
+
+cpo::uno::Sequence<
+    cpo::uno::Reference< css::reflection::XServiceConstructorDescription > >
+SingleInterfaceBasedServiceDescription::getConstructors()
+{
+    assert(entity_->getConstructors().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(entity_->getConstructors().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XServiceConstructorDescription > >
+            s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = new ConstructorDescription(
+            manager_, entity_->getConstructors()[i]);
+    }
+    return s;
+}
+
+class PropertyDescription:
+    public cppu::WeakImplHelper< css::reflection::XPropertyTypeDescription >
+{
+public:
+    PropertyDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        unoidl::AccumulationBasedServiceEntity::Property property):
+        manager_(manager), property_(std::move(property))
+    { assert(manager.is()); }
+
+private:
+    virtual ~PropertyDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_PROPERTY; }
+
+    virtual OUString getName() override
+    { return property_.name; }
+
+    virtual sal_Int16 getPropertyFlags() override
+    { return property_.attributes; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getPropertyTypeDescription() override
+    { return manager_->resolve(property_.type); }
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    unoidl::AccumulationBasedServiceEntity::Property property_;
+};
+
+typedef cppu::ImplInheritanceHelper<
+    PublishableDescription, css::reflection::XServiceTypeDescription2 >
+AccumulationBasedServiceDescription_Base;
+
+class AccumulationBasedServiceDescription:
+    public AccumulationBasedServiceDescription_Base
+{
+public:
+    AccumulationBasedServiceDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        rtl::Reference< unoidl::AccumulationBasedServiceEntity > const &
+            entity):
+        AccumulationBasedServiceDescription_Base(entity->getAnnotations(), entity->isPublished()),
+        manager_(manager), name_(std::move(name)), entity_(entity)
+    { assert(manager.is()); assert(entity.is()); }
+
+private:
+    virtual ~AccumulationBasedServiceDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_SERVICE; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XServiceTypeDescription > >
+    getMandatoryServices() override;
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XServiceTypeDescription > >
+    getOptionalServices() override;
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XInterfaceTypeDescription > >
+    getMandatoryInterfaces() override;
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XInterfaceTypeDescription > >
+    getOptionalInterfaces() override;
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XPropertyTypeDescription > >
+    getProperties() override;
+
+    virtual bool isSingleInterfaceBased() override
+    { return false; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getInterface() override
+    { return cpo::uno::Reference< css::reflection::XTypeDescription >(); }
+
+    virtual
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XServiceConstructorDescription > >
+    getConstructors() override
+    {
+        return cpo::uno::Sequence<
+            cpo::uno::Reference<
+                css::reflection::XServiceConstructorDescription > >();
+    }
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    rtl::Reference< unoidl::AccumulationBasedServiceEntity > entity_;
+};
+
+cpo::uno::Sequence<
+    cpo::uno::Reference< css::reflection::XServiceTypeDescription > >
+AccumulationBasedServiceDescription::getMandatoryServices()
+{
+    assert(entity_->getDirectMandatoryBaseServices().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(
+        entity_->getDirectMandatoryBaseServices().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XServiceTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i].set(
+            manager_->resolve(
+                entity_->getDirectMandatoryBaseServices()[i].name),
+            cpo::uno::UNO_QUERY_THROW);
+    }
+    return s;
+}
+
+cpo::uno::Sequence<
+    cpo::uno::Reference< css::reflection::XServiceTypeDescription > >
+AccumulationBasedServiceDescription::getOptionalServices()
+{
+    assert(entity_->getDirectOptionalBaseServices().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(
+        entity_->getDirectOptionalBaseServices().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XServiceTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i].set(
+            manager_->resolve(entity_->getDirectOptionalBaseServices()[i].name),
+            cpo::uno::UNO_QUERY_THROW);
+    }
+    return s;
+}
+
+cpo::uno::Sequence<
+    cpo::uno::Reference< css::reflection::XInterfaceTypeDescription > >
+AccumulationBasedServiceDescription::getMandatoryInterfaces()
+{
+    assert(entity_->getDirectMandatoryBaseInterfaces().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(
+        entity_->getDirectMandatoryBaseInterfaces().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XInterfaceTypeDescription > > s(
+            n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i].set(
+            resolveTypedefs(
+                manager_->find(
+                    entity_->getDirectMandatoryBaseInterfaces()[i].name)),
+            cpo::uno::UNO_QUERY_THROW);
+    }
+    return s;
+}
+
+cpo::uno::Sequence<
+    cpo::uno::Reference< css::reflection::XInterfaceTypeDescription > >
+AccumulationBasedServiceDescription::getOptionalInterfaces()
+{
+    assert(entity_->getDirectOptionalBaseInterfaces().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(
+        entity_->getDirectOptionalBaseInterfaces().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XInterfaceTypeDescription > > s(
+            n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i].set(
+            resolveTypedefs(
+                manager_->find(
+                    entity_->getDirectOptionalBaseInterfaces()[i].name)),
+            cpo::uno::UNO_QUERY_THROW);
+    }
+    return s;
+}
+
+cpo::uno::Sequence<
+    cpo::uno::Reference< css::reflection::XPropertyTypeDescription > >
+AccumulationBasedServiceDescription::getProperties()
+{
+    assert(entity_->getDirectProperties().size() <= SAL_MAX_INT32);
+    sal_Int32 n = static_cast< sal_Int32 >(
+        entity_->getDirectProperties().size());
+    cpo::uno::Sequence<
+        cpo::uno::Reference< css::reflection::XPropertyTypeDescription > > s(n);
+    auto r = asNonConstRange(s);
+    for (sal_Int32 i = 0; i != n; ++i) {
+        r[i] = new PropertyDescription(
+            manager_, entity_->getDirectProperties()[i]);
+    }
+    return s;
+}
+
+typedef cppu::ImplInheritanceHelper<
+    PublishableDescription, css::reflection::XSingletonTypeDescription2 >
+InterfaceBasedSingletonDescription_Base;
+
+class InterfaceBasedSingletonDescription:
+    public InterfaceBasedSingletonDescription_Base
+{
+public:
+    InterfaceBasedSingletonDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        rtl::Reference< unoidl::InterfaceBasedSingletonEntity > const & entity):
+        InterfaceBasedSingletonDescription_Base(entity->getAnnotations(), entity->isPublished()),
+        manager_(manager), name_(std::move(name)), entity_(entity)
+    { assert(manager.is()); assert(entity.is()); }
+
+private:
+    virtual ~InterfaceBasedSingletonDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_SINGLETON; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual cpo::uno::Reference< css::reflection::XServiceTypeDescription >
+    getService() override
+    {
+        return
+            cpo::uno::Reference< css::reflection::XServiceTypeDescription >();
+    }
+
+    virtual bool isInterfaceBased() override
+    { return true; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getInterface() override
+    { return manager_->resolve(entity_->getBase()); }
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    rtl::Reference< unoidl::InterfaceBasedSingletonEntity > entity_;
+};
+
+typedef cppu::ImplInheritanceHelper<
+    PublishableDescription, css::reflection::XSingletonTypeDescription2 >
+ServiceBasedSingletonDescription_Base;
+
+class ServiceBasedSingletonDescription:
+    public ServiceBasedSingletonDescription_Base
+{
+public:
+    ServiceBasedSingletonDescription(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString name,
+        rtl::Reference< unoidl::ServiceBasedSingletonEntity > const & entity):
+        ServiceBasedSingletonDescription_Base(entity->getAnnotations(), entity->isPublished()),
+        manager_(manager), name_(std::move(name)), entity_(entity)
+    { assert(manager.is()); assert(entity.is()); }
+
+private:
+    virtual ~ServiceBasedSingletonDescription() override {}
+
+    virtual cpo::uno::TypeClass getTypeClass() override
+    { return cpo::uno::TypeClass_SINGLETON; }
+
+    virtual OUString getName() override
+    { return name_; }
+
+    virtual cpo::uno::Reference< css::reflection::XServiceTypeDescription >
+    getService() override
+    {
+        return cpo::uno::Reference< css::reflection::XServiceTypeDescription >(
+            manager_->resolve(entity_->getBase()), cpo::uno::UNO_QUERY_THROW);
+    }
+
+    virtual bool isInterfaceBased() override
+    { return false; }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    getInterface() override
+    { return cpo::uno::Reference< css::reflection::XTypeDescription >(); }
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    OUString name_;
+    rtl::Reference< unoidl::ServiceBasedSingletonEntity > entity_;
+};
+
+class Enumeration:
+    public cppu::WeakImplHelper< css::reflection::XTypeDescriptionEnumeration >
+{
+public:
+    Enumeration(
+        rtl::Reference< cppuhelper::TypeManager > const & manager,
+        OUString const & prefix,
+        rtl::Reference< unoidl::MapCursor > const & cursor,
+        cpo::uno::Sequence< cpo::uno::TypeClass > const & types, bool deep):
+        manager_(manager), types_(types), deep_(deep)
+    {
+        assert(manager.is());
+        positions_.push(Position(prefix, cursor));
+        findNextMatch();
+    }
+
+private:
+    virtual ~Enumeration() override {}
+
+    virtual bool hasMoreElements() override
+    { return !positions_.empty(); }
+
+    virtual cpo::uno::Any nextElement() override
+    { return cpo::uno::Any(nextTypeDescription()); }
+
+    virtual cpo::uno::Reference< css::reflection::XTypeDescription >
+    nextTypeDescription() override;
+
+    bool matches(cpo::uno::TypeClass tc) const;
+
+    void findNextMatch();
+
+    struct Position {
+        Position(
+            OUString thePrefix,
+            rtl::Reference< unoidl::MapCursor > const & theCursor):
+            prefix(std::move(thePrefix)), cursor(theCursor)
+        { assert(theCursor.is()); }
+
+        Position(
+            OUString thePrefix,
+            rtl::Reference< unoidl::ConstantGroupEntity > const &
+                theConstantGroup):
+            prefix(std::move(thePrefix)), constantGroup(theConstantGroup),
+            constantGroupIndex(constantGroup->getMembers().begin())
+        { assert(theConstantGroup.is()); }
+
+        Position(Position const & other):
+            prefix(other.prefix), cursor(other.cursor),
+            constantGroup(other.constantGroup)
+        {
+            if (constantGroup.is()) {
+                constantGroupIndex = other.constantGroupIndex;
+            }
+        }
+
+        OUString prefix;
+        rtl::Reference< unoidl::MapCursor > cursor;
+        rtl::Reference< unoidl::ConstantGroupEntity > constantGroup;
+        std::vector< unoidl::ConstantGroupEntity::Member >::const_iterator
+            constantGroupIndex;
+    };
+
+    rtl::Reference< cppuhelper::TypeManager > manager_;
+    cpo::uno::Sequence< cpo::uno::TypeClass > types_;
+    bool deep_;
+
+    std::mutex mutex_;
+    std::stack< Position, std::vector<Position> > positions_;
+    OUString current_;
+};
+
+cpo::uno::Reference< css::reflection::XTypeDescription >
+Enumeration::nextTypeDescription()
+{
+    OUString name;
+    {
+        std::scoped_lock g(mutex_);
+        if (positions_.empty()) {
+            throw css::container::NoSuchElementException(
+                u"exhausted XTypeDescriptionEnumeration"_ustr,
+                static_cast< cppu::OWeakObject * >(this));
+        }
+        name = current_;
+        findNextMatch();
+    }
+    return manager_->resolve(name);
+}
+
+bool Enumeration::matches(cpo::uno::TypeClass tc) const {
+    if (!types_.hasElements()) {
+        return true;
+    }
+
+    return std::any_of(types_.begin(), types_.end(), [&tc](const auto& i) { return i == tc; });
+}
+
+void Enumeration::findNextMatch() {
+    try {
+        for (;;) {
+            assert(!positions_.empty());
+            OUString name;
+            if (positions_.top().cursor.is()) { // root or module
+                rtl::Reference< unoidl::Entity > ent(
+                    positions_.top().cursor->getNext(&name));
+                if (!ent.is()) {
+                    positions_.pop();
+                    if (positions_.empty()) {
+                        break;
+                    }
+                    continue;
+                }
+                name = positions_.top().prefix + name;
+                cpo::uno::TypeClass tc;
+                switch (ent->getSort()) {
+                case unoidl::Entity::SORT_MODULE:
+                    tc = cpo::uno::TypeClass_MODULE;
+                    if (deep_) {
+                        positions_.push(
+                            Position(
+                                makePrefix(name),
+                                static_cast< unoidl::ModuleEntity * >(
+                                    ent.get())->createCursor()));
+                    }
+                    break;
+                case unoidl::Entity::SORT_ENUM_TYPE:
+                    tc = cpo::uno::TypeClass_ENUM;
+                    break;
+                case unoidl::Entity::SORT_PLAIN_STRUCT_TYPE:
+                case unoidl::Entity::SORT_POLYMORPHIC_STRUCT_TYPE_TEMPLATE:
+                    tc = cpo::uno::TypeClass_STRUCT;
+                    break;
+                case unoidl::Entity::SORT_EXCEPTION_TYPE:
+                    tc = cpo::uno::TypeClass_EXCEPTION;
+                    break;
+                case unoidl::Entity::SORT_INTERFACE_TYPE:
+                    tc = cpo::uno::TypeClass_INTERFACE;
+                    break;
+                case unoidl::Entity::SORT_TYPEDEF:
+                    tc = cpo::uno::TypeClass_TYPEDEF;
+                    break;
+                case unoidl::Entity::SORT_CONSTANT_GROUP:
+                    tc = cpo::uno::TypeClass_CONSTANTS;
+                    if (deep_ && matches(cpo::uno::TypeClass_CONSTANT)) {
+                        positions_.push(
+                            Position(
+                                makePrefix(name),
+                                static_cast< unoidl::ConstantGroupEntity * >(
+                                    ent.get())));
+                    }
+                    break;
+                case unoidl::Entity::SORT_SINGLE_INTERFACE_BASED_SERVICE:
+                case unoidl::Entity::SORT_ACCUMULATION_BASED_SERVICE:
+                    tc = cpo::uno::TypeClass_SERVICE;
+                    break;
+                case unoidl::Entity::SORT_INTERFACE_BASED_SINGLETON:
+                case unoidl::Entity::SORT_SERVICE_BASED_SINGLETON:
+                    tc = cpo::uno::TypeClass_SINGLETON;
+                    break;
+                default:
+                    for (;;) { std::abort(); } // this cannot happen
+                }
+                if (matches(tc)) {
+                    current_ = name;
+                    break;
+                }
+            } else { // constant group
+                if (positions_.top().constantGroupIndex
+                    == positions_.top().constantGroup->getMembers().end())
+                {
+                    positions_.pop();
+                    if (positions_.empty()) {
+                        break;
+                    }
+                    continue;
+                }
+                current_ = positions_.top().prefix
+                    + positions_.top().constantGroupIndex++->name;
+                break;
+            }
+        }
+    } catch (unoidl::FileFormatException & e) {
+        throw cpo::uno::DeploymentException(
+            e.getUri() + ": " + e.getDetail(),
+            static_cast< cppu::OWeakObject * >(this));
+    }
+}
+
+}
+
+cppuhelper::TypeManager::TypeManager():
+    manager_(new unoidl::Manager)
+{}
+
+cpo::uno::Any cppuhelper::TypeManager::find(OUString const & name) {
+    //TODO: caching? (here or in unoidl::Manager?)
+    static constexpr std::pair<std::u16string_view, cpo::uno::TypeClass> const simple[] = {
+        { u"void", cpo::uno::TypeClass_VOID },
+        { u"boolean", cpo::uno::TypeClass_BOOLEAN },
+        { u"byte", cpo::uno::TypeClass_BYTE },
+        { u"short", cpo::uno::TypeClass_SHORT },
+        { u"unsigned short", cpo::uno::TypeClass_UNSIGNED_SHORT },
+        { u"long", cpo::uno::TypeClass_LONG },
+        { u"unsigned long", cpo::uno::TypeClass_UNSIGNED_LONG },
+        { u"hyper", cpo::uno::TypeClass_HYPER },
+        { u"unsigned hyper", cpo::uno::TypeClass_UNSIGNED_HYPER },
+        { u"float", cpo::uno::TypeClass_FLOAT },
+        { u"double", cpo::uno::TypeClass_DOUBLE },
+        { u"char", cpo::uno::TypeClass_CHAR },
+        { u"string", cpo::uno::TypeClass_STRING },
+        { u"type", cpo::uno::TypeClass_TYPE },
+        { u"any", cpo::uno::TypeClass_ANY } };
+    for (const auto& [ rName, rTypeClass ] : simple) {
+        if (name == rName) {
+            return cpo::uno::Any(
+                cpo::uno::Reference< css::reflection::XTypeDescription >(
+                    new SimpleTypeDescription(rTypeClass, name)));
+        }
+    }
+    if (name.startsWith("[]")) {
+        return getSequenceType(name);
+    }
+    sal_Int32 i = name.indexOf('<');
+    if (i != -1) {
+        return getInstantiatedStruct(name, i);
+    }
+    i = name.indexOf("::");
+    if (i != -1) {
+        return getInterfaceMember(name, i);
+    }
+    rtl::Reference< unoidl::Entity > ent(findEntity(name));
+    if (ent.is()) {
+        return getNamed(name, ent);
+    }
+    i = name.lastIndexOf('.');
+    if (i != -1) {
+        OUString parent(name.copy(0, i));
+        ent = findEntity(parent);
+        if (ent.is()) {
+            switch (ent->getSort()) {
+            case unoidl::Entity::SORT_ENUM_TYPE:
+                return getEnumMember(
+                    static_cast< unoidl::EnumTypeEntity * >(ent.get()),
+                    name.subView(i + 1));
+            case unoidl::Entity::SORT_CONSTANT_GROUP:
+                return getConstant(
+                    parent,
+                    static_cast< unoidl::ConstantGroupEntity * >(ent.get()),
+                    name.subView(i + 1));
+            default:
+                break;
+            }
+        }
+    }
+    return cpo::uno::Any();
+}
+
+cpo::uno::Reference< css::reflection::XTypeDescription >
+cppuhelper::TypeManager::resolve(OUString const & name) {
+    cpo::uno::Reference< css::reflection::XTypeDescription > desc(
+        find(name), cpo::uno::UNO_QUERY);
+    if (!desc.is()) {
+        throw cpo::uno::DeploymentException(
+            "cannot resolve type \"" + name + "\"",
+            static_cast< cppu::OWeakObject * >(this));
+    }
+    return desc;
+}
+
+cppuhelper::TypeManager::~TypeManager() noexcept {}
+
+OUString cppuhelper::TypeManager::getImplementationName()
+{
+    return
+        u"com.sun.star.comp.cppuhelper.bootstrap.TypeManager"_ustr;
+}
+
+bool cppuhelper::TypeManager::supportsService(
+    OUString const & ServiceName)
+{
+    return cppu::supportsService(this, ServiceName);
+}
+
+cpo::uno::Sequence< OUString >
+cppuhelper::TypeManager::getSupportedServiceNames()
+{
+    return { u"com.sun.star.reflection.TypeDescriptionManager"_ustr }; //TODO
+}
+
+cpo::uno::Any cppuhelper::TypeManager::getByHierarchicalName(
+    OUString const & aName)
+{
+    cpo::uno::Any desc(find(aName));
+    if (!desc.hasValue()) {
+        throw css::container::NoSuchElementException(
+            aName, static_cast< cppu::OWeakObject * >(this));
+    }
+    return desc;
+}
+
+bool cppuhelper::TypeManager::hasByHierarchicalName(
+    OUString const & aName)
+{
+    return find(aName).hasValue();
+}
+
+cpo::uno::Type cppuhelper::TypeManager::getElementType()
+{
+    return cppu::UnoType< OUString >::get();
+}
+
+bool cppuhelper::TypeManager::hasElements()
+{
+    throw cpo::uno::RuntimeException(
+        u"TypeManager hasElements: method not supported"_ustr,
+        static_cast< cppu::OWeakObject * >(this));
+}
+
+cpo::uno::Reference< css::container::XEnumeration >
+cppuhelper::TypeManager::createEnumeration()
+{
+    throw cpo::uno::RuntimeException(
+        u"TypeManager createEnumeration: method not supported"_ustr,
+        static_cast< cppu::OWeakObject * >(this));
+}
+
+bool cppuhelper::TypeManager::has(cpo::uno::Any const &)
+{
+    throw cpo::uno::RuntimeException(
+        u"TypeManager has: method not supported"_ustr,
+        static_cast< cppu::OWeakObject * >(this));
+}
+
+void cppuhelper::TypeManager::insert(cpo::uno::Any const & aElement)
+{
+    OUString uri;
+    if (!(aElement >>= uri)) {
+        throw css::lang::IllegalArgumentException(
+            (u"css.uno.theTypeDescriptionManager.insert expects a string URI"
+             " argument"_ustr),
+            static_cast< cppu::OWeakObject * >(this), 0);
+    }
+    //TODO: check for ElementExistException
+    //TODO: check for consistency with existing data
+    readRdbFile(uri, false);
+}
+
+void cppuhelper::TypeManager::remove(cpo::uno::Any const & aElement)
+{
+    OUString uri;
+    if (!(aElement >>= uri)) {
+        throw css::lang::IllegalArgumentException(
+            (u"css.uno.theTypeDescriptionManager.remove expects a string URI"
+             " argument"_ustr),
+            static_cast< cppu::OWeakObject * >(this), 0);
+    }
+    //TODO: remove requests are silently ignored for now
+}
+
+cpo::uno::Reference< css::reflection::XTypeDescriptionEnumeration >
+cppuhelper::TypeManager::createTypeDescriptionEnumeration(
+    OUString const & moduleName,
+    cpo::uno::Sequence< cpo::uno::TypeClass > const & types,
+    css::reflection::TypeDescriptionSearchDepth depth)
+{
+    rtl::Reference< unoidl::MapCursor > cursor;
+    try {
+        cursor = manager_->createCursor(moduleName);
+    } catch (unoidl::FileFormatException & e) {
+        throw cpo::uno::DeploymentException(
+            ("unoidl::FileFormatException for <" + e.getUri() + ">: "
+             + e.getDetail()),
+            static_cast< cppu::OWeakObject * >(this));
+    }
+    if (!cursor.is()) {
+        //TODO: css::reflection::InvalidTypeNameException if moduleName names a
+        // non-module
+        throw css::reflection::NoSuchTypeNameException(
+            moduleName, static_cast< cppu::OWeakObject * >(this));
+    }
+    return new Enumeration(
+        this, makePrefix(moduleName), cursor, types,
+        depth == css::reflection::TypeDescriptionSearchDepth_INFINITE);
+}
+
+void cppuhelper::TypeManager::init(std::u16string_view rdbUris) {
+    for (sal_Int32 i = 0; i != -1;) {
+        std::u16string_view uri(o3tl::getToken(rdbUris, 0, ' ', i));
+        if (uri.empty()) {
+            continue;
+        }
+        bool optional;
+        bool directory;
+        cppu::decodeRdbUri(&uri, &optional, &directory);
+        if (directory) {
+            readRdbDirectory(uri, optional);
+        } else {
+            readRdbFile(uri, optional);
+        }
+    }
+}
+
+void cppuhelper::TypeManager::readRdbDirectory(
+    std::u16string_view uri, bool optional)
+{
+    osl::Directory dir = OUString(uri);
+    switch (dir.open()) {
+    case osl::FileBase::E_None:
+        break;
+    case osl::FileBase::E_NOENT:
+        if (optional) {
+            SAL_INFO("cppuhelper", "Ignored optional " << OUString(uri));
+            return;
+        }
+        [[fallthrough]];
+    default:
+        throw cpo::uno::DeploymentException(
+            OUString::Concat("Cannot open directory ") + uri,
+            static_cast< cppu::OWeakObject * >(this));
+    }
+    for (;;) {
+        OUString url;
+        if (!cppu::nextDirectoryItem(dir, &url)) {
+            break;
+        }
+        readRdbFile(url, false);
+    }
+}
+
+void cppuhelper::TypeManager::readRdbFile(
+    std::u16string_view uri, bool optional)
+{
+    try {
+        manager_->addProvider(OUString(uri));
+    } catch (unoidl::NoSuchFileException &) {
+        if (!optional) {
+            throw cpo::uno::DeploymentException(
+                OUString::Concat(uri) + ": no such file",
+                static_cast< cppu::OWeakObject * >(this));
+        }
+        SAL_INFO("cppuhelper", "Ignored optional " << OUString(uri));
+    } catch (unoidl::FileFormatException & e) {
+            throw cpo::uno::DeploymentException(
+                ("unoidl::FileFormatException for <" + e.getUri() + ">: "
+                 + e.getDetail()),
+                static_cast< cppu::OWeakObject * >(this));
+    }
+}
+
+cpo::uno::Any cppuhelper::TypeManager::getSequenceType(
+    OUString const & name)
+{
+    assert(name.startsWith("[]"));
+    return cpo::uno::Any(
+        cpo::uno::Reference< css::reflection::XTypeDescription >(
+            new SequenceTypeDescription(
+                this, name, name.copy(std::strlen("[]")))));
+}
+
+cpo::uno::Any cppuhelper::TypeManager::getInstantiatedStruct(
+    OUString const & name, sal_Int32 separator)
+{
+    assert(name.indexOf('<') == separator && separator != -1);
+    rtl::Reference< unoidl::Entity > ent(findEntity(name.copy(0, separator)));
+    if (!ent.is()
+        || (ent->getSort()
+            != unoidl::Entity::SORT_POLYMORPHIC_STRUCT_TYPE_TEMPLATE))
+    {
+        return cpo::uno::Any();
+    }
+    rtl::Reference< unoidl::PolymorphicStructTypeTemplateEntity > ent2(
+        static_cast< unoidl::PolymorphicStructTypeTemplateEntity * >(
+            ent.get()));
+    std::vector< OUString > args;
+    sal_Int32 i = separator;
+    do {
+        ++i; // skip '<' or ','
+        sal_Int32 j = i;
+        for (sal_Int32 level = 0; j != name.getLength(); ++j) {
+            sal_Unicode c = name[j];
+            if (c == ',') {
+                if (level == 0) {
+                    break;
+                }
+            } else if (c == '<') {
+                ++level;
+            } else if (c == '>') {
+                if (level == 0) {
+                    break;
+                }
+                --level;
+            }
+        }
+        if (j != name.getLength()) {
+            args.push_back(name.copy(i, j - i));
+        }
+        i = j;
+    } while (i != name.getLength() && name[i] != '>');
+    if (i != name.getLength() - 1 || name[i] != '>'
+        || args.size() != ent2->getTypeParameters().size())
+    {
+        return cpo::uno::Any();
+    }
+    return cpo::uno::Any(
+        cpo::uno::Reference< css::reflection::XTypeDescription >(
+            new InstantiatedPolymorphicStructTypeDescription(
+                this, name, ent2, std::move(args))));
+}
+
+cpo::uno::Any cppuhelper::TypeManager::getInterfaceMember(
+    std::u16string_view name, std::size_t separator)
+{
+    assert(name.find(u"::") == separator && separator != std::u16string_view::npos);
+    cpo::uno::Reference< css::reflection::XInterfaceTypeDescription2 > ifc(
+        resolveTypedefs(find(OUString(name.substr(0, separator)))), cpo::uno::UNO_QUERY);
+    if (!ifc.is()) {
+        return cpo::uno::Any();
+    }
+    std::u16string_view member = name.substr(separator + std::strlen("::"));
+    const cpo::uno::Sequence<
+        cpo::uno::Reference<
+            css::reflection::XInterfaceMemberTypeDescription > > mems(
+                ifc->getMembers());
+    for (const auto & m : mems) {
+        if (m->getMemberName() == member) {
+            return cpo::uno::Any(
+                cpo::uno::Reference< css::reflection::XTypeDescription >(m));
+        }
+    }
+    return cpo::uno::Any();
+}
+
+cpo::uno::Any cppuhelper::TypeManager::getNamed(
+    OUString const & name, rtl::Reference< unoidl::Entity > const & entity)
+{
+    assert(entity.is());
+    switch (entity->getSort()) {
+    case unoidl::Entity::SORT_MODULE:
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new ModuleDescription(
+                    this, name,
+                    static_cast< unoidl::ModuleEntity * >(entity.get()))));
+    case unoidl::Entity::SORT_ENUM_TYPE:
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new EnumTypeDescription(
+                    name,
+                    static_cast< unoidl::EnumTypeEntity * >(entity.get()))));
+    case unoidl::Entity::SORT_PLAIN_STRUCT_TYPE:
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new PlainStructTypeDescription(
+                    this, name,
+                    static_cast< unoidl::PlainStructTypeEntity * >(
+                        entity.get()))));
+    case unoidl::Entity::SORT_POLYMORPHIC_STRUCT_TYPE_TEMPLATE:
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new PolymorphicStructTypeTemplateDescription(
+                    this, name,
+                    static_cast<
+                        unoidl::PolymorphicStructTypeTemplateEntity * >(
+                            entity.get()))));
+    case unoidl::Entity::SORT_EXCEPTION_TYPE:
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new ExceptionTypeDescription(
+                    this, name,
+                    static_cast< unoidl::ExceptionTypeEntity * >(
+                        entity.get()))));
+    case unoidl::Entity::SORT_INTERFACE_TYPE:
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new InterfaceTypeDescription(
+                    this, name,
+                    static_cast< unoidl::InterfaceTypeEntity * >(
+                        entity.get()))));
+    case unoidl::Entity::SORT_TYPEDEF:
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new TypedefDescription(
+                    this, name,
+                    static_cast< unoidl::TypedefEntity * >(entity.get()))));
+    case unoidl::Entity::SORT_CONSTANT_GROUP:
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new ConstantGroupDescription(
+                    name,
+                    static_cast< unoidl::ConstantGroupEntity * >(
+                        entity.get()))));
+    case unoidl::Entity::SORT_SINGLE_INTERFACE_BASED_SERVICE:
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new SingleInterfaceBasedServiceDescription(
+                    this, name,
+                    static_cast< unoidl::SingleInterfaceBasedServiceEntity * >(
+                        entity.get()))));
+    case unoidl::Entity::SORT_ACCUMULATION_BASED_SERVICE:
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new AccumulationBasedServiceDescription(
+                    this, name,
+                    static_cast< unoidl::AccumulationBasedServiceEntity * >(
+                        entity.get()))));
+    case unoidl::Entity::SORT_INTERFACE_BASED_SINGLETON:
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new InterfaceBasedSingletonDescription(
+                    this, name,
+                    static_cast< unoidl::InterfaceBasedSingletonEntity * >(
+                        entity.get()))));
+    case unoidl::Entity::SORT_SERVICE_BASED_SINGLETON:
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new ServiceBasedSingletonDescription(
+                    this, name,
+                    static_cast< unoidl::ServiceBasedSingletonEntity * >(
+                        entity.get()))));
+    default:
+        for (;;) { std::abort(); } // this cannot happen
+    }
+}
+
+cpo::uno::Any cppuhelper::TypeManager::getEnumMember(
+    rtl::Reference< unoidl::EnumTypeEntity > const & entity,
+    std::u16string_view member)
+{
+    auto i = std::find_if(entity->getMembers().begin(), entity->getMembers().end(),
+        [&member](const unoidl::EnumTypeEntity::Member& rMember) { return rMember.name == member; });
+    if (i != entity->getMembers().end())
+        return cpo::uno::Any(i->value);
+    return cpo::uno::Any();
+}
+
+cpo::uno::Any cppuhelper::TypeManager::getConstant(
+    std::u16string_view constantGroupName,
+    rtl::Reference< unoidl::ConstantGroupEntity > const & entity,
+    std::u16string_view member)
+{
+    auto i = std::find_if(entity->getMembers().begin(), entity->getMembers().end(),
+        [&member](const unoidl::ConstantGroupEntity::Member& rMember) { return rMember.name == member; });
+    if (i != entity->getMembers().end())
+        return cpo::uno::Any(
+            cpo::uno::Reference< css::reflection::XTypeDescription >(
+                new ConstantDescription(OUString(constantGroupName), *i)));
+    return cpo::uno::Any();
+}
+
+rtl::Reference< unoidl::Entity > cppuhelper::TypeManager::findEntity(
+    OUString const & name)
+{
+    try {
+        return manager_->findEntity(name);
+    } catch (unoidl::FileFormatException & e) {
+        throw cpo::uno::DeploymentException(
+            ("unoidl::FileFormatException for <" + e.getUri() + ">: "
+             + e.getDetail()),
+            static_cast< cppu::OWeakObject * >(this));
+    }
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

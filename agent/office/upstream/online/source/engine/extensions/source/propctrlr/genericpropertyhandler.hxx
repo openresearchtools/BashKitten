@@ -1,0 +1,139 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include "pcrcommontypes.hxx"
+#include "pcrcommon.hxx"
+
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/beans/XIntrospectionAccess.hpp>
+#include <com/sun/star/inspection/XPropertyHandler.hpp>
+#include <com/sun/star/script/XTypeConverter.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <comphelper/interfacecontainer2.hxx>
+#include <cppuhelper/compbase.hxx>
+#include <rtl/ref.hxx>
+
+#include <map>
+
+
+namespace pcr
+{
+
+
+    struct TypeLess
+    {
+        bool operator()( const cpo::uno::Type& _rLHS, const cpo::uno::Type& _rRHS ) const
+        {
+            return _rLHS.getTypeName() < _rRHS.getTypeName();
+        }
+    };
+
+    class IPropertyEnumRepresentation;
+
+    //= GenericPropertyHandler
+
+    typedef ::cppu::WeakComponentImplHelper    <   css::inspection::XPropertyHandler
+                                                ,  css::lang::XServiceInfo
+                                                >   GenericPropertyHandler_Base;
+    class GenericPropertyHandler final : public GenericPropertyHandler_Base
+    {
+        mutable ::osl::Mutex    m_aMutex;
+
+        /// the service factory for creating services
+        cpo::uno::Reference< cpo::uno::XComponentContext >        m_xContext;
+        /// need this to keep alive as long as m_xComponent lives
+        cpo::uno::Reference< css::beans::XIntrospectionAccess >   m_xComponentIntrospectionAccess;
+        /// the properties of the object we're handling
+        cpo::uno::Reference< css::beans::XPropertySet >           m_xComponent;
+        /// cached interface of ->m_xComponent
+        cpo::uno::Reference< css::beans::XPropertyState >         m_xPropertyState;
+        /// type converter, needed on various occasions
+        cpo::uno::Reference< css::script::XTypeConverter >        m_xTypeConverter;
+        /// cache of our supported properties
+        PropertyMap                                                                         m_aProperties;
+        /// property change listeners
+        ::comphelper::OInterfaceContainerHelper2                                                   m_aPropertyListeners;
+        std::map< cpo::uno::Type, ::rtl::Reference< IPropertyEnumRepresentation >, TypeLess >
+                                                                                            m_aEnumConverters;
+
+        /// has ->m_aProperties been initialized?
+        bool    m_bPropertyMapInitialized : 1;
+
+    public:
+        explicit GenericPropertyHandler(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext
+        );
+
+        virtual ~GenericPropertyHandler() override;
+
+    private:
+        // XPropertyHandler overridables
+        virtual void                                                inspect( const cpo::uno::Reference< cpo::uno::XInterface >& _rxIntrospectee ) override;
+        virtual cpo::uno::Any                                       getPropertyValue( const OUString& _rPropertyName ) override;
+        virtual void                                                setPropertyValue( const OUString& _rPropertyName, const cpo::uno::Any& _rValue ) override;
+        virtual cpo::uno::Any                                       convertToPropertyValue( const OUString& _rPropertyName, const cpo::uno::Any& _rControlValue ) override;
+        virtual cpo::uno::Any                                       convertToControlValue( const OUString& _rPropertyName, const cpo::uno::Any& _rPropertyValue, const cpo::uno::Type& _rControlValueType ) override;
+        virtual css::beans::PropertyState                           getPropertyState( const OUString& _rPropertyName ) override;
+        virtual void                                                addPropertyChangeListener( const cpo::uno::Reference< css::beans::XPropertyChangeListener >& _rxListener ) override;
+        virtual void                                                removePropertyChangeListener( const cpo::uno::Reference< css::beans::XPropertyChangeListener >& _rxListener ) override;
+        virtual cpo::uno::Sequence< css::beans::Property >
+                                                                    getSupportedProperties() override;
+        virtual cpo::uno::Sequence< OUString >
+                                                                    getSupersededProperties() override;
+        virtual cpo::uno::Sequence< OUString >                      getActuatingProperties() override;
+        virtual css::inspection::LineDescriptor                     describePropertyLine( const OUString& _rPropertyName, const cpo::uno::Reference< css::inspection::XPropertyControlFactory >& _rxControlFactory ) override;
+        virtual bool                                            isComposable( const OUString& _rPropertyName ) override;
+        virtual css::inspection::InteractiveSelectionResult
+                                                                    onInteractivePropertySelection( const OUString& _rPropertyName, bool _bPrimary, cpo::uno::Any& _rData, const cpo::uno::Reference< css::inspection::XObjectInspectorUI >& _rxInspectorUI ) override;
+        virtual void                                                actuatingPropertyChanged( const OUString& _rActuatingPropertyName, const cpo::uno::Any& _rNewValue, const cpo::uno::Any& _rOldValue, const cpo::uno::Reference< css::inspection::XObjectInspectorUI >& _rxInspectorUI, bool _bFirstTimeInit ) override;
+        virtual bool                                            suspend( bool _bSuspend ) override;
+
+        // XComponent
+        DECLARE_XCOMPONENT()
+        virtual void                                                disposing() override;
+
+        // XServiceInfo
+        virtual OUString getImplementationName(  ) override;
+        virtual bool supportsService( const OUString& ServiceName ) override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+        /** ensures that ->m_aProperties is initialized
+            @precond
+                our mutex is locked
+        */
+        void    impl_ensurePropertyMap();
+
+        /** retrieves the enum converter for the given ENUM type
+        */
+        ::rtl::Reference< IPropertyEnumRepresentation >
+                impl_getEnumConverter( const cpo::uno::Type& _rEnumType );
+
+        GenericPropertyHandler( const GenericPropertyHandler& ) = delete;
+        GenericPropertyHandler& operator=( const GenericPropertyHandler& ) = delete;
+    };
+
+
+} // namespace pcr
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

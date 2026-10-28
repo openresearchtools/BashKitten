@@ -1,0 +1,255 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <mutex>
+#include <rtl/ustring.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <comphelper/interfacecontainer4.hxx>
+#include <cpo/uno/XInterface.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/ucb/XCommandProcessor.hpp>
+#include <com/sun/star/beans/XPropertiesChangeNotifier.hpp>
+#include <com/sun/star/ucb/XContent.hpp>
+#include <com/sun/star/ucb/XDynamicResultSet.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/sdbc/XRow.hpp>
+#include <com/sun/star/beans/Property.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/ucb/XCommandInfo.hpp>
+#include <com/sun/star/ucb/InsertCommandArgument.hpp>
+#include <com/sun/star/beans/XPropertySetInfo.hpp>
+#include <com/sun/star/beans/XPropertyContainer.hpp>
+#include <com/sun/star/beans/XPropertySetInfoChangeNotifier.hpp>
+#include <com/sun/star/beans/XPropertySetInfoChangeListener.hpp>
+#include <com/sun/star/container/XChild.hpp>
+#include <com/sun/star/ucb/XContentCreator.hpp>
+#include <com/sun/star/ucb/OpenCommandArgument2.hpp>
+#include <com/sun/star/ucb/TransferInfo.hpp>
+#include "filtask.hxx"
+
+
+namespace fileaccess {
+
+    class PropertyListeners;
+    class TaskManager;
+
+    class BaseContent:
+        public cppu::WeakImplHelper<
+            css::lang::XComponent,
+            css::lang::XServiceInfo,
+            css::ucb::XCommandProcessor,
+            css::beans::XPropertiesChangeNotifier,
+            css::beans::XPropertyContainer,
+            css::beans::XPropertySetInfoChangeNotifier,
+            css::ucb::XContentCreator,
+            css::container::XChild,
+            css::ucb::XContent>,
+        public fileaccess::Notifier    // implementation class
+    {
+    private:
+
+        // A special creator for inserted contents; Creates an ugly object
+        BaseContent( TaskManager* pMyShell,
+                     OUString parentName,
+                     bool bFolder );
+
+    public:
+        enum state { NameForInsertionSet = 1,
+                     JustInserted = 2,
+                     Deleted = 4,
+                     FullFeatured = 8 };
+
+        BaseContent(
+            TaskManager* pMyShell,
+            const cpo::uno::Reference< css::ucb::XContentIdentifier >& xContentIdentifier,
+            OUString aUnqPath, sal_uInt16 nState = FullFeatured);
+
+        virtual ~BaseContent() override;
+
+        // XComponent
+        virtual void
+        dispose() override;
+
+        virtual void
+        addEventListener(
+            const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+
+        virtual void
+        removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
+
+
+        // XServiceInfo
+        virtual OUString
+        getImplementationName() override;
+
+        virtual bool
+        supportsService( const OUString& ServiceName ) override;
+
+        virtual cpo::uno::Sequence< OUString >
+        getSupportedServiceNames() override;
+
+
+        // XCommandProcessor
+        virtual sal_Int32
+        createCommandIdentifier() override;
+
+        virtual cpo::uno::Any
+        execute(
+            const css::ucb::Command& aCommand,
+            sal_Int32 CommandId,
+            const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment ) override;
+
+        virtual void
+        abort( sal_Int32 CommandId ) override;
+
+
+        // XContent
+        virtual cpo::uno::Reference< css::ucb::XContentIdentifier >
+        getIdentifier() override;
+
+        virtual OUString
+        getContentType() override;
+
+        virtual void
+        addContentEventListener(
+            const cpo::uno::Reference< css::ucb::XContentEventListener >& Listener ) override;
+
+        virtual void
+        removeContentEventListener(
+            const cpo::uno::Reference< css::ucb::XContentEventListener >& Listener ) override;
+
+        // XPropertiesChangeNotifier
+
+        virtual void
+        addPropertiesChangeListener(
+            const cpo::uno::Sequence< OUString >& PropertyNames,
+            const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& Listener ) override;
+
+        virtual void
+        removePropertiesChangeListener( const cpo::uno::Sequence< OUString >& PropertyNames,
+                                        const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& Listener ) override;
+
+        // XPropertyContainer
+
+        virtual void
+        addProperty(
+            const OUString& Name,
+            sal_Int16 Attributes,
+            const cpo::uno::Any& DefaultValue ) override;
+
+        virtual void
+        removeProperty( const OUString& Name ) override;
+
+        // XPropertySetInfoChangeNotifier
+
+        virtual void
+        addPropertySetInfoChangeListener(
+            const cpo::uno::Reference< css::beans::XPropertySetInfoChangeListener >& Listener ) override;
+
+        virtual void
+        removePropertySetInfoChangeListener(
+            const cpo::uno::Reference< css::beans::XPropertySetInfoChangeListener >& Listener ) override;
+
+
+        // XContentCreator
+
+        virtual cpo::uno::Sequence< css::ucb::ContentInfo >
+        queryCreatableContentsInfo() override;
+
+        virtual cpo::uno::Reference< css::ucb::XContent >
+        createNewContent( const css::ucb::ContentInfo& Info ) override;
+
+
+        // XChild
+        virtual cpo::uno::Reference< cpo::uno::XInterface >
+        getParent() override;
+
+        // Not supported
+        virtual void
+        setParent( const cpo::uno::Reference< cpo::uno::XInterface >& Parent ) override;
+
+
+        // Notifier
+
+        std::optional<ContentEventNotifier> cDEL() override;
+        std::optional<ContentEventNotifier> cEXC( const OUString& aNewName ) override;
+        std::optional<ContentEventNotifier> cCEL() override;
+        std::optional<PropertySetInfoChangeNotifier> cPSL() override;
+        std::optional<PropertyChangeNotifier> cPCL() override;
+
+    private:
+        // Data members
+        TaskManager*                                                m_pMyShell;
+        cpo::uno::Reference< css::ucb::XContentIdentifier >   m_xContentIdentifier;
+        OUString                                              m_aUncPath;
+        bool                                                  m_bFolder;
+        sal_uInt16                                            m_nState;
+
+        std::mutex                         m_aMutex;
+        comphelper::OInterfaceContainerHelper4<css::lang::XEventListener>   m_aDisposeEventListeners;
+        comphelper::OInterfaceContainerHelper4<css::ucb::XContentEventListener> m_aContentEventListeners;
+        comphelper::OInterfaceContainerHelper4<css::beans::XPropertySetInfoChangeListener> m_aPropertySetInfoChangeListeners;
+        std::unique_ptr<PropertyListeners>                  m_pPropertyListener;
+
+
+        // Private Methods
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference< css::ucb::XCommandInfo >
+        getCommandInfo();
+
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference< css::beans::XPropertySetInfo >
+        getPropertySetInfo();
+
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference< css::sdbc::XRow >
+        getPropertyValues(
+            sal_Int32 nMyCommandIdentifier,
+            const cpo::uno::Sequence< css::beans::Property >& PropertySet );
+
+        cpo::uno::Sequence< cpo::uno::Any >
+        setPropertyValues(
+            sal_Int32 nMyCommandIdentifier,
+            const cpo::uno::Sequence< css::beans::PropertyValue >& Values );
+
+        cpo::uno::Reference< css::ucb::XDynamicResultSet >
+        open(
+            sal_Int32 nMyCommandIdentifier,
+            const css::ucb::OpenCommandArgument2& aCommandArgument );
+
+        void
+        deleteContent( sal_Int32 nMyCommandIdentifier );
+
+
+        void
+        transfer( sal_Int32 nMyCommandIdentifier,
+                  const css::ucb::TransferInfo& aTransferInfo );
+
+        void
+        insert( sal_Int32 nMyCommandIdentifier,
+                const css::ucb::InsertCommandArgument& aInsertArgument );
+
+        void endTask( sal_Int32 CommandId );
+    };
+
+}             // end namespace fileaccess
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

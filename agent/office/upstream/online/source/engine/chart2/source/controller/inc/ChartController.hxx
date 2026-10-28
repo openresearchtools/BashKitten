@@ -1,0 +1,591 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <LifeTime.hxx>
+#include <ReferenceSizeProvider.hxx>
+#include "AccessibleChartView.hxx"
+#include "CommandDispatchContainer.hxx"
+#include "SelectionHelper.hxx"
+
+#include <svx/svdtypes.hxx>
+#include <vcl/timer.hxx>
+
+#include <cppuhelper/implbase.hxx>
+#include <o3tl/sorted_vector.hxx>
+#include <salhelper/simplereferenceobject.hxx>
+
+#include <com/sun/star/frame/XDispatchProvider.hpp>
+#include <com/sun/star/ui/XContextMenuInterception.hpp>
+#include <com/sun/star/util/XModeChangeListener.hpp>
+#include <com/sun/star/util/XCloseListener.hpp>
+#include <com/sun/star/util/XModifyListener.hpp>
+#include <com/sun/star/frame/XController2.hpp>
+#include <com/sun/star/frame/XLayoutManagerListener.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+
+#include <COKit/COKit.hxx>
+
+#include <memory>
+#include <string_view>
+
+namespace com::sun::star::awt { class XWindow; }
+namespace com::sun::star::awt { struct Point; }
+namespace com::sun::star::document { class XUndoManager; }
+namespace com::sun::star::frame { class XDispatch; }
+namespace com::sun::star::frame { class XLayoutManagerEventBroadcaster; }
+namespace com::sun::star::graphic { class XGraphic; }
+namespace cpo::uno { class XComponentContext; }
+namespace com::sun::star::view { class XSelectionSupplier; }
+
+class SdrModel;
+
+namespace svt
+{
+    class AcceleratorExecute;
+}
+
+namespace svx::sidebar {
+    class SelectionChangeHandler;
+}
+
+namespace weld {
+    class Window;
+}
+
+class DropTargetHelper;
+
+namespace chart
+{
+
+class UndoGuard;
+class ChartView;
+class ChartWindow;
+class DrawModelWrapper;
+class DrawViewWrapper;
+class ViewElementListProvider;
+class Diagram;
+class AccessibleTextHelper;
+
+enum ChartDrawMode { CHARTDRAW_INSERT, CHARTDRAW_SELECT };
+
+
+class ChartController final : public ::cppu::WeakImplHelper <
+         css::frame::XController2   //comprehends XComponent (css::frame::XController is required interface)
+        ,css::frame::XDispatchProvider     //(required interface)
+        ,css::view::XSelectionSupplier     //(optional interface)
+        ,css::ui::XContextMenuInterception //(optional interface)
+        ,css::util::XCloseListener         //(needed for communication with XModel)
+        ,css::frame::XDispatch
+        ,css::awt::XWindow //this is the Window Controller part of this Controller, that will be given to a Frame via setComponent
+        ,css::util::XModifyListener
+        ,css::util::XModeChangeListener
+        ,css::frame::XLayoutManagerListener
+        >
+{
+public:
+    ChartController() = delete;
+    explicit ChartController(cpo::uno::Reference< cpo::uno::XComponentContext > xContext);
+    virtual ~ChartController() override;
+
+    OUString GetContextName();
+
+    // css::frame::XController (required interface)
+    virtual void
+        attachFrame( const cpo::uno::Reference< css::frame::XFrame > & xFrame ) override;
+
+    virtual bool
+        attachModel( const cpo::uno::Reference< css::frame::XModel > & xModel ) override;
+
+    virtual cpo::uno::Reference< css::frame::XFrame >
+        getFrame() override;
+
+    virtual cpo::uno::Reference< css::frame::XModel >
+        getModel() override;
+
+    virtual cpo::uno::Any
+        getViewData() override;
+
+    virtual void
+        restoreViewData( const cpo::uno::Any& rValue ) override;
+
+    virtual bool
+        suspend( bool bSuspend ) override;
+
+    // css::frame::XController2
+    virtual cpo::uno::Reference<css::awt::XWindow> getComponentWindow() override;
+    virtual OUString getViewControllerName() override;
+    virtual cpo::uno::Sequence<css::beans::PropertyValue> getCreationArguments() override;
+    virtual cpo::uno::Reference<css::ui::XSidebarProvider> getSidebar() override;
+
+    // css::lang::XComponent (base of XController)
+    virtual void
+        dispose() override;
+
+    virtual void
+        addEventListener( const cpo::uno::Reference< css::lang::XEventListener > & xListener ) override;
+
+    virtual void
+        removeEventListener( const cpo::uno::Reference< css::lang::XEventListener > & xListener ) override;
+
+    // css::frame::XDispatchProvider (required interface)
+    virtual cpo::uno::Reference< css::frame::XDispatch>
+        queryDispatch( const css::util::URL& rURL
+                            , const OUString& rTargetFrameName
+                            , sal_Int32 nSearchFlags) override;
+
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::frame::XDispatch > >
+        queryDispatches( const cpo::uno::Sequence< css::frame::DispatchDescriptor > & xDescripts) override;
+
+    // css::view::XSelectionSupplier (optional interface)
+    virtual bool
+        select( const cpo::uno::Any& rSelection ) override;
+
+    virtual cpo::uno::Any
+        getSelection() override;
+
+    virtual void
+        addSelectionChangeListener( const cpo::uno::Reference< css::view::XSelectionChangeListener > & xListener ) override;
+
+    virtual void
+        removeSelectionChangeListener( const cpo::uno::Reference< css::view::XSelectionChangeListener > & xListener ) override;
+
+    // css::ui::XContextMenuInterception (optional interface)
+    virtual void
+        registerContextMenuInterceptor( const cpo::uno::Reference< css::ui::XContextMenuInterceptor > & xInterceptor) override;
+
+    virtual void
+        releaseContextMenuInterceptor( const cpo::uno::Reference< css::ui::XContextMenuInterceptor > & xInterceptor) override;
+
+    //additional interfaces
+
+    // css::util::XCloseListener
+    virtual void
+        queryClosing( const css::lang::EventObject& Source
+                            , bool GetsOwnership ) override;
+
+    virtual void
+        notifyClosing( const css::lang::EventObject& Source ) override;
+
+    // css::util::XEventListener (base of XCloseListener and XModifyListener)
+    virtual void
+        disposing( const css::lang::EventObject& Source ) override;
+
+    // css::frame::XDispatch
+
+    virtual void
+        dispatch( const css::util::URL& aURL
+                    , const cpo::uno::Sequence< css::beans::PropertyValue >& aArgs ) override;
+
+    virtual void
+        addStatusListener( const cpo::uno::Reference< css::frame::XStatusListener >& xControl
+                    , const css::util::URL& aURL ) override;
+
+    virtual void
+        removeStatusListener( const cpo::uno::Reference< css::frame::XStatusListener >& xControl
+                    , const css::util::URL& aURL ) override;
+
+    // css::awt::XWindow
+    virtual void
+        setPosSize( sal_Int32 X, sal_Int32 Y
+                    , sal_Int32 Width, sal_Int32 Height, sal_Int16 Flags ) override;
+
+    virtual css::awt::Rectangle
+        getPosSize() override;
+
+    virtual void
+        setVisible( bool Visible ) override;
+
+    virtual void
+        setEnable( bool Enable ) override;
+
+    virtual void
+        setFocus() override;
+
+    virtual void
+        addWindowListener( const cpo::uno::Reference< css::awt::XWindowListener >& xListener ) override;
+
+    virtual void
+        removeWindowListener( const cpo::uno::Reference< css::awt::XWindowListener >& xListener ) override;
+
+    virtual void
+        addFocusListener( const cpo::uno::Reference< css::awt::XFocusListener >& xListener ) override;
+
+    virtual void
+        removeFocusListener( const cpo::uno::Reference< css::awt::XFocusListener >& xListener ) override;
+
+    virtual void
+        addKeyListener( const cpo::uno::Reference< css::awt::XKeyListener >& xListener ) override;
+
+    virtual void
+        removeKeyListener( const cpo::uno::Reference< css::awt::XKeyListener >& xListener ) override;
+
+    virtual void
+        addMouseListener( const cpo::uno::Reference< css::awt::XMouseListener >& xListener ) override;
+
+    virtual void
+        removeMouseListener( const cpo::uno::Reference< css::awt::XMouseListener >& xListener ) override;
+
+    virtual void
+        addMouseMotionListener( const cpo::uno::Reference< css::awt::XMouseMotionListener >& xListener ) override;
+
+    virtual void
+        removeMouseMotionListener( const cpo::uno::Reference< css::awt::XMouseMotionListener >& xListener ) override;
+
+    virtual void
+        addPaintListener( const cpo::uno::Reference< css::awt::XPaintListener >& xListener ) override;
+
+    virtual void
+        removePaintListener( const cpo::uno::Reference< css::awt::XPaintListener >& xListener ) override;
+
+    // css::util::XModifyListener
+    virtual void modified(
+        const css::lang::EventObject& aEvent ) override;
+
+    // css::util::XModeChangeListener
+    virtual void modeChanged(
+        const css::util::ModeChangeEvent& _rSource ) override;
+
+    // css::frame::XLayoutManagerListener
+    virtual void layoutEvent(
+        const css::lang::EventObject& aSource,
+        ::sal_Int16 eLayoutEvent,
+        const cpo::uno::Any& aInfo ) override;
+
+    // WindowController stuff
+    void PrePaint();
+    void execute_Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect);
+    void execute_MouseButtonDown( const MouseEvent& rMEvt );
+    void execute_MouseMove( const MouseEvent& rMEvt );
+    void execute_MouseButtonUp( const MouseEvent& rMEvt );
+    void execute_Resize();
+    void execute_Command( const CommandEvent& rCEvt );
+    bool execute_KeyInput( const KeyEvent& rKEvt );
+
+    /** get help text to be shown in a quick help
+
+        @param aAtLogicPosition the position in logic coordinates (of the
+                                window) of the mouse cursor to determine for
+                                which object help is requested.
+
+        @param bIsBalloonHelp determines whether to return the long text version
+                              (balloon help) or the shorter one (quick help).
+
+        @param rOutQuickHelpText is filled with the quick help text
+
+        @param rOutEqualRect is filled with a rectangle that denotes the region
+                             in which the quick help does not change.
+
+        @return </true>, if a quick help should be shown.
+     */
+    bool requestQuickHelp(
+        ::Point aAtLogicPosition, bool bIsBalloonHelp,
+        OUString & rOutQuickHelpText, css::awt::Rectangle & rOutEqualRect );
+
+    rtl::Reference<AccessibleChartView> CreateAccessible();
+
+    /** Creates a helper accessibility class that must be initialized via initialize().  For
+        parameters see
+
+        The returned object should not be used directly.  Instead a proxy object
+        should use this helper to retrieve its children and add them to its own
+        children.
+     */
+    rtl::Reference< ::chart::AccessibleTextHelper > createAccessibleTextContext();
+
+    static bool isObjectDeleteable( const cpo::uno::Any& rSelection );
+
+    void setDrawMode( ChartDrawMode eMode ) { m_eDrawMode = eMode; }
+
+    bool isShapeContext() const;
+    bool IsTextEdit() const;
+
+    ViewElementListProvider getViewElementListProvider();
+    DrawModelWrapper* GetDrawModelWrapper();
+    DrawViewWrapper* GetDrawViewWrapper();
+    ChartWindow* GetChartWindow() const;
+    weld::Window* GetChartFrame();
+    bool isAdditionalShapeSelected() const;
+    void SetAndApplySelection(const cpo::uno::Reference<css::drawing::XShape>& rxShape);
+    void StartTextEdit( const Point* pMousePixel = nullptr );
+
+    void NotifyUndoActionHdl( std::unique_ptr<SdrUndoAction> );
+
+    rtl::Reference<::chart::ChartView> const & getChartView() const { return m_xChartView; }
+
+    rtl::Reference<::chart::ChartModel> getChartModel();
+    rtl::Reference<::chart::Diagram> getFirstDiagram();
+
+    const Selection& getSelectionMember() const { return m_aSelection; }
+
+    void setTheme(sal_uInt32 nIndex);
+    void saveTheme(sal_uInt32 nIndex);
+
+private:
+    class TheModel : public salhelper::SimpleReferenceObject
+    {
+        public:
+            explicit TheModel( rtl::Reference<::chart::ChartModel> xModel );
+
+            virtual ~TheModel() override;
+
+            void        addListener( ChartController* pController );
+            void        removeListener(  ChartController* pController );
+            void        tryTermination();
+            const rtl::Reference<::chart::ChartModel>&
+                        getModel() const { return m_xModel;}
+
+        private:
+            rtl::Reference<::chart::ChartModel>     m_xModel;
+
+            //the ownership between model and controller is not clear at first
+            //each controller might consider himself as owner of the model first
+            bool m_bOwnership;
+    };
+    class TheModelRef final
+    {
+        public:
+            TheModelRef( TheModel* pTheModel, ::osl::Mutex& rMutex );
+            TheModelRef( const TheModelRef& rTheModel, ::osl::Mutex& rMutex );
+            TheModelRef& operator=(ChartController::TheModel* pTheModel);
+            TheModelRef& operator=(const TheModelRef& rTheModel);
+            ~TheModelRef();
+            bool is() const;
+            TheModel* operator->() const { return m_xTheModel.get(); }
+        private:
+            rtl::Reference<TheModel>  m_xTheModel;
+            ::osl::Mutex&             m_rModelMutex;
+    };
+
+    mutable ::apphelper::LifeTimeManager m_aLifeTimeManager;
+
+    bool m_bSuspended;
+
+    cpo::uno::Reference< cpo::uno::XComponentContext> m_xCC;
+
+    //model
+    cpo::uno::Reference< css::frame::XFrame > m_xFrame;
+    mutable ::osl::Mutex m_aModelMutex;
+    TheModelRef m_aModel;
+
+    //view
+    cpo::uno::Reference<css::awt::XWindow> m_xViewWindow;
+    rtl::Reference<::chart::ChartView> m_xChartView;
+    std::shared_ptr< DrawModelWrapper > m_pDrawModelWrapper;
+    std::unique_ptr<DrawViewWrapper> m_pDrawViewWrapper;
+
+    Selection m_aSelection;
+    SdrDragMode m_eDragMode;
+
+    Timer m_aDoubleClickTimer;
+    bool m_bWaitingForDoubleClick;
+    bool m_bWaitingForMouseUp;
+    bool m_bFieldButtonDown;
+
+    bool m_bConnectingToView;
+    bool m_bDisposed;
+
+    cpo::uno::Reference< css::document::XUndoManager > m_xUndoManager;
+    std::unique_ptr< UndoGuard > m_pTextActionUndoGuard;
+
+    std::unique_ptr< ::svt::AcceleratorExecute > m_apAccelExecute;
+
+    CommandDispatchContainer m_aDispatchContainer;
+
+    std::unique_ptr< DropTargetHelper > m_apDropTargetHelper;
+    cpo::uno::Reference<
+            css::frame::XLayoutManagerEventBroadcaster > m_xLayoutManagerEventBroadcaster;
+
+    ChartDrawMode m_eDrawMode;
+
+    rtl::Reference<svx::sidebar::SelectionChangeHandler> mpSelectionChangeHandler;
+
+    bool impl_isDisposedOrSuspended() const;
+    ReferenceSizeProvider impl_createReferenceSizeProvider();
+    void impl_adaptDataSeriesAutoResize();
+
+    void impl_createDrawViewController();
+    void impl_deleteDrawViewController();
+
+    //executeDispatch methods
+    void executeDispatch_ObjectProperties();
+    void executeDispatch_FormatObject( std::u16string_view rDispatchCommand );
+    void executeDlg_ObjectProperties( const OUString& rObjectCID );
+    void executeDlg_ObjectProperties_withUndoGuard( std::shared_ptr<UndoGuard> aUndoGuard, const OUString& rObjectCID, bool bSuccessOnUnchanged );
+
+    void executeDispatch_ChartType();
+    void executeDispatch_ManageThemes(bool bSelectOnly = false);
+    void executeDispatch_SaveToNewTheme();
+
+    void executeDispatch_InsertTitles();
+    void executeDispatch_InsertLegend();
+    void executeDispatch_DeleteLegend();
+    void executeDispatch_OpenLegendDialog();
+    void executeDispatch_InsertAxes();
+    void executeDispatch_InsertGrid();
+
+    void executeDispatch_InsertDataTable();
+    void executeDispatch_DeleteDataTable();
+    void executeDispatch_OpenInsertDataTableDialog();
+
+    void executeDispatch_InsertMenu_DataLabels();
+    void executeDispatch_InsertMenu_Trendlines();
+    void executeDispatch_InsertMenu_MeanValues();
+
+    void executeDispatch_InsertMeanValue();
+    void executeDispatch_InsertTrendline();
+    void executeDispatch_InsertTrendlineEquation( bool bInsertR2=false );
+    void executeDispatch_InsertErrorBars( bool bYError );
+
+    void executeDispatch_InsertR2Value();
+    void executeDispatch_DeleteR2Value();
+
+    void executeDispatch_DeleteMeanValue();
+    void executeDispatch_DeleteTrendline();
+    void executeDispatch_DeleteTrendlineEquation();
+    void executeDispatch_DeleteErrorBars( bool bYError );
+
+    void executeDispatch_InsertDataLabels();
+    void executeDispatch_InsertDataLabel();
+    void executeDispatch_DeleteDataLabels();
+    void executeDispatch_DeleteDataLabel();
+
+    void executeDispatch_ResetAllDataPoints();
+    void executeDispatch_ResetDataPoint();
+
+    void executeDispatch_InsertAxis();
+    void executeDispatch_InsertAxisTitle();
+    void executeDispatch_InsertMajorGrid();
+    void executeDispatch_InsertMinorGrid();
+    void executeDispatch_DeleteAxis();
+    void executeDispatch_DeleteMajorGrid();
+    void executeDispatch_DeleteMinorGrid();
+
+    void executeDispatch_InsertSpecialCharacter();
+    void executeDispatch_EditText( const Point* pMousePixel = nullptr );
+    void executeDispatch_SourceData();
+    void executeDispatch_MoveSeries( bool bForward );
+
+    bool EndTextEdit();
+    cpo::uno::Sequence< cpo::uno::Reference<css::chart2::XFormattedString >> GetFormattedTitle(
+        const EditTextObject& aEdit, const cpo::uno::Reference< css::drawing::XShape >& xShape );
+
+    void executeDispatch_View3D();
+    void executeDispatch_PositionAndSize( const ::cpo::uno::Sequence< ::css::beans::PropertyValue >* pArgs = nullptr );
+
+    void executeDispatch_EditData();
+
+    void executeDispatch_NewArrangement();
+    void executeDispatch_ScaleText();
+
+    static void executeDispatch_FontBold(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties);
+    static void executeDispatch_FontName(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties,
+        const cpo::uno::Sequence<css::beans::PropertyValue>& rArgs);
+    static void executeDispatch_FontHeight(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties,
+        const cpo::uno::Sequence<css::beans::PropertyValue>& rArgs);
+    static void executeDispatch_FontItalic(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties);
+    static void executeDispatch_FontUnderline(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties,
+        const cpo::uno::Sequence<css::beans::PropertyValue>& rArgs);
+    static void executeDispatch_FontStrikeout(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties);
+    static void executeDispatch_FontShadowed(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties);
+    static void executeDispatch_FontColor(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties,
+        const cpo::uno::Sequence<css::beans::PropertyValue>& rArgs);
+    static void executeDispatch_FontGrow(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties);
+    static void executeDispatch_FontShrink(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties);
+    static void executeDispatch_FontReset(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties);
+    static void executeDispatch_FontSpacing(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties,
+        const cpo::uno::Sequence<css::beans::PropertyValue>& rArgs);
+    static void executeDispatch_FontSuperScript(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties);
+    static void executeDispatch_FontSubScript(
+        const std::vector<cpo::uno::Reference<css::beans::XPropertySet>>& xProperties);
+
+    void executeDispatch_Paste();
+    void executeDispatch_Copy();
+    void executeDispatch_Cut();
+    bool executeDispatch_Delete();
+    void executeDispatch_ToggleLegend();
+    void executeDispatch_ToggleGridHorizontal();
+    void executeDispatch_ToggleGridVertical();
+
+    void executeDispatch_KitSetTextSelection(COKitSetTextSelectionType eType, int nX, int nY);
+    void executeDispatch_KitPieSegmentDragging(int nOffset);
+    void executeDispatch_FillColor(const cpo::uno::Any& rColor);
+    void executeDispatch_FillGradient(std::u16string_view sJSONGradient);
+    void executeDispatch_LineColor(const cpo::uno::Any& rColor);
+    void executeDispatch_LineWidth(const cpo::uno::Any& rWidth);
+
+    void sendPopupRequest(std::u16string_view rCID, tools::Rectangle aRectangle);
+
+    void impl_ShapeControllerDispatch( const css::util::URL& rURL,
+        const cpo::uno::Sequence< css::beans::PropertyValue >& rArgs );
+
+    DECL_LINK( DoubleClickWaitingHdl, Timer*, void );
+    void execute_DoubleClick( const Point* pMousePixel, bool &bEditText );
+    void startDoubleClickWaiting();
+    void stopDoubleClickWaiting();
+
+    void impl_selectObjectAndNotiy();
+    void impl_notifySelectionChangeListeners();
+    void impl_invalidateAccessible();
+    void impl_initializeAccessible();
+    void impl_initializeAccessible( AccessibleChartView& xInit );
+
+    //sets the model member to null if it equals the parameter
+    //returns true if successful
+    bool impl_releaseThisModel( const cpo::uno::Reference< cpo::uno::XInterface > & xModel );
+
+    enum eMoveOrResizeType
+    {
+        MOVE_OBJECT,
+        CENTERED_RESIZE_OBJECT
+    };
+    /// @return </true>, if resize/move was successful
+    bool impl_moveOrResizeObject(
+        const OUString & rCID, eMoveOrResizeType eType, double fAmountLogicX, double fAmountLogicY );
+    bool impl_DragDataPoint( std::u16string_view rCID, double fOffset );
+
+    static const o3tl::sorted_vector< std::u16string_view >& impl_getAvailableCommands();
+
+    void impl_PasteGraphic( cpo::uno::Reference< css::graphic::XGraphic > const & xGraphic,
+                            const ::Point & aPosition );
+    void impl_PasteShapes( SdrModel* pModel );
+    void impl_PasteStringAsTextShape( const OUString& rString, const css::awt::Point& rPosition );
+    void impl_SetMousePointer( const MouseEvent & rEvent );
+
+    void impl_ClearSelection();
+
+    void impl_switchDiagramPositioningToExcludingPositioning();
+};
+
+}  // namespace chart
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

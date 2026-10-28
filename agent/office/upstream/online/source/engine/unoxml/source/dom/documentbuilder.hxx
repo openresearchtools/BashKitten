@@ -1,0 +1,121 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <sal/types.h>
+
+#include <cppuhelper/implbase.hxx>
+
+#include <cpo/uno/Reference.h>
+#include <cpo/uno/Sequence.h>
+
+#include <com/sun/star/xml/dom/XDocumentBuilder.hpp>
+#include <com/sun/star/xml/dom/XDocument.hpp>
+#include <com/sun/star/xml/dom/XDOMImplementation.hpp>
+#include <com/sun/star/xml/sax/XEntityResolver.hpp>
+#include <com/sun/star/xml/sax/XErrorHandler.hpp>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <mutex>
+
+namespace DOM
+{
+    typedef ::cppu::WeakImplHelper
+        < css::xml::dom::XDocumentBuilder
+        , css::lang::XServiceInfo
+        > CDocumentBuilder_Base;
+
+    class CDocumentBuilder
+        : public CDocumentBuilder_Base
+    {
+    private:
+        std::recursive_mutex m_Mutex;
+        cpo::uno::Reference< css::xml::sax::XEntityResolver > m_xEntityResolver;
+        cpo::uno::Reference< css::xml::sax::XErrorHandler > m_xErrorHandler;
+
+    public:
+
+        // ctor
+        explicit CDocumentBuilder();
+
+        // XServiceInfo
+        virtual OUString getImplementationName() override;
+        virtual bool supportsService(const OUString& ServiceName) override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames () override;
+
+        /**
+        Obtain an instance of a DOMImplementation object.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XDOMImplementation > getDOMImplementation() override;
+
+        /**
+        Indicates whether or not this parser is configured to understand
+        namespaces.
+        */
+        virtual bool isNamespaceAware() override;
+
+        /**
+        Indicates whether or not this parser is configured to validate XML
+        documents.
+        */
+        virtual bool isValidating() override;
+
+        /**
+        Obtain a new instance of a DOM Document object to build a DOM tree
+        with.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XDocument > newDocument() override;
+
+        /**
+        Parse the content of the given InputStream as an XML document and
+        return a new DOM Document object.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XDocument > parse(const cpo::uno::Reference< css::io::XInputStream >& is) override;
+
+        /**
+        Parse the content of the given URI as an XML document and return
+        a new DOM Document object.
+        */
+        virtual cpo::uno::Reference< css::xml::dom::XDocument > parseURI(const OUString& uri) override;
+
+        /**
+        Specify the EntityResolver to be used to resolve entities present
+        in the XML document to be parsed.
+        */
+        virtual void setEntityResolver(const cpo::uno::Reference< css::xml::sax::XEntityResolver >& er) override;
+
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference< css::xml::sax::XEntityResolver > getEntityResolver();
+
+        /**
+        Specify the ErrorHandler to be used to report errors present in
+        the XML document to be parsed.
+        */
+        virtual void setErrorHandler(const cpo::uno::Reference< css::xml::sax::XErrorHandler >& eh) override;
+
+        /*
+        Get the ErrorHandler to be used to report errors present in
+        the XML document to be parsed.
+        */
+        cpo::uno::Reference< css::xml::sax::XErrorHandler > getErrorHandler();
+    };
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,103 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <sal/config.h>
+
+#include <com/sun/star/geometry/AffineMatrix2D.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <vcl/bitmap.hxx>
+#include <rtl/ref.hxx>
+
+namespace canvas
+{
+class ParametricPolyPolygon;
+}
+
+namespace vclcanvas
+{
+/** Contains all information needed to define a texture.<p>
+
+    This structure contains all information necessary to define a
+    texture. A texture describes the filled area of polygonal shapes,
+    providing its own transformation matrix, repeat mode, and
+    transparency.<p>
+
+    To achieve uniformity, if this texture has a bitmap set, it is
+    scaled in such a way that it will cover the same [0,1]x[0,1] box
+    as the hatch and the gradient. The transformation member can then
+    be used to scale the complete texture as it fits suit.<p>
+ */
+struct Texture
+{
+    /** Texture transformation from texture to primitive space.<p>
+
+        This member allows arbitrary transformations of the texture,
+        relative to the textured primitive. Thus, the total
+        transformation from the [0,1]x[0,1] texture space to the
+        device coordinate space is the concatenation of texture,
+        render state, and view state transformation (with only render
+        state and view state transformation being applied to the
+        textured primitive).<p>
+     */
+    ::com::sun::star::geometry::AffineMatrix2D AffineTransform;
+
+    /** Overall transparency of the texturing.<p>
+
+        The valid range for this value is [0,1], where 0 denotes
+        complete transparency, and 1 denotes fully opaque.<p>
+     */
+    double Alpha;
+
+    /** Texture bitmap.<p>
+
+        This member can be used together with gradient and hatching.<p>
+
+        The bitmap is scaled to a one-by-one rectangle, to cover the
+        same area as both the gradient and the hatching.<p>
+    */
+    ::Bitmap aBitmap;
+
+    /** Texture gradient.<p>
+
+        This member can be used together with bitmap and hatching. The
+        parametric polygons color value is used to fill the returned
+        polygonal outlines.<p>
+     */
+    rtl::Reference<canvas::ParametricPolyPolygon> Gradient;
+
+    /** Repeat mode of the texture, x direction.<p>
+
+        The repeat mode is separated into x and y direction, this is
+        the x direction part. Permissible values are from the
+        TexturingMode constants.<p>
+    */
+    sal_Int8 RepeatModeX;
+
+    /** Repeat mode of the texture, y direction.<p>
+
+        The repeat mode is separated into x and y direction, this is
+        the y direction part. Permissible values are from the
+        TexturingMode constants.<p>
+    */
+    sal_Int8 RepeatModeY;
+};
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

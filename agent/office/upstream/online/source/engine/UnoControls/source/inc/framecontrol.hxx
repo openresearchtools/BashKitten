@@ -1,0 +1,169 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/lang/XConnectionPointContainer.hpp>
+#include <cppuhelper/propshlp.hxx>
+#include <rtl/ref.hxx>
+
+#include <basecontrol.hxx>
+
+namespace com::sun::star::beans { struct PropertyValue; }
+namespace com::sun::star::frame { class XFrame2; }
+namespace unocontrols { class OConnectionPointContainerHelper; }
+
+namespace unocontrols {
+
+using FrameControl_BASE = cppu::ImplInheritanceHelper<BaseControl, css::awt::XControlModel,
+                                                      css::lang::XConnectionPointContainer>;
+
+class FrameControl final : public FrameControl_BASE     // This order is necessary for right initialization of m_aMutex!
+                    , public ::cppu::OBroadcastHelper
+                    , public ::cppu::OPropertySetHelper
+{
+public:
+
+    FrameControl( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
+
+    virtual ~FrameControl() override;
+
+    //  XInterface
+
+    virtual cpo::uno::Any queryInterface(
+        const cpo::uno::Type& aType
+    ) override;
+
+    /**
+        @short      increment refcount
+        @seealso    XInterface
+        @seealso    release()
+        @onerror    A RuntimeException is thrown.
+    */
+
+    virtual void acquire() noexcept override;
+
+    /**
+        @short      decrement refcount
+        @seealso    XInterface
+        @seealso    acquire()
+        @onerror    A RuntimeException is thrown.
+    */
+
+    virtual void release() noexcept override;
+
+    //  XTypeProvider
+
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
+
+    OUString getImplementationName() override;
+
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+    //  XControl
+
+    virtual void createPeer(
+        const cpo::uno::Reference< css::awt::XToolkit >&      xToolkit ,
+        const cpo::uno::Reference< css::awt::XWindowPeer >&   xParent
+    ) override;
+
+    virtual bool setModel(
+        const cpo::uno::Reference< css::awt::XControlModel >& xModel
+    ) override;
+
+    virtual cpo::uno::Reference< css::awt::XControlModel > getModel() override;
+
+    //  XComponent
+
+    virtual void dispose() override;
+
+    //  XView
+
+    virtual bool setGraphics(
+        const cpo::uno::Reference< css::awt::XGraphics >& xDevice
+    ) override;
+
+    virtual cpo::uno::Reference< css::awt::XGraphics > getGraphics() override;
+
+    //  XConnectionPointContainer
+
+    virtual cpo::uno::Sequence< cpo::uno::Type > getConnectionPointTypes() override;
+
+    virtual cpo::uno::Reference< css::lang::XConnectionPoint > queryConnectionPoint(
+        const cpo::uno::Type& aType
+    ) override;
+
+    virtual void advise(
+        const cpo::uno::Type&                                aType       ,
+        const cpo::uno::Reference< cpo::uno::XInterface >&    xListener
+    ) override;
+
+    virtual void unadvise(
+        const cpo::uno::Type&                                aType ,
+        const cpo::uno::Reference< cpo::uno::XInterface >&    xListener
+    ) override;
+
+private:
+
+    using OPropertySetHelper::getFastPropertyValue;
+
+    //  OPropertySetHelper
+
+    virtual bool convertFastPropertyValue(
+        cpo::uno::Any&       rConvertedValue   ,
+        cpo::uno::Any&       rOldValue         ,
+        sal_Int32           nHandle           ,
+        const cpo::uno::Any& rValue
+    ) override;
+
+    virtual void setFastPropertyValue_NoBroadcast(
+        sal_Int32 nHandle ,
+        const cpo::uno::Any& rValue
+    ) override;
+
+    virtual void getFastPropertyValue( cpo::uno::Any&   rValue  ,
+                                                sal_Int32       nHandle ) const override;
+
+    virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
+
+    //  XPropertySet
+
+    cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo() override;
+
+    //  BaseControl
+
+    virtual css::awt::WindowDescriptor impl_getWindowDescriptor(
+        const cpo::uno::Reference< css::awt::XWindowPeer >& xParentPeer
+    ) override;
+
+    void impl_createFrame(  const cpo::uno::Reference< css::awt::XWindowPeer >&       xPeer           ,
+                            const OUString&                                         sURL            ,
+                            const cpo::uno::Sequence< css::beans::PropertyValue >&    seqArguments    );
+
+    cpo::uno::Reference< css::frame::XFrame2 >              m_xFrame;
+    OUString                                                m_sComponentURL;
+    cpo::uno::Sequence< css::beans::PropertyValue >         m_seqLoaderArguments;
+    rtl::Reference<OConnectionPointContainerHelper>         m_aConnectionPointContainer;
+
+};
+
+}
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

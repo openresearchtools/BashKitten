@@ -1,0 +1,99 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <config_options.h>
+#include <com/sun/star/sdbcx/XDataDescriptorFactory.hpp>
+#include <comphelper/IdPropArrayHelper.hxx>
+#include <cppuhelper/basemutex.hxx>
+#include <connectivity/CommonTools.hxx>
+#include <sdbcx/VTypeDef.hxx>
+#include <connectivity/sdbcx/IRefreshable.hxx>
+#include <connectivity/sdbcx/VDescriptor.hxx>
+#include <connectivity/dbtoolsdllapi.hxx>
+#include <cppuhelper/implbase1.hxx>
+
+namespace connectivity::sdbcx
+{
+    class OCollection;
+    class OIndex;
+    typedef ::cppu::ImplHelper1< css::sdbcx::XDataDescriptorFactory > OIndex_BASE;
+    typedef ::comphelper::OIdPropertyArrayUsageHelper<OIndex> OIndex_PROP;
+
+    class UNLESS_MERGELIBS(OOO_DLLPUBLIC_DBTOOLS) OIndex :
+                                public cppu::BaseMutex,
+                                public ODescriptor_BASE,
+                                public IRefreshableColumns,
+                                public OIndex_PROP,
+                                public ODescriptor,
+                                public OIndex_BASE
+    {
+    protected:
+        OUString        m_Catalog;
+        bool            m_IsUnique;
+        bool            m_IsPrimaryKeyIndex;
+        bool            m_IsClustered;
+
+        // no Reference! see OCollection::acquire
+        std::unique_ptr<OCollection> m_pColumns;
+
+        using ODescriptor_BASE::rBHelper;
+        virtual void refreshColumns() override;
+        // OPropertyArrayUsageHelper
+        virtual ::cppu::IPropertyArrayHelper* createArrayHelper( sal_Int32 _nId) const override;
+        virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
+    public:
+        OIndex(bool _bCase);
+        OIndex( const OUString& Name,
+                OUString Catalog,
+                bool _isUnique,
+                bool _isPrimaryKeyIndex,
+                bool _isClustered,
+                bool _bCase);
+
+        virtual ~OIndex( ) override;
+
+        DECLARE_SERVICE_INFO();
+
+        //XInterface
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+        virtual void acquire() noexcept override;
+        virtual void release() noexcept override;
+        //XTypeProvider
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+        // ODescriptor
+        virtual void construct() override;
+        // ::cppu::OComponentHelper
+        virtual void disposing() override;
+        // XPropertySet
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+        // XColumnsSupplier
+        virtual cpo::uno::Reference< css::container::XNameAccess > getColumns(  ) override;
+
+        // XNamed
+        virtual OUString getName(  ) override;
+        virtual void setName( const OUString& aName ) override;
+        // XDataDescriptorFactory
+        virtual cpo::uno::Reference< css::beans::XPropertySet > createDataDescriptor(  ) override;
+    };
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

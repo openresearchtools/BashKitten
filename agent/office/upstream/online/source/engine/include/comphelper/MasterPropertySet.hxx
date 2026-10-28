@@ -1,0 +1,134 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_COMPHELPER_MASTERPROPERTYSET_HXX
+#define INCLUDED_COMPHELPER_MASTERPROPERTYSET_HXX
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/beans/XMultiPropertySet.hpp>
+#include <comphelper/comphelperdllapi.h>
+#include <comphelper/ChainablePropertySet.hxx>
+#include <rtl/ref.hxx>
+#include <map>
+
+namespace comphelper { class SolarMutex; }
+namespace comphelper { struct PropertyInfo; }
+
+namespace comphelper
+{
+    class MasterPropertySetInfo;
+    struct SlaveData
+    {
+        rtl::Reference < ChainablePropertySet > mxSlave;
+        bool                                    mbInit;
+
+        SlaveData ( ChainablePropertySet *pSlave);
+        bool IsInit () const { return mbInit;}
+        void SetInit ( bool bInit) { mbInit = bInit; }
+    };
+}
+
+/*
+ * A MasterPropertySet implements all of the features of a ChainablePropertySet
+ * (it is not inherited from ChainablePropertySet to prevent MasterPropertySets
+ * being chained to each other), but also allows properties implemented in
+ * other ChainablePropertySets to be included as 'native' properties in a
+ * given MasterPropertySet implementation. These are registered using the
+ * 'registerSlave' method, and require that the implementation of the
+ * ChainablePropertySet and the implementation of the ChainablePropertySetInfo
+ * both declare the implementation of the MasterPropertySet as a friend.
+ */
+namespace comphelper
+{
+    class COMPHELPER_DLLPUBLIC MasterPropertySet : public css::beans::XPropertySet,
+                              public css::beans::XPropertyState,
+                              public css::beans::XMultiPropertySet
+    {
+        SolarMutex* const mpMutex;
+        sal_uInt8 mnLastId;
+        std::map< sal_uInt8, comphelper::SlaveData* >  maSlaveMap;
+        rtl::Reference< MasterPropertySetInfo >        mxInfo;
+
+    protected:
+        /// @throws css::beans::UnknownPropertyException
+        /// @throws css::beans::PropertyVetoException
+        /// @throws css::lang::IllegalArgumentException
+        /// @throws css::lang::WrappedTargetException
+        virtual void _preSetValues () = 0;
+        /// @throws css::beans::UnknownPropertyException
+        /// @throws css::beans::PropertyVetoException
+        /// @throws css::lang::IllegalArgumentException
+        /// @throws css::lang::WrappedTargetException
+        /// @throws cpo::uno::RuntimeException
+        virtual void _setSingleValue( const comphelper::PropertyInfo & rInfo, const cpo::uno::Any &rValue ) = 0;
+        /// @throws css::beans::UnknownPropertyException
+        /// @throws css::beans::PropertyVetoException
+        /// @throws css::lang::IllegalArgumentException
+        /// @throws css::lang::WrappedTargetException
+        virtual void _postSetValues () = 0;
+
+        /// @throws css::beans::UnknownPropertyException
+        /// @throws css::beans::PropertyVetoException
+        /// @throws css::lang::IllegalArgumentException
+        /// @throws css::lang::WrappedTargetException
+        virtual void _preGetValues () = 0;
+        /// @throws css::beans::UnknownPropertyException
+        /// @throws css::lang::WrappedTargetException
+        /// @throws cpo::uno::RuntimeException
+        virtual void _getSingleValue( const comphelper::PropertyInfo & rInfo, cpo::uno::Any & rValue ) = 0;
+        /// @throws css::beans::UnknownPropertyException
+        /// @throws css::beans::PropertyVetoException
+        /// @throws css::lang::IllegalArgumentException
+        /// @throws css::lang::WrappedTargetException
+        virtual void _postGetValues () = 0;
+
+    public:
+        MasterPropertySet( comphelper::MasterPropertySetInfo* pInfo, SolarMutex* pMutex )
+            noexcept;
+        virtual ~MasterPropertySet()
+            noexcept;
+        void registerSlave ( ChainablePropertySet *pNewSet )
+            noexcept;
+
+        // XPropertySet
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override final;
+        virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override final;
+        virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override final;
+        virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override final;
+        virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override final;
+        virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override final;
+        virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override final;
+
+        // XMultiPropertySet
+        virtual void setPropertyValues( const cpo::uno::Sequence< OUString >& aPropertyNames, const cpo::uno::Sequence< cpo::uno::Any >& aValues ) override final;
+        virtual cpo::uno::Sequence< cpo::uno::Any > getPropertyValues( const cpo::uno::Sequence< OUString >& aPropertyNames ) override final;
+        virtual void addPropertiesChangeListener( const cpo::uno::Sequence< OUString >& aPropertyNames, const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override final;
+        virtual void removePropertiesChangeListener( const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override final;
+        virtual void firePropertiesChangeEvent( const cpo::uno::Sequence< OUString >& aPropertyNames, const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override final;
+
+        // XPropertyState
+        virtual css::beans::PropertyState getPropertyState( const OUString& PropertyName ) override final;
+        virtual cpo::uno::Sequence< css::beans::PropertyState > getPropertyStates( const cpo::uno::Sequence< OUString >& aPropertyName ) override final;
+        virtual void setPropertyToDefault( const OUString& PropertyName ) override final;
+        virtual cpo::uno::Any getPropertyDefault( const OUString& aPropertyName ) override final;
+    };
+}
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

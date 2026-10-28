@@ -1,0 +1,108 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/script/XLibraryContainer.hpp>
+#include <rtl/ustrbuf.hxx>
+#include <xmloff/xmlimp.hxx>
+
+namespace xmloff
+{
+class BasicElementBase : public SvXMLImportContext
+{
+protected:
+    static bool
+    getBoolAttr(bool* pRet, sal_Int32 nToken,
+                const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& xAttributes);
+
+public:
+    BasicElementBase(SvXMLImport& rImport);
+};
+
+class BasicLibrariesElement : public BasicElementBase
+{
+private:
+    cpo::uno::Reference<css::script::XLibraryContainer> m_xLibContainer;
+
+public:
+    BasicLibrariesElement(SvXMLImport& rImport,
+                          const cpo::uno::Reference<css::frame::XModel>& rxModel);
+
+    virtual cpo::uno::Reference<XFastContextHandler> createFastChildContext(
+        sal_Int32 Element,
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& Attribs) override;
+};
+
+class BasicEmbeddedLibraryElement : public BasicElementBase
+{
+private:
+    cpo::uno::Reference<css::script::XLibraryContainer> m_xLibContainer;
+    cpo::uno::Reference<css::container::XNameContainer> m_xLib;
+    OUString const m_aLibName;
+    bool const m_bReadOnly;
+
+public:
+    BasicEmbeddedLibraryElement(
+        SvXMLImport& rImport,
+        const cpo::uno::Reference<css::script::XLibraryContainer>& rxLibContainer,
+        OUString aLibName, bool bReadOnly);
+
+    virtual cpo::uno::Reference<XFastContextHandler> createFastChildContext(
+        sal_Int32 Element,
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& Attribs) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
+};
+
+class BasicModuleElement : public BasicElementBase
+{
+private:
+    cpo::uno::Reference<css::container::XNameContainer> m_xLib;
+    OUString const m_aName;
+
+public:
+    BasicModuleElement(SvXMLImport& rImport,
+                       const cpo::uno::Reference<css::container::XNameContainer>& rxLib,
+                       OUString aName);
+
+    virtual cpo::uno::Reference<XFastContextHandler> createFastChildContext(
+        sal_Int32 Element,
+        const cpo::uno::Reference<css::xml::sax::XFastAttributeList>& Attribs) override;
+};
+
+class BasicSourceCodeElement : public BasicElementBase
+{
+private:
+    cpo::uno::Reference<css::container::XNameContainer> m_xLib;
+    OUString const m_aName;
+    OUStringBuffer m_aBuffer;
+
+public:
+    BasicSourceCodeElement(SvXMLImport& rImport,
+                           const cpo::uno::Reference<css::container::XNameContainer>& rxLib,
+                           OUString rName);
+
+    virtual void characters(const OUString& rChars) override;
+    virtual void endFastElement(sal_Int32 nElement) override;
+};
+
+} // namespace xmloff
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

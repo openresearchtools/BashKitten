@@ -1,0 +1,96 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+#pragma once
+
+#include <set>
+
+#include <cppuhelper/implbase.hxx>
+
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/frame/XDispatch.hpp>
+#include <com/sun/star/frame/XInterceptorInfo.hpp>
+#include <com/sun/star/frame/XDispatchProvider.hpp>
+#include <com/sun/star/frame/XDispatchProviderInterceptor.hpp>
+
+namespace framework {
+
+/**
+ * Implementation of a service to make it easy to disable a whole
+ * suite of UNO commands in a batch - and have that act in-process.
+ *
+ * Often external re-use of LibreOffice wants a very cut-down set
+ * of functionality included, and disabling elements remotely one
+ * by one performs poorly.
+ */
+class DispatchDisabler final : public ::cppu::WeakImplHelper<
+                                        css::lang::XInitialization,
+                                        css::container::XNameContainer,
+                                        css::frame::XDispatchProviderInterceptor,
+                                        css::frame::XInterceptorInfo,
+                                        css::lang::XServiceInfo >
+{
+    std::set<OUString> maDisabledURLs;
+    cpo::uno::Reference< css::frame::XDispatchProvider > mxSlave;
+    cpo::uno::Reference< css::frame::XDispatchProvider > mxMaster;
+public:
+             DispatchDisabler(const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext);
+
+    // XInitialization
+    virtual void initialize( const ::cpo::uno::Sequence< ::cpo::uno::Any >& aArguments ) override;
+
+    // XDispatchProvider
+    virtual ::cpo::uno::Reference< ::css::frame::XDispatch >
+        queryDispatch( const ::css::util::URL& URL,
+               const OUString& TargetFrameName,
+               ::sal_Int32 SearchFlags ) override;
+    virtual ::cpo::uno::Sequence< ::cpo::uno::Reference< ::css::frame::XDispatch > >
+        queryDispatches( const ::cpo::uno::Sequence< ::css::frame::DispatchDescriptor >& Requests ) override;
+
+    // XDispatchProviderInterceptor
+    virtual ::cpo::uno::Reference< ::css::frame::XDispatchProvider >
+        getSlaveDispatchProvider() override;
+    virtual void
+        setSlaveDispatchProvider( const ::cpo::uno::Reference< ::css::frame::XDispatchProvider >& NewDispatchProvider ) override;
+    virtual ::cpo::uno::Reference< ::css::frame::XDispatchProvider >
+        getMasterDispatchProvider() override;
+    virtual void
+        setMasterDispatchProvider( const ::cpo::uno::Reference< ::css::frame::XDispatchProvider >& NewSupplier ) override;
+
+    // XInterceptorInfo
+    virtual ::cpo::uno::Sequence< OUString >
+        getInterceptedURLs() override;
+
+    // XElementAccess
+    virtual ::cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
+
+    // XNameAccess
+    virtual ::cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual ::cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool hasByName( const OUString& aName ) override;
+
+    // XNameReplace
+    virtual void replaceByName( const OUString& aName, const ::cpo::uno::Any& aElement ) override;
+
+    // XNameContainer
+    virtual void insertByName( const OUString& aName, const ::cpo::uno::Any& aElement ) override;
+    virtual void removeByName( const OUString& Name ) override;
+
+    /* interface XServiceInfo */
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& sServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+};
+
+} // namespace framework
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

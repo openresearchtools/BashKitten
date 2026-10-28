@@ -1,0 +1,130 @@
+/* global describe it cy beforeEach require expect */
+
+var helper = require('../../common/helper');
+var desktopHelper = require('../../common/desktop_helper');
+
+describe(['tagdesktop'], 'Sidebar tests', function() {
+
+	beforeEach(function() {
+		helper.setupAndLoadDocument('writer/sidebar.odt');
+		cy.viewport(1920,1080);
+	});
+
+	it('Sidebar visual test', function() {
+		cy.viewport(1000,660);
+		cy.wait(500); // wait to make fully rendered
+		cy.cGet('#sidebar-dock-wrapper').scrollTo(0,0,{ ensureScrollable: false });
+		cy.wait(500); // wait for animations
+		cy.cGet('#sidebar-dock-wrapper').compareSnapshot('sidebar_writer', 0.07);
+	});
+
+	it('Sidebar reopens after a round trip through viewing mode', function() {
+		cy.cGet('#sidebar-dock-wrapper').should('have.class', 'visible');
+
+		// Switching to viewing mode closes the sidebar.
+		cy.cGet('#viewModeDropdownButton-button').click();
+		cy.cGet('#viewModeDropdownButton-entry-0').click();
+		cy.cGet('#viewModeDropdownButton-button').should('have.text', 'Viewing');
+		cy.cGet('#sidebar-dock-wrapper').should('not.have.class', 'visible');
+
+		// Switching back to editing mode keeps the sidebar closed.
+		cy.cGet('#viewModeDropdownButton-button').click();
+		cy.cGet('#viewModeDropdownButton-entry-1').click();
+		cy.cGet('#viewModeDropdownButton-button').should('have.text', 'Editing');
+		cy.cGet('#sidebar-dock-wrapper').should('not.have.class', 'visible');
+
+		// The sidebar button opens the sidebar again.
+		desktopHelper.sidebarToggle();
+		cy.cGet('#sidebar-dock-wrapper').should('have.class', 'visible');
+		cy.cGet('#PropertyDeck').should('be.visible');
+	});
+
+	it('Properties deck shows its heading', function() {
+		cy.cGet('#PropertyDeck .ui-deck-header .ui-panel-title')
+			.should('be.visible')
+			.should('have.text', 'Properties');
+	});
+
+	it('Style panel more button opens the style dialog for the cursor style', function() {
+		cy.cGet('.StylesPropertyPanel .ui-expander-icon-right button').click();
+
+		cy.cGet('[id^="TemplateDialog"].jsdialog').should('exist');
+
+		cy.cGet('.button-primary').click();
+		cy.cGet('[id^="TemplateDialog"].jsdialog').should('not.exist');
+	});
+
+	it('Show table panel multiple times', function() {
+		cy.cGet('.TableEditPanel').should('not.exist');
+
+		cy.cGet('#Insert-tab-label').click();
+		cy.cGet('#Insert .unoInsertTable').click();
+		cy.cGet('.inserttable-grid > .row > .col').eq(0).click();
+
+		cy.cGet('.TableEditPanel').should('exist');
+		cy.cGet('#sidebar-dock-wrapper').scrollTo(0, 300, { ensureScrollable: false });
+		cy.cGet('.TableEditPanel').should('be.visible');
+
+		helper.typeIntoDocument('{downArrow}');
+		cy.cGet('#sidebar-dock-wrapper').scrollTo(0, 300, { ensureScrollable: false });
+		cy.cGet('.TableEditPanel').should('not.be.visible');
+
+		helper.typeIntoDocument('{upArrow}');
+		cy.cGet('#sidebar-dock-wrapper').scrollTo(0, 300, { ensureScrollable: false });
+		cy.cGet('.TableEditPanel').should('be.visible');
+	});
+
+	function checkMathElementsVisibility() {
+		cy.viewport(2000, 1080);
+
+		cy.cGet('#Insert-tab-label').click();
+		cy.cGet('#Insert .unoInsertObjectStarMath').click();
+
+		cy.cGet('#Formula-tab-label').should('have.class', 'selected');
+		cy.cGet('#Formula-container #categorylist').should('be.visible');
+		cy.cGet('#Formula-container #elements_group0 .ui-iconview-entry').should('be.visible');
+		cy.cGet('.MathElementsPanel').should('not.exist');
+	}
+
+	it('Show formula Elements in the Formula tab with the sidebar closed', function() {
+		desktopHelper.sidebarToggle();
+		cy.cGet('#sidebar-dock-wrapper').should('not.be.visible');
+
+		checkMathElementsVisibility();
+
+		cy.cGet('#sidebar-dock-wrapper').should('not.be.visible');
+	});
+
+	it('Show formula Elements in the Formula tab', function() {
+		checkMathElementsVisibility();
+	});
+
+	it('Show document accessibility sidebar', function() {
+		cy.cGet('#Help-tab-label').click();
+		cy.cGet('#Help .unoAccessibilityCheck').click();
+
+		cy.cGet('#updateLinkButton').click();
+
+		cy.cGet('#expand_document-label').should('exist');
+		cy.cGet('#expand_other').should('exist');
+	});
+
+	it('Focus on the first focusable child', function() {
+		cy.cGet('#sidebar-dock-wrapper.visible').then(function(sidebar) {
+			helper.containsFocusElement(sidebar[0], false);
+		});
+
+		// Hide
+		desktopHelper.sidebarToggle();
+		cy.cGet('#sidebar-dock-wrapper').should('not.be.visible');
+
+		// Show
+		desktopHelper.sidebarToggle();
+		cy.cGet('#sidebar-panel').should('be.visible');
+		cy.cGet('#sidebar-panel').should('not.be.empty');
+
+		cy.cGet('#sidebar-dock-wrapper.visible').should(function(sidebar) {
+			expect(sidebar[0].contains(sidebar[0].ownerDocument.activeElement)).to.equal(true);
+		});
+	});
+});

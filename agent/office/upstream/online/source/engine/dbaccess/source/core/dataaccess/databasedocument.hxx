@@ -1,0 +1,742 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <sal/config.h>
+
+#include <atomic>
+#include <map>
+#include <memory>
+
+#include <ModelImpl.hxx>
+#include "documenteventnotifier.hxx"
+
+#include <com/sun/star/document/XDocumentSubStorageSupplier.hpp>
+#include <com/sun/star/frame/DoubleInitializationException.hpp>
+#include <com/sun/star/frame/XModel3.hpp>
+#include <com/sun/star/frame/XTitle.hpp>
+#include <com/sun/star/frame/XTitleChangeBroadcaster.hpp>
+#include <com/sun/star/frame/XUntitledNumbers.hpp>
+#include <com/sun/star/frame/XStorable.hpp>
+#include <com/sun/star/sdb/XReportDocumentsSupplier.hpp>
+#include <com/sun/star/sdb/XFormDocumentsSupplier.hpp>
+#include <com/sun/star/view/XPrintable.hpp>
+#include <com/sun/star/frame/XModuleManager2.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/NotInitializedException.hpp>
+#include <com/sun/star/sdb/XOfficeDatabaseDocument.hpp>
+#include <com/sun/star/embed/XTransactionListener.hpp>
+#include <com/sun/star/document/XStorageBasedDocument.hpp>
+#include <com/sun/star/document/XEmbeddedScripts.hpp>
+#include <com/sun/star/document/XEventsSupplier.hpp>
+#include <com/sun/star/document/XScriptInvocationContext.hpp>
+#include <com/sun/star/script/XStorageBasedLibraryContainer.hpp>
+#include <com/sun/star/script/provider/XScriptProviderSupplier.hpp>
+#include <com/sun/star/frame/XLoadable.hpp>
+#include <com/sun/star/document/XEventBroadcaster.hpp>
+#include <com/sun/star/document/XDocumentEventBroadcaster.hpp>
+#include <com/sun/star/document/XDocumentRecovery.hpp>
+#include <com/sun/star/ui/XUIConfigurationManager2.hpp>
+#include <com/sun/star/ui/XUIConfigurationManagerSupplier.hpp>
+#include <com/sun/star/util/XCloseable.hpp>
+#include <com/sun/star/util/XModifiable.hpp>
+
+#include <comphelper/interfacecontainer3.hxx>
+#include <cppuhelper/compbase.hxx>
+#include <cppuhelper/implbase3.hxx>
+#include <rtl/ref.hxx>
+
+namespace comphelper {
+    class NamedValueCollection;
+}
+namespace framework { class TitleHelper; }
+
+namespace dbaccess
+{
+
+class DocumentEvents;
+class DocumentEventExecutor;
+class DocumentGuard;
+class OCommandContainer;
+
+typedef std::vector< cpo::uno::Reference< css::frame::XController > >   Controllers;
+
+// ViewMonitor
+/** helper class monitoring the views of a document, and firing appropriate events
+    when views are attached / detached
+*/
+class ViewMonitor
+{
+public:
+    explicit ViewMonitor( DocumentEventNotifier& _rEventNotifier )
+        :m_rEventNotifier( _rEventNotifier )
+        ,m_bIsNewDocument( true )
+        ,m_bEverHadController( false )
+        ,m_bLastIsFirstEverController( false )
+        ,m_xLastConnectedController()
+    {
+    }
+
+    ViewMonitor(const ViewMonitor&) = delete;
+    const ViewMonitor& operator=(const ViewMonitor&) = delete;
+
+    void    reset()
+    {
+        m_bEverHadController = false;
+        m_bLastIsFirstEverController = false;
+        m_xLastConnectedController.clear();
+    }
+
+    /** to be called when a view (aka controller) has been connected to the document
+        @return
+            <TRUE/> if and only if this was the first-ever controller connected to the document
+    */
+    bool    onControllerConnected(
+                const cpo::uno::Reference< css::frame::XController >& _rxController
+             );
+
+    /**  to be called when a controller is set as current controller
+        @return <TRUE/>
+            if and only if the controller connection indicates that loading the document is finished. This
+            is the case if the given controller has previously been connected, and it was the first controller
+            ever for which this happened.
+    */
+    bool    onSetCurrentController(
+                const cpo::uno::Reference< css::frame::XController >& _rxController
+             );
+
+    void    onLoadedDocument() { m_bIsNewDocument = false; }
+
+private:
+    DocumentEventNotifier&  m_rEventNotifier;
+    bool                    m_bIsNewDocument;
+    bool                    m_bEverHadController;
+    bool                    m_bLastIsFirstEverController;
+    cpo::uno::Reference< css::frame::XController >
+                            m_xLastConnectedController;
+};
+
+// ODatabaseDocument
+typedef cppu::PartialWeakComponentImplHelper<   css::frame::XModel3
+                                                ,   css::util::XModifiable
+                                                ,   css::frame::XStorable
+                                                ,   css::document::XEventBroadcaster
+                                                ,   css::document::XDocumentEventBroadcaster
+                                                ,   css::view::XPrintable
+                                                ,   css::util::XCloseable
+                                                ,   css::lang::XServiceInfo
+                                                ,   css::sdb::XOfficeDatabaseDocument
+                                                ,   css::ui::XUIConfigurationManagerSupplier
+                                                ,   css::document::XStorageBasedDocument
+                                                ,   css::document::XEmbeddedScripts
+                                                ,   css::document::XScriptInvocationContext
+                                                ,   css::script::provider::XScriptProviderSupplier
+                                                ,   css::document::XEventsSupplier
+                                                ,   css::frame::XLoadable
+                                                ,   css::document::XDocumentRecovery
+                                                , css::frame::XTitle
+                                                ,   css::frame::XTitleChangeBroadcaster
+                                                ,   css::frame::XUntitledNumbers
+                                                >   ODatabaseDocument_OfficeDocument;
+
+class ODatabaseDocument :public ModelDependentComponent             // ModelDependentComponent must be first!
+                        ,public ODatabaseDocument_OfficeDocument
+{
+    enum InitState
+    {
+        NotInitialized,
+        Initializing,
+        Initialized
+    };
+
+    typedef std::map< OUString, cpo::uno::Reference< css::frame::XUntitledNumbers > > TNumberedController;
+    cpo::uno::Reference< css::ui::XUIConfigurationManager2>                                     m_xUIConfigurationManager;
+
+    ::comphelper::OInterfaceContainerHelper3<css::util::XModifyListener>                        m_aModifyListeners;
+    ::comphelper::OInterfaceContainerHelper3<css::util::XCloseListener>                         m_aCloseListener;
+
+    std::unique_ptr<DocumentEvents>                                                             m_pEventContainer;
+    ::rtl::Reference< DocumentEventExecutor >                                                   m_pEventExecutor;
+    DocumentEventNotifier                                                                       m_aEventNotifier;
+
+    cpo::uno::Reference< css::frame::XController >                                              m_xCurrentController;
+    Controllers                                                                                 m_aControllers;
+    ViewMonitor                                                                                 m_aViewMonitor;
+
+    cpo::uno::WeakReference< css::container::XNameAccess >                                      m_xForms;
+    cpo::uno::WeakReference< css::container::XNameAccess >                                      m_xReports;
+    cpo::uno::WeakReference< css::script::provider::XScriptProvider >                           m_xScriptProvider;
+
+    /** @short  such module manager is used to classify new opened documents. */
+    cpo::uno::Reference< css::frame::XModuleManager2 >                                          m_xModuleManager;
+    rtl::Reference< ::framework::TitleHelper >                                                  m_xTitleHelper;
+    TNumberedController                                                                         m_aNumberedControllers;
+
+    /** true if and only if the DatabaseDocument's "initNew" or "load" have been called (or, well,
+        the document has be initialized implicitly - see storeAsURL
+    */
+    InitState                                                                                   m_eInitState;
+    bool                                                                                        m_bClosing;
+    /// the macro decision allows the document's own UI configuration to call macros
+    bool                                                                                        m_bMacroCallsAllowed;
+    /// Using atomic because locking around accessing this will lead to deadlock in queryInterface
+    std::atomic<bool>                                                                           m_bAllowDocumentScripting;
+    bool                                                                                        m_bHasBeenRecovered;
+    /// If XModel::attachResource() was called to inform us that the document is embedded into another one.
+    bool                                                                                        m_bEmbedded;
+
+    enum StoreType { SAVE, SAVE_AS };
+    /** stores the document to the given URL, rebases it to the respective new storage, if necessary, resets
+        the modified flag, and notifies any listeners as required
+
+        @param _rURL
+            the URL to store the document to
+        @param _rArguments
+            arguments for storing the document (MediaDescriptor)
+        @param _eType
+            the type of the store process (Save or SaveAs). The method will automatically
+            notify the proper events for this type.
+        @param _rGuard
+            the instance lock to be released before doing synchronous notifications
+        @throws css::io::IOException
+        @throws cpo::uno::RuntimeException
+    */
+    void impl_storeAs_throw(
+            const OUString& _rURL,
+            const ::comphelper::NamedValueCollection& _rArguments,
+            const StoreType _eType,
+            DocumentGuard& _rGuard
+         );
+
+    /// write a single XML stream into the package
+    void WriteThroughComponent(
+        const cpo::uno::Reference< css::lang::XComponent > & xComponent,  /// the component we export
+        const OUString& rStreamName,                                                                /// the stream name
+        const OUString& rServiceName,                                                               /// service name of the component
+        const cpo::uno::Sequence< cpo::uno::Any> & rArguments,            /// the argument (XInitialization)
+        const cpo::uno::Sequence< css::beans::PropertyValue> & rMediaDesc,/// output descriptor
+        const cpo::uno::Reference< css::embed::XStorage >& _xStorageToSaveTo
+    ) const;
+
+    /// write a single output stream
+    /// (to be called either directly or by WriteThroughComponent(...))
+    void WriteThroughComponent(
+        const cpo::uno::Reference< css::io::XOutputStream >& xOutputStream,
+        const cpo::uno::Reference< css::lang::XComponent >& xComponent,
+        const OUString& rServiceName,
+        const cpo::uno::Sequence< cpo::uno::Any >& rArguments,
+        const cpo::uno::Sequence< css::beans::PropertyValue> & rMediaDesc
+    ) const;
+
+    /** writes the content and settings
+        @param  sURL
+            The URL
+        @param  lArguments
+            The media descriptor
+        @param  _xStorageToSaveTo
+            The storage which should be used for saving
+    */
+    void impl_writeStorage_throw(
+        const cpo::uno::Reference< css::embed::XStorage >& _rxTargetStorage,
+        const ::comphelper::NamedValueCollection& _rMediaDescriptor
+    ) const;
+
+    // ModelDependentComponent overridables
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getThis() const override;
+
+    rtl::Reference< ::framework::TitleHelper> const &     impl_getTitleHelper_throw();
+    cpo::uno::Reference< css::frame::XUntitledNumbers >   impl_getUntitledHelper_throw(
+        const cpo::uno::Reference< cpo::uno::XInterface >& _xComponent = cpo::uno::Reference< cpo::uno::XInterface >());
+
+private:
+    explicit ODatabaseDocument(const ::rtl::Reference<ODatabaseModelImpl>& _pImpl);
+    // Do NOT create those documents directly, always use ODatabaseModelImpl::getModel. Reason is that
+    // ODatabaseDocument requires clear ownership, and in turn lifetime synchronisation with the ModelImpl.
+    // If you create a ODatabaseDocument directly, you might easily create a leak.
+    // #i50905#
+
+protected:
+    virtual void disposing() override;
+
+    virtual ~ODatabaseDocument() override;
+
+public:
+    struct FactoryAccess { friend class ODatabaseModelImpl; private: FactoryAccess() { } };
+    static rtl::Reference<ODatabaseDocument> createDatabaseDocument( const ::rtl::Reference<ODatabaseModelImpl>& _pImpl, FactoryAccess /*accessControl*/ )
+    {
+        return new ODatabaseDocument( _pImpl );
+    }
+
+    // XServiceInfo
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+    // XInterface
+    virtual cpo::uno::Any  queryInterface(const cpo::uno::Type& _rType) override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+
+    // XComponent
+    virtual void dispose(  ) override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
+
+    // XModel
+    virtual bool attachResource( const OUString& URL, const cpo::uno::Sequence< css::beans::PropertyValue >& Arguments ) override ;
+    virtual OUString getURL(  ) override ;
+    virtual cpo::uno::Sequence< css::beans::PropertyValue > getArgs(  ) override ;
+    virtual void connectController( const cpo::uno::Reference< css::frame::XController >& Controller ) override ;
+    virtual void disconnectController( const cpo::uno::Reference< css::frame::XController >& Controller ) override ;
+    virtual void lockControllers(  ) override ;
+    virtual void unlockControllers(  ) override ;
+    virtual bool hasControllersLocked(  ) override ;
+    virtual cpo::uno::Reference< css::frame::XController > getCurrentController(  ) override ;
+    virtual void setCurrentController( const cpo::uno::Reference< css::frame::XController >& Controller ) override ;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getCurrentSelection(  ) override ;
+
+    // XModel2
+    virtual cpo::uno::Reference< css::container::XEnumeration > getControllers(  ) override ;
+    virtual cpo::uno::Reference< css::frame::XController2 > createDefaultViewController( const cpo::uno::Reference< css::frame::XFrame >& Frame ) override ;
+    virtual cpo::uno::Reference< css::frame::XController2 > createViewController( const OUString& ViewName, const cpo::uno::Sequence< css::beans::PropertyValue >& Arguments, const cpo::uno::Reference< css::frame::XFrame >& Frame ) override ;
+    virtual void setArgs(const cpo::uno::Sequence<css::beans::PropertyValue>& aArgs) override;
+
+    // XModel3
+    virtual ::cpo::uno::Sequence< ::css::beans::PropertyValue > getArgs2( const ::cpo::uno::Sequence< ::rtl::OUString >& requestedArgs ) override;
+
+    // XStorable
+    virtual bool hasLocation(  ) override ;
+    virtual OUString getLocation(  ) override ;
+    virtual bool isReadonly(  ) override ;
+    virtual void store(  ) override ;
+    virtual void storeAsURL( const OUString& sURL, const cpo::uno::Sequence< css::beans::PropertyValue >& lArguments ) override ;
+    virtual void storeToURL( const OUString& sURL, const cpo::uno::Sequence< css::beans::PropertyValue >& lArguments ) override ;
+
+    // XModifyBroadcaster
+    virtual void addModifyListener( const cpo::uno::Reference< css::util::XModifyListener >& aListener ) override;
+    virtual void removeModifyListener( const cpo::uno::Reference< css::util::XModifyListener >& aListener ) override;
+
+    // css::util::XModifiable
+    virtual bool isModified(  ) override ;
+    virtual void setModified( bool bModified ) override ;
+
+    // XEventBroadcaster
+    virtual void addEventListener( const cpo::uno::Reference< css::document::XEventListener >& aListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::document::XEventListener >& aListener ) override;
+
+    // XDocumentEventBroadcaster
+    virtual void addDocumentEventListener( const cpo::uno::Reference< css::document::XDocumentEventListener >& Listener ) override;
+    virtual void removeDocumentEventListener( const cpo::uno::Reference< css::document::XDocumentEventListener >& Listener ) override;
+    virtual void notifyDocumentEvent( const OUString& EventName, const cpo::uno::Reference< css::frame::XController2 >& ViewController, const cpo::uno::Any& Supplement ) override;
+
+    // XPrintable
+    virtual cpo::uno::Sequence< css::beans::PropertyValue > getPrinter(  ) override ;
+    virtual void setPrinter( const cpo::uno::Sequence< css::beans::PropertyValue >& aPrinter ) override ;
+    virtual void print( const cpo::uno::Sequence< css::beans::PropertyValue >& xOptions ) override ;
+
+    // XFormDocumentsSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess > getFormDocuments(  ) override;
+
+    // XReportDocumentsSupplier
+    virtual cpo::uno::Reference< css::container::XNameAccess > getReportDocuments(  ) override;
+
+    // XCloseable
+    virtual void close( bool DeliverOwnership ) override;
+    virtual void addCloseListener( const cpo::uno::Reference< css::util::XCloseListener >& Listener ) override;
+    virtual void removeCloseListener( const cpo::uno::Reference< css::util::XCloseListener >& Listener ) override;
+
+    // XUIConfigurationManagerSupplier
+    virtual cpo::uno::Reference< css::ui::XUIConfigurationManager > getUIConfigurationManager(  ) override;
+
+    // XDocumentSubStorageSupplier
+    virtual cpo::uno::Reference< css::embed::XStorage > getDocumentSubStorage( const OUString& aStorageName, sal_Int32 nMode ) override;
+    virtual cpo::uno::Sequence< OUString > getDocumentSubStoragesNames(  ) override;
+
+    // XOfficeDatabaseDocument
+    virtual cpo::uno::Reference< css::sdbc::XDataSource > getDataSource() override;
+
+    // XStorageBasedDocument
+    virtual void loadFromStorage( const cpo::uno::Reference< css::embed::XStorage >& xStorage, const cpo::uno::Sequence< css::beans::PropertyValue >& aMediaDescriptor ) override;
+    virtual void storeToStorage( const cpo::uno::Reference< css::embed::XStorage >& xStorage, const cpo::uno::Sequence< css::beans::PropertyValue >& aMediaDescriptor ) override;
+    virtual void switchToStorage( const cpo::uno::Reference< css::embed::XStorage >& xStorage ) override;
+    virtual cpo::uno::Reference< css::embed::XStorage > getDocumentStorage(  ) override;
+
+    // XEmbeddedScripts
+    virtual cpo::uno::Reference< css::script::XStorageBasedLibraryContainer > getBasicLibraries() override;
+    virtual cpo::uno::Reference< css::script::XStorageBasedLibraryContainer > getDialogLibraries() override;
+    virtual bool getAllowMacroExecution() override;
+
+    // XScriptInvocationContext
+    virtual cpo::uno::Reference< css::document::XEmbeddedScripts > getScriptContainer() override;
+
+    // XScriptProviderSupplier
+    virtual cpo::uno::Reference< css::script::provider::XScriptProvider > getScriptProvider(  ) override;
+
+    // XEventsSupplier
+    virtual cpo::uno::Reference< css::container::XNameReplace > getEvents(  ) override;
+
+    // XLoadable
+    virtual void initNew(  ) override;
+    virtual void load( const cpo::uno::Sequence< css::beans::PropertyValue >& lArguments ) override;
+
+    // css.document.XDocumentRecovery
+    virtual bool wasModifiedSinceLastSave() override;
+    virtual void storeToRecoveryFile( const OUString& i_TargetLocation, const cpo::uno::Sequence< css::beans::PropertyValue >& i_MediaDescriptor ) override;
+    virtual void recoverFromFile( const OUString& i_SourceLocation, const OUString& i_SalvagedFile, const cpo::uno::Sequence< css::beans::PropertyValue >& i_MediaDescriptor ) override;
+
+    // XTitle
+    virtual OUString getTitle(  ) override;
+    virtual void setTitle( const OUString& sTitle ) override;
+
+    // XTitleChangeBroadcaster
+    virtual void addTitleChangeListener( const cpo::uno::Reference< css::frame::XTitleChangeListener >& xListener ) override;
+    virtual void removeTitleChangeListener( const cpo::uno::Reference< css::frame::XTitleChangeListener >& xListener ) override;
+
+    // XUntitledNumbers
+    virtual ::sal_Int32 leaseNumber( const cpo::uno::Reference< cpo::uno::XInterface >& xComponent ) override;
+    virtual void releaseNumber( ::sal_Int32 nNumber ) override;
+    virtual void releaseNumberForComponent( const cpo::uno::Reference< cpo::uno::XInterface >& xComponent ) override;
+    virtual OUString getUntitledPrefix(  ) override;
+
+    /** clears the given object container
+
+        Clearing is done via disposal - the method calls XComponent::dispose at the given object,
+        which must be one of our impl's or our object containers (m_xForms, m_xReports,
+        m_xTableDefinitions, m_xCommandDefinitions)
+
+        @param _rxContainer
+            the container to clear
+    */
+    static void clearObjectContainer(
+                cpo::uno::WeakReference< css::container::XNameAccess >& _rxContainer);
+    static void clearObjectContainer(
+                unotools::WeakReference< OCommandContainer >& _rxContainer);
+
+    /** checks whether the component is already initialized, throws a NotInitializedException if not
+    */
+    void checkInitialized() const
+    {
+        if ( !impl_isInitialized() )
+            throw css::lang::NotInitializedException( OUString(), getThis() );
+    }
+
+    /** checks the document is currently in the initialization phase, or already initialized.
+        Throws NotInitializedException if not so.
+    */
+    void checkNotUninitialized() const
+    {
+        if ( impl_isInitialized() || impl_isInitializing() )
+            // fine
+            return;
+
+        throw css::lang::NotInitializedException( OUString(), getThis() );
+    }
+
+    /** checks whether the document is currently being initialized, or already initialized,
+        throws a DoubleInitializationException if so
+    */
+    void checkNotInitialized() const
+    {
+        if ( impl_isInitializing() || impl_isInitialized() )
+            throw css::frame::DoubleInitializationException( OUString(), getThis() );
+    }
+
+private:
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::ui::XUIConfigurationManager2 > const & getUIConfigurationManager2();
+
+    /** returns whether the model is currently being initialized
+    */
+    bool    impl_isInitializing() const { return m_eInitState == Initializing; }
+
+    /** returns whether the model is already initialized, i.e. the XModel's "initNew" or "load" methods have been called
+    */
+    bool    impl_isInitialized() const { return m_eInitState == Initialized; }
+
+    /// tells the model it is being initialized now
+    void    impl_setInitializing() { m_eInitState = Initializing; }
+
+    /// tells the model its initialization is done
+    void    impl_setInitialized();
+
+    /** closes the frames of all connected controllers
+
+    @param _bDeliverOwnership
+        determines if the ownership should be transferred to the component which
+        possibly vetos the closing
+
+    @throws css::util::CloseVetoException
+        if the closing was vetoed by any instance
+    */
+    void    impl_closeControllerFrames_nolck_throw( bool _bDeliverOwnership );
+
+    /** disposes the frames of all controllers which are still left in m_aControllers.
+    */
+    void    impl_disposeControllerFrames_nothrow();
+
+    /** does a reparenting at the given object container to ourself
+
+        Calls XChild::setParent at the given object, which must be one of our impl's or our
+        object containers (m_xForms, m_xReports, m_xTableDefinitions, m_xCommandDefinitions)
+    */
+    void    impl_reparent_nothrow( const cpo::uno::WeakReference< css::container::XNameAccess >& _rxContainer );
+
+    /** retrieves the forms or reports contained, creates and initializes it, if necessary
+
+        @throws DisposedException
+            if the instance is already disposed
+        @throws IllegalArgumentException
+            if <arg>_eType</arg> is not ODatabaseModelImpl::E_FORM and not ODatabaseModelImpl::E_REPORT
+    */
+    cpo::uno::Reference< css::container::XNameAccess >
+            impl_getDocumentContainer_throw( ODatabaseModelImpl::ObjectType _eType );
+
+    /** resets everything
+
+        @precond
+            m_pImpl is not <NULL/>
+    */
+    void
+            impl_reset_nothrow();
+
+    /** imports the document from the given resource.
+    */
+    static void
+            impl_import_nolck_throw(
+                const cpo::uno::Reference< cpo::uno::XComponentContext >& _rContext,
+                const cpo::uno::Reference< cpo::uno::XInterface >& _rxTargetComponent,
+                const ::comphelper::NamedValueCollection& _rResource
+            );
+
+    /** creates a storage for the given URL, truncating it if a file with this name already exists
+
+        @throws Exception
+            if creating the storage failed
+
+        @return
+            the newly created storage for the file at the given URL
+    */
+    cpo::uno::Reference< css::embed::XStorage >
+            impl_createStorageFor_throw(
+                const OUString& _rURL
+            ) const;
+
+    /** Extracts storage from arguments, or creates for the given URL, truncating it if a file with
+        this name already exists
+
+        @throws Exception
+            if creating the storage failed
+
+        @return
+            the storage that is either extracted from arguments, or newly created for the file at
+            the given URL
+    */
+    cpo::uno::Reference<css::embed::XStorage> impl_GetStorageOrCreateFor_throw(
+        const ::comphelper::NamedValueCollection& _rArguments, const OUString& _rURL) const;
+
+    /** sets our "modified" flag
+
+        will notify all our respective listeners, if the "modified" state actually changed
+
+        @param _bModified
+            the (new) flag indicating whether the document is currently modified or not
+        @param _rGuard
+            the guard for our instance. At method entry, the guard must hold the lock. At the moment
+            of method leave, the lock will be released.
+        @precond
+            our mutex is locked
+        @postcond
+            our mutex is not locked
+    */
+    void    impl_setModified_nothrow( bool _bModified, DocumentGuard& _rGuard );
+
+    /** stores the document to the given storage
+
+        Note that the document is actually not rebased to this storage, it just stores a copy of itself
+        to the given target storage.
+
+        @param _rxTargetStorage
+            denotes the storage to store the document into
+        @param _rMediaDescriptor
+            contains additional parameters for storing the document
+        @param _rDocGuard
+            a guard which holds the (only) lock to the document, and which will be temporarily
+            released where necessary (e.g. for notifications, or calling into other components)
+
+        @throws cpo::uno::IllegalArgumentException
+            if the given storage is <NULL/>.
+
+        @throws cpo::uno::RuntimeException
+            when any of the used operations throws it
+
+        @throws css::io::IOException
+            when any of the used operations throws it, or any other exception occurs which is no
+            RuntimeException and no IOException
+    */
+    void    impl_storeToStorage_throw(
+                const cpo::uno::Reference< css::embed::XStorage >& _rxTargetStorage,
+                const cpo::uno::Sequence< css::beans::PropertyValue >& _rMediaDescriptor,
+                DocumentGuard& _rDocGuard
+            ) const;
+
+    /** impl-version of attachResource
+
+        @param  i_rLogicalDocumentURL
+            denotes the logical URL of the document, to be reported by getURL/getLocation
+        @param  i_rMediaDescriptor
+            denotes additional document parameters
+        @param  _rDocGuard
+            is the guard which currently protects the document instance
+    */
+    bool    impl_attachResource(
+                    const OUString& i_rLogicalDocumentURL,
+                    const cpo::uno::Sequence< css::beans::PropertyValue >& i_rMediaDescriptor,
+                    DocumentGuard& _rDocGuard
+                );
+
+    /** throws an IOException with the message as defined in the RID_STR_ERROR_WHILE_SAVING resource, wrapping
+        the given caught non-IOException error
+    */
+    void        impl_throwIOExceptionCausedBySave_throw(
+                    const cpo::uno::Any& i_rError,
+                    std::u16string_view i_rTargetURL
+                ) const;
+};
+
+/** an extended version of the ModelMethodGuard, which also cares for the initialization state
+    of the document
+*/
+class DocumentGuard : private ModelMethodGuard
+{
+public:
+    enum InitMethod_
+    {
+        // a method which is to initialize the document
+        InitMethod,
+    };
+
+    enum DefaultMethod_
+    {
+        // a default method
+        DefaultMethod
+    };
+
+    enum MethodUsedDuringInit_
+    {
+        // a method which is used (externally) during the initialization phase
+        MethodUsedDuringInit
+    };
+
+    enum MethodWithoutInit_
+    {
+        // a method which does not need initialization - use with care!
+        MethodWithoutInit
+    };
+
+
+    /** constructs the guard
+
+        @param _document
+            the ODatabaseDocument instance
+
+        @throws css::lang::DisposedException
+            If the given component is already disposed
+
+        @throws css::lang::NotInitializedException
+            if the given component is not yet initialized
+    */
+    DocumentGuard(const ODatabaseDocument& _document, DefaultMethod_)
+        : ModelMethodGuard(_document)
+        , m_document(_document )
+    {
+        m_document.checkInitialized();
+    }
+
+    /** constructs the guard
+
+        @param _document
+            the ODatabaseDocument instance
+
+        @throws css::lang::DisposedException
+            If the given component is already disposed
+
+        @throws css::frame::DoubleInitializationException
+            if the given component is already initialized, or currently being initialized.
+    */
+    DocumentGuard(const ODatabaseDocument& _document, InitMethod_)
+        : ModelMethodGuard(_document)
+        , m_document(_document)
+    {
+        m_document.checkNotInitialized();
+    }
+
+    /** constructs the guard
+
+        @param _document
+            the ODatabaseDocument instance
+
+        @throws css::lang::DisposedException
+            If the given component is already disposed
+
+        @throws css::lang::NotInitializedException
+            if the component is still uninitialized, and not in the initialization
+            phase currently.
+    */
+    DocumentGuard(const ODatabaseDocument& _document, MethodUsedDuringInit_)
+        : ModelMethodGuard(_document)
+        , m_document(_document)
+    {
+        m_document.checkNotUninitialized();
+    }
+
+    /** constructs the guard
+
+        @param _document
+            the ODatabaseDocument instance
+
+        @throws css::lang::DisposedException
+            If the given component is already disposed
+    */
+    DocumentGuard(const ODatabaseDocument& _document, MethodWithoutInit_)
+        : ModelMethodGuard( _document )
+        , m_document( _document )
+    {
+    }
+
+    void clear()
+    {
+        ModelMethodGuard::clear();
+    }
+    void reset()
+    {
+        ModelMethodGuard::reset();
+        m_document.checkDisposed();
+    }
+
+private:
+
+    const ODatabaseDocument& m_document;
+};
+
+}   // namespace dbaccess
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,163 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_OOX_DRAWINGML_DIAGRAM_DIAGRAMHELPER_HXX
+#define INCLUDED_OOX_DRAWINGML_DIAGRAM_DIAGRAMHELPER_HXX
+
+#include <rtl/ustring.hxx>
+#include <oox/drawingml/theme.hxx>
+#include <oox/shape/ShapeFilterBase.hxx>
+#include <svx/svdogrp.hxx>
+#include <svx/diagram/DiagramHelper_svx.hxx>
+#include <basegfx/range/b2drange.hxx>
+#include <com/sun/star/awt/Point.hpp>
+#include <com/sun/star/awt/Size.hpp>
+
+namespace oox::drawingml {
+
+class SmartArtDiagram;
+class DrawingML;
+
+// Advanced DiagramHelper
+//
+// This helper tries to hold all necessary data to re-layout
+// all XShapes/SdrObjects of an already imported Diagram. The
+// Diagram holds the SmarArt model data before it gets layouted,
+// while Theme holds the oox Fill/Line/Style definitions to
+// apply.
+// Re-Layouting (re-creating) is rather complex, for detailed
+// information see ::reLayout implementation.
+// This helper class may/should be extended to:
+// - deliver representative data from the Diagram-Model
+// - modify it eventually
+// - im/export Diagram model to other representations
+class DiagramHelper_oox final : public svx::diagram::DiagramHelper_svx
+{
+    const std::shared_ptr< SmartArtDiagram >    mpDiagramPtr;
+    std::shared_ptr<::oox::drawingml::Theme>    mpDiagramThemePtr;
+
+    // Where the frame of the Diagram lies within the group that draws it, in parts of the width
+    // and the height of the group. The frame is the room the layout fills, the group covers what
+    // the shapes drew, and that reaches outside the frame where a shape sticks out of it. The
+    // group itself runs from (0, 0) to (1, 1), so a frame the shapes cover exactly is that too.
+    basegfx::B2DRange maFrameInGroup;
+
+    // data values set by addDiagramNode to be used by next reLayout call
+    // when a new Node gets added
+    OUString msNewNodeId;
+    OUString msNewNodeText;
+    OUString msNewNodeTemplateId;
+
+    bool hasDiagramData() const;
+
+    // Hands the fill, line and text attributes of xOldShape, and its text, to xNewShape. The
+    // shape geometry is not changed. nOldHeight is the height that xOldShapehad
+    // sizes alone.
+    static void moveDiagramModelDataFromOldToNewXShape(
+        const cpo::uno::Reference<css::drawing::XShape>& xOldShape,
+        const cpo::uno::Reference<css::drawing::XShape>& xNewShape, tools::Long nOldHeight);
+
+protected:
+    // access associated SdrObjGroup/XShape/RootShape
+    virtual cpo::uno::Reference< css::drawing::XShape >& accessRootShape() override;
+
+public:
+    DiagramHelper_oox(
+        std::shared_ptr< SmartArtDiagram > xDiagramPtr,
+        std::shared_ptr<::oox::drawingml::Theme> xTheme);
+    explicit DiagramHelper_oox(DiagramHelper_oox const& rSource);
+    explicit DiagramHelper_oox(std::u16string_view rLayout, std::u16string_view rData, std::u16string_view rColors, std::u16string_view rQuickstyle);
+
+    virtual ~DiagramHelper_oox();
+
+    // re-create XShapes
+    virtual void reLayout() override;
+
+    // get text representation of data tree
+    virtual OUString getDiagramString() const override;
+
+    // get children of provided data node
+    // use empty string for top-level nodes
+    // returns vector of (id, text)
+    virtual std::vector<std::pair<OUString, OUString>> getDiagramChildren(const OUString& rParentId) const override;
+
+    // true for a node that holds no nodes below it, false for a node that holds nodes
+    virtual bool isChildNode(std::u16string_view rNodeId) const override;
+
+    // true for a node that can take a node below it, which depends on the layout
+    virtual bool canHoldChildNode(std::u16string_view rNodeId) const override;
+
+    // add/remove new top-level node to data model, returns its id
+    virtual OUString addDiagramNode(std::u16string_view rText, SdrModel& rDrawModel,
+                                    std::u16string_view rAnchorNode, bool bAsChild) override;
+    virtual bool removeDiagramNode(std::u16string_view rNodeId, SdrModel& rDrawModel) override;
+    virtual void TextInformationChange() override;
+    virtual void ItemSetInformationChange(std::span< const SfxPoolItem* const > aChangedItems) override;
+
+    // Undo/Redo helpers to extract/restore Diagram-defining data
+    virtual std::shared_ptr< svx::diagram::DiagramDataState > extractDiagramDataState() const override;
+    virtual void applyDiagramDataState(const std::shared_ptr< svx::diagram::DiagramDataState >& rState) override;
+
+    // rFramePosition and rFrameSize are the frame of the Diagram in EMU, in the coordinates the
+    // shapes of the group were placed in.
+    void doAnchor(cpo::uno::Reference<css::drawing::XShape>& rTarget,
+                  const css::awt::Point& rFramePosition, const css::awt::Size& rFrameSize);
+
+    // make DiagramNodes use FitSize in edit mode
+    void applyTextFitToSizeToDiagramNodes(const cpo::uno::Reference<css::drawing::XShape>& rTarget,
+                                          bool bKeepFontScale);
+    const std::shared_ptr< ::oox::drawingml::Theme >& getOrCreateThemePtr(
+        const rtl::Reference< oox::shape::ShapeFilterBase>& rxFilter ) const;
+
+    // access to get/set PropertyValues
+    void setOOXDomValue(svx::diagram::DomMapFlag aDomMapFlag, const cpo::uno::Any& rValue);
+    virtual cpo::uno::Any getOOXDomValue(svx::diagram::DomMapFlag aDomMapFlag) const override;
+
+    // check if mandatory DiagramDomS exist and/or were not touched
+    virtual bool checkMinimalDataDoms() const override;
+
+    // helpers to write some specific DiagramDoms
+    void writeDiagramOOXData(DrawingML& rOriginalDrawingML, cpo::uno::Reference<css::io::XOutputStream>& xOutputStream, std::u16string_view rDrawingRelId) const;
+    void writeDiagramReducedOOXData(cpo::uno::Reference<css::io::XOutputStream>& xOutputStream) const;
+    void writeDiagramOOXDrawing(DrawingML& rOriginalDrawingML, cpo::uno::Reference<css::io::XOutputStream>& xOutputStream) const;
+
+    // needed to create DiagramHelper_oox in svx' SdrObjGroup copy constructor
+    virtual DiagramHelper_oox* clone() const override;
+
+    // return DiagramModelData requested by DomMapFlag as OUString
+    virtual OUString getDiagramModelData(svx::diagram::DomMapFlag aId) const override;
+
+    virtual bool isTextNodeModelID(const OUString& rModelID) const override;
+};
+
+class DiagramHelperFactory_oox : public svx::diagram::DiagramHelperFactory_svx
+{
+public:
+    DiagramHelperFactory_oox();
+    virtual ~DiagramHelperFactory_oox();
+
+    // overloaded here to allow instantiation of a DiagramHelper_oox
+    virtual std::shared_ptr<svx::diagram::DiagramHelper_svx> createDiagramHelper_svx(std::u16string_view rLayout, std::u16string_view rData, std::u16string_view rColors, std::u16string_view rQuickstyle) const override;
+};
+
+}
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

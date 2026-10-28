@@ -1,0 +1,79 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <controls/controlmodelcontainerbase.hxx>
+#include <com/sun/star/awt/tab/XTabPage.hpp>
+#include <cppuhelper/implbase2.hxx>
+
+class UnoControlTabPageModel final : public ControlModelContainerBase
+{
+    cpo::uno::Any          ImplGetDefaultValue( sal_uInt16 nPropId ) const override;
+    ::cppu::IPropertyArrayHelper& getInfoHelper() override;
+public:
+    UnoControlTabPageModel( cpo::uno::Reference< cpo::uno::XComponentContext > const & i_factory);
+
+    // css::io::XPersistObject
+    OUString getServiceName() override;
+
+    // css::beans::XMultiPropertySet
+    cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    // XInitialization
+    virtual void initialize (const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
+
+    // XServiceInfo
+    OUString getImplementationName() override;
+
+    cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+};
+
+
+
+typedef ::cppu::AggImplInheritanceHelper2   <   ControlContainerBase
+                                            ,   css::awt::tab::XTabPage
+                                            ,   css::awt::XWindowListener
+                                            >   UnoControlTabPage_Base;
+class UnoControlTabPage final : public UnoControlTabPage_Base
+{
+private:
+    bool            m_bWindowListener;
+public:
+
+    UnoControlTabPage( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext );
+    virtual ~UnoControlTabPage() override;
+    OUString             GetComponentServiceName() const override;
+
+    void createPeer( const cpo::uno::Reference< css::awt::XToolkit >& Toolkit, const cpo::uno::Reference< css::awt::XWindowPeer >& Parent ) override;
+    void disposing( const css::lang::EventObject& Source ) override;
+
+     // css::awt::XWindowListener
+    virtual void windowResized( const css::awt::WindowEvent& e ) override;
+    virtual void windowMoved( const css::awt::WindowEvent& e ) override;
+    virtual void windowShown( const css::lang::EventObject& e ) override;
+    virtual void windowHidden( const css::lang::EventObject& e ) override;
+    // css::lang::XServiceInfo
+    virtual OUString getImplementationName() override;
+
+    virtual bool supportsService(OUString const & ServiceName) override;
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

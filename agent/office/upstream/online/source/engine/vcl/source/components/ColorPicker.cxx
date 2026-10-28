@@ -1,0 +1,121 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/beans/XPropertyAccess.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <comphelper/compbase.hxx>
+#include <comphelper/propertyvalue.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <tools/color.hxx>
+#include <vcl/ColorDialog.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+
+namespace
+{
+class ColorPicker : public comphelper::WeakComponentImplHelper<
+                        css::lang::XServiceInfo, css::ui::dialogs::XExecutableDialog,
+                        css::lang::XInitialization, css::beans::XPropertyAccess>
+{
+public:
+    explicit ColorPicker();
+
+    // XInitialization
+    virtual void initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& rServiceName) override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+    // XPropertyAccess
+    virtual cpo::uno::Sequence<css::beans::PropertyValue> getPropertyValues() override;
+    virtual void
+    setPropertyValues(const cpo::uno::Sequence<css::beans::PropertyValue>& rProperties) override;
+
+    // XExecutableDialog
+    virtual void setTitle(const OUString& rTitle) override;
+    virtual sal_Int16 execute() override;
+
+private:
+    Color m_aColor;
+    cpo::uno::Reference<css::awt::XWindow> m_xParent;
+};
+
+constexpr OUString COLOR_PROPERTY_NAME = u"Color"_ustr;
+
+ColorPicker::ColorPicker()
+    : m_aColor(COL_BLACK)
+{
+}
+
+void ColorPicker::initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments)
+{
+    if (rArguments.getLength() == 1)
+    {
+        rArguments[0] >>= m_xParent;
+    }
+}
+
+OUString ColorPicker::getImplementationName()
+{
+    return u"com.sun.star.cui.ColorPicker"_ustr;
+}
+
+bool ColorPicker::supportsService(const OUString& rServiceName)
+{
+    return cppu::supportsService(this, rServiceName);
+}
+
+cpo::uno::Sequence<OUString> ColorPicker::getSupportedServiceNames()
+{
+    return { u"com.sun.star.ui.dialogs.ColorPicker"_ustr };
+}
+
+cpo::uno::Sequence<css::beans::PropertyValue> ColorPicker::getPropertyValues()
+{
+    cpo::uno::Sequence<css::beans::PropertyValue> aProps{ comphelper::makePropertyValue(
+        COLOR_PROPERTY_NAME, m_aColor) };
+    return aProps;
+}
+
+void
+ColorPicker::setPropertyValues(const cpo::uno::Sequence<css::beans::PropertyValue>& rProperties)
+{
+    for (const css::beans::PropertyValue& rProp : rProperties)
+    {
+        if (rProp.Name == COLOR_PROPERTY_NAME)
+            rProp.Value >>= m_aColor;
+    }
+}
+
+void ColorPicker::setTitle(const OUString&) {}
+
+sal_Int16 ColorPicker::execute()
+{
+    ColorDialog aColorDialog(Application::GetFrameWeld(m_xParent));
+    const int nRet = aColorDialog.Execute();
+    if (nRet == RET_OK)
+        m_aColor = aColorDialog.GetColor();
+    return nRet;
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_cui_ColorPicker_get_implementation(cpo::uno::XComponentContext*,
+                                                const cpo::uno::Sequence<cpo::uno::Any>&)
+{
+    return cppu::acquire(new ColorPicker);
+}
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

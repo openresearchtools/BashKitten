@@ -1,0 +1,98 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <xmloff/xmlnamespace.hxx>
+#include <xmloff/xmltoken.hxx>
+#include <xmloff/xmlmetai.hxx>
+#include <xmloff/xmlimp.hxx>
+#include <cpo/uno/Reference.hxx>
+#include <com/sun/star/document/XDocumentProperties.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+using namespace ::xmloff::token;
+
+namespace {
+
+class XMLMetaImportComponent : public SvXMLImport
+{
+private:
+    cpo::uno::Reference< css::document::XDocumentProperties> mxDocProps;
+
+public:
+    // XMLMetaImportComponent() throw();
+    explicit XMLMetaImportComponent(
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext
+        );
+
+protected:
+
+    virtual SvXMLImportContext *CreateFastContext( sal_Int32 nElement,
+        const ::cpo::uno::Reference< ::css::xml::sax::XFastAttributeList >& xAttrList ) override;
+
+    // XImporter
+    virtual void setTargetDocument( const cpo::uno::Reference< css::lang::XComponent >& xDoc ) override;
+};
+
+}
+
+// global functions to support the component
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+XMLMetaImportComponent_get_implementation(
+    cpo::uno::XComponentContext *context,
+    cpo::uno::Sequence<cpo::uno::Any> const &)
+{
+    return cppu::acquire(new XMLMetaImportComponent(context));
+}
+
+XMLMetaImportComponent::XMLMetaImportComponent(
+    const uno::Reference< cpo::uno::XComponentContext >& xContext)
+    :   SvXMLImport(xContext, u"XMLMetaImportComponent"_ustr)
+{
+}
+
+SvXMLImportContext *XMLMetaImportComponent::CreateFastContext( sal_Int32 nElement,
+        const uno::Reference< xml::sax::XFastAttributeList >& /*xAttrList*/ )
+{
+    if (nElement == XML_ELEMENT( OFFICE, XML_DOCUMENT_META ))
+    {
+        if (!mxDocProps.is()) {
+            throw cpo::uno::RuntimeException(
+                u"XMLMetaImportComponent::CreateFastContext: setTargetDocument "
+                "has not been called"_ustr, *this);
+        }
+        return new SvXMLMetaDocumentContext(
+                        *this, mxDocProps);
+    }
+    return nullptr;
+}
+
+void XMLMetaImportComponent::setTargetDocument(
+    const uno::Reference< lang::XComponent >& xDoc )
+{
+    mxDocProps.set( xDoc, uno::UNO_QUERY );
+    if( !mxDocProps.is() )
+        throw lang::IllegalArgumentException(
+            u"XMLMetaImportComponent::setTargetDocument: argument is no "
+            "XDocumentProperties"_ustr, uno::Reference<cpo::uno::XInterface>(*this), 0);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,285 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <sal/config.h>
+
+#include <condition_variable>
+#include <mutex>
+
+#include <cppunit/TestAssert.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
+
+#include <sal/types.h>
+#include <sal/log.hxx>
+
+#include <rtl/ref.hxx>
+
+#include <osl/file.hxx>
+
+#include <com/sun/star/beans/NamedValue.hpp>
+#include <com/sun/star/io/XStreamListener.hpp>
+#include <com/sun/star/ucb/SimpleFileAccess.hpp>
+#include <com/sun/star/xml/xslt/XSLTTransformer.hpp>
+
+#include <cppuhelper/implbase.hxx>
+
+#include <test/bootstrapfixture.hxx>
+
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+
+namespace {
+
+class XsltFilterTest
+    : public test::BootstrapFixture
+{
+public:
+    void testXsltCopyOld();
+    void testXsltCopyNew();
+    void testXsltOutputStreamOnly();
+
+    CPPUNIT_TEST_SUITE(XsltFilterTest);
+    CPPUNIT_TEST(testXsltCopyOld);
+    CPPUNIT_TEST(testXsltCopyNew);
+    CPPUNIT_TEST(testXsltOutputStreamOnly);
+    CPPUNIT_TEST_SUITE_END();
+};
+
+class Listener : public ::cppu::WeakImplHelper<io::XStreamListener>
+{
+public:
+    /// Pass false for bFailOnError when the transformation is meant to fail.
+    Listener(bool bFailOnError = true)
+        : m_bDone(false), m_bFailOnError(bFailOnError), m_bError(false) {}
+
+    void wait() {
+        std::unique_lock<std::mutex> g(m_mutex);
+        m_cond.wait(g, [this]() { return m_bDone; });
+    }
+
+    bool hadError() {
+        std::scoped_lock<std::mutex> g(m_mutex);
+        return m_bError;
+    }
+
+private:
+    std::mutex m_mutex;
+    std::condition_variable m_cond;
+    bool m_bDone;
+    bool m_bFailOnError;
+    bool m_bError;
+
+    virtual void disposing(const lang::EventObject&) noexcept override {}
+    virtual void started() noexcept override {}
+    virtual void closed() noexcept override { notifyDone(); }
+    virtual void terminated() noexcept override { notifyDone(); }
+    virtual void error(const cpo::uno::Any& e) override
+    {
+        {
+            std::scoped_lock<std::mutex> g(m_mutex);
+            m_bError = true;
+        }
+        notifyDone(); // set on error too, otherwise main thread waits forever
+        SAL_WARN("filter.xslt", e);
+        // A failure thrown here would land on the transformation thread, so record it and let
+        // the test body check hadError.
+        if (m_bFailOnError)
+            CPPUNIT_FAIL("exception while in XSLT");
+    }
+
+    void notifyDone() {
+        std::scoped_lock<std::mutex> g(m_mutex);
+        m_bDone = true;
+        m_cond.notify_all();
+    }
+};
+
+void XsltFilterTest::testXsltCopyNew()
+{
+    OUString tempDirURL;
+    osl_getTempDirURL(&tempDirURL.pData);
+    oslFileHandle tempFile;
+    OUString tempURL;
+    osl::File::RC rc = osl::File::createTempFile(nullptr, &tempFile, &tempURL);
+    CPPUNIT_ASSERT_EQUAL(osl::FileBase::E_None, rc);
+    osl_closeFile(tempFile); // close it so xSFA can open it on WNT
+
+    OUString source(
+            m_directories.getURLFromSrc(u"/filter/source/xsltfilter/xsltfilter.component"));
+    cpo::uno::Sequence<cpo::uno::Any> args{
+        cpo::uno::Any(beans::NamedValue(u"StylesheetURL"_ustr,
+            cpo::uno::Any(m_directories.getURLFromSrc(u"/filter/qa/cppunit/data/xslt/copy.xslt")))),
+        cpo::uno::Any(beans::NamedValue(u"SourceURL"_ustr, cpo::uno::Any(source))),
+        cpo::uno::Any(beans::NamedValue(u"TargetURL"_ustr, cpo::uno::Any(tempURL))),
+        cpo::uno::Any(beans::NamedValue(u"SourceBaseURL"_ustr,
+            cpo::uno::Any(m_directories.getURLFromSrc(u"/filter/source/xsltfilter/")))),
+        cpo::uno::Any(beans::NamedValue(u"TargetBaseURL"_ustr, cpo::uno::Any(tempDirURL))),
+        cpo::uno::Any(beans::NamedValue(u"SystemType"_ustr, cpo::uno::Any(OUString()))),
+        cpo::uno::Any(beans::NamedValue(u"PublicType"_ustr, cpo::uno::Any(OUString())))
+    };
+
+    uno::Reference<ucb::XSimpleFileAccess> xSFA =
+        ucb::SimpleFileAccess::create(getComponentContext());
+
+    uno::Reference<io::XInputStream> xIn = xSFA->openFileRead(source);
+    uno::Reference<io::XOutputStream> xOut = xSFA->openFileWrite(tempURL);
+
+    rtl::Reference<Listener> xListener = new Listener();
+
+    uno::Reference<xml::xslt::XXSLTTransformer> xXslt(
+            xml::xslt::XSLTTransformer::create(getComponentContext(), args));
+
+    xXslt->addListener(xListener);
+    xXslt->setInputStream(xIn);
+    xXslt->setOutputStream(xOut);
+
+    xXslt->start();
+
+    xListener->wait();
+
+    xIn->closeInput();
+    xOut->closeOutput();
+    xXslt->terminate();
+
+    osl::File foo(tempURL); // apparently it's necessary to open it again?
+    foo.open(osl_File_OpenFlag_Read);
+    sal_uInt64 size(0);
+    foo.getSize(size);
+    CPPUNIT_ASSERT(size > 1000); // check that something happened
+    foo.close();
+    osl_removeFile(tempURL.pData);
+}
+
+void XsltFilterTest::testXsltCopyOld()
+{
+    OUString tempDirURL;
+    osl_getTempDirURL(&tempDirURL.pData);
+    oslFileHandle tempFile;
+    OUString tempURL;
+    osl::File::RC rc = osl::File::createTempFile(nullptr, &tempFile, &tempURL);
+    CPPUNIT_ASSERT_EQUAL(osl::FileBase::E_None, rc);
+    osl_closeFile(tempFile); // close it so xSFA can open it on WNT
+
+    OUString source(
+            m_directories.getURLFromSrc(u"/filter/source/xsltfilter/xsltfilter.component"));
+    cpo::uno::Sequence<cpo::uno::Any> args{
+        cpo::uno::Any(beans::NamedValue(u"StylesheetURL"_ustr,
+            cpo::uno::Any(m_directories.getURLFromSrc(u"/filter/qa/cppunit/data/xslt/copy.xslt")))),
+        cpo::uno::Any(beans::NamedValue(u"SourceURL"_ustr, cpo::uno::Any(source))),
+        cpo::uno::Any(beans::NamedValue(u"TargetURL"_ustr, cpo::uno::Any(tempURL))),
+        cpo::uno::Any(beans::NamedValue(u"SourceBaseURL"_ustr,
+            cpo::uno::Any(m_directories.getURLFromSrc(u"/filter/source/xsltfilter/")))),
+        cpo::uno::Any(beans::NamedValue(u"TargetBaseURL"_ustr, cpo::uno::Any(tempDirURL))),
+        cpo::uno::Any(beans::NamedValue(u"SystemType"_ustr, cpo::uno::Any(OUString()))),
+        cpo::uno::Any(beans::NamedValue(u"PublicType"_ustr, cpo::uno::Any(OUString())))
+    };
+
+    uno::Reference<ucb::XSimpleFileAccess> xSFA =
+        ucb::SimpleFileAccess::create(getComponentContext());
+
+    uno::Reference<io::XInputStream> xIn = xSFA->openFileRead(source);
+    uno::Reference<io::XOutputStream> xOut = xSFA->openFileWrite(tempURL);
+
+    rtl::Reference<Listener> xListener = new Listener();
+
+    uno::Reference<xml::xslt::XXSLTTransformer> xXslt(
+        getMultiServiceFactory()->createInstance(
+            u"com.sun.star.comp.documentconversion.LibXSLTTransformer"_ustr),
+        uno::UNO_QUERY_THROW);
+
+    uno::Reference<lang::XInitialization> xInit(xXslt, uno::UNO_QUERY_THROW);
+    xInit->initialize(args);
+    xXslt->addListener(xListener);
+    xXslt->setInputStream(xIn);
+    xXslt->setOutputStream(xOut);
+
+    xXslt->start();
+
+    xListener->wait();
+
+    xIn->closeInput();
+    xOut->closeOutput();
+    xXslt->terminate();
+
+    osl::File foo(tempURL); // apparently it's necessary to open it again?
+    foo.open(osl_File_OpenFlag_Read);
+    sal_uInt64 size(0);
+    foo.getSize(size);
+    CPPUNIT_ASSERT(size > 1000); // check that something happened
+    foo.close();
+    osl_removeFile(tempURL.pData);
+}
+
+// The transformation writes to the output stream it is given, and nowhere else.
+void XsltFilterTest::testXsltOutputStreamOnly()
+{
+    OUString tempDirURL;
+    osl_getTempDirURL(&tempDirURL.pData);
+    oslFileHandle tempFile;
+    OUString tempURL;
+    osl::File::RC rc = osl::File::createTempFile(nullptr, &tempFile, &tempURL);
+    CPPUNIT_ASSERT_EQUAL(osl::FileBase::E_None, rc);
+    osl_closeFile(tempFile); // close it so xSFA can open it on WNT
+
+    OUString writtenURL(tempDirURL + "/xslt-write-test.txt");
+    osl_removeFile(writtenURL.pData);
+
+    OUString source(
+            m_directories.getURLFromSrc(u"/filter/source/xsltfilter/xsltfilter.component"));
+    cpo::uno::Sequence<cpo::uno::Any> args{
+        cpo::uno::Any(beans::NamedValue(u"StylesheetURL"_ustr,
+            cpo::uno::Any(m_directories.getURLFromSrc(u"/filter/qa/cppunit/data/xslt/document.xslt")))),
+        cpo::uno::Any(beans::NamedValue(u"SourceURL"_ustr, cpo::uno::Any(source))),
+        cpo::uno::Any(beans::NamedValue(u"TargetURL"_ustr, cpo::uno::Any(tempURL))),
+        cpo::uno::Any(beans::NamedValue(u"TargetBaseURL"_ustr, cpo::uno::Any(tempDirURL + "/"))),
+        cpo::uno::Any(beans::NamedValue(u"SystemType"_ustr, cpo::uno::Any(OUString()))),
+        cpo::uno::Any(beans::NamedValue(u"PublicType"_ustr, cpo::uno::Any(OUString())))
+    };
+
+    uno::Reference<ucb::XSimpleFileAccess> xSFA =
+        ucb::SimpleFileAccess::create(getComponentContext());
+
+    uno::Reference<io::XInputStream> xIn = xSFA->openFileRead(source);
+    uno::Reference<io::XOutputStream> xOut = xSFA->openFileWrite(tempURL);
+
+    rtl::Reference<Listener> xListener = new Listener(false);
+
+    uno::Reference<xml::xslt::XXSLTTransformer> xXslt(
+            xml::xslt::XSLTTransformer::create(getComponentContext(), args));
+
+    xXslt->addListener(xListener);
+    xXslt->setInputStream(xIn);
+    xXslt->setOutputStream(xOut);
+
+    xXslt->start();
+
+    xListener->wait();
+
+    xIn->closeInput();
+    xOut->closeOutput();
+    xXslt->terminate();
+
+    CPPUNIT_ASSERT_MESSAGE("the transformation wrote outside its output stream",
+                           !xSFA->exists(writtenURL));
+    CPPUNIT_ASSERT_MESSAGE("the transformation was not reported as failed",
+                           xListener->hadError());
+
+    osl_removeFile(tempURL.pData);
+}
+
+CPPUNIT_TEST_SUITE_REGISTRATION(XsltFilterTest);
+
+}
+
+CPPUNIT_PLUGIN_IMPLEMENT();
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

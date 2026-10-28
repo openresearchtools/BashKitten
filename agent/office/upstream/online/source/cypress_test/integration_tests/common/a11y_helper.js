@@ -1,0 +1,1505 @@
+/* -*- js-indent-level: 8 -*- */
+/* global cy Cypress expect require */
+
+var ceHelper = require('./contenteditable_helper');
+var desktopHelper = require('./desktop_helper');
+var helper = require('./helper');
+
+/**
+ * Enable UICoverage tracking. Call this in the `before` hook after getting the frame window.
+ * @param {Object} win - The frame window object
+ */
+function enableUICoverage(win) {
+	const enableUICoverage = {
+		'Track': { 'type': 'boolean', 'value': true }
+	};
+	win.app.map.sendUnoCommand('.uno:UICoverage', enableUICoverage);
+}
+
+/**
+ * Report UICoverage and verify results. Call this in the `after` hook.
+ * Returns the result object via a Cypress alias '@uicoverageResult' for additional assertions.
+ * @param {Object} win - The frame window object
+ * @param {boolean} hasLinguisticData - Whether linguistic data (thesaurus, etc.) is available
+ */
+function reportUICoverage(win, hasLinguisticData = true) {
+	if (win.app.socket._onMessage.restore) {
+		// if _onMessage is already wrapped by Sinon, do not create a new spy
+		cy.wrap(win.app.socket._onMessage).as('onMessage');
+	} else {
+		cy.spy(win.app.socket, '_onMessage').as('onMessage').log(false);
+	}
+
+	cy.then(() => {
+		const endUICoverage = {
+			'LinguisticDataAvailable': { 'type': 'boolean', 'value': hasLinguisticData },
+			'Report': { 'type': 'boolean', 'value': true },
+			'Track': { 'type': 'boolean', 'value': false }
+		};
+		win.app.map.sendUnoCommand('.uno:UICoverage', endUICoverage);
+	});
+
+	var coverageResult = null;
+
+	function findUICoverageCall(onMessage) {
+		return onMessage.getCalls().find(call => {
+			const evt = call.args && call.args[0]
+			const textMsg = evt && evt.textMsg;
+			if (!textMsg || !textMsg.startsWith('unocommandresult:')) {
+				return false;
+			}
+			const jsonPart = textMsg.replace('unocommandresult:', '').trim();
+			const data = JSON.parse(jsonPart);
+			return data.commandName === '.uno:UICoverage';
+		});
+	}
+
+	// Use should() for retry until the message arrives
+	cy.get('@onMessage').should(onMessage => {
+		const matchingCall = findUICoverageCall(onMessage);
+		expect(matchingCall, '.uno:UICoverage result').to.be.an('object');
+
+		const textMsg = matchingCall.args[0].textMsg;
+		const jsonPart = textMsg.replace('unocommandresult:', '').trim();
+		coverageResult = JSON.parse(jsonPart).result;
+
+		Cypress.log({name: 'UICoverage Message: ', message: JSON.stringify(coverageResult)});
+	}).then(() => {
+		cy.wrap(coverageResult).as('uicoverageResult');
+	});
+}
+
+/**
+ * Reset document state after each test.
+ */
+function resetState() {
+	cy.cGet('body').then($body => {
+		const snackbarDismiss = $body.find('#snackbar-dismiss-button-button');
+		if (snackbarDismiss.length > 0) {
+			cy.wrap(snackbarDismiss).click({ force: true });
+		}
+	});
+	desktopHelper.undoAll();
+	cy.cGet('div.clipboard').as('clipboard');
+	ceHelper.moveCaret('home', 'ctrl');
+}
+
+/**
+ * Check for a11y errors in spy calls and throw if any found.
+ * @param {Object} win - The frame window object
+ * @param {Object} spy - Sinon spy on console.error
+ */
+function checkA11yErrors(win, spy) {
+	cy.then(() => {
+		const a11yValidatorExceptionText = win.app.A11yValidatorException.PREFIX;
+		const a11yErrors = spy.getCalls().filter(call =>
+			String(call.args[0]).includes(a11yValidatorExceptionText)
+		);
+
+		if (a11yErrors.length > 0) {
+			const errorMessages = a11yErrors.map(call =>
+				call.args.map(arg => String(arg)).join(' ')
+			).join('\n\n');
+
+			throw new Error(`Found A11y errors:\n${errorMessages}`);
+		}
+	});
+}
+
+/**
+ * Run a11y validation via dispatcher command and check for errors.
+ * @param {Object} win - The frame window object
+ * @param {string} dispatchCommand - The dispatch command (e.g., 'validatedialogsa11y')
+ */
+function runA11yValidation(win, dispatchCommand) {
+	cy.then(() => {
+		var spy = Cypress.sinon.spy(win.console, 'error');
+		win.app.dispatcher.dispatch(dispatchCommand);
+
+		checkA11yErrors(win, spy);
+
+		if (spy && spy.restore) {
+			spy.restore();
+		}
+	});
+}
+
+/**
+ * Get the active dialog at a specific nesting level.
+ * @param {number} level - The dialog nesting level (1 for top-level dialog)
+ * @returns {Cypress.Chainable} - Chainable that yields the dialog element
+ */
+function getActiveDialog(level) {
+	return cy.cGet('.ui-dialog[role="dialog"]:not(.snackbar)')
+		.should('have.length', level)
+		.then($dialogs => cy.wrap($dialogs.last()));
+}
+
+/**
+ * Close the active dialog at a specific nesting level.
+ * @param {number} level - The dialog nesting level
+ */
+function closeActiveDialog(level) {
+	getActiveDialog(level)
+		.parents('.jsdialog-window')
+		.invoke('attr', 'id')
+		.then(dialogId => {
+			const windowSelector = `#${CSS.escape(dialogId)}`;
+			// A jsdialog update can rebuild the dialog contents at any moment,
+			// which detaches a close button found earlier. Find the button and
+			// click it in one step, and repeat until the dialog is gone.
+			helper.retryUntil(
+				function () {
+					cy.cGet('body').then($body => {
+						const $button = $body.find(windowSelector + ' .ui-dialog-titlebar-close');
+						if ($button.length) $button[0].click();
+					});
+				},
+				function () {
+					return cy.cGet('body').then($body =>
+						$body.find(windowSelector).length === 0);
+				},
+				{ errorMsg: 'dialog ' + dialogId + ' never closed' });
+		});
+
+	cy.cGet('.ui-dialog[role="dialog"]:not(.snackbar)').should('have.length', level - 1);
+}
+
+/**
+ * Close the active warning dialog at a specific nesting level.
+ * @param {number} level - The dialog nesting level
+ * @param {string} buttonSelector - The button to close the dialog with.
+ */
+function closeActiveWarningDialog(level, buttonSelector = '#no-button') {
+	getActiveDialog(level)
+		.parents('.jsdialog-window')
+		.invoke('attr', 'id')
+		.then(dialogId => {
+			cy.cGet(`#${CSS.escape(dialogId)} ` + buttonSelector)
+				.click();
+		});
+
+	cy.cGet('.ui-dialog[role="dialog"]:not(.snackbar)').should('have.length', level - 1);
+}
+
+/**
+ * Get the active tab panel for a given tab.
+ * @param {jQuery} $container - The container element
+ * @param {string} activeTabId - The ID of the active tab
+ * @returns {jQuery|null} - The tab panel element or null
+ */
+function getActiveTabPanel($container, activeTabId) {
+	const tabSelector = `#${CSS.escape(activeTabId)}`;
+	const $activeTab = $container.find(tabSelector);
+
+	if (!$activeTab.length) return null;
+
+	const panelId = $activeTab.attr('aria-controls');
+	if (!panelId) return null;
+
+	const panelSelector = `#${CSS.escape(panelId)}[role="tabpanel"]`;
+	return $container.find(panelSelector);
+}
+
+/**
+ * Test the name dialog (used for adding hatching patterns, etc.) - Writer only.
+ * @param {Object} win - The frame window object
+ * @param {number} level - The current dialog nesting level
+ */
+function testNameDialog(win, level) {
+	/* exercise the name dialog */
+	getActiveDialog(level + 1)
+		.then(() => {
+			return helper.processToIdle(win);
+		})
+		.then(() => {
+			runA11yValidation(win, 'validatedialogsa11y');
+		})
+		.then(() => {
+			// save with default suggested name
+			cy.cGet('.ui-dialog-title').filter(':contains("Name")').closest('[role="dialog"]')
+				.find('#ok-button').should('be.enabled').click();
+			return helper.processToIdle(win);
+		})
+		.then(() => {
+			cy.cGet('.ui-dialog[role="dialog"]:not(.snackbar)').should('have.length', level);
+		});
+	/* Then add the same name again so we get the warning subdialog */
+	cy.cGet('button.ui-pushbutton[aria-label="Add"]:visible').should('not.be.disabled').click();
+	getActiveDialog(level + 1)
+		.then(() => {
+			return helper.processToIdle(win);
+		})
+		.then(() => {
+			// save with a name that exists to force the warning subdialog
+			cy.cGet('#name_entry-input').type('{selectall}{backspace}Hatching 1');
+			cy.cGet('.ui-dialog-title').filter(':contains("Name")').closest('[role="dialog"]')
+				.find('#ok-button').should('be.enabled').click();
+			return helper.processToIdle(win);
+		})
+		.then(() => {
+			// warning subdialog, default close will cancel
+			handleDialog(win, level + 1);
+		});
+}
+
+/**
+ * Traverse tabs in a dialog and run a11y validation on each.
+ * @param {Function} getContainer - Function that returns the container element
+ * @param {Object} win - The frame window object
+ * @param {number} level - The current dialog nesting level
+ * @param {string} command - The uno command that opened the dialog
+ * @param {boolean} isNested - Whether this is a nested tab traversal
+ */
+function traverseTabs(getContainer, win, level, command, isNested = false) {
+	const TABLIST = '[role="tablist"]';
+	const TAB = '[role="tab"]';
+	const SHOWN = ':not(.hidden)';
+
+	return getContainer().then($container => {
+		let $tabLists;
+
+		if (!isNested) {
+			// For top-level tabs, select only direct tab lists under #tabcontrol
+			// to avoid picking up tab lists from nested tab-panels
+			$tabLists = $container.find('#tabcontrol > ' + TABLIST);
+		} else {
+			// For nested tabs, the container is already the relevant tab-panel,
+			// so select all tab lists within it
+			$tabLists = $container.find(TABLIST);
+		}
+
+		if (!$tabLists.length) return;
+
+		return Cypress._.reduce($tabLists, (chain, tabListEl, tabListIndex) => {
+			return chain.then(() => {
+				// A tab carrying the hidden class is one the dialog does not offer, such as
+				// the None fill type that the rail carries as a checkbox.
+				const $tabs = Cypress.$(tabListEl).find(TAB + SHOWN);
+
+				const clickTabByIndex = (index) => {
+					if (index >= $tabs.length) return cy.wrap(null);
+
+					const $tab = $tabs.eq(index);
+					const tabId = $tab.attr('id');
+					const tabAriaControls = $tab.attr('aria-controls');
+
+					return getContainer()
+						.find(TABLIST).eq(tabListIndex)
+						.find(TAB + SHOWN).eq(index)
+						.then(($liveTab) => {
+							// The tab of a page with no fill is disabled until the checkbox
+							// beside it is set, so set it and let the rail rebuild.
+							if ($liveTab.attr('aria-disabled') !== 'true')
+								return cy.wrap(null);
+
+							cy.cGet('#' + CSS.escape(tabId) + '-fill-input')
+								.check({ force: true });
+							return helper.processToIdle(win);
+						})
+						.then(() => {
+							return getContainer()
+								.find(TABLIST).eq(tabListIndex)
+								.find(TAB + SHOWN).eq(index)
+								.click({ force: true });
+						})
+						.then(() => {
+							return helper.processToIdle(win);
+						})
+						.then(() => {
+							runA11yValidation(win, 'validatedialogsa11y');
+						})
+						.then(() => {
+							// Writer-specific tab subdialogs
+							if (command == '.uno:SetDocumentProperties' && tabId == 'customprops') {
+								cy.cGet('#durationbutton-button').click();
+								handleDialog(win, level + 1);
+							} else if (command == '.uno:SetDocumentProperties' && tabId == 'general') {
+								cy.cGet('#changepass-button').should('not.be.disabled').click();
+								handleDialog(win, level + 1);
+							} else if (command == '.uno:InsertSection' && tabId == 'section') {
+								// check protect to enable password dialog
+								cy.cGet('#protect-input').check();
+								cy.cGet('#selectpassword-button').should('not.be.disabled').click();
+								handleDialog(win, level + 1);
+								cy.cGet('#protect-input').uncheck();
+								cy.cGet('#selectpassword-button').should('be.disabled');
+							} else if (command == '.uno:HyperlinkDialog' && tabId == 'document') {
+								cy.cGet('#browse-button').click();
+								handleDialog(win, level + 1);
+							} else if (command == '.uno:FontDialog' && tabId == 'font') {
+								cy.cGet('#btnWestFeatures-button').click();
+								handleDialog(win, level + 1);
+							} else if ((command == '.uno:PageDialog' || command == '.uno:PageFormatDialog') && (tabId == 'header' || tabId == 'footer')) {
+								// enable the header/footer to make the More... button sensitive
+								const toggleId = tabId == 'header' ? '#checkHeaderOn-input' : '#checkFooterOn-input';
+								cy.cGet(toggleId).check({ force: true });
+								cy.cGet('[id^="buttonMore"][id$="-button"]').filter(':visible').first().should('be.enabled').click();
+								handleDialog(win, level + 1);
+							} else if ((command == '.uno:FormatArea' || command == '.uno:PageDialog' || command == '.uno:PageFormatDialog') && tabAriaControls == 'lbhatch') {
+								cy.cGet('button.ui-pushbutton[aria-label="Add"]:visible').click();
+								testNameDialog(win, level);
+							}
+						})
+						.then(() => {
+							return getContainer();
+						})
+						.then($ctx => {
+							const $panel = getActiveTabPanel($ctx, tabId);
+
+							if (!$panel || !$panel.length) return;
+
+							const panelId = $panel.attr('id');
+							const panelSelector = `#${CSS.escape(panelId)}`;
+
+							return getContainer()
+								.then(() => {
+									const $nestedTablists = $panel.find(TABLIST);
+
+									if (!isNested && $nestedTablists.length > 0) {
+										return traverseTabs(
+											() => getContainer().find(panelSelector),
+											win, level, command, true
+										);
+									}
+								});
+						})
+						.then(() => {
+							return clickTabByIndex(index + 1);
+						});
+				};
+
+				return clickTabByIndex(0);
+			});
+		}, cy.wrap(null));
+	});
+}
+
+/**
+ * Handle tabs in a dialog.
+ * @param {Object} win - The frame window object
+ * @param {number} level - The current dialog nesting level
+ * @param {string} command - The uno command that opened the dialog
+ */
+function handleTabsInDialog(win, level, command) {
+	traverseTabs(() => getActiveDialog(level), win, level, command);
+}
+
+/**
+ * Handle a dialog - wait for it, validate a11y, handle subdialogs, traverse tabs, and close.
+ * @param {Object} win - The frame window object
+ * @param {number} level - The dialog nesting level
+ * @param {string} command - The uno command that opened the dialog (optional)
+ * @param {boolean} isWarningDialog - If this is a warning dialog
+ * @param {string} warningButtonSelector - The button a warning dialog is closed with (optional)
+ */
+function handleDialog(win, level, command, isWarningDialog, warningButtonSelector) {
+	getActiveDialog(level)
+		.then(() => {
+			return helper.processToIdle(win);
+		})
+		.then(() => {
+			runA11yValidation(win, 'validatedialogsa11y');
+		})
+		.then(() => {
+			// Writer-specific subdialogs
+			if (command == '.uno:EditRegion' ||
+			    command == '.uno:InsertCaptionDialog' ||
+			    command == '.uno:SpellDialog' ||
+			    command == '.uno:SpellingAndGrammarDialog' ||
+			    command == '.uno:DataDataPilotRun:Field') {
+				getActiveDialog(level).find('#options-button').click();
+				handleDialog(win, level + 1);
+			} else if (command == '.uno:InsertIndexesEntry') {
+				cy.cGet('#new-button').click();
+				handleDialog(win, level + 1);
+			} else if (command == '.uno:ContentControlProperties') {
+				cy.cGet('#add-button').click();
+				handleDialog(win, level + 1);
+			} else if (command == '.uno:ThemeDialog') {
+				cy.cGet('#button_add-button').click();
+				handleDialog(win, level + 1);
+			} else if (command == '.uno:SearchDialog') {
+				cy.cGet('.ui-expander-label').contains('Other options').should('be.visible').click();
+				cy.cGet('#similarity-input').check();
+				cy.cGet('#similaritybtn-button').should('be.enabled').click();
+				handleDialog(win, level + 1);
+				cy.cGet('#similarity-input').uncheck();
+				cy.cGet('#soundslike-input').check();
+				cy.cGet('#soundslikebtn-button').should('be.enabled').click();
+				handleDialog(win, level + 1);
+				cy.cGet('#soundslike-input').uncheck();
+				// Format and Attributes search are writer-only and the
+				// buttons are hidden in calc/draw.
+				cy.cGet('body').then($body => {
+					if ($body.find('#attributes-button:visible').length) {
+						cy.cGet('#attributes-button').should('be.enabled').click();
+						handleDialog(win, level + 1);
+					}
+				});
+				cy.cGet('body').then($body => {
+					if ($body.find('#format-button:visible').length) {
+						cy.cGet('#format-button').should('be.enabled').click();
+						handleDialog(win, level + 1);
+					}
+				});
+			} else if (command == '.uno:Signature') {
+				cy.cGet('#signatures .ui-treeview-entry > div:first-child').click();
+				cy.cGet('#view-button').should('be.enabled').click();
+				handleDialog(win, level + 1);
+				cy.cGet('#sign-button').should('be.enabled').click();
+				handleDialog(win, level + 1);
+			} else if (command == '.uno:DataBarFormatDialog') {
+				cy.cGet('#options-button').should('be.visible').click();
+				handleDialog(win, level + 1);
+			} else if (command == '.uno:DataDataPilotRun') {
+				cy.cGet('#listbox-page .ui-treeview-entry > div:first-child').dblclick();
+				handleDialog(win, level + 1, '.uno:DataDataPilotRun:Field');
+
+				cy.cGet('#listbox-data .ui-treeview-entry > div:first-child').dblclick();
+				handleDialog(win, level + 1, '.uno:DataDataPilotRun:Data');
+			} else if (command == '.uno:InsertObjectChart') {
+				cy.cGet('#next').click();
+				helper.processToIdle(win);
+				cy.cGet('#IB_RANGE-button').click();
+				// At some point this might begin to behave as if the current dialog turned
+				// into a cell selector, in which case the dialog will be the same level
+				// not a level higher I imagine.
+				handleDialog(win, level + 1);
+			}
+
+			handleTabsInDialog(win, level, command);
+			if (isWarningDialog) {
+				closeActiveWarningDialog(level, warningButtonSelector);
+			} else {
+				closeActiveDialog(level);
+			}
+		});
+}
+
+/**
+ * Test a dialog by sending its uno command and handling it.
+ * @param {Object} win - The frame window object
+ * @param {string|Object} commandSpec - The uno command or {command, args} object
+ */
+function testDialog(win, commandSpec) {
+	const command = typeof commandSpec === 'string' ? commandSpec : commandSpec.command;
+	const args = typeof commandSpec === 'string' ? undefined : commandSpec.args;
+
+	cy.then(() => {
+		win.app.map.sendUnoCommand(command, args);
+	});
+
+	handleDialog(win, 1, command);
+}
+
+const allCommonDialogs = [
+	// .uno:Signature must run first: it shows a "save before sign" prompt
+	// when the document is modified, which aborts the dialog flow. Running
+	// before any other dialog dirties the doc keeps that prompt out of the way.
+	'.uno:Signature',
+	'.uno:AcceptTrackedChanges',
+	{ command: '.uno:ExportToPDF', args: { SynchronMode: { type: 'boolean', value: false } } },
+	'.uno:FontworkGalleryFloater',
+	'.uno:GotoPage',
+	'.uno:HyperlinkDialog',
+	'.uno:InsertQrCode',
+	'.uno:InsertSymbol',
+	'.uno:RunMacro',
+	'.uno:SearchDialog',
+	// modules/swriter/ui/seclabeldialog.ui. The command is writer-only, so
+	// the calc and impress specs exclude it. With no SPIF policy provisioned
+	// (the a11y harness has none) the dialog opens with its no-policy notice
+	// and disabled inputs, which still exercises the .ui for coverage + a11y.
+	'.uno:SecurityLabel',
+	'.uno:SetDocumentProperties',
+	'.uno:SpellDialog',
+	'.uno:SpellingAndGrammarDialog',
+	'.uno:SplitCell',
+	'.uno:StyleNewByExample',
+	'.uno:ThemeDialog',
+	'.uno:ThesaurusDialog',
+	'.uno:WidgetTestDialog'
+];
+
+const needLinguisticDataDialogs = [
+	'.uno:SpellDialog',
+	'.uno:SpellingAndGrammarDialog',
+	'.uno:ThesaurusDialog',
+];
+
+/**
+ * Generate test cases for all common dialogs.
+ * @param {Object} options - Configuration options
+ * @param {Function} options.it - The Mocha `it` function from the test file
+ * @param {Function} options.getWin - Function that returns the frame window object
+ * @param {Function} options.getHasLinguisticData - Function that returns whether linguistic data is available
+ */
+/**
+ * Check if a dialog command requires linguistic data.
+ * @param {string} command - The uno command
+ * @returns {boolean} - Whether the dialog requires linguistic data
+ */
+function needsLinguisticData(command) {
+	return needLinguisticDataDialogs.includes(command);
+}
+
+/**
+ * Test the PDF export warning dialog by exporting with conflicting options.
+ * @param {Object} win - The frame window object
+ */
+function testPDFExportWarningDialog(win) {
+	cy.then(() => {
+		const args = { SynchronMode: { type: 'boolean', value: false } };
+		win.app.map.sendUnoCommand('.uno:ExportToPDF', args);
+	});
+
+	// The warning dialog opens at the same level (1) as the export options
+	// dialog it replaces, so to tell them apart capture the export
+	// dialog's window id and wait for that specific dialog to close after
+	// OK before handling the warning.
+	var exportDialogId;
+	getActiveDialog(1)
+		.then(($dialog) => {
+			exportDialogId = $dialog.parents('.jsdialog-window').attr('id');
+			return helper.processToIdle(win);
+		})
+		.then(() => {
+			cy.cGet('#forms-input').check();
+			cy.cGet('#pdf_version-input').select('PDF/A-1b (PDF 1.4 base)');
+			cy.cGet('#ok-button').click();
+			// pdf export dialog should dismiss
+			cy.cGet('#' + CSS.escape(exportDialogId)).should('not.exist');
+			// and the warning dialog we're interested in should appear
+			handleDialog(win, 1);
+		});
+}
+
+/**
+ * Assert that keyboard focus is somewhere inside the element matched by
+ * selector. Retries until it holds, so it is safe to call right after a
+ * focus-moving key press.
+ * @param {string} selector - cGet selector for the container element
+ */
+function assertFocusWithin(selector) {
+	cy.cGet(selector).should(function ($element) {
+		var win = $element[0].ownerDocument.defaultView;
+		expect($element[0].contains(win.document.activeElement)).to.equal(true);
+	});
+}
+
+/**
+ * The tab order of the open sidebar deck: every tabbable descendant in DOM
+ * order, which is the order the browser moves through with Tab as long as no
+ * widget forces a position of its own with a positive tabindex.
+ *
+ * JSDialog.GetFocusableElements is deliberately not used to build it, so the
+ * expectation stays independent of the helper under test.
+ * @param {Object} win - The frame window object
+ */
+function sidebarTabOrder(win) {
+	const wrapper = win.app.map.sidebar.wrapper;
+	const candidates = wrapper.querySelectorAll(
+		'a[href], button, input, select, textarea, [tabindex], [contenteditable="true"]');
+
+	return Array.prototype.filter.call(candidates, function (element) {
+		if (element.disabled) return false;
+		const tabindex = element.getAttribute('tabindex');
+		if (tabindex !== null && parseInt(tabindex, 10) < 0) return false;
+		// visibilityProperty matters: a deck keeps the widgets of the styles
+		// it does not show in place with visibility hidden, and those are not
+		// tabbable even though the default checkVisibility() call says so.
+		return element.checkVisibility({
+			visibilityProperty: true,
+			contentVisibilityAuto: true,
+		});
+	});
+}
+
+/**
+ * Name an element for an assertion message.
+ * @param {Element} element
+ */
+function describeFocusable(element) {
+	if (!element) return 'nothing';
+	return element.tagName + '#' + (element.id || '<no id>');
+}
+
+/**
+ * Open the property deck if it is not up yet and let its focus grab settle,
+ * so it cannot steal the focus back mid-test.
+ * @param {function} getWin - Returns the frame window object
+ */
+function openSidebarPropertyDeck(getWin) {
+	cy.cGet('#sidebar-dock-wrapper').then(function ($dock) {
+		if (!$dock.is(':visible')) {
+			cy.then(function () {
+				getWin().app.map.sendUnoCommand('.uno:SidebarDeck.PropertyDeck');
+				return helper.processToIdle(getWin());
+			});
+		}
+	});
+	cy.cGet('#sidebar-dock-wrapper').should('be.visible');
+
+	cy.then(function () {
+		helper.waitUntilLayoutingIsIdle(getWin());
+		helper.waitForTimers(getWin(), 'sidebarstealfocus');
+	});
+}
+
+/**
+ * Bodies of the sidebar deck keyboard tests. The deck differs per module, so
+ * every expectation is read from the DOM rather than naming widgets, and the
+ * same checks hold for Writer, Calc, Impress and Draw. Each spec declares its
+ * own it() blocks -- the tag preprocessor only rewrites spec files, so tests
+ * declared from here never reach the runner.
+ */
+const sidebarKeyboard = {
+	assertFocusedIs: function (win, getExpected, label) {
+		cy.cGet('#sidebar-dock-wrapper').should(function () {
+			const expected = getExpected();
+			const active = win.document.activeElement;
+			expect(describeFocusable(active), label)
+				.to.equal(describeFocusable(expected));
+			expect(active, label + ' (same element)').to.equal(expected);
+		});
+	},
+
+	assertNoForcedTabPosition: function (getWin) {
+		cy.then(function () {
+			const order = sidebarTabOrder(getWin());
+			expect(order.length, 'tabbable widgets of the deck').to.be.greaterThan(1);
+
+			const forced = order.filter(function (element) {
+				return parseInt(element.getAttribute('tabindex'), 10) > 0;
+			}).map(describeFocusable);
+			expect(forced, 'widgets with a positive tabindex').to.be.empty;
+		});
+	},
+
+	// A deck keeps the widgets of the styles it does not show in place with
+	// visibility hidden. A bare checkVisibility() does not look at the
+	// visibility property, so the helper used to offer them as focusable.
+	assertHelperSkipsInvisible: function (getWin) {
+		cy.then(function () {
+			const win = getWin();
+			const focusables = win.JSDialog.GetFocusableElements(win.app.map.sidebar.wrapper);
+			expect(focusables, 'focusables of the deck').to.not.be.empty;
+
+			const invisible = focusables.filter(function (element) {
+				return !element.checkVisibility({
+					visibilityProperty: true,
+					contentVisibilityAuto: true,
+				});
+			}).map(describeFocusable);
+			expect(invisible, 'widgets laid out but not visible').to.be.empty;
+		});
+	},
+
+	assertHelperReportsTabOrder: function (getWin) {
+		cy.then(function () {
+			const win = getWin();
+			const reported = win.JSDialog.GetFocusableElements(win.app.map.sidebar.wrapper)
+				.map(describeFocusable);
+			expect(reported, 'widgets the helper reports')
+				.to.deep.equal(sidebarTabOrder(win).map(describeFocusable));
+		});
+	},
+
+	assertPredicateAgreesWithHelper: function (getWin) {
+		cy.then(function () {
+			const win = getWin();
+			const wrapper = win.app.map.sidebar.wrapper;
+			const hidden = Array.prototype.filter.call(
+				wrapper.querySelectorAll(win.JSDialog.FocusableSelector),
+				function (element) {
+					return !element.checkVisibility({
+						visibilityProperty: true,
+						contentVisibilityAuto: true,
+					});
+				});
+
+			expect(hidden.map(describeFocusable),
+				'widgets of the deck hidden with visibility').to.not.be.empty;
+			hidden.forEach(function (element) {
+				expect(win.JSDialog.IsFocusable(element),
+					describeFocusable(element) + ' is hidden').to.equal(false);
+			});
+
+			win.JSDialog.GetFocusableElements(wrapper).forEach(function (element) {
+				expect(win.JSDialog.IsFocusable(element),
+					describeFocusable(element) + ' is reported focusable').to.equal(true);
+			});
+		});
+	},
+
+	assertRingEntersOnFirstWidget: function (getWin) {
+		cy.realPress('F6');
+		sidebarKeyboard.assertFocusedIs(getWin(), function () {
+			return sidebarTabOrder(getWin())[0];
+		}, 'widget focused when the ring enters the sidebar');
+	},
+
+	assertTabWalksTheDeck: function (getWin) {
+		cy.realPress('F6');
+
+		cy.then(function () {
+			const win = getWin();
+			const order = sidebarTabOrder(win);
+			const from = order.indexOf(win.document.activeElement);
+			expect(from, 'the focused widget is part of the tab order')
+				.to.be.greaterThan(-1);
+
+			// walk to the end of the deck, then back to where we started
+			for (let at = from + 1; at < order.length; at++) {
+				cy.then(function () {
+					cy.realPress('Tab');
+					sidebarKeyboard.assertFocusedIs(win, function () {
+						return sidebarTabOrder(win)[at];
+					}, 'widget ' + at + ' of the deck');
+				});
+			}
+
+			for (let at = order.length - 2; at >= from; at--) {
+				cy.then(function () {
+					cy.realPress(['Shift', 'Tab']);
+					sidebarKeyboard.assertFocusedIs(win, function () {
+						return sidebarTabOrder(win)[at];
+					}, 'widget ' + at + ' of the deck, walking back');
+				});
+			}
+		});
+	},
+
+	/// The engine reports a change of table cell by putting the DOM selection in
+	/// the hidden contenteditable, which focuses it. Moving the cursor with a uno
+	/// command reproduces that without typing, so the focus is provably still
+	/// where the keyboard left it and not where a race put it.
+	///
+	/// The cursor jumps into a table first and then to the next cell of that
+	/// table. The sidebar context stays Table, so core keeps the deck as it is.
+	assertCursorMoveKeepsFocus: function (getWin) {
+		cy.then(function () {
+			getWin().app.map.sendUnoCommand('.uno:JumpToNextTable');
+			return helper.processToIdle(getWin());
+		});
+		// core enables DeleteTable only while the cursor is inside a table
+		helper.waitForMapState('.uno:DeleteTable', 'enabled');
+
+		cy.realPress('F6');
+
+		cy.then(function () {
+			const win = getWin();
+			const before = win.document.activeElement;
+			expect(win.app.map.sidebar.wrapper.contains(before),
+				'the focus entered the deck').to.equal(true);
+
+			// the text input remembers the cell the engine last reported
+			const textInput = win.app.map._textInput;
+			const cellBefore = [textInput._lastRowIndex, textInput._lastColIndex];
+
+			win.app.map.sendUnoCommand('.uno:JumpToNextCell');
+
+			cy.cGet('div.clipboard').should(function () {
+				expect([textInput._lastRowIndex, textInput._lastColIndex],
+					'the engine reported the new cell').to.not.deep.equal(cellBefore);
+			});
+
+			cy.then(function () { return helper.processToIdle(win); });
+
+			cy.cGet('#sidebar-dock-wrapper').should(function () {
+				expect(describeFocusable(win.document.activeElement),
+					'the focus after the engine moved the cursor')
+					.to.equal(describeFocusable(before));
+			});
+		});
+	},
+
+	assertRingLeavesTheDeck: function (getWin) {
+		cy.realPress('F6');
+		cy.realPress('Tab');
+
+		cy.cGet('#sidebar-dock-wrapper').should(function ($dock) {
+			expect($dock[0].contains(getWin().document.activeElement),
+				'focus is inside the deck').to.equal(true);
+		});
+
+		cy.realPress('F6');
+
+		cy.cGet('#sidebar-dock-wrapper').should(function ($dock) {
+			expect($dock[0].contains(getWin().document.activeElement),
+				'focus left the deck').to.equal(false);
+		});
+	},
+};
+
+module.exports.assertFocusWithin = assertFocusWithin;
+/**
+ * The accessibility tree the browser exposes to assistive technology, read over
+ * the Chrome DevTools Protocol. runA11yValidation checks the markup; this is
+ * the name and role computed from it, so it catches a label that resolves to
+ * nothing. Chromium-family browsers only.
+ */
+function cdp(command, params) {
+	return Cypress.automation('remote:debugger:protocol', {
+		command: command,
+		params: params || {},
+	});
+}
+
+// The headings and the paragraphs around the caret are requested after a timer and answered after core is idle.
+function processToIdleWithA11yContext(win) {
+	return helper.processToIdle(win).then(function () {
+		return cy.waitUntil(function () {
+			const textInput = win.app.map._textInput;
+			return !textInput._headingsStale && !textInput._contextRequestTimer && !textInput._contextPending;
+		}, { interval: 50 });
+	});
+}
+
+function axTreeAvailable() {
+	return Cypress.browser.family === 'chromium';
+}
+
+/// The document lives in its own frame, and getFullAXTree defaults to the top
+/// one, which is the cypress runner.
+const COOL_FRAME_ATTEMPTS = 20;
+
+function coolFrameId(attempt) {
+	const at = attempt || 1;
+
+	return cy.then(function () {
+		return cdp('Page.enable');
+	}).then(function () {
+		return cdp('Page.getFrameTree');
+	}).then(function (tree) {
+		const urls = [];
+		(function walk(node) {
+			urls.push(node.frame.url ? node.frame.url : '');
+			if (node.frame.url && node.frame.url.indexOf('cool.html') !== -1)
+				urls.cool = node.frame.id;
+			(node.childFrames || []).forEach(walk);
+		})(tree.frameTree);
+
+		if (urls.cool) return urls.cool;
+
+		// The tree can be asked before the document frame is in it. Retrying
+		// keeps that from failing every accessibility assertion at once, with
+		// a message that names none of it.
+		if (at < COOL_FRAME_ATTEMPTS) {
+			return cy.wait(250, { log: false }).then(function () {
+				return coolFrameId(at + 1);
+			});
+		}
+
+		expect(urls.join(', '),
+			'no cool.html frame after ' + at + ' tries; the frames seen were')
+			.to.contain('cool.html');
+	});
+}
+
+function axNode(node) {
+	const props = {};
+	(node.properties || []).forEach(function (p) {
+		props[p.name] = p.value && p.value.value;
+	});
+	return {
+		role: node.role && node.role.value,
+		roleType: node.role && node.role.type,
+		name: (node.name && node.name.value) || '',
+		description: (node.description && node.description.value) || '',
+		ignored: node.ignored,
+		backendDOMNodeId: node.backendDOMNodeId,
+		nodeId: node.nodeId,
+		childIds: node.childIds || [],
+		properties: props,
+	};
+}
+
+/// Every node of the whole document's accessibility tree, in one round trip.
+/// getAXNodesWithin sweeps one container; getFocusedAXNode is a single widget.
+function getAXNodes() {
+	return coolFrameId().then(function (frameId) {
+		return enableAX().then(function () {
+			return cdp('Accessibility.getFullAXTree', { depth: -1, frameId: frameId });
+		});
+	}).then(function (res) {
+		return ((res && res.nodes) || []).map(axNode);
+	});
+}
+
+let axEnabled = false;
+
+/// Enabling the domain makes Chrome compute the page's whole accessibility
+/// tree, so it is paid once and not per widget. A cy chain would not do: a
+/// chainable awaited inside cdp's promise resolves to itself.
+function enableAX() {
+	if (axEnabled) return Cypress.Promise.resolve(null);
+
+	return cdp('Accessibility.enable').then(function () {
+		axEnabled = true;
+	});
+}
+
+/// The whole DOM tree of the runner, frames included, in one round trip. The root
+/// is the runner's document, and the cool one is two frames down from it.
+function getDomTree() {
+	return cy.then(function () {
+		return cdp('DOM.enable');
+	}).then(function () {
+		return cdp('DOM.getDocument', { depth: -1, pierce: true });
+	}).then(function (result) {
+		return result.root;
+	});
+}
+
+/// Call visit on every node of a DOM tree, including the documents of frames.
+function walkDomTree(node, visit) {
+	visit(node);
+	(node.children || []).forEach(function (child) {
+		walkDomTree(child, visit);
+	});
+	if (node.contentDocument) walkDomTree(node.contentDocument, visit);
+}
+
+/// The document node of the cool frame, which is what a selector is resolved
+/// against. Document nodes carry documentURL, not frameId -- that sits on the
+/// IFRAME element above them.
+function coolDocumentNodeIn(root) {
+	let found = null;
+
+	walkDomTree(root, function (node) {
+		if (found !== null) return;
+		if (node.nodeName === '#document' &&
+				(node.documentURL || '').indexOf('cool.html') !== -1)
+			found = node.nodeId;
+	});
+
+	expect(found, 'the cool.html document node in the DOM tree')
+		.to.not.equal(null);
+	return found;
+}
+
+/// The DOM id of every element of a DOM tree, keyed by the backend node id that
+/// the accessibility tree reports for it.
+function domIdsIn(root) {
+	const ids = {};
+
+	walkDomTree(root, function (node) {
+		const attributes = node.attributes || [];
+		for (let at = 0; at < attributes.length; at += 2) {
+			if (attributes[at] === 'id' && attributes[at + 1])
+				ids[node.backendNodeId] = attributes[at + 1];
+		}
+	});
+
+	return ids;
+}
+
+/// The same accessibility nodes, each told which element it stands for. The
+/// tree does not always name an element the way the DOM does: a collapsed
+/// select is a menu to the browser, so its values arrive as menu items, and a
+/// disabled one carries no selection state to tell it apart from the items of
+/// a real menu. One DOM fetch answers for the whole set.
+function withDomNames(nodes) {
+	return getDomTree().then(function (root) {
+		const names = {};
+
+		walkDomTree(root, function (node) {
+			names[node.backendNodeId] = node.nodeName;
+		});
+
+		return nodes.map(function (node) {
+			return Object.assign({}, node, {
+				domName: names[node.backendDOMNodeId] || '',
+			});
+		});
+	});
+}
+
+/// The accessibility subtree of the one element of a document that matches a
+/// selector.
+function axNodesWithin(documentNodeId, selector) {
+	return cdp('DOM.querySelector', {
+		nodeId: documentNodeId,
+		selector: selector,
+	}).then(function (result) {
+		expect(result.nodeId, 'a node matching ' + selector).to.not.equal(0);
+
+		return enableAX().then(function () {
+			return cdp('Accessibility.queryAXTree', { nodeId: result.nodeId });
+		});
+	}).then(function (result) {
+		return ((result && result.nodes) || []).map(axNode);
+	});
+}
+
+/// The accessibility subtree of one container, so an assertion names the
+/// surface it actually read.
+function getAXNodesWithin(selector) {
+	return getDomTree().then(function (root) {
+		return axNodesWithin(coolDocumentNodeIn(root), selector);
+	});
+}
+
+/// role plus whatever identifies the element behind an unnamed node, so a
+/// failure names something findable instead of a bare role.
+function describeAXNode(node) {
+	if (!node.backendDOMNodeId) return node.role;
+
+	return cdp('DOM.describeNode', { backendNodeId: node.backendDOMNodeId })
+		.then(function (res) {
+			const attributes = (res.node && res.node.attributes) || [];
+			const wanted = ['id', 'class'];
+			const parts = [];
+
+			for (let at = 0; at < attributes.length; at += 2) {
+				if (wanted.indexOf(attributes[at]) !== -1 && attributes[at + 1])
+					parts.push(attributes[at] + '="' + attributes[at + 1] + '"');
+			}
+
+			return node.role + (parts.length ? ' <' + parts.join(' ') + '>' : '');
+		});
+}
+
+/// A combobox's dropdown button must say which list it opens: the combobox's own
+/// name alone says nothing about the button, and a generic name says nothing
+/// about the list. The engine sends a name for one of the two only - a widget
+/// labelled by a caption carries no aria label of its own - so the button's
+/// name is read back from the tree rather than assumed.
+function assertDropdownButtonNamesItsList(id) {
+	return getAXNodesWithin('#' + id).then(function (nodes) {
+		const live = nodes.filter(function (node) { return !node.ignored; });
+		const box = live.find(function (node) { return node.role === 'combobox'; });
+		const button = live.find(function (node) { return node.role === 'button'; });
+
+		expect(box, '#' + id + ' is a combobox in the tree').to.not.be.undefined;
+		expect(button, '#' + id + ' offers a button to open its list').to.not.be.undefined;
+
+		const boxName = box.name.trim().replace(/:$/, '');
+
+		expect(boxName, '#' + id + ' combobox carries a name').to.not.be.empty;
+		expect(button.name.trim(), '#' + id + ' button does not repeat the combobox name')
+			.to.not.equal(box.name.trim());
+		expect(button.name.trim(), '#' + id + ' button says which list it opens')
+			.to.contain(boxName);
+	});
+}
+
+/// {role, name, ignored, properties} of the widget holding the focus, or null.
+/// The document root reports itself as focused too, so take the deepest one.
+function getFocusedAXNode() {
+	return coolFrameId().then(function (frameId) {
+		return enableAX().then(function () {
+			return cdp('Accessibility.getFullAXTree', { depth: -1, frameId: frameId });
+		});
+	}).then(function (res) {
+		const focused = (res.nodes || []).filter(function (n) {
+			return (n.properties || []).some(function (p) {
+				return p.name === 'focused' && p.value && p.value.value === true;
+			});
+		});
+		const node = focused[focused.length - 1];
+		if (!node) return null;
+		const props = {};
+		(node.properties || []).forEach(function (p) {
+			props[p.name] = p.value && p.value.value;
+		});
+		return {
+			role: node.role && node.role.value,
+			roleType: node.role && node.role.type,
+			name: (node.name && node.name.value) || '',
+			nameSources: ((node.name && node.name.sources) || []).map(function (src) {
+				return src.attribute || src.nativeSource || src.type;
+			}),
+			ignored: node.ignored,
+			properties: props,
+		};
+	});
+}
+
+/// Every toolbutton of one container that shows it is on, with the selected class,
+/// also announces it, with aria-pressed, and the two never disagree. Each button is
+/// paired with its own node of the accessibility tree, through its DOM id, and the
+/// pressed state of that node is what a screen reader is told. The container has to
+/// be exposed in the tree, since only a shown container has nodes to pair with.
+function assertToggleStatesAgree(win, container, when) {
+	const root = win.document.querySelector(container);
+	expect(root, container + ' exists').to.not.equal(null);
+
+	const shown = Array.prototype.map.call(
+		root.querySelectorAll('button'),
+		function (button) {
+			return {
+				id: button.id,
+				looksPressed: button.classList.contains('selected'),
+			};
+		}).filter(function (button) {
+			return button.id;
+		});
+
+	getDomTree().then(function (root) {
+		return axNodesWithin(coolDocumentNodeIn(root), container).then(function (nodes) {
+			const ids = domIdsIn(root);
+			const byId = {};
+			nodes.forEach(function (node) {
+				if (node.role !== 'button') return;
+				const id = ids[node.backendDOMNodeId];
+				if (id) byId[id] = node;
+			});
+
+			expect(Object.keys(byId), container + ' buttons in the accessibility tree ' + when)
+				.to.not.be.empty;
+
+			const silent = [];
+			const mismatched = [];
+
+			shown.forEach(function (button) {
+				const node = byId[button.id];
+				if (!node) return;
+				const says = node.properties.pressed;
+
+				if (button.looksPressed && says === undefined) {
+					silent.push(button.id);
+				} else if (says !== undefined &&
+						(says === 'true') !== button.looksPressed) {
+					mismatched.push(button.id + ' looks ' +
+						(button.looksPressed ? 'pressed' : 'unpressed') +
+						' but the tree says ' + says);
+				}
+			});
+
+			expect(silent, 'buttons that look pressed and announce nothing ' + when)
+				.to.deep.equal([]);
+			expect(mismatched, 'buttons whose announced state disagrees ' + when)
+				.to.deep.equal([]);
+		});
+	});
+}
+
+module.exports.enableUICoverage = enableUICoverage;
+module.exports.reportUICoverage = reportUICoverage;
+module.exports.resetState = resetState;
+module.exports.checkA11yErrors = checkA11yErrors;
+module.exports.runA11yValidation = runA11yValidation;
+module.exports.getActiveDialog = getActiveDialog;
+module.exports.testNameDialog = testNameDialog;
+module.exports.closeActiveDialog = closeActiveDialog;
+module.exports.getActiveTabPanel = getActiveTabPanel;
+module.exports.traverseTabs = traverseTabs;
+module.exports.handleTabsInDialog = handleTabsInDialog;
+module.exports.handleDialog = handleDialog;
+module.exports.testDialog = testDialog;
+module.exports.allCommonDialogs = allCommonDialogs;
+module.exports.needsLinguisticData = needsLinguisticData;
+module.exports.testPDFExportWarningDialog = testPDFExportWarningDialog;
+module.exports.sidebarTabOrder = sidebarTabOrder;
+module.exports.describeFocusable = describeFocusable;
+module.exports.openSidebarPropertyDeck = openSidebarPropertyDeck;
+module.exports.sidebarKeyboard = sidebarKeyboard;
+module.exports.axTreeAvailable = axTreeAvailable;
+module.exports.processToIdleWithA11yContext = processToIdleWithA11yContext;
+/// The relative luminance WCAG defines, from a computed color string.
+function relativeLuminance(color) {
+	const parts = String(color).match(/[\d.]+/g);
+
+	expect(parts, 'a color with channels in ' + color).to.not.equal(null);
+
+	const channels = parts.slice(0, 3).map(function (channel) {
+		const value = parseFloat(channel) / 255;
+		return value <= 0.03928
+			? value / 12.92
+			: Math.pow((value + 0.055) / 1.055, 2.4);
+	});
+
+	return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+/// The colour actually behind an element: a transparent background shows the
+/// nearest painted ancestor, and that is the colour a contrast check compares.
+function channels(color) {
+	const parts = String(color).match(/[\d.]+/g);
+
+	// A plain throw, not an assertion: this runs once per ancestor of every
+	// widget swept, and each chai assertion is one more entry in cypress's
+	// command log, which a hook never releases.
+	if (parts === null) throw new Error('a color with channels in ' + color);
+
+	const values = parts.slice(0, 3).map(parseFloat);
+	return values.concat(parts.length > 3 ? parseFloat(parts[3]) : 1);
+}
+
+function over(top, bottom) {
+	const alpha = top[3];
+	const mixed = [0, 1, 2].map(function (i) {
+		return top[i] * alpha + bottom[i] * (1 - alpha);
+	});
+
+	return mixed.concat(Math.min(1, alpha + bottom[3] * (1 - alpha)));
+}
+
+function rgb(color) {
+	return 'rgb(' + color.slice(0, 3).map(Math.round).join(', ') + ')';
+}
+
+function effectiveBackground(win, element) {
+	let seat = null;
+
+	for (let node = element; node; node = node.parentElement) {
+		const color = channels(win.getComputedStyle(node).backgroundColor);
+
+		if (color[3] === 0) continue;
+
+		seat = seat === null ? color : over(seat, color);
+		if (seat[3] >= 1) return rgb(seat);
+	}
+
+	throw new Error('nothing paints a background behind ' + element.tagName);
+}
+
+function renderedTextColor(win, element) {
+	const seat = channels(effectiveBackground(win, element));
+	let opacity = 1;
+
+	for (let node = element; node; node = node.parentElement) {
+		opacity *= parseFloat(win.getComputedStyle(node).opacity);
+	}
+
+	const color = channels(win.getComputedStyle(element).color);
+	color[3] *= opacity;
+
+	return rgb(over(color, seat));
+}
+
+/// The contrast ratio WCAG's 3:1 and 4.5:1 are written against. Opaque colors.
+function contrastRatio(one, other) {
+	const first = relativeLuminance(one);
+	const second = relativeLuminance(other);
+
+	return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
+const OPERABLE_TYPES = [
+	'bigcustomtoolitem',
+	'bigtoolitem',
+	'checkbox',
+	'combobox',
+	'customtoolitem',
+	'exportmenubutton',
+	'iconviewlist',
+	'linetransparency',
+	'linewidth',
+	'listbox',
+	'menubutton',
+	'toolitem',
+];
+
+function shortcutName(item) {
+	return item.command || item.id || '<' + item.type + '>';
+}
+
+function isSpacer(item) {
+	return !item.command && !(item.text && item.text.trim());
+}
+
+function rendersNothing(win, item) {
+	if (!item.command) return false;
+	if (item.type !== 'toolitem' && item.type !== 'bigtoolitem') return false;
+
+	const builder = win.app.map.uiManager.notebookbar.builder;
+	const handler = builder && builder._toolitemHandlers[item.command];
+
+	return !!handler && String(handler).replace(/\s/g, '') === 'function(){}';
+}
+
+function notebookbarShortcuts(win) {
+	const notebookbar = win.app.map.uiManager.notebookbar;
+	const json = notebookbar.getFullJSON();
+
+	let container = json;
+	while (container && container.id !== 'ContextContainer' && container.children)
+		container = container.children[0];
+	expect(container && container.id, 'the tab page container').to.equal('ContextContainer');
+
+	function collect(node, into, group) {
+		if (Array.isArray(node)) {
+			node.forEach(function (child) { collect(child, into, group); });
+			return;
+		}
+		if (!node || typeof node !== 'object') return;
+
+		const isGroup = node.type === 'overflowgroup';
+
+		if (!rendersNothing(win, node)) {
+			if (node.accessibility && node.accessibility.combination) {
+				if (!isGroup)
+					into.items.push({
+						name: shortcutName(node),
+						combination: node.accessibility.combination,
+					});
+			} else if (OPERABLE_TYPES.indexOf(node.type) !== -1 && !isSpacer(node)) {
+				into.unreachable.push({ name: shortcutName(node), type: node.type, group: group });
+			}
+		}
+
+		if (node.more && node.more.accessibility && node.more.accessibility.combination) {
+			into.items.push({
+				name: shortcutName(node) + ' (more)',
+				combination: node.more.accessibility.combination,
+			});
+		}
+
+		if (node.children)
+			collect(node.children, into, isGroup ? shortcutName(node) : group);
+	}
+
+	const found = [];
+	container.children.forEach(function (page) {
+		const content = page.children && page.children[0];
+		if (!content) return;
+		const tab = { where: content.id, items: [], unreachable: [] };
+		collect(content.children, tab, null);
+		if (tab.items.length || tab.unreachable.length) found.push(tab);
+	});
+
+	const strip = notebookbar.getTabs().filter(function (tab) {
+		return tab.accessibility && tab.accessibility.combination;
+	}).map(function (tab) {
+		return { name: tab.id, combination: tab.accessibility.combination };
+	});
+	found.push({ where: 'the tab strip', items: strip, unreachable: [] });
+
+	return found;
+}
+
+function notebookbarShortcutTargets(win) {
+	const definitions = win.app.UI.notebookbarAccessibility.definitions.getDefinitions();
+	const found = [];
+
+	const undrawn = new Set();
+	(function walk(node) {
+		if (Array.isArray(node)) {
+			node.forEach(walk);
+			return;
+		}
+		if (!node || typeof node !== 'object') return;
+		if (node.id && rendersNothing(win, node)) undrawn.add(node.id);
+		if (node.children) walk(node.children);
+	})(win.app.map.uiManager.notebookbar.getFullJSON());
+
+	Object.keys(definitions).forEach(function (tabId) {
+		const entries = definitions[tabId].contentList || [];
+		if (!entries.length) return;
+
+		found.push({
+			where: tabId,
+			targets: entries.filter(function (entry) {
+				return !undrawn.has(entry.id);
+			}).map(function (entry) {
+				const element = entry.id
+					? win.document.querySelector('[id^="' + entry.id + '"]')
+					: null;
+				return {
+					id: entry.id,
+					combination: entry.combination,
+					element: element,
+				};
+			}),
+		});
+	});
+
+	return found;
+}
+
+function assertShortcutsFindTheirWidgets(tabs) {
+	const problems = [];
+
+	tabs.forEach(function (tab) {
+		const claimedBy = new Map();
+
+		tab.targets.forEach(function (target) {
+			const name = target.combination + ' (' + target.id + ')';
+
+			if (!target.id || target.id === 'undefined') {
+				problems.push(tab.where + ': ' + target.combination + ' names no widget');
+				return;
+			}
+
+			if (!target.element) {
+				problems.push(tab.where + ': ' + name + ' finds no element');
+				return;
+			}
+
+			const other = claimedBy.get(target.element);
+			if (other && other.combination !== target.combination)
+				problems.push(tab.where + ': ' + name + ' lands on the same element as ' +
+					other.combination + ' (' + other.id + ')');
+			else if (!other)
+				claimedBy.set(target.element, target);
+		});
+	});
+
+	expect(problems, 'shortcuts that do not reach their own widget: ' + problems.join(' | '))
+		.to.be.empty;
+}
+
+function assertShortcutsAreDistinct(tabs) {
+	const problems = [];
+
+	tabs.forEach(function (tab) {
+		const describe = function (item) {
+			return item.combination + ' (' + item.name + ')';
+		};
+
+		tab.items.forEach(function (one, at) {
+			tab.items.slice(at + 1).forEach(function (other) {
+				if (one.name === other.name) return;
+
+				if (one.combination === other.combination) {
+					problems.push(tab.where + ': ' + describe(one) + ' and ' + describe(other) +
+						' answer to the same keys');
+					return;
+				}
+
+				const first = one.combination.length <= other.combination.length ? one : other;
+				const second = first === one ? other : one;
+				if (second.combination.indexOf(first.combination) === 0)
+					problems.push(tab.where + ': ' + describe(first) + ' swallows ' + describe(second));
+			});
+		});
+	});
+
+	expect(problems, 'shortcuts that cannot both be typed: ' + problems.join(' | '))
+		.to.be.empty;
+}
+
+function assertEveryControlHasAShortcut(tabs) {
+	const problems = [];
+
+	tabs.forEach(function (tab) {
+		tab.unreachable.forEach(function (item) {
+			problems.push(tab.where + ': ' + item.name +
+				(item.group ? ' in ' + item.group : ''));
+		});
+	});
+
+	expect(problems, 'controls no shortcut reaches: ' + problems.join(' | '))
+		.to.be.empty;
+}
+
+module.exports.getFocusedAXNode = getFocusedAXNode;
+module.exports.assertToggleStatesAgree = assertToggleStatesAgree;
+module.exports.getAXNodes = getAXNodes;
+module.exports.getAXNodesWithin = getAXNodesWithin;
+module.exports.withDomNames = withDomNames;
+module.exports.describeAXNode = describeAXNode;
+module.exports.assertDropdownButtonNamesItsList = assertDropdownButtonNamesItsList;
+module.exports.contrastRatio = contrastRatio;
+module.exports.relativeLuminance = relativeLuminance;
+module.exports.effectiveBackground = effectiveBackground;
+module.exports.renderedTextColor = renderedTextColor;
+module.exports.notebookbarShortcuts = notebookbarShortcuts;
+module.exports.assertShortcutsAreDistinct = assertShortcutsAreDistinct;
+module.exports.assertEveryControlHasAShortcut = assertEveryControlHasAShortcut;
+module.exports.notebookbarShortcutTargets = notebookbarShortcutTargets;
+module.exports.assertShortcutsFindTheirWidgets = assertShortcutsFindTheirWidgets;

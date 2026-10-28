@@ -1,0 +1,760 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+/*TODO: Do not depend on types for which C++ header files are only generated
+  later in the build process in offuh: */
+
+singleton FILE: cpo::uno::XInterface;
+singleton lconv: cpo::uno::XInterface;
+singleton tm: cpo::uno::XInterface;
+
+singleton std: cpo::uno::XInterface;
+
+module test { module codemaker { module cppumaker {
+
+interface XTest {
+    boolean test();
+
+    [attribute, bound] long A1;
+    [attribute, bound, readonly] long A2;
+    [attribute] long A3 {
+        get raises
+            (cpo::uno::Exception,
+             com::sun::star::lang::ClassNotFoundException);
+        set raises (cpo::uno::RuntimeException);
+    };
+    [attribute, readonly] long A4 {
+        get raises (cpo::uno::DeploymentException);
+    };
+};
+
+typedef boolean Boolean;
+typedef byte Byte;
+typedef short Short;
+typedef unsigned short UnsignedShort;
+typedef long Long;
+typedef unsigned long UnsignedLong;
+typedef hyper Hyper;
+typedef unsigned hyper UnsignedHyper;
+typedef float Float;
+typedef double Double;
+typedef char Char;
+typedef string String;
+typedef type Type;
+typedef any Any;
+typedef com::sun::star::lang::Locale Locale;
+typedef cpo::uno::XInterface XInterface;
+typedef cpo::uno::XNamingService XNamingService;
+
+typedef sequence< Boolean > SequenceBoolean;
+typedef sequence< Byte > SequenceByte;
+typedef sequence< Short > SequenceShort;
+typedef sequence< UnsignedShort > SequenceUnsignedShort;
+typedef sequence< Long > SequenceLong;
+typedef sequence< UnsignedLong > SequenceUnsignedLong;
+typedef sequence< Hyper > SequenceHyper;
+typedef sequence< UnsignedHyper > SequenceUnsignedHyper;
+typedef sequence< Float > SequenceFloat;
+typedef sequence< Double > SequenceDouble;
+typedef sequence< Char > SequenceChar;
+typedef sequence< String > SequenceString;
+typedef sequence< Type > SequenceType;
+typedef sequence< Any > SequenceAny;
+typedef sequence< Locale > SequenceLocale;
+typedef sequence< XInterface > SequenceXInterface;
+typedef sequence< XNamingService > SequenceXNamingService;
+
+service S1: XTest {
+    create1();
+
+    create2([in] any... create2)
+        raises (cpo::uno::RuntimeException,
+                com::sun::star::lang::ClassNotFoundException,
+                cpo::uno::Exception,
+                com::sun::star::lang::IllegalAccessException,
+                cpo::uno::DeploymentException);
+
+    create3([in] sequence<any> S1)
+        raises (cpo::uno::RuntimeException,
+                com::sun::star::lang::ClassNotFoundException,
+                com::sun::star::lang::IllegalAccessException,
+                cpo::uno::DeploymentException);
+
+    create4([in] long javamaker, [in] long S1, [in] long create4);
+
+    create5(
+        [in] boolean p1,
+        [in] byte p2,
+        [in] short p3,
+        [in] unsigned short p4,
+        [in] long p5,
+        [in] unsigned long p6,
+        [in] hyper p7,
+        [in] unsigned hyper p8,
+        [in] float p9,
+        [in] double p10,
+        [in] char p11,
+        [in] string p12,
+        [in] type p13,
+        [in] any p14,
+        [in] com::sun::star::lang::Locale p15,
+        [in] cpo::uno::XInterface p16,
+        [in] cpo::uno::XNamingService p17,
+        [in] Boolean t1,
+        [in] Byte t2,
+        [in] Short t3,
+        [in] UnsignedShort t4,
+        [in] Long t5,
+        [in] UnsignedLong t6,
+        [in] Hyper t7,
+        [in] UnsignedHyper t8,
+        [in] Float t9,
+        [in] Double t10,
+        [in] Char t11,
+        [in] String t12,
+        [in] Type t13,
+        [in] Any t14,
+        [in] Locale t15,
+        [in] XInterface t16,
+        [in] XNamingService t17,
+        [in] sequence< sequence< boolean > > a1,
+        [in] sequence< sequence< byte > > a2,
+        [in] sequence< sequence< short > > a3,
+        [in] sequence< sequence< unsigned short > > a4,
+        [in] sequence< sequence< long > > a5,
+        [in] sequence< sequence< unsigned long > > a6,
+        [in] sequence< sequence< hyper > > a7,
+        [in] sequence< sequence< unsigned hyper > > a8,
+        [in] sequence< sequence< float > > a9,
+        [in] sequence< sequence< double > > a10,
+        [in] sequence< sequence< char > > a11,
+        [in] sequence< sequence< string > > a12,
+        [in] sequence< sequence< type > > a13,
+        [in] sequence< sequence< any > > a14,
+        [in] sequence< sequence< com::sun::star::lang::Locale > > a15,
+        [in] sequence< sequence< cpo::uno::XInterface > > a16,
+        [in] sequence< sequence<
+            cpo::uno::XNamingService > > a17,
+        [in] sequence< SequenceBoolean > at1,
+        [in] sequence< SequenceByte > at2,
+        [in] sequence< SequenceShort > at3,
+        [in] sequence< SequenceUnsignedShort > at4,
+        [in] sequence< SequenceLong > at5,
+        [in] sequence< SequenceUnsignedLong > at6,
+        [in] sequence< SequenceHyper > at7,
+        [in] sequence< SequenceUnsignedHyper > at8,
+        [in] sequence< SequenceFloat > at9,
+        [in] sequence< SequenceDouble > at10,
+        [in] sequence< SequenceChar > at11,
+        [in] sequence< SequenceString > at12,
+        [in] sequence< SequenceType > at13,
+        [in] sequence< SequenceAny > at14,
+        [in] sequence< SequenceLocale > at15,
+        [in] sequence< SequenceXInterface > at16,
+        [in] sequence< SequenceXNamingService > at17);
+};
+
+service S2: XTest;
+
+service S3 { interface XTest; };
+
+singleton S4 { service S3; };
+
+module services {
+
+service asm: cpo::uno::XInterface { asm([in] long asm); };
+service auto: cpo::uno::XInterface { auto([in] long auto); };
+service bool: cpo::uno::XInterface { bool([in] long bool); };
+service break: cpo::uno::XInterface { break([in] long break); };
+//TODO: service case: cpo::uno::XInterface { case([in] long case); };
+service catch: cpo::uno::XInterface { catch([in] long catch); };
+//TODO: service char: cpo::uno::XInterface { char([in] long char); };
+service class: cpo::uno::XInterface { class([in] long class); };
+//TODO: service const: cpo::uno::XInterface {
+//    const([in] long const); };
+service continue: cpo::uno::XInterface {
+    continue([in] long continue); };
+//TODO: service default: cpo::uno::XInterface {
+//    default([in] long default); };
+service delete: cpo::uno::XInterface { delete([in] long delete); };
+service do: cpo::uno::XInterface { do([in] long do); };
+//TODO: service double: cpo::uno::XInterface {
+//    double([in] long double); };
+service else: cpo::uno::XInterface { else([in] long else); };
+//TODO: service enum: cpo::uno::XInterface { enum([in] long enum); };
+service explicit: cpo::uno::XInterface {
+    explicit([in] long explicit); };
+service export: cpo::uno::XInterface { export([in] long export); };
+service extern: cpo::uno::XInterface { extern([in] long extern); };
+service false: cpo::uno::XInterface { false([in] long false); };
+//TODO: service float: cpo::uno::XInterface {
+//    float([in] long float); };
+service for: cpo::uno::XInterface { for([in] long for); };
+service friend: cpo::uno::XInterface { friend([in] long friend); };
+service goto: cpo::uno::XInterface { goto([in] long goto); };
+service if: cpo::uno::XInterface { if([in] long if); };
+service inline: cpo::uno::XInterface { inline([in] long inline); };
+service int: cpo::uno::XInterface { int([in] long int); };
+//TODO: service long: cpo::uno::XInterface { long([in] long long); };
+service mutable: cpo::uno::XInterface {
+    mutable([in] long mutable); };
+service namespace: cpo::uno::XInterface {
+    namespace([in] long namespace); };
+service new: cpo::uno::XInterface { new([in] long new); };
+service operator: cpo::uno::XInterface {
+    operator([in] long operator); };
+service private: cpo::uno::XInterface {
+    private([in] long private); };
+service protected: cpo::uno::XInterface {
+    protected([in] long protected); };
+service public: cpo::uno::XInterface { public([in] long public); };
+service register: cpo::uno::XInterface {
+    register([in] long register); };
+service return: cpo::uno::XInterface { return([in] long return); };
+//TODO: service short: cpo::uno::XInterface {
+//    short([in] long short); };
+service signed: cpo::uno::XInterface { signed([in] long signed); };
+service sizeof: cpo::uno::XInterface { sizeof([in] long sizeof); };
+service static: cpo::uno::XInterface { static([in] long static); };
+//TODO: service struct: cpo::uno::XInterface {
+//    struct([in] long struct); };
+//TODO: service switch: cpo::uno::XInterface {
+//    switch([in] long switch); };
+service template: cpo::uno::XInterface {
+    template([in] long template); };
+service this: cpo::uno::XInterface { this([in] long this); };
+service throw: cpo::uno::XInterface { throw([in] long throw); };
+service true: cpo::uno::XInterface { true([in] long true); };
+service try: cpo::uno::XInterface { try([in] long try); };
+//TODO: service typedef: cpo::uno::XInterface {
+//    typedef([in] long typedef); };
+service typeid: cpo::uno::XInterface { typeid([in] long typeid); };
+service typename: cpo::uno::XInterface {
+    typename([in] long typename); };
+//TODO: service union: cpo::uno::XInterface {
+//    union([in] long union); };
+//TODO: service unsigned: cpo::uno::XInterface {
+//    unsigned([in] long unsigned); };
+service using: cpo::uno::XInterface { using([in] long using); };
+service virtual: cpo::uno::XInterface {
+    virtual([in] long virtual); };
+//TODO: service void: cpo::uno::XInterface { void([in] long void); };
+service volatile: cpo::uno::XInterface {
+    volatile([in] long volatile); };
+service while: cpo::uno::XInterface { while([in] long while); };
+
+service and: cpo::uno::XInterface { and([in] long and); };
+service bitand: cpo::uno::XInterface { bitand([in] long bitand); };
+service bitor: cpo::uno::XInterface { bitor([in] long bitor); };
+service compl: cpo::uno::XInterface { compl([in] long compl); };
+service not: cpo::uno::XInterface { not([in] long not); };
+service or: cpo::uno::XInterface { or([in] long or); };
+service xor: cpo::uno::XInterface { xor([in] long xor); };
+
+service BUFSIZ: cpo::uno::XInterface { BUFSIZ([in] long BUFSIZ); };
+service CLOCKS_PER_SEC: cpo::uno::XInterface {
+    CLOCKS_PER_SEC([in] long CLOCKS_PER_SEC); };
+service EDOM: cpo::uno::XInterface { EDOM([in] long EDOM); };
+service EOF: cpo::uno::XInterface { EOF([in] long EOF); };
+service ERANGE: cpo::uno::XInterface { ERANGE([in] long ERANGE); };
+service EXIT_FAILURE: cpo::uno::XInterface {
+    EXIT_FAILURE([in] long EXIT_FAILURE); };
+service EXIT_SUCCESS: cpo::uno::XInterface {
+    EXIT_SUCCESS([in] long EXIT_SUCCESS); };
+service FILENAME_MAX: cpo::uno::XInterface {
+    FILENAME_MAX([in] long FILENAME_MAX); };
+service FOPEN_MAX: cpo::uno::XInterface {
+    FOPEN_MAX([in] long FOPEN_MAX); };
+service HUGE_VAL: cpo::uno::XInterface {
+    HUGE_VAL([in] long HUGE_VAL); };
+service LC_ALL: cpo::uno::XInterface { LC_ALL([in] long LC_ALL); };
+service LC_COLLATE: cpo::uno::XInterface {
+    LC_COLLATE([in] long LC_COLLATE); };
+service LC_CTYPE: cpo::uno::XInterface {
+    LC_CTYPE([in] long LC_CTYPE); };
+service LC_MONETARY: cpo::uno::XInterface {
+    LC_MONETARY([in] long LC_MONETARY); };
+service LC_NUMERIC: cpo::uno::XInterface {
+    LC_NUMERIC([in] long LC_NUMERIC); };
+service LC_TIME: cpo::uno::XInterface {
+    LC_TIME([in] long LC_TIME); };
+service L_tmpnam: cpo::uno::XInterface {
+    L_tmpnam([in] long L_tmpnam); };
+service MB_CUR_MAX: cpo::uno::XInterface {
+    MB_CUR_MAX([in] long MB_CUR_MAX); };
+service NULL: cpo::uno::XInterface { NULL([in] long NULL); };
+service RAND_MAX: cpo::uno::XInterface {
+    RAND_MAX([in] long RAND_MAX); };
+service SEEK_CUR: cpo::uno::XInterface {
+    SEEK_CUR([in] long SEEK_CUR); };
+service SEEK_END: cpo::uno::XInterface {
+    SEEK_END([in] long SEEK_END); };
+service SEEK_SET: cpo::uno::XInterface {
+    SEEK_SET([in] long SEEK_SET); };
+service SIGABRT: cpo::uno::XInterface {
+    SIGABRT([in] long SIGABRT); };
+service SIGFPE: cpo::uno::XInterface { SIGFPE([in] long SIGFPE); };
+service SIGILL: cpo::uno::XInterface { SIGILL([in] long SIGILL); };
+service SIGINT: cpo::uno::XInterface { SIGINT([in] long SIGINT); };
+service SIGSEGV: cpo::uno::XInterface {
+    SIGSEGV([in] long SIGSEGV); };
+service SIGTERM: cpo::uno::XInterface {
+    SIGTERM([in] long SIGTERM); };
+service SIG_DFL: cpo::uno::XInterface {
+    SIG_DFL([in] long SIG_DFL); };
+service SIG_ERR: cpo::uno::XInterface {
+    SIG_ERR([in] long SIG_ERR); };
+service SIG_IGN: cpo::uno::XInterface {
+    SIG_IGN([in] long SIG_IGN); };
+service TMP_MAX: cpo::uno::XInterface {
+    TMP_MAX([in] long TMP_MAX); };
+service WCHAR_MAX: cpo::uno::XInterface {
+    WCHAR_MAX([in] long WCHAR_MAX); };
+service WCHAR_MIN: cpo::uno::XInterface {
+    WCHAR_MIN([in] long WCHAR_MIN); };
+service WEOF: cpo::uno::XInterface { WEOF([in] long WEOF); };
+service assert: cpo::uno::XInterface { assert([in] long assert); };
+service errno: cpo::uno::XInterface { errno([in] long errno); };
+service offsetof: cpo::uno::XInterface {
+    offsetof([in] long offsetof); };
+service setjmp: cpo::uno::XInterface { setjmp([in] long setjmp); };
+service stderr: cpo::uno::XInterface { stderr([in] long stderr); };
+service stdin: cpo::uno::XInterface { stdin([in] long stdin); };
+service stdout: cpo::uno::XInterface { stdout([in] long stdout); };
+
+service CHAR_BIT: cpo::uno::XInterface {
+    CHAR_BIT([in] long CHAR_BIT); };
+service CHAR_MAX: cpo::uno::XInterface {
+    CHAR_MAX([in] long CHAR_MAX); };
+service CHAR_MIN: cpo::uno::XInterface {
+    CHAR_MIN([in] long CHAR_MIN); };
+service DBL_DIG: cpo::uno::XInterface {
+    DBL_DIG([in] long DBL_DIG); };
+service DBL_EPSILON: cpo::uno::XInterface {
+    DBL_EPSILON([in] long DBL_EPSILON); };
+service DBL_MANT_DIG: cpo::uno::XInterface {
+    DBL_MANT_DIG([in] long DBL_MANT_DIG); };
+service DBL_MAX: cpo::uno::XInterface {
+    DBL_MAX([in] long DBL_MAX); };
+service DBL_MAX_10_EXP: cpo::uno::XInterface {
+    DBL_MAX_10_EXP([in] long DBL_MAX_10_EXP); };
+service DBL_MAX_EXP: cpo::uno::XInterface {
+    DBL_MAX_EXP([in] long DBL_MAX_EXP); };
+service DBL_MIN: cpo::uno::XInterface {
+    DBL_MIN([in] long DBL_MIN); };
+service DBL_MIN_10_EXP: cpo::uno::XInterface {
+    DBL_MIN_10_EXP([in] long DBL_MIN_10_EXP); };
+service DBL_MIN_EXP: cpo::uno::XInterface {
+    DBL_MIN_EXP([in] long DBL_MIN_EXP); };
+service FLT_DIG: cpo::uno::XInterface {
+    FLT_DIG([in] long FLT_DIG); };
+service FLT_EPSILON: cpo::uno::XInterface {
+    FLT_EPSILON([in] long FLT_EPSILON); };
+service FLT_MANT_DIG: cpo::uno::XInterface {
+    FLT_MANT_DIG([in] long FLT_MANT_DIG); };
+service FLT_MAX: cpo::uno::XInterface {
+    FLT_MAX([in] long FLT_MAX); };
+service FLT_MAX_10_EXP: cpo::uno::XInterface {
+    FLT_MAX_10_EXP([in] long FLT_MAX_10_EXP); };
+service FLT_MAX_EXP: cpo::uno::XInterface {
+    FLT_MAX_EXP([in] long FLT_MAX_EXP); };
+service FLT_MIN: cpo::uno::XInterface {
+    FLT_MIN([in] long FLT_MIN); };
+service FLT_MIN_10_EXP: cpo::uno::XInterface {
+    FLT_MIN_10_EXP([in] long FLT_MIN_10_EXP); };
+service FLT_MIN_EXP: cpo::uno::XInterface {
+    FLT_MIN_EXP([in] long FLT_MIN_EXP); };
+service FLT_RADIX: cpo::uno::XInterface {
+    FLT_RADIX([in] long FLT_RADIX); };
+service FLT_ROUNDS: cpo::uno::XInterface {
+    FLT_ROUNDS([in] long FLT_ROUNDS); };
+service INT_MAX: cpo::uno::XInterface {
+    INT_MAX([in] long INT_MAX); };
+service INT_MIN: cpo::uno::XInterface {
+    INT_MIN([in] long INT_MIN); };
+service LDBL_DIG: cpo::uno::XInterface {
+    LDBL_DIG([in] long LDBL_DIG); };
+service LDBL_EPSILON: cpo::uno::XInterface {
+    LDBL_EPSILON([in] long LDBL_EPSILON); };
+service LDBL_MANT_DIG: cpo::uno::XInterface {
+    LDBL_MANT_DIG([in] long LDBL_MANT_DIG); };
+service LDBL_MAX: cpo::uno::XInterface {
+    LDBL_MAX([in] long LDBL_MAX); };
+service LDBL_MAX_10_EXP: cpo::uno::XInterface {
+    LDBL_MAX_10_EXP([in] long LDBL_MAX_10_EXP); };
+service LDBL_MAX_EXP: cpo::uno::XInterface {
+    LDBL_MAX_EXP([in] long LDBL_MAX_EXP); };
+service LDBL_MIN: cpo::uno::XInterface {
+    LDBL_MIN([in] long LDBL_MIN); };
+service LDBL_MIN_10_EXP: cpo::uno::XInterface {
+    LDBL_MIN_10_EXP([in] long LDBL_MIN_10_EXP); };
+service LDBL_MIN_EXP: cpo::uno::XInterface {
+    LDBL_MIN_EXP([in] long LDBL_MIN_EXP); };
+service LONG_MAX: cpo::uno::XInterface {
+    LONG_MAX([in] long LONG_MAX); };
+service LONG_MIN: cpo::uno::XInterface {
+    LONG_MIN([in] long LONG_MIN); };
+service MB_LEN_MAX: cpo::uno::XInterface {
+    MB_LEN_MAX([in] long MB_LEN_MAX); };
+service SCHAR_MAX: cpo::uno::XInterface {
+    SCHAR_MAX([in] long SCHAR_MAX); };
+service SCHAR_MIN: cpo::uno::XInterface {
+    SCHAR_MIN([in] long SCHAR_MIN); };
+service SHRT_MAX: cpo::uno::XInterface {
+    SHRT_MAX([in] long SHRT_MAX); };
+service SHRT_MIN: cpo::uno::XInterface {
+    SHRT_MIN([in] long SHRT_MIN); };
+service UCHAR_MAX: cpo::uno::XInterface {
+    UCHAR_MAX([in] long UCHAR_MAX); };
+service UINT_MAX: cpo::uno::XInterface {
+    UINT_MAX([in] long UINT_MAX); };
+service ULONG_MAX: cpo::uno::XInterface {
+    ULONG_MAX([in] long ULONG_MAX); };
+service USHRT_MAX: cpo::uno::XInterface {
+    USHRT_MAX([in] long USHRT_MAX); };
+
+service FILE: cpo::uno::XInterface { FILE([in] long FILE); };
+service lconv: cpo::uno::XInterface { lconv([in] long lconv); };
+service tm: cpo::uno::XInterface { tm([in] long tm); };
+
+service std: cpo::uno::XInterface { std([in] long std); };
+
+service NDEBUG: cpo::uno::XInterface { NDEBUG([in] long NDEBUG); };
+
+service create: cpo::uno::XInterface;
+
+};
+
+module singletons {
+
+singleton asm: cpo::uno::XInterface;
+singleton auto: cpo::uno::XInterface;
+singleton bool: cpo::uno::XInterface;
+singleton break: cpo::uno::XInterface;
+//TODO: singleton case: cpo::uno::XInterface;
+singleton catch: cpo::uno::XInterface;
+//TODO: singleton char: cpo::uno::XInterface;
+singleton class: cpo::uno::XInterface;
+//TODO: singleton const: cpo::uno::XInterface;
+singleton continue: cpo::uno::XInterface;
+//TODO: singleton default: cpo::uno::XInterface;
+singleton delete: cpo::uno::XInterface;
+singleton do: cpo::uno::XInterface;
+//TODO: singleton double: cpo::uno::XInterface;
+singleton else: cpo::uno::XInterface;
+//TODO: singleton enum: cpo::uno::XInterface;
+singleton explicit: cpo::uno::XInterface;
+singleton export: cpo::uno::XInterface;
+singleton extern: cpo::uno::XInterface;
+singleton false: cpo::uno::XInterface;
+//TODO: singleton float: cpo::uno::XInterface;
+singleton for: cpo::uno::XInterface;
+singleton friend: cpo::uno::XInterface;
+singleton goto: cpo::uno::XInterface;
+singleton if: cpo::uno::XInterface;
+singleton inline: cpo::uno::XInterface;
+singleton int: cpo::uno::XInterface;
+//TODO: singleton long: cpo::uno::XInterface;
+singleton mutable: cpo::uno::XInterface;
+singleton namespace: cpo::uno::XInterface;
+singleton new: cpo::uno::XInterface;
+singleton operator: cpo::uno::XInterface;
+singleton private: cpo::uno::XInterface;
+singleton protected: cpo::uno::XInterface;
+singleton public: cpo::uno::XInterface;
+singleton register: cpo::uno::XInterface;
+singleton return: cpo::uno::XInterface;
+//TODO: singleton short: cpo::uno::XInterface;
+singleton signed: cpo::uno::XInterface;
+singleton sizeof: cpo::uno::XInterface;
+singleton static: cpo::uno::XInterface;
+//TODO: singleton struct: cpo::uno::XInterface;
+//TODO: singleton switch: cpo::uno::XInterface;
+singleton template: cpo::uno::XInterface;
+singleton this: cpo::uno::XInterface;
+singleton throw: cpo::uno::XInterface;
+singleton true: cpo::uno::XInterface;
+singleton try: cpo::uno::XInterface;
+//TODO: singleton typedef: cpo::uno::XInterface;
+singleton typeid: cpo::uno::XInterface;
+singleton typename: cpo::uno::XInterface;
+//TODO: singleton union: cpo::uno::XInterface;
+//TODO: singleton unsigned: cpo::uno::XInterface;
+singleton using: cpo::uno::XInterface;
+singleton virtual: cpo::uno::XInterface;
+//TODO: singleton void: cpo::uno::XInterface;
+singleton volatile: cpo::uno::XInterface;
+singleton while: cpo::uno::XInterface;
+
+singleton and: cpo::uno::XInterface;
+singleton bitand: cpo::uno::XInterface;
+singleton bitor: cpo::uno::XInterface;
+singleton compl: cpo::uno::XInterface;
+singleton not: cpo::uno::XInterface;
+singleton or: cpo::uno::XInterface;
+singleton xor: cpo::uno::XInterface;
+
+singleton BUFSIZ: cpo::uno::XInterface;
+singleton CLOCKS_PER_SEC: cpo::uno::XInterface;
+singleton EDOM: cpo::uno::XInterface;
+singleton EOF: cpo::uno::XInterface;
+singleton ERANGE: cpo::uno::XInterface;
+singleton EXIT_FAILURE: cpo::uno::XInterface;
+singleton EXIT_SUCCESS: cpo::uno::XInterface;
+singleton FILENAME_MAX: cpo::uno::XInterface;
+singleton FOPEN_MAX: cpo::uno::XInterface;
+singleton HUGE_VAL: cpo::uno::XInterface;
+singleton LC_ALL: cpo::uno::XInterface;
+singleton LC_COLLATE: cpo::uno::XInterface;
+singleton LC_CTYPE: cpo::uno::XInterface;
+singleton LC_MONETARY: cpo::uno::XInterface;
+singleton LC_NUMERIC: cpo::uno::XInterface;
+singleton LC_TIME: cpo::uno::XInterface;
+singleton L_tmpnam: cpo::uno::XInterface;
+singleton MB_CUR_MAX: cpo::uno::XInterface;
+singleton NULL: cpo::uno::XInterface;
+singleton RAND_MAX: cpo::uno::XInterface;
+singleton SEEK_CUR: cpo::uno::XInterface;
+singleton SEEK_END: cpo::uno::XInterface;
+singleton SEEK_SET: cpo::uno::XInterface;
+singleton SIGABRT: cpo::uno::XInterface;
+singleton SIGFPE: cpo::uno::XInterface;
+singleton SIGILL: cpo::uno::XInterface;
+singleton SIGINT: cpo::uno::XInterface;
+singleton SIGSEGV: cpo::uno::XInterface;
+singleton SIGTERM: cpo::uno::XInterface;
+singleton SIG_DFL: cpo::uno::XInterface;
+singleton SIG_ERR: cpo::uno::XInterface;
+singleton SIG_IGN: cpo::uno::XInterface;
+singleton TMP_MAX: cpo::uno::XInterface;
+singleton WCHAR_MAX: cpo::uno::XInterface;
+singleton WCHAR_MIN: cpo::uno::XInterface;
+singleton WEOF: cpo::uno::XInterface;
+singleton assert: cpo::uno::XInterface;
+singleton errno: cpo::uno::XInterface;
+singleton offsetof: cpo::uno::XInterface;
+singleton setjmp: cpo::uno::XInterface;
+singleton stderr: cpo::uno::XInterface;
+singleton stdin: cpo::uno::XInterface;
+singleton stdout: cpo::uno::XInterface;
+
+singleton CHAR_BIT: cpo::uno::XInterface;
+singleton CHAR_MAX: cpo::uno::XInterface;
+singleton CHAR_MIN: cpo::uno::XInterface;
+singleton DBL_DIG: cpo::uno::XInterface;
+singleton DBL_EPSILON: cpo::uno::XInterface;
+singleton DBL_MANT_DIG: cpo::uno::XInterface;
+singleton DBL_MAX: cpo::uno::XInterface;
+singleton DBL_MAX_10_EXP: cpo::uno::XInterface;
+singleton DBL_MAX_EXP: cpo::uno::XInterface;
+singleton DBL_MIN: cpo::uno::XInterface;
+singleton DBL_MIN_10_EXP: cpo::uno::XInterface;
+singleton DBL_MIN_EXP: cpo::uno::XInterface;
+singleton FLT_DIG: cpo::uno::XInterface;
+singleton FLT_EPSILON: cpo::uno::XInterface;
+singleton FLT_MANT_DIG: cpo::uno::XInterface;
+singleton FLT_MAX: cpo::uno::XInterface;
+singleton FLT_MAX_10_EXP: cpo::uno::XInterface;
+singleton FLT_MAX_EXP: cpo::uno::XInterface;
+singleton FLT_MIN: cpo::uno::XInterface;
+singleton FLT_MIN_10_EXP: cpo::uno::XInterface;
+singleton FLT_MIN_EXP: cpo::uno::XInterface;
+singleton FLT_RADIX: cpo::uno::XInterface;
+singleton FLT_ROUNDS: cpo::uno::XInterface;
+singleton INT_MAX: cpo::uno::XInterface;
+singleton INT_MIN: cpo::uno::XInterface;
+singleton LDBL_DIG: cpo::uno::XInterface;
+singleton LDBL_EPSILON: cpo::uno::XInterface;
+singleton LDBL_MANT_DIG: cpo::uno::XInterface;
+singleton LDBL_MAX: cpo::uno::XInterface;
+singleton LDBL_MAX_10_EXP: cpo::uno::XInterface;
+singleton LDBL_MAX_EXP: cpo::uno::XInterface;
+singleton LDBL_MIN: cpo::uno::XInterface;
+singleton LDBL_MIN_10_EXP: cpo::uno::XInterface;
+singleton LDBL_MIN_EXP: cpo::uno::XInterface;
+singleton LONG_MAX: cpo::uno::XInterface;
+singleton LONG_MIN: cpo::uno::XInterface;
+singleton MB_LEN_MAX: cpo::uno::XInterface;
+singleton SCHAR_MAX: cpo::uno::XInterface;
+singleton SCHAR_MIN: cpo::uno::XInterface;
+singleton SHRT_MAX: cpo::uno::XInterface;
+singleton SHRT_MIN: cpo::uno::XInterface;
+singleton UCHAR_MAX: cpo::uno::XInterface;
+singleton UINT_MAX: cpo::uno::XInterface;
+singleton ULONG_MAX: cpo::uno::XInterface;
+singleton USHRT_MAX: cpo::uno::XInterface;
+
+singleton FILE: cpo::uno::XInterface;
+singleton lconv: cpo::uno::XInterface;
+singleton tm: cpo::uno::XInterface;
+
+singleton std: cpo::uno::XInterface;
+
+singleton NDEBUG: cpo::uno::XInterface;
+
+singleton get: cpo::uno::XInterface;
+
+};
+
+enum HelperEnum { ZERO, ONE };
+
+struct HelperStruct { boolean m1; cpo::uno::XInterface m2; };
+
+typedef byte TDByte;
+typedef HelperEnum TDEnum1;
+typedef TDEnum1 TDEnum;
+
+struct BigStruct {
+    boolean m1;
+    byte m2;
+    short m3;
+    unsigned short m4;
+    long m5;
+    unsigned long m6;
+    hyper m7;
+    unsigned hyper m8;
+    float m9;
+    double m10;
+    char m11;
+    string m12;
+    type m13;
+    any m14;
+    sequence<boolean> m15;
+    HelperEnum m16;
+    HelperStruct m17;
+    cpo::uno::XInterface m18;
+    TDByte m19;
+    TDEnum m20;
+    sequence<unsigned short> m21;
+    sequence<char> m22;
+    sequence< sequence<char> > m23;
+};
+
+struct Struct<T, U> {
+    T member1;
+    sequence<SequenceAny> member2;
+};
+
+struct StructUsage {
+    Struct< long, short > member1;
+    sequence<
+        sequence<
+            Struct<
+                sequence< Struct< any, boolean > >,
+                cpo::uno::XInterface > > >
+                    member2;
+};
+
+struct AlignmentBaseStruct {
+    double member1;
+    short member2;
+};
+
+struct AlignmentDerivedStruct: AlignmentBaseStruct {
+    short member3;
+};
+
+exception TestException1: cpo::uno::RuntimeException {
+    long m1;
+    any m2;
+    HelperEnum m3;
+    Struct<long, long> m4;
+    unsigned short m5;
+};
+
+exception TestException2: TestException1 {};
+
+constants Constants {
+    const byte byteMin = -128;
+    const byte byteMax = 127;
+    const short shortMin = -32768;
+    const short shortMax = 32767;
+    const unsigned short unsignedShortMin = 0;
+    const unsigned short unsignedShortMax = 65535;
+    const long longMin = -2147483648;
+    const long longMax = 2147483647;
+    const unsigned long unsignedLongMin = 0;
+    const unsigned long unsignedLongMax = 4294967295;
+    const hyper hyperMin = -9223372036854775808;
+    const hyper hyperMax = 9223372036854775807;
+    const unsigned hyper unsignedHyperMin = 0;
+    const unsigned hyper unsignedHyperMax = 18446744073709551615;
+};
+
+constants ByteBits {
+    const byte BIT0 = 1;
+    const byte BIT1 = 2;
+    const byte BIT2 = 4;
+    const byte BIT3 = 8;
+    const byte BIT4 = 16;
+    const byte BIT5 = 32;
+    const byte BIT6 = 64;
+    const byte BIT7 = -128;
+    const byte ALL = -1;
+};
+
+constants ShortBits {
+    const short BIT0 = 1;
+    const short BIT1 = 2;
+    const short BIT2 = 4;
+    const short BIT3 = 8;
+    const short BIT4 = 16;
+    const short BIT5 = 32;
+    const short BIT6 = 64;
+    const short BIT7 = 128;
+    const short BIT8 = 256;
+    const short BIT9 = 512;
+    const short BIT10 = 1024;
+    const short BIT11 = 2048;
+    const short BIT12 = 4096;
+    const short BIT13 = 8192;
+    const short BIT14 = 16384;
+    const short BIT15 = -32768;
+    const short ALL = -1;
+};
+
+constants UnsignedHyperBits {
+    const unsigned hyper BIT0 = 1;
+    const unsigned hyper BIT1 = 2;
+    const unsigned hyper BIT2 = 4;
+    const unsigned hyper BIT3 = 8;
+    const unsigned hyper BIT4 = 16;
+    const unsigned hyper BIT5 = 32;
+    const unsigned hyper BIT6 = 64;
+    const unsigned hyper BIT7 = 128;
+    const unsigned hyper BIT8 = 256;
+    const unsigned hyper BIT9 = 512;
+    const unsigned hyper BIT10 = 1024;
+    const unsigned hyper BIT11 = 2048;
+    const unsigned hyper BIT12 = 4096;
+    const unsigned hyper BIT13 = 8192;
+    const unsigned hyper BIT14 = 16384;
+    const unsigned hyper BIT15 = 32768;
+    const unsigned hyper BIT62 = 4611686018427387904;
+    const unsigned hyper BIT63 = 9223372036854775808;
+    const unsigned hyper ALL = 18446744073709551615;
+};
+
+constants ProblematicConstantNames {
+    const long auto = 0;
+};
+
+}; }; };
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

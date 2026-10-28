@@ -1,0 +1,94 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include "propertyhandler.hxx"
+
+#include <memory>
+
+
+namespace pcr
+{
+
+
+    class EFormsHelper;
+
+    //= EFormsPropertyHandler
+
+    class EFormsPropertyHandler : public PropertyHandlerComponent
+    {
+    private:
+        std::unique_ptr< EFormsHelper > m_pHelper;
+        /** current value of the Model property, if there is no binding, yet
+        */
+        OUString                 m_sBindingLessModelName;
+        /** are we currently simulating a propertyChange event of the Model property?
+        */
+        bool                            m_bSimulatingModelChange;
+
+    public:
+        explicit EFormsPropertyHandler(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext
+        );
+
+    protected:
+        virtual ~EFormsPropertyHandler() override;
+
+    protected:
+        // XServiceInfo
+        virtual OUString getImplementationName() override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames () override;
+
+        // XPropertyHandler overriables
+        virtual cpo::uno::Any                       getPropertyValue( const OUString& _rPropertyName ) override;
+        virtual void                                setPropertyValue( const OUString& _rPropertyName, const cpo::uno::Any& _rValue ) override;
+        virtual cpo::uno::Sequence< OUString >
+                                                    getActuatingProperties( ) override;
+        virtual cpo::uno::Sequence< OUString >
+                                                    getSupersededProperties( ) override;
+        virtual css::inspection::LineDescriptor
+                                                    describePropertyLine( const OUString& _rPropertyName, const cpo::uno::Reference< css::inspection::XPropertyControlFactory >& _rxControlFactory ) override;
+        virtual css::inspection::InteractiveSelectionResult
+                                                    onInteractivePropertySelection( const OUString& _rPropertyName, bool _bPrimary, cpo::uno::Any& _rData, const cpo::uno::Reference< css::inspection::XObjectInspectorUI >& _rxInspectorUI ) override;
+        virtual void                                actuatingPropertyChanged( const OUString& _rActuatingPropertyName, const cpo::uno::Any& _rNewValue, const cpo::uno::Any& _rOldValue, const cpo::uno::Reference< css::inspection::XObjectInspectorUI >& _rxInspectorUI, bool ) override;
+        virtual cpo::uno::Any                       convertToPropertyValue( const OUString& _rPropertyName, const cpo::uno::Any& _rControlValue ) override;
+        virtual cpo::uno::Any                       convertToControlValue( const OUString& _rPropertyName, const cpo::uno::Any& _rPropertyValue, const cpo::uno::Type& _rControlValueType ) override;
+        virtual void                                addPropertyChangeListener( const cpo::uno::Reference< css::beans::XPropertyChangeListener >& _rxListener ) override;
+        virtual void                                removePropertyChangeListener( const cpo::uno::Reference< css::beans::XPropertyChangeListener >& _rxListener ) override;
+
+        // PropertyHandler overridables
+        virtual cpo::uno::Sequence< css::beans::Property >
+                                                    doDescribeSupportedProperties() const override;
+        virtual void onNewComponent() override;
+
+    protected:
+        /** returns the value of the PROPERTY_XML_DATA_MODEL property.
+
+            An extra method is necessary here, which respects both the value set at our helper,
+            and <member>m_sBindingLessModelName</member>
+        */
+        OUString getModelNamePropertyValue() const;
+    };
+
+
+} // namespace pcr
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

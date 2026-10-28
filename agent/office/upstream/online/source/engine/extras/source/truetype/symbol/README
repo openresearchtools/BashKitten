@@ -1,0 +1,54 @@
+Modify the OpenSymbol.sfd and generate opens___.ttf from it with FontForge. The
+.sfd is the canonical source for the .ttf. See .sfd format documentation at
+https://fontforge.org/docs/techref/sfdformat.html.
+Use TTX/FontTools, which can dump the content of .ttf as an XML file, in order
+to make sure that the resulting .ttf differs only deliberately from the original
+one.
+
+Every new version of the font should increase the font version. This is
+important so that when two versions of the font are installed, e.g.  one
+bundled inside the office installation, and one already installed on the system
+that the most recent font can be detected and favoured.
+
+Bumping the font version is easiest done manually by bumping the place in
+the .sfd where the version is mentioned, e.g.
+
+-Version: 102.3
++Version: 102.4
+
+The glyph names in the font should follow Adobe Glyph list for new fonts
+(https://github.com/adobe-type-tools/agl-aglfn) or just the uniXXXX scheme
+(see https://github.com/adobe-type-tools/agl-specification for the rationale).
+
+Fragments of OpenSymbol are mapped internally to a number of other
+fonts for interoperability purposes. See
+unotools/source/misc/fontcvt.cxx pwrt, the StarSymbol conversion
+tables.
+
+Generate the ttf from updated sfd:
+fontforge -lang=ff -c 'Open($1); Generate($2)' extras/source/truetype/symbol/OpenSymbol.sfd opens___.ttf
+
+Upload the font to the external repo, under extern/ and named after its own
+checksum, so that a new version is a new file and branches pinning the old one
+keep working:
+
+cp opens___.ttf extern/$(sha256sum opens___.ttf | awk '{ print $1 }')-opens___.ttf
+
+See the README.md in that repository for how to clone it and push the change
+for review.
+
+Then update the checksum everywhere it is pinned. The name contains the
+checksum, so all three have to move together or the build fetches a file that
+is no longer referenced:
+
+engine/download.lst
+    OPENSYMBOL_SHA256SUM and OPENSYMBOL_TTF
+
+qt/flatpak/com.collaboraoffice.Office.json
+    the url, sha256 and dest-filename of the opens___.ttf source
+
+qt/freebsd/editors/collabora-office/Makefile
+    the DISTFILES entry, then re-run makesum in the port
+
+Everything else refers to the font through those variables or by glob, so it
+needs no change.

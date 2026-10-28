@@ -1,0 +1,286 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <cppuhelper/supportsservice.hxx>
+#include <o3tl/any.hxx>
+#include <utility>
+#include <vcl/svapp.hxx>
+
+#include <miscuno.hxx>
+
+using namespace com::sun::star;
+using namespace ::cpo;
+using ::cpo::uno::Reference;
+using ::cpo::uno::Any;
+
+SC_SIMPLE_SERVICE_INFO( ScNameToIndexAccess, u"ScNameToIndexAccess"_ustr, u"stardiv.unknown"_ustr )
+
+bool ScUnoHelpFunctions::GetBoolProperty( const uno::Reference<beans::XPropertySet>& xProp,
+                                            const OUString& rName, bool bDefault )
+{
+    bool bRet = bDefault;
+    if ( xProp.is() )
+    {
+        try
+        {
+            xProp->getPropertyValue( rName ) >>= bRet;
+        }
+        catch(cpo::uno::Exception&)
+        {
+            // keep default
+        }
+    }
+    return bRet;
+}
+
+sal_Int16 ScUnoHelpFunctions::GetShortProperty( const cpo::uno::Reference< css::beans::XPropertySet>& xProp,
+                                                const OUString& rName, sal_Int16 nDefault )
+{
+    sal_Int16 nRet = nDefault;
+    if ( xProp.is() )
+    {
+        try
+        {
+            xProp->getPropertyValue( rName ) >>= nRet;
+        }
+        catch(cpo::uno::Exception&)
+        {
+            // keep default
+        }
+    }
+    return nRet;
+}
+
+sal_Int32 ScUnoHelpFunctions::GetLongProperty( const uno::Reference<beans::XPropertySet>& xProp,
+                                            const OUString& rName )
+{
+    sal_Int32 nRet = 0;
+    if ( xProp.is() )
+    {
+        try
+        {
+            //! type conversion???
+            xProp->getPropertyValue( rName ) >>= nRet;
+        }
+        catch(cpo::uno::Exception&)
+        {
+            // keep default
+        }
+    }
+    return nRet;
+}
+
+sal_Int32 ScUnoHelpFunctions::GetEnumPropertyImpl( const uno::Reference<beans::XPropertySet>& xProp,
+                                            const OUString& rName, sal_Int32 nDefault )
+{
+    sal_Int32 nRet = nDefault;
+    if ( xProp.is() )
+    {
+        try
+        {
+            cpo::uno::Any aAny(xProp->getPropertyValue( rName ));
+
+            if ( aAny.getValueTypeClass() == cpo::uno::TypeClass_ENUM )
+            {
+                //! get enum value from any???
+                nRet = *static_cast<sal_Int32 const *>(aAny.getValue());
+            }
+            else
+            {
+                //! type conversion???
+                aAny >>= nRet;
+            }
+        }
+        catch(cpo::uno::Exception&)
+        {
+            // keep default
+        }
+    }
+    return nRet;
+}
+
+OUString ScUnoHelpFunctions::GetStringProperty(
+    const Reference<beans::XPropertySet>& xProp, const OUString& rName, const OUString& rDefault )
+{
+    OUString aRet = rDefault;
+    if (!xProp.is())
+        return aRet;
+
+    try
+    {
+        Any any = xProp->getPropertyValue(rName);
+        any >>= aRet;
+    }
+    catch (const cpo::uno::Exception&)
+    {
+    }
+
+    return aRet;
+}
+
+bool ScUnoHelpFunctions::GetBoolFromAny( const cpo::uno::Any& aAny )
+{
+    auto b = o3tl::tryAccess<bool>(aAny);
+    return b.has_value() && *b;
+}
+
+sal_Int16 ScUnoHelpFunctions::GetInt16FromAny( const cpo::uno::Any& aAny )
+{
+    sal_Int16 nRet = 0;
+    if ( aAny >>= nRet )
+        return nRet;
+    return 0;
+}
+
+sal_Int32 ScUnoHelpFunctions::GetInt32FromAny( const cpo::uno::Any& aAny )
+{
+    sal_Int32 nRet = 0;
+    if ( aAny >>= nRet )
+        return nRet;
+    return 0;
+}
+
+sal_Int32 ScUnoHelpFunctions::GetEnumFromAny( const cpo::uno::Any& aAny )
+{
+    sal_Int32 nRet = 0;
+    if ( aAny.getValueTypeClass() == cpo::uno::TypeClass_ENUM )
+        nRet = *static_cast<sal_Int32 const *>(aAny.getValue());
+    else
+        aAny >>= nRet;
+    return nRet;
+}
+
+void ScUnoHelpFunctions::SetOptionalPropertyValue(
+    const Reference<beans::XPropertySet>& rPropSet, const char* pPropName, const Any& rVal )
+{
+    SetOptionalPropertyValue(rPropSet, OUString::createFromAscii(pPropName), rVal);
+}
+
+void ScUnoHelpFunctions::SetOptionalPropertyValue(
+    const Reference<beans::XPropertySet>& rPropSet, const OUString& sPropName, const Any& rVal )
+{
+    try
+    {
+        rPropSet->setPropertyValue(sPropName, rVal);
+    }
+    catch (const beans::UnknownPropertyException&)
+    {
+        // ignored - not supported.
+    }
+}
+
+ScIndexEnumeration::ScIndexEnumeration(uno::Reference<container::XIndexAccess> xInd,
+                                       OUString aServiceName) :
+    xIndex(std::move( xInd )),
+    sServiceName(std::move(aServiceName)),
+    nPos( 0 )
+{
+}
+
+ScIndexEnumeration::~ScIndexEnumeration()
+{
+}
+
+// XEnumeration
+
+bool ScIndexEnumeration::hasMoreElements()
+{
+    SolarMutexGuard aGuard;
+    return ( nPos < xIndex->getCount() );
+}
+
+cpo::uno::Any ScIndexEnumeration::nextElement()
+{
+    SolarMutexGuard aGuard;
+    cpo::uno::Any aReturn;
+    try
+    {
+        aReturn = xIndex->getByIndex(nPos++);
+    }
+    catch (lang::IndexOutOfBoundsException&)
+    {
+        throw container::NoSuchElementException();
+    }
+    return aReturn;
+}
+
+OUString ScIndexEnumeration::getImplementationName()
+{
+    return u"ScIndexEnumeration"_ustr;
+}
+
+bool ScIndexEnumeration::supportsService( const OUString& ServiceName )
+{
+    return cppu::supportsService(this, ServiceName);
+}
+
+cpo::uno::Sequence< OUString >
+    ScIndexEnumeration::getSupportedServiceNames()
+{
+    return { sServiceName };
+}
+
+ScNameToIndexAccess::ScNameToIndexAccess( cpo::uno::Reference<
+                                            css::container::XNameAccess> xNameObj ) :
+    xNameAccess(std::move( xNameObj ))
+{
+    //! test for XIndexAccess interface at rNameObj, use that instead!
+
+    if ( xNameAccess.is() )
+        aNames = xNameAccess->getElementNames();
+}
+
+ScNameToIndexAccess::~ScNameToIndexAccess()
+{
+}
+
+// XIndexAccess
+
+sal_Int32 ScNameToIndexAccess::getCount(  )
+{
+    return aNames.getLength();
+}
+
+cpo::uno::Any ScNameToIndexAccess::getByIndex( sal_Int32 nIndex )
+{
+    if ( xNameAccess.is() && nIndex >= 0 && nIndex < aNames.getLength() )
+        return xNameAccess->getByName( aNames.getConstArray()[nIndex] );
+
+    throw lang::IndexOutOfBoundsException();
+}
+
+// XElementAccess
+
+cpo::uno::Type ScNameToIndexAccess::getElementType(  )
+{
+    if ( xNameAccess.is() )
+        return xNameAccess->getElementType();
+    else
+        return cpo::uno::Type();
+}
+
+bool ScNameToIndexAccess::hasElements(  )
+{
+    return getCount() > 0;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

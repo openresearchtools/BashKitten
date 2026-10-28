@@ -1,0 +1,149 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_CPPUHELPER_COMPBASE3_HXX
+#define INCLUDED_CPPUHELPER_COMPBASE3_HXX
+
+#include "cppuhelper/implbase3.hxx"
+#include "cppuhelper/compbase_ex.hxx"
+
+namespace cppu
+{
+
+    /** Implementation helper supporting css::lang::XTypeProvider and
+        css::lang::XComponent.
+
+        Upon disposing objects of this class, sub-classes receive a disposing()
+        call.  Objects of this class can be held weakly, i.e. by a
+        cpo::uno::WeakReference.
+
+        @attention
+        The life-cycle of the passed mutex reference has to be longer than objects of this class.
+
+        @derive
+        Inherit from this class giving your interface(s) to be implemented as template argument(s).
+        Your sub class defines method implementations for these interface(s).
+    */
+    template< class Ifc1, class Ifc2, class Ifc3 >
+    class SAL_NO_VTABLE SAL_DLLPUBLIC_TEMPLATE WeakComponentImplHelper3
+        : public WeakComponentImplHelperBase
+        , public css::lang::XTypeProvider
+        , public Ifc1, public Ifc2, public Ifc3
+    {
+        struct cd : public rtl::StaticAggregate< class_data, ImplClassData3 < Ifc1, Ifc2, Ifc3, WeakComponentImplHelper3<Ifc1, Ifc2, Ifc3> > > {};
+    public:
+        WeakComponentImplHelper3( ::osl::Mutex & rMutex ) noexcept
+            : WeakComponentImplHelperBase( rMutex )
+            {}
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
+            { return WeakComponentImplHelper_query( rType, cd::get(), this, static_cast<WeakComponentImplHelperBase *>(this) ); }
+        virtual void acquire() noexcept override
+            { WeakComponentImplHelperBase::acquire(); }
+        virtual void release() noexcept override
+            { WeakComponentImplHelperBase::release(); }
+        virtual void dispose() override
+            { WeakComponentImplHelperBase::dispose(); }
+        virtual void addEventListener(const cpo::uno::Reference< css::lang::XEventListener > & xListener) override
+            { WeakComponentImplHelperBase::addEventListener(xListener); }
+        virtual void removeEventListener(const cpo::uno::Reference< css::lang::XEventListener > & xListener) override
+            { WeakComponentImplHelperBase::removeEventListener(xListener); }
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
+            { return WeakComponentImplHelper_getTypes( cd::get() ); }
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
+            { return ImplHelper_getImplementationId( cd::get() ); }
+    };
+
+    /** Same as WeakComponentImplHelper3, except doesn't implement
+        addEventListener, removeEventListener and dispose.
+
+        This requires derived classes to implement those three methods.
+        This makes it possible to implement classes which are required to
+        implement methods from multiple bases which have different
+        addEventListener/removeEventListener signatures without triggering
+        the g++ overloaded-virtual warning
+    */
+    template< class Ifc1, class Ifc2, class Ifc3 >
+    class SAL_NO_VTABLE SAL_DLLPUBLIC_TEMPLATE PartialWeakComponentImplHelper3
+        : public WeakComponentImplHelperBase
+        , public css::lang::XTypeProvider
+        , public Ifc1, public Ifc2, public Ifc3
+    {
+        struct cd : public rtl::StaticAggregate< class_data, ImplClassData3 < Ifc1, Ifc2, Ifc3, PartialWeakComponentImplHelper3<Ifc1, Ifc2, Ifc3> > > {};
+    public:
+        PartialWeakComponentImplHelper3( ::osl::Mutex & rMutex ) noexcept
+            : WeakComponentImplHelperBase( rMutex )
+            {}
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
+            { return WeakComponentImplHelper_query( rType, cd::get(), this, static_cast<WeakComponentImplHelperBase *>(this) ); }
+        virtual void acquire() noexcept override
+            { WeakComponentImplHelperBase::acquire(); }
+        virtual void release() noexcept override
+            { WeakComponentImplHelperBase::release(); }
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
+            { return WeakComponentImplHelper_getTypes( cd::get() ); }
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
+            { return ImplHelper_getImplementationId( cd::get() ); }
+    };
+
+    /** Implementation helper supporting css::lang::XTypeProvider and
+        css::lang::XComponent.
+
+        Upon disposing objects of this class, sub-classes receive a disposing()
+        call.  Objects of this class can be held weakly, i.e. by a
+        cpo::uno::WeakReference.  Object of this class can be
+        aggregated, i.e. incoming queryInterface() calls are delegated.
+
+        @attention
+        The life-cycle of the passed mutex reference has to be longer than objects of this class.
+
+        @derive
+        Inherit from this class giving your interface(s) to be implemented as template argument(s).
+        Your sub class defines method implementations for these interface(s).
+
+        @deprecated
+    */
+    template< class Ifc1, class Ifc2, class Ifc3 >
+    class SAL_NO_VTABLE SAL_DLLPUBLIC_TEMPLATE WeakAggComponentImplHelper3
+        : public WeakAggComponentImplHelperBase
+        , public css::lang::XTypeProvider
+        , public Ifc1, public Ifc2, public Ifc3
+    {
+        struct cd : public rtl::StaticAggregate< class_data, ImplClassData3 < Ifc1, Ifc2, Ifc3, WeakAggComponentImplHelper3<Ifc1, Ifc2, Ifc3> > > {};
+    public:
+        WeakAggComponentImplHelper3( ::osl::Mutex & rMutex ) noexcept
+            : WeakAggComponentImplHelperBase( rMutex )
+            {}
+        virtual cpo::uno::Any queryInterface( cpo::uno::Type const & rType ) override
+            { return WeakAggComponentImplHelperBase::queryInterface( rType ); }
+        virtual cpo::uno::Any queryAggregation( cpo::uno::Type const & rType ) override
+            { return WeakAggComponentImplHelper_queryAgg( rType, cd::get(), this, static_cast<WeakAggComponentImplHelperBase *>(this) ); }
+        virtual void acquire() noexcept override
+            { WeakAggComponentImplHelperBase::acquire(); }
+        virtual void release() noexcept override
+            { WeakAggComponentImplHelperBase::release(); }
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override
+            { return WeakAggComponentImplHelper_getTypes( cd::get() ); }
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override
+            { return ImplHelper_getImplementationId( cd::get() ); }
+    };
+}
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

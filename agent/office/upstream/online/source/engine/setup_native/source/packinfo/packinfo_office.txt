@@ -1,0 +1,925 @@
+#
+# This file is part of the Collabora Office project.
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# This file incorporates work covered by the following license notice:
+#
+#   Licensed to the Apache Software Foundation (ASF) under one or more
+#   contributor license agreements. See the NOTICE file distributed
+#   with this work for additional information regarding copyright
+#   ownership. The ASF licenses this file to you under the Apache
+#   License, Version 2.0 (the "License"); you may not use this file
+#   except in compliance with the License. You may obtain a copy of
+#   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+#
+
+# Format:
+
+# Start
+# scpModule
+# shellscript file (optional)
+# packagename
+# linuxreplaces (optional)
+# linuxincompat (optional)
+# requires (optional)
+# provides (optional)
+# copyright
+# vendor
+# description
+# destpath
+# End
+
+Start
+module = "gid_Module_Optional_Gnome"
+packagename = "%BASISPACKAGEPREFIX-gnome-integration"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+findrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "GNOME integration module for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+provides = "libreoffice-evolution libreoffice-gnome"
+End
+
+Start
+module = "gid_Module_Root"
+packagename = "%BASISPACKAGEPREFIX-core"
+linuxreplaces = "%BASISPACKAGEPREFIX-core01, %BASISPACKAGEPREFIX-core02, %BASISPACKAGEPREFIX-core03, %BASISPACKAGEPREFIX-core04, %BASISPACKAGEPREFIX-core05, %BASISPACKAGEPREFIX-core06, %BASISPACKAGEPREFIX-core07, %BASISPACKAGEPREFIX-libreofficekit-data, %BASISPACKAGEPREFIX-graphicfilter-debuginfo, %BASISPACKAGEPREFIX-base, %BASISPACKAGEPREFIX-base-debuginfo"
+linuxincompat = "%BASISPACKAGEPREFIX-libreofficekit-data, %BASISPACKAGEPREFIX-graphicfilter-debuginfo, %BASISPACKAGEPREFIX-base, %BASISPACKAGEPREFIX-base-debuginfo"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION, %BASISPACKAGEPREFIX-ooofonts %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+findrequires = "find-requires-x11.sh"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Core module for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+provides = "libreoffice-common"
+End
+
+Start
+module = "gid_Module_Prg_Wrt_Bin"
+packagename = "%BASISPACKAGEPREFIX-writer"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Writer module for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Prg_Calc_Bin"
+packagename = "%BASISPACKAGEPREFIX-calc"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Calc module for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Prg_Draw_Bin"
+packagename = "%BASISPACKAGEPREFIX-draw"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Draw module for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Prg_Impress_Bin"
+packagename = "%BASISPACKAGEPREFIX-impress"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Impress module for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Prg_Math_Bin"
+packagename = "%BASISPACKAGEPREFIX-math"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Math module for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Optional_Grfflt"
+packagename = "%BASISPACKAGEPREFIX-graphicfilter"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Graphic filter module for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Optional_Xsltfiltersamples"
+packagename = "%BASISPACKAGEPREFIX-xsltfilter"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "XSLT filter samples module for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Pyuno"
+packagename = "%BASISPACKAGEPREFIX-pyuno"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Pyuno module for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Optional_Pyuno_LibreLogo"
+packagename = "%BASISPACKAGEPREFIX-librelogo"
+requires = "%BASISPACKAGEPREFIX-pyuno %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-writer %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "LibreLogo toolbar for %PRODUCTNAME %PRODUCTVERSION Writer"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Script_Provider_For_Python"
+packagename = "%BASISPACKAGEPREFIX-python-script-provider"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Script provider for Python for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Files_Images"
+packagename = "%BASISPACKAGEPREFIX-images"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Images module for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Fonts_OOo_Hidden"
+packagename = "%BASISPACKAGEPREFIX-ooofonts"
+requires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "3rd party free fonts for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Oo_Linguistic"
+packagename = "%BASISPACKAGEPREFIX-ooolinguistic"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Linguistic module for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Af"
+packagename = "%UNIXPACKAGENAME-dict-af"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Afrikaans dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_An"
+packagename = "%UNIXPACKAGENAME-dict-an"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2011 Santiago Paricio, Juan Pablo Martinez"
+vendor = "Collabora Productivity Ltd."
+description = "Aragonese dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Ar"
+packagename = "%UNIXPACKAGENAME-dict-ar"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2006-2008 by Mohamed Kebdani, 2006-2009 Taha Zerrouki"
+vendor = "Ayaspell"
+description = "Arabic dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Be"
+packagename = "%UNIXPACKAGENAME-dict-be"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "Copyright (C) 2005 Mikalai Udodau"
+vendor = "Mikalai Udodau"
+description = "Belarusian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Bg"
+packagename = "%UNIXPACKAGENAME-dict-bg"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "Copyright (C) 2001 Anton Zinoviev, Borislav Mitev, Radostin Radnev"
+vendor = "Radostin Radnev"
+description = "Bulgarian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Bn"
+packagename = "%UNIXPACKAGENAME-dict-bn"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2002 Dr Abhijit Das, 2002 Taneem Ahmed, 2008 Jamil Ahmed"
+vendor = "Collabora Productivity Ltd."
+description = "Bengali dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Bo"
+packagename = "%UNIXPACKAGENAME-dict-bo"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2016 Elie Roux"
+vendor = "Collabora Productivity Ltd."
+description = "Tibetan dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Br"
+packagename = "%UNIXPACKAGENAME-dict-br"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2009-2011 by An Drouizig"
+vendor = "An Drouizig"
+description = "Breton dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Bs"
+packagename = "%UNIXPACKAGENAME-dict-bs"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2013 by Vedran Ljubović"
+vendor = "Vedran Ljubović"
+description = "Bosnian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Ca"
+packagename = "%UNIXPACKAGENAME-dict-ca"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Catalan dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Ckb"
+packagename = "%UNIXPACKAGENAME-dict-ckb"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Central Kurdish (Sorani) dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Cs"
+packagename = "%UNIXPACKAGENAME-dict-cs"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Czech dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Da"
+packagename = "%UNIXPACKAGENAME-dict-da"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Danish dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_De"
+packagename = "%UNIXPACKAGENAME-dict-de"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "German dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_En"
+packagename = "%UNIXPACKAGENAME-dict-en"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "English dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_El"
+packagename = "%UNIXPACKAGENAME-dict-el"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2002 by Evripidis Papakostas, 2006 by Steve Stavropoulos"
+vendor = "Collabora Productivity Ltd."
+description = "Greek dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Eo"
+packagename = "%UNIXPACKAGENAME-dict-eo"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Esperanto dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Es"
+packagename = "%UNIXPACKAGENAME-dict-es"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Spanish dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Et"
+packagename = "%UNIXPACKAGENAME-dict-et"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Estonian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Fa"
+packagename = "%UNIXPACKAGENAME-dict-fa"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2015 Mostafa Sedaghat Joo"
+vendor = "Mostafa Sedaghat Joo"
+description = "Persian (Farsi) dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Fr"
+packagename = "%UNIXPACKAGENAME-dict-fr"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "French dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Gd"
+packagename = "%UNIXPACKAGENAME-dict-gd"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2010 by Am Faclair Beag"
+vendor = "Kevin Scannel"
+description = "Scottish Gaelic dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Gl"
+packagename = "%UNIXPACKAGENAME-dict-gl"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Galician dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Gu"
+packagename = "%UNIXPACKAGENAME-dict-gu"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2009 by Kartik Mistry"
+vendor = "Collabora Productivity Ltd."
+description = "Gujarati dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_He"
+packagename = "%UNIXPACKAGENAME-dict-he"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Hebrew dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Hi"
+packagename = "%UNIXPACKAGENAME-dict-hi"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2005 Swapnil {Hajare, Sant}"
+vendor = "Collabora Productivity Ltd."
+description = "Hindi dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Hu"
+packagename = "%UNIXPACKAGENAME-dict-hu"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Hungarian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Hr"
+packagename = "%UNIXPACKAGENAME-dict-hr"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2003-2010 by Denis Lackovic"
+vendor = "Collabora Productivity Ltd."
+description = "Croatian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Id"
+packagename = "%UNIXPACKAGENAME-dict-id"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Indonesian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Is"
+packagename = "%UNIXPACKAGENAME-dict-is"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "The hunspell-is project"
+description = "Icelandic dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_It"
+packagename = "%UNIXPACKAGENAME-dict-it"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Italian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Kmr_Latn"
+packagename = "%UNIXPACKAGENAME-dict-kmr-Latn"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Northern Kurdish dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Ko"
+packagename = "%UNIXPACKAGENAME-dict-ko"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Korean dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Lo"
+packagename = "%UNIXPACKAGENAME-dict-lo"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2013 by Brian Eugene Wilson, Robert Martin Campbell"
+vendor = "Collabora Productivity Ltd."
+description = "Lao dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Lt"
+packagename = "%UNIXPACKAGENAME-dict-lt"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Lithuanian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Lv"
+packagename = "%UNIXPACKAGENAME-dict-lv"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2004-2005 Janis Vilims, 2002-2010 Janis Eisaks"
+vendor = "Dicollecte-LV"
+description = "Latvian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Ne"
+packagename = "%UNIXPACKAGENAME-dict-ne"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Nepali dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Nl"
+packagename = "%UNIXPACKAGENAME-dict-nl"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Dutch dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Mn"
+packagename = "%UNIXPACKAGENAME%BRANDPACKAGEVERSION-dict-mn"
+requires = "%UREPACKAGEPREFIX%BRANDPACKAGEVERSION-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX%PRODUCTVERSION-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME%BRANDPACKAGEVERSION %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Mongolian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_No"
+packagename = "%UNIXPACKAGENAME-dict-no"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Norwegian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Oc"
+packagename = "%UNIXPACKAGENAME-dict-oc"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2006-2011 by Bruno Gallart"
+vendor = "OpenOc.org"
+description = "Occitan-languedocian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Pl"
+packagename = "%UNIXPACKAGENAME-dict-pl"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Polish dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Pt_Br"
+packagename = "%UNIXPACKAGENAME-dict-pt-BR"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Portuguese (Brazil) dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Pt_Pt"
+packagename = "%UNIXPACKAGENAME-dict-pt-PT"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Portuguese (Portugal) dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Ro"
+packagename = "%UNIXPACKAGENAME-dict-ro"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Romanian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Ru"
+packagename = "%UNIXPACKAGENAME-dict-ru"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Russian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Si"
+packagename = "%UNIXPACKAGENAME-dict-si"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2010 by Laknath Semage"
+vendor = "Collabora Productivity Ltd."
+description = "Sinhala dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Sk"
+packagename = "%UNIXPACKAGENAME-dict-sk"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Slovak dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Sl"
+packagename = "%UNIXPACKAGENAME-dict-sl"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Slovenian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Sq"
+packagename = "%UNIXPACKAGENAME-dict-sq"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2011 by Luan Kelmendi"
+vendor = "Collabora Productivity Ltd."
+description = "Albanian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Sr"
+packagename = "%UNIXPACKAGENAME-dict-sr"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Serbian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Sv"
+packagename = "%UNIXPACKAGENAME-dict-sv"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Swedish dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Sw"
+packagename = "%UNIXPACKAGENAME-dict-sw"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Swahili dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Te"
+packagename = "%UNIXPACKAGENAME-dict-te"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2005 by IndLinux, Khadir, 2010 by Arjuna Rao Chavala, 2009 by Santhosh Thottingal"
+vendor = "Arjuna Rao Chavala"
+description = "Telugu dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Th"
+packagename = "%UNIXPACKAGENAME-dict-th"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Thai dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Tr"
+packagename = "%UNIXPACKAGENAME-dict-tr"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2014-2018 by Harun Resit Zafer, Muhammet Kara"
+vendor = "Collabora Productivity Ltd."
+description = "Turkish dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Uk"
+packagename = "%UNIXPACKAGENAME-dict-uk"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "1999-2009 by Vladimir Yakovchuk, Oleg Podgurniy, Dmytro Kovalyov, Maksym Polyakov, Andriy Rysin, Valentyn Solomko, Volodymyr M. Lisivka, Eugeniy Meshcheryakov"
+vendor = "Document Foundation"
+description = "Ukrainian dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Vi"
+packagename = "%UNIXPACKAGENAME-dict-vi"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Vietnamese dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+Start
+module = "gid_Module_Root_Extension_Dictionary_Zu"
+packagename = "%UNIXPACKAGENAME-dict-zu"
+requires = "%UREPACKAGEPREFIX-ure %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION,%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "Zulu dictionary for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End
+
+
+Start
+module = "gid_Module_Pdfimport"
+packagename = "%BASISPACKAGEPREFIX-extension-pdf-import"
+requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+linuxpatchrequires = ""
+copyright = "2026 Collabora Productivity Ltd."
+vendor = "Collabora Productivity Ltd."
+description = "PDF import extension for %PRODUCTNAME %PRODUCTVERSION"
+destpath = "/opt"
+packageversion = "%PACKAGEVERSION"
+End

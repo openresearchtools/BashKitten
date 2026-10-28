@@ -1,0 +1,165 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <map>
+#include <mutex>
+
+#include <comphelper/namecontainer.hxx>
+#include <comphelper/sequence.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <com/sun/star/container/XNameContainer.hpp>
+
+typedef std::map<OUString, cpo::uno::Any> SvGenericNameContainerMapImpl;
+
+namespace comphelper
+{
+    namespace {
+
+    /** this is the base helper class for NameContainer that's also declared in this header. */
+    class NameContainer : public ::cppu::WeakImplHelper< css::container::XNameContainer >
+    {
+    public:
+        explicit NameContainer( const cpo::uno::Type& aType );
+
+        // XNameContainer
+        virtual void insertByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
+        virtual void removeByName( const OUString& Name ) override;
+
+        // XNameReplace
+        virtual void replaceByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
+
+        // XNameAccess
+        virtual cpo::uno::Any getByName( const OUString& aName ) override;
+        virtual cpo::uno::Sequence< OUString > getElementNames(  ) override;
+        virtual bool hasByName( const OUString& aName ) override;
+
+        // XElementAccess
+        virtual bool hasElements(  ) override;
+        virtual cpo::uno::Type getElementType(  ) override;
+
+    private:
+        SvGenericNameContainerMapImpl maProperties;
+        const cpo::uno::Type maType;
+        std::mutex maMutex;
+    };
+
+    }
+}
+
+using namespace ::comphelper;
+using namespace ::cpo::uno;
+using namespace cpo::uno;
+using namespace ::com::sun::star::container;
+using namespace ::com::sun::star::lang;
+
+
+NameContainer::NameContainer( const cpo::uno::Type& aType )
+: maType( aType )
+{
+}
+
+// XNameContainer
+void NameContainer::insertByName( const OUString& aName, const Any& aElement )
+{
+    std::scoped_lock aGuard( maMutex );
+
+    if( maProperties.contains( aName ) )
+        throw ElementExistException();
+
+    if( aElement.getValueType() != maType )
+        throw IllegalArgumentException(u"element is wrong type"_ustr, static_cast<cppu::OWeakObject*>(this), 2);
+
+    maProperties.emplace(aName,aElement);
+}
+
+void NameContainer::removeByName( const OUString& Name )
+{
+    std::scoped_lock aGuard( maMutex );
+
+    SvGenericNameContainerMapImpl::iterator aIter = maProperties.find( Name );
+    if( aIter == maProperties.end() )
+        throw NoSuchElementException();
+
+    maProperties.erase( aIter );
+}
+
+// XNameReplace
+
+void NameContainer::replaceByName( const OUString& aName, const Any& aElement )
+{
+    std::scoped_lock aGuard( maMutex );
+
+    SvGenericNameContainerMapImpl::iterator aIter( maProperties.find( aName ) );
+    if( aIter == maProperties.end() )
+        throw NoSuchElementException();
+
+    if( aElement.getValueType() != maType )
+        throw IllegalArgumentException(u"element is wrong type"_ustr, static_cast<cppu::OWeakObject*>(this), 2);
+
+    (*aIter).second = aElement;
+}
+
+// XNameAccess
+
+Any NameContainer::getByName( const OUString& aName )
+{
+    std::scoped_lock aGuard( maMutex );
+
+    SvGenericNameContainerMapImpl::iterator aIter = maProperties.find( aName );
+    if( aIter == maProperties.end() )
+        throw NoSuchElementException();
+
+    return (*aIter).second;
+}
+
+Sequence< OUString > NameContainer::getElementNames(  )
+{
+    std::scoped_lock aGuard( maMutex );
+
+    return comphelper::mapKeysToSequence(maProperties);
+}
+
+bool NameContainer::hasByName( const OUString& aName )
+{
+    std::scoped_lock aGuard( maMutex );
+
+    SvGenericNameContainerMapImpl::iterator aIter = maProperties.find( aName );
+    return aIter != maProperties.end();
+}
+
+bool NameContainer::hasElements(  )
+{
+    std::scoped_lock aGuard( maMutex );
+
+    return !maProperties.empty();
+}
+
+Type NameContainer::getElementType()
+{
+    return maType;
+}
+
+Reference< XNameContainer > comphelper::NameContainer_createInstance( const Type& aType )
+{
+    return new NameContainer(aType);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

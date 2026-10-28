@@ -1,0 +1,899 @@
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <config.h>
+
+#include <COKit/COKit.hxx>
+
+#import <WebKit/WebKit.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#import <CoreServices/CoreServices.h>
+
+#import "coda-Swift.h"
+#import "COWrapper.h"
+#import "macos.h"
+
+// Include necessary C++ headers
+#include <thread>
+#include <string>
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
+#include <set>
+#include <common/Clipboard.hpp>
+#include <common/ConfigUtil.hpp>
+#include <common/LangUtil.hpp>
+#include <common/AIHttpTransport.hpp>
+#include <common/SettingsStorage.hpp>
+#include <common/Log.hpp>
+#include <common/ProcUtil.hpp>
+#include <common/MobileApp.hpp>
+#include <common/Util.hpp>
+#include <net/FakeSocket.hpp>
+#include <wsd/Extensions.hpp>
+#include <wsd/COOLWSD.hpp>
+#include <wsd/DocumentBroker.hpp>
+
+#include <Poco/Path.h>
+
+// Declare the coolwsd pointer at global scope
+COOLWSD *coolwsd = nullptr;
+
+// Tracks the system pasteboard state right after our own copy. A later paste can
+// then tell whether the pasteboard still holds that copy, and if so reuse the
+// engine's full-fidelity in-memory transferable instead of overwriting it with a
+// serialized format read back from the pasteboard. This mirrors the ownsClipboard
+// check the Qt (Bridge.cpp) and Windows (do_paste_or_read) app variants do.
+static NSInteger sOwnedPasteboardChangeCount = -1;
+
+/**
+ * Supplies clipboard bytes to the system pasteboard on demand. After a copy we
+ * advertise only the list of formats; when something actually pastes one, the
+ * pasteboard asks this owner for that format's bytes, which it fetches from the
+ * engine then. Mirrors what desktop LibreOffice does in vcl/osx/clipboard.cxx
+ * and what the Qt app does with its LazyClipboardMimeData.
+ */
+@interface COClipboardOwner : NSObject
+- (instancetype)initWithMimeByType:(NSDictionary<NSPasteboardType, NSString *> *)mimeByType;
+/**
+ * Force every advertised format onto the pasteboard now. Used before the last
+ * document goes away, so a later paste still finds the content.
+ */
+- (void)flushTo:(NSPasteboard *)pasteboard;
+@end
+
+/**
+ * The pasteboard does not retain the type owner it is given in declareTypes,
+ * so we hold the current lazy owner ourselves until the next advertise (or a
+ * flush) replaces it.
+ */
+static COClipboardOwner *sClipboardOwner = nil;
+
+// The engine office handle, captured when the clipboard provider is installed,
+// so a clipboard read can go straight to the process-shared clipboard without
+// needing a particular document.
+static COKit *sOffice = nullptr;
+
+static std::thread coolwsdThread;
+
+// Where the log is being written, or nil when it goes to standard error.
+static NSString *sLogFilePath = nil;
+
+/**
+ * Register the AI chat HTTP transport. The desktop apps have no server-side AI
+ * proxy and no COOL net stack for outbound requests, so AIChatSession reaches
+ * the provider through this platform hook (the macOS counterpart of Qt's
+ * registerAIHttpTransport()). onDone may run on any thread; AIChatSession hops
+ * back onto its polling thread itself.
+ */
+static void registerAIHttpTransport()
+{
+    ai::setHttpPostFn(
+        [](const std::string& url, const std::string& authHeader, std::string body,
+           int timeoutSeconds, ai::HttpDoneCallback onDone)
+        {
+            @autoreleasepool {
+                NSURL* nsURL = [NSURL URLWithString:[NSString stringWithUTF8String:url.c_str()]];
+                if (nsURL == nil)
+                {
+                    onDone(ai::HttpConnectFailed, std::string());
+                    return;
+                }
+
+                NSMutableURLRequest* req = [NSMutableURLRequest requestWithURL:nsURL];
+                req.HTTPMethod = @"POST";
+                [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+                if (!authHeader.empty())
+                    [req setValue:[NSString stringWithUTF8String:authHeader.c_str()]
+                       forHTTPHeaderField:@"Authorization"];
+                if (timeoutSeconds > 0)
+                    req.timeoutInterval = (NSTimeInterval)timeoutSeconds;
+                req.HTTPBody = [NSData dataWithBytes:body.data() length:body.size()];
+
+                NSURLSessionDataTask* task = [[NSURLSession sharedSession]
+                    dataTaskWithRequest:req
+                      completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
+                          int statusCode;
+                          if ([response isKindOfClass:[NSHTTPURLResponse class]])
+                              statusCode = (int)[(NSHTTPURLResponse*)response statusCode];
+                          else if (error != nil && error.code == NSURLErrorTimedOut)
+                              statusCode = ai::HttpNoResponse;
+                          else
+                              statusCode = ai::HttpConnectFailed;
+
+                          std::string responseBody;
+                          if (data != nil && data.length > 0)
+                              responseBody.assign(reinterpret_cast<const char*>(data.bytes),
+                                                  data.length);
+
+                          onDone(statusCode, std::move(responseBody));
+                      }];
+                [task resume];
+            }
+        });
+}
+
+/**
+ * Pull the bytes the engine holds for one clipboard format of an open document.
+ * Returns nil when the document is gone or offers nothing for that format.
+ */
+static NSData *_Nullable copyEngineClipboardData(const char *mime)
+{
+    // The clipboard is process-global (one shared clipboard for the desktop
+    // app), so read it straight from the office; no document is involved.
+    std::vector<char> bytes;
+    if (!sOffice || !sOffice->getGlobalClipboardData(mime, bytes))
+        return nil;
+
+    return [NSData dataWithBytes:bytes.data() length:bytes.size()];
+}
+
+@implementation COClipboardOwner
+{
+    /**
+     * Maps an advertised pasteboard type back to the engine mime it stands for,
+     * so a request for that type can fetch the matching format.
+     */
+    NSDictionary<NSPasteboardType, NSString *> *_mimeByType;
+}
+
+- (instancetype)initWithMimeByType:(NSDictionary<NSPasteboardType, NSString *> *)mimeByType {
+    self = [super init];
+    if (self) {
+        _mimeByType = mimeByType;
+    }
+    return self;
+}
+
+- (void)provideType:(NSPasteboardType)type to:(NSPasteboard *)pasteboard {
+    NSString *mime = _mimeByType[type];
+    if (mime == nil)
+        return;
+
+    NSData *data = copyEngineClipboardData([mime UTF8String]);
+    if (data != nil)
+        [pasteboard setData:data forType:type];
+}
+
+/**
+ * Sent by the system when an application reads a type we only promised.
+ */
+- (void)pasteboard:(NSPasteboard *)sender provideDataForType:(NSPasteboardType)type {
+    [self provideType:type to:sender];
+}
+
+- (void)flushTo:(NSPasteboard *)pasteboard {
+    for (NSPasteboardType type in _mimeByType)
+        [self provideType:type to:pasteboard];
+}
+
+@end
+
+/**
+ * Private read helpers used by the clipboard provider callbacks below.
+ */
+@interface COWrapper ()
++ (std::vector<std::string>)copyPasteboardMimeTypes;
++ (BOOL)copyPasteboardData:(NSString *_Nonnull)mime
+                       out:(std::vector<char> *_Nonnull)pOutData;
+@end
+
+/**
+ * The clipboard provider the engine drives. On copy the engine advertises its
+ * formats through advertise; on an external paste it reads the pasteboard one
+ * format at a time. The callbacks act on the process, not one document, so the
+ * one shared clipboard is reached from whichever document is current.
+ */
+
+static void clipboardProviderAdvertise(const char** pMimeTypes)
+{
+    @autoreleasepool {
+        NSMutableArray<NSString*>* mimes = [NSMutableArray array];
+        for (size_t i = 0; pMimeTypes && pMimeTypes[i]; ++i)
+            [mimes addObject:[NSString stringWithUTF8String:pMimeTypes[i]]];
+        [COWrapper advertiseClipboard:mimes];
+    }
+}
+
+static bool clipboardProviderOwns()
+{
+    return [COWrapper pasteboardOwnedByUs];
+}
+
+static std::vector<std::string> clipboardProviderGetMimeTypes()
+{
+    @autoreleasepool {
+        return [COWrapper copyPasteboardMimeTypes];
+    }
+}
+
+static bool clipboardProviderGetData(const char* pMimeType, std::vector<char>* pOutData)
+{
+    @autoreleasepool {
+        return [COWrapper copyPasteboardData:[NSString stringWithUTF8String:pMimeType]
+                                         out:pOutData];
+    }
+}
+
+// Install the process-global clipboard provider (declared in macos.h). After
+// this the engine advertises formats on copy and reads the pasteboard on paste
+// through the callbacks above, using one shared clipboard for every document.
+void install_clipboard_provider(COKit &rOffice)
+{
+    sOffice = &rOffice;
+
+    static COKitClipboardProvider provider{};
+    provider.advertiseToPlatform = clipboardProviderAdvertise;
+    provider.ownsClipboard = clipboardProviderOwns;
+    provider.getMimeTypes = clipboardProviderGetMimeTypes;
+    provider.getDataForMimeType = clipboardProviderGetData;
+    rOffice.installClipboardProvider(&provider);
+}
+
+// The engine asks the user for a file. Convert the details on the calling
+// thread, then show an open panel on the main thread and answer through the
+// completion; the engine's main loop keeps running while the panel is open.
+static void filePickerProviderPick(const char* pTitle, const COKitFilePickerFilter* pFilters,
+                                   size_t nFilters,
+                                   void (*pfnPicked)(void* pContext, const char* pUrl),
+                                   void* pContext)
+{
+    @autoreleasepool {
+        NSString* title = pTitle && pTitle[0] ? [NSString stringWithUTF8String:pTitle] : nil;
+
+        NSMutableArray<UTType*>* types = [NSMutableArray array];
+        for (size_t i = 0; i < nFilters; ++i)
+        {
+            NSString* wildcards = [NSString stringWithUTF8String:pFilters[i].pWildcards];
+            for (NSString* wildcard in [wildcards componentsSeparatedByString:@";"])
+            {
+                // A wildcard has the shape "*.png"; the extension follows the last dot.
+                NSRange dot = [wildcard rangeOfString:@"." options:NSBackwardsSearch];
+                if (dot.location == NSNotFound)
+                    continue;
+                UTType* type =
+                    [UTType typeWithFilenameExtension:[wildcard substringFromIndex:dot.location + 1]];
+                if (type)
+                    [types addObject:type];
+            }
+        }
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSOpenPanel* panel = [NSOpenPanel openPanel];
+            panel.canChooseFiles = YES;
+            panel.canChooseDirectories = NO;
+            panel.allowsMultipleSelection = NO;
+            if (title)
+                panel.message = title;
+            if (types.count > 0)
+                panel.allowedContentTypes = types;
+
+            void (^deliver)(NSModalResponse) = ^(NSModalResponse result) {
+                if (result == NSModalResponseOK && panel.URL)
+                    pfnPicked(pContext, panel.URL.absoluteString.UTF8String);
+                else
+                    pfnPicked(pContext, nullptr);
+            };
+
+            NSWindow* window = NSApp.keyWindow;
+            if (window)
+                [panel beginSheetModalForWindow:window completionHandler:deliver];
+            else
+                [panel beginWithCompletionHandler:deliver];
+        });
+    }
+}
+
+// Install the process-global file picker provider (declared in macos.h). After
+// this a command that needs the user to pick a file - compare documents,
+// insert an image - opens a native open panel instead of the engine's dialog.
+void install_filepicker_provider(COKit &rOffice)
+{
+    static COKitFilePickerProvider provider{};
+    provider.pick = filePickerProviderPick;
+    rOffice.installFilePickerProvider(&provider);
+}
+
+/**
+ * Wrapper to be able to call the C++ code from Swift.
+ *
+ * The main purpose is to initialize the COOLWSD and interact with it.
+ */
+@implementation COWrapper
+
++ (void)startServer {
+    // Initialize logging
+    // Use "debug" or potentially even "trace" for debugging
+#if DEBUG
+    const std::string logLevel("debug");
+#else
+    const std::string logLevel("information");
+#endif
+
+    // In UI testing mode the log goes to a file, because standard error is not
+    // collected when the app is launched through LaunchServices.
+    //
+    // Standard error itself is redirected, rather than the logging channel
+    // being pointed at the file. The server re-initializes logging with a
+    // channel of its own once it starts, and log lines are written to the
+    // standard error file descriptor directly, so redirecting that keeps every
+    // line whichever channel is in place at the time. Opening the file with "w"
+    // also starts each run with an empty log.
+    //
+    // The file lives in our own temporary directory, the place the sandbox
+    // allows us to write, and the test driver hands its content out from there
+    // on request. Reading it from outside would mean granting the reader access
+    // to another app's data, which a test run should not have to ask for.
+    if ([[[NSProcessInfo processInfo] arguments] containsObject:@"--uitesting"]) {
+        NSString *logFile =
+            [NSTemporaryDirectory() stringByAppendingPathComponent:@"coda-app.log"];
+        if (freopen([logFile fileSystemRepresentation], "w", stderr) != nullptr) {
+            sLogFilePath = logFile;
+        }
+        else {
+            NSLog(@"CollaboraOffice: cannot log to %@: %s", logFile, strerror(errno));
+        }
+    }
+
+    Log::initialize("Mobile", logLevel);
+
+    ProcUtil::setThreadName("main");
+
+    // Give AIChatSession a native HTTP transport (no server-side AI proxy here).
+    registerAIHttpTransport();
+
+    // Set up the logging callback
+    fakeSocketSetLoggingCallback([](const std::string& line) {
+        LOG_TRC_NOFILE(line);
+    });
+
+#if ENABLE_DEBUG
+    // The bundle's Resources directory stands in for browser/dist/:
+    Extensions::synthesizeBuiltinExtensionsIndex(Desktop::getDataDir() + "/extensions");
+#endif
+
+    // Start the COOLWSD server in a detached thread
+    NSLog(@"CollaboraOffice: Starting the thread");
+    coolwsdThread = std::thread([]{
+        assert(coolwsd == nullptr);
+
+        // Prepare arguments for COOLWSD
+        std::vector<std::string> args = {
+            "coda"
+        };
+
+        ProcUtil::setThreadName("app");
+
+        coolwsd = new COOLWSD();
+        coolwsd->run(args);
+        delete coolwsd;
+        coolwsd = nullptr; // Reset the pointer after deletion
+        NSLog(@"CollaboraOffice: The COOLWSD thread completed");
+    });
+}
+
++ (NSString *_Nullable)logFilePath {
+    return sLogFilePath;
+}
+
++ (void)stopServer {
+    NSLog(@"CollaboraOffice: Requesting shutdown");
+    SigUtil::requestShutdown();
+
+    // wait until coolwsdThread is torn down, so that we don't start cleaning up too early
+    coolwsdThread.join();
+}
+
++ (void)handleHULLOWithDocument:(Document *)document {
+    // Contact the permanently (during app lifetime) listening COOLWSD server
+    // "public" socket
+    assert(coolwsd_server_socket_fd != -1);
+    NSLog(@"CollaboraOffice: HULLO for appDocId %d, connecting client fd %d to server fd %d",
+          document.appDocId, document.fakeClientFd, coolwsd_server_socket_fd);
+    int rc = fakeSocketConnect(document.fakeClientFd, coolwsd_server_socket_fd);
+    assert(rc != -1);
+
+    // Create this document's close-notification socket pair. Each document has its
+    // own pair, so closing one document leaves the other documents' forwarding
+    // threads and engine connections running.
+    int closeNotificationPipe[2];
+    fakeSocketPipe2(closeNotificationPipe);
+    document.closeNotificationSignalFd = closeNotificationPipe[0];
+    document.closeNotificationWatchedFd = closeNotificationPipe[1];
+
+    // The forwarding thread keeps its own copy of the two fds it polls and closes. A
+    // reattach gives the document a fresh socket while this thread is still winding down,
+    // and reading the fds from the document here would pick up that newer connection.
+    const int clientFd = document.fakeClientFd;
+    const int watchedFd = document.closeNotificationWatchedFd;
+
+    // Start another thread to read responses and forward them to the JavaScript
+    dispatch_async(dispatch_get_global_queue( DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),
+                   ^{
+                       ProcUtil::setThreadName("app2js");
+                       NSLog(@"CollaboraOffice: forwarding thread started for appDocId %d",
+                             document.appDocId);
+                       while (true) {
+                           struct pollfd p[2];
+                           p[0].fd = clientFd;
+                           p[0].events = POLLIN;
+                           p[1].fd = watchedFd;
+                           p[1].events = POLLIN;
+                           if (fakeSocketPoll(p, 2, -1) > 0) {
+                               if (p[1].revents == POLLIN) {
+                                   // The code below handling the "BYE" fake Websocket
+                                   // message has closed the signal end of this document's
+                                   // close-notification pair. Let's close the watched end
+                                   // too just for cleanliness, even if a FakeSocket as
+                                   // such is not a system resource so nothing is saved by
+                                   // closing it.
+                                   fakeSocketClose(watchedFd);
+
+                                   // Close our end of the fake socket connection to the
+                                   // ClientSession thread, so that it terminates
+                                   fakeSocketClose(clientFd);
+
+                                   NSLog(@"CollaboraOffice: forwarding thread for appDocId %d "
+                                          "ends on close notification",
+                                         document.appDocId);
+                                   return;
+                               }
+                               if (p[0].revents == POLLIN) {
+                                   size_t n = fakeSocketAvailableDataLength(clientFd);
+                                   // I don't want to check for n being -1 here, even if
+                                   // that will lead to a crash (std::length_error from the
+                                   // below std::vector constructor), as n being -1 is a
+                                   // sign of something being wrong elsewhere anyway, and I
+                                   // prefer to fix the root cause. Let's see how well this
+                                   // works out. See tdf#122543 for such a case.
+                                   if (n == 0) {
+                                       NSLog(@"CollaboraOffice: forwarding thread for appDocId %d "
+                                              "ends, the server closed the socket",
+                                             document.appDocId);
+                                       return;
+                                   }
+                                   std::vector<char> buf(n);
+                                   n = fakeSocketRead(clientFd, buf.data(), n);
+                                   [document send2JS:buf.data() length:n];
+                               }
+                           }
+                           else
+                               break;
+                       }
+                       NSLog(@"CollaboraOffice: forwarding thread for appDocId %d ends, the poll "
+                              "on client fd %d failed",
+                             document.appDocId, clientFd);
+                       assert(false);
+                   });
+
+    // First we simply send the Online C++ parts the URL and the appDocId. This corresponds
+    // to the GET request with Upgrade to WebSocket.
+    std::string url([[document.tempFileURL absoluteString] UTF8String]);
+    // appDocId is read in ClientRequestDispatcher::handleIncomingMessage() in COOLWSD.cpp
+    std::string message(url + " " + std::to_string(document.appDocId));
+    // We load a working copy from a temp dir, so pass the original file the user
+    // opened as a third token. The Online parts forward it to the engine as a
+    // document load option, so the Properties dialog shows and reveals the real
+    // location rather than the temp copy. The URL is percent-encoded (no spaces),
+    // so it stays a single token.
+    if (document.fileURL != nil)
+        message += " " + std::string([[document.fileURL absoluteString] UTF8String]);
+    NSLog(@"CollaboraOffice: sending handshake for appDocId %d on client fd %d: %s",
+          document.appDocId, document.fakeClientFd, message.c_str());
+    fakeSocketWriteQueue(document.fakeClientFd, message.c_str(), message.size());
+}
+
++ (void)handleByeWith:(Document *_Nonnull)document {
+    NSLog(@"CollaboraOffice: BYE for appDocId %d, %d documents open",
+          document.appDocId, DocumentData::count());
+
+    // A document with no view of its own is kept loaded on purpose, so closing its
+    // last session is not what ends it. Ask for it directly.
+    closeDetachedDocument(document.appDocId);
+
+    if (DocumentData::count() > 1) {
+        // Other documents remain open. Keep the content in the shared clipboard;
+        // just render it now so a lazy transferable (Writer, Impress) stays
+        // readable once this document's engine is gone. No system-pasteboard
+        // write yet.
+        COKitDocument * loKitDoc = DocumentData::get(document.appDocId).loKitDocument;
+        if (loKitDoc)
+            loKitDoc->flushClipboard();
+    } else {
+        // Last document closing: serialize the promised formats onto the system
+        // pasteboard now, so the content survives with no engine left to serve it.
+        [COWrapper materializeClipboard];
+    }
+
+    // Close the signal end of this document's close-notification pair, which
+    // wakes up this document's forwarding thread.
+    fakeSocketClose(document.closeNotificationSignalFd);
+}
+
++ (void)detachDocument:(Document *_Nonnull)document {
+    NSLog(@"CollaboraOffice: detaching appDocId %d, client fd %d",
+          document.appDocId, document.fakeClientFd);
+
+    // Mark the document before the socket goes, so the broker never sees an empty
+    // session list that it would read as the document having ended.
+    if (auto broker = findBrokerByMobileAppDocId(document.appDocId))
+        broker->setDetached(true);
+
+    if (document.closeNotificationSignalFd == -1)
+        return;
+
+    // Wake this document's forwarding thread, which closes the watched end of the pair
+    // and the client socket. It holds its own copies of those two, so clearing them here
+    // leaves the document ready for a fresh connection straight away.
+    fakeSocketClose(document.closeNotificationSignalFd);
+    document.closeNotificationSignalFd = -1;
+    document.closeNotificationWatchedFd = -1;
+    document.fakeClientFd = -1;
+}
+
++ (void)handleMessageWith:(Document *)document message:(NSString *)message {
+    const char *buf = [message UTF8String];
+    fakeSocketWriteQueue(document.fakeClientFd, buf, strlen(buf));
+}
+
++ (void)saveAsWith:(Document *)document url:(NSString *)url format:(NSString *)format filterOptions:(NSString *)filterOptions {
+    DocumentData::get(document.appDocId).loKitDocument->saveAs([url UTF8String], [format UTF8String], [filterOptions UTF8String]);
+}
+
++ (NSString *_Nullable)embeddedMediaPathWithDocument:(Document *)document tag:(NSString *)tag {
+    // The broker is recorded under the appDocId once the engine has loaded the document.
+    DocumentData *data = DocumentData::getIfExists(document.appDocId);
+    std::shared_ptr<DocumentBroker> docBroker = data ? data->docBroker.lock() : nullptr;
+    if (!docBroker) {
+        LOG_ERR("No document broker for appDocId " << document.appDocId
+                << ", cannot resolve media tag [" << [tag UTF8String] << ']');
+        return nil;
+    }
+
+    const std::string path = docBroker->getEmbeddedMediaPath(std::string([tag UTF8String]));
+    if (path.empty())
+        return nil;
+
+    return [NSString stringWithUTF8String:path.c_str()];
+}
+
+/**
+ * Map an engine mime type to the pasteboard type other applications expect for
+ * it. The common interchange formats map to their system UTI (text/html becomes
+ * public.html, and so on). Everything else - notably the internal engine formats
+ * - keeps its raw mime string, which is exactly what desktop LibreOffice
+ * advertises and reads on the Mac pasteboard, see vcl/osx/DataFlavorMapping.cxx.
+ */
++ (NSString *)pasteboardTypeForMime:(NSString *_Nonnull)mime {
+    // Drop any parameters such as the charset in "text/plain;charset=utf-8" before
+    // the UTI lookup, which would otherwise fail to match.
+    NSString * baseMime = [[mime componentsSeparatedByString:@";"] firstObject];
+
+    if ([baseMime isEqualToString:@"text/plain"]) {
+        // Normalise to the canonical plain-text type so a single representation
+        // wins, and so that other plain-text-like flavours (such as text/markdown)
+        // do not collide with it.
+        return UTTypeUTF8PlainText.identifier;
+    }
+
+    UTType * uti = [UTType typeWithMIMEType:baseMime];
+    return (uti != nil && !uti.dynamic) ? uti.identifier : mime;
+}
+
+/**
+ * Advertise the given formats on the system pasteboard without serializing any
+ * bytes. The bytes for a format are fetched from the engine only when something
+ * actually reads it, through the COClipboardOwner. The mime types are the ones
+ * the engine reported it can offer for the current selection.
+ */
++ (BOOL)advertiseClipboard:(NSArray<NSString *> *_Nonnull)mimeTypes {
+    NSMutableArray<NSPasteboardType> * types = [NSMutableArray array];
+    NSMutableDictionary<NSPasteboardType, NSString *> * mimeByType = [NSMutableDictionary dictionary];
+
+    for (NSString * mime in mimeTypes) {
+        NSString * type = [COWrapper pasteboardTypeForMime:mime];
+        // Several mimes can fold onto one pasteboard type (the plain-text
+        // variants), so keep the first, matching the eager write.
+        if (mimeByType[type] != nil)
+            continue;
+        mimeByType[type] = mime;
+        [types addObject:type];
+    }
+
+    if (types.count == 0)
+        return NO;
+
+    COClipboardOwner * owner = [[COClipboardOwner alloc] initWithMimeByType:mimeByType];
+    NSPasteboard * pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard declareTypes:types owner:owner];
+    sClipboardOwner = owner;
+    [COWrapper noteClipboardWritten];
+    return YES;
+}
+
+/**
+ * Serialize every still-promised format onto the pasteboard now. Called just
+ * before a document closes, so a paste into another app keeps working once the
+ * engine that would have provided the bytes is gone.
+ */
++ (void)materializeClipboard {
+    if (sClipboardOwner == nil || ![COWrapper pasteboardOwnedByUs])
+        return;
+
+    [sClipboardOwner flushTo:[NSPasteboard generalPasteboard]];
+}
+
+/**
+ * Remember the pasteboard state right after we wrote it ourselves.
+ */
++ (void)noteClipboardWritten {
+    sOwnedPasteboardChangeCount = [NSPasteboard generalPasteboard].changeCount;
+}
+
+/**
+ * Whether the pasteboard still holds the copy we last wrote. When it does, a
+ * paste should use the engine's own clipboard rather than reading the pasteboard
+ * back, which both preserves full fidelity and avoids the transfer.
+ */
++ (BOOL)pasteboardOwnedByUs {
+    return sOwnedPasteboardChangeCount >= 0
+        && [NSPasteboard generalPasteboard].changeCount == sOwnedPasteboardChangeCount;
+}
+
+/**
+ * Map a pasteboard type back to the engine mime type, or nil if it carries no
+ * usable mime.
+ */
++ (NSString *_Nullable)mimeForPasteboardType:(NSString *_Nonnull)identifier {
+    UTType * uti = [UTType typeWithIdentifier:identifier];
+
+    // Not a uniform type identifier at all: a raw type name, use it as is.
+    if (uti == nil)
+        return identifier;
+
+    if ([uti conformsToType:UTTypePlainText]) {
+        // Several plain-text types describe the same text. Keep only the UTF-8 one
+        // and tell the engine its charset, so we neither feed duplicates nor
+        // mislabel UTF-16 bytes as UTF-8.
+        return [identifier isEqualToString:UTTypeUTF8PlainText.identifier]
+            ? @"text/plain;charset=utf-8" : nil;
+    }
+
+    // A registered type maps to its mime directly (png, html, rtf, pdf, ...).
+    if (!uti.dynamic)
+        return uti.preferredMIMEType;
+
+    // The internal engine formats (application/x-openoffice-*) have no registered
+    // type, so the system stored each as a dynamic type that keeps the original
+    // name under the pasteboard tag class. preferredMIMEType is nil for these;
+    // recover the name from that tag class, the same value the Pasteboard Viewer
+    // shows.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    CFStringRef aTag = UTTypeCopyPreferredTagWithClass((__bridge CFStringRef)identifier,
+                                                       CFSTR("com.apple.nspboard-type"));
+#pragma clang diagnostic pop
+    return aTag != NULL ? (__bridge_transfer NSString *)aTag : nil;
+}
+
+/**
+ * The engine mime types the system pasteboard currently offers, as a
+ * nullptr-terminated malloc'd array of malloc'd strings the engine then frees.
+ */
++ (std::vector<std::string>)copyPasteboardMimeTypes {
+    NSPasteboard * pasteboard = [NSPasteboard generalPasteboard];
+    NSMutableArray<NSString *> * mimes = [NSMutableArray array];
+    for (NSPasteboardItem * item in pasteboard.pasteboardItems) {
+        for (NSPasteboardType identifier in item.types) {
+            NSString * mime = [COWrapper mimeForPasteboardType:identifier];
+            if (mime != nil && ![mimes containsObject:mime])
+                [mimes addObject:mime];
+        }
+    }
+
+    std::vector<std::string> result;
+    NSUInteger i = 0;
+    for (NSString * mime in mimes)
+        result.push_back([mime UTF8String]);
+    return result;
+}
+
+/**
+ * Copy the bytes the pasteboard holds for one engine mime into a malloc'd buffer
+ * the engine then frees. Returns NO when the format is not present.
+ */
++ (BOOL)copyPasteboardData:(NSString *_Nonnull)mime
+                       out:(std::vector<char> *_Nonnull)pOutData {
+    NSPasteboard * pasteboard = [NSPasteboard generalPasteboard];
+    for (NSPasteboardItem * item in pasteboard.pasteboardItems) {
+        for (NSPasteboardType identifier in item.types) {
+            NSString * candidate = [COWrapper mimeForPasteboardType:identifier];
+            if (candidate == nil || ![candidate isEqualToString:mime])
+                continue;
+
+            NSData * value = [item dataForType:identifier];
+            if (value == nil)
+                continue;
+
+            (*pOutData).resize(value.length);
+            memcpy((*pOutData).data(), value.bytes, value.length);
+            return YES;
+        }
+    }
+    return NO;
+}
+
+/**
+ * Reuse the common implementation of the check if the message is binary.
+ */
++ (bool)isBinaryMessage:(const char *_Nonnull)buffer length:(NSInteger)length {
+    return COOLProtocol::isBinaryMessage(buffer, static_cast<size_t>(length));
+}
+
+/**
+ * We keep a running count of opening documents here. This is not necessarily in sync with the
+ * DocBrokerId in DocumentBroker due to potential parallelism when opening multiple documents in
+ * quick succession.
+ */
+static std::atomic<int> appDocIdCounter(1);
+
++ (int)generateNewAppDocId {
+    DocumentData::allocate(appDocIdCounter);
+    return appDocIdCounter++;
+}
+
++ (int)fakeSocketSocket {
+    return fakeSocketSocket();
+}
+
+/**
+ * Convert NSString to std::string & call the C++ version of the logging function.
+ */
++ (void)LOG_DBG:(NSString *)message {
+    std::string stdMessage = [message UTF8String];
+    LOG_DBG(stdMessage);
+}
+
++ (void)LOG_ERR:(NSString *)message {
+    std::string stdMessage = [message UTF8String];
+    LOG_ERR(stdMessage);
+}
+
++ (void)LOG_TRC:(NSString *)message {
+    std::string stdMessage = [message UTF8String];
+    LOG_TRC(stdMessage);
+}
+
++ (bool)traceEnabled {
+    return Log::traceEnabled();
+}
+
++ (bool)isRtlLanguage:(NSString *)language {
+    return LangUtil::isRtlLanguage(std::string([language UTF8String]));
+}
+
++ (bool)isWelcomeEnabled {
+#if ENABLE_DEBUG
+    return ConfigUtil::getBool("welcome.enable", false);
+#else
+    return true;
+#endif
+}
+
++ (bool)darkModeWithSystemDefault:(bool)systemDefault {
+    const std::optional<bool> stored = Desktop::getDarkMode();
+    return stored.has_value() ? *stored : systemDefault;
+}
+
++ (void)setDarkMode:(bool)value {
+    Desktop::setDarkMode(value);
+}
+
++ (NSString *)fetchSettingsConfig {
+    return [NSString stringWithUTF8String:Desktop::fetchSettingsConfig().c_str()];
+}
+
++ (NSString *)fetchSettingsFile:(NSString *)relPath {
+    const Desktop::FileResult result =
+        Desktop::fetchSettingsFile(std::string([relPath UTF8String]));
+    return [NSString stringWithUTF8String:result.content.c_str()];
+}
+
++ (void)uploadSettings:(NSString *)payload {
+    uploadAndApplySettings(std::string([payload UTF8String]));
+}
+
++ (void)syncSettingsWith:(Document *)document {
+    // syncSettings() reads viewsetting.json and invokes the callback with a
+    // "viewsetting: <json>" frame; hand it straight to the document's JS the
+    // same way the kit's own messages are delivered. Mirrors the Qt (Bridge.cpp)
+    // and Windows (CODA.cpp) SYNCSETTINGS handlers.
+    Desktop::syncSettings([document](const std::vector<char>& data) {
+        if (!data.empty())
+            [document send2JS:data.data() length:(NSInteger)data.size()];
+    });
+}
+
++ (NSString *)coolwsdVersion {
+    return [NSString stringWithUTF8String:Util::getCoolVersion().c_str()];
+}
+
++ (NSString *)coolwsdVersionHash {
+    return [NSString stringWithUTF8String:Util::getCoolVersionHash().c_str()];
+}
+
++ (NSString *)copyrightNotice {
+    // __DATE__ holds the build date as "Mmm dd yyyy", so its last four
+    // characters are the year. The copyright line combines that build year
+    // with the configured vendor name.
+    const std::string year(&__DATE__[7]);
+    const std::string notice = "Copyright \xC2\xA9 " + year + ", " + CODA_VENDOR + ".";
+    return [NSString stringWithUTF8String:notice.c_str()];
+}
+
+@end
+
+// macOS implementations of the platform-specific Desktop:: path hooks that
+// common/SettingsStorage.cpp relies on (Windows provides them in CODA.cpp, Qt
+// in Application.cpp). The app is sandboxed, so these resolve inside the app
+// container: per-user settings live under Application Support, and the app's
+// data is the bundle's Resources directory.
+namespace Desktop
+{
+Poco::Path getConfigPath()
+{
+    NSURL *appSupport = [[NSFileManager defaultManager] URLForDirectory:NSApplicationSupportDirectory
+                                                               inDomain:NSUserDomainMask
+                                                      appropriateForURL:nil
+                                                                 create:YES
+                                                                  error:nil];
+    if (appSupport == nil)
+    {
+        LOG_ERR("getConfigPath: could not resolve the Application Support directory");
+        return Poco::Path(std::string([NSTemporaryDirectory() UTF8String]));
+    }
+
+    // Namespace settings under the app's name so they sit beside the engine's
+    // user profile (".../Application Support/Collabora Office/") rather than at
+    // the Application Support root, matching Qt's AppConfigLocation. CFBundleName
+    // follows --with-app-name, so this tracks the product branding.
+    NSString *appName = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleName"];
+    if (appName.length == 0)
+        appName = @"Collabora Office";
+
+    return Poco::Path(std::string([appSupport.path UTF8String]) + "/" +
+                      std::string([appName UTF8String]));
+}
+
+std::string getDataDir()
+{
+    return std::string([[[NSBundle mainBundle] resourcePath] UTF8String]);
+}
+}

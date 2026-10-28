@@ -1,0 +1,316 @@
+/* global describe it cy require expect Cypress */
+
+var helper = require('../../common/helper');
+
+describe(['tagdesktop', 'tagnextcloud'], 'Clipboard operations.', function() {
+
+	it('Copy and Paste text.', function() {
+		helper.setupAndLoadDocument('writer/copy_paste.odt');
+		// Select some text
+		helper.selectAllText();
+
+		cy.getFrameWindow().then(win => {
+			const selectionStart = win.TextSelections.getStartRectangle();
+			cy.cGet('#document-container').rightclick(selectionStart.pX1, selectionStart.pY1);
+		});
+
+		helper.setDummyClipboardForCopy();
+
+		helper.getContextMenuItem('Copy').click();
+
+		cy.cGet('#copy-paste-container div p').should('have.text', 'text');
+	});
+
+	it('Copy plain text.', function() {
+		helper.setupAndLoadDocument('writer/copy_paste_simple.odt');
+
+		helper.setDummyClipboardForCopy('text/plain');
+		helper.selectAllText();
+		helper.copy();
+
+		let expected = '    • first\n    • second\n    • third';
+		cy.cGet('#copy-plain-container').should('have.text', expected);
+	});
+
+	it('Copy text as markdown.', function() {
+		// Given a document with 3 words: middle word is italic:
+		helper.setupAndLoadDocument('writer/copy_markdown.odt');
+		cy.getFrameWindow().then(function(win) {
+			cy.stub(win.parent, 'postMessage').as('postMessage');
+		});
+
+		// When copying the document text as markdown:
+		helper.selectAllText();
+		cy.getFrameWindow().then(function(win) {
+			// Same as using framed.doc.html's "Send a message" frame:
+			// - message set to 'Action_Copy'
+			// - values set to '{"Mimetype": "text/markdown;charset=utf-8"}'
+			const message = {
+				'MessageId': 'Action_Copy',
+				'Values': {
+					'Mimetype': 'text/markdown;charset=utf-8'
+				}
+			};
+			win.postMessage(JSON.stringify(message), '*');
+		});
+
+		// Then make sure we get markdown. The host also receives other messages such as
+		// Doc_ModifiedStatus, so look for the copy response among all posted messages.
+		// Without the accompanying fix in place, this test would have failed with:
+		// Action_Copy_Resp was not posted
+		cy.get('@postMessage').should(stub => {
+			const responses = stub.getCalls()
+				.map(call => JSON.parse(call.args[0]))
+				.filter(json => json.MessageId === 'Action_Copy_Resp');
+			expect(responses.length, 'Action_Copy_Resp was not posted').to.equal(1);
+			expect(responses[0].Values.content).to.equal('foo *bar* baz\n');
+		});
+	});
+
+	it('Copy Markdown using the UI.', function() {
+		// Given a document with 3 words: middle word is italic:
+		helper.setupAndLoadDocument('writer/copy_markdown.odt');
+		helper.setDummyClipboardForCopy('text/plain');
+		helper.selectAllText();
+
+		// When invoking the 'copy-markdown' action, dispatched by Home -> Clipboard -> Copy
+		// -> Copy Markdown:
+		cy.getFrameWindow().then(function(win) {
+			win.app.map._clip.filterExecCopyPaste('copy-markdown');
+		});
+
+		// Then the clipboard's text/plain slot should contain the markdown data:
+		// Without the accompanying fix in place, this test would have failed with:
+		// expected: 'foo *bar* baz\n'
+		// actual:
+		// i.e. nothing was placed on the system clipboard.
+		cy.cGet('#copy-plain-container').should('have.text', 'foo *bar* baz\n');
+	});
+
+	it('Right-click Paste does not duplicate when execCommand fires paste event synchronously but returns false.', function() {
+		helper.setupAndLoadDocument('writer/copy_paste.odt');
+
+		cy.getFrameWindow().then(function(win) {
+			const app = win.app;
+			const clip = app.map._clip;
+
+			// Spy on the async navigator-clipboard read path. With the
+			// bug it gets called even after execCommand has already
+			// synchronously dispatched a paste, producing a second
+			// .uno:Paste socket message and visually duplicating the
+			// pasted content.
+			cy.spy(clip, '_navigatorClipboardRead').as('navClipRead');
+
+			// Force the buggy browser behaviour: execCommand('paste')
+			// fires the paste event synchronously (so paste() runs and
+			// _clipboardSerial is incremented) but the call itself
+			// returns false. Real-world Chromium/Firefox can do this
+			// when the focused element is read-only or in certain
+			// permission states.
+			cy.stub(win.document, 'execCommand').callsFake(function(operation) {
+				if (operation !== 'paste') {
+					return false;
+				}
+				const html = clip._originWrapBody('<p>test</p>');
+				clip.paste({
+					clipboardData: {
+						getData: function(t) {
+							return t === 'text/html' ? html : '';
+						},
+						types: ['text/html'],
+					},
+					preventDefault: function() {},
+				});
+				return false;
+			});
+
+			// Drive the same entry point used by the right-click
+			// "Paste" context-menu item.
+			clip.filterExecCopyPaste('.uno:Paste');
+		});
+
+		cy.get('@navClipRead').should('not.have.been.called');
+	});
+
+	it('Copy and Paste text with DisableCopy', function () {
+		helper.setupAndLoadDocument('writer/copy_paste.odt', /* isMultiUser */ false, /* copy .wopi.json */ true);
+		// Select some text
+		helper.selectAllText();
+
+		cy.getFrameWindow().then(win => {
+			const selectionStart = win.TextSelections.getStartRectangle();
+			cy.cGet('#document-container').rightclick(selectionStart.pX1, selectionStart.pY1);
+		});
+
+		helper.setDummyClipboardForCopy();
+
+		const copyEntry = helper.getContextMenuItem('Copy');
+		copyEntry.should('be.visible');
+		copyEntry.click();
+
+		// With DisableCopy active we should not copy to clipboard
+		cy.cGet('#copy-paste-container div p').should('not.have.text', 'text');
+
+		// But paste should still work properly
+		helper.typeIntoDocument('{end}');
+		helper.getCursorPos('left', 'beforePaste');
+		cy.getFrameWindow().then(win => {
+			win.app.map.sendUnoCommand('.uno:Paste');
+			helper.processToIdle(win);
+		});
+		helper.getCursorPos('left', 'afterPaste');
+		cy.get('@beforePaste').then(beforeValue => {
+			cy.get('@afterPaste').should('be.gt', beforeValue);
+		});
+
+	});
+
+	it('Failed clipboard download does not report success.', function() {
+		helper.setupAndLoadDocument('writer/copy_paste.odt');
+
+		cy.intercept('GET', '**/cool/clipboard*', {
+			statusCode: 403,
+			body: '',
+		}).as('clipboardGet');
+
+		cy.getFrameWindow().then(function(win) {
+			const clip = win.app.map._clip;
+
+			return clip._doAsyncDownload('GET', clip.getMetaURL(), null, false, p => p)
+				.then(() => {
+					throw new Error('expected the download to be rejected');
+				})
+				.catch(() => {
+					// A rejected request must not be reported as a completed
+					// download: the progress notification should just close.
+					expect(clip._downloadProgress.isComplete()).to.equal(false);
+					expect(clip._downloadProgress.isClosed()).to.equal(true);
+				});
+		});
+	});
+
+	it('Paste of <img src="..."> HTML pastes the SVG image', function() {
+		// Given a clipboard with just text/html referring to an image URL:
+		helper.setupAndLoadDocument('writer/copy_paste.odt');
+		cy.getFrameWindow().then(function(win) {
+			const clip = win.app.map._clip;
+			const imageUrl = win.location.origin + '/browser/'
+				+ Cypress.env('WSD_VERSION_HASH') + '/images/lc_paste.svg';
+			const html = '<img src="' + imageUrl + '"/>';
+			const clipboardItem = {
+				types: ['text/html'],
+				getType: function(type) {
+					return {
+						then: function(resolve, reject) {
+							if (type === 'text/html') {
+								resolve(new Blob([html]));
+							} else {
+								reject({ message: 'no ' + type });
+							}
+						},
+					};
+				},
+			};
+			clip._dummyClipboard = {
+				read: function() {
+					return {
+						then: function(resolve) {
+							resolve([clipboardItem]);
+						},
+					};
+				},
+			};
+
+			// When doing async paste:
+			clip.filterExecCopyPaste('.uno:Paste');
+		});
+		cy.getFrameWindow().then(function(win) {
+			helper.processToIdle(win);
+		});
+
+		// Then make sure that results in a pasted image, visible in the navigator:
+		cy.getFrameWindow().then(function(win) {
+			win.app.map.sendUnoCommand('.uno:Navigator');
+		});
+		// Without the accompanying fix in place, this test would have failed, the navigator
+		// had no visible 'Images' container, as nothing was pasted.
+		cy.cGet('#contenttree')
+			.contains('.ui-treeview-cell-text-content', 'Images')
+			.parents('.ui-treeview-entry')
+			.find('.ui-treeview-expander')
+			.click();
+		cy.cGet('#contenttree')
+			.contains('.ui-treeview-cell-text-content', 'Image1')
+			.should('be.visible');
+	});
+
+	it('Async paste special offers both HTML and plain text when the clipboard has both', function() {
+		// Given a Writer document and a fake async clipboard exposing both
+		// text/html and text/plain:
+		helper.setupAndLoadDocument('writer/copy_paste.odt');
+
+		cy.getFrameWindow().then(function(win) {
+			const clip = win.app.map._clip;
+			const html = '<p>html content</p>';
+			const plainText = 'plain text content';
+			const clipboardItem = {
+				types: ['text/html', 'text/plain'],
+				getType: function(type) {
+					return {
+						then: function(resolve, reject) {
+							if (type === 'text/html') {
+								resolve(new Blob([html]));
+							} else if (type === 'text/plain') {
+								resolve(new Blob([plainText]));
+							} else {
+								reject({ message: 'no ' + type });
+							}
+						},
+					};
+				},
+			};
+			clip._dummyClipboard = {
+				read: function() {
+					return {
+						then: function(resolve) {
+							resolve([clipboardItem]);
+						},
+					};
+				},
+			};
+
+			// When triggering async paste special:
+			clip.filterExecCopyPaste('.uno:PasteSpecial');
+		});
+
+		// Then the paste-special dialog offers both formats:
+		cy.cGet('#PasteSpecialDialog').should('be.visible');
+		cy.cGet('#PasteSpecialDialog .ui-treeview-cell-text:contains("HTML")')
+			.should('exist');
+		// Without the accompanying fix in place, this test would have failed with:
+		// expected #PasteSpecialDialog .ui-treeview-cell-text:contains("Unformatted text") to exist in the DOM
+		// i.e. the plain text item was missing from the format list in the dialog.
+		cy.cGet('#PasteSpecialDialog .ui-treeview-cell-text:contains("Unformatted text")')
+			.should('exist');
+	});
+
+	it('Cross-document paste failure shows the reason from the source stub.', function() {
+		helper.setupAndLoadDocument('writer/copy_paste.odt');
+
+		cy.intercept('GET', '**/cool/clipboard*', {
+			statusCode: 403,
+			body: '',
+		});
+
+		cy.getFrameWindow().then(function(win) {
+			const clip = win.app.map._clip;
+
+			// Simulate pasting content copied from a document where copying is
+			// disabled: the source stamps that reason into the stub html it
+			// puts on the clipboard instead of the real content.
+			clip._dataTransferDownloadAndPasteAsync(clip.getMetaURL(), clip._getDisabledCopyStubHtml());
+		});
+
+		cy.cGet('#info-modal-label1').should('have.text', 'Copying from the document has been disabled by your administrator');
+	});
+});

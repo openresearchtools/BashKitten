@@ -1,0 +1,76 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <svx/svxdllapi.h>
+#include <svtools/toolboxcontroller.hxx>
+#include <svl/lstner.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/frame/XFrame.hpp>
+#include <vcl/vclptr.hxx>
+#include <vcl/InterimItemWindow.hxx>
+#include <svx/dialog/ThemeColorsPaneBase.hxx>
+
+// Used to put theme colors pane to the notebookbar
+
+class SVX_DLLPUBLIC ThemeColorsPaneWrapper final : public InterimItemWindow,
+                                                   public svx::ThemeColorsPaneBase,
+                                                   public SfxListener
+{
+private:
+    cpo::uno::Reference<css::frame::XFrame> m_xFrame;
+
+public:
+    ThemeColorsPaneWrapper(vcl::Window* pParent,
+                           const cpo::uno::Reference<css::frame::XFrame>& rxFrame);
+    virtual ~ThemeColorsPaneWrapper() override;
+    virtual void dispose() override;
+    void SetOptimalSize();
+
+    void Notify(SfxBroadcaster& rBC, const SfxHint& rHint) override;
+
+    DECL_LINK(SelectionChangedHdl, weld::IconView&, void);
+
+protected:
+    void onColorSetActivated() override;
+};
+
+using ThemeColorsToolBoxControl_Base
+    = cppu::ImplInheritanceHelper<svt::ToolboxController, css::lang::XServiceInfo>;
+
+class SVX_DLLPUBLIC ThemeColorsToolBoxControl final : public ThemeColorsToolBoxControl_Base
+{
+    VclPtr<ThemeColorsPaneWrapper> m_xVclBox;
+
+public:
+    ThemeColorsToolBoxControl();
+    virtual ~ThemeColorsToolBoxControl() override;
+
+    // XStatusListener
+    virtual void statusChanged(const css::frame::FeatureStateEvent& rEvent) override;
+
+    // XToolbarController
+    virtual cpo::uno::Reference<css::awt::XWindow>
+        createItemWindow(const cpo::uno::Reference<css::awt::XWindow>& rParent) override;
+
+    // WeakComponentImplHelperBase
+    using ThemeColorsToolBoxControl_Base::disposing;
+    virtual void disposing(std::unique_lock<std::mutex>& rGuard) override;
+
+    // XUpdatable
+    virtual void update() override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& rServiceName) override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

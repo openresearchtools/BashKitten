@@ -1,0 +1,189 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include "OPropertySet.hxx"
+#include <cppuhelper/implbase.hxx>
+#include <comphelper/uno3.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/chart2/XChartType.hpp>
+#include <com/sun/star/chart2/XDataSeriesContainer.hpp>
+#include <com/sun/star/util/XCloneable.hpp>
+#include <com/sun/star/util/XModifyBroadcaster.hpp>
+#include <com/sun/star/util/XModifyListener.hpp>
+#include <rtl/ref.hxx>
+
+#include <vector>
+
+namespace chart
+{
+class BaseCoordinateSystem;
+class DataSeries;
+class ModifyEventForwarder;
+
+enum
+{
+    PROP_PIECHARTTYPE_USE_RINGS,
+    PROP_PIECHARTTYPE_3DRELATIVEHEIGHT,
+    PROP_PIECHARTTYPE_SUBTYPE, // none, of-bar, of-pie
+    PROP_PIECHARTTYPE_SPLIT_POS
+};
+
+
+
+namespace impl
+{
+typedef ::cppu::WeakImplHelper<
+        css::lang::XServiceInfo,
+        css::chart2::XChartType,
+        css::chart2::XDataSeriesContainer,
+        css::util::XCloneable,
+        css::util::XModifyBroadcaster,
+        css::util::XModifyListener >
+    ChartType_Base;
+}
+
+class ChartType :
+    public impl::ChartType_Base,
+    public ::property::OPropertySet
+{
+public:
+    explicit ChartType();
+    virtual ~ChartType() override;
+
+    /// merge XInterface implementations
+     DECLARE_XINTERFACE()
+
+    explicit ChartType( const ChartType & rOther );
+
+    // ____ XChartType ____
+    // still abstract ! implement !
+    virtual OUString getChartType() override = 0;
+    virtual cpo::uno::Reference< css::chart2::XCoordinateSystem >
+        createCoordinateSystem( ::sal_Int32 DimensionCount ) final override;
+    virtual cpo::uno::Sequence< OUString >
+        getSupportedMandatoryRoles() override;
+    virtual cpo::uno::Sequence< OUString >
+        getSupportedOptionalRoles() override;
+    virtual OUString getRoleOfSequenceForSeriesLabel() override;
+    virtual cpo::uno::Sequence< OUString >
+        getSupportedPropertyRoles() override;
+
+    // ____ XDataSeriesContainer ____
+    virtual void addDataSeries(
+        const cpo::uno::Reference< css::chart2::XDataSeries >& aDataSeries ) override;
+    virtual void removeDataSeries(
+        const cpo::uno::Reference< css::chart2::XDataSeries >& aDataSeries ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::chart2::XDataSeries > > getDataSeries() override;
+    virtual void setDataSeries(
+        const cpo::uno::Sequence< cpo::uno::Reference< css::chart2::XDataSeries > >& aDataSeries ) override;
+
+    // ____ XModifyBroadcaster ____
+    virtual void addModifyListener(
+        const cpo::uno::Reference< css::util::XModifyListener >& aListener ) override;
+    virtual void removeModifyListener(
+        const cpo::uno::Reference< css::util::XModifyListener >& aListener ) override;
+
+    virtual rtl::Reference<ChartType> cloneChartType() const = 0;
+
+    void addDataSeries(
+        const rtl::Reference< ::chart::DataSeries >& aDataSeries );
+    void removeDataSeries(
+        const rtl::Reference< ::chart::DataSeries >& aDataSeries );
+    void setDataSeries(
+        const std::vector< rtl::Reference< ::chart::DataSeries > >& aDataSeries );
+
+    const std::vector<rtl::Reference<::chart::DataSeries>>& getDataSeries2() const;
+
+    virtual rtl::Reference< ::chart::BaseCoordinateSystem >
+        createCoordinateSystem2( sal_Int32 DimensionCount );
+
+    virtual void createCalculatedDataSeries();
+
+    void deleteSeries( const rtl::Reference< ::chart::DataSeries > & xSeries );
+
+    // Tools
+    bool isSupportingMainAxis(sal_Int32 nDimensionCount, sal_Int32 nDimensionIndex);
+    bool isSupportingStatisticProperties(sal_Int32 nDimensionCount);
+    bool isSupportingRegressionProperties(sal_Int32 nDimensionCount);
+    bool isSupportingGeometryProperties(sal_Int32 nDimensionCount);
+    bool isSupportingAreaProperties(sal_Int32 nDimensionCount);
+    bool isSupportingSymbolProperties(sal_Int32 nDimensionCount);
+    bool isSupportingSecondaryAxis(sal_Int32 nDimensionCount);
+    bool isSupportingRightAngledAxes();
+    bool isSupportingOverlapAndGapWidthProperties(sal_Int32 nDimensionCount);
+    bool isSupportingBarConnectors(sal_Int32 nDimensionCount);
+    bool isSupportingAxisSideBySide(sal_Int32 nDimensionCount);
+    bool isSupportingBaseValue();
+    bool isSupportingAxisPositioning(sal_Int32 nDimensionCount, sal_Int32 nDimensionIndex);
+    bool isSupportingStartingAngle();
+    bool isSupportingDateAxis(sal_Int32 nDimensionIndex);
+    bool isSupportingComplexCategory();
+    bool isSupportingCategoryPositioning(sal_Int32 nDimensionIndex);
+    bool isSupportingOnlyDeepStackingFor3D();
+    bool isSeriesInFrontOfAxisLine();
+
+    sal_Int32 getAxisType(sal_Int32 nDimensionIndex);
+
+protected:
+
+    // ____ XModifyListener ____
+    virtual void modified(
+        const css::lang::EventObject& aEvent ) override;
+
+    // ____ XEventListener (base of XModifyListener) ____
+    virtual void disposing(
+        const css::lang::EventObject& Source ) override;
+
+    void fireModifyEvent();
+
+    // ____ OPropertySet ____
+    virtual void GetDefaultValue( sal_Int32 nHandle, cpo::uno::Any& rAny ) const override;
+    virtual ::cppu::IPropertyArrayHelper & getInfoHelper() override;
+
+    virtual void firePropertyChangeEvent() override;
+    using OPropertySet::disposing;
+
+    // ____ XPropertySet ____
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+        getPropertySetInfo() override;
+
+    /// merge XTypeProvider implementations
+     DECLARE_XTYPEPROVIDER()
+
+protected:
+    rtl::Reference<ModifyEventForwarder> m_xModifyEventForwarder;
+
+private:
+    void impl_addDataSeriesWithoutNotification(
+        const rtl::Reference< ::chart::DataSeries >& aDataSeries );
+
+protected:
+    typedef std::vector<rtl::Reference<::chart::DataSeries>>  tDataSeriesContainerType;
+
+    // --- mutable members: the following members need mutex guard ---
+
+    tDataSeriesContainerType  m_aDataSeries;
+
+    bool  m_bNotifyChanges;
+};
+
+} //  namespace chart
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

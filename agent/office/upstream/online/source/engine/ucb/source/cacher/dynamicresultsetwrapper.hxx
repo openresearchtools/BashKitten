@@ -1,0 +1,183 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <condition_variable>
+#include <mutex>
+#include <osl/conditn.hxx>
+#include <cppuhelper/weak.hxx>
+#include <comphelper/interfacecontainer4.hxx>
+#include <com/sun/star/ucb/XDynamicResultSet.hpp>
+#include <com/sun/star/ucb/XSourceInitialization.hpp>
+#include <com/sun/star/ucb/XDynamicResultSetListener.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <rtl/ref.hxx>
+
+#include <memory>
+
+class DynamicResultSetWrapperListener;
+class DynamicResultSetWrapper
+                : public cppu::OWeakObject
+                , public css::ucb::XDynamicResultSet
+                , public css::ucb::XSourceInitialization
+{
+private:
+    //management of listeners
+    bool                    m_bDisposed; ///Dispose call ready.
+    bool                    m_bInDispose;///In dispose call
+    comphelper::OInterfaceContainerHelper4<css::lang::XEventListener>
+                            m_aDisposeEventListeners;
+protected:
+    rtl::Reference<DynamicResultSetWrapperListener>
+                            m_xMyListenerImpl;
+
+    cpo::uno::Reference< cpo::uno::XComponentContext >
+                            m_xContext;
+
+    std::mutex              m_aMutex;
+    bool                    m_bStatic;
+    bool                    m_bGotWelcome;
+
+    //different Interfaces from Origin:
+    cpo::uno::Reference< css::ucb::XDynamicResultSet >
+                            m_xSource;
+    cpo::uno::Reference< css::sdbc::XResultSet >
+                            m_xSourceResultOne;
+    cpo::uno::Reference< css::sdbc::XResultSet >
+                            m_xSourceResultTwo;
+
+    cpo::uno::Reference< css::sdbc::XResultSet >
+                            m_xMyResultOne;
+    cpo::uno::Reference< css::sdbc::XResultSet >
+                            m_xMyResultTwo;
+
+    cpo::uno::Reference< css::ucb::XDynamicResultSetListener >
+                            m_xListener;
+
+    osl::Condition          m_aSourceSet;
+    std::condition_variable m_aListenerSet;
+
+protected:
+    void impl_init();
+    void impl_deinit();
+    /// @throws css::lang::DisposedException
+    /// @throws cpo::uno::RuntimeException
+    void
+    impl_EnsureNotDisposed(std::unique_lock<std::mutex>& rGuard);
+
+    virtual void
+    impl_InitResultSetOne( std::unique_lock<std::mutex>& rGuard, const cpo::uno::Reference<
+                css::sdbc::XResultSet >& xResultSet );
+    virtual void
+    impl_InitResultSetTwo( std::unique_lock<std::mutex>& rGuard, const cpo::uno::Reference<
+                css::sdbc::XResultSet >& xResultSet );
+
+public:
+
+    DynamicResultSetWrapper(
+        cpo::uno::Reference< css::ucb::XDynamicResultSet > const & xOrigin
+        , const cpo::uno::Reference< cpo::uno::XComponentContext > & rxContext );
+
+    virtual ~DynamicResultSetWrapper() override;
+
+
+    // XInterface
+    virtual cpo::uno::Any
+    queryInterface( const cpo::uno::Type & rType ) override;
+
+
+    // XDynamicResultSet
+    virtual cpo::uno::Reference< css::sdbc::XResultSet >
+    getStaticResultSet() override;
+
+    virtual void
+    setListener( const cpo::uno::Reference< css::ucb::XDynamicResultSetListener > & Listener ) override;
+
+    virtual void
+    connectToCache( const cpo::uno::Reference< css::ucb::XDynamicResultSet > & xCache ) override;
+
+    virtual sal_Int16
+    getCapabilities() override;
+
+
+    // XComponent ( base of XDynamicResultSet )
+    virtual void
+    dispose() override;
+
+    virtual void
+    addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
+
+    virtual void
+    removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
+
+
+    // XSourceInitialization
+
+    virtual void
+    setSource(  const cpo::uno::Reference< cpo::uno::XInterface > & Source ) override;
+
+
+    // own methods:
+    /// @throws cpo::uno::RuntimeException
+    virtual void
+    impl_disposing( const css::lang::EventObject& Source );
+
+    /// @throws cpo::uno::RuntimeException
+    void
+    impl_notify( const css::ucb::ListEvent& Changes );
+};
+
+
+class DynamicResultSetWrapperListener
+                : public cppu::OWeakObject
+                , public css::ucb::XDynamicResultSetListener
+{
+    DynamicResultSetWrapper*    m_pOwner;
+    std::mutex                  m_aMutex;
+
+public:
+    DynamicResultSetWrapperListener( DynamicResultSetWrapper* pOwner );
+
+    virtual ~DynamicResultSetWrapperListener() override;
+
+
+    // XInterface
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire()
+        noexcept override;
+    virtual void release()
+        noexcept override;
+
+    // XEventListener ( base of XDynamicResultSetListener )
+
+    virtual void
+    disposing( const css::lang::EventObject& Source ) override;
+
+    // XDynamicResultSetListener
+    virtual void
+    notify( const css::ucb::ListEvent& Changes ) override;
+
+
+    // own methods:
+    void impl_OwnerDies();
+};
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

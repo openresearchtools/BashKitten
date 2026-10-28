@@ -1,0 +1,100 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/frame/XNotifyingDispatch.hpp>
+#include <com/sun/star/frame/XDispatch.hpp>
+#include <com/sun/star/frame/XDispatchProvider.hpp>
+#include <com/sun/star/util/URL.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/frame/XStatusListener.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+
+#include <cppuhelper/implbase.hxx>
+
+namespace framework{
+
+/**
+    @short          protocol handler for "service:*" URLs
+    @descr          It's a special dispatch/provider object which is registered for such URL pattern and will
+                    be automatically used by the framework dispatch mechanism if such URL occurred.
+                    His job is to create any registered uno components which must be coded inside
+                    dispatched URL (may with some optional given parameters). After that such created
+                    service must be hold his self alive. Such mechanism can be useful for UI components
+                    (e.g. Dialogs, Wizards) only.
+
+    @base           OWeakObject
+                        provides XWeak and ref count mechanism
+
+    @devstatus      ready to use
+*/
+class ServiceHandler final : public  ::cppu::WeakImplHelper<
+                                   css::lang::XServiceInfo       ,
+                                   css::frame::XDispatchProvider ,
+                                   css::frame::XNotifyingDispatch > // => XDispatch
+{
+    /* member */
+    private:
+
+        /// reference to global uno service manager which had created us
+        cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+
+    /* interface */
+    public:
+
+        // ctor/dtor
+                 ServiceHandler( cpo::uno::Reference< cpo::uno::XComponentContext > );
+        virtual ~ServiceHandler(                                                                        ) override;
+
+        /* interface XServiceInfo */
+        virtual OUString getImplementationName() override;
+        virtual bool supportsService( const OUString& sServiceName ) override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+        // XDispatchProvider
+        virtual cpo::uno::Reference< css::frame::XDispatch >                       queryDispatch  ( const css::util::URL&                                       aURL        ,
+                                                                                                             const OUString&                                      sTarget     ,
+                                                                                                                   sal_Int32                                             nFlags      ) override;
+        virtual cpo::uno::Sequence< cpo::uno::Reference< css::frame::XDispatch > > queryDispatches( const cpo::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptor ) override;
+
+        // XNotifyingDispatch
+        virtual void dispatchWithNotification( const css::util::URL&                                             aURL      ,
+                                                        const cpo::uno::Sequence< css::beans::PropertyValue >&            lArguments,
+                                                        const cpo::uno::Reference< css::frame::XDispatchResultListener >& xListener ) override;
+
+        // XDispatch
+        virtual void dispatch            ( const css::util::URL&                                     aURL       ,
+                                                    const cpo::uno::Sequence< css::beans::PropertyValue >&    lArguments ) override;
+        virtual void addStatusListener   ( const cpo::uno::Reference< css::frame::XStatusListener >& xListener  ,
+                                                    const css::util::URL&                                     aURL       ) override;
+        virtual void removeStatusListener( const cpo::uno::Reference< css::frame::XStatusListener >& xListener  ,
+                                                    const css::util::URL&                                     aURL       ) override;
+
+    /* internal */
+    private:
+        /// @throws cpo::uno::RuntimeException
+        cpo::uno::Reference< cpo::uno::XInterface > implts_dispatch( const css::util::URL& aURL );
+
+};      //  class ServiceHandler
+
+}       //  namespace framework
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

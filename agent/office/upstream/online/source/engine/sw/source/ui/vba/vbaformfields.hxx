@@ -1,0 +1,42 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+#pragma once
+
+#include <com/sun/star/text/XTextDocument.hpp>
+#include <ooo/vba/word/XFormFields.hpp>
+
+#include <vbahelper/vbacollectionimpl.hxx>
+#include <rtl/ref.hxx>
+
+typedef CollTestImplHelper<ooo::vba::word::XFormFields> SwVbaFormFields_BASE;
+
+class SwVbaFormFields : public SwVbaFormFields_BASE
+{
+public:
+    /// @throws cpo::uno::RuntimeException
+    SwVbaFormFields(const cpo::uno::Reference<ov::XHelperInterface>& xParent,
+                    const cpo::uno::Reference<cpo::uno::XComponentContext>& xContext,
+                    const rtl::Reference<SwXTextDocument>& xTextDocument);
+
+    // XFormFields
+    bool getShaded() override;
+    void setShaded(bool bSet) override;
+    //cpo::uno::Reference<ooo::vba::word::XFormField> Add(const cpo::uno::Any& Range, sal_Int32 Type) override;
+
+    // XEnumerationAccess
+    cpo::uno::Type getElementType() override;
+    cpo::uno::Reference<css::container::XEnumeration> createEnumeration() override;
+
+    // SwVbaFormFields_BASE
+    cpo::uno::Any createCollectionObject(const cpo::uno::Any& aSource) override;
+    OUString getServiceImplName() override;
+    cpo::uno::Sequence<OUString> getServiceNames() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

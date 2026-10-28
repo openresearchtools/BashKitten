@@ -1,0 +1,132 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/form/binding/XListEntryTypedSource.hpp>
+#include <com/sun/star/table/CellRangeAddress.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/util/XModifyListener.hpp>
+
+#include <comphelper/interfacecontainer4.hxx>
+#include <comphelper/propcontainerimplhelper.hxx>
+
+namespace com::sun::star::sheet { class XSpreadsheetDocument; }
+namespace com::sun::star::table { class XCellRange; }
+
+namespace calc
+{
+    using OCellListSource_Base = comphelper::OPropertyContainerImplHelper<
+              comphelper::WeakComponentImplHelper<
+                  css::form::binding::XListEntryTypedSource,
+                  css::util::XModifyListener,
+                  css::lang::XServiceInfo,
+                  css::lang::XInitialization>,
+              class OCellListSource>;
+
+    class OCellListSource final
+        : public OCellListSource_Base
+    {
+    private:
+        cpo::uno::Reference< css::sheet::XSpreadsheetDocument >
+                    m_xDocument;            /// the document where our cell lives
+        cpo::uno::Reference< css::table::XCellRange >
+                    m_xRange;               /// the range of cells we're bound to
+        ::comphelper::OInterfaceContainerHelper4<css::form::binding::XListEntryListener>
+                    m_aListEntryListeners;  /// our listeners
+        bool        m_bInitialized;         /// has XInitialization::initialize been called?
+
+    public:
+        explicit OCellListSource(
+            const cpo::uno::Reference< css::sheet::XSpreadsheetDocument >& _rxDocument
+        );
+
+    protected:
+        virtual ~OCellListSource( ) override;
+
+        // XListEntrySource
+        virtual sal_Int32 getListEntryCount(  ) override;
+        virtual OUString getListEntry( sal_Int32 Position ) override;
+        virtual cpo::uno::Sequence< OUString > getAllListEntries(  ) override;
+        virtual void addListEntryListener( const cpo::uno::Reference< css::form::binding::XListEntryListener >& Listener ) override;
+        virtual void removeListEntryListener( const cpo::uno::Reference< css::form::binding::XListEntryListener >& Listener ) override;
+
+        // XListEntryTypedSource
+        virtual cpo::uno::Sequence< OUString > getAllListEntriesTyped( cpo::uno::Sequence< cpo::uno::Any >& rDataValues ) override;
+
+        // OComponentHelper/XComponent
+        virtual void disposing( std::unique_lock<std::mutex>& ) override;
+
+        // XServiceInfo
+        virtual OUString getImplementationName(  ) override;
+        virtual bool supportsService( const OUString& ServiceName ) override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+        // OPropertyImplHelper
+        using OCellListSource_Base::getFastPropertyValue;
+        virtual void getFastPropertyValue( std::unique_lock<std::mutex>& rGuard, cpo::uno::Any& _rValue, sal_Int32 _nHandle ) const override;
+
+        // OPropertyArrayUsageHelper
+        virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
+
+        // XModifyListener
+        virtual void modified( const css::lang::EventObject& aEvent ) override;
+        virtual void disposing( const css::lang::EventObject& Source ) override;
+
+        // XInitialization
+        virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+    private:
+        void    checkInitialized();
+
+        /** retrieves the actual address of our cell range
+            @precond
+                our m_xRange is not <NULL/>
+        */
+        css::table::CellRangeAddress
+                getRangeAddress( ) const;
+
+        /** retrieves the text of a cell within our range
+            @param _nRangeRelativeRow
+                the relative row index of the cell within our range
+            @param pAny
+                if not <NULL/> then the underlying data value is returned in the Any
+            @precond
+                our m_xRange is not <NULL/>
+        */
+        OUString
+                getCellTextContent_noCheck(
+                    std::unique_lock<std::mutex>& rGuard,
+                    sal_Int32 _nRangeRelativeRow,
+                    cpo::uno::Any* pAny
+                );
+
+        void    notifyModified();
+
+        sal_Int32 getListEntryCount(std::unique_lock<std::mutex>& rGuard);
+
+    private:
+        OCellListSource( const OCellListSource& ) = delete;
+        OCellListSource& operator=( const OCellListSource& ) = delete;
+    };
+
+}   // namespace calc
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

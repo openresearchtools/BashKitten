@@ -1,0 +1,2032 @@
+All communication consists of messages that are one line of
+human-readable UTF-8 text (with no terminating newline), optionally
+followed by a single newline and arbitrary (potentially even binary)
+data.
+
+The WebSocket distinction between 'text' and 'binary' frames has no
+meaning for us for messages that don't contain additional binary data;
+such messages can be either 'binary' or 'text' from the WebSocket
+point of view even if we require them (the single line) to be
+UTF-8. In other words, an implementation is free to send such a
+single-line message as a WebSocket 'binary' frame, and the receiving
+implementation must treat that equally as if it was a 'text' frame.
+
+The WebSocket protocol says that 'text' frames are to be "interpreted"
+as UTF-8, so it is probably best to indeed use 'binary' frames for
+messages that contain optional non-UTF-8 data.
+
+The protocol is not a request-response one. Messages may be sent in
+either direction at any time, either in response to some message, or
+spontaneously. For 'tile' messages, the client may send a bunch of
+tile requests without waiting for return messages. The server may send
+tiles proactively (guessing what the client might need). Etc.
+
+The original intent was that the parameters of the messages can be in
+any order, as they are in a name=value form anyway and the name
+indicates which parameter is which. Sadly, this was not explicitly
+mentioned in this document, or tested by unit tests. So now we have
+code here and there that assumes that parameters are in a specific
+order anyway, thus losing the benefits of the named parameters. Oh
+well.
+
+When the document is password protected, it already implies that the
+document didn't load, and that with the proper password we should try
+again. Similarly for when the password given is wrong. However, if
+loading fails and it isn't a password-related failure,
+faileddocloading error is returned and in this case the client handles
+it as a final error (that requires reloading to retry).
+
+client -> server
+================
+
+A convention: Messages that have the first token (keyword) in
+UPPERCASE are related to debugging and tracing of the client and
+server software and not related to the user's actions.
+
+DEBUG <rest of message>
+
+    The rest of the message (without the DEBUG keyword), possibly
+    multiple lines, is logged by the server as LOG_DBG.
+
+ERROR <rest of message>
+
+    The rest of the message (without the ERROR keyword), possibly
+    multiple lines, is logged by the server as LOG_ERR.
+
+TRACEEVENT name=<name> ph=<letter> ts=<timestamp> <more parameters>... [ args=<JSON.stringify-string> ]
+
+    Timestamps and durations are in microseconds, from
+    performance.now(), multiplied by 1000, and rouded to an integer.
+
+    name is a string of non-space characters.
+
+    ts is the timestamp when the trace event was generated.
+
+    ph is one of the following, and the rest of the parameters depend
+    on what it is.
+
+    'i': An "Instant" event.
+
+    'S', 'F': The start and finish of an "Async" event. In addition to
+    the name, the messages have an "id" parameter, a unique number
+    that must be the same for the 'S' and 'F' messages.
+
+    'X': A "complete" event. The "dur" parameter is the duration
+    between the beginning of the thing being timed and the time when
+    the 'X' message was emitted, also in microseconds.
+
+    args is an optional parameter, and its value is a JSON string
+    where the keys and values are strings with no spaces in them.
+
+tileprocessed wids=<wid1,wid2,...>
+
+    Previously sent tile (server -> client) arrived and processed by the client.
+    We send a list of wire-ids back for tiles that have been received.
+
+downloadas name=<fileName> id=<id> format=<document format> options=<SkipImages, etc>
+
+    Exports the current document to the desired format and returns a download URL
+    The id identifies the request on the client. id can take following values:
+    * 'print': When request for download is basically for print purposes
+    * 'slideshow': When request for download is for showing slideshow
+    * 'export': Just a simple download
+
+remotedocsubscribe source=<encoded persistent link>
+remotedocunsubscribe source=<encoded persistent link>
+
+    Subscribes the sending view to, or unsubscribes it from, live events
+    about the remote document bound to the given persistent link. A view
+    names a remote document by its persistent link alone, and the address
+    the server reaches it at stays with the server. The subscription
+    belongs to that one view and is opened with that view's own access
+    token for the remote document; the token comes from that view's
+    UserPrivateInfo in CheckFileInfo, or from a POST to /cool/links. A view
+    without a token for the source is refused, and so is a persistent link
+    no remote link is bound to. A remotelinkremove of the persistent link
+    drops the document for every view, and the subscriptions to it go down
+    with it. A view holds at most one subscription per source. The command
+    is handled inside wsd and never given to this document's kit. Requires
+    the remote_links feature to be enabled.
+
+remotelinkresolve source=<encoded persistent link>
+
+    Asks this view's storage for the document behind one of the persistent
+    links the open document's pages record, over a POST to
+    <WOPISrc>/linkaccess. A view asks for the sources it finds on the
+    document once, when it joins; afterwards, and for the sources later
+    editing names, this command is the only thing that asks, so a user who
+    sees a source reported as missing can have it looked for again.
+    Requires the remote_links feature and SupportsLinkAccess.
+
+remotelinkremove source=<encoded persistent link>
+
+    Drops the remote link bound to the given persistent link from the list
+    of this document, for every view. The subscriptions to it go down with
+    it, and the fresh list goes out to all views. The link is named by its
+    persistent link, the value the document's pages store, and not by the
+    address the storage resolved it to. Answered with an error of kind
+    'notfound' when no remote link is bound to it. Requires the remote_links
+    feature to be enabled.
+
+remotedoccommand source=<encoded persistent link> <inner client command>
+
+    Routes a read-only client command to the remote document the current
+    document is subscribed to, bound to the given persistent link. The inner command is an
+    ordinary client command line, for example "getslidesections" or
+    "tilecombine ...". The command is handled inside wsd and sent to the
+    remote over the headless session; it is never given to this document's
+    kit. Only non-modifying commands are accepted. The remote's replies come
+    back as remotedoccommandresult: messages. Requires a live subscription to
+    the source.
+
+getchildid
+
+    Requests the child id so that it knows where the files needs to be sent when it is
+    inserted in the document
+
+gettextselection mimetype=<mimeType>
+
+    Request selection's content, which is returned via 'textselectioncontent', if the selection is text-only and relatively small.
+    However, for selections containing images and other embedded objects, or if the selection is a large text blob,
+    the response is 'complexselection'.
+
+paste mimetype=<mimeType>
+<binaryPasteData>
+
+    Paste content at the current cursor position.
+
+aichat: <json>
+
+    Send chat messages to the AI assistant. The JSON payload contains:
+    - messages: Array of chat messages in OpenAI format [{role, content}, ...]
+    - requestId: Unique identifier for matching the response
+    The server proxies the request to the configured AI provider and returns
+    the result via 'aichatresult' message. If the AI provider returns an
+    image, the result will contain imageData instead of content.
+
+aichatcancel: <requestId>
+
+    Cancel an in-progress AI chat request. <requestId> is the identifier
+    from the original 'aichat' message.
+
+executescript <callId> <startLine> <source>
+<script>
+
+    Run <script> as a JavaScript snippet in the kit's JS UNO and reply via 'executescriptresult:'
+    tagged with the same <callId>.  <script> occupies everything after the first newline; the header
+    line carries only <callId>, <startLine> and <source>.
+
+    <startLine> (1-based) and <source> are the coordinates QuickJS attributes to any stack frame the
+    script produces, so an exception thrown from inside <script> at its own (1-based) line N reports
+    as <source>:<startLine>+N-1:<column>.  <source> is typically the URL of the .js file the caller
+    took the code from; <startLine> compensates for any lines the caller prepends before <script>
+    (e.g. cool.callRemote wraps the function's own source in an outer expression).
+
+    Used by the iframe-extension framework (browser/extensions/cool.js's cool.callRemote helper) to
+    call into the kit from extension iframes.  <callId> is an opaque string the client picks for
+    matching the resulting 'executescriptresult:'.
+
+proxyreturn <callId> <json-value>
+
+    Deliver the JSON-encoded return value of a JS-UNO listener proxy invocation back to the kit-side
+    proxy stub (which is spinning in Application::Yield waiting for it, cf. ProxyInvocation::invoke
+    in engine/jsuno/source/jsuno.cxx).  <callId> is the id that was sent out in the corresponding
+    'proxycall:' (whose payload contains a non-null callId iff the invoked listener method has a
+    non-void return type).  Only meaningful while a 'proxycall:' is still outstanding; spurious or
+    late 'proxyreturn' messages are silently ignored.
+
+insertfile name=<name> type=<type>
+
+    Inserts the file with the name <name> into the document, we currently
+    support:
+
+        type = 'graphic': The file has been previously uploaded using insertfile POST
+
+        type = 'graphicurl': The file is supposed to be downloaded by the core
+	                     itself; it does so from the URL provided in 'name'
+
+        type = 'comparedocuments': The file has been previously uploaded using insertfile POST
+
+        type = 'comparedocumentsurl': The file is downloaded from the URL provided in 'name'.
+                                      coolwsd downloads a URL on the WOPI host of the document
+                                      itself, with the WOPI proof headers, and the core gets the
+                                      downloaded file. coolwsd follows a redirect within that
+                                      host the same way. The core downloads a URL on any other
+                                      host itself, including another WOPI host.
+
+selectbackground name=<name>
+
+    Inserts a graphic file with the name <name> into the document as background.
+
+slideimport insert file=<staged name> [source=<source name>] [slides=<i0,i1,...>]
+                   [at=<S>] [keepdesign=<0|1>] [link=<0|1>] [time=<source time>]
+                   [sourcepositions=<p0,p1,...>]
+
+    Inserts pages of a presentation staged in the jail into the open document.
+    Only Impress documents are served. The staged name is the file a remote
+    link wrote when it was asked to exportslides, which the server put in
+    the staging area of this document's jail; the insert takes it, so the file
+    leaves the staging area whether the pages are inserted or not. Slide
+    indices are 0-based standard-page indices, and no list at all inserts every
+    page of the file.
+
+    The pages are inserted before slide <S>; a missing or out-of-range <S>
+    appends them at the end. keepdesign=1 copies the design of the file along;
+    keepdesign=0 makes the inserted pages adopt the design of this document.
+
+    <source> names the source document as the user knows it, percent-encoded
+    like the staged name: a document name holding no path. link=1 keeps the
+    inserted pages bound to it, so that they can be refreshed from it later;
+    link=0, or no link at all, inserts plain copies. <source time> is the time
+    the source was last modified now, percent-encoded, recorded on the linked
+    pages so a later comparison tells whether they are up to date.
+
+    <sourcepositions> names the position each inserted page's slide holds in
+    the source, counted from one, in the order the staged file holds the pages:
+    one position per page or none at all. A page inserted with a position is
+    linked to that position rather than to one slide, so an update reads
+    whichever slide stands there; a page inserted without one is linked to the
+    identifier of the slide it came from. The reply is
+        slideimport: {"status":"inserted","count":<K>}
+
+    Errors are reported as
+        error: cmd=slideimport kind=<syntax|cantload|failure|nosource>
+    where cantload means no file is staged under that name, failure covers an
+    insert the document refused, including one a view that cannot edit asked
+    for, and nosource means an insert that asks for links without naming a
+    source document.
+
+exportslides [slides=<p0,p1,...>|guids=<g0,g1,...>]
+
+    Writes the given pages of this document out as a presentation of their own,
+    named by the part identifiers a presentationinfo: reports, or by the
+    identifier each page keeps in ODF, which is what a document holding pages
+    read from this one records for them. No list at all writes every page out.
+    The reply is the presentation itself, as a binary frame
+        exportslides: {"status":"written"}\n<the file>
+    so a document is reached the same way whichever node serves it.
+
+    One export carries at most 100 MB, as the file travels as one frame and is
+    held in memory whole. The pages are written before their size is known, so
+    a document whose chosen pages come to more than that is answered
+        exportslides: {"status":"failed","kind":"toolarge"}
+    and no file travels with it.
+
+    A client of this document sends it through remotedoccommand, to a document
+    this one is related to, and wsd takes the reply: it writes the file into the
+    staging area of this document's jail and answers the client with the name it
+    was staged under alone,
+        exportslides: {"status":"staged","name":"<staged name>"}
+    or {"status":"failed"} when it could not be staged. A path of another jail
+    is nothing a client is given. The staged name is what a slideimport insert
+    or a slidelink update then names.
+
+    Writing pages out takes the content of the document into a file of its own,
+    so a host that allows no export, or that has what leaves the document
+    watermarked, is answered
+        error: cmd=exportslides kind=failed
+    before any page is written.
+
+slidelink list
+slidelink break part=<part>
+slidelink update source=<source name> file=<staged name> [time=<source time>] [part=<part>]
+
+    Reads the pages of the document that are linked to a source document,
+    refreshes the pages of one source, and takes the source off one page. Only
+    Impress and Draw documents hold such pages. A source is the persistent
+    link of the source document, the value a page records: the reference the
+    storage resolves to that document, which is no address the server reads
+    itself. The server matches it against the remote links of the document,
+    and for one no remote link stands for it asks the storage, when
+    CheckFileInfo says SupportsLinkAccess; a refresh then reads the remote link
+    it stands for. A source name is any text without a control character, at
+    most 1024 bytes long. The source name, the WOPISrc and the staged name are
+    all percent-encoded.
+
+    A client sends all three. An update names a file the server staged in the
+    jail, which is what an exportslides of a remote link comes to, so the
+    kit reads only a file of its own jail and never a location. An update may add
+    a time, the time the source was last modified now, which the refreshed pages
+    record so a later comparison tells whether they are up to date.
+
+    list: the reply is
+        slidelinks: {"links":[{"source":"<source document>",
+                     "slides":[{"part":"<part>","name":"<source slide>",
+                                "lastModifiedTime":"<source time at the last read>"},...]},...]}
+    with the sources in the order their first page appears and the pages of one
+    source in slide order. <part> is the linked page and <source slide> the
+    slide of the source it was made from, named as the user sees it there.
+    <source time at the last read> is the time the source was last modified when
+    the page was read from it, empty when none was recorded. A page linked to a
+    file by its path names no source document and is left out, since a refresh
+    has no way to reach it. A document that links to nothing reports an empty
+    array.
+
+    The kit sends that same list on its own, to every view of the document, when a
+    page loses the source it records, which is what an edit of a linked page does,
+    and when an undo or a redo gives that source back. A client therefore learns of
+    a link that went or came back without asking for the list again. Other ways the
+    list changes, such as a view deleting a linked page or inserting more of them,
+    reach the view they happened in alone.
+
+    break: takes the source document off the page <part>, which keeps the content
+    it holds and becomes a page of this document alone, so a later refresh of
+    that source leaves it as it is. This is one undo step, and undoing it gives
+    the page its source back. The reply is
+        slidelink: {"status":"broken","part":"<part>"}
+    A page that is linked to nothing is answered kind=notlinked, and a view that
+    cannot edit kind=failed. The fresh link list arrives on its own, as above.
+
+    update: refreshes every page linked to <source name> from <staged name>, a
+    file previously uploaded using the insertfile POST that holds the slides of
+    that source. This is the message wsd sends the kit once it has the content
+    of a source as a local file. The kit reads only the staged file, never a
+    location, and removes the file once the refresh is done. A page whose slide the file does not hold keeps the
+    content it holds. With part=<part> the page <part> alone is refreshed, and
+    the other pages linked to the source keep their content and the time they
+    record; a <part> that is not linked to <source name> is answered
+    kind=notlinked. The whole refresh is one undo step. Each refreshed page is
+    the page read for it, so it holds a new part; the reply is therefore the
+    fresh link list followed by
+        slidelink: {"status":"updated","source":"<source document>","count":<K>}
+    where <K> counts the pages refreshed.
+
+    Errors are reported as
+        error: cmd=slidelink kind=<syntax|notlinked|failed> [source=<source name>]
+        error: cmd=slidelink kind=<syntax|notlinked|failed> [part=<part>]
+    where notlinked means no page of the document is linked to that source, or
+    that the page a break names is linked to nothing, and failed means the staged
+    file could not be read, or the view cannot edit. An answer of an update names
+    the source it was sent for and an answer of a break names the page it was
+    asked for, both percent-encoded as the command was, so that a reader of these
+    messages tells the answers of one command of the family from those of
+    another. A command too malformed to say what it was for names neither.
+
+key type=<type> char=<charcode> key=<keycode>
+
+    <type> is 'input' or 'up', <charcode> and <keycode> are numbers.
+
+load <pathname>
+
+    Deprecated.
+
+load [part=<part>] url=<url> [timestamp=<time>] [lang=<locale>] [deviceFormFactor=<device type>] [timezone=<timezone>] [options=<options>]
+
+    part is an optional parameter. <part> is a page identifier, or the
+    part's index in document order written in decimal form. The view opens
+    on that part.
+
+    timestamp is an optional parameter.  <time> is provided in microseconds
+    since the Unix epoch - midnight, January 1, 1970.
+
+    lang specifies the locale to which we should switch before loading the
+    document
+
+    deviceFormFactor specifies the form factor of the device the client is running on
+    it can be one of the following: 'desktop', 'tablet', 'mobile'
+
+    timestamp is in tzfile(5) format. For example: Pacific/Auckland.
+
+    options are the whole rest of the line, not URL-encoded, and must be valid JSON.
+
+editwithpassword password=<password>
+
+    Provides the password that allows editing a document that has a
+    separate password for modifying. Such a document loads in
+    read-only mode, and every view stays read-only until it has sent
+    the correct password with this message. Only the view that sent
+    the password becomes editable: the other views stay read-only
+    until each of them sends the password itself.
+
+    <password> is URL-encoded, so it can contain spaces.
+
+    On success the server answers:
+
+        editwithpassword: success
+
+    and the view can switch to edit mode. On failure an error is
+    returned:
+
+    * kind=wrongpassword - the password did not match and the view
+      stays read-only.
+
+    * kind=notallowed - the view has no write permission, or the
+      document has no separate password for modifying.
+
+    * kind=syntax - the password parameter was missing or empty.
+
+    * kind=failed - the password matched, but the document could not
+      be reopened for editing. The view stays read-only.
+
+coolclient <major.minor[-patch]> [ <timestamp> <perfcounter> ]
+
+    Upon connection, a client must announce the version number it supports.
+    major: an integer that must always match between client and server,
+           otherwise there are no guarantees of any sensible
+           compatibility. This is bumped when API changes.
+    minor: an integer is more flexible and is at the discretion of either party.
+           Security fixes that do not alter the API would bump the minor version number.
+    patch: an optional string that is informational.
+
+    timestamp: the value of the JavaScript Date.now(), i.e. integer number of milliseconds since
+           the Unix epoch.
+
+    perfcounter: the value of the JavaScript performance.now() function at the same time.
+            This is also in milliseconds but can be a floating point number and can be up to
+            microsecond precision.
+
+            The timestamp and perfcounter are used by the server to translate performance
+            counter values from the client for Trace Event logging into absolute timestamps.
+
+mouse type=<type> x=<x> y=<y> count=<count>
+
+    <type> is 'buttondown', 'buttonup' or 'move', others are numbers.
+
+ping
+
+    requests a 'pong' server message.
+
+
+resetselection
+
+saveas url=<url> format=<format> options=<options>
+
+    <url> is a URL, encoded. <format> is also URL-encoded, i.e. spaces as %20 and it can be empty
+    options are the whole rest of the line, not URL-encoded, and can be empty
+    If <url> uses 'wopi:' as the protocol, the path is treated as the path on
+    the wopi host.
+
+selecttext type=<type> x=<x> y=<y>
+
+    <type> is 'start', 'end' or 'reset', <x> and <y> are numbers.
+
+windowselecttext id=<dialogId> swap=<true|false> x=<x_position> y=<y_position>
+
+    This protocol is used to notify the system about text selection within a window, including the option to swap the mark and cursor roles.
+
+    - id=<dialogId> : Specifies the ID of the dialog window where the selection is happening.
+    - swap=<true|false> : Indicates whether the mark/cursor roles should be swapped. If swap=true, the mark and cursor positions are swapped.
+    - x=<x_position> : The x-coordinate of the selection position.
+    - y=<y_position> : The y-coordinate of the selection position.
+
+selectgraphic type=<type> x=<x> y=<y>
+
+    <type> is 'start' or 'end' <x> and <y> are numbers.
+
+inplaceobjectarea x=<x> y=<y> width=<width> height=<height>
+
+    Moves and resizes the object that is currently active for in-place editing, for
+    instance a chart opened for editing by double-clicking it. All four are numbers in
+    twips, the same unit the 'graphicselection:' message reports with "INPLACE".
+
+    The area is a request, not an instruction: core narrows it for an object protected
+    against moving or resizing, and clamps it to the page. The area finally taken comes
+    back as a fresh 'graphicselection:' "INPLACE" message, so the client should take its
+    handles from that rather than from what it asked for.
+
+setclientpart part=<partNumber>
+
+    Informs the server that the client changed to part <partNumber>.
+
+selectclientpart part=<partNumber>
+
+    Informs the server that the client changed the selection state of <partNumber>.
+    The server sends no reply.
+
+Part identifiers of a presentation or drawing document are the pages'
+GUIDs in braced form, {1BE1A269-4A03-4202-ACFE-0204C5E9BE1F}, not indexes
+into the page list. The identifiers carry no order: to reach a
+neighbouring page, find the page's position in the status message's page
+list and take the identifier listed next to it. The status message lists
+each page's identifier as part, in document order. A page keeps its
+identifier when other pages are moved, inserted or deleted, and across
+save and reload when the file format stores it (extended ODF and OOXML
+do). Because the tile cache keys carry the part identifier, the cached
+tiles of a page stay valid when the page order changes. The identifiers
+of the pages a mode addresses come from that mode's page list: the
+standard pages, the master pages, the notes pages, the notes master
+pages or the handout master page. Every message that
+names a part uses these identifiers for such documents - the tile,
+tilecombine, setclientpart, selectclientpart and getslide requests, and
+the tile:, delta:, invalidatetiles:, setpart:, curpart: and status:
+(selectedpart) responses. The load message's part option takes either
+form, a page identifier or a positional index. Text and spreadsheet
+documents use plain part indexes throughout, written in decimal form.
+
+moveselectedclientparts position=<positionNumber>
+
+    Moves the selected parts to a new position.
+
+setpage page=<pageNumber>
+
+    Valid only for text documents.
+    Informs the server that the client changed to page <pageNumber>.
+
+status
+
+styles
+
+tile part=<partNumber> width=<width> height=<height> tileposx=<xpos> tileposy=<ypos> tilewidth=<tileWidth> tileheight=<tileHeight> [timestamp=<time>] [id=<id>] [oldwid=<wireId>]
+
+    Parameters are numbers except wireId which is an opaque string
+    identifier unique to this tile.
+
+    Note: id must be echoed back in the response verbatim. It is used
+    when rendering slide previews of presentation documents, and not
+    for anything else. It is only useful to JS part and will break it
+    if not returned in the response.
+
+    For a presentation or drawing document the part is the page's
+    GUID. The page is rendered from whichever index it holds at render
+    time, so the picture is of that page even if the pages were
+    reordered after the request was sent. A request naming a page that
+    no longer exists is not rendered.
+
+tilecombine <parameters>
+
+    Accepts same parameters as the 'tile' message except that
+    parameters 'tileposx', 'tileposy' and 'oldwid are
+    comma-separated lists, and the number of elements in each must be
+    same.
+
+    if oldwid=0 this forces returning from the previous keyframe
+    for this tile - suitable for force-refreshing the data.
+
+dialog <command>
+
+    <command> is unique identifier for the dialog that needs to be painted.
+
+uno <command> [arguments]
+
+    <command> is a line of text.
+    [argments] - JSON encoded arguments for the UNO command
+
+save dontTerminateEdit=<value> dontSaveIfUnmodified=<value>
+
+    A wrapper over UNO save command. A non-zero integer <value> is considered true (non-integer
+    values such as 'true' are not allowed). 'dontTerminateEdit' means not terminating the edit
+    session in spreadsheets when saving the document. In most cases, you should set it to
+    non-zero. 'dontSaveIfUnmodified' when set to non-zero skips saving the document when it is
+    unmodified.
+
+savetostorage force=<value>
+
+    Saves the files to storage. A 'save' command automatically saves the file to
+    storage almost always except in the case where there is a document conflict
+    i.e document in the storage is changed behind our back. We might need to do
+    call this command with force=1 in that case to forcefully save it to storage
+    after asking from the user.
+
+clientvisiblearea x=<x> y=<y> width=<width> height=<height>
+
+    Invokes lok::Document::setClientVisibleArea().
+
+outlinestate type=<type> level=<level> index=<index> state=<state>
+
+    <type> is 'column' or 'row', <level> and <index> are numbers, <state> is 'visible' or 'hidden'.
+
+    Invokes  lok::Document::setOutlineState().
+
+selectobjects ids=<ids>
+
+    <ids> is a comma separated list of the unique ids of drawing objects, the ones the render
+    geometry of a page names its objects by, and it is empty to ask for no selection at all.
+    Marks those objects in this view and nothing else, the way a click on them would. The objects
+    of one selection all sit at the same level, directly on the page or in one and the same group;
+    an id naming an object elsewhere, or naming nothing on the page the view shows, is left out.
+
+setobjecttransform to=<mappings> as=<what>
+
+    <mappings> holds one item per object, separated by semicolons. An item is the unique id of a
+    drawing object, the one the render geometry of a page names it by, then the six numbers of
+    the mapping it is to be drawn by - a, b, c, d, e and f - all separated by commas. The
+    mapping takes the object's own square, whose corners are 0 and 0 and 1 and 1, onto the
+    page, in twips: the first corner goes to e and f, and the other four numbers say which way
+    and how far its own two axes run. A mapping whose two axes are turned over against each
+    other turns the object over. <what> is "move", "scale" or "turn", and names the step it can
+    be undone with.
+
+    Gives every one of those objects the mapping named: it keeps what it is and only its place,
+    its size, its turn and its shear become what the mapping says. The whole of it is one step to
+    undo. A client that works a drag out for itself hands over what it drew this way, rather than
+    asking for a handle of the selection to be moved.
+
+setobjectcontrolpoint id=<id> at=<at> x=<x> y=<y> withtheshape=<withtheshape>
+
+    <id> is the unique id of a drawing object, the one the render geometry of a page names it by,
+    and <at> counts the points a custom shape is shaped by, from zero, in the order the shape
+    offers them. <x> and <y> are where that point is to go on the page, in twips.
+    <withtheshape> is 1 to carry the shape along where the point is one that moves it, which is
+    what the tail of a callout does when it is dragged without a modifier, and 0 otherwise.
+
+    The shape reads such a point as the value it shapes itself from and holds it to whatever that
+    value may be, so the place named here is a wish and what the shape makes of it is the answer.
+    One step to undo. Naming an object that is not a custom shape does nothing.
+
+setobjecthandle id=<id> kind=<kind> polygon=<polygon> point=<point> at=<at> x=<x> y=<y>
+
+    <id> is the unique id of a drawing object, the one the render geometry of a page names it by,
+    and the four after it name one of that object's handles as the render geometry reports it:
+    <kind> is the kind of handle, <polygon> and <point> say which point of which polygon it
+    belongs to, and <at> is the number the object itself gives the handle, for the handles that
+    are told apart by nothing else. <at> is -1 where the three before it already name the handle.
+    <x> and <y> are where the handle is to go on the page, in twips.
+
+    The object reads such a move its own way: the corner radius of a rectangle, the angle a piece
+    of a circle begins at, the offset of a measurement. One step to undo. Nothing happens where
+    the object has no handle of that name or will not have that one dragged.
+
+    A point a custom shape is shaped by is not moved this way: it has setobjectcontrolpoint,
+    which says in the command whether the shape is carried along, where this one would leave
+    that to be read off the drag that is driving it.
+
+setobjectgluepoint id=<id> at=<at> x=<x> y=<y>
+
+    <id> is the unique id of a drawing object, the one the render geometry of a page names it by,
+    and <at> counts the points that object was given for a connector to tie itself to, from zero,
+    in the order the render geometry lists them. <x> and <y> are where that point goes on the
+    object: 0 and 0 is its upper left corner and 1 and 1 its lower right one, which is how the
+    render geometry reports such a point. Moves it there in one step that can be undone. The
+    object holds such a point either as a share of its own size or as a distance of its own, and
+    it keeps the way it holds it.
+
+setobjectpoints id=<id> changes=<changes>
+
+    <id> is the unique id of a drawing object, the one the render geometry of a page names it by.
+    <changes> names the points of that object's path which moved, and where each of them went. It
+    is a list separated by semicolons, and every item of it is six numbers separated by commas:
+
+        <polygon>,<point>,<part>,<x>,<y>,<continuity>
+
+    <polygon> counts the polygons of the path from zero and <point> counts the points of that
+    polygon from zero, in the order the render geometry lists them. <part> is 0 for the point
+    itself, 1 for the weight that bends the curve coming into it and 2 for the weight of the
+    curve going out of it. <x> and <y> are where that point or weight went, in twips.
+    <continuity> says how the curve is to run through that point: 0 for a corner, 1 for a point
+    it runs smoothly through, 2 for one it runs symmetrically through.
+
+    Moves those points and leaves every other point of the path untouched, in one step that can
+    be undone. Moving one weight of a point that is run through smoothly or symmetrically carries
+    the other weight of that point along, and the continuity that is named is then set exactly,
+    so a point whose numbers had drifted a little off comes out lying on the line. A point named
+    twice, or one the path does not have, is left out.
+
+reportmousepointer wanted=<wanted>
+
+    <wanted> is 'true' or 'false'. Says whether this client wants to be told the mouse pointer the
+    document asks for. A client that works out the pointer from the geometry it holds says 'false'
+    and is sent none until it says 'true' again.
+
+useractive
+
+    Sent when the user regains focus or clicks within the active area to
+    disable the inactive state.
+    Will send invalidation and update notifications to force refreshing the screen.
+
+    See 'userinactive'.
+
+userinactive
+
+    Sent when the user has switched tabs or away from the Browser altogether.
+    It should throttle updates until the user is active again.
+
+    See 'useractive'.
+
+closedocument
+
+    This gives document owners the ability to terminate all sessions currently
+    having that document opened. This functionality is enabled only in case WOPI
+    host mentions 'EnableOwnerTermination' flag in its CheckFileInfo response
+
+versionrestore <action>
+
+    Version restore related messages.
+
+    <action> can take the following values:
+    - prerestore: The storage is about to restore the document to an earlier
+    revision.
+
+asksignaturestatus
+
+    Requests a signing status of the document.
+
+rendershapeselection mimetype=<mimeType>
+
+    Request rendering of selected shapes into an SVG format.
+    By now only SVG mimetype is handled (image/svg+xml)
+
+removesession <viewid>
+
+    Requests the removal of a given view from the document. Lower
+    privilege views cannot remove higher ones, eg. a readonly view
+    can't remove an editor.
+
+traceeventrecording <start/stop>
+
+    Starts or stops comphelper::TraceEvent recording.
+
+sallogoverride <string>
+
+    Overrides the SAL_LOG value, or stops overriding if no parameter
+    or parameter is "default".
+
+loggingleveloverride <default|max|verbose|terse|none|fatal|critical|error|warning|notice|information|debug|trace>
+
+    Override the Online logging level for the thread(s) and Kit
+    processes handling this particular client.
+
+    The value is either one of the log level names, or the special
+    value "default" (meaning whatever is the log level specified in
+    the "logging.level" configuration setting), "verbose", or "terse")
+    (meaning the most or least verbose level allowed, the
+    "logging.most_verbose_level_settable_from_client" or
+    "logging.least_verbose_level_settable_from_client" configuration
+    setting).
+
+paintwindow <id> rectangle=<x>,<y>,<width>,<height> dpiscale=<scale>
+
+    Requests painting the area of a window.
+
+    <id> is the window's int ID.
+
+    <x>,<y>,<width>,<height> is the area of the dialog to be rendered.
+
+    <scale> is a scaling factor, e.g. 1 for non-HiDPI.
+
+clientzoom tilepixelwidth=<width> tilepixelheight=<height> tiletwipwidth=<twipWidth> tiletwipheight=<twipHeight> dpiscale=<scale> zoom=<zoomLevel>
+
+    Requests an update of the client zoom level and tile size.
+
+    <width> and <height> define the tile dimensions in pixels.
+
+    <twipWidth> and <twipHeight> define the tile dimensions in twips.
+
+    <scale> is the scaling factor, e.g., 1 for non-HiDPI displays.
+
+    <zoomLevel> represents the zoom factor applied to the client view.
+
+    This command ensures that the rendered tiles match the correct zoom level and DPI scaling.
+
+commandvalues command=<UNOCommand>[?param1=value1&param2=value2...]
+
+    Sends a UNO command from the client to the server.
+        - <UNOCommand> is the command to be executed (e.g., .uno:ViewAnnotations).
+        - Optional query parameters can be appended to specify additional command details.
+
+    .uno:FormulaDepChain (Calc only)
+        Requests the formula dependency chain for the currently selected cell.
+        Returns a JSON object with:
+        - hasError: boolean indicating if the cell has a formula error
+        - reason: if no error, one of "not_formula" or "no_error"
+        - cell: object with address, sheet, formula, error, errorCode
+        - dependencies: array of dependency objects (recursive), each with:
+          - address, sheet, type (formula/value/string/empty/range/circular)
+          - For formulas: formula text, optional error/value, nested dependencies
+          - For values/strings: the cell value
+        Maximum recursion depth: 10 levels. Maximum cells: 50.
+
+completefunction name=<FunctionName>
+
+    Requests the execution of a spreadsheet function in MobileWizard.Clients can request to complete a function name partially typed in the formula input box.
+
+    <FunctionName> is the name of the function to be applied, such as SUM, MIN, AVG, MAX, etc.
+
+    This command allows the client to request calculation functions dynamically.
+
+dialogevent <windowId> { "id": "<objectId>", "cmd": "<eventType>", "data": "<data>", "type": "<objectType>" }
+
+    Sends an event message related to a dialog object within JSDialog.
+
+    - <windowId> is the identifier of the dialog window (e.g., the JSDialog ID).
+
+    - <objectId> is the ID of the object that triggered the event, such as "POPOVER", "numberformat", "masterslidebutton", etc.
+
+    - <eventType> represents the type of event that occurred, such as "selected", "Activate", "click", "close", "response", "keypress", "render", etc.
+
+    - <data> contains any object data entered by the user, which will dictate the action performed.
+
+    - <objectType> specifies the type of object, such as "combobox", "iconpreview", "toolbox", etc.
+
+Example:
+    1.dialogevent 45 { "id": "linestylevalueset", "cmd": "click", "data": "0.19801980198019803;0.19130434782608696", "type": "drawingarea" }
+    2.dialogevent 21 {"id":"fontnamecombobox", "cmd": "render_entry", "data": "16;100;100", "type": "combobox"}
+    3.dialogevent 10 { "id": "-1" }
+
+exportas url=<url>
+
+    This command allows for the seamless export of documents within the WOPI protocol framework.
+
+    Requests the export of a file, directing the server to handle it through a WOPI (Web Application Open Platform Interface) URL.
+
+    - <url> is the URL that specifies the location of the file to be exported. This URL is passed using the wopi protocol, encoded via encodeURIComponent to ensure the proper formatting for transfer.
+
+formfieldevent { "type": "<objectType>", "cmd": "<eventType>", "data": "<data>" }
+
+    This command helps communicate form field interactions and pass relevant data back to the server or application for further processing.
+    This can be used to handle user actions like selecting a dropdown option or similar events
+
+    <type> Specifies the type of form field, such as "drop-down" etc
+
+    <cmd> Represents the event that occurred on the form field, such as "selected" etc
+
+    <data> Contains any relevant data tied to the event. This can include an index, value, or other information depending on the event type.
+
+getslide hash=<slideHash> part=<slidePart> width=<canvasWidth> height=<canvasHeight> renderBackground=<backgroundRenderFlag> renderMasterPage=<masterPageRenderFlag> devicePixelRatio=<devicePixelRatio>
+
+    This command is used to request and render a slide with the appropriate properties for a specific device display and rendering conditions.
+
+    Requests a specific slide from the server, providing necessary parameters to ensure proper rendering based on the client's display settings.
+
+    <hash>: The hash value identifying the specific slide to be requested.
+
+    <part>: The part identifier of the slide: the page's GUID in braced form.
+
+    <width>: The width of the canvas in which the slide will be rendered.
+
+    <height>: The height of the canvas in which the slide will be rendered.
+
+    <renderBackground>: A flag indicating whether the slide background should be rendered. 0 for not rendered, 1 for rendered.
+
+    <renderMasterPage>: A flag indicating whether the master page of the slide should be rendered. 0 for not rendered, 1 for rendered.
+
+    <devicePixelRatio>: The device pixel ratio, typically window.devicePixelRatio, which adjusts the rendering quality for HiDPI displays.
+
+resetaccesstoken <token=<accessToken>> [<expiryEpoch>]
+
+    This command ensures that the client uses the updated access token for further requests.
+    Resets the access token for authentication or session management.
+
+    - <token>: The new access token that replaces the previous one.
+    - <expiryEpoch>: The time from Unix/Javascript epoch when the access token will expire. Optional. 0 means unknown/missing.
+
+renamefile <filename=<newFilename>>
+
+    Requests a file rename operation.
+
+    - `<filename>`: The new name for the file, URL-encoded to handle special characters.
+
+    This command updates the file name on the server, ensuring proper encoding for special characters in the filename.
+
+a11ystate <enableA11y>
+
+    The a11ystate protocol is used to enable or disable accessibility (A11y) support in the UI.
+
+geta11yfocusedparagraph
+
+    The geta11yfocusedparagraph protocol is used to retrieve information about the currently focused paragraph in an editable area, supporting accessibility (A11y) features.
+
+a11ycaretposition
+
+    The a11ycaretposition protocol is used to notify or request the current caret position within an editable area, supporting accessibility (A11y) features.
+
+notasync:
+
+    Warns when a non-asynchronous (blocking) dialog is used.
+
+    This message is triggered to notify that a dialog operation is not running asynchronously, which may affect performance or user experience.
+
+getpresentationinfo
+
+    This adds support for getting the presentation info from core.
+
+    This change uses the new GetPresentationInfo() funciton that was added to the LOKit API.
+
+getslidesections
+
+    Returns the slide sections for an Impress presentation as a JSON array.
+    Response: slidesections: [{name, id, startIndex, slideCount}, ...]
+
+removetextcontext id=<windowId> before=<before_position> after=<after_position>
+
+    This protocol is used to remove text context from a specified location in a document. It allows the deletion of multiple characters within a range by specifying the positions before and after the deletion.
+
+    - id=<windowId> : Specifies the ID of the window where the text removal operation is occurring.
+    - before=<before_position> : The position before the deletion starts.
+    - after=<after_position> : The position after the deletion ends.
+
+browsersetting action=update [upload=false] json=<JSON>
+
+    Changes the user's browser settings. The server keeps a copy of the
+    browsersetting.json file for each session of the user; the changes are
+    applied to every copy.
+
+    - json=<JSON> : An object of the changed settings, with flat dotted keys
+      ("text.ShowAnnotations": "false"). A toggle is the string "true" or
+      "false", a number such as the zoom index is a number.
+    - upload=false : The file already holds these settings, so the server
+      does not write it out again. Without this token, the server writes
+      the file out with the changes.
+
+contentcontrolevent <JSON>
+    *Properties:
+    type - date,drop-down
+    selected:
+        - for drop-down: zero based index of item that is selected
+        - for date: date which is selected by date picker
+
+server -> client
+================
+
+coolserver <coolwsd version> <coolwsd git hash> <major.minor[-patch]>
+
+    Upon connection, the server must announce the version number it supports.
+    Major: an integer that must always match between client and server,
+           otherwise there are no guarantees of any sensible
+           compatibility. This is bumped when API changes.
+    Minor: an integer is more flexible and is at the discretion of either party.
+           Security fixes that do not alter the API would bump the minor version number.
+    Patch: an optional string that is informational.
+
+lokitversion <JSON string>
+
+    JSON string contains version information in format:
+    {ProductName: <>, ProductVersion: <>, ProductExtension: <>, BuildId: <>}
+
+    Eg: {"ProductName": "Collabora Office",
+         "ProductVersion": "26.04",
+         "ProductExtension": ".0.0.alpha0",
+         "BuildId": "<full 40 char git hash>"}
+
+osinfo: <string>
+
+    string that contains OS name and version.
+
+clipboardkey: <token>
+
+    Send access token for web clipboard use, may arrive periodically
+    Current and previous hash remain valid for that period, always use
+    the latest.
+
+linktoken: <token>
+
+    A one-time token that authorizes this view to register a remote link
+    over POST /cool/links. Sent when the view joins a document with
+    remote_links enabled, and again with a fresh token after each accepted
+    request, so a token is never accepted twice. Keep only the latest. The
+    Link object of the POST names in PersistentLink the reference the
+    document's pages store for the file, which is the one name a view knows
+    the registered link by.
+
+contextmenu: <json description of the context menu>
+
+    When the user right-clicks in the document, the content of the context
+    menu is sent back via this callback.
+
+    The structure of the context menu is a JSON, and looks like:
+
+        {
+            "menu": [
+                { "text": "label text1", "type": "command", "command": ".uno:Something1", "enabled": "true" },
+                { "text": "label text2", "type": "command", "command": ".uno:Something2", "enabled": "false" },
+                { "type": "separator" },
+                { "text": "label text2", "type": "menu", "menu": [ { ... }, { ... }, ... ] },
+                ...
+            ]
+        }
+
+downloadas: jail=<jail directory> dir=<a tmp dir> name=<name> port=<port> filename=<filename>
+
+    The client should then request http://server:port/jail/dir/name in order to download
+    the document
+
+remotelinks: <json>
+
+    The remote links the server tracks for this document, from the
+    RemoteLinks field of CheckFileInfo (WOPISrc, BaseFileName,
+    LastModifiedTime and PersistentLink per entry), from POST
+    /cool/links, and from the sources the document's own slide
+    links name. A remotelinkremove takes one off the list, for every view,
+    and the fresh list goes out to all of them. Built for the receiving
+    view: the source list and last-modified times are the same for every
+    view, but the state is that view's own. Sent to a view when it joins
+    and again when the shared list or that view's own access or
+    subscription state changes. Access tokens and the addresses of the
+    remote documents are never included: a view knows a remote link by its
+    persistent link alone. The JSON carries a documents array of entries:
+
+        { "name": "<the BaseFileName the integrator gave the document, or the
+                    file name at the end of its WOPISrc>",
+          "lastModifiedTime": "<time or empty>",
+          "state": "noaccess|available|subscribed|connected|disconnected|failed|missing",
+          "persistentLink": "<the reference the document's pages store for the source>",
+          "access": "pending|resolved|notfound|denied|failed, or empty" }
+
+    'noaccess' means the view holds no token for the source. 'available'
+    means the view holds a token but has no live subscription. The other
+    values follow the remotedocevent states of the view's subscription.
+    'missing' means the source cannot be read: either it could not be read
+    from storage, or it is a document the open one names as the source of
+    its slides that no remote link stands for. Such an entry carries its
+    name alone, so it says what the slides were made from while nothing can
+    reach it; its persistentLink is that name.
+
+    'access' is what asking this view's storage for the persistent link came
+    to, and it is empty for a source this view never asked for, which is
+    every source on a storage that does not answer link access requests.
+    'pending' means a question is in flight, 'notfound' that the storage
+    knows no document for the link, 'denied' that this view's user may not
+    reach it, and 'failed' any other answer or none. A source that is
+    'resolved' is the remote link the storage named. See remotelinkresolve
+    for asking again.
+
+remotedocevent: tag=<t> source=<encoded persistent link> event=<event> [part=<p>] [value=<v>] [kind=<k>] [time=<encoded-time>]
+
+    An event about a remote document a view subscribed to with
+    remotedocsubscribe, named by the persistent link its remote link is
+    bound to. The tag is the session id of the view that opened the
+    subscription. <event> is one of:
+    * 'connected': the remote document is loaded and events are flowing
+    * 'modified': the remote document's modified state changed to <value>
+    * 'saved': the remote document uploaded a new file to storage; <time> is
+      the storage's last-modified time for the new content, so the source is
+      newer than the copy shown here
+    * 'invalidated': the content of part <part> changed (-1 covers documents
+      without parts); invalidations are coalesced, so one event stands for a
+      burst of changes
+    * 'structure': parts were added, removed or resized
+    * 'disconnected': the connection was lost; the server is reconnecting
+    * 'failed': the connection is given up until a new subscription
+    * 'missing': the source could not be read from storage (a missing file
+      among the reasons); <kind> names the reason and the links to it are broken
+    * 'unsubscribed': the link was dropped on request
+    * 'error': the subscription failed; <kind> names the reason, among them
+      'notfound' for a persistent link no remote link is bound to and
+      'notoken' for a source the view holds no token for
+
+remotedoccommandresult: source=<encoded persistent link>\n<inner server frame>
+
+    A reply from a remote document to a remotedoccommand. The header line
+    names the remote by the persistent link its remote link is bound to;
+    everything after the first newline is
+    the frame the remote node sent, verbatim, text or binary (for example
+    slidesections:, status:, tile:, sendthumbnail:). The frame is delivered
+    only to the view that issued commands to that remote, so several remote
+    documents can be driven in parallel and told apart by the persistent
+    link.
+
+error: cmd=<command> kind=<kind> [code=<error_code>] [params=1,2,3,...,N]
+<freeErrorText>
+
+    <command> is the command part of the corresponding client->server
+    message that caused the error.
+
+    <command> can also take following values:
+    'internal': for errors generated without directly corresponding to a client
+    message.
+    'storage': for errors pertaining to storage (filesysytem, wopi etc.)
+
+    <kind> is some single-word classification
+
+    <code> (when provided) further specifies the error as forwarded from
+    Collabora Office
+
+close: <reason>
+
+    Ask a client to close the websocket connection with <reason>.
+    Exactly similar fields are also available in WebSocket protocol's
+    CLOSE frame, but some browser implementation (google-chrome) doesn't seem to
+    handle that well. This is a temporary application-level close websocket
+    to circumvent the same.
+
+    <reason> can have following values:
+    * ownertermination - If the session close is due to 'Document owner'
+    terminating the session.
+    (Document owner is the one who has the file ownership and hence have the
+    ability to kill all other sessions if EnableOwnerTermination flag in WOPI
+    CheckFileInfo is 'true' (assumed to be 'false' by default).
+
+    * shuttingdown - Sent when the server is going down in a graceful fashion.
+    The server doesn't disconnect from clients yet, but starts
+    saving document and tearing down internals.
+
+    * recycling - The last message sent from the server when it is gracefully
+    shutting down to let clients know they can try connecting
+    after a short interval.
+
+    * documentconflict - All sessions of this document are going down
+    because file was changed in storage and we want to load the new document
+    from the storage.
+
+    * versionrestore payload - Version restore message is also sent as part of
+      the close frame. See `versionrestore:` message for details.
+
+getchildid: id=<id>
+
+    Returns the child id
+
+invalidatetiles: part=<partId> x=<x> y=<y> width=<width> height=<height> wid=<wid>
+
+    Tells the client to invalidate any cached tiles for the document
+    area specified (in twips), at any zoom level. For a presentation
+    or drawing document the part is the page's GUID, matching the part
+    the tiles carry; every other parameter is a number.
+
+invalidatetiles: EMPTY, <partId>, <mode>, wid=<wid>
+
+    Tells the client to invalidate all cached tiles.
+
+loaded: viewid=<viewId> views=<number of active views> isfirst=<true|false>
+
+    Sent after a view has been loaded successfully.
+    Best to rely on this to detect loading events (rather than status:).
+
+    <viewId> the unique ID of this view (meaningful only in LOKit).
+    <views> the total number of active views in the document after finishing loading this one.
+    <isfirst> "true" if this is the first view (i.e. the document has just loaded), otherwise "false".
+
+    See also unloaded:.
+
+haspasswordtomodify: true
+
+    Sent while loading a document that has a separate password for
+    modifying, to every view that has not entered that password yet.
+    It arrives before the status: message of that view. The view is
+    read-only until it provides the password with an editwithpassword
+    message.
+
+editwithpassword: success
+
+    Sent to a view whose editwithpassword message carried the correct
+    password, after the document has become editable. The view can
+    switch to edit mode.
+
+pong rendercount=<num>
+
+    sent in reply to a 'ping' message, where <num> is the total number
+    of rendered tiles of the document.
+
+saveas: url=<url> name=<name>
+
+    <url> is a wopi URL of the newly created file, including the access token.
+    <name> is the resulting name (without path) that was created on the wopi
+    host. It can differ from what was requested in case the file already existed.
+
+status: type=<typeName> parts=<numberOfParts> current=<currentPartNumber> width=<width> height=<height> viewid=<viewId> hiddenparts=<part1,part2,...> selectedparts=<part1,part2,...> [partNames]
+
+    <typeName> is 'text, 'spreadsheet', 'presentation', 'drawing' or 'other. Others are numbers.
+    if the document has multiple parts and those have names, part names follow separated by '\n'
+
+statusupdate: type=<typeName> parts=<numberOfParts> current=<currentPartNumber> width=<width> height=<height> viewid=<viewId> hiddenparts=<part1,part2,...> selectedparts=<part1,part2,...> [partNames]
+
+    Same as status: but issued whenever the document parts have updated significantly.
+    status: implies document loading (deprecated, use loaded: instead). statusupdate: is just an update.
+
+    For a presentation or drawing document the selectedpart field of the
+    JSON payload carries the current page's part identifier, the page's
+    GUID, and each entry of the parts array carries its page's
+    identifier as part, in document order.
+
+styles: {"styleFamily": ["styles in family"], etc. }
+
+statechanged: <key>=<value>
+
+    Notifies client of state changed events of <key>.
+    Eg: 'statechanged: .uno:Undo=enabled'
+
+    The security-label lifecycle event is a special statechanged whose value is a
+    JSON object rather than a scalar, and which coolwsd broadcasts to every session
+    of the document (the classification banner it drives is client-side chrome, not
+    document content). It is emitted when a label is applied, changed or removed:
+
+        statechanged: {"commandName":".uno:SecurityLabel","state":{
+            "action":"applied"|"changed"|"removed",
+            "classification":<new classification, empty on removed>,
+            "marking":<new visual marking, empty on removed>,
+            "oldClassification":<prior classification, empty on applied>,
+            "oldMarking":<prior visual marking, empty on applied>}}
+
+    The client updates its banner from "marking" and, for an action-bearing change,
+    posts a Security_Label_Changed message to the host integration (see the SDK
+    postMessage API). The separate on-load 'commandvalues command=.uno:SecurityLabel'
+    seeds the banner without an action and is not broadcast.
+
+viewposition: [editmode=1] [zoompercent=<percent>] [x=<twips> y=<twips> width=<twips> height=<twips>]
+
+    Sent once, after the status that follows the load, when the document kept
+    the position of the view that left it before this one arrived. editmode is
+    present when that view was in editing mode. x and y are the top left corner
+    of the area it had in view, in document twips, followed by its size.
+
+    Only a CODA client sees this. A document keeps the position of a view that
+    goes away while the app keeps the document open but detaches its view, which
+    is what CODA does when it drops excess tab contents, and on reattach sends this.
+
+textselectioncontent:
+<JSON>
+
+    Current selection's content, only for text-only selections of a reasonably limited size.
+    For complex selection and large texts, selectioncontent message is returned.
+    The keys of the JSON are MIME types (text/html, text/plain;charset=utf-8),
+    the values are the content of the selection in that format.
+    For debug/test purposes, in case a single MIME type is requested, that's
+    returned as-is, not inside a JSON.
+
+complexselection:
+
+    Complex selections with embedded objects and large text selections need special export handling.
+    This response signifies that the payload is large and/or complex and needs to be retrieved via the clipboard API.
+
+aichatresult:<json>
+
+    Response from the AI chat assistant. The JSON payload contains:
+    - success: Boolean indicating if the request succeeded
+    - content: The AI response text (on success, for text responses)
+    - imageData: Base64-encoded PNG image data (on success, for image responses)
+    - error: Error message (on failure)
+    - requestId: The request identifier from the original 'aichat' message
+
+executescriptresult: <json>
+
+    Reply to an 'executescript' message.  The JSON payload has the shape
+
+        { "id": <callId> [, "ok": <jsonValue>] [, "err": <error>] [, "legacyUnoApi": true] }
+
+    Exactly one of "ok" or "err" is set, except when the script's result value was something
+    JSON.stringify drops (undefined, a function, a symbol), in which case neither key is present,
+    which the client-side helper surfaces as a Promise resolving to JavaScript undefined.
+
+    "err" is either a plain string (for engine-level failures without structured context, e.g.
+    QuickJS not enabled in this build) or a structured object
+
+        { "message": <string>, "name": <string>, "stack": [<frame>, ...] }
+
+    where each <frame> is
+
+        { "source": <string>, "line": <string>, "column": <string>, "functionName": <string> }
+
+    naming the (1-based) JS coordinates QuickJS attributed to the throw site (i.e. relative to the
+    <startLine>/<source> that were passed on the corresponding 'executescript').
+
+    "legacyUnoApi" is present and true iff the script touched the legacy com.sun.star UNO API, used
+    by the client to flash a one-time deprecation snackbar.
+
+proxycall: <json>
+
+    Notification that a UNO listener proxy installed via an earlier 'executescript' has been invoked
+    from UNO.  The JSON payload has the shape
+
+        { "proxyId": <string>, "callId": <string>, "method": <string>, "args": [...] }
+
+    "callId" is present iff the proxy stub is waiting for a synchronous return value via
+    'proxyreturn' (i.e. the listener method has a non-void return type; for void return types the
+    call is fire-and-forget).
+
+consolemsg <level>
+<message>
+
+    Notification that a script running under an 'executescript' called one of the WHATWG Console API
+    methods jsuno registers on the global `console` object: log, info, warn, error, debug, trace or
+    assert.  <level> is that method name; <message> occupies everything after the first newline and
+    is the stringified-and-space-joined args the script passed.  For "trace" and "assert" the JS
+    stack at the call site is appended to <message> (as extra "    at ..." lines); "warn" and
+    "error" carry the JS stack the same way, so that browser-side rendering of the message names the
+    kit-side call chain and not the client-side postMessage plumbing that delivered it.  "assert"
+    only fires when the assertion failed; the other methods fire on every call.  The client-side
+    helper routes each event to console[<level>] in the browser.
+
+tile: part=<partNumber> width=<width> height=<height> tileposx=<xpos> tileposy=<ypos> tilewidth=<tileWidth> tileheight=<tileHeight> [timestamp=<time>] [wid=<wireId>]
+<binaryPngImage>
+
+    The parameters from the corresponding 'tile' command.
+
+    WireId is a monotonically incrementing, unique reference to a
+    state of the document on the server, and can be included by
+    the client in the next 'tile' message requesting the same tile.
+
+    the tile message has at least one keyframe, followed by any
+    number of concatentated compressed deltas.
+
+delta: part=<partNumber> width=<width> height=<height> tileposx=<xpos> tileposy=<ypos> tilewidth=<tileWidth> tileheight=<tileHeight> [timestamp=<time>] [wid=<wireId>]
+
+    A delta command is like a tile: command but the payload is purely
+    an incremental patch on top of a previous tile.
+
+commandresult: <payload>
+
+    This is used to acknowledge the commands from the client.
+    <payload> is { command: <command name>, success: 'true' }
+
+Each LOK_CALLBACK_FOO_BAR callback except
+LOK_CALLBACK_INVALIDATE_TILES causes a corresponding message to the
+client, consisting of the FOO_BAR part in lowercase, without
+underscore, followed by a colon, space and the callback
+payload. (LOK_CALLBACK_INVALIDATE_TILES causes an invalidatetiles:
+message as documented above.) For instance:
+
+invalidatecursor: <payload>
+
+    The payload contains a rectangle describing the cursor position
+    and the id of the view which triggered the invalidation. JSON payload.
+
+    The communication between the parent process (the one keeping open the
+    Websocket connections to the clients) and a child process (handling
+    one document through COKit) uses the same protocol, with
+    the following additions and changes:
+
+unocommandresult: <payload>
+
+Callback that an UNO command has finished.
+See LOK_CALLBACK_UNO_COMMAND_RESULT for details.
+
+invalidateviewcursor:
+
+    Per-view cursor position invalidation. JSON payload.
+
+textviewselection:
+
+    Per-view text selection bounds. JSON payload.
+
+cellviewcursor:
+
+    Per-view cell cursor position. JSON payload.
+
+graphicviewselection:
+
+    Per-view graphic selection. JSON payload.
+
+viewcursorvisible:
+
+    Per-view cursor visible. JSON payload.
+
+viewlock:
+
+    Per-view lock rectangle. JSON payload.
+
+viewinfo: <payload>
+
+    Message is sent everytime there is any change in view information.
+    <payload> consists of an array of JSON objects. Structure of JSON
+    objects is like : {"id": <viewid>, "username": <Full Name of the user>}
+
+redlinetablechanged:
+
+    Signals that the redlines table has been modified.
+    Redlines are used for tracking changes.
+
+comment:
+
+    Signals that comment has either been added, removed or modified. See
+    LOK_CALLBACK_COMMENT for JSON structure.
+
+celladdress: <payload>
+
+    Message is sent anytime the content of the address input box should be updated.
+    The <payload> is a string representing the new content.
+
+stats: <key> <value>
+
+    Contains statistical data. Eg: 'stats: wopiloadduration 5' means that
+    wopi calls made in loading of document took 5 seconds.
+
+perm: <permission>
+
+    <permission> can be one of 'edit', 'view', 'readonly'. Client must
+    change the UI accordingly (disabling buttons etc.)
+
+wopi: <JSON>
+
+     Sent only in case storage is WOPI. Contains WOPI related
+     capabilities/information for JS part to act accordingly.
+
+     Properties mentioned:
+     + PostMessageOrigin: See WOPI specs for more information
+     + HideSaveOption: (boolean): If Collabora Online should hide the save options
+     + HidePrintOption: (boolean): If Collabora Online should hide print options
+     + HideExportOption: (boolean): If Collabora Online should hide the export options
+       this implies 'Download as' options in file menu
+     + HideRepairOption: (boolean): If Collabora Online should hide the Repair
+       undo functionality
+
+versionrestore: <action>
+
+     Possible values for <action>:
+
+     - prerestore_ack: The host can go ahead with restoring the document to an
+       earlier revision.
+
+clipboardchanged: <selection>
+
+    Sent when the content of the internal clipboard has changed.
+
+context: <applicationId> <context>
+
+    Sent when the editing context changes in the application; like when the
+    user switches from editing a textframe to editing a graphic object, etc.
+    Can be used eg. for contextual change of the toolbars.
+
+signaturestatus: <sign status>
+    Possible values:
+        0xffff - Unknown
+        0 - NOSIGNATURES
+        1 - OK
+        2 - BROKEN
+        3 - INVALID (signature is OK, but doc is modified now)
+        4 - NOTVALIDATED (signature is OK, but certificate could not be validated)
+        5 - PARTIAL_OK (signature and certificate are ok, but not all files are signed - old documents only)
+
+shapeselectioncontent: <content>
+
+    Current selection's content
+
+mobile: <event>
+
+    Available only in the mobile (Android and iOS) apps.  When you send
+    'mobile: eventname', the socket code will fire a 'eventname' event on the
+    map.
+
+windowpaint: id=<id> width=<width> height=<height> rectangle=<x>,<y>,<width>,<height> hash=<hash> nopng
+
+    Sent to the client when the server rendered the bitmap of a dialog.
+
+    <id> is the window's int ID.
+
+    <width> is the pixel width of the returned bitmap.
+
+    <height> is the pixel height of the returned bitmap.
+
+    <x>,<y>,<width>,<height> is the rendered area of the dialog
+
+    <hash> is the hash key of this bitmap in the pixmap cache
+
+    nopng appears when the the bitmap was already in the cache, so no PNG
+    encoding happened.
+
+contentcontrol: <JSON>
+    *Properties
+        - action - show, hide, change-picture
+        - rectangles - rectangle coordinates (x-coordinate, y-coordinate, width, height)
+        - date - boolean to indicate date content control
+        - items - array of items for dropdown
+
+canonicalidchange: viewid=<id> canonicalid=<id> viewrenderedstate=<Light|Dark|Empty>
+
+unloaded: viewid=<viewId> views=<number of active views>
+
+    Sent after a view has been unloaded successfully.
+    Best to rely on this to detect unloading events.
+
+    <viewId> the unique ID of this view (meaningful only in LOKit).
+    <views> the total number of active views in the document after finishing loading this one.
+
+    See also loaded:.
+
+wopi -> server
+===============
+
+extractdocumentstructure url=<documentURL> filter=<filterType>
+
+    Extracts structured data from a document and returns it in JSON format.
+
+    - url=<documentURL> : Specifies the document location.
+
+    - filter=<filterType> : (Optional) Limits extraction to specific elements (e.g., text, contentcontrol, charts, docprops, slides). If omitted, all available data is extracted.
+
+    This command retrieves structured document data for further processing.
+
+    https://sdk.collaboraonline.com/docs/extract_transform_api.html#general-extraction
+
+transformdocumentstructure url=<documentURL> transform=<JSONTransformation>
+
+    Modifies a document's structure based on a JSON transformation recipe.
+
+    url=<documentURL> : Specifies the document location.
+
+    transform=<JSONTransformation> : Defines the structural modifications in JSON format.
+
+    This command applies the transformation rules and returns the modified document.
+
+    https://sdk.collaboraonline.com/docs/extract_transform_api.html#general-transform
+
+extractlinktargets url=<documentURL>
+
+    This command returns a list of link targets in JSON format, which includes various document elements such as tables, images, and bookmarks.
+
+    url=<documentURL> : Specifies the document location.
+
+    You can use the target in the URL to open the document at a specific position, for example: `&target=Table1|table`
+
+getthumbnail x=<Width> y=<Height>
+
+    Generates a thumbnail image of a document or a specific element inside it.
+
+    - x=<Width> : Sets the width of the thumbnail.
+    - y=<Height> : Sets the height of the thumbnail.
+
+    Usage:
+    Sent via HTTP POST to /cool/get-thumbnail with the document file.
+
+    Optionally, specify a target to generate a thumbnail for a specific element (e.g., a table, image, or heading).
+
+    https://sdk.collaboraonline.com/docs/linking_api.html?highlight=thumbnail
+
+rendersearchresult <searchResultXml>
+
+    This command generates an image (PNG) of a specific search result within a document.
+
+    - <searchResultXml>: The XML file representing the search results, detailing the position of the search hits within the document.
+
+    This adds a new service render-search-result, which renders an
+    image of the position where, the search fund a hit. The search
+    result contains the information in which object or paragraph,
+    which is just the node id and node type from the document model.
+
+    The service takes the document and the search result (xml file)
+    as the input and returns a PNG image as the output.
+
+child -> parent
+===============
+
+curpart: part=<partNumber>
+
+    Sent to the parent process before certain messages that the parent
+    needs to act on in addition to passing them on to the client, like
+    invalidatetiles:
+
+errortoall: cmd=<command> kind=<kind> [code=<error_code>]
+
+    Causes the parent to send the corresponding error: message to all
+    clients.
+
+saveas: url=<url> filename=<filename>
+
+    <url> is a URL of the destination, encoded. Sent from the child to the
+    parent after a saveAs() completed.
+    <filename> is the resulting jailed filename of the newly created file.
+
+client-<sessionId> <Payload Message>
+
+    Forwarding message between a child and its parent session.
+    The payload message is forwarded to the ClientSession.
+
+procmemstats: pid=<pid> pss=<pss in kb> dirty=<private dirty in kb>
+
+    Memory information sent periodically to parent process by each of
+    the kit processes.
+
+loadtiming: <key>=<us> [<key>=<us> ...]
+
+    Kit-side debug-overlay load checkpoints; each value is microseconds
+    since the steady_clock epoch. Consumed by wsd, not forwarded.
+
+clipboardcontent: file=<file>
+
+    in reply to a getclipboard: message.
+
+    <file> is a path to the clipboard content which is of the format:
+
+    mime_type\n
+    length\n
+    <binary selection content>
+    ...
+
+traceevent:
+forcedtraceevent:
+
+     Followed by a number of lines consisting of Chrome Trace Event
+     formatted data recorded by the comphelper::TraceEvent API in the
+     core parts of the kit process.
+
+     The forcedtraceevent variant causes the data to be written to the
+     output file even if Trace Event recording is not turned on at the
+     moment. This is for metadata information.
+
+parent -> child
+===============
+
+child-<sessionId> <Payload Message>
+
+    Forwarding message between a parent and its child session.
+    The payload message is forwarded to the ChildSession.
+
+child-<sessionId> getclipboard [mimetype=<mimeType>]:
+
+     fetches the clipboard for this view and returns a
+     clipboardcontent message. If mimetype is present limit
+     the clipboard formats to that comma separated list of
+     mimetypes, otherwise provide the complete clipboard.
+
+child-<sessionId> setclipboard name=<name>:
+
+     Sets the clipboard content for this view from the file with the name <name>.
+
+     The format of the data in <name> is:
+     mime_type\n
+     length\n
+     <binary selection content>
+     ...
+
+disconnect
+
+    Signals to the child that the client for the respective connection
+    has disconnected.
+
+exit
+
+    Signals to the child that the process must end and exit.
+
+
+Admin console
+===============
+
+Client can query admin console to get information about currently opened
+documents. Following information about the document is exposed:
+
+* PID of the process hosting the document
+* Number of client views opening this document
+* Name of the document (URL encoded)
+* Memory consumed by the process (in kilobytes)
+* Elapsed time since first view of document was opened (in seconds)
+
+Admin console can also opt to get notified of various events on the server. For
+example, getting notified when a new document is opened or closed. Notifications
+are commands sent from server to the client over established websocket.
+
+Before doing anything, clients must authenticate by providing an auth token with
+'auth' command.
+
+client -> admin
+==============
+
+auth jwt=<jwtToken>
+
+    Authenticate the client with provided jwtToken. This is necessary before any
+    other command.
+
+subscribe <space separated list of commands>
+
+    Where list of commands are the ones that client wants to get notified
+    about. For eg. 'subscribe adddoc rmdoc'
+
+version
+
+    Queries the server for current version of lokit and coolserver. See
+    'lokitversion' and 'coolserver' in admin -> client for the format of
+    response message.
+
+documents
+
+    Queries the server for list of opened documents. See `documents` command
+    in admin -> client section for format of the response message
+
+history
+
+    Queries the server for list of opened and expired documents with their
+    snapshots. Returns a json object and it looks like:
+
+    { "History" :
+            {
+                "documents": [
+                    {
+                        "filename":"hello-world.odt",
+                        "start":1492104619,
+                        "end":1492104680,
+                        "pid":12302,
+                        "snapshots": [
+                            {
+                                "creationTime":1492104619,
+                                "memoryDirty":0,
+                                "activeViews":1,
+                                "views":["0008", ...],
+                                "lastActivity":1492104619
+                            },
+                            {
+                            ...
+                            }
+                        ]
+                    },
+                    {
+                    ...
+                    }
+                ],
+                "expiredDocuments" : [...]
+            }
+    }
+
+mem_consumed
+sent_bytes
+recv_bytes
+
+    Queries for total memory or bandwidth being consumed by the server
+    in kilobytes. For mem_consumed this includes processes - coolwsd,
+    coolforkit, and child processes hosting various documents. For
+    sent/recv_bytes this includes only external traffic.
+
+active_docs_count
+
+    Returns total number of documents opened
+
+active_users_count
+
+    Returns total number of users connected. This is a summation of number
+    of views opened of each document.
+
+settings
+
+    Queries the server for configurable settings from admin console.
+
+log_lines
+    Gets last n lines from "coolwsd.log" file.
+
+channel_list
+    Gets the log channels list with their respective log levels.
+
+update-log-levels
+    Updates the log channels' log levels with the given log levels. Format is: "update-log-levels channel1name=loglevel channel2name=loglevel".
+
+set <setting1=value1> <setting2=value2> ...
+
+    Sets a particular setting (must be one returned as response to
+    `settings` command) to value.
+
+    There are only 4 configurable settings as of now.
+
+    mem_stats_size: Number of memory consumed values that server caches
+    atmost.
+    mem_stats_interval: Time after which server calculates its total memory
+    consumption
+    cpu_stats_size: Number of cpu usage values that server caches atmost.
+    cpu_stats_interval: Time after which server calculates its total cpu
+    usage.
+
+    Note: cpu stats gathering is a TODO, so  not functional as of now.
+
+kill <pid>
+
+     <pid> process id of the document to kill. All sessions of document would be
+     killed. There is no way yet to kill individual sessions.
+
+wopiSrcMap
+
+    get map of wopiSrc<->routeToken
+
+verifyauth jwt=<jwt_token> id=<unique_identifier>
+
+    verify jwt token without shutting down the socket connection, works only with monitor
+
+routetokensanitycheck
+
+    The routetokensanitycheck protocol is used to request a sanity check for route tokens by the indirection server.
+
+    Usage:
+
+    - Sent as a request to verify the validity of route tokens.
+
+    - Ensures that tokens are correctly formatted and authorized.
+
+admin -> client
+===============
+
+Commands marked with [*] are notifications that are delivered only if client is
+subscribed to these commands using `subscribe` (see client->admin
+section). Others are just response messages to some client command.
+
+[*] adddoc <pid> <filename> <sessionid> <username> <userid> <memory consumed>
+           <wopiHost> <isViewReadOnly> <wopiSrc> <dockey>
+
+    <pid> process id hosting the document
+    <filename> URL encoded name of the file
+    <sessionid> string identifying the view of this document
+    <memory consumed> RSS of <pid> in kilobytes
+    <wopihost> storage host on which document exist
+    <isViewReadOnly> if the view is readonly
+    <wopiSrc> wopisrc of the document
+    <dockey> unique identifying key of the document
+
+[*] rmdoc <pid> <sessionid>
+
+    <pid> process id hosting the document
+    <sessionid> view which was closed
+
+[*] mem_stats <memory consumed>
+
+    <memory consumed> in kilobytes sent from admin -> client after every
+    mem_stats_interval (see `set` command for list of settings)
+
+[*] propchange <pid> <property> <new-value>
+
+    Notifies of a property change on a pid's property. Properties can
+    include:
+       "mem" <memory consumed> - in kilobytes of the process.
+
+[*] resetidle <pid>
+
+    <pid> process id hosting the document
+    reset the idle time counter for the document
+
+[*] updateroutetoken <JSON string>
+
+    <JSON string> contains the map of serverId as key and routeToken as value
+
+[*] routing_rmdoc <wopiSrc>
+
+    <wopiSrc> of the document that is getting removed, fired when all the views gets expired
+
+    note: This might get additional parameters in future
+
+[*] wopiSrcMap <JSON string>
+
+    wopiSrcMap:
+    {
+        "routeToken": "abcpqr"
+        "wopiSrc" : ["wopiSrc1", "wopiSrc2"]
+    }
+    <JSON string> contains the map wopiSrc<->routeToken
+
+InvalidAuthToken
+
+    This is sent when invalid auth token is provided in 'auth' and 'verifyauth' command. See
+    above.
+
+NotAuthenticated
+
+    When client sends an admin command that requires authentication.
+
+ValidAuthToken
+
+    This is sent when valid token is provided in 'verifyauth' command. See above
+
+documents <pid> <filename> <number of views> <memory consumed> <elapsed time> <idle time>
+<pid> <filename> ....
+...
+
+    <elapsed time> is in seconds since the first view of the document was opened
+    <idle time> is in seconds since some user did something in his view of the document (even just moving
+        the insertion cursor)
+    <number of views> Number of users/views opening this(<pid>) document
+    Other parameters are same as mentioned in `adddoc`
+
+    Each set document attributes is separated by a newline.
+
+mem_consumed <memory>
+    Total memory being consumed by Collabora Online.
+total_avail_mem <memory>
+    Total memory available to whole Collabora Online. This takes into account
+    the memproportion setting, if set by the user, when calculating the amount
+    of memory available to the process.
+
+sent_bytes <memory>
+recv_bytes <memory>
+
+    <memory> in kilobytes
+
+active_docs_count <count>
+
+active_users_count <count>
+
+settings <setting1=value1> <setting2=value2> ...
+
+    Current value of each configurable setting.
+
+mem_stats <comma separated list of memory consumed values>
+
+     The length of the list is equal to the value of setting
+     mem_stats_size`
+
+coolserver <JSON string>
+
+    The returned JSON string contains information in the following format:
+    {Version: <>, Hash: <>}
+
+    Eg: {"Version": "master..",
+         "Hash": "4897710"}
+
+lokitversion <JSON string>
+
+    JSON string contains version information in format:
+    {ProductName: <>, ProductVersion: <>, ProductExtension: <>, BuildId: <>}
+
+    Eg: {"ProductName": "Collabora Office",
+         "ProductVersion": "26.04",
+         "ProductExtension": ".0.0.alpha0",
+         "BuildId": "<full 40 char git hash>"}
+
+/co/collab WebSocket endpoint
+=============================
+
+The /co/collab WebSocket is separate from the per-document /cool/ws session.  A CODA or COWASM
+client opens it to coordinate with any other clients editing the same document: it surfaces a
+per-doc user list, lets peers signal that local editing has started, and exchanges document bytes
+through one-shot HTTP byte-stream URLs.  One CollabBroker per docKey lives on the server side and
+brokers all messages for that document.
+
+Connection:
+
+    wss://<host>/co/collab/<docKey>?wopiSrc=<wopi-url>&access_token=<token>
+
+    <docKey> is the same key used for the /cool/ws session of the document.  wopiSrc and
+    access_token authenticate the user against the integrator.  Until the server has validated them
+    it sends "progress: validating", and replies with one of
+
+        error: cmd=collab kind=accesstoken
+        error: cmd=internal kind=timeout
+        error: cmd=storage kind=loadfailed
+
+    on failure, or {"type":"authenticated"} on success.  After {"type":"authenticated"} every
+    subsequent message in either direction is a single JSON object with a "type" field.
+
+server -> client messages on /co/collab
+---------------------------------------
+
+{"type":"authenticated"}
+
+    Sent once the wopiSrc + access_token pair has been accepted.
+
+{"type":"user_list","users":[<user>,...],"editingActive":<bool>}
+
+    Initial snapshot of the connected user set, sent right after {"type":"authenticated"}.  Each
+    <user> object carries at least "id" (the integrator user id), "name" (display name) and
+    "canWrite" (true if this view holds write access).  When the user has an avatar registered with
+    the broker, the object also carries "avatar":"<url>" pointing at the /co/collab/avatar endpoint
+    described below.  "editingActive" is true once any peer has sent {"type":"editing_started"}.
+
+{"type":"user_joined","user":<user>}
+{"type":"user_left","user":<user>}
+
+    A peer connected or disconnected.  Sent to every other client.
+
+{"type":"editing_started","user":<user>}
+
+    Some peer transitioned from viewing to editing.  Sent once per document lifetime; the broker
+    tracks an "editing started" flag, so a late-joining client gets the same information through
+    user_list's "editingActive".
+
+{"type":"switch_to_collab"}
+{"type":"saved_and_switching"}
+
+    Sent during a local-to-server transition: a CODA peer that owned the document locally has
+    decided to hand it off to the server.  "saved_and_switching" follows the matching incoming
+    message from the same peer once its save back to the integrator has completed.
+
+{"type":"fetch_url","stream":"<name>","requestId":"<id>","url":"<url>","filename":"<name>"}
+
+    Reply to a client-sent {"type":"fetch"} or {"type":"upload"}: a one-shot URL the client can GET
+    (/co/collab/fetch) or POST (/co/collab/put) to transfer document bytes.  The token in the URL is
+    a rotating token consumed by the first request and may only be used once.  "filename" carries
+    the document filename when known.
+
+{"type":"fetch_error","stream":"<name>","requestId":"<id>","error":"<text>"}
+
+    Reply to a client-sent {"type":"fetch"} or {"type":"upload"} that cannot be served (no current
+    download, session expired, server shutting down).
+
+{"type":"error","error":"<text>"}
+
+    The client sent a malformed frame ("Invalid JSON", "Invalid JSON object", or "Unknown message
+    type").
+
+client -> server messages on /co/collab
+---------------------------------------
+
+{"type":"fetch","stream":"document","requestId":"<id>"}
+
+    Request a one-shot URL for downloading the current document bytes.  Server replies with
+    {"type":"fetch_url"} (success) or {"type":"fetch_error"} (failure), carrying the same
+    "requestId" so the client can correlate replies with requests.
+
+{"type":"upload","stream":"document","requestId":"<id>"}
+
+    Request a one-shot URL for uploading modified document bytes.  Reply shape mirrors "fetch": a
+    {"type":"fetch_url"} carrying a /co/collab/put URL on success, or {"type":"fetch_error"} on
+    failure.
+
+{"type":"editing_started"}
+
+    This view has just transitioned from viewing to editing.  Broadcast as
+    {"type":"editing_started","user":<self>} to every other client and sticks the "editingActive"
+    flag in subsequent user_list snapshots.
+
+{"type":"switch_to_collab"}
+{"type":"saved_and_switching"}
+
+    Drive the local-to-server transition: a CODA peer that owned the document locally asks the
+    server to take over.  "switch_to_collab" is sent first; "saved_and_switching" follows once the
+    page-JS save back to the integrator has completed.  Both are forwarded to all other peers
+    verbatim.
+
+{"type":"bye"}
+
+    Sent right before the client closes the WebSocket as an orderly disconnect marker.  Without it
+    the broker waits out an idle grace period in case the client reconnects; "bye" lets the broker
+    reclaim itself immediately.
+
+HTTP byte-stream endpoints under /co/collab/
+--------------------------------------------
+
+These endpoints are reached over the same origin that serves the WebSocket, with
+WOPI-token-authenticated cross-origin reads permitted so a CODA page on a different origin can drive
+them.
+
+/co/collab/fetch?token=<rotating-token>
+
+    GET.  Returns the document body bytes that the matching {"type":"fetch"} WS request resolved to.
+    The token is one-shot: it is consumed by the first GET and cannot be replayed.
+
+/co/collab/put?token=<rotating-token>
+
+    POST.  Accepts modified document body bytes from a peer that requested an upload URL via
+    {"type":"upload"}.  Same one-shot token semantics.
+
+/co/collab/avatar?WOPISrc=<wopi-url>&userId=<user-id>&token=<wopi-token>
+
+    GET.  Returns the avatar bytes for the user, fetched by the server from the URL the integrator
+    supplied in WOPI's UserExtraInfo.avatar so the client never sees integrator-internal URLs.

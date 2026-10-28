@@ -1,0 +1,220 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <mutex>
+
+#include <errobject.hxx>
+#include <sbxbase.hxx>
+
+#include <cppuhelper/implbase.hxx>
+#include <com/sun/star/script/XDefaultProperty.hpp>
+#include <sbintern.hxx>
+#include <runtime.hxx>
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+using namespace ::ooo;
+
+class ErrObject : public ::cppu::WeakImplHelper< vba::XErrObject,
+                                                 script::XDefaultProperty >
+{
+    OUString m_sHelpFile;
+    OUString m_sSource;
+    OUString m_sDescription;
+    sal_Int32 m_nNumber;
+    sal_Int32 m_nHelpContext;
+
+public:
+    ErrObject();
+
+    // Attributes
+    virtual ::sal_Int32 getNumber() override;
+    virtual void setNumber( ::sal_Int32 _number ) override;
+    virtual ::sal_Int32 getHelpContext() override;
+    virtual void setHelpContext( ::sal_Int32 _helpcontext ) override;
+    virtual OUString getHelpFile() override;
+    virtual void setHelpFile( const OUString& _helpfile ) override;
+    virtual OUString getDescription() override;
+    virtual void setDescription( const OUString& _description ) override;
+    virtual OUString getSource() override;
+    virtual void setSource( const OUString& _source ) override;
+
+    // Methods
+    virtual void Clear(  ) override;
+    virtual void Raise( const cpo::uno::Any& Number, const cpo::uno::Any& Source, const cpo::uno::Any& Description, const cpo::uno::Any& HelpFile, const cpo::uno::Any& HelpContext ) override;
+    // XDefaultProperty
+    virtual OUString getDefaultPropertyName(  ) override;
+
+    // Helper method
+    /// @throws cpo::uno::RuntimeException
+    void setData( const cpo::uno::Any& Number, const cpo::uno::Any& Source, const cpo::uno::Any& Description,
+        const cpo::uno::Any& HelpFile, const cpo::uno::Any& HelpContext );
+};
+
+ErrObject::ErrObject() : m_nNumber(0), m_nHelpContext(0)
+{
+}
+
+sal_Int32
+ErrObject::getNumber()
+{
+    return m_nNumber;
+}
+
+void
+ErrObject::setNumber( ::sal_Int32 _number )
+{
+    GetSbData()->pInst->setErrorVB( _number  );
+    OUString _description = GetSbData()->pInst->GetErrorMsg();
+    setData( cpo::uno::Any( _number ), cpo::uno::Any(), cpo::uno::Any( _description ), cpo::uno::Any(), cpo::uno::Any() );
+}
+
+::sal_Int32
+ErrObject::getHelpContext()
+{
+    return m_nHelpContext;
+}
+void
+ErrObject::setHelpContext( ::sal_Int32 _helpcontext )
+{
+    m_nHelpContext = _helpcontext;
+}
+
+OUString
+ErrObject::getHelpFile()
+{
+    return m_sHelpFile;
+}
+
+void
+ErrObject::setHelpFile( const OUString& _helpfile )
+{
+    m_sHelpFile = _helpfile;
+}
+
+OUString
+ErrObject::getDescription()
+{
+    return m_sDescription;
+}
+
+void
+ErrObject::setDescription( const OUString& _description )
+{
+    m_sDescription = _description;
+}
+
+OUString
+ErrObject::getSource()
+{
+    return m_sSource;
+}
+
+void
+ErrObject::setSource( const OUString& _source )
+{
+    m_sSource = _source;
+}
+
+// Methods
+void
+ErrObject::Clear(  )
+{
+    m_sHelpFile.clear();
+    m_sSource = m_sHelpFile;
+    m_sDescription = m_sSource;
+    m_nNumber = 0;
+    m_nHelpContext = 0;
+}
+
+void
+ErrObject::Raise( const cpo::uno::Any& Number, const cpo::uno::Any& Source, const cpo::uno::Any& Description, const cpo::uno::Any& HelpFile, const cpo::uno::Any& HelpContext )
+{
+    setData( Number, Source, Description, HelpFile, HelpContext );
+    if ( m_nNumber )
+        GetSbData()->pInst->ErrorVB( m_nNumber, m_sDescription );
+}
+
+// XDefaultProperty
+OUString
+ErrObject::getDefaultPropertyName(  )
+{
+    return u"Number"_ustr;
+}
+
+void ErrObject::setData( const cpo::uno::Any& Number, const cpo::uno::Any& Source, const cpo::uno::Any& Description, const cpo::uno::Any& HelpFile, const cpo::uno::Any& HelpContext )
+{
+    if ( !Number.hasValue() )
+        throw cpo::uno::RuntimeException(u"Missing Required Parameter"_ustr );
+    Number >>= m_nNumber;
+    Description >>= m_sDescription;
+    Source >>= m_sSource;
+    HelpFile >>= m_sHelpFile;
+    HelpContext >>= m_nHelpContext;
+}
+
+// SbxErrObject
+SbxErrObject::SbxErrObject( const OUString& rName, const cpo::uno::Any& rUnoObj )
+    : SbUnoObject( rName, rUnoObj )
+    , m_pErrObject( nullptr )
+{
+    rUnoObj >>= m_xErr;
+    if ( m_xErr.is() )
+    {
+        SetDfltProperty( uno::Reference< script::XDefaultProperty >( m_xErr, uno::UNO_QUERY_THROW )->getDefaultPropertyName() ) ;
+        m_pErrObject = static_cast< ErrObject* >( m_xErr.get() );
+    }
+}
+
+SbxErrObject::~SbxErrObject()
+{
+}
+
+uno::Reference< vba::XErrObject > const &
+SbxErrObject::getUnoErrObject()
+{
+    SbxErrObject* pGlobErr = static_cast< SbxErrObject* >(  getErrObject().get() );
+    return pGlobErr->m_xErr;
+}
+
+SbxVariableRef const &
+SbxErrObject::getErrObject()
+{
+    SbxVariableRef& rGlobErr = GetSbxData_Impl().m_aGlobErr;
+    {
+        static std::mutex aMutex;
+        std::scoped_lock aGuard(aMutex);
+        if (!rGlobErr)
+            rGlobErr = new SbxErrObject(u"Err"_ustr,
+                                        cpo::uno::Any(uno::Reference<vba::XErrObject>(new ErrObject())));
+    }
+    return rGlobErr;
+}
+
+void SbxErrObject::setNumberAndDescription( ::sal_Int32 _number, const OUString& _description )
+{
+    if( m_pErrObject != nullptr )
+    {
+        m_pErrObject->setData( cpo::uno::Any( _number ), cpo::uno::Any(), cpo::uno::Any( _description ), cpo::uno::Any(), cpo::uno::Any() );
+    }
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

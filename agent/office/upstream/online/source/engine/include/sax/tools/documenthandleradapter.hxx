@@ -1,0 +1,214 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#ifndef INCLUDED_SAX_TOOLS_DOCUMENTHANDLERADAPTER_HXX
+#define INCLUDED_SAX_TOOLS_DOCUMENTHANDLERADAPTER_HXX
+
+#include <com/sun/star/xml/sax/XDocumentHandler.hpp>
+#include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
+
+namespace sax
+{
+    /**
+     * DocumentHandlerAdapter provides a base class for simple decorators to XDocumentHandlers.
+     * It forwards all method calls to a delegate. An inheriting class only needs to override the
+     * methods it actually wants to modify.
+     *
+     * See filters/source/odfflatxml/FlatXml.cxx for an example.
+     */
+    class DocumentHandlerAdapter : public css::xml::sax::XDocumentHandler
+    {
+    public:
+        // XDocumentHandler
+        virtual void
+        startDocument() override
+        {
+            m_handler->startDocument();
+        }
+
+        virtual void
+        endDocument() override
+        {
+            m_handler->endDocument();
+        }
+
+        virtual void
+        startElement(const OUString& aName,
+                const cpo::uno::Reference< css::xml::sax::XAttributeList > & xAttribs) override
+        {
+            m_handler->startElement(aName, xAttribs);
+        }
+
+        virtual void
+        endElement(const OUString& aName) override
+        {
+            m_handler->endElement(aName);
+        }
+
+        virtual void
+        characters(const OUString& aChars) override
+        {
+            m_handler->characters(aChars);
+        }
+
+        virtual void
+        ignorableWhitespace(const OUString& aWhitespaces) override
+        {
+            m_handler->ignorableWhitespace(aWhitespaces);
+        }
+        virtual void
+        processingInstruction(const OUString& aTarget, const OUString& aData) override
+        {
+            m_handler->processingInstruction(aTarget, aData);
+        }
+        virtual void
+        setDocumentLocator(const cpo::uno::Reference< css::xml::sax::XLocator > & xLocator) override
+        {
+            m_handler->setDocumentLocator(xLocator);
+        }
+        DocumentHandlerAdapter() :
+            m_handler(cpo::uno::Reference< css::xml::sax::XDocumentHandler > (nullptr, cpo::uno::UNO_QUERY))
+        {
+        }
+        ;
+
+    protected:
+        void
+        setDelegate(const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& delegate)
+        {
+            m_handler = delegate;
+        }
+        const cpo::uno::Reference< css::xml::sax::XDocumentHandler >&
+        getDelegate() const
+        {
+            return m_handler;
+        }
+        virtual
+        ~DocumentHandlerAdapter()
+        {
+
+        }
+
+    private:
+        cpo::uno::Reference< css::xml::sax::XDocumentHandler > m_handler;
+
+    };
+
+    /**
+     * ExtendedDocumentHandlerAdapter provides a base class for simple decorators to XExtendedDocumentHandlers.
+     * It forwards all method calls to a delegate. An inheriting class only needs to override the
+     * methods it actually wants to modify.
+     */
+    class ExtendedDocumentHandlerAdapter : public css::xml::sax::XExtendedDocumentHandler
+
+    {
+
+    public:
+        // XDocumentHandler
+        virtual void
+        startDocument() override
+        {
+            m_handler->startDocument();
+        }
+
+        virtual void
+        endDocument() override
+        {
+            m_handler->endDocument();
+        }
+
+        virtual void
+        startElement(const OUString& aName,
+                const cpo::uno::Reference< css::xml::sax::XAttributeList > & xAttribs) override
+        {
+            m_handler->startElement(aName, xAttribs);
+        }
+
+        virtual void
+        endElement(const OUString& aName) override
+        {
+            m_handler->endElement(aName);
+        }
+
+        virtual void
+        characters(const OUString& aChars) override
+        {
+            m_handler->characters(aChars);
+        }
+
+        virtual void
+        ignorableWhitespace(const OUString& aWhitespaces) override
+        {
+            m_handler->ignorableWhitespace(aWhitespaces);
+        }
+        virtual void
+        processingInstruction(const OUString& aTarget, const OUString& aData) override
+        {
+            m_handler->processingInstruction(aTarget, aData);
+        }
+        virtual void
+        setDocumentLocator(const cpo::uno::Reference< css::xml::sax::XLocator > & xLocator) override
+        {
+            m_handler->setDocumentLocator(xLocator);
+        }
+        // XExtendedDocumentHandler
+        virtual void
+        startCDATA() override
+        {
+            m_handler->startCDATA();
+        }
+        virtual void
+        endCDATA() override
+        {
+            m_handler->endCDATA();
+        }
+        virtual void
+        comment(const OUString& sComment) override
+        {
+            m_handler->comment(sComment);
+        }
+        virtual void
+        unknown(const OUString& sString) override
+        {
+            m_handler->unknown(sString);
+        }
+        virtual void
+        allowLineBreak() override
+        {
+            m_handler->allowLineBreak();
+        }
+    protected:
+        ExtendedDocumentHandlerAdapter() :
+            m_handler(cpo::uno::Reference< css::xml::sax::XExtendedDocumentHandler > (nullptr, cpo::uno::UNO_QUERY))
+        {
+        }
+
+        void
+        setDelegate(const cpo::uno::Reference< css::xml::sax::XExtendedDocumentHandler >& delegate)
+        {
+            m_handler = delegate;
+        }
+        const cpo::uno::Reference< css::xml::sax::XExtendedDocumentHandler >&
+        getDelegate() const
+        {
+            return m_handler;
+        }
+        virtual
+        ~ExtendedDocumentHandlerAdapter()
+        {
+
+        }
+
+    private:
+        cpo::uno::Reference< css::xml::sax::XExtendedDocumentHandler > m_handler;
+    };
+}
+#endif // INCLUDED_SAX_TOOLS_DOCUMENTHANDLERADAPTER_HXX
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

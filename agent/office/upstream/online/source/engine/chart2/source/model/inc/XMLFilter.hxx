@@ -1,0 +1,161 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <cppuhelper/implbase.hxx>
+#include <com/sun/star/document/XFilter.hpp>
+#include <com/sun/star/document/XImporter.hpp>
+#include <com/sun/star/document/XExporter.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <osl/mutex.hxx>
+#include <comphelper/errcode.hxx>
+
+namespace com::sun::star::beans { class XPropertySet; }
+namespace cpo::uno { class XComponentContext; }
+namespace com::sun::star::xml::sax { class XWriter; }
+namespace com::sun::star::lang { class XMultiComponentFactory; }
+
+namespace com::sun::star {
+    namespace embed {
+        class XStorage;
+    }
+    namespace document {
+        class XGraphicStorageHandler;
+    }
+}
+
+namespace chart
+{
+
+class XMLFilter : public
+    ::cppu::WeakImplHelper<
+        css::document::XFilter,
+        css::document::XExporter,
+        css::document::XImporter,
+        css::lang::XServiceInfo >
+{
+public:
+    explicit XMLFilter( cpo::uno::Reference< cpo::uno::XComponentContext > const & xContext );
+    virtual ~XMLFilter() override;
+
+    /// XServiceInfo declarations
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+protected:
+    // ____ XFilter ____
+    virtual bool filter(
+        const cpo::uno::Sequence< css::beans::PropertyValue >& aDescriptor ) override;
+    virtual void cancel() override;
+
+    // ____ XImporter ____
+    virtual void setTargetDocument(
+        const cpo::uno::Reference< css::lang::XComponent >& Document ) override;
+
+    // ____ XExporter ____
+    virtual void setSourceDocument(
+        const cpo::uno::Reference< css::lang::XComponent >& Document ) override;
+
+    void setDocumentHandler(const OUString& _sDocumentHandler) { m_sDocumentHandler = _sDocumentHandler; }
+
+    virtual OUString getMediaType(bool _bOasis);
+
+    /** fills the oasis flag only when a filtername was set
+    *
+    * \param _rMediaDescriptor
+    * \param _rOutOASIS
+    */
+    virtual void isOasisFormat(const cpo::uno::Sequence< css::beans::PropertyValue >& _rMediaDescriptor, bool & _rOutOASIS );
+
+private:
+    // methods
+
+    /// @return a warning code, or 0 for successful operation
+    ErrCode impl_Import( const cpo::uno::Reference< css::lang::XComponent > & xDocumentComp,
+                           const cpo::uno::Sequence< css::beans::PropertyValue > & aMediaDescriptor );
+    /// @return a warning code, or 0 for successful operation
+    ErrCode impl_ImportStream(
+        const OUString & rStreamName,
+        const OUString & rServiceName,
+        const cpo::uno::Reference< css::embed::XStorage > & xStorage,
+        const cpo::uno::Reference< css::lang::XMultiComponentFactory > & xFactory,
+        const cpo::uno::Reference<css::document::XGraphicStorageHandler> & xGraphicStorageHandler,
+        cpo::uno::Reference< css::beans::XPropertySet > const & xPropSet );
+
+    /// @return a warning code, or 0 for successful operation
+    ErrCode impl_Export( const cpo::uno::Reference< css::lang::XComponent > & xDocumentComp,
+                           const cpo::uno::Sequence< css::beans::PropertyValue > & aMediaDescriptor );
+    /// @return a warning code, or 0 for successful operation
+    ErrCode impl_ExportStream(
+        const OUString & rStreamName,
+        const OUString & rServiceName,
+        const cpo::uno::Reference< css::embed::XStorage > & xStorage,
+        const cpo::uno::Reference< css::xml::sax::XWriter >& xActiveDataSource,
+        const cpo::uno::Reference< css::lang::XMultiServiceFactory > & xFactory,
+        const cpo::uno::Sequence< cpo::uno::Any > & rFilterProperties );
+
+    // members
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+    cpo::uno::Reference< css::lang::XComponent >       m_xTargetDoc;
+    cpo::uno::Reference< css::lang::XComponent >       m_xSourceDoc;
+
+    cpo::uno::Sequence<css::beans::PropertyValue> m_aMediaDescriptor;
+
+    OUString                                m_sDocumentHandler; // when set it will be set as doc handler
+    ::osl::Mutex                                   m_aMutex;
+};
+
+class XMLReportFilterHelper final : public XMLFilter
+{
+    virtual void isOasisFormat(const cpo::uno::Sequence< css::beans::PropertyValue >& _rMediaDescriptor,
+                               bool & _rOutOASIS ) override;
+public:
+    explicit XMLReportFilterHelper( cpo::uno::Reference< cpo::uno::XComponentContext > const & _xContext )
+                            :XMLFilter(_xContext)
+    {}
+protected:
+    virtual OUString
+        getImplementationName() override
+    {
+        return u"com.sun.star.comp.chart2.report.XMLFilter"_ustr;
+    }
+    // ____ XImporter ____
+    virtual void setTargetDocument(
+        const cpo::uno::Reference< css::lang::XComponent >& Document ) override
+    {
+        setDocumentHandler( u"com.sun.star.comp.report.ImportDocumentHandler"_ustr );
+        XMLFilter::setTargetDocument(Document);
+    }
+
+    // ____ XExporter ____
+    virtual void setSourceDocument(
+        const cpo::uno::Reference< css::lang::XComponent >& Document ) override
+    {
+        setDocumentHandler( u"com.sun.star.comp.report.ExportDocumentHandler"_ustr );
+        XMLFilter::setSourceDocument(Document);
+    }
+
+    virtual OUString getMediaType(bool _bOasis) override;
+};
+
+} //  namespace chart
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

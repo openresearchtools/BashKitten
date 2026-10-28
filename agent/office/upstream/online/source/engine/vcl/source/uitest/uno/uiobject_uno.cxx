@@ -1,0 +1,216 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <sal/config.h>
+
+#include <algorithm>
+#include <atomic>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include "uiobject_uno.hxx"
+#include <utility>
+#include <comphelper/propertyvalue.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <tools/link.hxx>
+#include <vcl/scheduler.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/idle.hxx>
+#include <vcl/window.hxx>
+
+#include <set>
+
+class Timer;
+
+namespace {
+
+struct Notifier {
+    std::condition_variable cv;
+    std::mutex mMutex;
+    bool mReady = false;
+
+    DECL_LINK( NotifyHdl, Timer*, void );
+};
+
+}
+
+UIObjectUnoObj::UIObjectUnoObj(std::unique_ptr<UIObject> pObj):
+    mpObj(std::move(pObj))
+{
+    assert(mpObj);
+}
+
+UIObjectUnoObj::~UIObjectUnoObj()
+{
+    SolarMutexGuard aGuard;
+    mpObj.reset();
+}
+
+cpo::uno::Reference<css::ui::test::XUIObject> UIObjectUnoObj::getChild(const OUString& rID)
+{
+    SolarMutexGuard aGuard;
+    std::unique_ptr<UIObject> pObj = mpObj->get_child(rID);
+    SAL_WARN_IF(!pObj, "vcl", "child " << rID << " of parent " << mpObj->dumpState() << " does not exist");
+    if (!pObj)
+        throw cpo::uno::RuntimeException("getChild with id " + rID + " did not find a child");
+    return new UIObjectUnoObj(std::move(pObj));
+}
+
+IMPL_LINK_NOARG(Notifier, NotifyHdl, Timer*, void)
+{
+    std::scoped_lock<std::mutex> lk(mMutex);
+    mReady = true;
+    cv.notify_all();
+}
+
+namespace {
+
+class ExecuteWrapper
+{
+    std::function<void()> mFunc;
+    Link<Timer*, void> mHandler;
+    std::atomic<bool> mbSignal;
+
+public:
+
+    ExecuteWrapper(std::function<void()> func, Link<Timer*, void> handler):
+        mFunc(std::move(func)),
+        mHandler(handler),
+        mbSignal(false)
+    {
+    }
+
+    void setSignal()
+    {
+        mbSignal = true;
+    }
+
+    DECL_LINK( ExecuteActionHdl, Timer*, void );
+};
+
+
+IMPL_LINK_NOARG(ExecuteWrapper, ExecuteActionHdl, Timer*, void)
+{
+    {
+        Idle aIdle("UI Test Idle Handler2");
+        {
+            mFunc();
+            aIdle.SetPriority(TaskPriority::LOWEST);
+            aIdle.SetInvokeHandler(mHandler);
+            aIdle.Start();
+        }
+
+        while (!mbSignal) {
+            Application::Reschedule();
+        }
+    }
+    delete this;
+}
+
+}
+
+void UIObjectUnoObj::executeAction(const OUString& rAction, const cpo::uno::Sequence<css::beans::PropertyValue>& rPropValues)
+{
+    auto aIdle = std::make_unique<Idle>("UI Test Idle Handler");
+    aIdle->SetPriority(TaskPriority::HIGHEST);
+
+    std::function<void()> func = [&rAction, &rPropValues, this](){
+
+        SolarMutexGuard aGuard;
+        StringMap aMap;
+        for (const auto& rPropVal : rPropValues)
+        {
+            OUString aVal;
+            if (!(rPropVal.Value >>= aVal))
+                continue;
+
+            aMap[rPropVal.Name] = aVal;
+        }
+        mpObj->execute(rAction, aMap);
+    };
+
+    Notifier notifier;
+    ExecuteWrapper* pWrapper = new ExecuteWrapper(std::move(func), LINK(&notifier, Notifier, NotifyHdl));
+    aIdle->SetInvokeHandler(LINK(pWrapper, ExecuteWrapper, ExecuteActionHdl));
+    {
+        SolarMutexGuard aGuard;
+        aIdle->Start();
+    }
+
+    {
+        std::unique_lock<std::mutex> lk(notifier.mMutex);
+        notifier.cv.wait(lk, [&notifier]{return notifier.mReady;});
+    }
+    pWrapper->setSignal();
+
+    SolarMutexGuard aGuard;
+    aIdle.reset();
+    Scheduler::ProcessEventsToIdle();
+}
+
+cpo::uno::Sequence<css::beans::PropertyValue> UIObjectUnoObj::getState()
+{
+    SolarMutexGuard aGuard;
+    StringMap aMap = mpObj->get_state();
+    cpo::uno::Sequence<css::beans::PropertyValue> aProps(aMap.size());
+    std::transform(aMap.begin(), aMap.end(), aProps.getArray(),
+                   [](auto const& elem)
+                   { return comphelper::makePropertyValue(elem.first, elem.second); });
+
+    return aProps;
+}
+
+cpo::uno::Sequence<OUString> UIObjectUnoObj::getChildren()
+{
+    std::set<OUString> aChildren;
+
+    {
+        SolarMutexGuard aGuard;
+        aChildren = mpObj->get_children();
+    }
+
+    cpo::uno::Sequence<OUString> aRet(aChildren.size());
+    std::copy(aChildren.begin(), aChildren.end(), aRet.getArray());
+
+    return aRet;
+}
+
+OUString UIObjectUnoObj::getType()
+{
+    SolarMutexGuard aGuard;
+    return mpObj->get_type();
+}
+
+OUString UIObjectUnoObj::getImplementationName()
+{
+    return u"org.libreoffice.uitest.UIObject"_ustr;
+}
+
+bool UIObjectUnoObj::supportsService(OUString const & ServiceName)
+{
+    return cppu::supportsService(this, ServiceName);
+}
+
+cpo::uno::Sequence<OUString> UIObjectUnoObj::getSupportedServiceNames()
+{
+    return { u"com.sun.star.ui.test.UIObject"_ustr };
+}
+
+OUString UIObjectUnoObj::getHierarchy()
+{
+    SolarMutexGuard aGuard;
+    return mpObj->dumpHierarchy();
+}
+
+bool UIObjectUnoObj::equals(const cpo::uno::Reference<css::ui::test::XUIObject>& rOther)
+{
+    return mpObj->equals(*static_cast<UIObjectUnoObj&>(*rOther).mpObj);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

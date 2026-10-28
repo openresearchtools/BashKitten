@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# -- Available env vars --
+# * COLLABORA_ONLINE_REPO - which git repo to clone the online monorepo from
+# * COLLABORA_ONLINE_BRANCH - which branch to build
+# * ENGINE_BUILD_TARGET - which make target to run for the engine
+# * ONLINE_EXTRA_BUILD_OPTIONS - extra build options for online
+#
+# Note: on Alpine the engine must be built from source -- prebuilt engine
+# assets are linked against glibc and won't work on musl.
+
+if [ -z "$COLLABORA_ONLINE_REPO" ]; then
+  COLLABORA_ONLINE_REPO="https://gerrit.collaboraoffice.com/online"
+fi;
+if [ -z "$COLLABORA_ONLINE_BRANCH" ]; then
+  COLLABORA_ONLINE_BRANCH="main"
+fi;
+echo "Building branch '$COLLABORA_ONLINE_BRANCH' from '$COLLABORA_ONLINE_REPO'"
+
+if [ -z "$ENGINE_BUILD_TARGET" ]; then
+  ENGINE_BUILD_TARGET=""
+fi;
+echo "Engine build target: '$ENGINE_BUILD_TARGET'"
+
+SRCDIR=$(realpath `dirname $0`)
+INSTDIR="$SRCDIR/instdir"
+BUILDDIR="$SRCDIR/builddir"
+
+mkdir -p "$BUILDDIR"
+cd "$BUILDDIR"
+
+rm -rf "$INSTDIR" || true
+mkdir -p "$INSTDIR"
+
+# POCO is built as part of the engine (engine/external/poco) and picked up from
+# its workdir automatically by the cool configure below; no separate build.
+
+
+##### cloning & updating #####
+
+# Clone the online monorepo (engine/ contains the rendering engine)
+git clone --depth=1 --branch "$COLLABORA_ONLINE_BRANCH" "$COLLABORA_ONLINE_REPO" online || exit 1
+
+##### engine #####
+
+# Build engine from source -- prebuilt assets are glibc and don't work on musl.
+( cd online/engine && ./autogen.sh --with-distro=CPLinux-LOKit --without-package-format --disable-symbols --with-lang=en-US ) || exit 1
+( cd online/engine && make $ENGINE_BUILD_TARGET ) || exit 1
+
+# copy stuff
+mkdir -p "$INSTDIR"/opt/
+cp -a online/engine/instdir "$INSTDIR"/opt/collaboraoffice
+
+##### coolwsd & cool #####
+
+# build
+( cd online && ./autogen.sh ) || exit 1
+( cd online && ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-tests --with-lokit-path="$BUILDDIR"/online/engine/include --with-lo-path=/opt/collaboraoffice $ONLINE_EXTRA_BUILD_OPTIONS) || exit 1
+( cd online && make -j $(nproc)) || exit 1
+
+# copy stuff
+( cd online && DESTDIR="$INSTDIR" make install ) || exit 1
+
+# Build online branding if available
+if test -d online-branding ; then
+  if ! which sass &> /dev/null; then npm install -g sass; fi
+  cd online-branding
+  ./brand.sh $INSTDIR/opt/collaboraoffice $INSTDIR/usr/share/coolwsd/browser/dist CODE # CODE
+  ./brand.sh $INSTDIR/opt/collaboraoffice $INSTDIR/usr/share/coolwsd/browser/dist NC-theme-community # Nextcloud Office
+  cd ..
+fi

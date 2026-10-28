@@ -1,0 +1,116 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include "vbascrollbar.hxx"
+
+using namespace com::sun::star;
+using namespace ::cpo;
+using namespace ooo::vba;
+
+ScVbaScrollBar::ScVbaScrollBar(  const cpo::uno::Reference< ov::XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< cpo::uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<AbstractGeometryAttributes> pGeomHelper )
+    : ScrollBarImpl_BASE( xParent, xContext, xControl, xModel, std::move(pGeomHelper) )
+{
+}
+
+// Attributes
+cpo::uno::Any
+ScVbaScrollBar::getValue()
+{
+    return  m_xProps->getPropertyValue( u"ScrollValue"_ustr );
+}
+
+void
+ScVbaScrollBar::setValue( const cpo::uno::Any& _value )
+{
+    m_xProps->setPropertyValue( u"ScrollValue"_ustr, _value );
+}
+
+::sal_Int32
+ScVbaScrollBar::getMax()
+{
+    sal_Int32 nMax = 0;
+    m_xProps->getPropertyValue( u"ScrollValueMax"_ustr ) >>= nMax;
+    return nMax;
+}
+
+void
+ScVbaScrollBar::setMax( sal_Int32 nVal )
+{
+    m_xProps->setPropertyValue( u"ScrollValueMax"_ustr, cpo::uno::Any( nVal ) );
+}
+
+::sal_Int32
+ScVbaScrollBar::getMin()
+{
+    sal_Int32 nVal = 0;
+    m_xProps->getPropertyValue( u"ScrollValueMin"_ustr ) >>= nVal;
+    return nVal;
+}
+
+void
+ScVbaScrollBar::setMin( sal_Int32 nVal )
+{
+    m_xProps->setPropertyValue( u"ScrollValueMin"_ustr, cpo::uno::Any( nVal ) );
+}
+
+void
+ScVbaScrollBar::setLargeChange( ::sal_Int32 _largechange )
+{
+    m_xProps->setPropertyValue( u"BlockIncrement"_ustr, cpo::uno::Any( _largechange ) );
+}
+
+::sal_Int32
+ScVbaScrollBar::getLargeChange()
+{
+    sal_Int32 nVal = 0;
+    m_xProps->getPropertyValue( u"BlockIncrement"_ustr ) >>= nVal;
+    return nVal;
+}
+
+::sal_Int32
+ScVbaScrollBar::getSmallChange()
+{
+    sal_Int32 nSmallChange = 0;
+    m_xProps->getPropertyValue( u"LineIncrement"_ustr ) >>= nSmallChange;
+    return nSmallChange;
+}
+
+void
+ScVbaScrollBar::setSmallChange( ::sal_Int32 _smallchange )
+{
+    m_xProps->setPropertyValue( u"LineIncrement"_ustr, cpo::uno::Any( _smallchange ) );
+}
+
+OUString
+ScVbaScrollBar::getServiceImplName()
+{
+    return u"ScVbaScrollBar"_ustr;
+}
+
+cpo::uno::Sequence< OUString >
+ScVbaScrollBar::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.msforms.Frame"_ustr
+    };
+    return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

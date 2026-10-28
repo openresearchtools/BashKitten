@@ -1,0 +1,73 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+#ifndef INCLUDED_SW_SOURCE_UI_VBA_VBALISTHELPER_HXX
+#define INCLUDED_SW_SOURCE_UI_VBA_VBALISTHELPER_HXX
+
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/container/XIndexReplace.hpp>
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/text/XTextDocument.hpp>
+
+#include <memory>
+
+class SwVbaListHelper;
+typedef std::shared_ptr< SwVbaListHelper > SwVbaListHelperRef;
+
+class SwVbaListHelper
+{
+private:
+    cpo::uno::Reference< css::text::XTextDocument > mxTextDocument;
+    cpo::uno::Reference< css::container::XIndexReplace > mxNumberingRules;
+    cpo::uno::Reference< css::container::XNameContainer > mxStyleFamily;
+    cpo::uno::Reference< css::beans::XPropertySet > mxStyleProps;
+    sal_Int32 mnGalleryType;
+    sal_Int32 mnTemplateType;
+    OUString msStyleName;
+
+    /// @throws cpo::uno::RuntimeException
+    void Init();
+    /// @throws cpo::uno::RuntimeException
+    void CreateListTemplate();
+    /// @throws cpo::uno::RuntimeException
+    void CreateBulletListTemplate();
+    /// @throws cpo::uno::RuntimeException
+    void CreateNumberListTemplate();
+    /// @throws cpo::uno::RuntimeException
+    void CreateOutlineNumberListTemplate();
+    /// @throws cpo::uno::RuntimeException
+    void CreateOutlineNumberForType1();
+    /// @throws cpo::uno::RuntimeException
+    void CreateOutlineNumberForType2();
+    /// @throws cpo::uno::RuntimeException
+    void CreateOutlineNumberForType3();
+    /// @throws cpo::uno::RuntimeException
+    void CreateOutlineNumberForType4();
+    /// @throws cpo::uno::RuntimeException
+    void CreateOutlineNumberForType5();
+    /// @throws cpo::uno::RuntimeException
+    void CreateOutlineNumberForType6();
+    /// @throws cpo::uno::RuntimeException
+    void CreateOutlineNumberForType7();
+
+public:
+    /// @throws cpo::uno::RuntimeException
+    SwVbaListHelper( cpo::uno::Reference< css::text::XTextDocument > xTextDoc, sal_Int32 nGalleryType, sal_Int32 nTemplateType );
+
+    sal_Int32 getGalleryType() const { return mnGalleryType; }
+    const cpo::uno::Reference< css::container::XIndexReplace >& getNumberingRules() const { return mxNumberingRules; }
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Any getPropertyValueWithNameAndLevel( sal_Int32 nLevel, const OUString& sName );
+    /// @throws cpo::uno::RuntimeException
+    void setPropertyValueWithNameAndLevel( sal_Int32 nLevel, const OUString& sName, const cpo::uno::Any& aValue );
+
+};
+
+#endif // INCLUDED_SW_SOURCE_UI_VBA_VBALISTHELPER_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

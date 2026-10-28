@@ -1,0 +1,235 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#include "vbacomment.hxx"
+
+#include <com/sun/star/drawing/XDrawPageSupplier.hpp>
+#include <com/sun/star/sheet/XSpreadsheet.hpp>
+#include <com/sun/star/sheet/XSheetAnnotationAnchor.hpp>
+#include <com/sun/star/sheet/XSheetAnnotationsSupplier.hpp>
+#include <com/sun/star/sheet/XSheetAnnotationShapeSupplier.hpp>
+#include <com/sun/star/sheet/XSheetCellRange.hpp>
+#include <com/sun/star/sheet/XCellAddressable.hpp>
+#include <com/sun/star/table/CellAddress.hpp>
+#include <com/sun/star/table/XCell.hpp>
+#include <com/sun/star/text/XSimpleText.hpp>
+#include <com/sun/star/text/XTextCursor.hpp>
+#include <com/sun/star/text/XTextRange.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <ooo/vba/office/MsoShapeType.hpp>
+
+#include <vbahelper/vbashape.hxx>
+#include <sal/log.hxx>
+#include "vbacomments.hxx"
+
+using namespace ::ooo::vba;
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+ScVbaComment::ScVbaComment(
+        const uno::Reference< XHelperInterface >& xParent,
+        const uno::Reference< cpo::uno::XComponentContext >& xContext,
+        const uno::Reference< frame::XModel >& xModel,
+        const uno::Reference< table::XCellRange >& xRange ) :
+    ScVbaComment_BASE( xParent, xContext ),
+    mxModel( xModel, uno::UNO_SET_THROW ),
+    mxRange( xRange )
+{
+    if  ( !xRange.is() )
+        throw lang::IllegalArgumentException(u"range is not set "_ustr, uno::Reference< cpo::uno::XInterface >() , 1 );
+    getAnnotation();
+}
+
+// private helper functions
+
+uno::Reference< sheet::XSheetAnnotation >
+ScVbaComment::getAnnotation()
+{
+    uno::Reference< table::XCell > xCell( mxRange->getCellByPosition(0, 0), uno::UNO_SET_THROW );
+    uno::Reference< sheet::XSheetAnnotationAnchor > xAnnoAnchor( xCell, uno::UNO_QUERY_THROW );
+    return uno::Reference< sheet::XSheetAnnotation > ( xAnnoAnchor->getAnnotation(), uno::UNO_SET_THROW );
+}
+
+uno::Reference< sheet::XSheetAnnotations >
+ScVbaComment::getAnnotations() const
+{
+    uno::Reference< sheet::XSheetCellRange > xSheetCellRange(mxRange, ::uno::UNO_QUERY_THROW );
+    uno::Reference< sheet::XSpreadsheet > xSheet = xSheetCellRange->getSpreadsheet();
+    uno::Reference< sheet::XSheetAnnotationsSupplier > xAnnosSupp( xSheet, uno::UNO_QUERY_THROW );
+
+    return uno::Reference< sheet::XSheetAnnotations > ( xAnnosSupp->getAnnotations(), uno::UNO_SET_THROW );
+}
+
+sal_Int32
+ScVbaComment::getAnnotationIndex()
+{
+    uno::Reference< sheet::XSheetAnnotations > xAnnos = getAnnotations();
+    table::CellAddress aAddress = getAnnotation()->getPosition();
+
+    sal_Int32 aIndex = 0;
+    sal_Int32 aCount = xAnnos->getCount();
+
+    for ( ; aIndex < aCount ; aIndex++ )
+    {
+        uno::Reference< sheet::XSheetAnnotation > xAnno( xAnnos->getByIndex( aIndex ), uno::UNO_QUERY_THROW );
+        table::CellAddress aAnnoAddress = xAnno->getPosition();
+
+        if ( aAnnoAddress.Column == aAddress.Column && aAnnoAddress.Row == aAddress.Row && aAnnoAddress.Sheet == aAddress.Sheet )
+        {
+            SAL_INFO("sc.ui", "terminating search, index is " << aIndex);
+            break;
+        }
+    }
+    SAL_INFO("sc.ui", "returning index is " << aIndex);
+
+    return aIndex;
+}
+
+uno::Reference< excel::XComment >
+ScVbaComment::getCommentByIndex( sal_Int32 Index )
+{
+    uno::Reference< container::XIndexAccess > xIndexAccess( getAnnotations(), uno::UNO_QUERY_THROW );
+    // parent is sheet ( parent of the range which is the parent of the comment )
+    uno::Reference< XCollection > xColl(  new ScVbaComments( getParent()->getParent(), mxContext, mxModel, xIndexAccess ) );
+
+    return uno::Reference< excel::XComment > ( xColl->Item( cpo::uno::Any( Index ), cpo::uno::Any() ), uno::UNO_QUERY_THROW );
+ }
+
+// public vba functions
+
+OUString
+ScVbaComment::getAuthor()
+{
+    return getAnnotation()->getAuthor();
+}
+
+void
+ScVbaComment::setAuthor( const OUString& /*_author*/ )
+{
+    // #TODO #FIXME  implementation needed
+}
+
+uno::Reference< msforms::XShape >
+ScVbaComment::getShape()
+{
+    uno::Reference< sheet::XSheetAnnotationShapeSupplier > xAnnoShapeSupp( getAnnotation(), uno::UNO_QUERY_THROW );
+    uno::Reference< drawing::XShape > xAnnoShape( xAnnoShapeSupp->getAnnotationShape(), uno::UNO_SET_THROW );
+    uno::Reference< sheet::XSheetCellRange > xCellRange( mxRange, uno::UNO_QUERY_THROW );
+    uno::Reference< drawing::XDrawPageSupplier > xDrawPageSupp( xCellRange->getSpreadsheet(), uno::UNO_QUERY_THROW );
+    uno::Reference< drawing::XShapes > xShapes( xDrawPageSupp->getDrawPage(), uno::UNO_QUERY_THROW );
+    return new ScVbaShape( this, mxContext, xAnnoShape, xShapes, mxModel, office::MsoShapeType::msoComment );
+}
+
+bool
+ScVbaComment::getVisible()
+{
+    return getAnnotation()->getIsVisible();
+}
+
+void
+ScVbaComment::setVisible( bool _visible )
+{
+    getAnnotation()->setIsVisible( _visible );
+}
+
+void
+ScVbaComment::Delete()
+{
+    getAnnotations()->removeByIndex( getAnnotationIndex() );
+}
+
+uno::Reference< excel::XComment >
+ScVbaComment::Next()
+{
+    // index: uno = 0, vba = 1
+    return getCommentByIndex( getAnnotationIndex() + 2 );
+}
+
+uno::Reference< excel::XComment >
+ScVbaComment::Previous()
+{
+    // index: uno = 0, vba = 1
+    return getCommentByIndex( getAnnotationIndex() );
+}
+
+OUString
+ScVbaComment::Text( const cpo::uno::Any& aText, const cpo::uno::Any& aStart, const cpo::uno::Any& Overwrite )
+{
+    OUString sText;
+    aText >>= sText;
+
+    uno::Reference< text::XSimpleText > xAnnoText( getAnnotation(), uno::UNO_QUERY_THROW );
+    OUString sAnnoText = xAnnoText->getString();
+
+    if ( aStart.hasValue() )
+    {
+        sal_Int16 nStart = 0;
+        bool bOverwrite = true;
+        Overwrite >>= bOverwrite;
+
+        if ( aStart >>= nStart )
+        {
+            uno::Reference< text::XTextCursor > xTextCursor( xAnnoText->createTextCursor(), uno::UNO_SET_THROW );
+
+            if ( bOverwrite )
+            {
+                xTextCursor->collapseToStart();
+                xTextCursor->gotoStart( false );
+                xTextCursor->goRight( nStart - 1, false );
+                xTextCursor->gotoEnd( true );
+            }
+            else
+            {
+                xTextCursor->collapseToStart();
+                xTextCursor->gotoStart( false );
+                xTextCursor->goRight( nStart - 1 , true );
+            }
+
+            uno::Reference< text::XTextRange > xRange( xTextCursor, uno::UNO_QUERY_THROW );
+            xAnnoText->insertString( xRange, sText, bOverwrite );
+            return xAnnoText->getString();
+        }
+        throw cpo::uno::RuntimeException(u"ScVbaComment::Text - bad Start value "_ustr );
+    }
+    else if ( aText.hasValue() )
+    {
+     uno::Reference< sheet::XCellAddressable > xCellAddr(mxRange->getCellByPosition(0, 0), uno::UNO_QUERY_THROW );
+     table::CellAddress aAddress = xCellAddr->getCellAddress();
+     getAnnotations()->insertNew( aAddress, sText );
+    }
+
+    return sAnnoText;
+}
+
+OUString
+ScVbaComment::getServiceImplName()
+{
+    return u"ScVbaComment"_ustr;
+}
+
+cpo::uno::Sequence< OUString >
+ScVbaComment::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+       u"ooo.vba.excel.ScVbaComment"_ustr
+    };
+    return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

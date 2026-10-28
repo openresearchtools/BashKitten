@@ -1,0 +1,165 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include "bibview.hxx"
+
+#include <com/sun/star/awt/XControlModel.hpp>
+#include <com/sun/star/form/XForm.hpp>
+#include <com/sun/star/sdb/XSingleSelectQueryComposer.hpp>
+#include <com/sun/star/form/runtime/XFormController.hpp>
+#include <comphelper/compbase.hxx>
+#include <comphelper/interfacecontainer4.hxx>
+#include <com/sun/star/form/XLoadable.hpp>
+#include <com/sun/star/frame/XDispatchProviderInterceptor.hpp>
+#include <com/sun/star/frame/XDispatchProviderInterception.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <vcl/vclptr.hxx>
+
+namespace weld { class Window; }
+
+namespace bib
+{
+    class BibBeamer;
+}
+
+class BibToolBar;
+struct BibDBDescriptor;
+
+class BibInterceptorHelper
+    :public cppu::WeakImplHelper< css::frame::XDispatchProviderInterceptor >
+{
+private:
+    cpo::uno::Reference< css::frame::XDispatchProvider > xMasterDispatchProvider;
+    cpo::uno::Reference< css::frame::XDispatchProvider > xSlaveDispatchProvider;
+    cpo::uno::Reference< css::frame::XDispatch > xFormDispatch;
+    cpo::uno::Reference< css::frame::XDispatchProviderInterception > xInterception;
+
+protected:
+    virtual ~BibInterceptorHelper( ) override;
+
+public:
+    BibInterceptorHelper( const ::bib::BibBeamer* pBibBeamer, cpo::uno::Reference< css::frame::XDispatch > const & xDispatch);
+
+    void ReleaseInterceptor();
+
+    // XDispatchProvider
+    virtual cpo::uno::Reference< css::frame::XDispatch > queryDispatch( const css::util::URL& aURL, const OUString& aTargetFrameName, sal_Int32 nSearchFlags ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::frame::XDispatch > > queryDispatches( const cpo::uno::Sequence< css::frame::DispatchDescriptor >& aDescripts ) override;
+    // XDispatchProviderInterceptor
+    virtual cpo::uno::Reference< css::frame::XDispatchProvider > getSlaveDispatchProvider(  ) override;
+    virtual void setSlaveDispatchProvider( const cpo::uno::Reference< css::frame::XDispatchProvider >& xNewSlaveDispatchProvider ) override;
+    virtual cpo::uno::Reference< css::frame::XDispatchProvider > getMasterDispatchProvider(  ) override;
+    virtual void setMasterDispatchProvider( const cpo::uno::Reference< css::frame::XDispatchProvider >& xNewMasterDispatchProvider ) override;
+};
+
+typedef comphelper::WeakComponentImplHelper  <   css::form::XLoadable
+                                        >   BibDataManager_Base;
+class BibDataManager final : public BibDataManager_Base
+{
+private:
+        cpo::uno::Reference< css::form::XForm >                       m_xForm;
+        cpo::uno::Reference< css::awt::XControlModel >                m_xGridModel;
+        cpo::uno::Reference< css::sdb::XSingleSelectQueryComposer >   m_xParser;
+        cpo::uno::Reference< css::form::runtime::XFormController >    m_xFormCtrl;
+        cpo::uno::Reference< css::frame::XDispatch >                  m_xFormDispatch;
+        rtl::Reference<BibInterceptorHelper>                          m_xInterceptorHelper;
+
+        OUString                     aActiveDataTable;
+        OUString                     aDataSourceURL;
+        OUString                     aQuoteChar;
+
+        ::comphelper::OInterfaceContainerHelper4<css::form::XLoadListener>   m_aLoadListeners;
+
+        VclPtr< ::bib::BibView>      pBibView;
+        VclPtr<BibToolBar>           pToolbar;
+
+        OUString                     sIdentifierMapping;
+
+        void                        InsertFields(const cpo::uno::Reference< css::form::XFormComponent > & xGrid);
+
+        cpo::uno::Reference< css::awt::XControlModel > const &
+                                    updateGridModel(const cpo::uno::Reference< css::form::XForm > & xDbForm);
+        static cpo::uno::Reference< css::awt::XControlModel >
+                                    createGridModel( const OUString& rName );
+
+        using WeakComponentImplHelperBase::disposing;
+
+public:
+
+        BibDataManager();
+        virtual ~BibDataManager() override;
+
+        // XLoadable
+        virtual void load(  ) override;
+        virtual void unload(  ) override;
+        virtual void reload(  ) override;
+        virtual bool isLoaded(  ) override;
+        virtual void addLoadListener( const cpo::uno::Reference< css::form::XLoadListener >& aListener ) override;
+        virtual void removeLoadListener( const cpo::uno::Reference< css::form::XLoadListener >& aListener ) override;
+
+        cpo::uno::Reference< css::form::XForm >                   createDatabaseForm( BibDBDescriptor&    aDesc);
+
+        cpo::uno::Reference< css::awt::XControlModel >            updateGridModel();
+
+        cpo::uno::Sequence< OUString>           getDataSources() const;
+
+        const OUString&             getActiveDataSource() const {return aDataSourceURL;}
+        void                        setActiveDataSource(const OUString& rURL);
+
+        const OUString&             getActiveDataTable() const { return aActiveDataTable;}
+        void                        setActiveDataTable(const OUString& rTable);
+
+        void                        setFilter(const OUString& rQuery);
+        OUString                    getFilter() const;
+
+        cpo::uno::Sequence< OUString> getQueryFields() const;
+        OUString                    getQueryField() const;
+        void                        startQueryWith(const OUString& rQuery);
+
+        const cpo::uno::Reference< css::sdb::XSingleSelectQueryComposer >&    getParser() const { return m_xParser; }
+        const cpo::uno::Reference< css::form::XForm >&                        getForm() const   { return m_xForm; }
+
+
+        static OUString             getControlName(sal_Int32 nFormatKey );
+
+        cpo::uno::Reference< css::awt::XControlModel > loadControlModel(const OUString& rName,
+                                                        bool bForceListBox);
+
+        void                        CreateMappingDialog(weld::Window* pParent);
+        OUString                    CreateDBChangeDialog(weld::Window* pParent);
+
+        void                        DispatchDBChangeDialog();
+
+        void                        SetView( ::bib::BibView* pView ) { pBibView = pView; }
+
+        void                        SetToolbar(BibToolBar* pSet);
+
+        const OUString&             GetIdentifierMapping();
+        void                        ResetIdentifierMapping() {sIdentifierMapping.clear();}
+
+        cpo::uno::Reference< css::form::runtime::XFormController > const & GetFormController();
+        void                        RegisterInterceptor( const ::bib::BibBeamer* pBibBeamer);
+
+        bool                        HasActiveConnection() const;
+};
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,713 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <comphelper/processfactory.hxx>
+#include <editeng/acorrcfg.hxx>
+#include <o3tl/any.hxx>
+#include <tools/debug.hxx>
+#include <tools/urlobj.hxx>
+#include <comphelper/diagnose_ex.hxx>
+#include <ucbhelper/content.hxx>
+#include <unotools/pathoptions.hxx>
+#include <unotools/ucbhelper.hxx>
+#include <svtools/langtab.hxx>
+#include <com/sun/star/sdbc/XResultSet.hpp>
+#include <com/sun/star/sdbc/XRow.hpp>
+
+#include <editeng/svxacorr.hxx>
+#include <cpo/uno/Sequence.hxx>
+
+using namespace utl;
+using namespace com::sun::star;
+using namespace ::cpo;
+using namespace ::cpo::uno;
+
+
+/** An autocorrection file dropped into such directory may create a language
+    list entry if one didn't exist already.
+ */
+static void scanAutoCorrectDirForLanguageTags( const OUString& rURL )
+{
+    // Silently ignore all errors.
+    try
+    {
+        ::ucbhelper::Content aContent( rURL,
+                uno::Reference<ucb::XCommandEnvironment>(), comphelper::getProcessComponentContext());
+        if (aContent.isFolder())
+        {
+            // Title is file name here.
+            uno::Reference<sdbc::XResultSet> xResultSet = aContent.createCursor(
+                    {u"Title"_ustr}, ::ucbhelper::INCLUDE_DOCUMENTS_ONLY);
+            uno::Reference<sdbc::XRow> xRow( xResultSet, UNO_QUERY);
+            if (xResultSet.is() && xRow.is())
+            {
+                while (xResultSet->next())
+                {
+                    try
+                    {
+                        const OUString aTitle( xRow->getString(1));
+                        if (aTitle.getLength() <= 9 || !(aTitle.startsWith("acor_") && aTitle.endsWith(".dat")))
+                            continue;
+
+                        const OUString aBcp47( aTitle.copy( 5, aTitle.getLength() - 9));
+                        // Ignore invalid langtags and canonicalize for good,
+                        // allow private-use tags.
+                        const LanguageTag aLanguageTag (aBcp47, true);
+                        if (!aLanguageTag.isValidBcp47())
+                            continue;
+
+                        if (SvtLanguageTable::HasLanguageType( aLanguageTag.getLanguageType()))
+                            continue;
+
+                        // Insert language(-script)-only tags only if there is
+                        // no known matching fallback locale, otherwise we'd
+                        // end up with unwanted entries where a language
+                        // autocorrection file covers several locales. We do
+                        // know a few art-x-... though so exclude those and any
+                        // other private-use tag (which should not fallback,
+                        // but avoid).
+                        if (aLanguageTag.getCountry().isEmpty()
+                                && LanguageTag::isValidBcp47( aLanguageTag.getBcp47(), nullptr,
+                                    LanguageTag::PrivateUse::DISALLOW))
+                        {
+                            LanguageTag aFallback( aLanguageTag);
+                            aFallback.makeFallback();
+                            if (aFallback.getLanguageAndScript() == aLanguageTag.getLanguageAndScript())
+                                continue;
+                        }
+
+                        // Finally add this one.
+                        SvtLanguageTable::AddLanguageTag( aLanguageTag);
+                    }
+                    catch (const cpo::uno::Exception&)
+                    {
+                        TOOLS_WARN_EXCEPTION("editeng", "Unable to get a directory entry from '" << rURL << "'");
+                    }
+                }
+            }
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("editeng", "Unable to iterate directory '" << rURL << "'");
+    }
+}
+
+namespace
+{
+    /** Split the autocorrect path into its share and user halves and append the acor name to
+        each. The user half is created if it is missing. */
+    void lcl_getAutoCorrectFileNames(OUString& rSharePath, OUString& rUserPath)
+    {
+        SvtPathOptions aPathOpt;
+        OUString const & sAutoPath( aPathOpt.GetAutoCorrectPath() );
+
+        rSharePath = sAutoPath.getToken(0, ';');
+        rUserPath = sAutoPath.getToken(1, ';');
+
+        //fdo#67743 ensure the userdir exists so that any later attempt to copy the
+        //shared autocorrect file into the user dir will succeed
+        ::ucbhelper::Content aContent;
+        Reference < ucb::XCommandEnvironment > xEnv;
+        ::utl::UCBContentHelper::ensureFolder(comphelper::getProcessComponentContext(), xEnv,
+                                             rUserPath, aContent);
+
+        for( OUString* pS : { &rSharePath, &rUserPath } )
+        {
+            INetURLObject aPath( *pS );
+            scanAutoCorrectDirForLanguageTags( aPath.GetMainURL(INetURLObject::DecodeMechanism::ToIUri));
+            aPath.insertName(u"acor");
+            *pS = aPath.GetMainURL(INetURLObject::DecodeMechanism::ToIUri);
+        }
+    }
+}
+
+SvxAutoCorrCfg::SvxAutoCorrCfg() :
+    aBaseConfig(*this),
+    aSwConfig(*this),
+    bFileRel(true),
+    bNetRel(true),
+    bAutoTextTip(true),
+    bAutoTextPreview(false),
+    bAutoFmtByInput(true),
+    bSearchInAllCategories(false)
+{
+    OUString sSharePath, sUserPath;
+    lcl_getAutoCorrectFileNames(sSharePath, sUserPath);
+    pAutoCorrect.reset( new SvxAutoCorrect( sSharePath, sUserPath ) );
+
+    aBaseConfig.Load(true);
+    aSwConfig.Load(true);
+}
+
+SvxAutoCorrCfg::~SvxAutoCorrCfg()
+{
+}
+
+void SvxAutoCorrCfg::ReloadPaths()
+{
+    if (!pAutoCorrect)
+        return;
+    OUString sSharePath, sUserPath;
+    lcl_getAutoCorrectFileNames(sSharePath, sUserPath);
+    pAutoCorrect->SetAutoCorrFileNames(sSharePath, sUserPath);
+}
+
+void SvxAutoCorrCfg::SetAutoCorrect(SvxAutoCorrect *const pNew)
+{
+    if (pNew != pAutoCorrect.get())
+    {
+        if (pNew && (pAutoCorrect->GetFlags() != pNew->GetFlags()))
+        {
+            aBaseConfig.SetModified();
+            aSwConfig.SetModified();
+        }
+        pAutoCorrect.reset( pNew );
+    }
+}
+
+Sequence<OUString>  SvxBaseAutoCorrCfg::GetPropertyNames()
+{
+    static constexpr OUString aPropNames[]
+    {
+        u"Exceptions/TwoCapitalsAtStart"_ustr,        //  0
+        u"Exceptions/CapitalAtStartSentence"_ustr,    //  1
+        u"UseReplacementTable"_ustr,                  //  2
+        u"TwoCapitalsAtStart"_ustr,                   //  3
+        u"CapitalAtStartSentence"_ustr,               //  4
+        u"ChangeUnderlineWeight"_ustr,                //  5
+        u"SetInetAttribute"_ustr,                     //  6
+        u"ChangeOrdinalNumber"_ustr,                  //  7
+        u"AddNonBreakingSpace"_ustr,                  //  8
+        u"ChangeDash"_ustr,                           //  9
+        u"RemoveDoubleSpaces"_ustr,                   // 10
+        u"ReplaceSingleQuote"_ustr,                   // 11
+        u"SingleQuoteAtStart"_ustr,                   // 12
+        u"SingleQuoteAtEnd"_ustr,                     // 13
+        u"ReplaceDoubleQuote"_ustr,                   // 14
+        u"DoubleQuoteAtStart"_ustr,                   // 15
+        u"DoubleQuoteAtEnd"_ustr,                     // 16
+        u"CorrectAccidentalCapsLock"_ustr,            // 17
+        u"TransliterateRTL"_ustr,                     // 18
+        u"ChangeAngleQuotes"_ustr,                    // 19
+        u"SetDOIAttribute"_ustr,                      // 20
+    };
+    const int nCount = 21;
+    Sequence<OUString> aNames(nCount);
+    OUString* pNames = aNames.getArray();
+    for(int i = 0; i < nCount; i++)
+        pNames[i] = aPropNames[i];
+    return aNames;
+}
+
+void SvxBaseAutoCorrCfg::Load(bool bInit)
+{
+    Sequence<OUString> aNames = GetPropertyNames();
+    Sequence<Any> aValues = GetProperties(aNames);
+    if(bInit)
+        EnableNotification(aNames);
+    DBG_ASSERT(aValues.getLength() == aNames.getLength(), "GetProperties failed");
+    if(aValues.getLength() != aNames.getLength())
+        return;
+
+    ACFlags nFlags = ACFlags::NONE;        // default all off
+    for(int nProp = 0; nProp < aNames.getLength(); nProp++)
+    {
+        sal_Int32 nTemp = 0; // the default for quotes when the optional value is empty
+        switch(nProp)
+        {
+            case  0:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::SaveWordCplSttLst;
+            break;//"Exceptions/TwoCapitalsAtStart",
+            case  1:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::SaveWordWordStartLst;
+            break;//"Exceptions/CapitalAtStartSentence",
+            case  2:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::Autocorrect;
+            break;//"UseReplacementTable",
+            case  3:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::CapitalStartWord;
+            break;//"TwoCapitalsAtStart",
+            case  4:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::CapitalStartSentence;
+            break;//"CapitalAtStartSentence",
+            case  5:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::ChgWeightUnderl;
+            break;//"ChangeUnderlineWeight",
+            case  6:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::SetINetAttr;
+            break;//"SetInetAttribute",
+            case  7:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::ChgOrdinalNumber;
+            break;//"ChangeOrdinalNumber",
+            case 8:
+                if (aValues[nProp] == true)
+                     nFlags |= ACFlags::AddNonBrkSpace;
+            break;//"AddNonBreakingSpace"
+            case  9:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::ChgToEnEmDash;
+            break;//"ChangeDash",
+            case 10:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::IgnoreDoubleSpace;
+            break;//"RemoveDoubleSpaces",
+            case 11:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::ChgSglQuotes;
+            break;//"ReplaceSingleQuote",
+            case 12:
+                aValues[nProp] >>= nTemp;
+                rParent.pAutoCorrect->SetStartSingleQuote(
+                    sal::static_int_cast< sal_Unicode >( nTemp ) );
+            break;//"SingleQuoteAtStart",
+            case 13:
+                aValues[nProp] >>= nTemp;
+                rParent.pAutoCorrect->SetEndSingleQuote(
+                    sal::static_int_cast< sal_Unicode >( nTemp ) );
+            break;//"SingleQuoteAtEnd",
+            case 14:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::ChgQuotes;
+            break;//"ReplaceDoubleQuote",
+            case 15:
+                aValues[nProp] >>= nTemp;
+                rParent.pAutoCorrect->SetStartDoubleQuote(
+                    sal::static_int_cast< sal_Unicode >( nTemp ) );
+            break;//"DoubleQuoteAtStart",
+            case 16:
+                aValues[nProp] >>= nTemp;
+                rParent.pAutoCorrect->SetEndDoubleQuote(
+                    sal::static_int_cast< sal_Unicode >( nTemp ) );
+            break;//"DoubleQuoteAtEnd"
+            case 17:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::CorrectCapsLock;
+            break;//"CorrectAccidentalCapsLock"
+            case 18:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::TransliterateRTL;
+            break;//"TransliterateRTL"
+            case 19:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::ChgAngleQuotes;
+            break;//"ChangeAngleQuotes"
+            case  20:
+                if (aValues[nProp] == true)
+                    nFlags |= ACFlags::SetDOIAttr;
+            break;//"SetDOIAttr",
+        }
+    }
+    if( nFlags != ACFlags::NONE )
+        rParent.pAutoCorrect->SetAutoCorrFlag( nFlags );
+    rParent.pAutoCorrect->SetAutoCorrFlag( ( static_cast<ACFlags>(0xffff) & ~nFlags ), false );
+}
+
+SvxBaseAutoCorrCfg::SvxBaseAutoCorrCfg(SvxAutoCorrCfg& rPar) :
+    utl::ConfigItem(u"Office.Common/AutoCorrect"_ustr),
+    rParent(rPar)
+{
+}
+
+SvxBaseAutoCorrCfg::~SvxBaseAutoCorrCfg()
+{
+}
+
+void SvxBaseAutoCorrCfg::ImplCommit()
+{
+    const ACFlags nFlags = rParent.pAutoCorrect->GetFlags();
+    PutProperties(
+        GetPropertyNames(),
+        {cpo::uno::Any(bool(nFlags & ACFlags::SaveWordCplSttLst)),
+            // "Exceptions/TwoCapitalsAtStart"
+         cpo::uno::Any(bool(nFlags & ACFlags::SaveWordWordStartLst)),
+            // "Exceptions/CapitalAtStartSentence"
+         cpo::uno::Any(bool(nFlags & ACFlags::Autocorrect)), // "UseReplacementTable"
+         cpo::uno::Any(bool(nFlags & ACFlags::CapitalStartWord)),
+            // "TwoCapitalsAtStart"
+         cpo::uno::Any(bool(nFlags & ACFlags::CapitalStartSentence)),
+            // "CapitalAtStartSentence"
+         cpo::uno::Any(bool(nFlags & ACFlags::ChgWeightUnderl)),
+            // "ChangeUnderlineWeight"
+         cpo::uno::Any(bool(nFlags & ACFlags::SetINetAttr)), // "SetInetAttribute"
+         cpo::uno::Any(bool(nFlags & ACFlags::ChgOrdinalNumber)),
+            // "ChangeOrdinalNumber"
+         cpo::uno::Any(bool(nFlags & ACFlags::AddNonBrkSpace)), // "AddNonBreakingSpace"
+         cpo::uno::Any(bool(nFlags & ACFlags::ChgToEnEmDash)), // "ChangeDash"
+         cpo::uno::Any(bool(nFlags & ACFlags::IgnoreDoubleSpace)),
+            // "RemoveDoubleSpaces"
+         cpo::uno::Any(bool(nFlags & ACFlags::ChgSglQuotes)), // "ReplaceSingleQuote"
+         cpo::uno::Any(sal_Int32(rParent.pAutoCorrect->GetStartSingleQuote())),
+            // "SingleQuoteAtStart"
+         cpo::uno::Any(sal_Int32(rParent.pAutoCorrect->GetEndSingleQuote())),
+            // "SingleQuoteAtEnd"
+         cpo::uno::Any(bool(nFlags & ACFlags::ChgQuotes)), // "ReplaceDoubleQuote"
+         cpo::uno::Any(sal_Int32(rParent.pAutoCorrect->GetStartDoubleQuote())),
+            // "DoubleQuoteAtStart"
+         cpo::uno::Any(sal_Int32(rParent.pAutoCorrect->GetEndDoubleQuote())),
+            // "DoubleQuoteAtEnd"
+         cpo::uno::Any(bool(nFlags & ACFlags::CorrectCapsLock)),
+            // "CorrectAccidentalCapsLock"
+         cpo::uno::Any(bool(nFlags & ACFlags::TransliterateRTL)),
+            // "TransliterateRTL"
+         cpo::uno::Any(bool(nFlags & ACFlags::ChgAngleQuotes)),
+            // "ChangeAngleQuotes"
+         cpo::uno::Any(bool(nFlags & ACFlags::SetDOIAttr)), // "SetDOIAttribute"
+        });
+}
+
+void SvxBaseAutoCorrCfg::Notify( const Sequence<OUString>& /* aPropertyNames */)
+{
+    Load(false);
+}
+
+Sequence<OUString>  SvxSwAutoCorrCfg::GetPropertyNames()
+{
+    static constexpr OUString aPropNames[]
+    {
+        u"Text/FileLinks"_ustr,                             // 0
+        u"Text/InternetLinks"_ustr,                         // 1
+        u"Text/ShowPreview"_ustr,                           // 2
+        u"Text/ShowToolTip"_ustr,                           // 3
+        u"Text/SearchInAllCategories"_ustr,                                   // 4
+        u"Format/Option/UseReplacementTable"_ustr,                            // 5
+        u"Format/Option/TwoCapitalsAtStart"_ustr,                             // 6
+        u"Format/Option/CapitalAtStartSentence"_ustr,                         // 7
+        u"Format/Option/ChangeUnderlineWeight"_ustr,                          // 8
+        u"Format/Option/SetInetAttribute"_ustr,                               // 9
+        u"Format/Option/ChangeOrdinalNumber"_ustr,                            //10
+        u"Format/Option/AddNonBreakingSpace"_ustr,                            //11
+        u"Format/Option/ChangeDash"_ustr,                                     //12
+        u"Format/Option/DelEmptyParagraphs"_ustr,                             //13
+        u"Format/Option/ReplaceUserStyle"_ustr,                               //14
+        u"Format/Option/ChangeToBullets/Enable"_ustr,                         //15
+        u"Format/Option/ChangeToBullets/SpecialCharacter/Char"_ustr,          //16
+        u"Format/Option/ChangeToBullets/SpecialCharacter/Font"_ustr,          //17
+        u"Format/Option/ChangeToBullets/SpecialCharacter/FontFamily"_ustr,    //18
+        u"Format/Option/ChangeToBullets/SpecialCharacter/FontCharset"_ustr,   //19
+        u"Format/Option/ChangeToBullets/SpecialCharacter/FontPitch"_ustr,     //20
+        u"Format/Option/CombineParagraphs"_ustr,                              //21
+        u"Format/Option/CombineValue"_ustr,                                   //22
+        u"Format/Option/DelSpacesAtStartEnd"_ustr,                            //23
+        u"Format/Option/DelSpacesBetween"_ustr,                               //24
+        u"Format/ByInput/Enable"_ustr,                                        //25
+        u"Format/ByInput/ChangeDash"_ustr,                                    //26
+        u"Format/ByInput/ApplyNumbering/Enable"_ustr,                         //27
+        u"Format/ByInput/ChangeToBorders"_ustr,                               //28
+        u"Format/ByInput/ChangeToTable"_ustr,                                 //29
+        u"Format/ByInput/ReplaceStyle"_ustr,                                  //30
+        u"Format/ByInput/DelSpacesAtStartEnd"_ustr,                           //31
+        u"Format/ByInput/DelSpacesBetween"_ustr,                              //32
+        u"Completion/Enable"_ustr,                                            //33
+        u"Completion/MinWordLen"_ustr,                                        //34
+        u"Completion/MaxListLen"_ustr,                                        //35
+        u"Completion/CollectWords"_ustr,                                      //36
+        u"Completion/EndlessList"_ustr,                                       //37
+        u"Completion/AppendBlank"_ustr,                                       //38
+        u"Completion/ShowAsTip"_ustr,                                         //39
+        u"Completion/AcceptKey"_ustr,                                         //40
+        u"Completion/KeepList"_ustr,                                          //41
+        u"Format/ByInput/ApplyNumbering/SpecialCharacter/Char"_ustr,          //42
+        u"Format/ByInput/ApplyNumbering/SpecialCharacter/Font"_ustr,          //43
+        u"Format/ByInput/ApplyNumbering/SpecialCharacter/FontFamily"_ustr,    //44
+        u"Format/ByInput/ApplyNumbering/SpecialCharacter/FontCharset"_ustr,   //45
+        u"Format/ByInput/ApplyNumbering/SpecialCharacter/FontPitch"_ustr,     //46
+        u"Format/Option/SetDOIAttribute"_ustr,                                //47
+        u"Format/ByInput/ApplyBulletsAfterSpace"_ustr,                        //48
+        u"Format/Option/ReplaceStyle"_ustr,                                   //49
+    };
+    const int nCount = 50;
+    Sequence<OUString> aNames(nCount);
+    OUString* pNames = aNames.getArray();
+    for(int i = 0; i < nCount; i++)
+        pNames[i] = aPropNames[i];
+    return aNames;
+}
+
+void SvxSwAutoCorrCfg::Load(bool bInit)
+{
+    Sequence<OUString> aNames = GetPropertyNames();
+    Sequence<Any> aValues = GetProperties(aNames);
+    if(bInit)
+        EnableNotification(aNames);
+    DBG_ASSERT(aValues.getLength() == aNames.getLength(), "GetProperties failed");
+    if(aValues.getLength() != aNames.getLength())
+        return;
+
+    SvxSwAutoFormatFlags& rSwFlags = rParent.pAutoCorrect->GetSwFlags();
+    for(int nProp = 0; nProp < aNames.getLength(); nProp++)
+    {
+        switch(nProp)
+        {
+            case  0: rParent.bFileRel = (aValues[nProp] == true); break; // "Text/FileLinks",
+            case  1: rParent.bNetRel = (aValues[nProp] == true);  break; // "Text/InternetLinks",
+            case  2: rParent.bAutoTextPreview = (aValues[nProp] == true); break; // "Text/ShowPreview",
+            case  3: rParent.bAutoTextTip = (aValues[nProp] == true);  break; // "Text/ShowToolTip",
+            case  4: rParent.bSearchInAllCategories = (aValues[nProp] == true);  break; //"Text/SearchInAllCategories"
+            case  5: rSwFlags.bAutoCorrect = (aValues[nProp] == true); break; // "Format/Option/UseReplacementTable",
+            case  6: rSwFlags.bCapitalStartSentence = (aValues[nProp] == true); break; // "Format/Option/TwoCapitalsAtStart",
+            case  7: rSwFlags.bCapitalStartWord = (aValues[nProp] == true); break; // "Format/Option/CapitalAtStartSentence",
+            case  8: rSwFlags.bChgWeightUnderl = (aValues[nProp] == true); break; // "Format/Option/ChangeUnderlineWeight",
+            case  9: rSwFlags.bSetINetAttr = (aValues[nProp] == true); break; // "Format/Option/SetInetAttribute",
+            case 10: rSwFlags.bChgOrdinalNumber = (aValues[nProp] == true); break; // "Format/Option/ChangeOrdinalNumber",
+            case 11: rSwFlags.bAddNonBrkSpace = (aValues[nProp] == true); break; // "Format/Option/AddNonBreakingSpace",
+// it doesn't exist here - the common flags are used for that -> LM
+//            case 12: rSwFlags.bChgToEnEmDash = (aValues[nProp] == true); break; // "Format/Option/ChangeDash",
+            case 13: rSwFlags.bDelEmptyNode = (aValues[nProp] == true); break; // "Format/Option/DelEmptyParagraphs",
+            case 14: rSwFlags.bChgUserColl = (aValues[nProp] == true); break; // "Format/Option/ReplaceUserStyle",
+            case 15: rSwFlags.bChgEnumNum = (aValues[nProp] == true); break; // "Format/Option/ChangeToBullets/Enable",
+            case 16:
+            {
+                sal_Int32 nVal = 0; aValues[nProp] >>= nVal;
+                rSwFlags.cBullet =
+                    sal::static_int_cast< sal_Unicode >(nVal);
+            }
+            break; // "Format/Option/ChangeToBullets/SpecialCharacter/Char",
+            case 17:
+            {
+                OUString sTemp; aValues[nProp] >>= sTemp;
+                rSwFlags.aBulletFont.SetFamilyName(sTemp);
+            }
+            break; // "Format/Option/ChangeToBullets/SpecialCharacter/Font",
+            case 18:
+            {
+                sal_Int32 nVal = 0; aValues[nProp] >>= nVal;
+                rSwFlags.aBulletFont.SetFamily(FontFamily(nVal));
+            }
+            break; // "Format/Option/ChangeToBullets/SpecialCharacter/FontFamily",
+            case 19:
+            {
+                sal_Int32 nVal = 0; aValues[nProp] >>= nVal;
+                rSwFlags.aBulletFont.SetCharSet(rtl_TextEncoding(nVal));
+            }
+            break; // "Format/Option/ChangeToBullets/SpecialCharacter/FontCharset",
+            case 20:
+            {
+                sal_Int32 nVal = 0; aValues[nProp] >>= nVal;
+                rSwFlags.aBulletFont.SetPitch(FontPitch(nVal));
+            }
+            break; // "Format/Option/ChangeToBullets/SpecialCharacter/FontPitch",
+            case 21: rSwFlags.bRightMargin = (aValues[nProp] == true); break; // "Format/Option/CombineParagraphs",
+            case 22:
+            {
+                sal_Int32 nVal = 0; aValues[nProp] >>= nVal;
+                rSwFlags.nRightMargin =
+                    sal::static_int_cast< sal_uInt8 >(nVal);
+            }
+            break; // "Format/Option/CombineValue",
+            case 23: rSwFlags.bAFormatDelSpacesAtSttEnd =  (aValues[nProp] == true); break; // "Format/Option/DelSpacesAtStartEnd",
+            case 24: rSwFlags.bAFormatDelSpacesBetweenLines = (aValues[nProp] == true); break; // "Format/Option/DelSpacesBetween",
+            case 25: rParent.bAutoFmtByInput = (aValues[nProp] == true); break; // "Format/ByInput/Enable",
+            case 26: rSwFlags.bChgToEnEmDash = (aValues[nProp] == true); break; // "Format/ByInput/ChangeDash",
+            case 27: rSwFlags.bSetNumRule = (aValues[nProp] == true); break; // "Format/ByInput/ApplyNumbering/Enable",
+            case 28: rSwFlags.bSetBorder = (aValues[nProp] == true); break; // "Format/ByInput/ChangeToBorders",
+            case 29: rSwFlags.bCreateTable = (aValues[nProp] == true); break; // "Format/ByInput/ChangeToTable",
+            case 30: rSwFlags.bReplaceStylesByInput =  (aValues[nProp] == true); break; // "Format/ByInput/ReplaceStyle",
+            case 31: rSwFlags.bAFormatByInpDelSpacesAtSttEnd =  (aValues[nProp] == true); break; // "Format/ByInput/DelSpacesAtStartEnd",
+            case 32: rSwFlags.bAFormatByInpDelSpacesBetweenLines = (aValues[nProp] == true); break; // "Format/ByInput/DelSpacesBetween",
+            case 33: rSwFlags.bAutoCompleteWords = (aValues[nProp] == true); break; // "Completion/Enable",
+            case 34:
+            {
+                sal_Int32 nVal = 0; aValues[nProp] >>= nVal;
+                rSwFlags.nAutoCmpltWordLen =
+                    sal::static_int_cast< sal_uInt16 >(nVal);
+            }
+            break; // "Completion/MinWordLen",
+            case 35:
+            {
+                sal_Int32 nVal = 0; aValues[nProp] >>= nVal;
+                rSwFlags.nAutoCmpltListLen =
+                    sal::static_int_cast< sal_uInt32 >(nVal);
+            }
+            break; // "Completion/MaxListLen",
+            case 36: rSwFlags.bAutoCmpltCollectWords = (aValues[nProp] == true); break; // "Completion/CollectWords",
+            case 37: rSwFlags.bAutoCmpltEndless = (aValues[nProp] == true); break; // "Completion/EndlessList",
+            case 38: rSwFlags.bAutoCmpltAppendBlank = (aValues[nProp] == true); break; // "Completion/AppendBlank",
+            case 39: rSwFlags.bAutoCmpltShowAsTip = (aValues[nProp] == true); break; // "Completion/ShowAsTip",
+            case 40:
+            {
+                sal_Int32 nVal = 0; aValues[nProp] >>= nVal;
+                rSwFlags.nAutoCmpltExpandKey =
+                    sal::static_int_cast< sal_uInt16 >(nVal);
+            }
+            break; // "Completion/AcceptKey"
+            case 41: rSwFlags.bAutoCmpltKeepList = (aValues[nProp] == true); break;//"Completion/KeepList"
+            case 42:
+            {
+                sal_Int32 nVal = 0; aValues[nProp] >>= nVal;
+                rSwFlags.cByInputBullet =
+                    sal::static_int_cast< sal_Unicode >(nVal);
+            }
+            break;// "Format/ByInput/ApplyNumbering/SpecialCharacter/Char",
+            case 43:
+            {
+                OUString sTemp; aValues[nProp] >>= sTemp;
+                rSwFlags.aByInputBulletFont.SetFamilyName(sTemp);
+            }
+            break;// "Format/ByInput/ApplyNumbering/SpecialCharacter/Font",
+            case 44:
+            {
+                sal_Int32 nVal = 0; aValues[nProp] >>= nVal;
+                rSwFlags.aByInputBulletFont.SetFamily(FontFamily(nVal));
+            }
+            break;// "Format/ByInput/ApplyNumbering/SpecialCharacter/FontFamily",
+            case 45:
+            {
+                sal_Int32 nVal = 0; aValues[nProp] >>= nVal;
+                rSwFlags.aByInputBulletFont.SetCharSet(rtl_TextEncoding(nVal));
+            }
+            break;// "Format/ByInput/ApplyNumbering/SpecialCharacter/FontCharset",
+            case 46:
+            {
+                sal_Int32 nVal = 0; aValues[nProp] >>= nVal;
+                rSwFlags.aByInputBulletFont.SetPitch(FontPitch(nVal));
+            }
+            break;// "Format/ByInput/ApplyNumbering/SpecialCharacter/FontPitch",
+            case 47: rSwFlags.bSetDOIAttr = (aValues[nProp] == true); break; // "Format/Option/SetDOIAttribute",
+            case 48: rSwFlags.bSetNumRuleAfterSpace = (aValues[nProp] == true); break; // "Format/ByInput/ApplyNumberingAfterSpace",
+            case 49: rSwFlags.bReplaceStyles = (aValues[nProp] == true); break; // "Format/Option/ReplaceStyle",
+        }
+    }
+}
+
+SvxSwAutoCorrCfg::SvxSwAutoCorrCfg(SvxAutoCorrCfg& rPar) :
+    utl::ConfigItem(u"Office.Writer/AutoFunction"_ustr),
+    rParent(rPar)
+{
+}
+
+SvxSwAutoCorrCfg::~SvxSwAutoCorrCfg()
+{
+}
+
+void SvxSwAutoCorrCfg::ImplCommit()
+{
+    SvxSwAutoFormatFlags& rSwFlags = rParent.pAutoCorrect->GetSwFlags();
+    PutProperties(
+        GetPropertyNames(),
+        {cpo::uno::Any(rParent.bFileRel), // "Text/FileLinks"
+         cpo::uno::Any(rParent.bNetRel), // "Text/InternetLinks"
+         cpo::uno::Any(rParent.bAutoTextPreview), // "Text/ShowPreview"
+         cpo::uno::Any(rParent.bAutoTextTip), // "Text/ShowToolTip"
+         cpo::uno::Any(rParent.bSearchInAllCategories),
+            // "Text/SearchInAllCategories"
+         cpo::uno::Any(rSwFlags.bAutoCorrect),
+            // "Format/Option/UseReplacementTable"
+         cpo::uno::Any(rSwFlags.bCapitalStartSentence),
+            // "Format/Option/TwoCapitalsAtStart"
+         cpo::uno::Any(rSwFlags.bCapitalStartWord),
+            // "Format/Option/CapitalAtStartSentence"
+         cpo::uno::Any(rSwFlags.bChgWeightUnderl),
+            // "Format/Option/ChangeUnderlineWeight"
+         cpo::uno::Any(rSwFlags.bSetINetAttr),
+            // "Format/Option/SetInetAttribute"
+         cpo::uno::Any(rSwFlags.bChgOrdinalNumber),
+            // "Format/Option/ChangeOrdinalNumber"
+         cpo::uno::Any(rSwFlags.bAddNonBrkSpace),
+            // "Format/Option/AddNonBreakingSpace"
+         cpo::uno::Any(true),
+            // "Format/Option/ChangeDash"; it doesn't exist here - the common
+            // flags are used for that -> LM
+         cpo::uno::Any(rSwFlags.bDelEmptyNode),
+            // "Format/Option/DelEmptyParagraphs"
+         cpo::uno::Any(rSwFlags.bChgUserColl),
+            // "Format/Option/ReplaceUserStyle"
+         cpo::uno::Any(rSwFlags.bChgEnumNum),
+            // "Format/Option/ChangeToBullets/Enable"
+         cpo::uno::Any(sal_Int32(rSwFlags.cBullet)),
+            // "Format/Option/ChangeToBullets/SpecialCharacter/Char"
+         cpo::uno::Any(rSwFlags.aBulletFont.GetFamilyName()),
+            // "Format/Option/ChangeToBullets/SpecialCharacter/Font"
+         cpo::uno::Any(sal_Int32(rSwFlags.aBulletFont.GetFamilyTypeMaybeAskConfig())),
+            // "Format/Option/ChangeToBullets/SpecialCharacter/FontFamily"
+         cpo::uno::Any(sal_Int32(rSwFlags.aBulletFont.GetCharSet())),
+            // "Format/Option/ChangeToBullets/SpecialCharacter/FontCharset"
+         cpo::uno::Any(sal_Int32(rSwFlags.aBulletFont.GetPitchMaybeAskConfig())),
+            // "Format/Option/ChangeToBullets/SpecialCharacter/FontPitch"
+         cpo::uno::Any(rSwFlags.bRightMargin),
+            // "Format/Option/CombineParagraphs"
+         cpo::uno::Any(sal_Int32(rSwFlags.nRightMargin)),
+            // "Format/Option/CombineValue"
+         cpo::uno::Any(rSwFlags.bAFormatDelSpacesAtSttEnd),
+            // "Format/Option/DelSpacesAtStartEnd"
+         cpo::uno::Any(rSwFlags.bAFormatDelSpacesBetweenLines),
+            // "Format/Option/DelSpacesBetween"
+         cpo::uno::Any(rParent.bAutoFmtByInput), // "Format/ByInput/Enable"
+         cpo::uno::Any(rSwFlags.bChgToEnEmDash), // "Format/ByInput/ChangeDash"
+         cpo::uno::Any(rSwFlags.bSetNumRule),
+            // "Format/ByInput/ApplyNumbering/Enable"
+         cpo::uno::Any(rSwFlags.bSetBorder), // "Format/ByInput/ChangeToBorders"
+         cpo::uno::Any(rSwFlags.bCreateTable), // "Format/ByInput/ChangeToTable"
+         cpo::uno::Any(rSwFlags.bReplaceStylesByInput),
+            // "Format/ByInput/ReplaceStyle"
+         cpo::uno::Any(rSwFlags.bAFormatByInpDelSpacesAtSttEnd),
+            // "Format/ByInput/DelSpacesAtStartEnd"
+         cpo::uno::Any(rSwFlags.bAFormatByInpDelSpacesBetweenLines),
+            // "Format/ByInput/DelSpacesBetween"
+         cpo::uno::Any(rSwFlags.bAutoCompleteWords), // "Completion/Enable"
+         cpo::uno::Any(sal_Int32(rSwFlags.nAutoCmpltWordLen)),
+            // "Completion/MinWordLen"
+         cpo::uno::Any(sal_Int32(rSwFlags.nAutoCmpltListLen)),
+            // "Completion/MaxListLen"
+         cpo::uno::Any(rSwFlags.bAutoCmpltCollectWords),
+            // "Completion/CollectWords"
+         cpo::uno::Any(rSwFlags.bAutoCmpltEndless), // "Completion/EndlessList"
+         cpo::uno::Any(rSwFlags.bAutoCmpltAppendBlank),
+            // "Completion/AppendBlank"
+         cpo::uno::Any(rSwFlags.bAutoCmpltShowAsTip), // "Completion/ShowAsTip"
+         cpo::uno::Any(sal_Int32(rSwFlags.nAutoCmpltExpandKey)),
+            // "Completion/AcceptKey"
+         cpo::uno::Any(rSwFlags.bAutoCmpltKeepList), // "Completion/KeepList"
+         cpo::uno::Any(sal_Int32(rSwFlags.cByInputBullet)),
+            // "Format/ByInput/ApplyNumbering/SpecialCharacter/Char"
+         cpo::uno::Any(rSwFlags.aByInputBulletFont.GetFamilyName()),
+            // "Format/ByInput/ApplyNumbering/SpecialCharacter/Font"
+         cpo::uno::Any(sal_Int32(rSwFlags.aByInputBulletFont.GetFamilyTypeMaybeAskConfig())),
+            // "Format/ByInput/ApplyNumbering/SpecialCharacter/FontFamily"
+         cpo::uno::Any(sal_Int32(rSwFlags.aByInputBulletFont.GetCharSet())),
+            // "Format/ByInput/ApplyNumbering/SpecialCharacter/FontCharset"
+         cpo::uno::Any(sal_Int32(rSwFlags.aByInputBulletFont.GetPitchMaybeAskConfig())),
+            // "Format/ByInput/ApplyNumbering/SpecialCharacter/FontPitch"
+         cpo::uno::Any(rSwFlags.bSetDOIAttr),
+         cpo::uno::Any(rSwFlags.bSetNumRuleAfterSpace), // "Format/ByInput/ApplyNumberingAfterSpace"
+         cpo::uno::Any(rSwFlags.bReplaceStyles), // "Format/Option/ReplaceStyle"
+        });
+            // "Format/Option/SetDOIAttribute"
+}
+
+void SvxSwAutoCorrCfg::Notify( const Sequence<OUString>& /* aPropertyNames */ )
+{
+    Load(false);
+}
+
+SvxAutoCorrCfg& SvxAutoCorrCfg::Get()
+{
+    static SvxAutoCorrCfg theSvxAutoCorrCfg;
+    return theSvxAutoCorrCfg;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

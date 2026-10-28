@@ -1,0 +1,449 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <string_view>
+
+#include "wizardshell.hxx"
+
+#include <com/sun/star/container/NoSuchElementException.hpp>
+#include <com/sun/star/beans/XPropertySetInfo.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <com/sun/star/ucb/AlreadyInitializedException.hpp>
+#include <com/sun/star/ui/dialogs/XWizard.hpp>
+#include <com/sun/star/ui/dialogs/XWizardController.hpp>
+#include <com/sun/star/ui/dialogs/WizardButton.hpp>
+#include <com/sun/star/util/InvalidStateException.hpp>
+
+#include <comphelper/proparrhlp.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <svtools/genericunodialog.hxx>
+#include <comphelper/diagnose_ex.hxx>
+#include <osl/mutex.hxx>
+#include <vcl/svapp.hxx>
+#include <tools/urlobj.hxx>
+
+using namespace ::com::sun::star;
+using namespace ::svt::uno;
+
+namespace {
+
+    using cpo::uno::Reference;
+    using cpo::uno::XInterface;
+    using cpo::uno::UNO_QUERY;
+    using cpo::uno::Any;
+    using cpo::uno::Sequence;
+    using css::ui::dialogs::XWizard;
+    using css::beans::XPropertySetInfo;
+    using cpo::uno::XComponentContext;
+    using css::beans::Property;
+    using css::lang::IllegalArgumentException;
+    using css::ucb::AlreadyInitializedException;
+    using css::ui::dialogs::XWizardController;
+    using css::ui::dialogs::XWizardPage;
+    using css::container::NoSuchElementException;
+    using css::util::InvalidStateException;
+    using css::awt::XWindow;
+
+    namespace WizardButton = css::ui::dialogs::WizardButton;
+
+    WizardButtonFlags lcl_convertWizardButtonToWZB( const sal_Int16 i_nWizardButton )
+    {
+        switch ( i_nWizardButton )
+        {
+        case WizardButton::NONE:        return WizardButtonFlags::NONE;
+        case WizardButton::NEXT:        return WizardButtonFlags::NEXT;
+        case WizardButton::PREVIOUS:    return WizardButtonFlags::PREVIOUS;
+        case WizardButton::FINISH:      return WizardButtonFlags::FINISH;
+        case WizardButton::CANCEL:      return WizardButtonFlags::CANCEL;
+        case WizardButton::HELP:        return WizardButtonFlags::HELP;
+        }
+        OSL_FAIL( "lcl_convertWizardButtonToWZB: invalid WizardButton constant!" );
+        return WizardButtonFlags::NONE;
+    }
+
+    typedef ::cppu::ImplInheritanceHelper  <   ::svt::OGenericUnoDialog
+                                            ,   ui::dialogs::XWizard
+                                            >   Wizard_Base;
+    class Wizard;
+    typedef ::comphelper::OPropertyArrayUsageHelper< Wizard >  Wizard_PBase;
+    class Wizard    : public Wizard_Base
+                    , public Wizard_PBase
+    {
+    public:
+        explicit Wizard( const cpo::uno::Reference< cpo::uno::XComponentContext >& i_rContext );
+
+        // lang::XServiceInfo
+        virtual OUString getImplementationName() override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+        // beans::XPropertySet
+        virtual cpo::uno::Reference< beans::XPropertySetInfo >  getPropertySetInfo() override;
+        virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
+
+        // OPropertyArrayUsageHelper
+        virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
+
+        // ui::dialogs::XWizard
+        virtual OUString getHelpURL() override;
+        virtual void setHelpURL( const OUString& _helpurl ) override;
+        virtual cpo::uno::Reference< awt::XWindow > getDialogWindow() override;
+        virtual cpo::uno::Reference< ui::dialogs::XWizardPage > getCurrentPage(  ) override;
+        virtual void enableButton( ::sal_Int16 WizardButton, bool Enable ) override;
+        virtual void setDefaultButton( ::sal_Int16 WizardButton ) override;
+        virtual bool travelNext(  ) override;
+        virtual bool travelPrevious(  ) override;
+        virtual void enablePage( ::sal_Int16 PageID, bool Enable ) override;
+        virtual void updateTravelUI(  ) override;
+        virtual bool advanceTo( ::sal_Int16 PageId ) override;
+        virtual bool goBackTo( ::sal_Int16 PageId ) override;
+        virtual void activatePath( ::sal_Int16 PathIndex, bool Final ) override;
+
+        // ui::dialogs::XExecutableDialog
+        virtual void setTitle( const OUString& aTitle ) override;
+        virtual ::sal_Int16 execute(  ) override;
+
+        // lang::XInitialization
+        virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+   protected:
+        virtual ~Wizard() override;
+
+    protected:
+        virtual std::unique_ptr<weld::DialogController> createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent) override;
+
+    private:
+        cpo::uno::Sequence< cpo::uno::Sequence< sal_Int16 > >         m_aWizardSteps;
+        cpo::uno::Reference< ui::dialogs::XWizardController >    m_xController;
+        OUString                                            m_sHelpURL;
+    };
+
+    Wizard::Wizard( const Reference< XComponentContext >& _rxContext )
+        :Wizard_Base( _rxContext )
+    {
+    }
+
+    OUString lcl_getHelpURL( std::u16string_view sHelpId )
+    {
+        OUStringBuffer aBuffer;
+        INetURLObject aHID(sHelpId);
+        if ( aHID.GetProtocol() == INetProtocol::NotValid )
+            aBuffer.append( INET_HID_SCHEME );
+        aBuffer.append(sHelpId);
+        return aBuffer.makeStringAndClear();
+    }
+
+    Wizard::~Wizard()
+    {
+        if (m_xDialog)
+        {
+            ::osl::MutexGuard aGuard( m_aMutex );
+            if (m_xDialog)
+            {
+                m_sHelpURL = lcl_getHelpURL(m_xDialog->get_help_id());
+                destroyDialog();
+            }
+        }
+    }
+
+    void lcl_checkPaths( const Sequence< Sequence< sal_Int16 > >& i_rPaths, const Reference< XInterface >& i_rContext )
+    {
+        // need at least one path
+        if ( !i_rPaths.hasElements() )
+            throw IllegalArgumentException( OUString(), i_rContext, 2 );
+
+        // each path must be of length 1, at least
+        sal_Int32 i = 0;
+        for ( const Sequence< sal_Int16 >& rPath : i_rPaths )
+        {
+            if ( !rPath.hasElements() )
+                throw IllegalArgumentException( OUString(), i_rContext, 2 );
+
+            // page IDs must be in ascending order
+            auto pPageId = std::adjacent_find(rPath.begin(), rPath.end(), std::greater_equal<sal_Int16>());
+            if (pPageId != rPath.end())
+            {
+                throw IllegalArgumentException(
+                    "Path " + OUString::number(i)
+                    + ": invalid page ID sequence - each page ID must be greater than the previous one.",
+                    i_rContext, 2 );
+            }
+            ++i;
+        }
+
+        // if we have one path, that's okay
+        if ( i_rPaths.getLength() == 1 )
+            return;
+
+        // if we have multiple paths, they must start with the same page id
+        const sal_Int16 nFirstPageId = i_rPaths[0][0];
+        if (std::any_of(i_rPaths.begin(), i_rPaths.end(),
+                [nFirstPageId](const Sequence< sal_Int16 >& rPath) { return rPath[0] != nFirstPageId; }))
+            throw IllegalArgumentException(
+                u"All paths must start with the same page id."_ustr,
+                i_rContext, 2 );
+    }
+
+    void Wizard::initialize( const Sequence< Any >& i_Arguments )
+    {
+        ::osl::MutexGuard aGuard( m_aMutex );
+        if ( m_bInitialized )
+            throw AlreadyInitializedException( OUString(), *this );
+
+        if ( i_Arguments.getLength() != 2 )
+            throw IllegalArgumentException( OUString(), *this, -1 );
+
+        // the second argument must be a XWizardController, for each constructor
+        m_xController.set( i_Arguments[1], UNO_QUERY );
+        if ( !m_xController.is() )
+            throw IllegalArgumentException( OUString(), *this, 2 );
+
+        // the first arg is either a single path (short[]), or multiple paths (short[][])
+        Sequence< sal_Int16 > aSinglePath;
+        i_Arguments[0] >>= aSinglePath;
+        Sequence< Sequence< sal_Int16 > > aMultiplePaths;
+        i_Arguments[0] >>= aMultiplePaths;
+
+        if ( !aMultiplePaths.hasElements() )
+        {
+            aMultiplePaths = { aSinglePath };
+        }
+        lcl_checkPaths( aMultiplePaths, *this );
+        // if we survived this, the paths are valid, and we're done here ...
+        m_aWizardSteps = std::move(aMultiplePaths);
+
+        m_bInitialized = true;
+    }
+
+    OUString lcl_getHelpId( const OUString& _rHelpURL )
+    {
+        INetURLObject aHID( _rHelpURL );
+        if ( aHID.GetProtocol() == INetProtocol::Hid )
+            return aHID.GetURLPath();
+        else
+            return _rHelpURL;
+    }
+
+    std::unique_ptr<weld::DialogController> Wizard::createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent)
+    {
+        auto xDialog = std::make_unique<WizardShell>(Application::GetFrameWeld(rParent), m_xController, m_aWizardSteps);
+        xDialog->set_help_id(lcl_getHelpId(m_sHelpURL));
+        xDialog->setTitleBase( m_sTitle );
+        return xDialog;
+    }
+
+    OUString Wizard::getImplementationName()
+    {
+        return u"com.sun.star.comp.svtools.uno.Wizard"_ustr;
+    }
+
+    Sequence< OUString > Wizard::getSupportedServiceNames()
+    {
+        return { u"com.sun.star.ui.dialogs.Wizard"_ustr };
+    }
+
+    Reference< XPropertySetInfo > Wizard::getPropertySetInfo()
+    {
+        return createPropertySetInfo( getInfoHelper() );
+    }
+
+    ::cppu::IPropertyArrayHelper& Wizard::getInfoHelper()
+    {
+        return *getArrayHelper();
+    }
+
+    ::cppu::IPropertyArrayHelper* Wizard::createArrayHelper( ) const
+    {
+        Sequence< Property > aProps;
+        describeProperties( aProps );
+        return new ::cppu::OPropertyArrayHelper( aProps );
+    }
+
+    OUString Wizard::getHelpURL()
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        if (!m_xDialog)
+            return m_sHelpURL;
+
+        return lcl_getHelpURL(m_xDialog->get_help_id());
+    }
+
+    void Wizard::setHelpURL( const OUString& i_HelpURL )
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        if (!m_xDialog)
+            m_sHelpURL = i_HelpURL;
+        else
+            m_xDialog->set_help_id(lcl_getHelpId(i_HelpURL));
+    }
+
+    Reference< XWindow > Wizard::getDialogWindow()
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        ENSURE_OR_RETURN( m_xDialog, "Wizard::getDialogWindow: illegal call (execution did not start, yet)!", nullptr );
+        return m_xDialog->getDialog()->GetXWindow();
+    }
+
+    void Wizard::enableButton( ::sal_Int16 i_WizardButton, bool i_Enable )
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        WizardShell* pWizardImpl = dynamic_cast<WizardShell*>(m_xDialog.get());
+        ENSURE_OR_RETURN_VOID( pWizardImpl, "Wizard::enableButtons: invalid dialog implementation!" );
+
+        pWizardImpl->enableButtons( lcl_convertWizardButtonToWZB( i_WizardButton ), i_Enable );
+    }
+
+    void Wizard::setDefaultButton( ::sal_Int16 i_WizardButton )
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        WizardShell* pWizardImpl = dynamic_cast<WizardShell*>(m_xDialog.get());
+        ENSURE_OR_RETURN_VOID( pWizardImpl, "Wizard::setDefaultButton: invalid dialog implementation!" );
+
+        pWizardImpl->defaultButton( lcl_convertWizardButtonToWZB( i_WizardButton ) );
+    }
+
+    bool Wizard::travelNext(  )
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        WizardShell* pWizardImpl = dynamic_cast<WizardShell*>(m_xDialog.get());
+        ENSURE_OR_RETURN_FALSE( pWizardImpl, "Wizard::travelNext: invalid dialog implementation!" );
+
+        return pWizardImpl->travelNext();
+    }
+
+    bool Wizard::travelPrevious(  )
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        WizardShell* pWizardImpl = dynamic_cast<WizardShell*>(m_xDialog.get());
+        ENSURE_OR_RETURN_FALSE( pWizardImpl, "Wizard::travelPrevious: invalid dialog implementation!" );
+
+        return pWizardImpl->travelPrevious();
+    }
+
+    void Wizard::enablePage( ::sal_Int16 i_PageID, bool i_Enable )
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        WizardShell* pWizardImpl = dynamic_cast<WizardShell*>(m_xDialog.get());
+        ENSURE_OR_RETURN_VOID( pWizardImpl, "Wizard::enablePage: invalid dialog implementation!" );
+
+        if ( !pWizardImpl->knowsPage( i_PageID ) )
+            throw NoSuchElementException( OUString(), *this );
+
+        if ( i_PageID == pWizardImpl->getCurrentPage() )
+            throw InvalidStateException( OUString(), *this );
+
+        pWizardImpl->enablePage( i_PageID, i_Enable );
+    }
+
+    void Wizard::updateTravelUI(  )
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        WizardShell* pWizardImpl = dynamic_cast<WizardShell*>(m_xDialog.get());
+        ENSURE_OR_RETURN_VOID( pWizardImpl, "Wizard::updateTravelUI: invalid dialog implementation!" );
+
+        pWizardImpl->updateTravelUI();
+    }
+
+    bool Wizard::advanceTo( ::sal_Int16 i_PageId )
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        WizardShell* pWizardImpl = dynamic_cast<WizardShell*>(m_xDialog.get());
+        ENSURE_OR_RETURN_FALSE( pWizardImpl, "Wizard::advanceTo: invalid dialog implementation!" );
+
+        return pWizardImpl->advanceTo( i_PageId );
+    }
+
+    bool Wizard::goBackTo( ::sal_Int16 i_PageId )
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        WizardShell* pWizardImpl = dynamic_cast<WizardShell*>(m_xDialog.get());
+        ENSURE_OR_RETURN_FALSE( pWizardImpl, "Wizard::goBackTo: invalid dialog implementation!" );
+
+        return pWizardImpl->goBackTo( i_PageId );
+    }
+
+    Reference< XWizardPage > Wizard::getCurrentPage(  )
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        WizardShell* pWizardImpl = dynamic_cast<WizardShell*>(m_xDialog.get());
+        ENSURE_OR_RETURN( pWizardImpl, "Wizard::getCurrentPage: invalid dialog implementation!", Reference< XWizardPage >() );
+
+        return pWizardImpl->getCurrentWizardPage();
+    }
+
+    void Wizard::activatePath( ::sal_Int16 i_PathIndex, bool i_Final )
+    {
+        SolarMutexGuard aSolarGuard;
+        ::osl::MutexGuard aGuard( m_aMutex );
+
+        if ( ( i_PathIndex < 0 ) || ( i_PathIndex >= m_aWizardSteps.getLength() ) )
+            throw NoSuchElementException( OUString(), *this );
+
+        WizardShell* pWizardImpl = dynamic_cast<WizardShell*>(m_xDialog.get());
+        ENSURE_OR_RETURN_VOID( pWizardImpl, "Wizard::activatePath: invalid dialog implementation!" );
+
+        pWizardImpl->activatePath( i_PathIndex, i_Final );
+    }
+
+    void Wizard::setTitle( const OUString& i_Title )
+    {
+        // simply disambiguate
+        Wizard_Base::OGenericUnoDialog::setTitle( i_Title );
+    }
+
+    ::sal_Int16 Wizard::execute(  )
+    {
+        return Wizard_Base::OGenericUnoDialog::execute();
+    }
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_svtools_uno_Wizard_get_implementation(
+    cpo::uno::XComponentContext *context,
+    cpo::uno::Sequence<cpo::uno::Any> const &)
+{
+    return cppu::acquire(new Wizard(context));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

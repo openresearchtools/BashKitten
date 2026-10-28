@@ -1,0 +1,1066 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Unit test for stress testing document saving under heavy load.
+ */
+
+#include <config.h>
+
+#include <test/UnitWSDClient.hpp>
+#include <Unit.hpp>
+#include <common/Util.hpp>
+#include <common/JsonUtil.hpp>
+#include <common/FileUtil.hpp>
+#include <common/Log.hpp>
+#include <JailUtil.hpp>
+#include <helpers.hpp>
+#include <common/StringVector.hpp>
+#include <WebSocketSession.hpp>
+#include <unistd.h>
+#include <wsd/COOLWSD.hpp>
+#include <wsd/DocumentBroker.hpp>
+#include <test/lokassert.hpp>
+#include <Poco/Util/LayeredConfiguration.h>
+
+#include <chrono>
+#include <string>
+#include <thread>
+
+using namespace std::literals;
+
+constexpr auto StampFileCheckPeriodMs = 100ms;
+
+/// Base class for Save Torture test cases.
+class UnitSaveTortureBase : public UnitWSDClient
+{
+    bool _forceAutosave;
+
+protected:
+    UnitSaveTortureBase(const std::string& name)
+        : UnitWSDClient(name)
+        , _forceAutosave(false)
+    {
+        setHasKitHooks();
+        // 4x the default.
+        constexpr std::chrono::minutes timeout_minutes(2);
+        setTimeout(timeout_minutes);
+    }
+
+    void modifyDocument()
+    {
+        TST_LOG("Modifying");
+
+        // move to another cell?
+        WSD_CMD("key type=input char=13 key=1280");
+        WSD_CMD("key type=up char=0 key=1280");
+        // enter - some text.
+        WSD_CMD("textinput id=0 text=foo");
+        // enter - commit to a cell in calc eg.
+        WSD_CMD("key type=input char=13 key=1280");
+        WSD_CMD("key type=up char=0 key=1280");
+    }
+
+    std::string getJailRootPath(const std::string& name)
+    {
+        return FileUtil::buildLocalPathToJail(JailUtil::isMountNamespacesEnabled(), getJailRoot(),
+                                              "/tmp/" + name);
+    }
+
+    void createStamp(const std::string& name)
+    {
+        const auto path = getJailRootPath(name);
+        TST_LOG("create stamp " << name << ": " << path);
+        std::ofstream stamp(path);
+        stamp.close();
+    }
+
+    void removeStamp(const std::string& name)
+    {
+        FileUtil::removeFile(getJailRootPath(name));
+        TST_LOG("removed stamp " << name);
+    }
+
+    // Force background autosave when saving the modified document
+    bool isAutosave() override { return _forceAutosave; }
+    void forceAutosave() { _forceAutosave = true; }
+
+    void configure(Poco::Util::LayeredConfiguration& config) override
+    {
+        UnitWSD::configure(config);
+
+        // Force much faster auto-saving
+        config.setBool("per_document.background_autosave", true);
+
+        // Set the timed idle and auto save to their defaults so every test
+        // starts from the same base regardless of the loaded config; an
+        // individual test may override these.
+        config.setInt("per_document.idlesave_duration_secs", 30);
+        config.setInt("per_document.autosave_duration_secs", 300);
+    }
+};
+
+class UnitModified : public UnitSaveTortureBase
+{
+    STATE_ENUM(Phase, Load, WaitLoadStatus, WaitModifiedStatus) _phase;
+    int _modifyCycleCount; ///< Number of times to modify.
+
+public:
+    UnitModified()
+        : UnitSaveTortureBase("UnitModified")
+        , _phase(Phase::Load)
+        , _modifyCycleCount(4)
+    {
+    }
+
+    /// The document is loaded.
+    bool onDocumentLoaded(const std::string& message) override
+    {
+        TST_LOG("Got: [" << message << ']');
+        LOK_ASSERT_STATE(_phase, Phase::WaitLoadStatus);
+
+        TRANSITION_STATE(_phase, Phase::WaitModifiedStatus);
+
+        modifyDocument();
+
+        return true;
+    }
+
+    bool onDocumentModified(const std::string& message) override
+    {
+        TST_LOG("Got: [" << message << ']');
+        LOK_ASSERT_STATE(_phase, Phase::WaitModifiedStatus);
+
+        if (--_modifyCycleCount == 0)
+        {
+            passTest("Force-modified successfully multiple times");
+        }
+        else
+        {
+            // It is vital that we can change the modified status successfully
+            // and also get correct notifications from the core for bgsave to work.
+            const std::string args =
+                "{ \"Modified\": { \"type\": \"boolean\", \"value\": \"false\" } }";
+            TST_LOG("post force modified command: .uno:Modified " << args);
+            WSD_CMD("uno .uno:Modified " + args);
+
+            modifyDocument();
+        }
+
+        return true;
+    }
+
+    void invokeWSDTest() override
+    {
+        switch (_phase)
+        {
+            case Phase::Load:
+            {
+                TRANSITION_STATE(_phase, Phase::WaitLoadStatus);
+
+                const std::string docName = "empty.ods";
+                TST_LOG("Loading document: " << docName);
+                connectAndLoadLocalDocument(docName);
+                break;
+            }
+            case Phase::WaitLoadStatus:
+            case Phase::WaitModifiedStatus:
+            {
+                // just wait for the results
+                break;
+            }
+        }
+    }
+};
+
+class UnitTileCombineRace : public UnitSaveTortureBase
+{
+    STATE_ENUM(Phase, Load, WaitLoadStatus, WaitDocClose) _phase;
+
+public:
+    UnitTileCombineRace()
+        : UnitSaveTortureBase("UnitTileCombineRace")
+        , _phase(Phase::Load)
+    {
+    }
+
+    /// The document is loaded.
+    bool onDocumentLoaded(const std::string& message) override
+    {
+        TST_LOG("Got: [" << message << ']');
+        LOK_ASSERT_STATE(_phase, Phase::WaitLoadStatus);
+
+        TRANSITION_STATE(_phase, Phase::WaitDocClose);
+
+        modifyDocument();
+
+        // We need the tilecombine and save in the same drainQueue in this order:
+        createStamp("holddrainqueue");
+
+        WSD_CMD("tilecombine nviewid=0 part=0 width=256 height=256 tileposx=0,3840,7680 "
+                "tileposy=0,0,0 tilewidth=3840 tileheight=3840");
+
+        // Force a background save-as-auto-save now.
+        forceAutosave();
+        WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0");
+
+        removeStamp("holddrainqueue");
+
+        return true;
+    }
+
+    bool onDocumentSaved(const std::string& message, bool success,
+                         [[maybe_unused]] const std::string& result) override
+    {
+        TST_LOG("Save result: " << message);
+
+        // Check the save succeeded & kit didn't crash.
+        LOK_ASSERT_MESSAGE("Expected save to succeed", success);
+
+        exitTest(success ? TestResult::Ok : TestResult::Failed);
+
+        return true;
+    }
+
+    void invokeWSDTest() override
+    {
+        switch (_phase)
+        {
+            case Phase::Load:
+            {
+                TRANSITION_STATE(_phase, Phase::WaitLoadStatus);
+
+                const std::string docName = "empty.ods";
+                TST_LOG("Loading document: " << docName);
+                connectAndLoadLocalDocument(docName);
+                break;
+            }
+            case Phase::WaitLoadStatus:
+            case Phase::WaitDocClose:
+            {
+                // just wait for the results
+                break;
+            }
+        }
+    }
+};
+
+class UnitBgSaveCrash : public UnitSaveTortureBase
+{
+    STATE_ENUM(Phase, Load, WaitLoadStatus, WaitModifiedStatus, WaitDocClose) _phase;
+    STATE_ENUM(Case, Background, Foreground) _case;
+
+public:
+    UnitBgSaveCrash()
+        : UnitSaveTortureBase("UnitBgSaveCrash")
+        , _phase(Phase::Load)
+        , _case(Case::Background)
+    {
+    }
+
+    /// The document is loaded.
+    bool onDocumentLoaded(const std::string& message) override
+    {
+        TST_LOG("Got: [" << message << ']');
+        LOK_ASSERT_STATE(_phase, Phase::WaitLoadStatus);
+
+        TRANSITION_STATE(_phase, Phase::WaitModifiedStatus);
+
+        modifyDocument();
+
+        return true;
+    }
+
+    bool onDocumentModified(const std::string& message) override
+    {
+        TST_LOG("Got: [" << message << ']');
+
+        // When the BG save fails, we get the unmodified state again.
+        if (_case == Case::Background)
+        {
+            LOK_ASSERT_STATE(_phase, Phase::WaitModifiedStatus);
+            TRANSITION_STATE(_phase, Phase::WaitDocClose);
+        }
+        else
+        {
+            LOK_ASSERT_STATE(_phase, Phase::WaitDocClose);
+        }
+
+        createStamp("crashkitonsave");
+
+        forceAutosave();
+
+        // force a crashing save ...
+        TST_LOG("Sending save request");
+        WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0");
+
+        return true;
+    }
+
+    bool onDocumentSaved(const std::string& message, bool success,
+                         const std::string& result) override
+    {
+        TST_LOG("Save result: " << result);
+        switch (_case)
+        {
+            case Case::Background:
+                if (success)
+                {
+                    TST_LOG("Document failed to save");
+                    failTest("Failed to save the document (Core is out-of-date or it has a "
+                             "regression: " +
+                             message);
+                }
+                else
+                {
+                    TST_LOG("Background save exited early as expected");
+                    TRANSITION_STATE(_case, Case::Foreground);
+
+                    TST_LOG("Sending save request to verify that foreground-saving is now used");
+                    WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0");
+                }
+                break;
+            case Case::Foreground:
+                if (success)
+                {
+                    TST_LOG("(non)-background save succeeded on 2nd attempt");
+                    passTest("Saved using foreground succeeded");
+                }
+                else
+                {
+                    TST_LOG("Document failed to save");
+                    failTest("Failed to save the document (Core is out-of-date or it has a "
+                             "regression: " +
+                             message);
+                }
+                break;
+        }
+
+        return true;
+    }
+
+    void invokeWSDTest() override
+    {
+        switch (_phase)
+        {
+            case Phase::Load:
+            {
+                TRANSITION_STATE(_phase, Phase::WaitLoadStatus);
+
+                const std::string docName = "empty.ods";
+                TST_LOG("Loading document: " << docName);
+                connectAndLoadLocalDocument(docName);
+                break;
+            }
+            case Phase::WaitLoadStatus:
+            case Phase::WaitModifiedStatus:
+            case Phase::WaitDocClose:
+            {
+                // just wait for the results
+                break;
+            }
+        }
+    }
+};
+
+// A dialog closing while a background save runs must not abort the save.
+class UnitBgSaveDialogClose : public UnitSaveTortureBase
+{
+    STATE_ENUM(Phase, Load, WaitLoadStatus, WaitModifiedStatus, WaitSaveStatus) _phase;
+
+public:
+    UnitBgSaveDialogClose()
+        : UnitSaveTortureBase("UnitBgSaveDialogClose")
+        , _phase(Phase::Load)
+    {
+    }
+
+    bool onDocumentLoaded(const std::string& message) override
+    {
+        TST_LOG("Got: [" << message << ']');
+        LOK_ASSERT_STATE(_phase, Phase::WaitLoadStatus);
+
+        // Any foreground save from here on means bgsave was wrongly disabled.
+        createStamp("abortonsyncsave");
+
+        TRANSITION_STATE(_phase, Phase::WaitModifiedStatus);
+        modifyDocument();
+        return true;
+    }
+
+    bool onDocumentModified(const std::string& message) override
+    {
+        TST_LOG("Got: [" << message << ']');
+        LOK_ASSERT_STATE(_phase, Phase::WaitModifiedStatus);
+        TRANSITION_STATE(_phase, Phase::WaitSaveStatus);
+
+        // Make the bgsave child flush a closing dialog while it saves.
+        createStamp("flushdialogclose");
+
+        forceAutosave();
+        TST_LOG("Sending save request");
+        WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0");
+        return true;
+    }
+
+    bool onDocumentSaved(const std::string& message, bool success,
+                         const std::string& result) override
+    {
+        TST_LOG("Save result: " << result << " for " << message);
+        LOK_ASSERT_STATE(_phase, Phase::WaitSaveStatus);
+
+        LOK_ASSERT_MESSAGE("Background save must survive a closing dialog", success);
+        passTest("Background save survived an in-flight dialog close");
+        return true;
+    }
+
+    void invokeWSDTest() override
+    {
+        switch (_phase)
+        {
+            case Phase::Load:
+            {
+                TRANSITION_STATE(_phase, Phase::WaitLoadStatus);
+
+                const std::string docName = "empty.ods";
+                TST_LOG("Loading document: " << docName);
+                connectAndLoadLocalDocument(docName);
+                break;
+            }
+            case Phase::WaitLoadStatus:
+            case Phase::WaitModifiedStatus:
+            case Phase::WaitSaveStatus:
+                break;
+        }
+    }
+};
+
+// A save of a document with no changes is skipped by Core and answered with
+// success false and the result string "unmodified". Background saving stays
+// available after such an answer, so every later save still runs in the
+// background child. A foreground save here would block the whole document
+// behind a "Saving document" dialog on every later save.
+class UnitBgSaveUnmodified : public UnitSaveTortureBase
+{
+    STATE_ENUM(Phase, Load, WaitLoadStatus, WaitFirstModified, WaitFirstSave, WaitSkippedSave,
+               WaitSecondModified, WaitSecondSave)
+    _phase;
+
+public:
+    UnitBgSaveUnmodified()
+        : UnitSaveTortureBase("UnitBgSaveUnmodified")
+        , _phase(Phase::Load)
+    {
+    }
+
+    bool onDocumentLoaded(const std::string& message) override
+    {
+        TST_LOG("Got: [" << message << ']');
+        LOK_ASSERT_STATE(_phase, Phase::WaitLoadStatus);
+
+        // Any foreground save from here on means bgsave was wrongly disabled.
+        createStamp("abortonsyncsave");
+
+        forceAutosave();
+        TRANSITION_STATE(_phase, Phase::WaitFirstModified);
+        modifyDocument();
+        return true;
+    }
+
+    bool onDocumentSaved(const std::string& message, bool success,
+                         const std::string& result) override
+    {
+        TST_LOG("Save result: [" << result << "] for " << message);
+
+        switch (_phase)
+        {
+            case Phase::WaitFirstSave:
+                LOK_ASSERT_MESSAGE("The first save writes the document", success);
+                TRANSITION_STATE(_phase, Phase::WaitSkippedSave);
+                TST_LOG("Sending a save of the now unchanged document");
+                WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=1");
+                break;
+
+            case Phase::WaitSkippedSave:
+                LOK_ASSERT_MESSAGE("A skipped save reports no new version", !success);
+                LOK_ASSERT_EQUAL(std::string("unmodified"), result);
+                TRANSITION_STATE(_phase, Phase::WaitSecondModified);
+                TST_LOG("Typing again to make the document savable");
+                modifyDocument();
+                break;
+
+            case Phase::WaitSecondSave:
+                LOK_ASSERT_MESSAGE("The save after a skipped save writes the document", success);
+                passTest("Background saving survived a skipped save");
+                break;
+
+            default:
+                failTest("Unexpected save result in phase " + std::string(name(_phase)));
+                break;
+        }
+
+        return true;
+    }
+
+    bool onDocumentModified(const std::string& message) override
+    {
+        TST_LOG("Got: [" << message << ']');
+
+        // The first save has to start from a document Core already knows is modified. A save sent
+        // before the typed text arrives leaves the document modified once that save finishes, and
+        // the next save then writes a new version instead of being skipped.
+        if (_phase == Phase::WaitFirstModified)
+        {
+            TRANSITION_STATE(_phase, Phase::WaitFirstSave);
+            TST_LOG("Sending the first save, which writes the typed text");
+            WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0");
+        }
+        else if (_phase == Phase::WaitSecondModified)
+        {
+            TRANSITION_STATE(_phase, Phase::WaitSecondSave);
+            TST_LOG("Sending the save that must still run in the background");
+            WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0");
+        }
+
+        return true;
+    }
+
+    void invokeWSDTest() override
+    {
+        switch (_phase)
+        {
+            case Phase::Load:
+            {
+                TRANSITION_STATE(_phase, Phase::WaitLoadStatus);
+
+                const std::string docName = "empty.ods";
+                TST_LOG("Loading document: " << docName);
+                connectAndLoadLocalDocument(docName);
+                break;
+            }
+            case Phase::WaitLoadStatus:
+            case Phase::WaitFirstModified:
+            case Phase::WaitFirstSave:
+            case Phase::WaitSkippedSave:
+            case Phase::WaitSecondModified:
+            case Phase::WaitSecondSave:
+                break;
+        }
+    }
+};
+
+// The answer of a background save child reaches the client even when the child hangs up while
+// the parent Kit still has a ping waiting to go out to it. The Kit hook delays each ping from the
+// parent Kit, so the child answers and exits before that ping is written.
+class UnitBgSaveHangupWithPing : public UnitSaveTortureBase
+{
+    STATE_ENUM(Phase, Load, WaitLoadStatus, WaitSave, Done) _phase;
+
+    static constexpr int SaveCount = 40;
+    int _savesDone;
+
+    void sendSave()
+    {
+        TST_LOG("Sending unmodified save #" << (_savesDone + 1));
+        WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=1");
+    }
+
+public:
+    UnitBgSaveHangupWithPing()
+        : UnitSaveTortureBase("UnitBgSaveHangupWithPing")
+        , _phase(Phase::Load)
+        , _savesDone(0)
+    {
+    }
+
+    bool onDocumentLoaded(const std::string& message) override
+    {
+        TST_LOG("Got: [" << message << ']');
+        LOK_ASSERT_STATE(_phase, Phase::WaitLoadStatus);
+
+        createStamp("delaybgsaveping");
+
+        forceAutosave();
+        TRANSITION_STATE(_phase, Phase::WaitSave);
+        sendSave();
+        return true;
+    }
+
+    bool onDocumentSaved(const std::string& message, bool success,
+                         const std::string& result) override
+    {
+        TST_LOG("Save result: [" << result << "] for " << message);
+        LOK_ASSERT_STATE(_phase, Phase::WaitSave);
+
+        LOK_ASSERT_MESSAGE("An unmodified document is not written", !success);
+        LOK_ASSERT_EQUAL_MESSAGE("Save #" + std::to_string(_savesDone + 1) + " lost its answer",
+                                 std::string("unmodified"), result);
+
+        ++_savesDone;
+        if (_savesDone < SaveCount)
+        {
+            sendSave();
+            return true;
+        }
+
+        removeStamp("delaybgsaveping");
+        TRANSITION_STATE(_phase, Phase::Done);
+        passTest("Every background save answer arrived");
+        return true;
+    }
+
+    void invokeWSDTest() override
+    {
+        switch (_phase)
+        {
+            case Phase::Load:
+            {
+                TRANSITION_STATE(_phase, Phase::WaitLoadStatus);
+
+                const std::string docName = "empty.odt";
+                TST_LOG("Loading document: " << docName);
+                connectAndLoadLocalDocument(docName);
+                break;
+            }
+            case Phase::WaitLoadStatus:
+            case Phase::WaitSave:
+            case Phase::Done:
+                break;
+        }
+    }
+};
+
+// An interactive dialog appearing in the background save child aborts that
+// save without writing a new version. The server must fall back to an
+// ordinary foreground save, and upload that, rather than uploading whatever
+// the aborted background save left on disk. This reproduces the case where a
+// background save was torn down by an unexpected jsdialog and the server
+// uploaded a version it had not just saved causing conflict error.
+class UnitBgSaveDialogAbort : public UnitSaveTortureBase
+{
+    STATE_ENUM(Phase, Load, WaitLoadStatus, WaitModifiedStatus, WaitBgSaveFail,
+               WaitForegroundSave)
+    _phase;
+
+public:
+    UnitBgSaveDialogAbort()
+        : UnitSaveTortureBase("UnitBgSaveDialogAbort")
+        , _phase(Phase::Load)
+    {
+    }
+
+    void configure(Poco::Util::LayeredConfiguration& config) override
+    {
+        UnitSaveTortureBase::configure(config);
+
+        // Turn off the timed idle and auto save. The only foreground save that
+        // can then happen is the fallback the server issues after the
+        // background save is aborted.
+        config.setInt("per_document.idlesave_duration_secs", 0);
+        config.setInt("per_document.autosave_duration_secs", 0);
+    }
+
+    bool onDocumentLoaded(const std::string& message) override
+    {
+        TST_LOG("Got: [" << message << ']');
+        LOK_ASSERT_STATE(_phase, Phase::WaitLoadStatus);
+
+        TRANSITION_STATE(_phase, Phase::WaitModifiedStatus);
+        modifyDocument();
+        return true;
+    }
+
+    bool onDocumentModified(const std::string& message) override
+    {
+        TST_LOG("Got: [" << message << ']');
+
+        if (_phase != Phase::WaitModifiedStatus)
+            return true;
+
+        TRANSITION_STATE(_phase, Phase::WaitBgSaveFail);
+
+        // Make the bgsave child flush an opening dialog: an interactive prompt
+        // that aborts the background save.
+        createStamp("flushdialogopen");
+
+        forceAutosave();
+        TST_LOG("Sending save request");
+        WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0");
+        return true;
+    }
+
+    bool onDocumentSaved(const std::string& message, bool success,
+                         const std::string& result) override
+    {
+        TST_LOG("Save result: success=" << success << " result=[" << result << "] for " << message);
+
+        switch (_phase)
+        {
+            case Phase::WaitBgSaveFail:
+                // The aborted background save reports failure to the client.
+                LOK_ASSERT_MESSAGE("The interrupted background save must report failure", !success);
+                TRANSITION_STATE(_phase, Phase::WaitForegroundSave);
+
+                // The server must retry on its own, without the client asking,
+                // so stop injecting the dialog for that foreground retry.
+                removeStamp("flushdialogopen");
+                break;
+            case Phase::WaitForegroundSave:
+                // The server fell back to a foreground save without a new
+                // client request, and that save succeeds.
+                LOK_ASSERT_MESSAGE("The fallback foreground save must succeed", success);
+                passTest("Aborted background save fell back to a foreground save");
+                break;
+            default:
+                LOK_ASSERT_FAIL("Unexpected save result before a save was requested");
+                break;
+        }
+        return true;
+    }
+
+    void invokeWSDTest() override
+    {
+        switch (_phase)
+        {
+            case Phase::Load:
+            {
+                TRANSITION_STATE(_phase, Phase::WaitLoadStatus);
+
+                const std::string docName = "empty.ods";
+                TST_LOG("Loading document: " << docName);
+                connectAndLoadLocalDocument(docName);
+                break;
+            }
+            case Phase::WaitLoadStatus:
+            case Phase::WaitModifiedStatus:
+            case Phase::WaitBgSaveFail:
+            case Phase::WaitForegroundSave:
+                break;
+        }
+    }
+};
+
+class UnitSaveTortureOne : public UnitSaveTortureBase
+{
+    STATE_ENUM(Phase, Load, WaitLoadStatus, WaitFirstModifiedStatus, WaitAfterSaveModifiedStatus,
+               WaitSaveStatus, WaitUnmodifiedStatus)
+    _phase;
+
+    Util::Stopwatch _stopwatch;
+    const std::string _filename;
+    const bool _modifyFirst;
+    const bool _modifyAfterSaveStarts;
+
+    void saveAndModifyDocument()
+    {
+        TST_LOG("Hold saving");
+        createStamp("holdsave");
+
+        if (!_modifyAfterSaveStarts)
+        {
+            TRANSITION_STATE(_phase, Phase::WaitSaveStatus);
+        }
+
+        // Force a background save-as-auto-save now.
+        forceAutosave();
+        WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0");
+
+        if (_modifyAfterSaveStarts)
+        {
+            TST_LOG("Modify after saving starts");
+            TRANSITION_STATE(_phase, Phase::WaitAfterSaveModifiedStatus);
+            modifyDocument();
+            TST_LOG("Wait for modified status");
+        }
+        else
+        {
+            TST_LOG("Allow saving to continue");
+            removeStamp("holdsave");
+            TRANSITION_STATE(_phase, Phase::WaitSaveStatus);
+        }
+    }
+
+public:
+    UnitSaveTortureOne(std::string filename, bool modifyFirst, bool modifyAfterSaveStarts,
+                       const std::string& description)
+        : UnitSaveTortureBase("UnitSaveTortureOne_" + description)
+        , _phase(Phase::Load)
+        , _filename(std::move(filename))
+        , _modifyFirst(modifyFirst)
+        , _modifyAfterSaveStarts(modifyAfterSaveStarts)
+    {
+    }
+
+    /// The document is loaded.
+    bool onDocumentLoaded(const std::string& message) override
+    {
+        TST_LOG("Phase: [" << name(_phase) << "] got: [" << message << ']');
+        LOK_ASSERT_STATE(_phase, Phase::WaitLoadStatus);
+
+        // Tests assume all are background save.
+        createStamp("abortonsyncsave");
+
+        if (_modifyFirst)
+        {
+            TST_LOG("Modify First");
+            TRANSITION_STATE(_phase, Phase::WaitFirstModifiedStatus);
+            modifyDocument();
+            TST_LOG("wait for first modified status");
+        }
+        else
+        {
+            TST_LOG("Save First");
+            saveAndModifyDocument();
+        }
+
+        return true;
+    }
+
+    bool onDocumentModified(const std::string& message) override
+    {
+        TST_LOG("Phase: [" << name(_phase) << "] got: [" << message << ']');
+
+        if (_phase == Phase::WaitFirstModifiedStatus)
+        {
+            TST_LOG("Save and modify after first modify");
+            saveAndModifyDocument();
+        }
+        else if (_phase == Phase::WaitAfterSaveModifiedStatus)
+        {
+            TST_LOG("Allow saving to continue");
+            removeStamp("holdsave");
+            TRANSITION_STATE(_phase, Phase::WaitSaveStatus);
+        }
+
+        return true;
+    }
+
+    bool onDocumentUnmodified(const std::string& message) override
+    {
+        TST_LOG("Phase: [" << name(_phase) << "] got: [" << message << ']');
+
+        // We get unmodified when loading and when saving; ignore them.
+        if (_phase == Phase::WaitUnmodifiedStatus)
+        {
+            passTest();
+        }
+
+        return true;
+    }
+
+    bool onDocumentSaved(const std::string& message, bool success,
+                         [[maybe_unused]] const std::string& result) override
+    {
+        TST_LOG("Phase: [" << name(_phase) << "] got: [" << message << ']');
+
+        LOK_ASSERT_MESSAGE("Expected to be in WaitSaveStatus or WaitAfterSaveModifiedStatus or "
+                           "WaitNoModifiedStatus",
+                           _phase == Phase::WaitSaveStatus ||
+                               _phase == Phase::WaitAfterSaveModifiedStatus ||
+                               _phase == Phase::WaitUnmodifiedStatus);
+
+        LOK_ASSERT_MESSAGE("Saved successfully", success);
+
+        if (_phase != Phase::WaitUnmodifiedStatus)
+        {
+            _stopwatch.restart();
+            TRANSITION_STATE(_phase, Phase::WaitUnmodifiedStatus);
+        }
+
+        if (!_modifyAfterSaveStarts)
+        {
+            if (_modifyFirst)
+            {
+                TST_LOG("wait for modified status");
+            }
+            else
+            {
+                passTest("We've never modified, so we'll never get modified status.");
+            }
+        }
+        else
+        {
+            // Restore the document un-modified state
+            WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0");
+            TST_LOG("wait for cleanup of modified state before end of test");
+        }
+
+        return true;
+    }
+
+    void invokeWSDTest() override
+    {
+        switch (_phase)
+        {
+            case Phase::Load:
+            {
+                TRANSITION_STATE(_phase, Phase::WaitLoadStatus);
+
+                const std::string docName = "empty.ods";
+                TST_LOG("Loading document: " << _filename);
+                connectAndLoadLocalDocument(_filename);
+                break;
+            }
+            case Phase::WaitLoadStatus:
+            case Phase::WaitFirstModifiedStatus:
+            case Phase::WaitAfterSaveModifiedStatus:
+            case Phase::WaitSaveStatus:
+                break;
+
+            case Phase::WaitUnmodifiedStatus:
+#if ENABLE_RUNTIME_OPTIMIZATIONS
+                constexpr std::chrono::seconds unmodifiedTimeout(5);
+#else
+                constexpr std::chrono::seconds unmodifiedTimeout(30);
+#endif
+                if (_stopwatch.elapsed(unmodifiedTimeout))
+                {
+                    failTest("Timed out waiting for the un-modified state");
+                }
+                break;
+        }
+    }
+};
+
+// Inside the forkit & kit processes
+class UnitKitSaveTorture : public UnitKit
+{
+    bool stampExists(const std::string& name, bool log = true)
+    {
+        // The temporary directory of this process is the tmp directory of its own jail
+        const std::string path = FileUtil::getSysTempDirectoryPath() + '/' + name;
+        const bool exists = FileUtil::Stat(path).exists();
+        if (log)
+            TST_LOG("Stamp [" << name << "] " << (exists ? "exists" : "missing"));
+        return exists;
+    }
+
+    void waitWhileStamp(const std::string &name)
+    {
+        TST_LOG("waiting while stamp " << name << " exists");
+        std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+        while (stampExists(name))
+        {
+            TST_LOG("stamp exists " << name);
+            if (std::chrono::steady_clock::now() - start > 10s)
+            {
+                LOK_ASSERT_FAIL("Timed out while waiting for stamp file " << name << " to go");
+                return;
+            }
+            std::this_thread::sleep_for(StampFileCheckPeriodMs);
+        }
+        TST_LOG("stamp removed " << name);
+    }
+
+public:
+    UnitKitSaveTorture() : UnitKit("savetorture")
+    {
+        // 4 times the default.
+        constexpr std::chrono::minutes timeout_minutes(2);
+        setTimeout(timeout_minutes);
+
+        std::cerr << "\n\nYour Kit process has Save torturing hooks\n\n\n";
+    }
+
+    void initialize() override
+    {
+        // Empty, so the socket poll thread is not started, which is unused by this test.
+    }
+
+    virtual bool filterKitMessage(WebSocketHandler *, std::string & /* message */) override
+    {
+        return false;
+    }
+
+    virtual bool filterDrainQueue() override { return stampExists("holddrainqueue", false); }
+
+    virtual void preSaveHook() override
+    {
+        TST_LOG("Synchronous non-background save!");
+        if (stampExists("abortonsyncsave"))
+        {
+            std::cerr << "Abort - unexpected non background save !\n\n";
+            _exit(0); // otherwise we create segv's to count.
+        }
+    }
+
+    virtual void postBackgroundSaveFork() override
+    {
+        if (stampExists("crashkitonsave"))
+        {
+            std::cerr << "Exit bgsave process to simulate crash\n\n";
+            _exit(0); // otherwise we create segv's to count.
+        }
+
+        std::cerr << "\npost background save process fork\n\n";
+
+        // The save outlasts the first ping from the parent Kit, as it does on a busy machine.
+        if (stampExists("delaybgsaveping", false))
+            std::this_thread::sleep_for(50ms);
+
+        waitWhileStamp("holdsave");
+    }
+
+    virtual std::string getBackgroundSaveInjectMessage() override
+    {
+        // A dialog "show" is an interactive prompt that must abort the save.
+        if (stampExists("flushdialogopen"))
+            return "client-0000 jsdialog: { \"id\": 13, \"jsontype\": \"dialog\", "
+                   "\"action\": \"show\" }";
+
+        if (!stampExists("flushdialogclose"))
+            return std::string();
+
+        // A dialog "close" flushed from the child's idle handler.
+        return "client-0000 jsdialog: { \"id\": 13, \"jsontype\": \"dialog\", "
+               "\"action\": \"close\" }";
+    }
+
+    // Only the parent Kit sends pings, to its background save child.
+    bool onFilterSendWebSocketMessage(std::string_view /* data */, const WSOpCode code,
+                                      const bool /* flush */, int& /* unitReturn */) override
+    {
+        if (code == WSOpCode::Ping && stampExists("delaybgsaveping", false))
+        {
+            TST_LOG("Delaying the ping to the background save child");
+            std::this_thread::sleep_for(200ms);
+        }
+        return false;
+    }
+
+    virtual void preBackgroundSaveExit() override
+    {
+        std::cerr << "\n\npre exit of background save process\n\n\n";
+    }
+};
+
+UnitBase** unit_create_wsd_multi(void)
+{
+    return new UnitBase* []
+    {
+        new UnitBgSaveCrash(), new UnitBgSaveDialogClose(), new UnitBgSaveDialogAbort(),
+            new UnitBgSaveUnmodified(), new UnitBgSaveHangupWithPing(),
+            new UnitTileCombineRace(), new UnitModified(),
+            new UnitSaveTortureOne("empty.ods", true, false, "simple_load-modify-bgsave"),
+            new UnitSaveTortureOne("empty.odt", true, false, "simple_load-modify-bgsave"),
+            new UnitSaveTortureOne("empty.ods", true, true,
+                                   "load-modify-bgsave-start+modify+bgsave-end"),
+            new UnitSaveTortureOne("empty.odt", true, true,
+                                   "load-modify-bgsave-start+modify+bgsave-end"),
+            new UnitSaveTortureOne("empty.ods", false, false, "un-modified-just-save-and-lets-see"),
+            new UnitSaveTortureOne("empty.odt", false, false, "un-modified-just-save-and-lets-see"),
+            nullptr
+    };
+}
+
+UnitBase *unit_create_kit(void) { return new UnitKitSaveTorture(); }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

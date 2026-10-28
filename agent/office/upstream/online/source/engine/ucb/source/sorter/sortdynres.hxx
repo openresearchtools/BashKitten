@@ -1,0 +1,164 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/ucb/NumberedSortingInfo.hpp>
+#include <com/sun/star/sdbc/XResultSet.hpp>
+#include <com/sun/star/ucb/XDynamicResultSet.hpp>
+#include <com/sun/star/ucb/XDynamicResultSetListener.hpp>
+#include <com/sun/star/ucb/XSortedDynamicResultSetFactory.hpp>
+#include <comphelper/interfacecontainer4.hxx>
+#include <cppuhelper/factory.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <memory>
+#include "sortresult.hxx"
+
+
+
+class SortedDynamicResultSetListener;
+
+class SortedDynamicResultSet: public cppu::WeakImplHelper <
+    css::lang::XServiceInfo,
+    css::ucb::XDynamicResultSet >
+{
+    comphelper::OInterfaceContainerHelper4<css::lang::XEventListener>  maDisposeEventListeners;
+
+    cpo::uno::Reference < css::ucb::XDynamicResultSetListener > mxListener;
+
+    cpo::uno::Reference < css::ucb::XDynamicResultSet >      mxOriginal;
+    cpo::uno::Sequence  < css::ucb::NumberedSortingInfo >    maOptions;
+    cpo::uno::Reference < css::ucb::XAnyCompareFactory >     mxCompFac;
+    cpo::uno::Reference < cpo::uno::XComponentContext >      m_xContext;
+
+    rtl::Reference<SortedResultSet>                          mxOne;
+    rtl::Reference<SortedResultSet>                          mxTwo;
+    rtl::Reference<SortedDynamicResultSetListener>           mxOwnListener;
+
+    EventList                           maActions;
+    std::mutex                          maMutex;
+    bool                                mbGotWelcome:1;
+    bool                                mbUseOne:1;
+    bool                                mbStatic:1;
+
+private:
+    void                SendNotify();
+
+public:
+    SortedDynamicResultSet( const cpo::uno::Reference < css::ucb::XDynamicResultSet >    &xOriginal,
+                            const cpo::uno::Sequence  < css::ucb::NumberedSortingInfo >  &aOptions,
+                            const cpo::uno::Reference < css::ucb::XAnyCompareFactory >   &xCompFac,
+                            const cpo::uno::Reference < cpo::uno::XComponentContext >    &rxContext );
+
+    virtual ~SortedDynamicResultSet() override;
+
+
+    // XServiceInfo
+
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XComponent
+
+    virtual void dispose() override;
+
+    virtual void
+    addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
+
+    virtual void
+    removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
+
+
+    // XDynamicResultSet
+
+    virtual cpo::uno::Reference< css::sdbc::XResultSet > getStaticResultSet() override;
+
+    virtual void
+    setListener( const cpo::uno::Reference< css::ucb::XDynamicResultSetListener >& Listener ) override;
+
+    virtual void
+    connectToCache( const cpo::uno::Reference< css::ucb::XDynamicResultSet > & xCache ) override;
+
+    virtual sal_Int16
+    getCapabilities() override;
+
+
+    // own methods:
+
+    /// @throws cpo::uno::RuntimeException
+    void impl_disposing();
+
+    /// @throws cpo::uno::RuntimeException
+    void impl_notify( const css::ucb::ListEvent& Changes );
+};
+
+class SortedDynamicResultSetListener: public cppu::WeakImplHelper <
+    css::ucb::XDynamicResultSetListener >
+{
+    SortedDynamicResultSet  *mpOwner;
+    std::mutex               maMutex;
+
+public:
+     SortedDynamicResultSetListener( SortedDynamicResultSet *mOwner );
+    virtual ~SortedDynamicResultSetListener() override;
+
+    // XEventListener ( base of XDynamicResultSetListener )
+
+    virtual void
+    disposing( const css::lang::EventObject& Source ) override;
+
+    // XDynamicResultSetListener
+
+    virtual void notify( const css::ucb::ListEvent& Changes ) override;
+
+    // own methods:
+
+    void impl_OwnerDies();
+};
+
+
+class SortedDynamicResultSetFactory: public cppu::WeakImplHelper <
+    css::lang::XServiceInfo,
+    css::ucb::XSortedDynamicResultSetFactory >
+{
+
+    cpo::uno::Reference< cpo::uno::XComponentContext >   m_xContext;
+
+public:
+    SortedDynamicResultSetFactory(
+        const cpo::uno::Reference< cpo::uno::XComponentContext > & rxContext);
+
+    virtual ~SortedDynamicResultSetFactory() override;
+
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XSortedDynamicResultSetFactory
+    virtual cpo::uno::Reference< css::ucb::XDynamicResultSet >
+    createSortedDynamicResultSet(
+                const cpo::uno::Reference< css::ucb::XDynamicResultSet > & Source,
+                const cpo::uno::Sequence< css::ucb::NumberedSortingInfo > & Info,
+                const cpo::uno::Reference< css::ucb::XAnyCompareFactory > & CompareFactory ) override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

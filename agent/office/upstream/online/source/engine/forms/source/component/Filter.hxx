@@ -1,0 +1,138 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/form/XBoundComponent.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <com/sun/star/util/XNumberFormatter.hpp>
+#include <com/sun/star/awt/XTextComponent.hpp>
+#include <com/sun/star/sdb/SQLContext.hpp>
+#include <com/sun/star/sdbc/XConnection.hpp>
+#include <toolkit/controls/unocontrol.hxx>
+
+#include <toolkit/helper/listenermultiplexer.hxx>
+#include <cppuhelper/implbase5.hxx>
+#include <comphelper/uno3.hxx>
+#include <svx/ParseContext.hxx>
+
+#include <unordered_map>
+
+
+namespace frm
+{
+
+
+    // OFilterControl
+
+    typedef ::cppu::ImplHelper5 <   css::awt::XTextComponent
+                                ,   css::awt::XFocusListener
+                                ,   css::awt::XItemListener
+                                ,   css::form::XBoundComponent
+                                ,   css::lang::XInitialization
+                                >   OFilterControl_BASE;
+
+    class OFilterControl final :public UnoControl
+                            ,public OFilterControl_BASE
+                            ,public ::svxform::OParseContextClient
+    {
+        TextListenerMultiplexer     m_aTextListeners;
+
+        cpo::uno::Reference< cpo::uno::XComponentContext >            m_xContext;
+        cpo::uno::Reference< css::beans::XPropertySet >               m_xField;
+        cpo::uno::Reference< css::util::XNumberFormatter >            m_xFormatter;
+        cpo::uno::Reference< css::sdbc::XConnection >                 m_xConnection;
+        cpo::uno::Reference< css::awt::XWindow >                      m_xMessageParent;
+
+        typedef std::unordered_map< OUString, OUString > MapString2String;
+        MapString2String                m_aDisplayItemToValueItem;
+
+        OUString                        m_aText;
+        sal_Int16                       m_nControlClass;        // which kind of control do we use?
+        bool                            m_bFilterList : 1;
+        bool                            m_bMultiLine : 1;
+        bool                            m_bFilterListFilled : 1;
+
+        void implInitFilterList();
+        void initControlModel(cpo::uno::Reference< css::beans::XPropertySet > const & xControlModel);
+
+    public:
+        explicit OFilterControl( const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxORB );
+
+        DECLARE_UNO3_AGG_DEFAULTS(OFilterControl,OWeakAggObject)
+        cpo::uno::Any  queryAggregation( const cpo::uno::Type & rType ) override;
+
+        virtual OUString GetComponentServiceName() const override;
+        virtual void   createPeer( const cpo::uno::Reference< css::awt::XToolkit > & rxToolkit, const cpo::uno::Reference< css::awt::XWindowPeer >  & rParentPeer ) override;
+
+    // css::lang::XComponent
+        virtual void   dispose() override;
+
+    // css::awt::XTextComponent
+        virtual void            addTextListener( const cpo::uno::Reference< css::awt::XTextListener > & l ) override;
+        virtual void            removeTextListener( const cpo::uno::Reference< css::awt::XTextListener > & l ) override;
+        virtual void            setText( const OUString& aText ) override;
+        virtual void            insertText( const css::awt::Selection& rSel, const OUString& aText ) override;
+        virtual OUString getText() override;
+        virtual OUString getSelectedText() override;
+        virtual void            setSelection( const css::awt::Selection& aSelection ) override;
+        virtual css::awt::Selection getSelection() override;
+        virtual bool        isEditable() override;
+        virtual void            setEditable( bool bEditable ) override;
+        virtual void            setMaxTextLen( sal_Int16 nLength ) override;
+        virtual sal_Int16       getMaxTextLen() override;
+
+    // css::form::XBoundComponent
+        virtual void            addUpdateListener(const cpo::uno::Reference< css::form::XUpdateListener > & /*l*/) override {}
+        virtual void            removeUpdateListener(const cpo::uno::Reference< css::form::XUpdateListener > & /*l*/) override {}
+        virtual bool        commit() override;
+
+    // css::lang::XEventListener
+        virtual void            disposing(const css::lang::EventObject& Source) override;
+
+    // css::awt::XFocusListener
+        virtual void            focusGained(const css::awt::FocusEvent& e) override;
+        virtual void            focusLost(const css::awt::FocusEvent& e) override;
+
+    // css::awt::XItemListener
+        virtual void            itemStateChanged(const css::awt::ItemEvent& rEvent) override;
+
+    // css::util::XInitialization
+        virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+        // XServiceInfo
+        virtual OUString getImplementationName(  ) override;
+        virtual bool supportsService( const OUString& ServiceName ) override;
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+    private:
+        virtual void PrepareWindowDescriptor( css::awt::WindowDescriptor& rDesc ) override;
+        virtual void ImplSetPeerProperty( const OUString& rPropName, const cpo::uno::Any& rVal ) override;
+
+        bool ensureInitialized( );
+
+        void displayException( const css::sdb::SQLContext& _rExcept );
+    };
+
+}   // namespace frm
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

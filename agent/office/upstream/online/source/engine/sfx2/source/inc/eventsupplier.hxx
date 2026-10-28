@@ -1,0 +1,87 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_SFX2_SOURCE_INC_EVENTSUPPLIER_HXX
+#define INCLUDED_SFX2_SOURCE_INC_EVENTSUPPLIER_HXX
+
+#include <sal/types.h>
+
+#include <com/sun/star/document/DocumentEvent.hpp>
+#include <com/sun/star/container/XNameReplace.hpp>
+#include <com/sun/star/document/XDocumentEventListener.hpp>
+#include <com/sun/star/document/XDocumentEventBroadcaster.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/Type.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <mutex>
+#include <vector>
+
+namespace comphelper
+{
+    class NamedValueCollection;
+}
+
+class SfxObjectShell;
+class SvxMacro;
+
+
+class SfxEvents_Impl final : public ::cppu::WeakImplHelper< css::container::XNameReplace, css::document::XDocumentEventListener >
+{
+    cpo::uno::Sequence< OUString >     maEventNames;
+    std::vector< cpo::uno::Sequence < css::beans::PropertyValue > >  maEventData;
+    cpo::uno::Reference< css::document::XDocumentEventBroadcaster >  mxBroadcaster;
+    std::mutex                     maMutex;
+    SfxObjectShell                 *mpObjShell;
+
+public:
+                                SfxEvents_Impl( SfxObjectShell* pShell,
+                                                cpo::uno::Reference< css::document::XDocumentEventBroadcaster > const & xBroadcaster );
+                               virtual ~SfxEvents_Impl() override;
+
+    //  --- XNameReplace ---
+    virtual void       replaceByName( const OUString & aName, const cpo::uno::Any & aElement ) override;
+
+    //  --- XNameAccess ( parent of XNameReplace ) ---
+    virtual cpo::uno::Any        getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool   hasByName( const OUString& aName ) override;
+
+    //  --- XElementAccess ( parent of XNameAccess ) ---
+    virtual cpo::uno::Type    getElementType() override;
+    virtual bool   hasElements() override;
+
+    // --- ::document::XDocumentEventListener ---
+    virtual void documentEventOccured(const css::document::DocumentEvent& aEvent) override;
+
+    // --- ::lang::XEventListener ---
+    virtual void       disposing( const css::lang::EventObject& Source ) override;
+
+    // convert and normalize
+    static std::unique_ptr<SvxMacro>  ConvertToMacro( const cpo::uno::Any& rElement, SfxObjectShell* pDoc );
+    static void                 NormalizeMacro( const cpo::uno::Any& rIn, cpo::uno::Any& rOut, SfxObjectShell* pDoc );
+    static void                 NormalizeMacro(
+                                    const ::comphelper::NamedValueCollection& i_eventDescriptor,
+                                    ::comphelper::NamedValueCollection& o_normalizedDescriptor,
+                                    SfxObjectShell* i_document );
+    static void Execute( cpo::uno::Sequence < css::beans::PropertyValue > const & aEventData, const css::document::DocumentEvent& aTrigger, SfxObjectShell* pDoc );
+};
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

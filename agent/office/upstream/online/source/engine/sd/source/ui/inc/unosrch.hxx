@@ -1,0 +1,130 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <memory>
+#include <com/sun/star/util/XReplaceable.hpp>
+#include <com/sun/star/util/XReplaceDescriptor.hpp>
+
+#include <comphelper/servicehelper.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <editeng/editdata.hxx>
+
+namespace com::sun::star::drawing { class XDrawPage; }
+namespace com::sun::star::drawing { class XShape; }
+namespace com::sun::star::text { class XTextRange; }
+
+class SvxItemPropertySet;
+class SdUnoSearchReplaceDescriptor;
+
+/** this class implements a search or replace operation on a given page or a given sdrobj */
+class SdUnoSearchReplaceShape : public css::util::XReplaceable
+{
+    css::drawing::XDrawPage* mpPage;
+
+protected:
+    cpo::uno::Reference< css::text::XTextRange >  Search( const cpo::uno::Reference< css::text::XTextRange >&  xText, SdUnoSearchReplaceDescriptor* pDescr );
+    bool Search( const OUString& rText, sal_Int32& nStartPos, sal_Int32& nEndPos, SdUnoSearchReplaceDescriptor* pDescr ) noexcept;
+    static ESelection GetSelection( const cpo::uno::Reference< css::text::XTextRange >&  xTextRange ) noexcept;
+    static cpo::uno::Reference< css::drawing::XShape >  GetShape( const cpo::uno::Reference< css::text::XTextRange >&  xTextRange ) noexcept;
+    cpo::uno::Reference< css::drawing::XShape >  GetNextShape( const cpo::uno::Reference< css::container::XIndexAccess >&  xShapes, const cpo::uno::Reference< css::drawing::XShape >&  xCurrentShape ) noexcept;
+    cpo::uno::Reference< css::drawing::XShape >  GetCurrentShape() const noexcept;
+
+public:
+    // danger, this c'tor is only usable if the given shape or page is derived
+    // from this class!!!
+    SdUnoSearchReplaceShape( css::drawing::XDrawPage* xPage ) noexcept;
+    virtual ~SdUnoSearchReplaceShape() noexcept;
+
+    // XReplaceable
+    virtual cpo::uno::Reference< css::util::XReplaceDescriptor > createReplaceDescriptor(  ) override;
+    virtual sal_Int32 replaceAll( const cpo::uno::Reference< css::util::XSearchDescriptor >& xDesc ) override;
+
+    // XSearchable
+    virtual cpo::uno::Reference< css::util::XSearchDescriptor > createSearchDescriptor(  ) override;
+    virtual cpo::uno::Reference< css::container::XIndexAccess > findAll( const cpo::uno::Reference< css::util::XSearchDescriptor >& xDesc ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > findFirst( const cpo::uno::Reference< css::util::XSearchDescriptor >& xDesc ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > findNext( const cpo::uno::Reference< cpo::uno::XInterface >& xStartAt, const cpo::uno::Reference< css::util::XSearchDescriptor >& xDesc ) override;
+};
+
+/* ================================================================= */
+
+/** this class holds the parameters and status of a search or replace operation performed
+    by class SdUnoSearchReplaceShape */
+
+class SdUnoSearchReplaceDescriptor final : public ::cppu::WeakImplHelper< css::util::XReplaceDescriptor > // public css::util::XSearchDescriptor, css::beans::XPropertySet
+{
+    std::unique_ptr<SvxItemPropertySet> mpPropSet;
+
+    bool mbBackwards;
+    bool mbCaseSensitive;
+    bool mbWords;
+
+    OUString maSearchStr;
+    OUString maReplaceStr;
+
+public:
+    /// @throws cpo::uno::RuntimeException
+    SdUnoSearchReplaceDescriptor();
+    virtual ~SdUnoSearchReplaceDescriptor() noexcept override;
+
+    bool IsCaseSensitive() const { return mbCaseSensitive; }
+    bool IsWords() const { return mbWords; }
+
+    // XSearchDescriptor
+    virtual OUString getSearchString(  ) override;
+    virtual void setSearchString( const OUString& aString ) override;
+
+    // XReplaceDescriptor
+    virtual OUString getReplaceString(  ) override;
+    virtual void setReplaceString( const OUString& aReplaceString ) override;
+
+    // XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+};
+
+/* ================================================================= */
+
+/** this class holds a sequence that is a result from a find all and
+    lets people access it through the XIndexAccess Interface. */
+class SdUnoFindAllAccess final : public ::cppu::WeakImplHelper< css::container::XIndexAccess > // public css::container::XElementAccess
+{
+    cpo::uno::Sequence< cpo::uno::Reference< cpo::uno::XInterface >  > maSequence;
+
+public:
+    SdUnoFindAllAccess( cpo::uno::Sequence< cpo::uno::Reference< cpo::uno::XInterface >  > const & rSequence ) noexcept;
+    virtual ~SdUnoFindAllAccess() noexcept override;
+
+    // XIndexAccess
+    virtual sal_Int32 getCount() override ;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
+
+    // XElementAccess
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

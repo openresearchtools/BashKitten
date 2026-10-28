@@ -1,0 +1,195 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <sal/config.h>
+
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <com/sun/star/frame/XFrame.hpp>
+#include <com/sun/star/frame/XDispatch.hpp>
+#include <com/sun/star/frame/XDispatchProvider.hpp>
+#include <com/sun/star/frame/FeatureStateEvent.hpp>
+#include <com/sun/star/frame/XFrameActionListener.hpp>
+#include <com/sun/star/frame/XPopupMenuController.hpp>
+#include <com/sun/star/awt/XSystemDependentMenuPeer.hpp>
+#include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/frame/XUIControllerFactory.hpp>
+#include <com/sun/star/ui/XUIConfigurationListener.hpp>
+#include <com/sun/star/ui/XImageManager.hpp>
+#include <com/sun/star/ui/XAcceleratorConfiguration.hpp>
+#include <com/sun/star/util/XURLTransformer.hpp>
+
+#include <rtl/ustring.hxx>
+#include <vcl/menu.hxx>
+#include <vcl/timer.hxx>
+#include <comphelper/compbase.hxx>
+#include <cppuhelper/weakref.hxx>
+#include <framework/addonsoptions.hxx>
+#include <toolkit/awt/vclxmenu.hxx>
+
+namespace framework
+{
+
+struct PopupControllerEntry
+{
+    cpo::uno::WeakReference< css::frame::XDispatchProvider > m_xDispatchProvider;
+};
+
+typedef std::unordered_map< OUString, PopupControllerEntry > PopupControllerCache;
+
+class MenuBarManager final :
+    public comphelper::WeakComponentImplHelper<
+        css::frame::XStatusListener,
+        css::frame::XFrameActionListener,
+        css::ui::XUIConfigurationListener,
+        css::awt::XSystemDependentMenuPeer>
+{
+    public:
+        MenuBarManager(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+            const cpo::uno::Reference< css::frame::XFrame >& rFrame,
+            const cpo::uno::Reference< css::util::XURLTransformer >& _xURLTransformer,
+            const cpo::uno::Reference< css::frame::XDispatchProvider >& rDispatchProvider,
+            const OUString& aModuleIdentifier,
+            Menu* pMenu,
+            bool bDelete,
+            bool bHasMenuBar = true );
+
+        virtual ~MenuBarManager() override;
+
+        // XStatusListener
+        virtual void statusChanged( const css::frame::FeatureStateEvent& Event ) override;
+
+        // XFrameActionListener
+        virtual void frameAction( const css::frame::FrameActionEvent& Action ) override;
+
+        // XEventListener
+        virtual void disposing( const css::lang::EventObject& Source ) override;
+
+        // XUIConfigurationListener
+        virtual void elementInserted( const css::ui::ConfigurationEvent& Event ) override;
+        virtual void elementRemoved( const css::ui::ConfigurationEvent& Event ) override;
+        virtual void elementReplaced( const css::ui::ConfigurationEvent& Event ) override;
+
+        // XSystemDependentMenuPeer
+        virtual cpo::uno::Any getMenuHandle( const cpo::uno::Sequence< sal_Int8 >& ProcessId, sal_Int16 SystemType ) override;
+
+        DECL_LINK( Select, Menu *, bool );
+
+        Menu*   GetMenuBar() const { return m_pVCLMenu; }
+
+        // Configuration methods
+        static void FillMenuWithConfiguration( sal_uInt16& nId, Menu* pMenu,
+                                               const OUString& rModuleIdentifier,
+                                               const cpo::uno::Reference< css::container::XIndexAccess >& rItemContainer,
+                                               const cpo::uno::Reference< css::util::XURLTransformer >& rTransformer );
+        static void FillMenu( sal_uInt16& nId,
+                              Menu* pMenu,
+                              const OUString& rModuleIdentifier,
+                              const cpo::uno::Reference< css::container::XIndexAccess >& rItemContainer,
+                              const cpo::uno::Reference< css::frame::XDispatchProvider >& rDispatchProvider );
+
+        void FillMenuManager( Menu* pMenu,
+                              const cpo::uno::Reference< css::frame::XFrame >& rFrame,
+                              const cpo::uno::Reference< css::frame::XDispatchProvider >& rDispatchProvider,
+                              const OUString& rModuleIdentifier,
+                              bool bDelete );
+        void SetItemContainer( const cpo::uno::Reference< css::container::XIndexAccess >& rItemContainer );
+        void GetPopupController( PopupControllerCache& rPopupController );
+
+    private:
+        DECL_LINK( Activate, Menu *, bool );
+        DECL_LINK( Deactivate, Menu *, bool );
+        DECL_LINK( AsyncSettingsHdl, Timer *, void );
+
+        void disposing(std::unique_lock<std::mutex>&) override;
+        void RemoveListener();
+        void RequestImages();
+        void RetrieveImageManagers();
+        static bool MustBeHidden( PopupMenu* pPopupMenu, const cpo::uno::Reference< css::util::XURLTransformer >& rTransformer );
+        OUString RetrieveLabelFromCommand(const OUString& rCmdURL);
+
+        struct MenuItemHandler
+        {
+            MenuItemHandler( sal_uInt16             aItemId,
+                             rtl::Reference< MenuBarManager > xManager,
+                             cpo::uno::Reference< css::frame::XDispatch > xDispatch ) :
+                             nItemId( aItemId ),
+                             bMadeInvisible ( false ),
+                             xSubMenuManager(std::move( xManager )),
+                             xMenuItemDispatch(std::move( xDispatch )) {}
+
+            sal_uInt16                                                        nItemId;
+            bool                                                              bMadeInvisible;
+            OUString                                                          aTargetFrame;
+            OUString                                                          aMenuItemURL;
+            OUString                                                          aParsedItemURL;
+            rtl::Reference< MenuBarManager >                                  xSubMenuManager;
+            cpo::uno::Reference< css::frame::XDispatch >                      xMenuItemDispatch;
+            cpo::uno::Reference< css::frame::XPopupMenuController >           xPopupMenuController;
+            rtl::Reference< VCLXPopupMenu >                                   xPopupMenu;
+            vcl::KeyCode                                                      aKeyCode;
+        };
+
+        void             RetrieveShortcuts( std::vector< std::unique_ptr<MenuItemHandler> >& aMenuShortCuts );
+        void SetAcceleratorKeys(Menu* pMenu);
+        static void      FillMenuImages( cpo::uno::Reference< css::frame::XFrame > const & xFrame, Menu* _pMenu, bool bShowMenuImages );
+        static void      impl_RetrieveShortcutsFromConfiguration( const cpo::uno::Reference< css::ui::XAcceleratorConfiguration >& rAccelCfg,
+                                                                  const cpo::uno::Sequence< OUString >& rCommands,
+                                                                  std::vector< std::unique_ptr<MenuItemHandler> >& aMenuShortCuts );
+        static void      MergeAddonMenus( Menu* pMenuBar, const MergeMenuInstructionContainer&, const OUString& aModuleIdentifier );
+
+        MenuItemHandler* GetMenuItemHandler( sal_uInt16 nItemId );
+        bool         CreatePopupMenuController( MenuItemHandler* pMenuItemHandler,
+                                                const cpo::uno::Reference< css::frame::XDispatchProvider >& rDispatchProvider,
+                                                const OUString& rModuleIdentifier );
+        void             AddMenu(MenuBarManager* pSubMenuManager,const OUString& _sItemCommand,sal_uInt16 _nItemId);
+        void             SetHdl();
+
+        bool                                                         m_bDeleteMenu;
+        bool                                                         m_bActive;
+        bool                                                         m_bShowMenuImages;
+        bool                                                         m_bRetrieveImages;
+        bool                                                         m_bAcceleratorCfg;
+        bool                                                         m_bHasMenuBar;
+        OUString                                                     m_aModuleIdentifier;
+        VclPtr<Menu>                                                 m_pVCLMenu;
+        cpo::uno::Reference< css::frame::XFrame >                    m_xFrame;
+        cpo::uno::Reference< css::frame::XUIControllerFactory >      m_xPopupMenuControllerFactory;
+        ::std::vector< std::unique_ptr<MenuItemHandler> >            m_aMenuItemHandlerVector;
+        cpo::uno::Reference< css::frame::XDispatchProvider >         m_xDispatchProvider;
+        cpo::uno::Reference< css::ui::XImageManager >                m_xDocImageManager;
+        cpo::uno::Reference< css::ui::XImageManager >                m_xModuleImageManager;
+        cpo::uno::Reference< css::ui::XAcceleratorConfiguration >    m_xDocAcceleratorManager;
+        cpo::uno::Reference< css::ui::XAcceleratorConfiguration >    m_xModuleAcceleratorManager;
+        cpo::uno::Reference< css::ui::XAcceleratorConfiguration >    m_xGlobalAcceleratorManager;
+        cpo::uno::Reference< cpo::uno::XComponentContext >           m_xContext;
+        cpo::uno::Reference< css::util::XURLTransformer >            m_xURLTransformer;
+        cpo::uno::Reference< css::container::XIndexAccess >          m_xDeferredItemContainer;
+        OUString                                                     m_sIconTheme;
+        Timer                                                        m_aAsyncSettingsTimer;
+};
+
+} // namespace
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

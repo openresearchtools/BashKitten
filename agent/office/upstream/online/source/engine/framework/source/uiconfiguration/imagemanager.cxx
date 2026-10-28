@@ -1,0 +1,172 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <uiconfiguration/imagemanager.hxx>
+#include "imagemanagerimpl.hxx"
+
+#include <com/sun/star/beans/XPropertySet.hpp>
+
+#include <vcl/svapp.hxx>
+
+using ::cpo::uno::Sequence;
+using ::cpo::uno::XInterface;
+using ::cpo::uno::Any;
+using ::com::sun::star::graphic::XGraphic;
+using namespace ::com::sun::star;
+using namespace ::com::sun::star::io;
+using namespace ::com::sun::star::embed;
+using namespace ::com::sun::star::lang;
+using namespace ::cpo;
+
+namespace framework
+{
+
+ImageManager::ImageManager( const uno::Reference< cpo::uno::XComponentContext >& rxContext, bool bForModule ) :
+    m_pImpl( new ImageManagerImpl(rxContext, this, bForModule) )
+{
+}
+
+ImageManager::~ImageManager()
+{
+    m_pImpl->clear();
+}
+
+// XComponent
+void ImageManager::dispose()
+{
+    m_pImpl->dispose();
+}
+
+void ImageManager::addEventListener( const uno::Reference< XEventListener >& xListener )
+{
+    m_pImpl->addEventListener(xListener);
+}
+
+void ImageManager::removeEventListener( const uno::Reference< XEventListener >& xListener )
+{
+    /* SAFE AREA ----------------------------------------------------------------------------------------------- */
+    m_pImpl->removeEventListener(xListener);
+}
+
+// Non-UNO methods
+void ImageManager::setStorage( const uno::Reference< XStorage >& Storage )
+{
+    SolarMutexGuard g;
+
+    m_pImpl->m_xUserConfigStorage = Storage;
+    m_pImpl->implts_initialize();
+}
+
+// XInitialization
+void ImageManager::initialize( const Sequence< Any >& aArguments )
+{
+    m_pImpl->initialize(aArguments);
+}
+
+// XImageManager
+void ImageManager::reset()
+{
+    /* SAFE AREA ----------------------------------------------------------------------------------------------- */
+    m_pImpl->reset();
+}
+
+Sequence< OUString > ImageManager::getAllImageNames( ::sal_Int16 nImageType )
+{
+    return m_pImpl->getAllImageNames( nImageType );
+}
+
+bool ImageManager::hasImage( ::sal_Int16 nImageType, const OUString& aCommandURL )
+{
+    return m_pImpl->hasImage(nImageType,aCommandURL);
+}
+
+Sequence< uno::Reference< XGraphic > > ImageManager::getImages(
+    ::sal_Int16 nImageType,
+    const Sequence< OUString >& aCommandURLSequence )
+{
+    return m_pImpl->getImages(nImageType,aCommandURLSequence);
+}
+
+void ImageManager::replaceImages(
+    ::sal_Int16 nImageType,
+    const Sequence< OUString >& aCommandURLSequence,
+    const Sequence< uno::Reference< XGraphic > >& aGraphicsSequence )
+{
+    m_pImpl->replaceImages(nImageType,aCommandURLSequence,aGraphicsSequence);
+}
+
+void ImageManager::removeImages( ::sal_Int16 nImageType, const Sequence< OUString >& aCommandURLSequence )
+{
+    m_pImpl->removeImages(nImageType,aCommandURLSequence);
+}
+
+void ImageManager::insertImages( ::sal_Int16 nImageType, const Sequence< OUString >& aCommandURLSequence, const Sequence< uno::Reference< XGraphic > >& aGraphicSequence )
+{
+    m_pImpl->insertImages(nImageType,aCommandURLSequence,aGraphicSequence);
+}
+
+// XUIConfiguration
+void ImageManager::addConfigurationListener( const uno::Reference< css::ui::XUIConfigurationListener >& xListener )
+{
+    m_pImpl->addConfigurationListener(xListener);
+}
+
+void ImageManager::removeConfigurationListener( const uno::Reference< css::ui::XUIConfigurationListener >& xListener )
+{
+    /* SAFE AREA ----------------------------------------------------------------------------------------------- */
+    m_pImpl->removeConfigurationListener(xListener);
+}
+
+// XUIConfigurationPersistence
+void ImageManager::reload()
+{
+    m_pImpl->reload();
+}
+
+void ImageManager::store()
+{
+    m_pImpl->store();
+}
+
+void ImageManager::storeToStorage( const uno::Reference< XStorage >& Storage )
+{
+    m_pImpl->storeToStorage(Storage);
+}
+
+bool ImageManager::isModified()
+{
+    return m_pImpl->isModified();
+}
+
+bool ImageManager::isReadOnly()
+{
+    return m_pImpl->isReadOnly();
+}
+
+} // namespace framework
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_framework_ImageManager_get_implementation(
+    cpo::uno::XComponentContext *context,
+    cpo::uno::Sequence<cpo::uno::Any> const &)
+{
+    return cppu::acquire(new framework::ImageManager(context, /*bForModule*/false));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

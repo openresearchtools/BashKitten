@@ -1,0 +1,83 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <uifactory/menubarfactory.hxx>
+#include <uielement/statusbarwrapper.hxx>
+
+#include <cppuhelper/supportsservice.hxx>
+
+using namespace ::cpo::uno;
+using namespace cpo::uno;
+using namespace com::sun::star::beans;
+using namespace ::com::sun::star::ui;
+
+using namespace framework;
+
+namespace {
+
+class StatusBarFactory :  public MenuBarFactory
+{
+public:
+    explicit StatusBarFactory( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
+
+    virtual OUString getImplementationName() override
+    {
+        return u"com.sun.star.comp.framework.StatusBarFactory"_ustr;
+    }
+
+    virtual bool supportsService(OUString const & ServiceName) override
+    {
+        return cppu::supportsService(this, ServiceName);
+    }
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override
+    {
+        return {u"com.sun.star.ui.StatusBarFactory"_ustr};
+    }
+
+    // XUIElementFactory
+    virtual cpo::uno::Reference< css::ui::XUIElement > createUIElement( const OUString& ResourceURL, const cpo::uno::Sequence< css::beans::PropertyValue >& Args ) override;
+};
+
+StatusBarFactory::StatusBarFactory( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext ) :
+    MenuBarFactory( xContext )
+{
+}
+
+// XUIElementFactory
+Reference< XUIElement > StatusBarFactory::createUIElement(
+    const OUString& ResourceURL,
+    const Sequence< PropertyValue >& Args )
+{
+    Reference< css::ui::XUIElement > xStatusBar = new StatusBarWrapper(m_xContext);
+    MenuBarFactory::CreateUIElement(ResourceURL, Args, u"private:resource/statusbar/", xStatusBar, m_xContext);
+    return xStatusBar;
+}
+
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_framework_StatusBarFactory_get_implementation(
+    cpo::uno::XComponentContext *context,
+    cpo::uno::Sequence<cpo::uno::Any> const &)
+{
+    return cppu::acquire(new StatusBarFactory(context));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

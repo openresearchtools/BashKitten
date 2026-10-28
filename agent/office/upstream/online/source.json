@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "name": "Collabora Online and matching Office engine",
+  "repository": "https://github.com/CollaboraOnline/online.mirror",
+  "release": "cp-26.04.5-2",
+  "version": "26.04.5.2",
+  "commit": "42745e44dd8530fac7acd5f46cb7571ceea63c6a",
+  "tagObject": "966fbb9b66914faeaf2428a2be656e1013cf368e",
+  "tree": "8656a18c1d5c13f1006229a6cda8d071e5dbab73",
+  "engineTree": "89ba6d3d5c33779d2d04ec7e522afb6f20b9eec5",
+  "sourceDirectory": "source",
+  "archive": {
+    "url": "https://codeload.github.com/CollaboraOnline/online.mirror/tar.gz/42745e44dd8530fac7acd5f46cb7571ceea63c6a",
+    "sha256": "c0ada55cdf7116b167ba1766da3f19f9a49039c3d5aceb59893c571f5c92bf47"
+  },
+  "archiveCompleteness": "The archive omits 57 engine/schema files through upstream export-ignore. Those original blobs are restored from the same immutable Git commit; the resulting whole source tree must match tree above.",
+  "licenseFiles": [
+    "COPYING",
+    "browser/LICENSE",
+    "THIRDPARTYLICENSES",
+    "CODA-THIRDPARTYLICENSES.html",
+    "engine/COPYING",
+    "engine/COPYING.MPL",
+    "engine/COPYING.LGPL",
+    "engine/readlicense_oo/license/license.xml"
+  ],
+  "externalSourceLocks": [
+    "engine/download.lst",
+    "engine/Makefile.fetch",
+    "engine/external/y-crdt/Cargo.lock",
+    "browser/npm-shrinkwrap.json.in"
+  ],
+  "imported": "2026-10-28",
+  "modifications": []
+}

@@ -1,0 +1,53 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/awt/XVclContainer.hpp>
+#include <com/sun/star/awt/XVclContainerPeer.hpp>
+#include <cppuhelper/implbase.hxx>
+
+#include <toolkit/awt/vclxwindow.hxx>
+
+class VCLXContainer : public cppu::ImplInheritanceHelper<VCLXWindow,
+                        css::awt::XVclContainer,
+                        css::awt::XVclContainerPeer>
+{
+public:
+                    VCLXContainer();
+                    virtual ~VCLXContainer() override;
+
+    // css::awt::XVclContainer
+    void addVclContainerListener( const cpo::uno::Reference< css::awt::XVclContainerListener >& l ) override;
+    void removeVclContainerListener( const cpo::uno::Reference< css::awt::XVclContainerListener >& l ) override;
+    cpo::uno::Sequence< cpo::uno::Reference< css::awt::XWindow > > getWindows(  ) override;
+
+    // css::awt::XVclContainerPeer
+    void enableDialogControl( bool bEnable ) override;
+    void setTabOrder( const cpo::uno::Sequence< cpo::uno::Reference< css::awt::XWindow > >& WindowOrder, const cpo::uno::Sequence< cpo::uno::Any >& Tabs, bool GroupControl ) override;
+    void setGroup( const cpo::uno::Sequence< cpo::uno::Reference< css::awt::XWindow > >& Windows ) override;
+
+    // css::awt::XVclWindowPeer
+    void setProperty( const OUString& PropertyName, const cpo::uno::Any& Value ) override;
+
+    static void     ImplGetPropertyIds( std::vector< sal_uInt16 > &aIds );
+    virtual void    GetPropertyIds( std::vector< sal_uInt16 > &aIds ) override { return ImplGetPropertyIds( aIds ); }
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

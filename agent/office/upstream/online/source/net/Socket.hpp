@@ -1,0 +1,1519 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Core socket abstractions: non-blocking I/O, polling, and protocol handling.
+ * Classes: Socket, StreamSocket, SocketPoll, ProtocolHandlerInterface, SocketDisposition
+ */
+
+#pragma once
+
+#include <common/Log.hpp>
+#include <common/ProcUtil.hpp>
+#include <common/SigUtil.hpp>
+#include <common/StateEnum.hpp>
+#include <common/Util.hpp>
+#include <net/Buffer.hpp>
+#include <net/FakeSocket.hpp>
+#include <net/NetUtil.hpp>
+
+#ifndef _WIN32
+#include <poll.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#endif
+
+#include <atomic>
+#include <cassert>
+#include <cerrno>
+#include <chrono>
+#include <climits>
+#include <cstddef>
+#include <cstdlib>
+#include <cstring>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <thread>
+
+#ifdef __linux__
+#define HAVE_ABSTRACT_UNIX_SOCKETS
+#endif
+
+// Enable to dump socket traffic as hex in logs.
+// #define LOG_SOCKET_DATA ENABLE_DEBUG
+
+#define ASSERT_CORRECT_SOCKET_THREAD(socket) socket->assertCorrectThread();
+
+namespace http
+{
+class Request;
+class Response;
+}
+namespace Poco
+{
+    class MemoryInputStream;
+    namespace Net
+    {
+        class HTTPRequest;
+        class HTTPResponse;
+    }
+    class URI;
+}
+
+namespace net
+{
+    /// Shut down both directions of a socket that has a real descriptor underneath.
+    void shutdownDescriptor(int descriptor);
+
+    /// Close a descriptor that has a real pipe or socket underneath.
+    void closeDescriptor(int descriptor);
+
+    /// Write to a descriptor that has a real pipe or socket underneath. Returns the number of
+    /// bytes written, or -1 with errno set.
+    ssize_t writeDescriptor(int descriptor, const void* buffer, std::size_t length);
+
+    /// Send each packet on a real socket as soon as it is ready, without waiting to aggregate
+    /// several of them.
+    void disableNagleAlgorithm(int descriptor);
+
+    /// True when accept failed for a reason that leaves the listening socket unusable, as opposed
+    /// to one worth retrying. Logs either way.
+    bool isUnrecoverableAcceptError(int cause);
+
+
+    /// Close a descriptor that came from this build's socket layer, which is a real socket in the
+    /// server and a fake one in the app.
+    inline void closeSocketDescriptor(int descriptor)
+    {
+        if (!Util::isMobileApp())
+            closeDescriptor(descriptor);
+        else
+            fakeSocketClose(descriptor);
+    }
+
+    /// Read from a descriptor that has a real pipe or socket underneath. Returns the number of
+    /// bytes read, or -1 with errno set.
+    ssize_t readDescriptor(int descriptor, void* buffer, std::size_t length);
+
+    /// Create a real pipe whose two descriptors are non-blocking and are closed when a new
+    /// program starts. Returns 0, or -1 with errno set.
+    int createPipe(int descriptors[2]);
+
+    /// Wait until one of the real descriptors is ready, for at most the given number of
+    /// microseconds. Returns how many are ready, 0 when the time ran out, or -1 with errno set.
+    int pollDescriptors(struct pollfd* descriptors, std::size_t count, int64_t timeoutMicroseconds);
+}
+
+class Socket;
+std::ostream& operator<<(std::ostream& os, const Socket &s);
+
+class Watchdog;
+class SocketPoll;
+class UnxSocketPath;
+
+/// Helper to allow us to easily defer the movement of a socket
+/// between polls to clarify thread ownership.
+class SocketDisposition final
+{
+    STATE_ENUM(Type, CONTINUE, CLOSED, TRANSFER);
+
+public:
+    using MoveFunction = std::function<void(const std::shared_ptr<Socket>&)>;
+
+    SocketDisposition(const std::shared_ptr<Socket> &socket)
+        : _socket(socket)
+        , _toPoll(nullptr)
+        , _disposition(Type::CONTINUE)
+    {}
+    ~SocketDisposition()
+    {
+        assert (!_socketMove);
+    }
+    /** move, correctly change ownership of and insert into a new poll.
+     * @transferFn is called as a callback inside the new poll, which
+     * has its thread started if it is not already.
+     * @moveFn can be used for optional setup.
+     */
+    void setTransfer(SocketPoll &poll, MoveFunction transferFn)
+    {
+        _socketMove = std::move(transferFn);
+        _disposition = Type::TRANSFER;
+        _toPoll = &poll; // rely on the closure to ensure lifetime
+    }
+    void setClosed()
+    {
+        _disposition = Type::CLOSED;
+    }
+    std::shared_ptr<Socket> getSocket() const
+    {
+        return _socket;
+    }
+    bool isClosed() const { return _disposition == Type::CLOSED; }
+    bool isTransfer() const { return  _disposition == Type::TRANSFER; }
+    bool isContinue() const { return _disposition == Type::CONTINUE; }
+
+    /// Perform the queued up work. Returns false if it fails to execute.
+    bool execute();
+
+private:
+    MoveFunction _socketMove;
+    std::shared_ptr<Socket> _socket;
+    SocketPoll *_toPoll;
+    Type _disposition;
+};
+
+class SocketThreadOwnerChange;
+
+/// A non-blocking, streaming socket. There is one per connection, so keep it small: a setting
+/// that is the same for every socket goes in net::Defaults, not in a member.
+class Socket
+{
+public:
+    static constexpr int DefaultSendBufferSize = 16 * 1024;
+    static constexpr int MaximumSendBufferSize = 128 * 1024;
+
+    enum class Type : uint8_t { IPv4, IPv6, All, Unix };
+    static constexpr std::string_view toString(Type t);
+
+    // NB. see other Socket::Socket by init below.
+    Socket(Type type,
+           std::chrono::steady_clock::time_point creationTime = std::chrono::steady_clock::now())
+        : _creationTime(creationTime)
+        , _lastSeenTime(_creationTime)
+        , _bytesSent(0)
+        , _bytesRcvd(0)
+        , _clientPort(0)
+        , _fd(createSocket(type))
+        , _type(type)
+        , _isShutdown(_fd < 0)
+    {
+        init();
+    }
+
+    virtual ~Socket()
+    {
+        LOG_TRC("Socket dtor");
+
+        closeFD(); // In case we haven't closed yet.
+    }
+
+    /// Returns true iff we have a valid FD and haven't called shutdown(2).
+    /// Note: this is needed because shutting down and closing are independent.
+    bool isOpen() const { return _fd >= 0 && !_isShutdown; }
+
+    /// Returns true if this socket FD has been shutdown, but not necessarily closed.
+    bool isShutdown() const { return _isShutdown; }
+
+    constexpr Type type() const { return _type; }
+    constexpr bool isIPType() const { return Type::IPv4 == _type || Type::IPv6 == _type; }
+    void setClientAddress(std::string address, unsigned int port = 0)
+    {
+        _clientAddress = std::move(address);
+        _clientPort = port;
+    }
+
+    const std::string& clientAddress() const { return _clientAddress; }
+    unsigned int clientPort() const { return _clientPort; }
+
+    /// Returns the OS native socket fd.
+    constexpr int getFD() const { return _fd; }
+
+    std::ostream& streamStats(std::ostream& os, std::chrono::steady_clock::time_point now) const;
+    std::string getStatsString(std::chrono::steady_clock::time_point now) const;
+
+    virtual std::ostream& stream(std::ostream& os) const  { return streamImpl(os); }
+
+    /// Returns monotonic creation timestamp
+    constexpr std::chrono::steady_clock::time_point getCreationTime() const { return _creationTime; }
+    /// Returns monotonic timestamp of last received signal from remote
+    constexpr std::chrono::steady_clock::time_point getLastSeenTime() const { return _lastSeenTime; }
+
+    /// Sets monotonic timestamp of last received signal from remote
+    void setLastSeenTime(const std::chrono::steady_clock::time_point now) { _lastSeenTime = now; }
+
+    /// Returns bytes sent statistic
+    constexpr uint64_t bytesSent() const { return _bytesSent; }
+    /// Returns bytes received statistic
+    constexpr uint64_t bytesRcvd() const { return _bytesRcvd; }
+
+    /// Get input/output statistics on this stream
+    void getIOStats(uint64_t& sent, uint64_t& recv) const
+    {
+        sent = _bytesSent;
+        recv = _bytesRcvd;
+    }
+
+    /// Shutdown the socket.
+    /// TODO: Support separate read/write shutdown.
+    void syncShutdown()
+    {
+        if (!_noShutdown)
+        {
+            LOG_TRC("Socket shutdown RDWR. " << *this);
+            if (!_isShutdown)
+            {
+                setShutdown();
+                if (Util::isMobileApp())
+                    fakeSocketShutdown(_fd);
+                else
+                    net::shutdownDescriptor(_fd);
+            }
+        }
+    }
+
+    /// Prepare our poll record; adjust @timeoutMaxMs downwards
+    /// for timeouts, based on current time @now.
+    /// @returns POLLIN and POLLOUT if output is expected.
+    virtual int getPollEvents(std::chrono::steady_clock::time_point now,
+                              int64_t &timeoutMaxMicroS) = 0;
+
+    /// Handle results of events returned from poll
+    virtual void handlePoll(SocketDisposition &disposition,
+                            std::chrono::steady_clock::time_point now,
+                            int events) = 0;
+
+    /// Do we have internally queued incoming / outgoing data ?
+    virtual bool hasBuffered() const { return false; }
+
+    /// Returns the total capacity of all data buffers.
+    virtual std::size_t totalBufferCapacity() const { return 0; }
+
+    /// manage latency issues around packet aggregation
+    void setNoDelay()
+    {
+        if (!Util::isMobileApp())
+            net::disableNagleAlgorithm(_fd);
+    }
+
+    /// Uses peercreds to get prisoner PID if present or -1
+    /// Defined only by the builds that have a real socket underneath.
+    int getPid() const;
+
+    /// Sets the kernel socket send buffer in size bytes.
+    /// Note: TCP will allocate twice this size for admin purposes,
+    /// so a subsequent call to getSendBufferSize will return
+    /// the larger (actual) buffer size, if this succeeds.
+    /// Note: the upper limit is set via /proc/sys/net/core/wmem_max,
+    /// and there is an unconfigurable lower limit as well.
+    /// Returns true on success only.
+    bool setSocketBufferSize([[maybe_unused]] const int size)
+    {
+#ifdef _WIN32
+        return false;
+#else
+        if (Util::isMobileApp())
+            return false;
+
+        int rc = ::setsockopt(_fd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
+
+        _sendBufferSize = getSocketBufferSize();
+        if (rc != 0 || _sendBufferSize < 0)
+        {
+            _sendBufferSize = DefaultSendBufferSize;
+            LOG_SYS("Error getting socket buffer size. Using default size of "
+                    << _sendBufferSize << " bytes.");
+            return false;
+        }
+
+        if (_sendBufferSize > MaximumSendBufferSize * 2)
+        {
+            LOG_TRC("Clamped send buffer size to " << MaximumSendBufferSize << " from "
+                                                   << _sendBufferSize);
+            _sendBufferSize = MaximumSendBufferSize;
+        }
+        else
+            LOG_TRC("Set socket buffer size to " << _sendBufferSize);
+
+        return true;
+#endif
+    }
+
+    /// Gets the actual send buffer size in bytes, -1 for failure.
+    [[nodiscard]] int getSocketBufferSize() const
+    {
+#ifdef _WIN32
+        return -1;
+#else
+        if (Util::isMobileApp())
+            return -1;
+
+        int size;
+        socklen_t len = sizeof(size);
+        const int rc = ::getsockopt(_fd, SOL_SOCKET, SO_SNDBUF, &size, &len);
+        return rc == 0 ? size : -1;
+#endif
+    }
+
+    /// Gets our fast cache of the socket buffer size
+    int getSendBufferSize() const { return (Util::isMobileApp() ? INT_MAX : _sendBufferSize); }
+
+    // Does this socket come from the localhost ?
+    bool isLocal() const;
+
+    virtual void dumpState(std::ostream&) {}
+
+    /// Returns the owner thread's id.
+    ProcUtil::ThreadId getThreadOwner() const { return _owner; }
+
+    /// Asserts in the debug builds, otherwise just logs.
+    void assertCorrectThread(LOG_CAPTURE_CALLER_DECLARATION) const
+    {
+        if (!ThreadChecks::Inhibit)
+            ProcUtil::assertCorrectThread(_owner, LOG_PASS_PARENT_CALLER);
+    }
+
+    bool ignoringInput() const { return _ignoreInput; }
+
+    // Ensure that no further input is processed from this socket
+    virtual void ignoreInput()
+    {
+        LOG_TRC("Ignore further input on socket");
+        _ignoreInput = true;
+    }
+
+    // arg to emphasize what is allowed do this
+    // close in advance of the ctor
+    void closeFD(const SocketPoll& /*rPoll*/) { closeFD(); }
+
+protected:
+    /// Construct based on an existing socket fd.
+    /// Used by accept() only.
+    Socket(const int fd, Type type,
+           std::chrono::steady_clock::time_point creationTime = std::chrono::steady_clock::now())
+        : _creationTime(creationTime)
+        , _lastSeenTime(_creationTime)
+        , _bytesSent(0)
+        , _bytesRcvd(0)
+        , _clientPort(0)
+        , _fd(fd)
+        , _type(type)
+        , _isShutdown(_fd < 0)
+    {
+        init();
+    }
+
+    void logPrefix(std::ostream& os) const { os << '#' << _fd << ": "; }
+
+    /// Adds `len` sent bytes to statistic
+    void notifyBytesSent(uint64_t len) { _bytesSent += len; }
+    /// Adds `len` received bytes to statistic
+    void notifyBytesRcvd(uint64_t len) { _bytesRcvd += len; }
+
+    /// avoid doing a shutdown before close
+    void setNoShutdown() { _noShutdown = true; }
+
+    /// Explicitly marks this socket FD as shut down, but not necessarily closed.
+    void setShutdown() { _isShutdown = true; }
+
+    /// Set the thread-id we're bound to
+    virtual void setThreadOwner(const ProcUtil::ThreadId id, LOG_CAPTURE_CALLER_DECLARATION)
+    {
+        if (id != _owner)
+        {
+            LOG_TRC("Thread affinity of Socket #" << _fd << " set to " << id << " (was " << _owner << ')');
+            _owner = id;
+        }
+    }
+
+    /// Reset the thread-id while it's in transition.
+    virtual void resetThreadOwner(LOG_CAPTURE_CALLER_DECLARATION)
+    {
+        if (ProcUtil::ThreadId() != _owner)
+        {
+            LOG_TRC("Resetting thread affinity of Socket #" << _fd << " while in transit (was " << _owner << ')');
+            _owner = ProcUtil::ThreadId();
+        }
+    }
+
+private:
+    friend class SocketThreadOwnerChange;
+
+    /// Create socket of the given type.
+    /// return >= 0 for a successfully created socket, -1 on error
+    static int createSocket(Type type);
+
+    std::ostream& streamImpl(std::ostream& os) const;
+    std::string toStringImpl() const;
+
+    void init()
+    {
+        if (_type != Type::Unix && _fd >= 0)
+            setNoDelay();
+        _ignoreInput = false;
+        _noShutdown = false;
+        _sendBufferSize = DefaultSendBufferSize;
+        _owner = ProcUtil::getThreadId();
+        LOG_DBG("Created socket #" << _fd << ". Thread affinity set to " << _owner);
+
+        if (!Util::isMobileApp())
+        {
+#if ENABLE_DEBUG
+            if (std::getenv("COOL_ZERO_BUFFER_SIZE") && _fd >= 0)
+            {
+                const int oldSize = getSocketBufferSize();
+                setSocketBufferSize(0);
+                LOG_TRC("Buffer size: " << getSendBufferSize() << " (was " << oldSize << ')');
+            }
+#endif
+        }
+    }
+
+    /// Close the socket FD.
+    /// Internal implementation, always private.
+    void closeFD()
+    {
+        // explicit closeFD called, or initial createSocket failure
+        if (_fd < 0)
+            return;
+
+            // Doesn't block on sockets; no error handling needed.
+        net::closeSocketDescriptor(_fd);
+
+        LOG_DBG("Closed socket " << toStringImpl()); // Should be logged exactly once.
+
+        // Invalidate the FD by negating to preserve the original value.
+        if (_fd > 0)
+            _fd = -_fd;
+        else if (_fd == 0) // Unlikely, but technically possible.
+            _fd = -1;
+    }
+
+    std::string _clientAddress;
+
+    const std::chrono::steady_clock::time_point _creationTime;
+    std::chrono::steady_clock::time_point _lastSeenTime;
+    uint64_t _bytesSent;
+    uint64_t _bytesRcvd;
+
+    /// We check the owner even in the release builds, needs to be always correct.
+    ProcUtil::ThreadId _owner;
+
+    unsigned int _clientPort;
+    int _fd;
+    int _sendBufferSize;
+
+    const Type _type;
+
+    /// True if this socket is shut down.
+    bool _isShutdown;
+    // If _ignoreInput is true no more input from this socket will be processed.
+    bool _ignoreInput;
+    bool _noShutdown;
+};
+
+// Allow SocketPoll and SocketDisposition to call Socket::setThreadOwner
+// without exposing the entirety of Socket's internals to them
+class SocketThreadOwnerChange
+{
+private:
+    friend class SocketDisposition;
+    friend class SocketPoll;
+
+    static void setThreadOwner(Socket& socket, const ProcUtil::ThreadId id,
+                               LOG_CAPTURE_CALLER_DECLARATION)
+    {
+        socket.setThreadOwner(id, LOG_PASS_PARENT_CALLER);
+    }
+
+    static void resetThreadOwner(Socket& socket, LOG_CAPTURE_CALLER_DECLARATION)
+    {
+        socket.resetThreadOwner(LOG_PASS_PARENT_CALLER);
+    }
+};
+
+inline std::ostream& operator<<(std::ostream& os, const Socket &s) { return s.stream(os); }
+
+namespace net
+{
+    /// Open a real stream socket of the given kind, non-blocking and closed when a new program
+    /// starts. Returns the descriptor, or -1 with errno set.
+    int openStreamSocket(Socket::Type type);
+
+    /// Give a real socket the given port, on every address when publicly is true and on the
+    /// loopback address otherwise. Returns true on success only.
+    bool bindToPort(int descriptor, Socket::Type socketType, bool publicly, int port);
+
+    /// The port a bound socket has, in host byte order, or -1 when it cannot be read.
+    int boundPort(int descriptor);
+
+    /// Where a connection came from.
+    struct PeerAddress
+    {
+        /// The kind of socket the connection arrived on.
+        Socket::Type type = Socket::Type::All;
+        /// The address in its printable form, empty when the platform could not render it.
+        std::string address;
+        /// The port, in host byte order.
+        unsigned int port = 0;
+        /// The address family the platform reported.
+        int family = 0;
+    };
+
+    /// Take a waiting connection from a real listening socket and fill in where it came from.
+    /// Returns the descriptor, -1 when there is nothing to take, and stops the process when the
+    /// listening socket is unusable.
+    int acceptConnection(int descriptor, PeerAddress& peer);
+}
+
+class StreamSocket;
+class MessageHandlerInterface;
+
+/// Interface that decodes the actual incoming message. Each StreamSocket owns one, so keep it
+/// small: a setting that is the same for every handler goes in net::Defaults, not in a member.
+class ProtocolHandlerInterface :
+    public std::enable_shared_from_this<ProtocolHandlerInterface>
+{
+protected:
+    /// We own a message handler, after decoding the socket data we pass it on as messages.
+    std::shared_ptr<MessageHandlerInterface> _msgHandler;
+
+    /// Sets the context used by logPrefix.
+    void setLogContext(int fd) { _fdSocket = fd; }
+
+    /// Returns the log prefix string for use outside of member context.
+    std::string getLogPrefix() const { return '#' + std::to_string(_fdSocket) + ": "; }
+
+    /// Used by the logging macros to automatically log a context prefix.
+    void logPrefix(std::ostream& os) const { os << getLogPrefix(); }
+
+public:
+    ProtocolHandlerInterface()
+        : _fdSocket(-1)
+        , _owner(ProcUtil::getThreadId())
+    {
+    }
+
+    // ------------------------------------------------------------------
+    // Interface for implementing low level socket goodness from streams.
+    // ------------------------------------------------------------------
+    virtual ~ProtocolHandlerInterface() = default;
+
+    /// Asserts in the debug builds, otherwise just logs.
+    void assertCorrectThread(LOG_CAPTURE_CALLER_DECLARATION) const
+    {
+        if (!ThreadChecks::Inhibit)
+            ProcUtil::assertCorrectThread(_owner, LOG_PASS_PARENT_CALLER);
+    }
+
+    /// Called when the socket is newly created to
+    /// set the socket associated with this ResponseClient.
+    /// Will be called exactly once.
+    virtual void onConnect(const std::shared_ptr<StreamSocket>& socket) = 0;
+
+    /// Enable/disable processing of incoming data at socket level.
+    virtual void enableProcessInput(bool /*enable*/){};
+    virtual bool processInputEnabled() const { return true; };
+
+    /// Called after successful socket reads.
+    virtual void handleIncomingMessage(SocketDisposition &disposition) = 0;
+
+    /// Prepare our poll record; adjust @timeoutMaxMs downwards
+    /// for timeouts, based on current time @now.
+    /// @returns POLLIN and POLLOUT if output is expected.
+    virtual int getPollEvents(std::chrono::steady_clock::time_point now,
+                              int64_t &timeoutMaxMicroS) = 0;
+
+    /// Checks whether a timeout has occurred. Method will shutdown connection and socket on timeout.
+    /// Returns true in case of a timeout, caller shall stop processing
+    virtual bool checkTimeout(std::chrono::steady_clock::time_point /* now */) { return false; }
+
+    /// Do some of the queued writing.
+    virtual void performWrites(std::size_t capacity) = 0;
+
+    /// Called when the SSL Handshake fails.
+    virtual void onHandshakeFail() {}
+
+    /// Called when the socket is disconnected and will be destroyed.
+    /// Will be called exactly once.
+    virtual void onDisconnect() = 0;
+
+    // -----------------------------------------------------------------
+    //            Interface for external MessageHandlers
+    // -----------------------------------------------------------------
+
+    void setMessageHandler(const std::shared_ptr<MessageHandlerInterface> &msgHandler)
+    {
+        ASSERT_CORRECT_THREAD();
+        _msgHandler = msgHandler;
+    }
+
+    /// Clear all external references
+    virtual void dispose()
+    {
+        ASSERT_CORRECT_THREAD();
+        _msgHandler.reset();
+    }
+
+    /// Sends a text message.
+    /// Returns the number of bytes written (including frame overhead) on success,
+    /// 0 for closed/invalid socket, and -1 for other errors.
+    virtual int sendTextMessage(std::string_view msg, bool flush = false) const = 0;
+
+    /// Sends a binary message.
+    /// Returns the number of bytes written (including frame overhead) on success,
+    /// 0 for closed/invalid socket, and -1 for other errors.
+    virtual int sendBinaryMessage(std::string_view data, bool flush = false) const = 0;
+
+    /// Shutdown the socket and specify if the endpoint is going away or not (useful for WS).
+    /// Optionally provide a message sent in the close frame (useful for WS).
+    virtual void shutdown(bool goingAway = false,
+                          const std::string_view statusMessage = std::string_view()) = 0;
+
+    virtual void getIOStats(uint64_t &sent, uint64_t &recv) = 0;
+
+    void dumpState(std::ostream& os) const { dumpState(os, "\n\t"); }
+
+    /// Append pretty printed internal state to a line
+    virtual void dumpState(std::ostream& os, const std::string& indent) const
+    {
+        os << indent;
+    }
+
+private:
+    friend class ProtocolThreadOwnerChange;
+
+    void setThreadOwner(const ProcUtil::ThreadId id, LOG_CAPTURE_CALLER_DECLARATION)
+    {
+        if (id != _owner)
+        {
+            LOG_TRC("Thread affinity of ProtocolHandlerInterface set to " << id << " (was "
+                                                                          << _owner << ')');
+            _owner = id;
+        }
+    }
+
+    void resetThreadOwner(LOG_CAPTURE_CALLER_DECLARATION)
+    {
+        if (ProcUtil::ThreadId() != _owner)
+        {
+            LOG_TRC("Resetting thread affinity of ProtocolHandlerInterface while in transit (was "
+                    << _owner << ')');
+            _owner = ProcUtil::ThreadId();
+        }
+    }
+
+    int _fdSocket; ///< The socket file-descriptor.
+    ProcUtil::ThreadId _owner;
+};
+
+class StreamSocket;
+
+// Allow Socket to call ProtocolHandlerInterface::setThreadOwner
+// without exposing the entirety of ProtocolHandlerInterface's internals to it
+class ProtocolThreadOwnerChange
+{
+    friend class StreamSocket;
+
+    static void setThreadOwner(ProtocolHandlerInterface& handler, const ProcUtil::ThreadId id,
+                               LOG_CAPTURE_CALLER_DECLARATION)
+    {
+        handler.setThreadOwner(id, LOG_PASS_PARENT_CALLER);
+    }
+
+    static void resetThreadOwner(ProtocolHandlerInterface& handler, LOG_CAPTURE_CALLER_DECLARATION)
+    {
+        handler.resetThreadOwner(LOG_PASS_PARENT_CALLER);
+    }
+
+};
+
+// Forward declare WebSocketHandler, which is inherited from ProtocolHandlerInterface.
+class WebSocketHandler;
+
+/// A ProtocolHandlerInterface with dummy sending API. Each StreamSocket owns one, so keep it
+/// small: a setting that is the same for every handler goes in net::Defaults, not in a member.
+class SimpleSocketHandler : public ProtocolHandlerInterface
+{
+public:
+    SimpleSocketHandler() = default;
+    int sendTextMessage(std::string_view, bool) const override { return 0; }
+    int sendBinaryMessage(std::string_view, bool) const override { return 0; }
+    void shutdown(bool, const std::string_view) override {}
+    void getIOStats(uint64_t &, uint64_t &) override {}
+};
+
+/// Interface that receives and sends incoming messages.
+class MessageHandlerInterface :
+    public std::enable_shared_from_this<MessageHandlerInterface>
+{
+protected:
+    std::shared_ptr<ProtocolHandlerInterface> _protocol;
+    explicit MessageHandlerInterface(std::shared_ptr<ProtocolHandlerInterface> protocol)
+        : _protocol(std::move(protocol))
+    {
+    }
+
+    virtual ~MessageHandlerInterface() = default;
+
+public:
+    /// Setup, after construction for shared_from_this
+    void initialize()
+    {
+        if (_protocol)
+            _protocol->setMessageHandler(shared_from_this());
+    }
+
+    /// Clear all external references
+    virtual void dispose()
+    {
+        if (_protocol)
+        {
+            _protocol->dispose();
+            _protocol.reset();
+        }
+    }
+
+    std::shared_ptr<ProtocolHandlerInterface> getProtocol() const
+    {
+        return _protocol;
+    }
+
+    /// Do we have something to send ?
+    virtual bool hasQueuedMessages() const = 0;
+    /// Please send them to me then.
+    /// Write queued messages into the socket, at least capacity bytes,
+    /// and up to the next message boundary.
+    virtual void writeQueuedMessages(std::size_t capacity) = 0;
+    /// We just got a message - here it is
+    virtual void handleMessage(const std::vector<char> &data) = 0;
+    /// Get notified that the underlying transports disconnected
+    virtual void onDisconnect() = 0;
+    /// Append pretty printed internal state to a line
+    virtual void dumpState(std::ostream& os) = 0;
+};
+
+class InputProcessingManager
+{
+public:
+    InputProcessingManager(const std::shared_ptr<ProtocolHandlerInterface> &protocol, bool inputProcess)
+        : _protocol(protocol)
+        , _prevInputProcess(false)
+    {
+        if (_protocol)
+        {
+            // Save previous state to be restored in destructor
+            _prevInputProcess = _protocol->processInputEnabled();
+            protocol->enableProcessInput(inputProcess);
+        }
+    }
+
+    ~InputProcessingManager()
+    {
+        // Restore previous state
+        if (_protocol)
+            _protocol->enableProcessInput(_prevInputProcess);
+    }
+
+private:
+    std::shared_ptr<ProtocolHandlerInterface> _protocol;
+    bool _prevInputProcess;
+};
+
+/// Handles non-blocking socket event polling.
+/// Only polls on N-Sockets and invokes callback and
+/// doesn't manage buffers or client data.
+/// Note: uses poll(2) since it has very good performance
+/// compared to epoll up to a few hundred sockets and
+/// doesn't suffer select(2)'s poor API. Since this will
+/// be used per-document we don't expect to have several
+/// hundred users on same document to suffer poll(2)'s
+/// scalability limit. Meanwhile, epoll(2)'s high
+/// overhead to adding/removing sockets is not helpful.
+class SocketPoll
+{
+public:
+    /// Create a socket poll, called rather infrequently.
+    explicit SocketPoll(std::string threadName);
+    virtual ~SocketPoll();
+
+    static std::unique_ptr<Watchdog> PollWatchdog;
+
+    /// Default poll time - useful to increase for debugging.
+    static constexpr std::chrono::microseconds DefaultPollTimeoutMicroS = std::chrono::seconds(64);
+
+    /// Stop the polling thread.
+    void stop();
+
+    /// Remove all the sockets we own.
+    void removeSockets();
+
+    /// After a fork - close all associated sockets without shutdown.
+    void closeAllSockets();
+
+    /// Setup pipes needed for cross-thread wakeups
+    void createWakeups();
+
+    bool isAlive() const { return (_threadStarted && !_threadFinished) || _runOnClientThread; }
+
+    /// True iff the polling thread was started at some point.
+    /// Unlike isAlive() this stays true after the thread finishes,
+    /// so it distinguishes a never-started poll from an expired one.
+    bool isThreadStarted() const { return _threadStarted > 0; }
+
+    /// Check if we should continue polling
+    virtual bool continuePolling()
+    {
+        return !_stop;
+    }
+
+    /// Executed inside the poll in case of a wakeup
+    virtual void wakeupHook() {}
+
+    ProcUtil::ThreadId getThreadOwner() const { return _owner; }
+
+    /// Are we running in either shutdown, or the polling thread.
+    /// Asserts in the debug builds, otherwise just logs.
+    void assertCorrectThread(LOG_CAPTURE_CALLER_DECLARATION) const
+    {
+        if (!ThreadChecks::Inhibit && isAlive())
+            ProcUtil::assertCorrectThread(_owner, LOG_PASS_PARENT_CALLER);
+    }
+
+    /// Kit poll can be called from COKit's Yield in any thread, adapt to that.
+    void checkAndReThread();
+
+    /// Poll the sockets for available data to read or buffer to write.
+    /// Returns the return-value of poll(2): 0 on timeout,
+    /// -1 for error, and otherwise the number of events signalled.
+    int poll(std::chrono::microseconds timeoutMax, bool justPoll = false) { return poll(timeoutMax.count(), justPoll); }
+
+    /// Poll the sockets for available data to read or buffer to write.
+    /// Returns the return-value of poll(2): 0 on timeout,
+    /// -1 for error, and otherwise the number of events signalled.
+    /// Takes the deadline, instead of a timeout.
+    /// Note: will *not* return until the deadline expires, or upon
+    /// hitting an error. Always polls at least once. Returns last rc.
+    int pollUntilDeadline(std::chrono::steady_clock::time_point deadline);
+
+    /// Write to a wakeup descriptor
+    static void wakeup (int fd);
+
+    /// Wakeup the main polling loop in another thread
+    void wakeup() const;
+
+    /// Global wakeup - signal safe: wakeup all socket polls.
+    static void wakeupWorld();
+
+    /// Insert a new socket to be polled, if still running.
+    /// Returns true iff we've scheduled the insertion (i.e. we're running).
+    /// A socket is removed when it is closed, readIncomingData
+    /// returns false, or when removeSockets is called (which is
+    /// done automatically when SocketPoll is stopped via joinThread).
+    bool insertNewSocket(std::shared_ptr<Socket> newSocket);
+
+    /// Schedules an async transfer of a socket from this SocketPoll to
+    /// @toPoll, if we're still running.
+    /// Return true iff we scheduled the transfer (i.e. we're running).
+    ///
+    /// @cbAfterArrivalInNewPoll is called when socket is inserted in @toPoll.
+    /// See insertNewSocket
+    ///
+    /// @cbAfterRemovalFromOldPoll is called when socket has been removed
+    /// from this SocketPoll. May be nullptr.
+    bool transferSocketTo(const std::weak_ptr<Socket>& socket,
+                          const std::weak_ptr<SocketPoll>& toPoll,
+                          SocketDisposition::MoveFunction cbAfterArrivalInNewPoll,
+                          std::function<void()> cbAfterRemovalFromOldPoll);
+
+    /// Takes socket from @fromPoll and moves it to @toPoll.
+    /// Blocks until the socket is removed from @fromPoll.
+    static void takeSocket(const std::shared_ptr<SocketPoll>& fromPoll,
+                           const std::shared_ptr<SocketPoll>& toPoll,
+                           const std::shared_ptr<Socket>& socket);
+
+    // Each is defined only by the builds that have that kind of socket.
+
+    /// Inserts a new remote websocket to be polled. Returns true when the
+    /// connection was made and the socket is being polled.
+    /// NOTE: The DNS lookup is synchronous.
+    bool insertNewWebSocketSync(const Poco::URI& uri,
+                                const std::shared_ptr<WebSocketHandler>& websocketHandler);
+
+    bool insertNewUnixSocket(
+        const UnxSocketPath &location,
+        const std::string &pathAndQuery,
+        const std::shared_ptr<WebSocketHandler>& websocketHandler,
+        const std::vector<int>* shareFDs = nullptr);
+
+    bool insertNewFakeSocket(
+        int peerSocket,
+        const std::shared_ptr<ProtocolHandlerInterface>& websocketHandler);
+
+    using CallbackFn = std::function<void()>;
+
+    /// Add a callback to be invoked in the polling thread, if we're running.
+    /// Returns true iff we've scheduled the callback (i.e. we're running).
+    bool addCallback(CallbackFn fn);
+
+    virtual void dumpState(std::ostream& os) const;
+
+    size_t getSocketCount() const
+    {
+        ASSERT_CORRECT_THREAD();
+        return _pollSockets.size();
+    }
+
+    const std::string& name() const { return _name; }
+
+    /// Start the polling thread (if desired)
+    /// Mutually exclusive with runOnClientThread().
+    bool startThread();
+
+    /// Stop and join the polling thread before returning (if active)
+    void joinThread();
+
+    /// Called to prevent starting own poll thread
+    /// when polling is done on the client's thread.
+    /// Mutually exclusive with startThread().
+    bool runOnClientThread();
+
+    bool isRunOnClientThread() const
+    {
+        return _runOnClientThread;
+    }
+
+    void disableWatchdog();
+    void enableWatchdog();
+
+protected:
+    bool isStop() const
+    {
+        return _stop;
+    }
+
+    void removeFromWakeupArray();
+
+    bool hasCallbacks()
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return _newCallbacks.size() > 0;
+    }
+
+    bool hasBuffered() const
+    {
+        for (const auto& it : _pollSockets)
+            if (it->hasBuffered())
+                return true;
+        return false;
+    }
+
+private:
+    /// The default implementation of our polling thread
+    virtual void pollingThread()
+    {
+        while (continuePolling())
+        {
+            poll(DefaultPollTimeoutMicroS);
+        }
+    }
+
+    /// Actual poll implementation
+    int poll(int64_t timeoutMaxMicroS, bool justPoll = false);
+
+    /// Initialize the poll fds array with the right events
+    void setupPollFds(std::chrono::steady_clock::time_point now,
+                      int64_t &timeoutMaxMicroS);
+
+    [[nodiscard]] std::string logInfo() const
+    {
+        std::ostringstream os;
+        os << "SocketPoll[this " << std::hex << this << std::dec << ", thread[name " << _name
+           << ", id[owner " << _owner << ", caller " << ProcUtil::getThreadId() << "]]]";
+        return os.str();
+    }
+
+    /// The polling thread entry.
+    /// Used to set the thread name and mark the thread as stopped when done.
+    void pollingThreadEntry();
+
+    bool taskQueuesEmpty() const
+    {
+        return _newSockets.empty() && _newCallbacks.empty() && _pendingTransfers.empty();
+    }
+
+    struct SocketTransfer
+    {
+        std::weak_ptr<Socket> _socket;
+        std::weak_ptr<SocketPoll> _toPoll;
+        SocketDisposition::MoveFunction _cbAfterArrivalInNewPoll;
+        std::function<void()> _cbAfterRemovalFromOldPoll;
+
+        SocketTransfer(std::weak_ptr<Socket> socket,
+                       std::weak_ptr<SocketPoll> toPoll,
+                       SocketDisposition::MoveFunction cbAfterArrivalInNewPoll,
+                       std::function<void()> cbAfterRemovalFromOldPoll)
+            : _socket(std::move(socket))
+            , _toPoll(std::move(toPoll))
+            , _cbAfterArrivalInNewPoll(std::move(cbAfterArrivalInNewPoll))
+            , _cbAfterRemovalFromOldPoll(std::move(cbAfterRemovalFromOldPoll))
+       {
+       }
+    };
+
+    void transfer(const SocketTransfer& pendingTransfer);
+
+    /// Protects _newSockets, _newCallbacks and _pendingTransfers
+    std::mutex _mutex;
+
+    /// Debug name used for logging.
+    const std::string _name;
+
+    /// The sockets we're controlling
+    std::vector<std::shared_ptr<Socket>> _pollSockets;
+    std::vector<std::shared_ptr<Socket>> _newSockets;
+    std::vector<CallbackFn> _newCallbacks;
+    std::vector<SocketTransfer> _pendingTransfers;
+
+    /// The fds to poll.
+    std::vector<pollfd> _pollFds;
+
+    /// main-loop wakeup pipe
+    int _wakeup[2];
+    /// We start handling the poll results of the above sockets at a different index each time, to
+    /// not arbitrarily prioritize some
+    size_t _pollStartIndex;
+    /// The polling thread.
+    std::thread _thread;
+    ProcUtil::ThreadId _owner;
+    /// Flag the thread to stop.
+    std::atomic<int64_t> _threadStarted;
+    std::atomic<uint64_t> _watchdogTime;
+
+    std::atomic<bool> _stop;
+    std::atomic<bool> _threadFinished;
+    std::atomic<bool> _runOnClientThread;
+};
+
+/// A SocketPoll that will stop polling and
+/// terminate when the TerminationFlag is set.
+class TerminatingPoll : public SocketPoll
+{
+public:
+    TerminatingPoll(const std::string &threadName) :
+        SocketPoll(threadName) {}
+
+    bool continuePolling() override
+    {
+        return SocketPoll::continuePolling() && !SigUtil::getTerminationFlag();
+    }
+};
+
+STATE_ENUM(SharedFDType, SMAPS, URPToKit, URPFromKit);
+
+enum class HostType : uint8_t { LocalHost, Other };
+
+// A plain, non-blocking, data streaming socket. There is one per connection, so keep it small: a
+// setting that is the same for every socket goes in net::Defaults, not in a member.
+class StreamSocket : public Socket,
+                     public std::enable_shared_from_this<StreamSocket>
+{
+public:
+    STATE_ENUM(ReadType, NormalRead, UseRecvmsgExpectFD);
+
+    /// Create a StreamSocket from native FD.
+    StreamSocket(std::string host, const int fd, Type type, bool isClient,
+                 HostType hostType, ReadType readType = ReadType::NormalRead,
+                 std::chrono::steady_clock::time_point creationTime = std::chrono::steady_clock::now() )
+        : Socket(fd, type, creationTime)
+        , _hostname(std::move(host))
+        , _wsState(WSState::HTTP)
+        , _readType(readType)
+        , _shutdownSignalled(false)
+        , _inputProcessingEnabled(true)
+        , _doneDisconnect(false)
+        , _isClient(isClient)
+        , _isLocalHost(hostType == HostType::LocalHost)
+        , _sentHTTPContinue(false)
+    {
+        LOG_TRC("StreamSocket ctor");
+        if (isExternalCountedConnection())
+            ++ExternalConnectionCount;
+    }
+
+    ~StreamSocket() override;
+
+    /// Emit 'onDisconnect' if it has not been done
+    void ensureDisconnected();
+
+    bool isWebSocket() const { return _wsState == WSState::WS; }
+    void setWebSocket() { _wsState = WSState::WS; }
+    bool isLocalHost() const { return _isLocalHost; }
+
+    /// Returns the peer hostname, if set.
+    const std::string& hostname() const { return _hostname; }
+
+    std::ostream& stream(std::ostream& os) const override;
+
+    /// Checks whether StreamSocket is due for forced removal, e.g. by inactivity. Method will shutdown connection and socket on forced removal.
+    /// Returns true in case of forced removal, caller shall stop processing
+    bool checkRemoval(std::chrono::steady_clock::time_point now);
+
+    void asyncShutdown()
+    {
+        _shutdownSignalled = true;
+        LOG_TRC("Async shutdown requested");
+    }
+
+    void ignoreInput() override
+    {
+        Socket::ignoreInput();
+        _inBuffer.clear();
+    }
+
+    /// Perform the real shutdown.
+    virtual void shutdownConnection() { syncShutdown(); }
+
+    int getPollEvents(std::chrono::steady_clock::time_point now,
+                      int64_t &timeoutMaxMicroS) override
+    {
+        // cf. SslSocket::getPollEvents
+        ASSERT_CORRECT_SOCKET_THREAD(this);
+        int events = _socketHandler->getPollEvents(now, timeoutMaxMicroS);
+        if (!_outBuffer.empty() || _shutdownSignalled)
+            events |= POLLOUT;
+        return events;
+    }
+
+    bool hasBuffered() const override
+    {
+        return !_outBuffer.empty() || !_inBuffer.empty();
+    }
+
+    std::size_t totalBufferCapacity() const override
+    {
+        return _outBuffer.capacity() + _inBuffer.capacity();
+    }
+
+    /// Create a pair of connected stream sockets
+    static bool socketpair(std::chrono::steady_clock::time_point creationTime,
+                           std::shared_ptr<StreamSocket>& parent,
+                           std::shared_ptr<StreamSocket>& child);
+
+    /// Send data to the socket peer.
+    void send(const char* data, const int len, const bool doFlush = true);
+
+    /// Send a string to the socket peer.
+    void send(const std::string_view str, const bool doFlush = true)
+    {
+        send(str.data(), str.size(), doFlush);
+    }
+
+    /// Send an http::Request and flush.
+    /// Does not add any fields to the header.
+    /// Will shutdown the socket upon error and return false.
+    bool send(http::Request& request);
+
+    /// Send an http::Response and flush.
+    /// Does not add any fields to the header.
+    /// Will shutdown the socket upon error and return false.
+    bool send(const http::Response& response);
+
+    /// Send an http::Response, flush, and shutdown.
+    /// Will set 'Connection: close' header.
+    /// Returns true if no errors are encountered.
+    /// Will always shutdown the socket.
+    bool sendAndShutdown(http::Response& response);
+
+    /// Safely attempt to write any outgoing data.
+    /// Returns true iff no data is left in the buffer.
+    bool attemptWrites()
+    {
+        if (!_outBuffer.empty())
+            writeOutgoingData();
+
+        return _outBuffer.empty();
+    }
+
+    /// Sends data with file descriptor as control data.
+    /// Can be used only with Unix sockets.
+    void sendFDs([[maybe_unused]] const char* data, [[maybe_unused]] const uint64_t len,
+                 [[maybe_unused]] const std::vector<int>& fds);
+
+    /// Reads data by invoking readData() and buffering.
+    /// Returns the last return from writeData. 0 implies socket is closed.
+    virtual int readIncomingData();
+
+    /// Replace the existing SocketHandler with a new one.
+    void setHandler(std::shared_ptr<ProtocolHandlerInterface> handler)
+    {
+        LOG_TRC("setHandler");
+        resetHandler(); // don't disconnect the pre-upgrade handler
+        _socketHandler = std::move(handler);
+        ProtocolThreadOwnerChange::setThreadOwner(*_socketHandler, getThreadOwner());
+        _socketHandler->onConnect(shared_from_this());
+    }
+
+    /// Explicitly avoids onDisconnect
+    void resetHandler()
+    {
+        LOG_TRC("resetHandler");
+        _socketHandler.reset();
+    }
+
+    /// Create a socket of type TSocket derived from StreamSocket given an FD and a handler.
+    /// We need this helper since the handler needs a shared_ptr to the socket
+    /// but we can't have a shared_ptr in the ctor.
+    template <typename TSocket>
+    static std::shared_ptr<TSocket>
+    create(std::string hostname, int fd, Type type, bool isClient, HostType hostType,
+           std::shared_ptr<ProtocolHandlerInterface> handler,
+           ReadType readType = ReadType::NormalRead,
+           std::chrono::steady_clock::time_point creationTime = std::chrono::steady_clock::now())
+        requires(std::is_base_of_v<StreamSocket, TSocket>)
+    {
+        // Without a handler we make no sense object.
+        if (!handler)
+            throw std::runtime_error("StreamSocket " + std::to_string(fd) +
+                                     " expects a valid SocketHandler instance.");
+
+        auto socket = std::make_shared<TSocket>(std::move(hostname), fd, type, isClient, hostType, readType, creationTime);
+        socket->setHandler(std::move(handler));
+
+        return socket;
+    }
+
+        /// Messages can be in chunks, only parts of message being valid.
+    struct MessageMap {
+        MessageMap() : _headerSize(0), _messageSize(0) {}
+        /// Size of HTTP headers
+        size_t _headerSize;
+        /// Entire size of data associated with this message
+        size_t _messageSize;
+        // offset + lengths to collate into the real stream
+        std::vector<std::pair<size_t, size_t>> _spans;
+    };
+
+    /// remove all queued input bytes
+    void clearInput()
+    {
+        _inBuffer.clear();
+    }
+
+    /// Remove the first @count bytes from input buffer
+    void eraseFirstInputBytes(const std::size_t count)
+    {
+        const size_t toErase = std::min(count, _inBuffer.size());
+        if (toErase < count)
+            LOG_ERR("Attempted to remove: " << count << " which is > size: " << _inBuffer.size()
+                                            << " clamped to " << toErase);
+        if (toErase > 0)
+            _inBuffer.eraseFirst(toErase);
+    }
+
+    /// Compacts chunk headers away leaving just the data we want
+    /// returns true if we did any re-sizing/movement of _inBuffer.
+    bool compactChunks(MessageMap& map);
+
+    ssize_t readHeader(std::string_view clientName, std::istream& message, size_t messagesize,
+                       Poco::Net::HTTPRequest& request,
+                       std::chrono::duration<float, std::milli> delayMs);
+
+    /// Detects if we have an HTTP header in the provided message and
+    /// populates a request for that.
+    bool parseHeader(std::string_view clientName, size_t headerSize, size_t bufferSize,
+                     const Poco::Net::HTTPRequest& request,
+                     std::chrono::duration<float, std::milli> delayMs, MessageMap& map);
+
+    void handleExpect(std::string_view expect);
+
+    bool checkChunks(const Poco::Net::HTTPRequest& request, size_t headerSize, MessageMap& map,
+                     std::chrono::duration<float, std::milli> delayMs);
+
+    Buffer& getInBuffer() { return _inBuffer; }
+
+    const Buffer& getOutBuffer() const { return _outBuffer; }
+    Buffer& getOutBuffer()
+    {
+        return _outBuffer;
+    }
+
+    int getIncomingFD(SharedFDType eType) const
+    {
+        const size_t eTypeIdx = static_cast<size_t>(eType);
+        if (eTypeIdx < _incomingFDs.size())
+            return _incomingFDs[eTypeIdx];
+        return -1;
+    }
+
+    bool processInputEnabled() const { return _inputProcessingEnabled; }
+    void enableProcessInput(bool enable = true){ _inputProcessingEnabled = enable; }
+
+    /// The available number of bytes in the socket
+    /// buffer for an optimal transmission.
+    int getSendBufferCapacity() const
+    {
+        if (Util::isMobileApp())
+            return INT_MAX; // We want to always send a single record in one go
+        const int capacity = getSendBufferSize();
+        return std::max<int>(0, capacity - _outBuffer.size());
+    }
+
+    virtual long getSslVerifyResult()
+    {
+        return 0;
+    }
+
+    virtual std::string getSslCert(std::string&)
+    {
+        return std::string();
+    }
+
+    /// Called when a polling event is received.
+    /// @events is the mask of events that triggered the wake.
+    void handlePoll(SocketDisposition &disposition,
+                    std::chrono::steady_clock::time_point now,
+                    const int events) override;
+
+    /// Override to write data out to socket.
+    /// Returns the last return from writeData.
+    virtual int writeOutgoingData();
+
+    /// Does it look like we have some TLS / SSL where we don't expect it ?
+    bool sniffSSL() const;
+
+    void dumpState(std::ostream& os) override;
+
+    static size_t getExternalConnectionCount() { return ExternalConnectionCount; }
+
+    /// Number of sockets closed because they stayed over the buffer bloat
+    /// threshold for too long, since the start of the application.
+    static size_t getBufferBloatClosedCount() { return BufferBloatClosedCount; }
+
+protected:
+    void handshakeFail()
+    {
+        if (_socketHandler)
+            _socketHandler->onHandshakeFail();
+    }
+
+    /// Reads data with file descriptors as control data if received.
+    /// Can be used only with Unix sockets.
+    int readFDs([[maybe_unused]] char* buf, [[maybe_unused]] int len,
+                [[maybe_unused]] std::vector<int>& fds);
+
+    /// Override to handle reading of socket data differently.
+    virtual int readData(char* buf, int len);
+
+    /// Override to handle writing data to socket differently.
+    virtual int writeData(const char* buf, const int len);
+
+    void setShutdownSignalled()
+    {
+        _shutdownSignalled = true;
+    }
+
+    bool isShutdownSignalled() const
+    {
+        return _shutdownSignalled;
+    }
+
+    void setThreadOwner(const ProcUtil::ThreadId id, LOG_CAPTURE_CALLER_DECLARATION) override
+    {
+        Socket::setThreadOwner(id, LOG_PASS_PARENT_CALLER);
+        if (_socketHandler)
+            ProtocolThreadOwnerChange::setThreadOwner(*_socketHandler, id, LOG_PASS_PARENT_CALLER);
+    }
+
+    void resetThreadOwner(LOG_CAPTURE_CALLER_DECLARATION) override
+    {
+        Socket::resetThreadOwner(LOG_PASS_PARENT_CALLER);
+        if (_socketHandler)
+            ProtocolThreadOwnerChange::resetThreadOwner(*_socketHandler, LOG_PASS_PARENT_CALLER);
+    }
+
+#if ENABLE_DEBUG
+    /// Return true and set errno to simulate an error
+    bool simulateSocketError(bool read);
+#endif
+
+private:
+    friend class NetUtilWhiteBoxTests;
+
+    /// Track lifetime of bloat
+    bool checkBufferBloat(std::chrono::steady_clock::time_point now);
+
+    /// The hostname (or IP) of the peer we are connecting to.
+    const std::string _hostname;
+
+    /// Warn once the incoming or outgoing buffer grows past this many bytes.
+    static constexpr size_t LargeBufferWarnSize = 200 * 1024 * 1024;
+
+    /// Close the socket if either buffer stays above this many bytes for too long
+    static size_t BufferBloatCloseSize;
+    static std::chrono::milliseconds BufferBloatCloseDuration;
+
+    /// Count of sockets closed for staying over BufferBloatCloseSize too long.
+    static std::atomic<size_t> BufferBloatClosedCount;
+
+    /// Continuous time buffer has been above BufferBloatCloseSize, or epoc if not above
+    std::chrono::steady_clock::time_point _largeBufferSince;
+
+    Buffer _inBuffer;
+    Buffer _outBuffer;
+
+    std::vector<int> _incomingFDs;
+
+    /// Client handling the actual data.
+    std::shared_ptr<ProtocolHandlerInterface> _socketHandler;
+
+    STATE_ENUM(WSState, HTTP, WS);
+    WSState _wsState;
+
+    ReadType _readType;
+
+    /// True when shutdown was requested via shutdown().
+    /// It's accessed from different threads.
+    std::atomic_bool _shutdownSignalled;
+    std::atomic_bool _inputProcessingEnabled;
+
+    /// Did we emit the onDisconnect event yet
+    bool _doneDisconnect:1;
+
+    /// True if owner is in client role, otherwise false (server)
+    bool _isClient:1;
+
+    /// True if host is localhost
+    bool _isLocalHost:1;
+
+    /// True if we've received a Continue in response to an Expect: 100-continue
+    bool _sentHTTPContinue:1;
+
+    /// True once we have warned that the outgoing buffer grew very large; reset
+    /// when it drains back below the threshold so each episode is logged once.
+    bool _warnedLargeOutBuffer:1 = false;
+
+    bool isExternalCountedConnection() const { return !_isClient && isIPType(); }
+    static std::atomic<size_t> ExternalConnectionCount; // accepted external TCP IPv4/IPv6 socket count
+};
+
+enum class WSOpCode : unsigned char {
+    Continuation = 0x0,
+    Text         = 0x1,
+    Binary       = 0x2,
+    Reserved1    = 0x3,
+    Reserved2    = 0x4,
+    Reserved3    = 0x5,
+    Reserved4    = 0x6,
+    Reserved5    = 0x7,
+    Close        = 0x8,
+    Ping         = 0x9,
+    Pong         = 0xa
+    // ... reserved
+};
+
+extern "C" void handleUserProfileSignal(int signal);
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

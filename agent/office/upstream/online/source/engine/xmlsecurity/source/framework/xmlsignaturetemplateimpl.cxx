@@ -1,0 +1,124 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+#include <rtl/ustring.hxx>
+#include <framework/xmlsignaturetemplateimpl.hxx>
+#include <comphelper/sequence.hxx>
+#include <cppuhelper/supportsservice.hxx>
+
+using namespace ::cpo::uno ;
+using namespace ::cpo::uno;
+using ::com::sun::star::lang::XMultiServiceFactory ;
+
+using ::com::sun::star::xml::wrapper::XXMLElementWrapper ;
+using ::com::sun::star::xml::crypto::XXMLSignatureTemplate ;
+
+XMLSignatureTemplateImpl::XMLSignatureTemplateImpl()
+    :m_nStatus ( css::xml::crypto::SecurityOperationStatus_UNKNOWN )
+{
+}
+
+XMLSignatureTemplateImpl::~XMLSignatureTemplateImpl() {
+}
+
+cpo::uno::Reference<css::security::XCertificate> XMLSignatureTemplateImpl::GetSigningCertificate()
+{
+    return m_xSigningCertificate;
+}
+
+void XMLSignatureTemplateImpl::SetVerifiedCertificate(cpo::uno::Reference<css::security::XCertificate> const& xCertificate)
+{
+    m_xVerifiedCertificate = xCertificate;
+}
+
+/* XXMLSignatureTemplate */
+void XMLSignatureTemplateImpl::setTemplate( const Reference< XXMLElementWrapper >& aTemplate )
+{
+    m_xTemplate = aTemplate ;
+}
+
+/* XXMLSignatureTemplate */
+Reference< XXMLElementWrapper > XMLSignatureTemplateImpl::getTemplate()
+{
+    return m_xTemplate ;
+}
+
+void XMLSignatureTemplateImpl::setTarget( const cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper >& aXmlElement )
+{
+    targets.push_back( aXmlElement );
+}
+
+cpo::uno::Sequence< cpo::uno::Reference< css::xml::wrapper::XXMLElementWrapper > > XMLSignatureTemplateImpl::getTargets()
+{
+    return comphelper::containerToSequence(targets);
+}
+
+void XMLSignatureTemplateImpl::setBinding(
+    const cpo::uno::Reference< css::xml::crypto::XUriBinding >& aUriBinding )
+{
+    m_xUriBinding = aUriBinding;
+}
+
+cpo::uno::Reference< css::xml::crypto::XUriBinding > XMLSignatureTemplateImpl::getBinding()
+{
+    return m_xUriBinding;
+}
+
+void XMLSignatureTemplateImpl::setStatus(
+    css::xml::crypto::SecurityOperationStatus status )
+{
+    m_nStatus = status;
+}
+
+css::xml::crypto::SecurityOperationStatus XMLSignatureTemplateImpl::getStatus(  )
+{
+    return m_nStatus;
+}
+
+/* XServiceInfo */
+OUString XMLSignatureTemplateImpl::getImplementationName() {
+    return impl_getImplementationName() ;
+}
+
+/* XServiceInfo */
+bool XMLSignatureTemplateImpl::supportsService( const OUString& serviceName) {
+    return cppu::supportsService(this, serviceName);
+}
+
+/* XServiceInfo */
+Sequence< OUString > XMLSignatureTemplateImpl::getSupportedServiceNames() {
+    return impl_getSupportedServiceNames() ;
+}
+
+//Helper for XServiceInfo
+Sequence< OUString > XMLSignatureTemplateImpl::impl_getSupportedServiceNames() {
+    Sequence<OUString> seqServiceNames { u"com.sun.star.xml.crypto.XMLSignatureTemplate"_ustr };
+    return seqServiceNames ;
+}
+
+OUString XMLSignatureTemplateImpl::impl_getImplementationName() {
+    return u"com.sun.star.xml.security.framework.XMLSignatureTemplateImpl"_ustr ;
+}
+
+//Helper for registry
+Reference< XInterface > XMLSignatureTemplateImpl::impl_createInstance( const Reference< XMultiServiceFactory >&  ) {
+    return Reference< XInterface >( *new XMLSignatureTemplateImpl ) ;
+}
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

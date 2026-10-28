@@ -1,0 +1,102 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <sal/config.h>
+
+#include <forward_list>
+#include <vector>
+
+#include <formula/callable.hxx>
+#include <formula/opcode.hxx>
+#include "tokenarray.hxx"
+#include <interpre.hxx>
+
+class ScDocument;
+class ScAddress;
+class ScFormulaCell;
+struct ScInterpreterContext;
+class ScDocShell;
+class SbMethod;
+class SbModule;
+
+/// a callable macro
+class SAL_DLLPUBLIC_RTTI ScMacroFunction : public formula::FormulaCallable
+{
+private:
+    FormulaError mnError;
+    ScDocShell* mpDocShell;
+    SbMethod* mpMethod;
+    SbModule* mpModule;
+    OUString maMacroStr;
+    OUString maBasicStr;
+    bool mbInvalid;
+
+public:
+    ScMacroFunction(const ScMacroFunction&) = default;
+    ScMacroFunction(const ScInterpreter& rInterpreter, const OUString& aMacro);
+    virtual OpCode GetOpCode() const override { return ocMacro; }
+    bool IsValid() const { return !mbInvalid; }
+    FormulaError GetError() const { return mnError; }
+    ScDocShell* GetDocumentShell() const { return mpDocShell; }
+    SbMethod* GetMethod() const { return mpMethod; }
+    SbModule* GetModule() const { return mpModule; }
+    const OUString& GetMacroStr() const { return maMacroStr; }
+    const OUString& GetBasicStr() const { return maBasicStr; }
+};
+
+/// a callable closure from a formula
+class SAL_DLLPUBLIC_RTTI ScFormulaFunction : public formula::FormulaCallable
+{
+private:
+    // ScInterpreter context data
+    ScDocument* mpDoc;
+    const ScAddress maPos;
+    ScFormulaCell* mpCell;
+    ScInterpreterContext* mpContext;
+
+    // the body (code) of the lambda
+    ScTokenArray maLambdaBody;
+    // for each parameter, a list of positions where it appears in the body
+    std::vector<std::forward_list<short>> maReplacementPositions;
+    short mnRequiredParams;
+
+public:
+    ScFormulaFunction(const ScFormulaFunction&) = default;
+    ScFormulaFunction(const ScInterpreter& rInterpreter, const std::vector<OUString>& rLambdaParams,
+                      short nRequiredParams, const ScTokenArray& rLambdaBody, short nBodyStart,
+                      short nBodyEnd);
+
+    virtual OpCode GetOpCode() const override { return ocLambda; }
+
+    ScDocument& GetDocument() const { return *mpDoc; }
+    ScAddress GetAddress() const { return maPos; }
+    ScFormulaCell* GetFormulaCell() const { return mpCell; }
+    ScInterpreterContext& GetContext() const { return *mpContext; }
+    const ScTokenArray& GetLambdaBody() const { return maLambdaBody; }
+    sal_Int32 GetNumParams() const { return maReplacementPositions.size(); }
+    const std::forward_list<short>& GetReplacementPositions(sal_Int32 nParam) const
+    {
+        return maReplacementPositions[nParam];
+    }
+    short GetNumRequiredParams() const { return mnRequiredParams; }
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

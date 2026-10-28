@@ -1,0 +1,90 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <helper/uiconfigelementwrapperbase.hxx>
+
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/ui/XUIFunctionListener.hpp>
+#include <com/sun/star/ui/XContextChangeEventListener.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <rtl/ref.hxx>
+#include <memory>
+
+namespace weld
+{
+    class Builder;
+    class Container;
+    class Toolbar;
+}
+
+namespace framework
+{
+class ToolBarManager;
+
+class ToolBarWrapper final : public cppu::ImplInheritanceHelper<UIConfigElementWrapperBase,
+                                                                css::ui::XUIFunctionListener,
+                                                                css::ui::XContextChangeEventListener>
+{
+    public:
+        ToolBarWrapper( const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext );
+        virtual ~ToolBarWrapper() override;
+
+        // XComponent
+        virtual void dispose() override;
+
+        // XInitialization
+        virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+        // XUIElement
+        virtual cpo::uno::Reference< cpo::uno::XInterface > getRealInterface() override;
+
+        // XUpdatable
+        virtual void update() override;
+
+        // XUIElementSettings
+        virtual void updateSettings() override;
+
+        // XUIFunctionListener
+        virtual void functionExecute( const OUString& aUIElementName, const OUString& aCommand ) override;
+
+        // XContextChangeEventListener
+        virtual void notifyContextChangeEvent( const css::ui::ContextChangeEventObject& aEvent ) override;
+
+        // XEventListener
+        using cppu::OPropertySetHelper::disposing;
+        virtual void disposing( const css::lang::EventObject& aEvent ) override;
+
+    private:
+        virtual void setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const cpo::uno::Any&  aValue ) override;
+        virtual void impl_fillNewData() override;
+
+        rtl::Reference< ToolBarManager >                        m_xToolBarManager;
+        cpo::uno::Reference< cpo::uno::XComponentContext >      m_xContext;
+        cpo::uno::Reference< css::ui::XUIElement >              m_xSubElement;
+
+        std::unique_ptr<weld::Builder>                          m_xBuilder;
+        std::unique_ptr<weld::Container>                        m_xTopLevel;
+        std::unique_ptr<weld::Toolbar>                          m_xWeldedToolbar;
+};
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

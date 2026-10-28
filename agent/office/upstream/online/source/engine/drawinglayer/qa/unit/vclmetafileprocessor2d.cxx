@@ -1,0 +1,294 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ */
+
+#include <test/bootstrapfixture.hxx>
+
+#include <vcl/virdev.hxx>
+#include <vcl/BitmapReadAccess.hxx>
+#include <vcl/graphicfilter.hxx>
+#include <vcl/metaact.hxx>
+#include <vcl/gdimtf.hxx>
+#include <vcl/pdfextoutdevdata.hxx>
+#include <vcl/filter/pdfdocument.hxx>
+#include <tools/stream.hxx>
+#include <unotools/tempfile.hxx>
+#include <drawinglayer/geometry/viewinformation2d.hxx>
+#include <drawinglayer/primitive2d/PolygonStrokePrimitive2D.hxx>
+#include <drawinglayer/primitive2d/texthierarchyprimitive2d.hxx>
+#include <drawinglayer/processor2d/baseprocessor2d.hxx>
+#include <drawinglayer/processor2d/processor2dtools.hxx>
+#include <basegfx/matrix/b2dhommatrixtools.hxx>
+#include <canvas/cppcanvastest.hxx>
+
+#include <optional>
+
+#include <com/sun/star/beans/XMaterialHolder.hpp>
+
+using namespace drawinglayer;
+using namespace com::sun::star;
+
+class VclMetaFileProcessor2DTest : public test::BootstrapFixture
+{
+    VclPtr<VirtualDevice> mVclDevice;
+
+    // if enabled - check the result images with:
+    // "xdg-open ./workdir/CppunitTest/drawinglayer_processors.test.core/"
+    static constexpr const bool mbExportBitmap = false;
+
+    void exportDevice(const OUString& filename, const VclPtr<VirtualDevice>& device)
+    {
+        if (mbExportBitmap)
+        {
+            Bitmap aBitmap(device->GetBitmap(Point(0, 0), device->GetOutputSizePixel()));
+            SvFileStream aStream(filename, StreamMode::WRITE | StreamMode::TRUNC);
+            GraphicFilter::GetGraphicFilter().compressAsPNG(aBitmap, aStream);
+        }
+    }
+
+public:
+    VclMetaFileProcessor2DTest()
+        : BootstrapFixture(true, false)
+    {
+    }
+
+    virtual void tearDown() override
+    {
+        mVclDevice.reset();
+        BootstrapFixture::tearDown();
+    }
+
+    void setupCanvas(const Size& size, Color backgroundColor = COL_WHITE, bool alpha = false)
+    {
+        mVclDevice = alpha ? VclPtr<VirtualDevice>::Create(DeviceFormat::WITH_ALPHA)
+                           : VclPtr<VirtualDevice>::Create(DeviceFormat::WITHOUT_ALPHA);
+        mVclDevice->SetOutputSizePixel(size);
+        mVclDevice->SetBackground(Wallpaper(backgroundColor));
+        mVclDevice->Erase();
+    }
+
+    // Test drawing a dotted line in Impress presentation mode.
+    void tdf136957_draw_impress_dotted_line()
+    {
+        // Impress presentation mode first draws the slide to a metafile.
+        GDIMetaFile metafile;
+        // I got these values by adding debug output to cppcanvas::internal::ImplRenderer::ImplRenderer().
+        metafile.SetPrefMapMode(MapMode(MapUnit::Map100thMM));
+        metafile.SetPrefSize(Size(14548, 3350));
+        ScopedVclPtrInstance<VirtualDevice> metadevice;
+        metafile.Record(metadevice);
+        drawinglayer::geometry::ViewInformation2D view;
+        std::unique_ptr<processor2d::BaseProcessor2D> processor(
+            processor2d::createProcessor2DFromOutputDevice(*metadevice, view));
+        CPPUNIT_ASSERT(processor);
+        // Match the values Impress uses.
+        basegfx::B2DPolygon polygon = { { 15601, 0 }, { 15602, 5832 } };
+        attribute::LineAttribute lineAttributes(
+            basegfx::BColor(0.047058823529411764, 0.19607843137254902, 0.17254901960784313), 35,
+            basegfx::B2DLineJoin::Miter, css::drawing::LineCap_ROUND);
+        attribute::StrokeAttribute strokeAttributes({ 0.35, 69.65 });
+        rtl::Reference<primitive2d::PolygonStrokePrimitive2D> strokePrimitive(
+            new primitive2d::PolygonStrokePrimitive2D(polygon, lineAttributes, strokeAttributes));
+        primitive2d::Primitive2DContainer primitives;
+        primitives.push_back(strokePrimitive);
+        processor->process(primitives);
+        metafile.Stop();
+        metafile.WindStart();
+
+        // Now verify that the metafile has the one PolyLine action with the right dashing.
+        int lineActionCount = 0;
+        for (std::size_t i = 0; i < metafile.GetActionSize(); ++i)
+        {
+            const MetaAction* metaAction = metafile.GetAction(i);
+            if (metaAction->GetType() == MetaActionType::POLYLINE)
+            {
+                const MetaPolyLineAction* action
+                    = static_cast<const MetaPolyLineAction*>(metaAction);
+
+                CPPUNIT_ASSERT_EQUAL(35.0, action->GetLineInfo().GetWidth());
+                CPPUNIT_ASSERT_EQUAL(LineStyle::Dash, action->GetLineInfo().GetStyle());
+                CPPUNIT_ASSERT_EQUAL(sal_uInt16(1), action->GetLineInfo().GetDashCount());
+                CPPUNIT_ASSERT_EQUAL(0.35, action->GetLineInfo().GetDashLen());
+                CPPUNIT_ASSERT_EQUAL(sal_uInt16(0), action->GetLineInfo().GetDotCount());
+                CPPUNIT_ASSERT_EQUAL(0.0, action->GetLineInfo().GetDotLen());
+                CPPUNIT_ASSERT_EQUAL(69.65, action->GetLineInfo().GetDistance());
+                lineActionCount++;
+            }
+        }
+        CPPUNIT_ASSERT_EQUAL(1, lineActionCount);
+
+        // Now draw the metafile using canvas and verify that the line is drawn.
+        setupCanvas(Size(1920, 1080));
+
+        // I got these matrices from a breakpoint in drawing the polyline, and walking up
+        // the stack to the canvas code.
+        CPPUNIT_ASSERT(cppcanvas::testCanvasDraw(
+            mVclDevice,
+            basegfx::B2DHomMatrix(0.056662828121770453, 0, 0, 0, 0.056640419947506564, 0), metafile,
+            basegfx::B2DHomMatrix(14548, 0, -2, 0, 3350, 3431)));
+
+        exportDevice(u"test-tdf136957"_ustr, mVclDevice);
+        Bitmap bitmap = mVclDevice->GetBitmap(Point(), Size(1920, 1080));
+        BitmapScopedReadAccess access(bitmap);
+        // There should be a dotted line, without the fix it wouldn't be there, so check
+        // there's a sufficient amount of non-white pixels and that's the line.
+        int nonWhiteCount = 0;
+        for (tools::Long y = 193; y <= 524; ++y)
+            for (tools::Long x = 883; x <= 885; ++x)
+                if (access->GetColor(y, x) != COL_WHITE)
+                    ++nonWhiteCount;
+        CPPUNIT_ASSERT_GREATER(100, nonWhiteCount);
+    }
+
+    /// Export a hyperlink field to a PDF in rTempFile
+    void exportLinkFieldToPDF(std::vector<std::pair<OUString, OUString>>& rValues,
+                              utl::TempFileNamed& rTempFile)
+    {
+        // Impress presentation mode first draws the slide to a metafile.
+        GDIMetaFile metafile;
+        metafile.SetPrefMapMode(MapMode(MapUnit::Map100thMM));
+        metafile.SetPrefSize(Size(14548, 3350));
+        ScopedVclPtrInstance<VirtualDevice> metadevice;
+
+        // Clickable links are only created during PDF export
+        vcl::PDFExtOutDevData aPDFExtOutDevData(*metadevice);
+        aPDFExtOutDevData.SetIsExportBookmarks(true);
+        aPDFExtOutDevData.SetIsExportTaggedPDF(true);
+        metadevice->SetExtOutDevData(&aPDFExtOutDevData);
+
+        vcl::pdf::PDFWriter::PDFWriterContext aContext;
+        aContext.Version = vcl::pdf::PDFWriter::PDFVersion::PDF_1_7;
+        aContext.Tagged = true;
+        aContext.PDFDocumentMode = vcl::pdf::PDFWriter::ModeDefault;
+        aContext.PDFDocumentAction = vcl::pdf::PDFWriter::ActionDefault;
+        aContext.PageLayout = vcl::pdf::PDFWriter::DefaultLayout;
+        aContext.URL = rTempFile.GetURL();
+
+        rtl::Reference<beans::XMaterialHolder> xEnc;
+        vcl::pdf::PDFWriter aPDFWriter(aContext, xEnc);
+        aPDFWriter.NewPage(14548, 3350);
+
+        metafile.Record(metadevice);
+        drawinglayer::geometry::ViewInformation2D view;
+
+        // Set a transform to ensure processed link honors transforms
+        const basegfx::B2DHomMatrix aMappingTransform(
+            basegfx::utils::createTranslateB2DHomMatrix(500, 500));
+        view.setObjectTransformation(aMappingTransform);
+
+        std::unique_ptr<processor2d::BaseProcessor2D> processor(
+            processor2d::createProcessor2DFromOutputDevice(*metadevice, view));
+        CPPUNIT_ASSERT(processor);
+
+        // Create a child primitive2d that holds the bounding box for the link
+        drawinglayer::primitive2d::Primitive2DContainer aSeq(1);
+        attribute::LineAttribute lineAttributes(
+            basegfx::BColor(0.047058823529411764, 0.19607843137254902, 0.17254901960784313), 35,
+            basegfx::B2DLineJoin::Miter, css::drawing::LineCap_ROUND);
+        basegfx::B2DPolygon aPolygon = { { -10, 65 }, { 539, 368 } };
+        aSeq[0] = new drawinglayer::primitive2d::PolygonStrokePrimitive2D(aPolygon, lineAttributes);
+
+        // The primitive2d for the link itself
+        rtl::Reference<primitive2d::TextHierarchyFieldPrimitive2D> fieldPrimitive(
+            new primitive2d::TextHierarchyFieldPrimitive2D(
+                std::move(aSeq), drawinglayer::primitive2d::FIELD_TYPE_URL, &rValues));
+
+        primitive2d::Primitive2DContainer primitives;
+        primitives.push_back(fieldPrimitive);
+
+        processor->process(primitives);
+
+        metafile.Stop();
+        metafile.WindStart();
+
+        // Match bookmarks with their link URL; usually done by each module's
+        // rendering code, eg ScModelObj::render() and such
+        std::vector<vcl::PDFExtOutDevBookmarkEntry>& rBookmarks = aPDFExtOutDevData.GetBookmarks();
+        CPPUNIT_ASSERT(!rBookmarks.empty());
+        for (const auto& rBookmark : rBookmarks)
+            aPDFExtOutDevData.SetLinkURL(rBookmark.nLinkId, rBookmark.aBookmark);
+
+        aPDFExtOutDevData.PlayGlobalActions(aPDFWriter);
+        CPPUNIT_ASSERT(aPDFWriter.Emit());
+        CPPUNIT_ASSERT(aPDFWriter.GetErrors().empty());
+    }
+
+    std::optional<OUString> exportLinkContents(std::vector<std::pair<OUString, OUString>>& rValues)
+    {
+        utl::TempFileNamed aTempFile;
+        aTempFile.EnableKillingFile();
+        exportLinkFieldToPDF(rValues, aTempFile);
+
+        vcl::filter::PDFDocument aDocument;
+        SvFileStream aStream(aTempFile.GetURL(), StreamMode::READ);
+        CPPUNIT_ASSERT(aDocument.Read(aStream));
+
+        std::vector<vcl::filter::PDFObjectElement*> aPages = aDocument.GetPages();
+        CPPUNIT_ASSERT_EQUAL(size_t(1), aPages.size());
+
+        auto pAnnots
+            = dynamic_cast<vcl::filter::PDFArrayElement*>(aPages[0]->Lookup("Annots"_ostr));
+        CPPUNIT_ASSERT(pAnnots);
+        CPPUNIT_ASSERT_EQUAL(size_t(1), pAnnots->GetElements().size());
+
+        auto pAnnotRef = dynamic_cast<vcl::filter::PDFReferenceElement*>(pAnnots->GetElements()[0]);
+        CPPUNIT_ASSERT(pAnnotRef);
+        vcl::filter::PDFObjectElement* pAnnot = pAnnotRef->LookupObject();
+        CPPUNIT_ASSERT(pAnnot);
+
+        auto pContents
+            = dynamic_cast<vcl::filter::PDFHexStringElement*>(pAnnot->Lookup("Contents"_ostr));
+        if (!pContents)
+            return std::nullopt;
+
+        return vcl::filter::PDFDocument::DecodeHexStringUTF16BE(*pContents);
+    }
+
+    // Test that the Contents entry of a link falls back to the link text and then the URL
+    void testLinkContentsFallback()
+    {
+        static constexpr OUString aURL = u"http://example.org"_ustr;
+
+        // The Name of the hyperlink is used if it is set
+        std::vector<std::pair<OUString, OUString>> aNamed{ { u"URL"_ustr, aURL },
+                                                           { u"Representation"_ustr,
+                                                             u"the link text"_ustr },
+                                                           { u"AltText"_ustr, u"the name"_ustr } };
+        std::optional<OUString> oContents = exportLinkContents(aNamed);
+        CPPUNIT_ASSERT(oContents.has_value());
+        CPPUNIT_ASSERT_EQUAL(u"the name"_ustr, *oContents);
+
+        // Without a Name, the text shown in the document is used
+        std::vector<std::pair<OUString, OUString>> aUnnamed{
+            { u"URL"_ustr, aURL }, { u"Representation"_ustr, u"the link text"_ustr }
+        };
+        oContents = exportLinkContents(aUnnamed);
+
+        // Without the fix, no Contents entry was written at all
+        CPPUNIT_ASSERT(oContents.has_value());
+        CPPUNIT_ASSERT_EQUAL(u"the link text"_ustr, *oContents);
+
+        // Without a Name and without text, the URL is used
+        std::vector<std::pair<OUString, OUString>> aBare{ { u"URL"_ustr, aURL } };
+        oContents = exportLinkContents(aBare);
+        CPPUNIT_ASSERT(oContents.has_value());
+        CPPUNIT_ASSERT_EQUAL(aURL, *oContents);
+    }
+
+    CPPUNIT_TEST_SUITE(VclMetaFileProcessor2DTest);
+    CPPUNIT_TEST(tdf136957_draw_impress_dotted_line);
+    CPPUNIT_TEST(testLinkContentsFallback);
+    CPPUNIT_TEST_SUITE_END();
+};
+
+CPPUNIT_TEST_SUITE_REGISTRATION(VclMetaFileProcessor2DTest);
+
+CPPUNIT_PLUGIN_IMPLEMENT();
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,160 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_CPPUHELPER_TYPEPROVIDER_HXX
+#define INCLUDED_CPPUHELPER_TYPEPROVIDER_HXX
+
+#include <sal/config.h>
+
+#include <cstddef>
+
+#include <rtl/alloc.h>
+#include <cpo/uno/Sequence.hxx>
+#include <cppuhelper/cppuhelperdllapi.h>
+
+
+namespace cppu
+{
+
+/** Helper class to implement css::lang::XTypeProvider.  Construct a static object
+    of this class with your UNO object's supported types.
+*/
+class SAL_WARN_UNUSED CPPUHELPER_DLLPUBLIC OTypeCollection
+{
+    cpo::uno::Sequence< cpo::uno::Type > _aTypes;
+
+public:
+    OTypeCollection(
+        const cpo::uno::Type & rType1,
+        const cpo::uno::Sequence< cpo::uno::Type > & rAddTypes = cpo::uno::Sequence< cpo::uno::Type >() );
+    OTypeCollection(
+        const cpo::uno::Type & rType1,
+        const cpo::uno::Type & rType2,
+        const cpo::uno::Sequence< cpo::uno::Type > & rAddTypes = cpo::uno::Sequence< cpo::uno::Type >() );
+    OTypeCollection(
+        const cpo::uno::Type & rType1,
+        const cpo::uno::Type & rType2,
+        const cpo::uno::Type & rType3,
+        const cpo::uno::Sequence< cpo::uno::Type > & rAddTypes = cpo::uno::Sequence< cpo::uno::Type >() );
+    OTypeCollection(
+        const cpo::uno::Type & rType1,
+        const cpo::uno::Type & rType2,
+        const cpo::uno::Type & rType3,
+        const cpo::uno::Type & rType4,
+        const cpo::uno::Sequence< cpo::uno::Type > & rAddTypes = cpo::uno::Sequence< cpo::uno::Type >() );
+    OTypeCollection(
+        const cpo::uno::Type & rType1,
+        const cpo::uno::Type & rType2,
+        const cpo::uno::Type & rType3,
+        const cpo::uno::Type & rType4,
+        const cpo::uno::Type & rType5,
+        const cpo::uno::Sequence< cpo::uno::Type > & rAddTypes = cpo::uno::Sequence< cpo::uno::Type >() );
+    OTypeCollection(
+        const cpo::uno::Type & rType1,
+        const cpo::uno::Type & rType2,
+        const cpo::uno::Type & rType3,
+        const cpo::uno::Type & rType4,
+        const cpo::uno::Type & rType5,
+        const cpo::uno::Type & rType6,
+        const cpo::uno::Sequence< cpo::uno::Type > & rAddTypes = cpo::uno::Sequence< cpo::uno::Type >() );
+    OTypeCollection(
+        const cpo::uno::Type & rType1,
+        const cpo::uno::Type & rType2,
+        const cpo::uno::Type & rType3,
+        const cpo::uno::Type & rType4,
+        const cpo::uno::Type & rType5,
+        const cpo::uno::Type & rType6,
+        const cpo::uno::Type & rType7,
+        const cpo::uno::Sequence< cpo::uno::Type > & rAddTypes = cpo::uno::Sequence< cpo::uno::Type >() );
+    OTypeCollection(
+        const cpo::uno::Type & rType1,
+        const cpo::uno::Type & rType2,
+        const cpo::uno::Type & rType3,
+        const cpo::uno::Type & rType4,
+        const cpo::uno::Type & rType5,
+        const cpo::uno::Type & rType6,
+        const cpo::uno::Type & rType7,
+        const cpo::uno::Type & rType8,
+        const cpo::uno::Sequence< cpo::uno::Type > & rAddTypes = cpo::uno::Sequence< cpo::uno::Type >() );
+    OTypeCollection(
+        const cpo::uno::Type & rType1,
+        const cpo::uno::Type & rType2,
+        const cpo::uno::Type & rType3,
+        const cpo::uno::Type & rType4,
+        const cpo::uno::Type & rType5,
+        const cpo::uno::Type & rType6,
+        const cpo::uno::Type & rType7,
+        const cpo::uno::Type & rType8,
+        const cpo::uno::Type & rType9,
+        const cpo::uno::Sequence< cpo::uno::Type > & rAddTypes = cpo::uno::Sequence< cpo::uno::Type >() );
+    OTypeCollection(
+        const cpo::uno::Type & rType1,
+        const cpo::uno::Type & rType2,
+        const cpo::uno::Type & rType3,
+        const cpo::uno::Type & rType4,
+        const cpo::uno::Type & rType5,
+        const cpo::uno::Type & rType6,
+        const cpo::uno::Type & rType7,
+        const cpo::uno::Type & rType8,
+        const cpo::uno::Type & rType9,
+        const cpo::uno::Type & rType10,
+        const cpo::uno::Sequence< cpo::uno::Type > & rAddTypes = cpo::uno::Sequence< cpo::uno::Type >() );
+    OTypeCollection(
+        const cpo::uno::Type & rType1,
+        const cpo::uno::Type & rType2,
+        const cpo::uno::Type & rType3,
+        const cpo::uno::Type & rType4,
+        const cpo::uno::Type & rType5,
+        const cpo::uno::Type & rType6,
+        const cpo::uno::Type & rType7,
+        const cpo::uno::Type & rType8,
+        const cpo::uno::Type & rType9,
+        const cpo::uno::Type & rType10,
+        const cpo::uno::Type & rType11,
+        const cpo::uno::Sequence< cpo::uno::Type > & rAddTypes = cpo::uno::Sequence< cpo::uno::Type >() );
+    OTypeCollection(
+        const cpo::uno::Type & rType1,
+        const cpo::uno::Type & rType2,
+        const cpo::uno::Type & rType3,
+        const cpo::uno::Type & rType4,
+        const cpo::uno::Type & rType5,
+        const cpo::uno::Type & rType6,
+        const cpo::uno::Type & rType7,
+        const cpo::uno::Type & rType8,
+        const cpo::uno::Type & rType9,
+        const cpo::uno::Type & rType10,
+        const cpo::uno::Type & rType11,
+        const cpo::uno::Type & rType12,
+        const cpo::uno::Sequence< cpo::uno::Type > & rAddTypes = cpo::uno::Sequence< cpo::uno::Type >() );
+
+    /** Called upon XTypeProvider::getTypes().
+
+        @return type collection
+    */
+    cpo::uno::Sequence< cpo::uno::Type > getTypes()
+        { return _aTypes; }
+    cpo::uno::Sequence< cpo::uno::Type > const & getTypes() const
+        { return _aTypes; }
+};
+
+}
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

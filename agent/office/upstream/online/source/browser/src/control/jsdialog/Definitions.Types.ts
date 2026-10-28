@@ -1,0 +1,768 @@
+/* -*- js-indent-level: 8 -*- */
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Definitions.Types - types and interfaces for JSDialog
+ */
+
+// common for all widgets
+interface WidgetJSON {
+	id: string; // unique id of a widget
+	type: string; // type of widget
+	enabled?: boolean; // enabled state
+	visible?: boolean; // visibility state
+	userHidden?: boolean; // hidden by user preference (separate from doc-type preferences)
+	children?: Array<WidgetJSON>; // child nodes
+	title?: string;
+	text?: string; // TODO: remove, its for not yet defined widget types
+	editText?: string; // text content from WeldEditView (EditEngine)
+	tooltip?: string; // tooltip text (QuickHelpText from VCL)
+	top?: string; // placement in the grid - row
+	left?: string; // placement in the grid - column
+	width?: string; // inside grid - width in number of columns
+	hexpand?: boolean; // horizontal expand in grid column
+	sizeGroupId?: string; // size group ID; widgets sharing an ID get their min-width equalized
+	vexpand?: boolean; // vertical expand in grid row
+	halign?: string; // horizontal alignment within the grid cell (start, center, end)
+	valign?: string; // vertical alignment within the grid cell (start, center, end)
+	labelledBy?: string | string[];
+	allyRole?: string;
+	accessibility?: NotebookbarAccessibilityDescriptor;
+	aria?: AriaLabelAttributes; // ARIA Label attributes
+	ariaLive?: 'polite' | 'assertive' | 'off';
+	gridKeyboardNavigation?: boolean; // receives keyboard navigation for elements in col/rows
+	cssClass?: string; // extra class(es) on the widget root, next to the builder's own
+}
+
+// A widget that can carry a list of entries, such as a combo box or the styles icon view
+type WidgetWithEntries = WidgetJSON & { entries?: Array<unknown> };
+
+interface JSBuilderOptions {
+	cssClass: string; // class added to every widget root
+	windowId?: WindowId | number; // window id to be sent with dialogevent for engine
+	map: MapInterface; // reference to map
+	mobileWizard: JSDialogComponent; // reference to the parent component FIXME: rename
+	useSetTabs?: boolean; // custom tabs placement handled by the parent container
+	useScrollAnimation?: boolean; // do we use animation for scrollIntoView
+	isMessageBox?: boolean; // when the dialog is a message box
+
+	// modifiers
+	noLabelsForUnoButtons?: boolean; // create only icon without label
+	useInLineLabelsForUnoButtons?: boolean; // create labels next to the icon
+	suffix: string; // add a suffix to the element ID to make it unique among different builder instances.
+}
+
+// The component a builder belongs to: a dialog, the notebookbar or the mobile wizard.
+interface JSBuilderParent {
+	goLevelDown: (contentToShow: Element) => void;
+	setTabs: (tabs: Element, builder: JSBuilder) => void;
+	rememberOpenTab: (
+		dialogId: WindowId | number,
+		tabControlId: string,
+		index: number,
+	) => void;
+	takeOpenTab: (
+		dialogId: WindowId | number,
+		tabControlId: string,
+	) => number | undefined;
+	rememberFillType: (
+		dialogId: WindowId | number,
+		notebookId: string,
+		index: number,
+	) => void;
+	lastFillType: (
+		dialogId: WindowId | number,
+		notebookId: string,
+	) => number | undefined;
+	setFillTypeOpener: (
+		dialogId: WindowId | number,
+		notebookId: string,
+		open: (index: number) => void,
+	) => void;
+	openFillType: (
+		dialogId: WindowId | number,
+		notebookId: string,
+		index: number,
+	) => boolean;
+}
+
+interface JSBuilder {
+	_currentDepth: number; // mobile-wizard only FIXME: encapsulate
+	_responses: any;
+
+	_unoToolButton: UnoToolButtonHandler; // special handler which returns toolitem object
+	_controlHandlers: { [key: string]: JSWidgetHandler }; // handlers for widget types
+	_menus: Map<string, Array<MenuDefinition>>;
+
+	options: JSBuilderOptions; // current state
+	map: MapInterface; // reference to map
+	rendersCache: any; // on demand content cache
+	wizard: JSBuilderParent;
+	windowId?: WindowId | number;
+
+	build: (
+		parentContainer: Element,
+		data: WidgetJSON[],
+		hasVerticalParent: boolean,
+	) => boolean;
+	updateWidget: (parentContainer: Element, updateJSON: WidgetJSON) => void;
+	_createTabClick: (
+		builder: JSBuilder,
+		tabIndex: number,
+		tabs: HTMLButtonElement[],
+		contentDivs: HTMLElement[],
+		tabIds: string[],
+	) => () => void;
+	// parentContainer may be an element, or a function returning one (or
+	// undefined) for a caller whose container can be replaced before this
+	// runs - it is applied on a deferred layouting task, not immediately.
+	executeAction: (
+		parentContainer: Element | (() => Element | undefined),
+		actionJSON: ActionData,
+	) => void;
+	callback: JSDialogCallback;
+	_defaultCallbackHandlerSendMessage: JSDialogCallback;
+	_defaultCallbackHandler: JSDialogCallback;
+	postProcess: (parentContainer: Element, data: WidgetJSON) => void;
+	setWindowId: (id: WindowId | number) => void;
+	onCommandStateChanged: (event: any) => void;
+
+	// helpers FIXME: put as local in Control.Containers.ts
+	_getGridColumns: (data: WidgetJSON[]) => number;
+	_getGridRows: (data: WidgetJSON[]) => number;
+	_preventDocumentLosingFocusOnClick: (container: Element) => void;
+	_cleanText: (text: string) => string;
+	_setAccessKey: (element: HTMLElement, key: string) => void;
+	_getAccessKeyFromText: (text: string) => string;
+	_stressAccessKey: (element: HTMLElement, accessKey: string) => void;
+	_expanderHandler: any; // FIXME: use handlers getter instead
+	_unitToVisibleString: (unit: string) => string;
+}
+
+// widget handler, returns true if child nodes should be still processed by the builder
+type JSWidgetHandler = (
+	parentContainer: Element,
+	data: WidgetJSON,
+	builder: JSBuilder,
+	customCallback?: () => void,
+) => boolean;
+
+// elements which make up a toolitem-like button
+type UnoToolButtonControl = {
+	container: HTMLElement;
+	button: HTMLElement;
+	label: HTMLElement;
+	arrow?: HTMLElement;
+};
+
+type UnoToolButtonOptions = {
+	hasDropdownArrow?: boolean; // show an arrow which indicates that a menu can be opened
+};
+
+type UnoToolButtonHandler = (
+	parentContainer: Element,
+	data: WidgetJSON,
+	builder: JSBuilder,
+	options?: UnoToolButtonOptions,
+) => UnoToolButtonControl;
+
+// callback triggered by user actions
+type JSDialogCallback = (
+	objectType: string,
+	eventType: string,
+	object: any,
+	data: any,
+	builder: JSBuilder,
+) => void;
+
+type JSDialogCallbackConsumer = (
+	objectType: string,
+	eventType: string,
+	object: any,
+	data: any,
+	builder: JSBuilder,
+) => boolean;
+
+type JSDialogMenuCallback = (
+	objectType: string,
+	eventType: string,
+	object: any,
+	data: any,
+	entry: JSBuilder | MenuDefinition,
+) => boolean;
+
+// Members of the JSDialog global object which are available with types. That
+// object collects the widget handlers and the shared helpers of the dialog
+// framework. The sources which are still JavaScript put more members on it
+// than are listed here.
+interface JSDialogGlobal {
+	AddOnClick: (element: Element, callback: EventListener) => void;
+	CloseDropdown: (id: string, focusHandled?: boolean) => void;
+	OpenDropdown: (
+		id: string,
+		popupParent: string | HTMLElement,
+		entries: Array<MenuDefinition>,
+		innerCallback: JSDialogMenuCallback,
+		popupAnchor?: string,
+		isSubmenu?: boolean,
+		earlyCallbackCall?: boolean,
+		noDefaultSelection?: boolean,
+	) => void;
+	SetupA11yLabelForNonLabelableElement: (
+		container: HTMLElement,
+		data: WidgetJSON,
+		builder: JSBuilder,
+	) => void;
+}
+
+interface DialogResponse {
+	id: string;
+	response: number;
+}
+
+interface ActionData {
+	jsontype: string;
+	control_id: string;
+	action_type: string;
+	data?: any;
+	new_id?: string;
+}
+
+interface UpdateData {
+	id: string;
+	jsontype: string;
+	control: WidgetJSON;
+}
+
+// JSDialog message (full, update or action)
+interface JSDialogJSON extends WidgetJSON {
+	id: string; // unique windowId
+	jsontype: string; // specifies target component, on root level only
+	action?: string; // optional name of an action
+	control?: WidgetJSON;
+	data?: ActionData;
+	init_focus_id?: string; // id of initially focused widget
+}
+
+// JSDialog message for popup
+interface PopupData extends JSDialogJSON {
+	isAutoCompletePopup?: boolean;
+	isAutoFillPreviewTooltip?: boolean;
+	cancellable?: boolean;
+	hasClose: boolean;
+	noOverlay: boolean;
+	popupParent?: string;
+	// The popup takes the width of its content instead of at least the width of the element it
+	// opens from.
+	fitContent?: boolean;
+	clickToClose?: string; // raw id of the element that closes the popup when clicked
+	clickToCloseElement?: HTMLElement; // clickToClose resolved to a DOM element by addHandlers
+	clickToCloseText?: string; // clickToClose text when the closing element is a treeview entry
+	persistKeyboard?: boolean;
+	serverSyncSelection?: boolean;
+	posx: number;
+	posy: number;
+}
+
+interface DialogJSON extends JSDialogJSON {
+	dialogid: string; // unique id for a dialog type, not instance
+	collapsed?: boolean; // if dialog is in collapsed mode
+	responses?: Array<DialogResponse>;
+}
+
+// Notebookbar
+
+type NotebookbarAccessibilityDescriptor = {
+	focusBack: boolean;
+	combination: string;
+	[language: string]: string | boolean | null | undefined; // language-specific combinations (e.g. 'de' for German)
+};
+
+type NotebookbarTabEntry = {
+	id: string;
+	text: string; // visible in the UI
+	name: string; // identifier for tab widget
+	context: string; // list of contexts (separated by '|') in which the element/tab is visible
+	keepSelected?: boolean; // a context change does not switch away from it
+	accessibility: NotebookbarAccessibilityDescriptor;
+};
+
+type NotebookbarTabContent = Array<WidgetJSON>;
+
+interface NotebookbarTab {
+	getName: () => string;
+	getEntry: () => NotebookbarTabEntry;
+	getContent: () => NotebookbarTabContent;
+	onCallback?: JSDialogCallbackConsumer;
+}
+
+// callback triggered for custom rendered entries
+type CustomEntryRenderCallback = (pos: number | string) => void;
+
+// used to define menus
+interface MenuDefinition extends WidgetJSON {
+	type:
+		| 'action'
+		| 'colorpicker'
+		| 'menu'
+		| 'separator'
+		| 'html'
+		| 'json'
+		| 'comboboxentry'; // type of entry
+	text?: string; // displayed text
+	hint?: string; // hint text
+	uno?: string; // uno command
+	action?: string; // dispatch command
+	command?: string; // UNO command which the entry applies its value to, used in colorpicker type
+	htmlId?: string; // DEPRECATED: id of HTMLContent - used in html type
+	content?: WidgetJSON; // custom content - used in json type
+	img?: string; // icon name
+	icon?: string; // icon name FIXME: duplicated property, used in exportMenuButton
+	checked?: boolean; // state of check mark
+	items?: Array<any>;
+	selected?: boolean; // selected state for entry
+	statusCommand?: string; // UNO command used to retrieve the status/value of the entry
+	isEnabled?: () => boolean; // when present, evaluated as the menu opens to decide if the entry is enabled
+	pos?: number | string; // identifier of an entry
+	class?: string; // extra CSS class to add to the rendered entry
+	shortcut?: string; // keyboard shortcut to display right-aligned next to the entry
+	separatorAfter?: boolean; // draw a separator below this entry
+}
+
+interface HtmlContentJson extends WidgetJSON {
+	htmlId: string;
+	viewIds?: Array<number>;
+	closeCallback?: EventListenerOrEventListenerObject;
+	isReadOnlyMode?: boolean;
+	canUserWrite?: boolean;
+	text?: string;
+}
+
+type FunctionNameAlias = {
+	en: string;
+	de?: string;
+	fr?: string;
+	es?: string;
+};
+
+interface ContainerWidgetJSON extends WidgetJSON {
+	layoutstyle?: string | 'start' | 'end'; // describes alignment of the elements
+	vertical?: boolean; // is horizontal or vertical container
+	spacing?: number; // gap between children in pixels
+	homogeneous?: boolean; // all children share equal size along the main axis
+}
+
+interface OverflowGroupWidgetJSON extends ContainerWidgetJSON {
+	name: string; // visible name of a group
+	icon?: string; // Optional icon name. Otherwise it will be guessed.
+	more?: MoreOptions;
+	nofold?: boolean; // for widgets which use overflowgroup just for the label
+}
+interface MoreOptions {
+	command: string;
+}
+interface OverflowGroupContainer extends Element {
+	foldGroup?: () => void;
+	isCollapsed?: () => boolean;
+	unfoldGroup?: () => void;
+}
+
+interface GridWidgetJSON extends ContainerWidgetJSON {
+	cols: number; // number of grid columns
+	rows: number; // numer of grid rows
+	tabIndex?: number;
+	initialSelectedId?: string; // id of the first selected element
+	columnSpacing?: number;
+}
+
+// the slide layout presets shown in the "New Slide" dropdown: a grid of
+// layout choices plus the extra Overview button
+interface NewSlideLayoutEntryWidgetJSON extends WidgetJSON {
+	gridContent: GridWidgetJSON; // the grid of layout presets
+}
+
+interface ToolboxWidgetJSON extends WidgetJSON {
+	hasVerticalParent: boolean;
+}
+
+interface ToolItemWidgetJSON extends WidgetJSON {
+	class?: string; // css class
+	noLabel?: boolean;
+	inlineLabel?: boolean;
+	command?: string; // command to trigger options for a panel
+	text?: string; // title to show or for tooltip
+	icon?: string; // url to an svg
+	postmessage?: boolean; // postmessage to WOPI in case the toolitem is added via postmessage
+	beforeId?: string; // for added via postmessage, before which to put
+	context?: string; // in which context we show the item
+	desktop?: boolean; // do we show on desktop
+	tablet?: boolean; // do we show on tablet
+	mobile?: boolean; // do we show on mobile
+	mobilebrowser?: boolean; // do we show on mobile in the browser
+	iosapptablet?: boolean; // do we show in app on ios
+	hidden?: boolean; // is hidden
+	visible?: boolean; // is visible
+	pressAndHold?: boolean; // for mobile
+	w2icon?: string; // DEPRECATED: w2 icon name
+	placeholder?: string; // DEPRECATED: w2 placeholder text
+	items?: Array<ToolItemWidgetJSON>; // DEPRECATED: w2 menus
+}
+
+interface DeckWidgetJSON extends WidgetJSON {
+	headerText?: string; // title shown in a heading row above the deck's panels
+	name?: string; // legacy deck id
+}
+
+interface PanelWidgetJSON extends WidgetJSON {
+	hidden: boolean; // is hidden
+	expanded?: boolean; // true when the section starts open
+	command: string; // command to trigger options for a panel
+	text: string; // panel title
+	name?: string; // legacy panel id
+	closeCommand?: string; // UNO command that leaves the panel's deck
+}
+
+// type: 'expander' - a section that folds shut under the text of its first child
+interface ExpanderWidgetJSON extends WidgetJSON {
+	expanded?: boolean; // true when the section starts open
+	hidden?: boolean;
+	command?: string; // command to trigger options for the section
+	// A second thing the heading says about what it holds, beside the name
+	secondaryText?: string;
+}
+
+// type: 'progressbar'
+interface ProgressBarWidgetJSON extends WidgetJSON {
+	value?: number; // steps done
+	maxValue?: number; // steps in the whole, 100 when not given
+	infinite?: boolean; // the whole is not known, so the bar moves on its own
+}
+
+// type: 'spinfield'
+interface SpinFieldWidgetJSON extends WidgetJSON {
+	value?: number;
+	min?: number;
+	max?: number;
+	step?: number;
+	unit?: string;
+}
+
+// type: 'slider'
+interface SliderWidgetJSON extends WidgetJSON {
+	value?: number;
+	min?: number;
+	max?: number;
+	step?: number;
+}
+
+// type: 'fixedtext'
+interface TextWidget extends WidgetJSON {
+	text: string;
+	html?: string;
+	labelFor?: string;
+	labelForType?: string;
+	style?: string;
+	hidden?: boolean;
+	renderAsStatic?: boolean;
+	xalign: string;
+	bold?: boolean;
+}
+
+// type: 'pushbutton'
+interface PushButtonWidget extends WidgetJSON {
+	symbol?: string;
+	text?: string;
+	icon?: string; // icon theme link name, resolved to one of our own SVGs
+	image?: string; // base64 bitmap, the fallback when we ship no such icon
+	isToggle?: boolean;
+	checked?: boolean;
+	command?: string;
+	hidden?: boolean; // todo: deprecate it in favor of WidgetJson.visible
+	has_default?: boolean; // the button that Enter presses in its dialog
+}
+
+// type: 'menubutton'
+interface MenuButtonWidgetJSON extends WidgetJSON {
+	menu?: Array<MenuDefinition>; // custom menu
+	// split button action for the left part: either a callback or the name of a
+	// UNO command or of a dispatcher action
+	applyCallback?: (() => void) | string;
+	// UNO command of the button, falls back to the id of the button or of its menu
+	command?: string;
+	class?: string;
+	image?: string | boolean;
+	icon?: string; // theme-aware icon file name, e.g. 'lc_recsearch.svg'
+	accessKey?: string;
+	noLabel?: boolean; // suppress text label, show icon only
+	inlineLabel?: boolean; // overrides the builder's inline label setting
+	// which end of the button the content sits at: 'left' or 'right', absent for the middle
+	xalign?: string;
+}
+
+// type: 'image'
+interface ImageWidgetJSON extends WidgetJSON {
+	// the picture itself, either a base64 bitmap or the address of one of our SVGs
+	image?: string;
+}
+
+// type: 'buttonbox'
+interface ButtonBoxWidget extends WidgetJSON {
+	layoutstyle: string;
+}
+
+// type: 'listbox'
+interface ListBoxWidget extends WidgetJSON {
+	entries: Array<string>;
+	selectedEntries?: Array<string> | Array<number>;
+}
+
+// type: 'radiobutton'
+interface RadioButtonWidget extends WidgetJSON {
+	text: string;
+	image?: string; // replacement image
+	group?: string; // identifier of radio group
+	checked?: boolean;
+	hidden?: boolean;
+}
+
+interface ComboBoxEntry extends MenuDefinition {
+	customRenderer?: boolean; // can render custom preview
+	hidden?: boolean; // a value of the box which its list does not offer
+	selected?: boolean; // is selected
+	comboboxId?: string; // used to reference parent
+	pos: string | number; // identifier of an entry
+	initialSelectedId?: string;
+}
+
+interface ComboBoxWidget extends WidgetJSON {
+	text?: string;
+	entries?: Array<string | number | ComboBoxEntry>;
+	selectedCount?: number;
+	selectedEntries?: Array<number>;
+	command?: string;
+	customEntryRenderer?: boolean;
+	renderSelectedEntry?: boolean;
+	wholeWidthPreview?: boolean;
+	separators?: Array<string | number>;
+	// entries which are values of the box but are not offered in its list
+	hiddenEntries?: Array<string | number>;
+	entrycompletion?: boolean;
+}
+
+interface TreeColumnJSON {
+	text?: any;
+	link?: string;
+	collapsed?: string | boolean;
+	expanded?: string | boolean;
+	customEntryRenderer?: boolean; // has custom rendering enabled
+	collapsedimage?: string;
+	expandedimage?: string;
+	editable?: boolean;
+}
+
+interface TreeEntryJSON {
+	row: number | string; // unique id of the entry
+	text: string; // deprecated: simple text for an entry
+	state: boolean; // checked radio/checkbox or not
+	enabled: boolean; // enabled entry or not
+	selected: boolean; // is entry selected
+	collapsed: boolean; // is entry collapsed
+	ondemand: boolean; // has content to request
+	columns: Array<TreeColumnJSON>; // entry data
+	children: Array<TreeEntryJSON>;
+}
+
+interface TreeHeaderJSON {
+	text: string;
+	sortable: boolean; // can be sorted by column
+	arrow?: 'up' | 'down'; // sorting arrow to show
+	color?: string; // series color as hex string (RRGGBB) for color bar indicator
+	headerName?: string; // series name for chart data table headers
+	headerNameAriaLabel?: string; // accessible name for the headerName input
+}
+
+interface TreeWidgetJSON extends WidgetJSON {
+	text: string;
+	singleclickactivate: boolean; // activates element on single click instead of just selection
+	fireKeyEvents?: boolean; // do we sent key events to core
+	hideIfEmpty?: boolean; // hide the widget if no entries available
+	serverSyncSelection?: boolean; // When false, suppresses sending the select message to the server.
+	checkboxtype: string; // radio or checkbox
+	draggable?: boolean; // indicates if we can drag entries to another treeview
+	entries: Array<TreeEntryJSON>;
+	headers: Array<TreeHeaderJSON>; // header columns
+	highlightTerm?: string; // what, if any, entries are we highlighting?
+	customEntryRenderer?: boolean;
+	noSearchField?: boolean; // When true, the widget shouldn't have a search field added
+	sortLocally?: boolean; // When true, the widget will run sort algorithm in JS instead of callback (lists only)
+	role?: string; // ARIA role from core: 'tree', 'treegrid', 'listbox', or 'grid'
+}
+
+interface IconViewEntry {
+	row: number | string; // unique id of the entry
+	separator?: boolean; // is separator
+	selected?: boolean; // is currently selected
+	image: string; // base64 encoded image
+	width?: number; // width in pixels; used for on demand rendering
+	height?: number; // height in pixels; used for on demand rendering
+	text: string; // label of an entry
+	tooltip?: string; // tooltip of an entry
+	ondemand?: boolean; // if true then we ignore image property and request it on demand (when shown)
+	command?: string; // uno command whose icon the client draws itself
+}
+
+// Payload of the iconview 'contextmenu' callback.
+interface IconViewContextMenuData {
+	row: number | string; // unique id of the entry under the pointer
+	clientX: number; // pointer position in viewport coordinates
+	clientY: number;
+}
+
+interface IconViewJSON extends WidgetJSON {
+	entries: Array<IconViewEntry>;
+	singleclickactivate: boolean; // activates element on single click instead of just selection
+	textWithIconEnabled: boolean; // To identify if we should add text below the icon or not.
+	selectionmode: string; // single or multiple
+}
+
+interface IconViewListJSON extends WidgetJSON {
+	children: Array<IconViewJSON>;
+	horizontal?: boolean;
+	expanderAccessKey?: string;
+	nameFromIconView?: boolean;
+}
+
+interface IconViewElement extends HTMLElement {
+	requestRenders: (
+		entry: IconViewEntry,
+		placeholder: Element,
+		entryContainer: Element,
+	) => void;
+
+	updateRenders: (pos: number) => void;
+
+	updateRendersImpl: (pos: number, id: string, where: HTMLElement) => void;
+
+	builderCallback: (
+		objectType: string,
+		eventType: string,
+		entryData: any,
+		builder: JSBuilder,
+	) => void;
+}
+
+interface EditWidgetJSON extends WidgetJSON {
+	placeholder: string; // show when empty
+	text: string; // text value
+	password: boolean; // is password field
+	hidden: boolean; // is hidden, TODO: duplicate?
+	changedCallback: any; // callback  for 'change' event
+	widthInChars: number; // width hint in characters
+}
+
+// type: 'emojipicker'
+interface EmojiPickerWidgetJSON extends WidgetJSON {
+	recentsPrefsKey?: string; // window.prefs key for the "Recently used" row
+	maxRecents?: number; // cap on the recents row length (default 16)
+	searchPlaceholder?: string; // placeholder for the search input
+}
+
+// trailing action button rendered inside a chip's pill
+interface ChipAction {
+	id: string; // unique id; click is dispatched as a 'pushbutton' callback
+	text?: string; // glyph / short label (e.g. '✎')
+	image?: string; // lc_*.svg icon (uses LOUtil.setImage like pushbuttons)
+	enabled?: boolean;
+	aria?: AriaLabelAttributes;
+}
+
+// type: 'chip'
+interface ChipWidgetJSON extends WidgetJSON {
+	text: string; // chip label
+	icon?: string; // optional leading glyph / emoji (or lc_*.svg path)
+	pressed?: boolean; // selected state, drives aria-pressed on the main button
+	actions?: ChipAction[]; // optional trailing action buttons inside the pill
+}
+
+// type: 'progressdots'
+interface ProgressDotsWidgetJSON extends WidgetJSON {
+	count: number; // number of steps, one dot each
+	current: number; // index of the current step, starting at 0
+}
+
+// type: 'checkbox'
+interface CheckboxWidgetJSON extends WidgetJSON {
+	text: string;
+	command?: string; // used to just execute uno command or dispatch command instead of sending message
+	commandField?: string; // for commands whose state is a multi-field object: name of the field within that state to bind to
+	commandFieldFlat?: boolean; // send commandField as its own top-level SDI argument instead of wrapping the whole state object
+	checked?: boolean; // checkbox state
+	hidden?: boolean;
+}
+
+interface AriaLabelAttributes {
+	label?: string;
+	description?: string;
+	role?: string;
+	pressed?: boolean; // drives aria-pressed on widgets that honour it (e.g. pushbutton)
+}
+
+interface SeparatorWidgetJSON extends WidgetJSON {
+	orientation: 'horizontal' | 'vertical';
+}
+
+// one uniformly formatted stretch of a paragraph, offsets are characters from the paragraph start
+interface EditEngineRun {
+	start: number;
+	end: number;
+	bold?: boolean;
+	italic?: boolean;
+	underline?: string; // single, double, dotted, dashed or wave
+	strikeout?: boolean;
+	color?: string; // #rrggbb
+	family?: string; // font family name
+	size?: number; // font height in points
+	escapement?: string; // super or sub
+	spellError?: boolean;
+}
+
+interface EditEngineParagraph {
+	text: string;
+	runs?: EditEngineRun[];
+	depth?: number; // outline level, zero for the topmost
+	bulletText?: string; // rendered bullet or number
+	align?: string; // left, right, center or justify
+	family?: string; // default font family; runs inherit it unless they carry their own
+	size?: number; // default font size in points; runs inherit it
+	color?: string; // #rrggbb default text color; runs inherit it
+}
+
+// paragraph plus character index, the pair the engine text model addresses text with
+interface EditEnginePosition {
+	para: number;
+	index: number;
+}
+
+interface EditEngineSelection {
+	startPara: number;
+	startIndex: number;
+	endPara: number;
+	endIndex: number;
+}
+
+// customType: 'editengine'
+interface EditEngineWidgetJSON {
+	paragraphs: EditEngineParagraph[];
+	selection: EditEngineSelection;
+	readOnly?: boolean;
+	lockedBy?: number; // view id of another view that edits the same text, so this one only shows it
+	extra?: any; // whatever the concrete engine-side widget adds
+}

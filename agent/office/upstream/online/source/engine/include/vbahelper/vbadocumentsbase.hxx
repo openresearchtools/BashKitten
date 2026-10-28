@@ -1,0 +1,77 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_VBAHELPER_VBADOCUMENTSBASE_HXX
+#define INCLUDED_VBAHELPER_VBADOCUMENTSBASE_HXX
+
+#include <cpo/uno/Any.hxx>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/Sequence.hxx>
+#include <ooo/vba/XDocumentsBase.hpp>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <vbahelper/vbacollectionimpl.hxx>
+#include <vbahelper/vbadllapi.h>
+#include <vbahelper/vbahelper.hxx>
+
+namespace com::sun::star {
+    namespace beans { struct PropertyValue; }
+    namespace container { class XEnumeration; }
+}
+namespace cpo::uno { class XComponentContext; }
+
+namespace ooo::vba {
+    class XDocumentsBase;
+    class XHelperInterface;
+}
+
+typedef CollTestImplHelper< ooo::vba::XDocumentsBase > VbaDocumentsBase_BASE;
+
+class VBAHELPER_DLLPUBLIC VbaDocumentsBase : public VbaDocumentsBase_BASE
+{
+public:
+    enum DOCUMENT_TYPE
+    {
+        WORD_DOCUMENT = 1,
+        EXCEL_DOCUMENT
+    };
+
+private:
+    DOCUMENT_TYPE meDocType;
+
+public:
+    /// @throws cpo::uno::RuntimeException
+    VbaDocumentsBase( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, DOCUMENT_TYPE eDocType );
+
+    // XEnumerationAccess
+    virtual cpo::uno::Type getElementType() override = 0;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override = 0;
+
+    // VbaDocumentsBase_BASE
+    virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& aSource ) override = 0;
+
+protected:
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Any createDocument();
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Any openDocument( const OUString& Filename, const cpo::uno::Any& ReadOnly, const cpo::uno::Sequence< css::beans::PropertyValue >& rProps );
+};
+
+#endif /* SC_ INCLUDED_VBAHELPER_VBADOCUMENTSBASE_HXX */
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

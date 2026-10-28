@@ -1,0 +1,4093 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <stdio.h>
+#include <oox/drawingml/clrscheme.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+#include <oox/token/relationship.hxx>
+#include <oox/ole/olehelper.hxx>
+#include <oox/ole/olestorage.hxx>
+#include <oox/ole/vbaproject.hxx>
+#include "epptooxml.hxx"
+#include <oox/export/shapes.hxx>
+#include <svx/svdlayer.hxx>
+#include <svx/annotation/Annotation.hxx>
+#include <tools/Guid.hxx>
+#include <tools/datetime.hxx>
+#include <tools/datetimeutils.hxx>
+#include <o3tl/string_view.hxx>
+#include <xmloff/autolayout.hxx>
+#include <unokywds.hxx>
+#include <osl/file.hxx>
+
+#include <editeng/fontitem.hxx>
+#include <editeng/eeitem.hxx>
+#include <drawdoc.hxx>
+#include <SdSoundLink.hxx>
+#include <svl/itempool.hxx>
+#include <editeng/section.hxx>
+#include <editeng/editeng.hxx>
+#include <editeng/editobj.hxx>
+#include <editeng/outlobj.hxx>
+
+#include <map>
+#include <o3tl/safeint.hxx>
+#include <comphelper/sequenceashashmap.hxx>
+#include <comphelper/storagehelper.hxx>
+#include <comphelper/string.hxx>
+#include <comphelper/xmltools.hxx>
+#include <sax/fshelper.hxx>
+#include <sax/fastattribs.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
+#include <tools/UnitConversion.hxx>
+#include <tools/urlobj.hxx>
+#include <tools/datetime.hxx>
+#include <unotools/securityoptions.hxx>
+#include <com/sun/star/animations/TransitionType.hpp>
+#include <com/sun/star/animations/TransitionSubType.hpp>
+#include <com/sun/star/awt/XControlModel.hpp>
+#include <com/sun/star/beans/XPropertySetInfo.hpp>
+#include <com/sun/star/drawing/FillStyle.hpp>
+#include <com/sun/star/drawing/XControlShape.hpp>
+#include <com/sun/star/drawing/XDrawPages.hpp>
+#include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
+#include <com/sun/star/drawing/XMasterPageTarget.hpp>
+#include <com/sun/star/drawing/XMasterPagesSupplier.hpp>
+#include <com/sun/star/embed/ElementModes.hpp>
+#include <com/sun/star/geometry/RealPoint2D.hpp>
+#include <com/sun/star/office/XAnnotationEnumeration.hpp>
+#include <com/sun/star/office/XAnnotationAccess.hpp>
+#include <com/sun/star/presentation/AnimationSpeed.hpp>
+#include <com/sun/star/util/DateTime.hpp>
+#include <com/sun/star/task/XStatusIndicator.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/presentation/XCustomPresentationSupplier.hpp>
+#include <com/sun/star/container/XIndexContainer.hpp>
+#include <com/sun/star/container/XNamed.hpp>
+#include <com/sun/star/presentation/XPresentationSupplier.hpp>
+#include <com/sun/star/presentation/XSoundReference.hpp>
+#include <comphelper/diagnose_ex.hxx>
+#include <comphelper/hash.hxx>
+#include <vcl/embeddedfontsmanager.hxx>
+
+#include <oox/export/utils.hxx>
+#include <oox/export/ThemeExport.hxx>
+#include <docmodel/theme/Theme.hxx>
+#include <ModelTraverser.hxx>
+
+#include "pptx-animations.hxx"
+#include "../ppt/pptanimations.hxx"
+
+#include <i18nlangtag/languagetag.hxx>
+#include <svx/sdrmasterpagedescriptor.hxx>
+#include <svx/sdtfsitm.hxx>
+#include <svx/svdograf.hxx>
+#include <svx/svdopath.hxx>
+#include <svx/svdotext.hxx>
+#include <svx/svdpage.hxx>
+#include <svx/svdxcgv.hxx>
+#include <svx/sdr/properties/properties.hxx>
+#include <svx/unoapi.hxx>
+#include <svx/svdogrp.hxx>
+#include <svx/ColorSets.hxx>
+#include <svx/diagram/DiagramHelper_svx.hxx>
+#include <sdmod.hxx>
+#include <sdpage.hxx>
+#include <unomodel.hxx>
+
+#include <vcl/svapp.hxx>
+#include <vcl/settings.hxx>
+#include <vcl/font/EOTConverter.hxx>
+
+#include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
+#include <com/sun/star/document/XStorageBasedDocument.hpp>
+#include <algorithm>
+#include <cstdlib>
+#include <utility>
+#include <unordered_map>
+#include <unordered_set>
+
+#if OSL_DEBUG_LEVEL > 1
+#include <com/sun/star/drawing/RectanglePoint.hpp>
+#endif
+
+using namespace sax_fastparser;
+using namespace ::com::sun::star;
+using namespace ::com::sun::star::animations;
+using namespace ::com::sun::star::beans;
+using namespace ::com::sun::star::container;
+using namespace ::com::sun::star::drawing;
+using namespace ::com::sun::star::geometry;
+using namespace ::com::sun::star::presentation;
+using namespace ::com::sun::star::office;
+using namespace ::com::sun::star::text;
+using namespace ::cpo;
+using namespace ::cpo::uno;
+using namespace ::com::sun::star::util;
+using namespace ::ppt;
+using ::com::sun::star::beans::XPropertySet;
+using ::com::sun::star::beans::XPropertySetInfo;
+using ::sax_fastparser::FSHelperPtr;
+using namespace oox::drawingml;
+using namespace oox::core;
+using namespace oox;
+
+namespace
+{
+rtl::Reference<FastAttributeList> presentationNamespaces(const oox::core::XmlFilterBase& rFilter)
+{
+    rtl::Reference<FastAttributeList> pAttributes = FastSerializerHelper::createAttrList();
+    pAttributes->add(FSNS(XML_xmlns, XML_a), OUStringToOString(rFilter.getNamespaceURL(OOX_NS(dml)), RTL_TEXTENCODING_UTF8));
+    pAttributes->add(FSNS(XML_xmlns, XML_p), OUStringToOString(rFilter.getNamespaceURL(OOX_NS(ppt)), RTL_TEXTENCODING_UTF8));
+    pAttributes->add(FSNS(XML_xmlns, XML_r), OUStringToOString(rFilter.getNamespaceURL(OOX_NS(officeRel)), RTL_TEXTENCODING_UTF8));
+    pAttributes->add(FSNS(XML_xmlns, XML_p14), OUStringToOString(rFilter.getNamespaceURL(OOX_NS(p14)), RTL_TEXTENCODING_UTF8));
+    pAttributes->add(FSNS(XML_xmlns, XML_p15), OUStringToOString(rFilter.getNamespaceURL(OOX_NS(p15)), RTL_TEXTENCODING_UTF8));
+    pAttributes->add(FSNS(XML_xmlns, XML_mc), OUStringToOString(rFilter.getNamespaceURL(OOX_NS(mce)), RTL_TEXTENCODING_UTF8));
+    return pAttributes;
+}
+
+rtl::Reference<FastAttributeList> presentationPrNamespaces(const oox::core::XmlFilterBase& rFilter)
+{
+    rtl::Reference<FastAttributeList> pAttributes = FastSerializerHelper::createAttrList();
+    pAttributes->add(FSNS(XML_xmlns, XML_a), OUStringToOString(rFilter.getNamespaceURL(OOX_NS(dml)), RTL_TEXTENCODING_UTF8));
+    pAttributes->add(FSNS(XML_xmlns, XML_p), OUStringToOString(rFilter.getNamespaceURL(OOX_NS(ppt)), RTL_TEXTENCODING_UTF8));
+    pAttributes->add(FSNS(XML_xmlns, XML_r), OUStringToOString(rFilter.getNamespaceURL(OOX_NS(officeRel)), RTL_TEXTENCODING_UTF8));
+    return pAttributes;
+}
+};
+
+namespace oox::core
+{
+
+class PowerPointShapeExport : public ShapeExport
+{
+    PowerPointExport&   mrExport;
+    PageType            mePageType;
+    bool                mbMaster;
+    /// True while writing a slideMaster part; a slideLayout part also uses PageType::MASTER.
+    bool                mbSlideMasterPart = false;
+public:
+    PowerPointShapeExport(FSHelperPtr pFS, ShapeHashMap* pShapeMap, PowerPointExport* pFB);
+    void                SetMaster(bool bMaster);
+    void                SetPageType(PageType ePageType);
+    void                SetSlideMasterPart(bool bSlideMasterPart) { mbSlideMasterPart = bSlideMasterPart; }
+    ShapeExport&        WriteNonVisualProperties(const Reference< XShape >& xShape) override;
+    ShapeExport&        WriteTextShape(const Reference< XShape >& xShape) override;
+    ShapeExport&        WriteUnknownShape(const Reference< XShape >& xShape) override;
+    ShapeExport&        WriteGraphicObjectShape(const Reference< XShape >& xShape) override;
+    ShapeExport&        WritePlaceholderShape(const Reference< XShape >& xShape, PlaceholderType ePlaceholder);
+    /** Writes a placeholder shape that references the placeholder on the master slide */
+    ShapeExport&        WritePlaceholderReferenceShape(PlaceholderType ePlaceholder, sal_Int32 nReferencedPlaceholderIdx, PageType ePageType, const Reference<XPropertySet>& rXPagePropSet);
+    ShapeExport&        WritePageShape(const Reference< XShape >& xShape, PageType ePageType, bool bPresObj);
+    /** Writes textbody of a placeholder that references the placeholder on the master slide */
+    ShapeExport&        WritePlaceholderReferenceTextBody(PlaceholderType ePlaceholder, PageType ePageType, const Reference<XPropertySet>& xPagePropSet);
+
+    // helper parts
+    bool WritePlaceholder(const Reference< XShape >& xShape, PlaceholderType ePlaceholder, bool bMaster);
+};
+
+namespace
+{
+void WriteSndAc(const FSHelperPtr& pFS, const OUString& sSoundRelId, const OUString& sSoundName)
+{
+        pFS->startElementNS(XML_p, XML_sndAc);
+        pFS->startElementNS(XML_p, XML_stSnd);
+        pFS->singleElementNS(XML_p, XML_snd, FSNS(XML_r, XML_embed),
+                             sax_fastparser::UseIf(sSoundRelId, !sSoundRelId.isEmpty()), XML_name,
+                             sax_fastparser::UseIf(sSoundName, !sSoundName.isEmpty()));
+        pFS->endElement(FSNS(XML_p, XML_stSnd));
+        pFS->endElement(FSNS(XML_p, XML_sndAc));
+}
+
+// Holds a graphic or media object rather than text, and so reaches the export through
+// ShapeExport::WriteGraphicObjectShape.
+bool isGraphicPlaceholder(PlaceholderType ePlaceholder)
+{
+    return ePlaceholder == Picture || ePlaceholder == Media;
+}
+
+// The placeholder kind a graphic-object shape stands for, or None when it is not a placeholder.
+PlaceholderType getGraphicPlaceholderType(std::u16string_view aShapeType)
+{
+    if (aShapeType == u"com.sun.star.presentation.GraphicObjectShape")
+        return Picture;
+    if (aShapeType == u"com.sun.star.presentation.MediaShape")
+        return Media;
+    return None;
+}
+
+// Whether the placeholder is still waiting for its content. A media one is never marked empty:
+// SdGenericDrawPage::CreateSdrObject_ builds it without SdPage::CreatePresObj, which is what sets
+// that flag, so ask the media itself.
+bool isPlaceholderStillEmpty(const Reference<XPropertySet>& xProps, PlaceholderType ePlaceholder)
+{
+    if (!xProps)
+        return false;
+
+    if (xProps->getPropertyValue(u"IsEmptyPresentationObject"_ustr) == true)
+        return true;
+
+    if (ePlaceholder != Media)
+        return false;
+
+    OUString aMediaURL;
+    return xProps->getPropertySetInfo()->hasPropertyByName(u"MediaURL"_ustr)
+           && (xProps->getPropertyValue(u"MediaURL"_ustr) >>= aMediaURL) && aMediaURL.isEmpty();
+}
+
+// The nth shape of a page, if it and all below it are non-placeholders. A placeholder stops the
+// count, because master shapes paint below layout shapes and it stays on the layout.
+// IsPresObj is wider than the write side's mbPresObj, so the run can only stop earlier.
+const SdrObject* getLeadingShape(SdPage& rPage, size_t nIndex)
+{
+    if (nIndex >= rPage.GetObjCount())
+        return nullptr;
+    for (size_t nObj = 0; nObj <= nIndex; ++nObj)
+    {
+        SdrObject* pObj = rPage.GetObj(nObj);
+        if (!pObj || rPage.IsPresObj(pObj))
+            return nullptr;
+    }
+    return rPage.GetObj(nIndex);
+}
+
+// The same place, within the slack that a page's own text layout can move a frame by
+bool isSameRect(const tools::Rectangle& rRect, const tools::Rectangle& rOther)
+{
+    constexpr tools::Long nSlack = 10; // 10/100 mm
+    return std::abs(rRect.Left() - rOther.Left()) <= nSlack
+           && std::abs(rRect.Top() - rOther.Top()) <= nSlack
+           && std::abs(rRect.Right() - rOther.Right()) <= nSlack
+           && std::abs(rRect.Bottom() - rOther.Bottom()) <= nSlack;
+}
+
+// Whether these are the same shape as far as a slide shows. Two copies have in common what the
+// document set for them; each page also carries values it recalculated for itself, which is why
+// SdrObject::Equals is no use here - it reads the cached m_nOrdNum and mnNavigationPosition - and
+// why the geometry gets a slack. What the export writes from outside the item set is compared
+// below, one kind at a time; a kind that cannot be compared in full is never the same.
+bool isSameShape(const SdrObject& rShape, const SdrObject& rOther)
+{
+    if (rShape.GetObjInventor() != rOther.GetObjInventor()
+        || rShape.GetObjIdentifier() != rOther.GetObjIdentifier()
+        || rShape.GetRotateAngle() != rOther.GetRotateAngle()
+        || rShape.GetShearAngle() != rOther.GetShearAngle()
+        || rShape.GetLayer() != rOther.GetLayer() || rShape.IsVisible() != rOther.IsVisible()
+        || rShape.IsPrintable() != rOther.IsPrintable() || rShape.GetName() != rOther.GetName()
+        || rShape.GetTitle() != rOther.GetTitle()
+        || rShape.GetDescription() != rOther.GetDescription())
+        return false;
+
+    // Both rectangles: getPosition and getSize use the logic rect for most kinds and the snap
+    // rect for a group or a path, and rotation makes the two differ.
+    if (!isSameRect(rShape.GetSnapRect(), rOther.GetSnapRect())
+        || !isSameRect(rShape.GetLogicRect(), rOther.GetLogicRect()))
+        return false;
+
+    // Not items: the style sheet, which the item comparison below does not resolve through, and
+    // the decorative flag, written as an extLst
+    if (rShape.GetStyleSheet() != rOther.GetStyleSheet()
+        || rShape.IsDecorative() != rOther.IsDecorative())
+        return false;
+
+    // Also not an item: the grab bag holds the effect list, p:style, 3D and theme colours
+    cpo::uno::Any aGrabBag;
+    cpo::uno::Any aOtherGrabBag;
+    rShape.GetGrabBagItem(aGrabBag);
+    rOther.GetGrabBagItem(aOtherGrabBag);
+    if (aGrabBag != aOtherGrabBag)
+        return false;
+
+    // A click action or bookmark lives in the shape's user data, so refuse a shape that has one
+    if (SdDrawDocument::GetShapeUserData(const_cast<SdrObject&>(rShape))
+        || SdDrawDocument::GetShapeUserData(const_cast<SdrObject&>(rOther)))
+        return false;
+
+    const OutlinerParaObject* pText = rShape.GetOutlinerParaObject();
+    const OutlinerParaObject* pOtherText = rOther.GetOutlinerParaObject();
+    if (bool(pText) != bool(pOtherText))
+        return false;
+    // operator==, not EditTextObject::Equals: it also compares the outline depth, exported as
+    // a:pPr/@lvl.
+    if (pText && *pText != *pOtherText)
+        return false;
+
+    switch (rShape.GetObjIdentifier())
+    {
+        case SdrObjKind::Group:
+        {
+            // GetObjectItemSet() can't be used with groups, so compare the members instead
+            // A diagram group exports as a graphicFrame with parts of its own, none compared here
+            if (rShape.getDiagramHelper() || rOther.getDiagramHelper())
+                return false;
+            const SdrObjList* pMembers = rShape.GetSubList();
+            const SdrObjList* pOtherMembers = rOther.GetSubList();
+            if (!pMembers || !pOtherMembers
+                || pMembers->GetObjCount() != pOtherMembers->GetObjCount())
+                return false;
+            for (size_t nObj = 0; nObj < pMembers->GetObjCount(); ++nObj)
+            {
+                const SdrObject* pMember = pMembers->GetObj(nObj);
+                const SdrObject* pOtherMember = pOtherMembers->GetObj(nObj);
+                if (!pMember || !pOtherMember || !isSameShape(*pMember, *pOtherMember))
+                    return false;
+            }
+            return true;
+        }
+        case SdrObjKind::Graphic:
+        {
+            // The graphic and the mirror flag are not items. Compare by checksum, not by
+            // Graphic::operator==, which uses whatever is decoded at the time; the checksum reads
+            // the imported bytes, and 0 means there was nothing to read.
+            const auto* pGraphic = dynamic_cast<const SdrGrafObj*>(&rShape);
+            const auto* pOtherGraphic = dynamic_cast<const SdrGrafObj*>(&rOther);
+            if (!pGraphic || !pOtherGraphic
+                || pGraphic->IsMirrored() != pOtherGraphic->IsMirrored())
+                return false;
+            const auto nChecksum = pGraphic->GetGraphicObject().GetGraphic().GetChecksum();
+            if (nChecksum == 0
+                || nChecksum != pOtherGraphic->GetGraphicObject().GetGraphic().GetChecksum())
+                return false;
+            break;
+        }
+        case SdrObjKind::Line:
+        case SdrObjKind::Polygon:
+        case SdrObjKind::PolyLine:
+        case SdrObjKind::PathLine:
+        case SdrObjKind::PathFill:
+        case SdrObjKind::FreehandLine:
+        case SdrObjKind::FreehandFill:
+        case SdrObjKind::PathPoly:
+        case SdrObjKind::PathPolyLine:
+        {
+            // The polygon is not an item
+            const auto* pPath = dynamic_cast<const SdrPathObj*>(&rShape);
+            const auto* pOtherPath = dynamic_cast<const SdrPathObj*>(&rOther);
+            if (!pPath || !pOtherPath || pPath->GetPathPoly() != pOtherPath->GetPathPoly())
+                return false;
+            break;
+        }
+        case SdrObjKind::Rectangle:
+        case SdrObjKind::CircleOrEllipse:
+        case SdrObjKind::CircleSection:
+        case SdrObjKind::CircleArc:
+        case SdrObjKind::CircleCut:
+        case SdrObjKind::Text:
+        case SdrObjKind::TitleText:
+        case SdrObjKind::OutlineText:
+        case SdrObjKind::CustomShape:
+            break; // the attributes and the text are all of it
+        default:
+            // A table, OLE frame, media object, connector, callout or 3D scene: not compared
+            // here, so it stays on its layout
+            return false;
+    }
+
+    if (!rShape.GetProperties().GetObjectItemSet().Equals(rOther.GetProperties().GetObjectItemSet(),
+                                                          false))
+        return false;
+
+    // Autofit sets the font and spacing scale at layout time and the export writes them. Last,
+    // because reading a scale lays the text out, and the item sets already agree by here.
+    if (rShape.GetMergedItem(SDRATTR_TEXT_FITTOSIZE).GetValue()
+        != drawing::TextFitToSizeType_AUTOFIT)
+        return true;
+    const SdrTextObj* pTextShape = DynCastSdrTextObj(&rShape);
+    const SdrTextObj* pOtherTextShape = DynCastSdrTextObj(&rOther);
+    return !pTextShape || !pOtherTextShape
+           || (pTextShape->GetFontScale() == pOtherTextShape->GetFontScale()
+               && pTextShape->GetSpacingScale() == pOtherTextShape->GetSpacingScale());
+}
+
+// The page knows what a shape is a placeholder for; its class only says what represents it.
+PlaceholderType getPresObjPlaceholderType(const Reference<XShape>& xShape)
+{
+    SdrObject* pObj = SdrObject::getSdrObjectFromXShape(xShape);
+    SdPage* pPage = pObj ? dynamic_cast<SdPage*>(pObj->getSdrPageFromSdrObject()) : nullptr;
+    if (!pPage)
+        return None;
+
+    switch (pPage->GetPresObjKind(pObj))
+    {
+        case PresObjKind::Graphic:
+            return Picture;
+        case PresObjKind::Media:
+            return Media;
+        default:
+            return None;
+    }
+}
+
+// A slide master takes only these; PowerPoint refuses to open a file whose master carries any
+// other placeholder type, content ones like pic included.
+bool isPlaceholderAllowedOnSlideMaster(PlaceholderType ePlaceholder)
+{
+    switch (ePlaceholder)
+    {
+        case Title:
+        case Outliner:
+        case Notes:
+        case DateAndTime:
+        case Footer:
+        case SlideNumber:
+            return true;
+        default:
+            return false;
+    }
+}
+
+const char* getPlaceholderTypeName(PlaceholderType ePlaceholder)
+{
+    switch (ePlaceholder)
+    {
+        case SlideImage:
+            return "sldImg";
+        case Notes:
+            return "body";
+        case Header:
+            return "hdr";
+        case Footer:
+            return "ftr";
+        case SlideNumber:
+            return "sldNum";
+        case DateAndTime:
+            return "dt";
+        case Outliner:
+            return "body";
+        case Title:
+            return "title";
+        case Subtitle:
+            return "subTitle";
+        case Picture:
+            return "pic";
+        case Media:
+            return "media";
+        default:
+            SAL_INFO("sd.eppt", "warning: unhandled placeholder type: " << ePlaceholder);
+            return "";
+    }
+}
+}
+}
+
+namespace {
+
+struct PPTXLayoutInfo
+{
+    const char* sName;
+    const char* sType;
+};
+
+}
+
+// the function 'SlidePersist::getLayoutFromValueToken()'
+// likely needs to be updated after any changes here
+// unsupported PPTX layouts: txAndMedia, twoColTx, twoTxTwoObj,
+//  twoObjAndObj, objTx, picTx, secHead, objOnly, objAndTwoObj,
+//  mediaAndTx, dgm, cust
+const PPTXLayoutInfo aLayoutInfo[] =
+{
+    { "Title Slide", "title" },
+    { "Title and text", "tx" },
+    { "Title and chart", "chart" },
+    { "Title, text on left, text on right", "twoObj" },
+    { "Title, text on left and chart on right", "txAndChart" },
+    { "Blank Slide", "blank" },
+    { "Title, text on left, clip art on right", "txAndClipArt" },
+    { "Title, chart on left and text on right", "chartAndTx" },
+    { "Title and table", "tbl" },
+    { "Title, clipart on left, text on right", "clipArtAndTx" },
+    { "Title, text on left, object on right", "txAndObj" },
+    { "Title and object", "obj" },
+    { "Title, text on left, two objects on right", "txAndTwoObj" },
+    { "Title, object on left, text on right", "objAndTx" },
+    { "Title, object on top, text on bottom", "objOverTx" },
+    { "Title, two objects on left, text on right", "twoObjAndTx" },
+    { "Title, two objects on top, text on bottom", "twoObjOverTx" },
+    { "Title, text on top, object on bottom", "txOverObj" },
+    { "Title and four objects", "fourObj" },
+    { "Title Only", "titleOnly" },
+    { "Blank Slide", "blank" },
+    { "Blank Slide", "blank" },
+    { "Blank Slide", "blank" },
+    { "Blank Slide", "blank" },
+    { "Blank Slide", "blank" },
+    { "Blank Slide", "blank" },
+    { "Blank Slide", "blank" },
+    { "Vertical title on right, vertical text on top, chart on bottom", "vertTitleAndTxOverChart" },
+    { "Vertical title on right, vertical text on left", "vertTitleAndTx" },
+    { "Title and vertical text body", "vertTx" },
+    { "Title, clip art on left, vertical text on right", "clipArtAndVertTx" },
+    { "Blank Slide", "blank" },
+    { "Object only", "objOnly" },
+    { "Blank Slide", "blank" },
+    { "Blank Slide", "blank" }
+};
+static_assert(std::size(aLayoutInfo) == AUTOLAYOUT_END,
+              "aLayoutInfo must have a corresponding item for each AUTOLAYOUT");
+
+PowerPointShapeExport::PowerPointShapeExport(FSHelperPtr pFS, ShapeHashMap* pShapeMap,
+        PowerPointExport* pFB)
+    : ShapeExport(XML_p, std::move(pFS), pShapeMap, pFB)
+    , mrExport(*pFB)
+    , mePageType(UNDEFINED)
+    , mbMaster(false)
+{
+}
+
+void PowerPointShapeExport::SetMaster(bool bMaster)
+{
+    mbMaster = bMaster;
+}
+
+void PowerPointShapeExport::SetPageType(PageType ePageType)
+{
+    mePageType = ePageType;
+}
+
+ShapeExport& PowerPointShapeExport::WriteNonVisualProperties(const Reference< XShape >&)
+{
+    GetFS()->singleElementNS(XML_p, XML_nvPr);
+
+    return *this;
+}
+
+ShapeExport& PowerPointShapeExport::WriteTextShape(const Reference< XShape >& xShape)
+{
+    OUString sShapeType = xShape->getShapeType();
+
+    SAL_INFO("sd.eppt", "shape(text) : " << sShapeType.toUtf8());
+
+    if (sShapeType == "com.sun.star.drawing.TextShape" || sShapeType == "com.sun.star.drawing.GraphicObjectShape")
+    {
+        ShapeExport::WriteTextShape(xShape);
+    }
+    else if (sShapeType == "com.sun.star.presentation.DateTimeShape")
+    {
+        if (!WritePlaceholder(xShape, DateAndTime, mbMaster))
+            ShapeExport::WriteTextShape(xShape);
+    }
+    else if (sShapeType == "com.sun.star.presentation.FooterShape")
+    {
+        if (!WritePlaceholder(xShape, Footer, mbMaster))
+            ShapeExport::WriteTextShape(xShape);
+    }
+    else if (sShapeType == "com.sun.star.presentation.HeaderShape")
+    {
+        if (!WritePlaceholder(xShape, Header, mbMaster))
+            ShapeExport::WriteTextShape(xShape);
+    }
+    else if (sShapeType == "com.sun.star.presentation.NotesShape")
+    {
+        if (mePageType == NOTICE && mrExport.GetPresObj())
+            WritePlaceholderShape(xShape, Notes);
+        else
+            ShapeExport::WriteTextShape(xShape);
+    }
+    else if (sShapeType == "com.sun.star.presentation.OutlinerShape"
+             || sShapeType == "com.sun.star.presentation.GraphicObjectShape"
+             || sShapeType == "com.sun.star.presentation.MediaShape")
+    {
+        // Written as the placeholder it is, with the text it holds: a body one would cost it its
+        // identity, and a picture with no image is written as nothing at all.
+        const PlaceholderType eStandsFor = getPresObjPlaceholderType(xShape);
+        if (!WritePlaceholder(xShape, eStandsFor != None ? eStandsFor : Outliner, mbMaster))
+            ShapeExport::WriteTextShape(xShape);
+    }
+    else if (sShapeType == "com.sun.star.presentation.SlideNumberShape")
+    {
+        if (!WritePlaceholder(xShape, SlideNumber, mbMaster))
+            ShapeExport::WriteTextShape(xShape);
+    }
+    else if (sShapeType == "com.sun.star.presentation.TitleTextShape")
+    {
+        if (!WritePlaceholder(xShape, Title, mbMaster))
+            ShapeExport::WriteTextShape(xShape);
+    }
+    else if (sShapeType == "com.sun.star.presentation.SubtitleShape")
+    {
+        if (!WritePlaceholder(xShape, Subtitle, mbMaster))
+            ShapeExport::WriteTextShape(xShape);
+    }
+    else
+        SAL_WARN("sd.eppt", "PowerPointShapeExport::WriteTextShape: shape of type '" << sShapeType << "' is ignored");
+
+    return *this;
+}
+
+ShapeExport& PowerPointShapeExport::WriteUnknownShape(const Reference< XShape >& xShape)
+{
+    OUString sShapeType = xShape->getShapeType();
+
+    SAL_INFO("sd.eppt", "shape(unknown): " << sShapeType.toUtf8());
+
+    if (sShapeType == "com.sun.star.presentation.PageShape")
+    {
+        WritePageShape(xShape, mePageType, mrExport.GetPresObj());
+    }
+    else if (sShapeType == "com.sun.star.drawing.AnnotationShape")
+    {
+        // A comment is a shape on the page, and it goes out as a part of its own beside the
+        // shapes of the slide.
+    }
+    else if (sShapeType == "com.sun.star.drawing.ControlShape")
+    {
+        // A form control is written after the shapes of the page, where OOXML keeps the list of
+        // them.
+        mrExport.maControlShapes.push_back(xShape);
+    }
+    else
+        SAL_WARN("sd.eppt", "unknown shape not handled: " << sShapeType.toUtf8());
+
+    return *this;
+}
+
+ShapeExport& PowerPointShapeExport::WriteGraphicObjectShape(const Reference<XShape>& xShape)
+{
+    // A picture or media placeholder serialises as <p:sp> with its own <p:ph>: on a layout or
+    // master always, on a slide only while still empty (once filled it stays a <p:pic>).
+    const PlaceholderType ePlaceholder
+        = xShape ? getGraphicPlaceholderType(xShape->getShapeType()) : None;
+    if (ePlaceholder != None)
+    {
+        if (auto xProps = xShape.query<XPropertySet>())
+        {
+            try
+            {
+                if ((mbMaster || isPlaceholderStillEmpty(xProps, ePlaceholder))
+                    && WritePlaceholder(xShape, ePlaceholder, mbMaster))
+                    return *this;
+            }
+            catch (const UnknownPropertyException&)
+            {
+                // Plain drawing.GraphicObjectShape has no
+                // IsEmptyPresentationObject; fall through.
+            }
+        }
+    }
+
+    return ShapeExport::WriteGraphicObjectShape(xShape);
+}
+
+PowerPointExport::PowerPointExport(const Reference< XComponentContext >& rContext, const cpo::uno::Sequence<cpo::uno::Any>& rArguments)
+    : XmlFilterBase(rContext)
+    , mpAuthorIDs( new SvtSecurityMapPersonalInfo )
+    , mnLayoutFileIdMax(1)
+    , mnSlideIdMax(1 << 8)
+    , mnSlideMasterIdMax(1U << 31)
+    , mnAnimationNodeIdMax(1)
+    , mnThemeIdMax(0)
+    , mnDiagramId(1)
+    , mbCreateNotes(false)
+    , mnPlaceholderIndexMax(1)
+{
+    comphelper::SequenceAsHashMap aArgumentsMap(rArguments);
+    mbPptm = aArgumentsMap.getUnpackedValueOrDefault(u"IsPPTM"_ustr, false);
+    mbExportTemplate = aArgumentsMap.getUnpackedValueOrDefault(u"IsTemplate"_ustr, false);
+    mbSlideShow = aArgumentsMap.getUnpackedValueOrDefault(u"IsSlideShow"_ustr, false);
+}
+
+PowerPointExport::~PowerPointExport()
+{
+}
+
+void PowerPointExport::writeDocumentProperties()
+{
+    uno::Reference<document::XDocumentProperties> xDocProps = mXModel->getDocumentProperties();
+
+    if (xDocProps.is())
+    {
+        bool bSecurityOptOpenReadOnly = false;
+        uno::Reference< beans::XPropertySet > xSettings(mXModel->createInstance(u"com.sun.star.document.Settings"_ustr), uno::UNO_QUERY);
+        try
+        {
+            xSettings->getPropertyValue(u"LoadReadonly"_ustr) >>= bSecurityOptOpenReadOnly;
+
+            xSettings->getPropertyValue(u"EmbedFonts"_ustr) >>= mbEmbedFonts;
+            xSettings->getPropertyValue(u"EmbedOnlyUsedFonts"_ustr) >>= mbEmbedUsedOnly;
+            xSettings->getPropertyValue(u"EmbedLatinScriptFonts"_ustr)  >>= mbEmbedLatinScript;
+            xSettings->getPropertyValue(u"EmbedAsianScriptFonts"_ustr)  >>= mbEmbedAsianScript;
+            xSettings->getPropertyValue(u"EmbedComplexScriptFonts"_ustr) >>= mbEmbedComplexScript;
+        }
+        catch( cpo::uno::Exception& )
+        {
+        }
+        exportDocumentProperties(xDocProps, bSecurityOptOpenReadOnly);
+    }
+}
+
+bool PowerPointExport::importDocument() noexcept
+{
+    return false;
+}
+
+bool PowerPointExport::exportDocument()
+{
+    auto& rGraphicExportCache = drawingml::GraphicExportCache::get();
+
+    rGraphicExportCache.push();
+
+    maShapeMap.clear();
+
+    auto pDoc = dynamic_cast<SdXImpressDocument*>(getModel().get());
+    assert(pDoc);
+    mXModel = pDoc;
+
+    //write document properties
+    writeDocumentProperties();
+
+    addRelation(oox::getRelationship(Relationship::OFFICEDOCUMENT), u"ppt/presentation.xml");
+
+    OUString aMediaType;
+    if (mbPptm)
+    {
+        if (mbExportTemplate)
+        {
+            aMediaType = u"application/vnd.ms-powerpoint.template.macroEnabled.main+xml"_ustr;
+        }
+        else if (mbSlideShow)
+        {
+            aMediaType = u"application/vnd.ms-powerpoint.slideshow.macroEnabled.main+xml"_ustr;
+        }
+        else
+        {
+            aMediaType = u"application/vnd.ms-powerpoint.presentation.macroEnabled.main+xml"_ustr;
+        }
+    }
+    else
+    {
+        if (mbExportTemplate)
+        {
+            aMediaType = u"application/vnd.openxmlformats-officedocument.presentationml.template.main+xml"_ustr;
+        }
+        else if (mbSlideShow)
+        {
+            aMediaType = u"application/vnd.openxmlformats-officedocument.presentationml.slideshow.main+xml"_ustr;
+        }
+        else
+        {
+            aMediaType = u"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"_ustr;
+        }
+    }
+
+    mPresentationFS = openFragmentStreamWithSerializer(u"ppt/presentation.xml"_ustr, aMediaType);
+
+    exportCustomFragments(mPresentationFS);
+
+    addRelation(mPresentationFS->getOutputStream(),
+                oox::getRelationship(Relationship::THEME),
+                u"theme/theme1.xml");
+
+    auto pAttributes = presentationNamespaces(*this);
+    if (mbEmbedFonts)
+        pAttributes->add(XML_embedTrueTypeFonts, "1");
+    mPresentationFS->startElementNS(XML_p, XML_presentation, pAttributes);
+
+    mXStatusIndicator = getStatusIndicator();
+
+    std::vector< PropertyValue > aProperties;
+    PropertyValue aProperty;
+    aProperty.Name = u"BaseURI"_ustr;
+    aProperty.Value <<= getFileUrl();
+    aProperties.push_back(aProperty);
+
+    exportPPT(aProperties);
+
+    // clamp to minimum values supported by PPTX
+    sal_Int64 nDestPageWidth = std::max(sal_Int64(914400), PPTtoEMU(maDestPageSize.Width));
+    sal_Int64 nDestPageHeight = std::max(sal_Int64(914400), PPTtoEMU(maDestPageSize.Height));
+    mPresentationFS->singleElementNS(XML_p, XML_sldSz,
+                                     XML_cx, OString::number(nDestPageWidth),
+                                     XML_cy, OString::number(nDestPageHeight));
+    // for some reason if added before slides list it will not load the slides (alas with error reports) in mso
+    mPresentationFS->singleElementNS(XML_p, XML_notesSz,
+                                     XML_cx, OString::number(PPTtoEMU(maNotesPageSize.Width)),
+                                     XML_cy, OString::number(PPTtoEMU(maNotesPageSize.Height)));
+    WriteEmbeddedFontList();
+
+    WriteCustomSlideShow();
+
+    WritePresentationProps();
+
+    WriteAuthors();
+
+    WriteModernAuthors();
+
+    WriteVBA();
+
+    WriteModifyVerifier();
+
+    WriteSections();
+
+    mPresentationFS->endElementNS(XML_p, XML_presentation);
+    mPresentationFS->endDocument();
+    mPresentationFS.reset();
+    // Free all FSHelperPtr, to flush data before committing storage
+    for (auto& serializer : mpSlidesFSArray)
+    {
+        if (!serializer)
+            continue;
+        serializer->endDocument();
+    }
+    mpSlidesFSArray.clear();
+
+    commitStorage();
+
+    rGraphicExportCache.pop();
+
+    maShapeMap.clear();
+    maAuthors.clear();
+    maRelId.clear();
+
+    return true;
+}
+
+::oox::ole::VbaProject* PowerPointExport::implCreateVbaProject() const
+{
+    return new ::oox::ole::VbaProject(getComponentContext(), getModel(), u"Impress");
+}
+
+namespace
+{
+struct EmbeddedFont
+{
+    OUString sFamilyName;
+
+    OString aRegularRelID;
+    OString aBoldRelID;
+    OString aItalicRelID;
+    OString aBoldItalicRelID;
+};
+} // end anonymous namespace
+
+namespace
+{
+
+/** Collects font names of fonts used in the document
+ *
+ * Uses the model traverser to traverse the document model.
+ * Can be parameterized to filter latin, asian or complex scripts.
+ */
+class FontNameCollector : public sd::ModelTraverseHandler
+{
+private:
+    std::unordered_set<OUString>& mrUsedFontNames;
+    bool mbEmbedLatinScript;
+    bool mbEmbedAsianScript;
+    bool mbEmbedComplexScript;
+
+    static const SvxFontItem* getFontItem(const editeng::Section& rSection, sal_uInt16 eFontWhich)
+    {
+        auto iterator = std::find_if(rSection.maAttributes.begin(), rSection.maAttributes.end(), [eFontWhich] (const SfxPoolItem* pPoolItem) {
+            return pPoolItem->Which() == eFontWhich;
+        });
+
+        if (iterator != rSection.maAttributes.end())
+            return static_cast<const SvxFontItem*>(*iterator);
+        return nullptr;
+    }
+
+    void addFontItem(const SvxFontItem* pItem)
+    {
+        OUString aFontName = pItem->GetFamilyName();
+        mrUsedFontNames.insert(aFontName);
+    }
+
+    void traverseEditEng(SdrTextObj* pTextObject)
+    {
+        OutlinerParaObject* pOutlinerParagraphObject = pTextObject->GetOutlinerParaObject();
+        if (!pOutlinerParagraphObject)
+            return;
+
+        const EditTextObject& rEditText = pOutlinerParagraphObject->GetTextObject();
+        std::vector<editeng::Section> aSections;
+        rEditText.GetAllSections(aSections);
+
+        for (editeng::Section const& rSection : aSections)
+        {
+            if (SvxFontItem const* pFontItem = getFontItem(rSection, EE_CHAR_FONTINFO); pFontItem && mbEmbedLatinScript)
+            {
+                addFontItem(pFontItem);
+            }
+            if (SvxFontItem const * pFontItem = getFontItem(rSection, EE_CHAR_FONTINFO_CJK); pFontItem && mbEmbedAsianScript)
+            {
+                addFontItem(pFontItem);
+            }
+            if (SvxFontItem const* pFontItem = getFontItem(rSection, EE_CHAR_FONTINFO_CTL); pFontItem && mbEmbedComplexScript)
+            {
+                addFontItem(pFontItem);
+            }
+        }
+    }
+
+public:
+    FontNameCollector(std::unordered_set<OUString>& rUsedFontNames, bool bEmbedLatinScript, bool bEmbedAsianScript, bool bEmbedComplexScript)
+        : mrUsedFontNames(rUsedFontNames)
+        , mbEmbedLatinScript(bEmbedLatinScript)
+        , mbEmbedAsianScript(bEmbedAsianScript)
+        , mbEmbedComplexScript(bEmbedComplexScript)
+    {}
+
+protected:
+    void handleSdrObject(SdrObject* pObject) override
+    {
+        SdrTextObj* pTextShape = DynCastSdrTextObj(pObject);
+        if (pTextShape && !pTextShape->IsEmptyPresObj())
+        {
+            traverseEditEng(pTextShape);
+        }
+    }
+};
+
+} // end anonymous namespace
+
+std::unordered_set<OUString> PowerPointExport::getUsedFontList()
+{
+    std::unordered_set<OUString> aReturnSet;
+
+    SdDrawDocument* pDocument = mXModel->GetDoc();
+    if (!pDocument)
+        return aReturnSet;
+
+    auto pCollector = std::make_shared<FontNameCollector>(aReturnSet, mbEmbedLatinScript, mbEmbedAsianScript, mbEmbedComplexScript);
+    sd::ModelTraverser aModelTraverser(pDocument, { .mbMasterPages = true });
+    aModelTraverser.addNodeHandler(pCollector);
+    aModelTraverser.traverse();
+
+    return aReturnSet;
+}
+
+// Writers the list of all embedded fonts and reference to the fonts
+void PowerPointExport::WriteEmbeddedFontList()
+{
+    if (!mbEmbedFonts)
+        return;
+
+    std::unordered_set<OUString> aUsedFonts;
+    if (mbEmbedUsedOnly)
+        aUsedFonts = getUsedFontList();
+
+    int nextFontId = 1;
+
+    std::unordered_set<OUString> aFontFamilyNameSet;
+    std::unordered_map<std::string, OString> aFontDeduplicationMap;
+
+    std::vector<EmbeddedFont> aEmbeddedFontInfo;
+
+    cpo::uno::Sequence<cpo::uno::Any> aAnySeq;
+    if (!(mXModel->getPropertyValue(u"Fonts"_ustr) >>= aAnySeq))
+        return;
+
+    if (aAnySeq.getLength() % 5 != 0)
+        return;
+
+    int nLen = aAnySeq.getLength() / 5;
+    int nSeqIndex = 0;
+
+    for (int i = 0; i < nLen; i++)
+    {
+        OUString sFamilyName;
+        OUString sStyleName;
+        sal_uInt16 eFamily = FAMILY_DONTKNOW;
+        sal_uInt16 ePitch = PITCH_DONTKNOW;
+        sal_uInt16 eCharSet = RTL_TEXTENCODING_DONTKNOW;
+
+        aAnySeq[nSeqIndex++] >>= sFamilyName;
+        aAnySeq[nSeqIndex++] >>= sStyleName;
+        aAnySeq[nSeqIndex++] >>= eFamily;
+        aAnySeq[nSeqIndex++] >>= ePitch;
+        aAnySeq[nSeqIndex++] >>= eCharSet;
+
+        if (EmbeddedFontsManager::isCommonFont(sFamilyName))
+            continue;
+
+        if (mbEmbedUsedOnly && !aUsedFonts.contains(sFamilyName))
+            continue;
+
+        if (aFontFamilyNameSet.contains(sFamilyName))
+            continue;
+
+        static std::vector<std::pair<FontItalic, FontWeight>> aFontVariantCombinations =
+        {
+            { ITALIC_NONE, WEIGHT_NORMAL },
+            { ITALIC_NONE, WEIGHT_BOLD },
+            { ITALIC_NORMAL, WEIGHT_NORMAL },
+            { ITALIC_NORMAL, WEIGHT_BOLD }
+        };
+
+        EmbeddedFont aInfo;
+        aInfo.sFamilyName = sFamilyName;
+        SAL_INFO("sd.eppt", "Embedding font: " << sFamilyName);
+
+        for (auto [eItalic, eWeight] : aFontVariantCombinations)
+        {
+            OUString sFontUrl = EmbeddedFontsManager::fontFileUrl(
+                                    sFamilyName, FontFamily(eFamily), eItalic, eWeight, FontPitch(ePitch),
+                                    EmbeddedFontsManager::FontRights::ViewingAllowed);
+
+            if (sFontUrl.isEmpty())
+                continue;
+
+            osl::File aFile(sFontUrl);
+            if (aFile.open(osl_File_OpenFlag_Read ) != osl::File::E_None)
+                continue;
+
+            std::vector<sal_uInt8> rFontData;
+
+            std::array<sal_uInt8, 4096> buffer;
+            sal_uInt64 readSize;
+
+            comphelper::Hash aHashCalc(comphelper::HashType::SHA256);
+
+            OString uRelID;
+
+            // Read file
+            for(;;)
+            {
+                bool eof;
+
+                if (aFile.isEndOfFile(&eof) != osl::File::E_None)
+                {
+                    SAL_WARN("sd.eppt", "Error reading font file " << sFontUrl);
+                    break;
+                }
+                if (eof)
+                    break;
+
+                if (aFile.read(buffer.data(), 4096, readSize) != osl::File::E_None)
+                {
+                    SAL_WARN("sd.eppt", "Error reading font file " << sFontUrl);
+                    break;
+                }
+
+                if (readSize == 0)
+                    break;
+
+                rFontData.insert(rFontData.end(), buffer.data(), buffer.data() + readSize);
+                aHashCalc.update(buffer.data(), readSize);
+            }
+
+            std::string aHash = comphelper::hashToString(aHashCalc.finalize());
+            auto iterator = aFontDeduplicationMap.find(aHash);
+            if (iterator == aFontDeduplicationMap.end())
+            {
+                std::vector<sal_uInt8> rEOT;
+
+                font::FontDataContainer aContainer(rFontData);
+                font::EOTConverter aConverter(aContainer);
+                if (!aConverter.convert(rEOT))
+                    continue;
+
+                OUString sFontType = u"Regular"_ustr;
+                if (eItalic == ITALIC_NONE && eWeight == WEIGHT_BOLD)
+                    sFontType = u"Bold"_ustr;
+                else if (eItalic == ITALIC_NORMAL && eWeight == WEIGHT_NORMAL)
+                    sFontType = u"Italic"_ustr;
+                else if (eItalic == ITALIC_NORMAL && eWeight == WEIGHT_BOLD)
+                    sFontType = u"BoldItalic"_ustr;
+
+                OUString sFontFileName = "Font_" + OUString::number(nextFontId) + "_" +
+                    sFamilyName.replaceAll(" ", "_") + "_" + sFontType +".fntdata";
+
+                OUString sArchivePath = "ppt/fonts/" + sFontFileName;
+
+                uno::Reference<css::io::XOutputStream> xOutStream = openFragmentStream(sArchivePath, u"application/x-fontdata"_ustr);
+                xOutStream->writeBytes(cpo::uno::Sequence<sal_Int8>(reinterpret_cast<const sal_Int8*>(rEOT.data()), rEOT.size()));
+                xOutStream->closeOutput();
+
+                OUString sRelID = addRelation(mPresentationFS->getOutputStream(),
+                                              oox::getRelationship(Relationship::FONT),
+                                              Concat2View("fonts/" + sFontFileName));
+
+                ++nextFontId;
+
+                uRelID = OUStringToOString(sRelID, RTL_TEXTENCODING_UTF8);
+                aFontDeduplicationMap.emplace(aHash, uRelID);
+            }
+            else
+            {
+                uRelID = iterator->second;
+            }
+
+            if (eItalic == ITALIC_NONE && eWeight == WEIGHT_NORMAL)
+                aInfo.aRegularRelID = uRelID;
+            else if (eItalic == ITALIC_NONE && eWeight == WEIGHT_BOLD)
+                aInfo.aBoldRelID = uRelID;
+            else if (eItalic == ITALIC_NORMAL && eWeight == WEIGHT_NORMAL)
+                aInfo.aItalicRelID = uRelID;
+            else if (eItalic == ITALIC_NORMAL && eWeight == WEIGHT_BOLD)
+                aInfo.aBoldItalicRelID = uRelID;
+        }
+
+        aEmbeddedFontInfo.push_back(aInfo);
+        aFontFamilyNameSet.insert(sFamilyName);
+    }
+
+    // if there are fonts to embed and font embedding enabled
+    mPresentationFS->startElementNS(XML_p, XML_embeddedFontLst);
+    for (auto const& rInfo : aEmbeddedFontInfo)
+    {
+        mPresentationFS->startElementNS(XML_p, XML_embeddedFont);
+
+        mPresentationFS->singleElementNS(XML_p, XML_font,
+            //XML_charset, OUString::number(0),
+            XML_typeface, rInfo.sFamilyName);
+
+        if (!rInfo.aRegularRelID.isEmpty())
+            mPresentationFS->singleElementNS(XML_p, XML_regular, FSNS(XML_r, XML_id), rInfo.aRegularRelID);
+
+        if (!rInfo.aBoldRelID.isEmpty())
+            mPresentationFS->singleElementNS(XML_p, XML_bold, FSNS(XML_r, XML_id), rInfo.aBoldRelID);
+
+        if (!rInfo.aItalicRelID.isEmpty())
+            mPresentationFS->singleElementNS(XML_p, XML_italic, FSNS(XML_r, XML_id), rInfo.aItalicRelID);
+
+        if (!rInfo.aBoldItalicRelID.isEmpty())
+            mPresentationFS->singleElementNS(XML_p, XML_boldItalic, FSNS(XML_r, XML_id), rInfo.aBoldItalicRelID);
+
+        mPresentationFS->endElementNS(XML_p, XML_embeddedFont);
+    }
+    mPresentationFS->endElementNS(XML_p, XML_embeddedFontLst);
+}
+
+void PowerPointExport::WriteCustomSlideShow()
+{
+    if (!mXModel->getCustomPresentations()->hasElements())
+        return;
+
+    mPresentationFS->startElementNS(XML_p, XML_custShowLst);
+
+    Reference<XDrawPages> xDrawPages(mXModel->getDrawPages(), uno::UNO_SET_THROW);
+    Reference<XNameContainer> aXNameCont(mXModel->getCustomPresentations());
+    const Sequence<OUString> aNameSeq(aXNameCont->getElementNames());
+
+    OUString sRelId;
+    sal_uInt32 nCustomShowIndex = 0;
+    sal_Int32 nSlideCount = xDrawPages->getCount();
+
+    for (OUString const& customShowName : aNameSeq)
+    {
+        mPresentationFS->startElementNS(XML_p, XML_custShow, XML_name, customShowName, XML_id,
+                                        OUString::number(nCustomShowIndex++));
+
+        mAny = aXNameCont->getByName(customShowName);
+        Reference<XIndexContainer> aXIContainer;
+        if (mAny >>= aXIContainer)
+        {
+            mPresentationFS->startElementNS(XML_p, XML_sldLst);
+
+            sal_Int32 nCustomShowSlideCount = aXIContainer->getCount();
+            for (sal_Int32 i = 0; i < nCustomShowSlideCount; ++i)
+            {
+                Reference<XDrawPage> aXCustomShowDrawPage;
+                aXIContainer->getByIndex(i) >>= aXCustomShowDrawPage;
+                Reference<XNamed> aXName(aXCustomShowDrawPage, UNO_QUERY_THROW);
+                OUString sCustomShowSlideName = aXName->getName();
+
+                for (sal_Int32 j = 0; j < nSlideCount; ++j)
+                {
+                    Reference<XDrawPage> xDrawPage;
+                    xDrawPages->getByIndex(j) >>= xDrawPage;
+                    Reference<XNamed> xNamed(xDrawPage, UNO_QUERY_THROW);
+                    OUString sSlideName = xNamed->getName();
+
+                    if (sCustomShowSlideName == sSlideName)
+                    {
+                        sRelId = maRelId[j];
+                        break;
+                    }
+                }
+                mPresentationFS->singleElementNS(XML_p, XML_sld, FSNS(XML_r, XML_id), sRelId);
+            }
+            mPresentationFS->endElementNS(XML_p, XML_sldLst);
+        }
+        mPresentationFS->endElementNS(XML_p, XML_custShow);
+    }
+    mPresentationFS->endElementNS(XML_p, XML_custShowLst);
+}
+
+void PowerPointExport::WriteSections()
+{
+    if (!mXModel->getPropertySetInfo()->hasPropertyByName(u"SlideSections"_ustr))
+        return;
+
+    cpo::uno::Sequence<beans::PropertyValue> aSectionList;
+    mXModel->getPropertyValue(u"SlideSections"_ustr) >>= aSectionList;
+
+    if (!aSectionList.hasElements())
+        return;
+
+    // Build page-name-to-index map for resolving slide names to IDs
+    Reference<XDrawPages> xDrawPages(mXModel->getDrawPages(), uno::UNO_SET_THROW);
+    std::map<OUString, sal_Int32> aNameToIndex;
+    for (sal_Int32 i = 0; i < xDrawPages->getCount(); ++i)
+    {
+        Reference<XDrawPage> xPage;
+        xDrawPages->getByIndex(i) >>= xPage;
+        Reference<XNamed> xNamed(xPage, UNO_QUERY);
+        if (xNamed.is())
+            aNameToIndex[xNamed->getName()] = i;
+    }
+
+    // https://learn.microsoft.com/en-us/openspecs/office_standards/ms-pptx/1f21a089-944d-410b-bd47-4f5e692c2532
+    static constexpr OUString aSectionExtUri = u"{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"_ustr;
+    mPresentationFS->startElementNS(XML_p, XML_extLst);
+    mPresentationFS->startElementNS(XML_p, XML_ext, XML_uri, aSectionExtUri);
+    mPresentationFS->startElementNS(XML_p14, XML_sectionLst, FSNS(XML_xmlns, XML_p14),
+                                    getNamespaceURL(OOX_NS(p14)));
+
+    // Resolve slide page names to PPTX slide IDs via name-to-index lookup.
+    sal_Int32 nFallbackIdx = 0;
+    for (const auto& rSectionProp : aSectionList)
+    {
+        cpo::uno::Sequence<beans::PropertyValue> aSectionProps;
+        rSectionProp.Value >>= aSectionProps;
+
+        OUString sSectionName;
+        OUString sSectionId;
+        cpo::uno::Sequence<OUString> aSlideNames;
+
+        for (const auto& rProp : aSectionProps)
+        {
+            if (rProp.Name == "Name")
+                rProp.Value >>= sSectionName;
+            else if (rProp.Name == "Id")
+                rProp.Value >>= sSectionId;
+            else if (rProp.Name == "SlideNameList")
+                rProp.Value >>= aSlideNames;
+        }
+
+        if (sSectionId.isEmpty())
+            sSectionId = OStringToOUString(comphelper::xml::generateGUIDString(),
+                                           RTL_TEXTENCODING_ASCII_US);
+
+        mPresentationFS->startElementNS(XML_p14, XML_section,
+                                        XML_name, sSectionName,
+                                        XML_id, sSectionId);
+        mPresentationFS->startElementNS(XML_p14, XML_sldIdLst);
+
+        for (const OUString& rSlideName : aSlideNames)
+        {
+            sal_Int32 nSlideIndex = -1;
+
+            auto it = aNameToIndex.find(rSlideName);
+            if (it != aNameToIndex.end())
+                nSlideIndex = it->second;
+            else
+                nSlideIndex = nFallbackIdx; // Fallback for edge cases
+
+            if (nSlideIndex >= 0 && o3tl::make_unsigned(nSlideIndex) < maSlideIdsInOrder.size())
+            {
+                mPresentationFS->singleElementNS(XML_p14, XML_sldId, XML_id,
+                                                 OString::number(maSlideIdsInOrder[nSlideIndex]));
+            }
+            ++nFallbackIdx;
+        }
+
+        mPresentationFS->endElementNS(XML_p14, XML_sldIdLst);
+        mPresentationFS->endElementNS(XML_p14, XML_section);
+    }
+
+    mPresentationFS->endElementNS(XML_p14, XML_sectionLst);
+    mPresentationFS->endElementNS(XML_p, XML_ext);
+    mPresentationFS->endElementNS(XML_p, XML_extLst);
+}
+
+void PowerPointExport::ImplWriteBackground(const FSHelperPtr& pFS, const Reference< XPropertySet >& rXPropSet)
+{
+    FillStyle aFillStyle(FillStyle_NONE);
+    if (ImplGetPropertyValue(rXPropSet, u"FillStyle"_ustr))
+        mAny >>= aFillStyle;
+
+    if (aFillStyle == FillStyle_NONE ||
+            aFillStyle == FillStyle_HATCH)
+        return;
+
+    // For BITMAP fill style, check if graphic is valid before writing bgPr
+    if (aFillStyle == FillStyle_BITMAP
+        && (!ImplGetPropertyValue(rXPropSet, u"FillBitmap"_ustr)
+            || !mAny.has<uno::Reference<graphic::XGraphic>>()))
+        return;
+
+    pFS->startElementNS(XML_p, XML_bg);
+    pFS->startElementNS(XML_p, XML_bgPr);
+
+    PowerPointShapeExport aDML(pFS, &maShapeMap, this);
+    aDML.SetBackgroundDark(mbIsBackgroundDark);
+    aDML.WriteFill(rXPropSet, maPageSize);
+
+    pFS->endElementNS(XML_p, XML_bgPr);
+    pFS->endElementNS(XML_p, XML_bg);
+}
+
+#define MAIN_GROUP \
+     "<p:nvGrpSpPr>\
+        <p:cNvPr id=\"1\" name=\"\"/>\
+        <p:cNvGrpSpPr/>\
+        <p:nvPr/>\
+      </p:nvGrpSpPr>\
+      <p:grpSpPr>\
+        <a:xfrm>\
+          <a:off x=\"0\" y=\"0\"/>\
+          <a:ext cx=\"0\" cy=\"0\"/>\
+          <a:chOff x=\"0\" y=\"0\"/>\
+          <a:chExt cx=\"0\" cy=\"0\"/>\
+        </a:xfrm>\
+      </p:grpSpPr>"
+
+const char* PowerPointExport::GetSideDirection(sal_uInt8 nDirection)
+{
+    const char* pDirection = nullptr;
+
+    switch (nDirection)
+    {
+    case 0:
+        pDirection = "l";
+        break;
+    case 1:
+        pDirection = "u";
+        break;
+    case 2:
+        pDirection = "r";
+        break;
+    case 3:
+        pDirection = "d";
+        break;
+    }
+
+    return pDirection;
+}
+
+const char* PowerPointExport::GetCornerDirection(sal_uInt8 nDirection)
+{
+    const char* pDirection = nullptr;
+
+    switch (nDirection)
+    {
+    case 4:
+        pDirection = "lu";
+        break;
+    case 5:
+        pDirection = "ru";
+        break;
+    case 6:
+        pDirection = "ld";
+        break;
+    case 7:
+        pDirection = "rd";
+        break;
+    }
+
+    return pDirection;
+}
+
+const char* PowerPointExport::Get8Direction(sal_uInt8 nDirection)
+{
+    const char* pDirection = GetSideDirection(nDirection);
+
+    if (!pDirection)
+        pDirection = GetCornerDirection(nDirection);
+
+    return pDirection;
+}
+
+void PowerPointExport::WriteTransition(const FSHelperPtr& pFS)
+{
+    FadeEffect eFadeEffect = FadeEffect_NONE;
+    if (ImplGetPropertyValue(mXPagePropSet, u"Effect"_ustr))
+        mAny >>= eFadeEffect;
+
+    sal_Int16 nTransitionType = 0, nTransitionSubtype = 0;
+    sal_Int8 nPPTTransitionType = 0;
+    sal_uInt8 nDirection = 0;
+
+    OUString sSoundUrl;
+    OUString sSoundRelId;
+    OUString sSoundName;
+
+    if (ImplGetPropertyValue(mXPagePropSet, u"TransitionType"_ustr) && (mAny >>= nTransitionType) &&
+            ImplGetPropertyValue(mXPagePropSet, u"TransitionSubtype"_ustr) && (mAny >>= nTransitionSubtype))
+    {
+        // FADEOVERCOLOR with black -> fade, with white -> flash
+        sal_Int32 nTransitionFadeColor = 0;
+        if( ImplGetPropertyValue(mXPagePropSet, u"TransitionFadeColor"_ustr))
+            mAny >>= nTransitionFadeColor;
+        nPPTTransitionType = GetTransition(nTransitionType, nTransitionSubtype, eFadeEffect, nTransitionFadeColor, nDirection);
+    }
+
+    if (!nPPTTransitionType && eFadeEffect != FadeEffect_NONE)
+        nPPTTransitionType = GetTransition(eFadeEffect, nDirection);
+
+    if (ImplGetPropertyValue(mXPagePropSet, u"Sound"_ustr))
+    {
+        cpo::uno::Reference<css::presentation::XSoundReference> xSound;
+        if ((mAny >>= xSound) && xSound.is() && xSound->getAllowed())
+        {
+            sSoundUrl = xSound->getURL();
+            embedEffectAudio(pFS, sSoundUrl, sSoundRelId, sSoundName);
+        }
+    }
+
+    bool bOOXmlSpecificTransition = false;
+
+    sal_Int32 nTransition = 0;
+    const char* pDirection = nullptr;
+    const char* pOrientation = nullptr;
+    const char* pThruBlk = nullptr;
+    const char* pSpokes = nullptr;
+
+    char pSpokesTmp[2] = "0";
+
+    // p14
+    sal_Int32 nTransition14 = 0;
+    const char* pDirection14 = nullptr;
+    const char* pInverted = nullptr;
+    const char* pPattern = nullptr; // diamond or hexagon
+
+    //p15
+    const char* pPresetTransition = nullptr;
+
+    if (!nPPTTransitionType)
+    {
+        switch (nTransitionType)
+        {
+        case animations::TransitionType::BARWIPE:
+        {
+            if (nTransitionSubtype == animations::TransitionSubType::FADEOVERCOLOR)
+            {
+                nTransition = XML_cut;
+                pThruBlk = "true";
+                bOOXmlSpecificTransition = true;
+            }
+            break;
+        }
+        case animations::TransitionType::MISCSHAPEWIPE:
+        {
+            switch (nTransitionSubtype)
+            {
+            case animations::TransitionSubType::TOPTOBOTTOM: // Turn around
+                nTransition = XML_fade;
+                nTransition14 = XML_flip;
+                pDirection14 = "l";
+                bOOXmlSpecificTransition = true;
+                break;
+            case animations::TransitionSubType::BOTTOMRIGHT: // Rochade
+                nTransition = XML_fade;
+                nTransition14 = XML_switch;
+                pDirection14 = "r";
+                bOOXmlSpecificTransition = true;
+                break;
+            case animations::TransitionSubType::VERTICAL: // Vortex
+                nTransition = XML_fade;
+                nTransition14 = XML_vortex;
+                bOOXmlSpecificTransition = true;
+                break;
+            case animations::TransitionSubType::HORIZONTAL: // Ripple
+                nTransition = XML_fade;
+                nTransition14 = XML_ripple;
+                bOOXmlSpecificTransition = true;
+                break;
+            case animations::TransitionSubType::LEFTTORIGHT: // Fall
+                nTransition = XML_fade;
+                pPresetTransition = "fallOver";
+                bOOXmlSpecificTransition = true;
+                break;
+            case animations::TransitionSubType::AIRPLANE: // Airplane
+                nTransition = XML_fade;
+                pPresetTransition = "airplane";
+                bOOXmlSpecificTransition = true;
+                break;
+            case animations::TransitionSubType::CORNERSIN: // Inside turning cube
+                pInverted = "true";
+                [[fallthrough]];
+            case animations::TransitionSubType::CORNERSOUT: // Outside turning cube
+                nTransition = XML_fade;
+                nTransition14 = XML_prism;
+                bOOXmlSpecificTransition = true;
+                break;
+            case animations::TransitionSubType::DIAMOND: // Glitter
+                nTransition = XML_fade;
+                nTransition14 = XML_glitter;
+                pDirection14 = "l";
+                pPattern = "hexagon";
+                bOOXmlSpecificTransition = true;
+                break;
+            case animations::TransitionSubType::HEART: // Honeycomb
+                nTransition = XML_fade;
+                nTransition14 = XML_honeycomb;
+                bOOXmlSpecificTransition = true;
+                break;
+            }
+            break;
+        }
+        }
+    }
+
+    AnimationSpeed animationSpeed = AnimationSpeed_MEDIUM;
+    const char* speed = nullptr;
+    sal_Int32 advanceTiming = -1;
+    sal_Int32 changeType = 0;
+
+    sal_Int32 nTransitionDuration = -1;
+    bool isTransitionDurationSet = false;
+    bool isNonDefaultTransitionDurationSet = false;
+
+    // try to use TransitionDuration instead of old Speed property
+    if (ImplGetPropertyValue(mXPagePropSet, u"TransitionDuration"_ustr))
+    {
+        double fTransitionDuration = -1.0;
+        mAny >>= fTransitionDuration;
+        if (fTransitionDuration >= 0)
+        {
+            nTransitionDuration = fTransitionDuration * 1000.0;
+
+            // override values because in MS formats meaning of fast/medium/slow is different
+            if (nTransitionDuration <= 500)
+            {
+                // fast is default
+                speed = nullptr;
+            }
+            else if (nTransitionDuration >= 1000)
+            {
+                speed = "slow";
+            }
+            else
+            {
+                speed = "med";
+            }
+
+            isNonDefaultTransitionDurationSet
+                = fTransitionDuration != SdPage::DEFAULT_TRANSITION_DURATION;
+            bool isStandardValue = nTransitionDuration == 500
+                || nTransitionDuration == 750
+                || nTransitionDuration == 1000;
+
+            if(!isStandardValue)
+                isTransitionDurationSet = true;
+        }
+    }
+    else if (ImplGetPropertyValue(mXPagePropSet, u"Speed"_ustr))
+    {
+        mAny >>= animationSpeed;
+
+        switch (animationSpeed)
+        {
+        default:
+        case AnimationSpeed_MEDIUM:
+            speed = "med";
+            break;
+        case AnimationSpeed_SLOW:
+            speed = "slow";
+            break;
+        case AnimationSpeed_FAST:
+            break;
+        }
+    }
+
+    if (ImplGetPropertyValue(mXPagePropSet, u"Change"_ustr))
+        mAny >>= changeType;
+
+    // 1 means automatic, 2 half automatic - not sure what it means - at least I don't see it in UI
+    if (changeType == 1 && ImplGetPropertyValue(mXPagePropSet, u"Duration"_ustr))
+        mAny >>= advanceTiming;
+
+    // check if we resolved what transition to export, or a time or a sound is set
+    if (!nPPTTransitionType && !bOOXmlSpecificTransition && !isNonDefaultTransitionDurationSet
+        && advanceTiming == -1 && sSoundRelId.isEmpty())
+    {
+        return;
+    }
+
+    if (!bOOXmlSpecificTransition)
+    {
+        switch (nPPTTransitionType)
+        {
+        case PPT_TRANSITION_TYPE_BLINDS:
+            nTransition = XML_blinds;
+            pDirection = (nDirection == 0) ? "vert" : "horz";
+            break;
+        case PPT_TRANSITION_TYPE_CHECKER:
+            nTransition = XML_checker;
+            pDirection = (nDirection == 1) ? "vert" : "horz";
+            break;
+        case PPT_TRANSITION_TYPE_CIRCLE:
+            nTransition = XML_circle;
+            break;
+        case PPT_TRANSITION_TYPE_COMB:
+            nTransition = XML_comb;
+            pDirection = (nDirection == 1) ? "vert" : "horz";
+            break;
+        case PPT_TRANSITION_TYPE_COVER:
+            nTransition = XML_cover;
+            pDirection = Get8Direction(nDirection);
+            break;
+        case PPT_TRANSITION_TYPE_DIAMOND:
+            nTransition = XML_diamond;
+            break;
+        case PPT_TRANSITION_TYPE_DISSOLVE:
+            nTransition = XML_dissolve;
+            break;
+        case PPT_TRANSITION_TYPE_FADE:
+            nTransition = XML_fade;
+            pThruBlk = "true";
+            break;
+        case PPT_TRANSITION_TYPE_SMOOTHFADE:
+            nTransition = XML_fade;
+            break;
+        case PPT_TRANSITION_TYPE_NEWSFLASH:
+            nTransition = XML_newsflash;
+            break;
+        case PPT_TRANSITION_TYPE_PLUS:
+            nTransition = XML_plus;
+            break;
+        case PPT_TRANSITION_TYPE_PULL:
+            nTransition = XML_pull;
+            pDirection = Get8Direction(nDirection);
+            break;
+        case PPT_TRANSITION_TYPE_PUSH:
+            nTransition = XML_push;
+            pDirection = GetSideDirection(nDirection);
+            break;
+        case PPT_TRANSITION_TYPE_RANDOM:
+            nTransition = XML_random;
+            break;
+        case PPT_TRANSITION_TYPE_RANDOM_BARS:
+            nTransition = XML_randomBar;
+            pDirection = (nDirection == 1) ? "vert" : "horz";
+            break;
+        case PPT_TRANSITION_TYPE_SPLIT:
+            nTransition = XML_split;
+            pDirection = (nDirection & 1) ? "in" : "out";
+            pOrientation = (nDirection < 2) ? "horz" : "vert";
+            break;
+        case PPT_TRANSITION_TYPE_STRIPS:
+            nTransition = XML_strips;
+            pDirection = GetCornerDirection(nDirection);
+            break;
+        case PPT_TRANSITION_TYPE_WEDGE:
+            nTransition = XML_wedge;
+            break;
+        case PPT_TRANSITION_TYPE_WHEEL:
+            nTransition = XML_wheel;
+            if (nDirection != 4 && nDirection <= 9)
+            {
+                pSpokesTmp[0] = '0' + nDirection;
+                pSpokes = pSpokesTmp;
+            }
+            break;
+        case PPT_TRANSITION_TYPE_WIPE:
+            nTransition = XML_wipe;
+            pDirection = GetSideDirection(nDirection);
+            break;
+        case PPT_TRANSITION_TYPE_ZOOM:
+            nTransition = XML_zoom;
+            pDirection = (nDirection == 1) ? "in" : "out";
+            break;
+        case PPT_TRANSITION_TYPE_FLASH:
+            nTransition14 = XML_flash;
+            nTransition = XML_fade;
+            bOOXmlSpecificTransition = true;
+            break;
+        // coverity[dead_error_line] - following conditions exist to avoid compiler warning
+        case PPT_TRANSITION_TYPE_NONE:
+        default:
+            nTransition = 0;
+            break;
+        }
+    }
+
+    bool isAdvanceTimingSet = advanceTiming != -1;
+    if (nTransition14 || pPresetTransition || isTransitionDurationSet)
+    {
+        // p15:prstTrans needs p15, even if p14:dur is also written.
+        const char* pRequiresNS = (!nTransition14 && pPresetTransition) ? "p15" : "p14";
+
+        pFS->startElement(FSNS(XML_mc, XML_AlternateContent));
+        pFS->startElement(FSNS(XML_mc, XML_Choice), XML_Requires, pRequiresNS);
+
+        if(isTransitionDurationSet && isAdvanceTimingSet)
+        {
+            pFS->startElementNS(XML_p, XML_transition,
+                XML_spd, speed,
+                XML_advTm, OString::number(advanceTiming * 1000),
+                FSNS(XML_p14, XML_dur), OString::number(nTransitionDuration));
+        }
+        else if(isTransitionDurationSet)
+        {
+            pFS->startElementNS(XML_p, XML_transition,
+                XML_spd, speed,
+                FSNS(XML_p14, XML_dur), OString::number(nTransitionDuration));
+        }
+        else if(isAdvanceTimingSet)
+        {
+            pFS->startElementNS(XML_p, XML_transition,
+                XML_spd, speed,
+                XML_advTm, OString::number(advanceTiming * 1000));
+        }
+        else
+        {
+            pFS->startElementNS(XML_p, XML_transition, XML_spd, speed);
+        }
+
+        if (nTransition14)
+        {
+            pFS->singleElementNS(XML_p14, nTransition14,
+                XML_isInverted, pInverted,
+                XML_dir, pDirection14,
+                XML_pattern, pPattern);
+        }
+        else if (pPresetTransition)
+        {
+            pFS->singleElementNS(XML_p15, XML_prstTrans,
+                XML_prst, pPresetTransition);
+        }
+        else if (isTransitionDurationSet && nTransition)
+        {
+            pFS->singleElementNS(XML_p, nTransition,
+                XML_dir, pDirection,
+                XML_orient, pOrientation,
+                XML_spokes, pSpokes,
+                XML_thruBlk, pThruBlk);
+        }
+
+        if (!sSoundRelId.isEmpty())
+            WriteSndAc(pFS, sSoundRelId, sSoundName);
+
+        pFS->endElement(FSNS(XML_p, XML_transition));
+
+        pFS->endElement(FSNS(XML_mc, XML_Choice));
+        pFS->startElement(FSNS(XML_mc, XML_Fallback));
+    }
+
+    pFS->startElementNS(XML_p, XML_transition,
+        XML_spd, speed,
+        XML_advTm, sax_fastparser::UseIf(OString::number(advanceTiming * 1000), isAdvanceTimingSet));
+
+    if (nTransition)
+    {
+        pFS->singleElementNS(XML_p, nTransition,
+                             XML_dir, pDirection,
+                             XML_orient, pOrientation,
+                             XML_spokes, pSpokes,
+                             XML_thruBlk, pThruBlk);
+    }
+
+    if (!sSoundRelId.isEmpty())
+        WriteSndAc(pFS, sSoundRelId, sSoundName);
+
+    pFS->endElementNS(XML_p, XML_transition);
+
+    if (nTransition14 || pPresetTransition || isTransitionDurationSet)
+    {
+        pFS->endElement(FSNS(XML_mc, XML_Fallback));
+        pFS->endElement(FSNS(XML_mc, XML_AlternateContent));
+    }
+}
+
+void PowerPointExport::WriteAuthors()
+{
+    if (maAuthors.empty())
+        return;
+
+    FSHelperPtr pFS = openFragmentStreamWithSerializer(u"ppt/commentAuthors.xml"_ustr,
+                      u"application/vnd.openxmlformats-officedocument.presentationml.commentAuthors+xml"_ustr);
+    addRelation(mPresentationFS->getOutputStream(),
+                oox::getRelationship(Relationship::COMMENTAUTHORS),
+                u"commentAuthors.xml");
+
+    pFS->startElementNS(XML_p, XML_cmAuthorLst,
+                        FSNS(XML_xmlns, XML_p), getNamespaceURL(OOX_NS(ppt)));
+
+    for (const AuthorsMap::value_type& i : maAuthors)
+    {
+        pFS->singleElementNS(XML_p, XML_cmAuthor,
+                             XML_id, OString::number(i.second.nId),
+                             XML_name, i.first,
+                             XML_initials, i.second.sInitials,
+                             XML_lastIdx, OString::number(i.second.nLastIndex),
+                             XML_clrIdx, OString::number(i.second.nId));
+    }
+
+    pFS->endElementNS(XML_p, XML_cmAuthorLst);
+
+    pFS->endDocument();
+}
+
+void PowerPointExport::WriteModernAuthors()
+{
+    if (maAuthors.empty())
+        return;
+
+    FSHelperPtr pFS = openFragmentStreamWithSerializer(
+        u"ppt/authors.xml"_ustr, u"application/vnd.ms-powerpoint.authors+xml"_ustr);
+    addRelation(mPresentationFS->getOutputStream(),
+                oox::getRelationship(Relationship::MODERNCOMMENTAUTHORS), u"authors.xml");
+
+    pFS->startElementNS(XML_p188, XML_authorLst,
+                        FSNS(XML_xmlns, XML_p188), getNamespaceURL(OOX_NS(p188)));
+
+    for (const AuthorsMap::value_type& i : maAuthors)
+    {
+        if (i.second.sGuid.isEmpty())
+            continue; // no comment referred to this author by the newer identifier
+        pFS->singleElementNS(XML_p188, XML_author,
+                             XML_id, i.second.sGuid,
+                             XML_name, i.first,
+                             XML_initials, i.second.sInitials);
+    }
+
+    pFS->endElementNS(XML_p188, XML_authorLst);
+    pFS->endDocument();
+}
+
+OUString PowerPointExport::GetAuthorGuid(const OUString& sAuthor, const OUString& sInitials)
+{
+    if (maAuthors.count(sAuthor) <= 0)
+        maAuthors.emplace(sAuthor, AuthorComments(maAuthors.size(), 0, sInitials));
+
+    AuthorComments& rAuthor = maAuthors[sAuthor];
+    if (rAuthor.sGuid.isEmpty())
+        rAuthor.sGuid = tools::Guid(tools::Guid::Generate).getOUString();
+    return rAuthor.sGuid;
+}
+
+sal_Int32 PowerPointExport::GetAuthorIdAndLastIndex(const OUString& sAuthor,
+                                                    const OUString& sInitials,
+                                                    sal_Int32& nLastIndex)
+{
+    if (maAuthors.count(sAuthor) <= 0)
+        maAuthors.emplace(sAuthor, AuthorComments(maAuthors.size(), 0, sInitials));
+
+    nLastIndex = ++maAuthors[ sAuthor ].nLastIndex;
+
+    return maAuthors[ sAuthor ].nId;
+}
+
+void PowerPointExport::WritePresentationProps()
+{
+    Reference<beans::XPropertySet> xPresentationProps(mXModel->getPresentation());
+    bool bEndlessVal = xPresentationProps->getPropertyValue(u"IsEndless"_ustr).get<bool>();
+    bool bChangeManually = xPresentationProps->getPropertyValue(u"IsAutomatic"_ustr).get<bool>();
+    OUString sFirstPage = xPresentationProps->getPropertyValue(u"FirstPage"_ustr).get<OUString>();
+    OUString sCustomShow = xPresentationProps->getPropertyValue(u"CustomShow"_ustr).get<OUString>();
+
+    FSHelperPtr pFS = openFragmentStreamWithSerializer(
+        u"ppt/presProps.xml"_ustr,
+        u"application/vnd.openxmlformats-officedocument.presentationml.presProps+xml"_ustr);
+
+    addRelation(mPresentationFS->getOutputStream(),
+                oox::getRelationship(Relationship::PRESPROPS), u"presProps.xml");
+
+    pFS->startElementNS(XML_p, XML_presentationPr, presentationPrNamespaces(*this));
+
+    pFS->startElementNS(XML_p, XML_showPr, XML_loop, sax_fastparser::UseIf("1", bEndlessVal),
+                        XML_useTimings, sax_fastparser::UseIf("0", bChangeManually),
+                        XML_showNarration, "1");
+
+    Reference<drawing::XDrawPages> xDrawPages(mXModel->getDrawPages(), uno::UNO_SET_THROW);
+    if (!sFirstPage.isEmpty())
+    {
+        sal_Int32 nStartSlide = 1;
+        sal_Int32 nEndSlide = xDrawPages->getCount();
+        for (sal_Int32 i = 0; i < nEndSlide; i++)
+        {
+            Reference<drawing::XDrawPage> xDrawPage;
+            xDrawPages->getByIndex(i) >>= xDrawPage;
+            Reference<container::XNamed> xNamed(xDrawPage, uno::UNO_QUERY_THROW);
+            if (xNamed->getName() == sFirstPage)
+            {
+                nStartSlide = i + 1;
+                break;
+            }
+        }
+
+        pFS->singleElementNS(XML_p, XML_sldRg, XML_st, OUString::number(nStartSlide), XML_end,
+                             OUString::number(nEndSlide));
+    }
+
+    if (!sCustomShow.isEmpty())
+    {
+        cpo::uno::Reference<css::container::XNameContainer> mxCustShows;
+        mxCustShows = mXModel->getCustomPresentations();
+        const cpo::uno::Sequence<OUString> aNameSeq(mxCustShows->getElementNames());
+
+        sal_Int32 nCustShowIndex = 0;
+        for (sal_Int32 i = 0; i < aNameSeq.getLength(); i++)
+        {
+            if (aNameSeq[i] == sCustomShow)
+            {
+                nCustShowIndex = i;
+                break;
+            }
+        }
+
+        pFS->singleElementNS(XML_p, XML_custShow, XML_id, OUString::number(nCustShowIndex));
+    }
+
+    pFS->endElementNS(XML_p, XML_showPr);
+
+    pFS->endElementNS(XML_p, XML_presentationPr);
+
+    pFS->endDocument();
+}
+
+namespace
+{
+/// The moment a threaded comment entry was written, which is what the created attribute holds. An
+/// entry that only ever had a wall clock has nothing better to offer than that. There is none
+/// when the entry has no date at all, or when personal information is left out of the file.
+std::optional<OUString> getModernCommentCreated(sdr::annotation::Annotation& rAnnotation,
+                                                bool bRemoveCommentAuthorDates)
+{
+    if (bRemoveCommentAuthorDates)
+        return std::nullopt;
+    const util::DateTime aDateTimeUTC = rAnnotation.getDateTimeUTC();
+    const util::DateTime aDate
+        = aDateTimeUTC.Year != 0 ? aDateTimeUTC : rAnnotation.getDateTime();
+    if (aDate.Year == 0)
+        return std::nullopt;
+    return DateTimeToOUString(::DateTime(aDate));
+}
+
+/// Writes the text of one threaded comment entry, a paragraph per line.
+void writeModernCommentText(const FSHelperPtr& pFS, std::u16string_view rText)
+{
+    pFS->startElementNS(XML_p188, XML_txBody);
+    pFS->singleElementNS(XML_a, XML_bodyPr);
+    pFS->singleElementNS(XML_a, XML_lstStyle);
+    sal_Int32 nIndex = 0;
+    do
+    {
+        const OUString aLine(o3tl::getToken(rText, 0, '\n', nIndex));
+        pFS->startElementNS(XML_a, XML_p);
+        pFS->startElementNS(XML_a, XML_r);
+        pFS->startElementNS(XML_a, XML_t);
+        pFS->writeEscaped(aLine);
+        pFS->endElementNS(XML_a, XML_t);
+        pFS->endElementNS(XML_a, XML_r);
+        pFS->endElementNS(XML_a, XML_p);
+    }
+    while (nIndex >= 0);
+    pFS->endElementNS(XML_p188, XML_txBody);
+}
+}
+
+bool PowerPointExport::WriteModernComments(sal_uInt32 nPageNum)
+{
+    Reference<XAnnotationAccess> xAnnotationAccess(mXDrawPage, uno::UNO_QUERY);
+    if (!xAnnotationAccess.is())
+        return false;
+
+    std::vector<rtl::Reference<sdr::annotation::Annotation>> aAnnotations;
+    Reference<XAnnotationEnumeration> xEnumeration(
+        xAnnotationAccess->createAnnotationEnumeration());
+    while (xEnumeration->hasMoreElements())
+    {
+        Reference<XAnnotation> xAnnotation(xEnumeration->nextElement());
+        rtl::Reference<sdr::annotation::Annotation> xImpl(
+            dynamic_cast<sdr::annotation::Annotation*>(xAnnotation.get()));
+        if (xImpl.is())
+            aAnnotations.push_back(xImpl);
+    }
+
+    if (aAnnotations.empty())
+        return false;
+
+    const bool bRemoveCommentAuthorDates
+        = SvtSecurityOptions::IsOptionSet(SvtSecurityOptions::EOption::DocWarnRemovePersonalInfo)
+          && !SvtSecurityOptions::IsOptionSet(
+                 SvtSecurityOptions::EOption::DocWarnKeepNoteAuthorDateInfo);
+
+    FSHelperPtr pFS = openFragmentStreamWithSerializer(
+        "ppt/comments/modernComment_" + OUString::number(nPageNum + 1) + ".xml",
+        u"application/vnd.ms-powerpoint.comments+xml"_ustr);
+
+    pFS->startElementNS(XML_p188, XML_cmLst,
+                        FSNS(XML_xmlns, XML_a), getNamespaceURL(OOX_NS(dml)),
+                        FSNS(XML_xmlns, XML_p188), getNamespaceURL(OOX_NS(p188)));
+
+    // The initials of an entry's author, replaced by a number derived from the author's name
+    // when personal information is left out of the file, as the author's name is.
+    auto getInitials = [&](sdr::annotation::Annotation& rAnnotation) -> OUString {
+        if (bRemoveCommentAuthorDates)
+            return "A" + OUString::number(GetInfoID(rAnnotation.getAuthor()));
+        return rAnnotation.getInitials();
+    };
+
+    std::unordered_set<sal_uInt64> aIds;
+    for (auto const& xAnnotation : aAnnotations)
+        aIds.insert(xAnnotation->GetId());
+
+    for (auto const& xAnnotation : aAnnotations)
+    {
+        // A reply is written inside the entry it answers, so only the roots start one here. A
+        // reply whose root is no longer on the page has nothing to be written inside of, so it
+        // becomes a root of its own.
+        if (xAnnotation->GetParentId() != 0 && aIds.count(xAnnotation->GetParentId()))
+            continue;
+
+        const OUString aAuthor(
+            bRemoveCommentAuthorDates
+                ? "Author" + OUString::number(GetInfoID(xAnnotation->getAuthor()))
+                : xAnnotation->getAuthor());
+        pFS->startElementNS(XML_p188, XML_cm,
+                            XML_id, tools::Guid(tools::Guid::Generate).getOUString(),
+                            XML_authorId, GetAuthorGuid(aAuthor, getInitials(*xAnnotation)),
+                            XML_created,
+                            getModernCommentCreated(*xAnnotation, bRemoveCommentAuthorDates));
+
+        const sal_uInt64 nRootId = xAnnotation->GetId();
+        bool bAnyReply = false;
+        for (auto const& xReply : aAnnotations)
+        {
+            if (xReply->GetParentId() != nRootId)
+                continue;
+            if (!bAnyReply)
+            {
+                pFS->startElementNS(XML_p188, XML_replyLst);
+                bAnyReply = true;
+            }
+            const OUString aReplyAuthor(
+                bRemoveCommentAuthorDates
+                    ? "Author" + OUString::number(GetInfoID(xReply->getAuthor()))
+                    : xReply->getAuthor());
+            pFS->startElementNS(XML_p188, XML_reply,
+                                XML_id, tools::Guid(tools::Guid::Generate).getOUString(),
+                                XML_authorId, GetAuthorGuid(aReplyAuthor, getInitials(*xReply)),
+                                XML_created,
+                                getModernCommentCreated(*xReply, bRemoveCommentAuthorDates));
+            writeModernCommentText(pFS, xReply->GetText());
+            pFS->endElementNS(XML_p188, XML_reply);
+        }
+        if (bAnyReply)
+            pFS->endElementNS(XML_p188, XML_replyLst);
+
+        writeModernCommentText(pFS, xAnnotation->GetText());
+        pFS->endElementNS(XML_p188, XML_cm);
+    }
+
+    pFS->endElementNS(XML_p188, XML_cmLst);
+    pFS->endDocument();
+    return true;
+}
+
+bool PowerPointExport::WriteComments(sal_uInt32 nPageNum)
+{
+    Reference< XAnnotationAccess > xAnnotationAccess(mXDrawPage, uno::UNO_QUERY);
+    if (xAnnotationAccess.is())
+    {
+        Reference< XAnnotationEnumeration > xAnnotationEnumeration(xAnnotationAccess->createAnnotationEnumeration());
+
+        if (xAnnotationEnumeration->hasMoreElements())
+        {
+            bool bRemoveCommentAuthorDates
+                = SvtSecurityOptions::IsOptionSet(
+                      SvtSecurityOptions::EOption::DocWarnRemovePersonalInfo)
+                  && !SvtSecurityOptions::IsOptionSet(
+                         SvtSecurityOptions::EOption::DocWarnKeepNoteAuthorDateInfo);
+
+            FSHelperPtr pFS = openFragmentStreamWithSerializer(
+                              "ppt/comments/comment" + OUString::number(nPageNum + 1) + ".xml",
+                              u"application/vnd.openxmlformats-officedocument.presentationml.comments+xml"_ustr);
+
+            pFS->startElementNS(XML_p, XML_cmLst,
+                                FSNS(XML_xmlns, XML_p), this->getNamespaceURL(OOX_NS(ppt)));
+
+            do
+            {
+                Reference< XAnnotation > xAnnotation(xAnnotationEnumeration->nextElement());
+                util::DateTime aDateTime(xAnnotation->getDateTime());
+                RealPoint2D aRealPoint2D(xAnnotation->getPosition());
+                Reference< XText > xText(xAnnotation->getTextRange());
+                sal_Int32 nLastIndex;
+                OUString sAuthor(bRemoveCommentAuthorDates
+                                     ? "Author"
+                                           + OUString::number(GetInfoID(xAnnotation->getAuthor()))
+                                     : xAnnotation->getAuthor());
+                OUString sInitials(bRemoveCommentAuthorDates
+                                       ? "A" + OUString::number(GetInfoID(xAnnotation->getAuthor()))
+                                       : xAnnotation->getInitials());
+                sal_Int32 nId = GetAuthorIdAndLastIndex(sAuthor, sInitials, nLastIndex);
+                char cDateTime[sizeof("-32768-65535-65535T65535:65535:65535.4294967295")];
+                    // reserve enough space for hypothetical max length
+
+                snprintf(cDateTime, sizeof cDateTime, "%02" SAL_PRIdINT32 "-%02" SAL_PRIuUINT32 "-%02" SAL_PRIuUINT32 "T%02" SAL_PRIuUINT32 ":%02" SAL_PRIuUINT32 ":%02" SAL_PRIuUINT32 ".%09" SAL_PRIuUINT32, sal_Int32(aDateTime.Year), sal_uInt32(aDateTime.Month), sal_uInt32(aDateTime.Day), sal_uInt32(aDateTime.Hours), sal_uInt32(aDateTime.Minutes), sal_uInt32(aDateTime.Seconds), aDateTime.NanoSeconds);
+
+                util::DateTime aEmptyDate;
+                if (bRemoveCommentAuthorDates || aDateTime == aEmptyDate)
+                {
+                    pFS->startElementNS(XML_p, XML_cm,
+                                        XML_authorId, OString::number(nId),
+                                        XML_idx, OString::number(nLastIndex));
+                }
+                else
+                {
+                    pFS->startElementNS(XML_p, XML_cm,
+                                        XML_authorId, OString::number(nId),
+                                        XML_dt, cDateTime,
+                                        XML_idx, OString::number(nLastIndex));
+                }
+
+                pFS->singleElementNS(XML_p, XML_pos,
+                                     XML_x, OString::number(std::round(convertMm100ToMasterUnit(aRealPoint2D.X * 100))),
+                                     XML_y, OString::number(std::round(convertMm100ToMasterUnit(aRealPoint2D.Y * 100))));
+
+                pFS->startElementNS(XML_p, XML_text);
+                pFS->writeEscaped(xText->getString());
+                pFS->endElementNS(XML_p, XML_text);
+
+                pFS->endElementNS(XML_p, XML_cm);
+
+            }
+            while (xAnnotationEnumeration->hasMoreElements());
+
+            pFS->endElementNS(XML_p, XML_cmLst);
+
+            pFS->endDocument();
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void PowerPointExport::WriteVBA()
+{
+    if (!mbPptm)
+        return;
+
+    uno::Reference<embed::XStorage> xDocumentStorage = mXModel->getDocumentStorage();
+    OUString aMacrosName(u"_MS_VBA_Macros"_ustr);
+    if (!xDocumentStorage.is() || !xDocumentStorage->hasByName(aMacrosName))
+        return;
+
+    const sal_Int32 nOpenMode = embed::ElementModes::READ;
+    uno::Reference<io::XInputStream> xMacrosStream(xDocumentStorage->openStreamElement(aMacrosName, nOpenMode), uno::UNO_QUERY);
+    if (!xMacrosStream.is())
+        return;
+
+    uno::Reference<io::XOutputStream> xOutputStream = openFragmentStream(u"ppt/vbaProject.bin"_ustr, u"application/vnd.ms-office.vbaProject"_ustr);
+    comphelper::OStorageHelper::CopyInputToOutput(xMacrosStream, xOutputStream);
+
+    // Write the relationship.
+    addRelation(mPresentationFS->getOutputStream(), oox::getRelationship(Relationship::VBAPROJECT), u"vbaProject.bin");
+}
+
+void PowerPointExport::WriteModifyVerifier()
+{
+    Sequence<PropertyValue> aInfo;
+
+    try
+    {
+        Reference<XPropertySet> xDocSettings(
+            mXModel->createInstance(u"com.sun.star.document.Settings"_ustr), UNO_QUERY);
+        xDocSettings->getPropertyValue(u"ModifyPasswordInfo"_ustr) >>= aInfo;
+    }
+    catch (const cpo::uno::Exception&)
+    {
+    }
+
+    if (aInfo.hasElements())
+    {
+        OUString sAlgorithm, sSalt, sHash;
+        sal_Int32 nCount = 0;
+        for (auto& prop : aInfo)
+        {
+            if (prop.Name == "algorithm-name")
+                prop.Value >>= sAlgorithm;
+            else if (prop.Name == "salt")
+                prop.Value >>= sSalt;
+            else if (prop.Name == "iteration-count")
+                prop.Value >>= nCount;
+            else if (prop.Name == "hash")
+                prop.Value >>= sHash;
+        }
+        if (!sAlgorithm.isEmpty() && !sSalt.isEmpty() && !sHash.isEmpty())
+        {
+            sal_Int32 nAlgorithmSid = 0;
+            if (sAlgorithm == "MD2")
+                nAlgorithmSid = 1;
+            else if (sAlgorithm == "MD4")
+                nAlgorithmSid = 2;
+            else if (sAlgorithm == "MD5")
+                nAlgorithmSid = 3;
+            else if (sAlgorithm == "SHA-1")
+                nAlgorithmSid = 4;
+            else if (sAlgorithm == "MAC")
+                nAlgorithmSid = 5;
+            else if (sAlgorithm == "RIPEMD")
+                nAlgorithmSid = 6;
+            else if (sAlgorithm == "RIPEMD-160")
+                nAlgorithmSid = 7;
+            else if (sAlgorithm == "HMAC")
+                nAlgorithmSid = 9;
+            else if (sAlgorithm == "SHA-256")
+                nAlgorithmSid = 12;
+            else if (sAlgorithm == "SHA-384")
+                nAlgorithmSid = 13;
+            else if (sAlgorithm == "SHA-512")
+                nAlgorithmSid = 14;
+
+            if (nAlgorithmSid != 0)
+                mPresentationFS->singleElementNS(XML_p, XML_modifyVerifier,
+                    XML_cryptProviderType, "rsaAES",
+                    XML_cryptAlgorithmClass, "hash",
+                    XML_cryptAlgorithmType, "typeAny",
+                    XML_cryptAlgorithmSid, OString::number(nAlgorithmSid),
+                    XML_spinCount, OString::number(nCount),
+                    XML_saltData, sSalt,
+                    XML_hashData, sHash);
+        }
+    }
+}
+
+void PowerPointExport::ImplWriteSlide(sal_uInt32 nPageNum, sal_uInt32 nMasterNum, sal_uInt16 /* nMode */,
+                                      bool bHasBackground, Reference< XPropertySet > const& aXBackgroundPropSet)
+{
+    SAL_INFO("sd.eppt", "write slide: " << nPageNum << "\n----------------");
+
+    // slides list
+    if (!mbHasCanvasPage && nPageNum == 0)
+        mPresentationFS->startElementNS(XML_p, XML_sldIdLst);
+    else if (mbHasCanvasPage && nPageNum  == 1)
+        mPresentationFS->startElementNS(XML_p, XML_sldIdLst);
+
+    // add explicit relation of presentation to this slide
+    OUString sRelId = addRelation(mPresentationFS->getOutputStream(),
+                                  oox::getRelationship(Relationship::SLIDE),
+                                  Concat2View("slides/slide" + OUString::number(nPageNum + 1) +".xml"));
+
+    sal_uInt32 nSlideId = GetNewSlideId();
+    maSlideIdsInOrder.push_back(nSlideId);
+    mPresentationFS->singleElementNS(XML_p, XML_sldId,
+                                     XML_id, OString::number(nSlideId),
+                                     FSNS(XML_r, XML_id), sRelId);
+
+    maRelId.push_back(sRelId);
+
+    if (nPageNum == mnPages - 1)
+        mPresentationFS->endElementNS(XML_p, XML_sldIdLst);
+
+    FSHelperPtr pFS = openFragmentStreamWithSerializer(
+                        "ppt/slides/slide" + OUString::number(nPageNum + 1) + ".xml",
+                        u"application/vnd.openxmlformats-officedocument.presentationml.slide+xml"_ustr);
+
+    if (mpSlidesFSArray.size() < mnPages)
+        mpSlidesFSArray.resize(mnPages);
+    mpSlidesFSArray[ nPageNum ] = pFS;
+
+    const char* pShow = nullptr;
+    const char* pShowMasterShape = nullptr;
+
+    if (ImplGetPropertyValue(mXPagePropSet, u"Visible"_ustr))
+    {
+        bool bShow(false);
+        if ((mAny >>= bShow) && !bShow)
+            pShow = "0";
+    }
+
+    if (ImplGetPropertyValue(mXPagePropSet, u"IsBackgroundObjectsVisible"_ustr))
+    {
+        bool bShowMasterShape(false);
+        if ((mAny >>= bShowMasterShape) && !bShowMasterShape)
+            pShowMasterShape = "0";
+    }
+
+    auto pAttributes = presentationNamespaces(*this);
+    if (pShow)
+        pAttributes->add(XML_show, pShow);
+    if (pShowMasterShape)
+        pAttributes->add(XML_showMasterSp, pShowMasterShape);
+
+    pFS->startElementNS(XML_p, XML_sld, pAttributes);
+
+    pFS->startElementNS(XML_p, XML_cSld);
+
+    // background
+    if (bHasBackground)
+    {
+        ImplWriteBackground(pFS, aXBackgroundPropSet);
+    }
+
+    WriteShapeTree(pFS, NORMAL, false);
+
+    WriteControls(pFS);
+
+    pFS->endElementNS(XML_p, XML_cSld);
+
+    WriteTransition(pFS);
+    WriteAnimations(pFS, mXDrawPage, *this);
+
+    WritePageGuidExtLst(pFS, mXPagePropSet);
+
+    pFS->endElementNS(XML_p, XML_sld);
+
+    // add implicit relation to slide layout
+    addRelation(pFS->getOutputStream(),
+                oox::getRelationship(Relationship::SLIDELAYOUT),
+                Concat2View("../slideLayouts/slideLayout" +
+                    OUString::number(GetLayoutFileId(GetLayoutOffset(mXPagePropSet), nMasterNum)) +
+                    ".xml"));
+
+    if (WriteComments(nPageNum))
+        // add implicit relation to slide comments
+        addRelation(pFS->getOutputStream(),
+                    oox::getRelationship(Relationship::COMMENTS),
+                    Concat2View("../comments/comment" + OUString::number(nPageNum + 1) + ".xml"));
+
+    // The newer comment part goes out beside the older one: it is the only one with somewhere to
+    // put a reply and the moment a comment was written, while the older one is all a reader that
+    // predates it understands.
+    if (WriteModernComments(nPageNum))
+        addRelation(pFS->getOutputStream(),
+                    oox::getRelationship(Relationship::MODERNCOMMENTS),
+                    Concat2View("../comments/modernComment_" + OUString::number(nPageNum + 1)
+                                + ".xml"));
+
+    SAL_INFO("sd.eppt", "----------------");
+}
+
+void PowerPointExport::ImplWriteNotes(sal_uInt32 nPageNum)
+{
+    if (!mbCreateNotes || !ContainsOtherShapeThanPlaceholders())
+        return;
+
+    SAL_INFO("sd.eppt", "write Notes " << nPageNum << "\n----------------");
+
+    FSHelperPtr pFS = openFragmentStreamWithSerializer(
+                        "ppt/notesSlides/notesSlide" +
+                        OUString::number(nPageNum + 1) +
+                        ".xml",
+                        u"application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"_ustr);
+
+    pFS->startElementNS(XML_p, XML_notes, presentationNamespaces(*this));
+
+    pFS->startElementNS(XML_p, XML_cSld);
+
+    WriteShapeTree(pFS, NOTICE, false);
+
+    pFS->endElementNS(XML_p, XML_cSld);
+
+    WritePageGuidExtLst(pFS, mXPagePropSet);
+
+    pFS->endElementNS(XML_p, XML_notes);
+
+    // add implicit relation to slide
+    addRelation(pFS->getOutputStream(),
+                oox::getRelationship(Relationship::SLIDE),
+                Concat2View("../slides/slide" + OUString::number(nPageNum + 1) + ".xml"));
+
+    // add slide implicit relation to notes
+    if (nPageNum < mpSlidesFSArray.size())
+        addRelation(mpSlidesFSArray[ nPageNum ]->getOutputStream(),
+                    oox::getRelationship(Relationship::NOTESSLIDE),
+                    Concat2View("../notesSlides/notesSlide" + OUString::number(nPageNum + 1) + ".xml"));
+
+    // add implicit relation to notes master
+    addRelation(pFS->getOutputStream(),
+                oox::getRelationship(Relationship::NOTESMASTER),
+                u"../notesMasters/notesMaster1.xml");
+
+    SAL_INFO("sd.eppt", "-----------------");
+
+    pFS->endDocument();
+}
+
+void PowerPointExport::AddLayoutIdAndRelation(const FSHelperPtr& pFS, sal_Int32 nLayoutFileId)
+{
+    // add implicit relation of slide master to slide layout
+    OUString sRelId = addRelation(pFS->getOutputStream(),
+                                  oox::getRelationship(Relationship::SLIDELAYOUT),
+                                  Concat2View("../slideLayouts/slideLayout" + OUString::number(nLayoutFileId) + ".xml"));
+
+    pFS->singleElementNS(XML_p, XML_sldLayoutId,
+                         XML_id, OString::number(GetNewSlideMasterId()),
+                         FSNS(XML_r, XML_id), sRelId);
+}
+
+static bool lcl_ContainsEquivalentObject(const SdrPage* pPage, const SdrObject* pObj)
+{
+    bool bFound = false;
+
+    if (!pPage || !pObj)
+        return bFound;
+
+    for (size_t nObj = 0; nObj < pPage->GetObjCount(); ++nObj)
+    {
+        SdrObject* pObjNext = pPage->GetObj(nObj);
+        if (pObjNext && pObjNext->GetMergedItemSet().Equals(pObj->GetMergedItemSet(), false))
+        {
+            bFound = true;
+            break;
+        }
+    }
+
+    return bFound;
+}
+
+static bool lcl_ComparePageObjects(const SdrPage* pMasterPage, SdrPage* pMasterNext)
+{
+    if (!pMasterPage || !pMasterNext)
+        return false;
+
+    SdrObject* pObjNext;
+    SdrLayerID aLayer = pMasterNext->GetLayerAdmin().GetLayerID(sUNO_LayerName_background_objects);
+
+    for (size_t nObj = 0; nObj < pMasterPage->GetObjCount(); ++nObj)
+    {
+        pObjNext = pMasterPage->GetObj(nObj);
+        if (!pObjNext || pObjNext->GetLayer() == aLayer)
+            continue;
+
+        if (!lcl_ContainsEquivalentObject(pMasterNext, pObjNext))
+            return false;
+    }
+
+    // No differences found
+    return true;
+}
+
+static bool lcl_ComparePageProperties(SdrPage* pMasterPage, SdrPage* pMasterNext)
+{
+    if (!pMasterPage || !pMasterNext)
+        return false;
+
+    SdrPageProperties& rProperties = pMasterPage->getSdrPageProperties();
+    SdrPageProperties& rNextProperties = pMasterNext->getSdrPageProperties();
+
+    return rProperties.GetItemSet().Equals(rNextProperties.GetItemSet(), false)
+           && rProperties.getTheme().get() == rNextProperties.getTheme().get();
+}
+
+void PowerPointExport::FindEquivalentMasterPages()
+{
+    cpo::uno::Reference<css::drawing::XDrawPages> xDrawPages(
+        mXModel->getMasterPages());
+    maMastersLayouts.resize(mnMasterPages);
+    maEquivalentMasters.resize(mnMasterPages, SAL_MAX_UINT32);
+    for (sal_uInt32 i = 0; i < mnMasterPages; i++)
+    {
+        if (i == mnCanvasMasterIndex)
+            continue;
+        cpo::uno::Reference<css::drawing::XDrawPage> xDrawPage;
+        cpo::uno::Any aAny(xDrawPages->getByIndex(i));
+        aAny >>= xDrawPage;
+        if (!xDrawPage.is())
+            continue;
+
+        maMastersLayouts[i] = std::make_pair(SdPage::getImplementation(xDrawPage), -1);
+        uno::Reference<beans::XPropertySet> xPagePropSet(xDrawPage, uno::UNO_QUERY_THROW);
+        if (xPagePropSet.is())
+        {
+            cpo::uno::Any aLayout = xPagePropSet->getPropertyValue(u"SlideLayout"_ustr);
+            if (aLayout.hasValue())
+            {
+                aLayout >>= maMastersLayouts[i].second;
+            }
+        }
+    }
+
+    for (sal_uInt32 i = 0; i < mnMasterPages; i++)
+    {
+        if (!maMastersLayouts[i].first || maEquivalentMasters[i] != SAL_MAX_UINT32
+            || i == mnCanvasMasterIndex)
+            continue;
+        for (sal_uInt32 j = i + 1; j < mnMasterPages; j++)
+        {
+            if (!maMastersLayouts[j].first || maEquivalentMasters[j] != SAL_MAX_UINT32
+                || j == mnCanvasMasterIndex)
+                continue;
+
+            if (lcl_ComparePageProperties(maMastersLayouts[i].first, maMastersLayouts[j].first)
+                && lcl_ComparePageObjects(maMastersLayouts[i].first, maMastersLayouts[j].first))
+            {
+                // If both masters have the same properties and objects,
+                // we assume they are the same and only export the first one
+                maEquivalentMasters[j] = i;
+                maEquivalentMasters[i] = i;
+            }
+        }
+    }
+}
+
+sal_uInt32 PowerPointExport::GetEquivalentMasterPage(sal_uInt32 nMasterPage)
+{
+    if (maEquivalentMasters.size() == 0)
+        FindEquivalentMasterPages();
+    return maEquivalentMasters[nMasterPage];
+}
+
+size_t PowerPointExport::GetMasterOwnShapeCount(sal_uInt32 nMasterPage)
+{
+    const sal_uInt32 nGroup = GetEquivalentMasterPage(nMasterPage);
+    if (const auto aIter = maMasterOwnShapeCounts.find(nGroup);
+        aIter != maMasterOwnShapeCounts.end())
+        return aIter->second;
+
+    std::vector<SdPage*> aPages;
+    if (nGroup != SAL_MAX_UINT32)
+    {
+        // The representative is the lowest index of its group, and the page the master part
+        // writes, so every other page is compared against it
+        for (sal_uInt32 i = 0; i < mnMasterPages; ++i)
+        {
+            if (maEquivalentMasters[i] == nGroup && maMastersLayouts[i].first)
+                aPages.push_back(static_cast<SdPage*>(maMastersLayouts[i].first));
+        }
+        assert(!aPages.empty() && aPages.front() == maMastersLayouts[nGroup].first);
+    }
+    if (aPages.empty())
+    {
+        maMasterOwnShapeCounts.emplace(nGroup, 0);
+        return 0;
+    }
+
+    // Each page draws the master's shapes first and its own after, so the leading run they all
+    // share is the master's. Stopping at the first difference keeps the z-order, since a shape can
+    // only move to the master along with everything below it.
+    size_t nOwn = 0;
+    for (;;)
+    {
+        const SdrObject* pShape = getLeadingShape(*aPages.front(), nOwn);
+        if (!pShape)
+            break;
+        if (!std::all_of(aPages.begin() + 1, aPages.end(), [pShape, nOwn](SdPage* pPage) {
+                const SdrObject* pOther = getLeadingShape(*pPage, nOwn);
+                return pOther && isSameShape(*pShape, *pOther);
+            }))
+            break;
+        ++nOwn;
+    }
+
+    maMasterOwnShapeCounts.emplace(nGroup, nOwn);
+    return nOwn;
+}
+
+void PowerPointExport::ImplWriteSlideMaster(sal_uInt32 nPageNum, Reference< XPropertySet > const& aXBackgroundPropSet)
+{
+    SAL_INFO("sd.eppt", "write master slide: " << nPageNum << "\n--------------");
+
+    assert(mnCanvasMasterIndex != nPageNum);
+
+    if (nPageNum != GetEquivalentMasterPage(nPageNum)
+        && GetEquivalentMasterPage(nPageNum) != SAL_MAX_UINT32)
+    {
+        // It's equivalent to an already written master, write only the layouts files
+        OUString aSlideName;
+        Reference<XNamed> xNamed(mXDrawPage, UNO_QUERY);
+        if (xNamed.is())
+            aSlideName = xNamed->getName();
+        for (int i = 0; i < AUTOLAYOUT_END; ++i)
+        {
+            if (mLayoutInfo[i].mnFileIdArray.size() > nPageNum
+                && mLayoutInfo[i].mnFileIdArray[nPageNum] > 0)
+            {
+                ImplWritePPTXLayoutWithContent(i, nPageNum, aSlideName, aXBackgroundPropSet);
+            }
+        }
+
+        // Close the list tag if it was the last one
+        if (nPageNum == mnMasterPages - 1)
+            mPresentationFS->endElementNS(XML_p, XML_sldMasterIdLst);
+        if (mnCanvasMasterIndex == mnMasterPages - 1 && nPageNum == mnMasterPages - 2)
+            mPresentationFS->endElementNS(XML_p, XML_sldMasterIdLst);
+
+        return;
+    }
+
+    // slides list
+    if (nPageNum == 0)
+        mPresentationFS->startElementNS(XML_p, XML_sldMasterIdLst);
+    if (mnCanvasMasterIndex == 0 && nPageNum == 1)
+        mPresentationFS->startElementNS(XML_p, XML_sldMasterIdLst);
+
+    OUString sRelId = addRelation(mPresentationFS->getOutputStream(),
+                                  oox::getRelationship(Relationship::SLIDEMASTER),
+                                  Concat2View("slideMasters/slideMaster" + OUString::number(nPageNum + 1) + ".xml"));
+
+    mPresentationFS->singleElementNS(XML_p, XML_sldMasterId,
+                                     XML_id, OString::number(GetNewSlideMasterId()),
+                                     FSNS(XML_r, XML_id), sRelId);
+
+    // if canvas master page is the last one, close the list tag before that
+    if (mnCanvasMasterIndex == mnMasterPages - 1)
+    {
+        if (nPageNum == mnMasterPages - 2)
+            mPresentationFS->endElementNS(XML_p, XML_sldMasterIdLst);
+    }
+    if (nPageNum == mnMasterPages - 1)
+        mPresentationFS->endElementNS(XML_p, XML_sldMasterIdLst);
+
+    FSHelperPtr pFS =
+        openFragmentStreamWithSerializer("ppt/slideMasters/slideMaster" +
+                                          OUString::number(nPageNum + 1) + ".xml",
+                                         u"application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"_ustr);
+
+    SdrPage* pMasterPage = SdPage::getImplementation(mXDrawPage);
+    model::Theme* pTheme = nullptr;
+    if (pMasterPage)
+    {
+        pTheme = pMasterPage->getSdrPageProperties().getTheme().get();
+    }
+
+    // The property set of the master page, kept in a local because writing the layouts
+    // below repoints mXPagePropSet at temporary slides.
+    Reference< XPropertySet > xMasterPagePropSet( mXDrawPage, UNO_QUERY );
+
+    // write theme per master
+    WriteTheme(mnThemeIdMax, pTheme);
+
+    // add implicit relation to the presentation theme
+    addRelation(pFS->getOutputStream(), oox::getRelationship(Relationship::THEME),
+                Concat2View("../theme/theme" + OUString::number(++mnThemeIdMax) + ".xml"));
+
+    pFS->startElementNS(XML_p, XML_sldMaster, presentationNamespaces(*this));
+
+    pFS->startElementNS(XML_p, XML_cSld);
+
+    // The master carries its own placeholders even where the layouts repeat them, as PowerPoint
+    // authors it: an empty master has nothing to inherit from, and no date, footer or slide number
+    // placeholder to set that state on.
+    if (aXBackgroundPropSet)
+        ImplWriteBackground(pFS, aXBackgroundPropSet);
+    WriteShapeTree(pFS, MASTER, true, /*bSlideMasterPart=*/true, nPageNum);
+
+    pFS->endElementNS(XML_p, XML_cSld);
+
+    cpo::uno::Sequence<beans::PropertyValue> aGrabBag;
+    if (mXModel->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+        mXModel->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
+
+    std::vector<OUString> aClrMap;
+    aClrMap.reserve(12);
+    cpo::uno::Sequence<beans::PropertyValue> aClrMapPropValue;
+    if(aGrabBag.hasElements())
+    {
+        for (const auto& rProp : aGrabBag)
+        {
+            if (rProp.Name == "OOXColorMap")
+            {
+                rProp.Value >>= aClrMapPropValue;
+                break;
+            }
+        }
+    }
+
+    if (aClrMapPropValue.getLength())
+    {
+        OUString sName;
+        sal_Int32 nToken = XML_TOKEN_INVALID;
+        for(const auto& item : aClrMapPropValue)
+        {
+            item.Value >>= nToken;
+            switch (nToken)
+            {
+                case XML_dk1:      sName = u"dk1"_ustr;      break;
+                case XML_lt1:      sName = u"lt1"_ustr;      break;
+                case XML_dk2:      sName = u"dk2"_ustr;      break;
+                case XML_lt2:      sName = u"lt2"_ustr;      break;
+                case XML_accent1:  sName = u"accent1"_ustr;  break;
+                case XML_accent2:  sName = u"accent2"_ustr;  break;
+                case XML_accent3:  sName = u"accent3"_ustr;  break;
+                case XML_accent4:  sName = u"accent4"_ustr;  break;
+                case XML_accent5:  sName = u"accent5"_ustr;  break;
+                case XML_accent6:  sName = u"accent6"_ustr;  break;
+                case XML_hlink:    sName = u"hlink"_ustr;    break;
+                case XML_folHlink: sName = u"folHlink"_ustr; break;
+            }
+            aClrMap.push_back(sName);
+        }
+        assert(aClrMap.size() == 12 && "missing entries for ClrMap");
+    }
+    else
+    {
+        // default clrMap to export ".odp" files to ".pptx"
+        aClrMap = { u"lt1"_ustr,     u"dk1"_ustr,     u"lt2"_ustr,     u"dk2"_ustr,
+                    u"accent1"_ustr, u"accent2"_ustr, u"accent3"_ustr, u"accent4"_ustr,
+                    u"accent5"_ustr, u"accent6"_ustr, u"hlink"_ustr,   u"folHlink"_ustr };
+    }
+
+    pFS->singleElementNS(XML_p, XML_clrMap,
+                         XML_bg1, aClrMap[0],
+                         XML_tx1, aClrMap[1],
+                         XML_bg2, aClrMap[2],
+                         XML_tx2, aClrMap[3],
+                         XML_accent1, aClrMap[4],
+                         XML_accent2, aClrMap[5],
+                         XML_accent3, aClrMap[6],
+                         XML_accent4, aClrMap[7],
+                         XML_accent5, aClrMap[8],
+                         XML_accent6, aClrMap[9],
+                         XML_hlink, aClrMap[10],
+                         XML_folHlink, aClrMap[11]);
+
+    // use master's id type as they have same range, mso does that as well
+    pFS->startElementNS(XML_p, XML_sldLayoutIdLst);
+
+    auto getLayoutsUsedForMaster = [](SdrPage* pMaster) -> std::unordered_set<sal_Int32>
+    {
+        if (!pMaster)
+            return {};
+
+        std::unordered_set<sal_Int32> aUsedLayouts{};
+        for (const auto* pPageUser : pMaster->GetPageUsers())
+        {
+            const auto* pMasterPageDescriptor
+                = dynamic_cast<const sdr::MasterPageDescriptor*>(pPageUser);
+
+            if (!pMasterPageDescriptor)
+                continue;
+
+            AutoLayout eLayout
+                = static_cast<SdPage&>(pMasterPageDescriptor->GetOwnerPage()).GetAutoLayout();
+            aUsedLayouts.insert(eLayout);
+        }
+        return aUsedLayouts;
+    };
+
+    std::unordered_set<sal_Int32> aLayouts = getLayoutsUsedForMaster(pMasterPage);
+
+    cpo::uno::Reference< css::beans::XPropertySet > xPagePropSet;
+    xPagePropSet.set(mXDrawPage, UNO_QUERY);
+    if (xPagePropSet.is())
+    {
+        cpo::uno::Any aAny;
+        if (GetPropertyValue(aAny, xPagePropSet, u"SlideLayout"_ustr))
+            aLayouts.insert(aAny.get<sal_Int32>());
+    }
+
+    OUString aSlideName;
+    Reference< XNamed > xNamed(mXDrawPage, UNO_QUERY);
+    if (xNamed.is())
+        aSlideName = xNamed->getName();
+
+    for (auto nLayout : aLayouts)
+    {
+        // Every layout carries the content of the page it stands for. A master representing a
+        // group hands each layout the pages' own shapes, and a master of its own hands its single
+        // layout the placeholders it holds.
+        ImplWritePPTXLayoutWithContent(nLayout, nPageNum, aSlideName, aXBackgroundPropSet);
+        AddLayoutIdAndRelation(pFS, GetLayoutFileId(nLayout, nPageNum));
+    }
+
+    // Add layouts of other Impress masters that came from a single pptx master with multiple layouts
+    for (sal_uInt32 i = 0; i < mnMasterPages; i++)
+    {
+        if (i == mnCanvasMasterIndex)
+            continue;
+        if (i != nPageNum && maEquivalentMasters[i] == nPageNum)
+        {
+            aLayouts = getLayoutsUsedForMaster(maMastersLayouts[i].first);
+            if (maMastersLayouts[i].second != -1)
+                aLayouts.insert(maMastersLayouts[i].second);
+
+            for (auto nLayout : aLayouts)
+            {
+                // Reserve layout file Id to be written later
+                if (mLayoutInfo[nLayout].mnFileIdArray.size() < mnMasterPages)
+                    mLayoutInfo[nLayout].mnFileIdArray.resize(mnMasterPages);
+                mLayoutInfo[nLayout].mnFileIdArray[i] = mnLayoutFileIdMax;
+                mnLayoutFileIdMax++;
+
+                AddLayoutIdAndRelation(pFS, GetLayoutFileId(nLayout, i));
+            }
+        }
+    }
+
+    pFS->endElementNS(XML_p, XML_sldLayoutIdLst);
+
+    WriteTextStyles(pFS);
+
+    // p:extLst is the last child of p:sldMaster.
+    WritePageGuidExtLst(pFS, xMasterPagePropSet);
+
+    pFS->endElementNS(XML_p, XML_sldMaster);
+
+    SAL_INFO("sd.eppt", "----------------");
+
+    pFS->endDocument();
+}
+
+void PowerPointExport::WriteLayoutClrMapOvr(const FSHelperPtr& pFS, sal_uInt32 nMasterNum)
+{
+    // Build key: "OOXLayoutClrMapOvr_<masterIndex>"
+    OUString sKey = "OOXLayoutClrMapOvr_" + OUString::number(nMasterNum);
+
+    // Get grab bag
+    cpo::uno::Sequence<beans::PropertyValue> aGrabBag;
+    if (mXModel->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+        mXModel->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
+
+    // Look for layout color map override
+    cpo::uno::Sequence<beans::PropertyValue> aClrMapOvr;
+    for (const auto& rProp : aGrabBag)
+    {
+        if (rProp.Name == sKey)
+        {
+            rProp.Value >>= aClrMapOvr;
+            break;
+        }
+    }
+
+    pFS->startElementNS(XML_p, XML_clrMapOvr);
+
+    if (aClrMapOvr.hasElements())
+    {
+        // Convert token values to string names
+        std::vector<OUString> aClrMap(12);
+        for (const auto& item : aClrMapOvr)
+        {
+            sal_Int32 nToken = XML_TOKEN_INVALID;
+            item.Value >>= nToken;
+            OUString sName;
+            switch (nToken)
+            {
+                case XML_dk1:      sName = u"dk1"_ustr;      break;
+                case XML_lt1:      sName = u"lt1"_ustr;      break;
+                case XML_dk2:      sName = u"dk2"_ustr;      break;
+                case XML_lt2:      sName = u"lt2"_ustr;      break;
+                case XML_accent1:  sName = u"accent1"_ustr;  break;
+                case XML_accent2:  sName = u"accent2"_ustr;  break;
+                case XML_accent3:  sName = u"accent3"_ustr;  break;
+                case XML_accent4:  sName = u"accent4"_ustr;  break;
+                case XML_accent5:  sName = u"accent5"_ustr;  break;
+                case XML_accent6:  sName = u"accent6"_ustr;  break;
+                case XML_hlink:    sName = u"hlink"_ustr;    break;
+                case XML_folHlink: sName = u"folHlink"_ustr; break;
+                default:           sName = u"lt1"_ustr;      break;
+            }
+            sal_Int32 nIndex = item.Name.toInt32();
+            if (nIndex >= 0 && nIndex < 12)
+                aClrMap[nIndex] = sName;
+        }
+
+        // Write override color mapping
+        pFS->singleElementNS(XML_a, XML_overrideClrMapping,
+                             XML_bg1, aClrMap[0],
+                             XML_tx1, aClrMap[1],
+                             XML_bg2, aClrMap[2],
+                             XML_tx2, aClrMap[3],
+                             XML_accent1, aClrMap[4],
+                             XML_accent2, aClrMap[5],
+                             XML_accent3, aClrMap[6],
+                             XML_accent4, aClrMap[7],
+                             XML_accent5, aClrMap[8],
+                             XML_accent6, aClrMap[9],
+                             XML_hlink, aClrMap[10],
+                             XML_folHlink, aClrMap[11]);
+    }
+    else
+    {
+        // No override - inherit from master
+        pFS->singleElementNS(XML_a, XML_masterClrMapping);
+    }
+
+    pFS->endElementNS(XML_p, XML_clrMapOvr);
+}
+
+sal_Int32 PowerPointExport::GetLayoutFileId(sal_Int32 nOffset, sal_uInt32 nMasterNum)
+{
+    SAL_INFO("sd.eppt", "GetLayoutFileId offset: " << nOffset << " master: " << nMasterNum);
+    if (mLayoutInfo[ nOffset ].mnFileIdArray.size() <= nMasterNum)
+        return 0;
+
+    return mLayoutInfo[ nOffset ].mnFileIdArray[ nMasterNum ];
+}
+
+void PowerPointExport::ImplWritePPTXLayoutWithContent(
+    sal_Int32 nOffset, sal_uInt32 nMasterNum, const OUString& aSlideName,
+    Reference<XPropertySet> const& aXBackgroundPropSet)
+{
+    SAL_INFO("sd.eppt", "write layout: " << nOffset);
+
+    if (mLayoutInfo[nOffset].mnFileIdArray.size() < mnMasterPages)
+    {
+        mLayoutInfo[nOffset].mnFileIdArray.resize(mnMasterPages);
+    }
+
+    if (mLayoutInfo[nOffset].mnFileIdArray[nMasterNum] == 0)
+    {
+        mLayoutInfo[nOffset].mnFileIdArray[nMasterNum] = mnLayoutFileIdMax;
+        mnLayoutFileIdMax++;
+    }
+    sal_Int32 nLayoutFileId = mLayoutInfo[nOffset].mnFileIdArray[nMasterNum];
+
+    FSHelperPtr pFS = openFragmentStreamWithSerializer(
+        "ppt/slideLayouts/slideLayout" + OUString::number(nLayoutFileId) + ".xml",
+        u"application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"_ustr);
+
+    // add implicit relation of slide layout to slide master. A master with no equivalent is its
+    // own, and GetEquivalentMasterPage reports SAL_MAX_UINT32 for it - taking that as an index
+    // would point the relation at a slideMaster0 that does not exist.
+    const sal_uInt32 nEquivalentMaster = GetEquivalentMasterPage(nMasterNum);
+    const sal_uInt32 nMasterFileNum
+        = nEquivalentMaster == SAL_MAX_UINT32 ? nMasterNum : nEquivalentMaster;
+    addRelation(pFS->getOutputStream(), oox::getRelationship(Relationship::SLIDEMASTER),
+                Concat2View("../slideMasters/slideMaster"
+                            + OUString::number(nMasterFileNum + 1) + ".xml"));
+
+    auto pAttributes = presentationNamespaces(*this);
+    pAttributes->add(XML_type, aLayoutInfo[nOffset].sType);
+    pAttributes->add(XML_preserve, "1");
+
+    pFS->startElementNS(XML_p, XML_sldLayout, pAttributes);
+
+    if (!aSlideName.isEmpty())
+    {
+        pFS->startElementNS(XML_p, XML_cSld, XML_name, aSlideName);
+    }
+    else
+    {
+        pFS->startElementNS(XML_p, XML_cSld, XML_name, aLayoutInfo[nOffset].sName);
+    }
+
+    if (aXBackgroundPropSet)
+        ImplWriteBackground(pFS, aXBackgroundPropSet);
+
+    WriteShapeTree(pFS, MASTER, true, /*bSlideMasterPart=*/false, nMasterNum);
+
+    pFS->endElementNS(XML_p, XML_cSld);
+
+    WriteLayoutClrMapOvr(pFS, nMasterNum);
+
+    pFS->endElementNS(XML_p, XML_sldLayout);
+
+    pFS->endDocument();
+}
+
+void PowerPointExport::WriteControls(const FSHelperPtr& pFS)
+{
+    if (maControlShapes.empty())
+        return;
+
+    std::vector<uno::Reference<drawing::XShape>> aControlShapes;
+    aControlShapes.swap(maControlShapes);
+
+    // Only a control that the OLE export knows goes out, and the parts below stand for those, so
+    // find them before the first of those parts is made.
+    std::vector<std::pair<uno::Reference<drawing::XShape>,
+                          std::unique_ptr<oox::ole::OleFormCtrlExportHelper>>>
+        aControls;
+    for (const uno::Reference<drawing::XShape>& xShape : aControlShapes)
+    {
+        uno::Reference<drawing::XControlShape> xControlShape(xShape, uno::UNO_QUERY);
+        if (!xControlShape.is())
+            continue;
+        uno::Reference<awt::XControlModel> xControlModel(xControlShape->getControl());
+        if (!xControlModel.is())
+            continue;
+
+        auto pHelper = std::make_unique<oox::ole::OleFormCtrlExportHelper>(getComponentContext(),
+                                                                          mXModel, xControlModel);
+        if (!pHelper->isValid())
+            continue;
+
+        aControls.emplace_back(xShape, std::move(pHelper));
+    }
+
+    if (aControls.empty())
+        return;
+
+    PowerPointShapeExport aDML(pFS, &maShapeMap, this);
+
+    // The shape a control is read back through lives in a drawing of the older kind, which the
+    // list below points into by its identifier.
+    ++mnVmlDrawings;
+    const OUString sVmlPath = "ppt/drawings/vmlDrawing" + OUString::number(mnVmlDrawings) + ".vml";
+    ::sax_fastparser::FSHelperPtr pVmlFS = openFragmentStreamWithSerializer(
+        sVmlPath, u"application/vnd.openxmlformats-officedocument.vmlDrawing"_ustr);
+    addRelation(pFS->getOutputStream(), oox::getRelationship(Relationship::VMLDRAWING),
+                Concat2View("../drawings/vmlDrawing" + OUString::number(mnVmlDrawings) + ".vml"));
+    pVmlFS->write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n");
+    pVmlFS->startElement(XML_xml, FSNS(XML_xmlns, XML_v), getNamespaceURL(OOX_NS(vml)).toUtf8(),
+                         FSNS(XML_xmlns, XML_o), getNamespaceURL(OOX_NS(vmlOffice)).toUtf8());
+    // An identifier of that kind holds a sequence the writer would otherwise escape.
+    pVmlFS->setAllowXEscape(false);
+    pVmlFS->startElement(FSNS(XML_v, XML_shapetype), XML_id, "_x0000_t201", XML_coordsize,
+                         "21600,21600", FSNS(XML_o, XML_spt), "201", XML_path,
+                         "m,l,21600r21600,l21600,xe");
+    pVmlFS->singleElement(FSNS(XML_v, XML_stroke), XML_joinstyle, "miter");
+    pVmlFS->singleElement(FSNS(XML_v, XML_path), XML_shadowok, "t", FSNS(XML_o, XML_connecttype),
+                          "rect");
+    pVmlFS->endElement(FSNS(XML_v, XML_shapetype));
+
+    pFS->startElementNS(XML_p, XML_controls);
+
+    for (const auto& [xShape, pHelper] : aControls)
+    {
+        ++mnActiveXControls;
+        const OUString sNumber = OUString::number(mnActiveXControls);
+        const OUString sGUID(pHelper->getGUID());
+        const OUString& rName = pHelper->getName();
+        const awt::Size aShapeSize = xShape->getSize();
+
+        // The control itself is kept the way OLE keeps it, in a stream of its own.
+        const OUString sBinaryPath = "ppt/activeX/activeX" + sNumber + ".bin";
+        uno::Reference<io::XStream> xOutStorage(
+            openFragmentStream(sBinaryPath, u"application/vnd.ms-office.activeX"_ustr),
+            uno::UNO_QUERY);
+        {
+            oox::ole::OleStorage aOleStorage(getComponentContext(), xOutStorage, false);
+            uno::Reference<io::XOutputStream> xOutputStream(
+                aOleStorage.openOutputStream(u"contents"_ustr), uno::UNO_SET_THROW);
+            pHelper->exportControl(xOutputStream, aShapeSize, true);
+            aOleStorage.commit();
+        }
+
+        // Beside it stands the part that names which control it is.
+        const OUString sFragmentPath = "ppt/activeX/activeX" + sNumber + ".xml";
+        ::sax_fastparser::FSHelperPtr pControlFS = openFragmentStreamWithSerializer(
+            sFragmentPath, u"application/vnd.ms-office.activeX+xml"_ustr);
+        const OUString sBinaryId
+            = addRelation(pControlFS->getOutputStream(),
+                          oox::getRelationship(Relationship::ACTIVEXCONTROLBINARY),
+                          Concat2View("activeX" + sNumber + ".bin"));
+        pControlFS->singleElementNS(
+            XML_ax, XML_ocx, FSNS(XML_xmlns, XML_ax), getNamespaceURL(OOX_NS(ax)),
+            FSNS(XML_xmlns, XML_r), getNamespaceURL(OOX_NS(officeRel)), FSNS(XML_ax, XML_classid),
+            OUStringToOString(Concat2View("{" + sGUID + "}"), RTL_TEXTENCODING_UTF8),
+            FSNS(XML_ax, XML_persistence), "persistStorage", FSNS(XML_r, XML_id),
+            OUStringToOString(sBinaryId, RTL_TEXTENCODING_UTF8));
+        pControlFS->endDocument();
+
+        const OUString sFragmentId
+            = addRelation(pFS->getOutputStream(), oox::getRelationship(Relationship::CONTROL),
+                          Concat2View("../activeX/activeX" + sNumber + ".xml"));
+
+        // The shape of the older kind that the control is found through. A drawing of that kind
+        // numbers its shapes from 1025 upwards.
+        const sal_Int32 nShapeId = 1025 + mnActiveXControls;
+        const awt::Point aPosition = xShape->getPosition();
+        auto toPoints = [](sal_Int32 nMm100) -> OString {
+            return OString::number(nMm100 * 72.0 / 2540.0) + "pt";
+        };
+        pVmlFS->singleElement(
+            FSNS(XML_v, XML_shape), XML_id, "_x0000_s" + OString::number(nShapeId), XML_type,
+            "#_x0000_t201", XML_style,
+            "position:absolute;left:" + toPoints(aPosition.X) + ";top:" + toPoints(aPosition.Y)
+                + ";width:" + toPoints(aShapeSize.Width) + ";height:"
+                + toPoints(aShapeSize.Height));
+
+        // A reader that does not run the control shows the picture below instead, which is also
+        // what says where on the page the control sits.
+        OUString sImageId;
+        if (SdrObject* pObject = SdrObject::getSdrObjectFromXShape(xShape))
+            sImageId = aDML.writeGraphicToStorage(SdrExchangeView::GetObjGraphic(*pObject));
+
+        pFS->startElementNS(XML_p, XML_control, XML_spid, OString::number(nShapeId), XML_name,
+                            OUStringToOString(rName, RTL_TEXTENCODING_UTF8), FSNS(XML_r, XML_id),
+                            OUStringToOString(sFragmentId, RTL_TEXTENCODING_UTF8), XML_imgW,
+                            OString::number(oox::drawingml::convertHmmToEmu(aShapeSize.Width)),
+                            XML_imgH,
+                            OString::number(oox::drawingml::convertHmmToEmu(aShapeSize.Height)));
+
+        if (!sImageId.isEmpty())
+        {
+            pFS->startElementNS(XML_p, XML_pic);
+            pFS->startElementNS(XML_p, XML_nvPicPr);
+            pFS->singleElementNS(XML_p, XML_cNvPr, XML_id,
+                                 OString::number(aDML.GetNewShapeID(xShape)), XML_name,
+                                 OUStringToOString(rName, RTL_TEXTENCODING_UTF8));
+            pFS->singleElementNS(XML_p, XML_cNvPicPr);
+            pFS->singleElementNS(XML_p, XML_nvPr);
+            pFS->endElementNS(XML_p, XML_nvPicPr);
+
+            pFS->startElementNS(XML_p, XML_blipFill);
+            pFS->singleElementNS(XML_a, XML_blip, FSNS(XML_r, XML_embed),
+                                 OUStringToOString(sImageId, RTL_TEXTENCODING_UTF8));
+            pFS->startElementNS(XML_a, XML_stretch);
+            pFS->singleElementNS(XML_a, XML_fillRect);
+            pFS->endElementNS(XML_a, XML_stretch);
+            pFS->endElementNS(XML_p, XML_blipFill);
+
+            pFS->startElementNS(XML_p, XML_spPr);
+            aDML.WriteShapeTransformation(xShape, XML_a);
+            aDML.WritePresetShape("rect"_ostr);
+            pFS->endElementNS(XML_p, XML_spPr);
+            pFS->endElementNS(XML_p, XML_pic);
+        }
+
+        pFS->endElementNS(XML_p, XML_control);
+    }
+
+    pFS->endElementNS(XML_p, XML_controls);
+
+    pVmlFS->setAllowXEscape(true);
+    pVmlFS->endElement(XML_xml);
+    pVmlFS->endDocument();
+}
+
+void PowerPointExport::WriteTextStyles(const FSHelperPtr& pFS)
+{
+    // The nine outline levels of a master and its title live as presentation styles, named after
+    // the master. A placeholder writes the levels it holds paragraphs for, which leaves the ones
+    // below that with nowhere to go, and text that no placeholder formats with nothing at all.
+    uno::Reference<container::XNamed> xMaster(mXDrawPage, uno::UNO_QUERY);
+    if (!xMaster.is() || !mXModel.is())
+        return;
+
+    uno::Reference<container::XNameAccess> xFamilies(mXModel->getStyleFamilies());
+    if (!xFamilies.is() || !xFamilies->hasByName(xMaster->getName()))
+        return;
+
+    uno::Reference<container::XNameAccess> xStyles(xFamilies->getByName(xMaster->getName()),
+                                                   uno::UNO_QUERY);
+    if (!xStyles.is())
+        return;
+
+    PowerPointShapeExport aDML(pFS, &maShapeMap, this);
+
+    // nOutlineLevel is the outline level a body style formats, or -1 for the title
+    auto writeLevel = [&aDML, &pFS, &xStyles](const OUString& rStyleName, sal_Int32 nElement,
+                                              sal_Int16 nOutlineLevel) {
+        if (!xStyles->hasByName(rStyleName))
+            return;
+        uno::Reference<beans::XPropertySet> xStyle(xStyles->getByName(rStyleName), uno::UNO_QUERY);
+        if (!xStyle.is())
+            return;
+
+        // An outline level is indented by its entry in the numbering rules, which the outline
+        // styles share. A level that states no indent of its own starts at the left edge.
+        sal_Int32 nLeftMargin = 0;
+        sal_Int32 nFirstLineOffset = 0;
+        if (nOutlineLevel >= 0)
+        {
+            nLeftMargin = aDML.getBulletMarginIndentation(xStyle, nOutlineLevel, u"LeftMargin");
+            nFirstLineOffset
+                = aDML.getBulletMarginIndentation(xStyle, nOutlineLevel, u"FirstLineOffset");
+        }
+        pFS->startElementNS(
+            XML_a, nElement, XML_marL,
+            sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nLeftMargin)),
+                                  nLeftMargin > 0),
+            XML_indent,
+            sax_fastparser::UseIf(
+                OString::number(oox::drawingml::convertHmmToEmu(nFirstLineOffset)),
+                nFirstLineOffset != 0));
+        oox::drawingml::WriteRunInput aInput;
+        aDML.WriteRunProperties(xStyle, XML_defRPr, aInput);
+        pFS->endElementNS(XML_a, nElement);
+    };
+
+    static const sal_Int32 aLevelTokens[]
+        = { XML_lvl1pPr, XML_lvl2pPr, XML_lvl3pPr, XML_lvl4pPr, XML_lvl5pPr,
+            XML_lvl6pPr, XML_lvl7pPr, XML_lvl8pPr, XML_lvl9pPr };
+
+    pFS->startElementNS(XML_p, XML_txStyles);
+
+    pFS->startElementNS(XML_p, XML_titleStyle);
+    writeLevel(u"title"_ustr, XML_lvl1pPr, -1);
+    pFS->endElementNS(XML_p, XML_titleStyle);
+
+    pFS->startElementNS(XML_p, XML_bodyStyle);
+    for (size_t nLevel = 0; nLevel < SAL_N_ELEMENTS(aLevelTokens); ++nLevel)
+        writeLevel("outline" + OUString::number(nLevel + 1), aLevelTokens[nLevel],
+                   static_cast<sal_Int16>(nLevel));
+    pFS->endElementNS(XML_p, XML_bodyStyle);
+
+    pFS->endElementNS(XML_p, XML_txStyles);
+}
+
+void PowerPointExport::WriteShapeTree(const FSHelperPtr& pFS, PageType ePageType, bool bMaster,
+                                     bool bSlideMasterPart, sal_uInt32 nMasterNum)
+{
+    PowerPointShapeExport aDML(pFS, &maShapeMap, this);
+    aDML.SetMaster(bMaster);
+    aDML.SetPageType(ePageType);
+    aDML.SetSlideMasterPart(bSlideMasterPart);
+    aDML.SetBackgroundDark(mbIsBackgroundDark);
+
+    // A master standing for a group writes its placeholders and the shapes the group shares. A
+    // placeholder reaches a slide only through a layout that references it, while a drawn shape
+    // paints below every slide of this master - so a shape one layout drew does not belong there.
+    const bool bMasterOfGroup
+        = bSlideMasterPart && GetEquivalentMasterPage(nMasterNum) == nMasterNum;
+    // The layout of a master that stands for no group takes the placeholders alone. The master
+    // part draws the rest of the page, and a shape written in both parts is drawn twice.
+    const bool bLayoutOfOwnMaster = !bSlideMasterPart && ePageType == MASTER
+                                    && GetEquivalentMasterPage(nMasterNum) == SAL_MAX_UINT32;
+    // The layouts of such a group leave those shapes to the master
+    const bool bLayoutOfGroup
+        = !bSlideMasterPart && ePageType == MASTER && !bLayoutOfOwnMaster;
+    assert(!bLayoutOfGroup || GetEquivalentMasterPage(nMasterNum) != SAL_MAX_UINT32);
+    const size_t nMasterOwn
+        = bMasterOfGroup || bLayoutOfGroup ? GetMasterOwnShapeCount(nMasterNum) : 0;
+
+    pFS->startElementNS(XML_p, XML_spTree);
+    pFS->write(MAIN_GROUP);
+
+    // MS Office complains if a shape ID is duplicated, and MAIN_GROUP specified p:cNvPr id="1"
+    if (GetMaxDocId() < 2)
+        SetMaxDocId(2); // this will be the next GetUniqueId()
+
+    ResetGroupTable(mXShapes->getCount());
+
+    while (GetNextGroupEntry())
+    {
+
+        sal_uInt32 nGroups = GetGroupsClosed();
+        for (sal_uInt32 i = 0; i < nGroups; i++)
+        {
+            SAL_INFO("sd.eppt", "leave group");
+        }
+
+        if (GetShapeByIndex(GetCurrentGroupIndex(), true))
+        {
+            SAL_INFO("sd.eppt", "mType: " << mType);
+            // The run leads the page, so the page index tells the master's shapes from a
+            // layout's own. The index is the page's because this loop never enters a group.
+            assert(GetCurrentGroupLevel() == 0);
+            const bool bOwn = GetCurrentGroupIndex() < nMasterOwn;
+            assert(!bOwn || !mbPresObj);
+            if (bMasterOfGroup && !bOwn && !mbPresObj)
+                continue; // one layout's own shape, which that layout writes
+            if (bLayoutOfGroup && bOwn)
+                continue; // the master draws it for every layout of the group
+            if (bLayoutOfOwnMaster && !mbPresObj)
+                continue; // the master part draws it
+
+            const SdrObjGroup* pDiagramCandidate(dynamic_cast<const SdrObjGroup*>(SdrObject::getSdrObjectFromXShape(mXShape)));
+            bool bSaveAsDiagram(false);
+
+            if (nullptr != pDiagramCandidate)
+            {
+                const std::shared_ptr<svx::diagram::DiagramHelper_svx>& rIDiagramHelper(pDiagramCandidate->getDiagramHelper());
+
+                if (rIDiagramHelper)
+                {
+                    // check if all needed data exists to either write unchanged/untouched
+                    // Diagram or with re-creation of some DataDoms
+                    bSaveAsDiagram = rIDiagramHelper->checkMinimalDataDoms();
+                }
+            }
+
+            if (bSaveAsDiagram)
+            {
+                sal_Int32 nShapeId = aDML.GetNewShapeID(mXShape);
+                SAL_INFO("sd.eppt", "writing Diagram " + OUString::number(mnDiagramId) + " with Shape Id " + OUString::number(nShapeId));
+                pFS->startElementNS(XML_p, XML_graphicFrame);
+                aDML.WriteDiagram(mXShape, mnDiagramId, nShapeId);
+                pFS->endElementNS(XML_p, XML_graphicFrame);
+                mnDiagramId++;
+            }
+            else
+                aDML.WriteShape(mXShape);
+        }
+    }
+
+    if ( ePageType == NORMAL || ePageType == LAYOUT )
+        WritePlaceholderReferenceShapes(aDML, ePageType);
+    if ( ePageType == LAYOUT )
+        WriteLayoutContentPlaceholders(aDML);
+    if (bSlideMasterPart)
+        WriteMasterOwnPlaceholders(aDML, nMasterNum);
+    pFS->endElementNS(XML_p, XML_spTree);
+}
+
+ShapeExport& PowerPointShapeExport::WritePageShape(const Reference< XShape >& xShape, PageType ePageType, bool bPresObj)
+{
+    if ((ePageType == NOTICE && bPresObj) || ePageType == LAYOUT || ePageType == MASTER)
+        return WritePlaceholderShape(xShape, SlideImage);
+
+    return WriteTextShape(xShape);
+}
+
+bool PowerPointShapeExport::WritePlaceholder(const Reference< XShape >& xShape, PlaceholderType ePlaceholder, bool bMaster)
+{
+    SAL_INFO("sd.eppt", "WritePlaceholder " << bMaster << " " << ShapeExport::NonEmptyText(xShape));
+    if (!xShape)
+        return false;
+    try
+    {
+        Reference<XPropertySet> xShapeProps(xShape, UNO_QUERY);
+        if (xShapeProps->getPropertyValue(u"IsPresentationObject"_ustr).get<bool>())
+        {
+            // The layouts of this master write the same shapes, and a type the master may not
+            // carry belongs only there. Report it as handled, so that no plain shape is written
+            // here in its place.
+            if (mbSlideMasterPart && !isPlaceholderAllowedOnSlideMaster(ePlaceholder))
+                return true;
+
+            WritePlaceholderShape(xShape, ePlaceholder);
+
+            return true;
+        }
+    }
+    catch (Exception&)
+    {
+        return false;
+    }
+    return false;
+}
+
+ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShape >& xShape, PlaceholderType ePlaceholder)
+{
+    Reference<XPropertySet> xProps(xShape, UNO_QUERY);
+    bool bUseBackground(false);
+    if (xProps.is() && xProps->getPropertySetInfo()->hasPropertyByName(u"FillUseSlideBackground"_ustr))
+        xProps->getPropertyValue(u"FillUseSlideBackground"_ustr) >>= bUseBackground;
+
+    if (bUseBackground)
+        mpFS->startElementNS(XML_p, XML_sp, XML_useBgFill, "1");
+    else
+        mpFS->startElementNS(XML_p, XML_sp);
+
+    // non visual shape properties
+    mpFS->startElementNS(XML_p, XML_nvSpPr);
+    // A placeholder that was given a name keeps it. One that has none is named after the number
+    // it was counted with, which is what a reader shows for it.
+    const OUString aShapeName = GetShapeName(xShape);
+    const OString aPlaceholderID
+        = aShapeName.isEmpty() ? "PlaceHolder " + OString::number(mnShapeIdMax++)
+                               : OUStringToOString(aShapeName, RTL_TEXTENCODING_UTF8);
+    WriteNonVisualDrawingProperties(xShape, aPlaceholderID.getStr());
+    mpFS->startElementNS(XML_p, XML_cNvSpPr);
+    mpFS->singleElementNS(XML_a, XML_spLocks, XML_noGrp, "1");
+    mpFS->endElementNS(XML_p, XML_cNvSpPr);
+    mpFS->startElementNS(XML_p, XML_nvPr);
+
+    bool bUsePlaceholderIndex
+        = ePlaceholder == Footer || ePlaceholder == DateAndTime || ePlaceholder == SlideNumber;
+    const char* pType = getPlaceholderTypeName(ePlaceholder);
+
+    SAL_INFO("sd.eppt", "write placeholder " << pType);
+
+    // export Custom Prompt
+    bool bUseCustomPrompt(false);
+    if (xProps.is() && xProps->getPropertySetInfo()->hasPropertyByName(u"CustomPromptText"_ustr))
+    {
+        OUString aCustomPromptText;
+        xProps->getPropertyValue(u"CustomPromptText"_ustr) >>= aCustomPromptText;
+        if (!aCustomPromptText.isEmpty())
+            bUseCustomPrompt = true;
+    }
+
+    // Leave the shape without a placeholder reference where the master would not take one, rather
+    // than writing a type that makes the whole file unopenable.
+    if (bUsePlaceholderIndex)
+    {
+        mpFS->singleElementNS(
+            XML_p, XML_ph, XML_type, pType, XML_idx,
+            OString::number(
+                static_cast<PowerPointExport*>(GetFB())->GetOrCreatePlaceholderIndex(xShape)),
+                    XML_hasCustomPrompt, sax_fastparser::UseIf("1", bUseCustomPrompt));
+    }
+    else
+    {
+        if ((mePageType == PageType::LAYOUT || mePageType == PageType::NORMAL)
+            && ePlaceholder == Outliner)
+            mpFS->singleElementNS(XML_p, XML_ph, XML_hasCustomPrompt, sax_fastparser::UseIf("1", bUseCustomPrompt));
+        else
+            mpFS->singleElementNS(XML_p, XML_ph, XML_type, pType, XML_hasCustomPrompt, sax_fastparser::UseIf("1", bUseCustomPrompt));
+    }
+    mpFS->endElementNS(XML_p, XML_nvPr);
+    mpFS->endElementNS(XML_p, XML_nvSpPr);
+
+    // Write the geometry even where a layout placeholder could supply it: that is what PowerPoint
+    // itself authors, and it keeps the slide readable by a consumer that does not resolve the
+    // inheritance.
+    mpFS->startElementNS(XML_p, XML_spPr);
+    WriteShapeTransformation(xShape, XML_a);
+    // A picture placeholder can be clipped to an outline, which is the shape's own geometry in the
+    // file; where there is one it takes the place of the rectangle.
+    if (!WriteGraphicClipCustomGeometry(xProps, xShape->getSize()))
+        WritePresetShape("rect"_ostr);
+    if (xProps.is())
+    {
+        // A picture placeholder's "Graphic" property is the internal
+        // placeholder icon; don't serialise it as a blipFill.
+        if (!isGraphicPlaceholder(ePlaceholder))
+            WriteBlipFill(xProps, u"Graphic"_ustr);
+        // Do not forget to export the visible properties.
+        WriteFill( xProps, xShape->getSize());
+        WriteOutline( xProps );
+        WriteShapeEffects( xProps );
+
+        bool bHas3DEffectinShape = false;
+        cpo::uno::Sequence<beans::PropertyValue> grabBag;
+        if (xProps->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+            xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= grabBag;
+
+        for (auto const& it : grabBag)
+            if (it.Name == "3DEffectProperties")
+                bHas3DEffectinShape = true;
+
+        if( bHas3DEffectinShape)
+            Write3DEffects( xProps, /*bIsText=*/false );
+    }
+    mpFS->endElementNS(XML_p, XML_spPr);
+
+    bool bWritePropertiesAsLstStyles
+        = (mePageType == PageType::MASTER)
+          && (ePlaceholder == Title || ePlaceholder == Subtitle || ePlaceholder == Outliner);
+
+    // An untouched placeholder shows Impress's own localized prompt resource unless the document
+    // authored one, and that must not reach the file - a reader supplies its own prompt.
+    bool bIsEmptyPresObj(false);
+    if (xProps
+        && xProps->getPropertySetInfo()->hasPropertyByName(u"IsEmptyPresentationObject"_ustr))
+        xProps->getPropertyValue(u"IsEmptyPresentationObject"_ustr) >>= bIsEmptyPresObj;
+    // Field placeholders carry their field content, and a master's text box carries list styles.
+    const bool bTextIsDefaultPrompt = bIsEmptyPresObj && !bUseCustomPrompt && !bUsePlaceholderIndex
+                                      && !bWritePropertiesAsLstStyles;
+
+    // A slide-side empty picture placeholder inherits the prompt from the layout, so it writes no
+    // text; one that is not empty was typed into, and that text is the slide's own content. The
+    // body properties travel either way - they carry the insets, the anchor, the writing direction
+    // and the autofit.
+    const bool bInheritsItsPrompt = isGraphicPlaceholder(ePlaceholder) && !mbMaster
+                                    && bIsEmptyPresObj;
+    WriteTextBox(xShape, XML_p, bUsePlaceholderIndex || bWritePropertiesAsLstStyles,
+                 /*bText=*/!bTextIsDefaultPrompt && !bInheritsItsPrompt);
+
+    mpFS->endElementNS(XML_p, XML_sp);
+
+    return *this;
+}
+
+ShapeExport& PowerPointShapeExport::WritePlaceholderReferenceShape(
+    PlaceholderType ePlaceholder, sal_Int32 nReferencedPlaceholderIdx, PageType ePageType,
+    const Reference<XPropertySet>& rXPagePropSet)
+{
+    mpFS->startElementNS(XML_p, XML_sp);
+
+    // non visual shape properties
+    mpFS->startElementNS(XML_p, XML_nvSpPr);
+    const OString aPlaceholderID("PlaceHolder " + OString::number(mnShapeIdMax++));
+    GetFS()->singleElementNS(XML_p, XML_cNvPr, XML_id, OString::number(mnShapeIdMax), XML_name,
+                             aPlaceholderID);
+
+    mpFS->startElementNS(XML_p, XML_cNvSpPr);
+    mpFS->singleElementNS(XML_a, XML_spLocks, XML_noGrp, "1");
+    mpFS->endElementNS(XML_p, XML_cNvSpPr);
+    mpFS->startElementNS(XML_p, XML_nvPr);
+
+    const char* pType = getPlaceholderTypeName(ePlaceholder);
+    mpFS->singleElementNS(XML_p, XML_ph, XML_type, pType, XML_idx,
+                          OString::number(nReferencedPlaceholderIdx));
+    mpFS->endElementNS(XML_p, XML_nvPr);
+    mpFS->endElementNS(XML_p, XML_nvSpPr);
+
+    // visual shape properties
+    mpFS->startElementNS(XML_p, XML_spPr);
+    mpFS->endElementNS(XML_p, XML_spPr);
+
+    WritePlaceholderReferenceTextBody(ePlaceholder, ePageType, rXPagePropSet);
+
+    mpFS->endElementNS(XML_p, XML_sp);
+
+    return *this;
+}
+
+ShapeExport& PowerPointShapeExport::WritePlaceholderReferenceTextBody(
+    PlaceholderType ePlaceholder, PageType ePageType, const Reference<XPropertySet>& xPagePropSet)
+{
+    mpFS->startElementNS(XML_p, XML_txBody);
+    mpFS->singleElementNS(XML_a, XML_bodyPr);
+    mpFS->startElementNS(XML_a, XML_p);
+
+    switch (ePlaceholder)
+    {
+        case Header:
+            break;
+        case Footer:
+        {
+            OUString aFooterText;
+            if (ePageType == LAYOUT)
+            {
+                aFooterText = u"Footer"_ustr;
+            }
+            else
+            {
+                xPagePropSet->getPropertyValue(u"FooterText"_ustr) >>= aFooterText;
+            }
+            mpFS->startElementNS(XML_a, XML_r);
+            mpFS->startElementNS(XML_a, XML_t);
+            mpFS->writeEscaped(aFooterText);
+            mpFS->endElementNS(XML_a, XML_t);
+            mpFS->endElementNS(XML_a, XML_r);
+            break;
+        }
+        case SlideNumber:
+        {
+            OUString aSlideNum;
+            sal_Int32 nSlideNum = 0;
+            if (ePageType == LAYOUT)
+            {
+                aSlideNum = u"<#>"_ustr;
+            }
+            else
+            {
+                xPagePropSet->getPropertyValue(u"Number"_ustr) >>= nSlideNum;
+                aSlideNum = OUString::number(nSlideNum);
+            }
+            OString aUUID(comphelper::xml::generateGUIDString());
+            mpFS->startElementNS(XML_a, XML_fld, XML_id, aUUID, XML_type, "slidenum");
+            mpFS->startElementNS(XML_a, XML_t);
+            mpFS->writeEscaped(aSlideNum);
+            mpFS->endElementNS(XML_a, XML_t);
+            mpFS->endElementNS(XML_a, XML_fld);
+            break;
+        }
+        case DateAndTime:
+        {
+            OUString aDateTimeType = u"datetime1"_ustr;
+            bool bIsDateTimeFixed = false;
+            xPagePropSet->getPropertyValue(u"IsDateTimeFixed"_ustr) >>= bIsDateTimeFixed;
+
+            OUString aDateTimeText = u"Date"_ustr;
+            const LanguageTag& rLanguageTag = Application::GetSettings().GetLanguageTag();
+
+            if(ePageType != LAYOUT && !bIsDateTimeFixed)
+            {
+                sal_Int32 nDateTimeFormat = 0;
+                xPagePropSet->getPropertyValue(u"DateTimeFormat"_ustr) >>= nDateTimeFormat;
+
+                // 4 LSBs represent the date
+                SvxDateFormat eDate = static_cast<SvxDateFormat>(nDateTimeFormat & 0x0f);
+                // the 4 bits after the date bits represent the time
+                SvxTimeFormat eTime = static_cast<SvxTimeFormat>(nDateTimeFormat >> 4);
+                aDateTimeType = GetDatetimeTypeFromDateTime(eDate, eTime);
+
+                if (aDateTimeType == "datetime")
+                    aDateTimeType = u"datetime1"_ustr;
+
+                ::DateTime aDateTime( ::DateTime::SYSTEM );
+
+                aDateTimeText = SvxDateTimeField::GetFormatted(
+                    aDateTime, aDateTime, eDate,
+                    eTime, *(SdModule::get()->GetNumberFormatter()),
+                    rLanguageTag.getLanguageType());
+            }
+
+            if(!bIsDateTimeFixed)
+            {
+                OString aUUID(comphelper::xml::generateGUIDString());
+                mpFS->startElementNS(XML_a, XML_fld, XML_id, aUUID, XML_type, aDateTimeType);
+            }
+            else
+            {
+                xPagePropSet->getPropertyValue(u"DateTimeText"_ustr) >>= aDateTimeText;
+                mpFS->startElementNS(XML_a, XML_r);
+            }
+
+            mpFS->startElementNS(XML_a, XML_rPr, XML_lang, rLanguageTag.getBcp47MS());
+            mpFS->endElementNS(XML_a, XML_rPr);
+
+            mpFS->startElementNS(XML_a, XML_t);
+            mpFS->writeEscaped(aDateTimeText);
+            mpFS->endElementNS(XML_a, XML_t);
+
+            mpFS->endElementNS(XML_a, bIsDateTimeFixed ? XML_r : XML_fld);
+            break;
+        }
+        default:
+            SAL_INFO("sd.eppt", "warning: no defined textbody for referenced placeholder type: "
+                                    << ePlaceholder);
+    }
+    mpFS->endElementNS(XML_a, XML_p);
+    mpFS->endElementNS(XML_p, XML_txBody);
+
+    return *this;
+}
+
+void PowerPointExport::WriteDefaultColorSchemes(const FSHelperPtr& pFS)
+{
+    for (int nId = PredefinedClrSchemeId::dk2; nId != PredefinedClrSchemeId::Count; nId++)
+    {
+        OUString sName(getPredefinedClrNames(static_cast<PredefinedClrSchemeId>(nId)));
+        sal_Int32 nColor = 0;
+
+        switch (nId)
+        {
+        case PredefinedClrSchemeId::dk2:
+            nColor = 0x1F497D;
+            break;
+        case PredefinedClrSchemeId::lt2:
+            nColor = 0xEEECE1;
+            break;
+        case PredefinedClrSchemeId::accent1:
+            nColor = 0x4F81BD;
+            break;
+        case PredefinedClrSchemeId::accent2:
+            nColor = 0xC0504D;
+            break;
+        case PredefinedClrSchemeId::accent3:
+            nColor = 0x9BBB59;
+            break;
+        case PredefinedClrSchemeId::accent4:
+            nColor = 0x8064A2;
+            break;
+        case PredefinedClrSchemeId::accent5:
+            nColor = 0x4BACC6;
+            break;
+        case PredefinedClrSchemeId::accent6:
+            nColor = 0xF79646;
+            break;
+        case PredefinedClrSchemeId::hlink:
+            nColor = 0x0000FF;
+            break;
+        case PredefinedClrSchemeId::folHlink:
+            nColor = 0x800080;
+            break;
+        }
+
+        OUString sOpenColorScheme = "<a:" + sName + ">";
+        pFS->write(sOpenColorScheme);
+
+        pFS->singleElementNS(XML_a, XML_srgbClr, XML_val, I32SHEX(nColor));
+
+        OUString sCloseColorScheme = "</a:" + sName + ">";
+        pFS->write(sCloseColorScheme);
+    }
+}
+
+void PowerPointExport::WriteTheme(sal_Int32 nThemeNum, const model::Theme* pTheme)
+{
+    if (!pTheme)
+        return;
+    OUString sThemePath = "ppt/theme/theme" + OUString::number(nThemeNum + 1) + ".xml";
+
+    oox::ThemeExport aThemeExport(this, DOCUMENT_PPTX);
+
+    aThemeExport.write(sThemePath, *pTheme);
+}
+
+bool PowerPointExport::ImplCreateDocument()
+{
+    mbCreateNotes = false;
+
+    for (sal_uInt32 i = 0; i < mnPages; i++)
+    {
+        if (mbHasCanvasPage && i == 0)
+            continue;
+        if (!GetPageByIndex(i, NOTICE))
+            return false;
+
+        if (ContainsOtherShapeThanPlaceholders())
+        {
+            mbCreateNotes = true;
+            break;
+        }
+    }
+
+    return true;
+}
+
+void PowerPointExport::WriteNotesMaster()
+{
+    SAL_INFO("sd.eppt", "write Notes master\n---------------");
+
+    mPresentationFS->startElementNS(XML_p, XML_notesMasterIdLst);
+
+    OUString sRelId = addRelation(mPresentationFS->getOutputStream(),
+                                  oox::getRelationship(Relationship::NOTESMASTER),
+                                  u"notesMasters/notesMaster1.xml");
+
+    mPresentationFS->singleElementNS(XML_p, XML_notesMasterId,
+                                     FSNS(XML_r, XML_id), sRelId);
+
+    mPresentationFS->endElementNS(XML_p, XML_notesMasterIdLst);
+
+    FSHelperPtr pFS =
+        openFragmentStreamWithSerializer(u"ppt/notesMasters/notesMaster1.xml"_ustr,
+                                         u"application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"_ustr);
+    // write theme per master
+
+    // TODO: Need to implement theme support for note master, so the
+    // note master has his own theme associated.
+
+    // For now just use the default theme
+    auto const* pDefaultColorSet = svx::ColorSets::getDefault();
+    if (pDefaultColorSet)
+    {
+        auto pTheme = std::make_shared<model::Theme>(u"Office Theme"_ustr);
+        pTheme->setColorSet(std::make_shared<model::ColorSet>(*pDefaultColorSet));
+
+        WriteTheme(mnThemeIdMax, pTheme.get());
+
+        // add implicit relation to the presentation theme
+        addRelation(pFS->getOutputStream(),
+                    oox::getRelationship(Relationship::THEME),
+                    Concat2View("../theme/theme" + OUString::number(++mnThemeIdMax) + ".xml"));
+    }
+
+    pFS->startElementNS(XML_p, XML_notesMaster, presentationNamespaces(*this));
+
+    pFS->startElementNS(XML_p, XML_cSld);
+
+    Reference< XPropertySet > aXBackgroundPropSet;
+    if (ImplGetPropertyValue(mXPagePropSet, u"Background"_ustr) &&
+            (mAny >>= aXBackgroundPropSet))
+        ImplWriteBackground(pFS, aXBackgroundPropSet);
+
+    WriteShapeTree(pFS, NOTICE, true);
+
+    pFS->endElementNS(XML_p, XML_cSld);
+
+    // color map - now it uses colors from hardcoded theme, once we eventually generate theme, this might need update
+    pFS->singleElementNS(XML_p, XML_clrMap,
+                         XML_bg1, "lt1",
+                         XML_bg2, "lt2",
+                         XML_tx1, "dk1",
+                         XML_tx2, "dk2",
+                         XML_accent1, "accent1",
+                         XML_accent2, "accent2",
+                         XML_accent3, "accent3",
+                         XML_accent4, "accent4",
+                         XML_accent5, "accent5",
+                         XML_accent6, "accent6",
+                         XML_hlink, "hlink",
+                         XML_folHlink, "folHlink");
+
+    // mXDrawPage holds the notes master at this point, so its property set is queried
+    // directly. p:extLst is the last child of p:notesMaster.
+    WritePageGuidExtLst(pFS, Reference< XPropertySet >(mXDrawPage, UNO_QUERY));
+
+    pFS->endElementNS(XML_p, XML_notesMaster);
+
+    SAL_INFO("sd.eppt", "----------------");
+
+    pFS->endDocument();
+}
+
+// The globally unique identifier of a page is stored in an extension list entry of its own,
+// with the coext namespace as the identifier of the extension. It is the same value ODF
+// stores in the coext:guid attribute of the page.
+void PowerPointExport::WritePageGuidExtLst(const FSHelperPtr& pFS,
+                                           const Reference< XPropertySet >& rXPropSet)
+{
+    if (!rXPropSet.is())
+        return;
+
+    try
+    {
+        cpo::uno::Any aAny;
+        if (!GetPropertyValue(aAny, rXPropSet, u"Guid"_ustr, /*bTestPropertyAvailability*/ true))
+            return;
+
+        OUString sGuid;
+        aAny >>= sGuid;
+        if (sGuid.isEmpty())
+            return;
+
+        const OUString sCoextNamespace = getNamespaceURL(OOX_NS(coext));
+        pFS->startElementNS(XML_p, XML_extLst);
+        pFS->startElementNS(XML_p, XML_ext, XML_uri, sCoextNamespace);
+        pFS->singleElement(FSNS(XML_coext, XML_pageGuid), FSNS(XML_xmlns, XML_coext),
+                           sCoextNamespace, XML_val, sGuid);
+        pFS->endElementNS(XML_p, XML_ext);
+        pFS->endElementNS(XML_p, XML_extLst);
+    }
+    catch (const Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("sd.eppt", "while exporting the globally unique identifier of the page");
+    }
+}
+
+void PowerPointExport::embedEffectAudio(const FSHelperPtr& pFS, const OUString& sUrl, OUString& sRelId, OUString& sName)
+{
+    comphelper::LifecycleProxy aProxy;
+
+    if (!sUrl.endsWithIgnoreAsciiCase(".wav"))
+        return;
+
+    uno::Reference<io::XInputStream> xAudioStream;
+    try
+    {
+        if (sUrl.startsWith("vnd.sun.star.Package:"))
+        {
+            uno::Reference<embed::XStorage> xDocumentStorage = mXModel->getDocumentStorage();
+            if (!xDocumentStorage.is())
+                return;
+
+            uno::Reference<io::XStream> xStream = comphelper::OStorageHelper::GetStreamAtPackageURL(xDocumentStorage, sUrl,
+                                                        css::embed::ElementModes::READ, aProxy);
+
+            if (xStream.is())
+                xAudioStream = xStream->getInputStream();
+        }
+        else
+            xAudioStream = comphelper::OStorageHelper::GetInputStreamFromURL(sUrl, getComponentContext());
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("sd", "PowerPointExport::embedEffectAudio");
+    }
+
+    if (!xAudioStream.is())
+        return;
+
+    sName = INetURLObject::decode(sUrl, INetURLObject::DecodeMechanism::ToIUri, RTL_TEXTENCODING_UTF8);
+    int nLastSlash = sName.lastIndexOf('/');
+    sName = sName.copy(nLastSlash >= 0 ? nLastSlash + 1 : 0);
+
+    // MS PowerPoint reports a corrupt file if the media name contains non-ascii characters
+    OUString sAsciiName;
+    cpo::uno::Sequence<sal_Int8> aTempBuf;
+    if (comphelper::string::isValidAsciiFilename(sName))
+        sAsciiName = sName;
+    else
+    {
+        // create an ASCII name - using a hash to try and keep it unique and yet non-random
+        comphelper::Hash aHash(comphelper::HashType::MD5);
+        sal_Int32 nBytesToRead = std::clamp<sal_Int32>(xAudioStream->available(), 0, 32000);
+        if ((nBytesToRead = xAudioStream->readBytes(aTempBuf, nBytesToRead)))
+            aHash.update(aTempBuf.getConstArray(), nBytesToRead);
+        else // safety fallback: use the name to create a hash: should never happen
+        {
+            const OString sUtf(OUStringToOString(sName, RTL_TEXTENCODING_UTF8));
+            aHash.update(sUtf.getStr(), sUtf.getLength());
+        }
+        sAsciiName
+            = "audio_" + OUString::fromUtf8(comphelper::hashToString(aHash.finalize())) + ".wav";
+    }
+
+    OUString sPath = "../media/" + sAsciiName;
+    sRelId = addRelation(pFS->getOutputStream(),
+                        oox::getRelationship(Relationship::AUDIO), sPath);
+
+    uno::Reference<io::XOutputStream> xOutputStream = openFragmentStream(sPath.replaceAt(0, 2, u"/ppt"),
+            u"audio/x-wav"_ustr);
+
+    // if bytes were read from input for hash generation, write those, too, otherwise they get lost
+    if (aTempBuf.hasElements())
+        xOutputStream->writeBytes(aTempBuf);
+    comphelper::OStorageHelper::CopyInputToOutput(xAudioStream, xOutputStream);
+}
+
+sal_Int32 PowerPointExport::GetShapeID(const Reference<XShape>& rXShape)
+{
+    return ShapeExport::GetShapeID(rXShape, &maShapeMap);
+}
+
+sal_Int32 PowerPointExport::GetNextAnimationNodeID()
+{
+    return mnAnimationNodeIdMax++;
+}
+
+bool PowerPointExport::ImplCreateMainNotes()
+{
+    if (mbCreateNotes)
+        WriteNotesMaster();
+
+    return true;
+}
+
+OUString PowerPointExport::getImplementationName()
+{
+    return u"com.sun.star.comp.Impress.oox.PowerPointExport"_ustr;
+}
+
+void PowerPointExport::WritePlaceholderReferenceShapes(PowerPointShapeExport& rDML, PageType ePageType)
+{
+    bool bCheckProps = ePageType == NORMAL;
+    Reference<XShape> xShape;
+    Any aAny;
+    OUString aText;
+    if (ePageType == LAYOUT
+        || (bCheckProps && PropValue::GetPropertyValue(aAny, mXPagePropSet, u"IsFooterVisible"_ustr, true)
+            && aAny == true && GetPropertyValue(aAny, mXPagePropSet, u"FooterText"_ustr, true)
+            && (aAny >>= aText) && !aText.isEmpty()))
+    {
+        if ((xShape = GetReferencedPlaceholderXShape(Footer, ePageType)))
+        {
+            const auto iter = maPlaceholderShapeToIndexMap.find(xShape);
+            assert(iter != maPlaceholderShapeToIndexMap.end());
+            rDML.WritePlaceholderReferenceShape(Footer,
+                                                iter->second,
+                                                ePageType, mXPagePropSet);
+        }
+    }
+
+    if (ePageType == LAYOUT
+        || (bCheckProps
+            && PropValue::GetPropertyValue(aAny, mXPagePropSet, u"IsPageNumberVisible"_ustr, true)
+            && aAny == true))
+    {
+        if ((xShape = GetReferencedPlaceholderXShape(SlideNumber, ePageType)))
+        {
+            const auto iter = maPlaceholderShapeToIndexMap.find(xShape);
+            assert(iter != maPlaceholderShapeToIndexMap.end());
+            rDML.WritePlaceholderReferenceShape(SlideNumber,
+                                                iter->second,
+                                                ePageType, mXPagePropSet);
+        }
+    }
+
+    if (ePageType == LAYOUT
+        || (bCheckProps
+            && PropValue::GetPropertyValue(aAny, mXPagePropSet, u"IsDateTimeVisible"_ustr, true)
+            && aAny == true
+            && ((GetPropertyValue(aAny, mXPagePropSet, u"DateTimeText"_ustr, true) && (aAny >>= aText)
+                 && !aText.isEmpty())
+                || mXPagePropSet->getPropertyValue(u"IsDateTimeFixed"_ustr) == false)))
+    {
+        if ((xShape = GetReferencedPlaceholderXShape(DateAndTime, ePageType)))
+        {
+            const auto iter = maPlaceholderShapeToIndexMap.find(xShape);
+            assert(iter != maPlaceholderShapeToIndexMap.end());
+            rDML.WritePlaceholderReferenceShape(DateAndTime,
+                                                iter->second,
+                                                ePageType, mXPagePropSet);
+        }
+    }
+}
+
+void PowerPointExport::WriteLayoutContentPlaceholders(PowerPointShapeExport& rDML)
+{
+    // A slide master may not carry these, so the master page's own copy is written here, where a
+    // slide looks for the geometry and the prompt it inherits.
+    //
+    // A media placeholder needs no entry: it reaches the file through the page's own shape tree,
+    // where WriteGraphicObjectShape writes it as a placeholder while it is still empty.
+    for (const PlaceholderType ePlaceholder : { Picture })
+    {
+        assert(!isPlaceholderAllowedOnSlideMaster(ePlaceholder));
+        Reference<XShape> xShape = GetReferencedPlaceholderXShape(ePlaceholder, LAYOUT);
+        if (!xShape)
+            continue;
+
+        // Only one still waiting for its content belongs on the layout. One that holds a picture
+        // is written on the page holding it, as an ordinary picture.
+        auto xProps = xShape.query<XPropertySet>();
+        if (!xProps || xProps->getPropertyValue(u"IsEmptyPresentationObject"_ustr) != true)
+            continue;
+
+        rDML.WritePlaceholderShape(xShape, ePlaceholder);
+    }
+}
+
+void PowerPointExport::WriteMasterOwnPlaceholders(PowerPointShapeExport& rDML,
+                                                  sal_uInt32 nMasterNum)
+{
+    SdPage* pPage = SdPage::getImplementation(mXDrawPage);
+    if (!pPage)
+        return;
+
+    for (const auto& [ePlaceholder, ePresObjKind] :
+         { std::pair(Title, PresObjKind::Title), std::pair(Outliner, PresObjKind::Outline) })
+    {
+        assert(isPlaceholderAllowedOnSlideMaster(ePlaceholder));
+        if (pPage->GetPresObj(ePresObjKind))
+            continue; // the shape tree has written the page's own
+
+        // The pages standing for one slide master are its layouts, and a layout placeholder was
+        // imported with the geometry and the formatting it inherits from the master, so the first
+        // of them to carry this type carries the master's prototype of it. A layout that states
+        // its own geometry gives that instead - the closest thing left to ask.
+        for (sal_uInt32 i = 0; i < mnMasterPages; ++i)
+        {
+            if (i == mnCanvasMasterIndex
+                || (i != nMasterNum && maEquivalentMasters[i] != nMasterNum))
+                continue;
+
+            SdPage* pOther = dynamic_cast<SdPage*>(maMastersLayouts[i].first);
+            SdrObject* pObj = pOther ? pOther->GetPresObj(ePresObjKind) : nullptr;
+            if (!pObj)
+                continue;
+
+            rDML.WritePlaceholderShape(GetXShapeForSdrObject(pObj), ePlaceholder);
+            break;
+        }
+    }
+}
+
+sal_Int32 PowerPointExport::GetOrCreatePlaceholderIndex(const cpo::uno::Reference<XShape> &rXShape)
+{
+    // One index per shape, however many parts write it: a slide's placeholder pairs with the
+    // layout's by type and index, so handing the second writer a fresh number breaks that pair.
+    const auto [aIter, bInserted]
+        = maPlaceholderShapeToIndexMap.try_emplace(rXShape, mnPlaceholderIndexMax);
+    if (bInserted)
+        ++mnPlaceholderIndexMax;
+    return aIter->second;
+}
+
+Reference<XShape> PowerPointExport::GetReferencedPlaceholderXShape(const PlaceholderType eType,
+                                                        PageType ePageType) const
+{
+    PresObjKind ePresObjKind = PresObjKind::NONE;
+    switch (eType)
+    {
+        case oox::core::None:
+            break;
+        case oox::core::SlideImage:
+            break;
+        case oox::core::Notes:
+            break;
+        case oox::core::Header:
+            ePresObjKind = PresObjKind::Header;
+            break;
+        case oox::core::Footer:
+            ePresObjKind = PresObjKind::Footer;
+            break;
+        case oox::core::SlideNumber:
+            ePresObjKind = PresObjKind::SlideNumber;
+            break;
+        case oox::core::DateAndTime:
+            ePresObjKind = PresObjKind::DateTime;
+            break;
+        case oox::core::Outliner:
+            break;
+        case oox::core::Title:
+            ePresObjKind = PresObjKind::Title;
+            break;
+        case oox::core::Subtitle:
+            break;
+        case oox::core::Picture:
+            ePresObjKind = PresObjKind::Graphic;
+            break;
+        case oox::core::Media:
+            ePresObjKind = PresObjKind::Media;
+            break;
+    }
+    if (ePresObjKind != PresObjKind::NONE)
+    {
+        SdrPage* pPage;
+        if (ePageType == LAYOUT)
+        {
+            // since Layout pages do not have drawpages themselves - mXDrawPage is still the master they reference to..
+            pPage = SdPage::getImplementation(mXDrawPage);
+        }
+        else
+        {
+            pPage = &SdPage::getImplementation(mXDrawPage)->TRG_GetMasterPage();
+        }
+        SdPage* pMasterPage = dynamic_cast<SdPage*>(pPage);
+        if (SdrObject* pMasterFooter
+            = (pMasterPage ? pMasterPage->GetPresObj(ePresObjKind) : nullptr))
+            return GetXShapeForSdrObject(pMasterFooter);
+    }
+    return nullptr;
+}
+
+// UNO component
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+css_comp_Impress_oox_PowerPointExport(cpo::uno::XComponentContext* rxCtxt,
+                                      cpo::uno::Sequence<cpo::uno::Any> const& rArguments)
+{
+    return cppu::acquire(new PowerPointExport(rxCtxt, rArguments));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

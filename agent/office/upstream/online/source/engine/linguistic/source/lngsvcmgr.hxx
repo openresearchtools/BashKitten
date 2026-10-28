@@ -1,0 +1,155 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <cppuhelper/implbase.hxx>
+#include <comphelper/interfacecontainer3.hxx>
+
+#include <comphelper/kit.hxx>
+
+#include <cpo/uno/Reference.h>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/linguistic2/XLinguServiceManager2.hpp>
+#include <com/sun/star/util/XModifyBroadcaster.hpp>
+#include <unotools/configitem.hxx>
+#include <rtl/ref.hxx>
+#include <vcl/timer.hxx>
+#include <vcl/idle.hxx>
+#include <vector>
+#include <optional>
+
+class SpellCheckerDispatcher;
+class HyphenatorDispatcher;
+class ThesaurusDispatcher;
+class GrammarCheckingIterator;
+class LngSvcMgrListenerHelper;
+struct SvcInfo;
+
+namespace com::sun::star::linguistic2 {
+    class XLinguServiceEventBroadcaster;
+}
+
+
+class LngSvcMgr :
+    public cppu::WeakImplHelper
+    <
+        css::linguistic2::XLinguServiceManager2,
+        css::lang::XServiceInfo
+    >,
+    private utl::ConfigItem,
+    public comphelper::COKit::ThreadJoinable
+{
+    friend class LngSvcMgrListenerHelper;
+
+    ::comphelper::OInterfaceContainerHelper3<css::lang::XEventListener>  aEvtListeners;
+
+    Idle                                                aUpdateIdle;
+
+
+    cpo::uno::Sequence<
+        css::lang::Locale >                             aAvailSpellLocales;
+    cpo::uno::Sequence<
+        css::lang::Locale >                             aAvailGrammarLocales;
+    cpo::uno::Sequence<
+        css::lang::Locale >                             aAvailHyphLocales;
+    cpo::uno::Sequence<
+        css::lang::Locale >                             aAvailThesLocales;
+
+    rtl::Reference<SpellCheckerDispatcher>              mxSpellDsp;
+    rtl::Reference<GrammarCheckingIterator>             mxGrammarDsp;
+    rtl::Reference<HyphenatorDispatcher>                mxHyphDsp;
+    rtl::Reference<ThesaurusDispatcher>                 mxThesDsp;
+
+    rtl::Reference<LngSvcMgrListenerHelper>             mxListenerHelper;
+
+    typedef std::vector< SvcInfo > SvcInfoArray;
+    std::optional<SvcInfoArray>                        pAvailSpellSvcs;
+    std::optional<SvcInfoArray>                        pAvailGrammarSvcs;
+    std::optional<SvcInfoArray>                        pAvailHyphSvcs;
+    std::optional<SvcInfoArray>                        pAvailThesSvcs;
+
+    bool bDisposing;
+
+    LngSvcMgr(const LngSvcMgr &) = delete;
+    LngSvcMgr & operator = (const LngSvcMgr &) = delete;
+
+    void    GetAvailableSpellSvcs_Impl();
+    void    GetAvailableGrammarSvcs_Impl();
+    void    GetAvailableHyphSvcs_Impl();
+    void    GetAvailableThesSvcs_Impl();
+    void    GetListenerHelper_Impl();
+
+    void    GetSpellCheckerDsp_Impl( bool bSetSvcList = true );
+    void    GetGrammarCheckerDsp_Impl( bool bSetSvcList = true );
+    void    GetHyphenatorDsp_Impl( bool bSetSvcList = true );
+    void    GetThesaurusDsp_Impl( bool bSetSvcList = true );
+
+    void    SetCfgServiceLists( SpellCheckerDispatcher &rSpellDsp );
+    void    SetCfgServiceLists( GrammarCheckingIterator &rGrammarDsp );
+    void    SetCfgServiceLists( HyphenatorDispatcher &rHyphDsp );
+    void    SetCfgServiceLists( ThesaurusDispatcher &rThesDsp );
+
+    bool    SaveCfgSvcs( std::u16string_view rServiceName );
+
+    // utl::ConfigItem (to allow for listening of changes of relevant properties)
+    virtual void    Notify( const cpo::uno::Sequence< OUString > &rPropertyNames ) override;
+    virtual void    ImplCommit() override;
+
+    void UpdateAll();
+    DECL_LINK( updateAndBroadcast, Timer*, void );
+
+public:
+    LngSvcMgr();
+    virtual ~LngSvcMgr() override;
+
+    // XLinguServiceManager
+    virtual cpo::uno::Reference< css::linguistic2::XSpellChecker > getSpellChecker(  ) override;
+    virtual cpo::uno::Reference< css::linguistic2::XHyphenator > getHyphenator(  ) override;
+    virtual cpo::uno::Reference< css::linguistic2::XThesaurus > getThesaurus(  ) override;
+    virtual bool addLinguServiceManagerListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual bool removeLinguServiceManagerListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual cpo::uno::Sequence< OUString > getAvailableServices( const OUString& aServiceName, const css::lang::Locale& aLocale ) override;
+    virtual void setConfiguredServices( const OUString& aServiceName, const css::lang::Locale& aLocale, const cpo::uno::Sequence< OUString >& aServiceImplNames ) override;
+    virtual cpo::uno::Sequence< OUString > getConfiguredServices( const OUString& aServiceName, const css::lang::Locale& aLocale ) override;
+
+    // XAvailableLocales
+    virtual cpo::uno::Sequence< css::lang::Locale > getAvailableLocales( const OUString& aServiceName ) override;
+
+    // XComponent
+    virtual void dispose(  ) override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+    // XEventListener
+
+
+    // comphelper::COKit::ThreadJoinable
+    virtual bool joinThreads() override;
+
+    bool    AddLngSvcEvtBroadcaster(
+                const cpo::uno::Reference< css::linguistic2::XLinguServiceEventBroadcaster > &rxBroadcaster );
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

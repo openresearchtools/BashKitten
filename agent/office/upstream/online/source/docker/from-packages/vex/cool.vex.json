@@ -1,0 +1,684 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 3,
+  "metadata": {
+    "timestamp": "2026-10-21T12:13:54Z",
+    "supplier": {
+      "name": "Collabora Productivity Ltd.",
+      "url": [
+        "https://collaboraoffice.com"
+      ]
+    },
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "grype",
+          "version": "0.118.0"
+        },
+        {
+          "type": "application",
+          "name": "trivy",
+          "version": "0.74.0"
+        }
+      ]
+    },
+    "properties": [
+      {
+        "name": "collabora:vex-scope",
+        "value": "components bundled in collaboraoffice and coolwsd, matched by CPE and npm purl, plus Collabora's own published advisories for Collabora Online itself; the packages of the base image are covered by the base image supplier's VEX"
+      },
+      {
+        "name": "collabora:vex-source",
+        "value": "component inventory of the co-26.04 branch: engine/download.lst and readlicense_oo/license/license.xml, merged with the generated collabora-online-sbom.spdx.json; the product-level statements come from https://github.com/CollaboraOnline/online/security/advisories, which carries no package ecosystem and so is matched by no scanner"
+      }
+    ]
+  },
+  "vulnerabilities": [
+    {
+      "id": "CVE-2013-6648",
+      "description": "skia: SkRegion::setPath in Skia allows remote attackers to cause a denial of service (crash)",
+      "analysis": {
+        "state": "false_positive",
+        "detail": "The flaw is in SkRegion::setPath as shipped in Chrome 31 and was fixed upstream in 2013. The bundled snapshot is skia m142 (f4ed99d2443962782cf5f8b4dd27179f131e7cbe), thirteen years of release branches later. Flagged only because the CPE match treats skia as unversioned."
+      }
+    },
+    {
+      "id": "CVE-2015-1239",
+      "description": "Double free in OpenJPEG j2k_read_ppm_v3 as bundled by 2015-era PDFium/Chrome",
+      "analysis": {
+        "state": "false_positive",
+        "detail": "Fixed upstream in OpenJPEG r2997 (2015). The bundled PDFium is the 7988 snapshot (2026), which has contained the fix for a decade."
+      }
+    },
+    {
+      "id": "CVE-2017-5436",
+      "description": "graphite2: heap buffer overflow in lz4::decompress",
+      "analysis": {
+        "state": "false_positive",
+        "detail": "Fixed upstream in graphite2 1.3.10 (2017); the bundled 1.3.15 contains the fix. Flagged only because of a sloppy NVD version range."
+      }
+    },
+    {
+      "id": "CVE-2021-25630",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-49w3-gr3w-m68v"
+      },
+      "description": "loolwsd: the loolforkit privileged program allowed a local root exploit",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-49w3-gr3w-m68v on 2021-01-26, severity High. Fixed in 6.4.3, 4.2.13; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2021-32744",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-32xj-9x82-q9jw"
+      },
+      "description": "loolwsd: an unauthenticated attacker could gain access to currently open files",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-32xj-9x82-q9jw on 2021-07-21, severity Critical. Fixed in 6.4.9-6, 4.2.17-2; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2021-32745",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-w536-654v-cjj9"
+      },
+      "description": "loolwsd: reflected cross-site-scripting vulnerability",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-w536-654v-cjj9 on 2021-07-21, severity High. Fixed in 6.4.9-5; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2021-43817",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-7f6h-v9mx-58q9"
+      },
+      "description": "loolwsd: reflected cross-site-scripting vulnerability",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-7f6h-v9mx-58q9 on 2021-12-13, severity High. Fixed in 6.4.16, 4.2.20; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2023-31145",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-rqj2-2c2x-gjmm"
+      },
+      "description": "coolwsd: reflected cross-site-scripting vulnerability",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-rqj2-2c2x-gjmm on 2023-05-13, severity Medium. Fixed in 22.05.13, 21.11.9, 6.4.27; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2023-34088",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-7582-pwfh-3pwr"
+      },
+      "description": "coolwsd: stored cross-site-scripting vulnerability in the admin interface",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-7582-pwfh-3pwr on 2023-05-31, severity Critical. Fixed in 21.11.9.1, 22.05.13, 6.4.27; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2023-37769",
+      "description": "FPE in pixman's 'stress-test' test utility",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "The flaw is in pixman's stress-test test program, not in the library; the test programs are neither built nor shipped.",
+        "justification": "code_not_present"
+      }
+    },
+    {
+      "id": "CVE-2023-48314",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-qjrm-q4h5-v3r2"
+      },
+      "description": "richdocumentscode: unescaped passing of the request URL",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-qjrm-q4h5-v3r2 on 2023-11-27, severity High. Fixed in 23.5.403; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2023-49782",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-8xm5-pgfr-8mjr"
+      },
+      "description": "richdocumentscode: cross-site-scripting vulnerability in richdocuments error message handling",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-8xm5-pgfr-8mjr on 2023-12-08, severity High. Fixed in 23.5.601; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2023-49788",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-3r69-xvf7-v94j"
+      },
+      "description": "richdocumentscode: improper handling of browser-side provided input in richdocuments path handling",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-3r69-xvf7-v94j on 2023-12-08, severity High. Fixed in 23.5.602; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2023-52356",
+      "description": "libtiff: segfault in TIFFReadRGBATileExt() (DoS)",
+      "analysis": {
+        "state": "false_positive",
+        "detail": "Fixed upstream in January 2024, first released in libtiff 4.7.0; the bundled 4.7.2 contains the fix."
+      }
+    },
+    {
+      "id": "CVE-2023-6228",
+      "description": "libtiff: heap buffer overflow in the tiffcp utility",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "Only the libtiff library is built and statically linked; the tiffcp command-line utility is neither built nor shipped.",
+        "justification": "code_not_present"
+      }
+    },
+    {
+      "id": "CVE-2023-6277",
+      "description": "libtiff: out-of-memory in TIFFOpen via a crafted file (DoS)",
+      "analysis": {
+        "state": "false_positive",
+        "detail": "Fixed upstream in November 2023, first released in libtiff 4.7.0; the bundled 4.7.2 contains the fix."
+      }
+    },
+    {
+      "id": "CVE-2024-25114",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-2fh2-ppjf-p3xv"
+      },
+      "description": "coolwsd: sensitive information disclosure (JailID) to users",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-2fh2-ppjf-p3xv on 2024-03-11, severity Low. Fixed in 21.11.9.4, 22.05.22, 23.05.9; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2024-29182",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-9gmw-5q2c-4398"
+      },
+      "description": "coolwsd: stored cross-site-scripting vulnerability via tooltip",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-9gmw-5q2c-4398 on 2024-04-02, severity High. Fixed in 23.05.10.1; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2024-37311",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-hvhm-5c44-977x"
+      },
+      "description": "coolwsd: remote host TLS certificates were not fully verified",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-hvhm-5c44-977x on 2024-08-23, severity High. Fixed in 22.05.23.1, 23.05.14.1, 24.04.4.3; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2024-5261",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-crg3-fjm2-xvpq"
+      },
+      "description": "coolwsd: TLS certificates were not properly verified when utilizing LibreOfficeKit",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-crg3-fjm2-xvpq on 2024-07-03, severity Low. Fixed in 22.05.23, 23.05.12, 24.04.3; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2024-57822",
+      "description": "Raptor RDF Syntax Library through 2.0.16: heap-based buffer over-read in the N-Triples parser when a bnode id ends in '.'",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_present",
+        "detail": "The bundled raptor is built with --enable-parsers=\"rdfxml\" only (engine/external/redland/ExternalProject_raptor.mk), so the vulnerable N-Triples parser is not compiled in. The upstream fix is additionally backported via engine/external/redland/raptor/raptor-backport-unreleased-fixes.patch.1."
+      }
+    },
+    {
+      "id": "CVE-2024-57823",
+      "description": "Raptor RDF Syntax Library through 2.0.16: integer underflow when normalizing a URI in raptor_uri_normalize_path(), reported via the Turtle parser",
+      "analysis": {
+        "state": "resolved_with_pedigree",
+        "detail": "The upstream fix (return an empty buffer when the path length reaches 0) is backported via engine/external/redland/raptor/raptor-backport-unreleased-fixes.patch.1, and CVE-2024-57823.patch.1 additionally makes the path length sanity checks unconditional. The reported trigger, the Turtle parser, is not compiled in either (--enable-parsers=\"rdfxml\")."
+      }
+    },
+    {
+      "id": "CVE-2025-10911",
+      "description": "libxslt: use-after-free with key data stored cross-RVT",
+      "analysis": {
+        "state": "resolved_with_pedigree",
+        "detail": "The upstream fix (GNOME libxslt merge request !77, 'Use a dedicated node type to maintain the list of cached RVTs', the same commit RHEL backports for this CVE) is applied to the bundled 1.1.45 via engine/external/libxslt/77.patch.1."
+      }
+    },
+    {
+      "id": "CVE-2025-15367",
+      "description": "Python: POP3 command injection via user-controlled commands in poplib",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_present",
+        "detail": "The only shipped user of poplib was the mailmerge mail service component (program/mailmerge.py), which is no longer built or shipped: Collabora Online has no mail merge functionality, and its only consumers were Writer's desktop wizard dialogs and the UNO MailMerge service, which nothing in COOL invokes. poplib itself remains only inside the optional python-core (pyuno packages, excluded from the container unless 'withpython'), reachable solely from user macros, which are disabled by default."
+      }
+    },
+    {
+      "id": "CVE-2025-24796",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-4jjq-vgqp-qw45"
+      },
+      "description": "coolwsd: remote code execution within the jail with macros enabled",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-4jjq-vgqp-qw45 on 2025-03-06, severity Medium. Fixed in 22.05.25, 23.05.19, 24.04.12.4; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2025-27791",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-9j32-gg3j-8w25"
+      },
+      "description": "coolwsd: arbitrary file write outside the jail with a malicious WOPI server",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-9j32-gg3j-8w25 on 2025-04-15, severity High. Fixed in 22.05.25, 23.05.19, 24.04.13.1; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2025-50422",
+      "description": "cairo through 1.18.4: assertion failure in _cairo_ft_unscaled_font_fini (DoS)",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "The assertion failure is only known to be reachable through Poppler's cairo-ft usage ('as used in Poppler through 25.08.0'), and Poppler is not bundled - it was removed from this tree (the PDF import filter is PDFium-based, and configure/externals contain no trace of poppler). cairo's only consumer here is vcl, whose cairo-ft font lifecycle has no known path to this assertion. Worst case would be an assertion abort (DoS), as the bundled cairo is built without NDEBUG."
+      }
+    },
+    {
+      "id": "CVE-2025-6021",
+      "description": "libxml2: integer overflow in xmlBuildQName() leading to a stack buffer overflow",
+      "analysis": {
+        "state": "false_positive",
+        "detail": "Fixed upstream in libxml2 2.13.8/2.14.2 (2025); the bundled 2.15.3 contains the fix."
+      }
+    },
+    {
+      "id": "CVE-2025-6170",
+      "description": "libxml2: stack buffer overflow in the xmllint interactive shell",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "Only the libxml2 library is shipped; the xmllint utility is neither built nor shipped.",
+        "justification": "code_not_present"
+      }
+    },
+    {
+      "id": "CVE-2025-66208",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-j3q6-q5pc-v5wf"
+      },
+      "description": "richdocumentscode: configuration-dependent OS command injection in the richdocumentscode proxy",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "Published by Collabora as GHSA-j3q6-q5pc-v5wf on 2025-12-03, severity Medium. Fixed in 25.04.702. The richdocumentscode proxy (proxy.php) lives in the separate CollaboraOnline/richdocumentscode repository and is not installed in this image - it is fetched only by the cypress proxy tests (cypress_test/Makefile.am:135).",
+        "justification": "code_not_present"
+      }
+    },
+    {
+      "id": "CVE-2025-7425",
+      "description": "libxslt: use-after-free via attribute type corruption when processing result tree fragments",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "The mitigation for this unfixed libxslt flaw lives in libxml2 >= 2.14 (per the Debian security tracker); the bundled libxml2 is 2.15.3, and libxslt only ever runs against it (both are statically linked together).",
+        "justification": "protected_by_mitigating_control"
+      }
+    },
+    {
+      "id": "CVE-2026-110447",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-g3vx-3m76-fghh"
+      },
+      "description": "richdocumentscode: unauthenticated OS command injection in the richdocumentscode proxy",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "Published by Collabora as GHSA-g3vx-3m76-fghh on 2026-10-14, severity Critical. Fixed in 26.4.303. The richdocumentscode proxy (proxy.php) lives in the separate CollaboraOnline/richdocumentscode repository and is not installed in this image - it is fetched only by the cypress proxy tests (cypress_test/Makefile.am:135).",
+        "justification": "code_not_present"
+      }
+    },
+    {
+      "id": "CVE-2026-12345",
+      "description": "python: The cleanup of tempfile.TemporaryDirectory is vulnerable to a race condition",
+      "analysis": {
+        "state": "in_triage",
+        "detail": "Re-checked on 2026-10-21: still unfixed on the 3.14 series. Python 3.14.8 (2026-09-30) is listed as affected by OSV; the fix is in 3.15.0 only, so there is no 3.14 release to move to. CVSS 4.0 AV:L/AC:L/AT:P - a local attacker who can modify the tree while TemporaryDirectory cleans it up. Awaiting an assessment of whether the bundled python cleans up a temporary directory that is writable by anyone but the jail's own user."
+      }
+    },
+    {
+      "id": "CVE-2026-15310",
+      "description": "Python: zipfile decompresses bzip2/LZMA/zstd members without a max_length bound",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "Python scripting is optional (the pyuno packages are separate and excluded from the container image unless built with 'withpython') and macro execution is disabled by default (security.enable_macros_execution); no product code uses this module, it is only reachable from user-authored macros.",
+        "justification": "requires_configuration"
+      }
+    },
+    {
+      "id": "CVE-2026-15806",
+      "description": "Python: HTTPPasswordMgr can send saved HTTPS credentials over HTTP",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "Python scripting is optional (the pyuno packages are separate and excluded from the container image unless built with 'withpython') and macro execution is disabled by default (security.enable_macros_execution); no product code uses this module, it is only reachable from user-authored macros.",
+        "justification": "requires_configuration"
+      }
+    },
+    {
+      "id": "CVE-2026-17084",
+      "description": "Python: stringprep.map_table_b2() deviates from RFC 3454",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "Python scripting is optional (the pyuno packages are separate and excluded from the container image unless built with 'withpython') and macro execution is disabled by default (security.enable_macros_execution); no product code uses this module, it is only reachable from user-authored macros.",
+        "justification": "requires_configuration"
+      }
+    },
+    {
+      "id": "CVE-2026-19672",
+      "description": "Python: tarfile can create directories outside the extraction path on POSIX",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "Python scripting is optional (the pyuno packages are separate and excluded from the container image unless built with 'withpython') and macro execution is disabled by default (security.enable_macros_execution); no product code uses this module, it is only reachable from user-authored macros.",
+        "justification": "requires_configuration"
+      }
+    },
+    {
+      "id": "CVE-2026-23623",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-68v6-r6qq-mmq2"
+      },
+      "description": "coolwsd: authorization bypass: ability to download read-only files",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-68v6-r6qq-mmq2 on 2026-02-05, severity Medium. Fixed in 23.05.20.1, 24.04.17.3, 25.04.7.5, 25.04.08.2; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2026-35189",
+      "description": "openssl: A certificate with many nameRelativeToCRLIssuer CRL distribution points causes disproportionate heap growth when OpenSSL caches X.509 extensions",
+      "analysis": {
+        "state": "in_triage",
+        "detail": "Collabora security assessment: low severity for this product, with no argument that the code is unreachable, so it stands until openssl is updated. Fixed upstream in openssl 3.5.9, released 2026-09-29; engine/download.lst still has openssl-3.5.8."
+      }
+    },
+    {
+      "id": "CVE-2026-35191",
+      "description": "openssl: The OpenSSL QUIC server, when configured to not preform address validation, can be forced to count incoming packets multiple times in its unvalidated credit\u2026",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "Collabora security assessment: QUIC is not used by Collabora Online, so the vulnerable code is never reached. Rated low severity for this product. Fixed upstream in openssl 3.5.9."
+      }
+    },
+    {
+      "id": "CVE-2026-42772",
+      "description": "openssl: The QUIC stream reassembly algorithm performance deteriorates progressively as packets are arriving out of order",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "Collabora security assessment: QUIC is not used by Collabora Online, so the vulnerable code is never reached. Rated low severity for this product. Fixed upstream in openssl 3.5.9."
+      }
+    },
+    {
+      "id": "CVE-2026-46499",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-27j2-3cqv-cc5q"
+      },
+      "description": "coolwsd: read-only session enforcement bypass allowed document modification within a live session",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-27j2-3cqv-cc5q on 2026-06-24, severity Medium. Fixed in 24.04.18, 25.04.11; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2026-4775",
+      "description": "libtiff: signed integer overflow in putcontig8bitYCbCr44tile leading to heap overflow in YCbCr tile decoding",
+      "analysis": {
+        "state": "false_positive",
+        "detail": "The bundled tiff-4.7.2 tarball already contains the upstream fix (libtiff commit 782a11d6, 'prevent integer overflow ... in YCbCr tile decoding functions'): all four affected 'incr' computations are the fixed const tmsize_t form. Verified in the tarball source; the advisory's version range is inaccurate."
+      }
+    },
+    {
+      "id": "CVE-2026-48164",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-wgmm-q3ch-64jj"
+      },
+      "description": "coolwsd: reflected HTML injection in cool.html",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-wgmm-q3ch-64jj on 2026-06-24, severity Medium. Fixed in 24.04.18, 25.04.11; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2026-54872",
+      "description": "openssl: The generic elliptic-curve scalar multiplication used for ECDSA and SM2 signature operations with curves that do not have a dedicated implementation leaks information\u2026",
+      "analysis": {
+        "state": "in_triage",
+        "detail": "Collabora security assessment: low severity for this product, with no argument that the code is unreachable, so it stands until openssl is updated. Fixed upstream in openssl 3.5.9, released 2026-09-29; engine/download.lst still has openssl-3.5.8."
+      }
+    },
+    {
+      "id": "CVE-2026-54873",
+      "description": "openssl: QUIC process may keep memory for QUIC packet buffer for much longer period than necessary",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "Collabora security assessment: QUIC is not used by Collabora Online, so the vulnerable code is never reached. Rated low severity for this product. Fixed upstream in openssl 3.5.9."
+      }
+    },
+    {
+      "id": "CVE-2026-54875",
+      "description": "openssl: A non-constant-time optimized implementation of scalar point multiplication is used for SM2 private key operations on ARM64 and RISC-V platforms",
+      "analysis": {
+        "state": "in_triage",
+        "detail": "Collabora security assessment: low severity, and only the ARM and RISC-V implementations are affected. We publish an arm64 image, so this is not dismissed as inapplicable. Fixed upstream in openssl 3.5.9, released 2026-09-29; engine/download.lst still has openssl-3.5.8."
+      }
+    },
+    {
+      "id": "CVE-2026-55243",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-2g97-qwj5-fj7f"
+      },
+      "description": "coolwsd: the comment author was not validated, allowing false attribution",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-2g97-qwj5-fj7f on 2026-09-25, severity Medium. Fixed in 24.04.19, 25.04.11, 26.04.2; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2026-72897",
+      "description": "openssl: A TLS server that calls SSL_set_SSL_CTX() to switch a connection to a different SSL_CTX part way through a handshake may access memory beyond the end of an internal\u2026",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "Collabora security assessment: SSL_set_SSL_CTX is never called by Collabora Online, so the vulnerable path is not reached. Rated low severity for this product. Fixed upstream in openssl 3.5.9."
+      }
+    },
+    {
+      "id": "CVE-2026-75804",
+      "description": "openssl: OpenSSL QUIC stack does not enforce connection level flow control for streams",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "Collabora security assessment: QUIC is not used by Collabora Online, so the vulnerable code is never reached. Rated low severity for this product. Fixed upstream in openssl 3.5.9."
+      }
+    },
+    {
+      "id": "CVE-2026-75805",
+      "description": "openssl: A CMP client that requests certificate revocation on the basis of a PKCS#10 CSR may dereference a NULL pointer and terminate abnormally when processing a crafted\u2026",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "Collabora security assessment: the CMP protocol is not used by Collabora Online, so the vulnerable code is never reached. Rated low severity for this product. Fixed upstream in openssl 3.5.9."
+      }
+    },
+    {
+      "id": "CVE-2026-75806",
+      "description": "openssl: An established DTLS 1.2 association using an AEAD cipher suite can be terminated by a single unauthenticated datagram whose encrypted fragment is shorter than the\u2026",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "Collabora security assessment: DTLS is not used by Collabora Online, so the vulnerable code is never reached. Rated low severity for this product. Fixed upstream in openssl 3.5.9."
+      }
+    },
+    {
+      "id": "CVE-2026-77276",
+      "source": {
+        "name": "Collabora Online security advisories",
+        "url": "https://github.com/CollaboraOnline/online/security/advisories/GHSA-cf9v-hrj7-8p4v"
+      },
+      "description": "coolwsd: unauthenticated document conversion could run document macros",
+      "analysis": {
+        "state": "resolved",
+        "detail": "Published by Collabora as GHSA-cf9v-hrj7-8p4v on 2026-09-03, severity High. Fixed in 25.04.12.3, 26.04.2.2; this image ships coolwsd 26.04.5.1, later than every patched version."
+      }
+    },
+    {
+      "id": "CVE-2026-77696",
+      "description": "openssl: SM2 signature generation uses non-constant-time arithmetic on secret values, forming a timing side-channel",
+      "analysis": {
+        "state": "in_triage",
+        "detail": "Collabora security assessment: low severity for this product, with no argument that the code is unreachable, so it stands until openssl is updated. Fixed upstream in openssl 3.5.9, released 2026-09-29; engine/download.lst still has openssl-3.5.8."
+      }
+    },
+    {
+      "id": "CVE-2026-84782",
+      "description": "openssl: The DTLS retransmission logic does not correctly handle a handshake message write that is suspended part-way through",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "Collabora security assessment: DTLS is not used by Collabora Online, so the vulnerable code is never reached. Rated low severity for this product. Fixed upstream in openssl 3.5.9."
+      }
+    },
+    {
+      "id": "CVE-2026-84784",
+      "description": "openssl: A malicious remote peer may flood the local QUIC stack with NEW_CONNECTION_ID frames by avoiding a limit check on how many connection IDs the remote QUIC stack can use",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "Collabora security assessment: QUIC is not used by Collabora Online, so the vulnerable code is never reached. Rated low severity for this product. Fixed upstream in openssl 3.5.9."
+      }
+    },
+    {
+      "id": "CVE-2026-85091",
+      "description": "zlib: zlib versions 1.3.1.2 through 1.3.2 contain a heap buffer overflow vulnerability in the gz_vacate() function when processing non-blocking gzwrite() operations with\u2026",
+      "analysis": {
+        "state": "in_triage",
+        "detail": "Re-checked on 2026-10-21: an upstream fix now exists but is unreleased. madler/zlib commit df84af25dc19 (2026-09-17, 'Fix buffer overflow bug in non-blocking gzwrite') states 'This addresses CVE-2026-85091'; it resets avail_in and next_in on the ret == -1 path in gz_write(), four lines in gzwrite.c. The latest release is still 1.3.2 (2026-02-17), which is what we bundle, so the choice is to backport the commit or wait for 1.3.3."
+      }
+    },
+    {
+      "id": "CVE-2026-87910",
+      "description": "python: When tarfile extracts a link on a system that doesn't support links, it falls back to extracting a member from the archive",
+      "analysis": {
+        "state": "in_triage",
+        "detail": "Re-checked on 2026-10-21: fixed in 3.10.22, 3.11.17, 3.12.15, 3.13.16 and 3.15.0, but no 3.14 release carries the fix - OSV still lists 3.14.8 (2026-09-30) as affected, so a version bump does not resolve it. The flaw needs tarfile to extract a link on a filesystem without link support, which the Linux image does not have."
+      }
+    },
+    {
+      "id": "CVE-2026-89156",
+      "description": "pcre2: PCRE2 before 10.48 has a pcre2_match out-of-bounds read after a JIT fallback when an attacker can provide invalid UTF data",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "pcre2 is built through Poco with SUPPORT_JIT undefined (dependencies/pcre2/src/pcre2_config.h) and no sljit backend is compiled: libPocoFoundation.a defines 0 sljit symbols, so pcre2_jit_compile_8 and pcre2_jit_match_8 are the PCRE2_ERROR_JIT_BADOPTION stubs. A JIT fallback cannot occur where no JIT exists. Poco 1.15.4 (2026-09-22) bundles pcre2 10.48 and is the clean fix; engine/download.lst still has poco-1.15.3-all, whose dependencies/pcre2 is 10.47.",
+        "justification": "code_not_present"
+      }
+    },
+    {
+      "id": "CVE-2026-89157",
+      "description": "pcre2: PCRE2 before 10.48, on 32-bit platforms, has a pcre2_pattern_convert out-of-bounds write when an attacker can provide a large pattern",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "pcre2 is reached only through Poco's RegularExpression - no engine or wsd source calls pcre2 directly. pcre2_pattern_convert_8 is compiled into libPocoFoundation.a but no object in it references the symbol, and Poco exposes no pattern conversion API. The flaw additionally needs a 32-bit platform. Poco 1.15.4 (2026-09-22) bundles pcre2 10.48 and is the clean fix; engine/download.lst still has poco-1.15.3-all, whose dependencies/pcre2 is 10.47.",
+        "justification": "code_not_reachable"
+      }
+    },
+    {
+      "id": "CVE-2026-89158",
+      "description": "pcre2: PCRE2 before 10.48, on 32-bit platforms, has a pcre2_compile_32 integer overflow and resultant out-of-bounds write",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "Only the 8-bit code unit library is built: Poco's pcre2_config.h defines PCRE2_CODE_UNIT_WIDTH 8 and SUPPORT_PCRE2_8, leaving SUPPORT_PCRE2_16 and SUPPORT_PCRE2_32 undefined. libPocoFoundation.a defines no _32 symbol at all, so there is no pcre2_compile_32 to overflow. Poco 1.15.4 (2026-09-22) bundles pcre2 10.48 and is the clean fix; engine/download.lst still has poco-1.15.3-all, whose dependencies/pcre2 is 10.47.",
+        "justification": "code_not_present"
+      }
+    },
+    {
+      "id": "CVE-2026-89160",
+      "description": "pcre2: PCRE2 before 10.48 has a pcre2_match out-of-bounds read during the PCRE2_MATCH_INVALID_UTF matching of an invalid UTF subject",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "pcre2 is reached only through Poco's RegularExpression - no engine or wsd source calls pcre2 directly. The flaw needs PCRE2_MATCH_INVALID_UTF, which Poco never sets - RegularExpression.cpp adds only PCRE2_UTF|PCRE2_UCP at compile time and PCRE2_NO_UTF_CHECK at match time, and Poco's RE_* option set has no equivalent to expose. Poco 1.15.4 (2026-09-22) bundles pcre2 10.48 and is the clean fix; engine/download.lst still has poco-1.15.3-all, whose dependencies/pcre2 is 10.47.",
+        "justification": "code_not_reachable"
+      }
+    },
+    {
+      "id": "CVE-2026-89161",
+      "description": "pcre2: In PCRE2 before 10.48, pcre2_jit_match mishandles a previously copied subject being passed in as a context",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "pcre2 is built through Poco with SUPPORT_JIT undefined (dependencies/pcre2/src/pcre2_config.h) and no sljit backend is compiled: libPocoFoundation.a defines 0 sljit symbols, so pcre2_jit_compile_8 and pcre2_jit_match_8 are the PCRE2_ERROR_JIT_BADOPTION stubs. pcre2_jit_match cannot mishandle a subject it never matches. Poco 1.15.4 (2026-09-22) bundles pcre2 10.48 and is the clean fix; engine/download.lst still has poco-1.15.3-all, whose dependencies/pcre2 is 10.47.",
+        "justification": "code_not_present"
+      }
+    },
+    {
+      "id": "CVE-2026-89162",
+      "description": "pcre2: In PCRE2 before 10.48, pcre2_serialize_encode might disclose two bytes to an adversary, typically in a situation where the access available to the adversary is\u2026",
+      "analysis": {
+        "state": "not_affected",
+        "detail": "pcre2 is reached only through Poco's RegularExpression - no engine or wsd source calls pcre2 directly. pcre2_serialize_encode_8 is compiled into libPocoFoundation.a but no object in it references the symbol; Poco never serializes compiled patterns. Poco 1.15.4 (2026-09-22) bundles pcre2 10.48 and is the clean fix; engine/download.lst still has poco-1.15.3-all, whose dependencies/pcre2 is 10.47.",
+        "justification": "code_not_reachable"
+      }
+    },
+    {
+      "id": "GHSA-6688-9rhm-gjv2",
+      "description": "dompurify: DOMPurify: IN_PLACE returns a force-removed rawtext root whose text carries attacker markup \u2014 pure HTML reparse executes",
+      "analysis": {
+        "state": "in_triage",
+        "detail": "Reported by grype 0.118.0 against dompurify 3.4.14 on 2026-10-07, severity Low. Re-checked on 2026-10-21: fixed in 3.4.16 (2026-09-23), and 3.4.17 (2026-10-12) is current; browser/package.json still pins 3.4.14. The flaw needs IN_PLACE, which has still to be checked against our sanitizer call sites."
+      }
+    },
+    {
+      "id": "GHSA-p98j-92pf-mc4p",
+      "description": "dompurify: DOMPurify: IN_PLACE: node-removing afterSanitize hook leaves detached subtree event handlers armed, causing DOM XSS",
+      "analysis": {
+        "state": "in_triage",
+        "detail": "Reported by grype 0.118.0 against dompurify 3.4.14 on 2026-10-07, severity Low. Re-checked on 2026-10-21: fixed in 3.4.16 (2026-09-23), and 3.4.17 (2026-10-12) is current; browser/package.json still pins 3.4.14. The flaw needs IN_PLACE and a node-removing afterSanitize hook, neither yet checked against our sanitizer call sites."
+      }
+    }
+  ]
+}

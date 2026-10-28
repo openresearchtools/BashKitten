@@ -1,0 +1,155 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include "ColorPropertySet.hxx"
+
+#include <cppuhelper/implbase.hxx>
+
+#include <osl/diagnose.h>
+
+using namespace ::com::sun::star;
+using namespace ::com::sun::star::beans;
+
+using ::cpo::uno::Reference;
+using ::cpo::uno::Sequence;
+
+namespace
+{
+class lcl_ColorPropertySetInfo : public ::cppu::WeakImplHelper<
+        XPropertySetInfo  >
+{
+public:
+    explicit lcl_ColorPropertySetInfo();
+
+protected:
+    // ____ XPropertySetInfo ____
+    virtual Sequence< Property > getProperties() override;
+    virtual Property getPropertyByName( const OUString& aName ) override;
+    virtual bool hasPropertyByName( const OUString& Name ) override;
+
+private:
+    static constexpr OUString g_aColorPropName = u"FillColor"_ustr;
+    Property m_aColorProp;
+};
+
+lcl_ColorPropertySetInfo::lcl_ColorPropertySetInfo() :
+        m_aColorProp( g_aColorPropName, -1,
+                      cppu::UnoType<sal_Int32>::get(), 0)
+{}
+
+Sequence< Property > lcl_ColorPropertySetInfo::getProperties()
+{
+
+    return Sequence< Property >( & m_aColorProp, 1 );
+}
+
+Property lcl_ColorPropertySetInfo::getPropertyByName( const OUString& aName )
+{
+    if( aName == g_aColorPropName )
+        return m_aColorProp;
+    throw UnknownPropertyException( g_aColorPropName, getXWeak());
+}
+
+bool lcl_ColorPropertySetInfo::hasPropertyByName( const OUString& Name )
+{
+    return Name == g_aColorPropName;
+}
+
+} // anonymous namespace
+
+namespace xmloff::chart
+{
+
+ColorPropertySet::ColorPropertySet( ::Color nColor ) :
+        m_nColor( nColor ),
+        m_nDefaultColor( 0x0099ccff )  // blue 8
+{}
+
+ColorPropertySet::~ColorPropertySet()
+{}
+
+// ____ XPropertySet ____
+
+Reference< XPropertySetInfo > ColorPropertySet::getPropertySetInfo()
+{
+    if( ! m_xInfo.is())
+        m_xInfo.set( new lcl_ColorPropertySetInfo );
+
+    return m_xInfo;
+}
+
+void ColorPropertySet::setPropertyValue( const OUString& /* aPropertyName */, const cpo::uno::Any& aValue )
+{
+    aValue >>= m_nColor;
+}
+
+cpo::uno::Any ColorPropertySet::getPropertyValue( const OUString& /* PropertyName */ )
+{
+    return cpo::uno::Any( m_nColor );
+}
+
+void ColorPropertySet::addPropertyChangeListener( const OUString& /* aPropertyName */, const Reference< XPropertyChangeListener >& /* xListener */ )
+{
+    OSL_FAIL( "Not Implemented" );
+}
+
+void ColorPropertySet::removePropertyChangeListener( const OUString& /* aPropertyName */, const Reference< XPropertyChangeListener >& /* aListener */ )
+{
+    OSL_FAIL( "Not Implemented" );
+}
+
+void ColorPropertySet::addVetoableChangeListener( const OUString& /* PropertyName */, const Reference< XVetoableChangeListener >& /* aListener */ )
+{
+    OSL_FAIL( "Not Implemented" );
+}
+
+void ColorPropertySet::removeVetoableChangeListener( const OUString& /* PropertyName */, const Reference< XVetoableChangeListener >& /* aListener */ )
+{
+    OSL_FAIL( "Not Implemented" );
+}
+
+// ____ XPropertyState ____
+
+PropertyState ColorPropertySet::getPropertyState( const OUString& /* PropertyName */ )
+{
+    return PropertyState_DIRECT_VALUE;
+}
+
+Sequence< PropertyState > ColorPropertySet::getPropertyStates( const Sequence< OUString >& /* aPropertyName */ )
+{
+    PropertyState aState = PropertyState_DIRECT_VALUE;
+    return Sequence<PropertyState>(&aState, 1);
+}
+
+void ColorPropertySet::setPropertyToDefault( const OUString& PropertyName )
+{
+    if( PropertyName == g_aColorPropName )
+        m_nColor = m_nDefaultColor;
+}
+
+cpo::uno::Any ColorPropertySet::getPropertyDefault( const OUString& aPropertyName )
+{
+    if( aPropertyName == g_aColorPropName )
+        return cpo::uno::Any( m_nDefaultColor );
+    return cpo::uno::Any();
+}
+
+} //  namespace xmloff::chart
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

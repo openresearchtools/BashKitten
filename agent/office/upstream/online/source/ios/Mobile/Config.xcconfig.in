@@ -1,0 +1,18 @@
+//
+// Copyright the Collabora Online contributors.
+//
+// SPDX-License-Identifier: MPL-2.0
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+// Configuration settings file format documentation can be found at:
+// https://help.apple.com/xcode/#/dev745c5c974
+
+APP_PACKAGE_NAME = @APP_PACKAGE_NAME@
+
+// The version of the app, derived by configure from the source tree. The main app carries it in
+// its generated Info.plist; the QuickLook extension takes it from here, since an embedded
+// extension has to declare the same CFBundleShortVersionString as its containing app.
+APP_BUNDLE_SHORT_VERSION = @IOSAPP_BUNDLE_SHORT_VERSION@

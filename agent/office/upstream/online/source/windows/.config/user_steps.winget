@@ -1,0 +1,171 @@
+# yaml-language-server: $schema=https://aka.ms/configuration-dsc-schema/0.2
+
+# configuration to setup the dependencies in ~/co and add make, jom and clang-format to ~/bin
+# and install the MSYS2 packages the engine and online configure steps need
+# this configuration is meant to be applied as the build user, and after the admin_deps one
+# has been applied. It also creates a ~/co/autogen.input with some sensible defaults that can be
+# used as a template for own modifications
+
+properties:
+  assertions:
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: prerequisitecheck
+      directives:
+        description: check that everything had been downloaded by the admin-step
+      settings:
+        GetScript: return $false
+        SetSCript: return $false
+        # the empty string element is so that each file can be specified with trailing comma
+        TestScript: |
+          $files = @(
+              "clang-format-5.0.0-win.exe",
+              "jom_1_1_4.zip",
+              "make-4.4.1-msvc.exe",
+              "pkgconf-2.4.3.exe",
+              "strawberry-perl-5.40.0.1-64bit-portable.zip",
+          "")
+          !(($files | foreach {Test-Path "$env:PUBLIC/Downloads/$_"}) -contains $false)
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: msys2-check
+      directives:
+        description: check that MSYS2 is installed (by the admin_deps step)
+      settings:
+        TestScript: Test-Path -Path "C:/msys64/usr/bin/bash.exe"
+        GetScript: return $false
+        SetScript: return $false
+  resources:
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: bindir
+      directives:
+        description: create the ~/bin directory
+      settings:
+        TestScript: Test-Path -Path "$env:UserProfile/bin" -PathType "Container"
+        GetScript:  Test-Path -Path "$env:UserProfile/bin" -PathType "Container"
+        SetScript: New-Item -ItemType "directory" -Path "$env:UserProfile" -Name "bin"
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: codir
+      directives:
+        description: create the ~/co directory
+      settings:
+        TestScript: Test-Path -Path "$env:UserProfile/co" -PathType "Container"
+        GetScript:  Test-Path -Path "$env:UserProfile/co" -PathType "Container"
+        SetScript: New-Item -ItemType "directory" -Path "$env:UserProfile" -Name "co"
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: make
+      dependsOn:
+        - bindir
+      directives:
+        description: copy make.exe to the ~/bin directory
+      settings:
+        TestScript: Test-Path -Path "$env:USERPROFILE/bin/make.exe"
+        GetScript:  Test-Path -Path "$env:USERPROFILE/bin/make.exe"
+        SetScript: Copy-Item -Path "$env:PUBLIC/Downloads/make-4.4.1-msvc.exe" -Destination "$env:USERPROFILE/bin/make.exe"
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: clang-format
+      dependsOn:
+        - bindir
+      directives:
+        description: copy clang-format.exe to the ~/bin directory
+      settings:
+        TestScript: Test-Path -Path "$env:USERPROFILE/bin/clang-format.exe"
+        GetScript:  Test-Path -Path "$env:USERPROFILE/bin/clang-format.exe"
+        SetScript: Copy-Item -LiteralPath "$env:PUBLIC/Downloads/clang-format-5.0.0-win.exe" -Destination "$env:USERPROFILE/bin/clang-format.exe"
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: pkgconf
+      dependsOn:
+        - bindir
+      directives:
+        description: copy pkgconf-2.4.3.exe to the ~/bin directory
+      settings:
+        TestScript: Test-Path -Path "$env:USERPROFILE/bin/pkgconf-2.4.3.exe"
+        GetScript:  Test-Path -Path "$env:USERPROFILE/bin/pkgconf-2.4.3.exe"
+        SetScript: Copy-Item -LiteralPath "$env:PUBLIC/Downloads/pkgconf-2.4.3.exe" -Destination "$env:USERPROFILE/bin/pkgconf-2.4.3.exe"
+    # the DSC Archive module doesn't operate with $env:FOO / would need hardcoded paths
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: spp-extract
+      dependsOn:
+        - codir
+      directives:
+        description: extract strawberry-perl-portable to the ~/co directory
+      settings:
+        TestScript: Test-Path -Path "$env:USERPROFILE/co/spp/perl/bin/perl.exe"
+        GetScript:  Test-Path -Path "$env:USERPROFILE/co/spp/perl/bin/perl.exe"
+        SetScript: Expand-Archive -LiteralPath "$env:PUBLIC/Downloads/strawberry-perl-5.40.0.1-64bit-portable.zip" -Destination "$env:USERPROFILE/co/spp"
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: spp-install-font-ttf
+      dependsOn:
+        - spp-extract
+      directives:
+        description: install perl-font-TTF to spp via cpan
+      settings:
+        TestScript: Test-Path -Path "$env:USERPROFILE/co/spp/perl/site/lib/Font/TTF.pm"
+        GetScript:  Test-Path -Path "$env:USERPROFILE/co/spp/perl/site/lib/Font/TTF.pm"
+        SetScript: |
+          $env:Path = "$env:USERPROFILE/co/spp/c/bin;$env:USERPROFILE/co/spp/perl/bin;$env:path"
+          cpanm Font::TTF
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: jom
+      dependsOn:
+        - bindir
+        - codir
+      directives:
+        description: extract and copy jom to the ~/bin directory
+      settings:
+        TestScript: Test-Path -Path "$env:USERPROFILE/bin/jom.exe"
+        GetScript:  Test-Path -Path "$env:USERPROFILE/bin/jom.exe"
+        SetScript: |
+          Expand-Archive -LiteralPath "$env:PUBLIC/Downloads/jom_1_1_4.zip" -Destination "$env:USERPROFILE/co/jom_unpack"
+          Copy-Item -LiteralPath "$env:USERPROFILE/co/jom_unpack/jom.exe" -Destination "$env:USERPROFILE/bin/jom.exe"
+          Remove-Item -LiteralPath "$env:USERPROFILE/co/jom_unpack" -Recurse
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: gitsettings
+      directives:
+        description: configure git to use protocol.version 2 and core.autocrlf false
+      settings:
+        TestScript: return $false
+        GetScript:  return $false
+        SetScript: |
+          git config --global core.autocrlf false
+          git config --global protocol.version 2
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: msys-winsymlinks
+      directives:
+        description: set MSYS=winsymlinks:nativestrict so Git-Bash/MSYS2 tar creates native symlinks when unpacking tarballs (requires Developer Mode, enabled by the admin step)
+      settings:
+        TestScript: '[System.Environment]::GetEnvironmentVariable("MSYS", "User") -eq "winsymlinks:nativestrict"'
+        GetScript:  '[System.Environment]::GetEnvironmentVariable("MSYS", "User") -eq "winsymlinks:nativestrict"'
+        SetScript:  '[System.Environment]::SetEnvironmentVariable("MSYS", "winsymlinks:nativestrict", "User")'
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: autogensnippet
+      dependsOn:
+        - codir
+      directives:
+        description: create an autogen.input snippet with some sensible defaults
+      settings:
+        TestScript: Test-Path -Path "$env:USERPROFILE/co/autogen.input"
+        GetScript:  Test-Path -Path "$env:USERPROFILE/co/autogen.input"
+        SetScript: |
+          New-Item -Path "$env:USERPROFILE/co" -Name "autogen.input" -ItemType "file" -Value "--with-distro=CODAWindows
+          # adjust to your needs - the build options come from distro-configs/CODAWindows.conf
+          --host=x86_64-pc-cygwin
+          #--host=i686-pc-cygwin
+          --with-external-tar=$env:USERPROFILE\co\co-externaltar
+          --with-strawberry-perl-portable=$env:USERPROFILE\co\spp
+          #--disable-dependency-tracking
+          #--enable-dbgutil
+          #--with-lang=fr ja
+          "
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: msys2-packages
+      directives:
+        description: install the MSYS2 packages the engine and online configure steps and the browser bundle need (autotools, flex, bison, gperf, nasm, zip, gettext, python with lxml and polib)
+      settings:
+        TestScript: |
+          C:\msys64\usr\bin\bash.exe -lc 'command -v autoconf && command -v aclocal && command -v libtoolize && command -v m4 && command -v make && command -v flex && command -v bison && command -v gperf && command -v nasm && command -v zip && command -v unzip && command -v msgfmt && command -v gcc && test -f /usr/share/aclocal/pkg.m4 && python3 -c "import lxml, polib"' > $null 2>&1
+          return ![bool]$LASTEXITCODE
+        GetScript: |
+          C:\msys64\usr\bin\bash.exe -lc 'command -v autoconf' > $null 2>&1
+          return ![bool]$LASTEXITCODE
+        SetScript: |
+          C:\msys64\usr\bin\bash.exe -lc 'pacman -S --noconfirm --needed autoconf automake libtool m4 make gcc bison flex gperf nasm zip unzip gettext gettext-devel patch pkgconf python python-lxml python-pip perl && python3 -m pip install --break-system-packages polib'
+  configurationVersion: 0.2.0

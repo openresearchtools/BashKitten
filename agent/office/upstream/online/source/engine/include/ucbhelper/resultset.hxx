@@ -1,0 +1,437 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_UCBHELPER_RESULTSET_HXX
+#define INCLUDED_UCBHELPER_RESULTSET_HXX
+
+#include <config_options.h>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/ucb/XContentAccess.hpp>
+#include <com/sun/star/sdbc/XResultSet.hpp>
+#include <com/sun/star/sdbc/XResultSetMetaDataSupplier.hpp>
+#include <com/sun/star/sdbc/XRow.hpp>
+#include <com/sun/star/sdbc/XCloseable.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+
+#include <rtl/ref.hxx>
+#include <salhelper/simplereferenceobject.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <ucbhelper/ucbhelperdllapi.h>
+#include <memory>
+#include <mutex>
+
+namespace cpo::uno { class XComponentContext; }
+namespace com::sun::star::ucb { class XCommandEnvironment; }
+
+namespace ucbhelper {
+
+
+inline constexpr OUString RESULTSET_SERVICE_NAME = u"com.sun.star.ucb.ContentResultSet"_ustr;
+
+
+class ResultSetDataSupplier;
+struct ResultSet_Impl;
+
+/**
+ * This is an implementation of the service com.sun.star.ucb.ContentResultSet.
+ * It can be used to implement the method XDynamicResultSet::getStaticResultSet,
+ * which needs to be implemented for instance to implement the command "open"
+ * at folder objects. This class uses a user supplied ResultSetDataSupplier
+ * object to request data on demand.
+ *
+ * @see ResultSetDataSupplier
+ */
+class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) ResultSet final :
+                public cppu::WeakImplHelper<
+                    css::lang::XServiceInfo,
+                    css::lang::XComponent,
+                    css::ucb::XContentAccess,
+                    css::sdbc::XResultSet,
+                    css::sdbc::XResultSetMetaDataSupplier,
+                    css::sdbc::XRow,
+                    css::sdbc::XCloseable,
+                    css::beans::XPropertySet>
+{
+    std::unique_ptr<ResultSet_Impl> m_pImpl;
+
+public:
+    /**
+      * Construction.
+      *
+      * @param rxSMgr is a Service Manager.
+      * @param rProperties is a sequence of properties for that the resultset
+      *        shall be able to obtain the values.
+      * @param rDataSupplier is a supplier for the resultset data.
+      */
+    UCBHELPER_DLLPUBLIC ResultSet(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+            const cpo::uno::Sequence< css::beans::Property >& rProperties,
+            const rtl::Reference< ResultSetDataSupplier >& rDataSupplier );
+    /**
+      * Construction.
+      *
+      * @param rxSMgr is a Service Manager.
+      * @param rProperties is a sequence of properties for that the resultset
+      *        shall be able to obtain the values.
+      * @param rDataSupplier is a supplier for the resultset data.
+      * @param rxEnv is the environment for interactions, progress propagation,
+      *        ...
+      */
+    UCBHELPER_DLLPUBLIC ResultSet(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+            const cpo::uno::Sequence< css::beans::Property >& rProperties,
+            const rtl::Reference< ResultSetDataSupplier >& rDataSupplier,
+            const cpo::uno::Reference< css::ucb::XCommandEnvironment >& rxEnv );
+    virtual ~ResultSet() override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XComponent
+    virtual void
+    dispose() override;
+    virtual void
+    addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
+    virtual void
+    removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& Listener ) override;
+
+    // XContentAccess
+    virtual OUString
+    queryContentIdentifierString() override;
+    virtual cpo::uno::Reference< css::ucb::XContentIdentifier >
+    queryContentIdentifier() override;
+    virtual cpo::uno::Reference< css::ucb::XContent >
+    queryContent() override;
+
+    // XResultSetMetaDataSupplier
+    virtual cpo::uno::Reference< css::sdbc::XResultSetMetaData >
+    getMetaData() override;
+
+    // XResultSet
+    virtual bool
+    next() override;
+    virtual bool
+    isBeforeFirst() override;
+    virtual bool
+    isAfterLast() override;
+    virtual bool
+    isFirst() override;
+    virtual bool
+    isLast() override;
+    virtual void
+    beforeFirst() override;
+    virtual void
+    afterLast() override;
+    virtual bool
+    first() override;
+    virtual bool
+    last() override;
+    virtual sal_Int32
+    getRow() override;
+    virtual bool
+    absolute( sal_Int32 row ) override;
+    virtual bool
+    relative( sal_Int32 rows ) override;
+    virtual bool
+    previous() override;
+    virtual void
+    refreshRow() override;
+    virtual bool
+    rowUpdated() override;
+    virtual bool
+    rowInserted() override;
+    virtual bool
+    rowDeleted() override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
+    getStatement() override;
+
+    // XRow
+    virtual bool
+    wasNull() override;
+    virtual OUString
+    getString( sal_Int32 columnIndex ) override;
+    virtual bool
+    getBoolean( sal_Int32 columnIndex ) override;
+    virtual sal_Int8
+    getByte( sal_Int32 columnIndex ) override;
+    virtual sal_Int16
+    getShort( sal_Int32 columnIndex ) override;
+    virtual sal_Int32
+    getInt( sal_Int32 columnIndex ) override;
+    virtual sal_Int64
+    getLong( sal_Int32 columnIndex ) override;
+    virtual float
+    getFloat( sal_Int32 columnIndex ) override;
+    virtual double
+    getDouble( sal_Int32 columnIndex ) override;
+    virtual cpo::uno::Sequence< sal_Int8 >
+    getBytes( sal_Int32 columnIndex ) override;
+    virtual css::util::Date
+    getDate( sal_Int32 columnIndex ) override;
+    virtual css::util::Time
+    getTime( sal_Int32 columnIndex ) override;
+    virtual css::util::DateTime
+    getTimestamp( sal_Int32 columnIndex ) override;
+    virtual cpo::uno::Reference<
+                css::io::XInputStream >
+    getBinaryStream( sal_Int32 columnIndex ) override;
+    virtual cpo::uno::Reference<
+                css::io::XInputStream >
+    getCharacterStream( sal_Int32 columnIndex ) override;
+    virtual cpo::uno::Any
+    getObject( sal_Int32 columnIndex,
+               const cpo::uno::Reference< css::container::XNameAccess >& typeMap ) override;
+    virtual cpo::uno::Reference< css::sdbc::XRef >
+    getRef( sal_Int32 columnIndex ) override;
+    virtual cpo::uno::Reference<
+                css::sdbc::XBlob >
+    getBlob( sal_Int32 columnIndex ) override;
+    virtual cpo::uno::Reference< css::sdbc::XClob >
+    getClob( sal_Int32 columnIndex ) override;
+    virtual cpo::uno::Reference< css::sdbc::XArray >
+    getArray( sal_Int32 columnIndex ) override;
+
+    // XCloseable
+    virtual void
+    close() override;
+
+    // XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+    getPropertySetInfo() override;
+    virtual void
+    setPropertyValue( const OUString& aPropertyName,
+                      const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any
+    getPropertyValue( const OUString& PropertyName ) override;
+    virtual void
+    addPropertyChangeListener( const OUString& aPropertyName,
+                               const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void
+    removePropertyChangeListener( const OUString& aPropertyName,
+                                  const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void
+    addVetoableChangeListener( const OUString& PropertyName,
+                               const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void
+    removeVetoableChangeListener( const OUString& PropertyName,
+                                  const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+
+
+    // Non-interface methods.
+
+
+    /**
+      * This method propagates property value changes to all registered
+      * listeners.
+      *
+      * @param rEvt is a property change event.
+      */
+    void propertyChanged(std::unique_lock<std::mutex>& rGuard,
+                const css::beans::PropertyChangeEvent& rEvt ) const;
+
+    /**
+      * This method should be called by the data supplier for the result set
+      * to indicate that there were new data obtained from the data source.
+      *
+      * @param nOld is the old count of rows; must be non-negative.
+      * @param nnew is the new count of rows; must be non-negative.
+      */
+    UCBHELPER_DLLPUBLIC void rowCountChanged( std::unique_lock<std::mutex>& rResultSetGuard, sal_uInt32 nOld, sal_uInt32 nNew );
+
+    /**
+      * This method should be called by the data supplier for the result set
+      * to indicate that there were all rows obtained from the data source.
+      */
+    UCBHELPER_DLLPUBLIC void rowCountFinal(std::unique_lock<std::mutex>& rResultSetGuard);
+
+    /**
+      * This method returns a sequence containing all properties ( not the
+      * values! ) of the result set.
+      *
+      * @return a sequence of properties.
+      */
+    UCBHELPER_DLLPUBLIC const cpo::uno::Sequence< css::beans::Property >&
+    getProperties() const;
+
+    /**
+      * This method returns the environment to use for interactions, progress
+      * propagation, ... It can by empty.
+      *
+      * @return an environment or an empty reference.
+      */
+    UCBHELPER_DLLPUBLIC const cpo::uno::Reference< css::ucb::XCommandEnvironment >&
+    getEnvironment() const;
+};
+
+
+/**
+ * This is the base class for an object that supplies data to a result set
+ *
+ * @see ResultSet
+ */
+class ResultSetDataSupplier : public salhelper::SimpleReferenceObject
+{
+    friend class ResultSet;
+
+    // No ref, otherwise we get a cyclic reference between supplier and set!
+    // Will be set from ResultSet ctor.
+    ResultSet* m_pResultSet;
+
+public:
+    ResultSetDataSupplier() : m_pResultSet( nullptr ) {}
+
+    /**
+     * This method returns the resultset this supplier belongs to.
+     *
+     * @return the resultset for that the supplier supplies data.
+     */
+    ResultSet* getResultSet() const { return m_pResultSet; }
+
+    /**
+     * This method returns the identifier string of the content at the
+     * specified index.
+     *
+     * @param nIndex is the zero-based index within the logical data array
+     *               of the supplier; must be non-negative.
+     * @return the content's identifier string.
+     */
+    virtual OUString queryContentIdentifierString( std::unique_lock<std::mutex>& rResultSetGuard, sal_uInt32 nIndex ) = 0;
+
+    /**
+     * This method returns the identifier of the content at the specified index.
+     *
+     * @param nIndex is the zero-based index within the logical data array
+     *               of the supplier; must be non-negative.
+     * @return the content's identifier.
+     */
+    virtual cpo::uno::Reference< css::ucb::XContentIdentifier >
+    queryContentIdentifier( std::unique_lock<std::mutex>& rResultSetGuard, sal_uInt32 nIndex ) = 0;
+
+    /**
+     * This method returns the content at the specified index.
+     *
+     * @param nIndex is the zero-based index within the logical data array
+     *               of the supplier; must be non-negative.
+     * @return the content.
+     */
+    virtual cpo::uno::Reference< css::ucb::XContent >
+    queryContent( std::unique_lock<std::mutex>& rResultSetGuard, sal_uInt32 nIndex ) = 0;
+
+    /**
+     * This method returns whether there is a content at the specified index.
+     *
+     * @param nIndex is the zero-based index within the logical data array
+     *               of the supplier; must be non-negative.
+     * @return true, if there is a content at the given index.
+     */
+    virtual bool getResult( std::unique_lock<std::mutex>& rResultSetGuard, sal_uInt32 nIndex ) = 0;
+
+    /**
+     * This method returns the total count of objects in the logical data array
+     * of the supplier. The implementation of this method may be very
+     * "expensive", because it can be necessary to obtain all data in order
+     * to determine the count. Therefore the ResultSet implementation calls
+     * it very seldom.
+     *
+     * @return the total count of objects; will always be non-negative.
+     */
+    virtual sal_uInt32 totalCount(std::unique_lock<std::mutex>& rResultSetGuard) = 0;
+
+    /**
+     * This method returns the count of objects obtained so far. There is no
+     * for the implementation to obtain all objects at once. It can obtain
+     * all data on demand.
+     *
+     * The implementation should call m_pResultSet->rowCountChanged(...)
+     * every time it has inserted a new entry in its logical result array.
+     *
+     * @return the count of objects obtained so far; will always be
+     * non-negative.
+     */
+    virtual sal_uInt32 currentCount() = 0;
+
+    /**
+     * This method returns whether the value returned by currentCount() is
+     * "final". This is the case, if that there was all data obtained by the
+     * supplier and the current count won't increase any more.
+     *
+     * The implementation should call m_pResultSet->rowCountFinal(...) if
+     * it has inserted all entries in its logical result array.
+     *
+     * @return true, if the value returned by currentCount() won't change
+               anymore.
+     */
+    virtual bool isCountFinal() = 0;
+
+    /**
+     * This method returns an object for accessing the property values at
+     * the specified index. The implementation may use the helper class
+     * ucb::PropertyValueSet to provide the return value.
+     *
+     * @param nIndex is the zero-based index within the logical data array
+     *               of the supplier.
+     * @return the object for accessing the property values.
+     */
+    virtual cpo::uno::Reference< css::sdbc::XRow >
+    queryPropertyValues( std::unique_lock<std::mutex>& rResultSetGuard, sal_uInt32 nIndex  ) = 0;
+
+    /**
+     * This method is called to instruct the supplier to release the (possibly
+     * present) property values at the given index.
+     *
+     * @param nIndex is the zero-based index within the logical data array
+     *               of the supplier.
+     */
+    virtual void releasePropertyValues( sal_uInt32 nIndex ) = 0;
+
+    /**
+     * This method will be called by the resultset implementation in order
+     * to instruct the data supplier to release all resources it has
+     * allocated so far. In case the supplier is collecting data
+     * asynchronously, that process must be stopped.
+     */
+    virtual void close() = 0;
+
+    /**
+     * This method will be called by the resultset implementation in order
+     * check, whether an error has occurred while collecting data. The
+     * implementation of this method must throw an exception in that case.
+     *
+     * Note: An exception thrown to indicate an error must always be thrown
+     * by the thread that created the data supplier. If the supplier collects
+     * data asynchronously ( i.e. in a separate thread ) and an error
+     * occurs, throwing of the appropriate exception must be deferred
+     * until validate() is called by the ResultSet implementation from
+     * inside the main thread.
+     * In case data are obtained synchronously, the ResultSetException can
+     * be thrown directly.
+     *
+     * @exception ResultSetException thrown, if an error has occurred
+     */
+    virtual void validate() = 0;
+};
+
+}
+
+#endif /* ! INCLUDED_UCBHELPER_RESULTSET_HXX */
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

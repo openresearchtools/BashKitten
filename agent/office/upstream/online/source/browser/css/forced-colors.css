@@ -1,0 +1,177 @@
+@media (forced-colors: active) {
+
+	/* Active notebookbar tab: box-shadow is stripped, use border-bottom */
+	.ui-tab.selected.notebookbar,
+	.main-nav.hasnotebookbar .ui-tabs > .ui-tab.selected.notebookbar {
+		border: 2px solid Highlight !important;
+		box-shadow: none !important;
+		background-color: Highlight !important;
+	}
+
+	.ui-tab.selected.notebookbar:hover {
+		box-shadow: none !important;
+		border-bottom: 3px solid Highlight !important
+	}
+
+	.ui-tab.notebookbar:hover {
+		box-shadow: none !important;
+		border-bottom: 3px solid ButtonBorder !important
+	}
+
+	/* Preserve SVG toolbar icons */
+	.unobutton img,
+	.savemodified.unotoolbutton .unobutton img,
+	.StyleListPanel #TemplatePanel button,
+	.document-logo,
+	.ui-tabs-content .unobutton > img,
+	.unotoolbutton.notebookbar .unobutton > img,
+	.ui-dialog-titlebar-close,
+	.unotoolbutton img,
+	.formulabar.ui-pushbutton,
+	.formulabar .unobutton,
+	#formulabar-buttons-toolbox .unobutton {
+		forced-color-adjust: none;
+		background-color: #e9e9ed !important;
+	}
+
+	/* Restore native checkboxes (OS renders in user's HC colors) */
+	input[type='checkbox'].autofilter,
+	.jsdialog input[type='checkbox'] {
+		appearance: auto !important;
+		background: none !important
+	}
+
+	/* Shortcuts buttons: small save icon etc */
+	.notebookbar-shortcuts-bar .unotoolbutton.notebookbar .unobutton {
+		forced-color-adjust: auto;
+	}
+
+	/* Dropdown arrows */
+	.unoarrow, .menubutton .arrow, .ui-listbox-arrow {
+		forced-color-adjust: none;
+		border-top-color: ButtonText !important;
+	}
+
+	/* Restore original Sidebar expanders */
+	.ui-expander-label.expanded::before,
+	.ui-treeview-expandable > div > .ui-treeview-expander::before,
+	.ui-treeview div[aria-expanded] > div > .ui-treeview-expander::before {
+		forced-color-adjust: none;
+		filter: none;
+	}
+
+	/* Color picker swatches and selected-color indicator */
+	.ui-color-picker-entry,
+	.unotoolbutton .selected-color {
+		forced-color-adjust: none;
+	}
+
+	/* Styles sidebar: specificity boost over [id] button rules */
+	.StyleListPanel #TemplatePanel [id] button {
+		forced-color-adjust: none;
+		background-color: #e9e9ed;
+	}
+
+	/* Style preview images in sidebar treeview */
+	.StyleListPanel .ui-treeview-entry img {
+		forced-color-adjust: none;
+	}
+
+	/* Comment/annotation action buttons (SVG background icons) */
+	.cool-annotation-menu,
+	.cool-annotation-menu-redline,
+	.cool-annotation-menu-edit,
+	.cool-redline-accept-button,
+	.cool-redline-reject-button {
+		forced-color-adjust: none;
+		background-color: #e9e9ed !important;
+	}
+
+	/* Overflow popup icons */
+	.ui-overflow-group-popup .unobutton > img {
+		forced-color-adjust: none;
+		background-color: #e9e9ed;
+	}
+
+	/* Cleanup deck: the badge on a row says what it is through a background colour, which
+	   forced colours drops, so it gets a border of a system colour and still reads as a
+	   shape. */
+	.cleanup-row-saving {
+		border: 1px solid ButtonBorder;
+	}
+
+	/* Dark mode: invert hardcoded light backgrounds for icon visibility */
+	[data-theme='dark'] .unobutton img,
+	[data-theme='dark'] .savemodified.unotoolbutton .unobutton img,
+	[data-theme='dark'] .StyleListPanel #TemplatePanel button,
+	[data-theme='dark'] .document-logo,
+	[data-theme='dark'] .ui-tabs-content .unobutton > img,
+	[data-theme='dark'] .unotoolbutton.notebookbar .unobutton > img,
+	[data-theme='dark'] .StyleListPanel #TemplatePanel [id] button,
+	[data-theme='dark'] .ui-overflow-group-popup .unobutton > img,
+	[data-theme='dark'] .ui-dialog-titlebar-close,
+	[data-theme='dark'] .unotoolbutton img,
+	[data-theme='dark'] .formulabar.ui-pushbutton,
+	[data-theme='dark'] .formulabar .unobutton,
+	[data-theme='dark'] #formulabar-buttons-toolbox .unobutton {
+		background-color: #1E1E1E !important;
+	}
+
+	[data-theme='dark'] .cool-annotation-menu,
+	[data-theme='dark'] .cool-annotation-menu-redline,
+	[data-theme='dark'] .cool-annotation-menu-edit,
+	[data-theme='dark'] .cool-redline-accept-button,
+	[data-theme='dark'] .cool-redline-reject-button {
+		background-color: #1E1E1E !important;
+	}
+
+	/* Dark mode: restore brightness for sidebar expanders (filter: none
+	   overrides dark mode's brightness(1), leaving dark chevron on dark bg) */
+	[data-theme='dark'] .ui-expander-label.expanded::before,
+	[data-theme='dark'] .ui-treeview-expandable > div > .ui-treeview-expander::before,
+	[data-theme='dark'] .ui-treeview div[aria-expanded] > div > .ui-treeview-expander::before {
+		filter: brightness(1);
+	}
+
+	/* The close icon is a background image, so keeping it keeps its own colour
+	   on the user's background. Paint it as a mask in their button colour. */
+	.close-navigation-button,
+	[data-theme='dark'] .close-navigation-button {
+		forced-color-adjust: none;
+		background-image: none;
+		background-color: ButtonText !important;
+		-webkit-mask: url('images/closedoc.svg') no-repeat center / contain;
+		mask: url('images/closedoc.svg') no-repeat center / contain;
+	}
+
+	/* An icon that published its URL can be recoloured, so it takes the palette
+	   instead of the plate above, which is for the ones that cannot. */
+	.unotoolbutton img.icon-maskable,
+	.unobutton img.icon-maskable,
+	.ui-tabs-content .unobutton > img.icon-maskable,
+	.unotoolbutton.notebookbar .unobutton > img.icon-maskable,
+	.savemodified.unotoolbutton .unobutton img.icon-maskable {
+		forced-color-adjust: none;
+		content: linear-gradient(transparent, transparent);
+		background-color: ButtonText !important;
+		-webkit-mask: var(--icon-url) no-repeat center / contain;
+		mask: var(--icon-url) no-repeat center / contain;
+	}
+
+	/* The submenu arrow is a mask painted in background-color, and the colour
+	   forced on that property is the surface it sits on, so it vanishes. */
+	.ui-combobox-entry.ui-has-menu::after {
+		forced-color-adjust: none;
+		background-color: CanvasText !important;
+	}
+
+	.ui-progressdots-dot {
+		forced-color-adjust: none;
+		background-color: CanvasText;
+	}
+
+	.ui-progressdots-dot.ui-progressdots-current {
+		background-color: Highlight;
+	}
+
+}

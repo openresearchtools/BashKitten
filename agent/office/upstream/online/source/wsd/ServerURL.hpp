@@ -1,0 +1,129 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * URL construction and manipulation for server endpoints.
+ * Classes: ServerURL
+ */
+
+#pragma once
+
+#include <string>
+#include <net/Uri.hpp>
+#include <wsd/RequestDetails.hpp>
+#include <wsd/COOLWSD.hpp>
+
+/** This class helps us to build a URL that will reliably point back
+ * at our service. It does very simple splitting of proxy URL
+ * and handles the proxy prefix feature.
+ */
+class ServerURL
+{
+    std::string _schemeAuthority;
+    std::string _pathPlus;
+    bool        _ssl;
+    bool        _websocket;
+public:
+    ServerURL(const RequestDetails &requestDetails)
+    {
+        init(requestDetails.getHostUntrusted(),
+             requestDetails.getProxyPrefix());
+    }
+
+    explicit ServerURL()
+    {
+        init("nohostname", "");
+    }
+
+    void init(const std::string &host, const std::string &proxyPrefix)
+    {
+        // The user can override the ServerRoot with a new prefix.
+        _pathPlus = COOLWSD::ServiceRoot;
+
+        _ssl = (ConfigUtil::isSslEnabled() || ConfigUtil::isSSLTermination());
+        _websocket = true;
+        _schemeAuthority = COOLWSD::ServerName.empty() ? host : COOLWSD::ServerName;
+
+        // A well formed ProxyPrefix will override it.
+        applyProxyPrefix(proxyPrefix);
+
+        sanitizeAuthority();
+    }
+
+private:
+    void applyProxyPrefix(const std::string& url)
+    {
+        if (url.empty())
+            return;
+
+        std::size_t pos = url.find("://");
+        if (pos != std::string::npos) {
+            pos += 3;
+            auto hostEndPos = url.find('/', pos);
+            if (hostEndPos != std::string::npos)
+            {
+                _websocket = false;
+                std::string schemeProtocol = url.substr(0, pos);
+                _ssl = (schemeProtocol != "http://");
+                _schemeAuthority = url.substr(pos, hostEndPos - pos);
+                _pathPlus = url.substr(hostEndPos);
+            }
+            else
+                LOG_ERR("Unusual proxy prefix '" << url << '\'');
+        } else
+            LOG_ERR("No http[s]:// in unusual proxy prefix '" << url << '\'');
+    }
+
+    /// Every URL we build points at this authority, so a port nothing can connect to breaks all of
+    /// them. Some reverse proxies report port -1 in the ProxyPrefix or in the Host header when the
+    /// browser sends no explicit port. Drop such a port and let the default port of the scheme
+    /// apply instead.
+    void sanitizeAuthority()
+    {
+        const std::string original = _schemeAuthority;
+        if (net::stripInvalidPort(_schemeAuthority))
+            LOG_WRN("Stripped invalid port from authority [" << original << "], using ["
+                                                             << _schemeAuthority << ']');
+    }
+
+public:
+    const std::string& getResponseRoot() const
+    {
+        return _pathPlus;
+    }
+
+    std::string getWebSocketUrl() const
+    {
+        std::string schemeProtocol = (_websocket ? "ws" : "http");
+        if (_ssl)
+            schemeProtocol += 's';
+        return schemeProtocol + "://" + _schemeAuthority;
+    }
+
+    std::string getWebServerUrl() const
+    {
+        std::string schemeProtocol = "http";
+        if (_ssl)
+            schemeProtocol += 's';
+        return schemeProtocol + "://" + _schemeAuthority;
+    }
+
+    std::string getSubURLForEndpoint(const std::string &path) const
+    {
+#if MOBILEAPP
+        return std::string("cool:") + _pathPlus + path;
+#else
+        return std::string("http") + (_ssl ? "s" : "") + "://" + _schemeAuthority + _pathPlus + path;
+#endif
+    }
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

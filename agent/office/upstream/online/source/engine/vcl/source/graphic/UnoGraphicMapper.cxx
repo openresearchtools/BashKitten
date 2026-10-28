@@ -1,0 +1,88 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <cpo/uno/XComponentContext.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/graphic/XGraphicMapper.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <comphelper/unique_disposing_ptr.hxx>
+
+#include <memory>
+#include <unordered_map>
+
+using namespace css;
+using namespace ::cpo;
+
+namespace
+{
+class GraphicMapper : public cppu::WeakImplHelper<graphic::XGraphicMapper, lang::XServiceInfo>
+{
+private:
+    std::unordered_map<OUString, uno::Reference<graphic::XGraphic>> maGraphicMap;
+
+public:
+    GraphicMapper() = default;
+
+protected:
+    // XServiceInfo
+    OUString getImplementationName() override
+    {
+        return u"com.sun.star.comp.graphic.GraphicMapper"_ustr;
+    }
+    bool supportsService(const OUString& ServiceName) override
+    {
+        return cppu::supportsService(this, ServiceName);
+    }
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override
+    {
+        return { u"com.sun.star.graphic.GraphicMapper"_ustr };
+    }
+
+    // XTypeProvider
+    cpo::uno::Sequence<cpo::uno::Type> getTypes() override
+    {
+        static const cpo::uno::Sequence<cpo::uno::Type> aTypes{
+            cppu::UnoType<lang::XServiceInfo>::get(), cppu::UnoType<lang::XTypeProvider>::get(),
+            cppu::UnoType<graphic::XGraphicMapper>::get()
+        };
+        return aTypes;
+    }
+    cpo::uno::Sequence<sal_Int8> getImplementationId() override
+    {
+        return cpo::uno::Sequence<sal_Int8>();
+    }
+
+    // XGraphicMapper
+    cpo::uno::Reference<css::graphic::XGraphic> findGraphic(const OUString& rId) override
+    {
+        auto aIterator = maGraphicMap.find(rId);
+
+        if (aIterator == maGraphicMap.end())
+            return cpo::uno::Reference<css::graphic::XGraphic>();
+
+        return aIterator->second;
+    }
+    void putGraphic(const OUString& rId,
+                             cpo::uno::Reference<css::graphic::XGraphic> const& rGraphic) override
+    {
+        maGraphicMap.emplace(rId, rGraphic);
+    }
+};
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_graphic_GraphicMapper_get_implementation(cpo::uno::XComponentContext*,
+                                                           cpo::uno::Sequence<cpo::uno::Any> const&)
+{
+    return cppu::acquire(new GraphicMapper);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

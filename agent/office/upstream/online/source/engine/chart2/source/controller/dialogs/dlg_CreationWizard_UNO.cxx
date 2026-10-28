@@ -1,0 +1,367 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <dlg_CreationWizard_UNO.hxx>
+#include <dlg_CreationWizard.hxx>
+#include <dlg_CreationWizardMobile.hxx>
+#include <KitDevice.hxx>
+#include <ChartModel.hxx>
+#include <TimerTriggeredControllerLock.hxx>
+#include <utility>
+#include <vcl/svapp.hxx>
+#include <vcl/weldutils.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <com/sun/star/awt/Point.hpp>
+#include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/frame/Desktop.hpp>
+#include <comphelper/diagnose_ex.hxx>
+#include <sfx2/viewsh.hxx>
+
+
+namespace chart
+{
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+CreationWizardUnoDlg::CreationWizardUnoDlg(uno::Reference<cpo::uno::XComponentContext> xContext)
+    : OComponentHelper(m_aMutex)
+    , m_xCC(std::move(xContext))
+    , m_bUnlockControllersOnExecute(false)
+{
+    uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create(m_xCC);
+    uno::Reference< frame::XTerminateListener > xListener( this );
+    xDesktop->addTerminateListener( xListener );
+}
+
+CreationWizardUnoDlg::~CreationWizardUnoDlg()
+{
+    SolarMutexGuard aSolarGuard;
+    m_xDialog.reset();
+}
+
+// lang::XServiceInfo
+OUString CreationWizardUnoDlg::getImplementationName()
+{
+    return u"com.sun.star.comp.chart2.WizardDialog"_ustr;
+}
+
+bool CreationWizardUnoDlg::supportsService( const OUString& rServiceName )
+{
+    return cppu::supportsService(this, rServiceName);
+}
+
+cpo::uno::Sequence< OUString > CreationWizardUnoDlg::getSupportedServiceNames()
+{
+    return { u"com.sun.star.chart2.WizardDialog"_ustr };
+}
+
+// XInterface
+cpo::uno::Any CreationWizardUnoDlg::queryInterface( const cpo::uno::Type& aType )
+{
+    return OComponentHelper::queryInterface( aType );
+}
+void CreationWizardUnoDlg::acquire() noexcept
+{
+    OComponentHelper::acquire();
+}
+void CreationWizardUnoDlg::release() noexcept
+{
+    OComponentHelper::release();
+}
+cpo::uno::Any CreationWizardUnoDlg::queryAggregation( cpo::uno::Type const & rType )
+{
+    if (rType == cppu::UnoType<ui::dialogs::XAsynchronousExecutableDialog>::get())
+    {
+        void * p = static_cast< ui::dialogs::XAsynchronousExecutableDialog * >( this );
+        return cpo::uno::Any( &p, rType );
+    }
+    else if (rType == cppu::UnoType<lang::XServiceInfo>::get())
+    {
+        void * p = static_cast< lang::XServiceInfo * >( this );
+        return cpo::uno::Any( &p, rType );
+    }
+    else if (rType == cppu::UnoType<lang::XInitialization>::get())
+    {
+        void * p = static_cast< lang::XInitialization * >( this );
+        return cpo::uno::Any( &p, rType );
+    }
+    else if (rType == cppu::UnoType<frame::XTerminateListener>::get())
+    {
+        void * p = static_cast< frame::XTerminateListener * >( this );
+        return cpo::uno::Any( &p, rType );
+    }
+    else if (rType == cppu::UnoType<beans::XPropertySet>::get())
+    {
+        void * p = static_cast< beans::XPropertySet * >( this );
+        return cpo::uno::Any( &p, rType );
+    }
+    return OComponentHelper::queryAggregation( rType );
+}
+
+cpo::uno::Sequence< cpo::uno::Type > CreationWizardUnoDlg::getTypes()
+{
+    static cpo::uno::Sequence<cpo::uno::Type> aTypeList{ cppu::UnoType<lang::XComponent>::get(),
+                                               cppu::UnoType<lang::XTypeProvider>::get(),
+                                               cppu::UnoType<cpo::uno::XAggregation>::get(),
+                                               cppu::UnoType<cpo::uno::XWeak>::get(),
+                                               cppu::UnoType<lang::XServiceInfo>::get(),
+                                               cppu::UnoType<lang::XInitialization>::get(),
+                                               cppu::UnoType<frame::XTerminateListener>::get(),
+                                               cppu::UnoType<ui::dialogs::XAsynchronousExecutableDialog>::get(),
+                                               cppu::UnoType<beans::XPropertySet>::get() };
+    return aTypeList;
+}
+
+cpo::uno::Sequence< sal_Int8 > CreationWizardUnoDlg::getImplementationId()
+{
+    return cpo::uno::Sequence<sal_Int8>();
+}
+
+// XTerminateListener
+void CreationWizardUnoDlg::queryTermination( const lang::EventObject& /*Event*/ )
+{
+}
+
+void CreationWizardUnoDlg::notifyTermination( const lang::EventObject& /*Event*/ )
+{
+    // we are going down, so dispose us!
+    dispose();
+}
+
+void CreationWizardUnoDlg::disposing( const lang::EventObject& /*Source*/ )
+{
+    //Listener should deregister himself and release all references to the closing object.
+}
+
+void CreationWizardUnoDlg::setDialogTitle( const OUString& /*rTitle*/ )
+{
+}
+void CreationWizardUnoDlg::createDialogOnDemand()
+{
+    SolarMutexGuard aSolarGuard;
+    if (m_xDialog)
+        return;
+
+    if( !m_xParentWindow.is() && m_xChartModel.is() )
+    {
+        uno::Reference< frame::XController > xController(
+            m_xChartModel->getCurrentController() );
+        if( xController.is() )
+        {
+            uno::Reference< frame::XFrame > xFrame(
+                xController->getFrame() );
+            if(xFrame.is())
+                m_xParentWindow = xFrame->getContainerWindow();
+        }
+    }
+
+    weld::Window* pParent(Application::GetFrameWeld(m_xParentWindow));
+    if (!pParent)
+    {
+        if (weld::TransportAsXWindow* pTunnel = dynamic_cast<weld::TransportAsXWindow*>(m_xParentWindow.get()))
+            pParent = dynamic_cast<weld::Window*>(pTunnel->getWidget());
+    }
+
+    uno::Reference< XComponent > xKeepAlive( this );
+    if( m_xChartModel.is() )
+    {
+        if (isKitMobilePhone())
+            m_xDialog = std::make_shared<CreationWizardMobile>(pParent, m_xChartModel, m_xCC);
+        else
+            m_xDialog = std::make_shared<CreationWizard>(pParent, m_xChartModel, m_xCC);
+    }
+}
+
+IMPL_STATIC_LINK_NOARG(CreationWizardUnoDlg, InstallKitNotifierHdl, void*, vcl::ICOKitNotifier*)
+{
+    return SfxViewShell::Current();
+}
+
+void CreationWizardUnoDlg::startExecuteModal( const cpo::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener )
+{
+    SolarMutexGuard aSolarGuard;
+    createDialogOnDemand();
+
+    if( !m_xDialog )
+        return;
+
+    m_xDialog->getDialog()->SetInstallKitNotifierHdl(
+                                LINK(this, CreationWizardUnoDlg, InstallKitNotifierHdl));
+
+    TimerTriggeredControllerLock aTimerTriggeredControllerLock( m_xChartModel );
+    if( m_bUnlockControllersOnExecute && m_xChartModel.is() )
+        m_xChartModel->unlockControllers();
+
+    CreationWizardUnoDlg* xThat = this;
+    weld::DialogController::runAsync(m_xDialog, [xListener, xThat](sal_Int32 nResult){
+            if( xListener.is() )
+            {
+                ::cpo::uno::Reference< ::cpo::uno::XInterface > xSource;
+                // Notify UNO listener to perform correct action depending on the result
+                css::ui::dialogs::DialogClosedEvent aEvent( xSource, nResult );
+                xListener->dialogClosed( aEvent );
+            }
+            xThat->m_xDialog.reset();
+        });
+}
+
+void CreationWizardUnoDlg::initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments )
+{
+    for(const cpo::uno::Any& rArgument : aArguments)
+    {
+        beans::PropertyValue aProperty;
+        if(rArgument >>= aProperty)
+        {
+            if( aProperty.Name == "ParentWindow" )
+            {
+                aProperty.Value >>= m_xParentWindow;
+            }
+            else if( aProperty.Name == "ChartModel" )
+            {
+                uno::Reference<XInterface> xInt;
+                aProperty.Value >>= xInt;
+                m_xChartModel = dynamic_cast<::chart::ChartModel*>(xInt.get());
+                assert(m_xChartModel);
+            }
+        }
+    }
+}
+
+// ____ OComponentHelper ____
+/// Called in dispose method after the listeners were notified.
+void CreationWizardUnoDlg::disposing()
+{
+    m_xChartModel.clear();
+    m_xParentWindow.clear();
+
+    SolarMutexGuard aSolarGuard;
+    m_xDialog.reset();
+
+    try
+    {
+        uno::Reference< frame::XDesktop > xDesktop = frame::Desktop::create(m_xCC);
+        uno::Reference< frame::XTerminateListener > xListener( this );
+        xDesktop->removeTerminateListener( xListener );
+    }
+    catch( const cpo::uno::Exception & )
+    {
+        DBG_UNHANDLED_EXCEPTION("chart2");
+    }
+}
+
+//XPropertySet
+uno::Reference< beans::XPropertySetInfo > CreationWizardUnoDlg::getPropertySetInfo()
+{
+    OSL_FAIL("not implemented");
+    return nullptr;
+}
+
+void CreationWizardUnoDlg::setPropertyValue(const OUString& rPropertyName,
+                                                     const cpo::uno::Any& rValue)
+{
+    if( rPropertyName == "Position" )
+    {
+        SolarMutexGuard aSolarGuard;
+        createDialogOnDemand();
+
+        //read only property, do nothing else
+    }
+    else if( rPropertyName == "Size")
+    {
+        //read only property, do nothing
+    }
+    else if( rPropertyName == "UnlockControllersOnExecute" )
+    {
+        if( ! (rValue >>= m_bUnlockControllersOnExecute) )
+            throw lang::IllegalArgumentException( u"Property 'UnlockControllers' requires value of type boolean"_ustr , nullptr, 0 );
+    }
+    else
+        throw beans::UnknownPropertyException( u"unknown property was tried to set to chart wizard"_ustr , nullptr );
+}
+
+cpo::uno::Any CreationWizardUnoDlg::getPropertyValue( const OUString& rPropertyName )
+{
+    cpo::uno::Any aRet;
+    if( rPropertyName == "Position" )
+    {
+        //get left upper outer corner relative to screen
+        //pixels, screen position
+        SolarMutexGuard aSolarGuard;
+        createDialogOnDemand();
+        if (m_xDialog)
+        {
+            Point aPos(m_xDialog->getDialog()->get_position());
+            awt::Point aPoint(aPos.X(), aPos.Y());
+            aRet <<= aPoint;
+        }
+    }
+    else if( rPropertyName == "Size" )
+    {
+        //get outer size inclusive decoration
+        //pixels, screen position
+        SolarMutexGuard aSolarGuard;
+        createDialogOnDemand();
+        if (m_xDialog)
+        {
+            Size aRect(m_xDialog->getDialog()->get_size());
+            awt::Size aSize(aRect.Width(), aRect.Height());
+            aRet <<= aSize;
+        }
+    }
+    else if( rPropertyName == "UnlockControllersOnExecute" )
+    {
+        aRet <<= m_bUnlockControllersOnExecute;
+    }
+    else
+        throw beans::UnknownPropertyException( u"unknown property was tried to get from chart wizard"_ustr , nullptr );
+    return aRet;
+}
+
+void CreationWizardUnoDlg::addPropertyChangeListener(
+        const OUString& /* aPropertyName */, const uno::Reference< beans::XPropertyChangeListener >& /* xListener */ )
+{
+    OSL_FAIL("not implemented");
+}
+void CreationWizardUnoDlg::removePropertyChangeListener(
+    const OUString& /* aPropertyName */, const uno::Reference< beans::XPropertyChangeListener >& /* aListener */ )
+{
+    OSL_FAIL("not implemented");
+}
+
+void CreationWizardUnoDlg::addVetoableChangeListener( const OUString& /* PropertyName */, const uno::Reference< beans::XVetoableChangeListener >& /* aListener */ )
+{
+    OSL_FAIL("not implemented");
+}
+
+void CreationWizardUnoDlg::removeVetoableChangeListener( const OUString& /* PropertyName */, const uno::Reference< beans::XVetoableChangeListener >& /* aListener */ )
+{
+    OSL_FAIL("not implemented");
+}
+
+} //namespace chart
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_chart2_WizardDialog_get_implementation(cpo::uno::XComponentContext *context,
+                                                         cpo::uno::Sequence<cpo::uno::Any> const &)
+{
+    return cppu::acquire(new chart::CreationWizardUnoDlg(context));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

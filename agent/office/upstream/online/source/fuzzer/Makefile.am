@@ -1,0 +1,343 @@
+#
+# Copyright the Collabora Online contributors.
+#
+# SPDX-License-Identifier: MPL-2.0
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+
+MAINTAINERCLEANFILES = Makefile.in
+
+common_fuzzer_sources = \
+                       Common.cpp \
+                       ../wsd/coolwsd-inproc.cpp \
+                       ../wsd/KitWSDGlobals.cpp
+
+include_paths = -I${top_srcdir}/common -I${top_srcdir}/net -I${top_srcdir}/wsd -I${top_srcdir}/kit ${ZLIB_CFLAGS} ${ZSTD_CFLAGS} ${PNG_CFLAGS}
+if ENABLE_SSL
+include_paths += ${OPENSSL_CFLAGS}
+endif
+
+AM_CPPFLAGS = -pthread \
+              ${include_paths}
+if !ENABLE_DEBUG
+AM_CPPFLAGS += -DNDEBUG
+endif
+
+# In the server build ${PNG_LIBS} / $(ZSTD_LIBS) are the engine's static
+# liblibpng.a / libzstd.a (system shared libraries in the Flatpak and Snap
+# builds).  The static libpng pulls in zlib symbols, so it must precede
+# $(ZLIB_LIBS) on the link line for the linker to resolve them.
+AM_LDFLAGS = ${PNG_LIBS} $(ZSTD_LIBS) $(ZLIB_LIBS)
+if !ENABLE_MACOS
+AM_LDFLAGS += -Wl,-E
+endif
+if !HAVE_CLANG
+AM_LDFLAGS += -pthread
+endif
+if ENABLE_SSL
+AM_LDFLAGS += ${OPENSSL_LIBS}
+endif
+
+if ENABLE_FUZZERS
+
+noinst_PROGRAMS = \
+                  admin_fuzzer \
+                  clientrequest_fuzzer \
+                  clientsession_fuzzer \
+                  collab_fuzzer \
+                  httpresponse_fuzzer \
+                  httpecho_fuzzer
+
+# Ignore list that suppresses the libstdc++ make_shared / _Sp_counted_ptr_inplace
+# ::_M_ptr() cfi-unrelated-cast false positive (see cfi-ignore.txt). Applied by the
+# frontend independently of -fsanitize ordering, so it survives afl-clang-fast's
+# AFL_USE_CFISAN=1 injection of a trailing -fsanitize=cfi (which the plain
+# -fno-sanitize=... below cannot, as the last -f*sanitize token wins).
+CFI_IGNORELIST_FLAGS = -fsanitize-ignorelist=$(srcdir)/cfi-ignore.txt
+
+# CFI for the libFuzzer build (see comment near ENV_san for details).
+if ENABLE_FUZZER_LTO
+LIBFUZZER_CFI_FLAGS = -fsanitize=cfi -fno-sanitize=cfi-derived-cast,cfi-unrelated-cast \
+                      -flto -fvisibility=hidden -fno-sanitize-trap=cfi \
+                      $(CFI_IGNORELIST_FLAGS)
+endif
+LIBFUZZER_CXXFLAGS_COMMON = $(AM_CXXFLAGS) $(LIBFUZZER_CFI_FLAGS)
+
+# Pull in code produced by gbuild already: the static libraries.
+GBUILD_SHARED_LIB = $(ENGINE_BUILDDIR)/workdir/LinkTarget/StaticLibrary/libshared.a
+GBUILD_WSD_LIB = $(ENGINE_BUILDDIR)/workdir/LinkTarget/StaticLibrary/libwsd.a
+GBUILD_FORKIT_LIB = $(ENGINE_BUILDDIR)/workdir/LinkTarget/StaticLibrary/libforkit.a
+GBUILD_DUMMYTRACEEVENT_LIB = $(ENGINE_BUILDDIR)/workdir/LinkTarget/StaticLibrary/libdummytraceevent.a
+GBUILD_WHOLE = -Wl,--whole-archive,$(GBUILD_WSD_LIB),$(GBUILD_FORKIT_LIB),$(GBUILD_SHARED_LIB),$(GBUILD_DUMMYTRACEEVENT_LIB),--no-whole-archive
+
+LIBFUZZER_LDFLAGS_COMMON = -fsanitize=fuzzer @FUZZER_LDFLAGS@ $(LIBFUZZER_CFI_FLAGS) $(GBUILD_WHOLE)
+
+# Dependency for code produced by gbuild.
+GBUILD_LIBS = $(GBUILD_SHARED_LIB) $(GBUILD_WSD_LIB) $(GBUILD_FORKIT_LIB) $(GBUILD_DUMMYTRACEEVENT_LIB)
+EXTRA_admin_fuzzer_DEPENDENCIES = $(GBUILD_LIBS)
+EXTRA_clientrequest_fuzzer_DEPENDENCIES = $(GBUILD_LIBS)
+EXTRA_clientsession_fuzzer_DEPENDENCIES = $(GBUILD_LIBS)
+EXTRA_collab_fuzzer_DEPENDENCIES = $(GBUILD_LIBS)
+EXTRA_httpresponse_fuzzer_DEPENDENCIES = $(GBUILD_LIBS)
+EXTRA_httpecho_fuzzer_DEPENDENCIES = $(GBUILD_LIBS)
+
+# When configure found the static Poco archives (@POCO_FUZZER_STATIC_LIBS@), link
+# them into every fuzzer to avoid cross-DSO CFI aborts against the
+# non-instrumented system libPoco*.so (see the comment in configure.ac). The
+# archives go in LDADD so they appear after the objects (resolving their Poco
+# symbols) and before the dynamic -lPoco* that automake appends from $(LIBS);
+# --as-needed then keeps those now-redundant shared Poco libs out of the
+# binary's DT_NEEDED. The sanitizer/fuzzer runtimes are static archives, so
+# --as-needed does not affect them. configure emits the archives in dependency
+# order, so no --start-group is needed (and bare -Wl flags aren't allowed in
+# LDADD anyway). The names deliberately avoid the _LDADD/_LDFLAGS suffixes that
+# automake would mistake for per-program flags. When no static archives are
+# available, both are empty and the dynamic Poco is used.
+if HAVE_POCO_STATIC_LIBS
+POCO_STATIC_ARCHIVES = @POCO_FUZZER_STATIC_LIBS@
+POCO_STATIC_LINKARGS = -Wl,--as-needed
+else
+POCO_STATIC_ARCHIVES =
+POCO_STATIC_LINKARGS =
+endif
+
+admin_fuzzer_CPPFLAGS = \
+			$(AM_CPPFLAGS)
+admin_fuzzer_CXXFLAGS = $(LIBFUZZER_CXXFLAGS_COMMON)
+admin_fuzzer_SOURCES = \
+		       $(common_fuzzer_sources) \
+		       Admin.cpp
+admin_fuzzer_LDFLAGS = $(LIBFUZZER_LDFLAGS_COMMON) $(POCO_STATIC_LINKARGS) $(AM_LDFLAGS)
+admin_fuzzer_LDADD = ../libsimd.a $(POCO_STATIC_ARCHIVES) $(POCO_LIBS)
+
+clientrequest_fuzzer_CPPFLAGS = \
+				$(AM_CPPFLAGS)
+clientrequest_fuzzer_CXXFLAGS = $(LIBFUZZER_CXXFLAGS_COMMON)
+clientrequest_fuzzer_SOURCES = \
+			       $(common_fuzzer_sources) \
+			       ClientRequestDispatcherFuzz.cpp
+clientrequest_fuzzer_LDFLAGS = $(LIBFUZZER_LDFLAGS_COMMON) $(POCO_STATIC_LINKARGS) $(AM_LDFLAGS)
+clientrequest_fuzzer_LDADD = ../libsimd.a $(POCO_STATIC_ARCHIVES) $(POCO_LIBS)
+
+clientsession_fuzzer_CPPFLAGS = \
+				$(AM_CPPFLAGS)
+clientsession_fuzzer_CXXFLAGS = $(LIBFUZZER_CXXFLAGS_COMMON)
+clientsession_fuzzer_SOURCES = \
+			       $(common_fuzzer_sources) \
+			       ClientSession.cpp
+clientsession_fuzzer_LDFLAGS = $(LIBFUZZER_LDFLAGS_COMMON) $(POCO_STATIC_LINKARGS) $(AM_LDFLAGS)
+clientsession_fuzzer_LDADD = ../libsimd.a $(POCO_STATIC_ARCHIVES) $(POCO_LIBS)
+
+collab_fuzzer_CPPFLAGS = \
+				$(AM_CPPFLAGS)
+collab_fuzzer_CXXFLAGS = $(LIBFUZZER_CXXFLAGS_COMMON)
+collab_fuzzer_SOURCES = \
+			       $(common_fuzzer_sources) \
+			       Collab.cpp
+collab_fuzzer_LDFLAGS = $(LIBFUZZER_LDFLAGS_COMMON) $(POCO_STATIC_LINKARGS) $(AM_LDFLAGS)
+collab_fuzzer_LDADD = ../libsimd.a $(POCO_STATIC_ARCHIVES) $(POCO_LIBS)
+
+httpresponse_fuzzer_CPPFLAGS = \
+				$(AM_CPPFLAGS)
+httpresponse_fuzzer_CXXFLAGS = $(LIBFUZZER_CXXFLAGS_COMMON)
+httpresponse_fuzzer_SOURCES = \
+			       $(common_fuzzer_sources) \
+			       HttpResponse.cpp
+httpresponse_fuzzer_LDFLAGS = $(LIBFUZZER_LDFLAGS_COMMON) $(POCO_STATIC_LINKARGS) $(AM_LDFLAGS)
+httpresponse_fuzzer_LDADD = ../libsimd.a $(POCO_STATIC_ARCHIVES) $(POCO_LIBS)
+
+httpecho_fuzzer_CPPFLAGS = \
+				$(AM_CPPFLAGS) \
+        -I${top_srcdir}/test
+httpecho_fuzzer_CXXFLAGS = $(LIBFUZZER_CXXFLAGS_COMMON)
+httpecho_fuzzer_SOURCES = \
+			       $(common_fuzzer_sources) \
+			       HttpEcho.cpp
+httpecho_fuzzer_LDFLAGS = $(LIBFUZZER_LDFLAGS_COMMON) $(POCO_STATIC_LINKARGS) $(AM_LDFLAGS)
+httpecho_fuzzer_LDADD = ../libsimd.a $(POCO_STATIC_ARCHIVES) $(POCO_LIBS)
+
+if ENABLE_AFL
+# AFL++ multi-variant fuzzer build.
+# 4 static libraries (one per variant) from common sources,
+# then 6 fuzzers x 4 variants. To add a new fuzzer, just add to AFL_FUZZERS.
+
+AFL_CPPFLAGS = $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) -I${top_srcdir}/test
+# AFL variants use afl-clang-* instrumentation; strip flags incompatible with
+# the AFL toolchain that may have leaked into CXXFLAGS:
+#  -fsanitize=%: every sanitizer spec inherited from the global CXXFLAGS,
+#     including whatever --with-sanitizer=... produced. Sanitizers must NOT come
+#     from there for AFL: only the `san` variant is sanitized, and it gets
+#     ASan/UBSan/CFI from afl-clang-fast via the AFL_USE_* env vars (ENV_san),
+#     which also link the matching runtime. If the spec leaked in, the non-san
+#     variants would be *instrumented* at compile but never linked against the
+#     runtime, failing with undefined __asan_report_*/__ubsan_handle_* at link.
+#     A `%` pattern is essential because --with-sanitizer fuses the spec into a
+#     single token (e.g. -fsanitize=address,undefined,fuzzer-no-link) that an
+#     exact-word filter can't match. This also covers the old fuzzer-no-link
+#     case (AFL links libAFLDriver.a, not libclang_rt.fuzzer.a, so its
+#     SanitizerCoverage refs like __sancov_lowest_stack would be unresolved).
+#  -static-libasan/-static-libsan: the sanitizer runtime-linkage selector that
+#     --with-sanitizer adds; a no-op at compile, irrelevant to the AFL link.
+#  -fno-sanitize-trap=cfi, -fsanitize-recover=cfi, -fvisibility=hidden: CFI is
+#     intentionally off for the non-san AFL variants (afl-clang-fast's
+#     instrumentation pass false-positives under CFI metadata).
+AFL_FILTER_OUT = -fsanitize=% \
+                 -static-libasan \
+                 -static-libsan \
+                 -fno-sanitize-trap=cfi \
+                 -fsanitize-recover=cfi \
+                 -fvisibility=hidden
+AFL_CXXFLAGS = $(AFL_CPPFLAGS) $(AM_CXXFLAGS) $(filter-out $(AFL_FILTER_OUT),$(CXXFLAGS))
+AFL_CFLAGS = $(AFL_CPPFLAGS) $(AM_CFLAGS) $(filter-out $(AFL_FILTER_OUT),$(CFLAGS))
+# @FUZZER_LDFLAGS@ carries -flto -fuse-ld=lld -Wl,--no-gc-sections, needed
+# because afl-clang-fast emits bitcode .o under SAND mode. It comes from
+# configure (validated there) and is applied here, not in global LDFLAGS,
+# so test/ binaries built alongside the fuzzers don't pay the LTO link cost.
+AFL_LDFLAGS_COMMON = $(AM_LDFLAGS) $(LIBS) $(POCO_LIBS) @FUZZER_LDFLAGS@
+
+# Variant configurations: ENV_<variant>, CXX_<variant>, CC_<variant>
+ENV_native =
+CXX_native = $(AFL_CXX)
+CC_native = $(AFL_CC)
+
+# CFI is enabled on the san variant for parity with the libFuzzer build, so
+# CFI findings can be compared between the two engines on the same input.
+# AFL_USE_CFISAN=1 makes afl-clang-fast add -fsanitize=cfi -flto
+# -fvisibility=hidden; we layer CXXFLAGS_san on top to:
+#  - subtract cfi-derived-cast and cfi-unrelated-cast (false positives on
+#    libstdc++'s _Sp_counted_ptr_inplace::_M_ptr() static_cast). NOTE: the
+#    -fno-sanitize=... below is necessary but NOT sufficient here -- AFL_USE_CFISAN
+#    appends its own -fsanitize=cfi *after* these flags, and clang honors the last
+#    -f*sanitize token, re-enabling the check. $(CFI_IGNORELIST_FLAGS) is what
+#    actually suppresses it, since an ignore list is order-independent;
+#  - swap the silent ud1 trap for a runtime diagnostic that prints the
+#    offending type before aborting (-fno-sanitize-trap=cfi).
+ENV_san = AFL_LLVM_ONLY_FSRV=1 AFL_USE_ASAN=1 AFL_USE_UBSAN=1 AFL_USE_CFISAN=1
+CXX_san = $(AFL_CLANG_FAST_CXX)
+CC_san = $(AFL_CLANG_FAST_CC)
+CXXFLAGS_san = -fno-sanitize=cfi-derived-cast,cfi-unrelated-cast \
+               -fno-sanitize-trap=cfi \
+               $(CFI_IGNORELIST_FLAGS)
+
+ENV_cmpcov = AFL_LLVM_LAF_ALL=1
+CXX_cmpcov = $(AFL_CXX)
+CC_cmpcov = $(AFL_CC)
+
+ENV_cmplog = AFL_LLVM_CMPLOG=1
+CXX_cmplog = $(AFL_CXX)
+CC_cmplog = $(AFL_CC)
+
+AFL_VARIANTS = native san cmpcov cmplog
+
+# Variant-specific Poco static linkage. Only the `san` variant builds under CFI
+# (AFL_USE_CFISAN=1), so only it needs static Poco to avoid the cross-DSO CFI
+# aborts -- same rationale as the libFuzzer build. The native/cmpcov/cmplog
+# variants are not instrumented with CFI and keep the dynamic -lPoco* from
+# $(LIBS). When configure found no static archives, POCO_FUZZER_LDADD/LDFLAGS
+# are empty and even `san` falls back to dynamic Poco.
+POCO_LDADD_native =
+POCO_LDADD_cmpcov =
+POCO_LDADD_cmplog =
+POCO_LDADD_san = $(POCO_STATIC_ARCHIVES)
+POCO_LDFLAGS_native =
+POCO_LDFLAGS_cmpcov =
+POCO_LDFLAGS_cmplog =
+POCO_LDFLAGS_san = $(POCO_STATIC_LINKARGS)
+
+# Common sources split by language
+common_fuzzer_cpp = $(common_fuzzer_sources)
+common_fuzzer_c = ../kit/DeltaSimd.c
+
+# Fuzzer registry: name=local-source-file (add new fuzzers here)
+AFL_FUZZERS = \
+	admin=Admin.cpp \
+	clientrequest=ClientRequestDispatcherFuzz.cpp \
+	clientsession=ClientSession.cpp \
+	collab=Collab.cpp \
+	httpresponse=HttpResponse.cpp \
+	httpecho=HttpEcho.cpp
+
+# Extract just the names
+AFL_FUZZER_NAMES = $(foreach f,$(AFL_FUZZERS),$(word 1,$(subst =, ,$f)))
+
+# Generate all target names: <name>_fuzzer_<variant>.afl
+AFL_FUZZER_TARGETS = $(foreach v,$(AFL_VARIANTS),$(foreach n,$(AFL_FUZZER_NAMES),$(n)_fuzzer_$(v).afl))
+
+all-local: $(AFL_FUZZER_TARGETS)
+
+clean-fuzzers:
+	rm -rf $(foreach v,$(AFL_VARIANTS),.afl-$(v)) $(AFL_LIBS) $(AFL_FUZZER_TARGETS)
+
+# Per-variant common object files.
+# Cross-dir sources (../X/Y.cpp) -> .afl-VARIANT/X/Y.o
+# Local sources (Y.cpp)          -> .afl-VARIANT/fuzzer/Y.o
+afl_common_objs = \
+	$(patsubst ../%,.afl-$(1)/%,$(filter ../%,$(common_fuzzer_cpp:.cpp=.o))) \
+	$(addprefix .afl-$(1)/fuzzer/,$(filter-out ../%,$(common_fuzzer_cpp:.cpp=.o))) \
+	$(patsubst ../%,.afl-$(1)/%,$(filter ../%,$(common_fuzzer_c:.c=.o))) \
+	$(addprefix .afl-$(1)/fuzzer/,$(filter-out ../%,$(common_fuzzer_c:.c=.o)))
+
+# Per-variant static library names
+AFL_LIBS = $(foreach v,$(AFL_VARIANTS),aflfuzz_$(v).a)
+
+# Pattern rules for compiling each variant's objects.
+# Cross-dir prereq: ../X/Y.cpp -> .afl-VARIANT/X/Y.o
+# Local prereq:      Y.cpp     -> .afl-VARIANT/fuzzer/Y.o
+define AFL_VARIANT_RULES
+.afl-$(1)/%.o: ../%.cpp
+	@mkdir -p $$(dir $$@)
+	$(ENV_$(1)) $$(CXX_$(1)) $$(AFL_CXXFLAGS) $$(CXXFLAGS_$(1)) -c -o $$@ $$<
+
+.afl-$(1)/fuzzer/%.o: %.cpp
+	@mkdir -p $$(dir $$@)
+	$(ENV_$(1)) $$(CXX_$(1)) $$(AFL_CXXFLAGS) $$(CXXFLAGS_$(1)) -c -o $$@ $$<
+
+.afl-$(1)/%.o: ../%.c
+	@mkdir -p $$(dir $$@)
+	$(ENV_$(1)) $$(CC_$(1)) $$(AFL_CFLAGS) @SIMD_CFLAGS@ -c -o $$@ $$<
+
+aflfuzz_$(1).a: $$(call afl_common_objs,$(1))
+	$$(AR) crs $$@ $$^
+endef
+
+$(foreach v,$(AFL_VARIANTS),$(eval $(call AFL_VARIANT_RULES,$(v))))
+
+# Link rule: <name>_fuzzer_<variant>.afl from variant-compiled fuzzer source + static lib
+# Fuzzer harness sources (Admin.cpp etc.) are local to fuzzer/, so .afl-VARIANT/fuzzer/X.o
+define AFL_FUZZER_LINK
+$(1)_fuzzer_$(2).afl: .afl-$(2)/fuzzer/$(3:.cpp=.o) aflfuzz_$(2).a
+	$(ENV_$(2)) $$(CXX_$(2)) $$(POCO_LDFLAGS_$(2)) -o $$@ $$< aflfuzz_$(2).a $$(POCO_LDADD_$(2)) $$(AFL_DRIVER_LIB) $$(AFL_LDFLAGS_COMMON)
+endef
+
+$(foreach f,$(AFL_FUZZERS),\
+  $(foreach v,$(AFL_VARIANTS),\
+    $(eval $(call AFL_FUZZER_LINK,$(word 1,$(subst =, ,$f)),$(v),$(word 2,$(subst =, ,$f))))))
+
+else # !ENABLE_AFL (libFuzzer-only build)
+
+clean-fuzzers: ;
+
+endif # !ENABLE_AFL
+
+# Serialize all fuzzer link steps. Each link is LTO + (variant-dependent)
+# CFI/ASan/UBSan and easily peaks at several GB of RSS; running them
+# concurrently under -j swamps memory and slows the build. Object
+# compilation upstream still runs in parallel.
+#  - $(noinst_PROGRAMS): the libFuzzer programs (always built).
+#  - $(AFL_FUZZER_TARGETS): 5 fuzzers x 4 variants = 20 AFL link steps;
+#    empty when !ENABLE_AFL.
+# A single .NOTPARALLEL rule (rather than one per condition) avoids automake's
+# "already defined in condition ..." warning for overlapping conditions.
+# NB: .NOTPARALLEL with prerequisites requires GNU make 4.4+.
+.NOTPARALLEL: $(noinst_PROGRAMS) $(AFL_FUZZER_TARGETS)
+
+else # !ENABLE_FUZZERS
+
+clean-fuzzers: ;
+
+endif # !ENABLE_FUZZERS
+
+clean-local: clean-fuzzers

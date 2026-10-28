@@ -1,0 +1,64 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_SW_SOURCE_UI_VBA_VBAROW_HXX
+#define INCLUDED_SW_SOURCE_UI_VBA_VBAROW_HXX
+
+#include <ooo/vba/word/XRow.hpp>
+#include <vbahelper/vbahelperinterface.hxx>
+#include <com/sun/star/table/XTableRows.hpp>
+#include <com/sun/star/text/XTextTable.hpp>
+#include <rtl/ref.hxx>
+
+class SwXTextDocument;
+
+typedef InheritedHelperInterfaceWeakImpl< ooo::vba::word::XRow > SwVbaRow_BASE;
+
+class SwVbaRow : public SwVbaRow_BASE
+{
+private:
+    cpo::uno::Reference< css::text::XTextTable > mxTextTable;
+    cpo::uno::Reference< css::table::XTableRows > mxTableRows;
+    cpo::uno::Reference< css::beans::XPropertySet > mxRowProps;
+    sal_Int32 mnIndex;
+
+public:
+    /// @throws cpo::uno::RuntimeException
+    SwVbaRow( const cpo::uno::Reference< ooo::vba::XHelperInterface >& rParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& rContext, cpo::uno::Reference< css::text::XTextTable >  xTextTable, sal_Int32 nIndex );
+    virtual ~SwVbaRow() override;
+
+    // Attributes
+    virtual cpo::uno::Any getHeight() override;
+    virtual void setHeight( const cpo::uno::Any& _height ) override;
+    virtual ::sal_Int32 getHeightRule() override;
+    virtual void setHeightRule( ::sal_Int32 _heightrule ) override;
+
+    // Methods
+    virtual void Select(  ) override;
+    virtual void SetHeight( float height, sal_Int32 heightrule ) override;
+
+    /// @throws cpo::uno::RuntimeException
+    static void SelectRow( const rtl::Reference< SwXTextDocument >& xModel, const cpo::uno::Reference< css::text::XTextTable >& xTextTable, sal_Int32 nStartRow, sal_Int32 nEndRow );
+
+    // XHelperInterface
+    virtual OUString getServiceImplName() override;
+    virtual cpo::uno::Sequence<OUString> getServiceNames() override;
+};
+#endif // INCLUDED_SW_SOURCE_UI_VBA_VBAROW_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

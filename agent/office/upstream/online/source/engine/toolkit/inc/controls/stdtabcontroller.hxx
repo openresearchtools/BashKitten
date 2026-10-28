@@ -1,0 +1,86 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/awt/XTabController.hpp>
+#include <com/sun/star/lang/XTypeProvider.hpp>
+#include <cppuhelper/weakagg.hxx>
+#include <osl/mutex.hxx>
+
+
+namespace com::sun::star::awt { class XWindow; }
+namespace com::sun::star::awt { class XControl; }
+namespace com::sun::star::awt { class XControlContainer; }
+
+class StdTabController final : public css::awt::XTabController,
+                            public css::lang::XServiceInfo,
+                            public css::lang::XTypeProvider,
+                            public ::cppu::OWeakAggObject
+{
+private:
+    ::osl::Mutex            maMutex;
+    cpo::uno::Reference< css::awt::XTabControllerModel >  mxModel;
+    cpo::uno::Reference< css::awt::XControlContainer >    mxControlContainer;
+
+    ::osl::Mutex&               GetMutex() { return maMutex; }
+    static bool                 ImplCreateComponentSequence( cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControl > >& rControls, const cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControlModel > >& rModels, cpo::uno::Sequence< cpo::uno::Reference< css::awt::XWindow > >& rComponents, cpo::uno::Sequence< cpo::uno::Any>* pTabStops, bool bPeerComponent );
+    // if sequence length of rModels is less than rControls, return only the matching elements in rModels sequence and remove corresponding elements from rControls
+    void                        ImplActivateControl( bool bFirst ) const;
+
+public:
+                            StdTabController();
+                            virtual ~StdTabController() override;
+
+    static cpo::uno::Reference< css::awt::XControl >  FindControl( cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControl > >& rCtrls, const cpo::uno::Reference< css::awt::XControlModel > & rxCtrlModel );
+
+    // cpo::uno::XInterface
+    cpo::uno::Any  queryInterface( const cpo::uno::Type & rType ) override { return OWeakAggObject::queryInterface(rType); }
+    void                        acquire() noexcept override  { OWeakAggObject::acquire(); }
+    void                        release() noexcept override  { OWeakAggObject::release(); }
+
+    cpo::uno::Any  queryAggregation( const cpo::uno::Type & rType ) override;
+
+    // css::lang::XTypeProvider
+    cpo::uno::Sequence< cpo::uno::Type >  getTypes() override;
+    cpo::uno::Sequence< sal_Int8 >                     getImplementationId() override;
+
+    // XTabController
+    void setModel( const cpo::uno::Reference< css::awt::XTabControllerModel >& Model ) override;
+    cpo::uno::Reference< css::awt::XTabControllerModel > getModel(  ) override;
+    void setContainer( const cpo::uno::Reference< css::awt::XControlContainer >& Container ) override;
+    cpo::uno::Reference< css::awt::XControlContainer > getContainer(  ) override;
+    cpo::uno::Sequence< cpo::uno::Reference< css::awt::XControl > > getControls(  ) override;
+    void autoTabOrder(  ) override;
+    void activateTabOrder(  ) override;
+    void activateFirst(  ) override;
+    void activateLast(  ) override;
+
+    // XServiceInfo
+    OUString getImplementationName() override;
+
+    bool supportsService(OUString const & ServiceName) override;
+
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+};
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,16 @@
+ext {
+    coAppName         = '@APP_NAME@'
+    coVendor          = '@VENDOR@'
+    coInfoURL         = '@INFO_URL@'
+    coLauncherIcon    = '@mipmap/@APP_IC_LAUNCHER@'
+    coHasBranding     = '@APP_HAS_BRANDING@'
+    coBrandingDir     = '@APP_BRANDING_DIR@'
+    coBrandingSuffix  = '@APP_BRANDING_SUFFIX@'
+    coVersionHash     = '@COOLWSD_VERSION_HASH@'
+    coAbiSplit        = [@ANDROID_ABI_SPLIT@]
+}
+android.defaultConfig {
+    applicationId '@APP_PACKAGE_NAME@'
+    versionCode @ANDROID_PACKAGE_VERSIONCODE@
+    versionName '@COOLWSD_VERSION@'
+}

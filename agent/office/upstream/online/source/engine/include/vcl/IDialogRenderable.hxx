@@ -1,0 +1,66 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ */
+
+#ifndef INCLUDED_VCL_IDIALOGRENDERABLE_HXX
+#define INCLUDED_VCL_IDIALOGRENDERABLE_HXX
+
+#include <vcl/dllapi.h>
+#include <rtl/ustring.hxx>
+
+#include <vector>
+
+#include <COKit/COKit.hxx>
+#include <comphelper/kit.hxx>
+
+namespace tools { class Rectangle; }
+
+namespace vcl
+{
+
+typedef std::pair<const OString, const OString> KitPayloadItem;
+
+typedef sal_uInt32 KitWindowId;
+
+class VCL_DLLPUBLIC ICOKitNotifier
+{
+public:
+    virtual ~ICOKitNotifier();
+
+    /// Callbacks
+    virtual void notifyWindow(vcl::KitWindowId nKitWindowId,
+                              const OUString& rAction,
+                              const std::vector<KitPayloadItem>& rPayload = std::vector<KitPayloadItem>()) const = 0;
+
+    virtual void viewCallback(COKitCallbackType eType, const OString& pPayload) const = 0;
+
+    /// Whether a client is attached to receive the callbacks at all.
+    virtual bool hasKitClient() const = 0;
+
+    /// The document this notifier speaks for, or NoDocId when it speaks for no document.
+    virtual ViewShellDocId getKitDocId() const = 0;
+
+    /// Whether viewCallback() would hand a payload of this type to the client now.
+    virtual bool acceptsViewCallback(COKitCallbackType eType) const = 0;
+
+    /// Emits a COKitCallbackType::INVALIDATE_TILES.
+    virtual void notifyInvalidation(tools::Rectangle const *) const = 0;
+
+    /// Emits a COKitCallbackType::INVALIDATE_VISIBLE_CURSOR.
+    virtual void notifyCursorInvalidation(tools::Rectangle const *, bool bControlEvent, int windowID) const = 0;
+
+    /// Debugging
+    virtual OString dumpNotifyState() const = 0;
+};
+
+} // namespace vcl
+
+#endif // INCLUDED_VCL_IDIALOGRENDERABLE_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

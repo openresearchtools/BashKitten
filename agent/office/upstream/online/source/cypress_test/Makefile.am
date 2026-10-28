@@ -1,0 +1,1195 @@
+#
+# Copyright the Collabora Online contributors.
+#
+# SPDX-License-Identifier: MPL-2.0
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+
+MAINTAINERCLEANFILES = Makefile.in
+
+export NODE_PATH=$(abs_builddir)/node_modules
+
+# Point the browser at the session bus of the desktop that started the tests.
+# Where the runtime directory holds no bus socket, as in the headless
+# containers, drop the inherited value instead, because there it is malformed.
+# The leading spaces keep automake from reading these as its own conditionals.
+DBUS_SOCKET := $(XDG_RUNTIME_DIR)/bus
+ ifneq ($(wildcard $(DBUS_SOCKET)),)
+ export DBUS_SESSION_BUS_ADDRESS := unix:path=$(DBUS_SOCKET)
+ else
+ unexport DBUS_SESSION_BUS_ADDRESS
+ endif
+
+# Cypress runs tput, if there is no TERM set then we get a frequent and annoying
+# "No value for $$TERM and no -T specified", so set a fallback and use an
+# explicit COLUMNS value of the num of cols that were used anyway in this case.
+ ifeq ($(TERM),)
+ export TERM := dumb
+ export COLUMNS := 100
+ endif
+
+# The cypress electron process has no dbus session here and logs a frequent and
+# annoying "Failed to connect to the bus" for every spec, so raise its log level
+# to fatal, except when ENABLE_LOGGING asks for the noisy output.
+ ifeq ($(ENABLE_LOGGING),)
+ export ELECTRON_EXTRA_LAUNCH_ARGS := --log-level=3
+ endif
+
+V = $(if $(verbose),,@)
+abs_dir = $(if $(filter $(abs_builddir),$(abs_srcdir)),.,$(abs_srcdir))
+CYPRESS_BINARY = $(abs_builddir)/node_modules/cypress/bin/cypress
+ESLINT_BINARY = $(abs_builddir)/node_modules/eslint/bin/eslint.js
+WAIT_ON_BINARY = $(abs_builddir)/node_modules/wait-on/bin/wait-on
+GET_PORT_BINARY = $(abs_builddir)/node_modules/get-port-cli/cli.js
+NPM_INSTALLED = $(abs_builddir)/workdir/npm_installed
+CYPRESS_CONFIG = $(abs_srcdir)/cypress.config.ts
+SERVER_ARG = $(subst :, ,$(shell basename $(if $(coolwsd),$(coolwsd),http://localhost:9980)))
+COOLWSD_SERVER = $(firstword $(SERVER_ARG))
+FREE_PORT = $(lastword $(SERVER_ARG))
+
+# The working copy of the presets the dev WOPI server offers to the tests.
+# Tests get the location from the environment, since the cypress project root
+# is the source directory.
+PRESETS_ROOT = $(abs_top_builddir)/test/data/presets
+
+export COOLWSD_SERVER
+export FREE_PORT
+export COOLWSD_VERSION_HASH
+export PRESETS_ROOT
+
+BUFFERED_SCRIPT = $(abs_srcdir)/run_buffered.sh
+
+# Render the browser UI with DejaVu Sans on every host, so jsdialogs drawn
+# as HTML match the pixel baselines regardless of the distribution's default
+# sans font. Only affect the cypress process, so it does not reach the kit.
+CYPRESS_FONTCONFIG = FONTCONFIG_FILE=$(abs_builddir)/fontconfig/cypress-fonts.conf
+
+PID_FILE=$(abs_builddir)/workdir/coolwsd.pid
+ERROR_LOG=$(abs_builddir)/workdir/error.log
+COOLWSD_LOG=$(abs_builddir)/cypress/wsd_logs/coolwsd.log
+COOLWSD_OUTPUT=$(abs_builddir)/cypress/wsd_logs/coolwsd_output.log
+
+SUPPORT_FILE_ABS = $(abs_srcdir)/support/index.js
+SUPPORT_FILE = $(if $(findstring $(abs_srcdir),$(abs_builddir)),support/index.js,$(SUPPORT_FILE_ABS))
+
+LIGHTHOUSE_USER_AGENT = "cypress"
+LIGHTHOUSE_BROWSER = chrome
+LIGHTHOUSE_TEST_FOLDER = $(abs_srcdir)/integration_tests/lighthouse
+LIGHTHOUSE_DATA_FOLDER = $(DESKTOP_DATA_FOLDER)
+LIGHTHOUSE_DATA_WORKDIR = $(DESKTOP_DATA_WORKDIR)
+LIGHTHOUSE_TRACK_FOLDER = $(abs_builddir)/workdir/track/lighthouse
+
+DESKTOP_USER_AGENT = "cypress"
+DESKTOP_TEST_FOLDER = $(abs_srcdir)/integration_tests/desktop
+DESKTOP_DATA_FOLDER = $(abs_srcdir)/data/desktop/
+DESKTOP_DATA_WORKDIR = $(if $(coolwsd),$(DESKTOP_DATA_FOLDER),$(abs_builddir)/workdir/data/desktop/)
+DESKTOP_TRACK_FOLDER = $(abs_builddir)/workdir/track/desktop
+
+IDLE_USER_AGENT = "cypress"
+IDLE_TEST_FOLDER = $(abs_srcdir)/integration_tests/idle
+IDLE_DATA_FOLDER = $(abs_srcdir)/data/idle/
+IDLE_DATA_WORKDIR = $(if $(coolwsd),$(IDLE_DATA_FOLDER),$(abs_builddir)/workdir/data/idle/)
+IDLE_TRACK_FOLDER = $(abs_builddir)/workdir/track/idle
+
+MOBILE_USER_AGENT = "cypress-mobile"
+MOBILE_TEST_FOLDER = $(abs_srcdir)/integration_tests/mobile
+MOBILE_DATA_FOLDER = $(abs_srcdir)/data/mobile/
+MOBILE_DATA_WORKDIR = $(if $(coolwsd),$(MOBILE_DATA_FOLDER),$(abs_builddir)/workdir/data/mobile/)
+MOBILE_TRACK_FOLDER = $(abs_builddir)/workdir/track/mobile
+
+MULTIUSER_TEST_FOLDER = $(abs_srcdir)/integration_tests/multiuser
+MULTIUSER_DATA_FOLDER = $(abs_srcdir)/data/multiuser/
+MULTIUSER_DATA_WORKDIR = $(if $(coolwsd),$(MULTIUSER_DATA_FOLDER),$(abs_builddir)/workdir/data/multiuser/)
+MULTIUSER_TRACK_FOLDER=$(abs_builddir)/workdir/track/multiuser
+
+REDLINE_USER_AGENT = "cypress"
+REDLINE_TEST_FOLDER = $(abs_srcdir)/integration_tests/redline
+REDLINE_DATA_FOLDER = $(abs_srcdir)/data/redline/
+REDLINE_DATA_WORKDIR = $(if $(coolwsd),$(REDLINE_DATA_FOLDER),$(abs_builddir)/workdir/data/redline/)
+
+USER_INTERFACE = classic
+UPDATE_SCREENSHOT = false
+
+# How many specs one cypress process runs. Starting it costs about four
+# seconds and each spec about two more, so only the start-up is saved, and a
+# bigger group wins little while packing worse into the parallel jobs.
+CYPRESS_GROUP_SIZE = 4
+
+PHP_PROXY_PORT = 9983
+NEXTCLOUD_PORT = 9980
+ALLOWED_PORTS = $(if $(findstring php-proxy, $(CYPRESS_INTEGRATION)),$(PHP_PROXY_PORT),\
+			$(if $(findstring nextcloud, $(CYPRESS_INTEGRATION)),$(NEXTCLOUD_PORT),$(shell seq 9900 1 9980)))
+
+# proxy.php of richdocumentscode in front of coolwsd, served by the PHP
+# command line web server. See check-php-proxy.
+PHP = php
+PHP_PROXY_HTTP_PORT = 9984
+# php -S serves one request per process. Each ProxySocket client polls every
+# 25-500 ms with up to four requests in flight, and the browser loads the page
+# assets on six connections, so give the parallel cypress processes a few
+# workers each. Requests beyond that only queue up. PHP >= 7.4.
+PHP_CLI_SERVER_WORKERS = 16
+PROXY_PHP_URL = https://raw.githubusercontent.com/CollaboraOnline/richdocumentscode/master/proxy.php
+# A local proxy.php to serve instead of downloading PROXY_PHP_URL.
+PROXY_PHP =
+PHP_PROXY_ROOT = $(abs_builddir)/workdir/php-proxy
+PHP_PROXY_PID_FILE = $(abs_builddir)/workdir/php-proxy.pid
+PHP_PROXY_LOG = $(abs_builddir)/workdir/php-proxy.log
+# The describe blocks that run under php-proxy carry this tag.
+PHP_PROXY_TAG = tagproxy
+# php -S forks its workers, so the server runs in a session of its own and
+# the pidfile holds the leader, which is also the process group. Signalling
+# that group takes the workers down with it, and leaves the server out of
+# the process group a CI wrapper waits on. pkill would be shorter, but
+# --pidfile is not in every procps version and failed silently on procps-ng
+# 3.3.10, and matching the command line instead also matches the shell
+# running this recipe, which carries the same text.
+#
+# Wait for the group to go and say so either way. A server that survives
+# holds a port the next run needs, and silence here has already cost two
+# rounds of guessing at a build that would not stop.
+KILL_PHP_PROXY = php_pgid=$$(cat $(PHP_PROXY_PID_FILE) 2>/dev/null); \
+	rm -f $(PHP_PROXY_PID_FILE); \
+	if test -z "$$php_pgid"; then \
+		echo "check-php-proxy: no php proxy pidfile, nothing to stop"; \
+	else \
+		kill -TERM -$$php_pgid 2>/dev/null || true; \
+		n=0; while kill -0 -$$php_pgid 2>/dev/null; do \
+			n=$$(expr $$n + 1); test $$n -ge 10 && break; sleep 1; \
+		done; \
+		if kill -0 -$$php_pgid 2>/dev/null; then \
+			echo "check-php-proxy: php proxy group $$php_pgid outlived SIGTERM, sending SIGKILL"; \
+			kill -KILL -$$php_pgid 2>/dev/null || true; \
+		else \
+			echo "check-php-proxy: php proxy group $$php_pgid stopped"; \
+		fi; \
+	fi
+
+KILL_COMMAND=$(if $(coolwsd),true,pkill -F $(PID_FILE) || pkill --signal SIGKILL -F $(PID_FILE))
+LOAD_PID_FILE=$(abs_builddir)/workdir/load.pids
+PARALLEL_BUILD = $(findstring -j,$(MAKEFLAGS))
+# use setsid --wait when available so Ctrl-C propagates to the cypress process group
+SETSID := setsid $(shell setsid --wait true 2>/dev/null && echo --wait)
+
+COMMA :=,
+EMPTY :=
+SPACE :=$(EMPTY) $(EMPTY)
+
+CORE_VERSION := $(subst $(SPACE),_,$(shell "@LO_PATH@"/program/soffice.bin --version 2> /dev/null))
+
+BROWSER:=$(if $(CYPRESS_BROWSER),$(CYPRESS_BROWSER),$(CHROME))
+A11Y_ENABLE:=$(if $(CYPRESS_A11Y),$(CYPRESS_A11Y),true)
+A11Y_TAG:=$(if $(findstring true,$(A11Y_ENABLE)),taga11yenabled,taga11ydisabled)
+REDLINE_ENABLE:=false
+
+if ENABLE_DEBUG
+FILTER_DEBUG=cypress:electron,cypress:launcher
+export DEBUG:=$(or $(DEBUG),$(if $(ENABLE_LOGGING),$(FILTER_DEBUG)))
+endif
+
+if HAVE_LO_PATH
+
+SLOWEST_FIRST_LIST=$(srcdir)/slowest-first.txt
+
+# One suite's entries from slowest-first.txt, in file order.
+slowest_in_suite=$(shell sed -n 's/^$(1)  *\([^ ]*\).*/\1/p' $(SLOWEST_FIRST_LIST))
+
+# make -j starts prerequisites in the order written, so the listed ones go first.
+order_slowest_first=$(foreach spec,$(call slowest_in_suite,$(1)),$(filter $(spec),$(2))) \
+	$(filter-out $(call slowest_in_suite,$(1)),$(2))
+
+# The spec list $(1), longest first, dealt into groups of CYPRESS_GROUP_SIZE,
+# each one comma-separated word. Group N opens with the Nth longest spec and
+# fills from further down, so the groups start in order and are about equally
+# long.
+group_specs = $(shell echo $(1) | awk -v size=$(CYPRESS_GROUP_SIZE) '{ \
+		groups = int((NF + size - 1) / size); \
+		for (g = 1; g <= groups; g++) { \
+			line = ""; \
+			for (r = 1; r <= size; r++) { \
+				i = (r % 2) ? (r - 1) * groups + g : r * groups + 1 - g; \
+				if (i <= NF) line = line (line ? "," : "") $$i; \
+			} \
+			print line; \
+		} }')
+
+# The spec a group is named after, which is the first one it runs.
+first_spec = $(firstword $(subst $(COMMA),$(SPACE),$(1)))
+
+# The group out of $(2) that is named after the spec $(1).
+group_from = $(filter $(1) $(1)$(COMMA)%,$(2))
+
+MOBILE_TEST_FILES=$(subst $(MOBILE_TEST_FOLDER)/,,$(wildcard $(MOBILE_TEST_FOLDER)/*_spec.js) $(wildcard $(MOBILE_TEST_FOLDER)/*/*_spec.js))
+
+LIGHTHOUSE_TEST_FILES=$(subst $(LIGHTHOUSE_TEST_FOLDER)/,,$(wildcard $(LIGHTHOUSE_TEST_FOLDER)/*_spec.js) $(wildcard $(LIGHTHOUSE_TEST_FOLDER)/*/*_spec.js))
+
+DESKTOP_TEST_FILES_ALL=$(wildcard $(DESKTOP_TEST_FOLDER)/*_spec.js) $(wildcard $(DESKTOP_TEST_FOLDER)/*/*_spec.js)
+
+# Under php-proxy only the describe blocks tagged tagproxy run, so leave the
+# other specs out of the list too: a cypress process that only skips still
+# costs its start-up. A describe.skip does not count. The dot in the pattern
+# stands for the opening parenthesis, which make would take for its own.
+DESKTOP_TEST_FILES=$(subst $(DESKTOP_TEST_FOLDER)/,,$(if $(findstring php-proxy,$(CYPRESS_INTEGRATION)),\
+	$(shell grep -l "^describe.\[[^]]*'$(PHP_PROXY_TAG)'" $(DESKTOP_TEST_FILES_ALL)),\
+	$(DESKTOP_TEST_FILES_ALL)))
+
+IDLE_TEST_FILES=$(subst $(IDLE_TEST_FOLDER)/,,$(wildcard $(IDLE_TEST_FOLDER)/*_spec.js) $(wildcard $(IDLE_TEST_FOLDER)/*/*_spec.js))
+
+MULTIUSER_TEST_FILES=$(subst $(MULTIUSER_TEST_FOLDER)/,,$(wildcard $(MULTIUSER_TEST_FOLDER)/*_spec.js) $(wildcard $(MULTIUSER_TEST_FOLDER)/*/*_spec.js))
+
+REDLINE_TEST_FILES=$(subst $(REDLINE_TEST_FOLDER)/,,$(wildcard $(REDLINE_TEST_FOLDER)/*_spec.js) $(wildcard $(REDLINE_TEST_FOLDER)/*/*_spec.js))
+
+MOBILE_SPEC_GROUPS := $(call group_specs,$(call order_slowest_first,mobile,$(MOBILE_TEST_FILES)))
+
+DESKTOP_SPEC_GROUPS := $(call group_specs,$(call order_slowest_first,desktop,$(DESKTOP_TEST_FILES)))
+
+LIGHTHOUSE_SPEC_GROUPS := $(call group_specs,$(call order_slowest_first,lighthouse,$(LIGHTHOUSE_TEST_FILES)))
+
+IDLE_SPEC_GROUPS := $(call group_specs,$(IDLE_TEST_FILES))
+
+MULTIUSER_SPEC_GROUPS := $(call group_specs,$(call order_slowest_first,multi-user,$(MULTIUSER_TEST_FILES)))
+
+MOBILE_TEST_FILES_DONE= \
+	$(foreach group,$(MOBILE_SPEC_GROUPS),$(MOBILE_TRACK_FOLDER)/$(call first_spec,$(group)).done)
+
+DESKTOP_TEST_FILES_DONE= \
+	$(foreach group,$(DESKTOP_SPEC_GROUPS),$(DESKTOP_TRACK_FOLDER)/$(call first_spec,$(group)).done)
+
+LIGHTHOUSE_TEST_FILES_DONE= \
+	$(foreach group,$(LIGHTHOUSE_SPEC_GROUPS),$(LIGHTHOUSE_TRACK_FOLDER)/$(call first_spec,$(group)).done)
+
+IDLE_TEST_FILES_DONE= \
+	$(foreach group,$(IDLE_SPEC_GROUPS),$(IDLE_TRACK_FOLDER)/$(call first_spec,$(group)).done)
+
+MULTIUSER_TESTS_DONE= \
+	$(MULTIUSER_TRACK_FOLDER)/multiuser_tests.done
+
+MULTIUSER_TEST_FILES_DONE= \
+	$(foreach group,$(MULTIUSER_SPEC_GROUPS),$(MULTIUSER_TRACK_FOLDER)/$(call first_spec,$(group)).done)
+
+check-local: do-check
+	$(if $(wildcard $(ERROR_LOG)),$(error CypressError: some tests failed!))
+
+# TODO: enable multiuser tests $(MULTIUSER_TESTS_DONE)
+# The idle suite kills the shared coolwsd and starts its own short-idle one, and
+# re-resets the shared test/data/presets, so it must not run at the same time as
+# the desktop and mobile suites:
+do-check: $(DESKTOP_TEST_FILES_DONE) $(MOBILE_TEST_FILES_DONE)
+	$(V)$(KILL_COMMAND) || true
+	$(V)rm -f $(ERROR_LOG).prev
+	$(V)test ! -f $(ERROR_LOG) || mv $(ERROR_LOG) $(ERROR_LOG).prev
+	trap '$(KILL_COMMAND)' EXIT && $(MAKE) $(IDLE_TEST_FILES_DONE)
+	$(V)test ! -f $(ERROR_LOG).prev || cat $(ERROR_LOG).prev >> $(ERROR_LOG)
+	$(V)rm -f $(ERROR_LOG).prev
+	$(V)test ! -f $(ERROR_LOG) || cat $(ERROR_LOG)
+
+$(PID_FILE): @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(call start_coolwsd)
+
+setup_short_idle:
+	$(eval SHORT_IDLE=1)
+
+setup_regular_idle:
+	$(eval SHORT_IDLE=)
+
+start_short_idle_coolwsd: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS) setup_short_idle
+	$(V)$(KILL_COMMAND) || true
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(call start_coolwsd)
+
+# SUITE_ONLY drops the desktop ordering dep so check-mobile can run independently
+$(MOBILE_TEST_FILES_DONE): $(PID_FILE) $(if $(SUITE_ONLY),,$(DESKTOP_TEST_FILES_DONE))
+	$(if $(PARALLEL_BUILD),\
+		$(call run_mobile_tests,$(call group_from,$(subst $(MOBILE_TRACK_FOLDER)/,,$(basename $@)),$(MOBILE_SPEC_GROUPS)),$(basename $@).log),\
+		$(call run_mobile_tests))
+	$(if $(PARALLEL_BUILD),\
+		$(V)mkdir -p $(dir $@) && touch $@\
+		,\
+		$(V)$(foreach done_file,$(MOBILE_TEST_FILES_DONE),mkdir -p $(dir $(done_file)) && touch $(done_file) &&) true\
+	)
+
+$(DESKTOP_TEST_FILES_DONE): $(PID_FILE)
+	$(if $(PARALLEL_BUILD),\
+		$(call run_desktop_tests,$(call group_from,$(subst $(DESKTOP_TRACK_FOLDER)/,,$(basename $@)),$(DESKTOP_SPEC_GROUPS)),$(basename $@).log),\
+		$(call run_desktop_tests))
+	$(if $(PARALLEL_BUILD),\
+		$(V)mkdir -p $(dir $@) && touch $@\
+		,\
+		$(V)$(foreach done_file,$(DESKTOP_TEST_FILES_DONE),mkdir -p $(dir $(done_file)) && touch $(done_file) &&) true\
+	)
+
+$(LIGHTHOUSE_TEST_FILES_DONE): $(PID_FILE)
+	$(if $(PARALLEL_BUILD),\
+		$(call run_lighthouse_tests,$(call group_from,$(subst $(LIGHTHOUSE_TRACK_FOLDER)/,,$(basename $@)),$(LIGHTHOUSE_SPEC_GROUPS)),$(basename $@).log),\
+		$(call run_lighthouse_tests))
+	$(if $(PARALLEL_BUILD),\
+		$(V)mkdir -p $(dir $@) && touch $@\
+		,\
+		$(V)$(foreach done_file,$(LIGHTHOUSE_TEST_FILES_DONE),mkdir -p $(dir $(done_file)) && touch $(done_file) &&) true\
+	)
+
+$(MULTIUSER_TESTS_DONE): $(PID_FILE) $(MOBILE_TEST_FILES_DONE) $(IDLE_TEST_FILES_DONE)
+	$(call run_all_multiuser_tests)
+	$(V)mkdir -p $(dir $@) && touch $@
+
+$(MULTIUSER_TEST_FILES_DONE): $(PID_FILE)
+	$(if $(PARALLEL_BUILD),\
+		$(call run_multiuser_tests,$(call group_from,$(subst $(MULTIUSER_TRACK_FOLDER)/,,$(basename $@)),$(MULTIUSER_SPEC_GROUPS)),$(basename $@).log),\
+		$(call run_multiuser_tests))
+	$(if $(PARALLEL_BUILD),\
+		$(V)mkdir -p $(dir $@) && touch $@\
+		,\
+		$(V)$(foreach done_file,$(MULTIUSER_TEST_FILES_DONE),mkdir -p $(dir $(done_file)) && touch $(done_file) &&) true\
+	)
+
+$(IDLE_TEST_FILES_DONE): start_short_idle_coolwsd
+	$(if $(PARALLEL_BUILD),\
+		$(call run_idle_tests,$(call group_from,$(subst $(IDLE_TRACK_FOLDER)/,,$(basename $@)),$(IDLE_SPEC_GROUPS)),$(basename $@).log),\
+		$(call run_idle_tests))
+	$(if $(PARALLEL_BUILD),\
+		$(V)mkdir -p $(dir $@) && touch $@\
+		,\
+		$(V)$(foreach done_file,$(IDLE_TEST_FILES_DONE),mkdir -p $(dir $(done_file)) && touch $(done_file) &&) true\
+	)
+
+@JAILS_PATH@:
+	mkdir -p $@
+
+@CACHE_PATH@:
+	mkdir -p $@
+
+define run_JS_error_check
+	$(V)echo "Checking for JS errors in test code..."
+	$(V)echo
+	$(V)$(NODE) $(ESLINT_BINARY) $(abs_srcdir) \
+		--ignore-path $(abs_srcdir)/.eslintignore --config .eslintrc
+	$(V)echo
+endef
+
+define start_coolwsd
+	$(if $(coolwsd),true,$(call start_coolwsd_instance))
+endef
+
+# Use 'ulimit' to intentionally reduce the maximum number of open file descriptors: if 1024 is not
+# enough, then probably we leak them.
+define start_coolwsd_instance
+	$(V)$(MAKE) -C $(abs_top_builddir) systemplate
+# get-port-cli colours its output when FORCE_COLOR is set, even into a pipe, and the
+# escapes then reach coolwsd as part of --port. NO_COLOR is ignored when FORCE_COLOR is set.
+	$(eval FREE_PORT:=$(shell FORCE_COLOR=0 $(GET_PORT_BINARY) --host=127.0.0.1 $(ALLOWED_PORTS)))
+	$(if $(findstring php-proxy, $(CYPRESS_INTEGRATION)),\
+		$(if $(findstring $(PHP_PROXY_PORT),$(FREE_PORT)),,$(error CypressError: $(PHP_PROXY_PORT) port is unavailable!)))
+	$(if $(findstring nextcloud, $(CYPRESS_INTEGRATION)),\
+		$(if $(findstring $(NEXTCLOUD_PORT),$(FREE_PORT)),,$(error CypressError: $(NEXTCLOUD_PORT) port is unavailable!)))
+	$(V)echo "Found available port for testing: $(FREE_PORT)"
+	$(V)echo
+	$(V)echo "Launching coolwsd..."
+	$(V)fc-cache "@LO_PATH@"/share/fonts/truetype
+	$(V)echo
+	$(V)mkdir -p $(dir $(COOLWSD_OUTPUT))
+# The AI settings block in the settings dialog needs ai.enabled and
+# ai.allow_user_settings on. The central endpoint is pinned empty so a run does not pick
+# up whatever credentials a developer put in their generated coolwsd.xml.
+	ulimit -n 1024; ../coolwsd --o:sys_template_path="@SYSTEMPLATE_PATH@" \
+			--o:child_root_path="@JAILS_PATH@" \
+			--o:cache_files.path="@CACHE_PATH@" \
+			--o:storage.filesystem[@allow]=true \
+			--disable-ssl --forcecaching \
+			--o:ssl.cert_file_path="$(abs_top_srcdir)/etc/cert.pem" \
+			--o:ssl.key_file_path="$(abs_top_srcdir)/etc/key.pem" \
+			--o:ssl.ca_file_path="$(abs_top_srcdir)/etc/ca-chain.cert.pem" \
+			--o:admin_console.username=admin --o:admin_console.password=admin \
+			--o:logging.file[@enable]=true --o:logging.level=debug \
+			--o:logging.disabled_areas="" --o:welcome.enable=false \
+			--o:user_interface.mode=$(USER_INTERFACE) \
+			--o:accessibility.enable=$(A11Y_ENABLE) \
+			--o:security.enable_macros_execution=true \
+			$(if $(CAPABILITIES),--o:security.capabilities=$(CAPABILITIES)) \
+			$(if $(MOUNT_JAIL_TREE),--o:mount_jail_tree=$(MOUNT_JAIL_TREE)) \
+			--o:ai.enabled=true --o:ai.allow_user_settings=true \
+			--o:ai.api_url="" --o:ai.api_key="" --o:ai.model="" \
+			$(if $(SHORT_IDLE),--o:per_view.out_of_focus_timeout_secs=1) \
+			$(if $(SHORT_IDLE),--o:per_view.idle_timeout_secs=7) \
+			--port=$(FREE_PORT) \
+			--pidfile=$(PID_FILE) \
+			--o:logging.file.property[0]=$(COOLWSD_LOG) \
+			--o:per_document.redlining_as_comments=$(REDLINE_ENABLE) \
+			--unattended \
+			$(if $(findstring php-proxy, $(CYPRESS_INTEGRATION)),--o:net.proxy_prefix=true) \
+			 > $(COOLWSD_OUTPUT) 2>&1 &
+	$(V)$(WAIT_ON_BINARY) http://localhost:$(FREE_PORT) --timeout 60000 || (echo ==dump coolwsd console output== && cat $(COOLWSD_OUTPUT) && exit 1)
+	$(V)echo
+endef
+
+define cleanup_before_run
+	$(V)rm -f $(ERROR_LOG)
+	$(V)rm -f $(PID_FILE)
+	$(V)rm -rf cypress
+	$(V)rm -rf $(abs_srcdir)/integration_tests/snapshots/actual
+	$(V)rm -rf $(PRESETS_ROOT)
+	$(V)mkdir -p $(dir $(PRESETS_ROOT))
+	$(V)cp -r $(abs_top_srcdir)/test/data/presets-default $(PRESETS_ROOT)
+endef
+
+NODE_BINS = \
+	$(CYPRESS_BINARY) \
+	$(ESLINT_BINARY) \
+	$(WAIT_ON_BINARY) \
+	$(GET_PORT_BINARY)
+
+$(NODE_BINS): $(NPM_INSTALLED);
+
+$(NPM_INSTALLED): package.json eslint_plugin/index.js eslint_plugin/package.json $(wildcard patches/*.patch)
+#	patch-package cannot apply updated patches over already-patched files
+#	remove patched packages so npm install restores clean originals first.
+#	https://github.com/ds300/patch-package/issues/227
+	$(V)rm -rf node_modules/cypress node_modules/cypress-log-to-output
+	$(V)UV_USE_IO_URING=0 npm install --no-audit
+	$(V)echo node_modules:
+	$(V)ls node_modules
+	$(V)mkdir -p $(dir $(NPM_INSTALLED))
+	$(V)touch $(NPM_INSTALLED)
+#	The cypress project root is the source directory, since that is where the
+#	specs, the support file and the snapshot baselines live - but npm installs
+#	into the builddir. Out of tree the source tree has to reach them, and
+#	cypress_test/.gitignore already covers the link.
+	$(V)$(if $(filter $(abs_builddir),$(abs_srcdir)),,\
+		ln -sfn $(abs_builddir)/node_modules $(abs_srcdir)/node_modules)
+
+clean-local:
+	rm -rf node_modules
+	rm -rf workdir
+	rm -rf cypress
+	rm -rf $(abs_srcdir)/integration_tests/snapshots/actual
+	rm -rf package-lock.json
+	rm -rf .nyc_output
+	rm -rf coverage
+
+# Used on jenkins to run all the tests in parallel as much as possible.
+# Using $(PID_FILE) as dependency to start coolwsd.
+# trap KILL_COMMAND on EXIT so a failed sub-make still kills coolwsd.
+check-desktop-mobile-multi: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	trap '$(KILL_COMMAND) || true' EXIT; \
+	$(MAKE) SUITE_ONLY=1 \
+		$(DESKTOP_TEST_FILES_DONE) \
+		$(MOBILE_TEST_FILES_DONE) \
+		$(MULTIUSER_TEST_FILES_DONE)
+# run_buffered.sh always exits 0 and records failures in ERROR_LOG
+	$(V)test ! -f $(ERROR_LOG) || (cat $(ERROR_LOG) && false)
+
+###############
+# Mobile tests.
+###############
+
+check-mobile: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+# coolwsd is already running via the parent make for the parallel sub-make case
+	$(if $(and $(PARALLEL_BUILD), $(if $(spec),,yes)),,$(call start_coolwsd))
+# with -jN and no single spec, dispatch to per-file .done targets via sub-make;
+# SUITE_ONLY=1 suppresses the mobile -> desktop ordering dependency;
+# trap KILL_COMMAND on EXIT so a failed sub-make still kills coolwsd
+	$(if $(and $(PARALLEL_BUILD), $(if $(spec),,yes)),\
+		trap '$(KILL_COMMAND) || true' EXIT; \
+		$(MAKE) SUITE_ONLY=1 $(MOBILE_TEST_FILES_DONE),\
+		$(call run_mobile_tests,$(spec)))
+# run_buffered.sh always exits 0 and records failures in ERROR_LOG
+	$(V)test ! -f $(ERROR_LOG) || (cat $(ERROR_LOG) && false)
+
+run-mobile: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(call start_coolwsd)
+	$(call run_interactive,mobile,,$(MOBILE_CONFIG),$(MOBILE_ENV),$(MOBILE_TEST_FOLDER))
+
+MOBILE_CONFIG = \
+	specPattern=$(MOBILE_TEST_FOLDER)/**/*_spec.js,supportFile=$(SUPPORT_FILE),userAgent=$(MOBILE_USER_AGENT)
+
+MOBILE_ENV = \
+	CYPRESS_INCLUDE_TAGS=tagmobile,DATA_FOLDER=$(MOBILE_DATA_FOLDER),DATA_WORKDIR=$(MOBILE_DATA_WORKDIR),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION)
+
+# Run one mobile test / all mobile tests in headless mode.
+# Parameters:
+# 1 - spec (optional):	test file to run, or several separated by commas in a
+#			parallel run, if not specified all mobile tests are run.
+# 2 - log (optional):	log file for cypress run, needed for parallel build only.
+# 3 - +env (optional):	additional env variables (will be appended to $(MOBILE_ENV).
+define run_mobile_tests
+	$(V)echo $(if $(1),"Running cypress mobile tests: $(1)","Running cypress mobile tests...")
+	$(V)echo
+	$(eval ENV_EXTENDED=$(MOBILE_ENV)$(if $(3),$(COMMA)$(3)))
+	$(if $(and $(PARALLEL_BUILD), $(1)),\
+		$(V)$(call run_test_buffered,\
+			$(MOBILE_CONFIG),$(ENV_EXTENDED),$(1),mobile,$(2))\
+	,\
+		$(eval SPEC_FILE=$(if $(1),$(MOBILE_TEST_FOLDER)/$(1)))\
+		$(if $(1),$(call check_spec_existence,$(1),mobile))\
+		$(call run_test_headless,\
+			$(MOBILE_CONFIG),$(ENV_EXTENDED),$(SPEC_FILE))\
+	)
+endef
+
+################
+# Lighthouse tests.
+################
+
+check-lighthouse: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+# the .done targets start coolwsd themselves
+	$(if $(and $(PARALLEL_BUILD), $(if $(spec),,yes)),,$(call start_coolwsd))
+# with -jN and no single spec, run one cypress process per spec
+	$(if $(and $(PARALLEL_BUILD), $(if $(spec),,yes)),\
+		trap '$(KILL_COMMAND) || true' EXIT; \
+		$(MAKE) $(LIGHTHOUSE_TEST_FILES_DONE),\
+		$(call run_lighthouse_tests,$(spec)))
+	$(V)$(KILL_COMMAND) || true
+# run_buffered.sh always exits 0 and records failures in ERROR_LOG
+	$(V)test ! -f $(ERROR_LOG) || (cat $(ERROR_LOG) && false)
+
+run-lighthouse: BROWSER := $(LIGHTHOUSE_BROWSER)
+run-lighthouse: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(call start_coolwsd)
+	$(call run_interactive,lighthouse,$(LIGHTHOUSE_INCLUDE_TAGS),$(LIGHTHOUSE_CONFIG),$(LIGHTHOUSE_ENV),$(LIGHTHOUSE_TEST_FOLDER))
+
+LIGHTHOUSE_CONFIG = \
+	specPattern=$(LIGHTHOUSE_TEST_FOLDER)/**/*_spec.js,supportFile=$(SUPPORT_FILE),userAgent=$(LIGHTHOUSE_USER_AGENT)
+
+LIGHTHOUSE_ENV = \
+	DATA_FOLDER=$(LIGHTHOUSE_DATA_FOLDER),DATA_WORKDIR=$(LIGHTHOUSE_DATA_WORKDIR),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION),IMAGES_FOLDER=$(abs_top_srcdir)/browser/images/help/en/
+
+LIGHTHOUSE_INCLUDE_TAGS = \
+	taglighthouse,$(A11Y_TAG)
+
+# Run lighthouse accessibility tests with Chrome browser.
+# Parameters:
+# 1 - spec (optional):	test file to run, or several separated by commas in a
+#			parallel run, if not specified all lighthouse tests are run.
+# 2 - log (optional):	log file for cypress run, needed for parallel build only.
+define run_lighthouse_tests
+	$(V)echo $(if $(1),"Running lighthouse tests: $(1)","Running all lighthouse accessibility tests...")
+	$(V)echo
+	$(eval CYPRESS_INCLUDE_TAGS=$(LIGHTHOUSE_INCLUDE_TAGS))
+	$(V)echo Cypress tags: $(CYPRESS_INCLUDE_TAGS)
+	$(V)echo
+	$(eval export CYPRESS_INCLUDE_TAGS)
+	$(if $(and $(PARALLEL_BUILD), $(1)),\
+		$(V)$(call run_test_buffered,\
+			$(LIGHTHOUSE_CONFIG),$(LIGHTHOUSE_ENV),$(1),lighthouse,$(2),$(LIGHTHOUSE_BROWSER))\
+	,\
+		$(eval SPEC_FILE=$(if $(1),$(LIGHTHOUSE_TEST_FOLDER)/$(1)))\
+		$(if $(1),$(call check_spec_existence,$(1),lighthouse))\
+		$(SETSID) $(CYPRESS_BINARY) run \
+			--browser $(LIGHTHOUSE_BROWSER) \
+			--headless \
+			--config-file $(CYPRESS_CONFIG) \
+			--project $(abs_srcdir) \
+			--config $(LIGHTHOUSE_CONFIG) \
+			--env $(LIGHTHOUSE_ENV) \
+			$(if $(SPEC_FILE),--spec=$(SPEC_FILE)) \
+			|| ($(KILL_COMMAND) && false)\
+	)
+endef
+
+################
+# Desktop tests.
+################
+
+check-desktop: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+# coolwsd is already running via the parent make for the parallel sub-make case
+	$(if $(and $(PARALLEL_BUILD), $(if $(spec),,yes)),,$(call start_coolwsd))
+# with -jN and no single spec, dispatch to per-file .done targets via sub-make;
+# trap KILL_COMMAND on EXIT so a failed sub-make still kills coolwsd
+	$(if $(and $(PARALLEL_BUILD), $(if $(spec),,yes)),\
+		trap '$(KILL_COMMAND) || true' EXIT; \
+		$(MAKE) $(DESKTOP_TEST_FILES_DONE),\
+		$(call run_desktop_tests,$(spec)))
+# run_buffered.sh always exits 0 and records failures in ERROR_LOG
+	$(V)test ! -f $(ERROR_LOG) || (cat $(ERROR_LOG) && false)
+
+run-desktop: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(call start_coolwsd)
+	$(call run_interactive,desktop,$(DESKTOP_INCLUDE_TAGS),$(DESKTOP_CONFIG),$(DESKTOP_ENV),$(DESKTOP_TEST_FOLDER))
+
+DESKTOP_CONFIG = \
+	specPattern=$(DESKTOP_TEST_FOLDER)/**/*_spec.js,supportFile=$(SUPPORT_FILE),userAgent=$(DESKTOP_USER_AGENT)
+
+DESKTOP_ENV = \
+	DATA_FOLDER=$(DESKTOP_DATA_FOLDER),DATA_WORKDIR=$(DESKTOP_DATA_WORKDIR),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION),IMAGES_FOLDER=$(abs_top_srcdir)/browser/images/help/en/$(if $(findstring php-proxy,$(CYPRESS_INTEGRATION)),$(COMMA)PHP_PROXY_HTTP_PORT=$(PHP_PROXY_HTTP_PORT))
+
+# Under php-proxy only the describe blocks tagged tagproxy run. The a11y tag is
+# left out there: cypress-tags ORs the include tags, so it would pull in every
+# a11y-tagged block as well.
+DESKTOP_INCLUDE_TAGS = \
+	$(if $(findstring php-proxy,$(CYPRESS_INTEGRATION)),$(PHP_PROXY_TAG),tagdesktop$(COMMA)$(A11Y_TAG))
+
+# Run one desktop test / all desktop tests in headless mode.
+# Parameters:
+# 1 - spec (optional):	test file to run, or several separated by commas in a
+#			parallel run, if not specified all desktop tests are run.
+# 2 - log (optional):	log file for cypress run, needed for parallel build only.
+# 3 - +env (optional):	additional env variables (will be appended to $(DESKTOP_ENV).
+define run_desktop_tests
+	$(V)echo $(if $(1),"Running cypress desktop mode tests: $(1)","Running cypress desktop mode tests...")
+	$(V)echo
+	$(eval CYPRESS_INCLUDE_TAGS=$(DESKTOP_INCLUDE_TAGS))
+	$(V)echo Cypress tags: $(CYPRESS_INCLUDE_TAGS)
+	$(V)echo
+	$(eval export CYPRESS_INCLUDE_TAGS)
+	$(eval ENV_EXTENDED=$(DESKTOP_ENV)$(if $(3),$(COMMA)$(3)))
+	$(if $(and $(PARALLEL_BUILD), $(1)),\
+		$(V)$(call run_test_buffered,\
+			$(DESKTOP_CONFIG),$(ENV_EXTENDED),$(1),desktop,$(2))\
+	,\
+		$(eval SPEC_FILE=$(if $(1),$(DESKTOP_TEST_FOLDER)/$(1)))\
+		$(if $(1),$(call check_spec_existence,$(1),desktop))\
+		$(call run_test_headless,\
+			$(DESKTOP_CONFIG),$(ENV_EXTENDED),$(SPEC_FILE))\
+	)
+endef
+
+################
+# Idle tests.
+################
+
+check-idle: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS) start_short_idle_coolwsd $(PID_FILE)
+	$(call run_idle_tests,$(spec))
+	$(V)$(KILL_COMMAND) || true
+
+run-idle: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS) start_short_idle_coolwsd $(PID_FILE)
+	$(call run_interactive,idle,$(IDLE_INCLUDE_TAGS),$(IDLE_CONFIG),$(IDLE_ENV),$(IDLE_TEST_FOLDER))
+
+IDLE_CONFIG = \
+	specPattern=$(IDLE_TEST_FOLDER)/**/*_spec.js,supportFile=$(SUPPORT_FILE),userAgent=$(IDLE_USER_AGENT)
+
+IDLE_ENV = \
+	DATA_FOLDER=$(IDLE_DATA_FOLDER),DATA_WORKDIR=$(IDLE_DATA_WORKDIR),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION),IMAGES_FOLDER=$(abs_top_srcdir)/browser/images/help/en/
+
+IDLE_INCLUDE_TAGS = \
+	tagdesktop,$(A11Y_TAG)
+
+# Run one idle test / all idle tests in headless mode.
+# Parameters:
+# 1 - spec (optional):	test file to run, or several separated by commas in a
+#			parallel run, if not specified all idle tests are run.
+# 2 - log (optional):	log file for cypress run, needed for parallel build only.
+# 3 - +env (optional):	additional env variables (will be appended to $(IDLE_ENV).
+define run_idle_tests
+	$(V)echo $(if $(1),"Running cypress idle tests: $(1)","Running cypress idle tests...")
+	$(V)echo
+	$(eval CYPRESS_INCLUDE_TAGS=$(IDLE_INCLUDE_TAGS))
+	$(V)echo Cypress tags: $(CYPRESS_INCLUDE_TAGS)
+	$(V)echo
+	$(eval export CYPRESS_INCLUDE_TAGS)
+	$(eval ENV_EXTENDED=$(IDLE_ENV)$(if $(3),$(COMMA)$(3)))
+	$(if $(and $(PARALLEL_BUILD), $(1)),\
+		$(V)$(call run_test_buffered,\
+			$(IDLE_CONFIG),$(ENV_EXTENDED),$(1),idle,$(2))\
+	,\
+		$(eval SPEC_FILE=$(if $(1),$(IDLE_TEST_FOLDER)/$(1)))\
+		$(if $(1),$(call check_spec_existence,$(1),idle))\
+		$(call run_test_headless,\
+			$(IDLE_CONFIG),$(ENV_EXTENDED),$(SPEC_FILE))\
+	)
+endef
+
+###################
+# Multi-user tests.
+###################
+check-multi: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(call start_coolwsd)
+	$(if $(spec), \
+		$(call run_multiuser_test,$(spec)), \
+		$(call run_all_multiuser_tests))
+	$(V)$(KILL_COMMAND) || true
+
+run-multi: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(call start_coolwsd)
+	$(call run_interactive,multi,,$(MULTIUSER_CONFIG),$(MULTIUSER_ENV),$(MULTIUSER_TEST_FOLDER))
+
+MULTIUSER_CONFIG = \
+	specPattern=$(MULTIUSER_TEST_FOLDER)/**/*_spec.js,supportFile=$(SUPPORT_FILE),userAgent=$(DESKTOP_USER_AGENT)
+
+MULTIUSER_ENV = \
+	CYPRESS_INCLUDE_TAGS=tagmultiuser,DATA_FOLDER=$(MULTIUSER_DATA_FOLDER),DATA_WORKDIR=$(MULTIUSER_DATA_WORKDIR),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION)
+
+# Run all multi-user tests in headless mode.
+# Parameters:
+# 1 - +env (optional):	additional env variables (will be appended to $(MULTIUSER_ENV).
+define run_all_multiuser_tests
+	$(V)echo "Running cypress multi-user tests..."
+	$(V)echo
+	$(eval ENV_EXTENDED=$(MULTIUSER_ENV)$(if $(1),$(COMMA)$(1)))
+	$(call run_test_headless,\
+		$(MULTIUSER_CONFIG),$(ENV_EXTENDED),)
+endef
+
+# Run one multi-user test in headless mode.
+# Parameters:
+# 1 - test name:	test name to run. This test name means to test files (user1, user2).
+# 2 - +env (optional):	additional env variables (will be appended to $(MULTIUSER_ENV).
+define run_multiuser_test
+	$(call check_spec_existence,$(1),multi)
+	$(V)echo "Running cypress multi-user test: $(1)"
+	$(V)echo
+	$(eval ENV_EXTENDED=$(MULTIUSER_ENV)$(if $(2),$(COMMA)$(2)))
+	$(eval SPEC_FILE=$(if $(1),$(MULTIUSER_TEST_FOLDER)/$(1)))
+	$(call run_test_headless,\
+		$(MULTIUSER_CONFIG),$(ENV_EXTENDED),$(SPEC_FILE))
+endef
+
+# Run one multi-user test / all multi-user tests in headless mode.
+# Parameters:
+# 1 - spec (optional):	test file to run, or several separated by commas in a
+#			parallel run, if not specified all multi-user tests are run.
+# 2 - log (optional):	log file for cypress run, needed for parallel build only.
+# 3 - +env (optional):	additional env variables (will be appended to $(MULTIUSER_ENV).
+define run_multiuser_tests
+	$(V)echo $(if $(1),"Running cypress multi-user tests: $(1)","Running cypress multi-user tests...")
+	$(V)echo
+	$(eval ENV_EXTENDED=$(MULTIUSER_ENV)$(if $(3),$(COMMA)$(3)))
+	$(if $(and $(PARALLEL_BUILD), $(1)),\
+		$(V)$(call run_test_buffered,\
+			$(MULTIUSER_CONFIG),$(ENV_EXTENDED),$(1),multi-user,$(2))\
+	,\
+		$(eval SPEC_FILE=$(if $(1),$(MULTIUSER_TEST_FOLDER)/$(1)))\
+		$(if $(1),$(call check_spec_existence,$(1),multi))\
+		$(call run_test_headless,\
+			$(MULTIUSER_CONFIG),$(ENV_EXTENDED),$(SPEC_FILE))\
+	)
+endef
+
+############################
+# Mobile interference tests.
+############################
+
+check-interfer-mobile: do-interfer-mobile-check-log
+	$(if $(wildcard $(ERROR_LOG)),$(error CypressError: some tests failed!))
+
+do-interfer-mobile-check-log: do-interfer-mobile-check
+	$(if $(wildcard $(ERROR_LOG)),$(V)cat $(ERROR_LOG))
+
+do-interfer-mobile-check: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(call start_coolwsd)
+	$(if $(spec), \
+		$(call run_mobile_interference_test,$(spec)), \
+		$(call run_mobile_interference_tests))
+	$(V)$(KILL_COMMAND) || true
+
+run-interfer-mobile: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(call start_coolwsd)
+	$(V)echo
+	$(V)echo "Running interfer mobile test in interactive test runner..."
+	$(V)echo
+	$(call check_spec_existence,$(spec),mobile)
+	$(eval USER1_SPEC=$(MOBILE_TEST_FOLDER)/$(spec))
+	$(eval USER2_SPEC=interference_user_spec.js)
+	$(eval USER2_LOG=$(MULTIUSER_TRACK_FOLDER)/$(USER2_SPEC).log)
+	$(call run_interactive_single,\
+		$(INTERFER_MOBILE_CONFIG1),$(INTERFER_MOBILE_ENV1),$(USER1_SPEC)) &
+	$(V)sleep 5
+	$(V)$(call run_test_buffered,\
+		$(INTERFER_MOBILE_CONFIG2),$(INTERFER_MOBILE_ENV2),$(USER2_SPEC),interfer,$(USER2_LOG)) || true
+	$(V)$(KILL_COMMAND) || true
+
+INTERFER_MOBILE_CONFIG1 = \
+	specPattern=$(MOBILE_TEST_FOLDER)/**/*_spec.js,supportFile=$(SUPPORT_FILE),userAgent=$(MOBILE_USER_AGENT)
+
+INTERFER_MOBILE_ENV1 = \
+	CYPRESS_INCLUDE_TAGS=tagmobile,DATA_FOLDER=$(MOBILE_DATA_FOLDER),DATA_WORKDIR=$(MULTIUSER_DATA_WORKDIR),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION),INTERFERENCE_TEST=true
+
+INTERFER_MOBILE_CONFIG2 = \
+	supportFile=$(SUPPORT_FILE),userAgent=$(MOBILE_USER_AGENT),retries=0
+
+INTERFER_MOBILE_ENV2 = \
+	CYPRESS_INCLUDE_TAGS=tagmobile,DATA_FOLDER=$(MOBILE_DATA_FOLDER),DATA_WORKDIR=$(MULTIUSER_DATA_WORKDIR),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION)
+
+# Run all mobile interference tests in headless mode.
+define run_mobile_interference_tests
+	$(foreach test,$(MOBILE_TEST_FILES),$(call run_mobile_interference_test,$(test)))
+endef
+
+# Run one mobile interference test in headless mode.
+# Parameters:
+# 1 - mobile test file:	  test file to run parallel with the interference user spec file.
+define run_mobile_interference_test
+	$(V)echo "Running cypress mobile interference test: $(1)"
+	$(V)echo
+	$(call check_spec_existence,$(1),mobile)
+	$(eval USER1_SPEC=$(1))
+	$(eval USER2_SPEC=interference_user_spec.js)
+	$(eval USER1_LOG=$(MULTIUSER_TRACK_FOLDER)/$(USER1_SPEC).log)
+	$(eval USER2_LOG=$(MULTIUSER_TRACK_FOLDER)/$(USER2_SPEC).log)
+	$(V)$(call run_test_buffered,\
+		$(INTERFER_MOBILE_CONFIG1),$(INTERFER_MOBILE_ENV1),$(USER1_SPEC),interfer-mobile,$(USER1_LOG)) & \
+	sleep 5 && \
+	$(call run_test_buffered,\
+		$(INTERFER_MOBILE_CONFIG2),$(INTERFER_MOBILE_ENV2),$(USER2_SPEC),interfer,$(USER2_LOG)) && \
+	wait # waits the background process to be finished
+endef
+
+#########################
+# proxy.php desktop tests
+#########################
+
+# Run the desktop specs tagged tagproxy through proxy.php of richdocumentscode,
+# served by the PHP command line web server on PHP_PROXY_HTTP_PORT, with
+# coolwsd on PHP_PROXY_PORT and its ProxyPrefix support on. -jN and spec= work
+# as for check-desktop. PHP=php82 picks another php binary, PROXY_PHP=<file>
+# serves a local proxy.php instead of downloading PROXY_PHP_URL.
+check-php-proxy: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(V)$(KILL_PHP_PROXY)
+	$(V)rm -rf $(PHP_PROXY_ROOT) $(PHP_PROXY_LOG) && mkdir -p $(PHP_PROXY_ROOT)
+	$(if $(PROXY_PHP),\
+		cp $(PROXY_PHP) $(PHP_PROXY_ROOT)/proxy.php,\
+		curl -sSfL -o $(PHP_PROXY_ROOT)/proxy.php $(PROXY_PHP_URL))
+	$(V)$(PHP) --version | head -n 1
+	$(V)$(PHP) -l $(PHP_PROXY_ROOT)/proxy.php
+# get-port-cli hands back another port when the asked one is taken, see FREE_PORT.
+	$(V)test "$$(FORCE_COLOR=0 $(GET_PORT_BINARY) --host=127.0.0.1 $(PHP_PROXY_HTTP_PORT))" = "$(PHP_PROXY_HTTP_PORT)" || \
+		{ echo "CypressError: port $(PHP_PROXY_HTTP_PORT) for the php proxy is unavailable!"; exit 1; }
+	$(V)echo "Starting the php proxy on http://127.0.0.1:$(PHP_PROXY_HTTP_PORT)/proxy.php with $(PHP_CLI_SERVER_WORKERS) workers..."
+# One shell for the whole run, so the trap stops the php server however the
+# tests end, and the status of check-desktop is the status of this target.
+	setsid sh -c 'echo $$$$ > $(PHP_PROXY_PID_FILE); \
+		exec env PHP_CLI_SERVER_WORKERS=$(PHP_CLI_SERVER_WORKERS) \
+		$(PHP) -S 127.0.0.1:$(PHP_PROXY_HTTP_PORT) -t $(PHP_PROXY_ROOT) \
+		-d upload_max_filesize=64M -d post_max_size=64M' \
+		> $(PHP_PROXY_LOG) 2>&1 & \
+	trap '$(KILL_PHP_PROXY)' EXIT INT TERM; \
+	$(WAIT_ON_BINARY) tcp:127.0.0.1:$(PHP_PROXY_HTTP_PORT) --timeout 30000 || \
+		{ echo ==dump php proxy output==; cat $(PHP_PROXY_LOG); exit 1; }; \
+	echo "proxy.php status: $$(curl -sf 'http://127.0.0.1:$(PHP_PROXY_HTTP_PORT)/proxy.php?status')"; \
+	status=0; \
+	$(MAKE) CYPRESS_INTEGRATION=php-proxy PHP_PROXY_HTTP_PORT=$(PHP_PROXY_HTTP_PORT) check-desktop || status=$$?; \
+	$(KILL_PHP_PROXY); trap - EXIT INT TERM; \
+	exit $$status
+
+# Stop a php proxy left behind by an interrupted check-php-proxy.
+cleanup-php-proxy:
+	$(V)$(KILL_PHP_PROXY)
+
+#############################
+# Desktop interference tests.
+#############################
+
+check-interfer-desktop: do-interfer-desktop-check-log
+	$(if $(wildcard $(ERROR_LOG)),$(error CypressError: some tests failed!))
+
+do-interfer-desktop-check-log: do-interfer-desktop-check
+	$(if $(wildcard $(ERROR_LOG)),$(V)cat $(ERROR_LOG))
+
+do-interfer-desktop-check: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(call start_coolwsd)
+	$(if $(spec), \
+		$(call run_desktop_interference_test,$(spec)), \
+		$(call run_desktop_interference_tests))
+	$(V)$(KILL_COMMAND) || true
+
+run-interfer-desktop: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(call start_coolwsd)
+	$(V)echo
+	$(V)echo "Running interfer desktop test in interactive test runner..."
+	$(V)echo
+	$(call check_spec_existence,$(spec),desktop)
+	$(eval USER1_SPEC=$(DESKTOP_TEST_FOLDER)/$(spec))
+	$(eval USER2_SPEC=interference_user_spec.js)
+	$(eval USER2_LOG=$(MULTIUSER_TRACK_FOLDER)/$(USER2_SPEC).log)
+	$(call run_interactive_single,\
+		$(INTERFER_DESKTOP_CONFIG1),$(INTERFER_DESKTOP_ENV1),$(USER1_SPEC)) &
+	$(V)sleep 5
+	$(V)$(call run_test_buffered,\
+		$(INTERFER_DESKTOP_CONFIG2),$(INTERFER_DESKTOP_ENV2),$(USER2_SPEC),interfer,$(USER2_LOG)) || true
+	$(V)$(KILL_COMMAND) || true
+
+INTERFER_DESKTOP_CONFIG1 = \
+	specPattern=$(DESKTOP_TEST_FOLDER)/**/*_spec.js,supportFile=$(SUPPORT_FILE),userAgent=$(DESKTOP_USER_AGENT)
+
+INTERFER_DESKTOP_ENV1 = \
+	DATA_FOLDER=$(DESKTOP_DATA_FOLDER),DATA_WORKDIR=$(MULTIUSER_DATA_WORKDIR),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION),INTERFERENCE_TEST=true
+
+INTERFER_DESKTOP_CONFIG2 = \
+	supportFile=$(SUPPORT_FILE),userAgent=$(DESKTOP_USER_AGENT),retries=0
+
+INTERFER_DESKTOP_ENV2 = \
+	DATA_FOLDER=$(DESKTOP_DATA_FOLDER),DATA_WORKDIR=$(MULTIUSER_DATA_WORKDIR),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION)
+
+# Run all desktop interference test in headless mode.
+define run_desktop_interference_tests
+	$(foreach test,$(DESKTOP_TEST_FILES),$(call run_desktop_interference_test,$(test)))
+endef
+
+# Run one desktop interference test in headless mode.
+# Parameters:
+# 1 - desktop test file:    test file to run parallel with the interference user spec file.
+define run_desktop_interference_test
+	$(V)echo "Running cypress desktop interference test: $(1)"
+	$(V)echo
+	$(call check_spec_existence,$(1),desktop)
+	$(eval USER1_SPEC=$(1))
+	$(eval USER2_SPEC=interference_user_spec.js)
+	$(eval USER1_LOG=$(MULTIUSER_TRACK_FOLDER)/$(USER1_SPEC).log)
+	$(eval USER2_LOG=$(MULTIUSER_TRACK_FOLDER)/$(USER2_SPEC).log)
+	$(V)$(call run_test_buffered,\
+		$(INTERFER_DESKTOP_CONFIG1),$(INTERFER_DESKTOP_ENV1),$(USER1_SPEC),interfer-desktop,$(USER1_LOG)) & \
+	sleep 5 && \
+	$(call run_test_buffered,\
+		$(INTERFER_DESKTOP_CONFIG2),$(INTERFER_DESKTOP_ENV2),$(USER2_SPEC),interfer,$(USER2_LOG)) && \
+	wait # waits the background process to be finished
+endef
+
+################
+# Test coverage.
+################
+
+run-cov: do-run-cov
+	$(if $(wildcard $(ERROR_LOG)),$(V)cat $(ERROR_LOG))
+
+do-run-cov: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(V)echo
+	$(V)echo "Setup coverage tools..."
+	$(V)echo
+	rm -rf .nyc_output
+	rm -rf coverage
+	UV_USE_IO_URING=0 npm install @cypress/code-coverage --no-save
+	$(V)echo "import '@cypress/code-coverage/support';" >> $(SUPPORT_FILE_ABS)
+	$(V)echo "" >> $(SUPPORT_FILE_ABS)
+	cd .. && npx nyc instrument --compact=false browser/src browser/dist/src && cd cypress_test
+	$(V)echo
+	$(V)echo "Run all tests..."
+	$(V)echo
+	$(call cleanup_before_run)
+	$(call start_coolwsd)
+	$(call run_desktop_tests,,,COVERAGE_RUN="1")
+	$(call run_mobile_tests,,,COVERAGE_RUN="1")
+	$(call run_all_multiuser_tests,COVERAGE_RUN="1")
+	$(V)$(KILL_COMMAND) || true
+	$(call run_idle_tests,,,COVERAGE_RUN="1")
+	$(V)$(KILL_COMMAND) || true
+
+##############################
+# Redlining as comments tests.
+##############################
+
+check-redline: REDLINE_ENABLE := true
+check-redline: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(if $(HEADLESS_BUILD),$(call start_Xvfb),)
+	$(call start_coolwsd)
+	$(call run_redline_tests,$(spec))
+	$(if $(HEADLESS_BUILD),$(V)pkill Xvfb,)
+	$(V)$(KILL_COMMAND) || true
+
+run-redline: REDLINE_ENABLE := true
+run-redline: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
+	$(call cleanup_before_run)
+	$(call run_JS_error_check)
+	$(call start_coolwsd)
+	$(call run_interactive,redline,$(REDLINE_INCLUDE_TAGS),$(REDLINE_CONFIG),$(REDLINE_ENV),$(REDLINE_TEST_FOLDER),**/*_spec.js)
+
+REDLINE_CONFIG = \
+	specPattern=$(REDLINE_TEST_FOLDER)/**/*_spec.js,supportFile=$(SUPPORT_FILE),userAgent=$(REDLINE_USER_AGENT)
+
+REDLINE_ENV = \
+	DATA_FOLDER=$(REDLINE_DATA_FOLDER),DATA_WORKDIR=$(REDLINE_DATA_WORKDIR),WSD_VERSION_HASH=$(COOLWSD_VERSION_HASH),SERVER=$(COOLWSD_SERVER),SERVER_PORT=$(FREE_PORT),LO_CORE_VERSION="$(CORE_VERSION)",INTEGRATION=$(CYPRESS_INTEGRATION),IMAGES_FOLDER=$(abs_top_srcdir)/browser/images/help/en/,DISABLE_REDLINE=0
+
+REDLINE_INCLUDE_TAGS = \
+		tagredline,$(A11Y_TAG)
+
+# Run one redline test / all redline tests in headless mode.
+# Parameters:
+# 1 - spec (optional):	test file to run, if not specified all redline tests are run.
+# 2 - log (optional):	log file for cypress run, needed for parallel build only.
+# 3 - +env (optional):	additional env variables (will be appended to $(REDLINE_ENV).
+define run_redline_tests
+	$(V)echo $(if $(1),"Running cypress redlining as comment test: $(1)","Running cypress redlining as comment tests...")
+	$(V)echo
+	$(eval CYPRESS_INCLUDE_TAGS=$(REDLINE_INCLUDE_TAGS))
+	$(V)echo Cypress tags: $(CYPRESS_INCLUDE_TAGS)
+	$(V)echo
+	$(eval export CYPRESS_INCLUDE_TAGS)
+	$(eval ENV_EXTENDED=$(REDLINE_ENV)$(if $(3),$(COMMA)$(3)))
+	$(if $(and $(PARALLEL_BUILD), $(1)),\
+		$(V)$(call run_test_parallel,\
+			$(REDLINE_CONFIG),$(ENV_EXTENDED),$(1),desktop,$(2))\
+	,\
+		$(eval SPEC_FILE=$(if $(1),$(REDLINE_TEST_FOLDER)/$(1)))\
+		$(if $(1),$(call check_spec_existence,$(1),redline))\
+		$(call run_test_headless,\
+			$(REDLINE_CONFIG),$(ENV_EXTENDED),$(SPEC_FILE))\
+	)
+endef
+
+####################
+# General functions.
+####################
+
+# Run one test of a suite, or all of its tests, in the interactive test runner. coolwsd is
+# killed when the runner exits, including when Ctrl-C aborts make.
+#
+# Parameters:
+# 1 - suite:	suite name as check_spec_existence expects it (desktop, mobile, idle, multi, redline)
+# 2 - tags (optional):	CYPRESS_INCLUDE_TAGS value, empty when the env already carries the tags
+# 3 - config:	cypress configuration (e.g. cypress' --config argument).
+# 4 - env:	list of environment variables (e.g. cypress' --env argument).
+# 5 - folder:	directory holding the suite's spec files
+# 6 - all-glob (optional):	spec glob to run when no spec is given, instead of opening the runner
+define run_interactive
+	$(V)echo "Open cypress with $(1) tests..."
+	$(V)echo
+	$(if $(2),$(eval CYPRESS_INCLUDE_TAGS=$(2)))
+	$(if $(2),$(eval export CYPRESS_INCLUDE_TAGS))
+	$(if $(2),$(V)echo Cypress tags: $(CYPRESS_INCLUDE_TAGS))
+	$(if $(spec),$(call check_spec_existence,$(spec),$(1)))
+	$(eval INTERACTIVE_SPEC=$(if $(spec),$(5)/$(spec),$(if $(6),$(5)/$(6))))
+	$(V)trap '$(KILL_COMMAND) || true' INT TERM EXIT; \
+		$(if $(INTERACTIVE_SPEC),$(call run_interactive_single,$(3),$(4),$(INTERACTIVE_SPEC)),$(call run_interactive_all,$(3),$(4))) || true
+endef
+
+# Open cypress interactive test runner window with all tests in it.
+#
+# Parameters:
+# 1 - config-file: cypress configuration file (e.g. cypress.config.ts).
+# 2 - config: cypress configuration (e.g. cypress' --config argument).
+# 3 - env:    list of environment variables (e.g. cypress' --env argument).
+define run_interactive_all
+	DEBUG='cypress:*' \
+		$(CYPRESS_BINARY) open \
+		--config-file $(CYPRESS_CONFIG) \
+		--project $(abs_srcdir) \
+		--config $(1) \
+		--env $(2)
+endef
+
+# Run single test in cypress interactive test runner.
+#
+# Parameters:
+# 1 - config-file: cypress configuration file (e.g. cypress.config.ts).
+# 2 - config: cypress configuration (e.g. cypress' --config argument).
+# 3 - env:    list of environment variables (e.g. cypress' --env argument).
+# 4 - spec:   test file path (e.g. cypress' --spec argument)
+# No setsid here: it would put cypress in a session of its own, out of reach
+# of the terminal's Ctrl-C. Headless runs keep it, an interactive one is
+# driven by hand and has to stay interruptible.
+define run_interactive_single
+	DEBUG='cypress:*' \
+		$(CYPRESS_BINARY) run \
+		--browser $(BROWSER) \
+		--headed --no-exit \
+		--config-file $(CYPRESS_CONFIG) \
+		--project $(abs_srcdir) \
+		--config $(1),retries=0 \
+		--env $(2) \
+		--spec=$(3)
+endef
+
+# Run one test in parallel mode, using parallel running script.
+#
+# Parameters:
+# 1 - config: cypress configuration (e.g. cypress' --config argument).
+# 2 - env:    list of environment variables (e.g. cypress' --env argument).
+# 3 - spec:   test file path, or several separated by commas, which one
+#             cypress process then runs one after another
+# 4 - type:   test type (e.g. mobile, desktop, multi-user)
+# 5 - log:    log file path
+# 6 - browser (optional): browser to run, defaults to $(BROWSER)
+define run_test_buffered
+	$(CYPRESS_FONTCONFIG) \
+	$(BUFFERED_SCRIPT) \
+		--browser $(if $(6),$(6),$(BROWSER)) \
+		--config $(1) \
+		--env $(2) \
+		--spec $(3) \
+		--type $(4) \
+		--log-file $(5) \
+		$(if $(CYPRESS_NO_SECOND_CHANCE),,--second-chance) \
+		--config-file $(CYPRESS_CONFIG) \
+		--project $(abs_srcdir)
+endef
+
+# Shell commands for CPU load generation (expanded conditionally based on ENABLE_CPULOAD)
+LOAD_START_CMD = $(if $(ENABLE_CPULOAD),\
+	echo "Starting CPU load generators..."; \
+	rm -f $(LOAD_PID_FILE); \
+	for i in $$(seq 1 $$(nproc)); do \
+		(while true; do :; done) & echo $$! >> $(LOAD_PID_FILE); \
+	done; \
+	echo "Load generators started";)
+LOAD_STOP_CMD = $(if $(ENABLE_CPULOAD),\
+	echo "Stopping CPU load generators..."; \
+	if [ -f $(LOAD_PID_FILE) ]; then \
+		while read pid; do kill $$pid 2>/dev/null || true; done < $(LOAD_PID_FILE); \
+		rm -f $(LOAD_PID_FILE); \
+	fi; \
+	echo "Load generators stopped";)
+
+# Run one test \ tests in headless mode.
+#
+# Parameters:
+# 1 - config-file:	 cypress configuration file (e.g. cypress.config.ts).
+# 2 - config:		 cypress configuration (e.g. cypress' --config argument).
+# 3 - env:		 list of environment variables (e.g. cypress' --env argument).
+# 4 - spec (optional):   test file path (e.g. cypress' --spec argument)
+define run_test_headless
+	$(LOAD_START_CMD) \
+	$(CYPRESS_FONTCONFIG) \
+	$(SETSID) $(CYPRESS_BINARY) run \
+		--browser $(BROWSER) \
+		--headless \
+		--config-file $(CYPRESS_CONFIG) \
+		--project $(abs_srcdir) \
+		--config $(1) \
+		--env $(2) \
+		$(if $(3),--spec=$(3)); \
+		rc=$$?; $(LOAD_STOP_CMD) $(KILL_COMMAND) || true; exit $$rc
+endef
+
+# Checks whether the given spec file exists.
+# We run this check when the spec file was specified by
+# the user so we can give clearer error message.
+#
+# Parameters:
+# 1 - spec:	      test file path (e.g. make check-mobile spec=...)
+# 2 - test type:      mobile, desktop, idle or multi test.
+define check_spec_existence
+	$(eval TEST_FILES=$(if $(filter mobile,$(2)),$(MOBILE_TEST_FILES),\
+				$(if $(filter desktop,$(2)),$(DESKTOP_TEST_FILES),\
+				$(if $(filter idle,$(2)),$(IDLE_TEST_FILES),\
+				$(if $(filter lighthouse,$(2)),$(LIGHTHOUSE_TEST_FILES),\
+				$(if $(filter multi,$(2)),$(MULTIUSER_TEST_FILES),\
+				$(if $(filter redline,$(2)),$(REDLINE_TEST_FILES))))))))
+	$(if $(filter $(1),$(TEST_FILES)),,$(error CypressError: Can't find the given spec file!))
+
+endef
+
+else
+
+check-local:
+	$(error CypressError: Can't find LibreOffice core installation!)
+
+endif

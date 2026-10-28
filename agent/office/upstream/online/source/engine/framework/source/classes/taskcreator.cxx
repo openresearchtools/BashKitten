@@ -1,0 +1,79 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <classes/taskcreator.hxx>
+#include <services/taskcreatorsrv.hxx>
+#include <services.h>
+#include <taskcreatordefs.hxx>
+
+#include <com/sun/star/frame/Desktop.hpp>
+#include <com/sun/star/frame/TaskCreator.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
+#include <com/sun/star/beans/NamedValue.hpp>
+
+#include <rtl/ref.hxx>
+
+#include <utility>
+
+namespace framework{
+
+/*-****************************************************************************************************
+    @short      initialize instance with necessary information
+    @descr      We need a valid uno service manager to create or instantiate new services.
+                All other information to create frames or tasks come in on right interface methods.
+
+    @param      xContext
+                    points to the valid uno service manager
+*//*-*****************************************************************************************************/
+TaskCreator::TaskCreator( cpo::uno::Reference< cpo::uno::XComponentContext > xContext )
+    : m_xContext    (std::move( xContext ))
+{
+}
+
+/*-****************************************************************************************************
+    @short      deinitialize instance
+    @descr      We should release all used resource which are not needed any longer.
+*//*-*****************************************************************************************************/
+TaskCreator::~TaskCreator()
+{
+}
+
+/*-****************************************************************************************************
+    TODO document me
+*//*-*****************************************************************************************************/
+cpo::uno::Reference< css::frame::XFrame > TaskCreator::createTask( const OUString& sName, const comphelper::SequenceAsHashMap& rDescriptor )
+{
+    rtl::Reference< TaskCreatorService > xCreator = new TaskCreatorService(m_xContext);
+
+    cpo::uno::Sequence< cpo::uno::Any > lArgs
+    {
+        cpo::uno::Any(css::beans::NamedValue(ARGUMENT_PARENTFRAME, cpo::uno::Any(cpo::uno::Reference< css::frame::XFrame >( css::frame::Desktop::create( m_xContext ), cpo::uno::UNO_QUERY_THROW)))) ,
+        cpo::uno::Any(css::beans::NamedValue(ARGUMENT_CREATETOPWINDOW, cpo::uno::Any(true))),
+        cpo::uno::Any(css::beans::NamedValue(ARGUMENT_MAKEVISIBLE, cpo::uno::Any(false))),
+        cpo::uno::Any(css::beans::NamedValue(ARGUMENT_SUPPORTPERSISTENTWINDOWSTATE, cpo::uno::Any(true))),
+        cpo::uno::Any(css::beans::NamedValue(ARGUMENT_FRAMENAME, cpo::uno::Any(sName))),
+        cpo::uno::Any(css::beans::NamedValue(ARGUMENT_HIDDENFORCONVERSION, cpo::uno::Any(rDescriptor.getUnpackedValueOrDefault(ARGUMENT_HIDDENFORCONVERSION, false))))
+    };
+    cpo::uno::Reference< css::frame::XFrame > xTask(xCreator->createInstanceWithArguments(lArgs), cpo::uno::UNO_QUERY_THROW);
+    return xTask;
+}
+
+} // namespace framework
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

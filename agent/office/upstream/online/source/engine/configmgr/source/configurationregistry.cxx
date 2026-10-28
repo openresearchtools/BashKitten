@@ -1,0 +1,640 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <cassert>
+
+#include <com/sun/star/beans/NamedValue.hpp>
+#include <com/sun/star/container/NoSuchElementException.hpp>
+#include <com/sun/star/container/XHierarchicalNameAccess.hpp>
+#include <com/sun/star/container/XNamed.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
+#include <com/sun/star/registry/InvalidRegistryException.hpp>
+#include <com/sun/star/registry/InvalidValueException.hpp>
+#include <com/sun/star/registry/RegistryKeyType.hpp>
+#include <com/sun/star/registry/RegistryValueType.hpp>
+#include <com/sun/star/registry/XRegistryKey.hpp>
+#include <com/sun/star/registry/XSimpleRegistry.hpp>
+#include <cpo/uno/Any.hxx>
+#include <cpo/uno/DeploymentException.hpp>
+#include <cpo/uno/Exception.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/RuntimeException.hpp>
+#include <cpo/uno/Sequence.hxx>
+#include <cpo/uno/Type.hxx>
+#include <cpo/uno/TypeClass.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <cpo/uno/XInterface.hpp>
+#include <com/sun/star/util/XFlushable.hpp>
+#include <cppu/unotype.hxx>
+#include <cppuhelper/exc_hlp.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <cppuhelper/weak.hxx>
+#include <mutex>
+#include <rtl/ustring.hxx>
+#include <utility>
+#include <sal/types.h>
+
+namespace configmgr::configuration_registry {
+
+namespace {
+
+class Service:
+    public cppu::WeakImplHelper<
+        css::lang::XServiceInfo, css::registry::XSimpleRegistry,
+        css::util::XFlushable >
+{
+public:
+    explicit Service(cpo::uno::Reference< cpo::uno::XComponentContext > const & context);
+
+private:
+    Service(const Service&) = delete;
+    Service& operator=(const Service&) = delete;
+
+    virtual ~Service() override {}
+
+    virtual OUString getImplementationName() override
+    { return u"com.sun.star.comp.configuration.ConfigurationRegistry"_ustr; }
+
+    virtual bool supportsService(OUString const & ServiceName) override
+    { return cppu::supportsService(this, ServiceName); }
+
+    virtual cpo::uno::Sequence< OUString >
+    getSupportedServiceNames() override
+    { return { u"com.sun.star.configuration.ConfigurationRegistry"_ustr }; }
+
+    virtual OUString getURL() override;
+
+    virtual void open(
+        OUString const & rURL, bool bReadOnly, bool) override;
+
+    virtual bool isValid() override;
+
+    virtual void close() override;
+
+    virtual void destroy() override;
+
+    virtual cpo::uno::Reference< css::registry::XRegistryKey >
+    getRootKey() override;
+
+    virtual bool isReadOnly() override;
+
+    virtual void mergeKey(OUString const &, OUString const &) override;
+
+    virtual void flush() override;
+
+    virtual void addFlushListener(
+        cpo::uno::Reference< css::util::XFlushListener > const &) override;
+
+    virtual void removeFlushListener(
+        cpo::uno::Reference< css::util::XFlushListener > const &) override;
+
+    void checkValid();
+
+    void checkValid_RuntimeException();
+
+    void doClose();
+
+    cpo::uno::Reference< css::lang::XMultiServiceFactory > provider_;
+    std::mutex mutex_;
+    cpo::uno::Reference< cpo::uno::XInterface > access_;
+    OUString url_;
+    bool readOnly_;
+
+    friend class RegistryKey;
+};
+
+class RegistryKey:
+    public cppu::WeakImplHelper< css::registry::XRegistryKey >
+{
+public:
+    RegistryKey(Service & service, cpo::uno::Any value):
+        service_(service), value_(std::move(value)) {}
+
+private:
+    RegistryKey(const RegistryKey&) = delete;
+    RegistryKey& operator=(const RegistryKey&) = delete;
+
+    virtual ~RegistryKey() override {}
+
+    virtual OUString getKeyName() override;
+
+    virtual bool isReadOnly() override;
+
+    virtual bool isValid() override;
+
+    virtual css::registry::RegistryKeyType getKeyType(
+        OUString const &) override;
+
+    virtual css::registry::RegistryValueType getValueType() override;
+
+    virtual sal_Int32 getLongValue() override;
+
+    virtual void setLongValue(sal_Int32) override;
+
+    virtual cpo::uno::Sequence< sal_Int32 > getLongListValue() override;
+
+    virtual void setLongListValue(
+        cpo::uno::Sequence< sal_Int32 > const &) override;
+
+    virtual OUString getAsciiValue() override;
+
+    virtual void setAsciiValue(OUString const &) override;
+
+    virtual cpo::uno::Sequence< OUString > getAsciiListValue() override;
+
+    virtual void setAsciiListValue(
+        cpo::uno::Sequence< OUString > const &) override;
+
+    virtual OUString getStringValue() override;
+
+    virtual void setStringValue(OUString const &) override;
+
+    virtual cpo::uno::Sequence< OUString > getStringListValue() override;
+
+    virtual void setStringListValue(
+        cpo::uno::Sequence< OUString > const &) override;
+
+    virtual cpo::uno::Sequence< sal_Int8 > getBinaryValue() override;
+
+    virtual void setBinaryValue(cpo::uno::Sequence< sal_Int8 > const &) override;
+
+    virtual cpo::uno::Reference< css::registry::XRegistryKey > openKey(
+        OUString const & aKeyName) override;
+
+    virtual cpo::uno::Reference< css::registry::XRegistryKey >
+    createKey(OUString const &) override;
+
+    virtual void closeKey() override;
+
+    virtual void deleteKey(OUString const &) override;
+
+    virtual
+    cpo::uno::Sequence< cpo::uno::Reference< css::registry::XRegistryKey > >
+    openKeys() override;
+
+    virtual cpo::uno::Sequence< OUString > getKeyNames() override;
+
+    virtual bool createLink(
+        OUString const &, OUString const &) override;
+
+    virtual void deleteLink(OUString const &) override;
+
+    virtual OUString getLinkTarget(OUString const &) override;
+
+    virtual OUString getResolvedName(
+        OUString const & aKeyName) override;
+
+    Service & service_;
+    cpo::uno::Any value_;
+};
+
+Service::Service(
+    cpo::uno::Reference< cpo::uno::XComponentContext > const & context)
+    : readOnly_(false)
+{
+    assert(context.is());
+    try {
+        provider_.set(
+            context->getServiceManager()->createInstanceWithContext(
+                u"com.sun.star.configuration.DefaultProvider"_ustr, context),
+            cpo::uno::UNO_QUERY_THROW);
+    } catch (cpo::uno::RuntimeException &) {
+        throw;
+    } catch (cpo::uno::Exception & e) {
+        throw cpo::uno::DeploymentException(
+            ("component context fails to supply service"
+             " com.sun.star.configuration.DefaultProvider of type"
+             " com.sun.star.lang.XMultiServiceFactory: " + e.Message),
+            context);
+    }
+}
+
+OUString Service::getURL() {
+    std::unique_lock g(mutex_);
+    checkValid_RuntimeException();
+    return url_;
+}
+
+void Service::open(OUString const & rURL, bool bReadOnly, bool)
+{
+    //TODO: bCreate
+    std::unique_lock g(mutex_);
+    if (access_.is()) {
+        doClose();
+    }
+    cpo::uno::Sequence< cpo::uno::Any > args{ cpo::uno::Any(
+        css::beans::NamedValue(u"nodepath"_ustr, cpo::uno::Any(rURL))) };
+    try {
+        access_ = provider_->createInstanceWithArguments(
+            (bReadOnly
+             ? u"com.sun.star.configuration.ConfigurationAccess"_ustr
+             : u"com.sun.star.configuration.ConfigurationUpdateAccess"_ustr),
+            args);
+    } catch (cpo::uno::RuntimeException &) {
+        throw;
+    } catch (cpo::uno::Exception & e) {
+        cpo::uno::Any anyEx = cppu::getCaughtException();
+        throw css::lang::WrappedTargetRuntimeException(
+            "com.sun.star.configuration.ConfigurationRegistry: open failed: " +
+            e.Message,
+            getXWeak(), anyEx );
+    }
+    url_ = rURL;
+    readOnly_ = bReadOnly;
+}
+
+bool Service::isValid() {
+    std::unique_lock g(mutex_);
+    return access_.is();
+}
+
+void Service::close()
+{
+    std::unique_lock g(mutex_);
+    checkValid();
+    doClose();
+}
+
+void Service::destroy()
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+cpo::uno::Reference< css::registry::XRegistryKey > Service::getRootKey()
+{
+    std::unique_lock g(mutex_);
+    checkValid();
+    return new RegistryKey(*this, cpo::uno::Any(access_));
+}
+
+bool Service::isReadOnly() {
+    std::unique_lock g(mutex_);
+    checkValid_RuntimeException();
+    return readOnly_;
+}
+
+void Service::mergeKey(OUString const &, OUString const &)
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+void Service::flush()
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+void Service::addFlushListener(
+    cpo::uno::Reference< css::util::XFlushListener > const &)
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+void Service::removeFlushListener(
+    cpo::uno::Reference< css::util::XFlushListener > const &)
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+void Service::checkValid() {
+    if (!access_.is()) {
+        throw css::registry::InvalidRegistryException(
+            u"com.sun.star.configuration.ConfigurationRegistry: not valid"_ustr,
+            getXWeak());
+    }
+}
+
+void Service::checkValid_RuntimeException() {
+    if (!access_.is()) {
+        throw cpo::uno::RuntimeException(
+            u"com.sun.star.configuration.ConfigurationRegistry: not valid"_ustr,
+            getXWeak());
+    }
+}
+
+void Service::doClose() {
+    access_.clear();
+}
+
+OUString RegistryKey::getKeyName() {
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid_RuntimeException();
+    cpo::uno::Reference< css::container::XNamed > named;
+    if (value_ >>= named) {
+        return named->getName();
+    }
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+bool RegistryKey::isReadOnly()
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid_RuntimeException();
+    return service_.readOnly_; //TODO: read-only sub-nodes in update access?
+}
+
+bool RegistryKey::isValid() {
+    return service_.isValid();
+}
+
+css::registry::RegistryKeyType RegistryKey::getKeyType(OUString const &)
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid();
+    return css::registry::RegistryKeyType_KEY;
+}
+
+css::registry::RegistryValueType RegistryKey::getValueType()
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid();
+    cpo::uno::Type t(value_.getValueType());
+    switch (t.getTypeClass()) {
+    case cpo::uno::TypeClass_LONG:
+        return css::registry::RegistryValueType_LONG;
+    case cpo::uno::TypeClass_STRING:
+        return css::registry::RegistryValueType_STRING;
+    case cpo::uno::TypeClass_SEQUENCE:
+        if (t == cppu::UnoType< cpo::uno::Sequence< sal_Int8 > >::get()) {
+            return css::registry::RegistryValueType_BINARY;
+        } else if (t == cppu::UnoType< cpo::uno::Sequence< sal_Int32 > >::get())
+        {
+            return css::registry::RegistryValueType_LONGLIST;
+        } else if (t ==
+                   cppu::UnoType< cpo::uno::Sequence< OUString > >::get())
+        {
+            return css::registry::RegistryValueType_STRINGLIST;
+        }
+        [[fallthrough]];
+    default:
+        return css::registry::RegistryValueType_NOT_DEFINED;
+    }
+}
+
+sal_Int32 RegistryKey::getLongValue()
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid();
+    sal_Int32 v1 = 0;
+    if (value_ >>= v1) {
+        return v1;
+    }
+    bool v2;
+    if (value_ >>= v2) {
+        return sal_Int32(v2);
+    }
+    throw css::registry::InvalidValueException(
+        u"com.sun.star.configuration.ConfigurationRegistry"_ustr,
+        getXWeak());
+}
+
+void RegistryKey::setLongValue(sal_Int32)
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+cpo::uno::Sequence< sal_Int32 > RegistryKey::getLongListValue()
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid();
+    cpo::uno::Sequence< sal_Int32 > v;
+    if (value_ >>= v) {
+        return v;
+    }
+    throw css::registry::InvalidValueException(
+        u"com.sun.star.configuration.ConfigurationRegistry"_ustr,
+        getXWeak());
+}
+
+void RegistryKey::setLongListValue(cpo::uno::Sequence< sal_Int32 > const &)
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+OUString RegistryKey::getAsciiValue()
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid();
+    OUString v;
+    if (value_ >>= v) {
+        return v;
+    }
+    throw css::registry::InvalidValueException(
+        u"com.sun.star.configuration.ConfigurationRegistry"_ustr,
+        getXWeak());
+}
+
+void RegistryKey::setAsciiValue(OUString const &)
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+cpo::uno::Sequence< OUString > RegistryKey::getAsciiListValue()
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid();
+    cpo::uno::Sequence< OUString > v;
+    if (value_ >>= v) {
+        return v;
+    }
+    throw css::registry::InvalidValueException(
+        u"com.sun.star.configuration.ConfigurationRegistry"_ustr,
+        getXWeak());
+}
+
+void RegistryKey::setAsciiListValue(cpo::uno::Sequence< OUString > const &)
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+OUString RegistryKey::getStringValue()
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid();
+    OUString v;
+    if (value_ >>= v) {
+        return v;
+    }
+    throw css::registry::InvalidValueException(
+        u"com.sun.star.configuration.ConfigurationRegistry"_ustr,
+        getXWeak());
+}
+
+void RegistryKey::setStringValue(OUString const &)
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+cpo::uno::Sequence< OUString > RegistryKey::getStringListValue()
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid();
+    cpo::uno::Sequence< OUString > v;
+    if (value_ >>= v) {
+        return v;
+    }
+    throw css::registry::InvalidValueException(
+        u"com.sun.star.configuration.ConfigurationRegistry"_ustr,
+        getXWeak());
+}
+
+void RegistryKey::setStringListValue(
+    cpo::uno::Sequence< OUString > const &)
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+cpo::uno::Sequence< sal_Int8 > RegistryKey::getBinaryValue()
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid();
+    cpo::uno::Sequence< sal_Int8 > v;
+    if (value_ >>= v) {
+        return v;
+    }
+    throw css::registry::InvalidValueException(
+        u"com.sun.star.configuration.ConfigurationRegistry"_ustr,
+        getXWeak());
+}
+
+void RegistryKey::setBinaryValue(cpo::uno::Sequence< sal_Int8 > const &)
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+cpo::uno::Reference< css::registry::XRegistryKey > RegistryKey::openKey(
+    OUString const & aKeyName)
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid_RuntimeException();
+    cpo::uno::Reference< css::container::XHierarchicalNameAccess > access;
+    if (value_ >>= access) {
+        try {
+            return new RegistryKey(
+                service_, access->getByHierarchicalName(aKeyName));
+        } catch (css::container::NoSuchElementException &) {}
+    }
+    return cpo::uno::Reference< css::registry::XRegistryKey >();
+}
+
+cpo::uno::Reference< css::registry::XRegistryKey > RegistryKey::createKey(
+    OUString const &)
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+void RegistryKey::closeKey()
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid_RuntimeException();
+}
+
+void RegistryKey::deleteKey(OUString const &)
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+cpo::uno::Sequence< cpo::uno::Reference< css::registry::XRegistryKey > >
+RegistryKey::openKeys()
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+cpo::uno::Sequence< OUString > RegistryKey::getKeyNames()
+{
+    throw cpo::uno::RuntimeException(
+        u"com.sun.star.configuration.ConfigurationRegistry: not implemented"_ustr,
+        getXWeak());
+}
+
+bool RegistryKey::createLink(OUString const &, OUString const &)
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid_RuntimeException();
+    return false;
+}
+
+void RegistryKey::deleteLink(OUString const &)
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid_RuntimeException();
+}
+
+OUString RegistryKey::getLinkTarget(OUString const &)
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid_RuntimeException();
+    return OUString();
+}
+
+OUString RegistryKey::getResolvedName(OUString const & aKeyName)
+{
+    std::unique_lock g(service_.mutex_);
+    service_.checkValid_RuntimeException();
+    return aKeyName;
+}
+
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_configuration_ConfigurationRegistry_get_implementation(
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+{
+    return cppu::acquire(new Service(context));
+}
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

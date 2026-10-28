@@ -1,0 +1,98 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+
+#include "pdfinteract.hxx"
+#include "impdialog.hxx"
+
+#include <com/sun/star/task/XInteractionRequest.hpp>
+#include <com/sun/star/task/PDFExportException.hpp>
+#include <comphelper/namedvaluecollection.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <vcl/svapp.hxx>
+
+using namespace css;
+using namespace ::cpo::uno;
+
+PDFInteractionHandler::PDFInteractionHandler()
+{
+}
+
+PDFInteractionHandler::~PDFInteractionHandler()
+{
+}
+
+void PDFInteractionHandler::handle( const Reference< task::XInteractionRequest >& i_xRequest )
+{
+    handleInteractionRequest( i_xRequest );
+}
+
+void PDFInteractionHandler::initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments)
+{
+    comphelper::NamedValueCollection aProperties(rArguments);
+    if (aProperties.has(u"Parent"_ustr))
+        aProperties.get(u"Parent"_ustr) >>= m_xParent;
+}
+
+bool PDFInteractionHandler::handleInteractionRequest( const Reference< task::XInteractionRequest >& i_xRequest )
+{
+    bool bHandled = false;
+
+    cpo::uno::Any aRequest( i_xRequest->getRequest() );
+    task::PDFExportException aExc;
+    if( aRequest >>= aExc )
+    {
+        std::set< vcl::pdf::PDFWriter::ErrorCode > aCodes;
+        for (const sal_Int32 nErrorCode : aExc.ErrorCodes)
+            aCodes.insert(static_cast<vcl::pdf::PDFWriter::ErrorCode>(nErrorCode));
+
+        auto xDialog = std::make_shared<ImplErrorDialog>(Application::GetFrameWeld(m_xParent), aCodes);
+        weld::DialogController::runAsync(xDialog, [](sal_uInt32 /*nResult*/) {});
+
+        bHandled = true;
+    }
+    return bHandled;
+}
+
+OUString PDFInteractionHandler::getImplementationName()
+{
+    return u"com.sun.star.comp.PDF.PDFExportInteractionHandler"_ustr;
+}
+
+
+bool PDFInteractionHandler::supportsService( const OUString& rServiceName )
+{
+    return cppu::supportsService( this, rServiceName );
+}
+
+
+cpo::uno::Sequence< OUString > PDFInteractionHandler::getSupportedServiceNames(  )
+{
+    return { u"com.sun.star.filter.pdfexport.PDFExportInteractionHandler"_ustr };
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+filter_PDFExportInteractionHandler_get_implementation(
+    cpo::uno::XComponentContext* , cpo::uno::Sequence<cpo::uno::Any> const&)
+{
+    return cppu::acquire(new PDFInteractionHandler());
+}
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

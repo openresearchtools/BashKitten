@@ -1,0 +1,114 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <com/sun/star/sdbc/XRow.hpp>
+#include <com/sun/star/script/XTypeConverter.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <mutex>
+
+namespace fileaccess {
+
+    class TaskManager;
+
+    class XRow_impl: public cppu::WeakImplHelper<
+        css::sdbc::XRow >
+    {
+    public:
+        XRow_impl( TaskManager* pShell,const cpo::uno::Sequence< cpo::uno::Any >& aValueMap );
+        virtual ~XRow_impl() override;
+
+        virtual bool
+        wasNull() override;
+
+        virtual OUString
+        getString( sal_Int32 columnIndex ) override;
+
+        virtual bool
+        getBoolean( sal_Int32 columnIndex ) override;
+
+        virtual sal_Int8
+        getByte( sal_Int32 columnIndex ) override;
+
+        virtual sal_Int16
+        getShort( sal_Int32 columnIndex ) override;
+
+        virtual sal_Int32
+        getInt( sal_Int32 columnIndex ) override;
+
+        virtual sal_Int64
+        getLong( sal_Int32 columnIndex ) override;
+
+        virtual float
+        getFloat( sal_Int32 columnIndex ) override;
+
+        virtual double
+        getDouble(
+            sal_Int32 columnIndex ) override;
+
+        virtual cpo::uno::Sequence< sal_Int8 >
+        getBytes( sal_Int32 columnIndex ) override;
+
+        virtual css::util::Date
+        getDate( sal_Int32 columnIndex ) override;
+
+        virtual css::util::Time
+        getTime( sal_Int32 columnIndex ) override;
+
+        virtual css::util::DateTime
+        getTimestamp( sal_Int32 columnIndex ) override;
+
+        virtual cpo::uno::Reference< css::io::XInputStream >
+        getBinaryStream( sal_Int32 columnIndex ) override;
+
+        virtual cpo::uno::Reference< css::io::XInputStream >
+        getCharacterStream( sal_Int32 columnIndex ) override;
+
+        virtual cpo::uno::Any
+        getObject(
+            sal_Int32 columnIndex,
+            const cpo::uno::Reference< css::container::XNameAccess >& typeMap ) override;
+
+        virtual cpo::uno::Reference< css::sdbc::XRef >
+        getRef( sal_Int32 columnIndex ) override;
+
+        virtual cpo::uno::Reference< css::sdbc::XBlob >
+        getBlob( sal_Int32 columnIndex ) override;
+
+        virtual cpo::uno::Reference< css::sdbc::XClob >
+        getClob( sal_Int32 columnIndex ) override;
+
+        virtual cpo::uno::Reference< css::sdbc::XArray >
+        getArray( sal_Int32 columnIndex ) override;
+
+    private:
+        std::mutex                                         m_aMutex;
+        cpo::uno::Sequence< cpo::uno::Any >                m_aValueMap;
+        bool                                               m_nWasNull;
+        TaskManager*                                       m_pMyShell;
+        cpo::uno::Reference< css::script::XTypeConverter > m_xTypeConverter;
+
+        bool isIndexOutOfBounds( sal_Int32 nIndex ) const;
+        template<typename T>
+        T getValue(sal_Int32 columnIndex);
+    };
+
+} // end namespace fileaccess
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

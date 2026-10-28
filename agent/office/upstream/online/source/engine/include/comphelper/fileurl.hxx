@@ -1,0 +1,44 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_COMPHELPER_FILEURL_HXX
+#define INCLUDED_COMPHELPER_FILEURL_HXX
+
+#include <sal/config.h>
+
+#include <comphelper/comphelperdllapi.h>
+
+#include <rtl/ustring.hxx>
+
+#include <string_view>
+
+namespace comphelper
+{
+// Return true iff url is an absolute URL of "file" scheme:
+COMPHELPER_DLLPUBLIC bool isFileUrl(std::u16string_view url);
+
+// Replace rURL, a file URL, with the absolute URL of the existing file or folder it names: "."
+// and ".." segments, percent-encoded characters and symbolic links resolved, and no final slash.
+// Return false, leaving rURL unchanged, when it names nothing that exists.
+COMPHELPER_DLLPUBLIC bool makeCanonicalFileURL(OUString& rURL);
+}
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,59 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* AbiWordImportFilter: Sets up the filter, and calls DocumentCollector
+ * to do the actual filtering
+ *
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <cppuhelper/supportsservice.hxx>
+
+#include <libabw/libabw.h>
+
+#include "AbiWordImportFilter.hxx"
+
+bool AbiWordImportFilter::doImportDocument(weld::Window*, librevenge::RVNGInputStream& rInput,
+                                           OdtGenerator& rGenerator, comphelper::SequenceAsHashMap&)
+{
+    return libabw::AbiDocument::parse(&rInput, &rGenerator);
+}
+
+bool AbiWordImportFilter::doDetectFormat(librevenge::RVNGInputStream& rInput, OUString& rTypeName)
+{
+    if (libabw::AbiDocument::isFileFormatSupported(&rInput))
+    {
+        rTypeName = u"writer_AbiWord_Document"_ustr;
+        return true;
+    }
+
+    return false;
+}
+
+// XServiceInfo
+OUString AbiWordImportFilter::getImplementationName()
+{
+    return u"com.sun.star.comp.Writer.AbiWordImportFilter"_ustr;
+}
+
+bool AbiWordImportFilter::supportsService(const OUString& rServiceName)
+{
+    return cppu::supportsService(this, rServiceName);
+}
+
+cpo::uno::Sequence<OUString> AbiWordImportFilter::getSupportedServiceNames()
+{
+    return { u"com.sun.star.document.ImportFilter"_ustr,
+             u"com.sun.star.document.ExtendedTypeDetection"_ustr };
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Writer_AbiWordImportFilter_get_implementation(
+    cpo::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
+{
+    return cppu::acquire(new AbiWordImportFilter(context));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,182 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include "EditBase.hxx"
+#include <tools/link.hxx>
+#include <cppuhelper/implbase1.hxx>
+#include "errorbroadcaster.hxx"
+
+#include <com/sun/star/util/XNumberFormatsSupplier.hpp>
+
+struct ImplSVEvent;
+
+namespace frm
+{
+class OFormattedModel final
+                    :public OEditBaseModel
+                    ,public OErrorBroadcaster
+    {
+        // the original, in case I faked the format properties of my aggregated model,
+        // i.e. I just passed on the attributes of the field to which I am bound
+        // (only valid if loaded)
+
+        cpo::uno::Reference< css::util::XNumberFormatsSupplier>   m_xOriginalFormatter;
+        css::util::Date        m_aNullDate;
+        cpo::uno::Any          m_aSaveValue;
+
+        sal_Int16                           m_nKeyType;
+        bool                                m_bOriginalNumeric      : 1,
+                                            m_bNumeric              : 1;    // analogous for the TreatAsNumeric-property
+
+        cpo::uno::Reference< css::util::XNumberFormatsSupplier>  calcDefaultFormatsSupplier() const;
+        cpo::uno::Reference< css::util::XNumberFormatsSupplier>  calcFormFormatsSupplier() const;
+        cpo::uno::Reference< css::util::XNumberFormatsSupplier>  calcFormatsSupplier() const;
+
+        OFormattedModel(
+            const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxFactory
+        );
+        OFormattedModel(
+            const OFormattedModel* _pOriginal,
+            const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxFactory
+        );
+        virtual ~OFormattedModel() override;
+
+        friend class OFormattedFieldWrapper;
+
+    public:
+        // XInterface
+        DECLARE_UNO3_AGG_DEFAULTS( OFormattedModel, OEditBaseModel )
+
+        // XTypeProvider
+        virtual cpo::uno::Sequence< cpo::uno::Type> _getTypes() override;
+
+        // XAggregation
+        virtual cpo::uno::Any queryAggregation(const cpo::uno::Type& _rType) override;
+
+        // OComponentHelper
+        virtual void disposing() override;
+
+        // XServiceInfo
+        OUString getImplementationName() override
+        { return u"com.sun.star.form.OFormattedModel"_ustr; }
+
+        virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+        // XPersistObject
+        virtual void write(const cpo::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream) override;
+        virtual void read(const cpo::uno::Reference< css::io::XObjectInputStream>& _rxInStream) override;
+        virtual OUString getServiceName() override;
+
+        // XLoadListener
+        virtual void loaded(const css::lang::EventObject& rEvent) override;
+
+        // XPropertyState
+        void setPropertyToDefaultByHandle(sal_Int32 nHandle) override;
+        cpo::uno::Any getPropertyDefaultByHandle(sal_Int32 nHandle) const override;
+
+        void setPropertyToDefault(const OUString& aPropertyName) override;
+        cpo::uno::Any getPropertyDefault( const OUString& aPropertyName ) override;
+
+        // OControlModel's property handling
+        virtual void describeFixedProperties(
+            cpo::uno::Sequence< css::beans::Property >& /* [out] */ _rProps
+        ) const override;
+        virtual void describeAggregateProperties(
+            cpo::uno::Sequence< css::beans::Property >& /* [out] */ _rAggregateProps
+        ) const override;
+
+        // XPropertyChangeListener
+        virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) override;
+
+        // prevent method hiding
+        using OEditBaseModel::disposing;
+        using OEditBaseModel::getFastPropertyValue;
+
+        virtual sal_uInt16 getPersistenceFlags() const override;
+        // as we have an own version handling for persistence
+
+        // OBoundControlModel overridables
+        virtual cpo::uno::Any
+                            translateDbColumnToControlValue( ) override;
+        virtual bool        commitControlValueToDbColumn( bool _bPostReset ) override;
+
+        virtual cpo::uno::Sequence< cpo::uno::Type >
+                            getSupportedBindingTypes() override;
+        virtual cpo::uno::Any
+                            translateExternalValueToControlValue( const cpo::uno::Any& _rExternalValue ) const override;
+        virtual cpo::uno::Any
+                            translateControlValueToExternalValue( ) const override;
+        virtual void onConnectedExternalValue( ) override;
+
+        virtual cpo::uno::Any
+                            getDefaultForReset() const override;
+        virtual void        resetNoBroadcast() override;
+
+        virtual void        onConnectedDbColumn( const cpo::uno::Reference< cpo::uno::XInterface >& _rxForm ) override;
+        virtual void        onDisconnectedDbColumn() override;
+
+        virtual cpo::uno::Reference< css::util::XCloneable > createClone(  ) override;
+
+        void implConstruct();
+
+        void    updateFormatterNullDate();
+    };
+
+    typedef ::cppu::ImplHelper1< css::awt::XKeyListener> OFormattedControl_BASE;
+    class OFormattedControl :    public OBoundControl
+                                ,public OFormattedControl_BASE
+    {
+        ImplSVEvent * m_nKeyEvent;
+
+    public:
+        explicit OFormattedControl(const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxContext);
+        virtual ~OFormattedControl() override;
+
+        DECLARE_UNO3_AGG_DEFAULTS(OFormattedControl, OBoundControl)
+        virtual cpo::uno::Any queryAggregation(const cpo::uno::Type& _rType) override;
+
+        virtual cpo::uno::Sequence< cpo::uno::Type> _getTypes() override;
+
+        // css::lang::XServiceInfo
+        OUString getImplementationName() override
+        { return u"com.sun.star.form.OFormattedControl"_ustr; }
+
+        virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+        // css::lang::XEventListener
+        virtual void disposing(const css::lang::EventObject& _rSource) override;
+
+        // css::awt::XKeyListener
+        virtual void keyPressed(const css::awt::KeyEvent& e) override;
+        virtual void keyReleased(const css::awt::KeyEvent& e) override;
+
+        // css::awt::XControl
+        using OBoundControl::setDesignMode;
+
+        // disambiguation
+        using OBoundControl::disposing;
+
+    private:
+        DECL_LINK( OnKeyPressed, void*, void );
+    };
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

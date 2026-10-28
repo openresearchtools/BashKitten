@@ -1,0 +1,154 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * URI parsing and decomposition utilities.
+ * Functions: parseUri()
+ */
+
+#pragma once
+
+#include <string>
+#include <string_view>
+
+#include <common/NumUtil.hpp>
+
+namespace net
+{
+
+/// Decomposes a URI into its components.
+/// Returns true if parsing was successful.
+inline bool parseUri(std::string uri, std::string& scheme, std::string& host, std::string& port,
+                     std::string& pathAndQuery)
+{
+    const auto itScheme = uri.find("://");
+    if (itScheme != uri.npos)
+    {
+        scheme = uri.substr(0, itScheme + 3); // Include the last slash.
+        uri = uri.substr(scheme.size()); // Remove the scheme.
+    }
+    else
+    {
+        // No scheme.
+        scheme.clear();
+    }
+
+    const auto itUrl = uri.find('/');
+    if (itUrl != uri.npos)
+    {
+        pathAndQuery = uri.substr(itUrl); // Including the first slash.
+        uri = uri.substr(0, itUrl);
+    }
+    else
+    {
+        pathAndQuery.clear();
+    }
+
+    // User information before an '@' in the authority is not supported.
+    if (uri.find('@') != uri.npos)
+        return false;
+
+    // Split the authority into host and optional port. An IPv6 literal is
+    // bracketed - "[::1]" or "[::1]:9980" - so its own colons are not port
+    // separators; return the address itself, without the brackets.
+    if (!uri.empty() && uri.front() == '[')
+    {
+        const auto itClose = uri.find(']');
+        if (itClose == uri.npos)
+            return false; // Malformed: '[' without a closing ']'.
+
+        host = uri.substr(1, itClose - 1); // The bare IPv6 address.
+
+        if (itClose + 1 >= uri.size())
+            port.clear(); // "[::1]" with no port.
+        else if (uri[itClose + 1] == ':')
+            port = uri.substr(itClose + 2); // "[::1]:port" - skip "]:".
+        else
+            return false; // Junk between the ']' and the port.
+    }
+    else
+    {
+        const auto itPort = uri.find(':');
+        if (itPort != uri.npos && uri.find(':', itPort + 1) != uri.npos)
+        {
+            // More than one colon and no brackets: a bare IPv6 literal such as
+            // "::1". It carries no port - that would require brackets - so the
+            // whole string is the host.
+            host = std::move(uri);
+            port.clear();
+        }
+        else if (itPort != uri.npos)
+        {
+            host = uri.substr(0, itPort);
+            port = uri.substr(itPort + 1); // Skip the colon.
+        }
+        else
+        {
+            // No port, just hostname.
+            host = std::move(uri);
+            port.clear();
+        }
+    }
+
+    return !host.empty();
+}
+
+/// Decomposes a URI into its components.
+/// Returns true if parsing was successful.
+inline bool parseUri(std::string uri, std::string& scheme, std::string& host, std::string& port)
+{
+    std::string pathAndQuery;
+    return parseUri(std::move(uri), scheme, host, port, pathAndQuery);
+}
+
+/// Removes from a host and port authority a port nothing could connect to, so that the default port
+/// of the scheme applies instead. A reverse proxy that terminates TLS on the standard port reports
+/// port -1 when the Host header it forwards carries no explicit port, and no browser can fetch a URL
+/// built with such a port. Returns true if a port was removed.
+inline bool stripInvalidPort(std::string& authority)
+{
+    std::string scheme, host, port;
+    if (!parseUri(authority, scheme, host, port) || port.empty())
+        return false;
+
+    const auto [number, parsed] = NumUtil::i32FromString(port);
+    if (parsed && number > 0 && number <= 65535)
+        return false;
+
+    authority.erase(authority.size() - port.size() - 1); // Also the colon before the port.
+    return true;
+}
+
+/// Return the locator given a URI.
+inline std::string_view parseUrl(const std::string_view uri)
+{
+    std::size_t itScheme = uri.find("://");
+    if (itScheme != uri.npos)
+    {
+        itScheme += 3; // Skip it.
+    }
+    else
+    {
+        itScheme = 0;
+    }
+
+    const std::size_t itUrl = uri.find('/', itScheme);
+    if (itUrl != uri.npos)
+    {
+        return uri.substr(itUrl); // Including the first slash.
+    }
+
+    return std::string_view();
+}
+
+} // namespace net
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

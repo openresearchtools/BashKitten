@@ -1,0 +1,56 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <cppuhelper/implbase.hxx>
+
+#include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/task/XInteractionHandler2.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+
+class PDFInteractionHandler : public cppu::WeakImplHelper<css::lang::XInitialization,
+                                                          css::task::XInteractionHandler2,
+                                                          css::lang::XServiceInfo>
+{
+private:
+    cpo::uno::Reference<css::awt::XWindow> m_xParent;
+protected:
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XInitialization
+    virtual void initialize(const cpo::uno::Sequence<cpo::uno::Any>& rArguments) override;
+
+    // XInteractionHandler
+    virtual void handle( const cpo::uno::Reference< css::task::XInteractionRequest >& ) override;
+
+    // XInteractionHandler2
+    virtual bool handleInteractionRequest( const cpo::uno::Reference< css::task::XInteractionRequest >& ) override;
+
+public:
+
+                PDFInteractionHandler();
+    virtual     ~PDFInteractionHandler() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,248 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include "SolverComponent.hxx"
+#include "strings.hrc"
+
+#include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <com/sun/star/sheet/XSpreadsheet.hpp>
+#include <com/sun/star/table/CellAddress.hpp>
+
+#include <cppuhelper/supportsservice.hxx>
+#include <comphelper/servicehelper.hxx>
+
+#include <unotools/resmgr.hxx>
+
+#include <docuno.hxx>
+#include <document.hxx>
+#include <address.hxx>
+#include <scresid.hxx>
+
+using namespace com::sun::star;
+using namespace ::cpo;
+
+size_t ScSolverCellHash::operator()( const css::table::CellAddress& rAddress ) const
+{
+    return ( rAddress.Sheet << 24 ) | ( rAddress.Column << 16 ) | rAddress.Row;
+}
+
+bool ScSolverCellEqual::operator()( const css::table::CellAddress& rAddr1, const css::table::CellAddress& rAddr2 ) const
+{
+    return AddressEqual( rAddr1, rAddr2 );
+}
+
+namespace
+{
+    enum
+    {
+        PROP_NONNEGATIVE,
+        PROP_INTEGER,
+        PROP_TIMEOUT,
+        PROP_EPSILONLEVEL,
+        PROP_LIMITBBDEPTH,
+        PROP_GEN_SENSITIVITY,
+        PROP_SENSITIVITY_REPORT
+    };
+}
+
+void SolverComponent::SetValue(const table::CellAddress& rPosition, double fValue)
+{
+    if (mpDocument)
+        mpDocument->SetValue(ScAddress(SCCOL(rPosition.Column),
+                                       SCROW(rPosition.Row),
+                                       SCTAB(rPosition.Sheet)), fValue);
+}
+
+double SolverComponent::GetValue(const table::CellAddress& rPosition)
+{
+    if (!mpDocument)
+        return 0.0;
+    return mpDocument->GetValue(ScAddress(SCCOL(rPosition.Column),
+                                          SCROW(rPosition.Row),
+                                          SCTAB(rPosition.Sheet)));
+}
+
+SolverComponent::SolverComponent() :
+    mbMaximize( true ),
+    mbNonNegative( false ),
+    mbInteger( false ),
+    mnTimeout( 100 ),
+    mnEpsilonLevel( 0 ),
+    mbLimitBBDepth( true ),
+    mbGenSensitivity(false),
+    mbSuccess( false ),
+    mfResultValue( 0.0 )
+{
+    // for XPropertySet implementation:
+    registerProperty(u"NonNegative"_ustr,  PROP_NONNEGATIVE,  0, &mbNonNegative,    cppu::UnoType<decltype(mbNonNegative)>::get());
+    registerProperty(u"Integer"_ustr,      PROP_INTEGER,      0, &mbInteger,        cppu::UnoType<decltype(mbInteger)>::get());
+    registerProperty(u"Timeout"_ustr,      PROP_TIMEOUT,      0, &mnTimeout,        cppu::UnoType<decltype(mnTimeout)>::get());
+    registerProperty(u"EpsilonLevel"_ustr, PROP_EPSILONLEVEL, 0, &mnEpsilonLevel,   cppu::UnoType<decltype(mnEpsilonLevel)>::get());
+    registerProperty(u"LimitBBDepth"_ustr, PROP_LIMITBBDEPTH, 0, &mbLimitBBDepth,   cppu::UnoType<decltype(mbLimitBBDepth)>::get());
+    registerProperty(u"GenSensitivityReport"_ustr, PROP_GEN_SENSITIVITY, 0, &mbGenSensitivity, cppu::UnoType<decltype(mbGenSensitivity)>::get());
+
+    // Sensitivity report
+    registerProperty(u"SensitivityReport"_ustr, PROP_SENSITIVITY_REPORT, 0, &m_aSensitivityReport, cppu::UnoType<decltype(m_aSensitivityReport)>::get());
+}
+
+SolverComponent::~SolverComponent()
+{
+}
+
+cppu::IPropertyArrayHelper* SolverComponent::createArrayHelper() const
+{
+    cpo::uno::Sequence<beans::Property> aProps;
+    describeProperties( aProps );
+    return new cppu::OPropertyArrayHelper( aProps );
+}
+
+// XSolverDescription
+
+OUString SolverComponent::getStatusDescription()
+{
+    return maStatus;
+}
+
+OUString SolverComponent::getPropertyDescription( const OUString& rPropertyName )
+{
+    TranslateId pResId;
+    sal_Int32 nHandle = getInfoHelper().getHandleByName( rPropertyName );
+    switch (nHandle)
+    {
+        case PROP_NONNEGATIVE:
+            pResId = RID_PROPERTY_NONNEGATIVE;
+            break;
+        case PROP_INTEGER:
+            pResId = RID_PROPERTY_INTEGER;
+            break;
+        case PROP_TIMEOUT:
+            pResId = RID_PROPERTY_TIMEOUT;
+            break;
+        case PROP_EPSILONLEVEL:
+            pResId = RID_PROPERTY_EPSILONLEVEL;
+            break;
+        case PROP_LIMITBBDEPTH:
+            pResId = RID_PROPERTY_LIMITBBDEPTH;
+            break;
+        case PROP_GEN_SENSITIVITY:
+            pResId = RID_PROPERTY_SENSITIVITY;
+            break;
+        default:
+            {
+                // unknown - leave empty
+            }
+    }
+    OUString aRet;
+    if (pResId)
+        aRet = ScResId(pResId);
+    return aRet;
+}
+
+// XSolver: settings
+
+uno::Reference<sheet::XSpreadsheetDocument> SolverComponent::getDocument()
+{
+    return mxDoc;
+}
+
+void SolverComponent::setDocument( const uno::Reference<sheet::XSpreadsheetDocument>& _document )
+{
+    mxDoc = _document;
+    mpDocument = nullptr;
+    if (ScModelObj* pModel = comphelper::getFromUnoTunnel<ScModelObj>(mxDoc))
+    {
+        mpDocument = pModel->GetDocument();
+        // The solver writes input cells and reads the recalculated objective and
+        // constraint cells, which needs automatic recalculation to be on.
+        if ( mpDocument )
+            mpDocument->SetAutoCalc( true );
+    }
+}
+
+table::CellAddress SolverComponent::getObjective()
+{
+    return maObjective;
+}
+
+void SolverComponent::setObjective( const table::CellAddress& _objective )
+{
+    maObjective = _objective;
+}
+
+cpo::uno::Sequence<table::CellAddress> SolverComponent::getVariables()
+{
+    return maVariables;
+}
+
+void SolverComponent::setVariables( const cpo::uno::Sequence<table::CellAddress>& _variables )
+{
+    maVariables = _variables;
+}
+
+cpo::uno::Sequence<sheet::SolverConstraint> SolverComponent::getConstraints()
+{
+    return maConstraints;
+}
+
+void SolverComponent::setConstraints( const cpo::uno::Sequence<sheet::SolverConstraint>& _constraints )
+{
+    maConstraints = _constraints;
+}
+
+bool SolverComponent::getMaximize()
+{
+    return mbMaximize;
+}
+
+void SolverComponent::setMaximize( bool _maximize )
+{
+    mbMaximize = _maximize;
+}
+
+// XSolver: get results
+
+bool SolverComponent::getSuccess()
+{
+    return mbSuccess;
+}
+
+double SolverComponent::getResultValue()
+{
+    return mfResultValue;
+}
+
+cpo::uno::Sequence<double> SolverComponent::getSolution()
+{
+    return maSolution;
+}
+
+// XServiceInfo
+
+bool SolverComponent::supportsService( const OUString& rServiceName )
+{
+    return cppu::supportsService(this, rServiceName);
+}
+
+cpo::uno::Sequence<OUString> SolverComponent::getSupportedServiceNames()
+{
+    return { u"com.sun.star.sheet.Solver"_ustr };
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

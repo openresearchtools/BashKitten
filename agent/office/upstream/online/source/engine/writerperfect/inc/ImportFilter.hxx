@@ -1,0 +1,185 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/document/XExtendedFilterDetection.hpp>
+#include <com/sun/star/document/XFilter.hpp>
+#include <com/sun/star/document/XImporter.hpp>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cpo/uno/Reference.h>
+#include <cpo/uno/XComponentContext.hpp>
+#include <com/sun/star/xml/sax/XFastDocumentHandler.hpp>
+
+#include <osl/diagnose.h>
+#include <comphelper/sequenceashashmap.hxx>
+#include <cppuhelper/implbase.hxx>
+
+#include <unotools/mediadescriptor.hxx>
+#include <utility>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+#include <xmloff/xmlimp.hxx>
+
+#include "DocumentHandler.hxx"
+#include "WPXSvInputStream.hxx"
+
+#include "DocumentHandlerFor.hxx"
+
+namespace writerperfect
+{
+namespace detail
+{
+template <class Generator>
+class ImportFilterImpl
+    : public cppu::WeakImplHelper<css::document::XFilter, css::document::XImporter,
+                                  css::document::XExtendedFilterDetection,
+                                  css::lang::XInitialization>
+{
+public:
+    ImportFilterImpl(cpo::uno::Reference<cpo::uno::XComponentContext> xContext)
+        : mxContext(std::move(xContext))
+    {
+    }
+
+    const cpo::uno::Reference<cpo::uno::XComponentContext>& getXContext() const
+    {
+        return mxContext;
+    }
+
+    // XFilter
+    virtual bool
+    filter(const cpo::uno::Sequence<css::beans::PropertyValue>& rDescriptor) override
+    {
+        comphelper::SequenceAsHashMap aDescriptor(rDescriptor);
+        cpo::uno::Reference<css::io::XInputStream> xInputStream;
+        aDescriptor[utl::MediaDescriptor::PROP_INPUTSTREAM] >>= xInputStream;
+        if (!xInputStream.is())
+        {
+            OSL_ASSERT(false);
+            return false;
+        }
+
+        cpo::uno::Reference<css::awt::XWindow> xDialogParent;
+        aDescriptor[u"ParentWindow"_ustr] >>= xDialogParent;
+
+        // An XML import service: what we push sax messages to...
+        cpo::uno::Reference<XInterface> xInternalFilter
+            = mxContext->getServiceManager()->createInstanceWithContext(
+                DocumentHandlerFor<Generator>::name(), mxContext);
+        assert(xInternalFilter);
+        cpo::uno::Reference<css::xml::sax::XFastDocumentHandler> xInternalHandler(
+            xInternalFilter, cpo::uno::UNO_QUERY);
+        assert(xInternalHandler);
+
+        // The XImporter sets up an empty target document for XDocumentHandler to write to...
+        cpo::uno::Reference<css::document::XImporter> xImporter(xInternalHandler,
+                                                                cpo::uno::UNO_QUERY);
+        assert(xImporter);
+        xImporter->setTargetDocument(mxDoc);
+
+        // OO Graphics Handler: abstract class to handle document SAX messages, concrete implementation here
+        // writes to in-memory target doc
+        DocumentHandler aHandler(
+            new SvXMLLegacyToFastDocHandler(static_cast<SvXMLImport*>(xInternalHandler.get())));
+
+        WPXSvInputStream input(xInputStream);
+
+        Generator exporter;
+        exporter.addDocumentHandler(&aHandler, ODF_FLAT_XML);
+
+        doRegisterHandlers(exporter);
+
+        return doImportDocument(Application::GetFrameWeld(xDialogParent), input, exporter,
+                                aDescriptor);
+    }
+
+    virtual void cancel() override {}
+
+    // XImporter
+    const cpo::uno::Reference<css::lang::XComponent>& getTargetDocument() const { return mxDoc; }
+    virtual void
+    setTargetDocument(const cpo::uno::Reference<css::lang::XComponent>& xDoc) override
+    {
+        mxDoc = xDoc;
+    }
+
+    //XExtendedFilterDetection
+    virtual OUString
+    detect(cpo::uno::Sequence<css::beans::PropertyValue>& Descriptor) override
+    {
+        OUString sTypeName;
+        sal_Int32 nLength = Descriptor.getLength();
+        sal_Int32 location = nLength;
+        const css::beans::PropertyValue* pValue = Descriptor.getConstArray();
+        cpo::uno::Reference<css::io::XInputStream> xInputStream;
+        for (sal_Int32 i = 0; i < nLength; i++)
+        {
+            if (pValue[i].Name == "TypeName")
+                location = i;
+            else if (pValue[i].Name == "InputStream")
+                pValue[i].Value >>= xInputStream;
+        }
+
+        if (!xInputStream.is())
+            return OUString();
+
+        WPXSvInputStream input(xInputStream);
+
+        if (doDetectFormat(input, sTypeName))
+        {
+            assert(!sTypeName.isEmpty());
+
+            if (location == nLength)
+            {
+                Descriptor.realloc(nLength + 1);
+                Descriptor.getArray()[location].Name = u"TypeName"_ustr;
+            }
+
+            Descriptor.getArray()[location].Value <<= sTypeName;
+        }
+
+        return sTypeName;
+    }
+
+    // XInitialization
+    virtual void
+    initialize(const cpo::uno::Sequence<cpo::uno::Any>& /*aArguments*/) override
+    {
+    }
+
+private:
+    virtual bool doDetectFormat(librevenge::RVNGInputStream& rInput, OUString& rTypeName) = 0;
+    virtual bool doImportDocument(weld::Window* pParent, librevenge::RVNGInputStream& rInput,
+                                  Generator& rGenerator, comphelper::SequenceAsHashMap& rDescriptor)
+        = 0;
+    virtual void doRegisterHandlers(Generator&){};
+
+    cpo::uno::Reference<cpo::uno::XComponentContext> mxContext;
+    cpo::uno::Reference<css::lang::XComponent> mxDoc;
+};
+}
+
+/** A base class for import filters.
+ */
+template <class Generator>
+struct ImportFilter : public cppu::ImplInheritanceHelper<detail::ImportFilterImpl<Generator>,
+                                                         css::lang::XServiceInfo>
+{
+    ImportFilter(const cpo::uno::Reference<cpo::uno::XComponentContext>& rxContext)
+        : cppu::ImplInheritanceHelper<detail::ImportFilterImpl<Generator>, css::lang::XServiceInfo>(
+              rxContext)
+    {
+    }
+};
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

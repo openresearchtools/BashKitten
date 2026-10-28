@@ -1,0 +1,203 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <editeng/outliner.hxx>
+#include <editeng/outlobj.hxx>
+#include <editeng/editobj.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
+
+#include <o3tl/cow_wrapper.hxx>
+#include <o3tl/safeint.hxx>
+#include <libxml/xmlwriter.h>
+
+
+
+OutlinerParaObject::OutlinerParaObject( EditTextObject&& aTextObj ) :
+    mpImpl(std::move(aTextObj))
+{
+}
+
+OutlinerParaObject::OutlinerParaObject( const OutlinerParaObject& r ) :
+    mpImpl(r.mpImpl)
+{
+}
+
+OutlinerParaObject::OutlinerParaObject( OutlinerParaObject&& r ) noexcept :
+    mpImpl(std::move(r.mpImpl))
+{
+}
+
+OutlinerParaObject::~OutlinerParaObject()
+{
+}
+
+OutlinerParaObject& OutlinerParaObject::operator=( const OutlinerParaObject& r )
+{
+    mpImpl = r.mpImpl;
+    return *this;
+}
+
+OutlinerParaObject& OutlinerParaObject::operator=( OutlinerParaObject&& r ) noexcept
+{
+    mpImpl = std::move(r.mpImpl);
+    return *this;
+}
+
+bool OutlinerParaObject::operator==( const OutlinerParaObject& r ) const
+{
+    return r.mpImpl == mpImpl;
+}
+
+// #i102062#
+bool OutlinerParaObject::isWrongListEqual( const OutlinerParaObject& r ) const
+{
+    if (r.mpImpl.same_object(mpImpl))
+    {
+        return true;
+    }
+
+    return mpImpl->isWrongListEqual(*r.mpImpl);
+}
+
+OutlinerMode OutlinerParaObject::GetOutlinerMode() const
+{
+    return mpImpl->GetUserType();
+}
+
+void OutlinerParaObject::SetOutlinerMode(OutlinerMode nNew)
+{
+    // create a const pointer to avoid an early call to
+    // make_unique() in the dereference of mpImpl
+    const ::o3tl::cow_wrapper< EditTextObject >* pImpl = &mpImpl;
+    if ( ( *pImpl )->GetUserType() != nNew )
+    {
+        mpImpl->SetUserType(nNew);
+    }
+}
+
+bool OutlinerParaObject::IsEffectivelyVertical() const
+{
+    return mpImpl->IsEffectivelyVertical();
+}
+
+bool OutlinerParaObject::GetVertical() const
+{
+    return mpImpl->GetVertical();
+}
+
+bool OutlinerParaObject::IsTopToBottom() const
+{
+    return mpImpl->IsTopToBottom();
+}
+
+void OutlinerParaObject::SetVertical(bool bNew)
+{
+    const ::o3tl::cow_wrapper< EditTextObject >* pImpl = &mpImpl;
+    if ( ( *pImpl )->IsEffectivelyVertical() != bNew)
+    {
+        mpImpl->SetVertical(bNew);
+    }
+}
+void OutlinerParaObject::SetRotation(TextRotation nRotation)
+{
+    mpImpl->SetRotation(nRotation);
+}
+
+TextRotation OutlinerParaObject::GetRotation() const
+{
+    return mpImpl->GetRotation();
+}
+
+sal_Int32 OutlinerParaObject::Count() const
+{
+    size_t nSize = mpImpl->GetParagraphCount();
+    if (nSize > o3tl::make_unsigned(EE_PARA_MAX))
+    {
+        SAL_WARN( "editeng", "OutlinerParaObject::Count - overflow " << nSize);
+        return EE_PARA_MAX;
+    }
+    return static_cast<sal_Int32>(nSize);
+}
+
+sal_Int16 OutlinerParaObject::GetNumberingDepth(sal_Int32 nPara) const
+{
+    return mpImpl->GetNumberingDepth(nPara);
+}
+
+sal_Int16 OutlinerParaObject::GetNumberingStartValue(sal_Int32 nPara) const
+{
+    return mpImpl->GetNumberingStartValue(nPara);
+}
+
+bool OutlinerParaObject::IsNumberingRestart(sal_Int32 nPara) const
+{
+    return mpImpl->IsNumberingRestart(nPara);
+}
+
+const EditTextObject& OutlinerParaObject::GetTextObject() const
+{
+    return *mpImpl;
+}
+
+void OutlinerParaObject::ClearPortionInfo()
+{
+    mpImpl->ClearPortionInfo();
+}
+
+bool OutlinerParaObject::ChangeStyleSheets(std::u16string_view rOldName,
+    SfxStyleFamily eOldFamily, const OUString& rNewName, SfxStyleFamily eNewFamily)
+{
+    return mpImpl->ChangeStyleSheets(rOldName, eOldFamily, rNewName, eNewFamily);
+}
+
+void OutlinerParaObject::ChangeStyleSheetName(SfxStyleFamily eFamily,
+    std::u16string_view rOldName, const OUString& rNewName)
+{
+    mpImpl->ChangeStyleSheetName(eFamily, rOldName, rNewName);
+}
+
+void OutlinerParaObject::SetStyleSheets(sal_uInt16 nLevel, const OUString& rNewName,
+    const SfxStyleFamily& rNewFamily)
+{
+    const sal_Int32 nCount(Count());
+
+    if(nCount)
+    {
+        sal_Int32 nDecrementer(nCount);
+
+        while(nDecrementer > 0)
+        {
+            if(GetNumberingDepth(--nDecrementer) == nLevel)
+            {
+                mpImpl->SetStyleSheet(nDecrementer, rNewName, rNewFamily);
+            }
+        }
+    }
+}
+
+void OutlinerParaObject::dumpAsXml(xmlTextWriterPtr pWriter) const
+{
+    (void)xmlTextWriterStartElement(pWriter, BAD_CAST("OutlinerParaObject"));
+    (void)xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("ptr"), "%p", this);
+    mpImpl->dumpAsXml(pWriter);
+    (void)xmlTextWriterEndElement(pWriter);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

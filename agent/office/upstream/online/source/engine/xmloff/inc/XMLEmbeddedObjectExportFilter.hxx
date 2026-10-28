@@ -1,0 +1,68 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cppuhelper/implbase.hxx>
+
+class XMLEmbeddedObjectExportFilter final : public cppu::WeakImplHelper<
+             css::xml::sax::XExtendedDocumentHandler,
+             css::lang::XServiceInfo,
+             css::lang::XInitialization>
+{
+    cpo::uno::Reference< css::xml::sax::XDocumentHandler >         xHandler;
+    cpo::uno::Reference< css::xml::sax::XExtendedDocumentHandler > xExtHandler;
+
+public:
+    XMLEmbeddedObjectExportFilter( const cpo::uno::Reference< css::xml::sax::XDocumentHandler > & rHandler ) noexcept;
+    virtual ~XMLEmbeddedObjectExportFilter () noexcept override;
+
+    // css::xml::sax::XDocumentHandler
+    virtual void startDocument() override;
+    virtual void endDocument() override;
+    virtual void startElement(const OUString& aName,
+                              const cpo::uno::Reference< css::xml::sax::XAttributeList > & xAttribs) override;
+    virtual void endElement(const OUString& aName) override;
+    virtual void characters(const OUString& aChars) override;
+    virtual void ignorableWhitespace(const OUString& aWhitespaces) override;
+    virtual void processingInstruction(const OUString& aTarget,
+                                       const OUString& aData) override;
+    virtual void setDocumentLocator(const cpo::uno::Reference< css::xml::sax::XLocator > & xLocator) override;
+
+    // css::xml::sax::XExtendedDocumentHandler
+    virtual void startCDATA() override;
+    virtual void endCDATA() override;
+    virtual void comment(const OUString& sComment) override;
+    virtual void allowLineBreak() override;
+    virtual void unknown(const OUString& sString) override;
+
+    // XInitialization
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

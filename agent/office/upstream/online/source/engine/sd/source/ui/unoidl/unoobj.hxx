@@ -1,0 +1,105 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <com/sun/star/beans/PropertyState.hpp>
+#include <com/sun/star/document/XEventsSupplier.hpp>
+#include <svx/unomaster.hxx>
+
+namespace com::sun::star::beans { class XPropertySetInfo; }
+
+class SdXImpressDocument;
+class SdAnimationInfo;
+class SvxItemPropertySet;
+class SvxShape;
+struct SfxItemPropertyMapEntry;
+
+class SdXShape : public SvxShapeMaster,
+                 public css::document::XEventsSupplier
+{
+    friend class SdUnoEventsAccess;
+
+private:
+    SvxShape* mpShape;
+    const SvxItemPropertySet*   mpPropSet;
+    std::span<const SfxItemPropertyMapEntry> mpMap;
+    SdXImpressDocument* mpModel;
+
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws cpo::uno::RuntimeException
+    void SetStyleSheet( const cpo::uno::Any& rAny );
+    /// @throws css::beans::UnknownPropertyException
+    cpo::uno::Any GetStyleSheet() const;
+
+    // Intern
+    /// @throws std::exception
+    SdAnimationInfo* GetAnimationInfo( bool bCreate = false ) const;
+    /// @throws std::exception
+    bool IsPresObj() const;
+
+    bool IsEmptyPresObj() const;
+    void SetEmptyPresObj(bool bEmpty);
+
+    OUString GetCustomPromptText() const;
+    void SetCustomPromptText(const OUString& aVal);
+
+    OUString GetPlaceholderShapeType() const;
+
+    bool IsMasterDepend() const noexcept;
+    void SetMasterDepend( bool bDepend ) noexcept;
+
+    OUString GetPlaceholderText() const;
+
+public:
+    SdXShape(SvxShape* pShape, SdXImpressDocument* pModel);
+    virtual ~SdXShape() noexcept;
+
+    virtual bool queryAggregation( const cpo::uno::Type & rType, cpo::uno::Any& aAny ) override;
+    virtual void dispose() override;
+
+    // XInterface
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire() noexcept override;
+    virtual void release() noexcept override;
+
+    // XServiceInfo
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    //XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+
+    //XPropertyState
+    virtual css::beans::PropertyState getPropertyState( const OUString& PropertyName ) override;
+    virtual void setPropertyToDefault( const OUString& PropertyName ) override;
+    virtual cpo::uno::Any getPropertyDefault( const OUString& aPropertyName ) override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+
+    // XEventsSupplier
+    virtual cpo::uno::Reference< css::container::XNameReplace > getEvents(  ) override;
+};
+
+struct SvEventDescription;
+const SvEventDescription* ImplGetSupportedMacroItems();
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

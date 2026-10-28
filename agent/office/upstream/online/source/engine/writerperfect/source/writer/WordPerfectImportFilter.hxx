@@ -1,0 +1,63 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+/* "This product is not manufactured, approved, or supported by
+ * Corel Corporation or Corel Corporation Limited."
+ */
+#pragma once
+
+#include <com/sun/star/document/XFilter.hpp>
+#include <com/sun/star/document/XImporter.hpp>
+#include <com/sun/star/document/XExtendedFilterDetection.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <utility>
+
+/* This component will be instantiated for both import or export. Whether it calls
+ * setSourceDocument or setTargetDocument determines which Impl function the filter
+ * member calls */
+class WordPerfectImportFilter
+    : public cppu::WeakImplHelper<css::document::XFilter, css::document::XImporter,
+                                  css::document::XExtendedFilterDetection,
+                                  css::lang::XInitialization, css::lang::XServiceInfo>
+{
+    cpo::uno::Reference<cpo::uno::XComponentContext> mxContext;
+    cpo::uno::Reference<css::lang::XComponent> mxDoc;
+
+    /// @throws cpo::uno::RuntimeException
+    bool importImpl(const cpo::uno::Sequence<css::beans::PropertyValue>& aDescriptor);
+
+public:
+    explicit WordPerfectImportFilter(cpo::uno::Reference<cpo::uno::XComponentContext> xContext)
+        : mxContext(std::move(xContext))
+    {
+    }
+
+    // XFilter
+    virtual bool
+    filter(const cpo::uno::Sequence<css::beans::PropertyValue>& aDescriptor) override;
+    virtual void cancel() override;
+
+    // XImporter
+    virtual void
+    setTargetDocument(const cpo::uno::Reference<css::lang::XComponent>& xDoc) override;
+
+    //XExtendedFilterDetection
+    virtual OUString
+    detect(cpo::uno::Sequence<css::beans::PropertyValue>& Descriptor) override;
+
+    // XInitialization
+    virtual void initialize(const cpo::uno::Sequence<cpo::uno::Any>& aArguments) override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(const OUString& ServiceName) override;
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

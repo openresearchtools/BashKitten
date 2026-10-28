@@ -1,0 +1,60 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+#pragma once
+
+#include <OPropertySet.hxx>
+#include <comphelper/uno3.hxx>
+
+#include <ChartTypeTemplate.hxx>
+
+namespace chart
+{
+class BoxWhiskerChartTypeTemplate : public ChartTypeTemplate, public ::property::OPropertySet
+{
+public:
+    BoxWhiskerChartTypeTemplate(cpo::uno::Reference<cpo::uno::XComponentContext> const& xContext,
+                                const OUString& rServiceName, sal_Int32 nDim = 2);
+    virtual ~BoxWhiskerChartTypeTemplate() override;
+
+    /// merge XInterface implementations
+    DECLARE_XINTERFACE()
+    /// merge XTypeProvider implementations
+    DECLARE_XTYPEPROVIDER()
+
+protected:
+    // ____ OPropertySet ____
+    virtual void GetDefaultValue(sal_Int32 nHandle, cpo::uno::Any& rAny) const override;
+    virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
+
+    // ____ XPropertySet ____
+    virtual cpo::uno::Reference<css::beans::XPropertySetInfo> getPropertySetInfo() override;
+
+    // ____ ChartTypeTemplate ____
+    virtual bool matchesTemplate2(const rtl::Reference<::chart::Diagram>& xDiagram,
+                                  bool bAdaptProperties) override;
+    virtual rtl::Reference<::chart::ChartType> getChartTypeForNewSeries2(
+        const std::vector<rtl::Reference<::chart::ChartType>>& aFormerlyUsedChartTypes) override;
+    virtual void applyStyle2(const rtl::Reference<::chart::DataSeries>& xSeries,
+                             ::sal_Int32 nChartTypeGroupIndex, ::sal_Int32 nSeriesIndex,
+                             ::sal_Int32 nSeriesCount) override;
+    virtual void resetStyles2(const rtl::Reference<::chart::Diagram>& xDiagram) override;
+
+    // ____ ChartTypeTemplate ____
+    virtual sal_Int32 getDimension() const override;
+
+    virtual rtl::Reference<::chart::ChartType>
+    getChartTypeForIndex(sal_Int32 nChartTypeIndex) override;
+
+private:
+    sal_Int32 m_nDim;
+};
+
+} //  namespace chart
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

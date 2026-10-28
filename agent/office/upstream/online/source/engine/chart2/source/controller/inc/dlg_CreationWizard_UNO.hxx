@@ -1,0 +1,113 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <cppuhelper/basemutex.hxx>
+#include <cppuhelper/component.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/frame/XTerminateListener.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+#include <com/sun/star/ui/dialogs/XAsynchronousExecutableDialog.hpp>
+#include <rtl/ref.hxx>
+
+#include <tools/link.hxx>
+#include <vcl/weld.hxx>
+
+namespace com::sun::star::awt { class XWindow; }
+namespace cpo::uno { class XComponentContext; }
+
+namespace chart
+{
+class ChartModel;
+
+class CreationWizardUnoDlg final : public cppu::BaseMutex
+                            , public ::cppu::OComponentHelper
+                            , public css::ui::dialogs::XAsynchronousExecutableDialog
+                            , public css::lang::XServiceInfo
+                            , public css::lang::XInitialization
+                            , public css::frame::XTerminateListener
+                            , public css::beans::XPropertySet
+{
+public:
+    CreationWizardUnoDlg() = delete;
+
+    CreationWizardUnoDlg( cpo::uno::Reference< cpo::uno::XComponentContext > xContext );
+    virtual ~CreationWizardUnoDlg() override;
+
+    // XInterface
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type& aType ) override;
+    virtual cpo::uno::Any queryAggregation( cpo::uno::Type const & rType ) override;
+    virtual void acquire() noexcept override;
+    virtual void release() noexcept override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XAsynchronousExecutableDialog
+    virtual void setDialogTitle( const OUString& aTitle ) override;
+    virtual void startExecuteModal( const cpo::uno::Reference<css::ui::dialogs::XDialogClosedListener>& xListener ) override;
+
+    // XInitialization
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+    // XTerminateListener
+    virtual void queryTermination( const css::lang::EventObject& Event ) override;
+    virtual void notifyTermination( const css::lang::EventObject& Event ) override;
+
+    virtual void disposing( const css::lang::EventObject& Source ) override;
+
+    //XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+
+protected:
+    // ____ OComponentHelper ____
+    /// Called in dispose method after the listeners were notified.
+    virtual void disposing() override;
+
+private:
+    void createDialogOnDemand();
+    DECL_STATIC_LINK(CreationWizardUnoDlg, InstallKitNotifierHdl, void*, vcl::ICOKitNotifier*);
+
+private:
+    rtl::Reference< ::chart::ChartModel     >            m_xChartModel;
+    cpo::uno::Reference< cpo::uno::XComponentContext>    m_xCC;
+    cpo::uno::Reference< css::awt::XWindow >             m_xParentWindow;
+
+    std::shared_ptr<weld::DialogController> m_xDialog;
+    bool            m_bUnlockControllersOnExecute;
+};
+
+} //namespace chart
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

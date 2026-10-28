@@ -1,0 +1,276 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include "vbalistbox.hxx"
+#include "vbanewfont.hxx"
+#include <comphelper/sequence.hxx>
+#include <ooo/vba/msforms/fmMultiSelect.hpp>
+
+using namespace com::sun::star;
+using namespace ::cpo;
+using namespace ooo::vba;
+
+ScVbaListBox::ScVbaListBox( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< cpo::uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper )
+    : ListBoxImpl_BASE(xParent, xContext, xControl, xModel, std::move(pGeomHelper))
+    , maListHelper( m_xProps )
+    , m_nIndex(0)
+{
+}
+
+// Attributes
+void
+ScVbaListBox::setListIndex( const cpo::uno::Any& _value )
+{
+    sal_Int32 nIndex = 0;
+    _value >>= nIndex;
+    uno::Reference< XPropValue > xPropVal( Selected( nIndex ), uno::UNO_QUERY_THROW );
+    xPropVal->setValue( cpo::uno::Any( true ) );
+}
+
+cpo::uno::Any
+ScVbaListBox::getListIndex()
+{
+    cpo::uno::Sequence< sal_Int16 > sSelection;
+    m_xProps->getPropertyValue( u"SelectedItems"_ustr ) >>= sSelection;
+    if ( !sSelection.hasElements() )
+        return cpo::uno::Any( sal_Int32( -1 ) );
+    return cpo::uno::Any( sSelection[ 0 ] );
+}
+
+cpo::uno::Any
+ScVbaListBox::getValue()
+{
+    cpo::uno::Sequence< sal_Int16 > sSelection;
+    cpo::uno::Sequence< OUString > sItems;
+    m_xProps->getPropertyValue( u"SelectedItems"_ustr ) >>= sSelection;
+    m_xProps->getPropertyValue( u"StringItemList"_ustr ) >>= sItems;
+    if( getMultiSelect() )
+        throw cpo::uno::RuntimeException( u"Attribute use invalid."_ustr );
+    cpo::uno::Any aRet;
+    if ( sSelection.hasElements() )
+        aRet <<= sItems[ sSelection[ 0 ] ];
+    return aRet;
+}
+
+void
+ScVbaListBox::setValue( const cpo::uno::Any& _value )
+{
+    if( getMultiSelect() )
+    {
+        throw cpo::uno::RuntimeException( u"Attribute use invalid."_ustr );
+    }
+    OUString sValue = getAnyAsString( _value );
+    cpo::uno::Sequence< OUString > sList;
+    m_xProps->getPropertyValue( u"StringItemList"_ustr ) >>= sList;
+    sal_Int16 nValue = static_cast<sal_Int16>(comphelper::findValue(sList, sValue));
+    if( nValue == -1 )
+        throw cpo::uno::RuntimeException( u"Attribute use invalid."_ustr );
+
+    cpo::uno::Sequence< sal_Int16 > nSelectedIndices { nValue };
+    cpo::uno::Sequence< sal_Int16 > nOldSelectedIndices;
+    m_xProps->getPropertyValue( u"SelectedItems"_ustr ) >>= nOldSelectedIndices;
+    m_xProps->setPropertyValue( u"SelectedItems"_ustr, cpo::uno::Any( nSelectedIndices ) );
+    if ( nSelectedIndices != nOldSelectedIndices )
+        fireClickEvent();
+}
+
+OUString
+ScVbaListBox::getText()
+{
+    OUString result;
+    getValue() >>= result;
+    return result;
+}
+
+void
+ScVbaListBox::setText( const OUString& _text )
+{
+    setValue( cpo::uno::Any( _text ) ); // seems the same
+}
+
+sal_Int32
+ScVbaListBox::getMultiSelect()
+{
+    bool bMultiSelect = false;
+    m_xProps->getPropertyValue( u"MultiSelection"_ustr ) >>= bMultiSelect;
+
+    return bMultiSelect ? msforms::fmMultiSelect::fmMultiSelectMulti : msforms::fmMultiSelect::fmMultiSelectSingle;
+}
+
+void
+ScVbaListBox::setMultiSelect( sal_Int32 _multiselect )
+{
+    bool bBoolVal = false;
+    switch ( _multiselect )
+    {
+        case  msforms::fmMultiSelect::fmMultiSelectMulti:
+        case  msforms::fmMultiSelect::fmMultiSelectExtended:
+            bBoolVal = true;
+            break;
+        case msforms::fmMultiSelect::fmMultiSelectSingle:
+            bBoolVal = false;
+            break;
+        default:
+            throw lang::IllegalArgumentException();
+            break;
+    }
+    m_xProps->setPropertyValue( u"MultiSelection"_ustr , cpo::uno::Any( bBoolVal ) );
+}
+
+
+cpo::uno::Any
+ScVbaListBox::Selected( sal_Int32 index )
+{
+    cpo::uno::Sequence< OUString > sList;
+    m_xProps->getPropertyValue( u"StringItemList"_ustr ) >>= sList;
+    sal_Int16 nLength = static_cast< sal_Int16 >( sList.getLength() );
+    // no choice but to do a horror cast as internally
+    // the indices are but sal_Int16
+    sal_Int16 nIndex = static_cast< sal_Int16 >( index );
+    if( nIndex < 0 || nIndex >= nLength )
+        throw cpo::uno::RuntimeException( u"Error Number."_ustr );
+    m_nIndex = nIndex;
+    return cpo::uno::Any( uno::Reference< XPropValue > ( new ScVbaPropValue( this ) ) );
+}
+
+// Methods
+void
+ScVbaListBox::AddItem( const cpo::uno::Any& pvargItem, const cpo::uno::Any& pvargIndex )
+{
+    maListHelper.AddItem( pvargItem, pvargIndex );
+}
+
+void
+ScVbaListBox::removeItem( const cpo::uno::Any& index )
+{
+    maListHelper.removeItem( index );
+}
+
+void
+ScVbaListBox::Clear(  )
+{
+    maListHelper.Clear();
+}
+
+// this is called when something like the following vba code is used
+// to set the selected state of particular entries in the Listbox
+// ListBox1.Selected( 3 ) = false
+//PropListener
+void
+ScVbaListBox::setValueEvent( const cpo::uno::Any& value )
+{
+    bool bValue = false;
+    if( !(value >>= bValue) )
+        throw cpo::uno::RuntimeException( u"Invalid type. need boolean."_ustr );
+    cpo::uno::Sequence< sal_Int16 > nList;
+    m_xProps->getPropertyValue( u"SelectedItems"_ustr ) >>= nList;
+    sal_Int16 nLength = static_cast<sal_Int16>( nList.getLength() );
+    sal_Int16 nIndex = m_nIndex;
+    for( sal_Int16 i = 0; i < nLength; i++ )
+    {
+        if( nList[i] == nIndex )
+        {
+            if( !bValue )
+            {
+                auto pList = nList.getArray();
+                for( ; i < nLength - 1; i++ )
+                {
+                    pList[i] = nList[i + 1];
+                }
+                nList.realloc( nLength - 1 );
+                //m_xProps->setPropertyValue( sSourceName, uno::makeAny( nList ) );
+                fireClickEvent();
+                m_xProps->setPropertyValue( u"SelectedItems"_ustr, cpo::uno::Any( nList ) );
+            }
+            return;
+        }
+    }
+    if( !bValue )
+        return;
+
+    if( getMultiSelect() )
+    {
+        nList.realloc( nLength + 1 );
+        nList.getArray()[nLength] = nIndex;
+    }
+    else
+    {
+        nList = { nIndex };
+    }
+    //m_xProps->setPropertyValue( sSourceName, uno::makeAny( nList ) );
+    fireClickEvent();
+    m_xProps->setPropertyValue( u"SelectedItems"_ustr, cpo::uno::Any( nList ) );
+}
+
+// this is called when something like the following vba code is used
+// to determine the selected state of particular entries in the Listbox
+// msgbox ListBox1.Selected( 3 )
+
+cpo::uno::Any
+ScVbaListBox::getValueEvent()
+{
+    cpo::uno::Sequence< sal_Int16 > nList;
+    m_xProps->getPropertyValue( u"SelectedItems"_ustr ) >>= nList;
+    sal_Int32 nIndex = m_nIndex;
+    bool bRet = std::find(std::cbegin(nList), std::cend(nList), nIndex) != std::cend(nList);
+
+    return cpo::uno::Any( bRet );
+}
+
+void
+ScVbaListBox::setRowSource( const OUString& _rowsource )
+{
+    ScVbaControl::setRowSource( _rowsource );
+    maListHelper.setRowSource( _rowsource );
+}
+
+sal_Int32
+ScVbaListBox::getListCount()
+{
+    return maListHelper.getListCount();
+}
+
+cpo::uno::Any
+ScVbaListBox::List( const ::cpo::uno::Any& pvargIndex, const cpo::uno::Any& pvarColumn )
+{
+    return maListHelper.List( pvargIndex, pvarColumn );
+}
+
+uno::Reference< msforms::XNewFont > ScVbaListBox::getFont()
+{
+    return new VbaNewFont( m_xProps );
+}
+
+OUString
+ScVbaListBox::getServiceImplName()
+{
+    return u"ScVbaListBox"_ustr;
+}
+
+cpo::uno::Sequence< OUString >
+ScVbaListBox::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.msforms.ScVbaListBox"_ustr
+    };
+    return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

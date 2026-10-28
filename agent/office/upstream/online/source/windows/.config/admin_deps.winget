@@ -1,0 +1,89 @@
+# yaml-language-server: $schema=https://aka.ms/configuration-dsc-schema/0.2
+
+# download additional dependencies used for the build to C:/Users/Public/Downloads (unfortunately
+# xRemoteFile doesn't accept $env:PUBLIC or similar, so using hardcoded paths for now),
+# & install MSYS2 (the Unix toolchain for the configure steps) and Node.js
+# (this configuration needs to be applied with administrator privileges, as otherwise even
+# downloading files e.g. would fail with:
+# Access to the path 'C:\ProgramData\Microsoft\Windows\PowerShell\Configuration\BuiltinProvCache\DSC_xRemoteFile' is denied.
+
+properties:
+  resources:
+    - resource: xPSDesiredStateConfiguration/xRemoteFile
+      id: jom
+      directives:
+        description: download jom (parallel nmake)
+        securityContext: elevated
+      settings:
+        DestinationPath: C:/Users/Public/Downloads
+        Uri: http://download.qt.io/official_releases/jom/jom_1_1_4.zip
+        ChecksumType: SHA256
+        Checksum: d533c1ef49214229681e90196ed2094691e8c4a0a0bef0b2c901debcb562682b
+    - resource: xPSDesiredStateConfiguration/xRemoteFile
+      id: make
+      directives:
+        description: download make
+        securityContext: elevated
+      settings:
+        DestinationPath: C:/Users/Public/Downloads
+        Uri: https://gerrit.collaboraoffice.com/extern/make-4.4.1-msvc.exe
+        ChecksumType: SHA256
+        Checksum: 3cbf585a213001fbdedc5269621a3617d5067aba8f9dc8947054b76f30035e3d
+    - resource: xPSDesiredStateConfiguration/xRemoteFile
+      id: clang-format
+      directives:
+        description: download clang-format
+        securityContext: elevated
+      settings:
+        DestinationPath: C:/Users/Public/Downloads
+        Uri: https://gerrit.collaboraoffice.com/extern/clang-format-5.0.0-win.exe
+        ChecksumType: SHA256
+        Checksum: a25d5c4b451ec4fba466807e9239d0bcbafcfeb7f35834f2db87448968a73ccb
+    - resource: xPSDesiredStateConfiguration/xRemoteFile
+      id: pkgconf
+      directives:
+        description: download pkgconf
+        securityContext: elevated
+      settings:
+        DestinationPath: C:/Users/Public/Downloads
+        Uri: https://gerrit.collaboraoffice.com/extern/pkgconf-2.4.3.exe
+        ChecksumType: SHA256
+        Checksum: 791cd6dbc56f7268fbf9c4652d6634b0f5c59687ab4e504565e58245952edd41
+    - resource: xPSDesiredStateConfiguration/xRemoteFile
+      id: spp
+      directives:
+        description: download strawberry perl portable
+        securityContext: elevated
+      settings:
+        DestinationPath: C:/Users/Public/Downloads
+        Uri: https://github.com/StrawberryPerl/Perl-Dist-Strawberry/releases/download/SP_54001_64bit_UCRT/strawberry-perl-5.40.0.1-64bit-portable.zip
+        ChecksumType: SHA256
+        Checksum: 754f3e2a8e473dc68d1540c7802fb166a025f35ef18960c4564a31f8b5933907
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      id: msys2
+      directives:
+        description: install MSYS2 (to C:\msys64) - it provides the Unix toolchain (autotools, flex, bison, gperf, nasm, zip, gettext, python) for the engine and online configure steps; the user step installs the packages
+        securityContext: elevated
+      settings:
+        id: MSYS2.MSYS2
+        source: winget
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      id: nodejs
+      directives:
+        description: install Node.js LTS (Collabora Online needs node >= 20 with npm >= 9 to build the browser bundle)
+        securityContext: elevated
+      settings:
+        id: OpenJS.NodeJS.LTS
+        source: winget
+    - resource: xPSDesiredStateConfiguration/xScript
+      id: developer-mode
+      directives:
+        description: enable Developer Mode so symlinks can be created without admin (some tarballs, e.g. pixman, contain symlinks that tar has to recreate at unpack time)
+        securityContext: elevated
+      settings:
+        TestScript: (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -ErrorAction SilentlyContinue).AllowDevelopmentWithoutDevLicense -eq 1
+        GetScript:  (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -ErrorAction SilentlyContinue).AllowDevelopmentWithoutDevLicense -eq 1
+        SetScript: |
+          New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Force | Out-Null
+          New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -PropertyType DWord -Value 1 -Force | Out-Null
+  configurationVersion: 0.2.0

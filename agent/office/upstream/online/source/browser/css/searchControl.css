@@ -1,0 +1,5 @@
+.search-not-found {
+	background-color: var(--color-error);
+	transition: background-color 0.8s linear;
+
+}

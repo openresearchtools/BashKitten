@@ -1,0 +1,664 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include "vbaaxis.hxx"
+#include <ooo/vba/excel/XlAxisCrosses.hpp>
+#include <ooo/vba/excel/XlAxisType.hpp>
+#include <ooo/vba/excel/XlScaleType.hpp>
+#include <utility>
+#include "vbaaxistitle.hxx"
+#include "vbachart.hxx"
+using namespace ::com::sun::star;
+using namespace ::cpo;
+using namespace ::ooo::vba;
+using namespace ::ooo::vba::excel::XlAxisCrosses;
+using namespace ::ooo::vba::excel::XlAxisType;
+using namespace ::ooo::vba::excel::XlScaleType;
+
+constexpr OUString ORIGIN(u"Origin"_ustr);
+constexpr OUString AUTOORIGIN(u"AutoOrigin"_ustr);
+constexpr OUString VBA_MIN(u"Max"_ustr);
+ScVbaChart*
+ScVbaAxis::getChartPtr()
+{
+    ScVbaChart* pChart = moChartParent.get();
+    if ( !pChart )
+        throw cpo::uno::RuntimeException(u"Can't access parent chart impl"_ustr );
+    return pChart;
+}
+
+bool
+ScVbaAxis::isValueAxis()
+{
+    if ( getType() == xlCategory )
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+    return true;
+}
+
+ScVbaAxis::ScVbaAxis( const rtl::Reference< ScVbaChart >& xParent,
+                      const uno::Reference< cpo::uno::XComponentContext > & xContext,
+                      uno::Reference< beans::XPropertySet >  _xPropertySet,
+                      sal_Int32 _nType, sal_Int32 _nGroup )
+  : ScVbaAxis_BASE( xParent, xContext ),
+    moChartParent(xParent),
+    mxPropertySet(std::move( _xPropertySet )),
+    mnType( _nType ), mnGroup( _nGroup ),
+    maShapeHelper( uno::Reference< drawing::XShape >( mxPropertySet, uno::UNO_QUERY ) ),
+    bCrossesAreCustomized( false )
+{
+    setType(_nType);
+    setCrosses(xlAxisCrossesAutomatic);
+}
+
+void
+ScVbaAxis::Delete(  )
+{
+    uno::Reference< lang::XComponent > xComponent( mxPropertySet, uno::UNO_QUERY_THROW );
+    xComponent->dispose();
+}
+
+ uno::Reference< ::ooo::vba::excel::XAxisTitle >
+ScVbaAxis::getAxisTitle(  )
+{
+    rtl::Reference< ScVbaAxisTitle > xAxisTitle;
+    try
+    {
+        ScVbaChart* pChart = getChartPtr();
+
+        if (!getHasTitle() )
+            return nullptr;
+
+        int nType = getType();
+        switch(nType)
+        {
+            case xlCategory:
+                xAxisTitle =  new ScVbaAxisTitle(this, mxContext, pChart->xAxisXSupplier->getXAxisTitle());
+                break;
+            case xlSeriesAxis:
+                xAxisTitle = new ScVbaAxisTitle(this, mxContext, pChart->xAxisZSupplier->getZAxisTitle());
+                break;
+            default: // xlValue:
+                xAxisTitle = new ScVbaAxisTitle(this, mxContext, pChart->xAxisYSupplier->getYAxisTitle());
+                break;
+        }
+    }
+    catch (const cpo::uno::Exception& e)
+    {
+        DebugHelper::basicexception(e);
+    }
+    return xAxisTitle;
+
+}
+
+void
+ScVbaAxis::setDisplayUnit( ::sal_Int32 /*DisplayUnit*/ )
+{
+    DebugHelper::basicexception(ERRCODE_BASIC_NOT_IMPLEMENTED, {});
+}
+
+::sal_Int32
+ScVbaAxis::getDisplayUnit(  )
+{
+    DebugHelper::basicexception(ERRCODE_BASIC_NOT_IMPLEMENTED, {});
+    return -1;
+}
+
+void
+ScVbaAxis::setCrosses( ::sal_Int32 _nCrosses )
+{
+    try
+    {
+        double fNum = 0.0;
+        switch (_nCrosses)
+        {
+            case  xlAxisCrossesAutomatic:       //Microsoft Excel sets the axis crossing point.
+                mxPropertySet->setPropertyValue(AUTOORIGIN, cpo::uno::Any( true ) );
+                bCrossesAreCustomized = false;
+                return;
+            case xlAxisCrossesMinimum:                     // The axis crosses at the minimum value.
+                mxPropertySet->getPropertyValue(VBA_MIN) >>= fNum;
+                setCrossesAt( fNum );
+                bCrossesAreCustomized = false;
+                break;
+            case xlAxisCrossesMaximum:                     // The axis crosses at the maximum value.
+                mxPropertySet->getPropertyValue(u"Min"_ustr) >>= fNum;
+                setCrossesAt(fNum);
+                bCrossesAreCustomized = false;
+                break;
+            default: //xlAxisCrossesCustom
+                bCrossesAreCustomized = true;
+                break;
+        }
+        mxPropertySet->setPropertyValue(AUTOORIGIN, cpo::uno::Any(false) );
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+}
+::sal_Int32
+ScVbaAxis::getCrosses(  )
+{
+    sal_Int32 nCrosses = xlAxisCrossesCustom;
+    try
+    {
+        bool bisAutoOrigin = false;
+        mxPropertySet->getPropertyValue(AUTOORIGIN) >>= bisAutoOrigin;
+        if (bisAutoOrigin)
+            nCrosses = xlAxisCrossesAutomatic;
+        else
+        {
+            if (bCrossesAreCustomized)
+                nCrosses = xlAxisCrossesCustom;
+            else
+            {
+                double forigin = 0.0;
+                mxPropertySet->getPropertyValue(ORIGIN) >>= forigin;
+                double fmin = 0.0;
+                mxPropertySet->getPropertyValue(VBA_MIN) >>= fmin;
+                if (forigin == fmin)
+                    nCrosses = xlAxisCrossesMinimum;
+                else
+                    nCrosses = xlAxisCrossesMaximum;
+            }
+        }
+    }
+    catch (cpo::uno::Exception& )
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {} );
+    }
+    return nCrosses;
+}
+
+ void
+ScVbaAxis::setCrossesAt( double _fCrossesAt )
+{
+    try
+    {
+        setMaximumScaleIsAuto( false );
+        setMinimumScaleIsAuto( false );
+        mxPropertySet->setPropertyValue(ORIGIN, cpo::uno::Any(_fCrossesAt));
+    }
+    catch (const cpo::uno::Exception& e)
+    {
+        DebugHelper::basicexception(e);
+    }
+}
+
+ double
+ScVbaAxis::getCrossesAt(  )
+{
+    double fCrosses = 0.0;
+    try
+    {
+        mxPropertySet->getPropertyValue(ORIGIN) >>= fCrosses;
+    }
+    catch (cpo::uno::Exception& )
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+    return fCrosses;
+}
+
+void
+ScVbaAxis::setType( ::sal_Int32 _nType )
+{
+    mnType = _nType;
+}
+
+::sal_Int32
+ScVbaAxis::getType(  )
+{
+    return mnType;
+}
+
+void
+ScVbaAxis::setHasTitle( bool _bHasTitle )
+{
+    try
+    {
+        ScVbaChart* pChart = getChartPtr();
+        sal_Int32 nType = getType();
+        switch(nType)
+        {
+            case xlCategory:
+                pChart->mxDiagramPropertySet->setPropertyValue(u"HasXAxisTitle"_ustr, cpo::uno::Any(_bHasTitle));
+                break;
+            case xlSeriesAxis:
+                pChart->mxDiagramPropertySet->setPropertyValue(u"HasZAxisTitle"_ustr, cpo::uno::Any(_bHasTitle));
+                break;
+            default: // xlValue:
+                pChart->mxDiagramPropertySet->setPropertyValue(u"HasYAxisTitle"_ustr, cpo::uno::Any(_bHasTitle));
+        }
+
+    }
+    catch (const cpo::uno::Exception& e)
+    {
+        DebugHelper::basicexception(e);
+    }
+}
+
+ bool
+ScVbaAxis::getHasTitle(  )
+{
+    bool bHasTitle = false;
+    try
+    {
+        ScVbaChart* pChart = getChartPtr();
+        int nType = getType();
+        switch(nType)
+        {
+            case xlCategory:
+                pChart->mxDiagramPropertySet->getPropertyValue(u"HasXAxisTitle"_ustr) >>= bHasTitle;
+                break;
+            case xlSeriesAxis:
+                pChart->mxDiagramPropertySet->getPropertyValue(u"HasZAxisTitle"_ustr) >>= bHasTitle;
+                break;
+            default: // xlValue:
+                pChart->mxDiagramPropertySet->getPropertyValue(u"HasYAxisTitle"_ustr) >>= bHasTitle;
+        }
+    }
+    catch (const cpo::uno::Exception& e)
+    {
+        DebugHelper::basicexception(e);
+    }
+    return bHasTitle;
+}
+
+void
+ScVbaAxis::setMinorUnit( double _fMinorUnit )
+{
+    try
+    {
+        if (isValueAxis())
+            mxPropertySet->setPropertyValue(u"StepHelp"_ustr, cpo::uno::Any(_fMinorUnit));
+    }
+    catch (cpo::uno::Exception& )
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+}
+
+double
+ScVbaAxis::getMinorUnit(  )
+{
+    double fMinor = 1.0;
+    try
+    {
+        if (isValueAxis())
+            mxPropertySet->getPropertyValue(u"StepHelp"_ustr) >>= fMinor;
+    }
+    catch (cpo::uno::Exception& )
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+    return fMinor;
+}
+
+void
+ScVbaAxis::setMinorUnitIsAuto( bool _bMinorUnitIsAuto )
+{
+    try
+    {
+        if (isValueAxis())
+            mxPropertySet->setPropertyValue(u"AutoStepHelp"_ustr, cpo::uno::Any(_bMinorUnitIsAuto));
+    }
+    catch (cpo::uno::Exception& )
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {} );
+    }
+}
+
+ bool
+ScVbaAxis::getMinorUnitIsAuto(  )
+{
+    bool bIsAuto = false;
+    try
+    {
+        if (isValueAxis())
+        {
+            mxPropertySet->getPropertyValue(u"AutoStepHelp"_ustr) >>= bIsAuto;
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+    return bIsAuto;
+}
+
+void
+ScVbaAxis::setReversePlotOrder( bool /*ReversePlotOrder*/ )
+{
+    DebugHelper::basicexception(ERRCODE_BASIC_NOT_IMPLEMENTED, {});
+}
+
+bool
+ScVbaAxis::getReversePlotOrder(  )
+{
+    DebugHelper::basicexception(ERRCODE_BASIC_NOT_IMPLEMENTED, {});
+    return false;
+}
+
+void
+ScVbaAxis::setMajorUnit( double _fMajorUnit )
+{
+    try
+    {
+        if (isValueAxis())
+        {
+            mxPropertySet->setPropertyValue(u"StepMain"_ustr, cpo::uno::Any(_fMajorUnit));
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+}
+
+double
+ScVbaAxis::getMajorUnit(  )
+{
+    double fMax = 1.0;
+    try
+    {
+        if (isValueAxis())
+            mxPropertySet->getPropertyValue(u"StepMain"_ustr) >>= fMax;
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {} );
+    }
+    return fMax;
+}
+
+void
+ScVbaAxis::setMajorUnitIsAuto( bool _bMajorUnitIsAuto )
+{
+    try
+    {
+        if (isValueAxis())
+        {
+            mxPropertySet->setPropertyValue(u"AutoStepMain"_ustr, cpo::uno::Any( _bMajorUnitIsAuto ));
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+}
+
+bool
+ScVbaAxis::getMajorUnitIsAuto(  )
+{
+    bool bIsAuto = false;
+    try
+    {
+        if (isValueAxis())
+        {
+            mxPropertySet->getPropertyValue(u"AutoStepMain"_ustr) >>= bIsAuto;
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+    return bIsAuto;
+}
+
+void
+ScVbaAxis::setMaximumScale( double _fMaximumScale )
+{
+    try
+    {
+        if ( isValueAxis() )
+        {
+            mxPropertySet->setPropertyValue(u"Max"_ustr, cpo::uno::Any(_fMaximumScale));
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+}
+
+double
+ScVbaAxis::getMaximumScale(  )
+{
+    double fMax = 1.0;
+    try
+    {
+        if (isValueAxis())
+        {
+            mxPropertySet->getPropertyValue(u"Max"_ustr) >>= fMax;
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+    return fMax;
+
+}
+
+void
+ScVbaAxis::setMaximumScaleIsAuto( bool _bMaximumScaleIsAuto )
+{
+    try
+    {
+        if ( isValueAxis() )
+            mxPropertySet->setPropertyValue(u"AutoMax"_ustr, cpo::uno::Any( _bMaximumScaleIsAuto ));
+
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+}
+
+bool
+ScVbaAxis::getMaximumScaleIsAuto(  )
+{
+    bool bIsAuto = false;
+    try
+    {
+        if (isValueAxis())
+            mxPropertySet->getPropertyValue(u"AutoMax"_ustr) >>= bIsAuto;
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception( ERRCODE_BASIC_METHOD_FAILED, {} );
+    }
+    return bIsAuto;
+}
+
+void
+ScVbaAxis::setMinimumScale( double _fMinimumScale )
+{
+    try
+    {
+        if (isValueAxis())
+            mxPropertySet->setPropertyValue(u"Min"_ustr, cpo::uno::Any( _fMinimumScale )  );
+    }
+    catch ( cpo::uno::Exception& )
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {} );
+    }
+}
+
+double
+ScVbaAxis::getMinimumScale(  )
+{
+    double fMin = 0.0;
+    try
+    {
+        if (isValueAxis())
+            mxPropertySet->getPropertyValue(u"Min"_ustr) >>= fMin;
+    }
+    catch (const cpo::uno::Exception& e)
+    {
+        DebugHelper::basicexception(e);
+    }
+    return fMin;
+}
+
+void
+ScVbaAxis::setMinimumScaleIsAuto( bool _bMinimumScaleIsAuto )
+{
+    try
+    {
+        if (isValueAxis())
+        {
+            mxPropertySet->setPropertyValue(u"AutoMin"_ustr, cpo::uno::Any(_bMinimumScaleIsAuto));
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+}
+
+bool
+ScVbaAxis::getMinimumScaleIsAuto(  )
+{
+    bool bIsAuto = false;
+    try
+    {
+        if (isValueAxis())
+        {
+            mxPropertySet->getPropertyValue(u"AutoMin"_ustr) >>= bIsAuto;
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+    return bIsAuto;
+}
+
+::sal_Int32
+ScVbaAxis::getAxisGroup(  )
+{
+    return mnGroup;
+}
+
+void
+ScVbaAxis::setScaleType( ::sal_Int32 _nScaleType )
+{
+    try
+    {
+        if (isValueAxis())
+        {
+            switch (_nScaleType)
+            {
+                case xlScaleLinear:
+                    mxPropertySet->setPropertyValue(u"Logarithmic"_ustr, cpo::uno::Any( false ) );
+                    break;
+                case xlScaleLogarithmic:
+                    mxPropertySet->setPropertyValue(u"Logarithmic"_ustr, cpo::uno::Any( true ) );
+                    break;
+                default:
+                    // According to MS the parameter is ignored and no Error is thrown
+                    break;
+            }
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+}
+
+::sal_Int32
+ScVbaAxis::getScaleType(  )
+{
+    sal_Int32 nScaleType = xlScaleLinear;
+    try
+    {
+        if (isValueAxis())
+        {
+            bool bisLogarithmic = false;
+            mxPropertySet->getPropertyValue( u"Logarithmic"_ustr ) >>= bisLogarithmic;
+            if (bisLogarithmic)
+                nScaleType = xlScaleLogarithmic;
+            else
+                nScaleType = xlScaleLinear;
+        }
+    }
+    catch (const cpo::uno::Exception&)
+    {
+        DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, {});
+    }
+    return nScaleType;
+}
+
+double
+ScVbaAxis::getHeight(  )
+{
+    return maShapeHelper.getHeight();
+}
+
+void ScVbaAxis::setHeight( double height )
+{
+    maShapeHelper.setHeight( height );
+}
+double ScVbaAxis::getWidth(  )
+{
+    return maShapeHelper.getWidth( );
+}
+void ScVbaAxis::setWidth( double width )
+{
+    maShapeHelper.setWidth( width );
+}
+double ScVbaAxis::getTop(  )
+{
+    return maShapeHelper.getTop( );
+}
+void ScVbaAxis::setTop( double top )
+{
+    maShapeHelper.setTop( top );
+}
+double ScVbaAxis::getLeft(  )
+{
+    return maShapeHelper.getLeft( );
+}
+void ScVbaAxis::setLeft( double left )
+{
+    maShapeHelper.setLeft( left );
+}
+
+OUString
+ScVbaAxis::getServiceImplName()
+{
+    return u"ScVbaAxis"_ustr;
+}
+
+cpo::uno::Sequence< OUString >
+ScVbaAxis::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.excel.Axis"_ustr
+    };
+    return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

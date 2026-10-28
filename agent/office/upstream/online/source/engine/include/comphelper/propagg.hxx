@@ -1,0 +1,323 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_COMPHELPER_PROPAGG_HXX
+#define INCLUDED_COMPHELPER_PROPAGG_HXX
+
+#include <config_options.h>
+#include <com/sun/star/beans/Property.hpp>
+#include <com/sun/star/beans/XPropertiesChangeListener.hpp>
+#include <com/sun/star/beans/XVetoableChangeListener.hpp>
+#include <comphelper/propstate.hxx>
+#include <comphelper/comphelperdllapi.h>
+
+#include <cstddef>
+#include <map>
+#include <memory>
+#include <vector>
+
+
+//= property helper classes
+
+
+namespace comphelper
+{
+
+
+//= OPropertyAccessor
+//= internal helper class for OPropertyArrayAggregationHelper
+
+namespace internal
+{
+    struct OPropertyAccessor
+    {
+        sal_Int32   nOriginalHandle;
+        std::size_t nPos;
+        bool        bAggregate;
+
+        OPropertyAccessor(sal_Int32 _nOriginalHandle, std::size_t _nPos, bool _bAggregate)
+            :nOriginalHandle(_nOriginalHandle) ,nPos(_nPos) ,bAggregate(_bAggregate) { }
+
+        bool operator==(const OPropertyAccessor& rOb) const { return nPos == rOb.nPos; }
+        bool operator <(const OPropertyAccessor& rOb) const { return nPos < rOb.nPos; }
+    };
+}
+
+
+/**
+ * used as callback for an OPropertyArrayAggregationHelper
+ */
+class IPropertyInfoService
+{
+public:
+    /** get the preferred handle for the given property
+        @param      _rName      the property name
+        @return                 the handle the property should be referred by, or -1 if there are no
+                                preferences for the given property
+    */
+    virtual sal_Int32           getPreferredPropertyId(const OUString& _rName) = 0;
+
+protected:
+    ~IPropertyInfoService() {}
+};
+
+/**
+ * used for implementing a cppu::IPropertyArrayHelper for classes
+ * aggregating property sets
+ */
+
+#define DEFAULT_AGGREGATE_PROPERTY_ID   10000
+
+class COMPHELPER_DLLPUBLIC OPropertyArrayAggregationHelper final : public ::cppu::IPropertyArrayHelper
+{
+    friend class OPropertySetAggregationHelper;
+
+    std::vector<css::beans::Property>         m_aProperties;
+    std::map< sal_Int32, internal::OPropertyAccessor > m_aPropertyAccessors;
+
+public:
+    /** construct the object.
+        @param  _rProperties    the properties of the object doing the aggregation. These properties
+                                are used without any checks, so the caller has to ensure that the names and
+                                handles are valid.
+        @param  _rAggProperties the properties of the aggregate, usually got via a call to getProperties on the
+                                XPropertySetInfo of the aggregate.
+                                The names of the properties are used without any checks, so the caller has to ensure
+                                that there are no doubles.
+                                The handles are stored for later quick access, but the outside-handles the
+                                aggregate properties get depend from the following two parameters.
+        @param  _pInfoService
+                                If not NULL, the object pointed to is used to calc handles which should be used
+                                for referring the aggregate's properties from outside.
+                                If one of the properties returned from the info service conflict with other handles
+                                already present (e.g. through _rProperties), the property is handled as if -1 was returned.
+                                If NULL (or, for a special property, a call to getPreferredPropertyId returns -1),
+                                the aggregate property(ies) get a new handle which they can be referred by from outside.
+        @param  _nFirstAggregateId
+                                if the object is about to create new handles for the aggregate properties, it uses
+                                id's ascending from this given id.
+                                No checks are made if the handle range determined by _nFirstAggregateId conflicts with other
+                                handles within _rProperties.
+    */
+    OPropertyArrayAggregationHelper(const cpo::uno::Sequence< css::beans::Property>& _rProperties,
+                                    const cpo::uno::Sequence< css::beans::Property>& _rAggProperties,
+                                    IPropertyInfoService* _pInfoService = nullptr,
+                                    sal_Int32 _nFirstAggregateId = DEFAULT_AGGREGATE_PROPERTY_ID);
+
+
+    /// inherited from IPropertyArrayHelper
+    virtual bool fillPropertyMembersByHandle( OUString* _pPropName, sal_Int16* _pAttributes,
+                                            sal_Int32 _nHandle) override ;
+
+    /// inherited from IPropertyArrayHelper
+    virtual cpo::uno::Sequence< css::beans::Property> getProperties() override;
+    /// inherited from IPropertyArrayHelper
+    virtual css::beans::Property getPropertyByName(const OUString& _rPropertyName) override;
+
+    /// inherited from IPropertyArrayHelper
+    virtual bool  hasPropertyByName(const OUString& _rPropertyName) override ;
+    /// inherited from IPropertyArrayHelper
+    virtual sal_Int32 getHandleByName(const OUString & _rPropertyName) override;
+    /// inherited from IPropertyArrayHelper
+    virtual sal_Int32 fillHandles( /*out*/sal_Int32* _pHandles, const cpo::uno::Sequence< OUString >& _rPropNames ) override;
+
+    /** returns information about a property of the aggregate.
+        @param  _pPropName          points to a string to receive the property name. No name is returned if this is NULL.
+        @param  _pOriginalHandle    points to a sal_Int32 to receive the original property handle. No original handle is returned
+                                    if this is NULL.
+        @param  _nHandle            the handle of the property as got by, for instance, fillHandles
+
+        @return true, if _nHandle marks an aggregate property, otherwise false
+    */
+    bool fillAggregatePropertyInfoByHandle(OUString* _pPropName, sal_Int32* _pOriginalHandle,
+                                                   sal_Int32 _nHandle) const;
+
+    /** returns information about a property given by handle
+    */
+    bool getPropertyByHandle( sal_Int32 _nHandle, css::beans::Property& _rProperty ) const;
+
+
+    enum class PropertyOrigin
+    {
+        Aggregate,
+        Delegator,
+        Unknown
+    };
+    /** prefer this one over the XPropertySetInfo of the aggregate!
+
+        <p>The reason is that OPropertyArrayAggregationHelper is the only instance which really knows
+        which properties of the aggregate are to be exposed. <br/>
+
+        For instance, some derivee of OPropertySetAggregationHelper may decide to create an
+        OPropertyArrayAggregationHelper which contains only a subset of the aggregate properties. This way,
+        some of the aggregate properties may be hidden to the public.<br/>
+
+        When using the XPropertySetInfo of the aggregate set to determine the existence of a property, then this
+        would return false positives.</p>
+    */
+    PropertyOrigin  classifyProperty( const OUString& _rName );
+
+private:
+    const css::beans::Property* findPropertyByName(const OUString& _rName) const;
+};
+
+
+namespace internal
+{
+    class PropertyForwarder;
+}
+
+/**
+ * helper class for implementing the property-set-related interfaces
+ * for an object doin' aggregation
+ * supports at least XPropertySet and XMultiPropertySet
+ *
+ */
+class UNLESS_MERGELIBS(COMPHELPER_DLLPUBLIC) OPropertySetAggregationHelper    :public OPropertyStateHelper
+                                    ,public css::beans::XPropertiesChangeListener
+                                    ,public css::beans::XVetoableChangeListener
+{
+    friend class internal::PropertyForwarder;
+
+protected:
+    cpo::uno::Reference< css::beans::XPropertyState>      m_xAggregateState;
+    cpo::uno::Reference< css::beans::XPropertySet>        m_xAggregateSet;
+    cpo::uno::Reference< css::beans::XMultiPropertySet>   m_xAggregateMultiSet;
+    cpo::uno::Reference< css::beans::XFastPropertySet>    m_xAggregateFastSet;
+
+    std::unique_ptr<internal::PropertyForwarder>          m_pForwarder;
+    bool                            m_bListening : 1;
+
+public:
+    OPropertySetAggregationHelper( ::cppu::OBroadcastHelper& rBHelper );
+
+    virtual cpo::uno::Any queryInterface(const cpo::uno::Type& aType) override;
+
+// XEventListener
+    virtual void disposing(const css::lang::EventObject& Source) override;
+
+// XFastPropertySet
+    virtual void setFastPropertyValue(sal_Int32 nHandle, const cpo::uno::Any& aValue) override;
+    virtual cpo::uno::Any getFastPropertyValue(sal_Int32 nHandle) override;
+
+// XPropertySet
+    virtual void           addPropertyChangeListener(const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener) override;
+    virtual void           addVetoableChangeListener(const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener) override;
+
+// XPropertiesChangeListener
+    virtual void propertiesChange(const cpo::uno::Sequence< css::beans::PropertyChangeEvent >& evt) override;
+
+// XVetoableChangeListener
+    virtual void vetoableChange(const css::beans::PropertyChangeEvent& aEvent) override;
+
+// XMultiPropertySet
+    virtual void   setPropertyValues(const cpo::uno::Sequence< OUString >& PropertyNames, const cpo::uno::Sequence< cpo::uno::Any >& Values) override;
+    virtual void   addPropertiesChangeListener(const cpo::uno::Sequence< OUString >& aPropertyNames, const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener) override;
+
+// XPropertyState
+    virtual css::beans::PropertyState getPropertyState(const OUString& PropertyName) override;
+    virtual void                                   setPropertyToDefault(const OUString& PropertyName) override;
+    virtual cpo::uno::Any             getPropertyDefault(const OUString& aPropertyName) override;
+
+// OPropertySetHelper
+    /** still waiting to be overwritten ...
+        you <B>must<B/> use an OPropertyArrayAggregationHelper here, as the implementation strongly relies on this.
+    */
+    virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override = 0;
+
+    /** only implemented for "forwarded" properties, every other property must be handled
+        in the derivee, and will assert if passed herein
+    */
+    virtual bool convertFastPropertyValue( cpo::uno::Any& _rConvertedValue, cpo::uno::Any& _rOldValue, sal_Int32 _nHandle, const cpo::uno::Any& _rValue ) override;
+
+    /** only implemented for "forwarded" properties, every other property must be handled
+        in the derivee, and will assert if passed herein
+    */
+    virtual void setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const cpo::uno::Any& _rValue ) override;
+
+protected:
+    virtual ~OPropertySetAggregationHelper() override;
+
+    virtual void getFastPropertyValue(cpo::uno::Any& rValue, sal_Int32 nHandle) const override;
+    void disposing();
+
+    sal_Int32       getOriginalHandle( sal_Int32 _nHandle ) const;
+    OUString getPropertyName( sal_Int32 _nHandle ) const;
+
+    /** declares the property with the given (public) handle as one to be forwarded to the aggregate
+
+        Sometimes, you might want to <em>overwrite</em> properties at the aggregate. That is,
+        though the aggregate implements this property, and still is to hold the property value,
+        you want to do additional handling upon setting the property, but then forward the value
+        to the aggregate.
+
+        Use this method to declare such properties.
+
+        When a "forwarded property" is set from outside, the class first calls
+        <member>forwardingPropertyValue</member> for any preprocessing, then forwards the property
+        value to the aggregate, and then calls <member>forwardedPropertyValue</member>.
+
+        When you declare a property as "forwarded", the class takes care for some multi-threading
+        issues, for instance, it won't fire any property change notifications which result from
+        forwarding a property value, unless it's safe to do so (i.e. unless our mutex is
+        released).
+
+        @see forwardingPropertyValue
+        @see forwardedPropertyValue
+    */
+    void declareForwardedProperty( sal_Int32 _nHandle );
+
+    /** checks whether we're actually forwarding a property value to our aggregate
+
+        @see declareForwardedProperty
+        @see forwardingPropertyValue
+        @see forwardedPropertyValue
+    */
+    bool    isCurrentlyForwardingProperty( sal_Int32 _nHandle ) const;
+
+    /** called immediately before a property value which is overwritten in this instance
+        is forwarded to the aggregate
+
+        @see declareForwardedProperty
+        @see forwardedPropertyValue
+    */
+    virtual void forwardingPropertyValue( sal_Int32 _nHandle );
+
+    /** called immediately after a property value which is overwritten in this instance
+        has been forwarded to the aggregate
+
+        @see declareForwardedProperty
+        @see forwardingPropertyValue
+    */
+    virtual void forwardedPropertyValue( sal_Int32 _nHandle );
+
+    /// must be called before aggregation, if aggregation is used
+    ///
+    /// @throws css::lang::IllegalArgumentException
+    void setAggregation(const cpo::uno::Reference< cpo::uno::XInterface >&);
+    void startListening();
+};
+
+
+}   // namespace comphelper
+
+
+#endif // INCLUDED_COMPHELPER_PROPAGG_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

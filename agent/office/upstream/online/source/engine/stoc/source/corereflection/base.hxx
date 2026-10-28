@@ -1,0 +1,400 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+//  #define TEST_LIST_CLASSES
+
+#pragma once
+
+#include <sal/config.h>
+
+#include <o3tl/any.hxx>
+#include <osl/mutex.hxx>
+#include <uno/mapping.hxx>
+#include <uno/dispatcher.h>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/compbase.hxx>
+#include <rtl/ustring.hxx>
+#include <rtl/ref.hxx>
+
+#include "lrucache.hxx"
+
+#ifdef TEST_LIST_CLASSES
+#include <vector>
+#include <algorithm>
+#endif
+#include <unordered_map>
+#include <memory>
+
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/container/XHierarchicalNameAccess.hpp>
+
+#include <com/sun/star/reflection/XIdlReflection.hpp>
+
+namespace cpo::uno { class XComponentContext; }
+namespace com::sun::star::reflection { class XIdlClass; }
+namespace com::sun::star::reflection { class XIdlField; }
+namespace com::sun::star::reflection { class XIdlMethod; }
+
+namespace stoc_corefl
+{
+
+#ifdef TEST_LIST_CLASSES
+extern std::vector<OUString> g_aClassNames;
+#endif
+
+
+::osl::Mutex & getMutexAccess();
+
+
+inline bool td_equals( typelib_TypeDescription * pTD, typelib_TypeDescriptionReference * pType )
+{
+    return (pTD->pWeakRef == pType ||
+            (pTD->pTypeName->length == pType->pTypeName->length &&
+             rtl_ustr_compare( pTD->pTypeName->buffer, pType->pTypeName->buffer ) == 0));
+}
+
+typedef std::unordered_map< OUString, cpo::uno::WeakReference< css::reflection::XIdlField > > OUString2Field;
+typedef std::unordered_map< OUString, cpo::uno::WeakReference< css::reflection::XIdlMethod > > OUString2Method;
+
+
+class IdlReflectionServiceImpl
+    : public ::cppu::WeakComponentImplHelper<
+          css::reflection::XIdlReflection,
+          css::container::XHierarchicalNameAccess,
+          css::lang::XServiceInfo>
+{
+    ::osl::Mutex                            _aComponentMutex;
+    cpo::uno::Reference< css::container::XHierarchicalNameAccess >    _xTDMgr;
+
+    // caching
+    LRU_CacheAnyByOUString                  _aElements;
+
+    cpo::uno::Mapping                     _aCpp2Uno;
+    cpo::uno::Mapping                     _aUno2Cpp;
+
+    inline cpo::uno::Reference< css::reflection::XIdlClass > constructClass( typelib_TypeDescription * pTypeDescr );
+
+public:
+    /// @throws cpo::uno::RuntimeException
+    const cpo::uno::Mapping & getCpp2Uno();
+    /// @throws cpo::uno::RuntimeException
+    const cpo::uno::Mapping & getUno2Cpp();
+    /// @throws cpo::uno::RuntimeException
+    uno_Interface * mapToUno( const cpo::uno::Any & rObj, typelib_InterfaceTypeDescription * pTo );
+
+    // ctor/ dtor
+    explicit IdlReflectionServiceImpl( const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext );
+    virtual ~IdlReflectionServiceImpl() override;
+
+    // WeakComponentImplHelper
+    virtual void disposing() override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString & rServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XIdlReflection
+    virtual cpo::uno::Reference< css::reflection::XIdlClass > forName( const OUString & rTypeName ) override;
+    virtual cpo::uno::Reference< css::reflection::XIdlClass > getType( const cpo::uno::Any & rObj ) override;
+
+    // XHierarchicalNameAccess
+    virtual cpo::uno::Any getByHierarchicalName( const OUString & rName ) override;
+    virtual bool hasByHierarchicalName( const OUString & rName ) override;
+
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::reflection::XIdlClass > forType( typelib_TypeDescription * pTypeDescr );
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::reflection::XIdlClass > forType( typelib_TypeDescriptionReference * pRef );
+};
+
+
+class IdlClassImpl
+    : public ::cppu::WeakImplHelper< css::reflection::XIdlClass >
+{
+    rtl::Reference<IdlReflectionServiceImpl>
+                                 m_xReflection;
+
+    OUString                    _aName;
+    cpo::uno::TypeClass         _eTypeClass;
+
+    typelib_TypeDescription *   _pTypeDescr;
+
+public:
+    typelib_TypeDescription *   getTypeDescr() const
+        { return _pTypeDescr; }
+    IdlReflectionServiceImpl *  getReflection() const
+        { return m_xReflection.get(); }
+
+    // Ctor
+    IdlClassImpl( IdlReflectionServiceImpl * pReflection,
+                  OUString aName, typelib_TypeClass eTypeClass,
+                  typelib_TypeDescription * pTypeDescr );
+    virtual ~IdlClassImpl() override;
+
+    // XIdlClassImpl default implementation
+    virtual cpo::uno::TypeClass getTypeClass() override;
+    virtual OUString getName() override;
+    virtual bool equals( const cpo::uno::Reference< css::reflection::XIdlClass >& xType ) override;
+
+    virtual bool isAssignableFrom( const cpo::uno::Reference< css::reflection::XIdlClass > & xType ) override;
+    virtual void createObject( cpo::uno::Any & rObj ) override;
+
+    // def impl ????
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlClass > > getClasses() override;
+    virtual cpo::uno::Reference< css::reflection::XIdlClass > getClass( const OUString & rName ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlClass > > getInterfaces() override;
+
+    // structs, interfaces
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlClass > > getSuperclasses() override;
+    // structs
+    virtual cpo::uno::Reference< css::reflection::XIdlField > getField( const OUString & rName ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlField > > getFields() override;
+    // interfaces
+    virtual cpo::uno::Reference< css::reflection::XIdlMethod > getMethod( const OUString & rName ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlMethod > > getMethods() override;
+    // array
+    virtual cpo::uno::Reference< css::reflection::XIdlClass > getComponentType() override;
+    virtual cpo::uno::Reference< css::reflection::XIdlArray > getArray() override;
+};
+
+
+class InterfaceIdlClassImpl
+    : public IdlClassImpl
+{
+    typedef std::pair< OUString, typelib_TypeDescription * > MemberInit;
+
+    cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlClass > >      _xSuperClasses;
+
+    std::unique_ptr<MemberInit[]>           _pSortedMemberInit; // first methods, then attributes
+    OUString2Field                          _aName2Field;
+    OUString2Method                         _aName2Method;
+    sal_Int32                               _nMethods;
+    sal_Int32                               _nAttributes;
+
+    void initMembers();
+
+public:
+    typelib_InterfaceTypeDescription * getTypeDescr() const
+        { return reinterpret_cast<typelib_InterfaceTypeDescription *>(IdlClassImpl::getTypeDescr()); }
+
+    // ctor/ dtor
+    InterfaceIdlClassImpl( IdlReflectionServiceImpl * pReflection,
+                           const OUString & rName, typelib_TypeClass eTypeClass,
+                           typelib_TypeDescription * pTypeDescr )
+        : IdlClassImpl( pReflection, rName, eTypeClass, pTypeDescr )
+        , _nMethods( 0 )
+        , _nAttributes( 0 )
+        {}
+    virtual ~InterfaceIdlClassImpl() override;
+
+    // IdlClassImpl modifications
+    virtual bool isAssignableFrom( const cpo::uno::Reference< css::reflection::XIdlClass > & xType ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlClass > > getSuperclasses() override;
+    virtual cpo::uno::Reference< css::reflection::XIdlMethod > getMethod( const OUString & rName ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlMethod > > getMethods() override;
+    virtual cpo::uno::Reference< css::reflection::XIdlField > getField( const OUString & rName ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlField > > getFields() override;
+    virtual void createObject( cpo::uno::Any & rObj ) override;
+};
+
+
+class CompoundIdlClassImpl
+    : public IdlClassImpl
+{
+    cpo::uno::Reference< css::reflection::XIdlClass >
+                                             _xSuperClass;
+    std::optional< cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlField > > >
+                                            m_xFields;
+    OUString2Field                          _aName2Field;
+
+public:
+    typelib_CompoundTypeDescription * getTypeDescr() const
+        { return reinterpret_cast<typelib_CompoundTypeDescription *>(IdlClassImpl::getTypeDescr()); }
+
+    // ctor/ dtor
+    CompoundIdlClassImpl( IdlReflectionServiceImpl * pReflection,
+                          const OUString & rName, typelib_TypeClass eTypeClass,
+                          typelib_TypeDescription * pTypeDescr )
+        : IdlClassImpl( pReflection, rName, eTypeClass, pTypeDescr )
+        {}
+    virtual ~CompoundIdlClassImpl() override;
+
+    // IdlClassImpl modifications
+    virtual bool isAssignableFrom( const cpo::uno::Reference< css::reflection::XIdlClass > & xType ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlClass > > getSuperclasses() override;
+    virtual cpo::uno::Reference< css::reflection::XIdlField > getField( const OUString & rName ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlField > > getFields() override;
+};
+
+
+typedef cppu::ImplInheritanceHelper<IdlClassImpl, css::reflection::XIdlArray> ArrayIdlClassImpl_Base;
+class ArrayIdlClassImpl : public ArrayIdlClassImpl_Base
+{
+public:
+    typelib_IndirectTypeDescription * getTypeDescr() const
+        { return reinterpret_cast<typelib_IndirectTypeDescription *>(IdlClassImpl::getTypeDescr()); }
+
+    // ctor
+    ArrayIdlClassImpl( IdlReflectionServiceImpl * pReflection,
+                       const OUString & rName, typelib_TypeClass eTypeClass,
+                       typelib_TypeDescription * pTypeDescr )
+        : ArrayIdlClassImpl_Base( pReflection, rName, eTypeClass, pTypeDescr )
+        {}
+
+    // IdlClassImpl modifications
+    virtual bool isAssignableFrom( const cpo::uno::Reference< css::reflection::XIdlClass > & xType ) override;
+    virtual cpo::uno::Reference< css::reflection::XIdlClass > getComponentType() override;
+    virtual cpo::uno::Reference< css::reflection::XIdlArray > getArray() override;
+
+    // XIdlArray
+    virtual void realloc( cpo::uno::Any & rArray, sal_Int32 nLen ) override;
+    virtual sal_Int32 getLen( const cpo::uno::Any & rArray ) override;
+    virtual cpo::uno::Any get( const cpo::uno::Any & rArray, sal_Int32 nIndex ) override;
+    virtual void set( cpo::uno::Any & rArray, sal_Int32 nIndex, const cpo::uno::Any & rNewValue ) override;
+};
+
+
+class EnumIdlClassImpl
+    : public IdlClassImpl
+{
+    std::optional< cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlField > > > m_xFields;
+    OUString2Field                       _aName2Field;
+
+public:
+    typelib_EnumTypeDescription * getTypeDescr() const
+        { return reinterpret_cast<typelib_EnumTypeDescription *>(IdlClassImpl::getTypeDescr()); }
+
+    // ctor/ dtor
+    EnumIdlClassImpl( IdlReflectionServiceImpl * pReflection,
+                      const OUString & rName, typelib_TypeClass eTypeClass,
+                      typelib_TypeDescription * pTypeDescr )
+        : IdlClassImpl( pReflection, rName, eTypeClass, pTypeDescr )
+        {}
+    virtual ~EnumIdlClassImpl() override;
+
+    // IdlClassImpl modifications
+    virtual cpo::uno::Reference< css::reflection::XIdlField > getField( const OUString & rName ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::reflection::XIdlField > > getFields() override;
+    virtual void createObject( cpo::uno::Any & rObj ) override;
+};
+
+
+class IdlMemberImpl
+    : public ::cppu::WeakImplHelper< css::reflection::XIdlMember >
+{
+    rtl::Reference<IdlReflectionServiceImpl>
+                                m_xReflection;
+    OUString                    _aName;
+
+    typelib_TypeDescription *   _pTypeDescr;
+    typelib_TypeDescription *   _pDeclTypeDescr;
+
+protected:
+    cpo::uno::Reference< css::reflection::XIdlClass >      _xDeclClass;
+
+public:
+    IdlReflectionServiceImpl *  getReflection() const
+        { return m_xReflection.get(); }
+    typelib_TypeDescription *   getTypeDescr() const
+        { return _pTypeDescr; }
+    typelib_TypeDescription *   getDeclTypeDescr() const
+        { return _pDeclTypeDescr; }
+
+    // ctor/ dtor
+    IdlMemberImpl( IdlReflectionServiceImpl * pReflection, OUString aName,
+                   typelib_TypeDescription * pTypeDescr, typelib_TypeDescription * pDeclTypeDescr );
+    virtual ~IdlMemberImpl() override;
+
+    // XIdlMember
+    virtual cpo::uno::Reference< css::reflection::XIdlClass > getDeclaringClass() override;
+    virtual OUString getName() override;
+};
+
+
+// coerces to type descr pTo else queries for it: the interface pointer is returned via rDest
+// ## type to XidlClass coercion possible
+inline bool extract(
+    const cpo::uno::Any & rObj, typelib_InterfaceTypeDescription * pTo,
+    cpo::uno::Reference< cpo::uno::XInterface > & rDest,
+    IdlReflectionServiceImpl * pRefl )
+{
+    rDest.clear();
+    if (nullptr != pTo)
+    {
+        if (! rObj.hasValue())
+            return true;
+        if (rObj.getValueTypeClass() == cpo::uno::TypeClass_INTERFACE)
+        {
+            return ::uno_type_assignData(
+                &rDest, pTo->aBase.pWeakRef,
+                const_cast< void * >( rObj.getValue() ), rObj.getValueTypeRef(),
+                reinterpret_cast< uno_QueryInterfaceFunc >(cpo::uno::cpp_queryInterface),
+                reinterpret_cast< uno_AcquireFunc >(cpo::uno::cpp_acquire),
+                reinterpret_cast< uno_ReleaseFunc >(cpo::uno::cpp_release) );
+        }
+        else if (auto t = o3tl::tryAccess<cpo::uno::Type>(rObj))
+        {
+            rDest = pRefl->forType( t->getTypeLibType() );
+            return rDest.is();
+        }
+    }
+    return false;
+}
+
+inline bool coerce_assign(
+    void * pDest, typelib_TypeDescription * pTD, const cpo::uno::Any & rSource,
+    IdlReflectionServiceImpl * pRefl )
+{
+    if (pTD->eTypeClass == typelib_TypeClass_INTERFACE)
+    {
+        cpo::uno::Reference< cpo::uno::XInterface > xVal;
+        if (extract( rSource, reinterpret_cast<typelib_InterfaceTypeDescription *>(pTD), xVal, pRefl ))
+        {
+            if (*static_cast<cpo::uno::XInterface **>(pDest))
+                (*static_cast<cpo::uno::XInterface **>(pDest))->release();
+            *static_cast<cpo::uno::XInterface **>(pDest) = xVal.get();
+            if (*static_cast<cpo::uno::XInterface **>(pDest))
+                (*static_cast<cpo::uno::XInterface **>(pDest))->acquire();
+            return true;
+        }
+        return false;
+    }
+    else if (pTD->eTypeClass == typelib_TypeClass_ANY)
+    {
+        return uno_assignData(
+            pDest, pTD,
+            const_cast<cpo::uno::Any *>(&rSource), pTD,
+            reinterpret_cast< uno_QueryInterfaceFunc >(cpo::uno::cpp_queryInterface),
+            reinterpret_cast< uno_AcquireFunc >(cpo::uno::cpp_acquire),
+            reinterpret_cast< uno_ReleaseFunc >(cpo::uno::cpp_release) );
+    }
+    else
+    {
+        return uno_type_assignData(
+            pDest, pTD->pWeakRef,
+            const_cast<void *>(rSource.getValue()), rSource.getValueTypeRef(),
+            reinterpret_cast< uno_QueryInterfaceFunc >(cpo::uno::cpp_queryInterface),
+            reinterpret_cast< uno_AcquireFunc >(cpo::uno::cpp_acquire),
+            reinterpret_cast< uno_ReleaseFunc >(cpo::uno::cpp_release) );
+    }
+}
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

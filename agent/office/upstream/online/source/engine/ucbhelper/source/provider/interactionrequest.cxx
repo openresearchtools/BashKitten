@@ -1,0 +1,382 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <ucbhelper/interactionrequest.hxx>
+
+#include <rtl/ref.hxx>
+#include <osl/diagnose.h>
+#include <cppuhelper/typeprovider.hxx>
+#include <cppuhelper/queryinterface.hxx>
+#include <utility>
+
+using namespace com::sun::star;
+using namespace ::cpo;
+using namespace ucbhelper;
+
+
+// InteractionRequest Implementation.
+
+
+namespace ucbhelper
+{
+
+struct InteractionRequest_Impl
+{
+    rtl::Reference< InteractionContinuation > m_xSelection;
+    cpo::uno::Any m_aRequest;
+    cpo::uno::Sequence<
+        cpo::uno::Reference<
+            css::task::XInteractionContinuation > > m_aContinuations;
+
+    InteractionRequest_Impl() {}
+    explicit InteractionRequest_Impl( cpo::uno::Any aRequest )
+    : m_aRequest(std::move( aRequest )) {}
+};
+
+}
+
+
+InteractionRequest::InteractionRequest()
+: m_pImpl( new InteractionRequest_Impl )
+{
+}
+
+
+InteractionRequest::InteractionRequest( const cpo::uno::Any & rRequest )
+: m_pImpl( new InteractionRequest_Impl( rRequest ) )
+{
+}
+
+
+// virtual
+InteractionRequest::~InteractionRequest()
+{
+}
+
+
+void InteractionRequest::setRequest( const cpo::uno::Any & rRequest )
+{
+    m_pImpl->m_aRequest = rRequest;
+}
+
+
+void InteractionRequest::setContinuations(
+                const cpo::uno::Sequence< uno::Reference<
+                    task::XInteractionContinuation > > & rContinuations )
+{
+    m_pImpl->m_aContinuations = rContinuations;
+}
+
+
+rtl::Reference< InteractionContinuation > const &
+InteractionRequest::getSelection() const
+{
+    return m_pImpl->m_xSelection;
+}
+
+
+void InteractionRequest::setSelection(
+                const rtl::Reference< InteractionContinuation > & rxSelection )
+{
+    m_pImpl->m_xSelection = rxSelection;
+}
+
+
+// XInterface methods.
+
+
+// XInteractionRequest methods.
+
+
+// virtual
+cpo::uno::Any InteractionRequest::getRequest()
+{
+    return m_pImpl->m_aRequest;
+}
+
+
+// virtual
+cpo::uno::Sequence< uno::Reference< task::XInteractionContinuation > >
+InteractionRequest::getContinuations()
+{
+    return m_pImpl->m_aContinuations;
+}
+
+
+// InteractionContinuation Implementation.
+
+
+InteractionContinuation::InteractionContinuation(
+                        InteractionRequest * pRequest )
+: m_pRequest( pRequest )
+{
+}
+
+
+// virtual
+InteractionContinuation::~InteractionContinuation()
+{
+}
+
+
+void InteractionContinuation::recordSelection()
+{
+    m_pRequest->setSelection( this );
+}
+
+
+// InteractionAbort Implementation.
+
+
+// XInteractionContinuation methods.
+
+
+// virtual
+void InteractionAbort::select()
+{
+    recordSelection();
+}
+
+
+// InteractionRetry Implementation.
+
+
+// XInteractionContinuation methods.
+
+
+// virtual
+void InteractionRetry::select()
+{
+    recordSelection();
+}
+
+
+// InteractionApprove Implementation.
+
+
+// XInteractionContinuation methods.
+
+
+// virtual
+void InteractionApprove::select()
+{
+    recordSelection();
+}
+
+
+// InteractionDisapprove Implementation.
+
+
+// XInteractionContinuation methods.
+
+
+// virtual
+void InteractionDisapprove::select()
+{
+    recordSelection();
+}
+
+
+// InteractionSupplyAuthentication Implementation.
+
+
+// XInteractionContinuation methods.
+
+
+// virtual
+void InteractionSupplyAuthentication::select()
+{
+    recordSelection();
+}
+
+
+// XInteractionSupplyAuthentication methods.
+
+
+// virtual
+bool
+InteractionSupplyAuthentication::canSetRealm()
+{
+    return m_bCanSetRealm;
+}
+
+
+// virtual
+void
+InteractionSupplyAuthentication::setRealm( const OUString& Realm )
+{
+    OSL_ENSURE( m_bCanSetPassword,
+        "InteractionSupplyAuthentication::setRealm - Not supported!" );
+
+    if ( m_bCanSetRealm )
+        m_aRealm = Realm;
+}
+
+
+// virtual
+bool
+InteractionSupplyAuthentication::canSetUserName()
+{
+    return m_bCanSetUserName;
+}
+
+
+// virtual
+void
+InteractionSupplyAuthentication::setUserName( const OUString& UserName )
+{
+    OSL_ENSURE( m_bCanSetUserName,
+        "InteractionSupplyAuthentication::setUserName - Not supported!" );
+
+    if ( m_bCanSetUserName )
+        m_aUserName = UserName;
+}
+
+
+// virtual
+bool
+InteractionSupplyAuthentication::canSetPassword()
+{
+    return m_bCanSetPassword;
+}
+
+
+// virtual
+void
+InteractionSupplyAuthentication::setPassword( const OUString& Password )
+{
+    OSL_ENSURE( m_bCanSetPassword,
+        "InteractionSupplyAuthentication::setPassword - Not supported!" );
+
+    if ( m_bCanSetPassword )
+        m_aPassword = Password;
+}
+
+
+// virtual
+cpo::uno::Sequence< ucb::RememberAuthentication >
+InteractionSupplyAuthentication::getRememberPasswordModes(
+                                    ucb::RememberAuthentication& Default )
+{
+    Default = m_eDefaultRememberPasswordMode;
+    return m_aRememberPasswordModes;
+}
+
+
+// virtual
+void
+InteractionSupplyAuthentication::setRememberPassword(
+                                    ucb::RememberAuthentication Remember )
+{
+    m_eRememberPasswordMode = Remember;
+}
+
+
+// virtual
+bool
+InteractionSupplyAuthentication::canSetAccount()
+{
+    return m_bCanSetAccount;
+}
+
+
+// virtual
+void
+InteractionSupplyAuthentication::setAccount( const OUString& /*Account*/ )
+{
+    OSL_ENSURE( m_bCanSetAccount,
+        "InteractionSupplyAuthentication::setAccount - Not supported!" );
+}
+
+
+// virtual
+cpo::uno::Sequence< ucb::RememberAuthentication >
+InteractionSupplyAuthentication::getRememberAccountModes(
+                                    ucb::RememberAuthentication& Default )
+{
+    Default = m_eDefaultRememberAccountMode;
+    return m_aRememberAccountModes;
+}
+
+
+// virtual
+void InteractionSupplyAuthentication::setRememberAccount(
+                                    ucb::RememberAuthentication )
+{
+}
+
+
+// XInteractionSupplyAuthentication2 methods.
+
+
+// virtual
+bool
+InteractionSupplyAuthentication::canUseSystemCredentials(
+        bool& Default )
+{
+    Default = false;
+    return m_bCanUseSystemCredentials;
+}
+
+
+// virtual
+void InteractionSupplyAuthentication::setUseSystemCredentials(
+        bool UseSystemCredentials )
+{
+    if ( m_bCanUseSystemCredentials )
+        m_bUseSystemCredentials = UseSystemCredentials;
+}
+
+
+// InteractionReplaceExistingData Implementation.
+
+
+// XInteractionContinuation methods.
+
+
+// virtual
+void InteractionReplaceExistingData::select()
+{
+    recordSelection();
+}
+
+// InteractionAuthFallback Implementation
+
+// XInteractionContinuation methods.
+
+// virtual
+void InteractionAuthFallback::select()
+{
+    recordSelection();
+}
+
+// XInteractionAuthFallback methods
+
+// virtual
+void InteractionAuthFallback::setCode( const OUString& code )
+{
+    m_aCode = code;
+}
+
+const OUString& InteractionAuthFallback::getCode() const
+{
+    return m_aCode;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

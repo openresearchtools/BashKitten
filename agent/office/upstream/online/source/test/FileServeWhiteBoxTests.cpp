@@ -1,0 +1,690 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * White box unit test for file server functionality.
+ */
+
+#include <config.h>
+
+#include <wsd/ContentSecurityPolicy.hpp>
+#include <wsd/FileServer.hpp>
+#include <common/ContainerUtil.hpp>
+#include <common/FileUtil.hpp>
+#include <common/Util.hpp>
+#include <test/lokassert.hpp>
+
+#include <Poco/File.h>
+#include <Poco/Path.h>
+#include <Poco/String.h>
+
+#include <cppunit/TestAssert.h>
+#include <cppunit/extensions/HelperMacros.h>
+
+#include <cstddef>
+#include <memory>
+
+/// File-Serve White-Box unit-tests.
+class FileServeTests : public CPPUNIT_NS::TestFixture
+{
+    CPPUNIT_TEST_SUITE(FileServeTests);
+    CPPUNIT_TEST(testUIDefaults);
+    CPPUNIT_TEST(testCSSVars);
+    CPPUNIT_TEST(testPreProcessedFile);
+    CPPUNIT_TEST(testPreProcessedFileRoundtrip);
+    CPPUNIT_TEST(testPreProcessedFileSubstitution);
+    CPPUNIT_TEST(testOnlyAConfiguredOriginRelaysMessages);
+    CPPUNIT_TEST(testCSPMergeNewlines);
+    CPPUNIT_TEST(testCSPKeepsOutBadSources);
+    CPPUNIT_TEST(testSettingsUploadFileId);
+    CPPUNIT_TEST_SUITE_END();
+
+    void testUIDefaults();
+    void testCSSVars();
+    void testPreProcessedFile();
+    void testPreProcessedFileRoundtrip();
+    void testPreProcessedFileSubstitution();
+    void testOnlyAConfiguredOriginRelaysMessages();
+    void testCSPMergeNewlines();
+    void testCSPKeepsOutBadSources();
+    void testSettingsUploadFileId();
+
+    void preProcessedFileSubstitution(const std::string_view testname,
+                                      const Util::UnorderedStringMap<std::string>& variables);
+    // Helper replace each occurrence of from in str to variables[to_key] except if to_key is not in variables
+    std::string& replaceIfExist(std::string& str, const std::string& from,
+                                const std::string& to_key,
+                                const Util::UnorderedStringMap<std::string>& variables);
+};
+
+void FileServeTests::testUIDefaults()
+{
+    constexpr std::string_view testname = __func__;
+
+    std::string uiMode;
+    std::string uiTheme;
+    std::string savedUIState;
+
+    LOK_ASSERT_EQUAL_STR("{\"uiMode\":\"classic\"}",
+                         FileServerRequestHandler::uiDefaultsToJSON("UIMode=classic;huh=bleh;",
+                                                                    uiMode, uiTheme, savedUIState));
+    LOK_ASSERT_EQUAL_STR("classic", uiMode);
+
+    LOK_ASSERT_EQUAL_STR(
+        "{\"spreadsheet\":{\"ShowSidebar\":\"false\"},\"text\":{\"ShowRuler\":\"true\"}}",
+        FileServerRequestHandler::uiDefaultsToJSON("TextRuler=true;SpreadsheetSidebar=false",
+                                                   uiMode, uiTheme, savedUIState));
+    LOK_ASSERT_EQUAL_STR("", uiMode);
+
+    LOK_ASSERT_EQUAL_STR(
+        "{\"presentation\":{\"ShowStatusbar\":\"false\"},\"spreadsheet\":{\"ShowSidebar\":"
+        "\"false\"},\"text\":{\"ShowRuler\":\"true\"},\"uiMode\":\"notebookbar\"}",
+        FileServerRequestHandler::uiDefaultsToJSON(
+            ";;UIMode=notebookbar;;PresentationStatusbar=false;;TextRuler=true;;bah=ugh;;"
+            "SpreadsheetSidebar=false",
+            uiMode, uiTheme, savedUIState));
+
+    LOK_ASSERT_EQUAL_STR(
+        "{\"drawing\":{\"ShowStatusbar\":\"true\"},\"presentation\":{"
+        "\"ShowStatusbar\":\"false\"},\"spreadsheet\":{\"ShowSidebar\":\"false\"},"
+        "\"text\":{\"ShowRuler\":\"true\"},\"uiMode\":\"notebookbar\"}",
+        FileServerRequestHandler::uiDefaultsToJSON(
+            ";;UIMode=notebookbar;;PresentationStatusbar=false;;TextRuler=true;;bah="
+            "ugh;;SpreadsheetSidebar=false;;DrawingStatusbar=true",
+            uiMode, uiTheme, savedUIState));
+
+    LOK_ASSERT_EQUAL_STR("notebookbar", uiMode);
+
+    // The AI Assistant is a widget of its own, set without disturbing the
+    // property deck beside it.
+    LOK_ASSERT_EQUAL_STR(
+        "{\"text\":{\"ShowAISidebar\":\"true\",\"ShowSidebar\":\"false\"}}",
+        FileServerRequestHandler::uiDefaultsToJSON("TextAISidebar=true;TextSidebar=false",
+                                                   uiMode, uiTheme, savedUIState));
+
+    LOK_ASSERT_EQUAL_STR(
+        "{\"presentation\":{\"ShowAISidebar\":\"false\"},\"spreadsheet\":{\"ShowAISidebar\":"
+        "\"true\"}}",
+        FileServerRequestHandler::uiDefaultsToJSON(
+            "SpreadsheetAISidebar=true;PresentationAISidebar=false", uiMode, uiTheme,
+            savedUIState));
+
+    // The tab and the sidebar are separate defaults; both may be set at once.
+    LOK_ASSERT_EQUAL_STR(
+        "{\"text\":{\"ShowAINotebookbar\":\"true\",\"ShowAISidebar\":\"false\"}}",
+        FileServerRequestHandler::uiDefaultsToJSON("TextAINotebookbar=true;TextAISidebar=false",
+                                                   uiMode, uiTheme, savedUIState));
+}
+
+void FileServeTests::testCSSVars()
+{
+    constexpr std::string_view testname = __func__;
+
+    LOK_ASSERT_EQUAL_STR(
+        "OnJvb3Qgey0tY28tc29tZXN0eWxlLXRleHQ6IzEyMzQ1NjstLWNvLXNvbWVzdHlsZS1zaXplOjE1cHg7fQ==",
+        FileServerRequestHandler::cssVarsToStyle(
+            "--co-somestyle-text=#123456;--co-somestyle-size=15px;"));
+
+    LOK_ASSERT_EQUAL_STR(
+        "OnJvb3Qgey0tY28tc29tZXN0eWxlLXRleHQ6IzEyMzQ1NjstLWNvLXNvbWVzdHlsZS1zaXplOjE1cHg7fQ==",
+        FileServerRequestHandler::cssVarsToStyle(
+            ";;--co-somestyle-text=#123456;;--co-somestyle-size=15px;;;"));
+
+    LOK_ASSERT_EQUAL_STR(
+        "OnJvb3Qgey0tY28tc29tZXN0eWxlLXRleHQ6IzEyMzQ1NjstLWNvLXNvbWVzdHlsZS1zaXplOjE1cHg7fQ==",
+        FileServerRequestHandler::cssVarsToStyle(
+            "--co-somestyle-text=#123456;;--co-somestyle-size=15px;--co-sometext#324;;"));
+
+    LOK_ASSERT_EQUAL_STR(
+        "OnJvb3Qgey0tY28tc29tZXN0eWxlLXRleHQ6IzEyMzQ1Njt9",
+        FileServerRequestHandler::cssVarsToStyle(
+            "--co-somestyle-text=#123456;;--some-val=3453--some-other-val=4536;;"));
+}
+
+/// Tests file pre-processing through PreProcessedFile class.
+void FileServeTests::testPreProcessedFile()
+{
+    constexpr std::string_view testname = __func__;
+
+    {
+        const std::string data = "Data %VAR% Data";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(3UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("Data ", ppf._segments[0].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Variable, ppf._segments[1].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[1].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[2].first);
+        LOK_ASSERT_EQUAL_STR(" Data", ppf._segments[2].second);
+    }
+
+    {
+        const std::string data = "Data %VAR%";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(2UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("Data ", ppf._segments[0].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Variable, ppf._segments[1].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[1].second);
+    }
+
+    {
+        const std::string data = "%VAR% Data";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(2UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Variable, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[0].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[1].first);
+        LOK_ASSERT_EQUAL_STR(" Data", ppf._segments[1].second);
+    }
+
+    {
+        const std::string data = "%VAR%";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(1UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Variable, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[0].second);
+    }
+
+    {
+        const std::string data = "%VAR%Data1 %VAR% Data%VAR%";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(5UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Variable, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[0].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[1].first);
+        LOK_ASSERT_EQUAL_STR("Data1 ", ppf._segments[1].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Variable, ppf._segments[2].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[2].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[3].first);
+        LOK_ASSERT_EQUAL_STR(" Data", ppf._segments[3].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Variable, ppf._segments[4].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[4].second);
+    }
+
+    {
+        const std::string data = "Data %VAR Data";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(1UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("Data %VAR Data", ppf._segments[0].second);
+    }
+
+    {
+        const std::string data = "Data 5% Data 7%";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(1UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("Data 5% Data 7%", ppf._segments[0].second);
+    }
+
+    {
+        const std::string data = "Data <!--%VAR%--> Data";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(3UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("Data ", ppf._segments[0].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::CommentedVariable, ppf._segments[1].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[1].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[2].first);
+        LOK_ASSERT_EQUAL_STR(" Data", ppf._segments[2].second);
+    }
+
+    {
+        const std::string data = "Data <!--%VAR%-->";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(2UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("Data ", ppf._segments[0].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::CommentedVariable, ppf._segments[1].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[1].second);
+    }
+
+    {
+        const std::string data = "<!--%VAR%--> Data";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(2UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::CommentedVariable, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[0].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[1].first);
+        LOK_ASSERT_EQUAL_STR(" Data", ppf._segments[1].second);
+    }
+
+    {
+        const std::string data = "<!--%VAR%-->";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(1UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::CommentedVariable, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[0].second);
+    }
+
+    {
+        const std::string data = "<!--%VAR%-->Data1 <!--%VAR%--> Data2<!--%VAR%-->";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(5UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::CommentedVariable, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[0].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[1].first);
+        LOK_ASSERT_EQUAL_STR("Data1 ", ppf._segments[1].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::CommentedVariable, ppf._segments[2].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[2].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[3].first);
+        LOK_ASSERT_EQUAL_STR(" Data2", ppf._segments[3].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::CommentedVariable, ppf._segments[4].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[4].second);
+    }
+
+    {
+        const std::string data = "<!--%VARA% Data2 <!--%VARB%--> Data4<!--%VARC%-->";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(4UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("<!--%VARA% Data2 ", ppf._segments[0].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::CommentedVariable, ppf._segments[1].first);
+        LOK_ASSERT_EQUAL_STR("VARB", ppf._segments[1].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[2].first);
+        LOK_ASSERT_EQUAL_STR(" Data4", ppf._segments[2].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::CommentedVariable, ppf._segments[3].first);
+        LOK_ASSERT_EQUAL_STR("VARC", ppf._segments[3].second);
+    }
+
+    {
+        const std::string data = "<!--%VAR%-->Data1 <!--%VAR%--> Data2<!--%VAR%";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(4UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::CommentedVariable, ppf._segments[0].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[0].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[1].first);
+        LOK_ASSERT_EQUAL_STR("Data1 ", ppf._segments[1].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::CommentedVariable, ppf._segments[2].first);
+        LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[2].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[3].first);
+        LOK_ASSERT_EQUAL_STR(" Data2<!--%VAR%", ppf._segments[3].second);
+    }
+
+    {
+        const std::string data = R"xxx(<!DOCTYPE html>
+<html %UI_RTL_SETTINGS% style="height:100%"><head><meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+<title>Online Editor</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
+
+<script>
+
+
+
+
+
+// FIXME: This is temporary and not what we actually eventually want.
+
+// What we really want is not a separate HTML file (produced with M4 conditionals on the below
+// ) for a "WASM app". What we want is that the same cool.html page adapts on demand to
+// instead run locally using WASM, if the connection to the COOL server breaks. (And then
+// re-connects to the COOL server when possible.)
+
+
+
+window.welcomeUrl = '%WELCOME_URL%';
+  window.feedbackUrl = '%FEEDBACK_URL%';
+  window.buyProductUrl = '%BUYPRODUCT_URL%';
+)xxx";
+        const PreProcessedFile ppf("filename", data);
+        LOK_ASSERT_EQUAL(ppf.filename(), std::string("filename"));
+        LOK_ASSERT_EQUAL(ppf.size(), data.size());
+        LOK_ASSERT_EQUAL(9UL, ppf._segments.size());
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[0].first);
+        // LOK_ASSERT_EQUAL_STR("VAR", ppf._segments[0].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Variable, ppf._segments[1].first);
+        LOK_ASSERT_EQUAL_STR("UI_RTL_SETTINGS", ppf._segments[1].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[2].first);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Variable, ppf._segments[3].first);
+        LOK_ASSERT_EQUAL_STR("WELCOME_URL", ppf._segments[3].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[4].first);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Variable, ppf._segments[5].first);
+        LOK_ASSERT_EQUAL_STR("FEEDBACK_URL", ppf._segments[5].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[6].first);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Variable, ppf._segments[7].first);
+        LOK_ASSERT_EQUAL_STR("BUYPRODUCT_URL", ppf._segments[7].second);
+        LOK_ASSERT_EQUAL(PreProcessedFile::SegmentType::Data, ppf._segments[8].first);
+    }
+}
+
+void FileServeTests::testPreProcessedFileRoundtrip()
+{
+    constexpr std::string_view testname = __func__;
+
+    const Poco::Path path(TDIST);
+
+    std::vector<std::string> files;
+    Poco::File(path).list(files);
+    for (const std::string& file : files)
+    {
+        std::unique_ptr<std::vector<char>> data =
+            FileUtil::readFile(Poco::Path(path, file).toString());
+
+        if (data)
+        {
+            const std::string orig = Util::toString(*data);
+            PreProcessedFile ppf(file, orig);
+            LOK_ASSERT_EQUAL(file, ppf.filename());
+            LOK_ASSERT_EQUAL(data->size(), ppf.size());
+
+            std::string recon = ppf.substitute({});
+
+            LOK_ASSERT_EQUAL(orig, recon);
+        }
+    }
+}
+
+void FileServeTests::preProcessedFileSubstitution(
+    const std::string_view testname, const Util::UnorderedStringMap<std::string>& variables)
+{
+    const Poco::Path path(TDIST);
+
+    std::vector<std::string> files;
+    Poco::File(path).list(files);
+    for (const std::string& file : files)
+    {
+        std::unique_ptr<std::vector<char>> data =
+            FileUtil::readFile(Poco::Path(path, file).toString());
+
+        if (data)
+        {
+            std::string orig = Util::toString(*data);
+            PreProcessedFile ppf(file, orig);
+            LOK_ASSERT_EQUAL(file, ppf.filename());
+            LOK_ASSERT_EQUAL(data->size(), ppf.size());
+
+            const std::string recon = ppf.substitute(variables);
+
+            replaceIfExist(orig, std::string("%ACCESS_TOKEN%"), "ACCESS_TOKEN", variables);
+            replaceIfExist(orig, std::string("%ACCESS_TOKEN_TTL%"), "ACCESS_TOKEN_TTL", variables);
+            replaceIfExist(orig, std::string("%ACCESS_HEADER%"), "ACCESS_HEADER", variables);
+            replaceIfExist(orig, std::string("%UI_DEFAULTS%"), "UI_DEFAULTS", variables);
+            replaceIfExist(orig, std::string("<!--%CSS_VARIABLES%-->"), "CSS_VARIABLES", variables);
+            replaceIfExist(orig, std::string("%POSTMESSAGE_ORIGIN%"), "POSTMESSAGE_ORIGIN",
+                           variables);
+            replaceIfExist(orig, std::string("%RELAY_ORIGIN%"), "RELAY_ORIGIN", variables);
+            replaceIfExist(orig, std::string("%BRANDING_THEME%"), "BRANDING_THEME", variables);
+            replaceIfExist(orig, std::string("<!--%BRANDING_JS%-->"), "BRANDING_JS", variables);
+            replaceIfExist(orig, std::string("%FOOTER%"), "FOOTER", variables);
+            replaceIfExist(orig, std::string("%CHECK_FILE_INFO_OVERRIDE%"),
+                           "CHECK_FILE_INFO_OVERRIDE", variables);
+            replaceIfExist(orig, std::string("%BUYPRODUCT_URL%"), "BUYPRODUCT_URL", variables);
+
+            LOK_ASSERT_EQUAL(orig, recon);
+        }
+    }
+}
+
+std::string&
+FileServeTests::replaceIfExist(std::string& str, const std::string& from, const std::string& to_key,
+                               const Util::UnorderedStringMap<std::string>& variables)
+{
+    auto search = variables.find(to_key);
+    if (search == variables.end())
+    {
+        // key not found, do nothing
+        return str;
+    }
+    return Poco::replaceInPlace(str, from, search->second);
+}
+
+void FileServeTests::testPreProcessedFileSubstitution()
+{
+    constexpr std::string_view testname = __func__;
+
+    Util::UnorderedStringMap<std::string> variables = {
+        { "ACCESS_TOKEN", "alksjdfiwjksnsdkafnsdl" },
+        { "ACCESS_TOKEN_TTL", "123" },
+        { "ACCESS_HEADER", "8923rweyhjsnjfnwoejl" },
+        { "UI_DEFAULTS",
+          "{\"presentation\":{\"ShowStatusbar\":false},\"spreadsheet\":{\"ShowSidebar\":"
+          "false},\"text\":{\"ShowRuler\":true},\"uiMode\":\"notebookbar\"}" },
+        { "CSS_VARIABLES",
+          "<style>:root {--co-somestyle-text:#123456;--co-somestyle-size:15px;}</style>" },
+        { "POSTMESSAGE_ORIGIN", "https://www.example.com:8080" },
+        { "RELAY_ORIGIN", "https://relay.example.com" },
+        { "BRANDING_THEME", "cool_brand" },
+        { "BRANDING_JS", "branding.js" },
+        { "FOOTER", "<div><b>blah blah footer</b></div>" },
+        { "CHECK_FILE_INFO_OVERRIDE", "DownloadAsPostMessage=true;blah=bleh" },
+        { "BUYPRODUCT_URL", "https://buy.ourproduct.com/'" }
+    };
+
+    preProcessedFileSubstitution(testname, variables);
+    preProcessedFileSubstitution(std::string(testname) + "_empty",
+                                 Util::UnorderedStringMap<std::string>());
+}
+
+void FileServeTests::testOnlyAConfiguredOriginRelaysMessages()
+{
+    constexpr std::string_view testname = __func__;
+
+    // The configured list arrives with its sources separated by spaces, and a leading one.
+    const std::string configured = " https://relay.example.com https://other.example.com:8443";
+
+    // A source the administrator wrote is taken as it stands.
+    LOK_ASSERT_EQUAL_STR("https://relay.example.com",
+                         FileServerRequestHandler::relayOriginFromForm("https://relay.example.com",
+                                                                      configured));
+    LOK_ASSERT_EQUAL_STR("https://other.example.com:8443",
+                         FileServerRequestHandler::relayOriginFromForm(
+                             "https://other.example.com:8443", configured));
+
+    // Anything that is not one of those sources, character for character, is dropped.
+    LOK_ASSERT_EQUAL_STR("", FileServerRequestHandler::relayOriginFromForm("relay.example.com",
+                                                                          configured));
+    LOK_ASSERT_EQUAL_STR("", FileServerRequestHandler::relayOriginFromForm(
+                                 "https://relay.example.com/", configured));
+    LOK_ASSERT_EQUAL_STR(
+        "", FileServerRequestHandler::relayOriginFromForm("http://relay.example.com", configured));
+    LOK_ASSERT_EQUAL_STR("", FileServerRequestHandler::relayOriginFromForm(
+                                 "https://relay.example.com:443", configured));
+    LOK_ASSERT_EQUAL_STR("", FileServerRequestHandler::relayOriginFromForm(
+                                 "https://evil.relay.example.com", configured));
+    LOK_ASSERT_EQUAL_STR("", FileServerRequestHandler::relayOriginFromForm("", configured));
+
+    // The host a WOPISrc points at is no ground for relaying, so an origin that only appears
+    // there is dropped as well.
+    LOK_ASSERT_EQUAL_STR(
+        "", FileServerRequestHandler::relayOriginFromForm("https://wopi.example.net", configured));
+
+    // With no source configured at all nothing is accepted.
+    LOK_ASSERT_EQUAL_STR("", FileServerRequestHandler::relayOriginFromForm(
+                                 "https://relay.example.com", std::string()));
+
+    // A list wrapped over several lines in the configuration file still names its sources.
+    LOK_ASSERT_EQUAL_STR("https://relay.example.com",
+                         FileServerRequestHandler::relayOriginFromForm(
+                             "https://relay.example.com",
+                             "https://other.example.com:8443\n   https://relay.example.com"));
+}
+
+void FileServeTests::testCSPMergeNewlines()
+{
+    constexpr std::string_view testname = __func__;
+
+    // Same line: the simple case.
+    {
+        ContentSecurityPolicy csp("frame-ancestors https://example.com; img-src https://example.com");
+        LOK_ASSERT_EQUAL_STR(" https://example.com", csp.getDirective("frame-ancestors"));
+        LOK_ASSERT_EQUAL_STR(" https://example.com", csp.getDirective("img-src"));
+    }
+
+    // Value on new line, as Poco XMLConfiguration returns when the XML
+    // config value is on a separate line from the opening tag.
+    {
+        ContentSecurityPolicy csp("\n        frame-ancestors https://example.com; img-src https://example.com\n    ");
+        LOK_ASSERT_EQUAL_STR(" https://example.com", csp.getDirective("frame-ancestors"));
+        LOK_ASSERT_EQUAL_STR(" https://example.com", csp.getDirective("img-src"));
+    }
+
+    // Value on new line in a config file written with carriage returns.
+    {
+        ContentSecurityPolicy csp("\r\n        frame-ancestors https://example.com; img-src https://example.com\r\n    ");
+        LOK_ASSERT_EQUAL_STR(" https://example.com", csp.getDirective("frame-ancestors"));
+        LOK_ASSERT_EQUAL_STR(" https://example.com", csp.getDirective("img-src"));
+    }
+}
+
+void FileServeTests::testCSPKeepsOutBadSources()
+{
+    constexpr std::string_view testname = __func__;
+
+    // A URL carrying a carriage return and a newline stays out, and the good source stays in.
+    {
+        ContentSecurityPolicy csp;
+        csp.appendDirectiveUrl("frame-src", "https://good.example.com");
+        csp.appendDirectiveUrl("frame-src", "https://evil.example.com\r\n\r\n<script>");
+        LOK_ASSERT_EQUAL_STR(" https://good.example.com", csp.getDirective("frame-src"));
+    }
+
+    // A space in a URL cannot smuggle a second source into the directive.
+    {
+        ContentSecurityPolicy csp;
+        csp.appendDirectiveUrl("frame-src", "https://evil.example.com *");
+        LOK_ASSERT_EQUAL_STR("", csp.getDirective("frame-src"));
+    }
+
+    // A tab is whitespace to the policy, so it cannot smuggle one either.
+    {
+        ContentSecurityPolicy csp;
+        csp.appendDirectiveUrl("frame-src", "https://evil.example.com\t*");
+        LOK_ASSERT_EQUAL_STR("", csp.getDirective("frame-src"));
+    }
+
+    // A comma would start a second policy, so a URL holding one stays out.
+    {
+        ContentSecurityPolicy csp;
+        csp.appendDirectiveUrl("img-src", "https://evil.example.com,https://other.example.com");
+        LOK_ASSERT_EQUAL_STR("", csp.getDirective("img-src"));
+    }
+
+    // A list of good sources still goes in whole.
+    {
+        ContentSecurityPolicy csp;
+        csp.appendDirective("frame-ancestors", "example.com:* other.example.com:*");
+        LOK_ASSERT_EQUAL_STR(" example.com:* other.example.com:*",
+                             csp.getDirective("frame-ancestors"));
+    }
+
+    // One bad source keeps the whole list out.
+    {
+        ContentSecurityPolicy csp;
+        csp.appendDirective("frame-ancestors", "example.com:* evil.example.com\r\n:*");
+        LOK_ASSERT_EQUAL_STR("", csp.getDirective("frame-ancestors"));
+    }
+}
+
+// The settings-upload forward path: coolwsd receives a settings file from the browser and
+// forwards it to the WOPI host, deriving the host-side fileId from the form's filePath + the
+// uploaded file's name. Guards the path validation (traversal, absolute, disabled per-user
+// extensions) and the fileId construction that feed that forward.
+void FileServeTests::testSettingsUploadFileId()
+{
+    constexpr std::string_view testname = __func__;
+
+    std::string fileId;
+
+    // A shared (systemconfig) SPIF policy: accepted, fileId = filePath + fileName.
+    fileId.clear();
+    LOK_ASSERT(FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/systemconfig/spif/", "spif-nato.xml", fileId));
+    LOK_ASSERT_EQUAL_STR("/settings/systemconfig/spif/spif-nato.xml", fileId);
+
+    // A per-user (userconfig) SPIF policy: accepted.
+    fileId.clear();
+    LOK_ASSERT(FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/spif/", "mine.xml", fileId));
+    LOK_ASSERT_EQUAL_STR("/settings/userconfig/spif/mine.xml", fileId);
+
+    // Another round-trip group is equally fine.
+    fileId.clear();
+    LOK_ASSERT(FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/wordbook/", "en_US.dic", fileId));
+    LOK_ASSERT_EQUAL_STR("/settings/userconfig/wordbook/en_US.dic", fileId);
+
+    // Per-user extension installation is disabled: rejected, fileId untouched.
+    fileId = "sentinel";
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/extensions/", "evil.zip", fileId));
+    LOK_ASSERT_EQUAL_STR("sentinel", fileId);
+
+    // Duplicate slashes must not smuggle a path past the extensions check.
+    fileId.clear();
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings//userconfig/extensions/", "evil.zip", fileId));
+
+    // A path must be absolute.
+    fileId.clear();
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "settings/userconfig/spif/", "x.xml", fileId));
+
+    // No traversal: "/../", "/./", or a trailing "/.." / "/.".
+    fileId.clear();
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/../etc/", "passwd", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/./spif/", "x.xml", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/spif/..", "x.xml", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/spif/.", "x.xml", fileId));
+
+    // The file name is a single path segment.
+    fileId = "sentinel";
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/", "extensions/evil.zip", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/spif/", "../extensions/evil.zip", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/spif/", "..\\evil.zip", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/spif/", "..", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/spif/", ".", fileId));
+    LOK_ASSERT(!FileServerRequestHandler::buildSettingsUploadFileId(
+        "/settings/userconfig/spif/", "", fileId));
+    LOK_ASSERT_EQUAL_STR("sentinel", fileId);
+}
+
+CPPUNIT_TEST_SUITE_REGISTRATION(FileServeTests);
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

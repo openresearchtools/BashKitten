@@ -1,0 +1,103 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <sfx2/dllapi.h>
+#include <tools/gen.hxx>
+#include <vcl/vclptr.hxx>
+#include <vcl/window.hxx>
+
+#include <COKit/COKit.hxx>
+
+namespace com::sun::star::beans { struct PropertyValue; }
+namespace com::sun::star::frame { class XController; }
+namespace com::sun::star::frame { class XFrame; }
+namespace cpo::uno { template<class E> class Sequence; }
+
+class SfxInPlaceClient;
+class SfxViewShell;
+class VirtualDevice;
+
+/// A class for chart editing support via COKit.
+class SFX2_DLLPUBLIC KitChartHelper
+{
+private:
+    SfxViewShell* mpViewShell;
+    mutable cpo::uno::Reference<css::frame::XController> mxController;
+    VclPtr<vcl::Window> mpWindow;
+
+public:
+    KitChartHelper(SfxViewShell* pViewShell)
+        : mpViewShell(pViewShell)
+        , mpWindow(nullptr)
+    {}
+
+    cpo::uno::Reference<css::frame::XController>& GetXController() const;
+    vcl::Window* GetWindow();
+    /// Where the chart is on the tiles, or with bWithGridOffset false, in print twips: in Calc
+    /// these differ by the grid offset.
+    tools::Rectangle GetChartBoundingBox(bool bWithGridOffset = true);
+    void Invalidate();
+
+    void Dispatch(const OUString& cmd, const cpo::uno::Sequence<css::beans::PropertyValue>& rArguments) const;
+
+    bool Hit(const Point& aPos);
+    static bool HitAny(const Point& aPos);
+    void PaintTile(VirtualDevice& rRenderContext, const tools::Rectangle& rTileRect);
+    static void PaintAllChartsOnTile(VirtualDevice& rDevice,
+                                     int nOutputWidth, int nOutputHeight,
+                                     int nTilePosX, int nTilePosY,
+                                     tools::Long nTileWidth, tools::Long nTileHeight,
+                                     bool bNegativeX = false);
+    bool postMouseEvent(COKitMouseEventType eType, int nX, int nY,
+                        int nCount, int nButtons, int nModifier,
+                        double fScaleX = 1.0, double fScaleY = 1.0);
+    bool setTextSelection(COKitSetTextSelectionType eType, int nX, int nY);
+    bool setGraphicSelection(COKitSetGraphicSelectionType eType, int nX, int nY,
+                             double fScaleX = 1.0, double fScaleY = 1.0);
+};
+
+/// A class for math editing support via COKit.
+class SFX2_DLLPUBLIC KitStarMathHelper
+{
+public:
+    KitStarMathHelper(const SfxViewShell* pViewShell);
+
+    vcl::Window* GetGraphicWindow();
+    vcl::Window* GetWidgetWindow();
+    const SfxViewShell* GetSmViewShell();
+    tools::Rectangle GetBoundingBox() const;
+
+    static const SfxViewShell* FindContainerViewShell(const SfxViewShell* pSmViewShell);
+
+    /// Sends the cursor and selection of a Math view to its COKit client.
+    static void SendCaret(const SfxViewShell& rSmViewShell);
+
+    void Dispatch(const OUString& cmd, const cpo::uno::Sequence<css::beans::PropertyValue>& rArguments) const;
+
+    bool postMouseEvent(COKitMouseEventType eType, int nX, int nY, int nCount, int nButtons,
+                        int nModifier,
+                        double fPPTScaleX, double fPPTScaleY);
+
+    static void PaintAllInPlaceOnTile(VirtualDevice& rDevice, int nOutputWidth, int nOutputHeight,
+                                      int nTilePosX, int nTilePosY, tools::Long nTileWidth,
+                                      tools::Long nTileHeight);
+
+private:
+    void PaintTile(VirtualDevice& rDevice, const tools::Rectangle& rTileRect);
+
+    const SfxViewShell* mpViewShell;
+    const SfxInPlaceClient* mpIPClient = nullptr; // not nullptr when the object is valid
+    cpo::uno::Reference<css::frame::XFrame> mxFrame; // not empty when the object is valid
+    VclPtr<vcl::Window> mpGraphicWindow;
+    VclPtr<vcl::Window> mpWidgetWindow;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

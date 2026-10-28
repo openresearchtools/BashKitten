@@ -1,0 +1,1224 @@
+// @ts-strict-ignore
+/* -*- js-indent-level: 8 -*- */
+/* global app */
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+interface DOMObjectLike {
+	[index: string]: any;
+	children?: DOMObjectLike[];
+}
+
+interface RectangleLike {
+	top: number;
+	left: number;
+	bottom: number;
+	right: number;
+}
+
+interface IconNameMap {
+	[key: string]: string;
+}
+
+declare var DOMPurify: any;
+
+// cool: URLs are used by mobile/derivative apps (iOS, Android, CODA-W,
+// CODA-Q) for embedded media; DOMPurify's default allow-list rejects them.
+// A media source URL is the only content that carries the scheme.
+if (window.ThisIsAMobileApp && DOMPurify.isSupported) {
+	DOMPurify.addHook('uponSanitizeAttribute', (_node: Node, data: any) => {
+		if (data.attrName === 'src' && data.attrValue.startsWith('cool:')) {
+			data.forceKeepAttr = true;
+		}
+	});
+}
+
+// LOUtil contains various LO related utility functions used
+// throughout the code.
+
+class LOUtil {
+	// Based on core.git's colordata.hxx: COL_AUTHOR1_DARK...COL_AUTHOR9_DARK
+	// consisting of arrays of RGB values
+	// Maybe move the color logic to separate file when it becomes complex
+	public static darkColors = [
+		[198, 146, 0],
+		[6, 70, 162],
+		[87, 157, 28],
+		[105, 43, 157],
+		[197, 0, 11],
+		[0, 128, 128],
+		[140, 132, 0],
+		[53, 85, 107],
+		[209, 118, 0],
+	];
+
+	// This list is based on supported filters defined in core in
+	// filter/Configuration_filter.mk
+	public static graphicMimeFilter = [
+		// bitmaps (well-defined)
+		'image/bmp',
+		'image/gif',
+		'image/jpeg',
+		'image/png',
+		'image/webp',
+		'image/tiff',
+
+		// vector graphics (canonical MIME)
+		'image/svg+xml',
+		'image/x-emf',
+		'image/x-wmf',
+
+		// PDF as image
+		'application/pdf',
+
+		// extensions for everything else (or as fallback)
+		// file pickers don't recognize them by MIME type
+		// Windows file picker doesn't recognize vector images by MIME type
+		'.svg',
+		'.svgz',
+		'.emf',
+		'.emz',
+		'.wmf',
+		'.wmz',
+		'.eps',
+		'.dxf',
+		'.pct',
+		'.pcx',
+		'.pcd',
+		'.psd',
+		'.tga',
+		'.ras',
+		'.svm',
+		'.met',
+		'.pbm',
+		'.pgm',
+		'.ppm',
+		'.xbm',
+		'.xpm',
+	];
+
+	public static mediaMimeFilter = [
+		'video/mp2t',
+		'video/mp4',
+		'video/mpeg',
+		'video/ogg',
+		'video/quicktime',
+		'video/webm',
+		'video/x-matroska',
+		'video/x-ms-wmv',
+		'video/x-msvideo',
+		'audio/aac',
+		'audio/flac',
+		'audio/mp4',
+		'audio/mpeg',
+		'audio/ogg',
+		'audio/wav',
+	];
+
+	// Not spreadsheet, presentation or drawing.
+	public static documentMimeFilter = [
+		'application/vnd.oasis.opendocument.text',
+		'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+		'application/msword',
+		'text/rtf',
+	];
+
+	// Presentation formats the slide import can open, covering the same
+	// extensions the local file picker accepts (odp, otp, ppt, pptx, pptm,
+	// potx, pps, ppsx).
+	public static presentationMimeFilter = [
+		'application/vnd.oasis.opendocument.presentation',
+		'application/vnd.oasis.opendocument.presentation-template',
+		'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+		'application/vnd.openxmlformats-officedocument.presentationml.slideshow',
+		'application/vnd.openxmlformats-officedocument.presentationml.template',
+		'application/vnd.ms-powerpoint',
+		'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
+	];
+
+	// The command behind each hidden file-input element.
+	private static filePickerCommands: { [inputId: string]: string } = {
+		insertgraphic: '.uno:InsertGraphic',
+		insertmultimedia: '.uno:InsertAVMedia',
+		selectbackground: '.uno:SelectBackground',
+		comparedocuments: '.uno:CompareDocuments',
+	};
+
+	// Open the file picker for one of the hidden file-input elements. In the
+	// desktop apps the bare command goes to the engine, which asks the app for
+	// a file through the requestfilepicker callback and then runs the command
+	// on the picked file directly. Everywhere else a click on the input element
+	// opens the browser's picker, and the picked file is uploaded through an
+	// insertfile message.
+	public static openFilePicker(inputId: string): void {
+		if (window.mode.isCODesktop()) {
+			app.map.sendUnoCommand(LOUtil.filePickerCommands[inputId]);
+			return;
+		}
+
+		const input = document.getElementById(inputId) as HTMLInputElement;
+		if (input) input.click();
+		else console.error('openFilePicker: no input element "' + inputId + '"');
+	}
+
+	// Time in milliseconds a touch has to stay down to count as a long press.
+	public static readonly longPressTime = 550;
+
+	// Whether the integration offers a file chooser of its own, which is the
+	// way a file other than the open document can be picked at all. wopi is
+	// the CheckFileInfo property set of the document.
+	public static hostOffersFileChooser(wopi: any): boolean {
+		return (
+			!!wopi && !!(wopi.EnableInsertRemoteFile || wopi.EnableRemoteSlideImport)
+		);
+	}
+
+	public static onRemoveHTMLElement(
+		element: Element,
+		onDetachCallback: () => void,
+	) {
+		const observer = new MutationObserver(function () {
+			function isDetached(el: Element) {
+				return !el.closest('html');
+			}
+
+			if (isDetached(element)) {
+				onDetachCallback();
+				observer.disconnect();
+			}
+		});
+
+		observer.observe(document, {
+			childList: true,
+			subtree: true,
+		});
+	}
+
+	public static startSpinner(
+		spinnerCanvas: HTMLCanvasElement,
+		spinnerSpeed: number,
+	): NodeJS.Timer {
+		spinnerCanvas.width = 50;
+		spinnerCanvas.height = 50;
+
+		const context = spinnerCanvas.getContext('2d');
+		context.lineWidth = 8;
+		context.strokeStyle = 'grey';
+		const x = spinnerCanvas.width / 2;
+		const y = spinnerCanvas.height / 2;
+		const radius = y - context.lineWidth / 2;
+		const spinnerInterval = setInterval(function () {
+			context.clearRect(0, 0, x * 2, y * 2);
+			// Move to center
+			context.translate(x, y);
+			context.rotate((spinnerSpeed * Math.PI) / 180);
+			context.translate(-x, -y);
+			context.beginPath();
+			context.arc(x, y, radius, 0, Math.PI * 1.3);
+			context.stroke();
+		}, 30);
+
+		return spinnerInterval;
+	}
+
+	public static getViewIdColor(viewId: number): number {
+		const color = LOUtil.darkColors[(viewId + 1) % LOUtil.darkColors.length];
+		return color[2] | (color[1] << 8) | (color[0] << 16);
+	}
+
+	public static rgbToHex(color: number) {
+		return '#' + ('000000' + color.toString(16)).slice(-6);
+	}
+
+	public static stringToBounds(bounds: string): cool.Bounds {
+		const numbers = bounds.match(/\d+/g);
+		const topLeft = cool.Point.toPoint(
+			parseInt(numbers[0]),
+			parseInt(numbers[1]),
+		);
+		const bottomRight = topLeft.add(
+			cool.Point.toPoint(parseInt(numbers[2]), parseInt(numbers[3])),
+		);
+		return cool.Bounds.toBounds(topLeft, bottomRight);
+	}
+
+	public static stringToRectangles(strRect: string): cool.Point[][] {
+		const matches = strRect.match(/\d+/g);
+		const rectangles: cool.Point[][] = [];
+		if (matches !== null) {
+			for (let itMatch = 0; itMatch < matches.length; itMatch += 4) {
+				const topLeft = cool.Point.toPoint(
+					parseInt(matches[itMatch]),
+					parseInt(matches[itMatch + 1]),
+				);
+				const size = cool.Point.toPoint(
+					parseInt(matches[itMatch + 2]),
+					parseInt(matches[itMatch + 3]),
+				);
+				const topRight = topLeft.add(cool.Point.toPoint(size.x, 0));
+				const bottomLeft = topLeft.add(cool.Point.toPoint(0, size.y));
+				const bottomRight = topLeft.add(size);
+				rectangles.push([bottomLeft, bottomRight, topLeft, topRight]);
+			}
+		}
+		return rectangles;
+	}
+
+	// Locales whose icons live under another locale's directory because the
+	// localized glyph is identical (e.g. Danish "Fed"/"Kursiv" share the F/K
+	// drawn for German "Fett"/"Kursiv"). The key is the UI language code; the
+	// value is the directory under images/ that actually holds the SVGs.
+	private static localeIconAlias: Record<string, string> = {
+		da: 'de',
+	};
+
+	// Map of locale → icon filenames that have locale-specific variants.
+	private static localizedIcons: Record<string, string[]> = {
+		ar: ['lc_chapternumberingdialog.svg', 'lc_linenumberingdialog.svg'],
+		da: ['lc_bold.svg', 'lc_italic.svg'],
+		de: [
+			'lc_bold.svg',
+			'lc_italic.svg',
+			'lc_numberformatdecdecimals.svg',
+			'lc_numberformatdecimal.svg',
+			'lc_numberformatincdecimals.svg',
+			'lc_numberformatthousands.svg',
+		],
+		es: ['lc_bold.svg', 'lc_underline.svg', 'lc_underlinedouble.svg'],
+		fr: ['lc_bold.svg'],
+		hu: ['lc_italic.svg', 'lc_underline.svg', 'lc_underlinedouble.svg'],
+		it: ['lc_italic.svg'],
+		km: [
+			'lc_bold.svg',
+			'lc_italic.svg',
+			'lc_underline.svg',
+			'lc_underlinedouble.svg',
+		],
+		ko: [
+			'lc_bold.svg',
+			'lc_charfontname.svg',
+			'lc_color.svg',
+			'lc_datasort.svg',
+			'lc_editstyle.svg',
+			'lc_fontdialog.svg',
+			'lc_grow.svg',
+			'lc_italic.svg',
+			'lc_overline.svg',
+			'lc_shadowed.svg',
+			'lc_shrink.svg',
+			'lc_sortascending.svg',
+			'lc_sortdescending.svg',
+			'lc_strikeout.svg',
+			'lc_stylenewbyexample.svg',
+			'lc_styleupdatebyexample.svg',
+			'lc_text.svg',
+			'lc_underline.svg',
+			'lc_underlinedouble.svg',
+			'lc_verticaltext.svg',
+		],
+		nl: ['lc_bold.svg', 'lc_underline.svg', 'lc_underlinedouble.svg'],
+		pl: ['lc_underline.svg', 'lc_underlinedouble.svg'],
+		ru: ['lc_bold.svg', 'lc_underline.svg', 'lc_underlinedouble.svg'],
+		sl: ['lc_bold.svg', 'lc_italic.svg'],
+		tr: ['lc_italic.svg'],
+	};
+
+	private static getUILanguageCode(): string {
+		const lang = (String as any).locale || '';
+		return lang.split('-')[0].split('_')[0].toLowerCase();
+	}
+
+	// Some items will only be present in dark mode so we will not check errors
+	// for those in other mode.
+	public static onlydarkModeItems: string[] = ['invertbackground'];
+
+	// Common images used in all modes, so the default one will be used.
+	public static commonItems: string[] = [
+		'serverauditok',
+		'serverauditerror',
+		'compact_customanimation',
+		'slideshow-exit',
+		'slideshow-slideNext',
+		'slideshow-slidePrevious',
+	];
+
+	// Helper function to strip '.svg' suffix and 'lc_' prefix.
+	public static stripName(name: string): string {
+		// Remove the '.svg' suffix.
+		var strippedName = name.replace(/\.svg$/, '');
+
+		// Remove the 'lc_' prefix if it exists.
+		if (strippedName.startsWith('lc_')) {
+			strippedName = strippedName.substring(3);
+		}
+
+		return strippedName;
+	}
+
+	public static isDarkModeItem(name: string): boolean {
+		const strippedName = LOUtil.stripName(name);
+
+		// Check if the stripped name is in the onlydarkModeItems array.
+		return LOUtil.onlydarkModeItems.includes(strippedName);
+	}
+
+	public static isCommonForAllMode(name: string): boolean {
+		const strippedName = LOUtil.stripName(name);
+
+		// Check if the stripped name is in the commonItems array.
+		return LOUtil.commonItems.includes(strippedName);
+	}
+
+	/// unwind things to get a good absolute URL.
+	public static getURL(path: string): string {
+		if (path === '') return '';
+		const customWindow = window as any;
+		if (customWindow.host === '' && customWindow.serviceRoot === '') {
+			// Mobile / desktop app: return a relative path so it resolves
+			// against the page's file:// origin rather than the filesystem root.
+			if (path.startsWith('/')) return path.substring(1);
+			return path;
+		}
+
+		let url = customWindow.makeHttpUrl('/browser/' + customWindow.versionPath);
+		if (path.substr(0, 1) !== '/') url += '/';
+
+		url += path;
+		return url;
+	}
+
+	// Forced colours cannot reach the colours inside an <img>, so an icon that is
+	// a plain shape publishes its URL for the stylesheet to use as a mask.
+	public static publishIconURL(element: HTMLImageElement, url: string): void {
+		if (!url || !url.endsWith('.svg')) return;
+		element.style.setProperty('--icon-url', 'url("' + url + '")');
+		element.classList.add('icon-maskable');
+	}
+
+	public static setImage(
+		element: HTMLImageElement | HTMLElement,
+		name: string,
+		map: any,
+		imageIsLayoutCritical?: boolean,
+	): void {
+		const setupIcon = function () {
+			const url = LOUtil.getImageURL(name);
+			if (element instanceof HTMLImageElement) {
+				element.src = url;
+				LOUtil.publishIconURL(element, url);
+				LOUtil.checkIfImageExists(element, imageIsLayoutCritical);
+			} else {
+				element.style.backgroundImage = 'url("' + url + '")';
+			}
+		};
+		setupIcon();
+
+		map.on('themechanged', setupIcon);
+	}
+
+	public static setUserImage(
+		img: HTMLImageElement,
+		map: any,
+		viewId: number,
+	): void {
+		// set avatar image if it exist in user extract info.
+		const defaultImage = LOUtil.getImageURL('user.svg');
+		const viewInfo = map._viewInfo[viewId];
+		if (
+			viewInfo !== undefined &&
+			viewInfo.userextrainfo !== undefined &&
+			viewInfo.userextrainfo.avatar !== undefined
+		) {
+			// set user avatar.
+			img.src = viewInfo.userextrainfo.avatar;
+			// Track if error event is already bound to this image.
+			img.addEventListener(
+				'error',
+				function () {
+					img.src = defaultImage;
+					LOUtil.checkIfImageExists(img, true);
+				},
+				{ once: true },
+			);
+			return;
+		}
+		img.src = defaultImage;
+		LOUtil.checkIfImageExists(img, true);
+	}
+
+	public static getImageURL(imgName: string) {
+		let defaultImageURL = LOUtil.getURL('images/' + imgName);
+
+		// Check if the image name is in the commonItems list and return the normal image path
+		if (LOUtil.isCommonForAllMode(imgName)) {
+			return defaultImageURL;
+		}
+
+		const lang = LOUtil.getUILanguageCode();
+		const hasLocalized = lang && LOUtil.localizedIcons[lang]?.includes(imgName);
+		const iconLang = LOUtil.localeIconAlias[lang] || lang;
+
+		if (window.prefs.getBoolean('darkTheme')) {
+			if (hasLocalized)
+				return LOUtil.getURL('images/dark/' + iconLang + '/' + imgName);
+			return LOUtil.getURL('images/dark/' + imgName);
+		}
+
+		if (hasLocalized)
+			return LOUtil.getURL('images/' + iconLang + '/' + imgName);
+
+		const dummyEmptyImg =
+			'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+		defaultImageURL = LOUtil.isDarkModeItem(imgName)
+			? dummyEmptyImg
+			: defaultImageURL;
+		return defaultImageURL;
+	}
+
+	public static getIconNameOfCommand(name: string, noCommad?: boolean) {
+		if (!name) return '';
+
+		var alreadyClean = noCommad;
+		var cleanName = name;
+
+		// An icon theme link name can arrive here in place of a command name:
+		// the engine sends the .ui icon-name of its toolbar items as e.g.
+		// 'lc_insertfooter.svg'. Reduce it to the bare name, so that the skip
+		// rules and the alias table below see the same thing they would see
+		// for a command. Only the lc_/sc_ prefix marks such a link name, our
+		// own icon files (e.g. statusbarmenu.svg) must not be touched here.
+		//
+		// The engine builds the link name of a parameterized command from the
+		// command itself, escaping only a few characters, so e.g.
+		// '.uno:StyleApply?Style:string=Bad&FamilyName:string=CellStyles'
+		// arrives as 'lc_styleapply%3fstyle%3astring%3dbad&familyname%3astring%3dcellstyles.svg'.
+		// Undo that escaping and send the result through the same encoding
+		// as the command, so both end at the one file we ship for it.
+		if (name.startsWith('lc_') || name.startsWith('sc_')) {
+			cleanName = LOUtil.stripName(name.substring(3));
+			if (cleanName.indexOf('%') >= 0) {
+				try {
+					cleanName = decodeURIComponent(cleanName);
+				} catch (e) {
+					// not a valid escape sequence, keep the name as sent
+				}
+				alreadyClean = false;
+			}
+		}
+
+		if (!alreadyClean || alreadyClean !== true) {
+			var prefixLength = '.uno:'.length;
+			if (cleanName.substr(0, prefixLength) == '.uno:')
+				cleanName = cleanName.substr(prefixLength);
+			cleanName = encodeURIComponent(cleanName).replace(/%/g, '');
+			cleanName = cleanName.toLowerCase();
+		}
+
+		// Skip icon lookup for numeric-only IDs (JSDialog artifacts like 1, 5, 65535),
+		// core sr*/sc* resource IDs (like sr20006, sc20177), and JSDialog submenu
+		// placeholder IDs (submenu1, submenu2, ...). We ship no icon under those
+		// names, the engine sends a base64 image for them.
+		if (
+			/^\d+$/.test(cleanName) ||
+			/^sr\d+$/.test(cleanName) ||
+			/^sc\d+$/.test(cleanName) ||
+			/^submenu\d+$/.test(cleanName)
+		)
+			return '';
+
+		// Skip icon lookup for overflow button pseudo-commands
+		if (cleanName.startsWith('overflow-button-')) return '';
+
+		// Strip 'sc_' prefix from sidebar controller command names
+		// (core's small-command icon prefix that doesn't apply to COOL)
+		if (cleanName.startsWith('sc_')) cleanName = cleanName.substring(3);
+
+		var iconURLAliases: IconNameMap = {
+			// lc_closemobile.svg is generated when loading in NB mode then
+			// switch to compact mode: 1st hidden element in the top toolbar
+			closemobile: 'closedocmobile',
+			'sidebardeck.shapesdeck': 'basicshapes',
+			'file-saveas': 'saveas',
+			savegraphic: 'saveas',
+			saveimagetowopi: 'saveasremote',
+			'home-search': 'recsearch',
+			searchdialog3finitialfocusreplace3abool3dtrue: 'searchreplace',
+			'addmb-menu': 'ok',
+			closetablet: 'view',
+			defineprintarea: 'menuprintranges',
+			deleteprintarea: 'delete',
+			sheetrighttoleft: 'pararighttoleft',
+			duplicatesheet: 'duplicatepage',
+			alignleft: 'leftpara',
+			alignright: 'rightpara',
+			alignhorizontalcenter: 'centerpara',
+			alignblock: 'justifypara',
+			formatsparklinemenu: 'insertsparkline',
+			formatungroup: 'ungroup',
+			insertdatecontentcontrol: 'datefield',
+			editheaderandfooter: 'headerandfooter',
+			insertfooter: 'insertpagefooter',
+			exportas: 'saveas',
+			insertheaderfooter: 'headerandfooter',
+			previoustrackedchange: 'prevrecord',
+			fieldtransparency: 'linetransparency',
+			lb_glow_transparency: 'linetransparency',
+			settransparency: 'linetransparency',
+			field_transparency: 'linetransparency',
+			selectionlanugagedefault: 'updateall',
+			connectortoolbox: 'connectorlines',
+			conditionalformatdialog: 'conditionalformatmenu',
+			groupoutlinemenu: 'group',
+			paperwidth: 'pagewidth',
+			charspacing: 'spacing',
+			fontworkcharacterspacingfloater: 'spacing',
+			tablesort: 'datasort',
+			spellcheckignoreall: 'spelling',
+			spellonline: 'autospellcheck-on',
+			deleterowbreak: 'delbreakmenu',
+			alignmentpropertypanel: 'alignvcenter',
+			cellvertcenter: 'alignvcenter',
+			charbackcolor: 'backcolor',
+			insertrowsafter: 'insertrowsmenu',
+			insertobjectchart: 'drawchart',
+			textpropertypanel: 'sidebartextpanel',
+			textbodyparastyle: 'parastyle',
+			spacepara15: 'linespacing',
+			orientationdegrees: 'rotation',
+			clearoutline: 'delete',
+			docsign: 'editdoc',
+			editmenu: 'editdoc',
+			drawtext: 'text',
+			inserttextbox: 'text',
+			accepttrackedchanges: 'acceptchanges',
+			accepttrackedchange: 'acceptchanges',
+			chartlinepanel: 'linestyle',
+			linepropertypanel: 'linestyle',
+			xlinestyle: 'linestyle',
+			listspropertypanel: 'outlinebullet',
+			shadowpropertypanel: 'shadowed',
+			incrementlevel: 'outlineleft',
+			menurowheight: 'rowheight',
+			menumargins: 'pagemargin',
+			menuorientation: 'orientation',
+			menupagesizescalc: 'pagesize',
+			menupagesizeswriter: 'pagesize',
+			setoptimalrowheight: 'rowheight',
+			cellverttop: 'aligntop',
+			scalignmentpropertypanel: 'aligntop',
+			hyperlinkdialog: 'inserthyperlink',
+			remotelink: 'inserthyperlink',
+			remoteaicontent: 'sdrespageobjs',
+			openhyperlinkoncursor: 'inserthyperlink',
+			pageformatdialog: 'pagedialog',
+			backgroundcolor: 'fillcolor',
+			settabbgcolor: 'fillcolor',
+			cellappearancepropertypanel: 'fillcolor',
+			formatarea: 'fillcolor',
+			glowcolor: 'fillcolor',
+			sccellappearancepropertypanel: 'fillcolor',
+			insertcolumnsafter: 'insertcolumnsmenu',
+			insertnonbreakingspace: 'formattingmark',
+			insertcurrentdate: 'datefield',
+			insertdatefieldfix: 'datefield',
+			insertdatefield: 'datefield',
+			setparagraphlanguagemenu: 'spelldialog',
+			spellingandgrammardialog: 'spelldialog',
+			styleapply3fstyle3astring3ddefault26familyname3astring3dcellstyles:
+				'fontcolor',
+			fontworkgalleryfloater: 'fontworkpropertypanel',
+			insertfieldctrl: 'insertfield',
+			pagenumberwizard: 'insertpagenumberfield',
+			entirerow: 'fromrow',
+			insertcheckboxcontentcontrol: 'checkbox',
+			cellvertbottom: 'alignbottom',
+			insertcurrenttime: 'inserttimefield',
+			inserttimefieldfix: 'inserttimefield',
+			cancelformula: 'cancel',
+			resetattributes: 'setdefault',
+			tabledialog: 'tablemenu',
+			insertindexesentry: 'insertmultiindex',
+			paperheight: 'pageheight',
+			masterslidespanel: 'masterslide',
+			slidemasterpage: 'masterslide',
+			tabledeletemenu: 'deletetable',
+			insertcalctable: 'inserttable',
+			removecalctable: 'deletetable',
+			tabletotalrow: 'autosum',
+			renamecalctable: 'renametable',
+			handleduplicaterecords: 'removeduplicates',
+			summarizewithpivot: 'datadatapilotrun',
+			calculatedfieldrun: 'functiondialog',
+			databasesettings: 'tabledesign',
+			tracechangemode: 'trackchanges',
+			showchanges: 'showtrackedchanges',
+			commentchange: 'editannotation',
+			deleteallannotation: 'deleteallnotes',
+			tableeditpanel: 'tabledesign',
+			tableautofitmenu: 'columnwidth',
+			menucolumnwidth: 'columnwidth',
+			hyphenation: 'hyphenate',
+			validatedialogsa11y: 'validation',
+			validatesidebara11y: 'validation',
+			objectbackone: 'behindobject',
+			deleteannotation: 'deletenote',
+			areapropertypanel: 'chartareapanel',
+			'downloadas-png': 'insertgraphic',
+			decrementlevel: 'outlineright',
+			acceptformula: 'ok',
+			insertannotation: 'shownote',
+			// the engine's generic info icon, shown beside a grammar message
+			info_16: 'about',
+			insertcomment: 'shownote',
+			objecttitledescription: 'shownote',
+			namegroup: 'shownote',
+			incrementindent: 'leftindent',
+			outlineup: 'moveup',
+			charttypepanel: 'diagramtype',
+			arrangeframemenu: 'arrangemenu',
+			bringtofront: 'arrangemenu',
+			scnumberformatpropertypanel: 'numberformatincdecimals',
+			graphicpropertypanel: 'graphicdialog',
+			rotateflipmenu: 'rotateleft',
+			outlinedown: 'movedown',
+			nexttrackedchange: 'nextrecord',
+			toggleorientation: 'orientation',
+			configuredialog: 'sidebar',
+			modifypage: 'sidebar',
+			parapropertypanel: 'paragraphdialog',
+			tablecellbackgroundcolor: 'fillcolor',
+			zoteroArtwork: 'zoteroThesis',
+			zoteroAudioRecording: 'zoteroThesis',
+			zoteroBill: 'zoteroThesis',
+			zoteroBlogPost: 'zoteroThesis',
+			zoteroBookSection: 'zoteroBook',
+			zoteroCase: 'zoteroThesis',
+			zoteroConferencePaper: 'zoteroThesis',
+			zoteroDictionaryEntry: 'zoteroThesis',
+			zoteroDocument: 'zoteroThesis',
+			zoteroEmail: 'zoteroThesis',
+			zoteroEncyclopediaArticle: 'zoteroThesis',
+			zoteroFilm: 'zoteroThesis',
+			zoteroForumPost: 'zoteroThesis',
+			zoteroHearing: 'zoteroThesis',
+			zoteroInstantMessage: 'zoteroThesis',
+			zoteroInterview: 'zoteroThesis',
+			zoteroLetter: 'zoteroThesis',
+			zoteroMagazineArticle: 'zoteroThesis',
+			zoteroWebpage: 'zoteroThesis',
+			zoteroaddeditcitation: 'insertauthoritiesentry',
+			zoteroaddnote: 'addcitationnote',
+			zoterorefresh: 'updateall',
+			zoterounlink: 'unlinkcitation',
+			zoteroaddeditbibliography: 'addeditbibliography',
+			zoteroeditbibliography: 'addeditbibliography',
+			zoterosetdocprefs: 'formproperties',
+			'sidebardeck.propertydeck': 'sidebar',
+			// Fix issue #6145 by adding aliases for the PDF and EPUB icons
+			// The fix for issues #6103 and #6104 changes the name of these
+			// icons so map the new names to the old names.
+			'downloadas-pdf': 'exportpdf',
+			'downloadas-direct-pdf': 'exportdirectpdf',
+			'downloadas-epub': 'exportepub',
+			languagestatusmenu: 'languagemenu',
+			cancelsearch: 'cancel',
+			printoptions: 'print',
+			togglesheetgrid: 'show',
+			toggleprintgrid: 'printgrid',
+			exportdirectpdf: 'exportpdf',
+			textcolumnspropertypanel: 'entirecolumn',
+			'sidebardeck.stylelistdeck': 'editstyle',
+			assignlayout3fwhatlayout3along3d20: 'layout00',
+			assignlayout3fwhatlayout3along3d0: 'layout01',
+			assignlayout3fwhatlayout3along3d1: 'layout02',
+			assignlayout3fwhatlayout3along3d3: 'layout03',
+			assignlayout3fwhatlayout3along3d19: 'layout04',
+			assignlayout3fwhatlayout3along3d32: 'layout05',
+			assignlayout3fwhatlayout3along3d15: 'layout06',
+			assignlayout3fwhatlayout3along3d12: 'layout07',
+			assignlayout3fwhatlayout3along3d16: 'layout08',
+			assignlayout3fwhatlayout3along3d14: 'layout09',
+			assignlayout3fwhatlayout3along3d18: 'layout10',
+			assignlayout3fwhatlayout3along3d34: 'layout11',
+			assignlayout3fwhatlayout3along3d27: 'layout12',
+			assignlayout3fwhatlayout3along3d28: 'layout13',
+			assignlayout3fwhatlayout3along3d29: 'layout02',
+			assignlayout3fwhatlayout3along3d30: 'layout03',
+			insertpage3fwhatlayout3along3d20: 'layout00',
+			insertpage3fwhatlayout3along3d0: 'layout01',
+			insertpage3fwhatlayout3along3d1: 'layout02',
+			insertpage3fwhatlayout3along3d3: 'layout03',
+			insertpage3fwhatlayout3along3d19: 'layout04',
+			insertpage3fwhatlayout3along3d32: 'layout05',
+			insertpage3fwhatlayout3along3d15: 'layout06',
+			insertpage3fwhatlayout3along3d12: 'layout07',
+			insertpage3fwhatlayout3along3d16: 'layout08',
+			insertpage3fwhatlayout3along3d14: 'layout09',
+			insertpage3fwhatlayout3along3d18: 'layout10',
+			insertpage3fwhatlayout3along3d34: 'layout11',
+			insertpage3fwhatlayout3along3d27: 'layout12',
+			insertpage3fwhatlayout3along3d28: 'layout13',
+			insertpage3fwhatlayout3along3d29: 'layout02',
+			insertpage3fwhatlayout3along3d30: 'layout03',
+			graphicfilterinvert: 'graphicfilterinvert',
+			graphicfilterpopart: 'graphicfilterpopart',
+			graphicfilterremovenoise: 'graphicfilterremovenoise',
+			graphicfiltersharpen: 'graphicfiltersharpen',
+			graphicfiltersobel: 'graphicfiltersobel',
+			effects: 'pictureeffectsmenu',
+			showmultiplepages: 'multipageview',
+			showtwopages: 'multipageview',
+			fitwidthzoom: 'pagewidth',
+			open: 'formularesfapopen',
+			'exportas-pdf': 'exportpdf',
+			'exportas-epub': 'exportepub',
+			'exportas-md': 'downloadas-md',
+			'fullscreen-drawing': 'presentation',
+			endnotedialog: 'footnotedialog',
+			updateallindexes: 'insertmultiindex',
+			formatframemenu: 'framedialog',
+			// Navigator content type toolbars. The engine gives the buttons that
+			// repeat across those toolbars a per content type suffix to keep the
+			// item idents unique, so they arrive here as separate names.
+			'objecttitledescription-frames': 'shownote',
+			'objecttitledescription-images': 'shownote',
+			'objecttitledescription-oleobjects': 'shownote',
+			'objecttitledescription-drawingobjects': 'shownote',
+			'framedialog-more': 'framedialog',
+			editbookmark: 'insertbookmark',
+			fielddialog: 'insertfield',
+			updatefields3funlocksoftfixed3abool3d1: 'updateall',
+			navelement: 'navigator',
+			switchtoedit: 'edit',
+		};
+		if (iconURLAliases[cleanName]) {
+			cleanName = iconURLAliases[cleanName];
+		}
+
+		return 'lc_' + cleanName + '.svg';
+	}
+
+	// Resolve an icon file name that the engine sent us, e.g. a toolbar item
+	// whose .ui icon-name is 'cmd/sc_insertfooter.png' arrives here as
+	// 'lc_insertfooter.svg'. Those are icon theme link names, so they have to
+	// go through the same alias table as the uno commands to end up at an icon
+	// we actually ship. Returns an empty string when there is nothing to
+	// request, in which case the caller should use the base64 fallback the
+	// engine sends alongside the icon name.
+	public static getIconNameOfIcon(iconFileName: string): string {
+		if (!iconFileName) return '';
+
+		// Anything without the size prefix is one of our own icon files, it is
+		// already the name we ship it under.
+		if (!iconFileName.startsWith('lc_') && !iconFileName.startsWith('sc_'))
+			return iconFileName;
+
+		return LOUtil.getIconNameOfCommand(iconFileName, true);
+	}
+
+	public static checkIfImageExists(
+		imageElement: HTMLImageElement,
+		imageIsLayoutCritical?: boolean,
+	): void {
+		imageElement.addEventListener('error', function (e: any) {
+			if (e.loUtilProcessed) {
+				return;
+			}
+
+			if (
+				imageElement.src &&
+				imageElement.src.includes('/images/branding/dark/')
+			) {
+				imageElement.src = imageElement.src.replace(
+					'/images/branding/dark/',
+					'/images/dark/',
+				);
+				e.loUtilProcessed = true;
+				return;
+			}
+			if (
+				imageElement.src &&
+				(imageElement.src.includes('/images/dark/') ||
+					imageElement.src.includes('/images/branding/'))
+			) {
+				imageElement.src = imageElement.src.replace(
+					'/images/dark/',
+					'/images/',
+				);
+				imageElement.src = imageElement.src.replace(
+					'/images/branding/',
+					'/images/',
+				);
+				e.loUtilProcessed = true;
+				return;
+			}
+
+			if (imageIsLayoutCritical) {
+				imageElement.src =
+					'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+				// We cannot set visibility: hidden because that would hide
+				// other attributes of the image, e.g. its border.
+				e.loUtilProcessed = true;
+				return;
+			}
+
+			imageElement.style.display = 'none';
+			e.loUtilProcessed = true;
+		});
+	}
+
+	/// oldFileName = Example.odt, suffix = new
+	/// returns: Example_new.odt
+	public static generateNewFileName(
+		oldFileName: string,
+		suffix: string,
+	): string {
+		const idx = oldFileName.lastIndexOf('.');
+		return oldFileName.substring(0, idx) + suffix + oldFileName.substring(idx);
+	}
+
+	public static commandWithoutIcon: string[] = [
+		'InsertPageHeader',
+		'InsertPageFooter',
+		'FLD_COL_NUMBER',
+		'MTR_FLD_COL_SPACING',
+		'rows',
+		'cols',
+		'None',
+	];
+
+	public static existsIconForCommand(
+		command: string,
+		docType: string,
+	): boolean {
+		const commandName = command.startsWith('.uno:')
+			? command.substring('.uno:'.length)
+			: command;
+		const res = !LOUtil.commandWithoutIcon.find(function (el: string) {
+			return el.startsWith(commandName);
+		});
+		if (commandName.indexOf('?') !== -1) {
+			if (
+				commandName.indexOf('SpellCheckIgnore') !== -1 ||
+				commandName.indexOf('SpellCheckIgnoreAll') !== -1
+			)
+				return true;
+
+			if (
+				(docType === 'spreadsheet' || docType === 'presentation') &&
+				commandName.indexOf('LanguageStatus') !== -1
+			)
+				return true;
+
+			if (
+				commandName ===
+					'LanguageStatus?Language:string=Current_LANGUAGE_NONE' ||
+				commandName ===
+					'LanguageStatus?Language:string=Current_RESET_LANGUAGES' ||
+				commandName ===
+					'LanguageStatus?Language:string=Paragraph_LANGUAGE_NONE' ||
+				commandName ===
+					'LanguageStatus?Language:string=Paragraph_RESET_LANGUAGES'
+			)
+				return true;
+
+			return false;
+		}
+		return res;
+	}
+
+	/// Searching in JSON trees for data with a given field.
+	public static findItemWithAttributeRecursive(
+		node: DOMObjectLike,
+		idName: string,
+		idValue: any,
+	): DOMObjectLike | null {
+		let found: DOMObjectLike | null = null;
+		if (node[idName] === idValue) return node;
+		if (node.children) {
+			for (var i = 0; !found && i < node.children.length; i++)
+				found = LOUtil.findItemWithAttributeRecursive(
+					node.children[i],
+					idName,
+					idValue,
+				);
+		}
+		return found;
+	}
+
+	/// Searching in JSON trees for an identifier and return the index in parent.
+	public static findIndexInParentByAttribute(
+		node: DOMObjectLike,
+		idName: string,
+		idValue: any,
+	): number {
+		if (node.children) {
+			for (var i = 0; i < node.children.length; i++)
+				if (node.children[i][idName] === idValue) return i;
+		}
+		return -1;
+	}
+
+	public static _doRectanglesIntersect(
+		rectangle1: number[],
+		rectangle2: number[],
+	): boolean {
+		// Format: (x, y, w, h).
+		// Don't use equality in comparison, that's not an intersection.
+		if (
+			Math.abs(
+				rectangle1[0] +
+					rectangle1[2] * 0.5 -
+					(rectangle2[0] + rectangle2[2] * 0.5),
+			) <
+			0.5 * (rectangle1[2] + rectangle2[2])
+		) {
+			if (
+				Math.abs(
+					rectangle1[1] +
+						rectangle1[3] * 0.5 -
+						(rectangle2[1] + rectangle2[3] * 0.5),
+				) <
+				0.5 * (rectangle1[3] + rectangle2[3])
+			)
+				return true;
+			else return false;
+		} else return false;
+	}
+
+	// Returns the intersecting area of 2 rectangles. Rectangle format: (x, y, w, h). Return format is the same or null.
+	public static _getIntersectionRectangle(
+		rectangle1: number[],
+		rectangle2: number[],
+	): number[] | null {
+		if (this._doRectanglesIntersect(rectangle1, rectangle2)) {
+			var x = rectangle1[0] > rectangle2[0] ? rectangle1[0] : rectangle2[0];
+			var y = rectangle1[1] > rectangle2[1] ? rectangle1[1] : rectangle2[1];
+			var w =
+				rectangle1[0] + rectangle1[2] < rectangle2[0] + rectangle2[2]
+					? rectangle1[0] + rectangle1[2] - x
+					: rectangle2[0] + rectangle2[2] - x;
+			var h =
+				rectangle1[1] + rectangle1[3] < rectangle2[1] + rectangle2[3]
+					? rectangle1[1] + rectangle1[3] - y
+					: rectangle2[1] + rectangle2[3] - y;
+
+			return [x, y, w, h];
+		} else return null;
+	}
+
+	public static getFileExtension(map: any): string {
+		const filename: string = map['wopi'].BaseFileName;
+		return filename.substring(filename.lastIndexOf('.') + 1);
+	}
+
+	public static isFileODF(map: any): boolean {
+		var ext = LOUtil.getFileExtension(map);
+		return (
+			ext === 'odt' ||
+			ext === 'ods' ||
+			ext === 'odp' ||
+			ext === 'odg' ||
+			ext === 'fodt' ||
+			ext === 'fods' ||
+			ext === 'fodp' ||
+			ext === 'fodg'
+		);
+	}
+
+	// The Options dialog needs somewhere to read and write the settings it
+	// shows. The apps carry their own store, reached through the native
+	// bridge; in the browser it takes an integration that hands us a settings
+	// endpoint, and plenty of integrations do not implement one. The apps
+	// have to be answered before wopiSettingBaseUrl is consulted: they load
+	// cool.html off disk with its placeholders unsubstituted, so the value
+	// there is the literal "%WOPI_SETTING_BASE_URL%" and means nothing.
+	// Without a persistable preference store the settings handler is not even
+	// installed on the map, so map.settings would be undefined.
+	public static canOpenSettings(): boolean {
+		if (!window.prefs.canPersist) return false;
+		if (window.ThisIsAMobileApp) return true;
+		return !!window.wopiSettingBaseUrl;
+	}
+
+	// Offer the AI assistant only when the user can get an answer out of it:
+	// either a provider is configured already - centrally in coolwsd.xml, or
+	// in the user's own settings - or they can still reach the Options dialog
+	// to configure one. A guest can do neither.
+	public static isAIAssistantAvailable(map: any): boolean {
+		const wopi = map['wopi'];
+		if (wopi.IsAnonymousUser) return false;
+		// isAIConfigured starts out as the WOPI value and follows every
+		// settings change, so a provider the user just removed takes the
+		// entry point with it on the next rebuild.
+		if (map.isAIConfigured) return true;
+		return !wopi.DisableAISettings && LOUtil.canOpenSettings();
+	}
+
+	public static containsDOMRect(
+		viewRect: RectangleLike,
+		rect: RectangleLike,
+	): boolean {
+		return (
+			rect.top >= viewRect.top &&
+			rect.right <= viewRect.right &&
+			rect.bottom <= viewRect.bottom &&
+			rect.left >= viewRect.left
+		);
+	}
+
+	public static Rectangle = cool.Rectangle;
+	public static createRectangle = cool.createRectangle;
+
+	public static sanitize(
+		html: string,
+		profile: 'html' | 'svg' = 'html',
+	): string {
+		if (DOMPurify.isSupported) {
+			if (profile === 'svg') {
+				return DOMPurify.sanitize(html, {
+					// Enable both SVG and HTML profiles to support HTML content inside foreignObject
+					USE_PROFILES: { svg: true, svgFilters: true, html: true },
+					ADD_TAGS: ['foreignObject'],
+					// Allow ODF namespaced attributes used by LibreOffice SVG export.
+					// See: core/filter/source/svg/svgexport.cxx for the full list.
+					ADD_ATTR: [
+						'ooo:background-visibility',
+						'ooo:date-time-field',
+						'ooo:date-time-format',
+						'ooo:date-time-visibility',
+						'ooo:display-name',
+						'ooo:footer-field',
+						'ooo:footer-visibility',
+						'ooo:has-custom-background',
+						'ooo:has-transition',
+						'ooo:header-field',
+						'ooo:id-list',
+						'ooo:master',
+						'ooo:master-objects-visibility',
+						'ooo:name',
+						'ooo:number-of-slides',
+						'ooo:numbering-type',
+						'ooo:page-number-visibility',
+						'ooo:page-numbering-type',
+						'ooo:slide',
+						'ooo:slide-duration',
+						'ooo:start-slide-number',
+						'ooo:text-adjust',
+						'ooo:use-positioned-chars',
+					],
+					// Allow HTML content inside foreignObject (for embedded video)
+					// See: https://github.com/cure53/DOMPurify/issues/1002
+					HTML_INTEGRATION_POINTS: { foreignobject: true },
+				});
+			}
+			return DOMPurify.sanitize(html, { USE_PROFILES: { [profile]: true } });
+		}
+		return '';
+	}
+
+	// Paste handler for contenteditable fields that only store plain text
+	// (comments): drop the source formatting right away, otherwise the
+	// pasted text looks formatted until the field is saved and its markup
+	// is dropped. insertText keeps the undo stack and fires 'input', which
+	// the mention handling relies on.
+	public static onPastePlainText(ev: ClipboardEvent): void {
+		if (!ev.clipboardData) return;
+
+		ev.preventDefault();
+		const text = ev.clipboardData.getData('text/plain');
+		if (text) document.execCommand('insertText', false, text);
+	}
+
+	// Turns arbitrary text into an HTML-safe string with no markup at all, unlike
+	// sanitize above, which still lets safe markup (bold, links, ...) through.
+	// Uses the browser's own serializer rather than a hand-written substitution:
+	// setting textContent escapes the text as a text node, and reading innerHTML
+	// back out gives that same text as HTML source.
+	public static escapeHtml(text: string): string {
+		const div = document.createElement('div');
+		div.textContent = text;
+		return div.innerHTML;
+	}
+
+	// Mirror data-cooltip onto aria-label so the accessible name
+	// matches the visible tooltip, even when branding overrides
+	// data-cooltip after load (e.g. to "Collabora Online"). When
+	// branding also sets an href, target="_blank" takes effect and
+	// the link opens a new tab, so announce that to screen readers.
+	public static syncDocumentLogoAriaLabel(docLogo: HTMLElement): void {
+		const syncAriaLabel = () => {
+			const cooltip = docLogo.getAttribute('data-cooltip');
+			let label;
+			if (cooltip) {
+				label = docLogo.getAttribute('href')
+					? _('{0} website, opens in new tab').replace('{0}', cooltip)
+					: cooltip;
+			} else {
+				label = _('file type icon');
+			}
+			docLogo.setAttribute('aria-label', label);
+		};
+		syncAriaLabel();
+		new MutationObserver(syncAriaLabel).observe(docLogo, {
+			attributes: true,
+			attributeFilter: ['data-cooltip', 'href'],
+		});
+	}
+
+	/**!
+	 * Turn the file type icon into a control that opens the templates
+	 * of the running application, which the backstage view filters down
+	 * to the type of the open document. The icon is an anchor without an
+	 * href, which the browser neither focuses nor activates from the
+	 * keyboard, so the role, the tab stop and the Enter and Space keys
+	 * are all set up here.
+	 */
+	public static openTemplatesFromDocumentLogo(
+		docLogo: HTMLElement,
+		map: any,
+	): void {
+		docLogo.setAttribute('role', 'button');
+		docLogo.setAttribute('tabindex', '0');
+
+		const openTemplates = () => {
+			if (map && map.backstageView) map.backstageView.show('new');
+		};
+
+		docLogo.addEventListener('click', openTemplates);
+		docLogo.addEventListener('keydown', (event: KeyboardEvent) => {
+			if (event.key !== 'Enter' && event.key !== ' ') return;
+			event.preventDefault();
+			openTemplates();
+		});
+	}
+
+	public static getDocumentLogoClass(docType: string) {
+		let iconClass: string;
+		let iconTooltip: string;
+		if (docType === 'text') {
+			iconClass = 'writer-icon-img';
+			iconTooltip = 'Writer';
+		} else if (docType === 'spreadsheet') {
+			iconClass = 'calc-icon-img';
+			iconTooltip = 'Calc';
+		} else if (docType === 'presentation') {
+			iconClass = 'impress-icon-img';
+			iconTooltip = 'Impress';
+		} else if (docType === 'drawing') {
+			iconClass = 'draw-icon-img';
+			iconTooltip = 'Draw';
+		}
+
+		return [iconClass, iconTooltip];
+	}
+}
+
+app.LOUtil = LOUtil;

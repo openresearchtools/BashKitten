@@ -1,0 +1,218 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/sdbc/XStatement.hpp>
+#include <com/sun/star/sdbc/XWarningsSupplier.hpp>
+#include <com/sun/star/sdbc/XMultipleResults.hpp>
+#include <com/sun/star/sdbc/XBatchExecution.hpp>
+#include <com/sun/star/sdbc/XCloseable.hpp>
+#include <com/sun/star/sdbc/SQLWarning.hpp>
+#include <com/sun/star/util/XCancellable.hpp>
+#include <cppuhelper/compbase.hxx>
+#include <cppuhelper/basemutex.hxx>
+#include <comphelper/proparrhlp.hxx>
+#include <unotools/weakref.hxx>
+#include <ado/AConnection.hxx>
+#include <string_view>
+#include <vector>
+#include <ado/Awrapado.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+
+namespace connectivity::ado
+{
+    typedef ::cppu::WeakComponentImplHelper<   css::sdbc::XStatement,
+                                               css::sdbc::XWarningsSupplier,
+                                               css::util::XCancellable,
+                                               css::sdbc::XCloseable,
+                                               css::sdbc::XMultipleResults> OStatement_BASE;
+
+
+    //************ Class: java.sql.Statement
+
+    class OStatement_Base       :   public cppu::BaseMutex,
+                                    public  OStatement_BASE,
+                                    public  ::cppu::OPropertySetHelper,
+                                    public  ::comphelper::OPropertyArrayUsageHelper<OStatement_Base>
+
+    {
+        friend class OResultSet;
+
+        css::sdbc::SQLWarning          m_aLastWarning;
+
+    protected:
+        std::vector< OUString>               m_aBatchVector;
+
+        unotools::WeakReference<OResultSet>    m_xResultSet;   // The last ResultSet created
+                                                                    //  for this Statement
+
+        OConnection*                                m_pConnection;// The owning Connection object
+        WpADOCommand                                m_Command;
+        WpADORecordset                              m_RecordSet;
+        OLEVariant                                  m_RecordsAffected;
+        OLEVariant                                  m_Parameters;
+        std::vector<connectivity::OTypeInfo>      m_aTypeInfo;    // Hashtable containing an entry
+                                                                    //  for each row returned by
+                                                                    //  DatabaseMetaData.getTypeInfo.
+        long m_nMaxRows;
+        sal_Int32                                   m_nFetchSize;
+        LockTypeEnum                                m_eLockType;
+        CursorTypeEnum                              m_eCursorType;
+
+        using OStatement_BASE::rBHelper;
+    private:
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        sal_Int32 getQueryTimeOut()         const;
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        static sal_Int32 getMaxFieldSize();
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        sal_Int32 getMaxRows()              const;
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        sal_Int32 getResultSetConcurrency() const;
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        sal_Int32 getResultSetType()        const;
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        static sal_Int32 getFetchDirection();
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        sal_Int32 getFetchSize()            const;
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        OUString getCursorName()     const;
+
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        void setQueryTimeOut(sal_Int32 _par0);
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        void setMaxFieldSize(sal_Int32 _par0);
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        void setMaxRows(sal_Int32 _par0);
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        void setResultSetConcurrency(sal_Int32 _par0);
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        void setResultSetType(sal_Int32 _par0);
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        void setFetchDirection(sal_Int32 _par0);
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        void setFetchSize(sal_Int32 _par0);
+        /// @throws css::sdbc::SQLException
+        /// @throws cpo::uno::RuntimeException
+        void setCursorName(std::u16string_view _par0);
+
+    protected:
+
+        void assignRecordSet( ADORecordset* _pRS );
+
+        /// @throws css::sdbc::SQLException
+        void reset ();
+        /// @throws css::sdbc::SQLException
+        void clearMyResultSet ();
+        /// @throws css::sdbc::SQLException
+        void setWarning (const  css::sdbc::SQLWarning &ex);
+        /// @throws css::sdbc::SQLException
+        sal_Int32 getRowCount ();
+        sal_Int32 getPrecision ( sal_Int32 sqlType);
+
+        void disposeResultSet();
+
+        // OPropertyArrayUsageHelper
+        virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
+        // OPropertySetHelper
+        virtual ::cppu::IPropertyArrayHelper & getInfoHelper() override;
+        virtual bool convertFastPropertyValue(
+                            cpo::uno::Any & rConvertedValue,
+                            cpo::uno::Any & rOldValue,
+                            sal_Int32 nHandle,
+                            const cpo::uno::Any& rValue ) override;
+        virtual void setFastPropertyValue_NoBroadcast(
+                                sal_Int32 nHandle,
+                                const cpo::uno::Any& rValue
+                                ) override;
+        virtual void getFastPropertyValue(
+                                cpo::uno::Any& rValue,
+                                sal_Int32 nHandle
+                                ) const override;
+    public:
+        OStatement_Base(OConnection* _pConnection );
+
+        using OStatement_BASE::operator cpo::uno::Reference< cpo::uno::XInterface >;
+        // OComponentHelper
+        virtual void disposing() override;
+        // XInterface
+        virtual void acquire() noexcept override;
+        virtual void release() noexcept override;
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+        //XTypeProvider
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+
+        // XPropertySet
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+        // XStatement
+        virtual cpo::uno::Reference< css::sdbc::XResultSet > executeQuery( const OUString& sql ) override;
+        virtual sal_Int32 executeUpdate( const OUString& sql ) override;
+        virtual bool execute( const OUString& sql ) override;
+        virtual cpo::uno::Reference< css::sdbc::XConnection > getConnection(  ) override;
+        // XWarningsSupplier
+        virtual cpo::uno::Any getWarnings(  ) override;
+        virtual void clearWarnings(  ) override;
+        // XCancellable
+        virtual void cancel(  ) override;
+        // XCloseable
+        virtual void close(  ) override;
+        // XMultipleResults
+        virtual cpo::uno::Reference< css::sdbc::XResultSet > getResultSet(  ) override;
+        virtual sal_Int32 getUpdateCount(  ) override;
+        virtual bool getMoreResults(  ) override;
+    };
+
+    class OStatement :  public OStatement_Base,
+                        public css::sdbc::XBatchExecution,
+                        public css::lang::XServiceInfo
+    {
+    public:
+        // a Constructor, that is needed for when Returning the Object is needed:
+        OStatement( OConnection* _pConnection) : OStatement_Base( _pConnection){};
+        ~OStatement() override;
+
+        DECLARE_SERVICE_INFO();
+
+        virtual void acquire() noexcept override;
+        virtual void release() noexcept override;
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+        // XBatchExecution
+        virtual void addBatch( const OUString& sql ) override;
+        virtual void clearBatch(  ) override;
+        virtual cpo::uno::Sequence< sal_Int32 > executeBatch(  ) override;
+    };
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,158 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <svtools/svtdllapi.h>
+
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
+
+#include <cppuhelper/implbase.hxx>
+#include <comphelper/uno3.hxx>
+#include <comphelper/propertycontainer.hxx>
+#include <comphelper/broadcasthelper.hxx>
+#include <vcl/weld.hxx>
+
+namespace com::sun::star::awt { class XWindow; }
+namespace cpo::uno { class XComponentContext; }
+
+
+namespace svt
+{
+
+
+#define     UNODIALOG_PROPERTY_ID_TITLE     1
+#define     UNODIALOG_PROPERTY_ID_PARENT    2
+
+inline constexpr OUString UNODIALOG_PROPERTY_TITLE = u"Title"_ustr;
+inline constexpr OUString UNODIALOG_PROPERTY_PARENT = u"ParentWindow"_ustr;
+
+    typedef cppu::WeakImplHelper< css::ui::dialogs::XExecutableDialog,
+                                  css::lang::XServiceInfo,
+                                  css::lang::XInitialization > OGenericUnoDialogBase;
+
+    /** abstract base class for implementing UNO objects representing dialogs (com.sun.star.awt::XDialog)
+    */
+    class SVT_DLLPUBLIC OGenericUnoDialog
+            :public OGenericUnoDialogBase
+            ,public ::comphelper::OMutexAndBroadcastHelper
+            ,public ::comphelper::OPropertyContainer
+    {
+    protected:
+        std::unique_ptr<weld::DialogController> m_xDialog;      /// the dialog to execute
+        bool                        m_bExecuting : 1;           /// we're currently executing the dialog
+        bool                        m_bTitleAmbiguous : 1;      /// m_sTitle has not been set yet
+        bool                        m_bInitialized : 1;         /// has "initialize" been called?
+
+        // <properties>
+        OUString                                         m_sTitle;   /// title of the dialog
+        cpo::uno::Reference<css::awt::XWindow>           m_xParent;  /// parent window
+        // </properties>
+
+        cpo::uno::Reference<cpo::uno::XComponentContext> m_aContext;
+
+    protected:
+        OGenericUnoDialog(const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext);
+        virtual ~OGenericUnoDialog() override;
+
+    public:
+        // UNO
+        DECLARE_UNO3_DEFAULTS(OGenericUnoDialog, OGenericUnoDialogBase)
+        virtual cpo::uno::Any queryInterface(const cpo::uno::Type& _rType) override;
+
+        // XTypeProvider
+        virtual cpo::uno::Sequence<cpo::uno::Type> getTypes(  ) override;
+        virtual cpo::uno::Sequence<sal_Int8> getImplementationId(  ) override = 0;
+
+        // XServiceInfo
+        virtual OUString getImplementationName() override = 0;
+        virtual bool supportsService(const OUString& ServiceName) override;
+        virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override = 0;
+
+        // OPropertySetHelper
+        virtual void setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const cpo::uno::Any& rValue ) override;
+        virtual bool convertFastPropertyValue( cpo::uno::Any& rConvertedValue, cpo::uno::Any& rOldValue, sal_Int32 nHandle, const cpo::uno::Any& rValue) override;
+
+        // XExecutableDialog
+        virtual void setTitle( const OUString& aTitle ) override;
+        virtual sal_Int16 execute(  ) override;
+
+        // XInitialization
+        virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+    protected:
+        /** create the concrete dialog instance. Note that m_aMutex is not locked when this method get called,
+            but the application-wide solar mutex is (to guard the not thread-safe ctor of the dialog).
+            @param      pParent     the parent window for the new dialog
+        */
+        virtual std::unique_ptr<weld::DialogController> createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent) = 0;
+
+        /// called to destroy the dialog used. deletes m_pDialog and resets it to NULL
+        void destroyDialog();
+
+        /** called after the dialog has been executed
+            @param      _nExecutionResult       the execution result as returned by Dialog::Execute
+        */
+        virtual void executedDialog(sal_Int16 /*_nExecutionResult*/) { }
+
+        /** smaller form of <method>initialize</method>.<p/>
+            The <method>initialize</method> method is called with a sequence of com.sun.star.uno::Any's,
+            which is split up into the single elements, which are passed to implInitialize. The default implementation
+            tries to extract a com.sun.star.beans::PropertyValue from the value a pass it to the
+            com.sun.star.beans::XPropertySet interface of the object.
+        */
+        virtual void implInitialize(const cpo::uno::Any& _rValue);
+
+    private:
+
+        /** ensures that m_pDialog is not <NULL/>
+
+            This method does nothing if m_pDialog is already non-<NULL/>. Else, it calls createDialog and does
+            all necessary initializations of the new dialog instance.
+
+            @precond
+                m_aMutex is locked
+
+            @return
+                <TRUE/> if and only if m_pDialog is non-<NULL/> upon returning from the method. Note that the only
+                case where m_pDialog is <NULL/> is when createDialog returned <NULL/>, which is will fire an assertion
+                in non-product builds.
+        */
+        bool    impl_ensureDialog_lck();
+    };
+
+    /// helper class for guarding access to methods of an OGenericUnoDialog
+    class UnoDialogEntryGuard
+    {
+    public:
+        UnoDialogEntryGuard( OGenericUnoDialog& _rDialog )
+            :m_aGuard( _rDialog.GetMutex() )
+        {
+        }
+
+    private:
+        ::osl::MutexGuard   m_aGuard;
+    };
+
+
+}   // namespace svt
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

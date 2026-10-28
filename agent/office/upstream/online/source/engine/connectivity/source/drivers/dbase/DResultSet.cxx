@@ -1,0 +1,210 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <com/sun/star/sdbcx/CompareBookmark.hpp>
+#include <dbase/DResultSet.hxx>
+#include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <comphelper/sequence.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <dbase/DIndex.hxx>
+#include <dbase/DIndexIter.hxx>
+#include <comphelper/types.hxx>
+#include <connectivity/dbexception.hxx>
+#include <strings.hrc>
+
+using namespace ::comphelper;
+
+using namespace connectivity::dbase;
+using namespace connectivity::file;
+using namespace ::cppu;
+using namespace ::cpo::uno;
+using namespace cpo::uno;
+using namespace com::sun::star::lang;
+using namespace com::sun::star::beans;
+using namespace com::sun::star::sdbc;
+using namespace com::sun::star::sdbcx;
+
+ODbaseResultSet::ODbaseResultSet( OStatement_Base* pStmt,connectivity::OSQLParseTreeIterator&   _aSQLIterator)
+                : file::OResultSet(pStmt,_aSQLIterator)
+                ,m_bBookmarkable(true)
+{
+    registerProperty(OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_ISBOOKMARKABLE),         PROPERTY_ID_ISBOOKMARKABLE,       PropertyAttribute::READONLY,&m_bBookmarkable,                cppu::UnoType<bool>::get());
+}
+
+OUString ODbaseResultSet::getImplementationName(  )
+{
+    return u"com.sun.star.sdbcx.dbase.ResultSet"_ustr;
+}
+
+Sequence< OUString > ODbaseResultSet::getSupportedServiceNames(  )
+{
+    return { u"com.sun.star.sdbc.ResultSet"_ustr, u"com.sun.star.sdbcx.ResultSet"_ustr };
+}
+
+bool ODbaseResultSet::supportsService( const OUString& _rServiceName )
+{
+    return cppu::supportsService(this, _rServiceName);
+}
+
+Any ODbaseResultSet::queryInterface( const Type & rType )
+{
+    Any aRet = ODbaseResultSet_BASE::queryInterface(rType);
+    return aRet.hasValue() ? aRet : OResultSet::queryInterface(rType);
+}
+
+ Sequence<  Type > ODbaseResultSet::getTypes(  )
+{
+    return ::comphelper::concatSequences(OResultSet::getTypes(),ODbaseResultSet_BASE::getTypes());
+}
+
+
+// XRowLocate
+Any ODbaseResultSet::getBookmark(  )
+{
+    ::osl::MutexGuard aGuard( m_aMutex );
+    checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
+    OSL_ENSURE((m_bShowDeleted || !m_aRow->isDeleted()),"getBookmark called for deleted row");
+
+    return Any((*m_aRow)[0]->getValue().getInt32());
+}
+
+bool ODbaseResultSet::moveToBookmark( const  Any& bookmark )
+{
+    ::osl::MutexGuard aGuard( m_aMutex );
+    checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
+
+
+    m_bRowDeleted = m_bRowInserted = m_bRowUpdated = false;
+
+    return m_pTable.is() && Move(IResultSetHelper::BOOKMARK,comphelper::getINT32(bookmark),true);
+}
+
+bool ODbaseResultSet::moveRelativeToBookmark( const  Any& bookmark, sal_Int32 rows )
+{
+    ::osl::MutexGuard aGuard( m_aMutex );
+    checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
+    if(!m_pTable.is())
+        return false;
+
+
+    Move(IResultSetHelper::BOOKMARK,comphelper::getINT32(bookmark),false);
+
+    return relative(rows);
+}
+
+
+sal_Int32 ODbaseResultSet::compareBookmarks( const Any& lhs, const Any& rhs )
+{
+    sal_Int32 nFirst(0),nSecond(0),nResult(0);
+    if ( !( lhs  >>= nFirst ) || !( rhs >>= nSecond ) )
+    {
+        ::connectivity::SharedResources aResources;
+        const OUString sMessage = aResources.getResourceString(STR_INVALID_BOOKMARK);
+        ::dbtools::throwGenericSQLException(sMessage ,*this);
+    } // if ( !( lhs  >>= nFirst ) || !( rhs >>= nSecond ) )
+
+    if(nFirst < nSecond)
+        nResult = CompareBookmark::LESS;
+    else if(nFirst > nSecond)
+        nResult = CompareBookmark::GREATER;
+    else
+        nResult = CompareBookmark::EQUAL;
+
+    return  nResult;
+}
+
+bool ODbaseResultSet::hasOrderedBookmarks(  )
+{
+    return true;
+}
+
+sal_Int32 ODbaseResultSet::hashBookmark( const  Any& bookmark )
+{
+    ::osl::MutexGuard aGuard( m_aMutex );
+    checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
+
+
+    return comphelper::getINT32(bookmark);
+}
+
+// XDeleteRows
+Sequence< sal_Int32 > ODbaseResultSet::deleteRows( const  Sequence<  Any >& /*rows*/ )
+{
+    ::osl::MutexGuard aGuard( m_aMutex );
+    checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
+
+    ::dbtools::throwFeatureNotImplementedSQLException( u"XDeleteRows::deleteRows"_ustr, *this );
+}
+
+bool ODbaseResultSet::fillIndexValues(const Reference< XColumnsSupplier> &_xIndex)
+{
+    auto pIndex = dynamic_cast<dbase::ODbaseIndex*>(_xIndex.get());
+    if(pIndex)
+    {
+        std::unique_ptr<dbase::OIndexIterator> pIter = pIndex->createIterator();
+
+        if (pIter)
+        {
+            sal_uInt32 nRec = pIter->First();
+            while (nRec != NODE_NOTFOUND)
+            {
+                m_pFileSet->push_back(nRec);
+                nRec = pIter->Next();
+            }
+            m_pFileSet->setFrozen();
+            return true;
+        }
+    }
+    return false;
+}
+
+::cppu::IPropertyArrayHelper & ODbaseResultSet::getInfoHelper()
+{
+    return *ODbaseResultSet_BASE3::getArrayHelper();
+}
+
+::cppu::IPropertyArrayHelper* ODbaseResultSet::createArrayHelper() const
+{
+    Sequence< Property > aProps;
+    describeProperties(aProps);
+    return new ::cppu::OPropertyArrayHelper(aProps);
+}
+
+void ODbaseResultSet::acquire() noexcept
+{
+    ODbaseResultSet_BASE2::acquire();
+}
+
+void ODbaseResultSet::release() noexcept
+{
+    ODbaseResultSet_BASE2::release();
+}
+
+cpo::uno::Reference< css::beans::XPropertySetInfo > ODbaseResultSet::getPropertySetInfo(  )
+{
+    return ::cppu::OPropertySetHelper::createPropertySetInfo(getInfoHelper());
+}
+
+sal_Int32 ODbaseResultSet::getCurrentFilePos() const
+{
+    return m_pTable->getFilePos();
+}
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

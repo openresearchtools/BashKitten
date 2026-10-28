@@ -1,0 +1,279 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <cppuhelper/implbase.hxx>
+#include <comphelper/interfacecontainer4.hxx>
+
+#include <svl/lstner.hxx>
+#include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/awt/Rectangle.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/datatransfer/XTransferable.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/qa/XDumper.hpp>
+#include <com/sun/star/util/XModeChangeBroadcaster.hpp>
+#include <com/sun/star/util/XModifyListener.hpp>
+#include <com/sun/star/util/XUpdatable2.hpp>
+#include <rtl/ref.hxx>
+#include <svx/unopage.hxx>
+#include <svx/unoshape.hxx>
+
+#include <vector>
+#include <memory>
+#include <mutex>
+
+#include <vcl/timer.hxx>
+
+namespace com::sun::star::io { class XOutputStream; }
+namespace cpo::uno { class XComponentContext; }
+namespace com::sun::star::util { class XUpdatable2; }
+namespace com::sun::star::util { class XNumberFormatsSupplier; }
+
+class SdrPage;
+
+namespace chart {
+
+class Axis;
+class BaseCoordinateSystem;
+class ChartModel;
+struct CreateShapeParam2D;
+class DrawModelWrapper;
+struct ExplicitIncrementData;
+struct ExplicitScaleData;
+class VCoordinateSystem;
+class VDataSeries;
+
+struct TimeBasedInfo
+{
+    TimeBasedInfo():
+        bTimeBased(false),
+        nFrame(0) {}
+
+    bool bTimeBased;
+    size_t nFrame;
+    Timer maTimer { "chart2 TimeBasedInfo" };
+
+    // only valid when we are in the time based mode
+    std::vector< std::vector< VDataSeries* > > m_aDataSeriesList;
+};
+
+/**
+ * The ChartView is responsible to manage the generation of Drawing Objects
+ * for visualization on a given OutputDevice. The ChartModel is responsible
+ * to notify changes to the view. The view than changes to state dirty. The
+ * view can be updated with call 'update'.
+ *
+ * The View is not responsible to handle single user events (that is instead
+ * done by the ChartWindow).
+ */
+class ChartView final : public ::cppu::WeakImplHelper<
+    css::lang::XInitialization
+        ,css::lang::XServiceInfo
+        ,css::datatransfer::XTransferable
+        ,css::util::XModifyListener
+        ,css::util::XModeChangeBroadcaster
+        ,css::util::XUpdatable2
+        ,css::beans::XPropertySet
+        ,css::lang::XMultiServiceFactory
+        ,css::qa::XDumper
+        >
+        , private SfxListener
+{
+private:
+    void init();
+
+public:
+    ChartView() = delete;
+    ChartView(cpo::uno::Reference<cpo::uno::XComponentContext> xContext, ChartModel& rModel);
+
+    virtual ~ChartView() override;
+
+    // ___lang::XServiceInfo___
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // ___lang::XInitialization___
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+    /** Gives calculated scale and increment values for a given xAxis in the current view.
+        In contrast to the model data these explicit values are always complete as missing auto properties are calculated.
+        If the given Axis could not be found or for another reason no correct output can be given false is returned.
+     */
+    bool getExplicitValuesForAxis(
+        const rtl::Reference< Axis > & xAxis
+        , ExplicitScaleData&  rExplicitScale
+        , ExplicitIncrementData& rExplicitIncrement );
+    rtl::Reference< SvxShape >
+        getShapeForCID( const OUString& rObjectCID );
+
+    /** for rotated objects the shape size and position differs from the visible rectangle
+        if bSnapRect is set to true you get the resulting visible position (left-top) and size
+    */
+    css::awt::Rectangle getRectangleOfObject( const OUString& rObjectCID, bool bSnapRect=false );
+
+    const css::awt::Rectangle & getDiagramRectangleExcludingAxes();
+
+    const std::shared_ptr< DrawModelWrapper > & getDrawModelWrapper();
+
+    // ___XTransferable___
+    virtual cpo::uno::Any getTransferData( const css::datatransfer::DataFlavor& aFlavor ) override;
+    virtual cpo::uno::Sequence< css::datatransfer::DataFlavor > getTransferDataFlavors(  ) override;
+    virtual bool isDataFlavorSupported( const css::datatransfer::DataFlavor& aFlavor ) override;
+
+    // css::util::XEventListener (base of XCloseListener and XModifyListener)
+    virtual void
+        disposing( const css::lang::EventObject& Source ) override;
+
+    // css::util::XModifyListener
+    virtual void modified(
+        const css::lang::EventObject& aEvent ) override;
+
+    //SfxListener
+    virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
+
+    // css::util::XModeChangeBroadcaster
+
+    virtual void addModeChangeListener( const cpo::uno::Reference< css::util::XModeChangeListener >& _rxListener ) override;
+    virtual void removeModeChangeListener( const cpo::uno::Reference< css::util::XModeChangeListener >& _rxListener ) override;
+    virtual void addModeChangeApproveListener( const cpo::uno::Reference< css::util::XModeChangeApproveListener >& _rxListener ) override;
+    virtual void removeModeChangeApproveListener( const cpo::uno::Reference< css::util::XModeChangeApproveListener >& _rxListener ) override;
+
+    // css::util::XUpdatable
+    virtual void update() override;
+
+    // util::XUpdatable2
+    virtual void updateSoft() override;
+    virtual void updateHard() override;
+
+    // css::beans::XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+
+    // css::lang::XMultiServiceFactory
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstance( const OUString& aServiceSpecifier ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstanceWithArguments(
+        const OUString& ServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& Arguments ) override;
+    virtual cpo::uno::Sequence< OUString > getAvailableServiceNames() override;
+
+    // XDumper
+    virtual OUString dump(OUString const & kind) override;
+
+    void setViewDirty();
+
+    cpo::uno::Reference<cpo::uno::XComponentContext> const& getComponentContext() { return m_xCC;}
+
+    void dumpAsXml(xmlTextWriterPtr pWriter) const;
+
+    static css::awt::Rectangle
+        AddSubtractAxisTitleSizes(
+                ChartModel& rModel
+            , ChartView* pChartView
+            , const css::awt::Rectangle& rPositionAndSize, bool bSubtract );
+
+    static sal_Int32 getExplicitNumberFormatKeyForAxis(
+              const rtl::Reference< ::chart::Axis >& xAxis
+            , const rtl::Reference< ::chart::BaseCoordinateSystem > & xCorrespondingCoordinateSystem
+            , const rtl::Reference<::chart::ChartModel>& xChartDoc);
+
+    static sal_Int32 getExplicitPercentageNumberFormatKeyForDataLabel(
+            const cpo::uno::Reference< css::beans::XPropertySet >& xSeriesOrPointProp
+            , const cpo::uno::Reference< css::util::XNumberFormatsSupplier >& xNumberFormatsSupplier );
+
+private: //methods
+    void createShapes();
+    void createShapes2D( const css::awt::Size& rPageSize );
+    bool createAxisTitleShapes2D( CreateShapeParam2D& rParam, const css::awt::Size& rPageSize, bool bHasRelativeSize );
+    void getMetaFile( const cpo::uno::Reference< css::io::XOutputStream >& xOutStream
+                      , bool bUseHighContrast );
+    SdrPage* getSdrPage();
+
+    void impl_deleteCoordinateSystems();
+    void impl_notifyModeChangeListener( const OUString& rNewMode );
+
+    void impl_refreshAddIn();
+
+    void impl_updateView( bool bCheckLockedCtrler = true );
+
+    css::awt::Rectangle impl_createDiagramAndContent( const CreateShapeParam2D& rParam, const css::awt::Size& rPageSize );
+
+    DECL_LINK( UpdateTimeBased, Timer*, void );
+
+private: //member
+    std::mutex m_aMutex;
+
+    cpo::uno::Reference< cpo::uno::XComponentContext> m_xCC;
+
+    ChartModel& mrChartModel;
+
+    cpo::uno::Reference< css::lang::XMultiServiceFactory>
+            m_xShapeFactory;
+    rtl::Reference<SvxDrawPage>
+            m_xDrawPage;
+    rtl::Reference<SvxShapeGroupAnyD>
+            mxRootShape;
+
+    cpo::uno::Reference< cpo::uno::XInterface > m_xDashTable;
+    cpo::uno::Reference< cpo::uno::XInterface > m_xGradientTable;
+    cpo::uno::Reference< cpo::uno::XInterface > m_xHatchTable;
+    cpo::uno::Reference< cpo::uno::XInterface > m_xBitmapTable;
+    cpo::uno::Reference< cpo::uno::XInterface > m_xTransGradientTable;
+    cpo::uno::Reference< cpo::uno::XInterface > m_xMarkerTable;
+
+    std::shared_ptr< DrawModelWrapper > m_pDrawModelWrapper;
+
+    std::vector< std::unique_ptr<VCoordinateSystem> > m_aVCooSysList;
+
+    comphelper::OInterfaceContainerHelper4<css::util::XModeChangeListener>
+                        m_aModeChangeListeners;
+
+    bool m_bViewDirty; //states whether the view needs to be rebuild
+    bool m_bInViewUpdate;
+    bool m_bViewUpdatePending;
+    bool m_bRefreshAddIn;
+
+    //better performance for big data
+    css::awt::Size m_aPageResolution;
+    bool m_bPointsWereSkipped;
+
+    //#i75867# poor quality of ole's alternative view with 3D scenes and zoomfactors besides 100%
+    sal_Int32 m_nScaleXNumerator;
+    sal_Int32 m_nScaleXDenominator;
+    sal_Int32 m_nScaleYNumerator;
+    sal_Int32 m_nScaleYDenominator;
+
+    bool m_bSdrViewIsInEditMode;
+
+    css::awt::Rectangle m_aResultingDiagramRectangleExcludingAxes;
+
+    TimeBasedInfo maTimeBased;
+    std::mutex maTimeMutex;
+};
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

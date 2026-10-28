@@ -1,0 +1,89 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <memory>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/sheet/XFilterFormulaParser.hpp>
+#include <cppuhelper/implbase.hxx>
+
+namespace com::sun::star::lang { class XComponent; }
+
+namespace oox::xls {
+
+class OOXMLFormulaParserImpl;
+
+typedef ::cppu::WeakImplHelper<
+    css::lang::XServiceInfo,
+    css::lang::XInitialization,
+    css::sheet::XFilterFormulaParser > OOXMLFormulaParser_BASE;
+
+/** OOXML formula parser/compiler service for usage in ODF filters. */
+class OOXMLFormulaParser : public OOXMLFormulaParser_BASE
+{
+public:
+    explicit            OOXMLFormulaParser();
+    virtual             ~OOXMLFormulaParser() override;
+
+    // com.sun.star.lang.XServiceInfo interface -------------------------------
+
+    virtual OUString
+                        getImplementationName() override;
+
+    virtual bool
+                        supportsService( const OUString& rService ) override;
+
+    virtual cpo::uno::Sequence< OUString >
+                        getSupportedServiceNames() override;
+
+    // com.sun.star.lang.XInitialization interface ----------------------------
+
+    virtual void initialize(
+                            const cpo::uno::Sequence< cpo::uno::Any >& rArgs ) override;
+
+    // com.sun.star.sheet.XFilterFormulaParser interface ----------------------
+
+    virtual OUString
+                        getSupportedNamespace() override;
+
+    // com.sun.star.sheet.XFormulaParser interface ----------------------------
+
+    virtual cpo::uno::Sequence< css::sheet::FormulaToken >
+                        parseFormula(
+                            const OUString& rFormula,
+                            const css::table::CellAddress& rReferencePos ) override;
+
+    virtual OUString
+                        printFormula(
+                            const cpo::uno::Sequence< css::sheet::FormulaToken >& rTokens,
+                            const css::table::CellAddress& rReferencePos ) override;
+
+private:
+    typedef std::shared_ptr< OOXMLFormulaParserImpl >   ParserImplRef;
+
+    cpo::uno::Reference< css::lang::XComponent >
+                        mxComponent;
+    ParserImplRef       mxParserImpl;       /// Implementation of import parser.
+};
+
+} // namespace oox::xls
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

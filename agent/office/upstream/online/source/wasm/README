@@ -1,0 +1,57 @@
+NOTE: For instructions on how to build and run it without the
+Allotropia-supplied container, see wasm/README.no-container.md.
+
+= WASM with emscripten =
+
+Building for WASM with emscripten is still a bit immature and many projects
+need patching to work.
+
+Note that there are wrapper tools like "emconfigure", "emmake", "emcmake" that
+tend to set up environment variables like CC properly, although some project's
+build system unfortunately override that.
+
+Linking WASM executable uses a lot of memory; without optimisations or with -O1
+in LDFLAGS, /usr/bin/time prints "1660068maxresident" which should work
+anywhere, but with -O2 in LDFLAGS (which is the default) some LTO happens that
+uses about 8x as much RAM, "12261016maxresident" or ~12 GiB... so append
+CXXFLAGS='-g -O1' or similar to the configure invocation if out of memory.
+
+For convenience it's recommended to build with a docker container that has the
+required build tools.
+
+    podman pull public.ecr.aws/allotropia/libo-builders/wasm
+
+== Build LO core ==
+
+First you need to build CollaboraOffice core with emscripten.
+Currently best to use "feature/wasm" branch.
+
+It can be good to create an environment file you can source in new shells eg.
+
+export GITREPO=$HOME/lo/feature_wasm
+export EXTSOURCES=$HOME/lo/ext_sources
+export BUILDDIR=/data/lo/build_feature_wasm
+export ONLINEGITREPO=$HOME/lo/online
+export ONLINEBUILDDIR=/data/lo/build_online_wasm
+
+These examples assume that the git repo is in $GITREPO, the build
+directory in $BUILDDIR and the tarball download cache in
+$EXTSOURCES - adjust these to your preferences.
+
+    podman run -v $GITREPO:$GITREPO:ro -v $BUILDDIR:$BUILDDIR -v $EXTSOURCES:/ext_sources:rw --security-opt=label=disable -ti public.ecr.aws/allotropia/libo-builders/wasm /bin/bash -c "source /home/builder/emsdk/emsdk_env.sh && cd $BUILDDIR/ && $GITREPO/autogen.sh --with-external-tar=/ext_sources --with-distro=CPWASM-LOKit"
+
+    podman run -v $GITREPO:$GITREPO:ro -v $BUILDDIR:$BUILDDIR -v $EXTSOURCES:/ext_sources:rw --security-opt=label=disable -ti public.ecr.aws/allotropia/libo-builders/wasm /bin/bash -c "source /home/builder/emsdk/emsdk_env.sh && cd $BUILDDIR/ && make -rj8"
+
+== Build Online ==
+
+POCO, zstd and libpng are built as part of the CollaboraOffice core engine and
+picked up from its workdir, so none of them need to be built separately any more
+(the container still ships a prebuilt libzstd, but it is no longer used).
+
+Note that here the LO core (and builddir, if separate) must be mapped to the
+same directory in the container as it was when building core, due to files
+containing absolute paths.
+
+    podman run -v $GITREPO:$GITREPO:ro -v $BUILDDIR:$BUILDDIR:ro -v $ONLINEGITREPO:$ONLINEGITREPO:rw -v $ONLINEBUILDDIR:$ONLINEBUILDDIR:rw --security-opt=label=disable -ti public.ecr.aws/allotropia/libo-builders/wasm /bin/bash -c "source /home/builder/emsdk/emsdk_env.sh && cd $ONLINEBUILDDIR/ && $ONLINEGITREPO/autogen.sh && emconfigure $ONLINEGITREPO/configure --disable-werror --with-lokit-path=$GITREPO/include --with-lo-path=$BUILDDIR/instdir --with-lo-builddir=$BUILDDIR --host=wasm32-local-emscripten"
+    podman run -v $GITREPO:$GITREPO:ro -v $BUILDDIR:$BUILDDIR:ro -v $ONLINEGITREPO:$ONLINEGITREPO:rw -v $ONLINEBUILDDIR:$ONLINEBUILDDIR:rw --security-opt=label=disable -ti public.ecr.aws/allotropia/libo-builders/wasm /bin/bash -c "source /home/builder/emsdk/emsdk_env.sh && cd $ONLINEBUILDDIR/ && emmake make -rj8"
+

@@ -1,0 +1,85 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include "EditBase.hxx"
+
+
+namespace frm
+{
+
+class OCurrencyModel final
+                :public OEditBaseModel
+{
+    cpo::uno::Any          m_aSaveValue;
+
+public:
+    OCurrencyModel(
+        const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxFactory
+    );
+    OCurrencyModel(
+        const OCurrencyModel* _pOriginal,
+        const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxFactory
+    );
+    virtual ~OCurrencyModel() override;
+
+    // css::lang::XServiceInfo
+    OUString getImplementationName() override
+    { return u"com.sun.star.form.OCurrencyModel"_ustr; }
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+    // css::io::XPersistObject
+    virtual OUString getServiceName() override;
+
+    // OControlModel's property handling
+    virtual void describeFixedProperties(
+        cpo::uno::Sequence< css::beans::Property >& /* [out] */ _rProps
+    ) const override;
+
+private:
+    // OBoundControlModel overridables
+    virtual cpo::uno::Any   translateDbColumnToControlValue( ) override;
+    virtual bool            commitControlValueToDbColumn( bool _bPostReset ) override;
+
+    virtual cpo::uno::Any   getDefaultForReset() const override;
+
+    virtual void            resetNoBroadcast() override;
+
+    virtual cpo::uno::Reference< css::util::XCloneable > createClone(  ) override;
+
+    void implConstruct();
+};
+
+class OCurrencyControl: public OBoundControl
+{
+public:
+    explicit OCurrencyControl(const cpo::uno::Reference< cpo::uno::XComponentContext>& _rxContext);
+    // css::lang::XServiceInfo
+    OUString getImplementationName() override
+    { return u"com.sun.star.form.OCurrencyControl"_ustr; }
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+};
+
+
+}   // namespace frm
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

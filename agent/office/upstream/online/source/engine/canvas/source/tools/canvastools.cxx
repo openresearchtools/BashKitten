@@ -1,0 +1,245 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <limits>
+
+#include <basegfx/matrix/b2dhommatrix.hxx>
+#include <basegfx/matrix/b2dhommatrixtools.hxx>
+#include <basegfx/numeric/ftools.hxx>
+#include <basegfx/point/b2dpoint.hxx>
+#include <basegfx/point/b2ipoint.hxx>
+#include <basegfx/polygon/b2dpolygon.hxx>
+#include <basegfx/polygon/b2dpolygontools.hxx>
+#include <basegfx/range/b2drange.hxx>
+#include <basegfx/range/b2drectangle.hxx>
+#include <basegfx/range/b2irange.hxx>
+#include <basegfx/utils/canvastools.hxx>
+#include <basegfx/vector/b2ivector.hxx>
+#include <com/sun/star/awt/Rectangle.hpp>
+#include <com/sun/star/awt/XWindow2.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/geometry/AffineMatrix2D.hpp>
+#include <com/sun/star/geometry/Matrix2D.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <RenderState.hxx>
+#include <Texture.hxx>
+#include <com/sun/star/util/Endianness.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <sal/log.hxx>
+#include <toolkit/helper/vclunohelper.hxx>
+#include <comphelper/diagnose_ex.hxx>
+#include <vcl/canvastools.hxx>
+#include <vcl/window.hxx>
+
+#include <canvastools.hxx>
+#include <ViewState.hxx>
+
+
+using namespace ::com::sun::star;
+
+namespace canvastools
+{
+        vclcanvas::RenderState& initRenderState( vclcanvas::RenderState& renderState )
+        {
+            // setup identity transform
+            renderState.AffineTransform.identity();
+            renderState.Clip.clear();
+            renderState.DeviceColor = COL_WHITE;
+
+            return renderState;
+        }
+
+        ::basegfx::B2DHomMatrix& mergeViewAndRenderTransform( ::basegfx::B2DHomMatrix&      combinedTransform,
+                                                              const vclcanvas::ViewState&   viewState,
+                                                              const vclcanvas::RenderState& renderState )
+        {
+            // this statement performs combinedTransform = viewTransform * combinedTransform
+            combinedTransform = viewState.AffineTransform * renderState.AffineTransform;
+
+            return combinedTransform;
+        }
+
+        geometry::Matrix2D& setIdentityMatrix2D( geometry::Matrix2D& matrix )
+        {
+            matrix.m00 = 1.0;
+            matrix.m01 = 0.0;
+            matrix.m10 = 0.0;
+            matrix.m11 = 1.0;
+
+            return matrix;
+        }
+
+        // Create a corrected view transformation out of the give one,
+        // which ensures that the rectangle given by (0,0) and
+        // rSpriteSize is mapped with its left,top corner to (0,0)
+        // again. This is required to properly render sprite
+        // animations to buffer bitmaps.
+        ::basegfx::B2DHomMatrix calcRectToOriginTransform( const ::basegfx::B2DRange&          i_srcRect,
+                                                           const ::basegfx::B2DHomMatrix&      i_transformation )
+        {
+            ::basegfx::B2DHomMatrix o_transform;
+            if( i_srcRect.isEmpty() )
+            {
+                o_transform = i_transformation;
+                return o_transform;
+            }
+
+            // transform by given transformation
+            ::basegfx::B2DRectangle aTransformedRect = calcTransformedRectBounds(
+                                       i_srcRect,
+                                       i_transformation );
+
+            // now move resulting left,top point of bounds to (0,0)
+            const basegfx::B2DHomMatrix aCorrectedTransform(basegfx::utils::createTranslateB2DHomMatrix(
+                -aTransformedRect.getMinX(), -aTransformedRect.getMinY()));
+
+            // prepend to original transformation
+            o_transform = aCorrectedTransform * i_transformation;
+
+            return o_transform;
+        }
+
+        ::basegfx::B2DRange calcTransformedRectBounds( const ::basegfx::B2DRange&      inRect,
+                                                        const ::basegfx::B2DHomMatrix&  transformation )
+        {
+            ::basegfx::B2DRange outRect;
+
+            if( inRect.isEmpty() )
+                return outRect;
+
+            // transform all four extremal points of the rectangle,
+            // take bounding rect of those.
+
+            // transform left-top point
+            outRect.expand( transformation * inRect.getMinimum() );
+
+            // transform bottom-right point
+            outRect.expand( transformation * inRect.getMaximum() );
+
+            ::basegfx::B2DPoint aPoint;
+
+            // transform top-right point
+            aPoint.setX( inRect.getMaxX() );
+            aPoint.setY( inRect.getMinY() );
+
+            aPoint *= transformation;
+            outRect.expand( aPoint );
+
+            // transform bottom-left point
+            aPoint.setX( inRect.getMinX() );
+            aPoint.setY( inRect.getMaxY() );
+
+            aPoint *= transformation;
+            outRect.expand( aPoint );
+
+            // over and out.
+            return outRect;
+        }
+
+        int calcGradientStepCount( ::basegfx::B2DHomMatrix&      rTotalTransform,
+                                   const vclcanvas::ViewState&   viewState,
+                                   const vclcanvas::RenderState& renderState,
+                                   const vclcanvas::Texture&     texture,
+                                   int                           nColorSteps )
+        {
+            // calculate overall texture transformation (directly from
+            // texture to device space).
+            ::basegfx::B2DHomMatrix aMatrix;
+
+            rTotalTransform.identity();
+            ::basegfx::unotools::homMatrixFromAffineMatrix( rTotalTransform,
+                                                            texture.AffineTransform );
+            mergeViewAndRenderTransform(aMatrix, viewState, renderState);
+            rTotalTransform *= aMatrix; // prepend total view/render transformation
+
+            // determine size of gradient in device coordinate system
+            // (to e.g. determine sensible number of gradient steps)
+            ::basegfx::B2DPoint aLeftTop( 0.0, 0.0 );
+            ::basegfx::B2DPoint aLeftBottom( 0.0, 1.0 );
+            ::basegfx::B2DPoint aRightTop( 1.0, 0.0 );
+            ::basegfx::B2DPoint aRightBottom( 1.0, 1.0 );
+
+            aLeftTop    *= rTotalTransform;
+            aLeftBottom *= rTotalTransform;
+            aRightTop   *= rTotalTransform;
+            aRightBottom*= rTotalTransform;
+
+            // longest line in gradient bound rect
+            const int nGradientSize(
+                static_cast<int>(
+                    std::max(
+                        ::basegfx::B2DVector(aRightBottom-aLeftTop).getLength(),
+                        ::basegfx::B2DVector(aRightTop-aLeftBottom).getLength() ) + 1.0 ) );
+
+            // typical number for pixel of the same color (strip size)
+            const int nStripSize( nGradientSize < 50 ? 2 : 4 );
+
+            // use at least three steps, and at utmost the number of color
+            // steps
+            return std::max( 3,
+                               std::min(
+                                   nGradientSize / nStripSize,
+                                   nColorSteps ) );
+        }
+
+        void clipOutDev(const vclcanvas::ViewState& viewState,
+                        const vclcanvas::RenderState& renderState,
+                        OutputDevice& rOutDev)
+        {
+            // accumulate non-empty clips into one region
+            vcl::Region aClipRegion(true);
+
+            if( renderState.Clip.count() )
+            {
+                ::basegfx::B2DPolyPolygon aClipPoly( renderState.Clip );
+
+                ::basegfx::B2DHomMatrix aMatrix;
+                aClipPoly.transform(mergeViewAndRenderTransform(aMatrix, viewState, renderState));
+
+                if( aClipPoly.count() )
+                {
+                    // setup non-empty clipping
+                    vcl::Region aRegion = vcl::Region::GetRegionFromPolyPolygon( ::tools::PolyPolygon( aClipPoly ) );
+                    aClipRegion.Intersect( aRegion );
+                }
+                else
+                {
+                    // clip polygon is empty
+                    aClipRegion.SetEmpty();
+                }
+            }
+
+            // setup accumulated clip region. Note that setting an
+            // empty clip region denotes "clip everything" on the
+            // OutputDevice (which is why we translate that into
+            // SetClipRegion() here). When both view and render clip
+            // are empty, aClipRegion remains default-constructed,
+            // i.e. empty, too.
+            if( aClipRegion.IsNull() )
+                rOutDev.SetClipRegion();
+            else
+                rOutDev.SetClipRegion( aClipRegion );
+        }
+
+} // namespace
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,121 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+
+#include <sal/types.h>
+#include <sal/log.hxx>
+#include <utility>
+#include <vcl/canvastools.hxx>
+
+#include <basegfx/range/b2drange.hxx>
+#include <basegfx/point/b2dpoint.hxx>
+#include <basegfx/utils/canvastools.hxx>
+#include <canvastools.hxx>
+#include <com/sun/star/geometry/RealPoint2D.hpp>
+#include <RenderState.hxx>
+
+#include "pointaction.hxx"
+#include "outdevstate.hxx"
+#include "mtftools.hxx"
+#include <canvas.hxx>
+
+using namespace ::com::sun::star;
+
+namespace cppcanvas
+{
+        namespace
+        {
+            class PointAction : public Action
+            {
+            public:
+                PointAction( const ::basegfx::B2DPoint&,
+                             const OutDevState& );
+                PointAction( const ::basegfx::B2DPoint&,
+                             const OutDevState&,
+                             const ::Color&     );
+
+                PointAction(const PointAction&) = delete;
+                const PointAction& operator=(const PointAction&) = delete;
+
+                virtual bool render( vclcanvas::Canvas& rCanvas,
+                                     const vclcanvas::ViewState& rViewState,
+                                     const ::basegfx::B2DHomMatrix& rTransformation ) const override;
+
+                virtual sal_Int32 getActionCount() const override;
+
+            private:
+                ::basegfx::B2DPoint                         maPoint;
+                ::vclcanvas::RenderState                 maState;
+            };
+
+            PointAction::PointAction( const ::basegfx::B2DPoint& rPoint,
+                                      const OutDevState&         rState ) :
+                maPoint( rPoint )
+            {
+                cppcanvastools::initRenderState(maState,rState);
+                maState.DeviceColor = rState.lineColor;
+            }
+
+            PointAction::PointAction( const ::basegfx::B2DPoint& rPoint,
+                                      const OutDevState&         rState,
+                                      const ::Color&             rAltColor ) :
+                maPoint( rPoint )
+            {
+                cppcanvastools::initRenderState(maState,rState);
+                maState.DeviceColor = rAltColor;
+            }
+
+            bool PointAction::render( vclcanvas::Canvas& rCanvas,
+                                      const vclcanvas::ViewState& rViewState,
+                                      const ::basegfx::B2DHomMatrix& rTransformation ) const
+            {
+                SAL_INFO( "cppcanvas.emf", "::cppcanvas::PointAction::render()" );
+                SAL_INFO( "cppcanvas.emf", "::cppcanvas::PointAction: 0x" << std::hex << this );
+
+                vclcanvas::RenderState aLocalState( maState );
+                aLocalState.AffineTransform = rTransformation * aLocalState.AffineTransform;
+
+                rCanvas.drawPoint( ::basegfx::unotools::point2DFromB2DPoint(maPoint),
+                                     rViewState,
+                                     aLocalState );
+
+                return true;
+            }
+
+            sal_Int32 PointAction::getActionCount() const
+            {
+                return 1;
+            }
+        }
+
+        std::shared_ptr<Action> PointActionFactory::createPointAction( const ::basegfx::B2DPoint& rPoint,
+                                                               const OutDevState&         rState )
+        {
+            return std::make_shared<PointAction>( rPoint, rState );
+        }
+
+        std::shared_ptr<Action> PointActionFactory::createPointAction( const ::basegfx::B2DPoint& rPoint,
+                                                               const OutDevState&         rState,
+                                                               const ::Color&             rColor    )
+        {
+            return std::make_shared<PointAction>( rPoint, rState, rColor );
+        }
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

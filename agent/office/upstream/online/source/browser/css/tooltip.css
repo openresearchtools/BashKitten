@@ -1,0 +1,26 @@
+.cooltip-text {
+	visibility: hidden;
+	pointer-events: none;
+	position: absolute;
+	z-index: 2147483647;
+	color: var(--color-main-text);
+	background-color: var(--color-background-lighter);
+	box-shadow: 0px 0px 4px 0 var(--color-box-shadow);
+	border-radius: 6px;
+	white-space: nowrap;
+	padding: 7px 9px;
+	font-family: var(--cool-font);
+	font-size: var(--tooltip-font-size);
+}
+
+.cooltip-text.cooltip-with-icon {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.cooltip-text .cooltip-icon {
+	flex: 0 0 auto;
+	width: 24px;
+	height: 24px;
+}

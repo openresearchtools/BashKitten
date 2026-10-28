@@ -1,0 +1,253 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <vector>
+#include <rtl/ref.hxx>
+#include <com/sun/star/ucb/XContentCreator.hpp>
+#include <ucbhelper/contenthelper.hxx>
+#include "hierarchydata.hxx"
+#include "hierarchyprovider.hxx"
+
+namespace com::sun::star::beans {
+    struct Property;
+    struct PropertyValue;
+}
+
+namespace com::sun::star::sdbc {
+    class XRow;
+}
+
+namespace com::sun::star::ucb {
+    struct TransferInfo;
+}
+
+namespace hierarchy_ucp
+{
+
+
+class HierarchyContentProperties
+{
+public:
+    HierarchyContentProperties() {};
+
+    explicit HierarchyContentProperties( const HierarchyEntryData::Type & rType )
+    : m_aData( rType ),
+      m_aContentType( rType == HierarchyEntryData::FOLDER
+        ? HIERARCHY_FOLDER_CONTENT_TYPE
+        : HIERARCHY_LINK_CONTENT_TYPE ) {}
+
+    explicit HierarchyContentProperties( const HierarchyEntryData & rData )
+    : m_aData( rData ),
+      m_aContentType( rData.getType() == HierarchyEntryData::FOLDER
+        ? HIERARCHY_FOLDER_CONTENT_TYPE
+        : HIERARCHY_LINK_CONTENT_TYPE ) {}
+
+    const OUString & getName() const { return m_aData.getName(); }
+    void setName( const OUString & rName ) { m_aData.setName( rName ); };
+
+    const OUString & getTitle() const { return m_aData.getTitle(); }
+    void setTitle( const OUString & rTitle )
+    { m_aData.setTitle( rTitle ); };
+
+    const OUString & getTargetURL() const
+    { return m_aData.getTargetURL(); }
+    void setTargetURL( const OUString & rURL )
+    { m_aData.setTargetURL( rURL ); };
+
+    const OUString & getContentType() const { return m_aContentType; }
+
+    bool getIsFolder() const
+    { return m_aData.getType() == HierarchyEntryData::FOLDER; }
+
+    bool getIsDocument() const { return !getIsFolder(); }
+
+    cpo::uno::Sequence< css::ucb::ContentInfo >
+    getCreatableContentsInfo() const;
+
+    const HierarchyEntryData & getHierarchyEntryData() const { return m_aData; }
+
+private:
+    HierarchyEntryData m_aData;
+    OUString m_aContentType;
+};
+
+
+class HierarchyContent : public ::ucbhelper::ContentImplHelper,
+                         public css::ucb::XContentCreator
+{
+    enum ContentKind  { LINK, FOLDER, ROOT };
+    enum ContentState { TRANSIENT,  // created via CreateNewContent,
+                                        // but did not process "insert" yet
+                        PERSISTENT, // processed "insert"
+                        DEAD        // processed "delete"
+                      };
+
+    HierarchyContentProperties m_aProps;
+    ContentKind                m_eKind;
+    ContentState               m_eState;
+    HierarchyContentProvider*  m_pProvider;
+    bool                       m_bCheckedReadOnly;
+    bool                       m_bIsReadOnly;
+
+private:
+    HierarchyContent(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+            HierarchyContentProvider* pProvider,
+            const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
+            HierarchyContentProperties aProps );
+    HierarchyContent(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+            HierarchyContentProvider* pProvider,
+            const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
+            const css::ucb::ContentInfo& Info );
+
+    virtual cpo::uno::Sequence< css::beans::Property >
+    getProperties( const cpo::uno::Reference<css::ucb::XCommandEnvironment > & xEnv ) override;
+    virtual cpo::uno::Sequence< css::ucb::CommandInfo >
+    getCommands( const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv ) override;
+    virtual OUString getParentURL() override;
+
+    static bool hasData(
+            const cpo::uno::Reference<  cpo::uno::XComponentContext >& rxContext,
+            HierarchyContentProvider* pProvider,
+            const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier );
+    bool hasData(
+            const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier )
+    { return hasData( m_xContext, m_pProvider, Identifier ); }
+    static bool loadData(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+            HierarchyContentProvider* pProvider,
+            const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
+            HierarchyContentProperties& rProps );
+    bool storeData();
+    void renameData( const cpo::uno::Reference< css::ucb::XContentIdentifier >& xOldId,
+                     const cpo::uno::Reference< css::ucb::XContentIdentifier >& xNewId );
+    bool removeData();
+
+    void setKind( const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier );
+
+    bool isReadOnly();
+
+    bool isFolder() const { return ( m_eKind > LINK ); }
+
+    cpo::uno::Reference< css::ucb::XContentIdentifier >
+    makeNewIdentifier( const OUString& rTitle );
+
+    typedef rtl::Reference< HierarchyContent > HierarchyContentRef;
+    typedef std::vector< HierarchyContentRef > HierarchyContentRefVector;
+    void queryChildren( HierarchyContentRefVector& rChildren );
+
+    bool exchangeIdentity(
+                const cpo::uno::Reference< css::ucb::XContentIdentifier >& xNewId );
+
+    cpo::uno::Reference< css::sdbc::XRow >
+    getPropertyValues( const cpo::uno::Sequence< css::beans::Property >& rProperties );
+    /// @throws cpo::uno::Exception
+    cpo::uno::Sequence< cpo::uno::Any >
+    setPropertyValues(
+            const cpo::uno::Sequence< css::beans::PropertyValue >& rValues,
+            const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+
+    /// @throws cpo::uno::Exception
+    void insert( sal_Int32 nNameClashResolve,
+                 const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+
+    /// @throws cpo::uno::Exception
+    void destroy( bool bDeletePhysical,
+                  const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+
+    /// @throws cpo::uno::Exception
+    void transfer( const css::ucb::TransferInfo& rInfo,
+                   const cpo::uno::Reference< css::ucb::XCommandEnvironment > & xEnv );
+
+public:
+    // Create existing content. Fail, if not already exists.
+    static rtl::Reference<HierarchyContent> create(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+            HierarchyContentProvider* pProvider,
+            const cpo::uno::Reference<
+                css::ucb::XContentIdentifier >& Identifier );
+
+    // Create new content. Fail, if already exists.
+    static rtl::Reference<HierarchyContent> create(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+            HierarchyContentProvider* pProvider,
+            const cpo::uno::Reference< css::ucb::XContentIdentifier >& Identifier,
+            const css::ucb::ContentInfo& Info );
+
+    virtual ~HierarchyContent() override;
+
+    // XInterface
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire()
+        noexcept override;
+    virtual void release()
+        noexcept override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override;
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes() override;
+
+    // XServiceInfo
+    virtual OUString
+    getImplementationName() override;
+    virtual cpo::uno::Sequence< OUString >
+    getSupportedServiceNames() override;
+
+    // XContent
+    virtual OUString
+    getContentType() override;
+    virtual cpo::uno::Reference< css::ucb::XContentIdentifier >
+    getIdentifier() override;
+
+    // XCommandProcessor
+    virtual cpo::uno::Any
+    execute( const css::ucb::Command& aCommand,
+             sal_Int32 CommandId,
+             const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment ) override;
+    virtual void
+    abort( sal_Int32 CommandId ) override;
+
+
+    // Additional interfaces
+
+
+    // XContentCreator
+    virtual cpo::uno::Sequence< css::ucb::ContentInfo >
+    queryCreatableContentsInfo() override;
+    virtual cpo::uno::Reference< css::ucb::XContent >
+    createNewContent( const css::ucb::ContentInfo& Info ) override;
+
+
+    // Non-interface methods.
+
+
+    static cpo::uno::Reference< css::sdbc::XRow >
+    getPropertyValues( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+                       const cpo::uno::Sequence< css::beans::Property >& rProperties,
+                       const HierarchyContentProperties& rData,
+                       HierarchyContentProvider* pProvider,
+                       const OUString& rContentId );
+};
+
+} // namespace hierarchy_ucp
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

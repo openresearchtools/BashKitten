@@ -1,0 +1,553 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <LifeTime.hxx>
+
+#include <com/sun/star/frame/XStorable2.hpp>
+#include <com/sun/star/util/XModifiable.hpp>
+#include <com/sun/star/util/XCloseable.hpp>
+#include <com/sun/star/util/XUpdatable.hpp>
+#include <com/sun/star/util/DateTime.hpp>
+#include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
+#include <com/sun/star/document/XUndoManagerSupplier.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/util/XCloneable.hpp>
+#include <com/sun/star/embed/XVisualObject.hpp>
+#include <com/sun/star/document/XStorageBasedDocument.hpp>
+#include <com/sun/star/lang/XUnoTunnel.hpp>
+#include <com/sun/star/util/XNumberFormatsSupplier.hpp>
+#include <com/sun/star/container/XChild.hpp>
+#include <com/sun/star/chart2/data/XDataSource.hpp>
+#include <com/sun/star/qa/XDumper.hpp>
+
+// public API
+#include <com/sun/star/chart2/data/XDataReceiver.hpp>
+
+#include <com/sun/star/chart2/XChartDocument.hpp>
+#include <com/sun/star/chart2/XTitled.hpp>
+
+#include <com/sun/star/frame/XLoadable.hpp>
+#include <com/sun/star/datatransfer/XTransferable.hpp>
+
+#include <osl/mutex.hxx>
+#include <rtl/ref.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <comphelper/interfacecontainer2.hxx>
+#include <vcl/GraphicObject.hxx>
+#include <svl/lstner.hxx>
+#include <svx/ChartColorPaletteType.hxx>
+#include <svx/ChartGradientVariation.hxx>
+
+#include <memory>
+
+typedef struct _xmlTextWriter* xmlTextWriterPtr;
+
+#define DEFAULT_PAGE_WIDTH  16000
+#define DEFAULT_PAGE_HEIGHT 9000
+
+namespace com::sun::star::awt { class XRequestCallback; }
+namespace com::sun::star::chart2::data { class XDataProvider; }
+namespace com::sun::star::document { class XFilter; }
+namespace com::sun::star::embed { class XStorage; }
+namespace com::sun::star::frame { class XModel; }
+namespace cpo::uno { class XComponentContext; }
+
+class SvNumberFormatter;
+class SvNumberFormatsSupplierObj;
+
+class UnoChartStyle;
+class UnoChartColorStyle;
+
+namespace model { class Theme; }
+
+namespace chart
+{
+class Diagram;
+class ChartTypeManager;
+class ChartTypeTemplate;
+class InternalDataProvider;
+class NameContainer;
+class PageBackground;
+class RangeHighlighter;
+class Title;
+class BaseCoordinateSystem;
+class DataSeries;
+class ChartType;
+namespace wrapper { class ChartDocumentWrapper; }
+
+namespace impl
+{
+
+// Note: needed for queryInterface (if it calls the base-class implementation)
+typedef cppu::WeakImplHelper<
+//       css::frame::XModel        //comprehends XComponent (required interface), base of XChartDocument
+         css::util::XCloseable     //comprehends XCloseBroadcaster
+        ,css::frame::XStorable2    //(extension of XStorable)
+        ,css::util::XModifiable    //comprehends XModifyBroadcaster (required interface)
+        ,css::lang::XServiceInfo
+        ,css::lang::XInitialization
+        ,css::chart2::XChartDocument  // derived from XModel
+        ,css::chart2::data::XDataReceiver   // public API
+        ,css::chart2::XTitled
+        ,css::frame::XLoadable
+        ,css::util::XCloneable
+        ,css::embed::XVisualObject
+        ,css::lang::XMultiServiceFactory
+        ,css::document::XStorageBasedDocument
+        ,css::lang::XUnoTunnel
+        ,css::util::XNumberFormatsSupplier
+        ,css::container::XChild
+        ,css::util::XModifyListener
+        ,css::datatransfer::XTransferable
+        ,css::document::XDocumentPropertiesSupplier
+        ,css::chart2::data::XDataSource
+        ,css::document::XUndoManagerSupplier
+        ,css::util::XUpdatable
+        ,css::qa::XDumper
+        >
+    ChartModel_Base;
+}
+
+class UndoManager;
+class ChartView;
+
+class SAL_LOPLUGIN_ANNOTATE("crosscast") ChartModel final :
+    public impl::ChartModel_Base, private SfxListener
+{
+
+private:
+    mutable ::apphelper::CloseableLifeTimeManager   m_aLifeTimeManager;
+
+    mutable ::osl::Mutex    m_aModelMutex;
+    bool volatile       m_bReadOnly;
+    bool volatile       m_bModified;
+    sal_Int32               m_nInLoad;
+    bool volatile       m_bUpdateNotificationsPending;
+
+    bool mbTimeBased;
+
+    mutable rtl::Reference<ChartView> mxChartView;
+
+    OUString m_aResource;
+    cpo::uno::Sequence< css::beans::PropertyValue >   m_aMediaDescriptor;
+    cpo::uno::Reference< css::document::XDocumentProperties > m_xDocumentProperties;
+    ::rtl::Reference< UndoManager >                    m_pUndoManager;
+
+    ::comphelper::OInterfaceContainerHelper2           m_aControllers;
+    cpo::uno::Reference< css::frame::XController >     m_xCurrentController;
+    sal_uInt16                                         m_nControllerLockCount;
+
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+    rtl::Reference< wrapper::ChartDocumentWrapper >    m_xOldModelAgg;
+
+    cpo::uno::Reference< css::embed::XStorage >        m_xStorage;
+    //the content of this should be always synchronized with the current m_xViewWindow size. The variable is necessary to hold the information as long as no view window exists.
+    css::awt::Size                                     m_aVisualAreaSize;
+    cpo::uno::Reference< css::frame::XModel >          m_xParent;
+    rtl::Reference< ::chart::RangeHighlighter >        m_xRangeHighlighter;
+    cpo::uno::Reference<css::awt::XRequestCallback>    m_xPopupRequest;
+    std::vector< GraphicObject >                            m_aGraphicObjectVector;
+
+    cpo::uno::Reference< css::chart2::data::XDataProvider >   m_xDataProvider;
+    /** is only valid if m_xDataProvider is set. If m_xDataProvider is set to an
+        external data provider this reference must be set to 0
+    */
+    rtl::Reference< InternalDataProvider > m_xInternalDataProvider;
+
+    rtl::Reference< SvNumberFormatsSupplierObj > m_xOwnNumberFormatsSupplier;
+    cpo::uno::Reference< css::util::XNumberFormatsSupplier >
+                                m_xNumberFormatsSupplier;
+    std::unique_ptr< SvNumberFormatter > m_apSvNumberFormatter; // #i113784# avoid memory leak
+
+    rtl::Reference< ::chart::ChartTypeManager >
+        m_xChartTypeManager;
+
+    // Diagram Access
+    rtl::Reference< ::chart::Diagram > m_xDiagram;
+
+    rtl::Reference< ::chart::Title > m_xTitle;
+
+    rtl::Reference< ::chart::PageBackground > m_xPageBackground;
+
+    rtl::Reference< ::chart::NameContainer > m_xXMLNamespaceMap;
+
+    ChartColorPaletteType m_eColorPaletteType;
+    sal_uInt32 m_nColorPaletteIndex;
+
+    std::optional<css::util::DateTime> m_aNullDate;
+
+    rtl::Reference<UnoChartStyle> m_aStyles;
+    rtl::Reference<UnoChartColorStyle> m_aColorStyles;
+
+    ChartGradientVariation m_eGradientPaletteVariation;
+    ChartGradientType m_nGradientPaletteType;
+    std::vector<Color>  m_aGradientBaseColors;
+
+private:
+    //private methods
+
+    OUString impl_g_getLocation();
+
+    bool
+        impl_isControllerConnected( const cpo::uno::Reference< css::frame::XController >& xController );
+
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::frame::XController >
+        impl_getCurrentController();
+
+    /// @throws cpo::uno::RuntimeException
+    void
+        impl_notifyModifiedListeners();
+    /// @throws cpo::uno::RuntimeException
+    void
+        impl_notifyCloseListeners();
+
+    void impl_store(
+        const cpo::uno::Sequence< css::beans::PropertyValue >& rMediaDescriptor,
+        const cpo::uno::Reference< css::embed::XStorage > & xStorage );
+    void impl_load(
+        const cpo::uno::Sequence< css::beans::PropertyValue >& rMediaDescriptor,
+        const cpo::uno::Reference< css::embed::XStorage >& xStorage );
+    void impl_loadGraphics(
+        const cpo::uno::Reference< css::embed::XStorage >& xStorage );
+    cpo::uno::Reference< css::document::XFilter >
+        impl_createFilter( const cpo::uno::Sequence< css::beans::PropertyValue > & rMediaDescriptor );
+
+    rtl::Reference< ::chart::ChartTypeTemplate > impl_createDefaultChartTypeTemplate();
+    cpo::uno::Reference< css::chart2::data::XDataSource > impl_createDefaultData();
+
+    void impl_adjustAdditionalShapesPositionAndSize(
+        const css::awt::Size& aVisualAreaSize );
+
+    void insertDefaultChart();
+
+public:
+    ChartModel() = delete;
+    ChartModel(cpo::uno::Reference< cpo::uno::XComponentContext > xContext);
+    explicit ChartModel( const ChartModel & rOther );
+    virtual ~ChartModel() override;
+
+    // css::lang::XServiceInfo
+
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // css::lang::XInitialization
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+    // css::frame::XModel (required interface)
+
+    virtual bool
+        attachResource( const OUString& rURL,
+                        const cpo::uno::Sequence< css::beans::PropertyValue >& rMediaDescriptor ) override;
+
+    virtual OUString
+        getURL() override;
+
+    virtual cpo::uno::Sequence< css::beans::PropertyValue >
+        getArgs() override;
+
+    virtual void
+        connectController( const cpo::uno::Reference< css::frame::XController >& xController ) override;
+
+    virtual void
+        disconnectController( const cpo::uno::Reference< css::frame::XController >& xController ) override;
+
+    virtual void
+        lockControllers() override;
+
+    virtual void
+        unlockControllers() override;
+
+    virtual bool
+        hasControllersLocked() override;
+
+    virtual cpo::uno::Reference< css::frame::XController >
+        getCurrentController() override;
+
+    virtual void
+        setCurrentController( const cpo::uno::Reference< css::frame::XController >& xController ) override;
+
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
+        getCurrentSelection() override;
+
+    // css::lang::XComponent (base of XModel)
+    virtual void
+        dispose() override;
+
+    virtual void
+        addEventListener( const cpo::uno::Reference< css::lang::XEventListener > & xListener ) override;
+
+    virtual void
+        removeEventListener( const cpo::uno::Reference< css::lang::XEventListener > & xListener ) override;
+
+    // css::util::XCloseable
+    virtual void
+        close( bool bDeliverOwnership ) override;
+
+    // css::util::XCloseBroadcaster (base of XCloseable)
+    virtual void
+        addCloseListener( const cpo::uno::Reference< css::util::XCloseListener > & xListener ) override;
+
+    virtual void
+        removeCloseListener( const cpo::uno::Reference< css::util::XCloseListener > & xListener ) override;
+
+    // css::frame::XStorable2 (extension of XStorable)
+    virtual void storeSelf(
+        const cpo::uno::Sequence< css::beans::PropertyValue >& rMediaDescriptor ) override;
+
+    // css::frame::XStorable (required interface)
+    virtual bool
+        hasLocation() override;
+
+    virtual OUString
+        getLocation() override;
+
+    virtual bool
+        isReadonly() override;
+
+    virtual void
+        store() override;
+
+    virtual void
+        storeAsURL( const OUString& rURL,
+                    const cpo::uno::Sequence< css::beans::PropertyValue >& rMediaDescriptor ) override;
+
+    virtual void
+        storeToURL( const OUString& rURL,
+                    const cpo::uno::Sequence< css::beans::PropertyValue >& rMediaDescriptor ) override;
+
+    // css::util::XModifiable (required interface)
+    virtual bool
+        isModified() override;
+
+    virtual void
+        setModified( bool bModified ) override;
+
+    // css::util::XModifyBroadcaster (base of XModifiable)
+    virtual void
+        addModifyListener( const cpo::uno::Reference< css::util::XModifyListener >& xListener ) override;
+
+    virtual void
+        removeModifyListener( const cpo::uno::Reference< css::util::XModifyListener >& xListener ) override;
+
+    // ____ XModifyListener ____
+    virtual void modified(
+        const css::lang::EventObject& aEvent ) override;
+
+    // ____ XEventListener (base of XModifyListener) ____
+    virtual void disposing(
+        const css::lang::EventObject& Source ) override;
+
+    // ____ datatransferable::XTransferable ____
+    virtual cpo::uno::Any getTransferData(
+        const css::datatransfer::DataFlavor& aFlavor ) override;
+    virtual cpo::uno::Sequence< css::datatransfer::DataFlavor > getTransferDataFlavors() override;
+    virtual bool isDataFlavorSupported(
+        const css::datatransfer::DataFlavor& aFlavor ) override;
+
+    // lang::XTypeProvider (override method of WeakImplHelper)
+    virtual cpo::uno::Sequence< cpo::uno::Type >
+        getTypes() override;
+
+    // ____ document::XDocumentPropertiesSupplier ____
+    virtual cpo::uno::Reference< css::document::XDocumentProperties >
+        getDocumentProperties(  ) override;
+
+    // ____ document::XUndoManagerSupplier ____
+    virtual cpo::uno::Reference< css::document::XUndoManager >
+        getUndoManager(  ) override;
+
+    // css::chart2::XChartDocument
+    virtual cpo::uno::Reference< css::chart2::XDiagram >
+        getFirstDiagram() override;
+    virtual void setFirstDiagram(
+        const cpo::uno::Reference< css::chart2::XDiagram >& xDiagram ) override;
+    virtual void
+        createInternalDataProvider( bool bCloneExistingData ) override;
+    virtual bool hasInternalDataProvider() override;
+    virtual cpo::uno::Reference< css::chart2::data::XDataProvider >
+        getDataProvider() override;
+    virtual cpo::uno::Reference< css::chart2::XChartTypeManager >
+        getChartTypeManager() override;
+    virtual cpo::uno::Reference< css::chart2::XChartStyle> getStyles() override;
+    virtual cpo::uno::Reference< css::chart2::XChartColorStyle> getColorStyles() override;
+    virtual cpo::uno::Reference< css::beans::XPropertySet >
+        getPageBackground() override;
+
+    virtual void createDefaultChart() override;
+
+    // ____ XDataReceiver (public API) ____
+    virtual void
+        attachDataProvider( const cpo::uno::Reference< css::chart2::data::XDataProvider >& xProvider ) override;
+    virtual void setArguments(
+        const cpo::uno::Sequence< css::beans::PropertyValue >& aArguments ) override;
+    virtual cpo::uno::Sequence< OUString > getUsedRangeRepresentations() override;
+    virtual cpo::uno::Reference< css::chart2::data::XDataSource > getUsedData() override;
+    virtual void attachNumberFormatsSupplier( const cpo::uno::Reference<
+        css::util::XNumberFormatsSupplier >& xSupplier ) override;
+    virtual cpo::uno::Reference< css::chart2::data::XRangeHighlighter > getRangeHighlighter() override;
+    virtual cpo::uno::Reference<css::awt::XRequestCallback> getPopupRequest() override;
+
+    // ____ XTitled ____
+    virtual cpo::uno::Reference< css::chart2::XTitle > getTitleObject() override;
+    virtual void setTitleObject( const cpo::uno::Reference< css::chart2::XTitle >& Title ) override;
+
+    // ____ XInterface (for old API wrapper) ____
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type& aType ) override;
+
+    // ____ XLoadable ____
+    virtual void initNew() override;
+    virtual void load( const cpo::uno::Sequence< css::beans::PropertyValue >& rMediaDescriptor ) override;
+
+    // ____ XCloneable ____
+    virtual cpo::uno::Reference< css::util::XCloneable > createClone() override;
+
+    // ____ XVisualObject ____
+    virtual void setVisualAreaSize(
+        ::sal_Int64 nAspect,
+        const css::awt::Size& aSize ) override;
+    virtual css::awt::Size getVisualAreaSize(
+        ::sal_Int64 nAspect ) override;
+    virtual css::embed::VisualRepresentation getPreferredVisualRepresentation(
+        ::sal_Int64 nAspect ) override;
+    virtual ::sal_Int32 getMapUnit(
+        ::sal_Int64 nAspect ) override;
+
+    // ____ XMultiServiceFactory ____
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
+        createInstance( const OUString& aServiceSpecifier ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface >
+        createInstanceWithArguments( const OUString& ServiceSpecifier
+                                   , const cpo::uno::Sequence< cpo::uno::Any >& Arguments ) override;
+    virtual cpo::uno::Sequence< OUString >
+        getAvailableServiceNames() override;
+
+    // ____ XStorageBasedDocument ____
+    virtual void loadFromStorage(
+        const cpo::uno::Reference< css::embed::XStorage >& xStorage,
+        const cpo::uno::Sequence< css::beans::PropertyValue >& rMediaDescriptor ) override;
+    virtual void storeToStorage(
+        const cpo::uno::Reference< css::embed::XStorage >& xStorage,
+        const cpo::uno::Sequence< css::beans::PropertyValue >& rMediaDescriptor ) override;
+    virtual void switchToStorage(
+        const cpo::uno::Reference< css::embed::XStorage >& xStorage ) override;
+    virtual cpo::uno::Reference< css::embed::XStorage > getDocumentStorage() override;
+
+    // for SvNumberFormatsSupplierObj
+    // ____ XUnoTunnel ___
+    virtual ::sal_Int64 getSomething( const cpo::uno::Sequence< ::sal_Int8 >& aIdentifier ) override;
+
+    // ____ XNumberFormatsSupplier ____
+    virtual cpo::uno::Reference< css::beans::XPropertySet > getNumberFormatSettings() override;
+    virtual cpo::uno::Reference< css::util::XNumberFormats > getNumberFormats() override;
+
+    // ____ XChild ____
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getParent() override;
+    virtual void setParent(
+        const cpo::uno::Reference< cpo::uno::XInterface >& Parent ) override;
+
+    // ____ XDataSource ____ allows access to the currently used data and data ranges
+    virtual cpo::uno::Sequence< cpo::uno::Reference< css::chart2::data::XLabeledDataSequence > > getDataSequences() override;
+
+    // XUpdatable
+    virtual void update() override;
+
+    // XDumper
+    virtual OUString dump(OUString const & kind) override;
+
+    // SfxListener
+    virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
+
+    // normal methods
+    cpo::uno::Reference< css::util::XNumberFormatsSupplier > const &
+        getNumberFormatsSupplier();
+
+    const rtl::Reference<ChartView> & createChartView();
+
+    ChartView* getChartView() const;
+
+    const rtl::Reference< ::chart::Diagram > & getFirstChartDiagram() { return m_xDiagram; }
+
+    bool isTimeBased() const { return mbTimeBased;}
+
+    void setTimeBasedRange(sal_Int32 nStart, sal_Int32 nEnd);
+
+    bool isDataFromSpreadsheet();
+
+    bool isDataFromPivotTable() const;
+
+    void removeDataProviders();
+
+    const rtl::Reference< ::chart::ChartTypeManager > & getTypeManager() const { return m_xChartTypeManager; }
+
+    rtl::Reference< ::chart::Title > getTitleObject2() const;
+    void setTitleObject( const rtl::Reference< ::chart::Title >& Title );
+
+    rtl::Reference< BaseCoordinateSystem > getFirstCoordinateSystem();
+
+    std::vector< rtl::Reference< ::chart::DataSeries > > getDataSeries();
+
+    rtl::Reference< ChartType > getChartTypeOfSeries( const rtl::Reference< ::chart::DataSeries >& xGivenDataSeries );
+
+    static css::awt::Size getDefaultPageSize();
+
+    css::awt::Size getPageSize();
+
+    void triggerRangeHighlighting();
+
+    bool isIncludeHiddenCells();
+    bool setIncludeHiddenCells( bool bIncludeHiddenCells );
+
+    std::shared_ptr<model::Theme> getDocumentTheme() const;
+    ChartColorPaletteType getColorPaletteType() const { return m_eColorPaletteType; }
+    sal_uInt32 getColorPaletteIndex() const { return m_nColorPaletteIndex; }
+    void setColorPalette(ChartColorPaletteType eType, sal_uInt32 nIndex);
+    void clearColorPalette();
+    bool usesColorPalette() const;
+    std::optional<ChartColorPalette> getCurrentColorPalette() const;
+    void applyColorPaletteToDataSeries(const ChartColorPalette& rColorPalette);
+    void onDocumentThemeChanged();
+
+    ChartGradientVariation getGradientPaletteVariation() const { return m_eGradientPaletteVariation; }
+    ChartGradientType getGradientPaletteType() const { return m_nGradientPaletteType; }
+    void setGradientPalette(ChartGradientVariation eVariation, ChartGradientType eType);
+    void clearGradientPalette();
+    bool usesGradientPalette() const;
+    const std::vector<Color>& getDataSeriesColorsForGradient(bool bIsPreview = false);
+    std::optional<ChartGradientPalette> getCurrentGradientPalette() const;
+    void applyGradientPaletteToDataSeries(const ChartGradientPalette& rColorPalette);
+
+    const std::optional<css::util::DateTime> & getNullDate() const;
+    void changeNullDate(const css::util::DateTime& aNullDate);
+
+private:
+    void dumpAsXml(xmlTextWriterPtr pWriter) const;
+
+    sal_Int32 mnStart;
+    sal_Int32 mnEnd;
+};
+
+}  // namespace chart
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

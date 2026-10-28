@@ -1,0 +1,241 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include "unogaltheme.hxx"
+#include <svx/gallery1.hxx>
+#include <vcl/svapp.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <com/sun/star/container/ElementExistException.hpp>
+#include <com/sun/star/gallery/XGalleryTheme.hpp>
+#include <com/sun/star/gallery/XGalleryThemeProvider.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+namespace {
+
+class GalleryThemeProvider : public ::cppu::WeakImplHelper< css::lang::XInitialization,
+                                                             css::gallery::XGalleryThemeProvider,
+                                                             css::lang::XServiceInfo >
+{
+public:
+
+    GalleryThemeProvider();
+
+protected:
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+
+    // XElementAccess
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
+
+    // XNameAccess
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool hasByName( const OUString& aName ) override;
+
+    // XInitialization
+    virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+    // XGalleryThemeProvider
+    virtual cpo::uno::Reference< css::gallery::XGalleryTheme > insertNewByName( const OUString& ThemeName ) override;
+    virtual void removeByName( const OUString& ThemeName ) override;
+
+private:
+
+    Gallery*    mpGallery;
+    bool    mbHiddenThemes;
+};
+
+GalleryThemeProvider::GalleryThemeProvider() :
+    mbHiddenThemes( false )
+{
+    mpGallery = ::Gallery::GetGalleryInstance();
+}
+
+OUString GalleryThemeProvider::getImplementationName()
+{
+    return u"com.sun.star.comp.gallery.GalleryThemeProvider"_ustr;
+}
+
+bool GalleryThemeProvider::supportsService( const OUString& ServiceName )
+{
+    return cppu::supportsService( this, ServiceName );
+}
+
+cpo::uno::Sequence< OUString > GalleryThemeProvider::getSupportedServiceNames()
+{
+    cpo::uno::Sequence<OUString> aSeq { u"com.sun.star.gallery.GalleryThemeProvider"_ustr };
+    return aSeq;
+}
+
+cpo::uno::Sequence< cpo::uno::Type > GalleryThemeProvider::getTypes()
+{
+    static const cpo::uno::Sequence aTypes {
+        cppu::UnoType<lang::XServiceInfo>::get(),
+        cppu::UnoType<lang::XTypeProvider>::get(),
+        cppu::UnoType<lang::XInitialization>::get(),
+        cppu::UnoType<container::XElementAccess>::get(),
+        cppu::UnoType<container::XNameAccess>::get(),
+        cppu::UnoType<gallery::XGalleryThemeProvider>::get() };
+
+    return aTypes;
+}
+
+cpo::uno::Sequence< sal_Int8 > GalleryThemeProvider::getImplementationId()
+{
+    return cpo::uno::Sequence<sal_Int8>();
+}
+
+void GalleryThemeProvider::initialize( const cpo::uno::Sequence< cpo::uno::Any >& rArguments )
+{
+    cpo::uno::Sequence< beans::PropertyValue >   aParams;
+
+    for( const auto& rArgument : rArguments )
+    {
+        if( rArgument >>= aParams )
+            break;
+    }
+
+    for (const beans::PropertyValue& rProp : aParams)
+    {
+        if ( rProp.Name == "ProvideHiddenThemes" )
+            rProp.Value >>= mbHiddenThemes;
+    }
+}
+
+
+cpo::uno::Type GalleryThemeProvider::getElementType()
+{
+    return cppu::UnoType<gallery::XGalleryTheme>::get();
+}
+
+
+bool GalleryThemeProvider::hasElements()
+{
+    const SolarMutexGuard aGuard;
+
+    return( ( mpGallery != nullptr ) && ( mpGallery->GetThemeCount() > 0 ) );
+}
+
+
+cpo::uno::Any GalleryThemeProvider::getByName( const OUString& rName )
+{
+    const SolarMutexGuard aGuard;
+    cpo::uno::Any            aRet;
+
+    if( !mpGallery || !mpGallery->HasTheme( rName ) )
+    {
+        throw container::NoSuchElementException();
+    }
+
+    aRet <<= uno::Reference< gallery::XGalleryTheme >( new ::unogallery::GalleryTheme( rName ) );
+
+    return aRet;
+}
+
+
+cpo::uno::Sequence< OUString > GalleryThemeProvider::getElementNames()
+{
+    const SolarMutexGuard aGuard;
+    sal_uInt32                          i = 0, nCount = ( mpGallery ? mpGallery->GetThemeCount() : 0 ), nRealCount = 0;
+    cpo::uno::Sequence< OUString >    aSeq( nCount );
+    auto aSeqRange = asNonConstRange(aSeq);
+
+    for( ; i < nCount; ++i )
+    {
+        const GalleryThemeEntry* pEntry = mpGallery->GetThemeInfo( i );
+
+        if( mbHiddenThemes || !pEntry->IsHidden() )
+            aSeqRange[ nRealCount++ ] = pEntry->GetThemeName();
+    }
+
+    aSeq.realloc( nRealCount );
+
+    return aSeq;
+}
+
+
+bool GalleryThemeProvider::hasByName( const OUString& rName )
+{
+    const SolarMutexGuard aGuard;
+
+    bool bRet = false;
+
+    if( mpGallery && mpGallery->HasTheme( rName ) )
+        bRet = ( mbHiddenThemes || !mpGallery->GetThemeInfo( rName )->IsHidden() );
+
+    return bRet;
+}
+
+
+uno::Reference< gallery::XGalleryTheme > GalleryThemeProvider::insertNewByName( const OUString& rThemeName )
+{
+    const SolarMutexGuard aGuard;
+
+    if( !mpGallery )
+        return nullptr;
+    if( mpGallery->HasTheme( rThemeName ) )
+        throw container::ElementExistException();
+    if( !mpGallery->CreateTheme( rThemeName ) )
+        return nullptr;
+    return new ::unogallery::GalleryTheme( rThemeName );
+}
+
+
+void GalleryThemeProvider::removeByName( const OUString& rName )
+{
+    const SolarMutexGuard aGuard;
+
+    if( !mpGallery ||
+        !mpGallery->HasTheme( rName ) ||
+        ( !mbHiddenThemes && mpGallery->GetThemeInfo( rName )->IsHidden() ) )
+    {
+        throw container::NoSuchElementException();
+    }
+
+    mpGallery->RemoveTheme( rName );
+}
+
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_gallery_GalleryThemeProvider_get_implementation(
+    cpo::uno::XComponentContext *,
+    cpo::uno::Sequence<cpo::uno::Any> const &)
+{
+    return cppu::acquire(new GalleryThemeProvider);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

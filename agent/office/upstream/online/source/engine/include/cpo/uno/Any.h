@@ -1,0 +1,393 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#pragma once
+
+#include <sal/config.h>
+
+#include <cstddef>
+#include <type_traits>
+
+#include <rtl/ustring.hxx>
+#include <uno/any2.h>
+#include <typelib/typedescription.h>
+#include <cppu/unotype.hxx>
+#include <cpo/uno/TypeClass.hdl>
+#include <rtl/alloc.h>
+
+namespace cpo::uno
+{
+    class BaseReference;
+    template<class interface_type> class Reference;
+}
+
+namespace cpo::uno
+{
+class Type;
+
+/** C++ class representing an IDL any.
+    This class is used to transport any type defined in IDL. The class inherits from the
+    binary C representation of uno_Any.
+    You can insert a value by using the <<= operators.
+    No any can hold an any. You can extract values from an any by using the >>= operators which
+    return true if the any contains an assignable value (no data loss), e.g. the any contains a
+    short and you >>= it into a long variable.
+*/
+class SAL_WARN_UNUSED SAL_DLLPUBLIC_RTTI Any : public uno_Any
+{
+public:
+    /** Default constructor: Any holds no value; its type is void.
+    */
+    inline Any();
+
+    /** Templated ctor.  Sets a copy of the given value.
+
+        @param value value of the Any
+    */
+    template <typename T>
+        // Disallow things like
+        // Reference<cpo::uno::XInterface> x(...);
+        // Any a(*x);
+        requires (!std::is_base_of_v<cpo::uno::XInterface, T>)
+    explicit inline Any( T const & value );
+    /// Ctor support for C++ bool.
+    explicit inline Any( bool value );
+
+    template<typename T1, typename T2>
+    explicit inline Any(rtl::OUStringConcat<T1, T2> && value);
+    template<typename T1, typename T2>
+    explicit Any(rtl::OUStringConcat<T1, T2> const &) = delete;
+    template<std::size_t nBufSize> explicit inline Any(rtl::StringNumber<sal_Unicode, nBufSize> && value);
+    template<std::size_t nBufSize> explicit Any(rtl::StringNumber<sal_Unicode, nBufSize> const &) = delete;
+    template <std::size_t N> explicit inline Any(const rtl::OUStringLiteral<N>& value);
+
+    /** Copy constructor: Sets value of the given any.
+
+        @param rAny another any
+    */
+    inline Any( const Any & rAny );
+
+    /** Constructor: Sets a copy of the given data.
+
+        @param pData_ value
+        @param rType type of value
+    */
+    inline Any( const void * pData_, const cpo::uno::Type & rType );
+
+    /** Constructor: Sets a copy of the given data.
+
+        @param pData_ value
+        @param pTypeDescr type of value
+    */
+    inline Any( const void * pData_, typelib_TypeDescription * pTypeDescr );
+
+    /** Constructor: Sets a copy of the given data.
+
+        @param pData_ value
+        @param pType_ type of value
+    */
+    inline Any( const void * pData_, typelib_TypeDescriptionReference * pType_ );
+
+    Any(bool const *, cpo::uno::Type const &) = delete;
+    Any(bool const *, typelib_TypeDescription *) = delete;
+    Any(bool const *, typelib_TypeDescriptionReference *) = delete;
+    Any(std::nullptr_t, cpo::uno::Type const & type):
+        Any(static_cast<void *>(nullptr), type) {}
+    Any(std::nullptr_t, typelib_TypeDescription * type):
+        Any(static_cast<void *>(nullptr), type) {}
+    Any(std::nullptr_t, typelib_TypeDescriptionReference * type):
+        Any(static_cast<void *>(nullptr), type) {}
+
+    /** Destructor: Destructs any content and frees memory.
+    */
+    inline ~Any();
+
+    /** Assignment operator: Sets the value of the given any.
+
+        @param rAny another any (right side)
+        @return this any
+    */
+    inline Any & operator = ( const Any & rAny );
+
+#if !defined(__COVERITY__) // suppress COPY_INSTEAD_OF_MOVE suggestions
+    inline Any(Any && other) noexcept;
+#endif
+    inline Any & operator =(Any && other) noexcept;
+
+    /** Gets the type of the set value.
+
+        @return a Type object of the set value
+     */
+    const cpo::uno::Type & getValueType() const
+        { return * reinterpret_cast< const cpo::uno::Type * >( &pType ); }
+    /** Gets the type of the set value.
+
+        @return the unacquired type description reference of the set value
+     */
+    typelib_TypeDescriptionReference * getValueTypeRef() const
+        { return pType; }
+
+    /** Gets the type description of the set value. Provides ownership of the type description!
+        Call an explicit typelib_typedescription_release() to release afterwards.
+
+        @param ppTypeDescr a pointer to type description pointer
+    */
+    void getValueTypeDescription( typelib_TypeDescription ** ppTypeDescr ) const
+        { ::typelib_typedescriptionreference_getDescription( ppTypeDescr, pType ); }
+
+    /** Gets the type class of the set value.
+
+        @return the type class of the set value
+     */
+    cpo::uno::TypeClass getValueTypeClass() const
+        { return static_cast<cpo::uno::TypeClass>(pType->eTypeClass); }
+
+    /** Gets the type name of the set value.
+
+        @return the type name of the set value
+    */
+    inline ::rtl::OUString getValueTypeName() const;
+
+    /** Tests if any contains a value.
+
+        @return true if any has a value, false otherwise
+    */
+    bool hasValue() const
+        { return (typelib_TypeClass_VOID != pType->eTypeClass); }
+
+    /** Gets a pointer to the set value.
+
+        @return a pointer to the set value
+    */
+    const void * getValue() const
+        { return pData; }
+
+    /** Provides a value of specified type, so you can easily write e.g.
+        <pre>
+        sal_Int32 myVal = myAny.get<sal_Int32>();
+        </pre>
+        Widening conversion without data loss is taken into account.
+        Throws a cpo::uno::RuntimeException if the specified type
+        cannot be provided.
+
+        @return value of specified type
+        @exception cpo::uno::RuntimeException
+                   in case the specified type cannot be provided
+    */
+    template <typename T>
+    inline T get() const;
+
+    /** Sets a value. If the any already contains a value, that value will be destructed
+        and its memory freed.
+
+        @param pData_ pointer to value
+        @param rType type of value
+    */
+    inline void setValue( const void * pData_, const cpo::uno::Type & rType );
+    /** Sets a value. If the any already contains a value, that value will be destructed
+        and its memory freed.
+
+        @param pData_ pointer to value
+        @param pType_ type of value
+    */
+    inline void setValue( const void * pData_, typelib_TypeDescriptionReference * pType_ );
+    /** Sets a value. If the any already contains a value, that value will be destructed
+        and its memory freed.
+
+        @param pData_ pointer to value
+        @param pTypeDescr type description of value
+    */
+    inline void setValue( const void * pData_, typelib_TypeDescription * pTypeDescr );
+
+    void setValue(bool const *, cpo::uno::Type const &) = delete;
+    void setValue(bool const *, typelib_TypeDescriptionReference *) = delete;
+    void setValue(bool const *, typelib_TypeDescription *) = delete;
+    void setValue(std::nullptr_t, cpo::uno::Type const & type)
+    { setValue(static_cast<void *>(nullptr), type); }
+    void setValue(std::nullptr_t, typelib_TypeDescriptionReference * type)
+    { setValue(static_cast<void *>(nullptr), type); }
+    void setValue(std::nullptr_t, typelib_TypeDescription * type)
+    { setValue(static_cast<void *>(nullptr), type); }
+
+    /** Clears this any. If the any already contains a value, that value will be destructed
+        and its memory freed. After this has been called, the any does not contain a value.
+    */
+    inline void clear();
+
+    /** Tests whether this any is extractable to a value of given type.
+        Widening conversion without data loss is taken into account.
+
+        @param rType destination type
+        @return true if this any is extractable to value of given type (e.g. using >>= operator)
+    */
+    inline bool isExtractableTo( const cpo::uno::Type & rType ) const;
+
+    /** Tests whether this any can provide a value of specified type.
+        Widening conversion without data loss is taken into account.
+
+        @return true if this any can provide a value of specified type
+        (e.g. using >>= operator)
+    */
+    template <typename T>
+    inline bool has() const;
+
+    /** Equality operator: compares two anys.
+        The values need not be of equal type, e.g. a short integer is compared to a long integer.
+
+        @param rAny another any (right side)
+        @return true if both any contains equal values
+    */
+    inline bool operator == ( const Any & rAny ) const;
+    /** Inequality operator: compares two anys.
+        The values need not be of equal type, e.g. a short integer is compared to a long integer.
+
+        @param rAny another any (right side)
+        @return true if both any contains unequal values
+    */
+    inline bool operator != ( const Any & rAny ) const;
+
+    // Similar to Reference::query/queryThrow, these allow to simplify calling constructors of
+    // Reference taking Any. queryThrow is functionally similar to get(), but doesn't require
+    // to specify the full Reference type explicitly, only the interface type.
+    template<class interface_type> inline cpo::uno::Reference<interface_type> query() const;
+    template<class interface_type> inline cpo::uno::Reference<interface_type> queryThrow() const;
+};
+
+/** Wrap a value in an Any, if necessary.
+
+    (A difference to the deprecated makeAny is that makeAny cannot be called on an Any, while
+    toAny just returns the given Any.)
+*/
+template<typename T> inline Any toAny(T const & value);
+
+template<> inline Any toAny(Any const & value);
+
+/** Extract a value from an Any, if necessary.
+
+    The difference to operator >>= is that operator >>= cannot be called with an
+    Any as right-hand side, while fromAny just passes on
+    the given Any (and always succeeds) in the specialization for T = Any.
+
+    @tparam T  any type representing a UNO type
+
+    @param any  any Any value
+
+    @param value  a non-null pointer, receiving the extracted value if
+    extraction succeeded (and left unmodified otherwise)
+
+    @return  true iff extraction succeeded
+*/
+template<typename T> inline bool fromAny(Any const & any, T * value);
+
+template<> inline bool fromAny(Any const & any, Any * value);
+
+/** Template binary <<= operator to set the value of an any.
+
+    @tparam C value type
+    @param rAny destination any (left side)
+    @param value source value (right side)
+*/
+template< class C >
+inline void operator <<= ( Any & rAny, const C & value );
+
+/** Template binary >>= operator to assign a value from an any.
+    If the any does not contain a value that can be assigned without data loss, then this
+    operation will fail returning false.
+
+    @tparam C value type
+    @param rAny source any (left side)
+    @param value destination value (right side)
+    @return true if assignment was possible without data loss
+*/
+template< class C >
+inline bool operator >>= ( const Any & rAny, C & value );
+
+/** Template equality operator: compares set value of left side any to right side value.
+    The values need not be of equal type, e.g. a short integer is compared to a long integer.
+    This operator can be implemented as template member function, if all supported compilers
+    can cope with template member functions.
+
+    @tparam C value type
+    @param rAny another any (left side)
+    @param value a value (right side)
+    @return true if values are equal, false otherwise
+*/
+template< class C >
+inline bool operator == ( const Any & rAny, const C & value );
+/** Template inequality operator: compares set value of left side any to right side value.
+    The values need not be of equal type, e.g. a short integer is compared to a long integer.
+    This operator can be implemented as template member function, if all supported compilers
+    can cope with template member functions.
+
+    @tparam C value type
+    @param rAny another any (left side)
+    @param value a value (right side)
+    @return true if values are unequal, false otherwise
+*/
+template< class C >
+inline bool operator != ( const Any & rAny, const C & value );
+
+// additional specialized >>= and == operators
+// bool
+template<>
+inline bool operator >>= ( Any const & rAny, bool & value );
+template<>
+inline bool operator == ( Any const & rAny, bool const & value );
+// byte
+template<>
+inline bool operator >>= ( const Any & rAny, sal_Int8 & value );
+// short
+template<>
+inline bool operator >>= ( const Any & rAny, sal_Int16 & value );
+template<>
+inline bool operator >>= ( const Any & rAny, sal_uInt16 & value );
+// long
+template<>
+inline bool operator >>= ( const Any & rAny, sal_Int32 & value );
+template<>
+inline bool operator >>= ( const Any & rAny, sal_uInt32 & value );
+// hyper
+template<>
+inline bool operator >>= ( const Any & rAny, sal_Int64 & value );
+template<>
+inline bool operator >>= ( const Any & rAny, sal_uInt64 & value );
+// float
+template<>
+inline bool operator >>= ( const Any & rAny, float & value );
+// double
+template<>
+inline bool operator >>= ( const Any & rAny, double & value );
+// string
+template<>
+inline bool operator >>= ( const Any & rAny, ::rtl::OUString & value );
+template<>
+inline bool operator == ( const Any & rAny, const ::rtl::OUString & value );
+template<std::size_t N>
+inline bool operator == (const Any& rAny, const rtl::OUStringLiteral<N>& value);
+// type
+template<>
+inline bool operator >>= ( const Any & rAny, cpo::uno::Type & value );
+template<>
+inline bool operator == ( const Any & rAny, const cpo::uno::Type & value );
+// interface
+template<>
+inline bool operator == ( const Any & rAny, const cpo::uno::BaseReference & value );
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,53 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/datatransfer/clipboard/XClipboardOwner.hpp>
+#include <cppuhelper/implbase.hxx>
+
+namespace basctl
+{
+
+
+class DlgEdTransferableImpl final : public ::cppu::WeakImplHelper< css::datatransfer::XTransferable,
+                                                             css::datatransfer::clipboard::XClipboardOwner >
+{
+private:
+    cpo::uno::Sequence< css::datatransfer::DataFlavor > m_SeqFlavors;
+    cpo::uno::Sequence< cpo::uno::Any > m_SeqData;
+
+    static bool compareDataFlavors( const css::datatransfer::DataFlavor& lFlavor, const css::datatransfer::DataFlavor& rFlavor );
+
+public:
+    DlgEdTransferableImpl( const cpo::uno::Sequence< css::datatransfer::DataFlavor >& aSeqFlavors, const cpo::uno::Sequence< cpo::uno::Any >& aSeqData );
+    virtual ~DlgEdTransferableImpl() override;
+
+    // XTransferable
+    virtual cpo::uno::Any getTransferData( const css::datatransfer::DataFlavor& rFlavor ) override;
+    virtual cpo::uno::Sequence< css::datatransfer::DataFlavor > getTransferDataFlavors() override;
+    virtual bool isDataFlavorSupported( const css::datatransfer::DataFlavor& rFlavor ) override;
+
+    // XClipboardOwner
+    virtual void lostOwnership( const cpo::uno::Reference< css::datatransfer::clipboard::XClipboard >& xClipboard, const cpo::uno::Reference< css::datatransfer::XTransferable >& xTrans ) override;
+};
+
+} // namespace basctl
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

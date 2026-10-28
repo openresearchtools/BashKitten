@@ -1,0 +1,835 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_SVX_UNOSHAPE_HXX
+#define INCLUDED_SVX_UNOSHAPE_HXX
+
+#include <memory>
+#include <com/sun/star/document/XActionLockable.hpp>
+#include <com/sun/star/drawing/XEnhancedCustomShapeDefaulter.hpp>
+#include <com/sun/star/drawing/XGluePointsSupplier.hpp>
+#include <com/sun/star/drawing/XShape.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XUnoTunnel.hpp>
+#include <com/sun/star/awt/Point.hpp>
+#include <com/sun/star/drawing/PolygonKind.hpp>
+#include <com/sun/star/drawing/XShapes.hpp>
+#include <com/sun/star/drawing/XShapes2.hpp>
+#include <com/sun/star/drawing/XShapeGroup.hpp>
+#include <com/sun/star/container/XNamed.hpp>
+#include <com/sun/star/container/XChild.hpp>
+#include <com/sun/star/beans/XMultiPropertySet.hpp>
+#include <com/sun/star/beans/XMultiPropertyStates.hpp>
+#include <com/sun/star/drawing/XControlShape.hpp>
+#include <basegfx/polygon/b2dpolypolygon.hxx>
+#include <sal/types.h>
+#include <svl/lstner.hxx>
+#include <editeng/unoipset.hxx>
+#include <svx/svxdllapi.h>
+#include <rtl/ref.hxx>
+#include <cpo/uno/Any.hxx>
+#include <editeng/unotext.hxx>
+
+#include <svx/svdobj.hxx>
+#include <unotools/weakref.hxx>
+
+#include <comphelper/servicehelper.hxx>
+
+#include <cppuhelper/implbase12.hxx>
+
+class SfxItemSet;
+class SdrModel;
+class SvxDrawPage;
+class SvGlobalName;
+
+// Dimension arrows change size/position on save/reload (#i59051#)
+namespace basegfx
+    {
+        class B2DPolyPolygon;
+    } // end of namespace basegfx
+
+struct SvxShapeImpl;
+class SvxShapeMaster;
+
+void SVXCORE_DLLPUBLIC SvxItemPropertySet_setPropertyValue( const SfxItemPropertyMapEntry* pMap,
+        const cpo::uno::Any& rVal, SfxItemSet& rSet );
+
+cpo::uno::Any SVXCORE_DLLPUBLIC SvxItemPropertySet_getPropertyValue( const SfxItemPropertyMapEntry* pMap, const SfxItemSet& rSet );
+
+
+// WARNING: if you update the supported interfaces,
+//          also update SvxShape::_getTypes()
+typedef ::cppu::WeakAggImplHelper12<
+    css::drawing::XShape,
+    css::lang::XComponent,
+    css::beans::XPropertySet,
+    css::beans::XMultiPropertySet,
+    css::beans::XPropertyState,
+    css::lang::XUnoTunnel,
+    css::container::XNamed,
+    css::drawing::XGluePointsSupplier,
+    css::container::XChild,
+    css::lang::XServiceInfo,
+    css::document::XActionLockable,
+    css::beans::XMultiPropertyStates> SvxShape_UnoImplHelper;
+
+class SVXCORE_DLLPUBLIC SvxShape :
+                 public SvxShape_UnoImplHelper,
+                 public SfxListener
+{
+protected:
+    friend class SvxDrawPage;
+    friend class SvxShapeConnector;
+    friend class SdXShape;
+
+    // translations for writer, which works in TWIPS
+    void ForceMetricToItemPoolMetric(Pair& rPoint) const noexcept;
+    void ForceMetricToItemPoolMetric(Point& rPoint) const noexcept { ForceMetricToItemPoolMetric(rPoint.toPair()); }
+    void ForceMetricToItemPoolMetric(Size& rPoint) const noexcept { ForceMetricToItemPoolMetric(rPoint.toPair()); }
+    void ForceMetricTo100th_mm(Pair& rPoint) const noexcept;
+    void ForceMetricTo100th_mm(Point& rPoint) const noexcept { ForceMetricTo100th_mm(rPoint.toPair()); }
+    void ForceMetricTo100th_mm(Size& rPoint) const noexcept { ForceMetricTo100th_mm(rPoint.toPair()); }
+
+    // version for basegfx::B2DPolyPolygon
+    void ForceMetricToItemPoolMetric(basegfx::B2DPolyPolygon& rPolyPolygon) const noexcept;
+    void ForceMetricTo100th_mm(basegfx::B2DPolyPolygon& rPolyPolygon) const noexcept;
+
+    // tdf#117145 version for basegfx::B2DHomMatrix
+    void ForceMetricToItemPoolMetric(basegfx::B2DHomMatrix& rB2DHomMatrix) const noexcept;
+    void ForceMetricTo100th_mm(basegfx::B2DHomMatrix& rB2DHomMatrix) const noexcept;
+
+    cpo::uno::Any GetAnyForItem( SfxItemSet const & aSet, const SfxItemPropertyMapEntry* pMap ) const;
+
+    bool SetFillAttribute( sal_uInt16 nWID, const OUString& rName );
+
+    /** called from the XActionLockable interface methods on initial locking */
+    virtual void lock();
+
+    /** called from the XActionLockable interface methods on final unlock */
+    virtual void unlock();
+
+    std::span<const SfxItemPropertyMapEntry> getPropertyMapEntries() const { return maPropMapEntries; }
+
+    void updateShapeKind();
+    void endSetPropertyValues();
+
+    // override these for special property handling in subcasses. Return true if property is handled
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws css::beans::PropertyVetoException
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws css::lang::WrappedTargetException
+    /// @throws cpo::uno::RuntimeException
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue );
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws css::lang::WrappedTargetException
+    /// @throws cpo::uno::RuntimeException
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue );
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws cpo::uno::RuntimeException
+    virtual bool getPropertyStateImpl( const SfxItemPropertyMapEntry* pProperty, css::beans::PropertyState& rState );
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws cpo::uno::RuntimeException
+    virtual bool setPropertyToDefaultImpl( const SfxItemPropertyMapEntry* pProperty );
+
+public:
+    /// @throws cpo::uno::RuntimeException
+    SvxShape( SdrObject* pObj );
+    /// @throws cpo::uno::RuntimeException
+    SvxShape( SdrObject* pObject, std::span<const SfxItemPropertyMapEntry> pEntries, const SvxItemPropertySet* pPropertySet );
+    virtual ~SvxShape() noexcept override;
+
+    // Internals
+    void ObtainSettingsFromPropertySet(const SvxItemPropertySet& rPropSet);
+    virtual void Create( SdrObject* pNewOpj, SvxDrawPage* pNewPage );
+
+    // used exclusively by SdrObject
+    void InvalidateSdrObject();
+
+    // Encapsulated access to SdrObject
+    SdrObject* GetSdrObject() const { return mxSdrObject.get(); }
+    bool HasSdrObject() const { return mxSdrObject.is(); }
+
+    void SetShapeType( const OUString& ShapeType ) { maShapeType = ShapeType; }
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Any GetBitmap( bool bMetaFile = false ) const;
+
+    void notifyPropertyChange(const OUString& rPropName);
+
+    void setShapeKind( SdrObjKind nKind );
+    SdrObjKind getShapeKind() const;
+
+    // styles need this
+    static bool SetFillAttribute( sal_uInt16 nWID, const OUString& rName, SfxItemSet& rSet, SdrModel const * pModel );
+    static bool SetFillAttribute( sal_uInt16 nWID, const OUString& rName, SfxItemSet& rSet );
+
+    /** same as SetFillAttribute but for property names instead of which ids,
+        and the property found is returned instead of set at the object
+        directly.
+     */
+
+    UNO3_GETIMPLEMENTATION_DECL( SvxShape )
+
+    // access methods for master objects
+    /// @throws cpo::uno::RuntimeException
+    rtl::Reference< SfxItemPropertySetInfo > const & _getPropertySetInfo(  );
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws css::beans::PropertyVetoException
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws css::lang::WrappedTargetException
+    /// @throws cpo::uno::RuntimeException
+    void _setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue );
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws css::lang::WrappedTargetException
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Any _getPropertyValue( const OUString& PropertyName );
+
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws cpo::uno::RuntimeException
+    css::beans::PropertyState _getPropertyState( const OUString& PropertyName );
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws cpo::uno::RuntimeException
+    void _setPropertyToDefault( const OUString& PropertyName );
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws css::lang::WrappedTargetException
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Any _getPropertyDefault( const OUString& aPropertyName );
+
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Sequence< OUString > _getSupportedServiceNames();
+
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Sequence< cpo::uno::Type > const & _getTypes(  );
+
+    void setMaster( SvxShapeMaster* pMaster );
+
+    // SfxListener
+    virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) noexcept override final;
+
+    // XAggregation
+    virtual cpo::uno::Any queryAggregation( const cpo::uno::Type& aType ) override;
+
+    // XNamed
+    virtual OUString getName(  ) override;
+    virtual void setName( const OUString& aName ) override;
+
+    // XShapeDescriptor
+    virtual OUString getShapeType() override;
+
+    // XShape
+    virtual css::awt::Point getPosition() override;
+    virtual void setPosition( const css::awt::Point& aPosition ) override;
+    virtual css::awt::Size getSize() override;
+    virtual void setSize( const css::awt::Size& aSize ) override;
+
+    // XComponent
+    virtual void dispose() override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
+
+    // XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+
+    // XMultiPropertySet
+    virtual void setPropertyValues( const cpo::uno::Sequence< OUString >& aPropertyNames, const cpo::uno::Sequence< cpo::uno::Any >& aValues ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Any > getPropertyValues( const cpo::uno::Sequence< OUString >& aPropertyNames ) override;
+    virtual void addPropertiesChangeListener( const cpo::uno::Sequence< OUString >& aPropertyNames, const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override;
+    virtual void removePropertiesChangeListener( const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override;
+    virtual void firePropertiesChangeEvent( const cpo::uno::Sequence< OUString >& aPropertyNames, const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override;
+
+    // XPropertyState
+    virtual css::beans::PropertyState getPropertyState( const OUString& PropertyName ) override;
+    virtual cpo::uno::Sequence< css::beans::PropertyState > getPropertyStates( const cpo::uno::Sequence< OUString >& aPropertyName ) override;
+    virtual void setPropertyToDefault( const OUString& PropertyName ) override;
+    virtual cpo::uno::Any getPropertyDefault( const OUString& aPropertyName ) override;
+
+    // XMultiPropertyStates
+    virtual void setAllPropertiesToDefault() override;
+    virtual void setPropertiesToDefault(
+        const cpo::uno::Sequence<
+        OUString >& aPropertyNames ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Any >
+    getPropertyDefaults(
+        const cpo::uno::Sequence<
+        OUString >& aPropertyNames ) override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+
+    // XGluePointsSupplier
+    virtual cpo::uno::Reference< css::container::XIndexContainer > getGluePoints(  ) override;
+
+    // XChild
+    virtual cpo::uno::Reference< cpo::uno::XInterface > getParent(  ) override;
+    virtual void setParent( const cpo::uno::Reference< cpo::uno::XInterface >& Parent ) override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+
+    // XActionLockable
+    virtual bool isActionLocked(  ) override;
+    virtual void addActionLock(  ) override;
+    virtual void removeActionLock(  ) override;
+    virtual void setActionLocks( sal_Int16 nLock ) override;
+    virtual sal_Int16 resetActionLocks(  ) override;
+
+private:
+    /** initializes SdrObj-dependent members. Only to be called when GetSdrObject() != NULL
+    */
+    SVX_DLLPRIVATE void impl_initFromSdrObject();
+    /// CTOR-Impl
+    SVX_DLLPRIVATE void impl_construct();
+
+    std::mutex m_aMutex;
+    css::awt::Size maSize;
+    css::awt::Point maPosition;
+    OUString maShapeType;
+    OUString maShapeName;
+    /** these members are used to optimize XMultiProperty calls */
+    std::unique_ptr<SvxShapeImpl> mpImpl;
+    bool mbIsMultiPropertyCall;
+
+    cpo::uno::WeakReference< css::container::XIndexContainer > mxGluePoints;
+    const SvxItemPropertySet* mpPropSet;
+    SvxItemPropertySetUsrAnys maUrsAnys;
+    std::span<const SfxItemPropertyMapEntry> maPropMapEntries;
+    rtl::Reference< SdrObject > mxSdrObject;
+    /** used from the XActionLockable interface */
+    sal_uInt16 mnLockCount;
+};
+
+class SVXCORE_DLLPUBLIC SvxShapeText : public SvxShape, public SvxUnoTextBase
+{
+protected:
+    /** called from the XActionLockable interface methods on initial locking */
+    virtual void lock() override;
+
+    /** called from the XActionLockable interface methods on final unlock */
+    virtual void unlock() override;
+
+protected:
+    // override these for special property handling in subcasses. Return true if property is handled
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyStateImpl( const SfxItemPropertyMapEntry* pProperty, css::beans::PropertyState& rState ) override;
+    virtual bool setPropertyToDefaultImpl( const SfxItemPropertyMapEntry* pProperty ) override;
+
+public:
+    SvxShapeText(SdrObject* pObj);
+    SvxShapeText(SdrObject* pObject, std::span<const SfxItemPropertyMapEntry> pPropertyMap, const SvxItemPropertySet* pPropertySet);
+    virtual ~SvxShapeText() noexcept override;
+
+    virtual void Create( SdrObject* pNewOpj, SvxDrawPage* pNewPage ) override;
+
+    // XInterface
+    virtual cpo::uno::Any queryAggregation( const cpo::uno::Type & rType ) override;
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire() noexcept override
+    { SvxShape::acquire(); }
+    virtual void release() noexcept override
+    { SvxShape::release(); }
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+
+    // css::text::XTextRange
+    virtual cpo::uno::Reference< css::text::XTextRange > getStart() override;
+    virtual cpo::uno::Reference< css::text::XTextRange > getEnd() override;
+    virtual OUString getString() override;
+    virtual void setString( const OUString& aString ) override;
+
+    // XUnoTunnel
+    virtual sal_Int64 getSomething( const cpo::uno::Sequence< sal_Int8 >& aIdentifier ) override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+};
+
+class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) SvxShapeRect final : public SvxShapeText
+{
+public:
+    UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) SvxShapeRect(SdrObject* pObj);
+    virtual ~SvxShapeRect() noexcept override;
+
+    // XInterface
+    virtual cpo::uno::Any queryAggregation( const cpo::uno::Type & rType ) override;
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire() noexcept override
+    { OWeakAggObject::acquire(); }
+    virtual void release() noexcept override
+    { OWeakAggObject::release(); }
+
+    // XServiceInfo
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+};
+
+/// This only exists so I have a common base class for SvxShapeGroup and Svx3DSceneObject
+class SVXCORE_DLLPUBLIC SvxShapeGroupAnyD : public SvxShape,
+                      public css::drawing::XShapes
+{
+public:
+    SvxShapeGroupAnyD( SdrObject* pObject, std::span<const SfxItemPropertyMapEntry> pEntries, const SvxItemPropertySet* pPropertySet );
+    virtual ~SvxShapeGroupAnyD() noexcept override;
+
+    virtual void acquire() noexcept override
+    { SvxShape::acquire(); }
+    virtual void release() noexcept override
+    { SvxShape::release(); }
+
+    virtual void addShape(SvxShape& rShape) = 0;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+class UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) SvxShapeGroup final : public SvxShapeGroupAnyD,
+                      public css::drawing::XShapeGroup,
+                      public css::drawing::XShapes2
+{
+private:
+    /// using a weak reference to prevent leaks via ref-counting cycles
+    unotools::WeakReference< SvxDrawPage> mxWeakPage;
+
+    void addUnoShape( const cpo::uno::Reference< css::drawing::XShape >& xShape, size_t nPos );
+    void addShape(SvxShape& rShape, size_t nPos);
+
+public:
+    SvxShapeGroup(SdrObject* pObj,SvxDrawPage* pDrawPage);
+    virtual ~SvxShapeGroup() noexcept override;
+
+    virtual void Create( SdrObject* pNewOpj, SvxDrawPage* pNewPage ) override;
+
+    // XInterface
+    virtual cpo::uno::Any queryAggregation( const cpo::uno::Type & rType ) override;
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire() noexcept override
+    { SvxShape::acquire(); }
+    virtual void release() noexcept override
+    { SvxShape::release(); }
+
+    // XShapes
+    virtual void add( const cpo::uno::Reference< css::drawing::XShape >& xShape ) override;
+    virtual void remove( const cpo::uno::Reference< css::drawing::XShape >& xShape ) override;
+
+    // XShapes2
+    virtual void addTop( const cpo::uno::Reference< css::drawing::XShape >& xShape ) override;
+    virtual void addBottom( const cpo::uno::Reference< css::drawing::XShape >& xShape ) override;
+
+    // XElementAccess
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
+
+    // XIndexAccess
+    virtual sal_Int32 getCount() override ;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
+
+    // XShapeDescriptor
+    virtual OUString getShapeType() override;
+
+    // XShape
+    virtual css::awt::Point getPosition() override;
+    virtual void setPosition( const css::awt::Point& aPosition ) override;
+    virtual css::awt::Size getSize() override;
+    virtual void setSize( const css::awt::Size& aSize ) override;
+
+    // XShapeGroup
+    virtual void enterGroup(  ) override;
+    virtual void leaveGroup(  ) override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+
+    virtual void addShape(SvxShape& rShape) final override;
+
+protected:
+    // support Diagram UNO API commands OWN_ATTR_IS_DIAGRAM/OWN_ATTR_DIAGRAM_DATA
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue ) override;
+};
+
+/***********************************************************************
+*  aka. SdrObjKind::Edge                                               *
+***********************************************************************/
+class SvxShapeConnector final : public SvxShapeText
+{
+public:
+    SvxShapeConnector(SdrObject* pObj);
+    virtual ~SvxShapeConnector() noexcept override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+class UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) SvxShapeControl final : public css::drawing::XControlShape, public SvxShapeText
+{
+protected:
+    using SvxUnoTextRangeBase::setPropertyValue;
+    using SvxUnoTextRangeBase::getPropertyValue;
+
+public:
+    SvxShapeControl(SdrObject* pObj);
+    virtual ~SvxShapeControl() noexcept override;
+
+    // XInterface
+    virtual cpo::uno::Any queryAggregation( const cpo::uno::Type & rType ) override;
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire() noexcept override
+    { SvxShapeText::acquire(); }
+    virtual void release() noexcept override
+    { SvxShapeText::release(); }
+
+    // XPropertySet
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+
+    // XPropertyState
+    virtual css::beans::PropertyState getPropertyState( const OUString& PropertyName ) override;
+    virtual void setPropertyToDefault( const OUString& PropertyName ) override;
+    virtual cpo::uno::Any getPropertyDefault( const OUString& aPropertyName ) override;
+
+    // XShapeDescriptor
+    virtual OUString getShapeType() override;
+
+    // XShape
+    virtual css::awt::Point getPosition() override;
+    virtual void setPosition( const css::awt::Point& aPosition ) override;
+    virtual css::awt::Size getSize() override;
+    virtual void setSize( const css::awt::Size& aSize ) override;
+
+    // XControlShape
+    virtual cpo::uno::Reference< css::awt::XControlModel > getControl() override;
+    virtual void setControl( const cpo::uno::Reference< css::awt::XControlModel >& xControl ) override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+class SvxShapeDimensioning final : public SvxShapeText
+{
+public:
+    SvxShapeDimensioning(SdrObject* pObj);
+    virtual ~SvxShapeDimensioning() noexcept override;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+class SvxShapeCircle final : public SvxShapeText
+{
+public:
+    UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) SvxShapeCircle(SdrObject* pObj);
+    virtual ~SvxShapeCircle() noexcept override;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+
+// #i118485# changed parent to SvxShapeText to allow Text handling over UNO API
+class UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) SvxOle2Shape : public SvxShapeText
+{
+private:
+    OUString m_referer;
+protected:
+    // override these for special property handling in subcasses. Return true if property is handled
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue ) override;
+
+    void resetModifiedState();
+
+    SvGlobalName GetClassName_Impl(OUString& rHexCLSID);
+public:
+    SvxOle2Shape(SdrObject* pObject, OUString referer, std::span<const SfxItemPropertyMapEntry> pPropertyMap, const SvxItemPropertySet* pPropertySet);
+    virtual ~SvxOle2Shape() noexcept override;
+
+    bool createObject( const SvGlobalName &aClassName );
+
+    void createLink( const OUString& aLinkURL );
+
+    virtual OUString GetAndClearInitialFrameURL();
+};
+
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) SvxShapePolyPolygon final : public SvxShapeText
+{
+    using SvxUnoTextRangeBase::setPropertyValue;
+    using SvxUnoTextRangeBase::getPropertyValue;
+
+    // override these for special property handling in subcasses. Return true if property is handled
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue ) override;
+
+    // local helper to detect PolygonKind from SdrObject::GetObjIdentifier()
+    css::drawing::PolygonKind GetPolygonKind() const;
+
+public:
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws css::beans::PropertyVetoException
+    UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) SvxShapePolyPolygon( SdrObject* pObj );
+    virtual ~SvxShapePolyPolygon() noexcept override;
+
+    // Local support functions
+    /// @throws cpo::uno::RuntimeException
+    void SetPolygon(const basegfx::B2DPolyPolygon& rNew);
+    basegfx::B2DPolyPolygon GetPolygon() const noexcept;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+
+class SvxGraphicObject final : public SvxShapeText
+{
+    using SvxUnoTextRangeBase::setPropertyValue;
+    using SvxUnoTextRangeBase::getPropertyValue;
+
+    // override these for special property handling in subcasses. Return true if property is handled
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue ) override;
+
+public:
+    UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) SvxGraphicObject(SdrObject* pObj);
+    virtual ~SvxGraphicObject() noexcept override;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+class UNLESS_MERGELIBS(SAL_DLLPUBLIC_RTTI) Svx3DSceneObject final : public SvxShapeGroupAnyD
+{
+private:
+    rtl::Reference< SvxDrawPage > mxPage;
+
+public:
+    using SvxShape::setPropertyValue;
+    using SvxShape::getPropertyValue;
+
+    UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) Svx3DSceneObject(SdrObject* pObj, SvxDrawPage* pDrawPage);
+    // override these for special property handling in subcasses. Return true if property is handled
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl(const OUString& rName, const SfxItemPropertyMapEntry* pProperty,
+        cpo::uno::Any& rValue ) override;
+
+    virtual ~Svx3DSceneObject() noexcept override;
+
+    virtual void Create( SdrObject* pNewOpj, SvxDrawPage* pNewPage ) override;
+
+    // XInterface
+    virtual cpo::uno::Any queryAggregation( const cpo::uno::Type & rType ) override;
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire() noexcept override
+    { SvxShape::acquire(); }
+    virtual void release() noexcept override
+    { SvxShape::release(); }
+
+    // XShapes
+    virtual void add( const cpo::uno::Reference< css::drawing::XShape >& xShape ) override;
+    virtual void remove( const cpo::uno::Reference< css::drawing::XShape >& xShape ) override;
+
+    // XElementAccess
+    virtual cpo::uno::Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
+
+    // XIndexAccess
+    virtual sal_Int32 getCount(  ) override ;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
+
+    // XServiceInfo
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+
+    virtual void addShape(SvxShape& rShape) override final;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+class Svx3DCubeObject final : public SvxShape
+{
+    // override these for special property handling in subcasses. Return true if property is handled
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue ) override;
+
+public:
+    Svx3DCubeObject(SdrObject* pObj);
+    virtual ~Svx3DCubeObject() noexcept override;
+
+    // XServiceInfo
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+class Svx3DSphereObject final : public SvxShape
+{
+public:
+    Svx3DSphereObject(SdrObject* pObj);
+private:
+    // override these for special property handling in subcasses. Return true if property is handled
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue ) override;
+
+    virtual ~Svx3DSphereObject() noexcept override;
+
+    // XServiceInfo
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+class Svx3DLatheObject final : public SvxShape
+{
+    // override these for special property handling in subcasses. Return true if property is handled
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue ) override;
+
+public:
+    UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) Svx3DLatheObject(SdrObject* pObj);
+    virtual ~Svx3DLatheObject() noexcept override;
+
+    // XServiceInfo
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+class Svx3DExtrudeObject final : public SvxShape
+{
+public:
+    UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) Svx3DExtrudeObject(SdrObject* pObj);
+private:
+    // override these for special property handling in subcasses. Return true if property is handled
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue ) override;
+
+    virtual ~Svx3DExtrudeObject() noexcept override;
+
+    // XServiceInfo
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+class Svx3DPolygonObject final : public SvxShape
+{
+    // override these for special property handling in subcasses. Return true if property is handled
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue ) override;
+
+public:
+    UNLESS_MERGELIBS(SVXCORE_DLLPUBLIC) Svx3DPolygonObject(SdrObject* pObj);
+    virtual ~Svx3DPolygonObject() noexcept override;
+
+    // XServiceInfo
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+class SVXCORE_DLLPUBLIC SvxCustomShape final : public SvxShapeText, public css::drawing::XEnhancedCustomShapeDefaulter
+{
+protected:
+    using SvxUnoTextRangeBase::setPropertyValue;
+    using SvxUnoTextRangeBase::getPropertyValue;
+
+public:
+    SvxCustomShape(SdrObject* pObj);
+    // override these for special property handling in subcasses. Return true if property is handled
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue ) override;
+
+
+    virtual ~SvxCustomShape() noexcept override;
+
+    // XInterface
+    virtual cpo::uno::Any queryAggregation( const cpo::uno::Type & rType ) override;
+    virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+    virtual void acquire() noexcept override
+    { SvxShapeText::acquire(); }
+    virtual void release() noexcept override
+    { SvxShapeText::release(); }
+
+    // XShape
+    virtual css::awt::Point getPosition() override;
+
+    // XPropertySet
+    void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+
+    // XTypeProvider
+    virtual cpo::uno::Sequence< sal_Int8 > getImplementationId(  ) override;
+
+    //XEnhancedCustomShapeDefaulter
+    virtual void createCustomShapeDefaults( const OUString& rShapeType ) override;
+};
+
+/***********************************************************************
+*                                                                      *
+***********************************************************************/
+
+class SvxMediaShape final : public SvxShape
+{
+public:
+    SvxMediaShape(SdrObject* pObj, OUString referer);
+    virtual     ~SvxMediaShape() noexcept override;
+
+private:
+    // override these for special property handling in subcasses. Return true if property is handled
+    virtual bool setPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, const cpo::uno::Any& rValue ) override;
+    virtual bool getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue ) override;
+    bool getPropertyStateImpl(const SfxItemPropertyMapEntry* pProperty,
+                              css::beans::PropertyState& rState) override;
+
+    OUString m_referer;
+};
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

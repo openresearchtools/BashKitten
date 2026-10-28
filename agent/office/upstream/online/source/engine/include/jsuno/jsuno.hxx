@@ -1,0 +1,81 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <sal/config.h>
+
+#include <functional>
+#include <vector>
+
+#include <jsuno/detail/dllapi.hxx>
+#include <rtl/string.hxx>
+#include <rtl/ustring.hxx>
+
+namespace jsuno
+{
+struct LO_DLLPUBLIC_JSUNO Exception {
+    struct Frame {
+        OUString source;
+        OUString line;
+        OUString column;
+        OUString functionName;
+    };
+
+    Exception() = default;
+    Exception(Exception const &) = default;
+    Exception & operator =(Exception const &) = default;
+    virtual ~Exception();
+
+    OUString name;
+    OUString message;
+    std::vector<Frame> stack;
+};
+
+// Run `script` in a JS UNO context and return the JSON-stringified result (empty string for
+// values JSON.stringify drops: `undefined`, a function, or a symbol).
+//
+// `source` and (1-based) `line` are used for any exception stack frames that are reported back.
+//
+// `consoleHook` receives every call the script makes on the global `console` object.  jsuno
+// registers the WHATWG Console API methods `log`, `info`, `warn`, `error`, `debug`, `trace`,
+// and `assert` on that object; each dispatches to the hook with `level` set to the method name
+// and `message` set to the stringified-and-space-joined arguments.  `assert` only fires on
+// failed assertion.  `warn`, `error`, `trace`, and `assert` prepend the JS stack to the message.
+//The hook is called synchronously on the JS thread; it must not itself call back into jsuno.
+//
+// `proxyCallHook`, if non-empty, is captured by every JS-UNO proxy listener stub created
+// during this call and fires (from any thread, possibly after execute() has returned) when
+// the wrapped C++ stub later receives a UNO call, with a JSON payload of the form
+//
+//     { "proxyId": "...", "callId": "...", "method": "...", "args": [...] }
+//
+// where `callId` is present iff the proxy's invoke is going to wait for a value back via
+// deliverProxyResult (i.e. the listener method has a non-void return type).
+//
+// If `usedLegacyUnoApi` is non-null, set to true when the script touched the legacy UNO API; not
+// modified otherwise.
+//
+// @throws jsuno::Exception
+LO_DLLPUBLIC_JSUNO OUString execute(OUString const& script, OUString const & source, int line,
+                                    std::function<void(OUString const &, OUString const &)>
+                                        consoleHook,
+                                    std::function<void(OUString const&)> proxyCallHook,
+                                    bool* usedLegacyUnoApi);
+
+// Deliver an iframe-side `jsonValue` to a `ProxyInvocation::invoke` blocked in Application::
+// Yield on `callId`; spurious callIds are silently ignored:
+LO_DLLPUBLIC_JSUNO void deliverProxyResult(OUString const& callId, OUString const& jsonValue);
+
+// Unblock the ProxyInvocation::invoke spinning on `callId` by marking the call as delivered with an
+// empty JSON value; spurious callIds are silently ignored:
+LO_DLLPUBLIC_JSUNO void cancelProxyCall(OUString const& callId);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab cinoptions=b1,g0,N-s cinkeys+=0=break: */

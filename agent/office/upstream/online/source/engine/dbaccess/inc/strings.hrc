@@ -1,0 +1,233 @@
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_DBACCESS_SOURCE_CORE_INC_CORE_RESOURCE_HRC
+#define INCLUDED_DBACCESS_SOURCE_CORE_INC_CORE_RESOURCE_HRC
+
+#include <unotools/resmgr.hxx>
+
+#define NC_(Context, String) TranslateId(Context, u8##String)
+#define NNC_(Context, StringSingular, StringPlural) TranslateNId(Context, reinterpret_cast<char const *>(u8##StringSingular), reinterpret_cast<char const *>(u8##StringPlural))
+
+#define RID_STR_CONNECTION_INVALID                  NC_("RID_STR_CONNECTION_INVALID", "No connection could be established.")
+#define RID_STR_TABLE_IS_FILTERED                   NC_("RID_STR_TABLE_IS_FILTERED", "The table $name$ already exists. It is not visible because it has been filtered out.")
+#define RID_STR_COULDNOTCONNECT_UNSPECIFIED         NC_("RID_STR_COULDNOTCONNECT_UNSPECIFIED", "The connection to the external data source could not be established. An unknown error occurred. The driver is probably defective.")
+#define RID_STR_COULDNOTCONNECT_NODRIVER            NC_("RID_STR_COULDNOTCONNECT_NODRIVER", "The connection to the external data source could not be established. No SDBC driver was found for the URL '$name$'.")
+#define RID_STR_COULDNOTCONNECT_UNTRUSTED           NC_("RID_STR_COULDNOTCONNECT_UNTRUSTED", "The connection to the external data source could not be established. The database document is not in a trusted location.")
+#define RID_STR_COULDNOTLOAD_MANAGER                NC_("RID_STR_COULDNOTLOAD_MANAGER", "The connection to the external data source could not be established. The SDBC driver manager could not be loaded.")
+#define RID_STR_FORM                                NC_("RID_STR_FORM", "Form")
+#define RID_STR_REPORT                              NC_("RID_STR_REPORT", "Report")
+#define RID_STR_DATASOURCE_NOT_STORED               NC_("RID_STR_DATASOURCE_NOT_STORED", "The data source was not saved. Please use the interface XStorable to save the data source.")
+#define RID_STR_ONLY_QUERY                          NC_("RID_STR_ONLY_QUERY", "The given command is not a SELECT statement.\nOnly queries are allowed.")
+#define RID_STR_NO_VALUE_CHANGED                    NC_("RID_STR_NO_VALUE_CHANGED", "No values were modified.")
+#define RID_STR_NO_XROWUPDATE                       NC_("RID_STR_NO_XROWUPDATE", "Values could not be inserted. The XRowUpdate interface is not supported by ResultSet.")
+#define RID_STR_NO_XRESULTSETUPDATE                 NC_("RID_STR_NO_XRESULTSETUPDATE", "Values could not be inserted. The XResultSetUpdate interface is not supported by ResultSet.")
+#define RID_STR_NO_UPDATE_MISSING_CONDITION         NC_("RID_STR_NO_UPDATE_MISSING_CONDITION", "Values could not be modified, due to a missing condition statement.")
+#define RID_STR_NO_COLUMN_ADD                       NC_("RID_STR_NO_COLUMN_ADD", "The adding of columns is not supported.")
+#define RID_STR_NO_COLUMN_DROP                      NC_("RID_STR_NO_COLUMN_DROP", "The dropping of columns is not supported.")
+#define RID_STR_NO_CONDITION_FOR_PK                 NC_("RID_STR_NO_CONDITION_FOR_PK", "The WHERE condition could not be created for the primary key.")
+#define RID_STR_COLUMN_UNKNOWN_PROP                 NC_("RID_STR_COLUMN_UNKNOWN_PROP", "The column does not support the property '%value'.")
+#define RID_STR_COLUMN_NOT_SEARCHABLE               NC_("RID_STR_COLUMN_NOT_SEARCHABLE", "The column is not searchable!")
+#define RID_STR_NOT_SEQUENCE_INT8                   NC_("RID_STR_NOT_SEQUENCE_INT8", "The value of the columns is not of the type Sequence<sal_Int8>.")
+#define RID_STR_COLUMN_NOT_VALID                    NC_("RID_STR_COLUMN_NOT_VALID", "The column is not valid.")
+#define RID_STR_COLUMN_MUST_VISIBLE                 NC_("RID_STR_COLUMN_MUST_VISIBLE", "The column '%name' must be visible as a column.")
+#define RID_STR_NO_XQUERIESSUPPLIER                 NC_("RID_STR_NO_XQUERIESSUPPLIER", "The interface XQueriesSupplier is not available.")
+#define RID_STR_NO_ABS_ZERO                         NC_("RID_STR_NO_ABS_ZERO", "An 'absolute(0)' call is not allowed.")
+#define RID_STR_NO_RELATIVE                         NC_("RID_STR_NO_RELATIVE", "Relative positioning is not allowed in this state.")
+#define RID_STR_NO_REFRESH_AFTERLAST                NC_("RID_STR_NO_REFRESH_AFTERLAST", "A row cannot be refreshed when the ResultSet is positioned after the last row.")
+#define RID_STR_NO_MOVETOINSERTROW_CALLED           NC_("RID_STR_NO_MOVETOINSERTROW_CALLED", "A new row cannot be inserted when the ResultSet is not first moved to the insert row.")
+#define RID_STR_NO_UPDATEROW                        NC_("RID_STR_NO_UPDATEROW", "A row cannot be modified in this state")
+#define RID_STR_NO_DELETEROW                        NC_("RID_STR_NO_DELETEROW", "A row cannot be deleted in this state.")
+#define RID_STR_NO_TABLE_RENAME                     NC_("RID_STR_NO_TABLE_RENAME", "The driver does not support table renaming.")
+#define RID_STR_COLUMN_ALTER_BY_NAME                NC_("RID_STR_COLUMN_ALTER_BY_NAME", "The driver does not support the modification of column descriptions by changing the name.")
+#define RID_STR_COLUMN_ALTER_BY_INDEX               NC_("RID_STR_COLUMN_ALTER_BY_INDEX", "The driver does not support the modification of column descriptions by changing the index.")
+#define RID_STR_FILE_DOES_NOT_EXIST                 NC_("RID_STR_FILE_DOES_NOT_EXIST", "The file \"$file$\" does not exist.")
+#define RID_STR_TABLE_DOES_NOT_EXIST                NC_("RID_STR_TABLE_DOES_NOT_EXIST", "There exists no table named \"$table$\".")
+#define RID_STR_QUERY_DOES_NOT_EXIST                NC_("RID_STR_QUERY_DOES_NOT_EXIST", "There exists no query named \"$table$\".")
+#define RID_STR_CONFLICTING_NAMES                   NC_("RID_STR_CONFLICTING_NAMES", "There are tables in the database whose names conflict with the names of existing queries. To make full use of all queries and tables, make sure they have distinct names.")
+#define RID_STR_COMMAND_LEADING_TO_ERROR            NC_("RID_STR_COMMAND_LEADING_TO_ERROR", "The SQL command leading to this error is:\n\n$command$")
+#define RID_STR_STATEMENT_WITHOUT_RESULT_SET        NC_("RID_STR_STATEMENT_WITHOUT_RESULT_SET", "The SQL command does not describe a result set.")
+#define RID_STR_NAME_MUST_NOT_BE_EMPTY              NC_("RID_STR_NAME_MUST_NOT_BE_EMPTY", "The name must not be empty.")
+#define RID_STR_NO_NULL_OBJECTS_IN_CONTAINER        NC_("RID_STR_NO_NULL_OBJECTS_IN_CONTAINER", "The container cannot contain NULL objects.")
+#define RID_STR_NAME_ALREADY_USED                   NC_("RID_STR_NAME_ALREADY_USED", "There already is an object with the given name.")
+#define RID_STR_OBJECT_CONTAINER_MISMATCH           NC_("RID_STR_OBJECT_CONTAINER_MISMATCH", "This object cannot be part of this container.")
+#define RID_STR_OBJECT_ALREADY_CONTAINED            NC_("RID_STR_OBJECT_ALREADY_CONTAINED", "The object already is, with a different name, part of the container.")
+#define RID_STR_NAME_NOT_FOUND                      NC_("RID_STR_NAME_NOT_FOUND", "Unable to find the document '$name$'.")
+#define RID_STR_ERROR_WHILE_SAVING                  NC_("RID_STR_ERROR_WHILE_SAVING", "Could not save the document to $location$:\n$message$")
+#define RID_NO_SUCH_DATA_SOURCE                     NC_("RID_NO_SUCH_DATA_SOURCE", "Error accessing data source '$name$':\n$error$")
+#define RID_STR_NO_SUB_FOLDER                       NC_("RID_STR_NO_SUB_FOLDER", "There exists no folder named \"$folder$\".")
+#define RID_STR_NO_DELETE_BEFORE_AFTER              NC_("RID_STR_NO_DELETE_BEFORE_AFTER", "Cannot delete the before-first or after-last row.")
+#define RID_STR_NO_DELETE_INSERT_ROW                NC_("RID_STR_NO_DELETE_INSERT_ROW", "Cannot delete the insert-row.")
+#define RID_STR_RESULT_IS_READONLY                  NC_("RID_STR_RESULT_IS_READONLY", "Result set is read only.")
+#define RID_STR_NO_DELETE_PRIVILEGE                 NC_("RID_STR_NO_DELETE_PRIVILEGE", "DELETE privilege not available.")
+#define RID_STR_ROW_ALREADY_DELETED                 NC_("RID_STR_ROW_ALREADY_DELETED", "Current row is already deleted.")
+#define RID_STR_UPDATE_FAILED                       NC_("RID_STR_UPDATE_FAILED", "Current row could not be updated.")
+#define RID_STR_NO_INSERT_PRIVILEGE                 NC_("RID_STR_NO_INSERT_PRIVILEGE", "INSERT privilege not available.")
+#define RID_STR_INTERNAL_ERROR                      NC_("RID_STR_INTERNAL_ERROR", "Internal error: no statement object provided by the database driver.")
+#define RID_STR_EXPRESSION1                         NC_("RID_STR_EXPRESSION1", "Expression1")
+#define RID_STR_NO_SQL_COMMAND                      NC_("RID_STR_NO_SQL_COMMAND", "No SQL command was provided.")
+#define RID_STR_INVALID_INDEX                       NC_("RID_STR_INVALID_INDEX", "Invalid column index.")
+#define RID_STR_INVALID_CURSOR_STATE                NC_("RID_STR_INVALID_CURSOR_STATE", "Invalid cursor state.")
+#define RID_STR_CURSOR_BEFORE_OR_AFTER              NC_("RID_STR_CURSOR_BEFORE_OR_AFTER", "The cursor points to before the first or after the last row.")
+#define RID_STR_NO_BOOKMARK_BEFORE_OR_AFTER         NC_("RID_STR_NO_BOOKMARK_BEFORE_OR_AFTER", "The rows before the first and after the last row don't have a bookmark.")
+#define RID_STR_NO_BOOKMARK_DELETED                 NC_("RID_STR_NO_BOOKMARK_DELETED", "The current row is deleted, and thus doesn't have a bookmark.")
+#define RID_STR_CONNECTION_REQUEST                  NC_("RID_STR_CONNECTION_REQUEST", "A connection for the following URL was requested \"$name$\".")
+#define RID_STR_MISSING_EXTENSION                   NC_("RID_STR_MISSING_EXTENSION", "The extension is not installed.")
+
+#define STR_QUERY_AND_TABLE_DISTINCT_NAMES          NC_("STR_QUERY_AND_TABLE_DISTINCT_NAMES", "You cannot give a table and a query the same name. Please use a name which is not yet used by a query or table.")
+#define STR_CONN_WITHOUT_QUERIES_OR_TABLES          NC_("STR_CONN_WITHOUT_QUERIES_OR_TABLES", "The given connection is no valid query and/or tables supplier.")
+#define STR_NO_TABLE_OBJECT                         NC_("STR_NO_TABLE_OBJECT", "The given object is no table object.")
+#define STR_INVALID_COMMAND_TYPE                    NC_("STR_INVALID_COMMAND_TYPE", "Invalid command type - only TABLE and QUERY from com.sun.star.sdb.CommandType are allowed.")
+
+#define STR_STATEMENT_WITHOUT_RESULT_SET            NC_("STR_STATEMENT_WITHOUT_RESULT_SET", "The query does not create a result set, and thus cannot be part of another query.")
+
+#define RID_STR_COLUMN_FORMAT                       NC_("RID_STR_COLUMN_FORMAT", "Column ~Format...")
+#define RID_STR_COLUMN_WIDTH                        NC_("RID_STR_COLUMN_WIDTH", "Column ~Width...")
+#define RID_STR_TABLE_FORMAT                        NC_("RID_STR_TABLE_FORMAT", "Table Format...")
+#define RID_STR_ROW_HEIGHT                          NC_("RID_STR_ROW_HEIGHT", "Row Height...")
+#define RID_STR_COPY                                NC_("RID_STR_COPY", "~Copy")
+#define RID_STR_UNDO_MODIFY_RECORD                  NC_("RID_STR_UNDO_MODIFY_RECORD", "Undo: Data Input")
+#define RID_STR_SAVE_CURRENT_RECORD                 NC_("RID_STR_SAVE_CURRENT_RECORD", "Save current record")
+#define STR_QRY_TITLE                               NC_("STR_QRY_TITLE", "Query #" )
+#define STR_TBL_TITLE                               NC_("STR_TBL_TITLE", "Table #" )
+#define STR_NAME_ALREADY_EXISTS                     NC_("STR_NAME_ALREADY_EXISTS", "The name \"#\" already exists.")
+#define STR_NO_COLUMNNAME_MATCHING                  NC_("STR_NO_COLUMNNAME_MATCHING", "No matching column names were found.")
+#define STR_ERROR_OCCURRED_WHILE_COPYING            NC_("STR_ERROR_OCCURRED_WHILE_COPYING", "An error occurred. Do you want to continue copying?")
+#define STR_DATASOURCE_GRIDCONTROL_NAME             NC_("STR_DATASOURCE_GRIDCONTROL_NAME", "Data source table view")
+#define STR_DATASOURCE_GRIDCONTROL_DESC             NC_("STR_DATASOURCE_GRIDCONTROL_DESC", "Shows the selected table or query.")
+
+#define STR_FRM_LABEL                               NC_("STR_FRM_LABEL", "F~orm name" )
+#define STR_RPT_LABEL                               NC_("STR_RPT_LABEL", "~Report name" )
+#define STR_FOLDER_LABEL                            NC_("STR_FOLDER_LABEL", "F~older name" )
+#define STR_PAGETITLE_GENERAL                       NC_("STR_PAGETITLE_GENERAL", "Advanced Properties")
+#define STR_PAGETITLE_ADVANCED                      NC_("STR_PAGETITLE_ADVANCED", "Additional Settings")
+#define STR_PAGETITLE_CONNECTION                    NC_("STR_PAGETITLE_CONNECTION", "Connection settings")
+#define STR_TITLE_RENAME                            NC_("STR_TITLE_RENAME", "Rename to")
+#define STR_TITLE_PASTE_AS                          NC_("STR_TITLE_PASTE_AS", "Insert as")
+
+#define STR_QUERY_BRW_DELETE_ROWS                   NC_("STR_QUERY_BRW_DELETE_ROWS", "Do you want to delete the selected data?" )
+#define SBA_BROWSER_SETTING_ORDER                   NC_("SBA_BROWSER_SETTING_ORDER", "Error setting the sort criteria")
+#define SBA_BROWSER_SETTING_FILTER                  NC_("SBA_BROWSER_SETTING_FILTER", "Error setting the filter criteria")
+#define RID_STR_QUERIES_CONTAINER                   NC_("RID_STR_QUERIES_CONTAINER", "Queries")
+#define RID_STR_TABLES_CONTAINER                    NC_("RID_STR_TABLES_CONTAINER", "Tables")
+#define STR_OPENTABLES_WARNINGS                     NC_("STR_OPENTABLES_WARNINGS", "Warnings encountered")
+#define STR_OPENTABLES_WARNINGS_DETAILS             NC_("STR_OPENTABLES_WARNINGS_DETAILS", "While retrieving the tables, warnings were reported by the database connection.")
+#define STR_CONNECTING_DATASOURCE                   NC_("STR_CONNECTING_DATASOURCE", "Connecting to \"$name$\" ...")
+#define STR_LOADING_QUERY                           NC_("STR_LOADING_QUERY", "Loading query $name$ ...")
+#define STR_LOADING_TABLE                           NC_("STR_LOADING_TABLE", "Loading table $name$ ...")
+#define STR_NO_TABLE_FORMAT_INSIDE                  NC_("STR_NO_TABLE_FORMAT_INSIDE", "No table format could be found." )
+#define STR_COULDNOTCONNECT_DATASOURCE              NC_("STR_COULDNOTCONNECT_DATASOURCE", "The connection to the data source \"$name$\" could not be established.")
+
+#define STR_TABLEDESIGN_DBFIELDTYPES                NC_("STR_TABLEDESIGN_DBFIELDTYPES", "Unknown;Text;Number;Date/Time;Date;Time;Yes/No;Currency;Memo;Counter;Image;Text (fix);Decimal;Binary (fix);Binary;BigInt;Double;Float;Real;Integer;Small Integer;Tiny Integer;SQL Null;Object;Distinct;Structure;Field;BLOB;CLOB;REF;OTHER;Bit (fix)")
+#define STR_VALUE_YES                               NC_("STR_VALUE_YES", "Yes" )
+#define STR_VALUE_NO                                NC_("STR_VALUE_NO", "No" )
+// Note: should somehow fit to the word "value" in other languages as well: value - none...
+#define STR_VALUE_NONE                              NC_("STR_VALUE_NONE", "<none>")
+#define STR_DEFAULT_VALUE                           NC_("STR_DEFAULT_VALUE", "~Default value" )
+#define STR_TABLEDESIGN_DUPLICATE_NAME              NC_("STR_TABLEDESIGN_DUPLICATE_NAME", "The table cannot be saved because column name \"$column$\" was assigned twice.")
+#define STR_COLUMN_NAME                             NC_("STR_COLUMN_NAME", "Column")
+#define STR_QRY_CONTINUE                            NC_("STR_QRY_CONTINUE", "Continue anyway?" )
+#define STR_TABLEDESIGN_DATASOURCE_DELETED          NC_("STR_TABLEDESIGN_DATASOURCE_DELETED", "The table filter could not be adjusted because the data source has been deleted.")
+#define STR_TABLEDESIGN_NO_PRIM_KEY                 NC_("STR_TABLEDESIGN_NO_PRIM_KEY", "A unique index or primary key is required for data record identification in this database.\nYou can only enter data into this table when one of these two structural conditions has been met.\n\nShould a primary key be created now?" )
+
+#define STR_ENTER_CONNECTION_PASSWORD               NC_("STR_ENTER_CONNECTION_PASSWORD", "A password is needed to connect to the data source \"$name$\".")
+#define STR_ASK_FOR_DIRECTORY_CREATION              NC_("STR_ASK_FOR_DIRECTORY_CREATION", "The directory\n\n$path$\n\ndoes not exist. Should it be created?")
+#define STR_COULD_NOT_CREATE_DIRECTORY              NC_("STR_COULD_NOT_CREATE_DIRECTORY", "The directory $name$ could not be created.")
+#define STR_ALREADYEXISTOVERWRITE                   NC_("STR_ALREADYEXISTOVERWRITE", "The file already exists. Overwrite?" )
+#define STR_NEW_FOLDER                              NC_("STR_NEW_FOLDER", "Folder" )
+
+#define STR_DATABASE_TYPE_CHANGE                    NC_("STR_DATABASE_TYPE_CHANGE", "Database properties" )
+#define STR_PARENTTITLE_GENERAL                     NC_("STR_PARENTTITLE_GENERAL", "Data Source Properties: #" )
+#define STR_COULD_NOT_LOAD_ODBC_LIB                 NC_("STR_COULD_NOT_LOAD_ODBC_LIB", "Could not load the program library #lib# or it is corrupted. The ODBC data source selection is not available.")
+#define STR_UNSUPPORTED_DATASOURCE_TYPE             NC_("STR_UNSUPPORTED_DATASOURCE_TYPE", "This kind of data source is not supported on this platform.\nYou are allowed to change the settings, but you probably will not be able to connect to the database.")
+#define STR_AUTOTEXT_FIELD_SEP_NONE                 NC_("STR_AUTOTEXT_FIELD_SEP_NONE", "{None}")
+// To translators: EM Dec 2002: 'Space' refers t    o what you get when you hit the space bar on your keyboard.
+#define STR_AUTOFIELDSEPARATORLIST                  NC_("STR_AUTOFIELDSEPARATORLIST", ";\t59\t,\t44\t:\t58\t{Tab}\t9\t{Space}\t32" )
+#define STR_AUTODELIMITER_MISSING                   NC_("STR_AUTODELIMITER_MISSING", "#1 must be set." )
+#define STR_AUTODELIMITER_MUST_DIFFER               NC_("STR_AUTODELIMITER_MUST_DIFFER", "#1 and #2 must be different." )
+#define STR_AUTONO_WILDCARDS                        NC_("STR_AUTONO_WILDCARDS", "Wildcards such as ?,* are not allowed in #1." )
+
+#define STR_CONNECTION_TEST                         NC_("STR_CONNECTION_TEST", "Connection Test")
+#define STR_CONNECTION_SUCCESS                      NC_("STR_CONNECTION_SUCCESS", "The connection was established successfully.")
+#define STR_CONNECTION_NO_SUCCESS                   NC_("STR_CONNECTION_NO_SUCCESS", "The connection could not be established.")
+#define STR_JDBCDRIVER_SUCCESS                      NC_("STR_JDBCDRIVER_SUCCESS", "The JDBC driver was loaded successfully.")
+#define STR_JDBCDRIVER_NO_SUCCESS                   NC_("STR_JDBCDRIVER_NO_SUCCESS", "The JDBC driver could not be loaded.")
+#define STR_MSACCESS_FILTERNAME                     NC_("STR_MSACCESS_FILTERNAME", "MS Access file")
+
+#define STR_RSC_CHARSETS                            NC_("STR_RSC_CHARSETS", "System")
+#define STR_UNEXPECTED_ERROR                        NC_("STR_UNEXPECTED_ERROR", "An error occurred. The operation could not be performed.")
+#define STR_UNKNOWN_TYPE_FOUND                      NC_("STR_UNKNOWN_TYPE_FOUND", "No corresponding column type could be found for column '#1'." )
+#define STR_FILE_DOES_NOT_EXIST                     NC_("STR_FILE_DOES_NOT_EXIST", "The file \"$file$\" does not exist.")
+#define STR_WARNINGS_DURING_CONNECT                 NC_("STR_WARNINGS_DURING_CONNECT", "Warnings were encountered while connecting to the data source. Press \"$buttontext$\" to view them.")
+#define STR_NAMED_OBJECT_ALREADY_EXISTS             NC_("STR_NAMED_OBJECT_ALREADY_EXISTS", "The name '$#$' already exists.\nPlease enter another name." )
+
+#define STR_COULDNOTCREATE_DRIVERMANAGER            NC_("STR_COULDNOTCREATE_DRIVERMANAGER", "Cannot connect to the SDBC driver manager (#servicename#).")
+#define STR_NOREGISTEREDDRIVER                      NC_("STR_NOREGISTEREDDRIVER", "A driver is not registered for the URL #connurl#.")
+
+#define STR_DBASE_PATH_OR_FILE                      NC_("STR_DBASE_PATH_OR_FILE", "Path to the dBASE files")
+#define STR_FLAT_PATH_OR_FILE                       NC_("STR_FLAT_PATH_OR_FILE", "Path to the text files")
+#define STR_CALC_PATH_OR_FILE                       NC_("STR_CALC_PATH_OR_FILE", "Path to the spreadsheet document")
+#define STR_NAME_OF_ODBC_DATASOURCE                 NC_("STR_NAME_OF_ODBC_DATASOURCE", "Name of the ODBC data source")
+#define STR_WRITER_PATH_OR_FILE                     NC_("STR_WRITER_PATH_OR_FILE", "Path to the Writer document")
+#define STR_MYSQL_DATABASE_NAME                     NC_("STR_MYSQL_DATABASE_NAME", "Name of the MySQL/MariaDB database")
+#define STR_ORACLE_DATABASE_NAME                    NC_("STR_ORACLE_DATABASE_NAME", "Name of the Oracle database")
+#define STR_MSACCESS_MDB_FILE                       NC_("STR_MSACCESS_MDB_FILE", "Microsoft Access database file")
+#define STR_NO_ADDITIONAL_SETTINGS                  NC_("STR_NO_ADDITIONAL_SETTINGS", "No more settings are necessary. To verify that the connection is working, click the '%test' button.")
+#define STR_COMMONURL                               NC_("STR_COMMONURL", "Enter the DBMS/driver-specific connection string here" )
+#define STR_HOSTNAME                                NC_("STR_HOSTNAME", "~Host name")
+#define STR_MOZILLA_PROFILE_NAME                    NC_("STR_MOZILLA_PROFILE_NAME", "~Mozilla profile name")
+#define STR_THUNDERBIRD_PROFILE_NAME                NC_("STR_THUNDERBIRD_PROFILE_NAME", "~Thunderbird profile name")
+
+#define STR_WIZ_COLUMN_SELECT_TITLE                 NC_("STR_WIZ_COLUMN_SELECT_TITEL", "Apply columns")
+#define STR_WIZ_TYPE_SELECT_TITLE                   NC_("STR_WIZ_TYPE_SELECT_TITEL", "Type formatting")
+#define STR_WIZ_NAME_ALREADY_DEFINED                NC_("STR_WIZ_NAME_ALREADY_DEFINED", "Enter a unique name for the new primary key data field.\nThe following name is already in use:")
+#define STR_WIZ_NAME_MATCHING_TITLE                 NC_("STR_WIZ_NAME_MATCHING_TITEL", "Assign columns" )
+#define STR_WIZ_PB_PREV                             NC_("STR_WIZ_PB_PREV", "< ~Back")
+#define STR_WIZ_PB_NEXT                             NC_("STR_WIZ_PB_NEXT", "~Next>")
+#define STR_WIZ_PB_OK                               NC_("STR_WIZ_PB_OK", "C~reate")
+#define STR_WIZ_TABLE_COPY                          NC_("STR_WIZ_TABLE_COPY", "Copy table" )
+#define STR_COPYTABLE_TITLE_COPY                    NC_("STR_COPYTABLE_TITLE_COPY", "Copy table" )
+#define STR_INVALID_TABLE_NAME                      NC_("STR_INVALID_TABLE_NAME", "This table name is not valid in the current database.")
+#define STR_SUGGEST_APPEND_TABLE_DATA               NC_("STR_SUGGEST_APPEND_TABLE_DATA", "Choose the option 'Append data' on the first page to append data to an existing table.")
+#define STR_INVALID_TABLE_NAME_LENGTH               NC_("STR_INVALID_TABLE_NAME_LENGTH", "Please change the table name. It is too long.")
+
+#define STR_COULD_NOT_CONVERT_PARAM                 NC_("STR_COULD_NOT_CONVERT_PARAM", "The entry could not be converted to a valid value for the \"$name$\" parameter")
+
+#define STR_EXCEPTION_STATUS                        NC_("STR_EXCEPTION_STATUS", "SQL Status")
+#define STR_EXCEPTION_ERRORCODE                     NC_("STR_EXCEPTION_ERRORCODE", "Error code")
+#define STR_EXPLAN_STRINGCONVERSION_ERROR           NC_("STR_EXPLAN_STRINGCONVERSION_ERROR", "A frequent reason for this error is an inappropriate character set setting for the language of your database. Check the setting by choosing Edit - Database - Properties.")
+#define STR_EXCEPTION_ERROR                         NC_("STR_EXCEPTION_ERROR", "Error")
+#define STR_EXCEPTION_WARNING                       NC_("STR_EXCEPTION_WARNING", "Warning")
+#define STR_EXCEPTION_INFO                          NC_("STR_EXCEPTION_INFO", "Information")
+#define STR_EXCEPTION_DETAILS                       NC_("STR_EXCEPTION_DETAILS", "Details")
+
+#define STR_CTW_NO_VIEWS_SUPPORT                    NC_("STR_CTW_NO_VIEWS_SUPPORT", "The destination database does not support views.")
+#define STR_CTW_NO_PRIMARY_KEY_SUPPORT              NC_("STR_CTW_NO_PRIMARY_KEY_SUPPORT", "The destination database does not support primary keys.")
+#define STR_CTW_INVALID_DATA_ACCESS_DESCRIPTOR      NC_("STR_CTW_INVALID_DATA_ACCESS_DESCRIPTOR", "no data access descriptor found, or no data access descriptor able to provide all necessary information")
+#define STR_CTW_ONLY_TABLES_AND_QUERIES_SUPPORT     NC_("STR_CTW_ONLY_TABLES_AND_QUERIES_SUPPORT", "Only tables and queries are supported at the moment.")
+#define STR_CTW_COPY_SOURCE_NEEDS_BOOKMARKS         NC_("STR_CTW_COPY_SOURCE_NEEDS_BOOKMARKS", "The copy source's result set must support bookmarks.")
+#define STR_CTW_UNSUPPORTED_COLUMN_TYPE             NC_("STR_CTW_UNSUPPORTED_COLUMN_TYPE", "Unsupported source column type ($type$) at column position $pos$.")
+#define STR_CTW_ILLEGAL_PARAMETER_COUNT             NC_("STR_CTW_ILLEGAL_PARAMETER_COUNT", "Illegal number of initialization parameters.")
+#define STR_CTW_ERROR_DURING_INITIALIZATION         NC_("STR_CTW_ERROR_DURING_INITIALIZATION", "An error occurred during initialization.")
+#define STR_CTW_ERROR_UNSUPPORTED_SETTING           NC_("STR_CTW_ERROR_UNSUPPORTED_SETTING", "Unsupported setting in the copy source descriptor: $name$.")
+#define STR_CTW_ERROR_NO_QUERY                      NC_("STR_CTW_ERROR_NO_QUERY", "To copy a query, your connection must be able to provide queries.")
+#define STR_CTW_ERROR_INVALID_INTERACTIONHANDLER    NC_("STR_CTW_ERROR_INVALID_INTERACTIONHANDLER", "The given interaction handler is invalid.")
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

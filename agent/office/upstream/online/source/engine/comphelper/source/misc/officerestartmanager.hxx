@@ -1,0 +1,67 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/task/XRestartManager.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/awt/XCallback.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+
+#include <mutex>
+#include <cppuhelper/implbase.hxx>
+#include <utility>
+
+namespace comphelper
+{
+
+class OOfficeRestartManager : public ::cppu::WeakImplHelper< css::task::XRestartManager
+                                                           , css::awt::XCallback
+                                                           , css::lang::XServiceInfo >
+{
+    std::mutex m_aMutex;
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+
+    bool m_bOfficeInitialized;
+    bool m_bRestartRequested;
+
+public:
+    explicit OOfficeRestartManager( cpo::uno::Reference< cpo::uno::XComponentContext > xContext )
+    : m_xContext(std::move( xContext ))
+    , m_bOfficeInitialized( false )
+    , m_bRestartRequested( false )
+    {}
+
+// XRestartManager
+    virtual void requestRestart( const cpo::uno::Reference< css::task::XInteractionHandler >& xInteractionHandler ) override;
+    virtual bool isRestartRequested( bool bInitialized ) override;
+
+// XCallback
+    virtual void notify( const cpo::uno::Any& aData ) override;
+
+// XServiceInfo
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+};
+
+} // namespace comphelper
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

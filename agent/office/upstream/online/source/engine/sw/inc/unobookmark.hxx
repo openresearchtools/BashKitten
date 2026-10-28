@@ -1,0 +1,244 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/container/XNamed.hpp>
+#include <com/sun/star/text/XTextContent.hpp>
+#include <com/sun/star/text/XTextField.hpp>
+#include <com/sun/star/text/XFormField.hpp>
+
+#include <cppuhelper/implbase.hxx>
+
+#include <svl/listener.hxx>
+#include <sfx2/Metadatable.hxx>
+
+#include "unobaseclass.hxx"
+#include "IDocumentMarkAccess.hxx"
+
+class SwDoc;
+class SwXTextRange;
+
+typedef ::cppu::ImplInheritanceHelper
+<   ::sfx2::MetadatableMixin
+,   css::lang::XServiceInfo
+,   css::beans::XPropertySet
+,   css::container::XNamed
+,   css::text::XTextContent
+> SwXBookmark_Base;
+
+/// UNO API wrapper around an internal sw::mark::MarkBase.
+class SAL_DLLPUBLIC_RTTI SwXBookmark
+    : public SwXBookmark_Base
+{
+
+private:
+
+    class Impl;
+    ::sw::UnoImplPtr<Impl> m_pImpl;
+
+protected:
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws cpo::uno::RuntimeException
+    void attachToRangeEx(
+            const cpo::uno::Reference< css::text::XTextRange > & xTextRange,
+            IDocumentMarkAccess::MarkType eType,
+            bool isFieldmarkSeparatorAtStart = false);
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws cpo::uno::RuntimeException
+    virtual void attachToRange(
+            const cpo::uno::Reference< css::text::XTextRange > & xTextRange);
+
+    ::sw::mark::MarkBase* GetBookmark() const;
+
+    IDocumentMarkAccess* GetIDocumentMarkAccess();
+
+    SwDoc * GetDoc();
+
+    void registerInMark( SwXBookmark& rXMark, ::sw::mark::MarkBase* const pMarkBase );
+
+    virtual ~SwXBookmark() override;
+
+    SwXBookmark(SwDoc *const pDoc);
+
+    /// descriptor
+    SwXBookmark();
+
+public:
+
+    static rtl::Reference<SwXBookmark>
+        CreateXBookmark(SwDoc & rDoc, ::sw::mark::MarkBase * pBookmark);
+
+    /// @return IMark for this, but only if it lives in pDoc
+    static ::sw::mark::MarkBase const* GetBookmarkInDoc(SwDoc const*const pDoc,
+            const cpo::uno::Reference<cpo::uno::XInterface> & xUT);
+
+    // MetadatableMixin
+    virtual ::sfx2::Metadatable* GetCoreObject() override;
+    virtual cpo::uno::Reference< css::frame::XModel > GetModel() override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService(
+            const OUString& rServiceName) override;
+    virtual cpo::uno::Sequence< OUString >
+        getSupportedServiceNames() override;
+
+    // XComponent
+    virtual void dispose() override;
+    virtual void addEventListener(
+            const cpo::uno::Reference< css::lang::XEventListener > & xListener) override;
+    virtual void removeEventListener(
+            const cpo::uno::Reference< css::lang::XEventListener > & xListener) override;
+
+    // XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+        getPropertySetInfo() override;
+    virtual void setPropertyValue(
+            const OUString& rPropertyName,
+            const cpo::uno::Any& rValue) override;
+    virtual cpo::uno::Any getPropertyValue(
+            const OUString& rPropertyName) override;
+    virtual void addPropertyChangeListener(
+            const OUString& rPropertyName,
+            const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener) override;
+    virtual void removePropertyChangeListener(
+            const OUString& rPropertyName,
+            const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener) override;
+    virtual void addVetoableChangeListener(
+            const OUString& rPropertyName,
+            const cpo::uno::Reference< css::beans::XVetoableChangeListener >& xListener) override;
+    virtual void removeVetoableChangeListener(
+            const OUString& rPropertyName,
+            const cpo::uno::Reference<
+                css::beans::XVetoableChangeListener >& xListener) override;
+
+    // XNamed
+    virtual OUString getName() override;
+    SW_DLLPUBLIC virtual void setName(const OUString& rName) override;
+
+    // XTextContent
+    virtual void attach(
+            const cpo::uno::Reference< css::text::XTextRange > & xTextRange) override;
+    virtual cpo::uno::Reference< css::text::XTextRange > getAnchor() override;
+
+};
+
+class SwXFieldmarkParameters final
+    : public ::cppu::WeakImplHelper< css::container::XNameContainer>
+    , public SvtListener
+{
+    private:
+        ::sw::mark::Fieldmark* m_pFieldmark;
+        /// @throws cpo::uno::RuntimeException
+        ::sw::mark::Fieldmark::parameter_map_t* getCoreParameters();
+    public:
+        SwXFieldmarkParameters(::sw::mark::Fieldmark* const pFieldmark)
+            : m_pFieldmark(pFieldmark)
+        {
+            StartListening(pFieldmark->GetNotifier());
+        }
+
+        // XNameContainer
+        virtual void insertByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
+        virtual void removeByName( const OUString& Name ) override;
+        // XNameReplace
+        virtual void replaceByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
+        // XNameAccess
+        virtual cpo::uno::Any getByName( const OUString& aName ) override;
+        virtual cpo::uno::Sequence< OUString > getElementNames(  ) override;
+        virtual bool hasByName( const OUString& aName ) override;
+        // XElementAccess
+        virtual cpo::uno::Type getElementType(  ) override;
+        virtual bool hasElements(  ) override;
+
+        virtual void Notify( const SfxHint& rHint ) override;
+};
+
+typedef cppu::ImplInheritanceHelper< SwXBookmark,
+        css::text::XFormField,
+        css::text::XTextField
+    > SwXFieldmark_Base;
+
+/// UNO wrapper around an sw::mark::Fieldmark.
+class SW_DLLPUBLIC SwXFieldmark final
+    : public SwXFieldmark_Base
+{
+    ::sw::mark::CheckboxFieldmark* getCheckboxFieldmark();
+    bool const m_bReplacementObject;
+    bool m_isFieldmarkSeparatorAtStart = false;
+
+    rtl::Reference<SwXTextRange>
+        GetCommand(::sw::mark::Fieldmark const& rMark);
+    rtl::Reference<SwXTextRange>
+        GetResult(::sw::mark::Fieldmark const& rMark);
+
+    SwXFieldmark(bool isReplacementObject, SwDoc* pDoc);
+
+    // workaround MSVC compiler
+    SwXFieldmark(const SwXFieldmark&) = delete;
+    SwXFieldmark(SwXFieldmark&&) = delete;
+
+public:
+    static rtl::Reference<SwXFieldmark>
+        CreateXFieldmark(SwDoc & rDoc, ::sw::mark::MarkBase * pMark,
+                bool isReplacementObject = false);
+
+    virtual void attachToRange(
+            const cpo::uno::Reference<css::text::XTextRange > & xTextRange) override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual cpo::uno::Sequence<OUString>
+        getSupportedServiceNames() override;
+
+    // XPropertySet
+    virtual cpo::uno::Reference<css::beans::XPropertySetInfo>
+        getPropertySetInfo() override;
+    virtual void setPropertyValue(
+            const OUString& rPropertyName,
+            const cpo::uno::Any& rValue) override;
+    virtual cpo::uno::Any getPropertyValue(
+            const OUString& rPropertyName) override;
+
+    // XComponent
+    virtual void dispose() override;
+    virtual void addEventListener(
+            const cpo::uno::Reference<css::lang::XEventListener> & xListener) override;
+    virtual void removeEventListener(
+            const cpo::uno::Reference<css::lang::XEventListener> & xListener) override;
+
+    // XTextContent
+    virtual void attach(
+            const cpo::uno::Reference<css::text::XTextRange> & xTextRange) override;
+    virtual cpo::uno::Reference<css::text::XTextRange> getAnchor() override;
+
+    // XTextField
+    virtual OUString getPresentation(bool bShowCommand) override;
+
+    // XFormField
+    virtual OUString getFieldType() override;
+    virtual void setFieldType(const OUString& description) override;
+    virtual cpo::uno::Reference<css::container::XNameContainer> getParameters() override;
+
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

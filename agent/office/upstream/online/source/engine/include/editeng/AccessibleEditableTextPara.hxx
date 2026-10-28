@@ -1,0 +1,353 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_EDITENG_ACCESSIBLEEDITABLETEXTPARA_HXX
+#define INCLUDED_EDITENG_ACCESSIBLEEDITABLETEXTPARA_HXX
+
+#include <config_options.h>
+#include <rtl/ustring.hxx>
+#include <tools/gen.hxx>
+
+#include <cpo/uno/Reference.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/accessibility/XAccessible.hpp>
+#include <com/sun/star/accessibility/XAccessibleEditableText.hpp>
+#include <com/sun/star/accessibility/XAccessibleTextAttributes.hpp>
+#include <com/sun/star/accessibility/XAccessibleHypertext.hpp>
+#include <com/sun/star/accessibility/XAccessibleMultiLineText.hpp>
+
+#include <comphelper/accessibletexthelper.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <editeng/editengdllapi.h>
+#include <editeng/unoedprx.hxx>
+#include <unotools/weakref.hxx>
+
+class SvxViewForwarder;
+class MapMode;
+class SvxAccessibleTextAdapter;
+class SvxAccessibleTextEditViewAdapter;
+namespace accessibility { class AccessibleImageBullet; }
+
+namespace accessibility
+{
+
+class AccessibleParaManager;
+
+/** This class implements the actual text paragraphs for the EditEngine/Outliner UAA
+ */
+class UNLESS_MERGELIBS(EDITENG_DLLPUBLIC) AccessibleEditableTextPara final
+    : public cppu::ImplInheritanceHelper<
+          comphelper::OAccessible, css::accessibility::XAccessibleEditableText,
+          css::accessibility::XAccessibleTextAttributes, css::accessibility::XAccessibleHypertext,
+          css::accessibility::XAccessibleMultiLineText>,
+      private ::comphelper::OCommonAccessibleText
+{
+
+    // override OCommonAccessibleText methods
+    virtual OUString                 implGetText() override;
+    virtual css::lang::Locale        implGetLocale() override;
+    virtual void                     implGetSelection( sal_Int32& nStartIndex, sal_Int32& nEndIndex ) override;
+    virtual void                     implGetParagraphBoundary( const OUString& rtext, css::i18n::Boundary& rBoundary, sal_Int32 nIndex ) override;
+    virtual void                     implGetLineBoundary( const OUString& rtext, css::i18n::Boundary& rBoundary, sal_Int32 nIndex ) override;
+
+public:
+    /// Create accessible object for given parent
+    // #i27138#
+    // - add parameter <_pParaManager> (default value NULL)
+    //   This has to be the instance of <AccessibleParaManager>, which
+    //   created and manages this accessible paragraph.
+    AccessibleEditableTextPara ( cpo::uno::Reference< css::accessibility::XAccessible > xParent,
+                                 const AccessibleParaManager* _pParaManager = nullptr );
+
+    // XAccessibleContext
+    virtual sal_Int64 getAccessibleChildCount() override;
+    virtual cpo::uno::Reference< css::accessibility::XAccessible > getAccessibleChild( sal_Int64 i ) override;
+    virtual cpo::uno::Reference< css::accessibility::XAccessible > getAccessibleParent() override;
+    virtual sal_Int64 getAccessibleIndexInParent() override;
+    virtual sal_Int16 getAccessibleRole() override;
+    virtual OUString getAccessibleDescription() override;
+    virtual OUString getAccessibleName() override;
+    virtual cpo::uno::Reference< css::accessibility::XAccessibleRelationSet > getAccessibleRelationSet() override;
+    virtual sal_Int64 getAccessibleStateSet() override;
+    virtual css::lang::Locale getLocale() override;
+
+    // OAccessible
+    virtual css::awt::Rectangle implGetBounds() override;
+
+    // XAccessibleComponent
+    virtual cpo::uno::Reference< css::accessibility::XAccessible > getAccessibleAtPoint( const css::awt::Point& aPoint ) override;
+    virtual void grabFocus(  ) override;
+    virtual sal_Int32 getForeground(  ) override;
+    virtual sal_Int32 getBackground(  ) override;
+
+    // XAccessibleText (this comes implicitly inherited by XAccessibleEditableText AND by XAccessibleMultiLineText)
+    virtual sal_Int32 getCaretPosition() override;
+    virtual bool setCaretPosition( sal_Int32 nIndex ) override;
+    virtual sal_Unicode getCharacter( sal_Int32 nIndex ) override;
+    virtual cpo::uno::Sequence< css::beans::PropertyValue > getCharacterAttributes( sal_Int32 nIndex, const cpo::uno::Sequence< OUString >& aRequestedAttributes ) override;
+    virtual css::awt::Rectangle getCharacterBounds( sal_Int32 nIndex ) override;
+    virtual sal_Int32 getCharacterCount() override;
+    virtual sal_Int32 getIndexAtPoint( const css::awt::Point& aPoint ) override;
+    virtual OUString getSelectedText() override;
+    virtual sal_Int32 getSelectionStart() override;
+    virtual sal_Int32 getSelectionEnd() override;
+    virtual bool setSelection( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) override;
+    virtual OUString getText() override;
+    virtual OUString getTextRange( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) override;
+    /// Does not support AccessibleTextType::SENTENCE (missing feature in EditEngine)
+    virtual css::accessibility::TextSegment getTextAtIndex( sal_Int32 nIndex, sal_Int16 aTextType ) override;
+    /// Does not support AccessibleTextType::SENTENCE (missing feature in EditEngine)
+    virtual css::accessibility::TextSegment getTextBeforeIndex( sal_Int32 nIndex, sal_Int16 aTextType ) override;
+    /// Does not support AccessibleTextType::SENTENCE (missing feature in EditEngine)
+    virtual css::accessibility::TextSegment getTextBehindIndex( sal_Int32 nIndex, sal_Int16 aTextType ) override;
+    virtual bool copyText( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) override;
+    virtual bool scrollSubstringTo( sal_Int32 nStartIndex, sal_Int32 nEndIndex, css::accessibility::AccessibleScrollType aScrollType) override;
+
+    // XAccessibleEditableText
+    virtual bool cutText( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) override;
+    virtual bool pasteText( sal_Int32 nIndex ) override;
+    virtual bool deleteText( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) override;
+    virtual bool insertText( const OUString& sText, sal_Int32 nIndex ) override;
+    virtual bool replaceText( sal_Int32 nStartIndex, sal_Int32 nEndIndex, const OUString& sReplacement ) override;
+    virtual bool setAttributes( sal_Int32 nStartIndex, sal_Int32 nEndIndex, const cpo::uno::Sequence< css::beans::PropertyValue >& aAttributeSet ) override;
+    virtual bool setText( const OUString& sText ) override;
+
+    // XAccessibleTextAttributes
+    virtual cpo::uno::Sequence< css::beans::PropertyValue > getDefaultAttributes( const cpo::uno::Sequence< OUString >& RequestedAttributes ) override;
+    virtual cpo::uno::Sequence< css::beans::PropertyValue > getRunAttributes( ::sal_Int32 Index, const cpo::uno::Sequence< OUString >& RequestedAttributes ) override;
+
+    // XAccessibleHypertext
+    virtual ::sal_Int32 getHyperLinkCount(  ) override;
+    virtual cpo::uno::Reference< css::accessibility::XAccessibleHyperlink > getHyperLink( ::sal_Int32 nLinkIndex ) override;
+    virtual ::sal_Int32 getHyperLinkIndex( ::sal_Int32 nCharIndex ) override;
+
+    // XAccessibleMultiLineText
+    virtual ::sal_Int32 getLineNumberAtIndex( ::sal_Int32 nIndex ) override;
+    virtual css::accessibility::TextSegment getTextAtLineNumber( ::sal_Int32 nLineNo ) override;
+    virtual css::accessibility::TextSegment getTextAtLineWithCaret(  ) override;
+    virtual ::sal_Int32 getNumberOfLineWithCaret(  ) override;
+
+    /** Set the current index in the accessibility parent
+
+        @attention This method does not lock the SolarMutex,
+        leaving that to the calling code. This is because only
+        there potential deadlock situations can be resolved. Thus,
+        make sure SolarMutex is locked when calling this.
+     */
+    void SetIndexInParent( sal_Int32 nIndex );
+
+    /** Get the current index in the accessibility parent
+
+        @attention This method does not lock the SolarMutex,
+        leaving that to the calling code. This is because only
+        there potential deadlock situations can be resolved. Thus,
+        make sure SolarMutex is locked when calling this.
+     */
+    sal_Int32 GetIndexInParent() const { return mnIndexInParent; }
+
+    /** Set the current paragraph number
+
+        @attention This method does not lock the SolarMutex,
+        leaving that to the calling code. This is because only
+        there potential deadlock situations can be resolved. Thus,
+        make sure SolarMutex is locked when calling this.
+     */
+    void SetParagraphIndex( sal_Int32 nIndex );
+
+    /** Query the current paragraph number (0 - nParas-1)
+
+        @attention This method does not lock the SolarMutex,
+        leaving that to the calling code. This is because only
+        there potential deadlock situations can be resolved. Thus,
+        make sure SolarMutex is locked when calling this.
+     */
+    sal_Int32 GetParagraphIndex() const { return mnParagraphIndex; }
+
+    /** Set the edit engine offset
+
+        @attention This method does not lock the SolarMutex,
+        leaving that to the calling code. This is because only
+        there potential deadlock situations can be resolved. Thus,
+        make sure SolarMutex is locked when calling this.
+     */
+    void SetEEOffset( const Point& rOffset );
+
+    /** Set the EditEngine offset
+
+        @attention This method does not lock the SolarMutex,
+        leaving that to the calling code. This is because only
+        there potential deadlock situations can be resolved. Thus,
+        make sure SolarMutex is locked when calling this.
+     */
+    void SetEditSource( SvxEditSourceAdapter* pEditSource );
+
+    void dispose() override;
+
+    /// Calls all Listener objects to tell them the change. Don't hold locks when calling this!
+    void FireEvent(const sal_Int16 nEventId, const cpo::uno::Any& rNewValue = cpo::uno::Any(), const cpo::uno::Any& rOldValue = cpo::uno::Any());
+
+    /// Sets the given state on the internal state set and fires STATE_CHANGE event. Don't hold locks when calling this!
+    void SetState( const sal_Int64 nStateId );
+    /// Unsets the given state on the internal state set and fires STATE_CHANGE event. Don't hold locks when calling this!
+    void UnSetState( const sal_Int64 nStateId );
+
+    static tools::Rectangle LogicToPixel( const tools::Rectangle& rRect, const MapMode& rMapMode, SvxViewForwarder const & rForwarder );
+
+    SvxEditSourceAdapter& GetEditSource() const;
+
+    /** Query the SvxTextForwarder for EditEngine access.
+
+        @attention This method does not lock the SolarMutex,
+        leaving that to the calling code. This is because only
+        there potential deadlock situations can be resolved. Thus,
+        make sure SolarMutex is locked when calling this.
+     */
+    SvxAccessibleTextAdapter&   GetTextForwarder() const;
+
+    /** Query the SvxViewForwarder for EditEngine access.
+
+        @attention This method does not lock the SolarMutex,
+        leaving that to the calling code. This is because only
+        there potential deadlock situations can be resolved. Thus,
+        make sure SolarMutex is locked when calling this.
+     */
+    SvxViewForwarder&   GetViewForwarder() const;
+
+    /** Query whether a GetEditViewForwarder( false ) will return a forwarder
+
+        @attention This method does not lock the SolarMutex,
+        leaving that to the calling code. This is because only
+        there potential deadlock situations can be resolved. Thus,
+        make sure SolarMutex is locked when calling this.
+     */
+    bool    HaveEditView() const;
+
+    /** Query the SvxEditViewForwarder for EditEngine access.
+
+        @attention This method does not lock the SolarMutex,
+        leaving that to the calling code. This is because only
+        there potential deadlock situations can be resolved. Thus,
+        make sure SolarMutex is locked when calling this.
+     */
+    SvxAccessibleTextEditViewAdapter& GetEditViewForwarder( bool bCreate = false ) const;
+
+    /** Send a TEXT_CHANGED event for this paragraph
+
+        This method internally caters for calculating text
+        differences, and sends the appropriate Anys in the
+        Accessibility::TEXT_CHANGED event
+     */
+    void TextChanged();
+
+private:
+    AccessibleEditableTextPara( const AccessibleEditableTextPara& ) = delete;
+    AccessibleEditableTextPara& operator= ( const AccessibleEditableTextPara& ) = delete;
+
+    /** Calculate character range of similar attributes
+
+        @param nStartIndex
+        Therein, the start of the character range with the same attributes is returned
+
+        @param nEndIndex
+        Therein, the end (exclusively) of the character range with the same attributes is returned
+
+        @param nIndex
+        The character index at where to look for similar character attributes
+
+        @return false, if the method was not able to determine the range
+     */
+    bool GetAttributeRun( sal_Int32& nStartIndex, sal_Int32& nEndIndex, sal_Int32 nIndex );
+
+    /// Do we have children? This is the case for image bullets
+    bool HaveChildren();
+
+    /// If there is a bullet, return it's text length, otherwise return 0
+    sal_Int32 GetBulletTextLength() const;
+
+    const Point& GetEEOffset() const { return maEEOffset; }
+
+    // Get text from forwarder
+    OUString GetTextRange( sal_Int32 nStartIndex, sal_Int32 nEndIndex );
+    sal_Int32 GetTextLen() const;
+
+    /** Get the current selection of this paragraph
+
+        @return false, if nothing in this paragraph is selected
+     */
+    bool GetSelection(sal_Int32& nStartPos, sal_Int32& nEndPos );
+
+    /** create selection from Accessible selection.
+
+    */
+    ESelection  MakeSelection( sal_Int32 nStartEEIndex, sal_Int32 nEndEEIndex );
+    ESelection  MakeSelection( sal_Int32 nEEIndex );
+    ESelection  MakeCursor( sal_Int32 nEEIndex );
+
+    // check whether index value is within permitted range
+
+    /// Check whether 0<=nIndex<=n-1
+    void CheckIndex( sal_Int32 nIndex );
+    /// Check whether 0<=nIndex<=n
+    void CheckPosition( sal_Int32 nIndex );
+    /// Check whether 0<=nStart<=n and 0<=nEnd<=n
+    void CheckRange( sal_Int32 nStart, sal_Int32 nEnd );
+
+    void _correctValues( cpo::uno::Sequence< css::beans::PropertyValue >& rValues );
+    sal_Int32 SkipField(sal_Int32 nIndex, bool bForward);
+    // get overlapped field, extend return string. Only extend forward for now
+    void ExtendByField( css::accessibility::TextSegment& Segment );
+    OUString GetFieldTypeNameAtIndex(sal_Int32 nIndex);
+    // the paragraph index in the edit engine (guarded by solar mutex)
+    sal_Int32   mnParagraphIndex;
+
+    // our current index in the parent (guarded by solar mutex)
+    sal_Int32   mnIndexInParent;
+
+    // the current edit source (guarded by solar mutex)
+    SvxEditSourceAdapter* mpEditSource;
+
+    // the possible child (for image bullets, guarded by solar mutex)
+    unotools::WeakReference<AccessibleImageBullet> maImageBullet;
+
+    // the last string used for an Accessibility::TEXT_CHANGED event (guarded by solar mutex)
+    OUString maLastTextString;
+
+    // the offset of the underlying EditEngine from the shape/cell (guarded by solar mutex)
+    Point maEEOffset;
+
+    // the current state set (updated from SetState/UnSetState and guarded by solar mutex)
+    sal_Int64 mnStateSet;
+
+    /// The shape we're the accessible for (unguarded)
+    cpo::uno::Reference< css::accessibility::XAccessible > mxParent;
+
+private:
+    // Text paragraphs should provide FLOWS_TO and FLOWS_FROM relations (#i27138#)
+    // the paragraph manager, which created this instance - is NULL, if
+    // instance isn't created by AccessibleParaManager.
+    // Needed for method <getAccessibleRelationSet()> to retrieve predecessor
+    // paragraph and the successor paragraph.
+    const AccessibleParaManager* mpParaManager;
+};
+
+} // end of namespace accessibility
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

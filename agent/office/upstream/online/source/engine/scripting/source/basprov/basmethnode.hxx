@@ -1,0 +1,84 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/script/XInvocation.hpp>
+#include <com/sun/star/script/browse/XBrowseNode.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+
+#include <comphelper/propcontainerimplhelper.hxx>
+
+class SbMethod;
+
+
+namespace basprov
+{
+
+    class BasicMethodNodeImpl final
+        : public comphelper::OPropertyContainerImplHelper<
+              comphelper::WeakImplHelper<
+                  css::script::browse::XBrowseNode,
+                  css::script::XInvocation>,
+              BasicMethodNodeImpl>
+    {
+    private:
+        cpo::uno::Reference< cpo::uno::XComponentContext >    m_xContext;
+        OUString m_sScriptingContext;
+        SbMethod* m_pMethod;
+        bool m_bIsAppScript;
+
+        // properties
+        OUString m_sURI;
+        bool m_bEditable;
+
+    protected:
+        // OPropertyArrayUsageHelper
+        virtual ::cppu::IPropertyArrayHelper* createArrayHelper(  ) const override;
+
+    public:
+        BasicMethodNodeImpl( const cpo::uno::Reference< cpo::uno::XComponentContext >& rxContext,
+            OUString sScriptingContext,
+            SbMethod* pMethod, bool isAppScript );
+        virtual ~BasicMethodNodeImpl() override;
+
+        // XBrowseNode
+        virtual OUString getName(  ) override;
+        virtual cpo::uno::Sequence< cpo::uno::Reference< css::script::browse::XBrowseNode > > getChildNodes(  ) override;
+        virtual bool hasChildNodes(  ) override;
+        virtual sal_Int16 getType(  ) override;
+
+        // XInvocation
+        virtual cpo::uno::Reference< css::beans::XIntrospectionAccess > getIntrospection(  ) override;
+        virtual cpo::uno::Any invoke(
+            const OUString& aFunctionName,
+            const cpo::uno::Sequence< cpo::uno::Any >& aParams,
+            cpo::uno::Sequence< sal_Int16 >& aOutParamIndex,
+            cpo::uno::Sequence< cpo::uno::Any >& aOutParam ) override;
+        virtual void setValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+        virtual cpo::uno::Any getValue( const OUString& aPropertyName ) override;
+        virtual bool hasMethod( const OUString& aName ) override;
+        virtual bool hasProperty( const OUString& aName ) override;
+    };
+
+
+}   // namespace basprov
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

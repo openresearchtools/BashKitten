@@ -1,0 +1,256 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <poolfmt.hxx>
+#include <shellio.hxx>
+#include <ndtxt.hxx>
+#include <doc.hxx>
+#include <docsh.hxx>
+#include <IDocumentStylePoolAccess.hxx>
+#include <swdll.hxx>
+#include <swerror.h>
+
+#include <unotextrange.hxx>
+
+#include <unotools/fcm.hxx>
+#include <unotools/streamwrap.hxx>
+#include <unotools/tempfile.hxx>
+#include <comphelper/processfactory.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <comphelper/diagnose_ex.hxx>
+
+#include <com/sun/star/document/XFilter.hpp>
+#include <com/sun/star/document/XExporter.hpp>
+#include <com/sun/star/document/XImporter.hpp>
+#include <com/sun/star/frame/Desktop.hpp>
+#include <com/sun/star/frame/XLoadable.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/text/XTextDocument.hpp>
+#include <com/sun/star/util/XCloseable.hpp>
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+namespace
+{
+/// Glue class to call RtfImport as an internal filter, needed by copy&paste support.
+class SwRTFReader : public Reader
+{
+    ErrCodeMsg Read(SwDoc& rDoc, const OUString& rBaseURL, SwPaM& rPam,
+                    const OUString& rFileName) override;
+};
+}
+
+ErrCodeMsg SwRTFReader::Read(SwDoc& rDoc, const OUString& /*rBaseURL*/, SwPaM& rPam,
+                             const OUString& /*rFileName*/)
+{
+    if (!m_pStream)
+        return ERR_SWG_READ_ERROR;
+
+    SwPasteInfo aPasteInfo(rDoc, rPam);
+    StartPaste(aPasteInfo);
+    // Reset paragraph style to Body Text.
+    rDoc.SetTextFormatColl(rPam, rDoc.getIDocumentStylePoolAccess().GetTextCollFromPool(
+                                     SwPoolFormatId::COLL_STANDARD, false));
+
+    auto ret = ERRCODE_NONE;
+    SwDocShell* pDocShell(rDoc.GetDocShell());
+    if (!pDocShell)
+        return ret;
+
+    uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(
+        comphelper::getProcessServiceFactory());
+    uno::Reference<cpo::uno::XInterface> xInterface(
+        xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.RtfFilter"_ustr),
+        uno::UNO_SET_THROW);
+
+    uno::Reference<document::XImporter> xImporter(xInterface, uno::UNO_QUERY_THROW);
+    uno::Reference<lang::XComponent> xDstDoc(pDocShell->GetModel(), uno::UNO_QUERY_THROW);
+    xImporter->setTargetDocument(xDstDoc);
+
+    const rtl::Reference<SwXTextRange> xInsertTextRange
+        = SwXTextRange::CreateXTextRange(rDoc, *rPam.GetPoint(), nullptr);
+
+    uno::Reference<document::XFilter> xFilter(xInterface, uno::UNO_QUERY_THROW);
+    cpo::uno::Sequence<beans::PropertyValue> aDescriptor(comphelper::InitPropertySequence(
+        { { u"InputStream"_ustr,
+            cpo::uno::Any(uno::Reference<io::XStream>(new utl::OStreamWrapper(*m_pStream))) },
+          { u"InsertMode"_ustr, cpo::uno::Any(true) },
+          { u"TextInsertModeRange"_ustr,
+            cpo::uno::Any(uno::Reference<text::XTextRange>(xInsertTextRange)) } }));
+    try
+    {
+        xFilter->filter(aDescriptor);
+    }
+    catch (cpo::uno::Exception const&)
+    {
+        TOOLS_WARN_EXCEPTION("sw.rtf", "SwRTFReader::Read()");
+        ret = ERR_SWG_READ_ERROR;
+    }
+
+    EndPaste(aPasteInfo);
+
+    return ret;
+}
+
+Reader* ImportRTF() { return new SwRTFReader; }
+
+extern "C" SAL_DLLPUBLIC_EXPORT bool TestImportRTF(SvStream& rStream)
+{
+    SwGlobals::ensure();
+
+    SfxObjectShellLock xDocSh(new SwDocShell(SfxObjectCreateMode::INTERNAL));
+    xDocSh->DoInitNew();
+
+    uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(
+        comphelper::getProcessServiceFactory());
+    uno::Reference<cpo::uno::XInterface> xInterface(
+        xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.RtfFilter"_ustr),
+        uno::UNO_SET_THROW);
+
+    uno::Reference<document::XImporter> xImporter(xInterface, uno::UNO_QUERY_THROW);
+    uno::Reference<lang::XComponent> xDstDoc(xDocSh->GetModel(), uno::UNO_QUERY_THROW);
+    xImporter->setTargetDocument(xDstDoc);
+
+    uno::Reference<document::XFilter> xFilter(xInterface, uno::UNO_QUERY_THROW);
+    cpo::uno::Sequence<beans::PropertyValue> aDescriptor(comphelper::InitPropertySequence(
+        { { u"InputStream"_ustr,
+            cpo::uno::Any(uno::Reference<io::XStream>(new utl::OStreamWrapper(rStream))) } }));
+    bool bRet = true;
+    try
+    {
+        xFilter->filter(aDescriptor);
+    }
+    catch (...)
+    {
+        bRet = false;
+    }
+    return bRet;
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT bool TestPDFExportRTF(SvStream& rStream)
+{
+#if 0
+    //TODO: probably end up needing one of these too
+    // do the same sort of check as FilterDetect::detect
+    OString const str(read_uInt8s_ToOString(rStream, 4000));
+    rStream.Seek(STREAM_SEEK_TO_BEGIN);
+    OUString resultString(str.getStr(), str.getLength(), RTL_TEXTENCODING_ASCII_US,
+                          RTL_TEXTTOUNICODE_FLAGS_UNDEFINED_DEFAULT
+                              | RTL_TEXTTOUNICODE_FLAGS_MBUNDEFINED_DEFAULT
+                              | RTL_TEXTTOUNICODE_FLAGS_INVALID_DEFAULT);
+    if (!resultString.startsWith("<?xml")
+        || resultString.indexOf("office:mimetype=\"application/vnd.oasis.opendocument.text\"")
+               == -1)
+        return false;
+#endif
+
+    uno::Reference<css::frame::XDesktop> xDesktop
+        = css::frame::Desktop::create(comphelper::getProcessComponentContext());
+    uno::Reference<css::frame::XFrame> xTargetFrame = xDesktop->findFrame(u"_blank"_ustr, 0);
+
+    const uno::Reference<cpo::uno::XComponentContext>& xContext(
+        comphelper::getProcessComponentContext());
+    uno::Reference<css::frame::XModel2> xModel(
+        xContext->getServiceManager()->createInstanceWithContext(
+            u"com.sun.star.text.TextDocument"_ustr, xContext),
+        uno::UNO_QUERY_THROW);
+
+    uno::Reference<css::frame::XLoadable> xModelLoad(xModel, uno::UNO_QUERY_THROW);
+    xModelLoad->initNew();
+
+    uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(
+        comphelper::getProcessServiceFactory());
+    uno::Reference<io::XInputStream> xStream(new utl::OSeekableInputStreamWrapper(rStream));
+
+    uno::Reference<cpo::uno::XInterface> xInterface(
+        xMultiServiceFactory->createInstance(u"com.sun.star.comp.Writer.RtfFilter"_ustr),
+        uno::UNO_SET_THROW);
+
+    uno::Reference<document::XImporter> xImporter(xInterface, uno::UNO_QUERY_THROW);
+    xImporter->setTargetDocument(xModel);
+
+    uno::Reference<document::XFilter> xFilter(xInterface, uno::UNO_QUERY_THROW);
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(
+        comphelper::InitPropertySequence({ { u"InputStream"_ustr, cpo::uno::Any(xStream) } }));
+
+    bool ret = true;
+    try
+    {
+        ret = xFilter->filter(aArgs);
+    }
+    catch (...)
+    {
+        ret = false;
+    }
+
+    if (ret)
+    {
+        uno::Reference<text::XTextDocument> xTextDocument(xModel, uno::UNO_QUERY);
+        uno::Reference<text::XText> xText(xTextDocument->getText());
+        uno::Reference<container::XEnumerationAccess> xParaAccess(xText, uno::UNO_QUERY);
+        uno::Reference<container::XEnumeration> xParaEnum(xParaAccess->createEnumeration());
+        while (xParaEnum->hasMoreElements())
+        {
+            uno::Reference<text::XTextRange> xPara(xParaEnum->nextElement(), uno::UNO_QUERY);
+            // discourage very long paragraphs for fuzzing performance
+            if (xPara && xPara->getString().getLength() > 15000)
+            {
+                ret = false;
+                break;
+            }
+        }
+    }
+
+    if (ret)
+    {
+        cpo::uno::Reference<css::frame::XController2> xController(
+            xModel->createDefaultViewController(xTargetFrame), uno::UNO_SET_THROW);
+        utl::ConnectFrameControllerModel(xTargetFrame, xController, xModel);
+
+        utl::TempFileFast aTempFile;
+
+        uno::Reference<document::XFilter> xPDFFilter(
+            xMultiServiceFactory->createInstance(u"com.sun.star.document.PDFFilter"_ustr),
+            uno::UNO_QUERY);
+        uno::Reference<document::XExporter> xExporter(xPDFFilter, uno::UNO_QUERY);
+        xExporter->setSourceDocument(xModel);
+
+        uno::Reference<io::XOutputStream> xOutputStream(
+            new utl::OStreamWrapper(*aTempFile.GetStream(StreamMode::READWRITE)));
+
+        // ofz#60533 fuzzer learned to use fo:font-size="842pt" which generate timeouts trying
+        // to export thousands of pages from minimal input size
+        cpo::uno::Sequence<beans::PropertyValue> aFilterData(comphelper::InitPropertySequence(
+            { { u"PageRange"_ustr, cpo::uno::Any(u"1-100"_ustr) } }));
+        cpo::uno::Sequence<beans::PropertyValue> aDescriptor(comphelper::InitPropertySequence(
+            { { u"FilterName"_ustr, cpo::uno::Any(u"writer_pdf_Export"_ustr) },
+              { u"OutputStream"_ustr, cpo::uno::Any(xOutputStream) },
+              { u"FilterData"_ustr, cpo::uno::Any(aFilterData) } }));
+        xPDFFilter->filter(aDescriptor);
+    }
+
+    cpo::uno::Reference<css::util::XCloseable> xClose(xModel, cpo::uno::UNO_QUERY);
+    xClose->close(false);
+
+    return ret;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

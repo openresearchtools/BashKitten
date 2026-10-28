@@ -1,0 +1,172 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <com/sun/star/sdbcx/CompareBookmark.hpp>
+#include <component/CResultSet.hxx>
+#include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <comphelper/sequence.hxx>
+#include <comphelper/types.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <connectivity/dbexception.hxx>
+
+using namespace ::comphelper;
+using namespace connectivity::component;
+using namespace connectivity::file;
+using namespace ::cppu;
+using namespace ::cpo::uno;
+using namespace cpo::uno;
+using namespace com::sun::star::lang;
+using namespace com::sun::star::beans;
+using namespace com::sun::star::sdbc;
+using namespace com::sun::star::sdbcx;
+
+
+OComponentResultSet::OComponentResultSet( OStatement_Base* pStmt,connectivity::OSQLParseTreeIterator& _aSQLIterator)
+                : file::OResultSet(pStmt,_aSQLIterator)
+                ,m_bBookmarkable(true)
+{
+    registerProperty(OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_ISBOOKMARKABLE),         PROPERTY_ID_ISBOOKMARKABLE,       PropertyAttribute::READONLY,&m_bBookmarkable,                cppu::UnoType<bool>::get());
+}
+
+OUString OComponentResultSet::getImplementationName(  )
+{
+    return u"com.sun.star.sdbcx.component.ResultSet"_ustr;
+}
+
+Sequence< OUString > OComponentResultSet::getSupportedServiceNames(  )
+{
+    return { u"com.sun.star.sdbc.ResultSet"_ustr, u"com.sun.star.sdbcx.ResultSet"_ustr };
+}
+
+bool OComponentResultSet::supportsService( const OUString& _rServiceName )
+{
+    return cppu::supportsService(this, _rServiceName);
+}
+
+Any OComponentResultSet::queryInterface( const Type & rType )
+{
+    Any aRet = OResultSet::queryInterface(rType);
+    return aRet.hasValue() ? aRet : OComponentResultSet_BASE::queryInterface(rType);
+}
+
+ Sequence<  Type > OComponentResultSet::getTypes(  )
+{
+    return ::comphelper::concatSequences(OResultSet::getTypes(),OComponentResultSet_BASE::getTypes());
+}
+
+
+// XRowLocate
+Any OComponentResultSet::getBookmark(  )
+{
+    ::osl::MutexGuard aGuard( m_aMutex );
+    checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
+
+
+    return Any((*m_aRow)[0]->getValue().getInt32());
+}
+
+bool OComponentResultSet::moveToBookmark( const  Any& bookmark )
+{
+    ::osl::MutexGuard aGuard( m_aMutex );
+    checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
+
+
+    m_bRowDeleted = m_bRowInserted = m_bRowUpdated = false;
+
+    return Move(IResultSetHelper::BOOKMARK,comphelper::getINT32(bookmark),true);
+}
+
+bool OComponentResultSet::moveRelativeToBookmark( const  Any& bookmark, sal_Int32 rows )
+{
+    ::osl::MutexGuard aGuard( m_aMutex );
+    checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
+
+
+    m_bRowDeleted = m_bRowInserted = m_bRowUpdated = false;
+
+    Move(IResultSetHelper::BOOKMARK,comphelper::getINT32(bookmark),false);
+
+    return relative(rows);
+}
+
+
+sal_Int32 OComponentResultSet::compareBookmarks( const Any& lhs, const  Any& rhs )
+{
+    return (lhs == rhs) ? CompareBookmark::EQUAL : CompareBookmark::NOT_EQUAL;
+}
+
+bool OComponentResultSet::hasOrderedBookmarks(  )
+{
+    return true;
+}
+
+sal_Int32 OComponentResultSet::hashBookmark( const  Any& bookmark )
+{
+    ::osl::MutexGuard aGuard( m_aMutex );
+    checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
+
+
+    return comphelper::getINT32(bookmark);
+}
+
+// XDeleteRows
+Sequence< sal_Int32 > OComponentResultSet::deleteRows( const  Sequence<  Any >& /*rows*/ )
+{
+    ::osl::MutexGuard aGuard( m_aMutex );
+    checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
+
+    ::dbtools::throwFeatureNotImplementedSQLException( u"XDeleteRows::deleteRows"_ustr, *this );
+}
+
+bool OComponentResultSet::fillIndexValues(const Reference< XColumnsSupplier> &/*_xIndex*/)
+{
+    //  Writer or Calc table has no index
+    return false;
+}
+
+::cppu::IPropertyArrayHelper & OComponentResultSet::getInfoHelper()
+{
+    return *OComponentResultSet_BASE3::getArrayHelper();
+}
+
+::cppu::IPropertyArrayHelper* OComponentResultSet::createArrayHelper() const
+{
+    Sequence< Property > aProps;
+    describeProperties(aProps);
+    return new ::cppu::OPropertyArrayHelper(aProps);
+}
+
+
+void OComponentResultSet::acquire() noexcept
+{
+    OComponentResultSet_BASE2::acquire();
+}
+
+void OComponentResultSet::release() noexcept
+{
+    OComponentResultSet_BASE2::release();
+}
+
+cpo::uno::Reference< css::beans::XPropertySetInfo > OComponentResultSet::getPropertySetInfo(  )
+{
+    return ::cppu::OPropertySetHelper::createPropertySetInfo(getInfoHelper());
+}
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

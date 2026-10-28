@@ -1,0 +1,95 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_PACKAGE_SOURCE_MANIFEST_MANIFESTIMPORT_HXX
+#define INCLUDED_PACKAGE_SOURCE_MANIFEST_MANIFESTIMPORT_HXX
+
+#include <cppuhelper/implbase.hxx>
+#include <com/sun/star/xml/sax/XDocumentHandler.hpp>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+#include <rtl/ustrbuf.hxx>
+
+namespace com::sun::star {
+    namespace xml::sax { class XAttributeList; }
+    namespace beans { struct PropertyValue; }
+}
+
+typedef std::unordered_map< OUString, OUString > StringHashMap;
+
+struct ManifestScopeEntry
+{
+    OUString        m_aConvertedName;
+    StringHashMap   m_aNamespaces;
+    bool            m_bValid;
+
+    ManifestScopeEntry( OUString aConvertedName, StringHashMap&& aNamespaces )
+    : m_aConvertedName(std::move( aConvertedName ))
+    , m_aNamespaces( std::move(aNamespaces) )
+    , m_bValid( true )
+    {}
+};
+
+typedef ::std::vector< ManifestScopeEntry > ManifestStack;
+
+class ManifestImport final : public cppu::WeakImplHelper < css::xml::sax::XDocumentHandler >
+{
+    std::vector< css::beans::PropertyValue > aSequence;
+    OUStringBuffer aCurrentCharacters{64};
+    ManifestStack aStack;
+    bool bIgnoreEncryptData;
+    sal_Int32 nDerivedKeySize;
+    ::std::vector < cpo::uno::Sequence < css::beans::PropertyValue > > & rManVector;
+    OUString m_PackageVersion; // on root element
+
+
+    OUString PushNameAndNamespaces( const OUString& aName,
+                                           const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttribs,
+                                           StringHashMap& o_aConvertedAttribs );
+    static OUString ConvertNameWithNamespace( const OUString& aName, const StringHashMap& aNamespaces );
+    OUString ConvertName( const OUString& aName );
+
+public:
+    ManifestImport( std::vector < cpo::uno::Sequence < css::beans::PropertyValue > > & rNewVector );
+    virtual ~ManifestImport() override;
+    virtual void startDocument(  ) override;
+    virtual void endDocument(  ) override;
+    virtual void startElement( const OUString& aName, const cpo::uno::Reference< css::xml::sax::XAttributeList >& xAttribs ) override;
+    virtual void endElement( const OUString& aName ) override;
+    virtual void characters( const OUString& aChars ) override;
+    virtual void ignorableWhitespace( const OUString& aWhitespaces ) override;
+    virtual void processingInstruction( const OUString& aTarget, const OUString& aData ) override;
+    virtual void setDocumentLocator( const cpo::uno::Reference< css::xml::sax::XLocator >& xLocator ) override;
+
+private:
+    /// @throws cpo::uno::RuntimeException
+    void doFileEntry(StringHashMap &rConvertedAttribs);
+    /// @throws cpo::uno::RuntimeException
+    void doEncryptionData(StringHashMap &rConvertedAttribs);
+    /// @throws cpo::uno::RuntimeException
+    void doAlgorithm(StringHashMap &rConvertedAttribs);
+    /// @throws cpo::uno::RuntimeException
+    void doKeyDerivation(StringHashMap &rConvertedAttribs);
+    /// @throws cpo::uno::RuntimeException
+    void doStartKeyAlg(StringHashMap &rConvertedAttribs);
+};
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

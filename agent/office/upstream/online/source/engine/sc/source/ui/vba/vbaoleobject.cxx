@@ -1,0 +1,151 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <com/sun/star/awt/XControlModel.hpp>
+#include <com/sun/star/container/XChild.hpp>
+#include <com/sun/star/lang/XMultiComponentFactory.hpp>
+#include <ooo/vba/XControlProvider.hpp>
+
+#include "vbaoleobject.hxx"
+
+using namespace com::sun::star;
+using namespace ::cpo;
+using namespace ooo::vba;
+
+ScVbaOLEObject::ScVbaOLEObject( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext,
+            cpo::uno::Reference< css::drawing::XControlShape > const & xControlShape )
+: OLEObjectImpl_BASE( xParent, xContext )
+{
+    //init m_xWindowPeer
+    uno::Reference< awt::XControlModel > xControlModel( xControlShape->getControl(), cpo::uno::UNO_SET_THROW );
+    uno::Reference< container::XChild > xChild( xControlModel, uno::UNO_QUERY_THROW );
+    xChild.set( xChild->getParent(), uno::UNO_QUERY_THROW );
+    xChild.set( xChild->getParent(), uno::UNO_QUERY_THROW );
+    uno::Reference<frame::XModel> xModel( xChild->getParent(), uno::UNO_QUERY_THROW );
+    uno::Reference<lang::XMultiComponentFactory > xServiceManager( mxContext->getServiceManager(), uno::UNO_SET_THROW );
+    uno::Reference< XControlProvider > xControlProvider( xServiceManager->createInstanceWithContext(u"ooo.vba.ControlProvider"_ustr, mxContext ), uno::UNO_QUERY_THROW );
+    m_xControl.set( xControlProvider->createControl(  xControlShape, xModel ) );
+}
+
+uno::Reference< cpo::uno::XInterface >
+ScVbaOLEObject::getObject()
+{
+    return uno::Reference< cpo::uno::XInterface >( m_xControl, uno::UNO_QUERY_THROW );
+}
+
+bool
+ScVbaOLEObject::getEnabled()
+{
+    return m_xControl->getEnabled();
+}
+
+void
+ScVbaOLEObject::setEnabled( bool _enabled )
+{
+    m_xControl->setEnabled( _enabled );
+}
+
+bool
+ScVbaOLEObject::getVisible()
+{
+    return m_xControl->getVisible();
+}
+
+void
+ScVbaOLEObject::setVisible( bool _visible )
+{
+    m_xControl->setVisible( _visible );
+}
+
+double
+ScVbaOLEObject::getLeft()
+{
+    return m_xControl->getLeft();
+}
+
+void
+ScVbaOLEObject::setLeft( double _left )
+{
+    m_xControl->setLeft( _left );
+
+}
+
+double
+ScVbaOLEObject::getTop()
+{
+    return m_xControl->getTop();
+}
+
+void
+ScVbaOLEObject::setTop( double _top )
+{
+    m_xControl->setTop( _top );
+}
+
+double
+ScVbaOLEObject::getHeight()
+{
+    return m_xControl->getHeight();
+}
+
+void
+ScVbaOLEObject::setHeight( double _height )
+{
+    m_xControl->setHeight( _height );
+}
+
+double
+ScVbaOLEObject::getWidth()
+{
+    return m_xControl->getWidth();
+}
+
+void
+ScVbaOLEObject::setWidth( double _width )
+{
+    m_xControl->setWidth( _width );
+}
+
+OUString ScVbaOLEObject::getLinkedCell()
+{
+    return m_xControl->getControlSource();
+}
+
+void ScVbaOLEObject::setLinkedCell( const OUString& _linkedcell )
+{
+    m_xControl->setControlSource( _linkedcell );
+}
+
+OUString
+ScVbaOLEObject::getServiceImplName()
+{
+    return u"ScVbaOLEObject"_ustr;
+}
+
+cpo::uno::Sequence< OUString >
+ScVbaOLEObject::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.excel.OLEObject"_ustr
+    };
+    return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

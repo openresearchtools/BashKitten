@@ -1,0 +1,153 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <com/sun/star/xml/crypto/XXMLSecurityContext.hpp>
+#include "securityenvironment_mscryptimpl.hxx"
+
+#include <xmlsec/xmlstreamio.hxx>
+
+#include "akmngr.hxx"
+
+#include <cppuhelper/supportsservice.hxx>
+
+using namespace ::com::sun::star;
+using namespace ::com::sun::star::lang ;
+
+using ::com::sun::star::xml::crypto::XSecurityEnvironment ;
+using ::com::sun::star::xml::crypto::XXMLSecurityContext ;
+
+namespace {
+
+class XMLSecurityContext_MSCryptImpl : public ::cppu::WeakImplHelper<
+    css::xml::crypto::XXMLSecurityContext ,
+    css::lang::XServiceInfo >
+{
+    private:
+        //xmlSecKeysMngrPtr m_pKeysMngr ;
+        cpo::uno::Reference< css::xml::crypto::XSecurityEnvironment > m_xSecurityEnvironment ;
+
+    public:
+        XMLSecurityContext_MSCryptImpl();
+
+        //Methods from XXMLSecurityContext
+        virtual sal_Int32 addSecurityEnvironment(
+            const cpo::uno::Reference< css::xml::crypto::XSecurityEnvironment >& aSecurityEnvironment
+            ) override;
+
+        virtual ::sal_Int32 getSecurityEnvironmentNumber(  ) override;
+
+        virtual cpo::uno::Reference<
+            css::xml::crypto::XSecurityEnvironment >
+            getSecurityEnvironmentByIndex( ::sal_Int32 index ) override;
+
+        virtual cpo::uno::Reference<
+            css::xml::crypto::XSecurityEnvironment >
+            getSecurityEnvironment(  ) override;
+
+        virtual ::sal_Int32 getDefaultSecurityEnvironmentIndex(  ) override;
+
+        virtual void setDefaultSecurityEnvironmentIndex( sal_Int32 nDefaultEnvIndex ) override;
+
+
+        //Methods from XServiceInfo
+        virtual OUString getImplementationName() override;
+
+        virtual bool supportsService(
+            const OUString& ServiceName
+        ) override;
+
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+};
+
+}
+
+XMLSecurityContext_MSCryptImpl::XMLSecurityContext_MSCryptImpl()
+{
+}
+
+sal_Int32 XMLSecurityContext_MSCryptImpl::addSecurityEnvironment(
+    const cpo::uno::Reference< css::xml::crypto::XSecurityEnvironment >& aSecurityEnvironment)
+{
+    if( !aSecurityEnvironment.is() )
+    {
+        throw cpo::uno::RuntimeException() ;
+    }
+
+    m_xSecurityEnvironment = aSecurityEnvironment;
+
+    return 0;
+}
+
+
+sal_Int32 XMLSecurityContext_MSCryptImpl::getSecurityEnvironmentNumber(  )
+{
+    return 1;
+}
+
+cpo::uno::Reference< css::xml::crypto::XSecurityEnvironment >
+    XMLSecurityContext_MSCryptImpl::getSecurityEnvironmentByIndex( sal_Int32 index )
+{
+    if (index != 0)
+    {
+        throw cpo::uno::RuntimeException() ;
+    }
+    return m_xSecurityEnvironment;
+}
+
+cpo::uno::Reference< css::xml::crypto::XSecurityEnvironment >
+    XMLSecurityContext_MSCryptImpl::getSecurityEnvironment(  )
+{
+    return m_xSecurityEnvironment;
+}
+
+sal_Int32 XMLSecurityContext_MSCryptImpl::getDefaultSecurityEnvironmentIndex(  )
+{
+    return 0;
+}
+
+void XMLSecurityContext_MSCryptImpl::setDefaultSecurityEnvironmentIndex( sal_Int32 /*nDefaultEnvIndex*/ )
+{
+    //dummy
+}
+
+/* XServiceInfo */
+OUString XMLSecurityContext_MSCryptImpl::getImplementationName() {
+    return u"com.sun.star.xml.crypto.XMLSecurityContext"_ustr;
+}
+
+/* XServiceInfo */
+bool XMLSecurityContext_MSCryptImpl::supportsService( const OUString& serviceName) {
+    return cppu::supportsService(this, serviceName);
+}
+
+/* XServiceInfo */
+cpo::uno::Sequence< OUString > XMLSecurityContext_MSCryptImpl::getSupportedServiceNames() {
+    return { u"com.sun.star.xml.crypto.XMLSecurityContext"_ustr };
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_xml_crypto_XMLSecurityContext_get_implementation(
+    cpo::uno::XComponentContext* /*pCtx*/, cpo::uno::Sequence<cpo::uno::Any> const& /*rSeq*/)
+{
+    return cppu::acquire(new XMLSecurityContext_MSCryptImpl);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

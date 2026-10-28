@@ -1,0 +1,65 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <cpo/uno/XComponentContext.hpp>
+#include <com/sun/star/sdbc/XConnection.hpp>
+#include <com/sun/star/sdbc/XDataSource.hpp>
+
+namespace weld { class Window; }
+namespace dbaui
+{
+
+    // ODatasourceConnector
+    class ODatasourceConnector final
+    {
+        weld::Window*  m_pErrorMessageParent;
+        cpo::uno::Reference< cpo::uno::XComponentContext >
+                             m_xContext;
+        OUString             m_sContextInformation;
+
+    public:
+        ODatasourceConnector(
+            const cpo::uno::Reference< cpo::uno::XComponentContext >& _rxContext,
+            weld::Window* _pMessageParent,
+            OUString _sContextInformation
+        );
+
+        /// returns <TRUE/> if the object is able to create data source connections
+        bool    isValid() const { return m_xContext.is(); }
+
+        /** creates a connection to the data source, displaying a possible error to the user
+        */
+        cpo::uno::Reference< css::sdbc::XConnection >
+                    connect(
+                        const OUString& _rDataSourceName
+                    ) const;
+
+        /** creates a connection to the data source, displaying a possible error to the user
+        */
+        cpo::uno::Reference< css::sdbc::XConnection >
+                    connect(
+                        const cpo::uno::Reference< css::sdbc::XDataSource>& _xDataSource
+                    ) const;
+    };
+
+}   // namespace dbaui
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

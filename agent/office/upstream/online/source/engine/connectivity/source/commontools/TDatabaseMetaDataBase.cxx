@@ -1,0 +1,282 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <cstddef>
+
+#include <TDatabaseMetaDataBase.hxx>
+#include <RowFunctionParser.hxx>
+
+#include <comphelper/sequenceashashmap.hxx>
+#include <comphelper/evtlistenerhlp.hxx>
+#include <comphelper/types.hxx>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <resource/sharedresources.hxx>
+#include <strings.hrc>
+#include <connectivity/dbexception.hxx>
+
+using namespace ::cpo::uno;
+using namespace cpo::uno;
+using namespace com::sun::star::lang;
+using namespace com::sun::star::sdbc;
+using namespace com::sun::star::beans;
+using namespace comphelper;
+using namespace connectivity;
+
+
+ODatabaseMetaDataBase::ODatabaseMetaDataBase(const Reference< XConnection >& _rxConnection,const Sequence< PropertyValue >& _rInfo)
+    : m_aConnectionInfo(_rInfo)
+    ,m_isCatalogAtStart(false,false)
+    ,m_sCatalogSeparator(false,OUString())
+    ,m_sIdentifierQuoteString(false,OUString())
+    ,m_supportsCatalogsInTableDefinitions(false,false)
+    ,m_supportsSchemasInTableDefinitions(false,false)
+    ,m_supportsCatalogsInDataManipulation(false,false)
+    ,m_supportsSchemasInDataManipulation(false,false)
+    ,m_supportsMixedCaseQuotedIdentifiers(false,false)
+    ,m_supportsAlterTableWithAddColumn(false,false)
+    ,m_supportsAlterTableWithDropColumn(false,false)
+    ,m_MaxStatements(false,0)
+    ,m_MaxTablesInSelect(false,0)
+    ,m_storesMixedCaseQuotedIdentifiers(false,false)
+    , m_xConnection(_rxConnection)
+{
+    osl_atomic_increment( &m_refCount );
+    {
+        m_xListenerHelper = new OEventListenerHelper(this);
+        Reference<XComponent> xCom(m_xConnection,UNO_QUERY);
+        if(xCom.is())
+            xCom->addEventListener(m_xListenerHelper);
+    }
+    osl_atomic_decrement( &m_refCount );
+}
+
+ODatabaseMetaDataBase::~ODatabaseMetaDataBase()
+{
+}
+
+
+Sequence< PropertyValue > ODatabaseMetaDataBase::getConnectionInfo(  )
+{
+    return m_aConnectionInfo;
+}
+
+
+void ODatabaseMetaDataBase::disposing( const EventObject& /*Source*/ )
+{
+    // cut off all references to the connection
+m_xConnection.clear();
+m_xListenerHelper.clear();
+}
+
+Reference< XResultSet > ODatabaseMetaDataBase::getTypeInfo(  )
+{
+    ::osl::MutexGuard aGuard( m_aMutex );
+    if ( m_aTypeInfoRows.empty() )
+    {
+        Reference< XResultSet > xRet = impl_getTypeInfo_throw();
+        Reference< XRow > xRow(xRet,UNO_QUERY);
+        ::comphelper::SequenceAsHashMap aMap(m_aConnectionInfo);
+        Sequence< Any > aTypeInfoSettings;
+        aTypeInfoSettings = aMap.getUnpackedValueOrDefault(u"TypeInfoSettings"_ustr,aTypeInfoSettings);
+
+        if ( xRow.is() )
+        {
+            static const sal_Int32 pTypes[] = {
+                                        DataType::VARCHAR
+                                        ,DataType::INTEGER
+                                        ,DataType::INTEGER
+                                        ,DataType::VARCHAR
+                                        ,DataType::VARCHAR
+                                        ,DataType::VARCHAR
+                                        ,DataType::INTEGER
+                                        ,DataType::BOOLEAN
+                                        ,DataType::INTEGER
+                                        ,DataType::BOOLEAN
+                                        ,DataType::BOOLEAN
+                                        ,DataType::BOOLEAN
+                                        ,DataType::VARCHAR
+                                        ,DataType::INTEGER
+                                        ,DataType::INTEGER
+                                        ,DataType::INTEGER
+                                        ,DataType::INTEGER
+                                        ,DataType::INTEGER
+                                    };
+            std::vector<std::shared_ptr<ExpressionNode>> aConditions;
+            if ( aTypeInfoSettings.getLength() > 1 && ((aTypeInfoSettings.getLength() % 2) == 0) )
+            {
+                try
+                {
+                    for (auto& any : aTypeInfoSettings)
+                        aConditions.push_back(FunctionParser::parseFunction(::comphelper::getString(any)));
+                }
+                catch(ParseError&)
+                {
+                    ::connectivity::SharedResources aResources;
+                    const OUString sError( aResources.getResourceString(STR_FORMULA_WRONG));
+                    ::dbtools::throwGenericSQLException(sError,*this);
+                }
+            }
+
+            ::connectivity::ODatabaseMetaDataResultSet::ORows aTypeInfoRows;
+            while( xRet->next() )
+            {
+                ::connectivity::ODatabaseMetaDataResultSet::ORow aRow;
+                aRow.push_back(ODatabaseMetaDataResultSet::getEmptyValue());
+                const sal_Int32* pType = pTypes;
+                for (std::size_t i = 1; i <= std::size(pTypes); ++i,++pType)
+                {
+                    ORowSetValue aValue;
+                    aValue.fill(i,*pType,xRow);
+                    aRow.push_back(new ORowSetValueDecorator(std::move(aValue)));
+                }
+
+                std::vector<std::shared_ptr<ExpressionNode>>::iterator aIter = aConditions.begin();
+                std::vector<std::shared_ptr<ExpressionNode>>::const_iterator aEnd = aConditions.end();
+                for (; aIter != aEnd; ++aIter)
+                {
+                    if ( (*aIter)->evaluate(aRow)->getValue().getBool() )
+                    {
+                        ++aIter;
+                        (*aIter)->fill(aRow);
+                    }
+                    else
+                        ++aIter;
+                }
+                aTypeInfoRows.push_back(std::move(aRow));
+            }
+            m_aTypeInfoRows = std::move(aTypeInfoRows);
+        }
+    }
+    rtl::Reference<::connectivity::ODatabaseMetaDataResultSet> pResult = new ::connectivity::ODatabaseMetaDataResultSet(::connectivity::ODatabaseMetaDataResultSet::eTypeInfo);
+    pResult->setRows(std::vector(m_aTypeInfoRows));
+    return pResult;
+}
+
+Reference< XResultSet > ODatabaseMetaDataBase::getImportedKeys(
+        const Any& /*catalog*/, const OUString& /*schema*/, const OUString& /*table*/ )
+{
+    return new ODatabaseMetaDataResultSet( ODatabaseMetaDataResultSet::eImportedKeys );
+}
+
+Reference< XResultSet > ODatabaseMetaDataBase::getPrimaryKeys(
+        const Any& /*catalog*/, const OUString& /*schema*/, const OUString& /*table*/ )
+{
+    return new ODatabaseMetaDataResultSet( ODatabaseMetaDataResultSet::ePrimaryKeys );
+}
+
+Reference< XResultSet > ODatabaseMetaDataBase::getIndexInfo(
+        const Any& /*catalog*/, const OUString& /*schema*/, const OUString& /*table*/,
+        bool /*unique*/, bool /*approximate*/ )
+{
+    return new ODatabaseMetaDataResultSet( ODatabaseMetaDataResultSet::eIndexInfo );
+}
+
+Reference< XConnection > ODatabaseMetaDataBase::getConnection(  )
+{
+    return m_xConnection;
+}
+
+Reference< XResultSet > ODatabaseMetaDataBase::getVersionColumns(
+        const Any& /*catalog*/, const OUString& /*schema*/, const OUString& /*table*/ )
+{
+    return new ODatabaseMetaDataResultSet( ODatabaseMetaDataResultSet::eVersionColumns );
+}
+
+Reference< XResultSet > ODatabaseMetaDataBase::getColumnPrivileges(
+        const Any& /*catalog*/, const OUString& /*schema*/, const OUString& /*table*/,
+        const OUString& /*columnNamePattern*/ )
+{
+    return new ODatabaseMetaDataResultSet( ODatabaseMetaDataResultSet::eColumnPrivileges );
+}
+
+Reference< XResultSet > ODatabaseMetaDataBase::getTablePrivileges(
+        const Any& /*catalog*/, const OUString& /*schema*/, const OUString& /*table*/)
+{
+    return new ODatabaseMetaDataResultSet( ODatabaseMetaDataResultSet::eTablePrivileges );
+}
+
+OUString ODatabaseMetaDataBase::getIdentifierQuoteString(  )
+{
+    return callImplMethod(m_sIdentifierQuoteString,std::function<OUString(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_getIdentifierQuoteString_throw));
+}
+
+bool ODatabaseMetaDataBase::isCatalogAtStart(  )
+{
+    return callImplMethod(m_isCatalogAtStart,std::function<bool(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_isCatalogAtStart_throw));
+}
+
+OUString ODatabaseMetaDataBase::getCatalogSeparator(  )
+{
+    return callImplMethod(m_sCatalogSeparator,std::function<OUString(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_getCatalogSeparator_throw));
+}
+
+bool ODatabaseMetaDataBase::supportsCatalogsInTableDefinitions(  )
+{
+    return callImplMethod(m_supportsCatalogsInTableDefinitions,std::function<bool(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_supportsCatalogsInTableDefinitions_throw));
+}
+
+bool ODatabaseMetaDataBase::supportsSchemasInTableDefinitions(  )
+{
+    return callImplMethod(m_supportsSchemasInTableDefinitions,std::function<bool(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_supportsSchemasInTableDefinitions_throw));
+}
+
+bool ODatabaseMetaDataBase::supportsCatalogsInDataManipulation(  )
+{
+    return callImplMethod(m_supportsCatalogsInDataManipulation,std::function<bool(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_supportsCatalogsInDataManipulation_throw));
+}
+
+bool ODatabaseMetaDataBase::supportsSchemasInDataManipulation(  )
+{
+    return callImplMethod(m_supportsSchemasInDataManipulation,std::function<bool(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_supportsSchemasInDataManipulation_throw));
+}
+
+bool ODatabaseMetaDataBase::supportsMixedCaseQuotedIdentifiers(  )
+{
+    return callImplMethod(m_supportsMixedCaseQuotedIdentifiers,std::function<bool(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_supportsMixedCaseQuotedIdentifiers_throw));
+}
+
+bool ODatabaseMetaDataBase::supportsAlterTableWithAddColumn(  )
+{
+    return callImplMethod(m_supportsAlterTableWithAddColumn,std::function<bool(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_supportsAlterTableWithAddColumn_throw));
+}
+
+bool ODatabaseMetaDataBase::supportsAlterTableWithDropColumn(  )
+{
+    return callImplMethod(m_supportsAlterTableWithDropColumn,std::function<bool(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_supportsAlterTableWithDropColumn_throw));
+}
+
+sal_Int32 ODatabaseMetaDataBase::getMaxStatements(  )
+{
+    return callImplMethod(m_MaxStatements,std::function<sal_Int32(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_getMaxStatements_throw));
+}
+
+sal_Int32 ODatabaseMetaDataBase::getMaxTablesInSelect(  )
+{
+    return callImplMethod(m_MaxTablesInSelect,std::function<sal_Int32(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_getMaxTablesInSelect_throw));
+}
+
+bool ODatabaseMetaDataBase::storesMixedCaseQuotedIdentifiers(  )
+{
+    return callImplMethod(m_storesMixedCaseQuotedIdentifiers,std::function<bool(ODatabaseMetaDataBase *)>(&ODatabaseMetaDataBase::impl_storesMixedCaseQuotedIdentifiers_throw));
+}
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

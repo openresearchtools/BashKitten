@@ -1,0 +1,434 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <config.h>
+
+#include <common/MobileApp.hpp>
+#include <qt/CoolUrlSchemeHandler.hpp>
+#include <qt/QtClipboard.hpp>
+#include <qt/qt.hpp>
+
+#include <common/Log.hpp>
+#include <common/Prefs.hpp>
+#include <common/RecentFiles.hpp>
+#include <common/SettingsStorage.hpp>
+
+#include <Poco/File.h>
+#include <Poco/Path.h>
+
+#include <QDir>
+#include <QEventLoop>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QMap>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QSslCertificate>
+#include <QSslKey>
+#include <QStandardPaths>
+#include <QStringList>
+#include <QTemporaryFile>
+#include <QUrl>
+#include <QWebEngineCookieStore>
+#include <QWebEnginePage>
+#include <QWebEngineProfile>
+#include <QWebEngineSettings>
+#include <QWebEngineView>
+
+namespace
+{
+QWebEngineProfile* createSavedProfile(const QString& storageName, const QString& storagePath,
+                                      const QString& cachePath)
+{
+    LOG_DBG("Application: profile '" << storageName.toStdString() << "' keeps its files in '"
+                                     << storagePath.toStdString() << "' and its cache in '"
+                                     << cachePath.toStdString() << "'");
+
+    auto* profile = new QWebEngineProfile(storageName);
+    profile->setPersistentStoragePath(storagePath);
+    profile->setCachePath(cachePath);
+    profile->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
+    return profile;
+}
+
+// The id names a folder on disk, so it is taken only as one plain path segment.
+bool isPlainAccountId(const QString& accountId)
+{
+    static const QRegularExpression plainId(
+        QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_-]{1,64}")));
+    return plainId.match(accountId).hasMatch();
+}
+
+QString accountStorageRoot()
+{
+    return QString::fromStdString(Desktop::getConfigPath().toString()) +
+           QStringLiteral("/accounts");
+}
+
+QString accountCacheRoot()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::CacheLocation) +
+           QStringLiteral("/accounts");
+}
+
+QString accountStoragePath(const QString& accountId)
+{
+    return accountStorageRoot() + '/' + accountId;
+}
+
+QString accountCachePath(const QString& accountId)
+{
+    return accountCacheRoot() + '/' + accountId;
+}
+
+// A folder goes only when its real path is the accounts folder's own plus the id, so a
+// symbolic link in its place leaves everything where it is.
+void removeAccountFolders(const QString& accountId)
+{
+    for (const QString& accounts : { accountStorageRoot(), accountCacheRoot() })
+    {
+        const QString folder = accounts + '/' + accountId;
+        if (!QFileInfo::exists(folder))
+        {
+            LOG_DBG("Application: '" << folder.toStdString()
+                                      << "' does not exist, so there is nothing to remove");
+            continue;
+        }
+
+        if (QFileInfo(folder).canonicalFilePath() !=
+            QDir(accounts).canonicalPath() + '/' + accountId)
+        {
+            LOG_ERR("Application: refusing to remove '" << folder.toStdString()
+                                                        << "': not an account folder");
+            continue;
+        }
+
+        LOG_DBG("Application: removing '" << folder.toStdString() << "'");
+        if (!QDir(folder).removeRecursively())
+            LOG_DBG("Application: could not remove all of '" << folder.toStdString() << "'");
+    }
+}
+
+// A profile has to outlive every page built on it, so each one stays until CODA exits.
+QMap<QString, QWebEngineProfile*>& accountProfiles()
+{
+    static QMap<QString, QWebEngineProfile*> profiles;
+    return profiles;
+}
+}
+
+QWebEngineProfile* Application::globalProfile = nullptr;
+RecentFiles Application::recentFiles;
+std::unique_ptr<Prefs> Application::prefs;
+
+QSslKey& Application::embedKeyRef()
+{
+    static QSslKey key;
+    return key;
+}
+
+QSslCertificate& Application::embedCertRef()
+{
+    static QSslCertificate cert;
+    return cert;
+}
+
+namespace
+{
+/// Generate an ephemeral self-signed RSA cert + key valid for
+/// loopback hosts, into the supplied @keyOut and @certOut, and
+/// fill @spkiHashB64 with the base64-encoded SHA-256 of the cert's
+/// SubjectPublicKeyInfo (the form Chromium's
+/// --ignore-certificate-errors-spki-list flag wants).  Shells out
+/// to the openssl CLI; OpenSSL is a transitive dependency of CODA's
+/// existing TLS/HTTPS code so the binary is always present at
+/// runtime on the platforms we ship to.
+void generateEmbedCert(QSslKey& keyOut, QSslCertificate& certOut,
+                       QByteArray& spkiHashB64)
+{
+    QTemporaryFile keyFile;
+    QTemporaryFile certFile;
+    if (!keyFile.open() || !certFile.open())
+    {
+        LOG_ERR("Application: cannot open tmp file for embed cert");
+        return;
+    }
+    const QString keyPath = keyFile.fileName();
+    const QString certPath = certFile.fileName();
+    keyFile.close();
+    certFile.close();
+
+    QProcess openssl;
+    openssl.start(QStringLiteral("openssl"), QStringList()
+        << "req" << "-x509" << "-newkey" << "rsa:3072"
+        << "-keyout" << keyPath << "-out" << certPath
+        << "-days" << "1" << "-nodes"
+        << "-subj" << "/CN=localhost"
+        << "-addext"
+        << "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1"
+        // Chromium requires EKU=serverAuth for HTTPS server certs;
+        // a cert without it is rejected at handshake time, before
+        // QWebEnginePage::certificateError gets a chance to override.
+        << "-addext" << "extendedKeyUsage=serverAuth"
+        << "-addext" << "basicConstraints=CA:FALSE"
+        << "-addext" << "keyUsage=digitalSignature,keyEncipherment");
+    if (!openssl.waitForFinished(10000) || openssl.exitCode() != 0)
+    {
+        LOG_ERR("Application: openssl failed generating embed cert: "
+                << openssl.readAllStandardError().toStdString());
+        QFile::remove(keyPath);
+        QFile::remove(certPath);
+        return;
+    }
+
+    QFile k(keyPath);
+    QFile c(certPath);
+    if (k.open(QIODevice::ReadOnly) && c.open(QIODevice::ReadOnly))
+    {
+        keyOut = QSslKey(k.readAll(), QSsl::Rsa);
+        certOut = QSslCertificate(c.readAll(), QSsl::Pem);
+    }
+
+    // Compute base64(sha256(DER-encoded SubjectPublicKeyInfo)) of
+    // the cert.  QSslCertificate has no direct accessor for the
+    // SPKI, so chain a few openssl invocations.
+    QProcess sh;
+    sh.start(QStringLiteral("bash"), QStringList() << "-c" << QString(
+        "openssl x509 -in '%1' -pubkey -noout | "
+        "openssl pkey -pubin -outform DER | "
+        "openssl dgst -sha256 -binary | base64").arg(certPath));
+    if (sh.waitForFinished(10000) && sh.exitCode() == 0)
+        spkiHashB64 = sh.readAllStandardOutput().trimmed();
+    else
+        LOG_ERR("Application: SPKI hash pipeline failed: "
+                << sh.readAllStandardError().toStdString());
+
+    QFile::remove(keyPath);
+    QFile::remove(certPath);
+
+    if (keyOut.isNull() || certOut.isNull() || spkiHashB64.isEmpty())
+        LOG_ERR("Application: embed cert/key/spki parse failed");
+}
+}
+
+void Application::initialize()
+{
+    if (!globalProfile)
+    {
+        // Generate the embed cert + SPKI hash and tell Chromium to
+        // ignore cert errors for that specific cert via the SPKI
+        // allowlist.  Must be set before the first profile/page is
+        // created (which is what triggers Chromium init).  Scoped to
+        // our cert only - the integrator's HTTPS origin is still
+        // validated against the system trust store as normal.
+        QByteArray spkiHash;
+        generateEmbedCert(embedKeyRef(), embedCertRef(), spkiHash);
+        if (!spkiHash.isEmpty())
+        {
+            // Append, so the switches the environment already carries stay in force.
+            QByteArray chromiumFlags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
+            if (!chromiumFlags.isEmpty())
+                chromiumFlags += ' ';
+            chromiumFlags += "--ignore-certificate-errors-spki-list=" + spkiHash;
+            qputenv("QTWEBENGINE_CHROMIUM_FLAGS", chromiumFlags);
+        }
+
+        // Keep the WebEngine's persistent data (localStorage, cookies) under the
+        // same directory as our settings instead of a separate data location.
+        QString configData = QString::fromStdString(Desktop::getConfigPath().toString());
+        QString cacheData = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+
+        globalProfile = createSavedProfile(QStringLiteral("PersistentProfile"), configData,
+                                           cacheData);
+
+        globalProfile->installUrlSchemeHandler(
+            "cool", new CoolUrlSchemeHandler(globalProfile));
+
+        // The non-embed remote-doc flow loads cool.html via file://
+        // so its page-side JS can fetch() the cool server's
+        // /co/collab/fetch and POST to /co/collab/put.  Chromium
+        // blocks file://-origin pages from accessing remote URLs by
+        // default; flipping LocalContentCanAccessRemoteUrls lets the
+        // cross-origin fetches through (CORS on the server side is
+        // what controls actual access).
+        globalProfile->settings()->setAttribute(
+            QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
+    }
+
+    // Initialize recent files
+    const Poco::Path configDir = Desktop::getConfigPath();
+    recentFiles.load(Poco::Path(configDir).append("RecentDocuments.conf").toString(), 15);
+
+    // Initialize persistent prefs
+    prefs = std::make_unique<Prefs>(
+        Poco::Path(configDir).append("coda-prefs.json").toString());
+
+    // Provide AIChatSession with an HTTP transport (the COOL http::Session stack
+    // isn't available here).
+    registerAIHttpTransport();
+
+    initializeQtClipboard();
+}
+
+Poco::Path Desktop::getConfigPath()
+{
+    QString pathStr = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    QDir().mkpath(pathStr);
+    Poco::Path configPath(pathStr.toStdString());
+    Poco::File configDir(configPath);
+    if (!configDir.exists() || !configDir.isDirectory())
+    {
+        LOG_ERR("getConfigPath: following configuration directory does not exist, trouble ahead:"
+                << pathStr.toStdString());
+    }
+    return configPath;
+}
+
+std::string Desktop::getDataDir()
+{
+    return ::getDataDir();
+}
+
+std::string Desktop::fetchAIModels(const std::string& payload)
+{
+    const QJsonObject obj =
+        QJsonDocument::fromJson(QByteArray::fromStdString(payload)).object();
+    const QString provider = obj.value("provider").toString();
+    const QString apiKey = obj.value("apiKey").toString();
+    QString baseUrl = obj.value("baseUrl").toString();
+
+    if (provider.isEmpty() || apiKey.isEmpty())
+        return R"({"error":"Missing provider or apiKey"})";
+
+    if (provider != "custom")
+    {
+        // Keep in sync with preCannedAIProviderBaseUrl() in wsd/FileServer.cpp.
+        static const QMap<QString, QString> preCanned = {
+            { "openai", "https://api.openai.com" },
+            { "groq", "https://api.groq.com/openai" },
+            { "together", "https://api.together.xyz" },
+            { "mistral", "https://api.mistral.ai" },
+        };
+        baseUrl = preCanned.value(provider);
+        if (baseUrl.isEmpty())
+            return R"({"error":"Unknown provider"})";
+    }
+    else if (baseUrl.isEmpty())
+    {
+        return R"({"error":"Missing baseUrl for custom provider"})";
+    }
+
+    if (baseUrl.endsWith('/'))
+        baseUrl.chop(1);
+    baseUrl += "/v1/models";
+
+    QNetworkAccessManager manager;
+    QNetworkRequest request{ QUrl(baseUrl) };
+    request.setRawHeader("Authorization", "Bearer " + apiKey.toUtf8());
+    request.setRawHeader("Content-Type", "application/json");
+
+    // Runs on the bridge call, so block (processing events) until the request
+    // finishes and postMobileCall resolves with the result.
+    QNetworkReply* reply = manager.get(request);
+    QEventLoop loop;
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    const QByteArray body = reply->readAll();
+    const bool failed = reply->error() != QNetworkReply::NoError;
+    reply->deleteLater();
+
+    if (failed && body.isEmpty())
+        return R"({"error":"Failed to reach the AI provider"})";
+
+    // Return the provider's body verbatim ({"data":[...]} or its own error JSON).
+    return body.toStdString();
+}
+
+QWebEngineProfile* Application::getProfile() { return globalProfile; }
+
+QWebEngineProfile* Application::getAccountProfile(const QString& accountId)
+{
+    if (!isPlainAccountId(accountId))
+    {
+        LOG_DBG("Application: account id '" << accountId.toStdString()
+                                             << "' is not plain, so it gets the shared profile");
+        return globalProfile;
+    }
+
+    auto it = accountProfiles().find(accountId);
+    if (it != accountProfiles().end())
+        return it.value();
+
+    QWebEngineProfile* profile =
+        createSavedProfile(QStringLiteral("Account-") + accountId,
+                           accountStoragePath(accountId), accountCachePath(accountId));
+    accountProfiles().insert(accountId, profile);
+    return profile;
+}
+
+int Application::countAccountProfileViews(const QString& accountId)
+{
+    auto it = accountProfiles().find(accountId);
+    if (it == accountProfiles().end())
+    {
+        LOG_DBG("Application: account '" << accountId.toStdString()
+                                        << "' has no profile this session, so no views use it");
+        return 0;
+    }
+
+    int count = 0;
+    for (QWidget* widget : QApplication::allWidgets())
+    {
+        auto* view = qobject_cast<QWebEngineView*>(widget);
+        if (view && view->page() && view->page()->profile() == it.value())
+            ++count;
+    }
+    return count;
+}
+
+void Application::deleteAccountProfile(const QString& accountId)
+{
+    if (!isPlainAccountId(accountId))
+    {
+        LOG_DBG("Application: account id '" << accountId.toStdString()
+                                             << "' is not plain, so nothing is deleted");
+        return;
+    }
+
+    // A profile in use this session holds its files open, so it is emptied through Qt instead.
+    auto it = accountProfiles().find(accountId);
+    if (it != accountProfiles().end())
+    {
+        LOG_DBG("Application: account '" << accountId.toStdString()
+                                        << "' is in use, so only its cookies and cache go");
+        it.value()->cookieStore()->deleteAllCookies();
+        it.value()->clearHttpCache();
+        return;
+    }
+
+    removeAccountFolders(accountId);
+}
+
+RecentFiles& Application::getRecentFiles() { return recentFiles; }
+
+Prefs& Application::getPrefs() { return *prefs; }
+
+const QSslKey& Application::getEmbedKey() { return embedKeyRef(); }
+
+const QSslCertificate& Application::getEmbedCert() { return embedCertRef(); }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,145 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <comphelper/seqstream.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/io/NotConnectedException.hpp>
+#include <com/sun/star/io/XSequenceOutputStream.hpp>
+#include <mutex>
+
+namespace cpo::uno { class XComponentContext; }
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+
+namespace {
+
+class SequenceOutputStreamService:
+    public cppu::WeakImplHelper<lang::XServiceInfo, io::XSequenceOutputStream>
+{
+public:
+    explicit SequenceOutputStreamService();
+
+    // noncopyable
+    SequenceOutputStreamService(const SequenceOutputStreamService&) = delete;
+    const SequenceOutputStreamService& operator=(const SequenceOutputStreamService&) = delete;
+
+    // css::lang::XServiceInfo:
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString & ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+
+    // css::io::XOutputStream:
+    virtual void writeBytes( const cpo::uno::Sequence< ::sal_Int8 > & aData ) override;
+    virtual void flush() override;
+    virtual void closeOutput() override;
+
+    // css::io::XSequenceOutputStream:
+    virtual cpo::uno::Sequence< ::sal_Int8 > getWrittenBytes(  ) override;
+
+private:
+    virtual ~SequenceOutputStreamService() override {};
+
+
+    std::mutex m_aMutex;
+    // WARNING: dtor of m_xOutputStream writes into m_aSequence so that must live longer!
+    cpo::uno::Sequence< ::sal_Int8 > m_aSequence;
+    uno::Reference< io::XOutputStream > m_xOutputStream;
+};
+SequenceOutputStreamService::SequenceOutputStreamService()
+{
+    m_xOutputStream.set( static_cast < ::cppu::OWeakObject* >( new ::comphelper::OSequenceOutputStream( m_aSequence ) ), uno::UNO_QUERY_THROW );
+}
+
+// com.sun.star.uno.XServiceInfo:
+OUString SequenceOutputStreamService::getImplementationName()
+{
+    return u"com.sun.star.comp.SequenceOutputStreamService"_ustr;
+}
+
+bool SequenceOutputStreamService::supportsService( OUString const & serviceName )
+{
+    return cppu::supportsService(this, serviceName);
+}
+
+cpo::uno::Sequence< OUString > SequenceOutputStreamService::getSupportedServiceNames()
+{
+    return { u"com.sun.star.io.SequenceOutputStream"_ustr };
+}
+
+// css::io::XOutputStream:
+void SequenceOutputStreamService::writeBytes( const cpo::uno::Sequence< ::sal_Int8 > & aData )
+{
+    std::scoped_lock aGuard( m_aMutex );
+    if ( !m_xOutputStream.is() )
+        throw io::NotConnectedException();
+
+    m_xOutputStream->writeBytes( aData );
+}
+
+void SequenceOutputStreamService::flush()
+{
+    std::scoped_lock aGuard( m_aMutex );
+    if ( !m_xOutputStream.is() )
+        throw io::NotConnectedException();
+
+    m_xOutputStream->flush();
+};
+
+void SequenceOutputStreamService::closeOutput()
+{
+    std::scoped_lock aGuard( m_aMutex );
+    if ( !m_xOutputStream.is() )
+        throw io::NotConnectedException();
+
+    m_xOutputStream->flush();
+    m_xOutputStream->closeOutput();
+    m_xOutputStream.clear();
+}
+
+// css::io::XSequenceOutputStream:
+cpo::uno::Sequence< ::sal_Int8 > SequenceOutputStreamService::getWrittenBytes()
+{
+    std::scoped_lock aGuard( m_aMutex );
+
+    if (m_xOutputStream.is())
+    {
+        m_xOutputStream->flush();
+    }
+    // else: no exception, just return the finished sequence
+
+    return m_aSequence;
+}
+
+} // anonymous namespace
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_SequenceOutputStreamService(
+    cpo::uno::XComponentContext *,
+    cpo::uno::Sequence<cpo::uno::Any> const &)
+{
+    return cppu::acquire(new SequenceOutputStreamService());
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,137 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <definitioncontainer.hxx>
+#include <cppuhelper/implbase5.hxx>
+#include <connectivity/CommonTools.hxx>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/frame/XComponentLoader.hpp>
+#include <com/sun/star/container/XHierarchicalNameContainer.hpp>
+#include <com/sun/star/container/XHierarchicalName.hpp>
+#include <com/sun/star/embed/XStorage.hpp>
+#include <com/sun/star/embed/XTransactedObject.hpp>
+#include <comphelper/propertystatecontainer.hxx>
+#include <comphelper/proparrhlp.hxx>
+#include <rtl/ref.hxx>
+#include <apitools.hxx>
+
+namespace dbaccess
+{
+typedef ::cppu::ImplHelper5 <   css::frame::XComponentLoader
+                            ,   css::lang::XMultiServiceFactory
+                            ,   css::container::XHierarchicalNameContainer
+                            ,   css::container::XHierarchicalName
+                            ,   css::embed::XTransactedObject
+                            >   ODocumentContainer_Base;
+// ODocumentContainer -    collections of database documents (reports/forms)
+class ODocumentContainer    : public ODefinitionContainer
+                            , public ODocumentContainer_Base
+                            , public ::comphelper::OPropertyStateContainer
+                            , public ::comphelper::OPropertyArrayUsageHelper< ODocumentContainer >
+{
+    bool        m_bFormsContainer;
+
+public:
+    /** constructs the container.<BR>
+    */
+    ODocumentContainer(
+          const cpo::uno::Reference< cpo::uno::XComponentContext >& _xORB
+        , const cpo::uno::Reference< cpo::uno::XInterface >&  _xParentContainer
+        ,const TContentPtr& _pImpl
+        , bool _bFormsContainer
+        );
+
+    // cpo::uno::XInterface
+    DECLARE_XINTERFACE( )
+
+    virtual cpo::uno::Sequence<cpo::uno::Type> getTypes() override;
+    virtual cpo::uno::Sequence<sal_Int8> getImplementationId() override;
+
+    // css::lang::XServiceInfo
+    DECLARE_SERVICE_INFO();
+
+    // XComponentLoader
+    virtual cpo::uno::Reference< css::lang::XComponent > loadComponentFromURL( const OUString& URL, const OUString& TargetFrameName, sal_Int32 SearchFlags, const cpo::uno::Sequence< css::beans::PropertyValue >& Arguments ) override;
+
+    // css::lang::XMultiServiceFactory
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstance( const OUString& aServiceSpecifier ) override;
+    virtual cpo::uno::Reference< cpo::uno::XInterface > createInstanceWithArguments( const OUString& ServiceSpecifier, const cpo::uno::Sequence< cpo::uno::Any >& Arguments ) override;
+    virtual cpo::uno::Sequence< OUString > getAvailableServiceNames(  ) override;
+
+    // XCommandProcessor
+    virtual cpo::uno::Any execute( const css::ucb::Command& aCommand, sal_Int32 CommandId, const cpo::uno::Reference< css::ucb::XCommandEnvironment >& Environment ) override ;
+
+    // XHierarchicalNameAccess
+    virtual cpo::uno::Any getByHierarchicalName( const OUString& _sName ) override;
+    virtual bool hasByHierarchicalName( const OUString& _sName ) override;
+
+    // XHierarchicalNameContainer
+    virtual void insertByHierarchicalName( const OUString& aName, const cpo::uno::Any& aElement ) override;
+    virtual void removeByHierarchicalName( const OUString& Name ) override;
+
+    // XHierarchicalName
+    virtual OUString getHierarchicalName(  ) override;
+    virtual OUString composeHierarchicalName( const OUString& aRelativeName ) override;
+
+    // XNameContainer
+    virtual void removeByName( const OUString& _rName ) override;
+
+    // XHierarchicalNameReplace
+    virtual void replaceByHierarchicalName( const OUString& aName, const cpo::uno::Any& aElement ) override;
+
+    // css::beans::XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+
+    // XTransactedObject
+    virtual void commit(  ) override;
+    virtual void revert(  ) override;
+
+    // XRename
+    virtual void rename( const OUString& newName ) override;
+
+    // OPropertySetHelper
+    virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
+
+    // helper
+    ::rtl::Reference<OContentHelper> getContent(const OUString& _sName) const;
+    cpo::uno::Reference< css::embed::XStorage > getContainerStorage() const;
+
+protected:
+    virtual ~ODocumentContainer() override;
+
+    /** OContentHelper
+    */
+    virtual OUString determineContentType() const override;
+
+    // ODefinitionContainer
+    virtual cpo::uno::Reference< css::ucb::XContent > createObject(
+        const OUString& _rName
+    ) override;
+
+    virtual void getPropertyDefaultByHandle( sal_Int32 _nHandle, cpo::uno::Any& _rDefault ) const override;
+
+    // OPropertyArrayUsageHelper
+    virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
+};
+
+}   // namespace dbaccess
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

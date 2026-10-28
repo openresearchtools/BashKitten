@@ -1,0 +1,82 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <cpo/uno/Reference.hxx>
+#include <cachedbitmap.hxx>
+
+#include <basegfx/matrix/b2dhommatrix.hxx>
+
+#include "action.hxx"
+
+
+/* Definition of CachedPrimitiveBase class */
+
+namespace cppcanvas
+    {
+        /** Base class providing cached re-rendering, if XCanvas
+            returns CachedBitmap
+
+            Derive from this class and implement private render()
+            method to perform the actual primitive rendering. Return
+            cached primitive into given reference. Next time this
+            class' public render() method gets called, the cached
+            representation is taken.
+         */
+        class CachedPrimitiveBase : public Action
+        {
+        public:
+            /** Constructor
+
+                @param rCanvas
+                Canvas on which this primitive is to appear
+
+                @param bOnlyRedrawWithSameTransform
+                When true, this class only reuses the cached
+                primitive, if the overall transformation stays the
+                same. Otherwise, repaints are always performed via the
+                cached primitive.
+             */
+            CachedPrimitiveBase( bool                   bOnlyRedrawWithSameTransform );
+
+            CachedPrimitiveBase(const CachedPrimitiveBase&) = delete;
+            const CachedPrimitiveBase& operator=(const CachedPrimitiveBase&) = delete;
+
+            virtual bool render( vclcanvas::Canvas& rCanvas,
+                                 const vclcanvas::ViewState& rViewState,
+                                 const ::basegfx::B2DHomMatrix& rTransformation ) const override;
+
+        protected:
+            using Action::render;
+
+        private:
+            virtual bool renderPrimitive( vclcanvas::Canvas& rCanvas,
+                                          const vclcanvas::ViewState& rViewState,
+                                          rtl::Reference< vclcanvas::CachedBitmap >& rCachedPrimitive,
+                                          const ::basegfx::B2DHomMatrix& rTransformation ) const = 0;
+
+            mutable rtl::Reference< vclcanvas::CachedBitmap >               mxCachedPrimitive;
+            mutable ::basegfx::B2DHomMatrix                                 maLastTransformation;
+            const bool                                                      mbOnlyRedrawWithSameTransform;
+        };
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

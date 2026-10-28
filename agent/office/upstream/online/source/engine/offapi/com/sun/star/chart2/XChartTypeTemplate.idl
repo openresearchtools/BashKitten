@@ -1,0 +1,93 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef com_sun_star_chart2_XChartTypeTemplate_idl
+#define com_sun_star_chart2_XChartTypeTemplate_idl
+
+#include <cpo/uno/XInterface.idl>
+#include <com/sun/star/beans/PropertyValue.idl>
+#include <com/sun/star/lang/IllegalArgumentException.idl>
+#include <com/sun/star/chart2/XDiagram.idl>
+#include <com/sun/star/chart2/data/XDataSource.idl>
+#include <com/sun/star/chart2/XChartType.idl>
+#include <com/sun/star/chart2/XDataInterpreter.idl>
+
+module com
+{
+module sun
+{
+module star
+{
+module chart2
+{
+
+interface XChartTypeTemplate : ::cpo::uno::XInterface
+{
+    /** Creates a new diagram based upon the given data .
+
+        @param xDataSource
+            This data source will be interpreted in a chart-type
+            specific way and appropriate DataSeries will
+            be created which serve as input for the new diagram.
+
+        @param aArguments
+            Arguments that tell the template how to slice the given
+            range.  The properties should be defined in a separate
+            service.
+
+            <p>For standard parameters that may be used, see the
+            service StandardDiagramCreationParameters.
+            </p>
+
+        @return
+            The new diagram which represents this
+            ChartTypeTemplate.
+     */
+    XDiagram createDiagramByDataSource(
+        [in] com::sun::star::chart2::data::XDataSource xDataSource,
+        [in] sequence< com::sun::star::beans::PropertyValue > aArguments );
+
+    /** @return
+            `TRUE` if the template does support categories
+     */
+    boolean supportsCategories();
+
+    /** Analyses the given diagram and reinterprets its
+        DataSeries and Categories and
+        creates a new diagram based on these series.
+
+        <p>Note, that if matchesTemplate() returns
+        `TRUE` for the given XDiagram, the latter should
+        not be changed.</p>
+
+        @param xDiagram
+            The diagram given will be modified such that it represents
+            this ChartTypeTemplate.
+     */
+    void changeDiagram( [in] XDiagram xDiagram );
+
+};
+
+} ; // chart2
+} ; // com
+} ; // sun
+} ; // star
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

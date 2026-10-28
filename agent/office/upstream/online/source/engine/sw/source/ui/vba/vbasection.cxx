@@ -1,0 +1,91 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#include "vbasection.hxx"
+#include <utility>
+#include <vbahelper/vbahelper.hxx>
+#include "vbapagesetup.hxx"
+#include "vbaheadersfooters.hxx"
+#include <unotxdoc.hxx>
+
+using namespace ::ooo::vba;
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+SwVbaSection::SwVbaSection( const uno::Reference< ooo::vba::XHelperInterface >& rParent,
+                            const uno::Reference< cpo::uno::XComponentContext >& rContext,
+                            rtl::Reference< SwXTextDocument > xModel,
+                            uno::Reference< beans::XPropertySet > xProps )
+: SwVbaSection_BASE( rParent, rContext ),
+  mxModel(std::move( xModel )),
+  mxPageProps(std::move( xProps ))
+{
+}
+
+SwVbaSection::~SwVbaSection()
+{
+}
+
+bool SwVbaSection::getProtectedForForms()
+{
+    return false;
+}
+
+void SwVbaSection::setProtectedForForms( bool /*_protectedforforms*/ )
+{
+}
+
+cpo::uno::Any SwVbaSection::Headers( const cpo::uno::Any& index )
+{
+    uno::Reference< XCollection > xCol( new SwVbaHeadersFooters( this, mxContext, mxModel, mxPageProps, true ) );
+    if ( index.hasValue() )
+        return xCol->Item( index, cpo::uno::Any() );
+    return cpo::uno::Any( xCol );
+}
+
+cpo::uno::Any SwVbaSection::Footers( const cpo::uno::Any& index )
+{
+    uno::Reference< XCollection > xCol( new SwVbaHeadersFooters( this, mxContext, mxModel, mxPageProps, false ) );
+    if ( index.hasValue() )
+        return xCol->Item( index, cpo::uno::Any() );
+    return cpo::uno::Any( xCol );
+}
+
+cpo::uno::Any
+SwVbaSection::PageSetup( )
+{
+    return cpo::uno::Any( uno::Reference< word::XPageSetup >( new SwVbaPageSetup( this, mxContext, mxModel, mxPageProps ) ) );
+}
+
+OUString
+SwVbaSection::getServiceImplName()
+{
+    return u"SwVbaSection"_ustr;
+}
+
+cpo::uno::Sequence< OUString >
+SwVbaSection::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.word.Section"_ustr
+    };
+    return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

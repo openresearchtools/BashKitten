@@ -1,0 +1,165 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+
+#include "pdfdialog.hxx"
+#include "impdialog.hxx"
+#include <vcl/svapp.hxx>
+
+using namespace ::com::sun::star;
+using namespace ::cpo::uno;
+using namespace cpo::uno;
+using namespace ::com::sun::star::lang;
+using namespace ::com::sun::star::beans;
+
+PDFDialog::PDFDialog( const Reference< XComponentContext > &rxContext )
+: PDFDialog_Base( rxContext )
+{
+}
+
+
+PDFDialog::~PDFDialog()
+{
+}
+
+
+Sequence< sal_Int8 > PDFDialog::getImplementationId()
+{
+    return cpo::uno::Sequence<sal_Int8>();
+}
+
+
+OUString PDFDialog::getImplementationName()
+{
+    return u"com.sun.star.comp.PDF.PDFDialog"_ustr;
+}
+
+
+Sequence< OUString > PDFDialog::getSupportedServiceNames()
+{
+    return { u"com.sun.star.document.PDFDialog"_ustr };
+}
+
+std::unique_ptr<weld::DialogController> PDFDialog::createDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent)
+{
+    if( mxSrcDoc.is() )
+        return std::make_unique<ImpPDFTabDialog>(Application::GetFrameWeld(rParent), maFilterData, mxSrcDoc);
+    return nullptr;
+}
+
+std::shared_ptr<SfxTabDialogController> PDFDialog::createAsyncDialog(const cpo::uno::Reference<css::awt::XWindow>& rParent)
+{
+    if( mxSrcDoc.is() )
+        return std::make_shared<ImpPDFTabDialog>(Application::GetFrameWeld(rParent), maFilterData, mxSrcDoc);
+    return nullptr;
+}
+
+void PDFDialog::executedDialog( sal_Int16 nExecutionResult )
+{
+    if (nExecutionResult && m_xDialog)
+        maFilterData = static_cast<ImpPDFTabDialog*>(m_xDialog.get())->GetFilterData();
+    destroyDialog();
+}
+
+void PDFDialog::runAsync(const cpo::uno::Reference< css::ui::dialogs::XDialogClosedListener >& xListener)
+{
+    rtl::Reference<PDFDialog> xThis(this); // keep alive, 'this' may be droped otherwise
+    SfxTabDialogController::runAsync(m_xAsyncDialog, [xThis, xListener](sal_Int32 nResponse) {
+        xThis->executedAsyncDialog( xThis->m_xAsyncDialog, nResponse );
+        css::ui::dialogs::DialogClosedEvent aEvent;
+        aEvent.DialogResult = nResponse;
+        xListener->dialogClosed( aEvent );
+        xThis->destroyAsyncDialog();
+    });
+}
+
+void PDFDialog::executedAsyncDialog( std::shared_ptr<SfxTabDialogController> xAsyncDialog, sal_Int32 nExecutionResult )
+{
+    if (nExecutionResult && xAsyncDialog)
+        maFilterData = static_cast<ImpPDFTabDialog*>(xAsyncDialog.get())->GetFilterData();
+}
+
+Reference< XPropertySetInfo > PDFDialog::getPropertySetInfo()
+{
+    Reference< XPropertySetInfo >  xInfo( createPropertySetInfo( getInfoHelper() ) );
+    return xInfo;
+}
+
+::cppu::IPropertyArrayHelper& PDFDialog::getInfoHelper()
+{
+    return *getArrayHelper();
+}
+
+::cppu::IPropertyArrayHelper* PDFDialog::createArrayHelper() const
+{
+    Sequence< Property > aProps;
+    describeProperties(aProps);
+    return new ::cppu::OPropertyArrayHelper( aProps );
+}
+
+
+Sequence< PropertyValue > PDFDialog::getPropertyValues()
+{
+    sal_Int32 i, nCount;
+
+    for( i = 0, nCount = maMediaDescriptor.getLength(); i < nCount; i++ )
+    {
+        if ( maMediaDescriptor[ i ].Name == "FilterData" )
+            break;
+    }
+
+    if( i == nCount )
+        maMediaDescriptor.realloc( ++nCount );
+    auto pMediaDescriptor = maMediaDescriptor.getArray();
+
+    pMediaDescriptor[ i ].Name = u"FilterData"_ustr;
+    pMediaDescriptor[ i ].Value <<= maFilterData;
+
+    return maMediaDescriptor;
+}
+
+
+void PDFDialog::setPropertyValues( const Sequence< PropertyValue >& rProps )
+{
+    maMediaDescriptor = rProps;
+
+    for (const PropertyValue& rProp : maMediaDescriptor)
+    {
+        if ( rProp.Name == "FilterData" )
+        {
+            rProp.Value >>= maFilterData;
+            break;
+        }
+    }
+}
+
+
+void PDFDialog::setSourceDocument( const Reference< XComponent >& xDoc )
+{
+    mxSrcDoc = xDoc;
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+filter_PDFDialog_get_implementation(
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const&)
+{
+    return cppu::acquire(new PDFDialog(context));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

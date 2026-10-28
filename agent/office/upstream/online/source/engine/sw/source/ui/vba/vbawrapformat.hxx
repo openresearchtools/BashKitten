@@ -1,0 +1,66 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_SW_SOURCE_UI_VBA_VBAWRAPFORMAT_HXX
+#define INCLUDED_SW_SOURCE_UI_VBA_VBAWRAPFORMAT_HXX
+
+#include <com/sun/star/drawing/XShape.hpp>
+#include <ooo/vba/word/XWrapFormat.hpp>
+#include <vbahelper/vbahelperinterface.hxx>
+
+typedef InheritedHelperInterfaceWeakImpl< ooo::vba::word::XWrapFormat > SwVbaWrapFormat_BASE;
+
+class SwVbaWrapFormat : public SwVbaWrapFormat_BASE
+{
+private:
+    cpo::uno::Reference< css::drawing::XShape > m_xShape;
+    cpo::uno::Reference< css::beans::XPropertySet > m_xPropertySet;
+    sal_Int32 mnWrapFormatType;
+    sal_Int32 mnSide;
+
+private:
+    /// @throws cpo::uno::RuntimeException
+    void makeWrap();
+    /// @throws cpo::uno::RuntimeException
+    float getDistance( const OUString& sName );
+    /// @throws cpo::uno::RuntimeException
+    void setDistance( const OUString& sName, float _distance );
+
+public:
+    SwVbaWrapFormat(  cpo::uno::Sequence< cpo::uno::Any > const& aArgs, cpo::uno::Reference< cpo::uno::XComponentContext >const& xContext );
+
+    virtual ::sal_Int32 getType() override;
+    virtual void setType( ::sal_Int32 _type ) override;
+    virtual ::sal_Int32 getSide() override;
+    virtual void setSide( ::sal_Int32 _side ) override;
+    virtual float getDistanceTop() override;
+    virtual void setDistanceTop( float _distancetop ) override;
+    virtual float getDistanceBottom() override;
+    virtual void setDistanceBottom( float _distancebottom ) override;
+    virtual float getDistanceLeft() override;
+    virtual void setDistanceLeft( float _distanceleft ) override;
+    virtual float getDistanceRight() override;
+    virtual void setDistanceRight( float _distanceright ) override;
+
+    virtual OUString getServiceImplName() override;
+    virtual cpo::uno::Sequence<OUString> getServiceNames() override;
+};
+
+#endif // INCLUDED_SW_SOURCE_UI_VBA_VBAWRAPFORMAT_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

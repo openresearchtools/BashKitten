@@ -1,0 +1,262 @@
+/* global describe it cy beforeEach expect require */
+
+var helper = require('../../common/helper');
+var desktopHelper = require('../../common/desktop_helper');
+
+describe(['tagdesktop'], 'Scroll through document, modify heading', function() {
+
+	function expandSection(name) {
+		cy.getFrameWindow().then((win) => helper.processToIdle(win));
+		cy.cGet('#contenttree')
+			.contains('.jsdialog.sidebar.ui-treeview-cell-text', name)
+			.parent() // .ui-treeview-cell
+			.parent() // div - column
+			.parent() // .ui-treeview-entry
+			.find('.ui-treeview-expander-column')
+			.click();
+		cy.getFrameWindow().then((win) => helper.processToIdle(win));
+	}
+
+	beforeEach(function() {
+		helper.setupAndLoadDocument('writer/navigator.odt');
+		cy.cGet('#navigator-floating-icon').click(); // Ensure it's open
+		cy.getFrameWindow().then((win) => {
+			this.win = win;
+		});
+	});
+
+	it('Navigator visual test', function() {
+		cy.cGet('#navigator-dock-wrapper').scrollTo(0,0,{ ensureScrollable: false });
+		helper.processToIdle(this.win);
+		cy.cGet('#navigator-dock-wrapper').compareSnapshot('navigator_writer', 0.065);
+	});
+
+	it('Jump to element. Navigator -> Document', function() {
+		// Expand Tables, Frames, Images
+		// Note click()/dblclick() scrolls the contenttree even if it would be not needed to click
+		expandSection('Tables');
+		expandSection('Frames');
+		expandSection('Images');
+
+		helper.processToIdle(this.win);
+
+		//Scroll back to Top
+		cy.cGet('#navigator-dock-wrapper').scrollTo(0,0, { ensureScrollable: false });
+		helper.processToIdle(this.win);
+
+		// Doubleclick several items, and check if the document is scrolled to the right page
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Feedback').dblclick();
+		desktopHelper.assertVisiblePage(2, 2, 8);
+		helper.processToIdle(this.win);
+
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Text').dblclick();
+		desktopHelper.assertVisiblePage(5, 6, 8);
+		helper.processToIdle(this.win);
+
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Replacing').dblclick();
+		desktopHelper.assertVisiblePage(7, 7, 8);
+		helper.processToIdle(this.win);
+
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Table15').dblclick();
+		desktopHelper.assertVisiblePage(2, 2, 8);
+		helper.processToIdle(this.win);
+
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Frame39').dblclick();
+		desktopHelper.assertVisiblePage(4, 4, 8);
+		helper.processToIdle(this.win);
+
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Frame27').dblclick();
+		desktopHelper.assertVisiblePage(6, 6, 8);
+		helper.processToIdle(this.win);
+
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'graphics3').dblclick();
+		desktopHelper.assertVisiblePage(1, 1, 8);
+		helper.processToIdle(this.win);
+
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'graphics10').dblclick();
+		desktopHelper.assertVisiblePage(5, 5, 8);
+	});
+
+	it('Search box keeps focus while typing in the Outline tab', function() {
+		// Regression test: typing in the Navigator search box must not lose
+		// focus to the Outline tree after the first character. The Outline tab
+		// is selected by default when the Navigator is opened.
+		cy.cGet('#tab-navigator.selected').should('exist');
+
+		cy.cGet('input#navigator-search-input').focus();
+		helper.assertFocus('id', 'navigator-search-input');
+
+		// Type into whatever currently has focus (not directly into the input)
+		// so that focus being stolen mid-typing is detectable.
+		cy.cGet('body').type('Feedback');
+		// Give a delayed focus steal, if any, time to happen: the regression fired
+		// once the Outline tree processed the typed text, not on the first keystroke.
+		cy.wait(1000);
+
+		// Focus must remain in the search input and the whole word present.
+		helper.assertFocus('id', 'navigator-search-input');
+		cy.cGet('input#navigator-search-input').should('have.value', 'Feedback');
+	});
+
+	it('Clearing the search field removes the Outline highlight', function() {
+		// Regression test: after searching, matching Outline entries get a
+		// yellow highlight; clearing the search field must remove it (and not
+		// leave it to be re-applied on later navigator updates).
+		cy.cGet('#tab-navigator.selected').should('exist');
+
+		// Search for a heading and activate; this highlights matching entries.
+		cy.cGet('input#navigator-search-input').type('Feedback{enter}');
+		cy.cGet('#contenttree .ui-treeview-entry.highlighted').should('exist');
+
+		// Clearing the field must remove the Outline highlight.
+		cy.cGet('input#navigator-search-input').type('{selectall}{backspace}');
+		cy.cGet('#contenttree .ui-treeview-entry.highlighted').should('not.exist');
+	});
+
+	it('The close button hides the navigator, and the floating icon shows it again', function() {
+		cy.cGet('#navigation-sidebar').should('have.class', 'visible');
+		cy.cGet('#contenttree').should('contain.text', 'Feedback');
+
+		desktopHelper.closeNavigatorSidebar();
+		helper.processToIdle(this.win);
+		cy.cGet('#navigation-sidebar').should('not.have.class', 'visible');
+		// The content tree is gone once core has closed its navigator.
+		cy.cGet('#contenttree').should('not.exist');
+		cy.getFrameWindow().should(function(win) {
+			expect(win.app.showNavigator).to.be.false;
+		});
+
+		cy.cGet('#navigator-floating-icon').click();
+		helper.processToIdle(this.win);
+		cy.cGet('#navigation-sidebar').should('have.class', 'visible');
+		cy.cGet('#contenttree').should('contain.text', 'Feedback');
+	});
+
+	it('Saved settings open and close the navigator to match them', function() {
+		cy.cGet('#contenttree').should('contain.text', 'Feedback');
+		cy.getFrameWindow().should(function(win) {
+			expect(win.app.showNavigator).to.be.true;
+		});
+
+		cy.getFrameWindow().then(function(win) {
+			win.app.map.settings.applyBrowserSettings({ 'text.ShowNavigator': 'false' });
+			return helper.processToIdle(win);
+		});
+		cy.cGet('#navigation-sidebar').should('not.have.class', 'visible');
+		cy.cGet('#contenttree').should('not.exist');
+		cy.getFrameWindow().should(function(win) {
+			expect(win.app.showNavigator).to.be.false;
+		});
+
+		cy.getFrameWindow().then(function(win) {
+			win.app.map.settings.applyBrowserSettings({ 'text.ShowNavigator': 'true' });
+			return helper.processToIdle(win);
+		});
+		cy.cGet('#navigation-sidebar').should('have.class', 'visible');
+		cy.cGet('#contenttree').should('contain.text', 'Feedback');
+	});
+
+	it('Jump to element even when cursor not visible', function() {
+		// Expand Tables, Frames, Images
+		// Note click()/dblclick() scrolls the contenttree even if it would be not needed to click
+		expandSection('Tables');
+		expandSection('Frames');
+		expandSection('Images');
+
+		//Scroll back to Top
+		cy.cGet('#navigator-dock-wrapper').scrollTo(0,0, { ensureScrollable: false });
+
+		// Doubleclick several items, and check if the document is scrolled to the right page
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Feedback').dblclick();
+		desktopHelper.assertVisiblePage(2, 2, 8);
+
+		desktopHelper.assertScrollbarPosition('vertical', 45, 75);
+
+		// Scroll document to the top so cursor is no longer visible, that turns following off
+		desktopHelper.scrollWriterDocumentToTop();
+
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Text').dblclick();
+		desktopHelper.assertVisiblePage(5, 6, 8);
+
+		desktopHelper.assertScrollbarPosition('vertical', 245, 275);
+
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Replacing').dblclick();
+		desktopHelper.assertVisiblePage(7, 7, 8);
+
+		desktopHelper.assertScrollbarPosition('vertical', 350, 380);
+	});
+
+	it('Jump to image when cursor not visible', function() {
+		// Regression test: when the text cursor is hidden, double-clicking
+		// an image in the navigator must still scroll the viewport to it.
+		// assertVisiblePage alone is not sufficient as #StatePageNumber
+		// reflects the selection's page (which core updates regardless of
+		// whether the viewport scrolls), so check the actual scrollbar.
+		expandSection('Images');
+
+		cy.cGet('#navigator-dock-wrapper').scrollTo(0,0, { ensureScrollable: false });
+
+		// Jump to a heading so a cursor exists at a known position.
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Feedback').dblclick();
+		desktopHelper.assertVisiblePage(2, 2, 8);
+		desktopHelper.assertScrollbarPosition('vertical', 45, 75);
+
+		// Scroll document to the top so the text cursor is no longer visible.
+		desktopHelper.scrollWriterDocumentToTop();
+		desktopHelper.assertScrollbarPosition('vertical', 0, 10);
+
+		// Double-click an image on a different page (graphics10 is on page 5).
+		// Without the fix, _onUpdateCursor returns early because the text
+		// cursor is invisible, so the viewport never scrolls and the
+		// scrollbar stays near 0.
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'graphics10').dblclick();
+		desktopHelper.assertVisiblePage(5, 5, 8);
+		desktopHelper.assertScrollbarPosition('vertical', 100, 400);
+	});
+
+	it.skip('Jump to element. Document -> Navigator', function() {
+		// Move the cursor into elements in Document, and check
+		// if navigator contentTree scroll to the element and select that,
+		// and if necessary expand contentypes, to make the element visible.
+
+		// Move into a hyperlink
+		desktopHelper.pressKey(2, 'pagedown');
+		desktopHelper.pressKey(3, 'downArrow');
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'http://www.gnu.org/licenses/gpl.html').should('be.visible');
+		cy.cGet('#contenttree').find('.jsdialog.sidebar.ui-treeview-entry.ui-treeview-notexpandable.selected').find('.jsdialog.sidebar.ui-treeview-cell-text').should('have.text','http://www.gnu.org/licenses/gpl.html');
+
+		// Move into a Table
+		desktopHelper.pressKey(2, 'pagedown');
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Table15').should('be.visible');
+		cy.cGet('#contenttree').find('.jsdialog.sidebar.ui-treeview-entry.ui-treeview-notexpandable.selected').find('.jsdialog.sidebar.ui-treeview-cell-text').should('have.text','Table15');
+
+		// Move into a Headings
+		// Previous headings was in a section, and navigator selected the section instead.
+		desktopHelper.pressKey(3, 'pagedown');
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Introduction').should('be.visible');
+		cy.cGet('#contenttree').find('.jsdialog.sidebar.ui-treeview-entry.ui-treeview-notexpandable.selected').find('.jsdialog.sidebar.ui-treeview-cell-text').should('have.text','Introduction');
+		// hyperlinks should be not visible, as they are so far from Introduction
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'http://www.gnu.org/licenses/gpl.html').should('be.not.visible');
+
+		desktopHelper.pressKey(1, 'pagedown');
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Leading zeroes').should('be.visible');
+		cy.cGet('#contenttree').find('.jsdialog.sidebar.ui-treeview-entry.ui-treeview-notexpandable.selected').find('.jsdialog.sidebar.ui-treeview-cell-text').should('have.text','Leading zeroes');
+
+		// Risky: blind click into a big image, because cursor avoid images.
+		cy.cGet('#document-container').click(450,450);
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'graphics36').should('be.visible');
+		cy.cGet('#contenttree').find('.jsdialog.sidebar.ui-treeview-entry.ui-treeview-notexpandable.selected').find('.jsdialog.sidebar.ui-treeview-cell-text').should('have.text','graphics36');
+
+		desktopHelper.pressKey(2, 'pagedown');
+		desktopHelper.pressKey(1, 'downArrow');
+		cy.cGet('#contenttree').contains('.jsdialog.sidebar.ui-treeview-cell-text', 'Table14').should('be.visible');
+		cy.cGet('#contenttree').find('.jsdialog.sidebar.ui-treeview-entry.ui-treeview-notexpandable.selected').find('.jsdialog.sidebar.ui-treeview-cell-text').should('have.text','Table14');
+	});
+
+	it.skip('Rewrite Heading', function() {
+		// Write into a heading, and check if it changed in navigator contentTree.
+		desktopHelper.pressKey(7, 'pagedown');
+		desktopHelper.pressKey(1, 'A');
+		cy.cGet('#contenttree').find('.jsdialog.sidebar.ui-treeview-entry.ui-treeview-notexpandable.selected').find('.jsdialog.sidebar.ui-treeview-cell-text').should('have.text','IntroAduction');
+	});
+});

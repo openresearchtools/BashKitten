@@ -1,0 +1,835 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <cfgutil.hxx>
+
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/container/XEnumerationAccess.hpp>
+#include <com/sun/star/container/XEnumeration.hpp>
+#include <com/sun/star/document/XScriptInvocationContext.hpp>
+#include <com/sun/star/frame/ModuleManager.hpp>
+#include <com/sun/star/frame/Desktop.hpp>
+#include <com/sun/star/script/browse/XBrowseNode.hpp>
+#include <com/sun/star/script/browse/BrowseNodeTypes.hpp>
+#include <com/sun/star/script/browse/theBrowseNodeFactory.hpp>
+#include <com/sun/star/script/browse/BrowseNodeFactoryViewTypes.hpp>
+#include <cpo/uno/RuntimeException.hpp>
+
+#include <tools/urlobj.hxx>
+#include <strings.hrc>
+#include <bitmaps.hlst>
+#include <comphelper/SetFlagContextHelper.hxx>
+#include <comphelper/documentinfo.hxx>
+#include <comphelper/kit.hxx>
+#include <comphelper/processfactory.hxx>
+#include <svtools/imagemgr.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
+#include <dialmgr.hxx>
+#include <comphelper/diagnose_ex.hxx>
+#include <vcl/commandevent.hxx>
+#include <vcl/svapp.hxx>
+
+#include <unotools/viewoptions.hxx>
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+using namespace ::cpo::uno;
+using namespace ::com::sun::star::script;
+using namespace ::com::sun::star::frame;
+using namespace ::com::sun::star::document;
+
+constexpr OUString MACRO_SELECTOR_CONFIGNAME = u"MacroSelectorDialog"_ustr;
+constexpr OUString LAST_RUN_MACRO_INFO = u"LastRunMacro"_ustr;
+
+OUString CuiConfigFunctionListBox::GetCommandHelpText()
+{
+    SfxGroupInfo_Impl *pData = weld::fromId<SfxGroupInfo_Impl*>(get_selected_id());
+    if (pData && pData->nKind == SfxCfgKind::FUNCTION_SCRIPT)
+        return pData->sHelpText;
+    return OUString();
+}
+
+CuiConfigFunctionListBox::CuiConfigFunctionListBox(std::unique_ptr<weld::TreeView> xTreeView)
+    : m_xTreeView(std::move(xTreeView))
+    , m_xScratchIter(m_xTreeView->make_iterator())
+{
+    m_xTreeView->make_sorted();
+    m_xTreeView->set_size_request(m_xTreeView->get_approximate_digit_width() * 35, m_xTreeView->get_height_rows(9));
+    m_xTreeView->connect_query_tooltip(LINK(this, CuiConfigFunctionListBox, QueryTooltip));
+}
+
+CuiConfigFunctionListBox::~CuiConfigFunctionListBox()
+{
+    ClearAll();
+}
+
+IMPL_LINK(CuiConfigFunctionListBox, QueryTooltip, const weld::TreeIter&, rIter, OUString)
+{
+    SfxGroupInfo_Impl *pData = weld::fromId<SfxGroupInfo_Impl*>(m_xTreeView->get_id(rIter));
+    if (!pData)
+        return OUString();
+    OUString aLabel = CuiResId(RID_CUISTR_COMMANDLABEL) + ": ";
+    OUString aName = CuiResId(RID_CUISTR_COMMANDNAME) + ": ";
+    OUString aTip = CuiResId(RID_CUISTR_COMMANDTIP) + ": ";
+    return  aLabel + pData->sLabel + "\n" + aName + pData->sCommand+ "\n" + aTip;
+}
+
+void CuiConfigFunctionListBox::ClearAll()
+/*  Description
+    Deletes all entries in the FunctionListBox, all UserData and all
+    possibly existing MacroInfo.
+*/
+{
+    sal_uInt16 nCount = aArr.size();
+    for ( sal_uInt16 i=0; i<nCount; ++i )
+    {
+        SfxGroupInfo_Impl *pData = aArr[i].get();
+
+        if ( pData->nKind == SfxCfgKind::FUNCTION_SCRIPT )
+        {
+            OUString* pScriptURI = static_cast<OUString*>(pData->pObject);
+            delete pScriptURI;
+        }
+
+        if ( pData->nKind == SfxCfgKind::GROUP_SCRIPTCONTAINER )
+        {
+            XInterface* xi = static_cast<XInterface *>(pData->pObject);
+            if (xi != nullptr)
+            {
+                xi->release();
+            }
+        }
+    }
+
+    aArr.clear();
+    m_xTreeView->clear();
+}
+
+OUString CuiConfigFunctionListBox::GetSelectedScriptURI() const
+{
+    SfxGroupInfo_Impl *pData = weld::fromId<SfxGroupInfo_Impl*>(get_selected_id());
+    if (pData && pData->nKind == SfxCfgKind::FUNCTION_SCRIPT)
+        return *static_cast<OUString*>(pData->pObject);
+    return OUString();
+}
+
+struct SvxConfigGroupBoxResource_Impl
+{
+    OUString m_sMyMacros;
+    OUString m_sProdMacros;
+
+    SvxConfigGroupBoxResource_Impl();
+};
+
+SvxConfigGroupBoxResource_Impl::SvxConfigGroupBoxResource_Impl() :
+    m_sMyMacros(CuiResId(RID_CUISTR_MYMACROS)),
+    m_sProdMacros(CuiResId(RID_CUISTR_PRODMACROS))
+{
+}
+
+namespace
+{
+
+    /** examines a component whether it supports XEmbeddedScripts, or provides access to such a
+        component by implementing XScriptInvocationContext.
+        @return
+            the model which supports the embedded scripts, or <NULL/> if it cannot find such a
+            model
+    */
+    Reference< XModel > lcl_getDocumentWithScripts_throw( const Reference< XInterface >& _rxComponent )
+    {
+        Reference< XEmbeddedScripts > xScripts( _rxComponent, UNO_QUERY );
+        if ( !xScripts.is() )
+        {
+            Reference< XScriptInvocationContext > xContext( _rxComponent, UNO_QUERY );
+            if ( xContext.is() )
+                xScripts = xContext->getScriptContainer();
+        }
+
+        return Reference< XModel >( xScripts, UNO_QUERY );
+    }
+
+
+    Reference< XModel > lcl_getScriptableDocument_nothrow( const Reference< XFrame >& _rxFrame )
+    {
+        Reference< XModel > xDocument;
+
+        // examine our associated frame
+        try
+        {
+            OSL_ENSURE( _rxFrame.is(), "lcl_getScriptableDocument_nothrow: you need to pass a frame to this dialog/tab page!" );
+            if ( _rxFrame.is() )
+            {
+                // first try the model in the frame
+                Reference< XController > xController( _rxFrame->getController(), UNO_SET_THROW );
+                xDocument = lcl_getDocumentWithScripts_throw( xController->getModel() );
+
+                if ( !xDocument.is() )
+                {
+                    // if there is no suitable document in the frame, try the controller
+                    xDocument = lcl_getDocumentWithScripts_throw( _rxFrame->getController() );
+                }
+            }
+        }
+        catch( const Exception& )
+        {
+        }
+
+        return xDocument;
+    }
+}
+
+CuiConfigGroupListBox::CuiConfigGroupListBox(std::unique_ptr<weld::TreeView> xTreeView)
+    : xImp(new SvxConfigGroupBoxResource_Impl())
+    , m_pFunctionListBox(nullptr)
+    , m_xTreeView(std::move(xTreeView))
+    , m_xScratchIter(m_xTreeView->make_iterator())
+{
+    m_xTreeView->connect_expanding(LINK(this, CuiConfigGroupListBox, ExpandingHdl));
+    m_xTreeView->set_size_request(m_xTreeView->get_approximate_digit_width() * 35, m_xTreeView->get_height_rows(9));
+}
+
+CuiConfigGroupListBox::~CuiConfigGroupListBox()
+{
+    ClearAll();
+}
+
+void CuiConfigGroupListBox::ClearAll()
+{
+    sal_uInt16 nCount = aArr.size();
+    for ( sal_uInt16 i=0; i<nCount; ++i )
+    {
+        SfxGroupInfo_Impl *pData = aArr[i].get();
+        if (pData->nKind == SfxCfgKind::FUNCTION_SCRIPT && pData->pObject )
+        {
+            OUString* pScriptURI = static_cast<OUString*>(pData->pObject);
+            delete pScriptURI;
+        }
+        else if (pData->nKind == SfxCfgKind::GROUP_SCRIPTCONTAINER)
+        {
+            XInterface* xi = static_cast<XInterface *>(pData->pObject);
+            if (xi != nullptr)
+            {
+                xi->release();
+            }
+        }
+    }
+
+    aArr.clear();
+    m_xTreeView->clear();
+}
+
+void CuiConfigGroupListBox::FillScriptList(const cpo::uno::Reference< css::script::browse::XBrowseNode >& xRootNode,
+                                           const weld::TreeIter* pParentEntry)
+{
+    try {
+        if ( xRootNode->hasChildNodes() )
+        {
+            // tdf#120362: Don't ask to enable disabled Java when filling script list
+            cpo::uno::ContextLayer layer(comphelper::NoEnableJavaInteractionContext());
+
+            const Sequence< Reference< browse::XBrowseNode > > children =
+                xRootNode->getChildNodes();
+            bool bIsRootNode = false;
+
+            OUString user(u"user"_ustr);
+            OUString share(u"share"_ustr);
+            if ( xRootNode->getName() == "Root" )
+            {
+                bIsRootNode = true;
+            }
+
+            //To mimic current starbasic behaviour we
+            //need to make sure that only the current document
+            //is displayed in the config tree. Tests below
+            //set the bDisplay flag to FALSE if the current
+            //node is a first level child of the Root and is NOT
+            //either the current document, user or share
+            OUString currentDocTitle;
+            Reference< XModel > xDocument( lcl_getScriptableDocument_nothrow( m_xFrame ) );
+            if ( xDocument.is() )
+            {
+                currentDocTitle = ::comphelper::DocumentInfo::getDocumentTitle( xDocument );
+            }
+
+            for ( Reference< browse::XBrowseNode > const & theChild : children )
+            {
+                if (!theChild.is())
+                    continue;
+
+                bool bDisplay = true;
+                OUString uiName = theChild->getName();
+                if ( bIsRootNode )
+                {
+                    if (  ! (uiName == user  || uiName == share ||
+                             uiName == currentDocTitle ) )
+                    {
+                        bDisplay=false;
+                    }
+                    else
+                    {
+                        if ( uiName == user )
+                        {
+                            uiName = xImp->m_sMyMacros;
+                        }
+                        else if ( uiName == share )
+                        {
+                            uiName = xImp->m_sProdMacros;
+                        }
+                    }
+                }
+                if (theChild->getType() != browse::BrowseNodeTypes::SCRIPT  && bDisplay )
+                {
+//                  We call acquire on the XBrowseNode so that it does not
+//                  get autodestructed and become invalid when accessed later.
+                    theChild->acquire();
+
+                    bool bChildOnDemand = false;
+
+                    if ( theChild->hasChildNodes() )
+                    {
+                        const Sequence< Reference< browse::XBrowseNode > > grandchildren =
+                            theChild->getChildNodes();
+
+                        for ( const auto& rxNode : grandchildren )
+                        {
+                            if (!rxNode.is())
+                                continue;
+
+                            if ( rxNode->getType() == browse::BrowseNodeTypes::CONTAINER )
+                            {
+                                bChildOnDemand = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    OUString aImage = GetImage(theChild, m_xContext, bIsRootNode);
+
+                    aArr.push_back( std::make_unique<SfxGroupInfo_Impl>(SfxCfgKind::GROUP_SCRIPTCONTAINER,
+                            static_cast<void *>( theChild.get())));
+
+                    OUString sId(weld::toId(aArr.back().get()));
+                    m_xTreeView->insert(pParentEntry, -1, &uiName, &sId, nullptr, nullptr, bChildOnDemand, m_xScratchIter.get());
+                    m_xTreeView->set_image(*m_xScratchIter, aImage);
+                }
+            }
+        }
+    }
+    catch (RuntimeException&) {
+        // do nothing, the entry will not be displayed in the UI
+    }
+}
+
+void CuiConfigGroupListBox::Init(const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+    const cpo::uno::Reference< css::frame::XFrame >& xFrame)
+{
+    m_xTreeView->freeze();
+    ClearAll(); // Remove all old entries from treelist box
+
+    m_xContext = xContext;
+    m_xFrame = xFrame;
+
+    SAL_INFO("cui.customize", "** ** About to initialise SF Scripts");
+    // Add Scripting Framework entries
+    Reference< browse::XBrowseNode > rootNode;
+    try
+    {
+        Reference< browse::XBrowseNodeFactory > xFac = browse::theBrowseNodeFactory::get( m_xContext );
+        rootNode.set( xFac->createView( browse::BrowseNodeFactoryViewTypes::MACROSELECTOR ) );
+    }
+    catch( const Exception& )
+    {
+        TOOLS_WARN_EXCEPTION("cui.customize", "Caught some exception whilst retrieving browse nodes from factory");
+        // TODO exception handling
+    }
+
+    m_xTreeView->thaw();
+    m_xTreeView->make_sorted();
+    m_xTreeView->make_unsorted();
+    m_xTreeView->freeze();
+
+    // add application macros to the end
+    if ( rootNode.is() )
+    {
+        //We are only showing scripts not slot APIs so skip
+        //Root node and show location nodes
+        FillScriptList(rootNode, nullptr);
+    }
+
+    m_xTreeView->thaw();
+    m_xTreeView->scroll_to_row(0);
+    m_xTreeView->select(0);
+}
+
+OUString CuiConfigGroupListBox::GetImage(
+    const Reference< browse::XBrowseNode >& node,
+    Reference< XComponentContext > const & xCtx,
+    bool bIsRootNode)
+{
+    OUString aImage;
+    if ( bIsRootNode )
+    {
+        if (node->getName() == "user" || node->getName() == "share" )
+        {
+            aImage = RID_CUIBMP_HARDDISK;
+        }
+        else
+        {
+            OUString factoryURL;
+            OUString nodeName = node->getName();
+            Reference<XInterface> xDocumentModel = getDocumentModel(xCtx, nodeName );
+            if ( xDocumentModel.is() )
+            {
+                Reference< frame::XModuleManager2 > xModuleManager( frame::ModuleManager::create(xCtx) );
+                // get the long name of the document:
+                OUString appModule( xModuleManager->identify(
+                                    xDocumentModel ) );
+                Sequence<beans::PropertyValue> moduleDescr;
+                Any aAny = xModuleManager->getByName(appModule);
+                if( !( aAny >>= moduleDescr ) )
+                {
+                    throw RuntimeException(u"SFTreeListBox::Init: failed to get PropertyValue"_ustr);
+                }
+                for ( sal_Int32 pos = moduleDescr.getLength(); pos--; )
+                {
+                    if (moduleDescr[pos].Name == "ooSetupFactoryEmptyDocumentURL")
+                    {
+                        moduleDescr[pos].Value >>= factoryURL;
+                        SAL_INFO("cui.customize", "factory url for doc images is " << factoryURL);
+                        break;
+                    }
+                }
+            }
+            if( !factoryURL.isEmpty() )
+            {
+                aImage = SvFileInformationManager::GetFileImageId(INetURLObject(factoryURL));
+            }
+            else
+            {
+                aImage = RID_CUIBMP_DOC;
+            }
+        }
+    }
+    else
+    {
+        if( node->getType() == browse::BrowseNodeTypes::SCRIPT )
+            aImage = RID_CUIBMP_MACRO;
+        else
+            aImage = RID_CUIBMP_LIB;
+    }
+    return aImage;
+}
+
+Reference< XInterface  >
+CuiConfigGroupListBox::getDocumentModel( Reference< XComponentContext > const & xCtx, std::u16string_view docName )
+{
+    Reference< XInterface > xModel;
+    Reference< frame::XDesktop > desktop = frame::Desktop::create( xCtx );
+
+    Reference< container::XEnumerationAccess > componentsAccess =
+        desktop->getComponents();
+    Reference< container::XEnumeration > components =
+        componentsAccess->createEnumeration();
+    while (components->hasMoreElements())
+    {
+        Reference< frame::XModel > model(
+            components->nextElement(), UNO_QUERY );
+        if ( model.is() )
+        {
+            OUString sTdocUrl =
+                ::comphelper::DocumentInfo::getDocumentTitle( model );
+            if( sTdocUrl == docName )
+            {
+                xModel = model;
+                break;
+            }
+        }
+    }
+    return xModel;
+}
+
+void CuiConfigGroupListBox::GroupSelected()
+/*  Description
+    A function group or a basic module has been selected.
+    All functions/macros are displayed in the functionlistbox.
+*/
+{
+    std::unique_ptr<weld::TreeIter> xIter(m_xTreeView->make_iterator());
+    if (!m_xTreeView->get_selected(xIter.get()))
+        return;
+
+    SfxGroupInfo_Impl *pInfo = weld::fromId<SfxGroupInfo_Impl*>(m_xTreeView->get_id(*xIter));
+    m_pFunctionListBox->freeze();
+    m_pFunctionListBox->ClearAll();
+
+    switch ( pInfo->nKind )
+    {
+        case SfxCfgKind::GROUP_SCRIPTCONTAINER:
+        {
+            Reference< browse::XBrowseNode > rootNode(
+                static_cast< browse::XBrowseNode* >( pInfo->pObject ) ) ;
+
+            try {
+                if ( rootNode->hasChildNodes() )
+                {
+                    const Sequence< Reference< browse::XBrowseNode > > children =
+                        rootNode->getChildNodes();
+
+                    for ( const Reference< browse::XBrowseNode >& childNode : children )
+                    {
+                        if (!childNode.is())
+                            continue;
+
+                        if (childNode->getType() == browse::BrowseNodeTypes::SCRIPT)
+                        {
+                            OUString uri, description;
+
+                            Reference < beans::XPropertySet >xPropSet( childNode, UNO_QUERY );
+                            if (!xPropSet.is())
+                            {
+                                continue;
+                            }
+
+                            Any value =
+                                xPropSet->getPropertyValue(u"URI"_ustr);
+                            value >>= uri;
+
+                            try
+                            {
+                                value = xPropSet->getPropertyValue(u"Description"_ustr);
+                                value >>= description;
+                            }
+                            catch (Exception &) {
+                                // do nothing, the description will be empty
+                            }
+
+                            OUString* pScriptURI = new OUString( uri );
+
+                            OUString aImage = GetImage(childNode, Reference< XComponentContext >(), false);
+                            m_pFunctionListBox->aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::FUNCTION_SCRIPT, pScriptURI ));
+                            m_pFunctionListBox->aArr.back()->sCommand = uri;
+                            m_pFunctionListBox->aArr.back()->sLabel = childNode->getName();
+                            m_pFunctionListBox->aArr.back()->sHelpText = description;
+
+                            OUString sId(weld::toId(m_pFunctionListBox->aArr.back().get()));
+                            m_pFunctionListBox->append(sId, childNode->getName(), aImage);
+                        }
+                    }
+                }
+            }
+            catch (RuntimeException&) {
+                // do nothing, the entry will not be displayed in the UI
+            }
+            break;
+        }
+
+        default:
+            // Do nothing, the list box will stay empty
+            SAL_INFO( "cui.customize", "Ignoring unexpected SfxCfgKind: " <<  static_cast<int>(pInfo->nKind) );
+            break;
+    }
+
+    m_pFunctionListBox->thaw();
+
+    if (m_pFunctionListBox->n_children())
+        m_pFunctionListBox->select(0);
+}
+
+/*  Description
+    A basic or a library is opened.
+*/
+IMPL_LINK(CuiConfigGroupListBox, ExpandingHdl, const weld::TreeIter&, rIter, bool)
+{
+    SfxGroupInfo_Impl *pInfo = weld::fromId<SfxGroupInfo_Impl*>(m_xTreeView->get_id(rIter));
+    switch ( pInfo->nKind )
+    {
+        case SfxCfgKind::GROUP_SCRIPTCONTAINER:
+        {
+            if (!m_xTreeView->iter_has_child(rIter))
+            {
+                Reference< browse::XBrowseNode > rootNode(
+                    static_cast< browse::XBrowseNode* >( pInfo->pObject ) ) ;
+                FillScriptList(rootNode, &rIter);
+            }
+            break;
+        }
+
+        default:
+            OSL_FAIL( "Wrong group type!" );
+            break;
+    }
+    return true;
+}
+
+/*
+ * Implementation of SvxScriptSelectorDialog
+ *
+ * This dialog is used for selecting Slot API commands
+ * and Scripting Framework Scripts.
+ */
+
+SvxScriptSelectorDialog::SvxScriptSelectorDialog(
+    weld::Window* pParent, const cpo::uno::Reference< css::frame::XFrame >& xFrame)
+    : GenericDialogController(pParent, u"cui/ui/macroselectordialog.ui"_ustr, u"MacroSelectorDialog"_ustr)
+    , m_xDialogDescription(m_xBuilder->weld_label(u"helpmacro"_ustr))
+    , m_xCategories(new CuiConfigGroupListBox(m_xBuilder->weld_tree_view(u"categories"_ustr)))
+    , m_xCommands(new CuiConfigFunctionListBox(m_xBuilder->weld_tree_view(u"commands"_ustr)))
+    , m_xLibraryFT(m_xBuilder->weld_label(u"libraryft"_ustr))
+    , m_xMacronameFT(m_xBuilder->weld_label(u"macronameft"_ustr))
+    , m_xOKButton(m_xBuilder->weld_button(u"ok"_ustr))
+    , m_xCancelButton(m_xBuilder->weld_button(u"cancel"_ustr))
+    , m_xDescriptionText(m_xBuilder->weld_text_view(u"description"_ustr))
+    , m_xDescriptionBox(m_xBuilder->weld_box(u"descriptionbox"_ustr))
+{
+    m_xCancelButton->show();
+    m_xDialogDescription->show();
+    m_xOKButton->show();
+
+    m_xLibraryFT->set_visible(true);
+    m_xMacronameFT->set_visible(true);
+
+    m_xCategories->SetFunctionListBox(m_xCommands.get());
+    m_xCategories->Init(comphelper::getProcessComponentContext(), xFrame);
+
+    m_xCategories->connect_changed(
+            LINK( this, SvxScriptSelectorDialog, SelectHdl ) );
+    m_xCommands->connect_changed( LINK( this, SvxScriptSelectorDialog, SelectHdl ) );
+    m_xCommands->connect_row_activated( LINK( this, SvxScriptSelectorDialog, FunctionDoubleClickHdl ) );
+    m_xCommands->connect_popup_menu( LINK( this, SvxScriptSelectorDialog, ContextMenuHdl ) );
+
+    m_xOKButton->connect_clicked( LINK( this, SvxScriptSelectorDialog, ClickHdl ) );
+    m_xCancelButton->connect_clicked( LINK( this, SvxScriptSelectorDialog, ClickHdl ) );
+
+    m_sDefaultDesc = m_xDescriptionText->get_text();
+
+    // The following call is a workaround to make scroll_to_row work as expected in x11
+    m_xDialog->resize_to_request();
+
+    LoadLastUsedMacro();
+    UpdateUI();
+
+    if (comphelper::COKit::isActive())
+        m_xDescriptionBox->hide();
+}
+
+SvxScriptSelectorDialog::~SvxScriptSelectorDialog()
+{
+}
+
+IMPL_LINK(SvxScriptSelectorDialog, SelectHdl, weld::TreeView&, rCtrl, void)
+{
+    if (&rCtrl == &m_xCategories->get_widget())
+    {
+        m_xCategories->GroupSelected();
+    }
+    UpdateUI();
+}
+
+IMPL_LINK_NOARG(SvxScriptSelectorDialog, FunctionDoubleClickHdl, weld::TreeView&, bool)
+{
+    if (m_xOKButton->get_sensitive())
+        ClickHdl(*m_xOKButton);
+    return true;
+}
+
+IMPL_LINK(SvxScriptSelectorDialog, ContextMenuHdl, const CommandEvent&, rCEvt, bool)
+{
+    weld::TreeView& xTreeView = m_xCommands->get_widget();
+    if (rCEvt.GetCommand() != CommandEventId::ContextMenu || !xTreeView.n_children())
+         return false;
+
+    std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(&xTreeView, u"modules/BasicIDE/ui/sortmenu.ui"_ustr));
+    std::unique_ptr<weld::Menu> xPopup(xBuilder->weld_menu(u"sortmenu"_ustr));
+    std::unique_ptr<weld::Menu> xDropMenu(xBuilder->weld_menu(u"sortsubmenu"_ustr));
+    xDropMenu->set_active(u"alphabetically"_ustr, xTreeView.get_sort_order());
+    xDropMenu->set_active(u"properorder"_ustr, !xTreeView.get_sort_order());
+
+    OUString sCommand(xPopup->popup_at_rect(&xTreeView, tools::Rectangle(rCEvt.GetMousePosPixel(), Size(1,1))));
+    if (sCommand == "alphabetically")
+    {
+        xTreeView.make_sorted();
+    }
+    else if (sCommand == "properorder")
+    {
+        xTreeView.make_unsorted();
+        m_xCategories->GroupSelected();
+    }
+    else if (!sCommand.isEmpty())
+    {
+         SAL_WARN("cui.customize", "Unknown context menu action: " << sCommand );
+    }
+
+    return true;
+}
+
+// Check if command is selected and enable the OK button accordingly
+// Grab the help text for this id if available and update the description field
+void
+SvxScriptSelectorDialog::UpdateUI()
+{
+    OUString url = GetScriptURL();
+    if ( !url.isEmpty() )
+    {
+        OUString sMessage = m_xCommands->GetCommandHelpText();
+        m_xDescriptionText->set_text(sMessage.isEmpty() ? m_sDefaultDesc : sMessage);
+        m_xOKButton->set_sensitive(true);
+    }
+    else
+    {
+        m_xDescriptionText->set_text(m_sDefaultDesc);
+        m_xOKButton->set_sensitive(false);
+    }
+}
+
+IMPL_LINK(SvxScriptSelectorDialog, ClickHdl, weld::Button&, rButton, void)
+{
+    if (&rButton == m_xCancelButton.get())
+    {
+        m_xDialog->response(RET_CANCEL);
+    }
+    else if (&rButton == m_xOKButton.get())
+    {
+        SaveLastUsedMacro();
+        m_xDialog->response(RET_OK);
+    }
+}
+
+void
+SvxScriptSelectorDialog::SetRunLabel()
+{
+    m_xOKButton->set_label(CuiResId(RID_CUISTR_SELECTOR_RUN));
+}
+
+OUString
+SvxScriptSelectorDialog::GetScriptURL() const
+{
+    OUString result;
+
+    std::unique_ptr<weld::TreeIter> xIter = m_xCommands->make_iterator();
+    if (m_xCommands->get_selected(xIter.get()))
+    {
+        SfxGroupInfo_Impl *pData = weld::fromId<SfxGroupInfo_Impl*>(m_xCommands->get_id(*xIter));
+        if (pData->nKind == SfxCfgKind::FUNCTION_SCRIPT)
+        {
+            result = pData->sCommand;
+        }
+    }
+
+    return result;
+}
+
+void
+SvxScriptSelectorDialog::SaveLastUsedMacro()
+{
+    // Gets the current selection in the dialog as a series of selected entries
+    OUString sMacroInfo;
+    sMacroInfo = m_xCommands->get_selected_text();
+    weld::TreeView& xCategories = m_xCategories->get_widget();
+    std::unique_ptr<weld::TreeIter> xIter = xCategories.make_iterator();
+
+    if (!xCategories.get_selected(xIter.get()))
+        return;
+
+    do
+    {
+        sMacroInfo = xCategories.get_text(*xIter) + "|" + sMacroInfo;
+    } while (xCategories.iter_parent(*xIter));
+
+    SvtViewOptions( EViewType::Dialog, MACRO_SELECTOR_CONFIGNAME ).SetUserItem(
+        LAST_RUN_MACRO_INFO, Any(sMacroInfo));
+}
+
+void
+SvxScriptSelectorDialog::LoadLastUsedMacro()
+{
+    SvtViewOptions aDlgOpt( EViewType::Dialog, MACRO_SELECTOR_CONFIGNAME );
+    if (!aDlgOpt.Exists())
+        return;
+
+    OUString sMacroInfo;
+    aDlgOpt.GetUserItem(LAST_RUN_MACRO_INFO) >>= sMacroInfo;
+    if (sMacroInfo.isEmpty())
+        return;
+
+    // Counts how many entries exist in the macro info string
+    sal_Int16 nInfoParts = 0;
+    sal_Int16 nLastIndex = sMacroInfo.indexOf('|');
+    if (nLastIndex > -1)
+    {
+        nInfoParts = 1;
+        while ( nLastIndex != -1 )
+        {
+            nInfoParts++;
+            nLastIndex = sMacroInfo.indexOf('|', nLastIndex + 1);
+        }
+    }
+
+    weld::TreeView& xCategories = m_xCategories->get_widget();
+    std::unique_ptr<weld::TreeIter> xIter = xCategories.make_iterator();
+    if (!xCategories.get_iter_first(*xIter))
+        return;
+
+    // Expand the nodes in the category tree
+    OUString sNodeToExpand;
+    bool bIsIterValid;
+    sal_Int16 nOpenedNodes = 0;
+    for (sal_Int16 i=0; i<nInfoParts - 1; i++)
+    {
+        sNodeToExpand = sMacroInfo.getToken(i, '|');
+        bIsIterValid = true;
+        while (bIsIterValid && xCategories.get_text(*xIter) != sNodeToExpand)
+            bIsIterValid = xCategories.iter_next_sibling(*xIter);
+
+        if (bIsIterValid)
+        {
+            xCategories.expand_row(*xIter);
+            nOpenedNodes++;
+        }
+        if (xCategories.iter_has_child(*xIter))
+            (void)xCategories.iter_children(*xIter);
+        else if (nOpenedNodes < nInfoParts - 1)
+            // If the number of levels in the tree is smaller than the
+            // number of parts in the macro info string, then return
+            return;
+    }
+    xCategories.select(*xIter);
+    xCategories.scroll_to_row(*xIter);
+    m_xCategories->GroupSelected();
+
+    // Select the macro in the command tree
+    weld::TreeView& xCommands = m_xCommands->get_widget();
+    xIter = xCommands.make_iterator();
+    if (!xCommands.get_iter_first(*xIter))
+        return;
+
+    OUString sMacroName = sMacroInfo.getToken(nInfoParts - 1, '|');
+    bIsIterValid = true;
+    while (bIsIterValid && xCommands.get_text(*xIter) != sMacroName)
+        bIsIterValid = xCommands.iter_next_sibling(*xIter);
+
+    if (bIsIterValid)
+    {
+        xCommands.scroll_to_row(*xIter);
+        xCommands.select(*xIter);
+    }
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

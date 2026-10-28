@@ -1,0 +1,249 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <graphic/UnoGraphic.hxx>
+
+#include <tools/stream.hxx>
+#include <vcl/svapp.hxx>
+#include <com/sun/star/graphic/GraphicType.hpp>
+#include <com/sun/star/graphic/XGraphicTransformer.hpp>
+#include <vcl/alpha.hxx>
+#include <vcl/dibtools.hxx>
+#include <vcl/graph.hxx>
+#include <vcl/BitmapColor.hxx>
+#include <vcl/BitmapTools.hxx>
+#include <comphelper/servicehelper.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <cppuhelper/queryinterface.hxx>
+#include <cppuhelper/typeprovider.hxx>
+
+#include <bitmap/BitmapDuoToneFilter.hxx>
+
+using namespace com::sun::star;
+using namespace ::cpo;
+
+namespace unographic {
+
+Graphic::Graphic(const ::Graphic& rGraphic)
+    : maGraphic(rGraphic)
+{
+    unographic::GraphicDescriptor::init(maGraphic);
+}
+
+Graphic::~Graphic() noexcept
+{
+}
+
+cpo::uno::Any Graphic::queryInterface( const cpo::uno::Type & rType )
+{
+    cpo::uno::Any aAny;
+    if( rType == cppu::UnoType<graphic::XGraphic>::get())
+        aAny <<= uno::Reference< graphic::XGraphic >( this );
+    else if( rType == cppu::UnoType<awt::XBitmap>::get())
+        aAny <<= uno::Reference< awt::XBitmap >( this );
+    else if( rType == cppu::UnoType<graphic::XGraphicTransformer>::get())
+        aAny <<= uno::Reference< graphic::XGraphicTransformer >(this);
+    else
+        aAny = ::unographic::GraphicDescriptor::queryInterface( rType );
+
+    return aAny;
+}
+
+void Graphic::acquire()
+    noexcept
+{
+    unographic::GraphicDescriptor::acquire();
+}
+
+void Graphic::release() noexcept
+{
+    unographic::GraphicDescriptor::release();
+}
+
+OUString Graphic::getImplementationName()
+{
+    return u"com.sun.star.comp.graphic.Graphic"_ustr;
+}
+
+bool Graphic::supportsService( const OUString& rServiceName )
+{
+    return cppu::supportsService( this, rServiceName );
+}
+
+cpo::uno::Sequence< OUString > Graphic::getSupportedServiceNames()
+{
+    cpo::uno::Sequence< OUString >    aRet( ::unographic::GraphicDescriptor::getSupportedServiceNames() );
+    const cpo::uno::Sequence< OUString >    aNew { u"com.sun.star.graphic.Graphic"_ustr };
+    sal_Int32                           nOldCount = aRet.getLength();
+
+    aRet.realloc( nOldCount + aNew.getLength() );
+
+    std::copy(aNew.begin(), aNew.end(), std::next(aRet.getArray(), nOldCount));
+
+    return aRet;
+}
+
+cpo::uno::Sequence< cpo::uno::Type > Graphic::getTypes()
+{
+    return cppu::OTypeCollection(
+            cppu::UnoType<graphic::XGraphic>::get(),
+            cppu::UnoType<awt::XBitmap>::get(),
+            ::unographic::GraphicDescriptor::getTypes()
+        ).getTypes();
+}
+
+sal_Int8 Graphic::getType()
+{
+    sal_Int8 cRet = graphic::GraphicType::EMPTY;
+
+    if (!maGraphic.IsNone())
+    {
+        cRet = (maGraphic.GetType() == ::GraphicType::Bitmap) ? graphic::GraphicType::PIXEL
+                                              : graphic::GraphicType::VECTOR;
+    }
+
+    return cRet;
+}
+
+// XBitmap
+
+awt::Size Graphic::getSize()
+{
+    SolarMutexGuard aGuard;
+
+    Size aVclSize;
+    if (!maGraphic.IsNone())
+    {
+        aVclSize = maGraphic.GetSizePixel();
+    }
+    return awt::Size(aVclSize.Width(), aVclSize.Height());
+}
+
+cpo::uno::Sequence<sal_Int8> Graphic::getDIB()
+{
+    SolarMutexGuard aGuard;
+
+    if (!maGraphic.IsNone())
+    {
+        SvMemoryStream aMemoryStream;
+
+        WriteDIB(maGraphic.GetBitmap().CreateColorBitmap(), aMemoryStream, false, true);
+        return cpo::uno::Sequence<sal_Int8>(static_cast<sal_Int8 const *>(aMemoryStream.GetData()), aMemoryStream.Tell());
+    }
+    else
+    {
+        return cpo::uno::Sequence<sal_Int8>();
+    }
+}
+
+cpo::uno::Sequence<sal_Int8> Graphic::getMaskDIB()
+{
+    SolarMutexGuard aGuard;
+
+    if (!maGraphic.IsNone())
+    {
+        return vcl::bitmap::GetMaskDIB(maGraphic.GetBitmap());
+    }
+    else
+    {
+        return cpo::uno::Sequence<sal_Int8>();
+    }
+}
+
+// XGraphicTransformer
+uno::Reference< graphic::XGraphic > Graphic::colorChange(
+    const uno::Reference< graphic::XGraphic >& rxGraphic, sal_Int32 nColorFrom, sal_Int8 nTolerance, sal_Int32 nColorTo, sal_Int8 nAlphaTo )
+{
+    ::Graphic aGraphic(rxGraphic);
+    ::Graphic aReturnGraphic;
+
+    BitmapColor aBmpColorFrom(Color(ColorTransparency, static_cast<sal_uInt32>(nColorFrom)));
+    BitmapColor aBmpColorTo(Color(ColorTransparency, static_cast<sal_uInt32>(nColorTo)));
+
+    Color aColorFrom(aBmpColorFrom);
+    Color aColorTo(aBmpColorTo);
+
+    const sal_uInt8 cIndexFrom = aBmpColorFrom.GetIndex();
+
+    //TODO This code convert GdiMetafile(vector graphic) to Bitmap, which cause to information lost
+    if (aGraphic.GetType() == GraphicType::Bitmap ||
+        aGraphic.GetType() == GraphicType::GdiMetafile)
+    {
+        Bitmap aBitmap(aGraphic.GetBitmap());
+
+        if (aBitmap.HasAlpha())
+        {
+            aBitmap.ChangeColorAlpha( cIndexFrom, nAlphaTo );
+            aBitmap.Replace(aColorFrom, aColorTo, nTolerance);
+            aReturnGraphic = ::Graphic(aBitmap);
+        }
+        else
+        {
+            if ((nAlphaTo == 0) || (nAlphaTo == sal::static_int_cast< sal_Int8 >(0xff)))
+            {
+                Bitmap aBitmap2(aBitmap);
+                AlphaMask aMask(aBitmap2.CreateAlphaMask(aColorFrom, nTolerance));
+                aBitmap2.Replace(aColorFrom, aColorTo, nTolerance);
+                aReturnGraphic = ::Graphic(Bitmap(aBitmap2, aMask));
+            }
+            else
+            {
+                aBitmap.Replace(aColorFrom, aColorTo, nTolerance);
+                aReturnGraphic = ::Graphic(aBitmap);
+            }
+        }
+    }
+
+    aReturnGraphic.setOriginURL(aGraphic.getOriginURL());
+    return aReturnGraphic.GetXGraphic();
+}
+
+uno::Reference< graphic::XGraphic > Graphic::applyDuotone(
+    const uno::Reference< graphic::XGraphic >& rxGraphic, sal_Int32 nColorOne, sal_Int32 nColorTwo )
+{
+    ::Graphic aGraphic(rxGraphic);
+    Bitmap    aBitmap( aGraphic.GetBitmap() );
+
+    BitmapFilter::Filter(aBitmap,
+                    BitmapDuoToneFilter(
+                        Color(ColorTransparency, nColorOne),
+                        Color(ColorTransparency, nColorTwo)));
+
+    ::Graphic aReturnGraphic(aBitmap);
+    aReturnGraphic.setOriginURL(aGraphic.getOriginURL());
+    return aReturnGraphic.GetXGraphic();
+}
+
+uno::Reference< graphic::XGraphic > Graphic::applyBrightnessContrast(
+    const uno::Reference< graphic::XGraphic >& rxGraphic, sal_Int32 nBrightness, sal_Int32 nContrast, bool mso )
+{
+    ::Graphic aGraphic(rxGraphic);
+    ::Graphic aReturnGraphic;
+
+    Bitmap aBitmap(aGraphic.GetBitmap());
+    aBitmap.Adjust(nBrightness, nContrast, 0, 0, 0, 0, false, mso);
+    aReturnGraphic = ::Graphic(aBitmap);
+    aReturnGraphic.setOriginURL(aGraphic.getOriginURL());
+    return aReturnGraphic.GetXGraphic();
+}
+
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

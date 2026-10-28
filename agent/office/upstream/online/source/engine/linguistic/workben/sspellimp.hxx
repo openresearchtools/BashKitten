@@ -1,0 +1,148 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <cppuhelper/implbase.hxx>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XServiceDisplayName.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/PropertyValues.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/linguistic2/XSpellChecker.hpp>
+#include <com/sun/star/linguistic2/XSearchableDictionaryList.hpp>
+#include <com/sun/star/linguistic2/XLinguServiceEventBroadcaster.hpp>
+
+#include "linguistic/misc.hxx"
+#include "sprophelp.hxx"
+
+class SpellChecker :
+    public cppu::WeakImplHelper
+    <
+        XSpellChecker,
+        XLinguServiceEventBroadcaster,
+        XInitialization,
+        XComponent,
+        XServiceInfo,
+        XServiceDisplayName
+    >
+{
+    Sequence< Locale >                      aSuppLocales;
+    ::comphelper::OInterfaceContainerHelper2       aEvtListeners;
+    Reference< XPropertyChangeListener >    xPropHelper;
+    PropertyHelper_Spell *                  pPropHelper;
+    bool                                    bDisposing;
+
+    // disallow copy-constructor and assignment-operator for now
+    SpellChecker(const SpellChecker &);
+    SpellChecker & operator = (const SpellChecker &);
+
+    PropertyHelper_Spell &  GetPropHelper_Impl();
+    PropertyHelper_Spell &  GetPropHelper()
+    {
+        return pPropHelper ? *pPropHelper : GetPropHelper_Impl();
+    }
+
+    sal_Int16   GetSpellFailure( const OUString &rWord, const Locale &rLocale );
+    Reference< XSpellAlternatives >
+            GetProposals( const OUString &rWord, const Locale &rLocale );
+
+public:
+    SpellChecker();
+    virtual ~SpellChecker();
+
+    // XSupportedLocales (for XSpellChecker)
+    virtual Sequence< Locale >
+        getLocales()
+            throw(RuntimeException);
+    virtual bool
+        hasLocale( const Locale& rLocale )
+            throw(RuntimeException);
+
+    // XSpellChecker
+    virtual bool
+        isValid( const OUString& rWord, const Locale& rLocale,
+                const PropertyValues& rProperties )
+            throw(IllegalArgumentException,
+                  RuntimeException);
+    virtual Reference< XSpellAlternatives >
+        spell( const OUString& rWord, const Locale& rLocale,
+                const PropertyValues& rProperties )
+            throw(IllegalArgumentException,
+                  RuntimeException);
+
+    // XLinguServiceEventBroadcaster
+    virtual bool
+        addLinguServiceEventListener(
+            const Reference< XLinguServiceEventListener >& rxLstnr )
+            throw(RuntimeException);
+    virtual bool
+        removeLinguServiceEventListener(
+            const Reference< XLinguServiceEventListener >& rxLstnr )
+            throw(RuntimeException);
+
+    // XServiceDisplayName
+    virtual OUString
+        getServiceDisplayName( const Locale& rLocale )
+            throw(RuntimeException);
+
+    // XInitialization
+    virtual void
+        initialize( const Sequence< Any >& rArguments )
+            throw(Exception, RuntimeException);
+
+    // XComponent
+    virtual void
+        dispose()
+            throw(RuntimeException);
+    virtual void
+        addEventListener( const Reference< XEventListener >& rxListener )
+            throw(RuntimeException);
+    virtual void
+        removeEventListener( const Reference< XEventListener >& rxListener )
+            throw(RuntimeException);
+
+    // Service specific part
+
+    // XServiceInfo
+    virtual OUString
+        getImplementationName()
+            throw(RuntimeException);
+    virtual bool
+        supportsService( const OUString& rServiceName )
+            throw(RuntimeException);
+    virtual Sequence< OUString >
+        getSupportedServiceNames()
+            throw(RuntimeException);
+
+
+    static inline OUString
+        getImplementationName_Static() throw();
+    static Sequence< OUString >
+        getSupportedServiceNames_Static() throw();
+};
+
+inline OUString SpellChecker::getImplementationName_Static() throw()
+{
+    return OUString( "com.sun.star.lingu.examples.SpellChecker" );
+}
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

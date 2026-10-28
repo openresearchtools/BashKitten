@@ -1,0 +1,413 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <strings.hxx>
+
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/document/XExtendedFilterDetection.hpp>
+#include <com/sun/star/embed/ElementModes.hpp>
+#include <com/sun/star/frame/XController2.hpp>
+#include <com/sun/star/frame/XFrame.hpp>
+#include <com/sun/star/frame/XFrameLoader.hpp>
+#include <com/sun/star/frame/XLoadEventListener.hpp>
+#include <com/sun/star/frame/XModel2.hpp>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/sdb/DatabaseContext.hpp>
+#include <com/sun/star/sdb/XDocumentDataSource.hpp>
+#include <com/sun/star/task/XJobExecutor.hpp>
+#include <com/sun/star/task/InteractionHandler.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
+#include <com/sun/star/sdb/application/DatabaseObjectContainer.hpp>
+#include <com/sun/star/sdb/application/NamedDatabaseObject.hpp>
+#include <com/sun/star/frame/XLoadable.hpp>
+
+#include <comphelper/documentconstants.hxx>
+#include <comphelper/namedvaluecollection.hxx>
+#include <comphelper/storagehelper.hxx>
+#include <comphelper/types.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <sfx2/docfile.hxx>
+#include <unotools/fcm.hxx>
+#include <unotools/moduleoptions.hxx>
+#include <comphelper/diagnose_ex.hxx>
+
+using namespace ::ucbhelper;
+using namespace ::com::sun::star::task;
+using namespace ::cpo::uno;
+using namespace cpo::uno;
+using namespace ::com::sun::star::ucb;
+using namespace ::com::sun::star::io;
+using namespace ::com::sun::star::util;
+using namespace ::com::sun::star::frame;
+using namespace ::com::sun::star::beans;
+using namespace ::com::sun::star::lang;
+using namespace ::com::sun::star::document;
+using namespace ::com::sun::star::sdb;
+using namespace ::com::sun::star::embed;
+using ::com::sun::star::sdb::application::NamedDatabaseObject;
+
+namespace dbaxml
+{
+
+namespace {
+
+class DBTypeDetection : public ::cppu::WeakImplHelper< XExtendedFilterDetection, XServiceInfo>
+{
+    const Reference< XComponentContext >  m_aContext;
+
+public:
+    explicit DBTypeDetection(const Reference< XComponentContext >&);
+
+    // XServiceInfo
+    OUString                        getImplementationName() override;
+    bool                        supportsService(const OUString& ServiceName) override;
+    Sequence< OUString >            getSupportedServiceNames() override;
+
+    virtual OUString detect( cpo::uno::Sequence< css::beans::PropertyValue >& Descriptor ) override;
+};
+
+}
+
+DBTypeDetection::DBTypeDetection(const Reference< XComponentContext >& _rxContext)
+    :m_aContext( _rxContext )
+{
+}
+
+OUString DBTypeDetection::detect( cpo::uno::Sequence< css::beans::PropertyValue >& Descriptor )
+{
+    try
+    {
+        ::comphelper::NamedValueCollection aMedia( Descriptor );
+        bool bStreamFromDescr = false;
+        OUString sURL = aMedia.getOrDefault( u"URL"_ustr, OUString() );
+
+        Reference< XInputStream > xInStream( aMedia.getOrDefault( u"InputStream"_ustr,  Reference< XInputStream >() ) );
+        Reference< XPropertySet > xStorageProperties;
+        if ( xInStream.is() )
+        {
+            bStreamFromDescr = true;
+            xStorageProperties.set( ::comphelper::OStorageHelper::GetStorageFromInputStream(
+                xInStream, m_aContext ), UNO_QUERY );
+        }
+        else
+        {
+            OUString sSalvagedURL( aMedia.getOrDefault( u"SalvagedFile"_ustr, OUString() ) );
+
+            OUString sFileLocation( sSalvagedURL.isEmpty() ? sURL : sSalvagedURL );
+            if ( !sFileLocation.isEmpty() )
+            {
+                xStorageProperties.set( ::comphelper::OStorageHelper::GetStorageFromURL(
+                    sFileLocation, ElementModes::READ, m_aContext ), UNO_QUERY );
+            }
+        }
+
+        if ( xStorageProperties.is() )
+        {
+            OUString sMediaType;
+            xStorageProperties->getPropertyValue( INFO_MEDIATYPE ) >>= sMediaType;
+            if ( sMediaType == MIMETYPE_OASIS_OPENDOCUMENT_DATABASE || sMediaType == MIMETYPE_VND_SUN_XML_BASE )
+            {
+                if ( bStreamFromDescr && !sURL.startsWith( "private:stream" ) )
+                {
+                    // After fixing of the i88522 issue ( use the new file locking for database files ) the stream from the type detection can be used further
+                    // for now the file should be reopened to have read/write access
+                    aMedia.remove( u"InputStream"_ustr );
+                    aMedia.remove( u"Stream"_ustr );
+                    aMedia >>= Descriptor;
+                    try
+                    {
+                        ::comphelper::disposeComponent(xStorageProperties);
+                        if ( xInStream.is() )
+                            xInStream->closeInput();
+                    }
+                    catch( cpo::uno::Exception& )
+                    {
+                        DBG_UNHANDLED_EXCEPTION("dbaccess");
+                    }
+                }
+
+                return u"StarBase"_ustr;
+            }
+            ::comphelper::disposeComponent(xStorageProperties);
+        }
+    } catch(Exception&){}
+    return OUString();
+}
+
+// XServiceInfo
+OUString DBTypeDetection::getImplementationName()
+{
+    return u"org.openoffice.comp.dbflt.DBTypeDetection"_ustr;
+}
+
+// XServiceInfo
+bool DBTypeDetection::supportsService(const OUString& ServiceName)
+{
+    return cppu::supportsService(this, ServiceName);
+}
+
+// XServiceInfo
+Sequence< OUString > DBTypeDetection::getSupportedServiceNames()
+{
+    return { u"com.sun.star.document.ExtendedTypeDetection"_ustr };
+}
+
+} // namespace dbaxml
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+org_openoffice_comp_dbflt_DBTypeDetection_get_implementation(
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+{
+    return cppu::acquire(new ::dbaxml::DBTypeDetection(context));
+}
+
+namespace dbaxml
+{
+
+namespace {
+
+class DBContentLoader : public ::cppu::WeakImplHelper< XFrameLoader, XServiceInfo>
+{
+private:
+    const Reference< XComponentContext >  m_aContext;
+
+public:
+    explicit DBContentLoader(const Reference< XComponentContext >&);
+
+    // XServiceInfo
+    OUString                        getImplementationName() override;
+    bool                        supportsService(const OUString& ServiceName) override;
+    Sequence< OUString >            getSupportedServiceNames() override;
+
+    // XLoader
+    virtual void load( const Reference< XFrame > & _rFrame, const OUString& _rURL,
+                                const Sequence< PropertyValue >& _rArgs,
+                                const Reference< XLoadEventListener > & _rListener) override;
+    virtual void cancel() override;
+};
+
+}
+
+DBContentLoader::DBContentLoader(const Reference< XComponentContext >& _rxFactory)
+    :m_aContext( _rxFactory )
+{
+
+}
+
+// XServiceInfo
+OUString DBContentLoader::getImplementationName()
+{
+    return u"org.openoffice.comp.dbflt.DBContentLoader2"_ustr;
+}
+
+// XServiceInfo
+bool DBContentLoader::supportsService(const OUString& ServiceName)
+{
+    return cppu::supportsService(this, ServiceName);
+}
+
+// XServiceInfo
+Sequence< OUString > DBContentLoader::getSupportedServiceNames()
+{
+    return { u"com.sun.star.frame.FrameLoader"_ustr };
+}
+
+
+void DBContentLoader::load(const Reference< XFrame > & rFrame, const OUString& _rURL,
+        const Sequence< PropertyValue >& rArgs,
+        const Reference< XLoadEventListener > & rListener)
+{
+    // first check if preview is true, if so return without creating a controller. Preview is not supported
+    ::comphelper::NamedValueCollection aMediaDesc( rArgs );
+    bool bPreview = aMediaDesc.getOrDefault( u"Preview"_ustr, false );
+    if ( bPreview )
+    {
+        if (rListener.is())
+            rListener->loadCancelled(this);
+        return;
+    }
+
+    Reference< XModel > xModel       = aMediaDesc.getOrDefault( u"Model"_ustr, Reference< XModel >() );
+    OUString            sSalvagedURL = aMediaDesc.getOrDefault( u"SalvagedFile"_ustr, _rURL );
+
+    bool bCreateNew = false;        // does the URL denote the private:factory URL?
+
+    bool bSuccess = true;
+
+    // If there's no interaction handler in the media descriptor, put one.
+    // By definition, loading via loadComponentFromURL (and thus via the content loader here)
+    // is allowed to raise UI. To not burden every place inside the document with creating
+    // a default handler, we simply ensure there is one.
+    // If a handler is present in the media descriptor, even if it is NULL, we will
+    // not touch it.
+    if ( !aMediaDesc.has( u"InteractionHandler"_ustr ) )
+    {
+       Reference< XInteractionHandler2 > xHandler( InteractionHandler::createWithParent(m_aContext, nullptr) );
+       aMediaDesc.put( u"InteractionHandler"_ustr, xHandler );
+    }
+
+    // it's allowed to pass an existing document
+    Reference< XOfficeDatabaseDocument > xExistentDBDoc;
+    xModel.set( aMediaDesc.getOrDefault( u"Model"_ustr, xExistentDBDoc ), UNO_QUERY );
+    aMediaDesc.remove( u"Model"_ustr );
+
+    // also, it's allowed to specify the type of view which should be created
+    OUString sViewName = aMediaDesc.getOrDefault( u"ViewName"_ustr, u"Default"_ustr );
+    aMediaDesc.remove( u"ViewName"_ustr );
+
+    // this needs to stay alive for duration of this method
+    Reference< XDatabaseContext > xDatabaseContext;
+
+    sal_Int32 nInitialSelection = -1;
+    if ( !xModel.is() )
+    {
+        xDatabaseContext = DatabaseContext::create(m_aContext);
+
+        OUString sFactoryName = SvtModuleOptions().GetFactoryEmptyDocumentURL(SvtModuleOptions::EFactory::DATABASE);
+        bCreateNew = sFactoryName.match(_rURL);
+
+        Reference< XDocumentDataSource > xDocumentDataSource;
+        if ( bCreateNew )
+        {
+            xDocumentDataSource.set( xDatabaseContext->createInstance(), UNO_QUERY_THROW );
+        }
+        else
+        {
+            ::comphelper::NamedValueCollection aCreationArgs;
+            aCreationArgs.put( INFO_POOLURL, sSalvagedURL );
+            xDocumentDataSource.set( xDatabaseContext->createInstanceWithArguments( aCreationArgs.getWrappedNamedValues() ), UNO_QUERY_THROW );
+        }
+
+        xModel.set( xDocumentDataSource->getDatabaseDocument(), UNO_QUERY );
+
+        if ( bCreateNew && xModel.is() )
+        {
+            try
+            {
+                Reference< XLoadable > xLoad( xModel, UNO_QUERY_THROW );
+                xLoad->initNew();
+                bSuccess = true;
+            }
+            catch( const Exception& )
+            {
+                bSuccess = false;
+            }
+
+            // initially select the "Tables" category (will be done below)
+            nInitialSelection = css::sdb::application::DatabaseObjectContainer::TABLES;
+        }
+    }
+
+    if ( !xModel.is() )
+    {
+        if ( rListener.is() )
+            rListener->loadCancelled(this);
+        return;
+    }
+
+    if ( !bCreateNew )
+    {
+        // We need to XLoadable::load the document if it does not yet have a URL.
+        // If it already *does* have a URL, then it was either passed in the arguments, or a previous incarnation
+        // of that model existed before (which can happen if a model is closed, but an associated DataSource is kept
+        // alive 'til loading the document again).
+        bool bNeedLoad = xModel->getURL().isEmpty();
+        try
+        {
+            aMediaDesc.put( u"FileName"_ustr, _rURL );
+            Sequence< PropertyValue > aResource( aMediaDesc.getPropertyValues() );
+
+            if ( bNeedLoad )
+            {
+                Reference< XLoadable > xLoad( xModel, UNO_QUERY_THROW );
+                xLoad->load( aResource );
+            }
+
+            // always attach the resource, even if the document has not been freshly loaded
+            xModel->attachResource( _rURL, aResource );
+        }
+        catch(const Exception&)
+        {
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
+            bSuccess = false;
+        }
+    }
+
+    if ( bSuccess )
+    {
+        try
+        {
+            Reference< XModel2 > xModel2( xModel, UNO_QUERY_THROW );
+            Reference< XController2 > xController( xModel2->createViewController( sViewName, Sequence< PropertyValue >(), rFrame ), UNO_SET_THROW );
+
+            // introduce model/view/controller to each other
+            utl::ConnectFrameControllerModel(rFrame, xController, xModel);
+
+            bSuccess = true;
+        }
+        catch( const Exception& )
+        {
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
+            bSuccess = false;
+        }
+    }
+
+    if (bSuccess)
+    {
+        if ( rListener.is() )
+            rListener->loadFinished(this);
+
+        if ( nInitialSelection != -1 )
+        {
+            Reference< css::view::XSelectionSupplier >  xDocView( xModel->getCurrentController(), UNO_QUERY );
+            if ( xDocView.is() )
+            {
+                NamedDatabaseObject aSelection;
+                aSelection.Type = nInitialSelection;
+                xDocView->select( Any( aSelection ) );
+            }
+        }
+    }
+    else
+    {
+        if ( rListener.is() )
+            rListener->loadCancelled( this );
+    }
+
+    if ( !bSuccess )
+        ::comphelper::disposeComponent(xModel);
+}
+
+void DBContentLoader::cancel()
+{
+}
+
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+org_openoffice_comp_dbflt_DBContentLoader2_get_implementation(
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+{
+    return cppu::acquire(new ::dbaxml::DBContentLoader(context));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

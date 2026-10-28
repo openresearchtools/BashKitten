@@ -1,0 +1,147 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <dispatch/startmoduledispatcher.hxx>
+
+#include <framework/framelistanalyzer.hxx>
+#include <targets.h>
+#include "isstartmoduledispatch.hxx"
+
+#include <com/sun/star/frame/Desktop.hpp>
+#include <com/sun/star/frame/DispatchResultState.hpp>
+#include <com/sun/star/frame/XController.hpp>
+#include <com/sun/star/frame/StartModule.hpp>
+
+#include <unotools/moduleoptions.hxx>
+#include <utility>
+
+namespace framework{
+
+#ifdef fpf
+    #error "Who uses \"fpf\" as define. It will overwrite my namespace alias ..."
+#endif
+
+StartModuleDispatcher::StartModuleDispatcher(cpo::uno::Reference< cpo::uno::XComponentContext > xContext)
+    : m_xContext         (std::move(xContext                         ))
+{
+}
+
+StartModuleDispatcher::~StartModuleDispatcher()
+{
+}
+
+void StartModuleDispatcher::dispatch(const css::util::URL&                                  aURL      ,
+                                              const cpo::uno::Sequence< css::beans::PropertyValue >& lArguments)
+{
+    dispatchWithNotification(aURL, lArguments, cpo::uno::Reference< css::frame::XDispatchResultListener >());
+}
+
+void StartModuleDispatcher::dispatchWithNotification(const css::util::URL&                                             aURL      ,
+                                                              const cpo::uno::Sequence< css::beans::PropertyValue >&            /*lArguments*/,
+                                                              const cpo::uno::Reference< css::frame::XDispatchResultListener >& xListener )
+{
+    ::sal_Int16 nResult = css::frame::DispatchResultState::DONTKNOW;
+    if (isStartModuleDispatch(aURL))
+    {
+        nResult = css::frame::DispatchResultState::FAILURE;
+        if (implts_isBackingModePossible ())
+        {
+            implts_establishBackingMode ();
+            nResult = css::frame::DispatchResultState::SUCCESS;
+        }
+    }
+
+    implts_notifyResultListener(xListener, nResult, cpo::uno::Any());
+}
+
+cpo::uno::Sequence< ::sal_Int16 > StartModuleDispatcher::getSupportedCommandGroups()
+{
+    return cpo::uno::Sequence< ::sal_Int16 >();
+}
+
+cpo::uno::Sequence< css::frame::DispatchInformation > StartModuleDispatcher::getConfigurableDispatchInformation(::sal_Int16 /*nCommandGroup*/)
+{
+    return cpo::uno::Sequence< css::frame::DispatchInformation >();
+}
+
+void StartModuleDispatcher::addStatusListener(const cpo::uno::Reference< css::frame::XStatusListener >& /*xListener*/,
+                                                       const css::util::URL&                                     /*aURL*/     )
+{
+}
+
+void StartModuleDispatcher::removeStatusListener(const cpo::uno::Reference< css::frame::XStatusListener >& /*xListener*/,
+                                                          const css::util::URL&                                     /*aURL*/     )
+{
+}
+
+bool StartModuleDispatcher::implts_isBackingModePossible()
+{
+    if ( ! SvtModuleOptions().IsModuleInstalled(SvtModuleOptions::EModule::STARTMODULE))
+        return false;
+
+    cpo::uno::Reference< css::frame::XFramesSupplier > xDesktop =
+        css::frame::Desktop::create( m_xContext );
+
+    FrameListAnalyzer aCheck(
+        xDesktop,
+        cpo::uno::Reference< css::frame::XFrame >(),
+        FrameAnalyzerFlags::Help | FrameAnalyzerFlags::BackingComponent);
+
+    bool  bIsPossible    = false;
+
+    if ( ! aCheck.m_xBackingComponent.is()
+         && aCheck.m_lOtherVisibleFrames.empty() )
+    {
+        bIsPossible = true;
+    }
+
+    return bIsPossible;
+}
+
+void StartModuleDispatcher::implts_establishBackingMode()
+{
+    cpo::uno::Reference< css::frame::XDesktop> xDesktop        = css::frame::Desktop::create( m_xContext );
+    cpo::uno::Reference< css::frame::XFrame > xFrame           = xDesktop->findFrame(SPECIALTARGET_BLANK, 0);
+    cpo::uno::Reference< css::awt::XWindow  > xContainerWindow = xFrame->getContainerWindow();
+
+    cpo::uno::Reference< css::frame::XController > xStartModule = css::frame::StartModule::createWithParentWindow(m_xContext, xContainerWindow);
+    cpo::uno::Reference< css::awt::XWindow > xComponentWindow(xStartModule, cpo::uno::UNO_QUERY);
+    xFrame->setComponent(xComponentWindow, xStartModule);
+    xStartModule->attachFrame(xFrame);
+    xContainerWindow->setVisible(true);
+}
+
+void StartModuleDispatcher::implts_notifyResultListener(const cpo::uno::Reference< css::frame::XDispatchResultListener >& xListener,
+                                                              ::sal_Int16                                                 nState   ,
+                                                        const cpo::uno::Any&                                              aResult  )
+{
+    if ( ! xListener.is())
+        return;
+
+    css::frame::DispatchResultEvent aEvent(
+        cpo::uno::Reference< cpo::uno::XInterface >(static_cast< ::cppu::OWeakObject* >(this), cpo::uno::UNO_QUERY),
+        nState,
+        aResult);
+
+    xListener->dispatchFinished(aEvent);
+}
+
+} // namespace framework
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,454 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <test/bootstrapfixture.hxx>
+
+#include <com/sun/star/beans/PropertyValue.hpp>
+
+#include <vcl/alpha.hxx>
+#include <vcl/graph.hxx>
+#include <vcl/graphicfilter.hxx>
+#include <vcl/pdfread.hxx>
+#include <vcl/filter/PDFiumLibrary.hxx>
+#include <comphelper/kit.hxx>
+#include <comphelper/scopeguard.hxx>
+#include <tools/color.hxx>
+#include <tools/stream.hxx>
+
+#include <impgraph.hxx>
+#include <vcl/graphic/Manager.hxx>
+#include <vcl/graphic/MemoryManaged.hxx>
+
+#include "KitModeScope.hxx"
+
+using namespace css;
+
+namespace
+{
+Bitmap createBitmap(Size aSize, bool bAlpha = false)
+{
+    Bitmap aBitmap(aSize, vcl::PixelFormat::N24_BPP);
+    aBitmap.Erase(COL_LIGHTRED);
+
+    aBitmap.SetPrefSize(Size(aSize.Width() * 2, aSize.Height() * 3));
+    aBitmap.SetPrefMapMode(MapMode(MapUnit::Map100thMM));
+
+    if (bAlpha)
+    {
+        sal_uInt8 uAlphaValue = 0x80;
+        AlphaMask aAlphaMask(aSize, &uAlphaValue);
+
+        return Bitmap(aBitmap, aAlphaMask);
+    }
+    else
+    {
+        return aBitmap;
+    }
+}
+
+void createBitmapAndExportForType(SvStream& rStream, std::u16string_view sType,
+                                  Size aSize = Size(120, 100), bool bAlpha = false)
+{
+    Bitmap aBitmap = createBitmap(aSize, bAlpha);
+
+    cpo::uno::Sequence<beans::PropertyValue> aFilterData;
+    GraphicFilter& rGraphicFilter = GraphicFilter::GetGraphicFilter();
+    sal_uInt16 nFilterFormat = rGraphicFilter.GetExportFormatNumberForShortName(sType);
+    rGraphicFilter.ExportGraphic(aBitmap, u"none", rStream, nFilterFormat, &aFilterData);
+
+    rStream.Seek(STREAM_SEEK_TO_BEGIN);
+}
+
+Graphic makeUnloadedGraphic(std::u16string_view sType, Size aSize = Size(120, 100),
+                            bool bAlpha = false)
+{
+    SvMemoryStream aStream;
+    GraphicFilter& rGraphicFilter = GraphicFilter::GetGraphicFilter();
+    createBitmapAndExportForType(aStream, sType, aSize, bAlpha);
+    return rGraphicFilter.ImportUnloadedGraphic(aStream);
+}
+
+constexpr OUString DATA_DIRECTORY = u"/vcl/qa/cppunit/data/"_ustr;
+
+Graphic loadGraphic(std::u16string_view rFilename)
+{
+    test::Directories aDirectories;
+    OUString aFilename = aDirectories.getURLFromSrc(DATA_DIRECTORY) + rFilename;
+    SvFileStream aFileStream(aFilename, StreamMode::READ);
+    GraphicFilter& rGraphicFilter = GraphicFilter::GetGraphicFilter();
+
+    Graphic aGraphic;
+    CPPUNIT_ASSERT_EQUAL(ERRCODE_NONE, rGraphicFilter.ImportGraphic(aGraphic, u"", aFileStream,
+                                                                    GRFILTER_FORMAT_DONTKNOW));
+    return aGraphic;
+}
+
+Graphic loadUnloadedGraphic(std::u16string_view rFilename)
+{
+    test::Directories aDirectories;
+    OUString aFilename = aDirectories.getURLFromSrc(DATA_DIRECTORY) + rFilename;
+    SvFileStream aFileStream(aFilename, StreamMode::READ);
+    GraphicFilter& rGraphicFilter = GraphicFilter::GetGraphicFilter();
+    return rGraphicFilter.ImportUnloadedGraphic(aFileStream);
+}
+
+} // end anonymous
+
+class GraphicMemoryTest : public test::BootstrapFixture
+{
+};
+
+CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testMemoryManager_Empty)
+{
+    auto& rManager = vcl::graphic::MemoryManager::get();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    Graphic aGraphic1;
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    Graphic aGraphic2;
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    Graphic aGraphic3;
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    aGraphic1 = aGraphic2;
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    aGraphic2 = aGraphic3;
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+}
+
+CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testMemoryManager_Unloaded)
+{
+    auto& rManager = vcl::graphic::MemoryManager::get();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    Graphic aGraphic_100 = makeUnloadedGraphic(u"jpg", Size(100, 100));
+    Graphic aGraphic_200 = makeUnloadedGraphic(u"png", Size(200, 100));
+    Graphic aGraphic_300 = makeUnloadedGraphic(u"jpg", Size(300, 100));
+
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    aGraphic_100.makeAvailable();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(30000), rManager.getTotalSize());
+    CPPUNIT_ASSERT_EQUAL(sal_uLong(30000), aGraphic_100.GetSizeBytes());
+
+    aGraphic_200.makeAvailable();
+    CPPUNIT_ASSERT_EQUAL(size_t(2), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(90000), rManager.getTotalSize());
+    CPPUNIT_ASSERT_EQUAL(sal_uLong(30000), aGraphic_100.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(sal_uLong(60000), aGraphic_200.GetSizeBytes());
+
+    aGraphic_300.makeAvailable();
+    CPPUNIT_ASSERT_EQUAL(size_t(3), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(180000), rManager.getTotalSize());
+    CPPUNIT_ASSERT_EQUAL(sal_uLong(30000), aGraphic_100.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(sal_uLong(60000), aGraphic_200.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(sal_uLong(90000), aGraphic_300.GetSizeBytes());
+}
+
+CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testMemoryManager_Destruction)
+{
+    auto& rManager = vcl::graphic::MemoryManager::get();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    Graphic aGraphic_100 = makeUnloadedGraphic(u"jpg", Size(100, 100));
+    Graphic aGraphic_200 = makeUnloadedGraphic(u"png", Size(200, 100));
+    Graphic aGraphic_300 = makeUnloadedGraphic(u"jpg", Size(300, 100));
+
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    aGraphic_100.makeAvailable();
+    aGraphic_200.makeAvailable();
+    aGraphic_300.makeAvailable();
+    CPPUNIT_ASSERT_EQUAL(size_t(3), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(180000), rManager.getTotalSize());
+
+    aGraphic_200 = Graphic();
+    CPPUNIT_ASSERT_EQUAL(size_t(2), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(120000), rManager.getTotalSize());
+
+    aGraphic_300 = Graphic();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(30000), rManager.getTotalSize());
+}
+
+CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testMemoryManager_Copy)
+{
+    auto& rManager = vcl::graphic::MemoryManager::get();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    Graphic aGraphic_100 = makeUnloadedGraphic(u"jpg", Size(100, 100));
+    Graphic aGraphic_200 = makeUnloadedGraphic(u"png", Size(200, 100));
+    Graphic aGraphic_300 = makeUnloadedGraphic(u"jpg", Size(300, 100));
+
+    Graphic aSVG = loadUnloadedGraphic(u"SimpleExample.svg");
+
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    aGraphic_100.makeAvailable();
+    aGraphic_200.makeAvailable();
+    aGraphic_300.makeAvailable();
+}
+
+CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testMemoryManager)
+{
+    auto& rManager = vcl::graphic::MemoryManager::get();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    Graphic aGraphic;
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    Graphic aGraphicPng = loadGraphic(u"TypeDetectionExample.png");
+    {
+        CPPUNIT_ASSERT_EQUAL(GraphicType::Bitmap, aGraphicPng.GetType());
+        CPPUNIT_ASSERT_EQUAL(sal_uLong(300), aGraphicPng.GetSizeBytes());
+        CPPUNIT_ASSERT_EQUAL(true, aGraphicPng.isAvailable());
+    }
+
+    CPPUNIT_ASSERT_EQUAL(size_t(1), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(300), rManager.getTotalSize());
+
+    CPPUNIT_ASSERT_EQUAL(false, aGraphicPng.ImplGetImpGraphic()->isSwappedOut());
+    CPPUNIT_ASSERT_EQUAL(true, aGraphicPng.ImplGetImpGraphic()->swapOut());
+    CPPUNIT_ASSERT_EQUAL(true, aGraphicPng.ImplGetImpGraphic()->isSwappedOut());
+    CPPUNIT_ASSERT_EQUAL(false, aGraphicPng.isAvailable());
+
+    CPPUNIT_ASSERT_EQUAL(size_t(1), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0), rManager.getTotalSize());
+
+    Graphic aGraphicJpg = makeUnloadedGraphic(u"jpg");
+    {
+        CPPUNIT_ASSERT_EQUAL(tools::Long(120), aGraphicJpg.GetSizePixel().Width());
+        CPPUNIT_ASSERT_EQUAL(tools::Long(100), aGraphicJpg.GetSizePixel().Height());
+        CPPUNIT_ASSERT_EQUAL(false, aGraphicJpg.isAvailable());
+    }
+
+    CPPUNIT_ASSERT_EQUAL(size_t(1), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0), rManager.getTotalSize());
+
+    aGraphicJpg.makeAvailable();
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(36000), rManager.getTotalSize());
+
+    CPPUNIT_ASSERT_EQUAL(true, aGraphicPng.makeAvailable());
+    CPPUNIT_ASSERT_EQUAL(false, aGraphicPng.ImplGetImpGraphic()->isSwappedOut());
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(36300), rManager.getTotalSize());
+
+    aGraphicJpg = aGraphic;
+
+    CPPUNIT_ASSERT_EQUAL(size_t(1), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(300), rManager.getTotalSize());
+}
+
+// A caller that only wants the checksum reads the encoded data back in. Those bytes have to be
+// counted while they are there and have to be able to leave again.
+CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testAChecksumCountsTheBytesItReadBack)
+{
+    KitModeScope aKitMode;
+
+    auto& rManager = vcl::graphic::MemoryManager::get();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    Graphic aGraphic = makeUnloadedGraphic(u"jpg", Size(300, 300));
+    CPPUNIT_ASSERT_EQUAL(true, aGraphic.makeAvailable());
+
+    ImpGraphic* pImpGraphic = aGraphic.ImplGetImpGraphic();
+    vcl::graphic::MemoryManaged* pMemoryManaged = pImpGraphic;
+
+    CPPUNIT_ASSERT_EQUAL(true, pImpGraphic->swapOut());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0), rManager.getTotalSize());
+
+    // Nothing of this graphic is in memory, so there is nothing to reduce.
+    CPPUNIT_ASSERT_EQUAL(false, pMemoryManaged->canReduceMemory());
+
+    // Hashing only reaches bytes that are in memory, so it finds nothing to hash.
+    const BinaryDataContainer& rContainer = aGraphic.GetSharedGfxLink()->getDataContainer();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rContainer.calculateHash());
+
+    CPPUNIT_ASSERT(aGraphic.GetChecksum() != 0);
+
+    // The checksum ran over the encoded data, which is back in memory and counted for.
+    CPPUNIT_ASSERT(rContainer.calculateHash() != 0);
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(rContainer.getSize()), rManager.getTotalSize());
+
+    // The graphic is still swapped out, and those bytes are what a reduction can hand back.
+    CPPUNIT_ASSERT_EQUAL(true, pImpGraphic->isSwappedOut());
+    CPPUNIT_ASSERT_EQUAL(true, pMemoryManaged->canReduceMemory());
+    CPPUNIT_ASSERT_EQUAL(true, pMemoryManaged->reduceMemory());
+
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rContainer.calculateHash());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0), rManager.getTotalSize());
+}
+
+// A caller can ask for the encoded data of a graphic on its own, without going through the
+// checksum. Those bytes are counted while they are in memory and can leave again.
+CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testEncodedDataBroughtInIsCountedAndCanGoAgain)
+{
+    KitModeScope aKitMode;
+
+    auto& rManager = vcl::graphic::MemoryManager::get();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    Graphic aGraphic = makeUnloadedGraphic(u"jpg", Size(300, 300));
+    CPPUNIT_ASSERT_EQUAL(true, aGraphic.makeAvailable());
+
+    ImpGraphic* pImpGraphic = aGraphic.ImplGetImpGraphic();
+    vcl::graphic::MemoryManaged* pMemoryManaged = pImpGraphic;
+
+    CPPUNIT_ASSERT_EQUAL(true, pImpGraphic->swapOut());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0), rManager.getTotalSize());
+
+    // Hashing only reaches bytes that are in memory, so it finds nothing to hash.
+    const BinaryDataContainer& rContainer = aGraphic.GetSharedGfxLink()->getDataContainer();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rContainer.calculateHash());
+
+    aGraphic.ensureEncodedDataAvailable();
+
+    // The encoded data is back in memory and the running total counts it.
+    CPPUNIT_ASSERT(rContainer.calculateHash() != 0);
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(rContainer.getSize()), rManager.getTotalSize());
+
+    // The graphic is still swapped out, and those bytes are what a reduction can hand back.
+    CPPUNIT_ASSERT_EQUAL(true, pImpGraphic->isSwappedOut());
+    CPPUNIT_ASSERT_EQUAL(true, pMemoryManaged->canReduceMemory());
+    CPPUNIT_ASSERT_EQUAL(true, pMemoryManaged->reduceMemory());
+
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rContainer.calculateHash());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(0), rManager.getTotalSize());
+}
+
+namespace
+{
+class TestManaged : public vcl::graphic::MemoryManaged
+{
+public:
+    std::chrono::high_resolution_clock::time_point maLastUsed
+        = std::chrono::high_resolution_clock::now();
+
+    TestManaged(bool bRegister, sal_Int64 nSize = 0)
+        : MemoryManaged(bRegister)
+    {
+        updateCurrentSizeInBytes(nSize);
+    }
+
+    void setCurrentSize(sal_Int64 nSize) { updateCurrentSizeInBytes(nSize); }
+
+    void callRegister() { registerIntoManager(); }
+
+    void callUnregister() { unregisterFromManager(); }
+
+    bool canReduceMemory() const override { return false; }
+
+    bool reduceMemory() override { return false; }
+
+    std::chrono::high_resolution_clock::time_point getLastUsed() const override
+    {
+        return maLastUsed;
+    }
+
+    void dumpState(rtl::OStringBuffer& /*rState*/) override {}
+};
+}
+
+CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testMemoryManagerX)
+{
+    auto& rManager = vcl::graphic::MemoryManager::get();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    TestManaged aTestManaged(false, 1000);
+    CPPUNIT_ASSERT_EQUAL(size_t(0), rManager.getManagedObjects().size());
+
+    TestManaged aTestManaged2(true, 100);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(100), rManager.getTotalSize());
+
+    aTestManaged2.setCurrentSize(400);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(400), rManager.getTotalSize());
+
+    aTestManaged.setCurrentSize(600);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(400), rManager.getTotalSize());
+
+    aTestManaged.callRegister();
+    CPPUNIT_ASSERT_EQUAL(size_t(2), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(1000), rManager.getTotalSize());
+
+    aTestManaged.callUnregister();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), rManager.getManagedObjects().size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int64(400), rManager.getTotalSize());
+}
+
+// the file bytes of a PDF stay in memory while another page of the same file still holds them
+CPPUNIT_TEST_FIXTURE(GraphicMemoryTest, testPdfPagesShareBytesAcrossSwapOut)
+{
+    if (!vcl::pdf::PDFiumLibrary::get())
+        return;
+
+    test::Directories aDirectories;
+    OUString aFilename
+        = aDirectories.getURLFromSrc(u"/vcl/qa/cppunit/pdfexport/data/") + "SimpleMultiPagePDF.pdf";
+    SvFileStream aFileStream(aFilename, StreamMode::READ);
+    const sal_uLong nFileSize = aFileStream.TellEnd();
+    CPPUNIT_ASSERT(nFileSize > 0);
+
+    std::vector<vcl::PDFGraphicResult> aPages;
+    CPPUNIT_ASSERT_EQUAL(size_t(3), vcl::ImportPDFUnloaded(aFileStream, aPages));
+
+    // the shared bytes are swapped to disk in kit mode only
+    const bool bWasKitActive = comphelper::COKit::isActive();
+    comphelper::COKit::setActive(true);
+    comphelper::ScopeGuard aRestoreKit([bWasKitActive]
+                                       { comphelper::COKit::setActive(bWasKitActive); });
+
+    Graphic aPage0 = aPages[0].GetGraphic();
+    Graphic aPage1 = aPages[1].GetGraphic();
+    Graphic aPage2 = aPages[2].GetGraphic();
+    CPPUNIT_ASSERT(aPage0.makeAvailable());
+    CPPUNIT_ASSERT(aPage1.makeAvailable());
+    CPPUNIT_ASSERT(aPage2.makeAvailable());
+
+    // every copy of the container shares the same bytes, so this copy shows whether the
+    // bytes are in memory without loading anything
+    BinaryDataContainer aSharedBytes = aPage0.GetGfxLink().getDataContainer();
+    CPPUNIT_ASSERT_EQUAL(size_t(nFileSize), aSharedBytes.getSizeBytes());
+
+    // the loaded pages account equal shares of the one copy of the file bytes
+    CPPUNIT_ASSERT_EQUAL(nFileSize / 3, aPage0.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(nFileSize / 3, aPage1.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(nFileSize / 3, aPage2.GetSizeBytes());
+
+    // swapping out one page leaves the bytes in memory for the pages that still hold them
+    CPPUNIT_ASSERT(aPage0.ImplGetImpGraphic()->swapOut());
+    CPPUNIT_ASSERT_EQUAL(sal_uLong(0), aPage0.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(nFileSize / 2, aPage1.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(nFileSize / 2, aPage2.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(size_t(nFileSize), aSharedBytes.getSizeBytes());
+
+    CPPUNIT_ASSERT(aPage1.ImplGetImpGraphic()->swapOut());
+    CPPUNIT_ASSERT_EQUAL(nFileSize, aPage2.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(size_t(nFileSize), aSharedBytes.getSizeBytes());
+
+    // once the last page is swapped out the bytes leave memory, and loading a page again
+    // brings them back
+    CPPUNIT_ASSERT(aPage2.ImplGetImpGraphic()->swapOut());
+    CPPUNIT_ASSERT_EQUAL(sal_uLong(0), aPage2.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(size_t(0), aSharedBytes.getSizeBytes());
+    CPPUNIT_ASSERT(aPage0.makeAvailable());
+    CPPUNIT_ASSERT_EQUAL(nFileSize, aPage0.GetSizeBytes());
+    CPPUNIT_ASSERT_EQUAL(size_t(nFileSize), aSharedBytes.getSizeBytes());
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

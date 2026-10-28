@@ -1,0 +1,263 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <svl/lstner.hxx>
+#include <svl/style.hxx>
+#include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/style/XStyle.hpp>
+#include <com/sun/star/style/XStyleLoader2.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XMultiPropertySet.hpp>
+#include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/beans/XMultiPropertyStates.hpp>
+#include <cppuhelper/implbase.hxx>
+
+namespace com::sun::star::container { class XIndexReplace; }
+
+class ScDocShell;
+class SfxItemPropertySet;
+class SfxItemSet;
+
+class ScStyleFamilyObj;
+class ScStyleObj;
+struct SfxItemPropertyMapEntry;
+
+class ScStyleFamiliesObj final : public ::cppu::WeakImplHelper<
+                            css::container::XIndexAccess,
+                            css::container::XNameAccess,
+                            css::style::XStyleLoader2,
+                            css::lang::XServiceInfo >,
+                        public SfxListener
+{
+private:
+    ScDocShell*             pDocShell;
+
+    rtl::Reference<ScStyleFamilyObj> GetObjectByType_Impl(SfxStyleFamily nType) const;
+    rtl::Reference<ScStyleFamilyObj> GetObjectByIndex_Impl(sal_uInt32 nIndex) const;
+    rtl::Reference<ScStyleFamilyObj> GetObjectByName_Impl(std::u16string_view aName) const;
+
+public:
+                            ScStyleFamiliesObj(ScDocShell* pDocSh);
+    virtual                 ~ScStyleFamiliesObj() override;
+
+    virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
+
+                            // XIndexAccess
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
+
+                            // XNameAccess
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool hasByName( const OUString& aName ) override;
+
+                            // XElementAccess
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
+
+                            // XStyleLoader
+    virtual void   loadStylesFromURL( const OUString& URL,
+                                const cpo::uno::Sequence< css::beans::PropertyValue >& aOptions ) override;
+    virtual cpo::uno::Sequence< css::beans::PropertyValue >
+                            getStyleLoaderOptions() override;
+
+                            //XStyleLoader2
+    virtual void   loadStylesFromDocument( const cpo::uno::Reference < css::lang::XComponent > & aSourceComponent,
+                                const cpo::uno::Sequence< css::beans::PropertyValue >& aOptions ) override;
+                            // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+private:
+    /// @throws css::io::IOException
+    /// @throws cpo::uno::RuntimeException
+    void loadStylesFromDocShell( ScDocShell* pSource,
+                              const cpo::uno::Sequence< css::beans::PropertyValue>& aOptions );
+};
+
+class ScStyleFamilyObj final : public ::cppu::WeakImplHelper<
+                            css::container::XNameContainer,
+                            css::container::XIndexAccess,
+                            css::beans::XPropertySet,
+                            css::lang::XServiceInfo >,
+                        public SfxListener
+{
+private:
+    ScDocShell*             pDocShell;
+    SfxStyleFamily          eFamily;        // Family
+
+    rtl::Reference<ScStyleObj> GetObjectByIndex_Impl(sal_Int32 nIndex);
+    rtl::Reference<ScStyleObj> GetObjectByName_Impl(const OUString& Name);
+
+public:
+                            ScStyleFamilyObj(ScDocShell* pDocSh, SfxStyleFamily eFam);
+    virtual                 ~ScStyleFamilyObj() override;
+
+    virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
+
+                            // XNameContainer
+    virtual void   insertByName( const OUString& aName,
+                                const cpo::uno::Any& aElement ) override;
+    virtual void   removeByName( const OUString& Name ) override;
+
+                            // XNameReplace
+    virtual void   replaceByName( const OUString& aName,
+                                const cpo::uno::Any& aElement ) override;
+
+                            // XNameAccess
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames() override;
+    virtual bool hasByName( const OUString& aName ) override;
+
+                            // XIndexAccess
+    virtual sal_Int32 getCount() override;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
+
+                            // XElementAccess
+    virtual cpo::uno::Type getElementType() override;
+    virtual bool hasElements() override;
+
+                            // XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo() override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+
+                            // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+};
+
+class ScStyleObj final : public ::cppu::WeakImplHelper<
+                    css::style::XStyle,
+                    css::beans::XPropertySet,
+                    css::beans::XMultiPropertySet,
+                    css::beans::XPropertyState,
+                    css::beans::XMultiPropertyStates,
+                    css::lang::XServiceInfo >,
+                public SfxListener
+{
+private:
+    const SfxItemPropertySet* pPropSet;
+    ScDocShell*             pDocShell;
+    SfxStyleFamily          eFamily;        // Family
+    OUString                aStyleName;
+    SfxStyleSheetBase*      pStyle_cached;
+
+    const SfxItemSet*       GetStyleItemSet_Impl( std::u16string_view rPropName, const SfxItemPropertyMapEntry*& rpEntry );
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws cpo::uno::RuntimeException
+    css::beans::PropertyState getPropertyState_Impl( std::u16string_view PropertyName );
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws css::lang::WrappedTargetException
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Any           getPropertyDefault_Impl( std::u16string_view aPropertyName );
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws css::lang::WrappedTargetException
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Any           getPropertyValue_Impl( std::u16string_view aPropertyName );
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws cpo::uno::RuntimeException
+    void                    setPropertyValue_Impl( std::u16string_view rPropertyName,
+                                                 const SfxItemPropertyMapEntry* pEntry,
+                                                 const cpo::uno::Any* pValue );
+
+public:
+                            ScStyleObj() = delete;
+                            ScStyleObj(ScDocShell* pDocSh, SfxStyleFamily eFam, OUString aName);
+    virtual                 ~ScStyleObj() override;
+
+                            // created by getImplementation:
+    bool                    IsInserted() const      { return pDocShell != nullptr; }
+    SfxStyleFamily          GetFamily() const       { return eFamily; }
+    void                    InitDoc( ScDocShell* pNewDocSh, const OUString& rNewName );
+    SfxStyleSheetBase*      GetStyle_Impl( bool bUseCachedValue = false );
+
+    virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
+
+    static cpo::uno::Reference< css::container::XIndexReplace >
+                            CreateEmptyNumberingRules();
+
+                            // XStyle
+    virtual bool isUserDefined() override;
+    virtual bool isInUse() override;
+    virtual OUString getParentStyle() override;
+    virtual void   setParentStyle( const OUString& aParentStyle ) override;
+
+                            // XNamed
+    virtual OUString getName() override;
+    virtual void   setName( const OUString& aName ) override;
+
+                            // XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+                            getPropertySetInfo() override;
+    virtual void   setPropertyValue( const OUString& aPropertyName,
+                                    const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void   addPropertyChangeListener( const OUString& aPropertyName,
+                                    const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void   removePropertyChangeListener( const OUString& aPropertyName,
+                                    const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void   addVetoableChangeListener( const OUString& PropertyName,
+                                    const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void   removeVetoableChangeListener( const OUString& PropertyName,
+                                    const cpo::uno::Reference<
+                                        css::beans::XVetoableChangeListener >& aListener ) override;
+
+                            // XMultiPropertySet
+    virtual void   setPropertyValues( const cpo::uno::Sequence< OUString >& aPropertyNames,
+                                    const cpo::uno::Sequence< cpo::uno::Any >& aValues ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Any >
+                            getPropertyValues( const cpo::uno::Sequence< OUString >& aPropertyNames ) override;
+    virtual void addPropertiesChangeListener( const cpo::uno::Sequence< OUString >& aPropertyNames,
+                                    const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override;
+    virtual void removePropertiesChangeListener( const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override;
+    virtual void firePropertiesChangeEvent( const cpo::uno::Sequence< OUString >& aPropertyNames,
+                                    const cpo::uno::Reference< css::beans::XPropertiesChangeListener >& xListener ) override;
+
+                            // XPropertyState
+    virtual css::beans::PropertyState getPropertyState(
+                                    const OUString& PropertyName ) override;
+    virtual cpo::uno::Sequence< css::beans::PropertyState >
+                            getPropertyStates( const cpo::uno::Sequence< OUString >& aPropertyName ) override;
+    virtual void   setPropertyToDefault( const OUString& PropertyName ) override;
+    virtual cpo::uno::Any getPropertyDefault( const OUString& aPropertyName ) override;
+
+                            // XMultiPropertyStates
+    // getPropertyStates already defined for XPropertyState
+    virtual void   setAllPropertiesToDefault() override;
+    virtual void   setPropertiesToDefault( const cpo::uno::Sequence< OUString >& aPropertyNames ) override;
+    virtual cpo::uno::Sequence< cpo::uno::Any >
+                            getPropertyDefaults( const cpo::uno::Sequence< OUString >& aPropertyNames ) override;
+
+                            // XServiceInfo
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

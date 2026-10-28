@@ -1,0 +1,203 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include "sctiledrenderingtest.hxx"
+
+#include <COKit/COKit.hxx>
+#include <comphelper/kit.hxx>
+#include <i18nlangtag/languagetag.hxx>
+#include <comphelper/servicehelper.hxx>
+#include <sfx2/kit/helper.hxx>
+#include <vcl/dialoghelper.hxx>
+#include <vcl/scheduler.hxx>
+#include <vcl/virdev.hxx>
+
+#include <docuno.hxx>
+#include <tabvwsh.hxx>
+#include <viewdata.hxx>
+
+#include "sctestviewcallback.hxx"
+
+using namespace com::sun::star;
+
+ScTiledRenderingTest::ScTiledRenderingTest()
+    : UnoApiXmlTest(u"/sc/qa/unit/tiledrendering/data/"_ustr)
+    , m_callbackWrapper(&callback, this)
+{
+}
+
+void ScTiledRenderingTest::setUp()
+{
+    UnoApiXmlTest::setUp();
+
+    comphelper::COKit::setActive(true);
+
+    // The kit language and locale are process globals that one test would
+    // otherwise inherit from whichever test ran before it. Start each test
+    // from the unset state so its result does not depend on the run order.
+    comphelper::COKit::setLanguageTag(LanguageTag(LANGUAGE_NONE));
+    comphelper::COKit::setLocale(LanguageTag(LANGUAGE_NONE));
+}
+
+void ScTiledRenderingTest::tearDown()
+{
+    vcl::EndAllDialogs(nullptr);
+
+    m_callbackWrapper.clear();
+
+    comphelper::COKit::resetCompatFlag();
+
+    UnoApiXmlTest::tearDown();
+}
+
+ScModelObj* ScTiledRenderingTest::createDoc(const char* pName)
+{
+    loadFromFile(OUString::createFromAscii(pName));
+
+    ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+    CPPUNIT_ASSERT(pModelObj);
+    pModelObj->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    return pModelObj;
+}
+
+void ScTiledRenderingTest::setupCOKitViewCallback(SfxViewShell* pViewShell)
+{
+    pViewShell->setCOKitViewCallback(&m_callbackWrapper);
+    m_callbackWrapper.setKitViewId(KitHelper::getView(*pViewShell));
+}
+
+void ScTiledRenderingTest::callback(COKitCallbackType eType, const char* pPayload, void* pData)
+{
+    static_cast<ScTiledRenderingTest*>(pData)->callbackImpl(eType, pPayload);
+}
+
+void ScTiledRenderingTest::callbackImpl(COKitCallbackType eType, const char* pPayload)
+{
+    switch (eType)
+    {
+        case COKitCallbackType::DOCUMENT_SIZE_CHANGED:
+        {
+            OString aPayload(pPayload);
+            sal_Int32 nIndex = 0;
+            OString aToken = aPayload.getToken(0, ',', nIndex);
+            m_aDocumentSize.setWidth(aToken.toInt32());
+            aToken = aPayload.getToken(0, ',', nIndex);
+            m_aDocumentSize.setHeight(aToken.toInt32());
+            m_aDocSizeCondition.set();
+        }
+        break;
+        default:
+        break;
+    }
+}
+
+void ScTiledRenderingTest::checkSampleInvalidation(const ScTestViewCallback& rView, bool bFullRow)
+{
+    // we expect invalidations, but that isn't really important
+    CPPUNIT_ASSERT(rView.m_bInvalidateTiles);
+    tools::Rectangle aInvalidation;
+    for (const auto& rRect : rView.m_aInvalidations)
+        aInvalidation.Union(rRect);
+    if (!bFullRow)
+    {
+        // What matters is that we expect that the invalidation does not extend all the
+        // way to the max right of the sheet.
+        // Here we originally got 32212306 and now ~5056 for a single cell case
+        CPPUNIT_ASSERT_LESSEQUAL(tools::Long(8000), aInvalidation.GetWidth());
+    }
+    else
+    {
+        // We expect RTL to continue to invalidate the entire row
+        // from 0 to end of sheet (see ScDocShell::PostPaint, 'Extend to whole rows'),
+        // which is different to the adjusted LTR case which
+        // invalidated the row from left of edited cell to right of end
+        // of sheet.
+        CPPUNIT_ASSERT_LESSEQUAL(tools::Long(0), aInvalidation.Left());
+        CPPUNIT_ASSERT_EQUAL(tools::Long(32212230), aInvalidation.Right());
+    }
+}
+
+void ScTiledRenderingTest::cellInvalidationHelper(ScModelObj* pModelObj, ScTabViewShell* pView,
+                                                  const ScAddress& rAdr, bool bAddText,
+                                                  bool bFullRow)
+{
+    // view
+    ScTestViewCallback aView;
+
+    if (bAddText)
+    {
+        // Type "Hello World" in D8, process events to idle and don't commit yet
+        typeCharsInCell("Hello World", rAdr.Col(), rAdr.Row(), pView, pModelObj, false, false);
+
+        aView.m_bInvalidateTiles = false;
+        aView.m_aInvalidations.clear();
+
+        // commit text and process events to idle
+        typeCharsInCell("", rAdr.Col(), rAdr.Row(), pView, pModelObj, true, true);
+    }
+    else // DeleteText
+    {
+        pView->SetCursor(rAdr.Col(), rAdr.Row());
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::DELETE);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::DELETE);
+        Scheduler::ProcessEventsToIdle();
+    }
+
+    checkSampleInvalidation(aView, bFullRow);
+}
+
+void ScTiledRenderingTest::typeCharsInCell(const std::string& aStr, SCCOL nCol, SCROW nRow,
+                                           ScTabViewShell* pView, ScModelObj* pModelObj,
+                                           bool bInEdit, bool bCommit)
+{
+    if (!bInEdit)
+        pView->SetCursor(nCol, nRow);
+
+    for (const char& cChar : aStr)
+    {
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, cChar, 0);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, cChar, 0);
+        Scheduler::ProcessEventsToIdle();
+    }
+
+    if (bCommit)
+    {
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::RETURN);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::RETURN);
+        Scheduler::ProcessEventsToIdle();
+    }
+}
+
+bool ScTiledRenderingTest::hasEditView(const ScViewData& rViewData)
+{
+    for (unsigned int i = 0; i < 4; i++)
+    {
+        if (rViewData.HasEditView(static_cast<ScSplitPos>(i)))
+            return true;
+    }
+    return false;
+}
+
+Bitmap ScTiledRenderingTest::getTile(ScModelObj* pModelObj, int nTilePosX, int nTilePosY,
+                                     tools::Long nTileWidth, tools::Long nTileHeight)
+{
+    size_t nCanvasSize = 1024;
+    size_t nTileSize = 256;
+    // BGRA format data
+    std::vector<unsigned char> aPixmap(nCanvasSize * nCanvasSize * 4, 0);
+    ScopedVclPtrInstance<VirtualDevice> xDevice(DeviceFormat::WITHOUT_ALPHA);
+    xDevice->SetBackground(Wallpaper(COL_TRANSPARENT));
+    xDevice->SetOutputSizePixelScaleOffsetAndKitBuffer(Size(nCanvasSize, nCanvasSize),
+            1.0, Point(), aPixmap.data());
+    pModelObj->paintTile(*xDevice, nCanvasSize, nCanvasSize, nTilePosX, nTilePosY, nTileWidth, nTileHeight);
+    xDevice->EnableMapMode(false);
+    return xDevice->GetBitmap(Point(0, 0), Size(nTileSize, nTileSize));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

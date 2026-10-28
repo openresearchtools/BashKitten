@@ -1,0 +1,20 @@
+# -*- Mode: makefile-gmake; tab-width: 4; indent-tabs-mode: t -*-
+#
+# This file is part of the Collabora Office project.
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+
+#please make generic modifications to unxgcc.mk
+
+include $(GBUILDDIR)/platform/unxgcc.mk
+
+# ports install their libraries under /usr/local, which the linker does not
+# search by default
+gb_LinkTarget_LDFLAGS += -L/usr/local/lib
+
+USE_LD += -Wl,--undefined-version
+
+# vim: set noet sw=4:

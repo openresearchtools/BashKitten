@@ -1,0 +1,164 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <memory>
+#include <com/sun/star/util/XNumberFormatsSupplier.hpp>
+#include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
+#include <com/sun/star/sdbcx/XDataDescriptorFactory.hpp>
+#include <com/sun/star/sdbcx/XIndexesSupplier.hpp>
+#include <com/sun/star/sdbcx/XKeysSupplier.hpp>
+#include <com/sun/star/sdbcx/XRename.hpp>
+#include <com/sun/star/sdbcx/XAlterTable.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XUnoTunnel.hpp>
+#include <com/sun/star/sdbc/XConnection.hpp>
+#include <cppuhelper/compbase.hxx>
+#include "datasettings.hxx"
+#include "column.hxx"
+
+#include <connectivity/CommonTools.hxx>
+#include <connectivity/sdbcx/IRefreshable.hxx>
+#include <comphelper/IdPropArrayHelper.hxx>
+
+namespace dbaccess
+{
+    typedef ::cppu::WeakComponentImplHelper<   css::sdbcx::XColumnsSupplier,
+                                               css::sdbcx::XKeysSupplier,
+                                               css::container::XNamed,
+                                               css::lang::XServiceInfo,
+                                               css::sdbcx::XDataDescriptorFactory,
+                                               css::sdbcx::XIndexesSupplier,
+                                               css::sdbcx::XRename,
+                                               css::lang::XUnoTunnel,
+                                               css::sdbcx::XAlterTable> OTableDescriptor_BASE;
+    // OTables
+    class ODBTableDecorator;
+    typedef ::comphelper::OIdPropertyArrayUsageHelper< ODBTableDecorator >  ODBTableDecorator_PROP;
+
+    class ODBTableDecorator :public cppu::BaseMutex
+                            ,public OTableDescriptor_BASE
+                            ,public ODataSettings //ODataSettings_Base
+                            ,public IColumnFactory
+                            ,public ::connectivity::sdbcx::IRefreshableColumns
+                            ,public ODBTableDecorator_PROP
+    {
+        void fillPrivileges() const;
+        rtl::Reference< OContainerMediator > m_xColumnMediator;
+        cpo::uno::Reference< css::sdbcx::XColumnsSupplier >       m_xTable;
+        cpo::uno::Reference< css::container::XNameAccess >        m_xColumnDefinitions;
+        cpo::uno::Reference< css::sdbc::XConnection >             m_xConnection;
+        cpo::uno::Reference< css::sdbc::XDatabaseMetaData >       m_xMetaData;
+        cpo::uno::Reference< css::util::XNumberFormatsSupplier >  m_xNumberFormats;
+
+        // <properties>
+        mutable sal_Int32                                         m_nPrivileges;
+        // </properties>
+        // note: this thing uses the ref-count of "this", see OCollection::acquire()!
+        std::unique_ptr<::connectivity::sdbcx::OCollection>       m_pColumns;
+
+    protected:
+        // IColumnFactory
+        virtual rtl::Reference<OColumn> createColumn(const OUString& _rName) const override;
+        virtual cpo::uno::Reference< css::beans::XPropertySet > createColumnDescriptor() override;
+        virtual void columnAppended( const cpo::uno::Reference< css::beans::XPropertySet >& _rxSourceDescriptor ) override;
+        virtual void columnDropped(const OUString& _sName) override;
+
+        virtual void refreshColumns() override;
+
+        virtual ::cppu::IPropertyArrayHelper* createArrayHelper(sal_Int32 _nId) const override;
+        virtual ::cppu::IPropertyArrayHelper & getInfoHelper() override;
+
+        // OPropertySetHelper
+        virtual bool convertFastPropertyValue(
+                            cpo::uno::Any & rConvertedValue,
+                            cpo::uno::Any & rOldValue,
+                            sal_Int32 nHandle,
+                            const cpo::uno::Any& rValue ) override;
+        virtual void getFastPropertyValue(cpo::uno::Any& rValue, sal_Int32 nHandle) const override;
+        virtual void setFastPropertyValue_NoBroadcast(
+                                sal_Int32 nHandle,
+                                const cpo::uno::Any& rValue
+                                                 ) override;
+
+        virtual ~ODBTableDecorator() override;
+    public:
+        /** constructs a wrapper supporting the com.sun.star.sdb.Table service.
+
+            @param _rxConn
+                the connection the table belongs to. Must not be <NULL/>
+            @param _rxTable
+                the table from the driver can be <NULL/>
+            @throws css::sdbc::SQLException
+        */
+        ODBTableDecorator(
+            const cpo::uno::Reference< css::sdbc::XConnection >& _rxConn,
+            const cpo::uno::Reference< css::sdbcx::XColumnsSupplier >& _rxTable,
+            const cpo::uno::Reference< css::util::XNumberFormatsSupplier >& _rxNumberFormats,
+            const cpo::uno::Reference< css::container::XNameAccess >& _rxColumnDefinitions
+        );
+
+        // ODescriptor
+        void construct();
+
+        //XInterface
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+        virtual void acquire() noexcept override;
+        virtual void release() noexcept override;
+        //XTypeProvider
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+        virtual cpo::uno::Sequence< sal_Int8 > getImplementationId() override;
+
+    // OComponentHelper
+        virtual void disposing() override;
+
+    // css::lang::XServiceInfo
+        DECLARE_SERVICE_INFO();
+        // XPropertySet
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    // css::sdbcx::XRename,
+        virtual void rename( const OUString& _rNewName ) override;
+
+    // css::sdbcx::XAlterTable,
+        virtual void alterColumnByName( const OUString& _rName, const cpo::uno::Reference< css::beans::XPropertySet >& _rxDescriptor ) override;
+        virtual void alterColumnByIndex( sal_Int32 _nIndex, const cpo::uno::Reference< css::beans::XPropertySet >& _rxDescriptor ) override;
+
+        // XNamed
+        virtual OUString getName() override;
+        virtual void setName( const OUString& aName ) override;
+        // css::lang::XUnoTunnel
+        virtual sal_Int64 getSomething( const cpo::uno::Sequence< sal_Int8 >& aIdentifier ) override;
+        static const cpo::uno::Sequence< sal_Int8 > & getUnoTunnelId();
+
+        // XColumnsSupplier
+        virtual cpo::uno::Reference< css::container::XNameAccess > getColumns(  ) override;
+        // XKeysSupplier
+        virtual cpo::uno::Reference< css::container::XIndexAccess > getKeys(  ) override;
+        // XIndexesSupplier
+        virtual cpo::uno::Reference< css::container::XNameAccess > getIndexes(  ) override;
+        // XDataDescriptorFactory
+        virtual cpo::uno::Reference< css::beans::XPropertySet > createDataDescriptor(  ) override;
+
+    protected:
+        using ODataSettings::getFastPropertyValue;
+    };
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,66 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_SW_SOURCE_UI_VBA_VBACOLUMNS_HXX
+#define INCLUDED_SW_SOURCE_UI_VBA_VBACOLUMNS_HXX
+
+#include <vbahelper/vbacollectionimpl.hxx>
+#include <ooo/vba/word/XColumns.hpp>
+#include <ooo/vba/word/XColumn.hpp>
+#include <com/sun/star/table/XTableColumns.hpp>
+#include <com/sun/star/text/XTextTable.hpp>
+
+typedef CollTestImplHelper< ooo::vba::word::XColumns > SwVbaColumns_BASE;
+
+class SwVbaColumns : public SwVbaColumns_BASE
+{
+private:
+    cpo::uno::Reference< css::text::XTextTable > mxTextTable;
+    sal_Int32 mnStartColumnIndex;
+    sal_Int32 mnEndColumnIndex;
+
+private:
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< ooo::vba::word::XColumn > getColumnAtIndex( sal_Int32 index );
+
+public:
+    /// @throws cpo::uno::RuntimeException
+    SwVbaColumns( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext, cpo::uno::Reference< css::text::XTextTable >  xTextTable, const cpo::uno::Reference< css::table::XTableColumns >& xTableColumns );
+    /// @throws cpo::uno::RuntimeException
+    SwVbaColumns( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext > & xContext, cpo::uno::Reference< css::text::XTextTable >  xTextTable, const cpo::uno::Reference< css::table::XTableColumns >& xTableColumns, sal_Int32 nStartCol, sal_Int32 nEndCol );
+
+    virtual sal_Int32 getWidth(  ) override;
+    virtual void setWidth( sal_Int32 _width ) override;
+    virtual void Select(  ) override;
+
+    //XCollection
+    virtual ::sal_Int32 getCount() override;
+    virtual cpo::uno::Any Item( const cpo::uno::Any& Index1, const cpo::uno::Any& /*not processed in this base class*/ ) override;
+    // XEnumerationAccess
+    virtual cpo::uno::Type getElementType() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
+
+    // SwVbaColumns_BASE
+    virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& aSource ) override;
+    virtual OUString getServiceImplName() override;
+    virtual cpo::uno::Sequence<OUString> getServiceNames() override;
+};
+
+#endif // INCLUDED_SW_SOURCE_UI_VBA_VBACOLUMNS_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

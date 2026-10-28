@@ -1,0 +1,226 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <swtiledrenderingtest.hxx>
+
+#include <boost/property_tree/json_parser.hpp>
+
+#include <COKit/COKit.hxx>
+#include <comphelper/kit.hxx>
+#include <comphelper/string.hxx>
+#include <sfx2/kit/helper.hxx>
+
+#include <docsh.hxx>
+#include <swdll.hxx>
+#include <swmodule.hxx>
+#include <unotxdoc.hxx>
+#include <wrtsh.hxx>
+
+using namespace css;
+
+SwTiledRenderingTest::SwTiledRenderingTest()
+    : SwModelTestBase(u"/sw/qa/extras/tiledrendering/data/"_ustr)
+    , m_bFound(true)
+    , m_nSelectionBeforeSearchResult(0)
+    , m_nSelectionAfterSearchResult(0)
+    , m_nInvalidations(0)
+    , m_nRedlineTableSizeChanged(0)
+    , m_nRedlineTableEntryModified(0)
+    , m_nTrackedChangeIndex(-1)
+    , m_bFullInvalidateSeen(false)
+    , m_callbackWrapper(&callback, this)
+{
+}
+
+void SwTiledRenderingTest::setUp()
+{
+    SwModelTestBase::setUp();
+
+    SwGlobals::ensure();
+    SwModule::get()->ClearRedlineAuthors();
+
+    comphelper::COKit::setActive(true);
+}
+
+void SwTiledRenderingTest::tearDown()
+{
+    if (mxComponent.is())
+    {
+        SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+        if (pWrtShell)
+        {
+            pWrtShell->GetSfxViewShell()->setCOKitViewCallback(nullptr);
+        }
+    }
+    m_callbackWrapper.clear();
+
+    SwModelTestBase::tearDown();
+}
+
+SwXTextDocument* SwTiledRenderingTest::createDoc(const char* pName)
+{
+    if (!pName)
+        createSwDoc();
+    else
+        createSwDoc(pName);
+
+    SwXTextDocument* pTextDocument = getSwTextDoc();
+    pTextDocument->initializeForTiledRendering(cpo::uno::Sequence<beans::PropertyValue>());
+    return pTextDocument;
+}
+
+void SwTiledRenderingTest::setupCOKitViewCallback(SfxViewShell* pViewShell)
+{
+    pViewShell->setCOKitViewCallback(&m_callbackWrapper);
+    m_callbackWrapper.setKitViewId(KitHelper::getView(*pViewShell));
+}
+
+void SwTiledRenderingTest::callback(COKitCallbackType eType, const char* pPayload, void* pData)
+{
+    static_cast<SwTiledRenderingTest*>(pData)->callbackImpl(eType, pPayload);
+}
+
+void SwTiledRenderingTest::callbackImpl(COKitCallbackType eType, const char* pPayload)
+{
+    OString aPayload(pPayload);
+    switch (eType)
+    {
+        case COKitCallbackType::INVALIDATE_TILES:
+        {
+            tools::Rectangle aInvalidation;
+            cpo::uno::Sequence<OUString> aSeq
+                = comphelper::string::convertCommaSeparated(OUString::createFromAscii(pPayload));
+            if (aPayload.startsWith("EMPTY"))
+            {
+                m_bFullInvalidateSeen = true;
+                return;
+            }
+
+            CPPUNIT_ASSERT(aSeq.getLength() >= 4);
+            aInvalidation.SetLeft(aSeq[0].toInt32());
+            aInvalidation.SetTop(aSeq[1].toInt32());
+            aInvalidation.setWidth(aSeq[2].toInt32());
+            aInvalidation.setHeight(aSeq[3].toInt32());
+            if (m_aInvalidation.IsEmpty())
+            {
+                m_aInvalidation = aInvalidation;
+            }
+            m_aInvalidations.Union(aInvalidation);
+            ++m_nInvalidations;
+        }
+        break;
+        case COKitCallbackType::DOCUMENT_SIZE_CHANGED:
+        {
+            cpo::uno::Sequence<OUString> aSeq
+                = comphelper::string::convertCommaSeparated(OUString::createFromAscii(pPayload));
+            CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(2), aSeq.getLength());
+            m_aDocumentSize.setWidth(aSeq[0].toInt32());
+            m_aDocumentSize.setHeight(aSeq[1].toInt32());
+        }
+        break;
+        case COKitCallbackType::TEXT_SELECTION:
+        {
+            m_aTextSelection = OString(pPayload);
+            if (m_aSearchResultSelection.empty())
+                ++m_nSelectionBeforeSearchResult;
+            else
+                ++m_nSelectionAfterSearchResult;
+        }
+        break;
+        case COKitCallbackType::SEARCH_NOT_FOUND:
+        {
+            m_bFound = false;
+        }
+        break;
+        case COKitCallbackType::SEARCH_RESULT_SELECTION:
+        {
+            m_aSearchResultSelection.clear();
+            boost::property_tree::ptree aTree;
+            std::stringstream aStream(pPayload);
+            boost::property_tree::read_json(aStream, aTree);
+            for (const boost::property_tree::ptree::value_type& rValue :
+                 aTree.get_child("searchResultSelection"))
+            {
+                m_aSearchResultSelection.emplace_back(
+                    rValue.second.get<std::string>("rectangles").c_str());
+                m_aSearchResultPart.push_back(
+                    std::atoi(rValue.second.get<std::string>("part").c_str()));
+            }
+        }
+        break;
+        case COKitCallbackType::REDLINE_TABLE_SIZE_CHANGED:
+        {
+            ++m_nRedlineTableSizeChanged;
+        }
+        break;
+        case COKitCallbackType::REDLINE_TABLE_ENTRY_MODIFIED:
+        {
+            ++m_nRedlineTableEntryModified;
+        }
+        break;
+        case COKitCallbackType::STATE_CHANGED:
+        {
+            OString aTrackedChangeIndexPrefix(".uno:TrackedChangeIndex="_ostr);
+            if (aPayload.startsWith(aTrackedChangeIndexPrefix))
+            {
+                OString sIndex = aPayload.copy(aTrackedChangeIndexPrefix.getLength());
+                if (sIndex.isEmpty())
+                    m_nTrackedChangeIndex = -1;
+                else
+                    m_nTrackedChangeIndex = sIndex.toInt32();
+            }
+        }
+        break;
+        case COKitCallbackType::INVALIDATE_VISIBLE_CURSOR:
+        {
+            boost::property_tree::ptree aTree;
+            std::stringstream aStream(pPayload);
+            boost::property_tree::read_json(aStream, aTree);
+            boost::property_tree::ptree& aChild = aTree.get_child("hyperlink");
+            m_sHyperlinkText = OString(aChild.get("text", ""));
+            m_sHyperlinkLink = OString(aChild.get("link", ""));
+
+            OString aRectangle(aTree.get_child("rectangle").get_value<std::string>());
+            cpo::uno::Sequence<OUString> aSeq
+                = comphelper::string::convertCommaSeparated(OUString::fromUtf8(aRectangle));
+            CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(4), aSeq.getLength());
+            m_aCursorRectangle = tools::Rectangle(Point(aSeq[0].toInt32(), aSeq[1].toInt32()),
+                                                  Size(aSeq[2].toInt32(), aSeq[3].toInt32()));
+        }
+        break;
+        case COKitCallbackType::FORM_FIELD_BUTTON:
+        {
+            m_aFormFieldButton = OString(pPayload);
+        }
+        break;
+        case COKitCallbackType::CONTENT_CONTROL:
+        {
+            m_aContentControl = OString(pPayload);
+        }
+        break;
+        case COKitCallbackType::GRAPHIC_SELECTION:
+        {
+            m_ShapeSelection = OString(pPayload);
+        }
+        break;
+        case COKitCallbackType::TOOLTIP:
+        {
+            std::stringstream aStream(pPayload);
+            boost::property_tree::ptree aTree;
+            boost::property_tree::read_json(aStream, aTree);
+            m_aTooltip.text = aTree.get_child("text").get_value<std::string>();
+            m_aTooltip.rect = aTree.get_child("rectangle").get_value<std::string>();
+        }
+        break;
+        default:
+        break;
+    }
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

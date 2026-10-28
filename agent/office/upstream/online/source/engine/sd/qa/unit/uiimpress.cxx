@@ -1,0 +1,6516 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include "sdmodeltestbase.hxx"
+
+#include <config_folders.h>
+
+#include <COKit/COKit.hxx>
+
+#include <comphelper/scopeguard.hxx>
+#include <osl/file.hxx>
+#include <rtl/bootstrap.hxx>
+
+#include <com/sun/star/animations/XAnimationNodeSupplier.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XPropertyContainer.hpp>
+#include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
+#include <com/sun/star/document/XDocumentProperties.hpp>
+#include <com/sun/star/frame/Desktop.hpp>
+#include <com/sun/star/frame/XStorable.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <com/sun/star/drawing/LineStyle.hpp>
+#include <com/sun/star/drawing/FillStyle.hpp>
+#include <com/sun/star/drawing/XDrawView.hpp>
+#include <com/sun/star/drawing/XDrawPage.hpp>
+#include <com/sun/star/drawing/XMasterPageTarget.hpp>
+#include <com/sun/star/style/ParagraphAdjust.hpp>
+#include <com/sun/star/table/XMergeableCell.hpp>
+#include <com/sun/star/text/GraphicCrop.hpp>
+#include <com/sun/star/text/WritingMode2.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
+
+#include <comphelper/propertysequence.hxx>
+#include <editeng/adjustitem.hxx>
+#include <editeng/editobj.hxx>
+#include <editeng/editview.hxx>
+#include <editeng/eeitem.hxx>
+#include <editeng/flditem.hxx>
+#include <editeng/outliner.hxx>
+#include <sfx2/cokitfilepicker.hxx>
+#include <sfx2/dispatch.hxx>
+#include <sfx2/request.hxx>
+#include <sfx2/viewfrm.hxx>
+#include <svl/intitem.hxx>
+#include <svl/srchitem.hxx>
+#include <svx/svxids.hrc>
+#include <svx/svdoashp.hxx>
+#include <svx/svdpagv.hxx>
+#include <basegfx/polygon/b2dpolygon.hxx>
+#include <svx/svdopath.hxx>
+#include <svx/svdorect.hxx>
+#include <svx/svdhdl.hxx>
+#include <svx/svddrgmt.hxx>
+#include <svx/svdomedia.hxx>
+#include <svx/svdotable.hxx>
+#include <svx/xlineit0.hxx>
+#include <svx/xfillit0.hxx>
+#include <svx/xflclit.hxx>
+#include <svx/xflgrit.hxx>
+#include <svx/xlndsit.hxx>
+#include <DrawViewShell.hxx>
+#include <SdSecurityLabelTarget.hxx>
+#include <SlideSorterViewShell.hxx>
+#include <SlideSorter.hxx>
+#include <controller/SlsClipboard.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsPageSelector.hxx>
+#include <svl/stritem.hxx>
+#include <undo/undomanager.hxx>
+#include <vcl/scheduler.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
+#include <comphelper/propertyvalue.hxx>
+#include <comphelper/sequenceashashmap.hxx>
+#include <comphelper/kit.hxx>
+#include <comphelper/scopeguard.hxx>
+#include <docmodel/uno/UnoTheme.hxx>
+#include <docmodel/theme/Theme.hxx>
+#include <docmodel/color/ComplexColorJSON.hxx>
+
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <SlideSectionManager.hxx>
+#include <DesignTemplates.hxx>
+#include <ViewShell.hxx>
+#include <OutlineView.hxx>
+#include <Window.hxx>
+#include <app.hrc>
+#include <sdpage.hxx>
+#include <vcl/bitmap.hxx>
+#include <vcl/transfer.hxx>
+#include <unomodel.hxx>
+#include <osl/thread.hxx>
+#include <tools/json_writer.hxx>
+#include <slideshow.hxx>
+#include <sdresid.hxx>
+#include <strings.hrc>
+#include <unopage.hxx>
+#include <editeng/outlobj.hxx>
+#include <sdmod.hxx>
+#include <officecfg/Office/Impress.hxx>
+#include <unotools/lingucfg.hxx>
+#include <svx/sdgcpitm.hxx>
+#include <svx/svdograf.hxx>
+#include <svx/svdotext.hxx>
+#include <set>
+#include <vector>
+
+#include <tools/color.hxx>
+#include <tools/stream.hxx>
+#include <vcl/BinaryDataContainer.hxx>
+#include <vcl/alpha.hxx>
+#include <vcl/BitmapTools.hxx>
+#include <vcl/graphicfilter.hxx>
+#include <tools/LintImageCompressor.hxx>
+#include <tools/LintMeasureCache.hxx>
+#include <tools/PresentationLint.hxx>
+#include <vcl/gfxlink.hxx>
+#include <vcl/mapmod.hxx>
+#include <xmloff/autolayout.hxx>
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+/// Impress UI tests.
+class SdUiImpressTest : public SdModelTestBase
+{
+public:
+    SdUiImpressTest()
+        : SdModelTestBase(u"/sd/qa/unit/data/"_ustr)
+    {
+    }
+
+    void checkCurrentPageNumber(sal_uInt16 nNum);
+    void insertStringToObject(sal_uInt16 nObj, std::u16string_view rStr, bool bUseEscape);
+    sd::slidesorter::SlideSorterViewShell*
+    getSlideSorterViewShell(const cpo::uno::Reference<css::lang::XComponent>& xComp = nullptr);
+    void lcl_search(const OUString& rKey, bool bFindAll = false, bool bBackwards = false);
+    // Opens a new presentation in Outline view, with one slide per title.
+    OutlinerView* createOutlineView(std::initializer_list<std::u16string_view> aTitles);
+    // Sends keys to the Outline view, where postKeyEvent() does not reach.
+    void typeOutlineKey(sal_uInt16 nKey);
+    void typeOutlineString(std::u16string_view aStr);
+};
+
+void SdUiImpressTest::typeOutlineKey(sal_uInt16 nKey)
+{
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    pViewShell->KeyInput(KeyEvent(0, vcl::KeyCode(nKey)), pViewShell->GetActiveWindow());
+    Scheduler::ProcessEventsToIdle();
+}
+
+void SdUiImpressTest::typeOutlineString(std::u16string_view aStr)
+{
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    for (const char16_t c : aStr)
+        pViewShell->KeyInput(KeyEvent(c, vcl::KeyCode()), pViewShell->GetActiveWindow());
+    Scheduler::ProcessEventsToIdle();
+}
+
+OutlinerView* SdUiImpressTest::createOutlineView(std::initializer_list<std::u16string_view> aTitles)
+{
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:OutlineMode"_ustr, {});
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT_EQUAL(sd::ViewShell::ST_OUTLINE, pViewShell->GetShellType());
+    auto pView = static_cast<sd::SimpleOutlinerView*>(pViewShell->GetView());
+    OutlinerView* pOutlinerView = pView->GetViewByWindow(pViewShell->GetActiveWindow());
+    CPPUNIT_ASSERT(pOutlinerView);
+
+    bool bFirst = true;
+    for (const std::u16string_view & aTitle : aTitles)
+    {
+        if (!std::exchange(bFirst, false))
+            typeOutlineKey(KEY_RETURN);
+        typeOutlineString(aTitle);
+    }
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(aTitles.size()),
+                         pImpressDocument->GetDoc()->GetSdPageCount(PageKind::Standard));
+    return pOutlinerView;
+}
+
+void SdUiImpressTest::checkCurrentPageNumber(sal_uInt16 nNum)
+{
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawView> xDrawView(xModel->getCurrentController(), uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xPage(xDrawView->getCurrentPage(), uno::UNO_SET_THROW);
+    uno::Reference<beans::XPropertySet> xPropertySet(xPage, uno::UNO_QUERY);
+
+    sal_uInt16 nPageNumber;
+    xPropertySet->getPropertyValue(u"Number"_ustr) >>= nPageNumber;
+    CPPUNIT_ASSERT_EQUAL(nNum, nPageNumber);
+}
+
+void SdUiImpressTest::insertStringToObject(sal_uInt16 nObj, std::u16string_view rStr,
+                                           bool bUseEscape)
+{
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pPage = pViewShell->GetActualPage();
+    SdrObject* pShape = pPage->GetObj(nObj);
+    CPPUNIT_ASSERT_MESSAGE("No Shape", pShape);
+    SdrView* pView = pViewShell->GetView();
+    pView->MarkObj(pShape, pView->GetSdrPageView());
+    Scheduler::ProcessEventsToIdle();
+
+    CPPUNIT_ASSERT(!pView->IsTextEdit());
+
+    typeString(pImpressDocument, rStr);
+
+    CPPUNIT_ASSERT(pView->IsTextEdit());
+
+    if (bUseEscape)
+    {
+        typeKey(pImpressDocument, KEY_ESCAPE);
+        CPPUNIT_ASSERT(!pView->IsTextEdit());
+    }
+}
+
+sd::slidesorter::SlideSorterViewShell*
+SdUiImpressTest::getSlideSorterViewShell(const cpo::uno::Reference<css::lang::XComponent>& xComp)
+{
+    // The slide sorter is created in the slide panel, which a unit test with the Kit does not get
+    if (comphelper::COKit::isActive())
+        dispatchCommand(xComp.is() ? xComp : mxComponent, u".uno:LeftPaneImpress"_ustr, {});
+
+    auto pXImpressDocument
+        = dynamic_cast<SdXImpressDocument*>(xComp.is() ? xComp.get() : mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    sd::slidesorter::SlideSorterViewShell* pSSVS = nullptr;
+    // Same as in sd/qa/unit/misc-tests.cxx
+    for (int i = 0; i < 1000; i++)
+    {
+        // Process all Tasks - slide sorter is created here
+        Scheduler::ProcessEventsToIdle();
+        if ((pSSVS = sd::slidesorter::SlideSorterViewShell::GetSlideSorter(
+                 pViewShell->GetViewShellBase()))
+            != nullptr)
+            break;
+        osl::Thread::wait(std::chrono::milliseconds(100));
+    }
+    CPPUNIT_ASSERT(pSSVS);
+    return pSSVS;
+}
+
+void SdUiImpressTest::lcl_search(const OUString& rKey, bool bFindAll, bool bBackwards)
+{
+    Scheduler::ProcessEventsToIdle();
+    SvxSearchCmd eSearch = bFindAll ? SvxSearchCmd::FIND_ALL : SvxSearchCmd::FIND;
+
+    cpo::uno::Sequence<beans::PropertyValue> aPropertyValues(comphelper::InitPropertySequence({
+        { u"SearchItem.SearchString"_ustr, cpo::uno::Any(rKey) },
+        { u"SearchItem.Backward"_ustr, cpo::uno::Any(bBackwards) },
+        { u"SearchItem.Command"_ustr, cpo::uno::Any(sal_uInt16(eSearch)) },
+    }));
+
+    dispatchCommand(mxComponent, u".uno:ExecuteSearch"_ustr, aPropertyValues);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTransformExtractSlide)
+{
+    createSdImpressDoc("odp/tdf161430.odp");
+
+    static constexpr OUString aJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"JumpToSlideByName": "Slide 3"},
+            {"MoveSlide": 0},
+            {"RenameSlide": "Slide3-Renamed"},
+            {"DeleteSlide": 2},
+            {"JumpToSlide": 2},
+            {"DeleteSlide": ""},
+            {"JumpToSlide": 1},
+            {"DuplicateSlide": ""},
+            {"RenameSlide": "Slide1-Duplicated"},
+            {"InsertMasterSlide": 1},
+            {"RenameSlide": "SlideInserted-1"},
+            {"ChangeLayout": 18},
+            {"JumpToSlide": "last"},
+            {"InsertMasterSlideByName": "Topic Separator white"},
+            {"RenameSlide": "SlideInserted-Name"},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_2CONTENT"},
+            {"SetText.0": "first"},
+            {"SetText.1": "second"},
+            {"SetText.2": "third"},
+            {"DuplicateSlide": 1},
+            {"MoveSlide.2": 6}
+        ]
+    }
+}
+)json"_ustr;
+
+    //transform
+    cpo::uno::Sequence<css::beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"DataJson"_ustr, aJson),
+    };
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr, aArgs);
+
+    //extract
+    tools::JsonWriter aJsonWriter;
+    std::string_view aCommand(".uno:ExtractDocumentStructure?filter=slides");
+    auto pXPresDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    pXPresDocument->getCommandValues(aJsonWriter, aCommand);
+
+    OString aExpectedStr
+        = "{ \"DocStructure\": { \"SlideCount\": 7, \"MasterSlideCount\": 8, \"MasterSlides\": { "
+          "\"MasterSlide 0\": { \"Name\": \"Topic_Separator_Purple\", \"Theme\": \"Office Theme\""
+          "}, \"MasterSlide 1\": { \"Name\": \"Content_sidebar_White\", \"Theme\": \"Office Theme"
+          "\"}, \"MasterSlide 2\": { \"Name\": \"Topic Separator white\", \"Theme\": \"Office The"
+          "me\"}, \"MasterSlide 3\": { \"Name\": \"Content_sidebar_White_\", \"Theme\": \"Office"
+          "\"}, \"MasterSlide 4\": { \"Name\": \"Topic_Separator_Purple_\", \"Theme\": \"Office\""
+          "}, \"MasterSlide 5\": { \"Name\": \"Content_White_Purple_Sidebar\", \"Theme\": \"Offic"
+          "e\"}, \"MasterSlide 6\": { \"Name\": \"Default 1\", \"Theme\": \"Office\"}, \"MasterSl"
+          "ide 7\": { \"Name\": \"Default 1_\", \"Theme\": \"Office\"}}, \"Slides\": { \"Slide 0"
+          "\": { \"SlideName\": \"Slide3-Renamed\", \"MasterSlideName\": \"Content_White_Purple_S"
+          "idebar\", \"LayoutId\": 3, \"LayoutName\": \"AUTOLAYOUT_TITLE_2CONTENT\", \"ObjectCoun"
+          "t\": 4, \"Objects\": { \"Objects 0\": { \"Kind\": \"Title\", \"TextCount\": 1, \"Texts"
+          "\": { \"Text 0\": { \"ParaCount\": 1, \"Paragraphs\": [ \"Friendly Open Source Project"
+          "\"]}}}, \"Objects 1\": { \"Kind\": \"Graphic\"}, \"Objects 2\": { \"Kind\": \"Outline"
+          "\", \"TextCount\": 1, \"Texts\": { \"Text 0\": { \"ParaCount\": 9, \"Paragraphs\": [ "
+          "\"Real Open Source\", \"100% open-source code\", \"Built with LibreOffice technology\""
+          ", \"Built with Free Software technology stacks: primarily C++\", \"Runs best on Linux"
+          "\", \"Open Development\", \"Anyone can contribute & participate\", \"Follow commits an"
+          "d tickets\", \"Public community calls - forum has details\"]}}}, \"Objects 3\": { \"Ki"
+          "nd\": \"Outline\", \"TextCount\": 1, \"Texts\": { \"Text 0\": { \"ParaCount\": 5, \"Pa"
+          "ragraphs\": [ \"Focus:\", \"a non-renewable resource.\", \"Office Productivity & Docum"
+          "ents\", \"Excited about migrating your\\u0001documents\", \"Grateful to our partners f"
+          "or solving\\u0001other problems.\"]}}}}}, \"Slide 1\": { \"SlideName\": \"Slide 2\", "
+          "\"MasterSlideName\": \"Topic_Separator_Purple\", \"LayoutId\": 3, \"LayoutName\": \"AU"
+          "TOLAYOUT_TITLE_2CONTENT\", \"ObjectCount\": 1, \"Objects\": { \"Objects 0\": { \"TextC"
+          "ount\": 1, \"Texts\": { \"Text 0\": { \"ParaCount\": 3, \"Paragraphs\": [ \"Collabora "
+          "Online\", \"\", \"Powerful Online Collaboration\"]}}}}}, \"Slide 2\": { \"SlideName\":"
+          " \"Slide1-Duplicated\", \"MasterSlideName\": \"Topic_Separator_Purple\", \"LayoutId\":"
+          " 3, \"LayoutName\": \"AUTOLAYOUT_TITLE_2CONTENT\", \"ObjectCount\": 1, \"Objects\": { "
+          "\"Objects 0\": { \"TextCount\": 1, \"Texts\": { \"Text 0\": { \"ParaCount\": 3, \"Para"
+          "graphs\": [ \"Collabora Online\", \"\", \"Powerful Online Collaboration\"]}}}}}, \"Sli"
+          "de 3\": { \"SlideName\": \"SlideInserted-1\", \"MasterSlideName\": \"Content_sidebar_W"
+          "hite\", \"LayoutId\": 18, \"LayoutName\": \"AUTOLAYOUT_TITLE_4CONTENT\", \"ObjectCount"
+          "\": 5, \"Objects\": { \"Objects 0\": { \"Kind\": \"Title\", \"Empty\": true, \"TextCou"
+          "nt\": 1, \"Texts\": { \"Text 0\": { \"ParaCount\": 1, \"Paragraphs\": [ \"Click to add"
+          " Title\"]}}}, \"Objects 1\": { \"Kind\": \"Outline\", \"Empty\": true, \"TextCount\": "
+          "1, \"Texts\": { \"Text 0\": { \"ParaCount\": 1, \"Paragraphs\": [ \"Click to add Text"
+          "\"]}}}, \"Objects 2\": { \"Kind\": \"Outline\", \"Empty\": true, \"TextCount\": 1, \"T"
+          "exts\": { \"Text 0\": { \"ParaCount\": 1, \"Paragraphs\": [ \"Click to add Text\"]}}},"
+          " \"Objects 3\": { \"Kind\": \"Outline\", \"Empty\": true, \"TextCount\": 1, \"Texts\":"
+          " { \"Text 0\": { \"ParaCount\": 1, \"Paragraphs\": [ \"Click to add Text\"]}}}, \"Obje"
+          "cts 4\": { \"Kind\": \"Outline\", \"Empty\": true, \"TextCount\": 1, \"Texts\": { \"Te"
+          "xt 0\": { \"ParaCount\": 1, \"Paragraphs\": [ \"Click to add Text\"]}}}}}, \"Slide 4\""
+          ": { \"SlideName\": \"Slide 5\", \"MasterSlideName\": \"Topic_Separator_Purple\", \"Lay"
+          "outId\": 3, \"LayoutName\": \"AUTOLAYOUT_TITLE_2CONTENT\", \"ObjectCount\": 1, \"Objec"
+          "ts\": { \"Objects 0\": { \"TextCount\": 1, \"Texts\": { \"Text 0\": { \"ParaCount\": 1"
+          ", \"Paragraphs\": [ \"With thanks to our Partners, Customers & Community !\"]}}}}}, \""
+          "Slide 5\": { \"SlideName\": \"SlideInserted-Name\", \"MasterSlideName\": \"Topic Separ"
+          "ator white\", \"LayoutId\": 3, \"LayoutName\": \"AUTOLAYOUT_TITLE_2CONTENT\", \"Object"
+          "Count\": 3, \"Objects\": { \"Objects 0\": { \"Kind\": \"Title\", \"TextCount\": 1, \"T"
+          "exts\": { \"Text 0\": { \"ParaCount\": 1, \"Paragraphs\": [ \"first\"]}}}, \"Objects 1"
+          "\": { \"Kind\": \"Outline\", \"TextCount\": 1, \"Texts\": { \"Text 0\": { \"ParaCount"
+          "\": 1, \"Paragraphs\": [ \"second\"]}}}, \"Objects 2\": { \"Kind\": \"Outline\", \"Tex"
+          "tCount\": 1, \"Texts\": { \"Text 0\": { \"ParaCount\": 1, \"Paragraphs\": [ \"third\"]"
+          "}}}}}, \"Slide 6\": { \"SlideName\": \"Slide 7\", \"MasterSlideName\": \"Topic_Separat"
+          "or_Purple\", \"LayoutId\": 3, \"LayoutName\": \"AUTOLAYOUT_TITLE_2CONTENT\", \"ObjectC"
+          "ount\": 1, \"Objects\": { \"Objects 0\": { \"TextCount\": 1, \"Texts\": { \"Text 0\": "
+          "{ \"ParaCount\": 3, \"Paragraphs\": [ \"Collabora Online\", \"\", \"Powerful Online Co"
+          "llaboration\"]}}}}}}}}"_ostr;
+
+    CPPUNIT_ASSERT_EQUAL(aExpectedStr, aJsonWriter.finishAndGetAsOString());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureExtractSlideText)
+{
+    // The text filter returns the slide text as markdown, read from the live
+    // document so that text still being typed is included.
+    createSdImpressDoc();
+
+    // Type into the title placeholder and keep the edit session open: the
+    // typed text lives only in the editing outliner at this point.
+    insertStringToObject(0, u"Typed while editing", /*bUseEscape*/ false);
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    {
+        tools::JsonWriter aJsonWriter;
+        pImpressDocument->getCommandValues(aJsonWriter,
+                                           ".uno:ExtractDocumentStructure?filter=text");
+        const OString aJson = aJsonWriter.finishAndGetAsOString();
+
+        CPPUNIT_ASSERT(aJson.indexOf("\"BodyText\"") >= 0);
+        CPPUNIT_ASSERT(aJson.indexOf("\"format\": \"markdown\"") >= 0);
+        CPPUNIT_ASSERT(aJson.indexOf("\"truncated\": false") >= 0);
+        // The body has one markdown section per slide.
+        CPPUNIT_ASSERT(aJson.indexOf("## Slide 1: ") >= 0);
+        // The open edit session's text is included.
+        CPPUNIT_ASSERT(aJson.indexOf("Typed while editing") >= 0);
+        // The untouched content placeholder shows only its prompt text, which
+        // is not document content.
+        CPPUNIT_ASSERT(aJson.indexOf("Click to add") < 0);
+    }
+
+    // The committed text is still returned once the edit session is closed.
+    typeKey(pImpressDocument, KEY_ESCAPE);
+    {
+        tools::JsonWriter aJsonWriter;
+        pImpressDocument->getCommandValues(aJsonWriter,
+                                           ".uno:ExtractDocumentStructure?filter=text");
+        const OString aJson = aJsonWriter.finishAndGetAsOString();
+
+        CPPUNIT_ASSERT(aJson.indexOf("Typed while editing") >= 0);
+        CPPUNIT_ASSERT(aJson.indexOf("Click to add") < 0);
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureUndo)
+{
+    // The whole transform must collapse into one undo step: one undo reverts
+    // it, one redo restores it.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    // A fresh Impress document starts with a single slide.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), pImpressDocument->getDrawPages()->getCount());
+
+    auto getSlide0Title = [&]() -> OUString {
+        SdPage* pPage = pImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+        SdrObject* pObj = pPage ? pPage->GetObj(0) : nullptr;
+        if (pObj && pObj->IsSdrTextObj())
+        {
+            SdrTextObj* pTextObj = static_cast<SdrTextObj*>(pObj);
+            if (pTextObj->GetOutlinerParaObject())
+                return pTextObj->GetOutlinerParaObject()->GetTextObject().GetText(0);
+        }
+        return OUString();
+    };
+
+    static constexpr OUString aJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_CONTENT"},
+            {"SetText.0": "Generated title"},
+            {"InsertMasterSlide": 0},
+            {"SetText.0": "Second slide"},
+            {"InsertMasterSlide": 0},
+            {"SetText.0": "Third slide"}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    // The transform added two slides (three total) and set the first title.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), pImpressDocument->getDrawPages()->getCount());
+    CPPUNIT_ASSERT_EQUAL(u"Generated title"_ustr, getSlide0Title());
+
+    // One undo reverts everything: back to one slide, title no longer set.
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), pImpressDocument->getDrawPages()->getCount());
+    CPPUNIT_ASSERT(getSlide0Title() != u"Generated title"_ustr);
+
+    // A single redo restores all of it.
+    dispatchCommand(mxComponent, u".uno:Redo"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), pImpressDocument->getDrawPages()->getCount());
+    CPPUNIT_ASSERT_EQUAL(u"Generated title"_ustr, getSlide0Title());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureInsertSlideNotesMaster)
+{
+    // An inserted slide's notes page must keep a notes master. If it instead
+    // points at the standard master, the notes placeholder text leaks onto the
+    // slide and the slide master after a PPTX round-trip.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    static constexpr OUString aJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"InsertMasterSlide": 0},
+            {"SetText.0": "Second slide"}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), pImpressDocument->getDrawPages()->getCount());
+
+    SdPage* pNotesMaster
+        = static_cast<SdPage*>(&(pDoc->GetSdPage(1, PageKind::Notes)->TRG_GetMasterPage()));
+    CPPUNIT_ASSERT_EQUAL(PageKind::Notes, pNotesMaster->GetPageKind());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureApplyTemplate)
+{
+    // ApplyTemplate gives a generated deck the bundled template's design. Every
+    // slide is themed, including slides inserted after the ApplyTemplate command -
+    // not just the first one. Each slide also gets the master that fits its
+    // layout, so a title slide and a content slide use different template masters.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    const OUString aBeforeMaster
+        = static_cast<SdPage*>(&pDoc->GetSdPage(0, PageKind::Standard)->TRG_GetMasterPage())
+              ->GetName();
+
+    // A title slide, a content slide, and a section divider - three layouts that
+    // the Cobalt template pairs with three different masters.
+    static constexpr OUString aJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"ApplyTemplate": "Cobalt"},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE"},
+            {"InsertMasterSlide": 0},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_CONTENT"},
+            {"InsertMasterSlide": 0},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_ONLY"}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), pImpressDocument->getDrawPages()->getCount());
+
+    auto masterName = [&](sal_uInt16 nPage) {
+        return static_cast<SdPage*>(
+                   &pDoc->GetSdPage(nPage, PageKind::Standard)->TRG_GetMasterPage())
+            ->GetName();
+    };
+    // Every slide is on a Cobalt master, not the plain default one...
+    CPPUNIT_ASSERT(masterName(0).startsWith("Cobalt"));
+    CPPUNIT_ASSERT(masterName(1).startsWith("Cobalt"));
+    CPPUNIT_ASSERT(masterName(2).startsWith("Cobalt"));
+    CPPUNIT_ASSERT(aBeforeMaster != masterName(0));
+    // ...and the title, content, and divider slides each use a distinct master,
+    // matching how the template's own example slides pair layouts with masters.
+    CPPUNIT_ASSERT(masterName(0) != masterName(1));
+    CPPUNIT_ASSERT(masterName(1) != masterName(2));
+    CPPUNIT_ASSERT(masterName(0) != masterName(2));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDesignMasterRoleFromName)
+{
+    // A master's part is read from role keywords in its name, so a real
+    // template whose masters all share one or two layouts still themes a deck
+    // by part. The names here are those a designed template carries.
+    using sd::DesignMasterRole;
+    using sd::DesignMasterRoleFromName;
+
+    CPPUNIT_ASSERT_EQUAL(DesignMasterRole::Title, DesignMasterRoleFromName(u"Title_Slide"));
+    CPPUNIT_ASSERT_EQUAL(DesignMasterRole::Content, DesignMasterRoleFromName(u"Content_Outline_Normal"));
+    CPPUNIT_ASSERT_EQUAL(DesignMasterRole::Divider, DesignMasterRoleFromName(u"Topic_Separator_Purple"));
+    CPPUNIT_ASSERT_EQUAL(DesignMasterRole::Closing, DesignMasterRoleFromName(u"Ending_Slide"));
+
+    // The match ignores letter case.
+    CPPUNIT_ASSERT_EQUAL(DesignMasterRole::Divider, DesignMasterRoleFromName(u"section break"));
+
+    // A name that carries both a divider keyword and "title" reads as a divider,
+    // because the divider group is tested before the title group.
+    CPPUNIT_ASSERT_EQUAL(DesignMasterRole::Divider, DesignMasterRoleFromName(u"Section Title"));
+    CPPUNIT_ASSERT_EQUAL(DesignMasterRole::Divider,
+                         DesignMasterRoleFromName(u"Title & Content Divider"));
+
+    // "title" is a substring match, so a name whose only keyword is part of a
+    // longer word still reads as a title.
+    CPPUNIT_ASSERT_EQUAL(DesignMasterRole::Title, DesignMasterRoleFromName(u"Subtitle"));
+
+    // A name with no part keyword is left Unknown, so the part falls to the
+    // example slide's layout instead - this is how the bundled templates, whose
+    // masters are named Cobalt, Cobalt1, ..., are still placed by layout.
+    CPPUNIT_ASSERT_EQUAL(DesignMasterRole::Unknown, DesignMasterRoleFromName(u"Cobalt1"));
+    CPPUNIT_ASSERT_EQUAL(DesignMasterRole::Unknown, DesignMasterRoleFromName(u"Default"));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureSetSlidePart)
+{
+    // A SetSlidePart command labels a slide's part; the engine places the slide
+    // on the template's master for that part, overriding the slide's own layout.
+    // An unknown part word is dropped, leaving the slide to the part-based
+    // default. Cobalt's masters are Cobalt (body), Cobalt1 (opening), Cobalt2
+    // (divider).
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+
+    // Three content-layout slides, labelled opening, divider, and a word that is
+    // not a part.
+    static constexpr OUString aJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"ApplyTemplate": "Cobalt"},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_CONTENT"},
+            {"SetText.0": "One"},
+            {"SetSlidePart": "opening"},
+            {"InsertMasterSlide": 0},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_CONTENT"},
+            {"SetText.0": "Two"},
+            {"SetSlidePart": "divider"},
+            {"InsertMasterSlide": 0},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_CONTENT"},
+            {"SetText.0": "Three"},
+            {"SetSlidePart": "bogus"}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), pImpressDocument->getDrawPages()->getCount());
+
+    auto masterName = [&](sal_uInt16 nPage) {
+        return static_cast<SdPage*>(
+                   &pDoc->GetSdPage(nPage, PageKind::Standard)->TRG_GetMasterPage())
+            ->GetName();
+    };
+    // The opening label lands on the opening master and the divider label on the
+    // divider master, each winning over the content layout. The unknown part is
+    // dropped, so the third slide takes the body master.
+    CPPUNIT_ASSERT_EQUAL(u"Cobalt1"_ustr, masterName(0));
+    CPPUNIT_ASSERT_EQUAL(u"Cobalt2"_ustr, masterName(1));
+    CPPUNIT_ASSERT_EQUAL(u"Cobalt"_ustr, masterName(2));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureDuplicateSlideKeepsPart)
+{
+    // A duplicated slide plays the same part as its source, so the copy of a
+    // divider slide lands on the divider master too, not on the body master
+    // its content layout suggests.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+
+    static constexpr OUString aJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"ApplyTemplate": "Cobalt"},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_CONTENT"},
+            {"SetText.0": "Break"},
+            {"SetSlidePart": "divider"},
+            {"DuplicateSlide": 0}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), pImpressDocument->getDrawPages()->getCount());
+
+    auto masterName = [&](sal_uInt16 nPage) {
+        return static_cast<SdPage*>(
+                   &pDoc->GetSdPage(nPage, PageKind::Standard)->TRG_GetMasterPage())
+            ->GetName();
+    };
+    CPPUNIT_ASSERT_EQUAL(u"Cobalt2"_ustr, masterName(0));
+    CPPUNIT_ASSERT_EQUAL(u"Cobalt2"_ustr, masterName(1));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureSetNotes)
+{
+    // A SetNotes command writes the speaker notes of the current slide, and one
+    // undo reverts the whole transform including the notes.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+
+    auto notesText = [&]() -> OUString {
+        SdPage* pNotes = pDoc->GetSdPage(0, PageKind::Notes);
+        SdrObject* pObj = pNotes ? pNotes->GetPresObj(PresObjKind::Notes) : nullptr;
+        if (pObj && pObj->IsSdrTextObj())
+        {
+            SdrTextObj* pTextObj = static_cast<SdrTextObj*>(pObj);
+            if (pTextObj->GetOutlinerParaObject())
+                return pTextObj->GetOutlinerParaObject()->GetTextObject().GetText(0);
+        }
+        return OUString();
+    };
+
+    static constexpr OUString aJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"SetText.0": "Slide title"},
+            {"SetNotes": "Speak to the roadmap here."}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    CPPUNIT_ASSERT_EQUAL(u"Speak to the roadmap here."_ustr, notesText());
+
+    // One undo clears the notes again.
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    CPPUNIT_ASSERT(notesText() != u"Speak to the roadmap here."_ustr);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureApplyTemplateKeepsUntouchedSlides)
+{
+    // Re-applying an already applied template re-themes only the slides the
+    // transform touches. A slide the transform leaves alone keeps the
+    // geometry and the master it had, so the user's manual edits between two
+    // AI turns survive the second turn.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+
+    // A themed two-slide deck: an opening slide and a body slide, on two
+    // different Cobalt masters.
+    static constexpr OUString aFirstJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"ApplyTemplate": "Cobalt"},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_CONTENT"},
+            {"SetText.0": "One"},
+            {"SetSlidePart": "opening"},
+            {"InsertMasterSlide": 0},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_CONTENT"},
+            {"SetText.0": "Two"}
+        ]
+    }
+}
+)json"_ustr;
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aFirstJson) });
+
+    auto masterName = [&](sal_uInt16 nPage) {
+        return static_cast<SdPage*>(
+                   &pDoc->GetSdPage(nPage, PageKind::Standard)->TRG_GetMasterPage())
+            ->GetName();
+    };
+    CPPUNIT_ASSERT_EQUAL(u"Cobalt1"_ustr, masterName(0));
+    CPPUNIT_ASSERT_EQUAL(u"Cobalt"_ustr, masterName(1));
+
+    // The user moves slide 1's title by hand.
+    SdPage* pFirstSlide = pDoc->GetSdPage(0, PageKind::Standard);
+    SdrObject* pTitle = pFirstSlide->GetObj(0);
+    tools::Rectangle aMovedRect = pTitle->GetLogicRect();
+    aMovedRect.Move(1000, 1000);
+    pTitle->SetLogicRect(aMovedRect);
+
+    // The next AI turn carries the template again but only edits slide 2.
+    static constexpr OUString aSecondJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"ApplyTemplate": "Cobalt"},
+            {"JumpToSlide": 1},
+            {"SetText.0": "Two updated"}
+        ]
+    }
+}
+)json"_ustr;
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aSecondJson) });
+
+    // Slide 1 keeps the moved title and the opening master, even though this
+    // turn named no part for it; slide 2 stays on a template master.
+    CPPUNIT_ASSERT_EQUAL(aMovedRect, pFirstSlide->GetObj(0)->GetLogicRect());
+    CPPUNIT_ASSERT_EQUAL(u"Cobalt1"_ustr, masterName(0));
+    CPPUNIT_ASSERT(masterName(1).startsWith("Cobalt"));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureApplyTemplateUnknownName)
+{
+    // A name that matches no template file is rejected: the deck keeps its
+    // original master rather than the command reaching for an arbitrary file.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    const OUString aBeforeMaster
+        = static_cast<SdPage*>(&pDoc->GetSdPage(0, PageKind::Standard)->TRG_GetMasterPage())
+              ->GetName();
+
+    static constexpr OUString aJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"ApplyTemplate": "NoSuchTemplate"},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE"}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    const OUString aAfterMaster
+        = static_cast<SdPage*>(&pDoc->GetSdPage(0, PageKind::Standard)->TRG_GetMasterPage())
+              ->GetName();
+    CPPUNIT_ASSERT_EQUAL(aBeforeMaster, aAfterMaster);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDesignTemplateCatalog)
+{
+    // The catalog the picker is built from lists the bundled design templates,
+    // each with a thumbnail the picker can show.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    tools::JsonWriter aJsonWriter;
+    pImpressDocument->getCommandValues(aJsonWriter, ".uno:GetDesignTemplates");
+    const OString aJson = aJsonWriter.finishAndGetAsOString();
+
+    // The client's commandvalues handler reads commandName and commandValues, so
+    // the response must carry both - returning the templates bare would be dropped.
+    CPPUNIT_ASSERT(aJson.indexOf(".uno:GetDesignTemplates") >= 0);
+    CPPUNIT_ASSERT(aJson.indexOf("commandValues") >= 0);
+    // Bundled templates appear by name...
+    CPPUNIT_ASSERT(aJson.indexOf("Cobalt") >= 0);
+    CPPUNIT_ASSERT(aJson.indexOf("Ivory") >= 0);
+    // ...and carry a base64 PNG thumbnail data URL the picker shows. The JSON
+    // writer escapes the slash in the media type, so match a slash-free prefix.
+    CPPUNIT_ASSERT(aJson.indexOf("data:image") >= 0);
+    CPPUNIT_ASSERT(aJson.indexOf("base64") >= 0);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDesignTemplateCatalogSkipsInvalidNames)
+{
+    // A template whose file name breaks the naming contract (at most 64 plain
+    // letters, digits, spaces, hyphens, or underscores - here a '!') is not
+    // offered: the server drops such a pick, so listing it would put a dead
+    // entry in the picker.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    OUString aDirUrl = u"$BRAND_BASE_DIR/" LIBO_SHARE_FOLDER "/cool-ai-templates/"_ustr;
+    rtl::Bootstrap::expandMacros(aDirUrl);
+    const OUString aBadUrl = aDirUrl + "Bad!name.otp";
+    CPPUNIT_ASSERT_EQUAL(osl::FileBase::E_None,
+                         osl::File::copy(aDirUrl + "Cobalt.otp", aBadUrl));
+    comphelper::ScopeGuard aCleanup([&aBadUrl] { osl::File::remove(aBadUrl); });
+
+    tools::JsonWriter aJsonWriter;
+    pImpressDocument->getCommandValues(aJsonWriter, ".uno:GetDesignTemplates");
+    const OString aJson = aJsonWriter.finishAndGetAsOString();
+
+    CPPUNIT_ASSERT(aJson.indexOf("Cobalt") >= 0);
+    CPPUNIT_ASSERT(aJson.indexOf("Bad!name") < 0);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDesignTemplateLayouts)
+{
+    // The per-name design query reports the slide layouts the template's
+    // example slides cover. It is a separate command from the template list, so
+    // the reply is told apart from the list reply by its command name. The
+    // reply echoes the full command, parameters included.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    tools::JsonWriter aJsonWriter;
+    // The lowercase name must match too - names resolve ignoring letter case.
+    pImpressDocument->getCommandValues(aJsonWriter, ".uno:GetDesignTemplateDesigns?name=cobalt");
+    const OString aJson = aJsonWriter.finishAndGetAsOString();
+
+    CPPUNIT_ASSERT(aJson.indexOf("name=cobalt") >= 0);
+    CPPUNIT_ASSERT(aJson.indexOf("layouts") >= 0);
+    // Cobalt ships example slides, so at least one layout must be reported.
+    CPPUNIT_ASSERT(aJson.indexOf("AUTOLAYOUT_") >= 0);
+
+    // The same reply lists the template's design masters with the part each
+    // plays, so the model can put each slide on the design that fits its role.
+    CPPUNIT_ASSERT(aJson.indexOf("masters") >= 0);
+    CPPUNIT_ASSERT(aJson.indexOf("Cobalt") >= 0);
+    CPPUNIT_ASSERT(aJson.indexOf("role") >= 0);
+}
+
+namespace
+{
+// Stores a design manifest JSON string in the document's AIDesignManifest
+// user-defined property, the standard ODF carrier a template declares its
+// manifest in.
+void lcl_SetDesignManifest(const uno::Reference<lang::XComponent>& xComponent,
+                           const OUString& rJson)
+{
+    uno::Reference<document::XDocumentPropertiesSupplier> xSupplier(xComponent, uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xSupplier.is());
+    uno::Reference<beans::XPropertyContainer> xUserProps
+        = xSupplier->getDocumentProperties()->getUserDefinedProperties();
+    CPPUNIT_ASSERT(xUserProps.is());
+    try
+    {
+        xUserProps->removeProperty(u"AIDesignManifest"_ustr);
+    }
+    catch (const cpo::uno::Exception&)
+    {
+    }
+    xUserProps->addProperty(u"AIDesignManifest"_ustr, beans::PropertyAttribute::REMOVABLE,
+                            cpo::uno::Any(rJson));
+}
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDesignManifestDeclaredRoles)
+{
+    // A master a manifest declares takes the declared part and skips the
+    // name-and-example heuristic, so the manifest wins even when the example
+    // layout would suggest a different part.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+
+    const OUString aMasterName
+        = pDoc->GetMasterSdPage(0, PageKind::Standard)->GetName();
+
+    auto roleOf = [&](const OUString& rName) -> sd::DesignTemplateMaster {
+        for (const auto& rMaster : sd::CollectDesignTemplateMasters(*pDoc))
+            if (rMaster.maName == rName)
+                return rMaster;
+        return {};
+    };
+
+    // Without a manifest the part is inferred, not declared. A closing part can
+    // only come from a name keyword, never from an example layout, so the fresh
+    // document does not infer one.
+    CPPUNIT_ASSERT(!roleOf(aMasterName).mbDeclared);
+    CPPUNIT_ASSERT(sd::DesignMasterRole::Closing != roleOf(aMasterName).meRole);
+
+    // Declaring the master a closing overrides whatever the heuristic inferred.
+    lcl_SetDesignManifest(mxComponent, "{\"schemaVersion\":1,\"masters\":{\"" + aMasterName
+                                           + "\":\"closing\"}}");
+    CPPUNIT_ASSERT_EQUAL(sd::DesignMasterRole::Closing, roleOf(aMasterName).meRole);
+    CPPUNIT_ASSERT(roleOf(aMasterName).mbDeclared);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDesignManifestUnreadable)
+{
+    // A manifest that cannot be parsed, or whose schema version is not
+    // recognised, reads as no manifest at all, so the heuristic runs as before.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+
+    lcl_SetDesignManifest(mxComponent, u"this is not json {{{"_ustr);
+    CPPUNIT_ASSERT(!sd::ReadAIDesignManifest(*pDoc).has_value());
+
+    // A version below 1 is not a schema the reader knows.
+    lcl_SetDesignManifest(mxComponent, u"{\"schemaVersion\":0,\"masters\":{}}"_ustr);
+    CPPUNIT_ASSERT(!sd::ReadAIDesignManifest(*pDoc).has_value());
+
+    // A well-formed version-1 manifest reads back as a manifest.
+    lcl_SetDesignManifest(mxComponent, u"{\"schemaVersion\":1}"_ustr);
+    CPPUNIT_ASSERT(sd::ReadAIDesignManifest(*pDoc).has_value());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureSetSlideIntent)
+{
+    // A manifest can map a slide intent word straight to a master. A slide the
+    // model gives that intent lands on the mapped master, winning over the
+    // part-and-layout choice. An intent the manifest maps nothing for falls back
+    // to the ordinary choice.
+    OUString aDirUrl = u"$BRAND_BASE_DIR/" LIBO_SHARE_FOLDER "/cool-ai-templates/"_ustr;
+    rtl::Bootstrap::expandMacros(aDirUrl);
+
+    // Build a template that carries an intent manifest: start from the bundled
+    // Cobalt template, add a manifest mapping the intent "quote" to Cobalt's
+    // opening master, and save it under a fresh name in the template directory.
+    const OUString aIntentTemplateUrl = aDirUrl + "IntentDeck.otp";
+    comphelper::ScopeGuard aCleanup(
+        [&aIntentTemplateUrl] { osl::File::remove(aIntentTemplateUrl); });
+    {
+        loadFromURL(aDirUrl + "Cobalt.otp");
+        lcl_SetDesignManifest(
+            mxComponent, u"{\"schemaVersion\":1,\"intents\":{\"quote\":\"Cobalt1\"}}"_ustr);
+        uno::Reference<frame::XStorable> xStorable(mxComponent, uno::UNO_QUERY);
+        CPPUNIT_ASSERT(xStorable.is());
+        xStorable->storeToURL(aIntentTemplateUrl,
+                              { comphelper::makePropertyValue(u"FilterName"_ustr,
+                                                              u"impress8_template"_ustr) });
+    }
+
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+
+    // Both slides use the body content layout. The first carries the mapped
+    // intent, the second an intent the manifest maps nothing for.
+    static constexpr OUString aJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"ApplyTemplate": "IntentDeck"},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_CONTENT"},
+            {"SetText.0": "Quote"},
+            {"SetSlideIntent": "quote"},
+            {"InsertMasterSlide": 0},
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_CONTENT"},
+            {"SetText.0": "Body"},
+            {"SetSlideIntent": "mystery"}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), pImpressDocument->getDrawPages()->getCount());
+
+    auto masterName = [&](sal_uInt16 nPage) {
+        return static_cast<SdPage*>(
+                   &pDoc->GetSdPage(nPage, PageKind::Standard)->TRG_GetMasterPage())
+            ->GetName();
+    };
+    // The mapped intent lands on the opening master; the unknown intent falls
+    // back to the body master its content layout suggests.
+    CPPUNIT_ASSERT_EQUAL(u"Cobalt1"_ustr, masterName(0));
+    CPPUNIT_ASSERT_EQUAL(u"Cobalt"_ustr, masterName(1));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDesignTemplateDesignsDeclared)
+{
+    // When a template declares a manifest, the per-name design query reports
+    // each master's part as declared, and adds the manifest's image art
+    // direction and content budgets. A template with no manifest leaves those
+    // out.
+    OUString aDirUrl = u"$BRAND_BASE_DIR/" LIBO_SHARE_FOLDER "/cool-ai-templates/"_ustr;
+    rtl::Bootstrap::expandMacros(aDirUrl);
+
+    const OUString aDesignedTemplateUrl = aDirUrl + "DesignedDeck.otp";
+    comphelper::ScopeGuard aCleanup(
+        [&aDesignedTemplateUrl] { osl::File::remove(aDesignedTemplateUrl); });
+    {
+        loadFromURL(aDirUrl + "Cobalt.otp");
+        lcl_SetDesignManifest(
+            mxComponent,
+            u"{\"schemaVersion\":1,\"masters\":{\"Cobalt1\":\"opening\"},"
+            "\"artDirection\":\"Flat vector deep cobalt blue.\","
+            "\"budgets\":{\"maxSlides\":12,\"maxTitleLength\":80}}"_ustr);
+        uno::Reference<frame::XStorable> xStorable(mxComponent, uno::UNO_QUERY);
+        CPPUNIT_ASSERT(xStorable.is());
+        xStorable->storeToURL(aDesignedTemplateUrl,
+                              { comphelper::makePropertyValue(u"FilterName"_ustr,
+                                                              u"impress8_template"_ustr) });
+    }
+
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    tools::JsonWriter aJsonWriter;
+    pImpressDocument->getCommandValues(aJsonWriter,
+                                       ".uno:GetDesignTemplateDesigns?name=DesignedDeck");
+    const OString aJson = aJsonWriter.finishAndGetAsOString();
+
+    // The declared master reports its part as declared rather than inferred.
+    CPPUNIT_ASSERT(aJson.indexOf("declared") >= 0);
+    // The art-direction sentence rides the reply.
+    CPPUNIT_ASSERT(aJson.indexOf("artDirection") >= 0);
+    CPPUNIT_ASSERT(aJson.indexOf("Flat vector deep cobalt blue") >= 0);
+    // The declared budgets ride it too, under the exact key names.
+    CPPUNIT_ASSERT(aJson.indexOf("budgets") >= 0);
+    CPPUNIT_ASSERT(aJson.indexOf("maxSlides") >= 0);
+    CPPUNIT_ASSERT(aJson.indexOf("maxTitleLength") >= 0);
+    // A budget the manifest did not state is left out.
+    CPPUNIT_ASSERT(aJson.indexOf("maxItemLength") < 0);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureUndoImage)
+{
+    // Inserting an image replaces a placeholder object; undoing the transform
+    // must revert that replace without crashing.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    auto isObj1Graphic = [&]() {
+        SdPage* pPage = pImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+        SdrObject* pObj = pPage ? pPage->GetObj(1) : nullptr;
+        return pObj && pObj->GetObjIdentifier() == SdrObjKind::Graphic;
+    };
+
+    OUString aImageURL = createFileURL(u"TestImage1.png");
+    OUString aJson = "{ \"Transforms\": { \"SlideCommands\": ["
+                     "{ \"ChangeLayoutByName\": \"AUTOLAYOUT_TITLE_CONTENT\" },"
+                     "{ \"InsertImage.1\": \""
+                     + aImageURL + "\" } ] } }";
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+    CPPUNIT_ASSERT(isObj1Graphic());
+
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    CPPUNIT_ASSERT(!isObj1Graphic());
+
+    dispatchCommand(mxComponent, u".uno:Redo"_ustr, {});
+    CPPUNIT_ASSERT(isObj1Graphic());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureInsertImageAtAlt)
+{
+    // InsertImageAt takes either a plain URL string or an object carrying the
+    // URL and a text alternative. The object form sets the graphic and stores
+    // the alt text as the object title, which is the accessibility text
+    // alternative for an image. The string form still sets the graphic.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+
+    auto obj1 = [&]() {
+        SdPage* pPage = pDoc->GetSdPage(0, PageKind::Standard);
+        return pPage ? pPage->GetObj(1) : nullptr;
+    };
+
+    OUString aImageURL = createFileURL(u"TestImage1.png");
+
+    OUString aObjectJson = "{ \"Transforms\": { \"SlideCommands\": ["
+                           "{ \"ChangeLayoutByName\": \"AUTOLAYOUT_TITLE_CONTENT\" },"
+                           "{ \"InsertImageAt.0.1\": { \"url\": \""
+                           + aImageURL + "\", \"alt\": \"A blue mountain at dawn\" } } ] } }";
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aObjectJson) });
+
+    CPPUNIT_ASSERT(obj1());
+    CPPUNIT_ASSERT_EQUAL(SdrObjKind::Graphic, obj1()->GetObjIdentifier());
+    CPPUNIT_ASSERT_EQUAL(u"A blue mountain at dawn"_ustr, obj1()->GetTitle());
+
+    // The plain string form still replaces the placeholder with the graphic; it
+    // carries no alt text.
+    createSdImpressDoc();
+    pDoc = dynamic_cast<SdXImpressDocument*>(mxComponent.get())->GetDoc();
+    OUString aStringJson = "{ \"Transforms\": { \"SlideCommands\": ["
+                           "{ \"ChangeLayoutByName\": \"AUTOLAYOUT_TITLE_CONTENT\" },"
+                           "{ \"InsertImageAt.0.1\": \""
+                           + aImageURL + "\" } ] } }";
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aStringJson) });
+
+    CPPUNIT_ASSERT(obj1());
+    CPPUNIT_ASSERT_EQUAL(SdrObjKind::Graphic, obj1()->GetObjIdentifier());
+    CPPUNIT_ASSERT(obj1()->GetTitle().isEmpty());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureUnoCommand)
+{
+    // 1. Create a document;
+    // 2. Check that its first slide has two objects (the default title + content placeholders);
+    // 3. Perform a "TransformDocumentStructure" with a "UnoCommand" calling ".uno:SelectAll" and
+    //    ".uno:Cut";
+    // 4. Check that the first slide has no objects now.
+
+    createSdImpressDoc();
+
+    // Let comphelper::dispatchCommand (in KitHelper::dispatchUnoCommand) find the frame
+    auto xDesktop = frame::Desktop::create(comphelper::getProcessComponentContext());
+    auto pImpressDocument = static_cast<SdXImpressDocument*>(mxComponent.get());
+    auto pFrame = pImpressDocument->GetDocShell()->GetFrame();
+    CPPUNIT_ASSERT(pFrame);
+    xDesktop->setActiveFrame(pFrame->GetFrame().GetFrameInterface());
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2),
+                         pImpressDocument->getSdDrawPages()->getDrawPageByIndex(0)->getCount());
+
+    static constexpr OUString aJson = uR"json(
+{
+    "UnoCommand": {
+        "name": ".uno:SelectAll"
+    },
+    "UnoCommand": {
+        "name": ".uno:Cut"
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0),
+                         pImpressDocument->getSdDrawPages()->getDrawPageByIndex(0)->getCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSlideCommandJumpToSlideClamps)
+{
+    // JumpToSlide accepts "last" for the final slide, and an index past the
+    // end is clamped to it, so the commands that follow still land on a real
+    // slide.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    auto getSlideTitle = [&](sal_uInt16 nPage) -> OUString {
+        SdPage* pPage = pImpressDocument->GetDoc()->GetSdPage(nPage, PageKind::Standard);
+        SdrObject* pObj = pPage ? pPage->GetObj(0) : nullptr;
+        if (pObj && pObj->IsSdrTextObj())
+        {
+            SdrTextObj* pTextObj = static_cast<SdrTextObj*>(pObj);
+            if (pTextObj->GetOutlinerParaObject())
+                return pTextObj->GetOutlinerParaObject()->GetTextObject().GetText(0);
+        }
+        return OUString();
+    };
+
+    static constexpr OUString aJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"InsertMasterSlide": 0},
+            {"InsertMasterSlide": 0},
+            {"JumpToSlide": 0},
+            {"SetText.0": "first"},
+            {"JumpToSlide": "last"},
+            {"SetText.0": "third"}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), pImpressDocument->getDrawPages()->getCount());
+    CPPUNIT_ASSERT_EQUAL(u"first"_ustr, getSlideTitle(0));
+    CPPUNIT_ASSERT_EQUAL(u"third"_ustr, getSlideTitle(2));
+
+    // An index past the end addresses the last slide instead of being dropped.
+    static constexpr OUString aJsonClamp = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"JumpToSlide": 99},
+            {"SetText.0": "clamped"}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJsonClamp) });
+
+    CPPUNIT_ASSERT_EQUAL(u"clamped"_ustr, getSlideTitle(2));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSlideCommandDeleteSlideKeepsOnlySlide)
+{
+    // Deleting is refused when the deck has a single slide, so a transform
+    // cannot leave an empty document behind.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), pImpressDocument->getDrawPages()->getCount());
+
+    static constexpr OUString aJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"DeleteSlide": 0}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), pImpressDocument->getDrawPages()->getCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSlideCommandMarkObject)
+{
+    // MarkObject selects a shape on the current slide and UnMarkObject
+    // releases it again.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+
+    static constexpr OUString aJsonMark = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"MarkObject": 0}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJsonMark) });
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1),
+                         pView->GetMarkedObjectList().GetMarkCount());
+
+    static constexpr OUString aJsonUnMark = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"UnMarkObject": 0}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJsonUnMark) });
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0),
+                         pView->GetMarkedObjectList().GetMarkCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSlideCommandEditTextObject)
+{
+    // EditTextObject edits inside a shape's existing text: SelectText picks a
+    // slice and an insert overwrites just that slice, leaving the rest alone.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    static constexpr OUString aJson = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"ChangeLayoutByName": "AUTOLAYOUT_TITLE_CONTENT"},
+            {"SetText.0": "Hello World"},
+            {"EditTextObject.0": [
+                {"SelectText": [0, 0, 0, 5]},
+                {"InsertText": "Howdy"}
+            ]}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    SdPage* pPage = pImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+    SdrObject* pObj = pPage->GetObj(0);
+    CPPUNIT_ASSERT(pObj);
+    CPPUNIT_ASSERT(pObj->IsSdrTextObj());
+    SdrTextObj* pTextObj = static_cast<SdrTextObj*>(pObj);
+    CPPUNIT_ASSERT(pTextObj->GetOutlinerParaObject());
+    // The insert replaces the selected "Hello", not the whole text.
+    CPPUNIT_ASSERT_EQUAL(u"Howdy World"_ustr,
+                         pTextObj->GetOutlinerParaObject()->GetTextObject().GetText(0));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSlideCommandInsertImageAtKeepsView)
+{
+    // InsertImageAt addresses slide and object in the command key itself: the
+    // image lands on that slide while the view keeps showing the slide it was
+    // on.
+    createSdImpressDoc();
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    // A second slide whose content placeholder the image will replace. The
+    // view stays on the first slide because no command after the insert moves
+    // it.
+    static constexpr OUString aJsonInsert = uR"json(
+{
+    "Transforms": {
+        "SlideCommands": [
+            {"InsertMasterSlide": 0}
+        ]
+    }
+}
+)json"_ustr;
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJsonInsert) });
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), pImpressDocument->getDrawPages()->getCount());
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+    const SdrPage* pShownBefore = pView->GetSdrPageView()->GetPage();
+
+    OUString aImageURL = createFileURL(u"TestImage1.png");
+    OUString aJson = "{ \"Transforms\": { \"SlideCommands\": ["
+                     "{ \"InsertImageAt.1.1\": \""
+                     + aImageURL + "\" } ] } }";
+
+    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
+                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
+
+    SdPage* pPage1 = pImpressDocument->GetDoc()->GetSdPage(1, PageKind::Standard);
+    SdrObject* pObj = pPage1->GetObj(1);
+    CPPUNIT_ASSERT(pObj);
+    CPPUNIT_ASSERT_EQUAL(SdrObjKind::Graphic, pObj->GetObjIdentifier());
+    // The view did not navigate to the slide the image was placed on.
+    CPPUNIT_ASSERT_EQUAL(pShownBefore, static_cast<const SdrPage*>(pView->GetSdrPageView()->GetPage()));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf111522)
+{
+    // Load the document and create two new windows.
+    createSdImpressDoc("tdf111522.odp");
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    pViewShell->GetViewFrame()->GetDispatcher()->Execute(SID_NEWWINDOW, SfxCallMode::SYNCHRON);
+    sd::ViewShell* pViewShell1 = pImpressDocument->GetDocShell()->GetViewShell();
+    pViewShell->GetViewFrame()->GetDispatcher()->Execute(SID_NEWWINDOW, SfxCallMode::SYNCHRON);
+    sd::ViewShell* pViewShell2 = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell1 != pViewShell2);
+
+    // Have slide 1 in window 1, slide 2 in window 2.
+    SfxRequest aRequest(*pViewShell2->GetViewFrame(), SID_SWITCHPAGE);
+    aRequest.AppendItem(SfxUInt32Item(ID_VAL_WHATPAGE, 1));
+    aRequest.AppendItem(
+        SfxUInt32Item(ID_VAL_WHATKIND, static_cast<sal_uInt32>(PageKind::Standard)));
+    pViewShell2->ExecuteSlot(aRequest);
+
+    // Start text edit in window 1.
+    SdPage* pPage1 = pViewShell1->GetActualPage();
+    SdrObject* pShape1 = pPage1->GetObj(0);
+    SdrView* pView1 = pViewShell1->GetView();
+    pView1->MarkObj(pShape1, pView1->GetSdrPageView());
+    pView1->SdrBeginTextEdit(pShape1);
+    CPPUNIT_ASSERT(pView1->IsTextEdit());
+
+    // Move the shape in window 2 & undo.
+    SdPage* pPage2 = pViewShell2->GetActualPage();
+    CPPUNIT_ASSERT(pPage1 != pPage2);
+    SdrObject* pShape2 = pPage2->GetObj(0);
+    SdrView* pView2 = pViewShell2->GetView();
+    pView2->MarkObj(pShape2, pView2->GetSdrPageView());
+    pView2->MoveMarkedObj(Size(1, 1), /*bCopy=*/false);
+    // Without the accompanying fix in place, this test would have failed with an assertion failure
+    // in SdrObjEditView::SdrEndTextEdit() as mpOldTextEditUndoManager was not nullptr.
+    pViewShell2->GetViewFrame()->GetDispatcher()->Execute(SID_UNDO, SfxCallMode::SYNCHRON);
+
+    // Rotate the shape in window 2 & undo.
+    pView2->MarkObj(pShape2, pView2->GetSdrPageView());
+    pView2->RotateMarkedObj(pShape2->GetLastBoundRect().Center(), /*nAngle=*/45_deg100);
+    // Without the accompanying fix in place, this test would have failed with an assertion failure
+    // in SdrObjEditView::SdrEndTextEdit() as mpOldTextEditUndoManager was not nullptr.
+    pViewShell2->GetViewFrame()->GetDispatcher()->Execute(SID_UNDO, SfxCallMode::SYNCHRON);
+
+    // Start text edit in window 2.
+    // tdf#125824
+    pView2->MarkObj(pShape2, pView2->GetSdrPageView());
+    pView2->SdrBeginTextEdit(pShape2);
+    CPPUNIT_ASSERT(pView2->IsTextEdit());
+    // Write 'test' inside the shape
+    SfxStringItem aInputString(SID_ATTR_CHAR, u"test"_ustr);
+    pViewShell2->GetViewFrame()->GetDispatcher()->ExecuteList(SID_ATTR_CHAR, SfxCallMode::SYNCHRON,
+                                                              { &aInputString });
+    CPPUNIT_ASSERT(pView2->GetTextEditObject());
+    EditView& rEditView = pView2->GetTextEditOutlinerView()->GetEditView();
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(4), rEditView.GetSelection().start.nIndex);
+    pView2->SdrEndTextEdit();
+    // Without the accompanying fix in place, this test would have failed with an assertion failure
+    // in SdrObjEditView::SdrEndTextEdit() as mpOldTextEditUndoManager was not nullptr.
+    pViewShell2->GetViewFrame()->GetDispatcher()->Execute(SID_UNDO, SfxCallMode::SYNCHRON);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf126197)
+{
+    // Load the document and create two new windows.
+    createSdImpressDoc("tdf126197.odp");
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    pViewShell->GetViewFrame()->GetDispatcher()->Execute(SID_NEWWINDOW, SfxCallMode::SYNCHRON);
+    sd::ViewShell* pViewShell1 = pImpressDocument->GetDocShell()->GetViewShell();
+    pViewShell->GetViewFrame()->GetDispatcher()->Execute(SID_NEWWINDOW, SfxCallMode::SYNCHRON);
+    sd::ViewShell* pViewShell2 = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell1 != pViewShell2);
+
+    // Start text edit in window 1.
+    SdPage* pPage1 = pViewShell1->GetActualPage();
+    SdrObject* pShape1 = pPage1->GetObj(0);
+    SdrView* pView1 = pViewShell1->GetView();
+    pView1->MarkObj(pShape1, pView1->GetSdrPageView());
+    pView1->SdrBeginTextEdit(pShape1);
+    CPPUNIT_ASSERT(pView1->IsTextEdit());
+
+    SdPage* pPage2 = pViewShell2->GetActualPage();
+    CPPUNIT_ASSERT_EQUAL(pPage1, pPage2);
+    SdrObject* pShape2 = pPage2->GetObj(0);
+    CPPUNIT_ASSERT_EQUAL(pShape1, pShape2);
+    SdrView* pView2 = pViewShell2->GetView();
+    pView2->MarkObj(pShape2, pView2->GetSdrPageView());
+
+    // Without the accompanying fix in place, this test would have failed with an assertion failure
+    // in SdrObjEditView::SdrEndTextEdit()
+    pViewShell2->GetViewFrame()->GetDispatcher()->Execute(SID_DELETE, SfxCallMode::SYNCHRON);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf124708)
+{
+    createSdImpressDoc("tdf124708.ppt");
+
+    dispatchCommand(mxComponent, u".uno:NextPage"_ustr, {});
+
+    checkCurrentPageNumber(2);
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(16), pActualPage->GetObjCount());
+
+    dispatchCommand(mxComponent, u".uno:SelectAll"_ustr, {});
+
+    // Without the fix in place, this test would have crashed here
+    dispatchCommand(mxComponent, u".uno:Delete"_ustr, {});
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), pActualPage->GetObjCount());
+
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(16), pActualPage->GetObjCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf159666)
+{
+    createSdDrawDoc("tdf159666.odg");
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(12), pActualPage->GetObjCount());
+
+    // Without the fix in place, this test would have crashed here
+    dispatchCommand(mxComponent, u".uno:SelectAll"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:Delete"_ustr, {});
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), pActualPage->GetObjCount());
+
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(12), pActualPage->GetObjCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf143412)
+{
+    createSdImpressDoc();
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pActualPage->GetObjCount());
+
+    OUString aImageURL = createFileURL(u"tdf143412.svg");
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+        { u"FileName"_ustr, cpo::uno::Any(aImageURL) },
+    }));
+    dispatchCommand(mxComponent, u".uno:InsertGraphic"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), pActualPage->GetObjCount());
+
+    // Without the fix in place, this test would have crashed
+    // Check that converting an image to the different options doesn't crash
+
+    dispatchCommand(mxComponent, u".uno:ChangeBezier"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:ChangePolygon"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:convert_to_contour"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:ConvertInto3D"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:ConvertInto3DLatheFast"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:ConvertIntoBitmap"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:ConvertIntoMetaFile"_ustr, {});
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), pActualPage->GetObjCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf155211_dashed_line)
+{
+    createSdImpressDoc();
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pActualPage->GetObjCount());
+
+    OUString aImageURL = createFileURL(u"tdf155211_dashed_line.svg");
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+        { u"FileName"_ustr, cpo::uno::Any(aImageURL) },
+    }));
+    dispatchCommand(mxComponent, u".uno:InsertGraphic"_ustr, aArgs);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), pActualPage->GetObjCount());
+
+    // split the (auto-selected) svg
+    dispatchCommand(mxComponent, u".uno:Break"_ustr, {});
+
+    SdrObject* pObject = pActualPage->GetObj(2);
+    const XLineStyleItem& rStyleItem = pObject->GetMergedItem(XATTR_LINESTYLE);
+    // tdf#115162: Without the fix in place, this test would have failed with
+    // - Expected: 2 (LineStyle_DASH)
+    // - Actual  : 1 (LineStyle_SOLID)
+    CPPUNIT_ASSERT_EQUAL(drawing::LineStyle_DASH, rStyleItem.GetValue());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf169813_prevent_unintended_dashed_line)
+{
+    createSdImpressDoc();
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pActualPage->GetObjCount());
+
+    OUString aImageURL = createFileURL(u"tdf169813_prevent_unintended_dashed_line.svg");
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+        { u"FileName"_ustr, cpo::uno::Any(aImageURL) },
+    }));
+    dispatchCommand(mxComponent, u".uno:InsertGraphic"_ustr, aArgs);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), pActualPage->GetObjCount());
+
+    // split the (auto-selected) svg
+    dispatchCommand(mxComponent, u".uno:Break"_ustr, {});
+
+    SdrObject* pObject = pActualPage->GetObj(3);
+    const XLineStyleItem& rStyleItem = pObject->GetMergedItem(XATTR_LINESTYLE);
+    // tdf#169813: Without the fix in place, this test would have failed with
+    // - Expected: 0 (LineStyle_NONE)
+    // - Actual  : 2 (LineStyle_DASH)
+    CPPUNIT_ASSERT_EQUAL(drawing::LineStyle_NONE, rStyleItem.GetValue());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf162455)
+{
+    createSdImpressDoc();
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pActualPage->GetObjCount());
+
+    OUString aImageURL = createFileURL(u"tdf162455.svg");
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence({
+        { u"FileName"_ustr, cpo::uno::Any(aImageURL) },
+    }));
+    dispatchCommand(mxComponent, u".uno:InsertGraphic"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), pActualPage->GetObjCount());
+
+    // split the (auto-selected) svg up
+
+    dispatchCommand(mxComponent, u".uno:Break"_ustr, {});
+
+    // Get the newly created shape that has the text '100' in it
+    uno::Reference<beans::XPropertySet> xShape(getShapeFromPage(4, 0));
+    uno::Reference<text::XTextRange> xParagraph1(getParagraphFromShape(0, xShape));
+    uno::Reference<text::XTextRange> xRun(getRunFromParagraph(0, xParagraph1));
+    CPPUNIT_ASSERT_EQUAL(u"100"_ustr, xRun->getString());
+
+    uno::Reference<beans::XPropertySet> xPropSet1(xRun, uno::UNO_QUERY);
+    double fFontSize1 = xPropSet1->getPropertyValue(u"CharHeight"_ustr).get<double>();
+
+    /* before this fix the font sizes were way too small
+      - Expected: 7.5
+      - Actual  : 0.300000011920929 */
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(7.5, fFontSize1, 0.01);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSetHyperlinkKeepSelection)
+{
+    // Given an Impress doc with a rectangle shape, in text edit mode, with "f" typed and
+    // selected:
+    createSdImpressDoc();
+    auto* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+    SdPage* pPage = pViewShell->GetActualPage();
+
+    rtl::Reference<SdrRectObj> pRect
+        = new SdrRectObj(pView->getSdrModelFromSdrView(), tools::Rectangle(1000, 1000, 5000, 5000));
+    pPage->NbcInsertObject(pRect.get());
+
+    pView->MarkObj(pRect.get(), pView->GetSdrPageView());
+    pView->SdrBeginTextEdit(pRect.get());
+    CPPUNIT_ASSERT(pView->IsTextEdit());
+
+    SfxStringItem aInputString(SID_ATTR_CHAR, u"f"_ustr);
+    pViewShell->GetViewFrame()->GetDispatcher()->ExecuteList(SID_ATTR_CHAR, SfxCallMode::SYNCHRON,
+                                                             { &aInputString });
+
+    OutlinerView* pOlView = pView->GetTextEditOutlinerView();
+    CPPUNIT_ASSERT(pOlView);
+    pOlView->SetSelection(ESelection(0, 0, 0, 1));
+    CPPUNIT_ASSERT(pOlView->HasSelection());
+
+    // When dispatching .uno:SetHyperlink with Hyperlink.Text differing from the selection,
+    // but marked as a hint:
+    cpo::uno::Sequence<beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"Hyperlink.Text"_ustr, cpo::uno::Any(u"mytext"_ustr)),
+        comphelper::makePropertyValue(u"Hyperlink.TextIsHint"_ustr, cpo::uno::Any(true)),
+        comphelper::makePropertyValue(u"Hyperlink.URL"_ustr,
+                                      cpo::uno::Any(u"http://www.example.com"_ustr)),
+    };
+    dispatchCommand(mxComponent, u".uno:SetHyperlink"_ustr, aArgs);
+
+    // Then make sure the previously-selected character is preserved as the URL field's
+    // displayed text, not replaced by Hyperlink.Text:
+    pView->SdrEndTextEdit();
+    const OutlinerParaObject* pOPO = pRect->GetOutlinerParaObject();
+    CPPUNIT_ASSERT(pOPO);
+    const SvxFieldData* pField
+        = pOPO->GetTextObject().GetFieldData(0, 0, css::text::textfield::Type::URL);
+    auto* pURLField = dynamic_cast<const SvxURLField*>(pField);
+    CPPUNIT_ASSERT(pURLField);
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: f
+    // - Actual  : mytext
+    // i.e. the selected character was lost, the provided text hint was used.
+    CPPUNIT_ASSERT_EQUAL(u"f"_ustr, pURLField->GetRepresentation());
+}
+
+static SdrObject* lcl_findTextBoxByText(const SdPage* pPage, std::u16string_view rText)
+{
+    for (size_t i = 0; i < pPage->GetObjCount(); ++i)
+    {
+        SdrObject* pObj = pPage->GetObj(i);
+        const SdrTextObj* pTextObj = DynCastSdrTextObj(pObj);
+        if (!pTextObj || !pTextObj->HasText())
+            continue;
+        const OutlinerParaObject* pOPO = pTextObj->GetOutlinerParaObject();
+        if (pOPO && pOPO->GetTextObject().GetText(0) == rText)
+            return pObj;
+    }
+    return nullptr;
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPasteTextboxBackground)
+{
+    // The textbox 'xxx' in the source has draw:fill="none" inherited from a
+    // layout-specific named style ("Content_Outline_Normal-outline1") on its
+    // master page, not from the auto-style on the frame itself. Copying it
+    // into a different document used to drop the inherited fill: the
+    // destination's style pool had no "Content_Outline_Normal-outline1", so
+    // AttributeProperties' by-name lookup returned null and the clone fell
+    // through to applyDefaultStyleSheetFromSdrModel(), giving the pasted
+    // shape a solid (white) background.
+    //
+    // Hold the source via mxComponent2 so it stays alive while we open the
+    // destination via mxComponent.
+    mxComponent2 = loadFromDesktop(createFileURL(u"odp/paste-textbox-background.odp"),
+                                   u"com.sun.star.presentation.PresentationDocument"_ustr);
+    CPPUNIT_ASSERT(mxComponent2.is());
+
+    auto* pSrcImpress = dynamic_cast<SdXImpressDocument*>(mxComponent2.get());
+    CPPUNIT_ASSERT(pSrcImpress);
+    sd::ViewShell* pSrcViewShell = pSrcImpress->GetDocShell()->GetViewShell();
+    SdPage* pSrcPage = pSrcViewShell->GetActualPage();
+
+    SdrObject* pSrcTextBox = lcl_findTextBoxByText(pSrcPage, u"xxx");
+    CPPUNIT_ASSERT_MESSAGE("source textbox 'xxx' not found", pSrcTextBox);
+
+    // The source's effective fill is none, courtesy of the layout parent.
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_NONE,
+                         pSrcTextBox->GetMergedItem(XATTR_FILLSTYLE).GetValue());
+
+    // Mark the textbox and copy via .uno:Copy. This goes through the
+    // standard same-process clipboard path: View::DoCopy ->
+    // CreateClipboardDataObject sets SdModule::pTransferClip and puts the
+    // data on the system clipboard.
+    SdrView* pSrcView = pSrcViewShell->GetView();
+    pSrcView->UnmarkAllObj();
+    pSrcView->MarkObj(pSrcTextBox, pSrcView->GetSdrPageView());
+    dispatchCommand(mxComponent2, u".uno:Copy"_ustr, {});
+
+    // Open a fresh destination - mxComponent2 stays untouched.
+    createSdImpressDoc();
+    auto* pDstImpress = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pDstImpress);
+    sd::ViewShell* pDstViewShell = pDstImpress->GetDocShell()->GetViewShell();
+    SdPage* pDstPage = pDstViewShell->GetActualPage();
+    const size_t nDstObjsBefore = pDstPage->GetObjCount();
+
+    // Paste in the destination. The destination's InsertData recognises
+    // SdModule::pTransferClip as own data and goes through the same-process
+    // branch, calling our View::Paste(SdrModel) override on the source's
+    // intermediate model.
+    dispatchCommand(mxComponent, u".uno:Paste"_ustr, {});
+
+    CPPUNIT_ASSERT_EQUAL(nDstObjsBefore + 1, pDstPage->GetObjCount());
+    SdrObject* pDstShape = pDstPage->GetObj(nDstObjsBefore);
+
+    // Without the fix in sd::View::Paste(const SdrModel&, ...) this would
+    // be FillStyle_SOLID and the pasted shape would have a different
+    // background.
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_NONE,
+                         pDstShape->GetMergedItem(XATTR_FILLSTYLE).GetValue());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPasteTextboxBackgroundCrossProcess)
+{
+    // Same scenario as testPasteTextboxBackground, but exercising the
+    // cross-process path that online (coolwsd) uses. There the source kit
+    // and the destination kit are different processes, so the destination
+    // sees the clipboard data as a generic non-SdTransferable and goes
+    // through InsertData's DRAWING import branch: SvxDrawingLayerImport
+    // into a fresh SdDrawDocument, then Paste(rMod).
+    //
+    // Simulate that here by clearing SdModule::pTransferClip after the
+    // copy, so the destination's InsertData no longer recognises the
+    // transferable as own data.
+    mxComponent2 = loadFromDesktop(createFileURL(u"odp/paste-textbox-background.odp"),
+                                   u"com.sun.star.presentation.PresentationDocument"_ustr);
+    CPPUNIT_ASSERT(mxComponent2.is());
+
+    auto* pSrcImpress = dynamic_cast<SdXImpressDocument*>(mxComponent2.get());
+    CPPUNIT_ASSERT(pSrcImpress);
+    sd::ViewShell* pSrcViewShell = pSrcImpress->GetDocShell()->GetViewShell();
+    SdPage* pSrcPage = pSrcViewShell->GetActualPage();
+
+    SdrObject* pSrcTextBox = lcl_findTextBoxByText(pSrcPage, u"xxx");
+    CPPUNIT_ASSERT_MESSAGE("source textbox 'xxx' not found", pSrcTextBox);
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_NONE,
+                         pSrcTextBox->GetMergedItem(XATTR_FILLSTYLE).GetValue());
+
+    SdrView* pSrcView = pSrcViewShell->GetView();
+    pSrcView->UnmarkAllObj();
+    pSrcView->MarkObj(pSrcTextBox, pSrcView->GetSdrPageView());
+    dispatchCommand(mxComponent2, u".uno:Copy"_ustr, {});
+
+    // Make the destination see the transferable as foreign: this drops it
+    // into the DRAWING-import branch of InsertData, the same one online
+    // takes when the source kit is a different process.
+    SdModule::get()->pTransferClip = nullptr;
+
+    createSdImpressDoc();
+    auto* pDstImpress = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pDstImpress);
+    sd::ViewShell* pDstViewShell = pDstImpress->GetDocShell()->GetViewShell();
+    SdPage* pDstPage = pDstViewShell->GetActualPage();
+    const size_t nDstObjsBefore = pDstPage->GetObjCount();
+
+    dispatchCommand(mxComponent, u".uno:Paste"_ustr, {});
+
+    CPPUNIT_ASSERT_EQUAL(nDstObjsBefore + 1, pDstPage->GetObjCount());
+    SdrObject* pDstShape = pDstPage->GetObj(nDstObjsBefore);
+
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_NONE,
+                         pDstShape->GetMergedItem(XATTR_FILLSTYLE).GetValue());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPasteKeepsPositionInKit)
+{
+    // When kit is active the destination's visible area is not a reliable
+    // paste position. A cross-document paste arrives with the selection
+    // normalised to the origin, so place the group's top-left at the page
+    // origin instead of recentering it on that visible area. Recentering
+    // shifted the pasted shape away from the corner.
+    mxComponent2 = loadFromDesktop(createFileURL(u"odp/paste-textbox-background.odp"),
+                                   u"com.sun.star.presentation.PresentationDocument"_ustr);
+    CPPUNIT_ASSERT(mxComponent2.is());
+
+    auto* pSrcImpress = dynamic_cast<SdXImpressDocument*>(mxComponent2.get());
+    CPPUNIT_ASSERT(pSrcImpress);
+    sd::ViewShell* pSrcViewShell = pSrcImpress->GetDocShell()->GetViewShell();
+    SdPage* pSrcPage = pSrcViewShell->GetActualPage();
+
+    SdrObject* pSrcTextBox = lcl_findTextBoxByText(pSrcPage, u"xxx");
+    CPPUNIT_ASSERT_MESSAGE("source textbox 'xxx' not found", pSrcTextBox);
+    const Size aSrcSize = pSrcTextBox->GetSnapRect().GetSize();
+
+    SdrView* pSrcView = pSrcViewShell->GetView();
+    pSrcView->UnmarkAllObj();
+    pSrcView->MarkObj(pSrcTextBox, pSrcView->GetSdrPageView());
+    dispatchCommand(mxComponent2, u".uno:Copy"_ustr, {});
+
+    // Make the destination see the clipboard as foreign, the cross-process
+    // path online takes, so the paste goes through View::Paste(SdrModel).
+    SdModule::get()->pTransferClip = nullptr;
+
+    createSdImpressDoc();
+    auto* pDstImpress = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pDstImpress);
+    sd::ViewShell* pDstViewShell = pDstImpress->GetDocShell()->GetViewShell();
+    SdPage* pDstPage = pDstViewShell->GetActualPage();
+    const size_t nDstObjsBefore = pDstPage->GetObjCount();
+
+    {
+        comphelper::COKit::setActive(true);
+        comphelper::ScopeGuard aKitGuard([] { comphelper::COKit::setActive(false); });
+        dispatchCommand(mxComponent, u".uno:Paste"_ustr, {});
+    }
+
+    CPPUNIT_ASSERT_EQUAL(nDstObjsBefore + 1, pDstPage->GetObjCount());
+    SdrObject* pDstShape = pDstPage->GetObj(nDstObjsBefore);
+
+    // The pasted shape sits at the page origin with its size preserved,
+    // rather than being shifted by the recentering offset.
+    CPPUNIT_ASSERT_EQUAL(tools::Rectangle(Point(0, 0), aSrcSize),
+                         pDstShape->GetSnapRect());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSlidePasteSizeMismatch)
+{
+    // Given a 4:3 presentation, with the first slide selected:
+    createSdImpressDoc("odp/4-3.odp");
+    sd::slidesorter::controller::SlideSorterController& rSrcCtl
+        = getSlideSorterViewShell()->GetSlideSorter().GetController();
+    auto pSrcImpress = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdPage* pSrcFirst = pSrcImpress->GetDoc()->GetSdPage(0, PageKind::Standard);
+    rSrcCtl.GetPageSelector().DeselectAllPages();
+    rSrcCtl.GetPageSelector().SelectPage(pSrcFirst);
+
+    // When copying that slide and pasting it into a 16:9 presentation:
+    rSrcCtl.GetClipboard().DoCopy();
+    // Disable internal paste to hit the clipboard save + load code-path.
+    SdModule::get()->pTransferClip = nullptr;
+    mxComponent2 = loadFromDesktop(createFileURL(u"odp/16-9.odp"),
+                                   u"com.sun.star.presentation.PresentationDocument"_ustr);
+    auto* pDstImpress = dynamic_cast<SdXImpressDocument*>(mxComponent2.get());
+    SdDrawDocument* pDstDoc = pDstImpress->GetDoc();
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(1), pDstDoc->GetSdPageCount(PageKind::Standard));
+    sd::slidesorter::SlideSorterViewShell* pDstSSVS = getSlideSorterViewShell(mxComponent2);
+    sd::slidesorter::controller::SlideSorterController& rDstCtl
+        = pDstSSVS->GetSlideSorter().GetController();
+    SdPage* pDstLast = pDstDoc->GetSdPage(0, PageKind::Standard);
+    rDstCtl.GetPageSelector().DeselectAllPages();
+    rDstCtl.GetPageSelector().SelectPage(pDstLast);
+    rDstCtl.GetClipboard().PasteSlidesFromSystemClipboard();
+
+    // Then make sure paste results in 2 slides:
+    sal_uInt16 nActualPageCount = pDstDoc->GetSdPageCount(PageKind::Standard);
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 2
+    // - Actual  : 1
+    // i.e. an unexpected non-async dialog popped up, which gets cancelled in silent mode, so the
+    // paste fails.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(2), nActualPageCount);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf96206)
+{
+    // Copying/pasting slide referring to a non-default master with a text duplicated the master
+
+    createSdImpressDoc("odp/tdf96206.odp");
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    const sal_uInt16 nMasterPageCnt1 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), nMasterPageCnt1);
+    rSSController.GetClipboard().DoCopy();
+    rSSController.GetClipboard().DoPaste();
+    const sal_uInt16 nMasterPageCnt2 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(nMasterPageCnt1, nMasterPageCnt2);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentCut)
+{
+    // Test cutting slides and verifying the document state afterwards
+    createSdImpressDoc("odp/tdf96206.odp");
+
+    // Get the slide sorter and controller
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+
+    // Get document and initial page count
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // Get initial page count
+    const sal_uInt16 nInitialPageCount = pDoc->GetSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT(nInitialPageCount > 0);
+
+    // Select all slides
+    rSSController.GetPageSelector().SelectAllPages();
+
+    // Check that slides are selected
+    CPPUNIT_ASSERT(rSSController.GetPageSelector().GetSelectedPageCount() > 0);
+
+    // Cut the selected slides
+    rSSController.GetClipboard().DoCut();
+
+    // Paste the cut slides
+    rSSController.GetClipboard().DoPaste();
+
+    // After pasting, we should have at least the initial number of pages
+    const sal_uInt16 nPageCountAfterPaste = pDoc->GetSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT(nPageCountAfterPaste >= nInitialPageCount);
+
+    // Verify that master page count remains unchanged throughout the operation
+    const sal_uInt16 nMasterPageCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), nMasterPageCount);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf96708)
+{
+    createSdImpressDoc("odp/tdf96708.odp");
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+    auto& rPageSelector = rSSController.GetPageSelector();
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    const sal_uInt16 nMasterPageCnt1 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), nMasterPageCnt1);
+    rSSController.GetClipboard().DoCopy();
+    rPageSelector.SelectAllPages();
+
+    // Now wait for timers to trigger creation of auto-layout
+    osl::Thread::wait(std::chrono::milliseconds(100));
+    Scheduler::ProcessEventsToIdle();
+
+    rSSController.GetClipboard().DoPaste();
+
+    // tdf#151802: pasting the pages back brought a master page along that was the same as one
+    // already there, so the count grew by one
+    const sal_uInt16 nMasterPageCnt2 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(nMasterPageCnt1, nMasterPageCnt2);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617_default_master)
+{
+    // Copying/pasting slide referring to a master page.
+    createSdImpressDoc("odp/tdf96206.odp");
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    const sal_uInt16 nMasterPageCnt1 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), nMasterPageCnt1);
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+    const sal_uInt16 nMasterPageCnt2 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(nMasterPageCnt1 + 1), nMasterPageCnt2);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617)
+{
+    // Copying/pasting slide referring to a master page.
+    createSdImpressDoc("odp/tdf96708.odp");
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    const sal_uInt16 nMasterPageCnt1 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), nMasterPageCnt1);
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+    const sal_uInt16 nMasterPageCnt2 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(nMasterPageCnt1 + 1), nMasterPageCnt2);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617_test_master_name)
+{
+    // Copying/pasting slide referring to a master page.
+    createSdImpressDoc("odp/tdf96708.odp");
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+    // Get the master page name
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    SdPage* pMasterPage = pDoc->GetMasterSdPage(0, PageKind::Standard);
+    OUString aMasterPageName = pMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"Master0"_ustr, aMasterPageName);
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+    SdPage* pNewMasterPage = pDoc->GetMasterSdPage(4, PageKind::Standard);
+    OUString aNewMasterPageName = pNewMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"1_Master0"_ustr, aNewMasterPageName);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617_test_default_master_name)
+{
+    // Copying/pasting slide referring to a master page.
+    createSdImpressDoc();
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+    // Get the master page name
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    SdPage* pMasterPage = pDoc->GetMasterSdPage(0, PageKind::Standard);
+    OUString aMasterPageName = pMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"Default"_ustr, aMasterPageName);
+
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    SdPage* pNewMasterPage = pDoc->GetMasterSdPage(0, PageKind::Standard);
+    OUString aNewMasterPageName = pNewMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"1_Default"_ustr, aNewMasterPageName);
+
+    rSSController.GetClipboard().DoPaste(true);
+
+    SdPage* pNewMasterPage2 = pDoc->GetMasterSdPage(1, PageKind::Standard);
+    OUString aNewMasterPageName2 = pNewMasterPage2->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"2_Default"_ustr, aNewMasterPageName2);
+}
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617_basic_master_name)
+{
+    // Basic test for copying/pasting slide referring to a master page
+    createSdImpressDoc("odp/tdf96708.odp");
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    SdPage* pMasterPage = pDoc->GetMasterSdPage(0, PageKind::Standard);
+    OUString aMasterPageName = pMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"Master0"_ustr, aMasterPageName);
+
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    SdPage* pNewMasterPage = pDoc->GetMasterSdPage(4, PageKind::Standard);
+    OUString aNewMasterPageName = pNewMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"1_Master0"_ustr, aNewMasterPageName);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617_leading_underscore_master_name)
+{
+    // Test master page name with underscore at first position
+    createSdImpressDoc("odp/tdf96708.odp");
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    SdPage* pMasterPage = pDoc->GetMasterSdPage(0, PageKind::Standard);
+    // Rename the master page with leading underscore
+    pDoc->RenameLayoutTemplate(pMasterPage->GetLayoutName(), u"_Master0"_ustr);
+
+    OUString aMasterPageName = pMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"_Master0"_ustr, aMasterPageName);
+
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    SdPage* pNewMasterPage = pDoc->GetMasterSdPage(4, PageKind::Standard);
+    OUString aNewMasterPageName = pNewMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"1__Master0"_ustr, aNewMasterPageName);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617_middle_underscore_master_name)
+{
+    // Test master page name with underscore in the middle
+    createSdImpressDoc("odp/tdf96708.odp");
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    SdPage* pMasterPage = pDoc->GetMasterSdPage(0, PageKind::Standard);
+    // Rename the master page with middle underscore
+    pDoc->RenameLayoutTemplate(pMasterPage->GetLayoutName(), u"Master_0"_ustr);
+
+    OUString aMasterPageName = pMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"Master_0"_ustr, aMasterPageName);
+
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    SdPage* pNewMasterPage = pDoc->GetMasterSdPage(4, PageKind::Standard);
+    OUString aNewMasterPageName = pNewMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"1_Master_0"_ustr, aNewMasterPageName);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617_trailing_underscore_master_name)
+{
+    // Test master page name with underscore at the end
+    createSdImpressDoc("odp/tdf96708.odp");
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    SdPage* pMasterPage = pDoc->GetMasterSdPage(0, PageKind::Standard);
+    // Rename the master page with trailing underscore
+    pDoc->RenameLayoutTemplate(pMasterPage->GetLayoutName(), u"Master0_"_ustr);
+
+    OUString aMasterPageName = pMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"Master0_"_ustr, aMasterPageName);
+
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    SdPage* pNewMasterPage = pDoc->GetMasterSdPage(4, PageKind::Standard);
+    OUString aNewMasterPageName = pNewMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"1_Master0_"_ustr, aNewMasterPageName);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617_space_in_master_name)
+{
+    // Test master page name with space in the middle
+    createSdImpressDoc("odp/tdf96708.odp");
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    SdPage* pMasterPage = pDoc->GetMasterSdPage(0, PageKind::Standard);
+    // Rename the master page with space in the middle
+    pDoc->RenameLayoutTemplate(pMasterPage->GetLayoutName(), u"Master 0"_ustr);
+
+    OUString aMasterPageName = pMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"Master 0"_ustr, aMasterPageName);
+
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    SdPage* pNewMasterPage = pDoc->GetMasterSdPage(4, PageKind::Standard);
+    OUString aNewMasterPageName = pNewMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"1_Master 0"_ustr, aNewMasterPageName);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617_Double_Copy)
+{
+    // Test master page name with double copy
+    createSdImpressDoc();
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+    // Set edit master page mode
+    rSSController.ChangeEditMode(EditMode::MasterPage);
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // Get the master page name
+    const sal_uInt16 nMasterPageCnt1 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1), nMasterPageCnt1);
+    SdPage* pMasterPage = pDoc->GetMasterSdPage(0, PageKind::Standard);
+    // Rename the master page with master name
+    pDoc->RenameLayoutTemplate(pMasterPage->GetLayoutName(), u"master"_ustr);
+    OUString aMasterPageName = pMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"master"_ustr, aMasterPageName);
+
+    // Reselect the master page
+    rSSController.GetPageSelector().DeselectAllPages();
+    rSSController.GetPageSelector().SelectPage(pMasterPage);
+
+    // Copy and paste the master page
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    const sal_uInt16 nMasterPageCnt2 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), nMasterPageCnt2);
+
+    SdPage* pNewMasterPage = pDoc->GetMasterSdPage(1, PageKind::Standard);
+    OUString aNewMasterPageName = pNewMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"1_master"_ustr, aNewMasterPageName);
+
+    // Reselect the master page
+    rSSController.GetPageSelector().DeselectAllPages();
+    rSSController.GetPageSelector().SelectPage(pMasterPage);
+
+    // Copy again
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+    const sal_uInt16 nMasterPageCnt3 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(3), nMasterPageCnt3);
+    SdPage* pNewMasterPage2 = pDoc->GetMasterSdPage(2, PageKind::Standard);
+    OUString aNewMasterPageName2 = pNewMasterPage2->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"2_master"_ustr, aNewMasterPageName2);
+
+    // Reselect the master page
+    rSSController.GetPageSelector().DeselectAllPages();
+    rSSController.GetPageSelector().SelectPage(pMasterPage);
+
+    // Copy again
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    const sal_uInt16 nMasterPageCnt4 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(4), nMasterPageCnt4);
+    SdPage* pNewMasterPage3 = pDoc->GetMasterSdPage(3, PageKind::Standard);
+    OUString aNewMasterPageName3 = pNewMasterPage3->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"3_master"_ustr, aNewMasterPageName3);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617_Double_Copy_Default)
+{
+    // Test master page name with double copy
+    createSdImpressDoc();
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+    // Set edit master page mode
+    rSSController.ChangeEditMode(EditMode::MasterPage);
+
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+
+    // Get the master page name
+    const sal_uInt16 nMasterPageCnt1 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1), nMasterPageCnt1);
+    SdPage* pMasterPage = pDoc->GetMasterSdPage(0, PageKind::Standard);
+    // Rename the master page with default name
+    pDoc->RenameLayoutTemplate(pMasterPage->GetLayoutName(), u"Default"_ustr);
+    OUString aMasterPageName = pMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"Default"_ustr, aMasterPageName);
+
+    // Reselect the master page
+    rSSController.GetPageSelector().DeselectAllPages();
+    rSSController.GetPageSelector().SelectPage(pMasterPage);
+
+    // Copy and paste the master page
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    const sal_uInt16 nMasterPageCnt2 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(2), nMasterPageCnt2);
+
+    SdPage* pNewMasterPage = pDoc->GetMasterSdPage(1, PageKind::Standard);
+    OUString aNewMasterPageName = pNewMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"1_Default"_ustr, aNewMasterPageName);
+
+    // Reselect the master page
+    rSSController.GetPageSelector().DeselectAllPages();
+    rSSController.GetPageSelector().SelectPage(pMasterPage);
+    // Copy again
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+    const sal_uInt16 nMasterPageCnt3 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(3), nMasterPageCnt3);
+    SdPage* pNewMasterPage2 = pDoc->GetMasterSdPage(2, PageKind::Standard);
+    OUString aNewMasterPageName2 = pNewMasterPage2->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"2_Default"_ustr, aNewMasterPageName2);
+
+    // Reselect the master page
+    rSSController.GetPageSelector().DeselectAllPages();
+    rSSController.GetPageSelector().SelectPage(pMasterPage);
+    // Copy again
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+    const sal_uInt16 nMasterPageCnt4 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(4), nMasterPageCnt4);
+    SdPage* pNewMasterPage3 = pDoc->GetMasterSdPage(3, PageKind::Standard);
+    OUString aNewMasterPageName3 = pNewMasterPage3->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"3_Default"_ustr, aNewMasterPageName3);
+}
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf45617_Double_Copy_CopiedPage)
+{
+    // Test master page name with double copy for copied page which doesn't have a normal page created
+    createSdImpressDoc("odp/tdf96708.odp");
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+    // Set edit master page mode
+    rSSController.ChangeEditMode(EditMode::MasterPage);
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    // Get the master page name
+    const sal_uInt16 nMasterPageCnt1 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), nMasterPageCnt1);
+    SdPage* pMasterPage = pDoc->GetMasterSdPage(3, PageKind::Standard);
+    OUString aMasterPageName = pMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"Master3"_ustr, aMasterPageName);
+
+    // Reselect the master page
+    rSSController.GetPageSelector().DeselectAllPages();
+    rSSController.GetPageSelector().SelectPage(pMasterPage);
+    // Copy and paste the master page
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    const sal_uInt16 nMasterPageCnt2 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(5), nMasterPageCnt2);
+    SdPage* pNewMasterPage = pDoc->GetMasterSdPage(4, PageKind::Standard);
+    OUString aNewMasterPageName = pNewMasterPage->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"1_Master3"_ustr, aNewMasterPageName);
+
+    // Reselect the master page
+    rSSController.GetPageSelector().DeselectAllPages();
+    rSSController.GetPageSelector().SelectPage(pNewMasterPage);
+    // Copy again
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    const sal_uInt16 nMasterPageCnt3 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(6), nMasterPageCnt3);
+    SdPage* pNewMasterPage2 = pDoc->GetMasterSdPage(5, PageKind::Standard);
+    OUString aNewMasterPageName2 = pNewMasterPage2->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"2_Master3"_ustr, aNewMasterPageName2);
+
+    // Reselect the master page
+    rSSController.GetPageSelector().DeselectAllPages();
+    rSSController.GetPageSelector().SelectPage(pNewMasterPage2);
+    // Copy again
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    const sal_uInt16 nMasterPageCnt4 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(7), nMasterPageCnt4);
+    SdPage* pNewMasterPage3 = pDoc->GetMasterSdPage(6, PageKind::Standard);
+    OUString aNewMasterPageName3 = pNewMasterPage3->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"3_Master3"_ustr, aNewMasterPageName3);
+
+    // Reselect the master page
+    rSSController.GetPageSelector().DeselectAllPages();
+    rSSController.GetPageSelector().SelectPage(pNewMasterPage);
+    // Copy again
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    const sal_uInt16 nMasterPageCnt5 = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(8), nMasterPageCnt5);
+    SdPage* pNewMasterPage4 = pDoc->GetMasterSdPage(7, PageKind::Standard);
+    OUString aNewMasterPageName4 = pNewMasterPage4->GetName();
+    CPPUNIT_ASSERT_EQUAL(u"4_Master3"_ustr, aNewMasterPageName4);
+}
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testUndoMergeMasterPage)
+{
+    // Test undo for merging master pages only
+    createSdImpressDoc("odp/tdf96708.odp");
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+
+    // Get document and check initial master page count
+    SdXImpressDocument* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pXImpressDocument->GetDoc();
+    const sal_uInt16 nInitialMasterPageCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(4), nInitialMasterPageCount);
+
+    // Copy and paste master page only
+    rSSController.GetClipboard().DoCopy(true);
+    rSSController.GetClipboard().DoPaste(true);
+
+    // Check that a master page was added
+    const sal_uInt16 nAfterPasteMasterPageCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(nInitialMasterPageCount + 1),
+                         nAfterPasteMasterPageCount);
+
+    // Undo the master page merge
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+
+    // Check that the master page count is back to the initial value
+    const sal_uInt16 nAfterUndoMasterPageCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    CPPUNIT_ASSERT_EQUAL(nInitialMasterPageCount, nAfterUndoMasterPageCount);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf139996)
+{
+    createSdImpressDoc();
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+    auto& rPageSelector = rSSController.GetPageSelector();
+
+    CPPUNIT_ASSERT_EQUAL(1, rPageSelector.GetSelectedPageCount());
+
+    rPageSelector.DeselectAllPages();
+
+    CPPUNIT_ASSERT_EQUAL(0, rPageSelector.GetSelectedPageCount());
+
+    // Without the fix in place, this test would have crashed here
+    dispatchCommand(mxComponent, u".uno:MovePageUp"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:MovePageDown"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:MovePageTop"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:MovePageBottom"_ustr, {});
+
+    CPPUNIT_ASSERT_EQUAL(0, rPageSelector.GetSelectedPageCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf128651)
+{
+    // Error was, that undo and redo changes size of the shape. Affected actions were e.g.
+    // extrusion on/off, shadow on/off, changes on line or fill attributes.
+    // All these actions do not change the snap rectangle.
+    createSdImpressDoc("tdf128651_CustomShapeUndo.odp");
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    SdrObject* pObject = pActualPage->GetObj(0);
+    auto pCustomShape = dynamic_cast<SdrObjCustomShape*>(pObject);
+    CPPUNIT_ASSERT_MESSAGE("No Shape", pCustomShape);
+    const sal_Int32 nOrigWidth(pCustomShape->GetSnapRect().GetWidth());
+
+    SdDrawDocument* pDocument = pXImpressDocument->GetDoc();
+    sd::UndoManager* pUndoManager = pDocument->GetUndoManager();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), pUndoManager->GetRedoActionCount());
+
+    SdrView* pView = pViewShell->GetView();
+    pView->MarkObj(pCustomShape, pView->GetSdrPageView());
+    pViewShell->GetViewFrame()->GetDispatcher()->Execute(SID_EXTRUSION_TOGGLE,
+                                                         SfxCallMode::SYNCHRON);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pUndoManager->GetUndoActionCount());
+
+    pViewShell->GetViewFrame()->GetDispatcher()->Execute(SID_UNDO, SfxCallMode::SYNCHRON);
+    const sal_Int32 nUndoWidth(pCustomShape->GetSnapRect().GetWidth());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Undo changes width", nOrigWidth, nUndoWidth);
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pUndoManager->GetRedoActionCount());
+    pViewShell->GetViewFrame()->GetDispatcher()->Execute(SID_REDO, SfxCallMode::SYNCHRON);
+    const sal_Int32 nRedoWidth(pCustomShape->GetSnapRect().GetWidth());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Redo changes width", nUndoWidth, nRedoWidth);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf126605)
+{
+    createSdImpressDoc();
+
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+
+    insertStringToObject(0, u"Test", /*bUseEscape*/ false);
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(1),
+                                                 uno::UNO_QUERY);
+
+    uno::Reference<beans::XPropertySet> xShape(xDrawPage->getByIndex(0), uno::UNO_QUERY);
+
+    uno::Reference<text::XText> xText
+        = uno::Reference<text::XTextRange>(xShape, uno::UNO_QUERY_THROW)->getText();
+    CPPUNIT_ASSERT_MESSAGE("Not a text shape", xText.is());
+
+    uno::Reference<container::XEnumerationAccess> paraEnumAccess(xText, uno::UNO_QUERY);
+    uno::Reference<container::XEnumeration> paraEnum(paraEnumAccess->createEnumeration());
+
+    // Get first paragraph
+    uno::Reference<text::XTextRange> xParagraph(paraEnum->nextElement(), uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xPropSet(xParagraph, uno::UNO_QUERY_THROW);
+
+    sal_Int16 nWritingMode = 0;
+    xPropSet->getPropertyValue(u"WritingMode"_ustr) >>= nWritingMode;
+    CPPUNIT_ASSERT_EQUAL(text::WritingMode2::LR_TB, nWritingMode);
+
+    // Without the fix in place, this test would have crashed here
+    dispatchCommand(mxComponent, u".uno:ParaRightToLeft"_ustr, {});
+
+    xPropSet->getPropertyValue(u"WritingMode"_ustr) >>= nWritingMode;
+    CPPUNIT_ASSERT_EQUAL(text::WritingMode2::RL_TB, nWritingMode);
+
+    dispatchCommand(mxComponent, u".uno:ParaLeftToRight"_ustr, {});
+
+    xPropSet->getPropertyValue(u"WritingMode"_ustr) >>= nWritingMode;
+    CPPUNIT_ASSERT_EQUAL(text::WritingMode2::LR_TB, nWritingMode);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf167029PasteKeepsOutlineLevel)
+{
+    // Copy a level-1 (depth 0) list paragraph and paste it into a level-2
+    // (depth 1) paragraph in various ways. Pasting into a list paragraph must
+    // keep that paragraph's own outline level, whatever the paste position and
+    // whether the destination is empty. bRtf forces the RTF clipboard flavour
+    // instead of the default flat-XML one, since both go through the same
+    // paragraph-merge code.
+    enum class PastePos
+    {
+        AfterBullet, // caret right after the bullet (start of the text)
+        InMiddle,    // caret in the middle of the text
+        AtEnd,       // caret at the end of the line
+        IntoEmpty,   // caret in an empty destination paragraph
+    };
+    auto posName = [](PastePos ePos) -> std::string {
+        switch (ePos)
+        {
+            case PastePos::AfterBullet: return "AfterBullet";
+            case PastePos::InMiddle: return "InMiddle";
+            case PastePos::AtEnd: return "AtEnd";
+            case PastePos::IntoEmpty: return "IntoEmpty";
+        }
+        return "?";
+    };
+    auto checkCase = [this, &posName](PastePos ePos, bool bRtf) {
+        createSdImpressDoc();
+        auto pDoc = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+        sd::ViewShell* pViewShell = pDoc->GetDocShell()->GetViewShell();
+        pViewShell->GetActualPage()->SetAutoLayout(AUTOLAYOUT_TITLE_CONTENT, true);
+        SdrView* pView = pViewShell->GetView();
+
+        insertStringToObject(1, u"AAA", /*bUseEscape*/ false); // para 0, depth 0
+        typeKey(pDoc, KEY_RETURN);
+        typeKey(pDoc, KEY_TAB);                                // demote -> depth 1
+        if (ePos != PastePos::IntoEmpty)
+            typeString(pDoc, u"BBB");                          // para 1, depth 1
+
+        OutlinerView* pOlView = pView->GetTextEditOutlinerView();
+        CPPUNIT_ASSERT(pOlView);
+        Outliner& rOut = pOlView->GetOutliner();
+        CPPUNIT_ASSERT_EQUAL(sal_Int16(0), rOut.GetDepth(0));
+        CPPUNIT_ASSERT_EQUAL(sal_Int16(1), rOut.GetDepth(1));
+
+        pOlView->SetSelection(ESelection(0, 0, 0, 3));         // select "AAA"
+        pOlView->Copy();
+
+        const sal_Int32 nLen = rOut.GetText(1).getLength();
+        ESelection aDest(1, 0, 1, 0);
+        switch (ePos)
+        {
+            case PastePos::AfterBullet: aDest = ESelection(1, 0, 1, 0); break;
+            case PastePos::InMiddle: aDest = ESelection(1, nLen / 2, 1, nLen / 2); break;
+            case PastePos::AtEnd: aDest = ESelection(1, nLen, 1, nLen); break;
+            case PastePos::IntoEmpty: aDest = ESelection(1, 0, 1, 0); break;
+        }
+        pOlView->SetSelection(aDest);
+        // Force the clipboard flavour: a plain OutlinerView::Paste() would paste
+        // unformatted text and never exercise the paragraph-merge under test.
+        pOlView->PasteSpecial(bRtf ? SotClipboardFormatId::RTF
+                                   : SotClipboardFormatId::EDITENGINE_ODF_TEXT_FLAT);
+
+        const std::string aCase = posName(ePos) + (bRtf ? " (RTF)" : " (flat-XML)");
+
+        // Make sure the copied text was actually pasted into the paragraph, so
+        // the depth check below is meaningful (and not a no-op paste).
+        CPPUNIT_ASSERT_MESSAGE("copied text was not pasted; " + aCase,
+                               rOut.GetText(1).indexOf(u"AAA") >= 0);
+
+        // The destination paragraph keeps its own level 2 (depth 1). Without the
+        // fix, pasting at the end of the line dropped it to depth 0 (the copied
+        // paragraph's level).
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(aCase, sal_Int16(1), rOut.GetDepth(1));
+    };
+    for (bool bRtf : { false, true }) // flat-XML and RTF clipboard flavours
+    {
+        checkCase(PastePos::AfterBullet, bRtf);
+        checkCase(PastePos::InMiddle, bRtf);
+        checkCase(PastePos::AtEnd, bRtf);
+        checkCase(PastePos::IntoEmpty, bRtf);
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf167029PasteIntoNonOutline)
+{
+    // Complement to testTdf167029PasteKeepsOutlineLevel: when the destination
+    // paragraph is not part of an outline (it has no outline level of its own,
+    // depth -1), pasting a leveled paragraph applies the pasted (source) level
+    // instead of forcing the destination's "no level" onto the merged text.
+    createSdImpressDoc();
+    auto pDoc = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pDoc->GetDocShell()->GetViewShell();
+    SdPage* pPage = pViewShell->GetActualPage();
+    pPage->SetAutoLayout(AUTOLAYOUT_TITLE_CONTENT, true);
+    SdrView* pView = pViewShell->GetView();
+
+    // Copy a level-1 (depth 0) paragraph from the outline placeholder.
+    insertStringToObject(1, u"AAA", /*bUseEscape*/ false);
+    OutlinerView* pOlView = pView->GetTextEditOutlinerView();
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(0), pOlView->GetOutliner().GetDepth(0));
+    pOlView->SetSelection(ESelection(0, 0, 0, 3));
+    pOlView->Copy();
+    pView->SdrEndTextEdit();
+
+    // A plain text box: its paragraph is not part of an outline (depth -1).
+    rtl::Reference<SdrRectObj> pRect
+        = new SdrRectObj(pView->getSdrModelFromSdrView(), tools::Rectangle(1000, 1000, 9000, 5000));
+    pPage->NbcInsertObject(pRect.get());
+    pView->MarkObj(pRect.get(), pView->GetSdrPageView());
+    pView->SdrBeginTextEdit(pRect.get());
+    typeString(pDoc, u"BBB");
+    OutlinerView* pBoxView = pView->GetTextEditOutlinerView();
+    Outliner& rBoxOut = pBoxView->GetOutliner();
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(-1), rBoxOut.GetDepth(0));
+
+    // Paste the copied outline paragraph at the end of the text box paragraph.
+    const sal_Int32 nLen = rBoxOut.GetText(0).getLength();
+    pBoxView->SetSelection(ESelection(0, nLen, 0, nLen));
+    pBoxView->PasteSpecial(SotClipboardFormatId::EDITENGINE_ODF_TEXT_FLAT);
+    CPPUNIT_ASSERT_EQUAL(u"BBBAAA"_ustr, rBoxOut.GetText(0));
+
+    // Without an outline level of its own, the destination takes the pasted
+    // (source) level 0 rather than keeping its "no level" (-1).
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(0), rBoxOut.GetDepth(0));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, tdf139269_prevent_pasting_into_readonly_master_objects)
+{
+    createSdImpressDoc();
+
+    insertStringToObject(0, u"Test", /*bUseEscape*/ false);
+
+    dispatchCommand(mxComponent, u".uno:SelectAll"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:Copy"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:SlideMasterPage"_ustr, {});
+
+    // Use tab key to select the first object and try to type something to go
+    // into edit mode although it's not possible to add text to it
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    typeKey(pXImpressDocument, KEY_TAB);
+    typeString(pXImpressDocument, u"test");
+
+    dispatchCommand(mxComponent, u".uno:Paste"_ustr, {});
+
+    uno::Reference<drawing::XMasterPagesSupplier> xMasterPagesSupplier(mxComponent,
+                                                                       uno::UNO_QUERY_THROW);
+    uno::Reference<drawing::XDrawPages> xMasterPages(xMasterPagesSupplier->getMasterPages());
+    CPPUNIT_ASSERT(xMasterPages.is());
+    uno::Reference<drawing::XDrawPage> xDrawPage(xMasterPages->getByIndex(0), uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xShape(xDrawPage->getByIndex(0), uno::UNO_QUERY);
+
+    // Without the fix in place, this test would have failed with
+    // - Expected: Click to edit the title text format
+    // - Actual  : Click to edit the title text formatTest
+    CPPUNIT_ASSERT_EQUAL(u"Click to edit the title text format"_ustr, xShape->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf100950)
+{
+    createSdImpressDoc();
+
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+
+    insertStringToObject(0, u"Test", /*bUseEscape*/ true);
+
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+    auto& rPageSelector = rSSController.GetPageSelector();
+
+    // Without the fix in place, this test would have failed here
+    CPPUNIT_ASSERT(rPageSelector.IsPageSelected(2));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf130581_undo_hide_show_slide)
+{
+    createSdImpressDoc();
+
+    // Hiding and showing a slide are the slide sorter's commands
+    sd::slidesorter::SlideSorterViewShell* pSSVS = getSlideSorterViewShell();
+
+    // Hide slide and check the number of available undo actions
+    dispatchCommand(mxComponent, u".uno:ShowSlide"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:HideSlide"_ustr, {});
+
+    // There should be a single undo action, i.e., hide slide
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDocument = pXImpressDocument->GetDoc();
+    sd::UndoManager* pUndoManager = pDocument->GetUndoManager();
+    // Check if there is the correct undo action, i.e., hide slide
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_UNDO_HIDE_SLIDE), pUndoManager->GetUndoActionComment());
+
+    // Check if the page is actually hidden
+    auto& rSSController = pSSVS->GetSlideSorter().GetController();
+    auto& rPageSelector = rSSController.GetPageSelector();
+    CPPUNIT_ASSERT_EQUAL(true, rPageSelector.IsPageExcluded(0));
+
+    // Undo hide slide action and check the number of available redo actions
+    // including the correct undo action, i.e., hide slide
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pUndoManager->GetRedoActionCount());
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_UNDO_HIDE_SLIDE), pUndoManager->GetRedoActionComment());
+    CPPUNIT_ASSERT_EQUAL(false, rPageSelector.IsPageExcluded(0));
+
+    // Show slide and check the number of available undo actions
+    dispatchCommand(mxComponent, u".uno:Redo"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(true, rPageSelector.IsPageExcluded(0));
+    dispatchCommand(mxComponent, u".uno:ShowSlide"_ustr, {});
+    // There should be two undo actions, i.e., show and hide slide
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_UNDO_SHOW_SLIDE), pUndoManager->GetUndoActionComment());
+    CPPUNIT_ASSERT_EQUAL(false, rPageSelector.IsPageExcluded(0));
+
+    // Undo show slide and check the number of available undo/redo actions
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    // There should be one undo action, i.e., hide slide, and one redo action, i.e., show slide
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_UNDO_HIDE_SLIDE), pUndoManager->GetUndoActionComment());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pUndoManager->GetRedoActionCount());
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_UNDO_SHOW_SLIDE), pUndoManager->GetRedoActionComment());
+    CPPUNIT_ASSERT_EQUAL(true, rPageSelector.IsPageExcluded(0));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf129346)
+{
+    createSdImpressDoc();
+
+    dispatchCommand(mxComponent, u".uno:DiaMode"_ustr, {});
+    checkCurrentPageNumber(1);
+
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+    checkCurrentPageNumber(2);
+
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    checkCurrentPageNumber(1);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testmoveSlides)
+{
+    createSdImpressDoc();
+
+    // Moving a slide is the slide sorter's command
+    getSlideSorterViewShell();
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(
+        comphelper::InitPropertySequence({ { u"PageName"_ustr, cpo::uno::Any(u"Test 1"_ustr) },
+                                           { u"WhatLayout"_ustr, cpo::uno::Any(sal_Int32(1)) },
+                                           { u"IsPageBack"_ustr, cpo::uno::Any(false) },
+                                           { u"IsPageObj"_ustr, cpo::uno::Any(false) } }));
+
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, aArgs);
+    checkCurrentPageNumber(2);
+
+    CPPUNIT_ASSERT_EQUAL(u"Test 1"_ustr, pViewShell->GetActualPage()->GetName());
+
+    aArgs = comphelper::InitPropertySequence({ { u"PageName"_ustr, cpo::uno::Any(u"Test 2"_ustr) },
+                                               { u"WhatLayout"_ustr, cpo::uno::Any(sal_Int32(1)) },
+                                               { u"IsPageBack"_ustr, cpo::uno::Any(false) },
+                                               { u"IsPageObj"_ustr, cpo::uno::Any(false) } });
+
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, aArgs);
+    checkCurrentPageNumber(3);
+
+    CPPUNIT_ASSERT_EQUAL(u"Test 2"_ustr, pViewShell->GetActualPage()->GetName());
+
+    // Move slide 'Test 2' up
+    for (size_t i = 2; i > 0; --i)
+    {
+        dispatchCommand(mxComponent, u".uno:MovePageUp"_ustr, {});
+        checkCurrentPageNumber(i);
+        CPPUNIT_ASSERT_EQUAL(u"Test 2"_ustr, pViewShell->GetActualPage()->GetName());
+    }
+
+    // Move slide 'Test 2' down
+    for (size_t i = 2; i < 4; ++i)
+    {
+        dispatchCommand(mxComponent, u".uno:MovePageDown"_ustr, {});
+        checkCurrentPageNumber(i);
+        CPPUNIT_ASSERT_EQUAL(u"Test 2"_ustr, pViewShell->GetActualPage()->GetName());
+    }
+
+    // Move slide 'Test 2' to the top
+    dispatchCommand(mxComponent, u".uno:MovePageFirst"_ustr, {});
+    checkCurrentPageNumber(1);
+    CPPUNIT_ASSERT_EQUAL(u"Test 2"_ustr, pViewShell->GetActualPage()->GetName());
+
+    // Move slide 'Test 2' to the bottom
+    dispatchCommand(mxComponent, u".uno:MovePageLast"_ustr, {});
+    checkCurrentPageNumber(3);
+    CPPUNIT_ASSERT_EQUAL(u"Test 2"_ustr, pViewShell->GetActualPage()->GetName());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf68320_hidden_pages_total_slide_count)
+{
+    createSdImpressDoc();
+
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:HideSlide"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+    checkCurrentPageNumber(3);
+
+    insertStringToObject(0, u"Pages: ", /*bUseEscape*/ false);
+
+    dispatchCommand(mxComponent, u".uno:InsertPagesField"_ustr, {});
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    typeString(pXImpressDocument, u"/");
+
+    dispatchCommand(mxComponent, u".uno:InsertPageField"_ustr, {});
+
+    dispatchCommand(mxComponent, u".uno:SelectAll"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:Cut"_ustr, {});
+
+    cpo::uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
+        { { u"SelectedFormat"_ustr, cpo::uno::Any(static_cast<sal_uInt32>(SotClipboardFormatId::STRING)) } });
+
+    // Paste as Unformatted text in order to get the field's values
+    dispatchCommand(mxComponent, u".uno:ClipboardFormatItems"_ustr, aPropertyValues);
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(2),
+                                                 uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xShape(xDrawPage->getByIndex(0), uno::UNO_QUERY);
+
+    // Without the fix in place, this test would have failed with
+    // - Expected: Pages: 3/3
+    // - Actual  : Pages: 2/3
+    CPPUNIT_ASSERT_EQUAL(u"Pages: 3/3"_ustr, xShape->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf148620)
+{
+    createSdImpressDoc();
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xShape(xDrawPage->getByIndex(1), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(u""_ustr, xShape->getString());
+
+    insertStringToObject(1, u"one", /*bUseEscape*/ false);
+    typeKey(pXImpressDocument, KEY_RETURN);
+    typeString(pXImpressDocument, u"two");
+    typeKey(pXImpressDocument, KEY_RETURN);
+    typeString(pXImpressDocument, u"three");
+    typeKey(pXImpressDocument, KEY_RETURN);
+    typeString(pXImpressDocument, u"four");
+    typeKey(pXImpressDocument, KEY_RETURN);
+    typeString(pXImpressDocument, u"five");
+    typeKey(pXImpressDocument, KEY_RETURN);
+    typeString(pXImpressDocument, u"six");
+
+    CPPUNIT_ASSERT_EQUAL(u"One\nTwo\nThree\nFour\nFive\nsix"_ustr, xShape->getString());
+
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(
+        comphelper::InitPropertySequence({ { u"KeyModifier"_ustr, cpo::uno::Any(sal_Int32(0)) } }));
+    dispatchCommand(mxComponent, u".uno:OutlineUp"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(u"One\nTwo\nThree\nFour\nsix\nFive"_ustr, xShape->getString());
+
+    dispatchCommand(mxComponent, u".uno:OutlineUp"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(u"One\nTwo\nThree\nsix\nFour\nFive"_ustr, xShape->getString());
+
+    dispatchCommand(mxComponent, u".uno:OutlineUp"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(u"One\nTwo\nsix\nThree\nFour\nFive"_ustr, xShape->getString());
+
+    dispatchCommand(mxComponent, u".uno:OutlineUp"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(u"One\nsix\nTwo\nThree\nFour\nFive"_ustr, xShape->getString());
+
+    dispatchCommand(mxComponent, u".uno:OutlineUp"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(u"six\nOne\nTwo\nThree\nFour\nFive"_ustr, xShape->getString());
+
+    dispatchCommand(mxComponent, u".uno:OutlineDown"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(u"One\nsix\nTwo\nThree\nFour\nFive"_ustr, xShape->getString());
+
+    dispatchCommand(mxComponent, u".uno:OutlineDown"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(u"One\nTwo\nsix\nThree\nFour\nFive"_ustr, xShape->getString());
+
+    dispatchCommand(mxComponent, u".uno:OutlineDown"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(u"One\nTwo\nThree\nsix\nFour\nFive"_ustr, xShape->getString());
+
+    dispatchCommand(mxComponent, u".uno:OutlineDown"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(u"One\nTwo\nThree\nFour\nsix\nFive"_ustr, xShape->getString());
+
+    dispatchCommand(mxComponent, u".uno:OutlineDown"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(u"One\nTwo\nThree\nFour\nFive\nsix"_ustr, xShape->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf141703)
+{
+    createSdImpressDoc();
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence(
+        { { u"Rows"_ustr, cpo::uno::Any(sal_Int32(2)) }, { u"Columns"_ustr, cpo::uno::Any(sal_Int32(2)) } }));
+
+    dispatchCommand(mxComponent, u".uno:InsertTable"_ustr, aArgs);
+
+    // Move to A1 using Alt + Tab and write 'A'
+    for (int i = 0; i < 3; i++)
+    {
+        pXImpressDocument->postKeyEvent(COKitKeyEventType::DOWN, 0, KEY_SHIFT | KEY_TAB);
+        pXImpressDocument->postKeyEvent(COKitKeyEventType::UP, 0, KEY_SHIFT | KEY_TAB);
+        Scheduler::ProcessEventsToIdle();
+    }
+
+    typeString(pXImpressDocument, u"A");
+
+    // Move to A2 with Tab and write 'B'
+    typeKey(pXImpressDocument, KEY_TAB);
+
+    typeString(pXImpressDocument, u"B");
+
+    typeKey(pXImpressDocument, KEY_ESCAPE);
+
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    auto pTableObject = dynamic_cast<sdr::table::SdrTableObj*>(pActualPage->GetObj(2));
+    CPPUNIT_ASSERT(pTableObject);
+
+    uno::Reference<css::table::XTable> xTable(pTableObject->getTable(), uno::UNO_SET_THROW);
+    uno::Reference<css::table::XMergeableCell> xCellA1(xTable->getCellByPosition(0, 0),
+                                                       uno::UNO_QUERY_THROW);
+    uno::Reference<css::table::XMergeableCell> xCellA2(xTable->getCellByPosition(1, 0),
+                                                       uno::UNO_QUERY_THROW);
+
+    uno::Reference<text::XText> xTextA1
+        = uno::Reference<text::XTextRange>(xCellA1, uno::UNO_QUERY_THROW)->getText();
+
+    // Without the fix in place, this test would have failed with
+    // - Expected: A
+    // - Actual  :
+    CPPUNIT_ASSERT_EQUAL(u"A"_ustr, xTextA1->getString());
+
+    uno::Reference<text::XText> xTextA2
+        = uno::Reference<text::XTextRange>(xCellA2, uno::UNO_QUERY_THROW)->getText();
+    CPPUNIT_ASSERT_EQUAL(u"B"_ustr, xTextA2->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf164855)
+{
+    createSdImpressDoc();
+
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence(
+        { { u"Rows"_ustr, cpo::uno::Any(sal_Int32(2)) }, { u"Columns"_ustr, cpo::uno::Any(sal_Int32(2)) } }));
+
+    dispatchCommand(mxComponent, u".uno:InsertTable"_ustr, aArgs);
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), pActualPage->GetObjCount());
+
+    auto pTableObject = dynamic_cast<sdr::table::SdrTableObj*>(pActualPage->GetObj(2));
+    CPPUNIT_ASSERT(pTableObject);
+
+    const EditTextObject& rEdit
+        = pTableObject->getText(0)->GetOutlinerParaObject()->GetTextObject();
+    const SfxItemSet& rParaAttribs = rEdit.GetParaAttribs(0);
+    auto pAdjust = rParaAttribs.GetItem(EE_PARA_JUST);
+    CPPUNIT_ASSERT_EQUAL(SvxAdjust::Left, pAdjust->GetAdjust());
+
+    // Without the fix in place, this test would have crashed here
+    dispatchCommand(mxComponent, u".uno:RightPara"_ustr, {});
+
+    const EditTextObject& rEdit2
+        = pTableObject->getText(0)->GetOutlinerParaObject()->GetTextObject();
+    const SfxItemSet& rParaAttribs2 = rEdit2.GetParaAttribs(0);
+    pAdjust = rParaAttribs2.GetItem(EE_PARA_JUST);
+    CPPUNIT_ASSERT_EQUAL(SvxAdjust::Right, pAdjust->GetAdjust());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf127481)
+{
+    createSdImpressDoc();
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), pActualPage->GetObjCount());
+
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence(
+        { { u"Rows"_ustr, cpo::uno::Any(sal_Int32(1)) }, { u"Columns"_ustr, cpo::uno::Any(sal_Int32(1)) } }));
+
+    dispatchCommand(mxComponent, u".uno:InsertTable"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), pActualPage->GetObjCount());
+
+    dispatchCommand(mxComponent, u".uno:DuplicatePage"_ustr, aArgs);
+
+    checkCurrentPageNumber(2);
+
+    pActualPage = pViewShell->GetActualPage();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), pActualPage->GetObjCount());
+
+    auto pTableObject = dynamic_cast<sdr::table::SdrTableObj*>(pActualPage->GetObj(2));
+    CPPUNIT_ASSERT(pTableObject);
+
+    //without the fix, it would crash here
+    pViewShell->GetView()->SdrBeginTextEdit(pTableObject);
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), pActualPage->GetObjCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPageFillColor)
+{
+    // Load the document and create two new windows.
+    createSdImpressDoc("tdf126197.odp");
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+
+    // Set FillPageColor
+
+    cpo::uno::Sequence<beans::PropertyValue> aPropertyValues = {
+        comphelper::makePropertyValue(u"FillColor"_ustr, static_cast<sal_Int32>(0xff0000)),
+    };
+    dispatchCommand(mxComponent, u".uno:FillPageColor"_ustr, aPropertyValues);
+
+    SdPage* pPage = pViewShell->getCurrentPage();
+    const SfxItemSet& rPageAttr = pPage->getSdrPageProperties().GetItemSet();
+
+    const XFillStyleItem* pFillStyle = rPageAttr.GetItem(XATTR_FILLSTYLE);
+    drawing::FillStyle eXFS = pFillStyle->GetValue();
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_SOLID, eXFS);
+
+    Color aColor = rPageAttr.GetItem(XATTR_FILLCOLOR)->GetColorValue();
+    CPPUNIT_ASSERT_EQUAL(COL_LIGHTRED, aColor);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPageFillGradient)
+{
+    // Load the document and create two new windows.
+    createSdImpressDoc("tdf126197.odp");
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+
+    // Set FillPageColor
+
+    cpo::uno::Sequence<beans::PropertyValue> aPropertyValues(comphelper::InitPropertySequence({
+        { u"FillPageGradientJSON"_ustr,
+          cpo::uno::Any(u"{\"style\":\"LINEAR\",\"startcolor\":\"ff0000\",\"endcolor\":\"0000ff\","
+                   "\"angle\":\"300\",\"border\":\"0\",\"x\":\"0\",\"y\":\"0\",\"intensstart\":"
+                   "\"100\",\"intensend\":\"100\",\"stepcount\":\"0\"}"_ustr) },
+    }));
+
+    dispatchCommand(mxComponent, u".uno:FillPageGradient"_ustr, aPropertyValues);
+
+    SdPage* pPage = pViewShell->getCurrentPage();
+    const SfxItemSet& rPageAttr = pPage->getSdrPageProperties().GetItemSet();
+
+    const XFillStyleItem* pFillStyle = rPageAttr.GetItem(XATTR_FILLSTYLE);
+    drawing::FillStyle eXFS = pFillStyle->GetValue();
+    CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_GRADIENT, eXFS);
+
+    basegfx::BGradient aGradient(rPageAttr.GetItem(XATTR_FILLGRADIENT)->GetGradientValue());
+    const basegfx::BColorStops& rColorStops(aGradient.GetColorStops());
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), rColorStops.size());
+    CPPUNIT_ASSERT_EQUAL(0.0, rColorStops.getStopOffset(0));
+    CPPUNIT_ASSERT_EQUAL(COL_LIGHTRED, Color(rColorStops.getStopColor(0)));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(rColorStops.getStopOffset(1), 1.0));
+    CPPUNIT_ASSERT_EQUAL(COL_LIGHTBLUE, Color(rColorStops.getStopColor(1)));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf134053)
+{
+    // Error was, that dashes and dots were longer than in MS Office.
+    createSdImpressDoc("pptx/tdf134053_dashdot.pptx");
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdPage* pActualPage = pViewShell->GetActualPage();
+    SdrObject* pShape = pActualPage->GetObj(0);
+    CPPUNIT_ASSERT_MESSAGE("No Shape", pShape);
+
+    SdDrawDocument* pDocument = pXImpressDocument->GetDoc();
+    sd::UndoManager* pUndoManager = pDocument->GetUndoManager();
+
+    // tdf#114613: Without the fix in place, this test would have failed with
+    // - Expected: 0
+    // - Actual  : 8
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), pUndoManager->GetRedoActionCount());
+
+    XDash dash = pShape->GetMergedItem(XATTR_LINEDASH).GetDashValue();
+
+    // Because 0% is not possible as dash length (as of June 2020) 1% is used in the fix.
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Distance", 399.0, dash.GetDistance());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Dot length", 301.0, dash.GetDotLen());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Dash length", 1.0, dash.GetDashLen());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testAutomaticSpellCheckingIsPerApplication)
+{
+    SvtLinguConfig aLinguConfig;
+    SvtLinguOptions aLinguOptions;
+    aLinguConfig.GetOptions(aLinguOptions);
+    const bool bSharedSpellAuto = aLinguOptions.bIsSpellAuto;
+
+    // Nothing was ever chosen for Impress, so the shared linguistic option this
+    // setting was split out of still answers for it
+    CPPUNIT_ASSERT(!officecfg::Office::Impress::Content::Display::AutomaticSpellChecking::get()
+                        .has_value());
+    CPPUNIT_ASSERT_EQUAL(bSharedSpellAuto, SdModule::GetAutoSpellProperty(DocumentType::Impress));
+
+    SdModule::SetAutoSpellProperty(false, DocumentType::Impress);
+
+    // turning Impress off leaves Draw where it was
+    CPPUNIT_ASSERT(SdModule::GetAutoSpellProperty(DocumentType::Draw));
+
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    // a new presentation takes Impress's setting
+    CPPUNIT_ASSERT(!pImpressDocument->GetDoc()->GetOnlineSpell());
+
+    // Tools - Automatic Spell Checking turns it back on, and Impress keeps that
+    // choice for the next presentation
+    dispatchCommand(mxComponent, u".uno:SpellOnline"_ustr, {});
+    CPPUNIT_ASSERT(pImpressDocument->GetDoc()->GetOnlineSpell());
+    CPPUNIT_ASSERT(SdModule::GetAutoSpellProperty(DocumentType::Impress));
+
+    // none of which touches the shared linguistic option
+    aLinguConfig.GetOptions(aLinguOptions);
+    CPPUNIT_ASSERT_EQUAL(bSharedSpellAuto, aLinguOptions.bIsSpellAuto);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellOnlineParameter)
+{
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    bool bSet = pImpressDocument->GetDoc()->GetOnlineSpell();
+
+    cpo::uno::Sequence<beans::PropertyValue> params(
+        comphelper::InitPropertySequence({ { u"Enable"_ustr, cpo::uno::Any(!bSet) } }));
+    dispatchCommand(mxComponent, u".uno:SpellOnline"_ustr, params);
+    CPPUNIT_ASSERT_EQUAL(!bSet, pImpressDocument->GetDoc()->GetOnlineSpell());
+
+    // set the same state as now and we don't expect any change (no-toggle)
+    params = comphelper::InitPropertySequence({ { u"Enable"_ustr, cpo::uno::Any(!bSet) } });
+    dispatchCommand(mxComponent, u".uno:SpellOnline"_ustr, params);
+    CPPUNIT_ASSERT_EQUAL(!bSet, pImpressDocument->GetDoc()->GetOnlineSpell());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf38669)
+{
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    // Insert shape with ctrl key
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(
+        comphelper::InitPropertySequence({ { u"KeyModifier"_ustr, cpo::uno::Any(KEY_MOD1) } }));
+    dispatchCommand(mxComponent, u".uno:BasicShapes.rectangle"_ustr, aArgs);
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), xDrawPage->getCount());
+
+    typeString(pImpressDocument, u"°");
+
+    uno::Reference<text::XTextRange> xShape(xDrawPage->getByIndex(2), uno::UNO_QUERY);
+    // Without the fix in place, this test would have failed with:
+    // - Expected: °
+    // - Actual  : ㅀ
+    CPPUNIT_ASSERT_EQUAL(u"°"_ustr, xShape->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf151417)
+{
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xDraws = xDrawPagesSupplier->getDrawPages();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xDraws->getCount());
+
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), xDrawPage->getCount());
+
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(
+        comphelper::InitPropertySequence({ { u"KeyModifier"_ustr, cpo::uno::Any(KEY_MOD1) } }));
+
+    // Without the fix in place, this test would have crashed here
+    dispatchCommand(mxComponent, u".uno:Edit"_ustr, aArgs);
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), xDrawPage->getCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf123841)
+{
+    // To check if selecting unfilled rectangle produces unfilled rectangle
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+
+    cpo::uno::Sequence<beans::PropertyValue> aArgs(
+        comphelper::InitPropertySequence({ { u"KeyModifier"_ustr, cpo::uno::Any(KEY_MOD1) } }));
+    dispatchCommand(mxComponent, u".uno:Rect_Unfilled"_ustr, aArgs);
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), xDrawPage->getCount());
+
+    for (int i = 0; i < 3; i++)
+    {
+        uno::Reference<beans::XPropertySet> XPropSet(xDrawPage->getByIndex(i), uno::UNO_QUERY);
+        drawing::FillStyle eFillStyle = drawing::FillStyle_NONE;
+        XPropSet->getPropertyValue(u"FillStyle"_ustr) >>= eFillStyle;
+
+        // Without the fix in place, this test would have failed with
+        // with drawing::FillStyle_NONE != drawing::FillStyle_SOLID
+        CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_NONE, eFillStyle);
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSearchAllInDocumentAndNotes)
+{
+    // tdf#142478
+    // "find all" produces a crash when the search string exists in notes
+    // and the document
+
+    createSdImpressDoc("odp/search-all-notes.odp");
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+
+    lcl_search(u"Crash"_ustr, /*bFindAll=*/true, /*bBackwards=*/true);
+}
+
+#if !defined(_WIN32) && !defined(MACOSX)
+// for some reason, the search for "second" (or "Second") didn't return page 2 in WIN and MACOS
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf123658_SearchAfterSlideChange)
+{
+    createSdImpressDoc("odp/tdf123658_SearchAfterSlideChange.odp");
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+
+    lcl_search(u"second"_ustr);
+    checkCurrentPageNumber(2);
+
+    pXImpressDocument->setPart(0); // Switch to 1st page
+
+    lcl_search(u"of"_ustr);
+    // Instead of finding this on the 1st page (or on the 2nd page would be acceptable too)
+    // it was going to the third page.
+    checkCurrentPageNumber(1);
+}
+#endif
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testCharColorTheme)
+{
+    // Given an Impress document with a shape, with its text selected:
+    createSdImpressDoc();
+    uno::Reference<drawing::XDrawPagesSupplier> xPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xPage(xPagesSupplier->getDrawPages()->getByIndex(0),
+                                             uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xShape(xPage->getByIndex(0), uno::UNO_QUERY);
+    {
+        uno::Reference<text::XSimpleText> xText = xShape->getText();
+        xText->insertString(xText->getStart(), u"test"_ustr, false);
+    }
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<view::XSelectionSupplier> xController(xModel->getCurrentController(),
+                                                         uno::UNO_QUERY);
+    xController->select(cpo::uno::Any(xShape));
+    Scheduler::ProcessEventsToIdle();
+    dispatchCommand(mxComponent, u".uno:Text"_ustr, {});
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+    CPPUNIT_ASSERT(pView->IsTextEdit());
+    dispatchCommand(mxComponent, u".uno:SelectAll"_ustr, {});
+
+    // When picking a theme color on the sidebar:
+    {
+        model::ComplexColor aComplexColor;
+        aComplexColor.setThemeColor(model::ThemeColorType::Accent1);
+        aComplexColor.addTransformation({ model::TransformationType::LumMod, 2000 });
+        aComplexColor.addTransformation({ model::TransformationType::LumOff, 8000 });
+
+        OUString aJSON
+            = OStringToOUString(model::color::convertToJSON(aComplexColor), RTL_TEXTENCODING_UTF8);
+
+        // When setting the fill color of that shape, with theme metadata & effects:
+        cpo::uno::Sequence<beans::PropertyValue> aColorArgs = {
+            comphelper::makePropertyValue(u"Color.Color"_ustr,
+                                          sal_Int32(0xdae3f3)), // 80% light blue
+            comphelper::makePropertyValue(u"Color.ComplexColorJSON"_ustr, cpo::uno::Any(aJSON)),
+        };
+        dispatchCommand(mxComponent, u".uno:Color"_ustr, aColorArgs);
+    }
+
+    // Then make sure the theme "metadata" is set in the document model:
+    pView->EndTextEditCurrentView();
+    CPPUNIT_ASSERT(!pView->IsTextEdit());
+    uno::Reference<container::XEnumerationAccess> xShapeParaAccess(xShape, uno::UNO_QUERY);
+    uno::Reference<container::XEnumerationAccess> xPara(
+        xShapeParaAccess->createEnumeration()->nextElement(), uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xPortion(xPara->createEnumeration()->nextElement(),
+                                                 uno::UNO_QUERY);
+    {
+        uno::Reference<util::XComplexColor> xComplexColor;
+        CPPUNIT_ASSERT(xPortion->getPropertyValue(u"CharComplexColor"_ustr) >>= xComplexColor);
+        CPPUNIT_ASSERT(xComplexColor.is());
+        auto aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent1, aComplexColor.getThemeColorType());
+        CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumMod,
+                             aComplexColor.getTransformations()[0].meType);
+        CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(2000),
+                             aComplexColor.getTransformations()[0].mnValue);
+        CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumOff,
+                             aComplexColor.getTransformations()[1].meType);
+        CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(8000),
+                             aComplexColor.getTransformations()[1].mnValue);
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testFillColorTheme)
+{
+    // Given an Impress document with a selected shape:
+    createSdImpressDoc();
+    uno::Reference<drawing::XDrawPagesSupplier> xPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xPage(xPagesSupplier->getDrawPages()->getByIndex(0),
+                                             uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xShape(xPage->getByIndex(0), uno::UNO_QUERY);
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<view::XSelectionSupplier> xController(xModel->getCurrentController(),
+                                                         uno::UNO_QUERY);
+    xController->select(cpo::uno::Any(xShape));
+
+    // Change fill color
+    {
+        model::ComplexColor aComplexColor;
+        aComplexColor.setThemeColor(model::ThemeColorType::Accent1);
+        aComplexColor.addTransformation({ model::TransformationType::LumMod, 4000 });
+        aComplexColor.addTransformation({ model::TransformationType::LumOff, 6000 });
+
+        OUString aJSON
+            = OStringToOUString(model::color::convertToJSON(aComplexColor), RTL_TEXTENCODING_UTF8);
+
+        // When setting the fill color of that shape, with theme metadata & effects:
+        cpo::uno::Sequence<beans::PropertyValue> aColorArgs = {
+            comphelper::makePropertyValue(u"FillColor.Color"_ustr, sal_Int32(0xed7d31)), // orange
+            comphelper::makePropertyValue(u"FillColor.ComplexColorJSON"_ustr,
+                                          cpo::uno::Any(aJSON)), // accent 1
+        };
+        dispatchCommand(mxComponent, u".uno:FillColor"_ustr, aColorArgs);
+    }
+
+    // Then make sure the theme index is not lost when the sidebar sets it:
+    {
+        uno::Reference<util::XComplexColor> xComplexColor;
+        CPPUNIT_ASSERT(xShape->getPropertyValue(u"FillComplexColor"_ustr) >>= xComplexColor);
+        CPPUNIT_ASSERT(xComplexColor.is());
+        auto aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent1, aComplexColor.getThemeColorType());
+        CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumMod,
+                             aComplexColor.getTransformations()[0].meType);
+        CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(4000),
+                             aComplexColor.getTransformations()[0].mnValue);
+        CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumOff,
+                             aComplexColor.getTransformations()[1].meType);
+        CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(6000),
+                             aComplexColor.getTransformations()[1].mnValue);
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf163805)
+{
+    createSdImpressDoc();
+
+    uno::Reference<beans::XPropertySet> xShape(getShapeFromPage(0, 0));
+
+    drawing::FillStyle eFillStyle;
+    Color aColor;
+    CPPUNIT_ASSERT(xShape->getPropertyValue(u"FillStyle"_ustr) >>= eFillStyle);
+    CPPUNIT_ASSERT_EQUAL(int(drawing::FillStyle_NONE), static_cast<int>(eFillStyle));
+    CPPUNIT_ASSERT(xShape->getPropertyValue(u"FillColor"_ustr) >>= aColor);
+    CPPUNIT_ASSERT_EQUAL(Color(0x729fcf), aColor);
+
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<view::XSelectionSupplier> xController(xModel->getCurrentController(),
+                                                         uno::UNO_QUERY);
+    xController->select(cpo::uno::Any(xShape));
+
+    cpo::uno::Sequence<beans::PropertyValue> aColorArgs
+        = { comphelper::makePropertyValue(u"FillColor.Color"_ustr, sal_Int32(0x800000)) };
+    dispatchCommand(mxComponent, u".uno:FillColor"_ustr, aColorArgs);
+
+    CPPUNIT_ASSERT(xShape->getPropertyValue(u"FillStyle"_ustr) >>= eFillStyle);
+
+    // Without the fix in place, this test would have failed with
+    // - Expected: 1
+    // - Actual  : 0
+    CPPUNIT_ASSERT_EQUAL(int(drawing::FillStyle_SOLID), static_cast<int>(eFillStyle));
+    CPPUNIT_ASSERT(xShape->getPropertyValue(u"FillColor"_ustr) >>= aColor);
+    CPPUNIT_ASSERT_EQUAL(COL_RED, aColor);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testFillColorNoColor)
+{
+    // Given an empty Impress document:
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    SfxDispatcher* pDispatcher = pViewShell->GetViewFrame()->GetDispatcher();
+
+    // When dispatching a fill color that only has a fill style (no color), then make sure we don't
+    // crash:
+    XFillStyleItem aXFillStyleItem(drawing::FillStyle_NONE);
+    pDispatcher->ExecuteList(SID_ATTR_FILL_COLOR, SfxCallMode::RECORD, { &aXFillStyleItem });
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf153161)
+{
+    createSdImpressDoc("odp/tdf153161_FlushToSave.odp");
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xShape(xDrawPage->getByIndex(1), uno::UNO_QUERY);
+    OUString sOldText(xShape->getString());
+    CPPUNIT_ASSERT(sOldText.startsWith(u"在没有版本控制系统的时期"));
+
+    // Type something, getting into text editing mode (appending) automatically
+    insertStringToObject(1, u"Foo Bar", /*bUseEscape*/ false);
+
+    saveAndReload(TestFilter::ODP);
+
+    xDrawPagesSupplier.set(mxComponent, uno::UNO_QUERY);
+    xDrawPage.set(xDrawPagesSupplier->getDrawPages()->getByIndex(0), uno::UNO_QUERY);
+    xShape.set(xDrawPage->getByIndex(1), uno::UNO_QUERY);
+    OUString sExpectedText = sOldText + "Foo Bar";
+    CPPUNIT_ASSERT_EQUAL(sExpectedText, xShape->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf148810)
+{
+    createSdImpressDoc("pptx/tdf148810_PARA_OUTLLEVEL.pptx");
+
+    // type something to get into text editing mode (instead of shape selection).
+    insertStringToObject(1, u"x", /*bUseEscape*/ false);
+
+    auto pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    typeKey(pXImpressDocument, KEY_HOME);
+
+    typeKey(pXImpressDocument, KEY_BACKSPACE);
+
+    uno::Reference<beans::XPropertySet> xShape(getShapeFromPage(1, 0));
+    uno::Reference<text::XTextRange> xParagraph(getParagraphFromShape(0, xShape));
+    uno::Reference<beans::XPropertySet> xPropSet(xParagraph, uno::UNO_QUERY_THROW);
+    sal_Int16 nNumberingLevel = -1;
+    xPropSet->getPropertyValue(u"NumberingLevel"_ustr) >>= nNumberingLevel;
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(0), nNumberingLevel);
+
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+
+    nNumberingLevel = -1;
+    xPropSet->getPropertyValue(u"NumberingLevel"_ustr) >>= nNumberingLevel;
+
+    // Without the fix in place, this test would have failed with
+    // - Expected: 0
+    // - Actual  : -1
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(0), nNumberingLevel);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf127696)
+{
+    createSdImpressDoc();
+
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+
+    insertStringToObject(0, u"Test", /*bUseEscape*/ false);
+    dispatchCommand(mxComponent, u".uno:SelectAll"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:OutlineFont"_ustr, {});
+
+    // Save it as PPTX and load it again.
+    saveAndReload(TestFilter::PPTX);
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(1),
+                                                 uno::UNO_QUERY);
+
+    uno::Reference<beans::XPropertySet> xShape(xDrawPage->getByIndex(0), uno::UNO_QUERY);
+
+    uno::Reference<text::XText> xText
+        = uno::Reference<text::XTextRange>(xShape, uno::UNO_QUERY_THROW)->getText();
+    CPPUNIT_ASSERT_MESSAGE("Not a text shape", xText.is());
+
+    uno::Reference<container::XEnumerationAccess> paraEnumAccess(xText, uno::UNO_QUERY);
+    uno::Reference<container::XEnumeration> paraEnum(paraEnumAccess->createEnumeration());
+
+    uno::Reference<text::XTextRange> xParagraph(paraEnum->nextElement(), uno::UNO_QUERY_THROW);
+
+    uno::Reference<container::XEnumerationAccess> runEnumAccess(xParagraph, uno::UNO_QUERY);
+    uno::Reference<container::XEnumeration> runEnum = runEnumAccess->createEnumeration();
+
+    uno::Reference<text::XTextRange> xRun(runEnum->nextElement(), uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xPropSet(xRun, uno::UNO_QUERY_THROW);
+
+    bool bContoured = false;
+    xPropSet->getPropertyValue(u"CharContoured"_ustr) >>= bContoured;
+    CPPUNIT_ASSERT(bContoured);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testThemeShapeInsert)
+{
+    // Given a document with a theme, accent1 color is set to 0x000004:
+    createSdImpressDoc();
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    uno::Reference<drawing::XMasterPageTarget> xMasterPageTarget(xDrawPage, uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xMasterPage(xMasterPageTarget->getMasterPage(),
+                                                    uno::UNO_QUERY);
+
+    auto pTheme = std::make_shared<model::Theme>(u"mytheme"_ustr);
+    auto pColorSet = std::make_shared<model::ColorSet>(u"mycolorscheme"_ustr);
+    pColorSet->add(model::ThemeColorType::Dark1, 0x0);
+    pColorSet->add(model::ThemeColorType::Light1, 0x1);
+    pColorSet->add(model::ThemeColorType::Dark2, 0x2);
+    pColorSet->add(model::ThemeColorType::Light2, 0x3);
+    pColorSet->add(model::ThemeColorType::Accent1, 0x4);
+    pColorSet->add(model::ThemeColorType::Accent2, 0x5);
+    pColorSet->add(model::ThemeColorType::Accent3, 0x6);
+    pColorSet->add(model::ThemeColorType::Accent4, 0x7);
+    pColorSet->add(model::ThemeColorType::Accent5, 0x8);
+    pColorSet->add(model::ThemeColorType::Accent6, 0x9);
+    pColorSet->add(model::ThemeColorType::Hyperlink, 0xa);
+    pColorSet->add(model::ThemeColorType::FollowedHyperlink, 0xb);
+    pTheme->setColorSet(pColorSet);
+
+    xMasterPage->setPropertyValue(u"Theme"_ustr, cpo::uno::Any(model::theme::createXTheme(pTheme)));
+
+    // When inserting a shape:
+    cpo::uno::Sequence<beans::PropertyValue> aArgs = {
+        comphelper::makePropertyValue(u"CreateDirectly"_ustr, true),
+    };
+
+    dispatchCommand(mxComponent, u".uno:BasicShapes.round-rectangle"_ustr, aArgs);
+
+    // Then make sure the that fill color of the last shape is the accent1 color:
+    sal_Int32 nShapeIndex = xDrawPage->getCount() - 1;
+    uno::Reference<beans::XPropertySet> xShape(xDrawPage->getByIndex(nShapeIndex), uno::UNO_QUERY);
+    sal_Int32 nFillColor{};
+    xShape->getPropertyValue(u"FillColor"_ustr) >>= nFillColor;
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(0x4), nFillColor);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf168835)
+{
+    createSdImpressDoc("pptx/tdf168835.pptx");
+    checkCurrentPageNumber(1);
+
+    dispatchCommand(mxComponent, u".uno:InsertPage"_ustr, {});
+    checkCurrentPageNumber(2);
+
+    insertStringToObject(0, u"Title of the second slide", /*bUseEscape*/ true);
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(1),
+                                                 uno::UNO_QUERY);
+
+    uno::Reference<beans::XPropertySet> xShape(xDrawPage->getByIndex(0), uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xParagraph(getParagraphFromShape(0, xShape));
+
+    CPPUNIT_ASSERT_EQUAL(u"Title of the second slide"_ustr, xParagraph->getString());
+    CPPUNIT_ASSERT_EQUAL(44.0f, xShape->getPropertyValue(u"CharHeight"_ustr).get<float>());
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(style::ParagraphAdjust_LEFT),
+                         xShape->getPropertyValue(u"ParaAdjust"_ustr).get<sal_Int16>());
+    CPPUNIT_ASSERT_EQUAL(u"Arial"_ustr,
+                         xShape->getPropertyValue(u"CharFontName"_ustr).get<OUString>());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testNumToBullet)
+{
+    // Given a document with a shape, 2nd paragraph is a numbering:
+    createSdImpressDoc("odp/num-to-bullet.odp");
+    sd::ViewShell* pViewShell = getSdDocShell()->GetViewShell();
+    SdPage* pPage = pViewShell->GetActualPage();
+    SdrObject* pShape = pPage->GetObj(0);
+    CPPUNIT_ASSERT(pShape);
+    SdrView* pView = pViewShell->GetView();
+    pView->MarkObj(pShape, pView->GetSdrPageView());
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(!pView->IsTextEdit());
+
+    // When turning the numbering to a bullet:
+    // Start text edit:
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    typeString(pImpressDocument, u"x");
+    CPPUNIT_ASSERT(pView->IsTextEdit());
+    // Do the switch:
+    dispatchCommand(mxComponent, u".uno:DefaultBullet"_ustr, {});
+    // End text edit:
+    typeKey(pImpressDocument, KEY_ESCAPE);
+
+    // Then make sure we switch to a bullet and not toggle off the numbering:
+    CPPUNIT_ASSERT(!pView->IsTextEdit());
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xShape(xDrawPage->getByIndex(0), uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xParagraph(getParagraphFromShape(1, xShape),
+                                                   uno::UNO_QUERY);
+    // Check that list level is 1 & level 1 numbering type is a bullet:
+    sal_Int16 nNumberingLevel{};
+    xParagraph->getPropertyValue(u"NumberingLevel"_ustr) >>= nNumberingLevel;
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 0
+    // i.e. list level was -1 (toggle off) instead of switch to bullet.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int16>(1), nNumberingLevel);
+    uno::Reference<container::XIndexAccess> xNumberingRules;
+    xParagraph->getPropertyValue(u"NumberingRules"_ustr) >>= xNumberingRules;
+    comphelper::SequenceAsHashMap aNumberingRule(xNumberingRules->getByIndex(1));
+    sal_Int16 nNumberingType = 0;
+    aNumberingRule[u"NumberingType"_ustr] >>= nNumberingType;
+    // Bullet and not numbering (ARABIC):
+    CPPUNIT_ASSERT_EQUAL(style::NumberingType::CHAR_SPECIAL, nNumberingType);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testBulletOffOn)
+{
+    // Given a document with a shape, last paragraph is has a bullet:
+    createSdImpressDoc("odp/bullet-off-on.odp");
+    sd::ViewShell* pViewShell = getSdDocShell()->GetViewShell();
+    SdPage* pPage = pViewShell->GetActualPage();
+    SdrObject* pShape = pPage->GetObj(0);
+    CPPUNIT_ASSERT(pShape);
+    SdrView* pView = pViewShell->GetView();
+    pView->MarkObj(pShape, pView->GetSdrPageView());
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(!pView->IsTextEdit());
+
+    // When turning the bullet off & then back on again:
+    // Start text edit:
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    typeString(pImpressDocument, u"x");
+    CPPUNIT_ASSERT(pView->IsTextEdit());
+    // Toggle off:
+    dispatchCommand(mxComponent, u".uno:DefaultBullet"_ustr, {});
+    // Toggle on:
+    dispatchCommand(mxComponent, u".uno:DefaultBullet"_ustr, {});
+    // End text edit:
+    typeKey(pImpressDocument, KEY_ESCAPE);
+
+    // Then make sure the result is Level 1 from the master page:
+    CPPUNIT_ASSERT(!pView->IsTextEdit());
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xShape(xDrawPage->getByIndex(0), uno::UNO_QUERY);
+    // 5th, last paragraph.
+    uno::Reference<beans::XPropertySet> xParagraph(getParagraphFromShape(4, xShape),
+                                                   uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xNumberingRules;
+    xParagraph->getPropertyValue(u"NumberingRules"_ustr) >>= xNumberingRules;
+    // Level 1.
+    comphelper::SequenceAsHashMap aNumberingRule(xNumberingRules->getByIndex(0));
+    sal_Int32 nLeftMargin = 0;
+    aNumberingRule[u"LeftMargin"_ustr] >>= nLeftMargin;
+    sal_Int32 nFirstLineOffset = 0;
+    aNumberingRule[u"FirstLineOffset"_ustr] >>= nFirstLineOffset;
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 300
+    // - Actual  : 0
+    // i.e. the indent was 0cm, even if Level1 and Level2 had other values.
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(300), nLeftMargin + nFirstLineOffset);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPasteInTextEditWithAnimationNode)
+{
+    createSdImpressDoc();
+
+    // Give the slide an (empty) animation node, so the paragraph removal that the
+    // paste below performs is reported to the animation sequence.
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawView> xDrawView(xModel->getCurrentController(), uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawView->getCurrentPage(), uno::UNO_SET_THROW);
+    uno::Reference<animations::XAnimationNodeSupplier> xAnimNodeSupplier(xDrawPage,
+                                                                         uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT(xAnimNodeSupplier->getAnimationNode().is());
+
+    // Type a word into the title placeholder, staying in text edit.
+    insertStringToObject(0, u"blah", /*bUseEscape*/ false);
+
+    // Select and copy it, then put the caret at the end so the paste appends.
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    dispatchCommand(mxComponent, u".uno:SelectAll"_ustr, {});
+    dispatchCommand(mxComponent, u".uno:Copy"_ustr, {});
+    typeKey(pImpressDocument, KEY_END);
+
+    // Without the accompanying fix, this paste asserts in a dbgutil build: the
+    // paragraph removal probes the shape text through the UNO forwarder, forcing
+    // a text frame layout recompute while the EditEngine layout is suspended.
+    dispatchCommand(mxComponent, u".uno:Paste"_ustr, {});
+
+    // The word got appended to itself.
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+    dispatchCommand(mxComponent, u".uno:SelectAll"_ustr, {});
+    EditView& rEditView = pView->GetTextEditOutlinerView()->GetEditView();
+    CPPUNIT_ASSERT_EQUAL(u"blahblah"_ustr, rEditView.GetSelected());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testMultiSelectionResize)
+{
+    // Two separate rectangles, wireframe (non-solid) dragging so the per-object
+    // drag origins are exercised.
+    createSdImpressDoc();
+    auto* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+    SdPage* pPage = pViewShell->GetActualPage();
+
+    pView->SetSolidDragging(false);
+    pView->SetSnapEnabled(false);
+
+    rtl::Reference<SdrRectObj> pRect1
+        = new SdrRectObj(pView->getSdrModelFromSdrView(), tools::Rectangle(0, 0, 1000, 1000));
+    rtl::Reference<SdrRectObj> pRect2
+        = new SdrRectObj(pView->getSdrModelFromSdrView(), tools::Rectangle(5000, 5000, 6000, 6000));
+    pPage->NbcInsertObject(pRect1.get());
+    pPage->NbcInsertObject(pRect2.get());
+
+    // A single selection keeps the standard group frame handles, a second object
+    // switches to individual handles automatically.
+    pView->MarkObj(pRect1.get(), pView->GetSdrPageView());
+    CPPUNIT_ASSERT(pView->IsFrameDragSingles());
+    pView->MarkObj(pRect2.get(), pView->GetSdrPageView());
+    CPPUNIT_ASSERT(!pView->IsFrameDragSingles());
+
+    // Find the lower-right resize handle that belongs to the first rectangle.
+    const SdrHdlList& rHdlList = pView->GetHdlList();
+    SdrHdl* pDragHdl = nullptr;
+    for (size_t i = 0; i < rHdlList.GetHdlCount(); ++i)
+    {
+        SdrHdl* pHdl = rHdlList.GetHdl(i);
+        if (pHdl->GetKind() == SdrHdlKind::LowerRight && pHdl->GetObj() == pRect1.get())
+        {
+            pDragHdl = pHdl;
+            break;
+        }
+    }
+    CPPUNIT_ASSERT(pDragHdl);
+
+    const tools::Rectangle aOrig1(pRect1->GetSnapRect());
+    const tools::Rectangle aOrig2(pRect2->GetSnapRect());
+
+    // Dragging that single handle must drive an all-objects resize, not the
+    // single-object special drag, with each object anchored at its own origin
+    // (top-left for a lower-right drag).
+    CPPUNIT_ASSERT(pView->BegDragObj(pDragHdl->GetPos(), nullptr, pDragHdl, 0));
+    SdrDragMethod* pDragMethod = pView->GetDragMethod();
+    CPPUNIT_ASSERT(dynamic_cast<SdrDragResize*>(pDragMethod));
+    std::optional<Point> oOrigin1 = pDragMethod->getIndividualDragOrigin(*pRect1);
+    std::optional<Point> oOrigin2 = pDragMethod->getIndividualDragOrigin(*pRect2);
+    CPPUNIT_ASSERT(oOrigin1.has_value());
+    CPPUNIT_ASSERT(oOrigin2.has_value());
+    CPPUNIT_ASSERT_EQUAL(aOrig1.TopLeft(), *oOrigin1);
+    CPPUNIT_ASSERT_EQUAL(aOrig2.TopLeft(), *oOrigin2);
+
+    // Double the first rectangle by moving its handle, then commit.
+    pView->MovDragObj(Point(2000, 2000));
+    pView->EndDragObj();
+
+    const tools::Rectangle aNew1(pRect1->GetSnapRect());
+    const tools::Rectangle aNew2(pRect2->GetSnapRect());
+
+    // Both rectangles kept their own top-left origin and doubled in size. The
+    // second rectangle did not move, unlike a shared-pivot group resize.
+    CPPUNIT_ASSERT_EQUAL(aOrig1.TopLeft(), aNew1.TopLeft());
+    CPPUNIT_ASSERT_EQUAL(aOrig1.Left() + 2 * (aOrig1.Right() - aOrig1.Left()), aNew1.Right());
+    CPPUNIT_ASSERT_EQUAL(aOrig1.Top() + 2 * (aOrig1.Bottom() - aOrig1.Top()), aNew1.Bottom());
+    CPPUNIT_ASSERT_EQUAL(aOrig2.TopLeft(), aNew2.TopLeft());
+    CPPUNIT_ASSERT_EQUAL(aOrig2.Left() + 2 * (aOrig2.Right() - aOrig2.Left()), aNew2.Right());
+    CPPUNIT_ASSERT_EQUAL(aOrig2.Top() + 2 * (aOrig2.Bottom() - aOrig2.Top()), aNew2.Bottom());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testRotateHandleOfAPolygonIsNotOneOfItsPoints)
+{
+    // A polygon has points that the user can select, and its rotate handle is not one of them.
+    // Counting it as a point selects the first point of the polygon and shows the wrong mouse
+    // pointer.
+    createSdImpressDoc();
+    auto* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+    SdPage* pPage = pViewShell->GetActualPage();
+
+    rtl::Reference<SdrRectObj> pRectangle
+        = new SdrRectObj(pView->getSdrModelFromSdrView(), tools::Rectangle(0, 3000, 2000, 4000));
+    basegfx::B2DPolygon aTriangle;
+    aTriangle.append(basegfx::B2DPoint(5000, 3000));
+    aTriangle.append(basegfx::B2DPoint(7000, 3000));
+    aTriangle.append(basegfx::B2DPoint(6000, 5000));
+    aTriangle.setClosed(true);
+    rtl::Reference<SdrPathObj> pPolygon
+        = new SdrPathObj(pView->getSdrModelFromSdrView(), SdrObjKind::Polygon,
+                         basegfx::B2DPolyPolygon(aTriangle));
+    pPage->NbcInsertObject(pRectangle.get());
+    pPage->NbcInsertObject(pPolygon.get());
+
+    // Two selected objects give each of them its own rotate handle.
+    pView->MarkObj(pRectangle.get(), pView->GetSdrPageView());
+    pView->MarkObj(pPolygon.get(), pView->GetSdrPageView());
+    CPPUNIT_ASSERT(!pView->IsFrameDragSingles());
+
+    SdrHdl* pRotateHandle = nullptr;
+    const SdrHdlList& rHdlList = pView->GetHdlList();
+    for (size_t i = 0; i < rHdlList.GetHdlCount(); ++i)
+    {
+        SdrHdl* pHdl = rHdlList.GetHdl(i);
+        if (pHdl->GetKind() == SdrHdlKind::Rotate && pHdl->GetObj() == pPolygon.get())
+            pRotateHandle = pHdl;
+    }
+    CPPUNIT_ASSERT_MESSAGE("the polygon has no rotate handle", pRotateHandle);
+
+    CPPUNIT_ASSERT(!pView->IsPointMarkable(*pRotateHandle));
+    CPPUNIT_ASSERT(!pView->MarkPoint(*pRotateHandle));
+    CPPUNIT_ASSERT(!pView->HasMarkedPoints());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testMultiSelectionRotate)
+{
+    // Two separate, non-square rectangles, wireframe (non-solid) dragging.
+    createSdImpressDoc();
+    auto* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+    SdPage* pPage = pViewShell->GetActualPage();
+
+    pView->SetSolidDragging(false);
+    pView->SetSnapEnabled(false);
+
+    rtl::Reference<SdrRectObj> pRect1
+        = new SdrRectObj(pView->getSdrModelFromSdrView(), tools::Rectangle(0, 0, 2000, 1000));
+    rtl::Reference<SdrRectObj> pRect2
+        = new SdrRectObj(pView->getSdrModelFromSdrView(), tools::Rectangle(5000, 5000, 7000, 6000));
+    pPage->NbcInsertObject(pRect1.get());
+    pPage->NbcInsertObject(pRect2.get());
+
+    pView->MarkObj(pRect1.get(), pView->GetSdrPageView());
+    pView->MarkObj(pRect2.get(), pView->GetSdrPageView());
+    CPPUNIT_ASSERT(!pView->IsFrameDragSingles());
+
+    // Each object gets exactly one rotate handle in the individual handle set.
+    const SdrHdlList& rHdlList = pView->GetHdlList();
+    int nRotateHandles = 0;
+    SdrHdl* pRotateHdl = nullptr;
+    for (size_t i = 0; i < rHdlList.GetHdlCount(); ++i)
+    {
+        SdrHdl* pHdl = rHdlList.GetHdl(i);
+        if (pHdl->GetKind() == SdrHdlKind::Rotate)
+        {
+            ++nRotateHandles;
+            if (pHdl->GetObj() == pRect1.get())
+                pRotateHdl = pHdl;
+        }
+    }
+    CPPUNIT_ASSERT_EQUAL(2, nRotateHandles);
+    CPPUNIT_ASSERT(pRotateHdl);
+
+    const Point aCenter1(pRect1->GetSnapRect().Center());
+    const Point aCenter2(pRect2->GetSnapRect().Center());
+
+    // Dragging rect1's rotate handle must drive an all-objects rotate, not the
+    // single-object special drag, with each object turning around its own centre.
+    CPPUNIT_ASSERT(pView->BegDragObj(pRotateHdl->GetPos(), nullptr, pRotateHdl, 0));
+    SdrDragMethod* pDragMethod = pView->GetDragMethod();
+    CPPUNIT_ASSERT(pDragMethod);
+    CPPUNIT_ASSERT_EQUAL(PointerStyle::Rotate, pDragMethod->GetSdrDragPointer());
+    std::optional<Point> oOrigin1 = pDragMethod->getIndividualDragOrigin(*pRect1);
+    std::optional<Point> oOrigin2 = pDragMethod->getIndividualDragOrigin(*pRect2);
+    CPPUNIT_ASSERT(oOrigin1.has_value());
+    CPPUNIT_ASSERT(oOrigin2.has_value());
+    CPPUNIT_ASSERT_EQUAL(aCenter1, *oOrigin1);
+    CPPUNIT_ASSERT_EQUAL(aCenter2, *oOrigin2);
+
+    // Drag the handle a quarter turn around rect1's centre, then commit.
+    pView->MovDragObj(Point(aCenter1.X() + 2000, aCenter1.Y()));
+    pView->EndDragObj();
+
+    // Both rectangles rotated by the same angle and each kept its own centre. A
+    // shared-pivot group rotate would instead have swung rect2's centre around
+    // rect1.
+    CPPUNIT_ASSERT_EQUAL(aCenter1, pRect1->GetSnapRect().Center());
+    CPPUNIT_ASSERT_EQUAL(aCenter2, pRect2->GetSnapRect().Center());
+    CPPUNIT_ASSERT(pRect1->GetRotateAngle() != 0_deg100);
+    CPPUNIT_ASSERT_EQUAL(pRect1->GetRotateAngle().get(), pRect2->GetRotateAngle().get());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testMultiSelectionPointEditToggle)
+{
+    // Selecting multiple objects auto-enables Point Edit Mode (individual
+    // handles). Pressing F8 / the toolbar button (.uno:ToggleObjectBezierMode)
+    // must still toggle it as before, and the manual choice must persist while
+    // the multi-selection is held.
+    createSdImpressDoc();
+    auto* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+
+    // dispatchCommand needs an active frame to find the view.
+    auto xDesktop = frame::Desktop::create(comphelper::getProcessComponentContext());
+    auto pFrame = pXImpressDocument->GetDocShell()->GetFrame();
+    CPPUNIT_ASSERT(pFrame);
+    xDesktop->setActiveFrame(pFrame->GetFrame().GetFrameInterface());
+
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+    SdPage* pPage = pViewShell->GetActualPage();
+
+    rtl::Reference<SdrRectObj> pRect1
+        = new SdrRectObj(pView->getSdrModelFromSdrView(), tools::Rectangle(0, 0, 1000, 1000));
+    rtl::Reference<SdrRectObj> pRect2
+        = new SdrRectObj(pView->getSdrModelFromSdrView(), tools::Rectangle(2000, 0, 3000, 1000));
+    rtl::Reference<SdrRectObj> pRect3
+        = new SdrRectObj(pView->getSdrModelFromSdrView(), tools::Rectangle(4000, 0, 5000, 1000));
+    pPage->NbcInsertObject(pRect1.get());
+    pPage->NbcInsertObject(pRect2.get());
+    pPage->NbcInsertObject(pRect3.get());
+
+    // A single selection keeps the standard frame handles, a second object
+    // auto-enables Point Edit Mode.
+    pView->MarkObj(pRect1.get(), pView->GetSdrPageView());
+    CPPUNIT_ASSERT(pView->IsFrameDragSingles());
+    pView->MarkObj(pRect2.get(), pView->GetSdrPageView());
+    CPPUNIT_ASSERT(!pView->IsFrameDragSingles());
+
+    // Pressing F8 / the button turns Point Edit Mode off, as it did before.
+    dispatchCommand(mxComponent, u".uno:ToggleObjectBezierMode"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(pView->IsFrameDragSingles());
+
+    // Pressing it again turns it back on, so the old toggle is not broken.
+    dispatchCommand(mxComponent, u".uno:ToggleObjectBezierMode"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(!pView->IsFrameDragSingles());
+
+    // Turn it off, then extend the selection: the manual choice must persist and
+    // not be re-forced back on while the selection stays multi.
+    dispatchCommand(mxComponent, u".uno:ToggleObjectBezierMode"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(pView->IsFrameDragSingles());
+    pView->MarkObj(pRect3.get(), pView->GetSdrPageView());
+    CPPUNIT_ASSERT(pView->IsFrameDragSingles());
+
+    // Dropping back to a single selection restores the standard frame handles and
+    // re-arms the auto default, so a fresh multi-selection enables it again.
+    pView->UnmarkAllObj(pView->GetSdrPageView());
+    pView->MarkObj(pRect1.get(), pView->GetSdrPageView());
+    CPPUNIT_ASSERT(pView->IsFrameDragSingles());
+    pView->MarkObj(pRect2.get(), pView->GetSdrPageView());
+    CPPUNIT_ASSERT(!pView->IsFrameDragSingles());
+
+    // Turning it off and then picking several objects again brings it back. Select All marks
+    // every object in one step, without passing through a selection of one.
+    dispatchCommand(mxComponent, u".uno:ToggleObjectBezierMode"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT(pView->IsFrameDragSingles());
+    pView->UnmarkAllObj(pView->GetSdrPageView());
+    pView->MarkAllObj(pView->GetSdrPageView());
+    CPPUNIT_ASSERT(!pView->IsFrameDragSingles());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testUndoRestoresDeletedPlaceholderText)
+{
+    // Given a slide whose title placeholder was typed into:
+    createSdImpressDoc();
+    auto* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    sd::View* pView = pViewShell->GetView();
+    SdrObject* pTitle = pViewShell->GetActualPage()->GetObj(0);
+    CPPUNIT_ASSERT(pTitle);
+    pView->MarkObj(pTitle, pView->GetSdrPageView());
+
+    pView->SdrBeginTextEdit(pTitle);
+    pView->GetTextEditOutlinerView()->GetEditView().SetSelection(ESelection::All());
+    pView->GetTextEditOutlinerView()->GetEditView().InsertText(u"Typed"_ustr);
+    pView->SdrEndTextEdit();
+    CPPUNIT_ASSERT_EQUAL(u"Typed"_ustr,
+                         pTitle->GetOutlinerParaObject()->GetTextObject().GetText(0));
+
+    // When deleting all of that text, which puts the placeholder's prompt back:
+    pView->SdrBeginTextEdit(pTitle);
+    pView->GetTextEditOutlinerView()->GetEditView().SetSelection(ESelection::All());
+    pView->GetTextEditOutlinerView()->GetEditView().InsertText(OUString());
+    pView->SdrEndTextEdit();
+    CPPUNIT_ASSERT(pTitle->IsEmptyPresObj());
+
+    // Then one undo brings the text back. Without the fix the deletion was not undoable at all: the
+    // prompt goes in before svx captures the text change, which then looks like no change.
+    dispatchCommand(mxComponent, u".uno:Undo"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(u"Typed"_ustr,
+                         pTitle->GetOutlinerParaObject()->GetTextObject().GetText(0));
+    CPPUNIT_ASSERT(!pTitle->IsEmptyPresObj());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf166401_imageFillsAPlaceholderHoldingText)
+{
+    // Given a slide whose picture placeholder holds text, so an outliner object represents it:
+    createSdImpressDoc("pptx/pic-placeholder-with-text.pptx");
+    auto* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    sd::View* pView = pViewShell->GetView();
+    SdrObject* pText = pViewShell->GetActualPage()->GetObj(0);
+    CPPUNIT_ASSERT_EQUAL(SdrObjKind::OutlineText, pText->GetObjIdentifier());
+
+    // When an image is put into it, which is what it is a placeholder for:
+    pView->MarkObj(pText, pView->GetSdrPageView());
+    Graphic aGraphic(Bitmap(Size(16, 16), vcl::PixelFormat::N24_BPP));
+    sal_Int8 nAction = DND_ACTION_LINK;
+    pView->InsertGraphic(aGraphic, nAction, pText->GetSnapRect().Center(), pText, nullptr);
+
+    // Then a graphic object represents it, still as the picture placeholder, and the text it held
+    // has given way to the image.
+    SdrObject* pFilled = pViewShell->GetActualPage()->GetObj(0);
+    CPPUNIT_ASSERT_EQUAL(SdrObjKind::Graphic, pFilled->GetObjIdentifier());
+    CPPUNIT_ASSERT(!pFilled->HasText());
+
+    // The shape type is what the page answers for the object, so it states the identity.
+    auto xPage = mxComponent.queryThrow<drawing::XDrawPagesSupplier>()
+                     ->getDrawPages()
+                     ->getByIndex(0)
+                     .queryThrow<drawing::XDrawPage>();
+    auto xShape = xPage->getByIndex(0).queryThrow<drawing::XShape>();
+    CPPUNIT_ASSERT_EQUAL(u"com.sun.star.presentation.GraphicObjectShape"_ustr,
+                         xShape->getShapeType());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf166401_textGivenThroughTheApi)
+{
+    // Given a slide with an empty picture placeholder:
+    createSdImpressDoc("pptx/picture-placeholder-custom-prompt.pptx");
+    auto xPage = mxComponent.queryThrow<drawing::XDrawPagesSupplier>()
+                     ->getDrawPages()
+                     ->getByIndex(0)
+                     .queryThrow<drawing::XDrawPage>();
+
+    // When text reaches it without any editing, which is the route a script takes:
+    xPage->getByIndex(0).queryThrow<text::XTextRange>()->setString(
+        u"Given through the API"_ustr);
+    Scheduler::ProcessEventsToIdle();
+
+    // Then an outliner object represents it, as it does for text that arrives by any other route,
+    // and the placeholder is still the picture one. Without the fix the placeholder went on
+    // standing for itself, and the text was painted the way a prompt is - unwrapped.
+    auto xShape = xPage->getByIndex(0).queryThrow<drawing::XShape>();
+    CPPUNIT_ASSERT_EQUAL(u"com.sun.star.presentation.OutlinerShape"_ustr, xShape->getShapeType());
+    CPPUNIT_ASSERT_EQUAL(u"com.sun.star.presentation.GraphicObjectShape"_ustr,
+                         xShape.queryThrow<beans::XPropertySet>()
+                             ->getPropertyValue(u"PlaceholderShapeType"_ustr)
+                             .get<OUString>());
+    CPPUNIT_ASSERT_EQUAL(u"Given through the API"_ustr,
+                         xShape.queryThrow<text::XTextRange>()->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf166401_theEditedObjectStaysWhileEditing)
+{
+    // Given an empty picture placeholder in text edit, with text typed into it:
+    createSdImpressDoc("pptx/picture-placeholder-custom-prompt.pptx");
+    auto* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    sd::View* pView = pViewShell->GetView();
+    SdrObject* pEdited = pViewShell->GetActualPage()->GetObj(0);
+    pView->MarkObj(pEdited, pView->GetSdrPageView());
+    pView->SdrBeginTextEdit(pEdited);
+    CPPUNIT_ASSERT(pView->IsTextEdit());
+    pView->GetTextEditOutlinerView()->GetEditView().SetSelection(ESelection::All());
+    pView->GetTextEditOutlinerView()->GetEditView().InsertText(u"While editing"_ustr);
+
+    // When something asks that shape for its text through UNO, which is what another view does and
+    // which marks the object as no longer empty while the edit is still open:
+    auto xPage = mxComponent.queryThrow<drawing::XDrawPagesSupplier>()
+                     ->getDrawPages()
+                     ->getByIndex(0)
+                     .queryThrow<drawing::XDrawPage>();
+    xPage->getByIndex(0).queryThrow<text::XTextRange>()->getString();
+    Scheduler::ProcessEventsToIdle();
+
+    // Then the object the edit view is working on is still the one on the page. Switching what
+    // represents the placeholder here took it away mid-typing: the edit was lost and editeng
+    // aborted on its undo manager.
+    CPPUNIT_ASSERT_EQUAL(pEdited, pViewShell->GetActualPage()->GetObj(0));
+    if (pView->IsTextEdit())
+        pView->SdrEndTextEdit();
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf166401_anEditElsewhereIsLeftAlone)
+{
+    // Given two slides with a picture placeholder each, one of them in text edit with text typed
+    // into it:
+    createSdImpressDoc("pptx/picture-placeholder-custom-prompt.pptx");
+    dispatchCommand(mxComponent, u".uno:DuplicatePage"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+    auto* pXImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pXImpressDocument->GetDocShell()->GetViewShell();
+    sd::View* pView = pViewShell->GetView();
+    SdrPage* pEditedPage = pViewShell->GetActualPage();
+    SdrObject* pEdited = pEditedPage->GetObj(0);
+    pView->MarkObj(pEdited, pView->GetSdrPageView());
+    pView->SdrBeginTextEdit(pEdited);
+    CPPUNIT_ASSERT(pView->IsTextEdit());
+    pView->GetTextEditOutlinerView()->GetEditView().SetSelection(ESelection::All());
+    pView->GetTextEditOutlinerView()->GetEditView().InsertText(u"While editing"_ustr);
+
+    // When another view asks that object for its text, which writes the typing back and marks it
+    // no longer empty while the edit is still open:
+    auto xPages = mxComponent.queryThrow<drawing::XDrawPagesSupplier>()->getDrawPages();
+    xPages->getByIndex(pEditedPage->GetPageNum() / 2)
+        .queryThrow<drawing::XShapes>()
+        ->getByIndex(0)
+        .queryThrow<text::XTextRange>()
+        ->getString();
+
+    // and text then reaches the placeholder on the other slide, the pass that switches what
+    // represents a placeholder runs over every page - and the object in text edit is not the one
+    // that asked for it. That is what two views editing one document look like from here.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), xPages->getCount());
+    const sal_Int32 nElsewhere = pEditedPage->GetPageNum() / 2 == 0 ? 1 : 0;
+    auto xElsewherePage = xPages->getByIndex(nElsewhere).queryThrow<drawing::XShapes>();
+    xElsewherePage->getByIndex(0)
+        .queryThrow<text::XTextRange>()
+        ->setString(u"Given elsewhere"_ustr);
+    Scheduler::ProcessEventsToIdle();
+
+    // Then that one is switched, so the pass did run - and the one being edited is still the object
+    // the edit view holds. Taking it away mid-typing lost the edit and aborted editeng on its undo
+    // manager, and the pass had only the object that asked for it to go by. The shape is asked
+    // again, since a UNO shape keeps the type it was made with.
+    CPPUNIT_ASSERT_EQUAL(u"com.sun.star.presentation.OutlinerShape"_ustr,
+                         xElsewherePage->getByIndex(0)
+                             .queryThrow<drawing::XShape>()
+                             ->getShapeType());
+    CPPUNIT_ASSERT_EQUAL(pEdited, pEditedPage->GetObj(0));
+    if (pView->IsTextEdit())
+        pView->SdrEndTextEdit();
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintScan)
+{
+    // The lint scan lists an image stored at a far higher resolution than it is drawn at, a hidden
+    // slide and a master slide no slide uses, and keeps the speaker notes out of the list until the
+    // deck is being prepared to hand out.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    auto scanFor = [pDoc](const sd::lint::LintOptions& rOptions, sd::lint::LintCategory eCategory) {
+        sd::lint::PresentationLint aLint(*pDoc, rOptions);
+        aLint.scan();
+
+        std::vector<std::shared_ptr<sd::lint::LintFinding>> aMatches;
+        for (const auto& rpFinding : aLint.getFindings())
+        {
+            if (rpFinding->getCategory() == eCategory)
+                aMatches.push_back(rpFinding);
+        }
+        return aMatches;
+    };
+
+    sd::lint::LintOptions aOptions;
+
+    // The first slide carries two images: the large JPEG the deck draws twice, and a small one
+    // that is also stored at far more pixels than it is drawn at.
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pDoc->GetSdPage(0, PageKind::Standard)->GetObjCount());
+
+    // The deck draws one JPEG twice, on the first slide at 4 cm across and on the third at 8 cm.
+    // The two drawings share a single row, which speaks for the 4 cm drawing because that is the
+    // more oversized of the two. Re-encoding the small image would free up a few kilobytes, which
+    // is under the floor the scan lists, so it gets no row.
+    auto aLargeImages = scanFor(aOptions, sd::lint::LintCategory::LargeImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aLargeImages.size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aLargeImages[0]->getSlideIndex());
+    // The document still holds the encoded JPEG the slide was loaded from, so the row quotes
+    // its size.
+    CPPUNIT_ASSERT(aLargeImages[0]->getCurrentBytes() > 0);
+
+    // The row carries no image number, because it is the only image the first slide has a row
+    // for, and it says what the image is stored at so the client can write that under the line.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aLargeImages[0]->getFacts().mnImageNumber);
+    CPPUNIT_ASSERT(aLargeImages[0]->getFacts().mnEffectiveDPI > 0);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aLargeImages[0]->getFacts().mnHiddenPercent);
+
+    CPPUNIT_ASSERT_EQUAL(size_t(1), scanFor(aOptions, sd::lint::LintCategory::HiddenSlide).size());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), scanFor(aOptions, sd::lint::LintCategory::UnusedMaster).size());
+    CPPUNIT_ASSERT_EQUAL(size_t(0), scanFor(aOptions, sd::lint::LintCategory::NotesContent).size());
+
+    // Preparing the deck to hand out brings in the speaker notes of the third slide.
+    aOptions.mbForPublication = true;
+    auto aNotes = scanFor(aOptions, sd::lint::LintCategory::NotesContent);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aNotes.size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), aNotes[0]->getSlideIndex());
+
+    // At a target of 300 DPI the 8 cm drawing wants about as many pixels as the JPEG already
+    // holds, so the image is left alone rather than encoded again for a fraction of its detail.
+    aOptions.mnImageResolution = 300;
+    CPPUNIT_ASSERT_EQUAL(size_t(0), scanFor(aOptions, sd::lint::LintCategory::LargeImage).size());
+
+    // A target resolution of zero leaves every image alone whatever it is stored at.
+    aOptions.mnImageResolution = 0;
+    CPPUNIT_ASSERT_EQUAL(size_t(0), scanFor(aOptions, sd::lint::LintCategory::LargeImage).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintScanReportsProgressAsItRuns)
+{
+    // The scan lists what it found before it has worked out a single saving, and the measurement
+    // that fills the figures in afterwards runs one finding at a time.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    auto imagesOf = [](const sd::lint::PresentationLint& rLint) {
+        std::vector<std::shared_ptr<sd::lint::LintFinding>> aMatches;
+        for (const auto& rpFinding : rLint.getFindings())
+        {
+            if (rpFinding->getCategory() == sd::lint::LintCategory::LargeImage)
+                aMatches.push_back(rpFinding);
+        }
+        return aMatches;
+    };
+
+    const sd::lint::LintOptions aOptions;
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scanStructure();
+
+    // Both images of the first slide are listed straight away, told apart by their number, because
+    // nothing has yet found out that one of them has too little to offer.
+    auto aListed = imagesOf(aLint);
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aListed.size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), aListed[0]->getFacts().mnImageNumber);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), aListed[1]->getFacts().mnImageNumber);
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aLint.getMeasureCount());
+    CPPUNIT_ASSERT_EQUAL(size_t(0), aLint.getMeasuredCount());
+
+    auto sumOfListedSavings = [&aLint] {
+        sal_uInt64 nSum = 0;
+        for (const auto& rpFinding : aLint.getFindings())
+            nSum += rpFinding->getSavingBytes();
+        return nSum;
+    };
+
+    // Every step leaves the running total equal to a fresh sum over the list. The figures tracked
+    // here are the saving each finding is counted at, and the sum of those figures.
+    std::vector<std::pair<const sd::lint::LintFinding*, sal_uInt64>> aCountedSavings;
+    sal_uInt64 nRunningTotal = 0;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        aCountedSavings.emplace_back(rpFinding.get(), rpFinding->getSavingBytes());
+        nRunningTotal += rpFinding->getSavingBytes();
+    }
+
+    // Every step measures exactly one finding, and the step that meets the image with too little to
+    // offer says that the row is gone.
+    size_t nSteps = 0;
+    size_t nDropped = 0;
+    while (aLint.hasPendingMeasurement())
+    {
+        const sd::lint::LintMeasureStep aStep = aLint.measureNextFinding();
+        CPPUNIT_ASSERT(aStep.mpFinding);
+        ++nSteps;
+        if (aStep.mbDropped)
+            ++nDropped;
+
+        CPPUNIT_ASSERT_EQUAL(nSteps, aLint.getMeasuredCount());
+
+        // The figure the finding was counted at is replaced by the one it carries now, and a
+        // finding the step took off the list counts for nothing from here on.
+        for (auto& rCounted : aCountedSavings)
+        {
+            if (rCounted.first != aStep.mpFinding.get())
+                continue;
+
+            nRunningTotal -= rCounted.second;
+            rCounted.second = aStep.mbDropped ? 0 : aStep.mpFinding->getSavingBytes();
+            nRunningTotal += rCounted.second;
+        }
+
+        CPPUNIT_ASSERT_EQUAL(sumOfListedSavings(), nRunningTotal);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), nSteps);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), nDropped);
+
+    aLint.finishMeasurement();
+
+    // What stepping through the measurement leaves behind is what a scan in one go produces: the
+    // one image worth a row, with its figure, and with no number now that it stands alone for its
+    // slide.
+    sd::lint::PresentationLint aWholeLint(*pDoc, aOptions);
+    aWholeLint.scan();
+
+    auto aStepped = imagesOf(aLint);
+    auto aWhole = imagesOf(aWholeLint);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aWhole.size());
+    CPPUNIT_ASSERT_EQUAL(aWhole.size(), aStepped.size());
+    CPPUNIT_ASSERT_EQUAL(aWhole[0]->getFacts().mnImageNumber,
+                         aStepped[0]->getFacts().mnImageNumber);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aStepped[0]->getFacts().mnImageNumber);
+    CPPUNIT_ASSERT_EQUAL(aWhole[0]->getFacts().mnEffectiveDPI,
+                         aStepped[0]->getFacts().mnEffectiveDPI);
+    CPPUNIT_ASSERT(aStepped[0]->getSavingBytes() > 0);
+    CPPUNIT_ASSERT_EQUAL(aWhole[0]->getSavingBytes(), aStepped[0]->getSavingBytes());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintRescanKeepsWhatItMeasured)
+{
+    // A deck scanned a second time at the same settings reports the savings the first scan
+    // reported, out of the encodings the first scan kept.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    auto imagesOf = [](const sd::lint::PresentationLint& rLint) {
+        std::vector<std::shared_ptr<sd::lint::LintFinding>> aMatches;
+        for (const auto& rpFinding : rLint.getFindings())
+        {
+            if (rpFinding->getCategory() == sd::lint::LintCategory::LargeImage)
+                aMatches.push_back(rpFinding);
+        }
+        return aMatches;
+    };
+
+    const sd::lint::LintOptions aOptions;
+    auto pCache = std::make_shared<sd::lint::LintMeasureCache>();
+
+    // The cache starts out with nothing in it, so the first scan has no measurement to work from
+    // and both images of the deck are encoded.
+    CPPUNIT_ASSERT_EQUAL(size_t(0), pCache->getCount());
+
+    sd::lint::PresentationLint aFirstLint(*pDoc, aOptions, pCache);
+    aFirstLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aFirstLint.getMeasureCount());
+
+    while (aFirstLint.hasPendingMeasurement())
+        CPPUNIT_ASSERT(aFirstLint.measureNextFinding().mpFinding);
+
+    aFirstLint.finishMeasurement();
+
+    // What the first scan encoded is in the cache, ready for a second scan to read.
+    const size_t nCachedAfterFirst = pCache->getCount();
+    CPPUNIT_ASSERT(nCachedAfterFirst > 0);
+
+    // The second scan lines the same two images up and finds every figure among the encodings the
+    // first scan left behind.
+    sd::lint::PresentationLint aSecondLint(*pDoc, aOptions, pCache);
+    aSecondLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aSecondLint.getMeasureCount());
+
+    while (aSecondLint.hasPendingMeasurement())
+        CPPUNIT_ASSERT(aSecondLint.measureNextFinding().mpFinding);
+
+    aSecondLint.finishMeasurement();
+
+    // The second scan read the figures it reports and put no encoding of its own in the cache.
+    CPPUNIT_ASSERT_EQUAL(nCachedAfterFirst, pCache->getCount());
+
+    auto aFirst = imagesOf(aFirstLint);
+    auto aSecond = imagesOf(aSecondLint);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aFirst.size());
+    CPPUNIT_ASSERT_EQUAL(aFirst.size(), aSecond.size());
+    CPPUNIT_ASSERT(aSecond[0]->getSavingBytes() > 0);
+    CPPUNIT_ASSERT_EQUAL(aFirst[0]->getSavingBytes(), aSecond[0]->getSavingBytes());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintMeasurementsBelongToTheDocument)
+{
+    // The measurement cache belongs to the document rather than to one view of it, so a second
+    // holder is handed the encodings the first one worked out. It goes once no holder is left.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::DrawDocShell* pDocShell = pImpressDocument->GetDocShell();
+    CPPUNIT_ASSERT(pDocShell);
+
+    const sd::lint::LintOptions aOptions;
+    {
+        auto pFirstCache = pDocShell->getLintMeasureCache();
+        CPPUNIT_ASSERT_EQUAL(size_t(0), pFirstCache->getCount());
+
+        sd::lint::PresentationLint aFirstLint(*pDoc, aOptions, pFirstCache);
+        aFirstLint.scan();
+
+        const size_t nCachedAfterFirstScan = pFirstCache->getCount();
+        CPPUNIT_ASSERT(nCachedAfterFirstScan > 0);
+        const size_t nHandedInAfterFirstScan = pFirstCache->getHandedInCount();
+
+        // Whoever asks the document next is handed the very same cache.
+        auto pSecondCache = pDocShell->getLintMeasureCache();
+        CPPUNIT_ASSERT_EQUAL(pFirstCache.get(), pSecondCache.get());
+
+        // So a scan run from it reads every figure out and encodes none of the images again. Every
+        // encoding a scan makes is handed to the cache, so the cache has been handed no more.
+        sd::lint::PresentationLint aSecondLint(*pDoc, aOptions, pSecondCache);
+        aSecondLint.scan();
+
+        CPPUNIT_ASSERT_EQUAL(nCachedAfterFirstScan, pSecondCache->getCount());
+        CPPUNIT_ASSERT_EQUAL(nHandedInAfterFirstScan, pSecondCache->getHandedInCount());
+    }
+
+    // Nothing holds the encodings any more, so the document has an empty cache to hand out again.
+    auto pLaterCache = pDocShell->getLintMeasureCache();
+    CPPUNIT_ASSERT_EQUAL(size_t(0), pLaterCache->getCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintFix)
+{
+    // Every cleanup the scan offers changes the document and can be taken back again with a single
+    // undo, under the name of the cleanup.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    auto scanFor = [pDoc](sd::lint::LintCategory eCategory, bool bForPublication = false) {
+        sd::lint::LintOptions aOptions;
+        aOptions.mbForPublication = bForPublication;
+
+        sd::lint::PresentationLint aLint(*pDoc, aOptions);
+        aLint.scan();
+
+        std::vector<std::shared_ptr<sd::lint::LintFinding>> aMatches;
+        for (const auto& rpFinding : aLint.getFindings())
+        {
+            if (rpFinding->getCategory() == eCategory)
+                aMatches.push_back(rpFinding);
+        }
+        return aMatches;
+    };
+
+    auto applyFix = [&rBase](const std::shared_ptr<sd::lint::LintFinding>& rpFinding) {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, rpFinding->getUndoLabel());
+        rpFinding->fix(rBase);
+    };
+
+    auto getGraphicOf = [](const SdrObject* pObject) -> const Graphic& {
+        auto* pGraphicObject = dynamic_cast<const SdrGrafObj*>(pObject);
+        CPPUNIT_ASSERT(pGraphicObject);
+        const Graphic& rGraphic = pGraphicObject->GetGraphic();
+        CPPUNIT_ASSERT(rGraphic.IsGfxLink());
+        return rGraphic;
+    };
+
+    auto getGraphicBytes = [&getGraphicOf](const SdrObject* pObject) {
+        return sal_uInt64(getGraphicOf(pObject).GetGfxLink().GetDataSize());
+    };
+
+    // The first slide draws the JPEG at 4 cm across and the third draws the very same JPEG at 8 cm.
+    // The second object of the first slide is the small image, which the scan leaves alone.
+    SdPage* pFirstSlide = pDoc->GetSdPage(0, PageKind::Standard);
+    SdPage* pThirdSlide = pDoc->GetSdPage(2, PageKind::Standard);
+    CPPUNIT_ASSERT(pFirstSlide);
+    CPPUNIT_ASSERT(pThirdSlide);
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pFirstSlide->GetObjCount());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pThirdSlide->GetObjCount());
+
+    const sal_uInt64 nImageBytes = getGraphicBytes(pFirstSlide->GetObj(0));
+    const BitmapChecksum nImageChecksum = getGraphicOf(pFirstSlide->GetObj(0)).GetChecksum();
+    CPPUNIT_ASSERT_EQUAL(nImageBytes, getGraphicBytes(pThirdSlide->GetObj(0)));
+    CPPUNIT_ASSERT_EQUAL(nImageChecksum, getGraphicOf(pThirdSlide->GetObj(0)).GetChecksum());
+
+    // One row stands for both drawings of the image, so a single cleanup deals with the two of
+    // them and the document keeps one encoding of that image throughout.
+    auto aLargeImages = scanFor(sd::lint::LintCategory::LargeImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aLargeImages.size());
+    CPPUNIT_ASSERT(aLargeImages[0]->canFix());
+    applyFix(aLargeImages[0]);
+
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_COMPRESS_IMAGE),
+                         pUndoManager->GetUndoActionComment(0));
+
+    const sal_uInt64 nFixedBytes = getGraphicBytes(pFirstSlide->GetObj(0));
+    CPPUNIT_ASSERT(nFixedBytes < nImageBytes);
+    CPPUNIT_ASSERT_EQUAL(nFixedBytes, getGraphicBytes(pThirdSlide->GetObj(0)));
+    CPPUNIT_ASSERT_EQUAL(getGraphicOf(pFirstSlide->GetObj(0)).GetChecksum(),
+                         getGraphicOf(pThirdSlide->GetObj(0)).GetChecksum());
+
+    // Eight centimetres at the target of 150 DPI comes to 472 pixels across.
+    CPPUNIT_ASSERT_EQUAL(tools::Long(472),
+                         getGraphicOf(pFirstSlide->GetObj(0)).GetSizePixel().Width());
+
+    // The image now holds the pixels the 8 cm drawing asks for, so a fresh scan does not offer it
+    // again. The 4 cm drawing shows those same pixels at twice the target resolution, which is not
+    // what decides whether an image is worth a row.
+    CPPUNIT_ASSERT_EQUAL(size_t(0), scanFor(sd::lint::LintCategory::LargeImage).size());
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(nImageBytes, getGraphicBytes(pFirstSlide->GetObj(0)));
+    CPPUNIT_ASSERT_EQUAL(nImageBytes, getGraphicBytes(pThirdSlide->GetObj(0)));
+    CPPUNIT_ASSERT_EQUAL(nImageChecksum, getGraphicOf(pFirstSlide->GetObj(0)).GetChecksum());
+    CPPUNIT_ASSERT_EQUAL(nImageChecksum, getGraphicOf(pThirdSlide->GetObj(0)).GetChecksum());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), scanFor(sd::lint::LintCategory::LargeImage).size());
+
+    auto aHiddenSlides = scanFor(sd::lint::LintCategory::HiddenSlide);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aHiddenSlides.size());
+    applyFix(aHiddenSlides[0]);
+
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_DELETE_HIDDEN_SLIDE),
+                         pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(pDoc->GetSdPage(1, PageKind::Standard)->IsExcluded());
+
+    const sal_uInt16 nMasterCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    auto aUnusedMasters = scanFor(sd::lint::LintCategory::UnusedMaster);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aUnusedMasters.size());
+    applyFix(aUnusedMasters[0]);
+
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_DELETE_UNUSED_MASTER),
+                         pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDoc->GetMasterSdPageCount(PageKind::Standard));
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDoc->GetMasterSdPageCount(PageKind::Standard));
+
+    // The speaker notes of the third slide only come up when the deck is being prepared to hand
+    // out, and clearing them leaves the placeholder waiting to be typed into again.
+    auto aNotes = scanFor(sd::lint::LintCategory::NotesContent, true);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aNotes.size());
+    applyFix(aNotes[0]);
+
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_CLEAR_NOTES),
+                         pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(size_t(0), scanFor(sd::lint::LintCategory::NotesContent, true).size());
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), scanFor(sd::lint::LintCategory::NotesContent, true).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintFixAll)
+{
+    // Dealing with every finding in one go leaves a single undo entry, and taking that one entry
+    // back restores the whole document.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    auto countNotesFindings = [pDoc] {
+        sd::lint::LintOptions aOptions;
+        aOptions.mbForPublication = true;
+
+        sd::lint::PresentationLint aLint(*pDoc, aOptions);
+        aLint.scan();
+
+        size_t nCount = 0;
+        for (const auto& rpFinding : aLint.getFindings())
+        {
+            if (rpFinding->getCategory() == sd::lint::LintCategory::NotesContent)
+                ++nCount;
+        }
+        return nCount;
+    };
+
+    auto getImageBytes = [pDoc] {
+        SdPage* pSlide = pDoc->GetSdPage(0, PageKind::Standard);
+        CPPUNIT_ASSERT(pSlide);
+        auto* pGraphicObject = dynamic_cast<SdrGrafObj*>(pSlide->GetObj(0));
+        CPPUNIT_ASSERT(pGraphicObject);
+        const Graphic& rGraphic = pGraphicObject->GetGraphic();
+        CPPUNIT_ASSERT(rGraphic.IsGfxLink());
+        return sal_uInt64(rGraphic.GetGfxLink().GetDataSize());
+    };
+
+    const sal_uInt16 nPageCount = pDoc->GetSdPageCount(PageKind::Standard);
+    const sal_uInt16 nMasterCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    const sal_uInt64 nImageBytes = getImageBytes();
+    CPPUNIT_ASSERT_EQUAL(size_t(1), countNotesFindings());
+
+    sd::lint::LintOptions aOptions;
+    aOptions.mbForPublication = true;
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    // The scan measures what encoding the image again would free up, which is the figure the row
+    // carries.
+    sal_uInt64 nEstimatedBytes = 0;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        if (rpFinding->getCategory() == sd::lint::LintCategory::LargeImage)
+            nEstimatedBytes += rpFinding->getSavingBytes();
+    }
+    CPPUNIT_ASSERT(nEstimatedBytes > 0);
+
+    sal_uInt64 nSavedBytes = 0;
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, SdResId(STR_LINT_UNDO_FIX_ALL));
+        for (const auto& rpFinding : aLint.getFindings())
+        {
+            if (!rpFinding->canFix())
+                continue;
+
+            rpFinding->fix(rBase);
+            nSavedBytes += rpFinding->getRealizedSavingBytes();
+        }
+    }
+
+    // The image is stored once however many slides draw it, so the batch reports the estimate for
+    // that one image rather than a multiple of it.
+    CPPUNIT_ASSERT_EQUAL(nEstimatedBytes, nSavedBytes);
+
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_FIX_ALL),
+                         pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nPageCount - 1), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(getImageBytes() < nImageBytes);
+    CPPUNIT_ASSERT_EQUAL(size_t(0), countNotesFindings());
+
+    pUndoManager->Undo();
+
+    CPPUNIT_ASSERT_EQUAL(nPageCount, pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nImageBytes, getImageBytes());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), countNotesFindings());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintFixAllPrepared)
+{
+    // Working every cleanup out before any of them changes anything is what keeps the document
+    // usable while a cleanup is prepared. Preparing first leaves the same single undo entry, frees
+    // up the same bytes and leaves the document in the same state as dealing with the findings one
+    // after another does.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    const sal_uInt16 nPageCount = pDoc->GetSdPageCount(PageKind::Standard);
+    const sal_uInt16 nMasterCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+
+    sd::lint::LintOptions aOptions;
+    aOptions.mbForPublication = true;
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    sal_uInt64 nEstimatedBytes = 0;
+    std::vector<std::shared_ptr<sd::lint::LintFinding>> aFixable;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        if (!rpFinding->canFix())
+            continue;
+
+        aFixable.push_back(rpFinding);
+        if (rpFinding->getCategory() == sd::lint::LintCategory::LargeImage)
+            nEstimatedBytes += rpFinding->getSavingBytes();
+    }
+    CPPUNIT_ASSERT(!aFixable.empty());
+    CPPUNIT_ASSERT(nEstimatedBytes > 0);
+
+    // Every cleanup is worked out first. The document is untouched by this, so the undo stack is
+    // still empty afterwards and a cleanup cancelled here leaves no trace.
+    for (const auto& rpFinding : aFixable)
+        rpFinding->prepareFix();
+
+    CPPUNIT_ASSERT_EQUAL(size_t(0), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(nPageCount, pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDoc->GetMasterSdPageCount(PageKind::Standard));
+
+    sal_uInt64 nSavedBytes = 0;
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, SdResId(STR_LINT_UNDO_FIX_ALL));
+        for (const auto& rpFinding : aFixable)
+        {
+            rpFinding->fix(rBase);
+            nSavedBytes += rpFinding->getRealizedSavingBytes();
+        }
+    }
+
+    CPPUNIT_ASSERT_EQUAL(nEstimatedBytes, nSavedBytes);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_FIX_ALL),
+                         pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nPageCount - 1), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDoc->GetMasterSdPageCount(PageKind::Standard));
+
+    pUndoManager->Undo();
+
+    CPPUNIT_ASSERT_EQUAL(nPageCount, pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDoc->GetMasterSdPageCount(PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintFixKeepsList)
+{
+    // A cleanup that stays within the finding it is about leaves the rest of the list standing, so
+    // the one finding can be taken off the list rather than the whole deck being scanned again.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    // Preparing the deck to hand out brings in the speaker notes as well, so the scan finds
+    // something of every kind the deck holds.
+    sd::lint::LintOptions aOptions;
+    aOptions.mbForPublication = true;
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    auto findingOf = [&aLint](sd::lint::LintCategory eCategory) {
+        std::shared_ptr<sd::lint::LintFinding> pMatch;
+        for (const auto& rpFinding : aLint.getFindings())
+        {
+            if (rpFinding->getCategory() == eCategory)
+            {
+                pMatch = rpFinding;
+                break;
+            }
+        }
+        CPPUNIT_ASSERT(pMatch);
+        return pMatch;
+    };
+
+    // Encoding an image again reaches the objects that draw that one bitmap, and clearing the
+    // speaker notes reaches one placeholder. Taking a slide or a master out of the document moves
+    // what the findings around it are about.
+    const std::shared_ptr<sd::lint::LintFinding> pImage
+        = findingOf(sd::lint::LintCategory::LargeImage);
+    CPPUNIT_ASSERT(!pImage->invalidatesOtherFindings());
+    CPPUNIT_ASSERT(!findingOf(sd::lint::LintCategory::NotesContent)->invalidatesOtherFindings());
+    CPPUNIT_ASSERT(findingOf(sd::lint::LintCategory::HiddenSlide)->invalidatesOtherFindings());
+    CPPUNIT_ASSERT(findingOf(sd::lint::LintCategory::UnusedMaster)->invalidatesOtherFindings());
+
+    // A finding that goes before its saving has been worked out leaves the measurement owing
+    // nothing for it, so the steps that follow never meet it again.
+    sd::lint::PresentationLint aStepLint(*pDoc, aOptions);
+    aStepLint.scanStructure();
+
+    std::shared_ptr<sd::lint::LintFinding> pUnmeasured;
+    for (const auto& rpFinding : aStepLint.getFindings())
+    {
+        if (rpFinding->needsMeasuring())
+        {
+            pUnmeasured = rpFinding;
+            break;
+        }
+    }
+    CPPUNIT_ASSERT(pUnmeasured);
+    CPPUNIT_ASSERT_EQUAL(size_t(0), aStepLint.getMeasuredCount());
+
+    aStepLint.dropFinding(pUnmeasured);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aStepLint.getMeasuredCount());
+
+    // Each finding is handed out for its figure once, and the one that went out of order is not
+    // handed out at all.
+    std::vector<const sd::lint::LintFinding*> aHandedOut;
+    while (aStepLint.hasPendingMeasurement())
+    {
+        const sd::lint::LintMeasureStep aStep = aStepLint.measureNextFinding();
+        CPPUNIT_ASSERT(aStep.mpFinding);
+        CPPUNIT_ASSERT(aStep.mpFinding != pUnmeasured);
+
+        for (const auto* pSeen : aHandedOut)
+            CPPUNIT_ASSERT(pSeen != aStep.mpFinding.get());
+
+        aHandedOut.push_back(aStep.mpFinding.get());
+    }
+
+    // Every finding the scan lined up is accounted for: the one that went out of order, and the
+    // ones the steps handed out.
+    CPPUNIT_ASSERT_EQUAL(aStepLint.getMeasureCount(), aHandedOut.size() + 1);
+
+    std::vector<std::pair<sal_Int32, sal_Int32>> aOtherRows;
+    sal_uInt64 nOtherSaving = 0;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        if (rpFinding == pImage)
+            continue;
+
+        aOtherRows.emplace_back(rpFinding->getFacts().mnImageNumber,
+                                rpFinding->getSlideIndex());
+        nOtherSaving += rpFinding->getSavingBytes();
+    }
+
+    const sal_uInt64 nTotalSaving = nOtherSaving + pImage->getSavingBytes();
+    CPPUNIT_ASSERT(pImage->getSavingBytes() > 0);
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, pImage->getUndoLabel());
+        pImage->fix(rBase);
+    }
+
+    aLint.dropFinding(pImage);
+
+    // What is left reads exactly as it did, figures and all, so no row has to be measured again.
+    CPPUNIT_ASSERT_EQUAL(aOtherRows.size(), aLint.getFindings().size());
+
+    size_t nRow = 0;
+    sal_uInt64 nSavingLeft = 0;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        CPPUNIT_ASSERT(rpFinding != pImage);
+        CPPUNIT_ASSERT_EQUAL(aOtherRows[nRow].first, rpFinding->getFacts().mnImageNumber);
+        CPPUNIT_ASSERT_EQUAL(aOtherRows[nRow].second, rpFinding->getSlideIndex());
+        ++nRow;
+        nSavingLeft += rpFinding->getSavingBytes();
+    }
+
+    // The rows that are left stand for a hidden slide, an unused master slide and the speaker
+    // notes, and none of those carries a byte figure. So the image was the whole of what the list
+    // offered, and dealing with it leaves the list offering nothing.
+    CPPUNIT_ASSERT_EQUAL(sal_uInt64(0), nOtherSaving);
+    CPPUNIT_ASSERT_EQUAL(nOtherSaving, nSavingLeft);
+    CPPUNIT_ASSERT(nSavingLeft < nTotalSaving);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintUndoAsksForList)
+{
+    // Taking a cleanup back puts what it dealt with into the document again, so whoever started it
+    // is asked for the list afresh. Making the cleanup again asks once more.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    auto countImageFindings = [pDoc] {
+        sd::lint::PresentationLint aLint(*pDoc, sd::lint::LintOptions());
+        aLint.scan();
+
+        size_t nCount = 0;
+        for (const auto& rpFinding : aLint.getFindings())
+        {
+            if (rpFinding->getCategory() == sd::lint::LintCategory::LargeImage)
+                ++nCount;
+        }
+        return nCount;
+    };
+
+    int nListRequests = 0;
+    auto pNotifier
+        = std::make_shared<sd::lint::LintUndoNotifier>([&nListRequests] { ++nListRequests; });
+
+    sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    std::shared_ptr<sd::lint::LintFinding> pImage;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        if (rpFinding->getCategory() == sd::lint::LintCategory::LargeImage)
+            pImage = rpFinding;
+    }
+    CPPUNIT_ASSERT(pImage);
+
+    const size_t nUndoCountBefore = pUndoManager->GetUndoActionCount();
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, pImage->getUndoLabel(), pNotifier);
+        pImage->fix(rBase);
+    }
+
+    // The list is asked for when a cleanup is taken back or made again, and the request travels
+    // inside the one entry the cleanup leaves behind rather than adding an entry of its own.
+    CPPUNIT_ASSERT_EQUAL(0, nListRequests);
+    CPPUNIT_ASSERT_EQUAL(nUndoCountBefore + 1, pUndoManager->GetUndoActionCount());
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_COMPRESS_IMAGE),
+                         pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT_EQUAL(size_t(0), countImageFindings());
+
+    // A cleanup that changes nothing is dropped off the undo stack, and the request for the list
+    // that goes with it is dropped along with it.
+    {
+        sd::lint::LintUndoGroup aEmptyGroup(rBase, u"nothing to take back"_ustr, pNotifier);
+    }
+    CPPUNIT_ASSERT_EQUAL(nUndoCountBefore + 1, pUndoManager->GetUndoActionCount());
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(1, nListRequests);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), countImageFindings());
+
+    pUndoManager->Redo();
+    CPPUNIT_ASSERT_EQUAL(2, nListRequests);
+    CPPUNIT_ASSERT_EQUAL(size_t(0), countImageFindings());
+
+    // The undo stack outlives whoever filled it, and an entry left over from a holder that has
+    // gone asks nobody for anything.
+    pNotifier.reset();
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(2, nListRequests);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), countImageFindings());
+}
+
+namespace
+{
+/** The encoded bytes of the given bitmap, the way an image read from a document carries them. */
+BinaryDataContainer encodeTestImage(const Bitmap& rBitmap)
+{
+    SvMemoryStream aStream;
+    GraphicFilter& rFilter = GraphicFilter::GetGraphicFilter();
+    const sal_uInt16 nFormat = rFilter.GetExportFormatNumberForShortName(u"jpg");
+    CPPUNIT_ASSERT_EQUAL(ERRCODE_NONE,
+                         rFilter.ExportGraphic(Graphic(rBitmap), u"none", aStream, nFormat));
+
+    const sal_uInt64 nBytes = aStream.TellEnd();
+    CPPUNIT_ASSERT(nBytes > 0);
+
+    aStream.Seek(STREAM_SEEK_TO_BEGIN);
+    return BinaryDataContainer(aStream, std::size_t(nBytes));
+}
+
+/** The encoded bytes of a plain bitmap of the given size in the given colour. */
+BinaryDataContainer encodePlainImage(const Size& rPixelSize, Color aColour)
+{
+    Bitmap aBitmap(rPixelSize, vcl::PixelFormat::N24_BPP);
+    aBitmap.Erase(aColour);
+
+    return encodeTestImage(aBitmap);
+}
+
+/** A graphic read back from encoded bytes, which holds those bytes alongside its pixels. */
+Graphic importTestImage(const BinaryDataContainer& rData)
+{
+    SvMemoryStream aStream(const_cast<sal_uInt8*>(rData.getData()), rData.getSize(),
+                           StreamMode::READ);
+
+    Graphic aGraphic;
+    GraphicFilter& rFilter = GraphicFilter::GetGraphicFilter();
+    CPPUNIT_ASSERT_EQUAL(ERRCODE_NONE, rFilter.ImportGraphic(aGraphic, u"", aStream));
+    return aGraphic;
+}
+
+/** A bitmap of scattered colours, which no encoding shrinks to very little, so an image made from
+    it is worth a row of its own. The number picks the pattern, so two bitmaps made under different
+    numbers hold different pixels. */
+Bitmap makeNoisyBitmap(const Size& rPixelSize, sal_Int32 nPattern)
+{
+    const sal_Int32 nWidth = rPixelSize.Width();
+    const sal_Int32 nHeight = rPixelSize.Height();
+    std::vector<sal_uInt8> aPixels(std::size_t(nWidth) * std::size_t(nHeight) * 3);
+
+    // A run of numbers that jumps about within the byte range, so neighbouring pixels have little
+    // in common and the encoded image stays large.
+    sal_uInt32 nValue = sal_uInt32(nPattern) * 7919 + 12345;
+    for (sal_uInt8& rByte : aPixels)
+    {
+        nValue = nValue * 1103515245 + 12345;
+        rByte = sal_uInt8((nValue >> 16) & 0xFF);
+    }
+
+    return vcl::bitmap::CreateFromData(aPixels.data(), nWidth, nHeight, nWidth * 3, 24);
+}
+
+/** A graphic of its own, told from every other by the pixels the number picks, holding the bytes it
+    was read from the way an image of a document does. */
+Graphic makeLinkedTestImage(sal_Int32 nPattern)
+{
+    return importTestImage(encodeTestImage(makeNoisyBitmap(Size(900, 900), nPattern)));
+}
+
+/** Draws the graphic on the given slide of the deck, 2 cm across, which is small enough for the
+    scan to find an 800 pixel image stored at more pixels than the deck needs. Answers the object
+    that draws it. */
+SdrGrafObj& addImageToSlide(SdDrawDocument& rDoc, sal_uInt16 nSlide, const Graphic& rGraphic,
+                            sal_Int32 nIndex)
+{
+    SdPage* pPage = rDoc.GetSdPage(nSlide, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+
+    const tools::Rectangle aRectangle(Point(500 + nIndex * 200, 8000), Size(2000, 2000));
+    rtl::Reference<SdrGrafObj> pObject = new SdrGrafObj(rDoc, rGraphic, aRectangle);
+    pPage->InsertObject(pObject.get());
+
+    return *pObject;
+}
+
+/** The same, on the first slide of the deck. */
+SdrGrafObj& addImageToFirstSlide(SdDrawDocument& rDoc, const Graphic& rGraphic, sal_Int32 nIndex)
+{
+    return addImageToSlide(rDoc, 0, rGraphic, nIndex);
+}
+
+/** The findings of the given kind, in the order the list holds them. */
+std::vector<std::shared_ptr<sd::lint::LintFinding>>
+findingsOfCategory(const sd::lint::PresentationLint& rLint, sd::lint::LintCategory eCategory)
+{
+    std::vector<std::shared_ptr<sd::lint::LintFinding>> aMatches;
+    for (const auto& rpFinding : rLint.getFindings())
+    {
+        if (rpFinding->getCategory() == eCategory)
+            aMatches.push_back(rpFinding);
+    }
+
+    return aMatches;
+}
+
+/** Which of the red, green and blue channels are strong in each quarter of a quadrant picture: red
+    at the top left, green at the top right, blue at the bottom left and yellow at the bottom
+    right. */
+constexpr bool gaQuadrantChannels[4][3] = {
+    { true, false, false }, { false, true, false }, { false, false, true }, { true, true, false }
+};
+
+/** The quarter of a quadrant picture a colour belongs to, or -1 for a colour none of them holds. */
+sal_Int32 quadrantOfColour(const Color& rColour)
+{
+    for (sal_Int32 nQuadrant = 0; nQuadrant < 4; ++nQuadrant)
+    {
+        if (gaQuadrantChannels[nQuadrant][0] == (rColour.GetRed() >= 128)
+            && gaQuadrantChannels[nQuadrant][1] == (rColour.GetGreen() >= 128)
+            && gaQuadrantChannels[nQuadrant][2] == (rColour.GetBlue() >= 128))
+            return nQuadrant;
+    }
+
+    return -1;
+}
+
+/** A bitmap whose four quarters each carry one of the quadrant colours, with every channel jumping
+    about within its own end of the range. The noise keeps the encoded picture large, so trimming
+    the picture down frees up real bytes, and every channel still reads as strong or weak wherever
+    a pixel is taken from. The number picks the run of noise, so two bitmaps made under different
+    numbers hold different pixels. */
+Bitmap makeQuadrantBitmap(const Size& rPixelSize, sal_Int32 nPattern)
+{
+    const sal_Int32 nWidth = rPixelSize.Width();
+    const sal_Int32 nHeight = rPixelSize.Height();
+    std::vector<sal_uInt8> aPixels(std::size_t(nWidth) * std::size_t(nHeight) * 3);
+
+    sal_uInt32 nValue = sal_uInt32(nPattern) * 7919 + 12345;
+    for (sal_Int32 nRow = 0; nRow < nHeight; ++nRow)
+    {
+        for (sal_Int32 nColumn = 0; nColumn < nWidth; ++nColumn)
+        {
+            const sal_Int32 nQuadrant
+                = (nRow < nHeight / 2 ? 0 : 2) + (nColumn < nWidth / 2 ? 0 : 1);
+            sal_uInt8* pPixel = aPixels.data() + (std::size_t(nRow) * nWidth + nColumn) * 3;
+
+            for (sal_Int32 nChannel = 0; nChannel < 3; ++nChannel)
+            {
+                nValue = nValue * 1103515245 + 12345;
+
+                // A quarter of the range keeps every value clear of the middle, so an encoding
+                // that shifts the colours a little still leaves each channel on its own side.
+                const sal_uInt8 nNoise = sal_uInt8((nValue >> 16) % 64);
+                pPixel[nChannel] = gaQuadrantChannels[nQuadrant][nChannel] ? 255 - nNoise : nNoise;
+            }
+        }
+    }
+
+    return vcl::bitmap::CreateFromData(aPixels.data(), nWidth, nHeight, nWidth * 3, 24);
+}
+
+/** A quadrant picture of its own, holding the bytes it was read from the way an image of a document
+    does. It carries enough pixels that hiding part of it is worth well over the few kilobytes the
+    list keeps as its floor. */
+Graphic makeQuadrantImage(sal_Int32 nPattern)
+{
+    return importTestImage(encodeTestImage(makeQuadrantBitmap(Size(1200, 1200), nPattern)));
+}
+
+/** The size of the whole picture in hundredths of a millimetre, which is the unit a crop is written
+    in. A picture read back from encoded bytes carries the resolution it was written at, so it
+    already knows itself in that unit. */
+Size pictureLogicSize(const Graphic& rGraphic)
+{
+    CPPUNIT_ASSERT_EQUAL(MapUnit::Map100thMM, rGraphic.GetPrefMapMode().GetMapUnit());
+
+    return rGraphic.GetPrefSize();
+}
+
+/** Keeps the given share of the picture off each edge of the object, the way the crop of a picture
+    on a slide does. A negative share pads the picture out instead of trimming it. */
+void setCropShares(SdrGrafObj& rObject, double fLeft, double fTop, double fRight, double fBottom)
+{
+    const Size aLogicSize = pictureLogicSize(rObject.GetGraphic());
+    const text::GraphicCrop aCrop(
+        sal_Int32(aLogicSize.Height() * fTop), sal_Int32(aLogicSize.Height() * fBottom),
+        sal_Int32(aLogicSize.Width() * fLeft), sal_Int32(aLogicSize.Width() * fRight));
+
+    uno::Reference<beans::XPropertySet> xShape(rObject.getUnoShape(), uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xShape.is());
+    xShape->setPropertyValue(u"GraphicCrop"_ustr, cpo::uno::Any(aCrop));
+}
+
+/** The crop the object carries, in hundredths of a millimetre. */
+const SdrGrafCropItem& cropOf(const SdrGrafObj& rObject)
+{
+    return rObject.GetMergedItem(SDRATTR_GRAFCROP);
+}
+
+/** Draws the graphic on the first slide of the deck as a square of the given side in hundredths of
+    a millimetre. Answers the object that draws it. */
+SdrGrafObj& addSquareImageToFirstSlide(SdDrawDocument& rDoc, const Graphic& rGraphic,
+                                       tools::Long nSide)
+{
+    SdPage* pPage = rDoc.GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+
+    rtl::Reference<SdrGrafObj> pObject
+        = new SdrGrafObj(rDoc, rGraphic, tools::Rectangle(Point(500, 500), Size(nSide, nSide)));
+    pPage->InsertObject(pObject.get());
+
+    return *pObject;
+}
+
+/** The image the first slide of the deck holds at the given place in its object list. A cleanup
+    puts a new object in the place of the one it changes, so the object is looked up again after
+    every step. */
+SdrGrafObj& imageOnFirstSlide(SdDrawDocument& rDoc, sal_uInt32 nIndex)
+{
+    SdPage* pPage = rDoc.GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+
+    auto* pObject = dynamic_cast<SdrGrafObj*>(pPage->GetObj(nIndex));
+    CPPUNIT_ASSERT(pObject);
+
+    return *pObject;
+}
+
+/** The colour of the picture the object draws, at the given share of its width and height. */
+Color colourAtShare(const SdrGrafObj& rObject, double fX, double fY)
+{
+    Bitmap aBitmap = rObject.GetGraphic().GetBitmap();
+    const Size aPixelSize = aBitmap.GetSizePixel();
+
+    return aBitmap.GetPixelColor(sal_Int32(aPixelSize.Width() * fX),
+                                 sal_Int32(aPixelSize.Height() * fY));
+}
+
+/** How many bytes the document spends on the picture the object draws. */
+sal_uInt64 storedBytesOf(const SdrGrafObj& rObject)
+{
+    const Graphic& rGraphic = rObject.GetGraphic();
+    CPPUNIT_ASSERT(rGraphic.IsGfxLink());
+
+    return sal_uInt64(rGraphic.GetGfxLink().GetDataSize());
+}
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintEncodesATransparentImageAsPng)
+{
+    // JPEG has no way to hold transparency, so a bitmap that carries any comes back as PNG.
+    createSdImpressDoc();
+
+    Bitmap aBitmap(Size(600, 600), vcl::PixelFormat::N24_BPP);
+    aBitmap.Erase(COL_LIGHTRED);
+
+    sal_uInt8 nAlphaValue = 0x80;
+    AlphaMask aAlphaMask(Size(600, 600), &nAlphaValue);
+    const Graphic aGraphic(Bitmap(aBitmap, aAlphaMask));
+
+    const sd::lint::LintCompressedImage aCompressed = sd::lint::compressGraphic(
+        aGraphic, sal_uInt64(aGraphic.GetSizeBytes()), Size(2000, 2000), 150, 80);
+
+    CPPUNIT_ASSERT(aCompressed.getByteCount() > 8);
+
+    // The first eight bytes of a PNG are the signature the format begins with.
+    const sal_uInt8 aPngSignature[] = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+    for (std::size_t nByte = 0; nByte < 8; ++nByte)
+        CPPUNIT_ASSERT_EQUAL(aPngSignature[nByte], aCompressed.maData.getData()[nByte]);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testLintMeasureCacheKeepsWhatFitsAndDropsTheOldest)
+{
+    // The cache answers with the encoding it was given for a key, keeps the first encoding stored
+    // under a key it already holds, and lets the oldest go once the kept bytes are over its limit.
+    createSdImpressDoc();
+
+    sd::lint::LintMeasureCache aCache;
+
+    const sd::lint::LintMeasureKey aFirstKey{ 111, 2000, 2000, 150, 80 };
+    const sd::lint::LintMeasureKey aSecondKey{ 222, 2000, 2000, 150, 80 };
+
+    sd::lint::LintCompressedImage aSmall;
+    aSmall.maData = encodePlainImage(Size(200, 200), COL_LIGHTRED);
+    CPPUNIT_ASSERT(!aSmall.maData.isEmpty());
+
+    aCache.store(aFirstKey, aSmall);
+
+    const auto oFound = aCache.find(aFirstKey, aSmall.getByteCount() * 4);
+    CPPUNIT_ASSERT(oFound);
+    CPPUNIT_ASSERT_EQUAL(aSmall.getByteCount(), oFound->getByteCount());
+
+    // Whether the encoding is smaller is about the image that was asked after, so the same bytes
+    // answer differently for a document that spends less on the image than they take.
+    CPPUNIT_ASSERT(oFound->mbSmaller);
+    CPPUNIT_ASSERT(!aCache.find(aFirstKey, 1)->mbSmaller);
+
+    // A key that is already there keeps the bytes it has.
+    sd::lint::LintCompressedImage aOther;
+    aOther.maData = encodePlainImage(Size(300, 300), COL_LIGHTBLUE);
+    CPPUNIT_ASSERT(aOther.getByteCount() != aSmall.getByteCount());
+
+    aCache.store(aFirstKey, aOther);
+    CPPUNIT_ASSERT_EQUAL(aSmall.getByteCount(), aCache.find(aFirstKey, 1)->getByteCount());
+
+    // Two encodings of seventeen megabytes each are over the limit the cache keeps, so the one
+    // that went in first goes and the one that has just gone in stays.
+    constexpr std::size_t nHugeBytes = 17u * 1024 * 1024;
+    SvMemoryStream aHugeStream;
+    const std::vector<sal_uInt8> aHugeBlock(nHugeBytes, 0x5A);
+    aHugeStream.WriteBytes(aHugeBlock.data(), nHugeBytes);
+    aHugeStream.Seek(STREAM_SEEK_TO_BEGIN);
+
+    sd::lint::LintCompressedImage aHuge;
+    aHuge.maData = BinaryDataContainer(aHugeStream, nHugeBytes);
+
+    aCache.store(aSecondKey, aHuge);
+
+    const sd::lint::LintMeasureKey aThirdKey{ 333, 2000, 2000, 150, 80 };
+    aCache.store(aThirdKey, aHuge);
+
+    CPPUNIT_ASSERT(!aCache.find(aFirstKey, 1));
+    CPPUNIT_ASSERT(!aCache.find(aSecondKey, 1));
+    CPPUNIT_ASSERT(aCache.find(aThirdKey, 1));
+
+    // Everything goes when the cache is emptied.
+    aCache.clear();
+    CPPUNIT_ASSERT(!aCache.find(aThirdKey, 1));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintListsTheCostliestImageOfAGroupFirst)
+{
+    // The list groups the findings by the kind of problem they describe, and inside a group the
+    // one the document spends the most bytes on comes first.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    // A third image, larger than the small one of the deck and smaller than its large one.
+    addImageToFirstSlide(*pDoc, makeLinkedTestImage(3), 0);
+
+    sd::lint::LintOptions aOptions;
+    aOptions.mbForPublication = true;
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scanStructure();
+
+    std::vector<sd::lint::LintCategory> aCategoryOrder;
+    for (const auto& rpFinding : aLint.getFindings())
+    {
+        if (aCategoryOrder.empty() || aCategoryOrder.back() != rpFinding->getCategory())
+            aCategoryOrder.push_back(rpFinding->getCategory());
+    }
+
+    // Every finding of one kind stands together, so no kind turns up twice in the list.
+    std::set<sd::lint::LintCategory> aSeenCategories(aCategoryOrder.begin(), aCategoryOrder.end());
+    CPPUNIT_ASSERT_EQUAL(aCategoryOrder.size(), aSeenCategories.size());
+    CPPUNIT_ASSERT_EQUAL(sd::lint::LintCategory::LargeImage, aCategoryOrder.front());
+
+    const auto aImages = findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(3), aImages.size());
+    CPPUNIT_ASSERT(aImages[0]->getCurrentBytes() > aImages[1]->getCurrentBytes());
+    CPPUNIT_ASSERT(aImages[1]->getCurrentBytes() > aImages[2]->getCurrentBytes());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintLeavesAnAnimatedImageAlone)
+{
+    // An animation is a series of frames, and the size in pixels of one frame says nothing about
+    // what the whole of it takes, so an animated image gets no row.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aBeforeLint(*pDoc, aOptions);
+    aBeforeLint.scanStructure();
+    const size_t nImagesBefore
+        = findingsOfCategory(aBeforeLint, sd::lint::LintCategory::LargeImage).size();
+
+    SvFileStream aFileStream(m_directories.getURLFromSrc(u"/sd/qa/unit/data/") + "animated.gif",
+                             StreamMode::READ);
+    Graphic aAnimation;
+    GraphicFilter& rFilter = GraphicFilter::GetGraphicFilter();
+    CPPUNIT_ASSERT_EQUAL(ERRCODE_NONE, rFilter.ImportGraphic(aAnimation, u"", aFileStream));
+    CPPUNIT_ASSERT(aAnimation.IsAnimated());
+
+    // Drawn at one centimetre the animation carries far more pixels than the deck needs, so only
+    // its being an animation keeps it off the list.
+    SdPage* pPage = pDoc->GetSdPage(0, PageKind::Standard);
+    CPPUNIT_ASSERT(pPage);
+    rtl::Reference<SdrGrafObj> pObject
+        = new SdrGrafObj(*pDoc, aAnimation, tools::Rectangle(Point(500, 11000), Size(1000, 1000)));
+    pPage->InsertObject(pObject.get());
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scanStructure();
+
+    CPPUNIT_ASSERT_EQUAL(nImagesBefore,
+                         findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintListsAHeavilyCroppedImage)
+{
+    // An image most of which a crop keeps off the slide is listed as a cropped image, whatever
+    // resolution the part that is shown is stored at.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aBeforeLint(*pDoc, aOptions);
+    aBeforeLint.scan();
+    const size_t nImagesBefore
+        = findingsOfCategory(aBeforeLint, sd::lint::LintCategory::LargeImage).size();
+
+    // Twelve centimetres across is wide enough for the quarter that is left to carry no more
+    // pixels than the target resolution asks for, so the crop alone is what earns the row.
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 12000);
+    setCropShares(rObject, 0.0, 0.0, 0.5, 0.5);
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    CPPUNIT_ASSERT_EQUAL(nImagesBefore,
+                         findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage).size());
+
+    const auto aCropped = findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aCropped.size());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aCropped[0]->getSlideIndex());
+    CPPUNIT_ASSERT(aCropped[0]->getSavingBytes() > 0);
+
+    // Half the width and half the height are kept off, which leaves three quarters of the area
+    // hidden. The row says that share and what the document spends on the whole picture.
+    CPPUNIT_ASSERT_EQUAL(storedBytesOf(rObject), aCropped[0]->getCurrentBytes());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(75), aCropped[0]->getFacts().mnHiddenPercent);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintFixBakesTheCrop)
+{
+    // Cleaning up a cropped image leaves the slide showing the same picture out of a bitmap that
+    // holds only the part of it that is shown.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 12000);
+    const sal_uInt32 nIndex = rObject.GetOrdNum();
+    setCropShares(rObject, 0.0, 0.0, 0.5, 0.5);
+
+    const tools::Rectangle aRectangleBefore = rObject.GetLogicRect();
+    const sal_uInt64 nBytesBefore = storedBytesOf(rObject);
+    const Size aPixelsBefore = rObject.GetGraphic().GetSizePixel();
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    const auto aCropped = findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aCropped.size());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, aCropped[0]->getUndoLabel());
+        aCropped[0]->fix(rBase);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_TRIM_IMAGE), pUndoManager->GetUndoActionComment(0));
+    CPPUNIT_ASSERT(aCropped[0]->getRealizedSavingBytes() > 0);
+
+    const SdrGrafObj& rFixed = imageOnFirstSlide(*pDoc, nIndex);
+
+    // Nothing is kept off the picture any more, and the slide gives it the room it already had.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetLeft());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetTop());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetRight());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetBottom());
+    CPPUNIT_ASSERT_EQUAL(aRectangleBefore, rFixed.GetLogicRect());
+
+    // Only the quarter the crop left showing is still there. Trimming a bitmap takes the row and
+    // the column the crop lands on as well, so the result can come out a pixel longer per side.
+    const Size aPixelsAfter = rFixed.GetGraphic().GetSizePixel();
+    CPPUNIT_ASSERT(aPixelsAfter.Width() >= aPixelsBefore.Width() / 2);
+    CPPUNIT_ASSERT(aPixelsAfter.Width() <= aPixelsBefore.Width() / 2 + 1);
+    CPPUNIT_ASSERT(aPixelsAfter.Height() >= aPixelsBefore.Height() / 2);
+    CPPUNIT_ASSERT(aPixelsAfter.Height() <= aPixelsBefore.Height() / 2 + 1);
+
+    // The crop kept the top left quarter, which is the red one.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), quadrantOfColour(colourAtShare(rFixed, 0.5, 0.5)));
+
+    CPPUNIT_ASSERT(storedBytesOf(rFixed) < nBytesBefore);
+
+    // The picture now holds what the slide shows, so a fresh scan offers it under neither kind.
+    sd::lint::PresentationLint aAfterLint(*pDoc, aOptions);
+    aAfterLint.scan();
+    CPPUNIT_ASSERT_EQUAL(
+        size_t(0), findingsOfCategory(aAfterLint, sd::lint::LintCategory::CroppedImage).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintUndoRestoresTheCrop)
+{
+    // Taking back the cleanup of a cropped image brings the whole picture and its crop back, and
+    // making the cleanup again trims the picture once more.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 12000);
+    const sal_uInt32 nIndex = rObject.GetOrdNum();
+    setCropShares(rObject, 0.0, 0.0, 0.5, 0.5);
+
+    const sal_Int32 nCropRightBefore = cropOf(rObject).GetRight();
+    const sal_uInt64 nBytesBefore = storedBytesOf(rObject);
+    CPPUNIT_ASSERT(nCropRightBefore > 0);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    const auto aCropped = findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aCropped.size());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, aCropped[0]->getUndoLabel());
+        aCropped[0]->fix(rBase);
+    }
+
+    const sal_uInt64 nBytesFixed = storedBytesOf(imageOnFirstSlide(*pDoc, nIndex));
+    CPPUNIT_ASSERT(nBytesFixed < nBytesBefore);
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(nCropRightBefore, cropOf(imageOnFirstSlide(*pDoc, nIndex)).GetRight());
+    CPPUNIT_ASSERT_EQUAL(nBytesBefore, storedBytesOf(imageOnFirstSlide(*pDoc, nIndex)));
+
+    pUndoManager->Redo();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(imageOnFirstSlide(*pDoc, nIndex)).GetRight());
+    CPPUNIT_ASSERT_EQUAL(nBytesFixed, storedBytesOf(imageOnFirstSlide(*pDoc, nIndex)));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintLeavesAMixedCropImageAlone)
+{
+    // The document keeps one copy of a bitmap however many slides draw it, so a bitmap whose users
+    // show different parts of it gets no row: trimming it would need a copy per user.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aBeforeLint(*pDoc, aOptions);
+    aBeforeLint.scanStructure();
+    const size_t nImagesBefore
+        = findingsOfCategory(aBeforeLint, sd::lint::LintCategory::LargeImage).size();
+
+    const Graphic aGraphic = makeQuadrantImage(5);
+    SdrGrafObj& rFirstObject = addSquareImageToFirstSlide(*pDoc, aGraphic, 2000);
+    SdrGrafObj& rSecondObject = addSquareImageToFirstSlide(*pDoc, aGraphic, 2000);
+
+    sd::lint::PresentationLint aListedLint(*pDoc, aOptions);
+    aListedLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(
+        nImagesBefore + 1,
+        findingsOfCategory(aListedLint, sd::lint::LintCategory::LargeImage).size());
+
+    // One slide shows the left half of the picture and the other the right half.
+    setCropShares(rFirstObject, 0.0, 0.0, 0.5, 0.0);
+    setCropShares(rSecondObject, 0.5, 0.0, 0.0, 0.0);
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(nImagesBefore,
+                         findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage).size());
+    CPPUNIT_ASSERT_EQUAL(size_t(0),
+                         findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintLeavesANegativeCropImageAlone)
+{
+    // A negative crop pads the picture out rather than trimming it, so there is nothing to bake in
+    // and the image gets no row.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aBeforeLint(*pDoc, aOptions);
+    aBeforeLint.scanStructure();
+    const size_t nImagesBefore
+        = findingsOfCategory(aBeforeLint, sd::lint::LintCategory::LargeImage).size();
+
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 2000);
+
+    sd::lint::PresentationLint aListedLint(*pDoc, aOptions);
+    aListedLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(
+        nImagesBefore + 1,
+        findingsOfCategory(aListedLint, sd::lint::LintCategory::LargeImage).size());
+
+    setCropShares(rObject, -0.2, 0.0, 0.0, 0.0);
+
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(nImagesBefore,
+                         findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage).size());
+    CPPUNIT_ASSERT_EQUAL(size_t(0),
+                         findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintBakesTheCropOfAMirroredImage)
+{
+    // A crop names a part of the picture as the picture itself is stored, before the slide flips
+    // it, so trimming a mirrored image keeps the part the crop names and the flip along with it.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 12000);
+    const sal_uInt32 nIndex = rObject.GetOrdNum();
+
+    const tools::Rectangle aRectangle = rObject.GetLogicRect();
+    const tools::Long nCentreX = aRectangle.Left() + aRectangle.GetWidth() / 2;
+    rObject.Mirror(Point(nCentreX, aRectangle.Top()), Point(nCentreX, aRectangle.Bottom()));
+    CPPUNIT_ASSERT(rObject.IsMirrored());
+
+    setCropShares(rObject, 0.0, 0.0, 0.5, 0.5);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    const auto aCropped = findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aCropped.size());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, aCropped[0]->getUndoLabel());
+        aCropped[0]->fix(rBase);
+    }
+
+    const SdrGrafObj& rFixed = imageOnFirstSlide(*pDoc, nIndex);
+
+    // The crop kept the top left quarter of the stored picture, which is the red one, and the
+    // slide goes on showing that quarter the other way round.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), quadrantOfColour(colourAtShare(rFixed, 0.5, 0.5)));
+    CPPUNIT_ASSERT(rFixed.IsMirrored());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetRight());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintLeavesASmallCropAlone)
+{
+    // Trimming a sliver off a picture frees up too little to be worth reading, so a small crop
+    // earns no row of its own.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aBeforeLint(*pDoc, aOptions);
+    aBeforeLint.scanStructure();
+    const size_t nImagesBefore
+        = findingsOfCategory(aBeforeLint, sd::lint::LintCategory::LargeImage).size();
+
+    // Fourteen centimetres across is wide enough for the picture to carry no more pixels than the
+    // target resolution asks for, so the crop is the only thing that could earn it a row.
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 14000);
+    setCropShares(rObject, 0.0, 0.0, 0.02, 0.02);
+
+    sd::lint::PresentationLint aSmallCropLint(*pDoc, aOptions);
+    aSmallCropLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(
+        nImagesBefore,
+        findingsOfCategory(aSmallCropLint, sd::lint::LintCategory::LargeImage).size());
+    CPPUNIT_ASSERT_EQUAL(
+        size_t(0), findingsOfCategory(aSmallCropLint, sd::lint::LintCategory::CroppedImage).size());
+
+    // Hiding three quarters of the same picture is worth a row.
+    setCropShares(rObject, 0.0, 0.0, 0.5, 0.5);
+
+    sd::lint::PresentationLint aLargeCropLint(*pDoc, aOptions);
+    aLargeCropLint.scanStructure();
+    CPPUNIT_ASSERT_EQUAL(
+        size_t(1), findingsOfCategory(aLargeCropLint, sd::lint::LintCategory::CroppedImage).size());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintBakesTheCropOfALargeImageRow)
+{
+    // An image that keeps a sliver off and is stored at far more pixels than it is drawn at is
+    // listed for its pixels, and its cleanup trims the sliver away as it encodes the image again.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 2000);
+    const sal_uInt32 nIndex = rObject.GetOrdNum();
+    setCropShares(rObject, 0.02, 0.02, 0.02, 0.02);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    CPPUNIT_ASSERT_EQUAL(size_t(0),
+                         findingsOfCategory(aLint, sd::lint::LintCategory::CroppedImage).size());
+
+    std::shared_ptr<sd::lint::LintFinding> pImage;
+    for (const auto& rpFinding : findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage))
+    {
+        if (rpFinding->getCurrentBytes() == storedBytesOf(rObject))
+            pImage = rpFinding;
+    }
+    CPPUNIT_ASSERT(pImage);
+    CPPUNIT_ASSERT_EQUAL(SdResId(STR_LINT_UNDO_COMPRESS_IMAGE), pImage->getUndoLabel());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, pImage->getUndoLabel());
+        pImage->fix(rBase);
+    }
+
+    const SdrGrafObj& rFixed = imageOnFirstSlide(*pDoc, nIndex);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetLeft());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), cropOf(rFixed).GetBottom());
+
+    // All four quarters of the picture survive the cleanup, each where it was.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0), quadrantOfColour(colourAtShare(rFixed, 0.25, 0.25)));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), quadrantOfColour(colourAtShare(rFixed, 0.75, 0.25)));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), quadrantOfColour(colourAtShare(rFixed, 0.25, 0.75)));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), quadrantOfColour(colourAtShare(rFixed, 0.75, 0.75)));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintMeasuresTheCropOfItsOwn)
+{
+    // What an encoding comes to depends on the part of the picture that is shown, so a measurement
+    // taken of the whole picture is never read for a crop of it.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    auto pCache = std::make_shared<sd::lint::LintMeasureCache>();
+    SdrGrafObj& rObject = addSquareImageToFirstSlide(*pDoc, makeQuadrantImage(5), 12000);
+
+    const sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aWholeLint(*pDoc, aOptions, pCache);
+    aWholeLint.scan();
+
+    const std::size_t nKeysOfWholePicture = pCache->getCount();
+    CPPUNIT_ASSERT(nKeysOfWholePicture > 0);
+
+    setCropShares(rObject, 0.0, 0.0, 0.5, 0.5);
+
+    sd::lint::PresentationLint aCroppedLint(*pDoc, aOptions, pCache);
+    aCroppedLint.scan();
+
+    CPPUNIT_ASSERT_EQUAL(nKeysOfWholePicture + 1, pCache->getCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintFixOfAnImageOnADeletedSlideChangesNothing)
+{
+    // A slide that goes between the scan and the cleanup takes its images with it, so the cleanup
+    // finds nothing left to replace, frees nothing up and leaves no undo entry behind.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    // The hidden slide of the deck carries nothing, so an image of its own goes on it and goes
+    // with it when the slide is taken out.
+    const Graphic aGraphic = makeLinkedTestImage(4);
+    SdrGrafObj& rObject = addImageToSlide(*pDoc, 1, aGraphic, 0);
+    const BitmapChecksum nChecksum = aGraphic.GetChecksum();
+
+    sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    std::shared_ptr<sd::lint::LintFinding> pImage;
+    for (const auto& rpFinding : findingsOfCategory(aLint, sd::lint::LintCategory::LargeImage))
+    {
+        if (rpFinding->getSlideIndex() == 1)
+            pImage = rpFinding;
+    }
+    CPPUNIT_ASSERT(pImage);
+    CPPUNIT_ASSERT(pImage->getSavingBytes() > 0);
+
+    const auto aHiddenSlides = findingsOfCategory(aLint, sd::lint::LintCategory::HiddenSlide);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aHiddenSlides.size());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, aHiddenSlides[0]->getUndoLabel());
+        aHiddenSlides[0]->fix(rBase);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+
+    const size_t nUndoCountBefore = pUndoManager->GetUndoActionCount();
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, pImage->getUndoLabel());
+        pImage->fix(rBase);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt64(0), pImage->getRealizedSavingBytes());
+    CPPUNIT_ASSERT_EQUAL(nUndoCountBefore, pUndoManager->GetUndoActionCount());
+
+    // The image the slide took with it is the one it was.
+    CPPUNIT_ASSERT_EQUAL(nChecksum, rObject.GetGraphic().GetChecksum());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintUndoMakesAMasterPreciousAgain)
+{
+    // Every master a document is loaded with is marked precious, which is what keeps it from being
+    // dropped automatically. Taking the cleanup back puts that mark on again, and making the
+    // cleanup again takes it off.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    const auto aMasters = findingsOfCategory(aLint, sd::lint::LintCategory::UnusedMaster);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aMasters.size());
+
+    // Every slide of the deck builds on the one master, so the other master is the unused one.
+    const SdrPage& rUsedMaster = pDoc->GetSdPage(0, PageKind::Standard)->TRG_GetMasterPage();
+    const sal_uInt16 nMasterCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    rtl::Reference<SdPage> xMaster;
+    for (sal_uInt16 nMaster = 0; nMaster < nMasterCount; ++nMaster)
+    {
+        SdPage* pMaster = pDoc->GetMasterSdPage(nMaster, PageKind::Standard);
+        if (pMaster && pMaster != &rUsedMaster)
+            xMaster = pMaster;
+    }
+    CPPUNIT_ASSERT(xMaster.is());
+    CPPUNIT_ASSERT(xMaster->IsPrecious());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, aMasters[0]->getUndoLabel());
+        aMasters[0]->fix(rBase);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(!xMaster->IsPrecious());
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(xMaster->IsPrecious());
+
+    pUndoManager->Redo();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(!xMaster->IsPrecious());
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT(xMaster->IsPrecious());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPresentationLintUndoLeavesAnUnmarkedMasterUnmarked)
+{
+    // A master made during the session carries no precious mark. Taking the cleanup back brings the
+    // master back the way it was, still without the mark.
+    createSdImpressDoc("presentation-lint.fodp");
+
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT(pViewShell);
+    sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+
+    SfxUndoManager* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
+    CPPUNIT_ASSERT(pUndoManager);
+
+    // Every slide of the deck builds on the one master, so the other master is the unused one.
+    const SdrPage& rUsedMaster = pDoc->GetSdPage(0, PageKind::Standard)->TRG_GetMasterPage();
+    const sal_uInt16 nMasterCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
+    rtl::Reference<SdPage> xMaster;
+    for (sal_uInt16 nMaster = 0; nMaster < nMasterCount; ++nMaster)
+    {
+        SdPage* pMaster = pDoc->GetMasterSdPage(nMaster, PageKind::Standard);
+        if (pMaster && pMaster != &rUsedMaster)
+            xMaster = pMaster;
+    }
+    CPPUNIT_ASSERT(xMaster.is());
+
+    // A master the document was loaded with comes in marked, so the mark comes off to stand for a
+    // master that was made while the document was open.
+    xMaster->SetPrecious(false);
+
+    sd::lint::LintOptions aOptions;
+    sd::lint::PresentationLint aLint(*pDoc, aOptions);
+    aLint.scan();
+
+    const auto aMasters = findingsOfCategory(aLint, sd::lint::LintCategory::UnusedMaster);
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aMasters.size());
+
+    {
+        sd::lint::LintUndoGroup aUndoGroup(rBase, aMasters[0]->getUndoLabel());
+        aMasters[0]->fix(rBase);
+    }
+
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(nMasterCount - 1),
+                         pDoc->GetMasterSdPageCount(PageKind::Standard));
+
+    pUndoManager->Undo();
+    CPPUNIT_ASSERT_EQUAL(nMasterCount, pDoc->GetMasterSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(!xMaster->IsPrecious());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testEditingAfterSlideSectionRename)
+{
+    // Typing into a shape still starts a text edit after a slide section has
+    // been added and then renamed.
+    createSdImpressDoc();
+
+    dispatchCommand(mxComponent, u".uno:AddSlideSection"_ustr, {});
+
+    uno::Sequence<beans::PropertyValue> aRenameArgs(
+        comphelper::InitPropertySequence({ { u"SectionIndex"_ustr, uno::Any(sal_Int32(0)) },
+                                           { u"Name"_ustr, uno::Any(u"Opening"_ustr) } }));
+    dispatchCommand(mxComponent, u".uno:RenameSlideSection"_ustr, aRenameArgs);
+
+    auto* pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    sd::SlideSectionManager& rManager = pImpressDocument->GetDoc()->GetSectionManager();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), rManager.GetSectionCount());
+    CPPUNIT_ASSERT_EQUAL(u"Opening"_ustr, rManager.GetSection(0).maName);
+
+    // The keystrokes reach the slide and open a text edit on the shape.
+    insertStringToObject(0, u"Test", /*bUseEscape*/ true);
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(u"Test"_ustr,
+                         xDrawPage->getByIndex(0).queryThrow<text::XTextRange>()->getString());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineDemoteTitle)
+{
+    OutlinerView* pOutlinerView = createOutlineView({ u"A", u"B" });
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+
+    // Tab in front of "B" turns the title of the second slide into a paragraph of the first.
+    pOutlinerView->SetSelection(ESelection(1, 0, 1, 0));
+    typeOutlineKey(KEY_TAB);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(1),
+                         pImpressDocument->GetDoc()->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), pOutlinerView->GetOutliner().GetParagraphCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineSelectedPages)
+{
+    createOutlineView({ u"A", u"B" });
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    pDoc->GetSdPage(0, PageKind::Standard)->SetSelected(false);
+    pDoc->GetSdPage(1, PageKind::Standard)->SetSelected(false);
+
+    // The state of the summary slide command marks the slide of the cursor as selected.
+    SfxPoolItemHolder aState;
+    pImpressDocument->GetDocShell()->GetViewShell()->GetViewFrame()->GetDispatcher()->QueryState(
+        SID_SUMMARY_PAGE, aState);
+    CPPUNIT_ASSERT(!pDoc->GetSdPage(0, PageKind::Standard)->IsSelected());
+    CPPUNIT_ASSERT(pDoc->GetSdPage(1, PageKind::Standard)->IsSelected());
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineDeleteAcrossSlides)
+{
+    // Slides "A" with the body paragraph "x", "B" and "C".
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    auto xDrawPages = mxComponent.queryThrow<drawing::XDrawPagesSupplier>()->getDrawPages();
+    xDrawPages->insertNewByIndex(0);
+    xDrawPages->insertNewByIndex(1);
+    const std::u16string_view aTitles[] = { u"A", u"B", u"C" };
+    for (sal_uInt16 i = 0; i < std::size(aTitles); ++i)
+    {
+        SdPage* pPage = pDoc->GetSdPage(i, PageKind::Standard);
+        pPage->SetAutoLayout(AUTOLAYOUT_TITLE_CONTENT, true);
+        auto pTitle = static_cast<SdrTextObj*>(pPage->GetPresObj(PresObjKind::Title));
+        pTitle->SetText(OUString(aTitles[i]));
+        pTitle->SetEmptyPresObj(false);
+    }
+    auto pBody = static_cast<SdrTextObj*>(
+        pDoc->GetSdPage(0, PageKind::Standard)->GetPresObj(PresObjKind::Outline));
+    pBody->SetText(u"x"_ustr);
+    pBody->SetEmptyPresObj(false);
+
+    dispatchCommand(mxComponent, u".uno:OutlineMode"_ustr, {});
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT_EQUAL(sd::ViewShell::ST_OUTLINE, pViewShell->GetShellType());
+    auto pView = static_cast<sd::SimpleOutlinerView*>(pViewShell->GetView());
+    OutlinerView* pOutlinerView = pView->GetViewByWindow(pViewShell->GetActiveWindow());
+    CPPUNIT_ASSERT(pOutlinerView);
+    Outliner& rOutliner = pOutlinerView->GetOutliner();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(4), rOutliner.GetParagraphCount());
+
+    // Deleting from the end of "A" to the end of "B" removes the second slide only.
+    pOutlinerView->SetSelection(ESelection(0, 1, 2, 1));
+    typeOutlineKey(KEY_DELETE);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), rOutliner.GetParagraphCount());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineBackspaceMergesTitle)
+{
+    OutlinerView* pOutlinerView = createOutlineView({ u"A", u"B", u"C" });
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    SdPage* pPageA = pDoc->GetSdPage(0, PageKind::Standard);
+    SdPage* pPageC = pDoc->GetSdPage(2, PageKind::Standard);
+
+    // Backspace in front of "B" merges it into "A" and removes the slide of "B".
+    pOutlinerView->SetSelection(ESelection(1, 0, 1, 0));
+    typeOutlineKey(KEY_BACKSPACE);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), pOutlinerView->GetOutliner().GetParagraphCount());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageA, pDoc->GetSdPage(0, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageC, pDoc->GetSdPage(1, PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineDeleteWholeTitle)
+{
+    OutlinerView* pOutlinerView = createOutlineView({ u"A", u"B", u"C", u"D" });
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    SdPage* pPageA = pDoc->GetSdPage(0, PageKind::Standard);
+    SdPage* pPageD = pDoc->GetSdPage(3, PageKind::Standard);
+
+    // Deleting from the end of "A" to the end of "C" removes the slides of "B" and "C".
+    pOutlinerView->SetSelection(ESelection(0, 1, 2, 1));
+    typeOutlineKey(KEY_DELETE);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), pOutlinerView->GetOutliner().GetParagraphCount());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(2), pDoc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageA, pDoc->GetSdPage(0, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageD, pDoc->GetSdPage(1, PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineMoveTitleUp)
+{
+    OutlinerView* pOutlinerView = createOutlineView({ u"A", u"B", u"C" });
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    SdPage* pPageA = pDoc->GetSdPage(0, PageKind::Standard);
+    SdPage* pPageB = pDoc->GetSdPage(1, PageKind::Standard);
+    SdPage* pPageC = pDoc->GetSdPage(2, PageKind::Standard);
+
+    // Moving "C" up moves its slide in front of the slide of "B".
+    // Order will be A C B
+    pOutlinerView->SetSelection(ESelection(2, 0, 2, 1));
+    dispatchCommand(mxComponent, u".uno:OutlineUp"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(u"C"_ustr, pOutlinerView->GetOutliner().GetText(1));
+    CPPUNIT_ASSERT_EQUAL(pPageC, pDoc->GetSdPage(1, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageB, pDoc->GetSdPage(2, PageKind::Standard));
+
+    // Moving "C" up again moves its slide in front of the slide of "A".
+    // Order will be C A B
+    pOutlinerView->SetSelection(ESelection(1, 0, 1, 1));
+    dispatchCommand(mxComponent, u".uno:OutlineUp"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(u"C"_ustr, pOutlinerView->GetOutliner().GetText(0));
+    CPPUNIT_ASSERT_EQUAL(pPageC, pDoc->GetSdPage(0, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageA, pDoc->GetSdPage(1, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageB, pDoc->GetSdPage(2, PageKind::Standard));
+
+    // Moving "A" down, to test moving to the end.
+    // Order will be C B A
+    pOutlinerView->SetSelection(ESelection(1, 0, 1, 1));
+    dispatchCommand(mxComponent, u".uno:OutlineDown"_ustr, {});
+    CPPUNIT_ASSERT_EQUAL(u"A"_ustr, pOutlinerView->GetOutliner().GetText(2));
+    CPPUNIT_ASSERT_EQUAL(pPageC, pDoc->GetSdPage(0, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageB, pDoc->GetSdPage(1, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageA, pDoc->GetSdPage(2, PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testOutlineDropSlideDownIntoBody)
+{
+    // Slides "A", "B" with the body paragraphs "y1" and "y2", and "C".
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    auto xDrawPages = mxComponent.queryThrow<drawing::XDrawPagesSupplier>()->getDrawPages();
+    xDrawPages->insertNewByIndex(0);
+    xDrawPages->insertNewByIndex(1);
+    const std::u16string_view aTitles[] = { u"A", u"B", u"C" };
+    for (sal_uInt16 i = 0; i < std::size(aTitles); ++i)
+    {
+        SdPage* pPage = pDoc->GetSdPage(i, PageKind::Standard);
+        pPage->SetAutoLayout(AUTOLAYOUT_TITLE_CONTENT, true);
+        auto pTitle = static_cast<SdrTextObj*>(pPage->GetPresObj(PresObjKind::Title));
+        pTitle->SetText(OUString(aTitles[i]));
+        pTitle->SetEmptyPresObj(false);
+    }
+    auto pBody = static_cast<SdrTextObj*>(
+        pDoc->GetSdPage(1, PageKind::Standard)->GetPresObj(PresObjKind::Outline));
+    pBody->SetText(u"y1\ny2"_ustr);
+    pBody->SetEmptyPresObj(false);
+    SdPage* pPageA = pDoc->GetSdPage(0, PageKind::Standard);
+    SdPage* pPageB = pDoc->GetSdPage(1, PageKind::Standard);
+    SdPage* pPageC = pDoc->GetSdPage(2, PageKind::Standard);
+
+    dispatchCommand(mxComponent, u".uno:OutlineMode"_ustr, {});
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    CPPUNIT_ASSERT_EQUAL(sd::ViewShell::ST_OUTLINE, pViewShell->GetShellType());
+    auto pView = static_cast<sd::SimpleOutlinerView*>(pViewShell->GetView());
+    OutlinerView* pOutlinerView = pView->GetViewByWindow(pViewShell->GetActiveWindow());
+    CPPUNIT_ASSERT(pOutlinerView);
+    Outliner& rOutliner = pOutlinerView->GetOutliner();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(5), rOutliner.GetParagraphCount());
+    CPPUNIT_ASSERT_EQUAL(u"y2"_ustr, rOutliner.GetText(3));
+
+    // Dropping "A" between "y1" and "y2" moves its slide between the slides of "B" and "C".
+    pOutlinerView->SetSelection(ESelection(0, 0, 0, 1));
+    rOutliner.UndoActionStart(EDITUNDO_DRAGANDDROP);
+    pOutlinerView->GetEditView().MoveParagraphs(Range(0, 0), 3);
+    rOutliner.UndoActionEnd();
+    CPPUNIT_ASSERT_EQUAL(u"A"_ustr, rOutliner.GetText(2));
+    CPPUNIT_ASSERT_EQUAL(pPageB, pDoc->GetSdPage(0, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageA, pDoc->GetSdPage(1, PageKind::Standard));
+    CPPUNIT_ASSERT_EQUAL(pPageC, pDoc->GetSdPage(2, PageKind::Standard));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testReflectionCommands)
+{
+    // The fourth shape has no reflection.
+    createSdImpressDoc("pptx/shape-reflection-effect.pptx");
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
+    SdrView* pView = pViewShell->GetView();
+    pView->MarkObj(pViewShell->GetActualPage()->GetObj(3), pView->GetSdrPageView());
+    Scheduler::ProcessEventsToIdle();
+
+    dispatchCommand(
+        mxComponent, u".uno:ReflectionEffect"_ustr,
+        comphelper::InitPropertySequence({ { "ReflectionEffect", cpo::uno::Any(true) } }));
+    dispatchCommand(mxComponent, u".uno:ReflectionDistance"_ustr,
+                    comphelper::InitPropertySequence(
+                        { { "ReflectionDistance", cpo::uno::Any(sal_Int32(500)) } }));
+    dispatchCommand(mxComponent, u".uno:ReflectionEndPosition"_ustr,
+                    comphelper::InitPropertySequence(
+                        { { "ReflectionEndPosition", cpo::uno::Any(sal_Int16(70)) } }));
+
+    uno::Reference<beans::XPropertySet> xShape(getShapeFromPage(3, 0));
+    CPPUNIT_ASSERT(xShape->getPropertyValue(u"ReflectionEffect"_ustr).get<bool>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int32(500),
+        xShape->getPropertyValue(u"ReflectionEffectDistance"_ustr).get<sal_Int32>());
+    CPPUNIT_ASSERT_EQUAL(
+        sal_Int16(70),
+        xShape->getPropertyValue(u"ReflectionEffectEndPosition"_ustr).get<sal_Int16>());
+
+    // The state of the selected shape reads back through the same slots, the way the sidebar
+    // sees it.
+    SfxDispatcher* pDispatcher = pViewShell->GetViewFrame()->GetDispatcher();
+    SfxPoolItemHolder aResult;
+    CPPUNIT_ASSERT(pDispatcher->QueryState(SID_ATTR_REFLECTION, aResult) >= SfxItemState::DEFAULT);
+    auto pOnOff = dynamic_cast<const SfxBoolItem*>(aResult.getItem());
+    CPPUNIT_ASSERT(pOnOff);
+    CPPUNIT_ASSERT(pOnOff->GetValue());
+    CPPUNIT_ASSERT(pDispatcher->QueryState(SID_ATTR_REFLECTION_END_POSITION, aResult)
+                   >= SfxItemState::DEFAULT);
+    auto pSize = dynamic_cast<const SfxUInt16Item*>(aResult.getItem());
+    CPPUNIT_ASSERT(pSize);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(70), pSize->GetValue());
+}
+
+namespace
+{
+SdrMediaObj* findMediaObject(const uno::Reference<lang::XComponent>& xComponent)
+{
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(xComponent.get());
+    CPPUNIT_ASSERT(pImpressDocument);
+    SdPage* pPage = pImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
+    for (const rtl::Reference<SdrObject>& pObj : *pPage)
+        if (auto pMediaObj = dynamic_cast<SdrMediaObj*>(pObj.get()))
+            return pMediaObj;
+    return nullptr;
+}
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertMediaWithoutSize)
+{
+    // A media file dispatched without a size goes in at the default size, even when no media
+    // player can open the file to measure it.
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr,
+                    { comphelper::makePropertyValue(u"URL"_ustr, createFileURL(u"silence.wav")) });
+
+    CPPUNIT_ASSERT(findMediaObject(mxComponent));
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertMediaFromAppFilePicker)
+{
+    // Media picked with the file picker of a COKit app is embedded in the document, so the
+    // slideshow has an extracted copy to play.
+    createSdImpressDoc();
+    // The picked file arrives as a command for the active frame.
+    mxDesktop->setActiveFrame(uno::Reference<frame::XModel>(mxComponent, uno::UNO_QUERY_THROW)
+                                  ->getCurrentController()
+                                  ->getFrame());
+
+    static OString aPickedUrl;
+    aPickedUrl = createFileURL(u"silence.wav").toUtf8();
+    COKitFilePickerProvider aProvider{};
+    aProvider.pick = [](const char*, const COKitFilePickerFilter*, size_t,
+                        void (*pfnPicked)(void*, const char*), void* pContext)
+    { pfnPicked(pContext, aPickedUrl.getStr()); };
+
+    comphelper::COKit::setActive(true);
+    sfx2::COKitFilePicker::installProvider(&aProvider);
+    comphelper::ScopeGuard aKitGuard(
+        []
+        {
+            sfx2::COKitFilePicker::installProvider(nullptr);
+            comphelper::COKit::setActive(false);
+        });
+
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr, {});
+    Scheduler::ProcessEventsToIdle();
+
+    SdrMediaObj* pMediaObj = findMediaObject(mxComponent);
+    CPPUNIT_ASSERT(pMediaObj);
+    CPPUNIT_ASSERT(pMediaObj->getURL().startsWith("vnd.sun.star.Package:"));
+    CPPUNIT_ASSERT(!pMediaObj->getTempURL().isEmpty());
+}
+
+namespace
+{
+double aspectRatio(const Size& rSize) { return rSize.Width() / double(rSize.Height()); }
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertVideoKeepsItsShape)
+{
+    // With no media player to measure the video, its shape comes from the file headers.
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr,
+                    { comphelper::makePropertyValue(u"URL"_ustr,
+                                                    createFileURL(u"video-320x240.webm")) });
+
+    SdrMediaObj* pMediaObj = findMediaObject(mxComponent);
+    CPPUNIT_ASSERT(pMediaObj);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(4.0 / 3.0, aspectRatio(pMediaObj->GetLogicRect().GetSize()), 0.01);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertLargeVideoFitsTheSlide)
+{
+    // A full HD video is wider than the slide at its pixel size.
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr,
+                    { comphelper::makePropertyValue(u"URL"_ustr,
+                                                    createFileURL(u"video-1920x1080.mp4")) });
+
+    SdrMediaObj* pMediaObj = findMediaObject(mxComponent);
+    CPPUNIT_ASSERT(pMediaObj);
+    const Size aSize = pMediaObj->GetLogicRect().GetSize();
+    const Size aPageSize = pMediaObj->getSdrPageFromSdrObject()->GetSize();
+    CPPUNIT_ASSERT_LESSEQUAL(aPageSize.Width(), aSize.Width());
+    CPPUNIT_ASSERT_LESSEQUAL(aPageSize.Height(), aSize.Height());
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(16.0 / 9.0, aspectRatio(aSize), 0.01);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertRotatedVideoIsPortrait)
+{
+    // The file stores 640x360 frames with a quarter turn, as phones record upright video.
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr,
+                    { comphelper::makePropertyValue(u"URL"_ustr,
+                                                    createFileURL(u"video-640x360-rotated.mp4")) });
+
+    SdrMediaObj* pMediaObj = findMediaObject(mxComponent);
+    CPPUNIT_ASSERT(pMediaObj);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(9.0 / 16.0, aspectRatio(pMediaObj->GetLogicRect().GetSize()),
+                                 0.01);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertVideoTakesItsDisplayShape)
+{
+    // The file stores 320x240 frames and asks for them to be shown at an aspect ratio of 16:9.
+    createSdImpressDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr,
+                    { comphelper::makePropertyValue(u"URL"_ustr,
+                                                    createFileURL(u"video-320x240-wide.webm")) });
+
+    SdrMediaObj* pMediaObj = findMediaObject(mxComponent);
+    CPPUNIT_ASSERT(pMediaObj);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(16.0 / 9.0, aspectRatio(pMediaObj->GetLogicRect().GetSize()),
+                                 0.01);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testInsertLargeVideoFitsInsideTheMargins)
+{
+    // A Draw page has margins, and a full HD video is wider than the space between them.
+    createSdDrawDoc();
+    dispatchCommand(mxComponent, u".uno:InsertAVMedia"_ustr,
+                    { comphelper::makePropertyValue(u"URL"_ustr,
+                                                    createFileURL(u"video-1920x1080.mp4")) });
+
+    SdrMediaObj* pMediaObj = findMediaObject(mxComponent);
+    CPPUNIT_ASSERT(pMediaObj);
+    const SdrPage* pPage = pMediaObj->getSdrPageFromSdrObject();
+    CPPUNIT_ASSERT(pPage->GetLeftBorder() + pPage->GetRightBorder() > 0);
+    const Size aSize = pMediaObj->GetLogicRect().GetSize();
+    CPPUNIT_ASSERT_LESSEQUAL(
+        pPage->GetSize().Width() - pPage->GetLeftBorder() - pPage->GetRightBorder(),
+        aSize.Width());
+    CPPUNIT_ASSERT_LESSEQUAL(
+        pPage->GetSize().Height() - pPage->GetUpperBorder() - pPage->GetLowerBorder(),
+        aSize.Height());
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(16.0 / 9.0, aspectRatio(aSize), 0.01);
+}
+
+CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSecurityLabelFooterFitsMarking)
+{
+    createSdImpressDoc();
+    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
+    auto pViewShell = dynamic_cast<sd::DrawViewShell*>(pImpressDocument->GetDocShell()->GetViewShell());
+    CPPUNIT_ASSERT(pViewShell);
+
+    SdPage* pMaster = pDoc->GetMasterSdPage(0, PageKind::Standard);
+    SdrObject* pFooter = pMaster->GetPresObj(PresObjKind::Footer);
+    CPPUNIT_ASSERT(pFooter);
+    const tools::Rectangle aOrigRect = pFooter->GetLogicRect();
+    const tools::Long nMaxWidth
+        = pMaster->GetSize().Width() - pMaster->GetLeftBorder() - pMaster->GetRightBorder();
+
+    SdSecurityLabelTarget aTarget(*pViewShell);
+    svx::seclabel::LabelPlacement aPlacement;
+
+    // A short marking fits the default footer: leave the layout alone.
+    aPlacement.aMarking = u"SECRET"_ustr;
+    aTarget.applyMarking(aPlacement);
+    CPPUNIT_ASSERT_EQUAL(aOrigRect, pFooter->GetLogicRect());
+
+    // A longer marking widens the footer (centred, same height) instead of wrapping it.
+    aPlacement.aMarking = u"GBR OFFICIAL-SENSITIVE RELEASABLE TO FVEY"_ustr;
+    aTarget.applyMarking(aPlacement);
+    tools::Rectangle aRect = pFooter->GetLogicRect();
+    // Without the fix, this was the original width and the marking wrapped off the slide.
+    CPPUNIT_ASSERT_GREATER(aOrigRect.GetWidth(), aRect.GetWidth());
+    CPPUNIT_ASSERT_LESS(nMaxWidth, aRect.GetWidth());
+    CPPUNIT_ASSERT_EQUAL(aOrigRect.GetHeight(), aRect.GetHeight());
+    CPPUNIT_ASSERT_EQUAL(aOrigRect.Bottom(), aRect.Bottom());
+    CPPUNIT_ASSERT_LESSEQUAL(tools::Long(1), std::abs(aOrigRect.Center().X() - aRect.Center().X()));
+
+    // A marking that can't fit the page width wraps, growing upwards and staying on the page.
+    for (int i = 0; i < 3; ++i)
+        aPlacement.aMarking += " " + aPlacement.aMarking;
+    aTarget.applyMarking(aPlacement);
+    aRect = pFooter->GetLogicRect();
+    CPPUNIT_ASSERT_EQUAL(nMaxWidth, aRect.GetWidth());
+    CPPUNIT_ASSERT_GREATER(aOrigRect.GetHeight(), aRect.GetHeight());
+    CPPUNIT_ASSERT_EQUAL(aOrigRect.Bottom(), aRect.Bottom());
+    CPPUNIT_ASSERT_EQUAL(tools::Long(pMaster->GetLeftBorder()), aRect.Left());
+}
+
+CPPUNIT_PLUGIN_IMPLEMENT();
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,95 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_VBAHELPER_VBASHAPES_HXX
+#define INCLUDED_VBAHELPER_VBASHAPES_HXX
+
+#include <string_view>
+
+#include <cpo/uno/Any.hxx>
+#include <cpo/uno/Reference.hxx>
+#include <ooo/vba/msforms/XShapes.hpp>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <vbahelper/vbacollectionimpl.hxx>
+#include <vbahelper/vbadllapi.h>
+#include <vbahelper/vbahelper.hxx>
+
+namespace com::sun::star {
+    namespace container { class XEnumeration; }
+    namespace container { class XIndexAccess; }
+    namespace drawing { class XDrawPage; }
+    namespace drawing { class XShape; }
+    namespace drawing { class XShapes; }
+    namespace frame { class XModel; }
+}
+namespace cpo::uno { class XComponentContext; }
+
+namespace ooo::vba {
+    class XHelperInterface;
+    namespace msforms { class XShapeRange; }
+}
+
+typedef CollTestImplHelper< ov::msforms::XShapes > ScVbaShapes_BASE;
+
+class SAL_DLLPUBLIC_RTTI ScVbaShapes final : public ScVbaShapes_BASE
+{
+private:
+    cpo::uno::Reference< css::drawing::XShapes > m_xShapes;
+    cpo::uno::Reference< css::drawing::XDrawPage > m_xDrawPage;
+    sal_Int32 m_nNewShapeCount;
+    void initBaseCollection();
+    cpo::uno::Reference< css::frame::XModel > m_xModel;
+    virtual OUString getServiceImplName() override;
+    virtual cpo::uno::Sequence<OUString> getServiceNames() override;
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::container::XIndexAccess > getShapesByArrayIndices( const cpo::uno::Any& Index );
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Reference< css::drawing::XShape > createShape( const OUString& service );
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Any AddRectangle( sal_Int32 startX, sal_Int32 startY, sal_Int32 nLineWidth, sal_Int32 nLineHeight );
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Any AddEllipse( sal_Int32 startX, sal_Int32 startY, sal_Int32 nLineWidth, sal_Int32 nLineHeight );
+    /// @throws cpo::uno::RuntimeException
+    cpo::uno::Any AddTextboxInWriter( sal_Int32 _nLeft, sal_Int32 _nTop, sal_Int32 _nWidth, sal_Int32 _nHeight );
+    OUString createName( std::u16string_view sName );
+    //TODO helperapi using a writer document
+    //css::awt::Point calculateTopLeftMargin( cpo::uno::Reference< ov::XHelperInterface > xDocument );
+
+public:
+    VBAHELPER_DLLPUBLIC ScVbaShapes( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, const cpo::uno::Reference< css::container::XIndexAccess >& xShapes, cpo::uno::Reference< css::frame::XModel > xModel );
+    /// @throws cpo::uno::RuntimeException
+    static void setDefaultShapeProperties( const cpo::uno::Reference< css::drawing::XShape >& xShape );
+    static void setShape_NameProperty( const cpo::uno::Reference< css::drawing::XShape >& xShape, const OUString& sName );
+    //XEnumerationAccess
+    virtual cpo::uno::Type getElementType() override;
+    virtual cpo::uno::Reference< css::container::XEnumeration > createEnumeration() override;
+
+    virtual void SelectAll() override;
+    //helper::calc
+    virtual cpo::uno::Any AddLine( sal_Int32 StartX, sal_Int32 StartY, sal_Int32 endX, sal_Int32 endY ) override;
+    virtual cpo::uno::Any AddShape( sal_Int32 _nType, sal_Int32 _nLeft, sal_Int32 _nTop, sal_Int32 _nWidth, sal_Int32 _nHeight ) override;
+    virtual cpo::uno::Any AddTextbox( sal_Int32 _nOrientation, sal_Int32 _nLeft, sal_Int32 _nTop, sal_Int32 _nWidth, sal_Int32 _nHeight ) override;
+    virtual cpo::uno::Reference< ov::msforms::XShapeRange > Range( const cpo::uno::Any& shapes ) override;
+    // ScVbaCollectionBaseImpl
+    virtual cpo::uno::Any createCollectionObject( const cpo::uno::Any& aSource ) override;
+};
+
+#endif // INCLUDED_VBAHELPER_VBASHAPES_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

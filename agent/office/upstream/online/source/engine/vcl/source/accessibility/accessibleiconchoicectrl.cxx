@@ -1,0 +1,261 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <accessibility/accessibleiconchoicectrl.hxx>
+#include <accessibility/accessibleiconchoicectrlentry.hxx>
+#include <com/sun/star/accessibility/AccessibleEventId.hpp>
+#include <com/sun/star/accessibility/AccessibleRole.hpp>
+#include <com/sun/star/accessibility/AccessibleStateType.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <comphelper/accessiblecontexthelper.hxx>
+#include <vcl/vclevent.hxx>
+#include <vcl/toolkit/ivctrl.hxx>
+
+// class AccessibleIconChoiceCtrl ----------------------------------------------
+
+using namespace ::com::sun::star::accessibility;
+using namespace ::cpo::uno;
+using namespace cpo::uno;
+using namespace ::com::sun::star::lang;
+using namespace ::com::sun::star;
+
+
+// Ctor() and Dtor()
+
+AccessibleIconChoiceCtrl::AccessibleIconChoiceCtrl(SvtIconChoiceCtrl& _rIconCtrl)
+    : ImplInheritanceHelper(&_rIconCtrl)
+{
+}
+
+void AccessibleIconChoiceCtrl::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
+{
+    if ( !isAlive() )
+        return;
+
+    switch ( rVclWindowEvent.GetId() )
+    {
+        case VclEventId::ListboxSelect :
+        {
+            if (getCtrl())
+            {
+                SvxIconChoiceCtrlEntry* pEntry = static_cast< SvxIconChoiceCtrlEntry* >( rVclWindowEvent.GetData() );
+                if ( pEntry )
+                {
+                    sal_Int32 nPos = getCtrl()->GetEntryListPos( pEntry );
+                    Reference< XAccessible > xChild = new AccessibleIconChoiceCtrlEntry( *getCtrl(), nPos, this );
+                    cpo::uno::Any aOldValue, aNewValue;
+                    aNewValue <<= xChild;
+                    if (getCtrl()->HasFocus())
+                        NotifyAccessibleEvent( AccessibleEventId::ACTIVE_DESCENDANT_CHANGED, aOldValue, aNewValue );
+
+                    NotifyAccessibleEvent( AccessibleEventId::SELECTION_CHANGED, aOldValue, aNewValue );
+                }
+            }
+            break;
+        }
+        case VclEventId::WindowGetFocus :
+        {
+            VclPtr<SvtIconChoiceCtrl> pCtrl = getCtrl();
+            if ( pCtrl && pCtrl->HasFocus() )
+            {
+                SvxIconChoiceCtrlEntry* pEntry = getCtrl()->GetSelectedEntry();
+                if ( pEntry )
+                {
+                    sal_Int32 nPos = pCtrl->GetEntryListPos( pEntry );
+                    Reference< XAccessible > xChild = new AccessibleIconChoiceCtrlEntry( *pCtrl, nPos, this );
+                    cpo::uno::Any aOldValue, aNewValue;
+                    aNewValue <<= xChild;
+                    NotifyAccessibleEvent( AccessibleEventId::ACTIVE_DESCENDANT_CHANGED, aOldValue, aNewValue );
+                }
+            }
+            break;
+        }
+        default:
+            VCLXAccessibleComponent::ProcessWindowChildEvent (rVclWindowEvent);
+    }
+}
+
+// XServiceInfo
+
+OUString AccessibleIconChoiceCtrl::getImplementationName()
+{
+    return u"com.sun.star.comp.svtools.AccessibleIconChoiceControl"_ustr;
+}
+
+Sequence< OUString > AccessibleIconChoiceCtrl::getSupportedServiceNames()
+{
+    return {u"com.sun.star.accessibility.AccessibleContext"_ustr,
+            u"com.sun.star.awt.AccessibleIconChoiceControl"_ustr};
+}
+
+// XAccessibleContext
+
+sal_Int64 AccessibleIconChoiceCtrl::getAccessibleChildCount(  )
+{
+    ::comphelper::OExternalLockGuard aGuard( this );
+
+    return getCtrl()->GetEntryCount();
+}
+
+Reference< XAccessible > AccessibleIconChoiceCtrl::getAccessibleChild( sal_Int64 i )
+{
+    ::comphelper::OExternalLockGuard aGuard( this );
+
+    if (i < 0 || i >= getAccessibleChildCount())
+        throw IndexOutOfBoundsException();
+
+    VclPtr<SvtIconChoiceCtrl> pCtrl = getCtrl();
+    return new AccessibleIconChoiceCtrlEntry( *pCtrl, i, this );
+}
+
+sal_Int16 AccessibleIconChoiceCtrl::getAccessibleRole(  )
+{
+    //return AccessibleRole::TREE;
+    return AccessibleRole::LIST;
+}
+
+OUString AccessibleIconChoiceCtrl::getAccessibleDescription(  )
+{
+    ::comphelper::OExternalLockGuard aGuard( this );
+
+    return getCtrl()->GetAccessibleDescription();
+}
+
+OUString AccessibleIconChoiceCtrl::getAccessibleName(  )
+{
+    ::comphelper::OExternalLockGuard aGuard( this );
+
+    return getCtrl()->GetAccessibleName();
+}
+
+// XAccessibleSelection
+
+void AccessibleIconChoiceCtrl::selectAccessibleChild( sal_Int64 nChildIndex )
+{
+    ::comphelper::OExternalLockGuard aGuard( this );
+
+    if (nChildIndex < 0 || nChildIndex >= getAccessibleChildCount())
+        throw IndexOutOfBoundsException();
+
+    VclPtr<SvtIconChoiceCtrl> pCtrl = getCtrl();
+    SvxIconChoiceCtrlEntry* pEntry = pCtrl->GetEntry( nChildIndex );
+    if ( !pEntry )
+        throw IndexOutOfBoundsException();
+
+    pCtrl->SetCursor( pEntry );
+}
+
+bool AccessibleIconChoiceCtrl::isAccessibleChildSelected( sal_Int64 nChildIndex )
+{
+    ::comphelper::OExternalLockGuard aGuard( this );
+
+    if (nChildIndex < 0 || nChildIndex >= getAccessibleChildCount())
+        throw IndexOutOfBoundsException();
+
+    VclPtr<SvtIconChoiceCtrl> pCtrl = getCtrl();
+    SvxIconChoiceCtrlEntry* pEntry = pCtrl->GetEntry( nChildIndex );
+    if ( !pEntry )
+        throw IndexOutOfBoundsException();
+
+    return ( pCtrl->GetCursor() == pEntry );
+}
+
+void AccessibleIconChoiceCtrl::clearAccessibleSelection(  )
+{
+    // one entry should always be selected, so don't unselect
+}
+
+void AccessibleIconChoiceCtrl::selectAllAccessibleChildren(  )
+{
+    ::comphelper::OExternalLockGuard aGuard( this );
+
+    // don't do anything if there are no or multiple entries, as only
+    // a single one can be selected
+    VclPtr<SvtIconChoiceCtrl> pCtrl = getCtrl();
+    sal_Int32 nCount = pCtrl->GetEntryCount();
+    if (nCount != 1)
+        return;
+
+    pCtrl->SetCursor(pCtrl->GetEntry(0));
+}
+
+sal_Int64 AccessibleIconChoiceCtrl::getSelectedAccessibleChildCount(  )
+{
+    ::comphelper::OExternalLockGuard aGuard( this );
+
+    VclPtr<SvtIconChoiceCtrl> pCtrl = getCtrl();
+    if (pCtrl->GetCursor())
+        return 1;
+
+    return 0;
+}
+
+Reference< XAccessible > AccessibleIconChoiceCtrl::getSelectedAccessibleChild( sal_Int64 nSelectedChildIndex )
+{
+    ::comphelper::OExternalLockGuard aGuard( this );
+
+    if ( nSelectedChildIndex < 0 || nSelectedChildIndex >= getSelectedAccessibleChildCount() )
+        throw IndexOutOfBoundsException();
+
+    rtl::Reference< AccessibleIconChoiceCtrlEntry > xChild;
+    sal_Int32 nSelCount = 0;
+    VclPtr<SvtIconChoiceCtrl> pCtrl = getCtrl();
+    sal_Int32 nCount = pCtrl->GetEntryCount();
+    for ( sal_Int32 i = 0; i < nCount; ++i )
+    {
+        SvxIconChoiceCtrlEntry* pEntry = pCtrl->GetEntry( i );
+        if ( pCtrl->GetCursor() == pEntry )
+            ++nSelCount;
+
+        if ( nSelCount == ( nSelectedChildIndex + 1 ) )
+        {
+            xChild = new AccessibleIconChoiceCtrlEntry( *pCtrl, i, this );
+            break;
+        }
+    }
+
+    return xChild;
+}
+
+void AccessibleIconChoiceCtrl::deselectAccessibleChild( sal_Int64 nSelectedChildIndex )
+{
+    ::comphelper::OExternalLockGuard aGuard( this );
+
+    if ( nSelectedChildIndex < 0 || nSelectedChildIndex >= getAccessibleChildCount() )
+        throw IndexOutOfBoundsException();
+
+    // one entry should always be selected, so don't unselect
+}
+
+void AccessibleIconChoiceCtrl::FillAccessibleStateSet( sal_Int64& rStateSet )
+{
+    VCLXAccessibleComponent::FillAccessibleStateSet( rStateSet );
+    if ( isAlive() )
+    {
+        rStateSet |= AccessibleStateType::FOCUSABLE;
+        rStateSet |= AccessibleStateType::MANAGES_DESCENDANTS;
+    }
+}
+
+VclPtr< SvtIconChoiceCtrl > AccessibleIconChoiceCtrl::getCtrl() const
+{
+    return GetAs<SvtIconChoiceCtrl >();
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

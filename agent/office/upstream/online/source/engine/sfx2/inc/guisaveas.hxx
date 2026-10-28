@@ -1,0 +1,124 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_SFX2_INC_GUISAVEAS_HXX
+#define INCLUDED_SFX2_INC_GUISAVEAS_HXX
+
+#include <sal/config.h>
+
+#include <string_view>
+
+#include <cpo/uno/Sequence.hxx>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/container/XContainerQuery.hpp>
+#include <com/sun/star/frame/XModel2.hpp>
+#include <com/sun/star/frame/XModuleManager2.hpp>
+
+#include <comphelper/sequenceashashmap.hxx>
+
+#include <sfx2/bindings.hxx>
+#include <sfx2/signaturestate.hxx>
+
+#include <svtools/dialogclosedlistener.hxx>
+
+#include <unotools/saveopt.hxx>
+
+#include <tools/urlobj.hxx>
+
+
+namespace com::sun::star::document { class XDocumentProperties; }
+
+namespace weld { class Window; }
+class ModelData_Impl;
+
+namespace sfx2 {
+    bool UseODFWholesomeEncryption(SvtSaveOptions::ODFSaneDefaultVersion const nODFVersion);
+} // namespace sfx2
+
+class SfxStoringHelper
+{
+    friend class ModelData_Impl;
+
+private:
+    cpo::uno::Reference< css::container::XNameAccess >     m_xFilterCFG;
+    cpo::uno::Reference< css::container::XContainerQuery > m_xFilterQuery;
+    cpo::uno::Reference< css::frame::XModuleManager2 >     m_xModuleManager;
+
+    std::shared_ptr<ModelData_Impl> m_xModelData;
+    cpo::uno::Sequence< css::beans::PropertyValue > m_aArgsSequence;
+
+    cpo::uno::Reference< css::container::XNameAccess > const & GetFilterConfiguration();
+    cpo::uno::Reference< css::container::XContainerQuery > const & GetFilterQuery();
+    cpo::uno::Reference< css::frame::XModuleManager2 > const & GetModuleManager();
+
+    bool m_bRemote;
+    bool m_bPreselectPassword;
+    bool m_bDialogUsed;
+    bool m_bSetStandardName;
+    sal_Int16 m_nStoreMode;
+    SignatureState m_nScriptingSignatureState{SignatureState::UNKNOWN};
+
+    static bool FinishGUIStoreModel(::comphelper::SequenceAsHashMap::const_iterator& aFileNameIter,
+                             ModelData_Impl& aModelData, bool bRemote, sal_Int16 nStoreMode,
+                             const cpo::uno::Sequence< css::beans::PropertyValue >& aFilterProps,
+                             bool bSetStandardName, bool bPreselectPassword, bool bDialogUsed,
+                             std::u16string_view aFilterFromMediaDescr, std::u16string_view aOldFilterName,
+                             cpo::uno::Sequence< css::beans::PropertyValue >& aArgsSequence,
+                             OUString aFilterName,
+                             SignatureState nScriptingSignatureState);
+
+    void CallFinishGUIStoreModel();
+
+public:
+    SfxStoringHelper();
+
+    bool GUIStoreModel(
+                    const cpo::uno::Reference< css::frame::XModel2 >& xModel,
+                    std::u16string_view aSlotName,
+                    cpo::uno::Sequence< css::beans::PropertyValue >& aArgsSequence,
+                    bool bPreselectPassword,
+                    SignatureState nDocumentSignatureState,
+                    SignatureState nScriptingSignatureState,
+                    bool bIsAsync );
+
+    static bool CheckFilterOptionsAppearance(
+                    const cpo::uno::Reference< css::container::XNameAccess >& xFilterCFG,
+                    const OUString& aFilterName );
+
+
+    static void SetDocInfoState(
+        const cpo::uno::Reference< css::frame::XModel2 >& xModel,
+        const cpo::uno::Reference< css::document::XDocumentProperties>& i_xOldDocInfo );
+
+    static bool WarnUnacceptableFormat(
+                                    const cpo::uno::Reference< css::frame::XModel2 >& xModel,
+                                    std::u16string_view aOldUIName,
+                                    std::u16string_view aExtension,
+                                    const OUString& aDefExtension,
+                                    bool rDefaultIsAlien );
+
+    static cpo::uno::Reference<css::awt::XWindow> GetModelXWindow(const cpo::uno::Reference<css::frame::XModel2>& rModel);
+    static weld::Window* GetModelWindow( const cpo::uno::Reference< css::frame::XModel2 >& xModel );
+
+};
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,61 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* QXPImportFilter: Sets up the filter, and calls OdgExporter
+ * to do the actual filtering
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <libqxp/libqxp.h>
+
+#include <cppuhelper/supportsservice.hxx>
+
+#include "QXPImportFilter.hxx"
+
+using cpo::uno::Sequence;
+using cpo::uno::XComponentContext;
+using cpo::uno::XInterface;
+
+bool QXPImportFilter::doImportDocument(weld::Window*, librevenge::RVNGInputStream& rInput,
+                                       OdgGenerator& rGenerator, comphelper::SequenceAsHashMap&)
+{
+    return libqxp::QXPDocument::parse(&rInput, &rGenerator) == libqxp::QXPDocument::RESULT_OK;
+}
+
+bool QXPImportFilter::doDetectFormat(librevenge::RVNGInputStream& rInput, OUString& rTypeName)
+{
+    if (libqxp::QXPDocument::isSupported(&rInput))
+    {
+        rTypeName = u"draw_QXP_Document"_ustr;
+        return true;
+    }
+
+    return false;
+}
+
+// XServiceInfo
+OUString QXPImportFilter::getImplementationName()
+{
+    return u"org.libreoffice.comp.Draw.QXPImportFilter"_ustr;
+}
+
+bool QXPImportFilter::supportsService(const OUString& rServiceName)
+{
+    return cppu::supportsService(this, rServiceName);
+}
+
+Sequence<OUString> QXPImportFilter::getSupportedServiceNames()
+{
+    return { u"com.sun.star.document.ImportFilter"_ustr,
+             u"com.sun.star.document.ExtendedTypeDetection"_ustr };
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+org_libreoffice_comp_Draw_QXPImportFilter_get_implementation(
+    cpo::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
+{
+    return cppu::acquire(new QXPImportFilter(context));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

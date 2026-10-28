@@ -1,0 +1,68 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/xml/crypto/XNSSInitializer.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+
+#include <cppuhelper/implbase.hxx>
+
+namespace cpo::uno { class XComponentContext; }
+
+inline constexpr OUString NSS_SERVICE_NAME = u"com.sun.star.xml.crypto.NSSInitializer"_ustr;
+
+class ONSSInitializer : public cppu::WeakImplHelper
+<
+    css::xml::crypto::XNSSInitializer,
+    css::lang::XServiceInfo
+>
+{
+protected:
+    cpo::uno::Reference< cpo::uno::XComponentContext > m_xContext;
+    static OUString m_sNSSPath;
+    static bool m_bIsNSSinitialized;
+
+    ONSSInitializer();
+
+public:
+    explicit ONSSInitializer(cpo::uno::Reference<cpo::uno::XComponentContext> xContext);
+    virtual ~ONSSInitializer() override;
+
+    static bool initNSS( const cpo::uno::Reference< cpo::uno::XComponentContext > &rxContext );
+    static const OUString & getMozillaCurrentProfile(const cpo::uno::Reference< cpo::uno::XComponentContext > &rxContext, bool bSetActive = false);
+
+    /* XNSSInitializer */
+    virtual OUString getNSSPath() override;
+    virtual bool getIsNSSinitialized() override;
+    virtual cpo::uno::Sequence<css::xml::crypto::NSSProfile> getNSSProfiles() override;
+
+    /* XDigestContextSupplier */
+    virtual cpo::uno::Reference< css::xml::crypto::XDigestContext > getDigestContext( ::sal_Int32 nDigestID, const cpo::uno::Sequence< css::beans::NamedValue >& aParams ) override;
+
+    /* XCipherContextSupplier */
+    virtual cpo::uno::Reference< css::xml::crypto::XCipherContext > getCipherContext( ::sal_Int32 nCipherID, const cpo::uno::Sequence< ::sal_Int8 >& aKey, const cpo::uno::Sequence< ::sal_Int8 >& aInitializationVector, bool bEncryption, const cpo::uno::Sequence< css::beans::NamedValue >& aParams ) override;
+
+    /* XServiceInfo */
+    virtual OUString getImplementationName() override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames() override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

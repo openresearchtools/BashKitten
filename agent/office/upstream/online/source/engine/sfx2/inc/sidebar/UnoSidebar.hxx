@@ -1,0 +1,52 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ */
+
+#ifndef INCLUDED_SFX2_SIDEBAR_SIDEBAR_HXX
+#define INCLUDED_SFX2_SIDEBAR_SIDEBAR_HXX
+
+#include <com/sun/star/ui/XSidebarProvider.hpp>
+
+#include <cppuhelper/implbase.hxx>
+
+namespace com::sun::star::frame { class XFrame; }
+namespace sfx2::sidebar { class SidebarController; }
+
+/** get the sidebar for a given frame
+*/
+class SfxUnoSidebar final : public cppu::WeakImplHelper<css::ui::XSidebarProvider>
+{
+
+private:
+
+    const cpo::uno::Reference<css::frame::XFrame> xFrame;
+    sfx2::sidebar::SidebarController* getSidebarController();
+
+public:
+
+    SfxUnoSidebar(cpo::uno::Reference<css::frame::XFrame> );
+
+    virtual void showDecks (const bool bVisible) override;
+
+
+    virtual void setVisible (const bool bVisible) override;
+
+    virtual bool isVisible() override;
+
+    virtual cpo::uno::Reference<css::frame::XFrame> getFrame() override;
+
+    virtual cpo::uno::Reference<css::ui::XDecks> getDecks() override;
+
+    virtual cpo::uno::Reference<css::ui::XSidebar> getSidebar() override;
+
+};
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

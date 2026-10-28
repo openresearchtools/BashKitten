@@ -1,0 +1,192 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <cppuhelper/compbase.hxx>
+#include <cppuhelper/basemutex.hxx>
+#include <com/sun/star/ui/dialogs/XControlInformation.hpp>
+#include <com/sun/star/ui/dialogs/XControlAccess.hpp>
+#include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/util/XCancellable.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <comphelper/propertycontainer.hxx>
+#include <comphelper/proparrhlp.hxx>
+#include <comphelper/uno3.hxx>
+#include <tools/link.hxx>
+#include <rtl/ref.hxx>
+
+class SvtFileDialog_Base;
+namespace weld { class Window; }
+struct ImplSVEvent;
+namespace comphelper { class OWeakEventListenerAdapter; }
+
+namespace svt
+{
+
+
+    typedef ::cppu::WeakComponentImplHelper    <   css::ui::dialogs::XControlAccess
+                                                ,   css::ui::dialogs::XControlInformation
+                                                ,   css::lang::XEventListener
+                                                ,   css::util::XCancellable
+                                                ,   css::lang::XInitialization
+                                                >   OCommonPicker_Base;
+    /** implements common functionality for the 2 UNO picker components
+    */
+    class OCommonPicker
+                    :public ::cppu::BaseMutex
+                    ,public OCommonPicker_Base
+                    ,public ::comphelper::OPropertyContainer
+                    ,public ::comphelper::OPropertyArrayUsageHelper< OCommonPicker >
+    {
+    private:
+        // <properties>
+        OUString                                                  m_sHelpURL;
+        cpo::uno::Reference< css::awt::XWindow >                  m_xWindow;
+        // </properties>
+
+        ImplSVEvent *                   m_nCancelEvent;
+        bool                            m_bExecuting;
+
+        cpo::uno::Reference< css::awt::XWindow >      m_xDialogParent;
+
+        rtl::Reference< comphelper::OWeakEventListenerAdapter >  m_xWindowListenerAdapter;
+        rtl::Reference< comphelper::OWeakEventListenerAdapter >  m_xParentListenerAdapter;
+
+    protected:
+        OUString     m_aTitle;
+        OUString     m_aDisplayDirectory;
+
+    protected:
+        std::shared_ptr<SvtFileDialog_Base> m_xDlg;
+
+        const    ::cppu::OBroadcastHelper&   GetBroadcastHelper() const  { return OCommonPicker_Base::rBHelper; }
+        ::cppu::OBroadcastHelper&   GetBroadcastHelper()        { return OCommonPicker_Base::rBHelper; }
+
+    public:
+        OCommonPicker();
+
+    protected:
+        virtual ~OCommonPicker() override;
+
+        // overridables
+
+        // will be called with locked SolarMutex
+        virtual std::shared_ptr<SvtFileDialog_Base> implCreateDialog( weld::Window* pParent ) = 0;
+        virtual sal_Int16       implExecutePicker( ) = 0;
+            // do NOT override XExecutableDialog::execute! We need to do some stuff there ourself ...
+
+    protected:
+
+        // disambiguate XInterface
+
+        DECLARE_XINTERFACE( )
+
+
+        // disambiguate XTypeProvider
+
+        DECLARE_XTYPEPROVIDER( )
+
+
+        // ComponentHelper/XComponent
+
+        virtual void disposing() override;
+
+
+        // XEventListener
+
+        virtual void disposing( const css::lang::EventObject& Source ) override;
+
+
+        // property set related methods
+
+
+        // XPropertySet pure methods
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+        // OPropertySetHelper pure methods
+        virtual ::cppu::IPropertyArrayHelper& getInfoHelper() override;
+        // OPropertyArrayUsageHelper pure methods
+        virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
+
+        // OPropertySetHelper overridden methods
+        virtual void setFastPropertyValue_NoBroadcast(
+                sal_Int32 _nHandle, const cpo::uno::Any& _rValue ) override;
+
+
+        // XExecutableDialog functions
+
+        /// @throws cpo::uno::RuntimeException
+        virtual void           setTitle( const OUString& _rTitle );
+        /// @throws cpo::uno::RuntimeException
+        virtual sal_Int16      execute();
+
+
+        // XControlAccess functions
+
+        virtual void setControlProperty( const OUString& aControlName, const OUString& aControlProperty, const cpo::uno::Any& aValue ) override;
+        virtual cpo::uno::Any getControlProperty( const OUString& aControlName, const OUString& aControlProperty ) override;
+
+
+        // XControlInformation functions
+
+        virtual cpo::uno::Sequence< OUString > getSupportedControls(  ) override;
+        virtual bool isControlSupported( const OUString& aControlName ) override;
+        virtual cpo::uno::Sequence< OUString > getSupportedControlProperties( const OUString& aControlName ) override;
+        virtual bool isControlPropertySupported( const OUString& aControlName, const OUString& aControlProperty ) override;
+
+
+        // XCancellable functions
+
+        virtual void cancel(  ) override;
+
+
+        // XInitialization functions
+
+
+        virtual void initialize( const cpo::uno::Sequence< cpo::uno::Any >& aArguments ) override;
+
+
+        // misc
+
+        void checkAlive() const;
+
+        void prepareDialog();
+
+    protected:
+                bool    createPicker();
+
+        /** handle a single argument from the XInitialization::initialize method
+
+            @return <TRUE/> if the argument could be handled
+        */
+        virtual bool    implHandleInitializationArgument(
+                                const OUString& _rName,
+                                const cpo::uno::Any& _rValue
+                            );
+
+    private:
+        void        stopWindowListening();
+
+        DECL_LINK( OnCancelPicker, void*, void );
+    };
+
+}   // namespace svt
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

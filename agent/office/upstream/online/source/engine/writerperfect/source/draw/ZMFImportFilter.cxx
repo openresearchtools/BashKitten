@@ -1,0 +1,61 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* ZMFImportFilter: Sets up the filter, and calls OdgExporter
+ * to do the actual filtering
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <libzmf/libzmf.h>
+
+#include <cppuhelper/supportsservice.hxx>
+
+#include "ZMFImportFilter.hxx"
+
+using cpo::uno::Sequence;
+using cpo::uno::XComponentContext;
+using cpo::uno::XInterface;
+
+bool ZMFImportFilter::doImportDocument(weld::Window*, librevenge::RVNGInputStream& rInput,
+                                       OdgGenerator& rGenerator, comphelper::SequenceAsHashMap&)
+{
+    return libzmf::ZMFDocument::parse(&rInput, &rGenerator);
+}
+
+bool ZMFImportFilter::doDetectFormat(librevenge::RVNGInputStream& rInput, OUString& rTypeName)
+{
+    if (libzmf::ZMFDocument::isSupported(&rInput))
+    {
+        rTypeName = u"draw_ZMF_Document"_ustr;
+        return true;
+    }
+
+    return false;
+}
+
+// XServiceInfo
+OUString ZMFImportFilter::getImplementationName()
+{
+    return u"org.libreoffice.comp.Draw.ZMFImportFilter"_ustr;
+}
+
+bool ZMFImportFilter::supportsService(const OUString& rServiceName)
+{
+    return cppu::supportsService(this, rServiceName);
+}
+
+Sequence<OUString> ZMFImportFilter::getSupportedServiceNames()
+{
+    return { u"com.sun.star.document.ImportFilter"_ustr,
+             u"com.sun.star.document.ExtendedTypeDetection"_ustr };
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+org_libreoffice_comp_Draw_ZMFImportFilter_get_implementation(
+    cpo::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
+{
+    return cppu::acquire(new ZMFImportFilter(context));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

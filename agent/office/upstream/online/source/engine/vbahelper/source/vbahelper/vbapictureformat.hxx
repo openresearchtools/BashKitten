@@ -1,0 +1,58 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_VBAHELPER_SOURCE_VBAHELPER_VBAPICTUREFORMAT_HXX
+#define INCLUDED_VBAHELPER_SOURCE_VBAHELPER_VBAPICTUREFORMAT_HXX
+
+#include <com/sun/star/drawing/XShape.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <ooo/vba/msforms/XPictureFormat.hpp>
+#include <vbahelper/vbahelperinterface.hxx>
+
+typedef InheritedHelperInterfaceWeakImpl< ov::msforms::XPictureFormat > ScVbaPictureFormat_BASE;
+
+class ScVbaPictureFormat : public ScVbaPictureFormat_BASE
+{
+private:
+    cpo::uno::Reference< css::drawing::XShape > m_xShape;
+    cpo::uno::Reference< css::beans::XPropertySet > m_xPropertySet;
+protected:
+    virtual OUString getServiceImplName() override;
+    virtual cpo::uno::Sequence<OUString> getServiceNames() override;
+private:
+    /// @throws cpo::uno::RuntimeException
+    static void checkParameterRangeInDouble( double nRange, double nMin, double nMax );
+public:
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws cpo::uno::RuntimeException
+    ScVbaPictureFormat( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext, cpo::uno::Reference< css::drawing::XShape > xShape );
+
+    // Attributes
+    virtual double getBrightness() override;
+    virtual void setBrightness( double _brightness ) override;
+    virtual double getContrast() override;
+    virtual void setContrast( double _contrast ) override;
+
+    // Methods
+    virtual void IncrementBrightness( double increment ) override;
+    virtual void IncrementContrast( double increment ) override;
+};
+
+#endif // INCLUDED_VBAHELPER_SOURCE_VBAHELPER_VBAPICTUREFORMAT_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,0 +1,169 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_SW_SOURCE_UIBASE_INC_UNOMAILMERGE_HXX
+#define INCLUDED_SW_SOURCE_UIBASE_INC_UNOMAILMERGE_HXX
+
+#include <cppuhelper/implbase.hxx>
+#include <comphelper/interfacecontainer2.hxx>
+#include <comphelper/interfacecontainer3.hxx>
+#include <comphelper/multiinterfacecontainer3.hxx>
+
+#include <com/sun/star/task/XJob.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/beans/PropertyChangeEvent.hpp>
+#include <com/sun/star/text/XMailMergeBroadcaster.hpp>
+#include <com/sun/star/util/XCancellable.hpp>
+#include <svl/itemprop.hxx>
+#include <sfx2/objsh.hxx>
+
+namespace com::sun::star {
+
+    namespace sdbc {
+        class XResultSet;
+        class XConnection;
+    }
+    namespace frame {
+        class XModel;
+    }
+    namespace text {
+        struct MailMergeEvent;
+    }
+    namespace beans{
+        struct PropertyValue;
+    }
+
+}
+
+typedef comphelper::OMultiTypeInterfaceContainerHelperVar3<css::beans::XPropertyChangeListener, sal_Int32>
+    OPropertyListenerContainerHelper;
+
+class SwDBManager;
+
+/**
+ * Gives UNO access to the global mail merge functionality, via the com.sun.star.text.MailMerge
+ * service.
+ */
+class SwXMailMerge final :
+    public cppu::WeakImplHelper
+    <
+        css::task::XJob,
+        css::util::XCancellable,
+        css::beans::XPropertySet,
+        css::text::XMailMergeBroadcaster,
+        css::lang::XComponent,
+        css::lang::XServiceInfo
+    >
+{
+    friend class MailMergeExecuteFinalizer;
+
+    comphelper::OInterfaceContainerHelper3<css::lang::XEventListener>  m_aEvtListeners;
+    comphelper::OInterfaceContainerHelper2 m_aMergeListeners;
+    OPropertyListenerContainerHelper     m_aPropListeners;
+
+    const SfxItemPropertySet*   m_pPropSet;
+
+    SfxObjectShellRef m_xDocSh;   // the document
+
+    OUString        m_aTmpFileName;
+
+    // properties of mail merge service
+    cpo::uno::Sequence< cpo::uno::Any >           m_aSelection;
+    cpo::uno::Reference< css::sdbc::XResultSet >  m_xResultSet;
+    cpo::uno::Reference< css::sdbc::XConnection > m_xConnection;
+    cpo::uno::Reference< css::frame::XModel >     m_xModel;
+    OUString   m_aDataSourceName;
+    OUString   m_aDataCommand;
+    OUString   m_aFilter;
+    OUString   m_aDocumentURL;
+    OUString   m_aOutputURL;
+    OUString   m_aFileNamePrefix;
+    sal_Int32       m_nDataCommandType;
+    sal_Int16       m_nOutputType;
+    bool        m_bEscapeProcessing;
+    bool        m_bFileNameFromColumn;
+
+    OUString                                         m_sInServerPassword;
+    OUString                                         m_sOutServerPassword;
+    OUString                                         m_sSubject;
+    OUString                                         m_sAddressFromColumn;
+    OUString                                         m_sMailBody;
+    OUString                                         m_sAttachmentName;
+    OUString                                         m_sAttachmentFilter;
+    cpo::uno::Sequence< OUString >                   m_aCopiesTo;
+    cpo::uno::Sequence< OUString >                   m_aBlindCopiesTo;
+    bool                                             m_bSendAsHTML;
+    bool                                             m_bSendAsAttachment;
+
+    cpo::uno::Sequence< css::beans::PropertyValue >  m_aPrintSettings;
+
+    bool                                             m_bSaveAsSingleFile;
+    OUString                                         m_sSaveFilter;
+    OUString                                         m_sSaveFilterOptions;
+    cpo::uno::Sequence< css::beans::PropertyValue >  m_aSaveFilterData;
+
+    bool        m_bDisposing;
+    SwDBManager     *m_pMgr;
+
+    void    launchEvent( const css::beans::PropertyChangeEvent &rEvt ) const;
+
+    SwXMailMerge( const SwXMailMerge & ) = delete;
+    SwXMailMerge & operator = ( const SwXMailMerge & ) = delete;
+
+    virtual ~SwXMailMerge() override;
+public:
+    SwXMailMerge();
+
+    void LaunchMailMergeEvent( const css::text::MailMergeEvent &rData ) const;
+
+    // XJob
+    virtual cpo::uno::Any execute( const cpo::uno::Sequence< css::beans::NamedValue >& Arguments ) override;
+
+    // XCancellable
+    virtual void cancel() override;
+
+    // XPropertySet
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+    virtual void addPropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override;
+    virtual void removePropertyChangeListener( const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener >& aListener ) override;
+    virtual void addVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+    virtual void removeVetoableChangeListener( const OUString& PropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener >& aListener ) override;
+
+    // XMailMergeBroadcaster
+    virtual void addMailMergeEventListener( const cpo::uno::Reference< css::text::XMailMergeListener >& xListener ) override;
+    virtual void removeMailMergeEventListener( const cpo::uno::Reference< css::text::XMailMergeListener >& xListener ) override;
+
+    // XComponent
+    virtual void dispose(  ) override;
+    virtual void addEventListener( const cpo::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void removeEventListener( const cpo::uno::Reference< css::lang::XEventListener >& aListener ) override;
+
+    // XServiceInfo
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+};
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

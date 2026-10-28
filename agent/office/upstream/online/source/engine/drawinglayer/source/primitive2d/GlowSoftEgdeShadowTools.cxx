@@ -1,0 +1,340 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include "GlowSoftEgdeShadowTools.hxx"
+#include <EuclideanDistanceTransform.hxx>
+#include <GaussianGridBlur.hxx>
+#include <vcl/bitmap/BitmapBasicMorphologyFilter.hxx>
+#include <vcl/BitmapReadAccess.hxx>
+#include <vcl/Scanline.hxx>
+#include <vcl/BitmapWriteAccess.hxx>
+#include <algorithm>
+#include <cmath>
+#include <vector>
+
+namespace drawinglayer::primitive2d
+{
+namespace
+{
+// The pixels of an 8-bit gray bitmap as floats, one a pixel, row after row. Empty when the bitmap
+// cannot be read.
+std::vector<float> readGrays(const Bitmap& rGrays)
+{
+    const tools::Long nWidth = rGrays.GetSizePixel().Width();
+    const tools::Long nHeight = rGrays.GetSizePixel().Height();
+    BitmapScopedReadAccess pRead(rGrays);
+
+    if (!pRead || nWidth <= 0 || nHeight <= 0)
+        return {};
+
+    std::vector<float> aGrays(nWidth * nHeight);
+    // Eight bit grays are one byte a pixel, so read them straight off the scanline.
+    const bool bBytePerPixel = pRead->GetScanlineFormat() == ScanlineFormat::N8BitPal;
+    float* pTarget = aGrays.data();
+
+    for (tools::Long nY = 0; nY < nHeight; ++nY)
+    {
+        Scanline pScanline = pRead->GetScanline(nY);
+
+        for (tools::Long nX = 0; nX < nWidth; ++nX)
+            *pTarget++
+                = float(bBytePerPixel ? pScanline[nX] : pRead->GetIndexFromData(pScanline, nX));
+    }
+
+    return aGrays;
+}
+
+// Write floats back into an 8-bit gray bitmap of the same size, each scaled by fScale and clamped
+// to the byte range. False when the bitmap cannot be written.
+bool writeGrays(Bitmap& rGrays, const std::vector<float>& rValues, float fScale)
+{
+    const tools::Long nWidth = rGrays.GetSizePixel().Width();
+    const tools::Long nHeight = rGrays.GetSizePixel().Height();
+    BitmapScopedWriteAccess pWrite(rGrays);
+
+    if (!pWrite)
+        return false;
+
+    const bool bBytePerPixel = pWrite->GetScanlineFormat() == ScanlineFormat::N8BitPal;
+    const float* pSource = rValues.data();
+
+    for (tools::Long nY = 0; nY < nHeight; ++nY)
+    {
+        Scanline pScanline = pWrite->GetScanline(nY);
+
+        for (tools::Long nX = 0; nX < nWidth; ++nX)
+        {
+            const sal_uInt8 nGray
+                = static_cast<sal_uInt8>(std::clamp(fScale * *pSource++, 0.0f, 255.0f));
+
+            if (bBytePerPixel)
+                pScanline[nX] = nGray;
+            else
+                pWrite->SetPixelOnData(pScanline, nX, BitmapColor(nGray));
+        }
+    }
+
+    return true;
+}
+} // anonymous namespace
+
+/* Returns 8-bit alpha mask created from passed mask.
+
+   Negative fErodeDilateRadius values mean erode, positive - dilate.
+   fBlurRadius is how far the blur reaches in pixels, three deviations of its Gaussian.
+   nTransparency defines minimal transparency level.
+*/
+AlphaMask ProcessAndBlurAlphaMask(const AlphaMask& rMask, double fErodeDilateRadius,
+                                  double fBlurRadius, sal_uInt8 nTransparency, bool bConvertTo1Bit)
+{
+    // Invert it to operate in the transparency domain. Trying to update this method to
+    // work in the alpha domain is fraught with hazards.
+    AlphaMask tmpMask = rMask;
+    tmpMask.Invert();
+
+    // Only completely white pixels on the initial mask must be considered for transparency. Any
+    // other color must be treated as black. This creates 1-bit B&W bitmap.
+    Bitmap mask = bConvertTo1Bit ? tmpMask.GetBitmap().CreateMask(COL_WHITE) : tmpMask.GetBitmap();
+
+    // Scaling down increases performance without noticeable quality loss.
+    Size aSize = mask.GetSizePixel();
+    double fScale = 1.0;
+    while (aSize.Height() > 1000 || aSize.Width() > 1000)
+    {
+        fScale /= 2;
+        fBlurRadius /= 2;
+        fErodeDilateRadius /= 2;
+        aSize /= 2;
+    }
+
+    // BmpScaleFlag::NearestNeighbor is important for following color replacement
+    mask.Scale(fScale, fScale, BmpScaleFlag::NearestNeighbor);
+
+    if (fErodeDilateRadius > 0)
+        BitmapFilter::Filter(mask, BitmapDilateFilter(fErodeDilateRadius));
+    else if (fErodeDilateRadius < 0)
+        BitmapFilter::Filter(mask, BitmapErodeFilter(-fErodeDilateRadius, 0xFF));
+
+    if (nTransparency)
+    {
+        const Color aTransparency(nTransparency, nTransparency, nTransparency);
+        mask.Replace(COL_BLACK, aTransparency);
+    }
+
+    // We need 8-bit grey mask for blurring
+    mask.Convert(BmpConversion::N8BitGreys);
+
+    // A blur radius is three deviations of the Gaussian, so the blur fades out at the radius. The
+    // OOXML reference renderer blurs the same way.
+    std::vector<float> aGrays(readGrays(mask));
+    if (!aGrays.empty())
+    {
+        const Size aMaskSize(mask.GetSizePixel());
+        GaussianGridBlur(aMaskSize.Width(), aMaskSize.Height(), fBlurRadius / 3.0)
+            .execute(aGrays.data());
+        writeGrays(mask, aGrays, 1.0f);
+    }
+
+    mask.Scale(rMask.GetSizePixel());
+
+    // And switch to the alpha domain.
+    mask.Invert();
+
+    return AlphaMask(mask);
+}
+
+namespace
+{
+// A mask that lets nothing through, so no halo is painted.
+AlphaMask createTransparentMask(const Size& rSizePixel)
+{
+    const sal_uInt8 nFullyTransparent = 255;
+
+    return AlphaMask(rSizePixel, &nFullyTransparent);
+}
+
+} // anonymous namespace
+
+AlphaMask CreateGlowAlphaMask(const AlphaMask& rMask, double fGlowRadius, sal_uInt8 nTransparency)
+{
+    if (fGlowRadius <= 0.0)
+        return createTransparentMask(rMask.GetSizePixel());
+
+    Bitmap aMask = rMask.GetBitmap();
+    aMask.Convert(BmpConversion::N8BitGreys);
+
+    const tools::Long nWidth = aMask.GetSizePixel().Width();
+    const tools::Long nHeight = aMask.GetSizePixel().Height();
+
+    // Coverage of the object per pixel, and the most any pixel holds, which is its solid opacity.
+    std::vector<float> aField(readGrays(aMask));
+    if (aField.empty())
+        return createTransparentMask(rMask.GetSizePixel());
+
+    float* pField = aField.data();
+    const float fPeakCoverage = *std::max_element(aField.begin(), aField.end());
+
+    if (fPeakCoverage <= 0.0f)
+        return createTransparentMask(rMask.GetSizePixel());
+
+    // Half the peak opacity is the object's outline to within a fraction of a pixel, however wide
+    // the anti-aliased fringe, and it holds when the whole object is transparent.
+    const float fContour = fPeakCoverage * 0.5f;
+    const float fFarAway = float(nWidth + nHeight) * float(nWidth + nHeight);
+
+    for (tools::Long nIndex = 0; nIndex < nWidth * nHeight; ++nIndex)
+        pField[nIndex] = pField[nIndex] >= fContour ? 0.0f : fFarAway;
+
+    EuclideanDistanceTransform(nWidth, nHeight).execute(pField);
+
+    // Growing by half the radius and softening over the other half is the blurred outline the
+    // effect is. The blur shapes the corners: a convex one thins, a concave one fills in.
+    const float fSpread = float(fGlowRadius) * 0.5f;
+    const double fSigma = fGlowRadius / 6.0;
+
+    // A halo is as opaque as the object's most opaque part. A half transparent shape halves it.
+    const float fAmplitude = fPeakCoverage * (1.0f / 255.0f);
+
+    // Half a pixel of ramp each side anti-aliases the grown outline. Only that band needs a square
+    // root, the value is flat on either side of it.
+    const float fOuterEdge = fSpread + 0.5f;
+    const float fOuterSquared = fOuterEdge * fOuterEdge;
+    const float fInnerEdge = std::max(fSpread - 0.5f, 0.0f);
+    const float fInnerSquared = fInnerEdge * fInnerEdge;
+
+    for (tools::Long nIndex = 0; nIndex < nWidth * nHeight; ++nIndex)
+    {
+        const float fSquaredDistance = pField[nIndex];
+
+        if (fSquaredDistance >= fOuterSquared)
+            pField[nIndex] = 0.0f;
+        else if (fSquaredDistance > fInnerSquared)
+            pField[nIndex] = fAmplitude * (fOuterEdge - std::sqrt(fSquaredDistance));
+        else
+            pField[nIndex] = fAmplitude;
+    }
+
+    GaussianGridBlur(nWidth, nHeight, fSigma).execute(pField);
+
+    if (!writeGrays(aMask, aField, 255.0f - float(nTransparency)))
+        return createTransparentMask(rMask.GetSizePixel());
+
+    return AlphaMask(aMask);
+}
+
+Bitmap BlurBitmapWithAlpha(const Bitmap& rBitmap, double fBlurRadius)
+{
+    if (!rBitmap.HasAlpha() || fBlurRadius <= 0.0)
+        return rBitmap;
+
+    Bitmap aColor = rBitmap.CreateColorBitmap();
+    Bitmap aAlpha = rBitmap.CreateAlphaMask().GetBitmap();
+    aAlpha.Convert(BmpConversion::N8BitGreys);
+
+    const tools::Long nWidth = aColor.GetSizePixel().Width();
+    const tools::Long nHeight = aColor.GetSizePixel().Height();
+    if (nWidth <= 0 || nHeight <= 0)
+        return rBitmap;
+
+    // Red, green and blue weighted by the alpha, then the alpha, each in a grid of its own. The
+    // alpha is 0 for a transparent and 1 for an opaque pixel.
+    const size_t nCount = size_t(nWidth) * size_t(nHeight);
+    std::vector<float> aChannels(4 * nCount);
+    float* pRed = aChannels.data();
+    float* pGreen = pRed + nCount;
+    float* pBlue = pGreen + nCount;
+    float* pAlpha = pBlue + nCount;
+
+    {
+        BitmapScopedReadAccess pColorRead(aColor);
+        BitmapScopedReadAccess pAlphaRead(aAlpha);
+        if (!pColorRead || !pAlphaRead)
+            return rBitmap;
+
+        size_t nIndex = 0;
+        for (tools::Long nY = 0; nY < nHeight; ++nY)
+        {
+            Scanline pColorScanline = pColorRead->GetScanline(nY);
+            Scanline pAlphaScanline = pAlphaRead->GetScanline(nY);
+            for (tools::Long nX = 0; nX < nWidth; ++nX, ++nIndex)
+            {
+                const float fAlpha = pAlphaRead->GetIndexFromData(pAlphaScanline, nX) / 255.0f;
+                const BitmapColor aPixel = pColorRead->GetColorFromData(pColorScanline, nX);
+                pRed[nIndex] = aPixel.GetRed() * fAlpha;
+                pGreen[nIndex] = aPixel.GetGreen() * fAlpha;
+                pBlue[nIndex] = aPixel.GetBlue() * fAlpha;
+                pAlpha[nIndex] = fAlpha;
+            }
+        }
+    }
+
+    // The blur radius is two standard deviations of the Gaussian, as for a CSS shadow.
+    const GaussianGridBlur aBlur(nWidth, nHeight, fBlurRadius / 2.0);
+    for (float* pChannel : { pRed, pGreen, pBlue, pAlpha })
+        aBlur.execute(pChannel);
+
+    auto toByte = [](float fValue)
+    { return static_cast<sal_uInt8>(std::clamp(std::lround(fValue), 0L, 255L)); };
+
+    {
+        BitmapScopedWriteAccess pColorWrite(aColor);
+        BitmapScopedWriteAccess pAlphaWrite(aAlpha);
+        if (!pColorWrite || !pAlphaWrite)
+            return rBitmap;
+
+        size_t nIndex = 0;
+        for (tools::Long nY = 0; nY < nHeight; ++nY)
+        {
+            Scanline pColorScanline = pColorWrite->GetScanline(nY);
+            Scanline pAlphaScanline = pAlphaWrite->GetScanline(nY);
+            for (tools::Long nX = 0; nX < nWidth; ++nX, ++nIndex)
+            {
+                // Dividing by the blurred alpha gives back the plain color.
+                const float fAlpha = pAlpha[nIndex];
+                BitmapColor aPixel(0, 0, 0);
+                if (fAlpha > 0.0f)
+                {
+                    aPixel = BitmapColor(toByte(pRed[nIndex] / fAlpha),
+                                         toByte(pGreen[nIndex] / fAlpha),
+                                         toByte(pBlue[nIndex] / fAlpha));
+                }
+                pColorWrite->SetPixelOnData(pColorScanline, nX, aPixel);
+                pAlphaWrite->SetPixelOnData(pAlphaScanline, nX,
+                                            BitmapColor(toByte(fAlpha * 255.0f)));
+            }
+        }
+    }
+
+    return Bitmap(aColor, AlphaMask(aAlpha));
+}
+
+drawinglayer::geometry::ViewInformation2D
+expandB2DRangeAtViewInformation2D(const drawinglayer::geometry::ViewInformation2D& rViewInfo,
+                                  double nAmount)
+{
+    drawinglayer::geometry::ViewInformation2D aRetval(rViewInfo);
+    basegfx::B2DRange viewport(rViewInfo.getViewport());
+    viewport.grow(nAmount);
+    aRetval.setViewport(viewport);
+    return aRetval;
+}
+
+} // end of namespace drawinglayer::primitive2d
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

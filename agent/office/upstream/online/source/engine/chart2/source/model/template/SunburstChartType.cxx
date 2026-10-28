@@ -1,0 +1,73 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include "SunburstChartType.hxx"
+#include <servicenames_charttypes.hxx>
+#include <cppuhelper/supportsservice.hxx>
+
+namespace cpo::uno { class XComponentContext; }
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+namespace chart
+{
+SunburstChartType::SunburstChartType() {}
+
+SunburstChartType::SunburstChartType(const SunburstChartType& rOther)
+    : ChartType(rOther)
+{
+}
+
+SunburstChartType::~SunburstChartType() {}
+
+// ____ XCloneable ____
+uno::Reference<util::XCloneable> SunburstChartType::createClone()
+{
+    return uno::Reference<util::XCloneable>(new SunburstChartType(*this));
+}
+
+rtl::Reference<ChartType> SunburstChartType::cloneChartType() const
+{
+    return new SunburstChartType(*this);
+}
+
+// ____ XChartType ____
+OUString SunburstChartType::getChartType() { return CHART2_SERVICE_NAME_CHARTTYPE_SUNBURST; }
+
+cpo::uno::Sequence<OUString> SunburstChartType::getSupportedPropertyRoles()
+{
+    return { u"FillColor"_ustr, u"BorderColor"_ustr };
+}
+
+OUString SunburstChartType::getImplementationName()
+{
+    return u"com.sun.star.comp.chart.SunburstChartType"_ustr;
+}
+
+bool SunburstChartType::supportsService(const OUString& rServiceName)
+{
+    return cppu::supportsService(this, rServiceName);
+}
+
+cpo::uno::Sequence<OUString> SunburstChartType::getSupportedServiceNames()
+{
+    return { CHART2_SERVICE_NAME_CHARTTYPE_SUNBURST, u"com.sun.star.chart2.ChartType"_ustr };
+}
+
+} //  namespace chart
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_chart_SunburstChartType_get_implementation(
+    cpo::uno::XComponentContext* /*context*/, cpo::uno::Sequence<cpo::uno::Any> const&)
+{
+    return cppu::acquire(new ::chart::SunburstChartType);
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

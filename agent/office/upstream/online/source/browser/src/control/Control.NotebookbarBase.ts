@@ -1,0 +1,216 @@
+/* -*- js-indent-level: 8 -*- */
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Control.NotebookbarBase - component for tabbed menu on the top of application
+ */
+
+class NotebookbarBase extends JSDialogComponent {
+	/// reference to old JS Notebookbar
+	impl: any = null;
+
+	/// rebuilds the style box at the new density so the previews are re-rendered
+	private dpiListener: DPIChangeListener = new DPIChangeListener(() => {
+		this.reloadStylesView();
+	});
+
+	constructor(map: any, impl: any) {
+		super(map, 'Notebookbar', 'notebookbar');
+		this.impl = impl;
+
+		this.createBuilder();
+		this.impl.setBuilder(this.builder, this.model);
+
+		this.map.addControl(this.impl);
+
+		this.registerMessageHandlers();
+	}
+
+	// when we show the UI
+	public onAdd() {
+		this.setupContainer(undefined);
+		this.impl.create(this.container);
+		if (this.builder) {
+			this.map.on(
+				'commandstatechanged',
+				this.builder.onCommandStateChanged,
+				this.builder,
+			);
+		}
+
+		this.dpiListener.start();
+	}
+
+	// when we hide the UI
+	public onRemove() {
+		if (this.builder) {
+			this.map.off(
+				'commandstatechanged',
+				this.builder.onCommandStateChanged,
+				this.builder,
+			);
+		}
+
+		this.dpiListener.stop();
+
+		if (this.impl) this.impl.onRemove();
+	}
+
+	public onCallback(
+		objectType: string,
+		eventType: string,
+		object: any,
+		data: any,
+		builder: JSBuilder,
+	) {
+		if (this.impl && this.impl.onCallback) {
+			const consumed = this.impl.onCallback(
+				objectType,
+				eventType,
+				object,
+				data,
+				builder,
+			);
+			if (consumed) return;
+		}
+		return this.builder?._defaultCallbackHandler(
+			objectType,
+			eventType,
+			object,
+			data,
+			builder,
+		);
+	}
+
+	protected createBuilder() {
+		this.builder = new window.L.control.notebookbarBuilder({
+			windowId: WindowId.Notebookbar,
+			mobileWizard: this.impl,
+			map: this.map,
+			cssClass: 'notebookbar',
+			useSetTabs: true,
+			suffix: 'notebookbar',
+			callback: this.onCallback.bind(this),
+		});
+	}
+
+	protected setupContainer(parentContainer?: HTMLElement) {
+		// remove old toolbar
+		let toolbar = window.L.DomUtil.get('toolbar-up');
+		if (toolbar) toolbar.remove();
+		// create toolbar from template
+		const toolbarLogo = document.getElementById('toolbar-logo');
+		if (toolbarLogo)
+			toolbarLogo.after(this.map.toolbarUpTemplate.cloneNode(true));
+		toolbar = window.L.DomUtil.get('toolbar-up');
+
+		this.container = window.L.DomUtil.create(
+			'div',
+			'notebookbar-scroll-wrapper',
+			toolbar,
+		);
+	}
+
+	protected onJSUpdate(e: { data: UpdateData }) {
+		if (
+			e.data &&
+			e.data.jsontype === this.allowedJsonType &&
+			e.data.control &&
+			this.impl?.onCoreWidgetUpdate?.(e.data.control)
+		)
+			return true;
+
+		if (super.onJSUpdate(e)) {
+			this.impl?.setInitialized(true);
+			return true;
+		}
+		return false;
+	}
+
+	private reloadStylesView() {
+		const widgetData = this.model.getById('stylesview') as IconViewJSON;
+		if (!widgetData || !this.builder) return;
+
+		if (this.container) this.builder.updateWidget(this.container, widgetData);
+	}
+
+	protected onJSAction(e: { data: ActionData }) {
+		if (super.onJSAction(e)) {
+			this.impl?.setInitialized(true);
+			return true;
+		}
+		return false;
+	}
+
+	/// used to get full model
+	public getFullJSON(): any[] {
+		return this.impl?.getFullJSON();
+	}
+
+	// shortcuts
+
+	/// used to get shortcut items
+	public getDefaultToolItems(): any[] {
+		return this.impl?.getDefaultToolItems();
+	}
+
+	public insertButtonToShortcuts(button: ToolItemWidgetJSON) {
+		this.impl?.insertButtonToShortcuts(button);
+	}
+
+	public reloadShortcutsBar() {
+		this.impl?.reloadShortcutsBar();
+	}
+
+	public showNotebookbarCommand(commandId: string, show: boolean): boolean {
+		return this.impl?.showNotebookbarCommand(commandId, show);
+	}
+
+	// tabs
+
+	public getTabs() {
+		return this.impl?.getTabs();
+	}
+
+	public setTabs(tabs: any[]) {
+		this.impl?.setTabs();
+	}
+
+	public showTabs() {
+		this.impl?.showTabs();
+	}
+
+	public hideTabs() {
+		this.impl?.hideTabs();
+	}
+
+	public selectTab(tabName: string) {
+		this.impl?.selectTab(tabName);
+	}
+
+	public refreshContextTabsVisibility() {
+		this.impl?.refreshContextTabsVisibility();
+	}
+
+	// customization
+
+	public showItem(id: string, show?: boolean): boolean {
+		return this.impl?.showItem(id /* no show used */);
+	}
+
+	public hideItem(id: string): boolean {
+		return this.impl?.hideItem(id);
+	}
+}
+
+JSDialog.NotebookbarBase = function (map: any, impl: any) {
+	return new NotebookbarBase(map, impl);
+};

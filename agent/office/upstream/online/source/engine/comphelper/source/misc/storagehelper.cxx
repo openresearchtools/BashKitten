@@ -1,0 +1,604 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <com/sun/star/embed/ElementModes.hpp>
+#include <com/sun/star/embed/XEncryptionProtectedStorage.hpp>
+#include <com/sun/star/embed/XStorage.hpp>
+#include <com/sun/star/embed/XTransactedObject.hpp>
+#include <com/sun/star/embed/StorageFactory.hpp>
+#include <com/sun/star/embed/FileSystemStorageFactory.hpp>
+#include <com/sun/star/io/IOException.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
+#include <com/sun/star/ucb/SimpleFileAccess.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/beans/NamedValue.hpp>
+#include <com/sun/star/beans/IllegalTypeException.hpp>
+
+#include <vector>
+
+#include <rtl/digest.h>
+#include <sal/log.hxx>
+
+#include <ucbhelper/content.hxx>
+
+#include <comphelper/bytereader.hxx>
+#include <comphelper/diagnose_ex.hxx>
+#include <comphelper/fileformat.h>
+#include <comphelper/hash.hxx>
+#include <comphelper/processfactory.hxx>
+#include <comphelper/documentconstants.hxx>
+#include <comphelper/propertyvalue.hxx>
+#include <comphelper/storagehelper.hxx>
+#include <comphelper/sequence.hxx>
+#include <cppuhelper/exc_hlp.hxx>
+#include <o3tl/string_view.hxx>
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+namespace comphelper {
+
+
+uno::Reference< lang::XSingleServiceFactory > OStorageHelper::GetStorageFactory(
+                            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
+{
+    uno::Reference< cpo::uno::XComponentContext> xContext = rxContext.is() ? rxContext : ::comphelper::getProcessComponentContext();
+
+    return embed::StorageFactory::create( xContext );
+}
+
+
+uno::Reference< lang::XSingleServiceFactory > OStorageHelper::GetFileSystemStorageFactory(
+                            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
+{
+    return embed::FileSystemStorageFactory::create(rxContext);
+}
+
+
+uno::Reference< embed::XStorage > OStorageHelper::GetTemporaryStorage(
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
+{
+    uno::Reference< embed::XStorage > xTempStorage( GetStorageFactory( rxContext )->createInstance(),
+                                                    uno::UNO_QUERY_THROW );
+    return xTempStorage;
+}
+
+
+uno::Reference< embed::XStorage > OStorageHelper::GetStorageFromURL(
+            const OUString& aURL,
+            sal_Int32 nStorageMode,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
+{
+    cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(aURL), cpo::uno::Any(nStorageMode) };
+    uno::Reference< embed::XStorage > xTempStorage( GetStorageFactory( rxContext )->createInstanceWithArguments( aArgs ),
+                                                    uno::UNO_QUERY_THROW );
+    return xTempStorage;
+}
+
+
+uno::Reference< embed::XStorage > OStorageHelper::GetStorageFromURL2(
+            const OUString& aURL,
+            sal_Int32 nStorageMode,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
+{
+    cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(aURL), cpo::uno::Any(nStorageMode) };
+
+    uno::Reference< lang::XSingleServiceFactory > xFact;
+    cpo::uno::Any anyEx;
+    try {
+        ::ucbhelper::Content aCntnt( aURL,
+            uno::Reference< css::ucb::XCommandEnvironment > (),
+            getProcessComponentContext() );
+        if (aCntnt.isDocument()) {
+            xFact = GetStorageFactory( rxContext );
+        } else {
+            xFact = GetFileSystemStorageFactory( rxContext );
+        }
+    } catch (cpo::uno::Exception &)
+    {
+        anyEx = cppu::getCaughtException();
+    }
+
+    if (!xFact.is())
+    {
+        if (anyEx.hasValue())
+            throw css::lang::WrappedTargetRuntimeException( u""_ustr, nullptr, anyEx );
+        else
+            throw cpo::uno::RuntimeException();
+    }
+
+    uno::Reference< embed::XStorage > xTempStorage(
+        xFact->createInstanceWithArguments( aArgs ), uno::UNO_QUERY_THROW );
+    return xTempStorage;
+}
+
+
+uno::Reference< embed::XStorage > OStorageHelper::GetStorageFromInputStream(
+            const uno::Reference < io::XInputStream >& xStream,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
+{
+    cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(xStream), cpo::uno::Any(embed::ElementModes::READ) };
+    uno::Reference< embed::XStorage > xTempStorage( GetStorageFactory( rxContext )->createInstanceWithArguments( aArgs ),
+                                                    uno::UNO_QUERY_THROW );
+    return xTempStorage;
+}
+
+
+uno::Reference< embed::XStorage > OStorageHelper::GetStorageFromStream(
+            const uno::Reference < io::XStream >& xStream,
+            sal_Int32 nStorageMode,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
+{
+    cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(xStream), cpo::uno::Any(nStorageMode) };
+    uno::Reference< embed::XStorage > xTempStorage( GetStorageFactory( rxContext )->createInstanceWithArguments( aArgs ),
+                                                    uno::UNO_QUERY_THROW );
+    return xTempStorage;
+}
+
+
+void OStorageHelper::CopyInputToOutput(
+            const uno::Reference< io::XInputStream >& xInput,
+            const uno::Reference< io::XOutputStream >& xOutput )
+{
+    static const sal_Int32 nConstBufferSize = 32000;
+
+    if (auto pByteReader = dynamic_cast< comphelper::ByteReader* >( xInput.get() ))
+    {
+        if (auto pByteWriter = dynamic_cast< comphelper::ByteWriter* >( xOutput.get() ))
+        {
+            sal_Int32 nRead;
+            sal_Int8 aTempBuf[ nConstBufferSize ];
+            do
+            {
+                nRead = pByteReader->readSomeBytes ( aTempBuf, nConstBufferSize );
+                pByteWriter->writeBytes ( aTempBuf, nRead );
+            }
+            while ( nRead == nConstBufferSize );
+            return;
+        }
+    }
+
+    sal_Int32 nRead;
+    cpo::uno::Sequence < sal_Int8 > aSequence ( nConstBufferSize );
+    do
+    {
+        nRead = xInput->readBytes ( aSequence, nConstBufferSize );
+        if ( nRead < nConstBufferSize )
+            aSequence.realloc( nRead );
+        xOutput->writeBytes ( aSequence );
+    }
+    while ( nRead == nConstBufferSize );
+}
+
+
+uno::Reference< io::XInputStream > OStorageHelper::GetInputStreamFromURL(
+            const OUString& aURL,
+            const uno::Reference< cpo::uno::XComponentContext >& context )
+{
+    uno::Reference< io::XInputStream > xInputStream = ucb::SimpleFileAccess::create(context)->openFileRead( aURL );
+    if ( !xInputStream.is() )
+        throw cpo::uno::RuntimeException();
+
+    return xInputStream;
+}
+
+
+void OStorageHelper::SetCommonStorageEncryptionData(
+            const uno::Reference< embed::XStorage >& xStorage,
+            const cpo::uno::Sequence< beans::NamedValue >& aEncryptionData )
+{
+    uno::Reference< embed::XEncryptionProtectedStorage > xEncrSet( xStorage, uno::UNO_QUERY );
+    if ( !xEncrSet.is() )
+        throw io::IOException(u"no XEncryptionProtectedStorage"_ustr); // TODO
+
+    xEncrSet->setEncryptionData( aEncryptionData );
+}
+
+
+sal_Int32 OStorageHelper::GetXStorageFormat(
+            const uno::Reference< embed::XStorage >& xStorage )
+{
+    uno::Reference< beans::XPropertySet > xStorProps( xStorage, uno::UNO_QUERY_THROW );
+
+    OUString aMediaType;
+    xStorProps->getPropertyValue(u"MediaType"_ustr) >>= aMediaType;
+
+    sal_Int32 nResult = 0;
+
+    // TODO/LATER: the filter configuration could be used to detect it later, or better a special service
+    if (
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_VND_SUN_XML_WRITER       ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_VND_SUN_XML_WRITER_WEB   ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_VND_SUN_XML_WRITER_GLOBAL) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_VND_SUN_XML_DRAW         ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_VND_SUN_XML_IMPRESS      ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_VND_SUN_XML_CALC         ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_VND_SUN_XML_CHART        ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_VND_SUN_XML_MATH         )
+       )
+    {
+        nResult = SOFFICE_FILEFORMAT_60;
+    }
+    else if (
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_TEXT        ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_TEXT_WEB    ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_TEXT_GLOBAL ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_DRAWING     ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_PRESENTATION) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_SPREADSHEET ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_CHART       ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_FORMULA     ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_DATABASE    ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_REPORT      ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_REPORT_CHART) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_TEXT_TEMPLATE        ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_TEXT_GLOBAL_TEMPLATE ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_DRAWING_TEMPLATE     ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_PRESENTATION_TEMPLATE) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_SPREADSHEET_TEMPLATE ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_CHART_TEMPLATE       ) ||
+        aMediaType.equalsIgnoreAsciiCase(MIMETYPE_OASIS_OPENDOCUMENT_FORMULA_TEMPLATE     )
+       )
+    {
+        nResult = SOFFICE_FILEFORMAT_8;
+    }
+    else
+    {
+        // the mediatype is not known
+        throw beans::IllegalTypeException("unknown media type '" + aMediaType + "'");
+    }
+
+    return nResult;
+}
+
+
+uno::Reference< embed::XStorage > OStorageHelper::GetStorageOfFormatFromURL(
+            const OUString& aFormat,
+            const OUString& aURL,
+            sal_Int32 nStorageMode,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext )
+{
+    cpo::uno::Sequence< beans::PropertyValue > aProps{ comphelper::makePropertyValue(u"StorageFormat"_ustr,
+                                                                                aFormat) };
+
+    cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(aURL), cpo::uno::Any(nStorageMode), cpo::uno::Any(aProps) };
+    uno::Reference< embed::XStorage > xTempStorage( GetStorageFactory( rxContext )->createInstanceWithArguments( aArgs ),
+                                                    uno::UNO_QUERY_THROW );
+    return xTempStorage;
+}
+
+
+uno::Reference< embed::XStorage > OStorageHelper::GetStorageOfFormatFromInputStream(
+            const OUString& aFormat,
+            const uno::Reference < io::XInputStream >& xStream,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext,
+            bool bRepairStorage )
+{
+    cpo::uno::Sequence< beans::PropertyValue > aProps( bRepairStorage ? 2 : 1 );
+    auto pProps = aProps.getArray();
+    pProps[0].Name = u"StorageFormat"_ustr;
+    pProps[0].Value <<= aFormat;
+    if ( bRepairStorage )
+    {
+        pProps[1].Name = u"RepairPackage"_ustr;
+        pProps[1].Value <<= bRepairStorage;
+    }
+
+    cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(xStream), cpo::uno::Any(embed::ElementModes::READ), cpo::uno::Any(aProps) };
+    uno::Reference< embed::XStorage > xTempStorage( GetStorageFactory( rxContext )->createInstanceWithArguments( aArgs ),
+                                                    uno::UNO_QUERY_THROW );
+    return xTempStorage;
+}
+
+
+uno::Reference< embed::XStorage > OStorageHelper::GetStorageOfFormatFromStream(
+            const OUString& aFormat,
+            const uno::Reference < io::XStream >& xStream,
+            sal_Int32 nStorageMode,
+            const uno::Reference< cpo::uno::XComponentContext >& rxContext,
+            bool bRepairStorage )
+{
+    cpo::uno::Sequence< beans::PropertyValue > aProps( bRepairStorage ? 2 : 1 );
+    auto pProps = aProps.getArray();
+    pProps[0].Name = u"StorageFormat"_ustr;
+    pProps[0].Value <<= aFormat;
+    if ( bRepairStorage )
+    {
+        pProps[1].Name = u"RepairPackage"_ustr;
+        pProps[1].Value <<= bRepairStorage;
+    }
+
+    cpo::uno::Sequence< cpo::uno::Any > aArgs{ cpo::uno::Any(xStream), cpo::uno::Any(nStorageMode), cpo::uno::Any(aProps) };
+    uno::Reference< embed::XStorage > xTempStorage( GetStorageFactory( rxContext )->createInstanceWithArguments( aArgs ),
+                                                    uno::UNO_QUERY_THROW );
+    return xTempStorage;
+}
+
+
+cpo::uno::Sequence< beans::NamedValue > OStorageHelper::CreatePackageEncryptionData( std::u16string_view aPassword )
+{
+    // TODO/LATER: Should not the method be part of DocPasswordHelper?
+    cpo::uno::Sequence< beans::NamedValue > aEncryptionData;
+    if ( !aPassword.empty() )
+    {
+        sal_Int32 nSha1Ind = 0;
+        // generate SHA256 start key
+        try
+        {
+            OString aUTF8Password( OUStringToOString( aPassword, RTL_TEXTENCODING_UTF8 ) );
+            std::vector<unsigned char> const hash(comphelper::Hash::calculateHash(
+                aUTF8Password.getStr(), aUTF8Password.getLength(),
+                comphelper::HashType::SHA256));
+            cpo::uno::Sequence<sal_Int8> aDigest(reinterpret_cast<const sal_Int8*>(hash.data()), hash.size());
+
+            ++nSha1Ind;
+            aEncryptionData = { { PACKAGE_ENCRYPTIONDATA_SHA256UTF8, cpo::uno::Any(aDigest) } };
+        }
+        catch ( cpo::uno::Exception& )
+        {
+            TOOLS_WARN_EXCEPTION("comphelper", "Can not create SHA256 digest!" );
+            throw; // tdf#159519 DO NOT RETURN SUCCESS
+        }
+
+        // MS_1252 encoding was used for SO60 document format password encoding,
+        // this encoding supports only a minor subset of nonascii characters,
+        // but for compatibility reasons it has to be used for old document formats
+        aEncryptionData.realloc( nSha1Ind + 3 );
+        auto pEncryptionData = aEncryptionData.getArray();
+        // these are StarOffice not-quite-SHA1
+        pEncryptionData[nSha1Ind].Name = PACKAGE_ENCRYPTIONDATA_SHA1UTF8;
+        pEncryptionData[nSha1Ind + 1].Name = PACKAGE_ENCRYPTIONDATA_SHA1MS1252;
+
+        rtl_TextEncoding const pEncoding[2] = { RTL_TEXTENCODING_UTF8, RTL_TEXTENCODING_MS_1252 };
+
+        for ( sal_Int32 nInd = 0; nInd < 2; nInd++ )
+        {
+            OString aByteStrPass = OUStringToOString( aPassword, pEncoding[nInd] );
+
+            sal_uInt8 pBuffer[RTL_DIGEST_LENGTH_SHA1];
+            rtlDigestError nError = rtl_digest_SHA1_StarOfficeBug( aByteStrPass.getStr(),
+                                                    aByteStrPass.getLength(),
+                                                    pBuffer,
+                                                    RTL_DIGEST_LENGTH_SHA1 );
+
+            if ( nError != rtl_Digest_E_None )
+            {
+                aEncryptionData.realloc( nSha1Ind );
+                return aEncryptionData;
+            }
+
+            pEncryptionData[nSha1Ind+nInd].Value <<= cpo::uno::Sequence< sal_Int8 >( reinterpret_cast<sal_Int8*>(pBuffer), RTL_DIGEST_LENGTH_SHA1 );
+        }
+
+        // actual SHA1
+        pEncryptionData[nSha1Ind + 2].Name = PACKAGE_ENCRYPTIONDATA_SHA1CORRECT;
+        OString aByteStrPass = OUStringToOString(aPassword, RTL_TEXTENCODING_UTF8);
+        std::vector<unsigned char> const sha1(::comphelper::Hash::calculateHash(
+                aByteStrPass.getStr(), aByteStrPass.getLength(),
+                ::comphelper::HashType::SHA1));
+        pEncryptionData[nSha1Ind + 2].Value <<= cpo::uno::Sequence<sal_Int8>(
+                reinterpret_cast<sal_Int8 const*>(sha1.data()), sha1.size());
+    }
+
+    return aEncryptionData;
+}
+
+bool OStorageHelper::IsValidZipEntryFileName( std::u16string_view aName, bool bSlashAllowed )
+{
+    long nDots{0};
+    for ( size_t i = 0; i < aName.size(); i++ )
+    {
+        switch ( aName[i] )
+        {
+            case '.':
+                if (nDots != -1)
+                {
+                    ++nDots;
+                }
+                break;
+            case '\\':
+            case '?':
+            case '<':
+            case '>':
+            case '\"':
+            case '|':
+            case ':':
+                return false;
+            case '/':
+                if (!bSlashAllowed || nDots == 1 || nDots == 2 || i == 0)
+                    return false;
+                nDots = 0;
+                break;
+            default:
+                nDots = -1;
+                if ( aName[i] < 32  || (aName[i] >= 0xD800 && aName[i] <= 0xDFFF) )
+                    return false;
+        }
+    }
+    return nDots != 1 && nDots != 2;
+}
+
+
+bool OStorageHelper::PathHasSegment( std::u16string_view aPath, std::u16string_view aSegment )
+{
+    bool bResult = false;
+    const size_t nPathLen = aPath.size();
+    const size_t nSegLen = aSegment.size();
+
+    if ( !aSegment.empty() && nPathLen >= nSegLen )
+    {
+        OUString aEndSegment = OUString::Concat("/") + aSegment;
+        OUString aInternalSegment = aEndSegment + "/";
+
+        if ( aPath.find( aInternalSegment ) != std::u16string_view::npos )
+            bResult = true;
+
+        if ( !bResult && o3tl::starts_with(aPath, aSegment ) )
+        {
+            if ( nPathLen == nSegLen || aPath[nSegLen] == '/' )
+                bResult = true;
+        }
+
+        if ( !bResult && nPathLen > nSegLen && aPath.substr( nPathLen - nSegLen - 1, nSegLen + 1 ) == aEndSegment )
+            bResult = true;
+    }
+
+    return bResult;
+}
+
+
+void OStorageHelper::SplitPackageURL(const OUString& rURL,
+                                     OUString& rContainerStorageName,
+                                     OUString& rObjectStorageName)
+{
+    SAL_WARN_IF (!rURL.isEmpty() && '#' == rURL[0], "comphelper", "invalid object URL: " << rURL);
+    OUString aURL = rURL;
+
+    sal_Int32 nPos = aURL.lastIndexOf('/');
+    if (-1 == nPos)
+    {
+        rContainerStorageName.clear();
+        rObjectStorageName = aURL;
+    }
+    else
+    {
+        //eliminate 'superfluous' slashes at start and end
+        //#i103076# load objects with all allowed xlink:href syntaxes
+        {
+            //eliminate './' at start
+            sal_Int32 nStart = 0;
+            sal_Int32 nCount = aURL.getLength();
+            if (aURL.startsWith( "./" ))
+            {
+                nStart = 2;
+                nCount -= 2;
+            }
+
+            //eliminate '/' at end
+            sal_Int32 nEnd = aURL.lastIndexOf('/');
+            if (nEnd == aURL.getLength()-1 && nEnd != (nStart-1))
+                nCount--;
+
+            aURL = aURL.copy(nStart, nCount);
+        }
+
+        nPos = aURL.lastIndexOf('/');
+        if (nPos >= 0)
+            rContainerStorageName = aURL.copy(0, nPos);
+        rObjectStorageName = aURL.copy(nPos + 1);
+    }
+}
+
+class LifecycleProxy::Impl
+    : public std::vector< uno::Reference< embed::XStorage > > {};
+LifecycleProxy::LifecycleProxy()
+    : m_xBadness( new Impl ) { }
+LifecycleProxy::~LifecycleProxy() { }
+
+void LifecycleProxy::commitStorages()
+{
+    std::for_each(m_xBadness->rbegin(), m_xBadness->rend(), // reverse order (outwards)
+        [](Impl::reference rxItem) {
+            uno::Reference<embed::XTransactedObject> const xTransaction(rxItem, uno::UNO_QUERY);
+            if (xTransaction.is())
+            {
+                xTransaction->commit();
+            }
+        });
+}
+
+static void splitPath( std::vector<OUString> &rElems, std::u16string_view rPath )
+{
+    for (sal_Int32 i = 0; i >= 0;)
+        rElems.push_back( OUString(o3tl::getToken(rPath, 0, '/', i )) );
+}
+
+static uno::Reference< embed::XStorage > LookupStorageAtPath(
+        const uno::Reference< embed::XStorage > &xParentStorage,
+        std::vector<OUString> &rElems, sal_uInt32 nOpenMode,
+        LifecycleProxy const &rNastiness )
+{
+    uno::Reference< embed::XStorage > xStorage( xParentStorage );
+    rNastiness.m_xBadness->push_back( xStorage );
+    for( size_t i = 0; i < rElems.size() && xStorage.is(); i++ )
+    {
+        xStorage = xStorage->openStorageElement( rElems[i], nOpenMode );
+        rNastiness.m_xBadness->push_back( xStorage );
+    }
+    return xStorage;
+}
+
+uno::Reference< embed::XStorage > OStorageHelper::GetStorageAtPath(
+        const uno::Reference< embed::XStorage > &xStorage,
+        std::u16string_view rPath, sal_uInt32 nOpenMode,
+        LifecycleProxy const &rNastiness )
+{
+    std::vector<OUString> aElems;
+    splitPath( aElems, rPath );
+    return LookupStorageAtPath( xStorage, aElems, nOpenMode, rNastiness );
+}
+
+uno::Reference< io::XStream > OStorageHelper::GetStreamAtPath(
+        const uno::Reference< embed::XStorage > &xParentStorage,
+        std::u16string_view rPath, sal_uInt32 nOpenMode,
+        LifecycleProxy const &rNastiness )
+{
+    std::vector<OUString> aElems;
+    splitPath( aElems, rPath );
+    OUString aName( aElems.back() );
+    aElems.pop_back();
+    sal_uInt32 nStorageMode = nOpenMode & ~embed::ElementModes::TRUNCATE;
+    uno::Reference< embed::XStorage > xStorage(
+        LookupStorageAtPath( xParentStorage, aElems, nStorageMode, rNastiness ),
+        uno::UNO_SET_THROW );
+    return xStorage->openStreamElement( aName, nOpenMode );
+}
+
+uno::Reference< io::XStream > OStorageHelper::GetStreamAtPackageURL(
+        uno::Reference< embed::XStorage > const& xParentStorage,
+        const OUString& rURL, sal_uInt32 const nOpenMode,
+        LifecycleProxy const & rNastiness)
+{
+    std::u16string_view path;
+    if (rURL.startsWithIgnoreAsciiCase("vnd.sun.star.Package:", &path))
+    {
+        return GetStreamAtPath(xParentStorage, path, nOpenMode, rNastiness);
+    }
+    return nullptr;
+}
+
+OUString OStorageHelper::GetODFVersionFromStorage(const uno::Reference<embed::XStorage>& xStorage)
+{
+    OUString aODFVersion;
+    try
+    {
+        uno::Reference<beans::XPropertySet> xPropSet(xStorage, uno::UNO_QUERY);
+        if (xPropSet)
+            xPropSet->getPropertyValue(u"Version"_ustr) >>= aODFVersion;
+    }
+    catch (cpo::uno::Exception&)
+    {
+    }
+    return aODFVersion;
+}
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

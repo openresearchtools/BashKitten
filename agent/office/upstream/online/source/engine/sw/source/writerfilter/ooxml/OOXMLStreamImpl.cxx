@@ -1,0 +1,428 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include "OOXMLStreamImpl.hxx"
+#include <oox/core/fasttokenhandler.hxx>
+
+#include <com/sun/star/embed/XHierarchicalStorageAccess.hpp>
+#include <com/sun/star/uri/UriReferenceFactory.hpp>
+#include <comphelper/storagehelper.hxx>
+#include <utility>
+
+namespace writerfilter::ooxml
+{
+
+using namespace com::sun::star;
+using namespace ::cpo;
+
+OOXMLStreamImpl::OOXMLStreamImpl
+(uno::Reference<cpo::uno::XComponentContext> const & xContext,
+ uno::Reference<io::XInputStream> xStorageStream,
+ StreamType_t nType, bool bRepairStorage)
+: mxContext(xContext), mxStorageStream(std::move(xStorageStream)), mnStreamType(nType)
+{
+    mxStorage.set
+        (comphelper::OStorageHelper::GetStorageOfFormatFromInputStream
+         (OFOPXML_STORAGE_FORMAT_STRING, mxStorageStream, xContext, bRepairStorage));
+    mxRelationshipAccess.set(mxStorage, uno::UNO_QUERY_THROW);
+
+    init();
+}
+
+OOXMLStreamImpl::OOXMLStreamImpl
+(OOXMLStreamImpl const & rOOXMLStream, StreamType_t nStreamType)
+: mxContext(rOOXMLStream.mxContext),
+  mxStorageStream(rOOXMLStream.mxStorageStream),
+  mxStorage(rOOXMLStream.mxStorage),
+  mnStreamType(nStreamType),
+  msPath(rOOXMLStream.msPath)
+{
+    mxRelationshipAccess.set(rOOXMLStream.mxDocumentStream, uno::UNO_QUERY_THROW);
+
+    init();
+}
+
+OOXMLStreamImpl::OOXMLStreamImpl
+(OOXMLStreamImpl const & rOOXMLStream, OUString sId)
+: mxContext(rOOXMLStream.mxContext),
+  mxStorageStream(rOOXMLStream.mxStorageStream),
+  mxStorage(rOOXMLStream.mxStorage),
+  mnStreamType(StreamType_t::UNKNOWN),
+  msId(std::move(sId)),
+  msPath(rOOXMLStream.msPath)
+{
+    mxRelationshipAccess.set(rOOXMLStream.mxDocumentStream, uno::UNO_QUERY_THROW);
+
+    init();
+}
+
+OOXMLStreamImpl::~OOXMLStreamImpl()
+{
+}
+
+const OUString & OOXMLStreamImpl::getTarget() const
+{
+    return msTarget;
+}
+
+bool OOXMLStreamImpl::lcl_getTarget(const uno::Reference<embed::XRelationshipAccess>&
+                                    xRelationshipAccess,
+                                    StreamType_t nStreamType,
+                                    const OUString & rId,
+                                    OUString & rDocumentTarget)
+{
+    static const char sId[] = "Id";
+    static const char sTarget[] = "Target";
+    static const char sTargetMode[] = "TargetMode";
+    static const char sExternal[] = "External";
+    if (maIdCache.empty())
+    {
+        // Cache is empty? Then let's build it!
+        const cpo::uno::Sequence< cpo::uno::Sequence<beans::StringPair> >aSeqs = xRelationshipAccess->getAllRelationships();
+        for (const cpo::uno::Sequence<beans::StringPair>& rSeq : aSeqs)
+        {
+            OUString aId;
+            OUString aTarget;
+            bool bExternal = false;
+            for (const beans::StringPair& rPair : rSeq)
+            {
+                if (rPair.First == sId)
+                    aId = rPair.Second;
+                else if (rPair.First == sTarget)
+                    aTarget = rPair.Second;
+                else if (rPair.First == sTargetMode && rPair.Second == sExternal)
+                    bExternal = true;
+            }
+            // Only cache external targets, internal ones are more complex (see below)
+            if (bExternal || aTarget.startsWith("#"))
+                maIdCache[aId] = aTarget;
+        }
+    }
+
+    if (maIdCache.find(rId) != maIdCache.end())
+    {
+        rDocumentTarget = maIdCache[rId];
+        return true;
+    }
+
+    bool bFound = false;
+    static uno::Reference<uri::XUriReferenceFactory> xFac = uri::UriReferenceFactory::create(mxContext);
+    // use '/' to represent the root of the zip package ( and provide a 'file' scheme to
+    // keep the XUriReference implementation happy )
+    // add mspath to represent the 'source' of this stream
+    uno::Reference<uri::XUriReference> xBase = xFac->parse("file:///" + msPath);
+
+    static const char sType[] = "Type";
+    static constexpr OUString sCustomType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml"_ustr;
+    static constexpr OUString sChartType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart"_ustr;
+    static constexpr OUString sEmbeddingsType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/package"_ustr;
+    static constexpr OUString sFooterType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer"_ustr;
+    static constexpr OUString sHeaderType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header"_ustr;
+    static constexpr OUString sCommentsExtendedType = u"http://schemas.microsoft.com/office/2011/relationships/commentsExtended"_ustr;
+    static constexpr OUString sCommentsIdsType = u"http://schemas.microsoft.com/office/2016/09/relationships/commentsIds"_ustr;
+    static constexpr OUString sCommentsExtensibleType = u"http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible"_ustr;
+    static constexpr OUString sVBAProjectType = u"http://schemas.microsoft.com/office/2006/relationships/vbaProject"_ustr;
+    static constexpr OUString sVBADataType = u"http://schemas.microsoft.com/office/2006/relationships/wordVbaData"_ustr;
+
+    OUString sStreamType;
+    OUString sStreamTypeStrict;
+
+    switch (nStreamType)
+    {
+        case StreamType_t::VBAPROJECT:
+            sStreamType = sVBAProjectType;
+            sStreamTypeStrict = sVBAProjectType;
+            break;
+        case StreamType_t::VBADATA:
+            sStreamType = sVBADataType;
+            sStreamTypeStrict = sVBADataType;
+            break;
+        case StreamType_t::DOCUMENT:
+            sStreamType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"_ustr;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument"_ustr;
+            break;
+        case StreamType_t::STYLES:
+            sStreamType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"_ustr;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/styles"_ustr;
+            break;
+        case StreamType_t::NUMBERING:
+            sStreamType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering"_ustr;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/numbering"_ustr;
+            break;
+        case StreamType_t::FONTTABLE:
+            sStreamType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable"_ustr;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/fontTable"_ustr;
+            break;
+        case StreamType_t::FOOTNOTES:
+            sStreamType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes"_ustr;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/footnotes"_ustr;
+            break;
+        case StreamType_t::ENDNOTES:
+            sStreamType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes"_ustr;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/endnotes"_ustr;
+            break;
+        case StreamType_t::COMMENTS:
+            sStreamType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments"_ustr;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/comments"_ustr;
+            break;
+        case StreamType_t::THEME:
+            sStreamType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme"_ustr;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/theme"_ustr;
+            break;
+        case StreamType_t::CUSTOMXML:
+            sStreamType = sCustomType;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/customXml"_ustr;
+            break;
+        case StreamType_t::CUSTOMXMLPROPS:
+            sStreamType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps"_ustr;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/customXmlProps"_ustr;
+            break;
+        case StreamType_t::SETTINGS:
+            sStreamType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings"_ustr;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/settings"_ustr;
+            break;
+        case StreamType_t::GLOSSARY:
+            sStreamType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/glossaryDocument"_ustr;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/glossaryDocument"_ustr;
+            break;
+        case StreamType_t::WEBSETTINGS:
+            sStreamType = u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings"_ustr;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/webSettings"_ustr;
+          break;
+        case StreamType_t::CHARTS:
+            sStreamType = sChartType;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/chart"_ustr;
+          break;
+        case StreamType_t::EMBEDDINGS:
+            sStreamType = sEmbeddingsType;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/package"_ustr;
+          break;
+        case StreamType_t::FOOTER:
+            sStreamType = sFooterType;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/footer"_ustr;
+          break;
+        case StreamType_t::HEADER:
+            sStreamType = sHeaderType;
+            sStreamTypeStrict = u"http://purl.oclc.org/ooxml/officeDocument/relationships/header"_ustr;
+          break;
+        case StreamType_t::COMMENTS_EXTENDED:
+            sStreamType = sCommentsExtendedType;
+            sStreamTypeStrict = sCommentsExtendedType;
+            break;
+        case StreamType_t::COMMENTS_IDS:
+            sStreamType = sCommentsIdsType;
+            sStreamTypeStrict = sCommentsIdsType;
+            break;
+        case StreamType_t::COMMENTS_EXTENSIBLE:
+            sStreamType = sCommentsExtensibleType;
+            sStreamTypeStrict = sCommentsExtensibleType;
+            break;
+        default:
+            break;
+    }
+
+    if (xRelationshipAccess.is())
+    {
+        const cpo::uno::Sequence< cpo::uno::Sequence< beans::StringPair > >aSeqs =
+            xRelationshipAccess->getAllRelationships();
+
+        for (const cpo::uno::Sequence< beans::StringPair > &rSeq : aSeqs)
+        {
+            bool bExternalTarget = false;
+            OUString sMyTarget;
+            for (const beans::StringPair &rPair : rSeq)
+            {
+                if (rPair.First == sType &&
+                    ( rPair.Second == sStreamType ||
+                      rPair.Second == sStreamTypeStrict ))
+                    bFound = true;
+                else if(rPair.First == sType &&
+                        ((rPair.Second == u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject"_ustr ||
+                          rPair.Second == u"http://purl.oclc.org/ooxml/officeDocument/relationships/oleObject"_ustr) &&
+                          nStreamType == StreamType_t::EMBEDDINGS))
+                {
+                    bFound = true;
+                }
+                else if (rPair.First == sId &&
+                         rPair.Second == rId)
+                    bFound = true;
+                else if (rPair.First == sTarget)
+                {
+                    // checking item[n].xml is not visited already.
+                    if(customTarget != rPair.Second && (sStreamType == sCustomType || sStreamType == sChartType || sStreamType == sFooterType || sStreamType == sHeaderType))
+                    {
+                        bFound = false;
+                    }
+                    else
+                    {
+                        sMyTarget = rPair.Second;
+                    }
+                }
+                else if (rPair.First == sTargetMode &&
+                         rPair.Second == sExternal)
+                    bExternalTarget = true;
+            }
+
+            if (bFound)
+            {
+                if (bExternalTarget)
+                    rDocumentTarget = sMyTarget;
+                else
+                {
+                    // 'Target' is a relative Uri, so a 'Target=/path'
+                    // with a base Uri of file://base/foo will resolve to
+                    // file://base/word. We need something more than some
+                    // simple string concatenation here to handle that.
+                    uno::Reference<uri::XUriReference> xPart = xFac->parse(sMyTarget);
+                    uno::Reference<uri::XUriReference> xAbs = xFac->makeAbsolute(xBase, xPart, true, uri::RelativeUriExcessParentSegments_RETAIN);
+                    if (!xAbs)
+                    {
+                        //it was invalid gibberish
+                        bFound = false;
+                    }
+                    else
+                    {
+                        rDocumentTarget = xAbs->getPath();
+                        // path will start with the fragment separator. need to
+                        // remove that
+                        rDocumentTarget = rDocumentTarget.copy( 1 );
+                        if(sStreamType == sEmbeddingsType)
+                            embeddingsTarget = rDocumentTarget;
+                    }
+                }
+
+                break;
+            }
+        }
+    }
+
+    return bFound;
+}
+
+OUString OOXMLStreamImpl::getTargetForId(const OUString & rId)
+{
+    OUString sTarget;
+
+    uno::Reference<embed::XRelationshipAccess> xRelationshipAccess
+        (mxDocumentStream, uno::UNO_QUERY_THROW);
+
+    if (lcl_getTarget(xRelationshipAccess, StreamType_t::UNKNOWN, rId, sTarget))
+        return sTarget;
+
+    return OUString();
+}
+
+void OOXMLStreamImpl::init()
+{
+    bool bFound = lcl_getTarget(mxRelationshipAccess,
+                                mnStreamType, msId, msTarget);
+
+    if (!bFound)
+        return;
+
+    sal_Int32 nLastIndex = msTarget.lastIndexOf('/');
+    if (nLastIndex >= 0)
+        msPath = msTarget.copy(0, nLastIndex + 1);
+
+    uno::Reference<embed::XHierarchicalStorageAccess>
+        xHierarchicalStorageAccess(mxStorage, uno::UNO_QUERY);
+
+    if (xHierarchicalStorageAccess.is())
+    {
+        cpo::uno::Any aAny(xHierarchicalStorageAccess->
+                      openStreamElementByHierarchicalName
+                      (msTarget, embed::ElementModes::SEEKABLEREAD));
+        aAny >>= mxDocumentStream;
+        // Non-cached ID lookup works by accessing mxDocumentStream as an embed::XRelationshipAccess.
+        // So when it changes, we should empty the cache.
+        maIdCache.clear();
+    }
+}
+
+uno::Reference<io::XInputStream> OOXMLStreamImpl::getDocumentStream()
+{
+    uno::Reference<io::XInputStream> xResult;
+
+    if (mxDocumentStream.is())
+        xResult = mxDocumentStream->getInputStream();
+
+    return xResult;
+}
+
+uno::Reference<cpo::uno::XComponentContext> OOXMLStreamImpl::getContext()
+{
+    return mxContext;
+}
+
+uno::Reference <xml::sax::XFastTokenHandler> OOXMLStreamImpl::getFastTokenHandler()
+{
+    if (! mxFastTokenHandler.is())
+        mxFastTokenHandler.set(new oox::core::FastTokenHandler);
+
+    return mxFastTokenHandler;
+}
+
+OOXMLStream::Pointer_t
+OOXMLDocumentFactory::createStream
+(const uno::Reference<cpo::uno::XComponentContext>& xContext,
+ const uno::Reference<io::XInputStream>& rStream,
+ bool bRepairStorage)
+{
+    OOXMLStreamImpl * pStream = new OOXMLStreamImpl(xContext, rStream,
+                                                    OOXMLStream::StreamType_t::DOCUMENT, bRepairStorage);
+    return OOXMLStream::Pointer_t(pStream);
+}
+
+OOXMLStream::Pointer_t
+OOXMLDocumentFactory::createStream
+(const OOXMLStream::Pointer_t& pStream,  OOXMLStream::StreamType_t nStreamType)
+{
+    OOXMLStream::Pointer_t pRet;
+
+    if (nStreamType != OOXMLStream::StreamType_t::VBADATA)
+    {
+        if (OOXMLStreamImpl* pImpl = dynamic_cast<OOXMLStreamImpl *>(pStream.get()))
+            pRet = new OOXMLStreamImpl(*pImpl, nStreamType);
+    }
+    else
+    {
+        // VBADATA is not a relation of the document, but of the VBAPROJECT stream.
+        if (OOXMLStreamImpl* pImpl = dynamic_cast<OOXMLStreamImpl *>(pStream.get()))
+        {
+            OOXMLStreamImpl aProject(*pImpl, OOXMLStream::StreamType_t::VBAPROJECT);
+            pRet = new OOXMLStreamImpl(aProject, OOXMLStream::StreamType_t::VBADATA);
+        }
+    }
+
+    return pRet;
+}
+
+OOXMLStream::Pointer_t
+OOXMLDocumentFactory::createStream
+(const OOXMLStream::Pointer_t& pStream, const OUString & rId)
+{
+    OOXMLStream::Pointer_t pRet;
+    if (OOXMLStreamImpl* pImpl = dynamic_cast<OOXMLStreamImpl *>(pStream.get()))
+        pRet = new OOXMLStreamImpl(*pImpl, rId);
+    return pRet;
+}
+
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

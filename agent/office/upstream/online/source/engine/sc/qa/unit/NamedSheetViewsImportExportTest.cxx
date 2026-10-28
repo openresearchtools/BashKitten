@@ -1,0 +1,505 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <test/unoapixml_test.hxx>
+#include <comphelper/servicehelper.hxx>
+#include <dbdata.hxx>
+#include <document.hxx>
+#include <docuno.hxx>
+#include <queryparam.hxx>
+#include <sortparam.hxx>
+#include <SheetView.hxx>
+#include <SheetViewManager.hxx>
+
+#include <map>
+
+class NamedSheetViewsImportExportTest : public UnoApiXmlTest
+{
+public:
+    NamedSheetViewsImportExportTest()
+        : UnoApiXmlTest(u"sc/qa/unit/data"_ustr)
+    {
+    }
+};
+
+CPPUNIT_TEST_FIXTURE(NamedSheetViewsImportExportTest, testImportAndCheckState)
+{
+    loadFromFile(u"xlsx/NamedSheetViews.xlsx");
+
+    ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    CPPUNIT_ASSERT(pDoc);
+
+    // Check sheet view manager
+    auto pManager = pDoc->GetSheetViewManager(SCTAB(0));
+    CPPUNIT_ASSERT(pManager);
+    // 2 sheet views for sheet 1
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pManager->size());
+
+    // 3 sheets total: Sheet1 + 2 sheet view tabs
+    CPPUNIT_ASSERT_EQUAL(SCTAB(3), pDoc->GetTableCount());
+}
+
+CPPUNIT_TEST_FIXTURE(NamedSheetViewsImportExportTest, testRoundtripXLSX)
+{
+    loadFromFile(u"xlsx/NamedSheetViews.xlsx");
+
+    // Loading is verified in a separate test so here we can assume it's fine
+
+    save(TestFilter::XLSX);
+
+    // Verify the exported XML structure
+    xmlDocUniquePtr pNsv = parseExport(u"xl/namedSheetViews/namedSheetView1.xml"_ustr);
+    CPPUNIT_ASSERT(pNsv);
+
+    // Two named sheet views: "View1" and "View2"
+    assertXPath(pNsv, "/xnsv:namedSheetViews/xnsv:namedSheetView", 2);
+    assertXPath(pNsv, "/xnsv:namedSheetViews/xnsv:namedSheetView[1]", "name", u"View1");
+    assertXPath(pNsv, "/xnsv:namedSheetViews/xnsv:namedSheetView[2]", "name", u"View2");
+
+    // View1: nsvFilter sort rule on column 2, no column filters
+    OString sView1 = "/xnsv:namedSheetViews/xnsv:namedSheetView[1]/xnsv:nsvFilter"_ostr;
+    assertXPath(pNsv, sView1, 1);
+    // tableId="0" marks the filter as bound to the worksheet auto-filter, not a
+    // formal <table>.
+    assertXPath(pNsv, sView1, "tableId", u"0");
+    assertXPath(pNsv, sView1 + "/xnsv:columnFilter", 0);
+    assertXPath(pNsv, sView1 + "/xnsv:sortRules/xnsv:sortRule", 1);
+    assertXPath(pNsv, sView1 + "/xnsv:sortRules/xnsv:sortRule", "colId", u"2");
+    assertXPath(pNsv, sView1 + "/xnsv:sortRules/xnsv:sortRule/xnsv:sortCondition", "ref", u"C1:C8");
+
+    // View2: nsvFilter with 2 column filters and sort rule on column 0
+    OString sView2 = "/xnsv:namedSheetViews/xnsv:namedSheetView[2]/xnsv:nsvFilter"_ostr;
+    assertXPath(pNsv, sView2, 1);
+    assertXPath(pNsv, sView2, "tableId", u"0");
+    assertXPath(pNsv, sView2 + "/xnsv:columnFilter", 2);
+
+    // Column filter on ID 1
+    assertXPath(pNsv, sView2 + "/xnsv:columnFilter[1]", "colId", u"1");
+    assertXPath(pNsv, sView2 + "/xnsv:columnFilter[1]/xnsv:filter/x:filters/x:filter", 4);
+
+    // Column filter on ID 2
+    assertXPath(pNsv, sView2 + "/xnsv:columnFilter[2]", "colId", u"2");
+    assertXPath(pNsv, sView2 + "/xnsv:columnFilter[2]/xnsv:filter/x:filters/x:dateGroupItem", 3);
+
+    // Sort rule on column 0
+    assertXPath(pNsv, sView2 + "/xnsv:sortRules/xnsv:sortRule", 1);
+    assertXPath(pNsv, sView2 + "/xnsv:sortRules/xnsv:sortRule", "colId", u"0");
+    assertXPath(pNsv, sView2 + "/xnsv:sortRules/xnsv:sortRule/xnsv:sortCondition", "ref", u"A1:A8");
+}
+
+namespace
+{
+/** The state both views of NamedSheetViews.xlsx come back with after a round trip. */
+void assertSheetViewsModelState(ScDocument* pDoc)
+{
+    // 3 tabs should exist
+    SCTAB nTabCount = pDoc->GetTableCount();
+    CPPUNIT_ASSERT_EQUAL(SCTAB(3), nTabCount);
+
+    // Tab index 0 should be visible, the sheet view tabs should be hidden
+    CPPUNIT_ASSERT(pDoc->IsVisible(0));
+    CPPUNIT_ASSERT(!pDoc->IsVisible(1)); // sheet view 1
+    CPPUNIT_ASSERT(!pDoc->IsVisible(2)); // sheet view 2
+
+    // Sheet view tabs should be sheet view holders
+    CPPUNIT_ASSERT(!pDoc->IsSheetViewHolder(0));
+    CPPUNIT_ASSERT(pDoc->IsSheetViewHolder(1));
+    CPPUNIT_ASSERT(pDoc->IsSheetViewHolder(2));
+
+    // Sheet views should exist on tab index 0 - associated with 2 sheet views
+    auto pManager = pDoc->GetSheetViewManager(0);
+    CPPUNIT_ASSERT(pManager);
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pManager->size());
+
+    // Find the tab index for each view by name
+    SCTAB nView1Tab = -1;
+    SCTAB nView2Tab = -1;
+    for (auto& rSheetView : pManager->iterateValidSheetViews())
+    {
+        if (rSheetView.GetName() == u"View1")
+            nView1Tab = rSheetView.getTableNumber();
+        else if (rSheetView.GetName() == u"View2")
+            nView2Tab = rSheetView.getTableNumber();
+    }
+    CPPUNIT_ASSERT(nView1Tab >= 0);
+    CPPUNIT_ASSERT(nView2Tab >= 0);
+
+    // Sheet View 1: has sort on column 2
+    {
+        ScDBData* pDBData = pDoc->GetAnonymousDBData(nView1Tab);
+        CPPUNIT_ASSERT(pDBData);
+
+        ScSortParam aSortParam;
+        pDBData->GetSortParam(aSortParam);
+        CPPUNIT_ASSERT(aSortParam.maKeyState[0].bDoSort);
+        CPPUNIT_ASSERT_EQUAL(SCCOLROW(2), aSortParam.maKeyState[0].nField);
+    }
+
+    // Sheet View 2: has column filters and sort on column 0, with rows filtered
+    {
+        ScDBData* pDBData = pDoc->GetAnonymousDBData(nView2Tab);
+        CPPUNIT_ASSERT(pDBData);
+
+        ScQueryParam aQueryParam;
+        pDBData->GetQueryParam(aQueryParam);
+        // Should have at least one active query entry
+        CPPUNIT_ASSERT(aQueryParam.GetEntry(0).bDoQuery);
+
+        ScSortParam aSortParam;
+        pDBData->GetSortParam(aSortParam);
+        CPPUNIT_ASSERT(aSortParam.maKeyState[0].bDoSort);
+        CPPUNIT_ASSERT_EQUAL(SCCOLROW(0), aSortParam.maKeyState[0].nField);
+
+        // At least one data row should be hidden by the filter
+        bool bHasHiddenRow = false;
+        for (SCROW nRow = 1; nRow <= 7; ++nRow)
+        {
+            if (pDoc->RowHidden(nRow, nView2Tab))
+            {
+                bHasHiddenRow = true;
+                break;
+            }
+        }
+        CPPUNIT_ASSERT_MESSAGE("Sheet View 2 should have at least one filtered row", bHasHiddenRow);
+    }
+}
+}
+
+CPPUNIT_TEST_FIXTURE(NamedSheetViewsImportExportTest, testRoundtripModelState)
+{
+    loadFromFile(u"xlsx/NamedSheetViews.xlsx");
+
+    // Save and reload to test full round-trip
+    saveAndReload(TestFilter::XLSX);
+
+    ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+    CPPUNIT_ASSERT(pModelObj);
+    assertSheetViewsModelState(pModelObj->GetDocument());
+}
+
+CPPUNIT_TEST_FIXTURE(NamedSheetViewsImportExportTest, testRoundtripGUIDs)
+{
+    loadFromFile(u"xlsx/NamedSheetViews.xlsx");
+
+    OString aView1GUID;
+    OString aView1FilterGUID;
+    OString aView2GUID;
+    OString aView2FilterGUID;
+    {
+        ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+        CPPUNIT_ASSERT(pModelObj);
+        ScDocument* pDocument = pModelObj->GetDocument();
+        CPPUNIT_ASSERT(pDocument);
+
+        auto pManager = pDocument->GetSheetViewManager(SCTAB(0));
+        CPPUNIT_ASSERT(pManager);
+
+        for (auto& rSheetView : pManager->iterateValidSheetViews())
+        {
+            if (rSheetView.GetName() == u"View1")
+            {
+                aView1GUID = rSheetView.GetGUID();
+                aView1FilterGUID = rSheetView.GetFilterGUID();
+            }
+            else if (rSheetView.GetName() == u"View2")
+            {
+                aView2GUID = rSheetView.GetGUID();
+                aView2FilterGUID = rSheetView.GetFilterGUID();
+            }
+        }
+
+        // Imported GUIDs must not be empty.
+        CPPUNIT_ASSERT(!aView1GUID.isEmpty());
+        CPPUNIT_ASSERT(!aView1FilterGUID.isEmpty());
+        CPPUNIT_ASSERT(!aView2GUID.isEmpty());
+        CPPUNIT_ASSERT(!aView2FilterGUID.isEmpty());
+    }
+
+    save(TestFilter::XLSX);
+
+    xmlDocUniquePtr pNsv = parseExport(u"xl/namedSheetViews/namedSheetView1.xml"_ustr);
+    CPPUNIT_ASSERT(pNsv);
+
+    // Exported @id / @filterId must match the GUIDs held on the runtime SheetView
+    CPPUNIT_ASSERT_EQUAL(
+        aView1GUID,
+        getXPath(pNsv, "/xnsv:namedSheetViews/xnsv:namedSheetView[1]", "id").toUtf8());
+    CPPUNIT_ASSERT_EQUAL(
+        aView1FilterGUID,
+        getXPath(pNsv, "/xnsv:namedSheetViews/xnsv:namedSheetView[1]/xnsv:nsvFilter", "filterId")
+            .toUtf8());
+    CPPUNIT_ASSERT_EQUAL(
+        aView2GUID,
+        getXPath(pNsv, "/xnsv:namedSheetViews/xnsv:namedSheetView[2]", "id").toUtf8());
+    CPPUNIT_ASSERT_EQUAL(
+        aView2FilterGUID,
+        getXPath(pNsv, "/xnsv:namedSheetViews/xnsv:namedSheetView[2]/xnsv:nsvFilter", "filterId")
+            .toUtf8());
+}
+
+CPPUNIT_TEST_FIXTURE(NamedSheetViewsImportExportTest, testMultiSheetRoundtripVisibility)
+{
+    loadFromFile(u"xlsx/NamedSheetViews.xlsx");
+
+    // After loading, the document already has 3 tabs: Sheet1 + 2 view tabs.
+    // Insert Sheet2 at the end so that after round-trip it tests that
+    // view tab creation doesn't break visibility of subsequent sheets.
+    {
+        ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+        CPPUNIT_ASSERT(pModelObj);
+        ScDocument* pDoc = pModelObj->GetDocument();
+        CPPUNIT_ASSERT(pDoc);
+
+        // Add a new tab (Sheet2) at the end
+        pDoc->InsertTab(pDoc->GetTableCount(), u"Sheet2"_ustr);
+        CPPUNIT_ASSERT_EQUAL(SCTAB(4), pDoc->GetTableCount());
+    }
+
+    // Roundtrip it
+    saveAndReload(TestFilter::XLSX);
+
+    // Check the state after roundtrip
+    {
+        ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+        CPPUNIT_ASSERT(pModelObj);
+        ScDocument* pDoc = pModelObj->GetDocument();
+        CPPUNIT_ASSERT(pDoc);
+
+        // 2 Sheets, Sheet 1 has 2 sheet views
+        SCTAB nTabCount = pDoc->GetTableCount();
+        CPPUNIT_ASSERT_EQUAL(SCTAB(4), nTabCount);
+
+        // Sheet1 (index 0) should be visible
+        CPPUNIT_ASSERT(pDoc->IsVisible(0));
+
+        // Sheet view tabs (index 1, 2) should be hidden and should be sheet view holders
+        CPPUNIT_ASSERT(!pDoc->IsVisible(1));
+        CPPUNIT_ASSERT(!pDoc->IsVisible(2));
+        CPPUNIT_ASSERT(pDoc->IsSheetViewHolder(1));
+        CPPUNIT_ASSERT(pDoc->IsSheetViewHolder(2));
+
+        // Sheet2 (index 3) should be visible as it's a normal sheet
+        CPPUNIT_ASSERT(pDoc->IsVisible(3));
+        CPPUNIT_ASSERT(!pDoc->IsSheetViewHolder(3));
+
+        // Sheet1 (index 0) should be associated with 2 sheet views
+        auto pManager = pDoc->GetSheetViewManager(0);
+        CPPUNIT_ASSERT(pManager);
+        CPPUNIT_ASSERT_EQUAL(size_t(2), pManager->size());
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(NamedSheetViewsImportExportTest, testMultiSheetViewsRoundtrip)
+{
+    loadFromFile(u"xlsx/NamedSheetViews.xlsx");
+
+    // Add a second ordinary sheet with its own sheet view, so the round-trip
+    // has named sheet views on two sheets.
+    {
+        ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+        CPPUNIT_ASSERT(pModelObj);
+        ScDocument* pDoc = pModelObj->GetDocument();
+        CPPUNIT_ASSERT(pDoc);
+
+        // Tabs so far: Sheet1, 2 view tabs. Sheet2 goes to the end.
+        SCTAB nSheet2 = pDoc->GetTableCount();
+        pDoc->InsertTab(nSheet2, u"Sheet2"_ustr);
+
+        auto [nViewID, nViewTab] = pDoc->CreateNewSheetView(nSheet2);
+        CPPUNIT_ASSERT(nViewID != sc::InvalidSheetViewID);
+        CPPUNIT_ASSERT_EQUAL(SCTAB(nSheet2 + 1), nViewTab);
+        pDoc->GetSheetViewManager(nSheet2)->get(nViewID)->SetName(u"Sheet2View"_ustr);
+    }
+
+    saveAndReload(TestFilter::XLSX);
+
+    {
+        ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+        CPPUNIT_ASSERT(pModelObj);
+        ScDocument* pDoc = pModelObj->GetDocument();
+        CPPUNIT_ASSERT(pDoc);
+
+        // Tabs: Sheet1, its 2 view tabs, Sheet2, its view tab.
+        CPPUNIT_ASSERT_EQUAL(SCTAB(5), pDoc->GetTableCount());
+
+        // Sheet1 keeps its two sheet views.
+        auto pManager1 = pDoc->GetSheetViewManager(0);
+        CPPUNIT_ASSERT(pManager1);
+        CPPUNIT_ASSERT_EQUAL(size_t(2), pManager1->size());
+
+        // Sheet2 keeps its sheet view, with its name.
+        SCTAB nSheet2 = 3;
+        CPPUNIT_ASSERT(!pDoc->IsSheetViewHolder(nSheet2));
+        CPPUNIT_ASSERT(pDoc->IsSheetViewHolder(nSheet2 + 1));
+
+        auto pManager2 = pDoc->GetSheetViewManager(nSheet2);
+        CPPUNIT_ASSERT(pManager2);
+        CPPUNIT_ASSERT_EQUAL(size_t(1), pManager2->size());
+
+        bool bFound = false;
+        for (auto& rSheetView : pManager2->iterateValidSheetViews())
+        {
+            if (rSheetView.GetName() == u"Sheet2View")
+                bFound = true;
+        }
+        CPPUNIT_ASSERT(bFound);
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(NamedSheetViewsImportExportTest, testOdfExportSheetViews)
+{
+    loadFromFile(u"xlsx/NamedSheetViews.xlsx");
+
+    save(TestFilter::ODS);
+
+    xmlDocUniquePtr pContent = parseExport(u"content.xml"_ustr);
+    CPPUNIT_ASSERT(pContent);
+
+    // The holder tables stay out of the file: one sheet, one auto-filter range on it.
+    assertXPath(pContent, "//table:table", 1);
+    assertXPath(pContent, "//table:database-range", 1);
+
+    OString sViews = "//office:spreadsheet/coext:sheet-views"_ostr;
+    assertXPath(pContent, sViews, 1);
+    assertXPath(pContent, sViews + "/coext:sheet-view", 2);
+
+    // View1: sorted on the third column of the range, no filter condition.
+    OString sView1 = sViews + "/coext:sheet-view[1]";
+    assertXPath(pContent, sView1, "name", u"View1");
+    assertXPath(pContent, sView1, "table-name", u"Sheet1");
+    CPPUNIT_ASSERT(!getXPath(pContent, sView1, "guid").isEmpty());
+    CPPUNIT_ASSERT(!getXPath(pContent, sView1, "filter-guid").isEmpty());
+    CPPUNIT_ASSERT(getXPath(pContent, sView1, "target-range-address").startsWith(u"Sheet1."));
+    assertXPath(pContent, sView1 + "/table:filter", 0);
+    assertXPath(pContent, sView1 + "/table:sort/table:sort-by", 1);
+    assertXPath(pContent, sView1 + "/table:sort/table:sort-by", "field-number", u"2");
+
+    // View2: two filtered columns, sorted on the first column of the range.
+    OString sView2 = sViews + "/coext:sheet-view[2]";
+    assertXPath(pContent, sView2, "name", u"View2");
+    assertXPath(pContent, sView2, "table-name", u"Sheet1");
+    assertXPath(pContent, sView2 + "/table:filter", 1);
+    assertXPath(pContent, sView2 + "/table:filter/table:filter-and/table:filter-condition", 2);
+    assertXPath(pContent, sView2 + "/table:sort/table:sort-by", "field-number", u"0");
+}
+
+CPPUNIT_TEST_FIXTURE(NamedSheetViewsImportExportTest, testOdfRoundtripModelState)
+{
+    loadFromFile(u"xlsx/NamedSheetViews.xlsx");
+
+    saveAndReload(TestFilter::ODS);
+
+    ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+    CPPUNIT_ASSERT(pModelObj);
+    assertSheetViewsModelState(pModelObj->GetDocument());
+}
+
+CPPUNIT_TEST_FIXTURE(NamedSheetViewsImportExportTest, testOdfRoundtripGUIDs)
+{
+    loadFromFile(u"xlsx/NamedSheetViews.xlsx");
+
+    std::map<OUString, std::pair<OString, OString>> aGUIDsBefore;
+    {
+        ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+        CPPUNIT_ASSERT(pModelObj);
+        auto pManager = pModelObj->GetDocument()->GetSheetViewManager(SCTAB(0));
+        CPPUNIT_ASSERT(pManager);
+        for (auto& rSheetView : pManager->iterateValidSheetViews())
+            aGUIDsBefore[rSheetView.GetName()] = { rSheetView.GetGUID(), rSheetView.GetFilterGUID() };
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aGUIDsBefore.size());
+    }
+
+    saveAndReload(TestFilter::ODS);
+
+    ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+    CPPUNIT_ASSERT(pModelObj);
+    auto pManager = pModelObj->GetDocument()->GetSheetViewManager(SCTAB(0));
+    CPPUNIT_ASSERT(pManager);
+    size_t nChecked = 0;
+    for (auto& rSheetView : pManager->iterateValidSheetViews())
+    {
+        auto it = aGUIDsBefore.find(rSheetView.GetName());
+        CPPUNIT_ASSERT(it != aGUIDsBefore.end());
+        CPPUNIT_ASSERT_EQUAL(it->second.first, rSheetView.GetGUID());
+        CPPUNIT_ASSERT_EQUAL(it->second.second, rSheetView.GetFilterGUID());
+        ++nChecked;
+    }
+    CPPUNIT_ASSERT_EQUAL(size_t(2), nChecked);
+}
+
+CPPUNIT_TEST_FIXTURE(NamedSheetViewsImportExportTest, testOdfRoundtripHiddenColumns)
+{
+    loadFromFile(u"xlsx/NamedSheetViews.xlsx");
+
+    // Hide a column in View1 only.
+    {
+        ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+        CPPUNIT_ASSERT(pModelObj);
+        ScDocument* pDoc = pModelObj->GetDocument();
+        auto pManager = pDoc->GetSheetViewManager(SCTAB(0));
+        CPPUNIT_ASSERT(pManager);
+        for (auto& rSheetView : pManager->iterateValidSheetViews())
+        {
+            if (rSheetView.GetName() == u"View1")
+                pDoc->SetColHidden(1, 1, rSheetView.getTableNumber(), true);
+        }
+    }
+
+    saveAndReload(TestFilter::ODS);
+
+    ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+    CPPUNIT_ASSERT(pModelObj);
+    ScDocument* pDoc = pModelObj->GetDocument();
+    auto pManager = pDoc->GetSheetViewManager(SCTAB(0));
+    CPPUNIT_ASSERT(pManager);
+    CPPUNIT_ASSERT(!pDoc->ColHidden(1, 0));
+    for (auto& rSheetView : pManager->iterateValidSheetViews())
+    {
+        bool bExpectHidden = rSheetView.GetName() == u"View1";
+        CPPUNIT_ASSERT_EQUAL(bExpectHidden, pDoc->ColHidden(1, rSheetView.getTableNumber()));
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(NamedSheetViewsImportExportTest, testOdfRoundtripKeepsLaterSheets)
+{
+    // A holder table sits right after its sheet, so the sheets after it move by one and each
+    // of them has to keep its own content.
+    loadFromFile(u"fods/sheet-views-three-sheets.fods");
+
+    {
+        ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+        CPPUNIT_ASSERT(pModelObj);
+        ScDocument* pDoc = pModelObj->GetDocument();
+        auto [nViewID, nViewTab] = pDoc->CreateNewSheetView(0);
+        CPPUNIT_ASSERT(nViewID != sc::InvalidSheetViewID);
+        CPPUNIT_ASSERT_EQUAL(SCTAB(1), nViewTab);
+    }
+
+    // Two rounds: the first saves a view made at runtime, the second one made by the import.
+    for (int nRound = 0; nRound < 2; ++nRound)
+    {
+        saveAndReload(TestFilter::ODS);
+
+        ScModelObj* pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
+        CPPUNIT_ASSERT(pModelObj);
+        ScDocument* pDoc = pModelObj->GetDocument();
+        CPPUNIT_ASSERT_EQUAL(SCTAB(4), pDoc->GetTableCount());
+        CPPUNIT_ASSERT(pDoc->IsSheetViewHolder(1));
+        CPPUNIT_ASSERT_EQUAL(u"first"_ustr, pDoc->GetString(0, 0, 0));
+        CPPUNIT_ASSERT_EQUAL(u"first"_ustr, pDoc->GetString(0, 0, 1));
+        CPPUNIT_ASSERT_EQUAL(u"second"_ustr, pDoc->GetString(0, 0, 2));
+        CPPUNIT_ASSERT_EQUAL(u"third"_ustr, pDoc->GetString(0, 0, 3));
+    }
+}
+
+CPPUNIT_PLUGIN_IMPLEMENT();
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

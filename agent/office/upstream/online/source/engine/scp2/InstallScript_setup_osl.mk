@@ -1,0 +1,28 @@
+# -*- Mode: makefile-gmake; tab-width: 4; indent-tabs-mode: t -*-
+#
+# This file is part of the Collabora Office project.
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+
+$(eval $(call gb_InstallScript_InstallScript,setup_osl))
+
+$(eval $(call gb_InstallScript_use_modules,setup_osl,\
+	scp2/calc \
+	scp2/draw \
+	scp2/graphicfilter \
+	scp2/impress \
+	scp2/math \
+	scp2/ooo \
+	scp2/python \
+	scp2/ure \
+	scp2/writer \
+	scp2/xsltfilter \
+	$(if $(filter TRUE,$(ENABLE_EVOAB2) $(ENABLE_GIO) $(ENABLE_GTK3)),\
+		scp2/gnome \
+	) \
+))
+
+# vim: set shiftwidth=4 tabstop=4 noexpandtab:

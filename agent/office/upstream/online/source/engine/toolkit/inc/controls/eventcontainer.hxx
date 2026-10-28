@@ -1,0 +1,82 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/container/XContainer.hpp>
+
+#include <toolkit/helper/listenermultiplexer.hxx>
+
+#include <cppuhelper/implbase.hxx>
+#include <unordered_map>
+
+namespace toolkit
+{
+
+// Hashtable to optimize
+typedef std::unordered_map
+<
+    OUString,
+    sal_Int32,
+    OUStringHash
+>
+NameContainerNameMap;
+
+class ScriptEventContainer final : public ::cppu::WeakImplHelper<
+                                        css::container::XNameContainer,
+                                        css::container::XContainer >
+{
+    // The map needs to keep the insertion order, otherwise Macro signatures would get broken
+    // if the order changes here (Dialog xml files are digitally signed too).
+    // Thus a std::map or std::unordered_map can't be used.
+    NameContainerNameMap mHashMap;
+    cpo::uno::Sequence< OUString > mNames;
+    std::vector< cpo::uno::Any > mValues;
+    cpo::uno::Type mType;
+
+    ContainerListenerMultiplexer maContainerListeners;
+
+public:
+    ScriptEventContainer();
+
+    // Methods XElementAccess
+    virtual cpo::uno::Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
+
+    // Methods XNameAccess
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames(  ) override;
+    virtual bool hasByName( const OUString& aName ) override;
+
+    // Methods XNameReplace
+    virtual void replaceByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
+
+    // Methods XNameContainer
+    virtual void insertByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
+    virtual void removeByName( const OUString& Name ) override;
+
+    // Methods XContainer
+    void addContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& xListener ) override;
+    void removeContainerListener( const cpo::uno::Reference< css::container::XContainerListener >& xListener ) override;
+};
+
+}   // namespace toolkit_namecontainer
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

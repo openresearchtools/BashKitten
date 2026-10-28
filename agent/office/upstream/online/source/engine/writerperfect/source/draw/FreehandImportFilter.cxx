@@ -1,0 +1,58 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* FreehandImportFilter: Sets up the filter, and calls OdgExporter
+ * to do the actual filtering
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#include <cppuhelper/supportsservice.hxx>
+
+#include <libfreehand/libfreehand.h>
+
+#include "FreehandImportFilter.hxx"
+
+bool FreehandImportFilter::doImportDocument(weld::Window*, librevenge::RVNGInputStream& rInput,
+                                            OdgGenerator& rGenerator,
+                                            comphelper::SequenceAsHashMap&)
+{
+    return libfreehand::FreeHandDocument::parse(&rInput, &rGenerator);
+}
+
+bool FreehandImportFilter::doDetectFormat(librevenge::RVNGInputStream& rInput, OUString& rTypeName)
+{
+    if (libfreehand::FreeHandDocument::isSupported(&rInput))
+    {
+        rTypeName = u"draw_Freehand_Document"_ustr;
+        return true;
+    }
+
+    return false;
+}
+
+// XServiceInfo
+OUString FreehandImportFilter::getImplementationName()
+{
+    return u"com.sun.star.comp.Draw.FreehandImportFilter"_ustr;
+}
+
+bool FreehandImportFilter::supportsService(const OUString& rServiceName)
+{
+    return cppu::supportsService(this, rServiceName);
+}
+
+cpo::uno::Sequence<OUString> FreehandImportFilter::getSupportedServiceNames()
+{
+    return { u"com.sun.star.document.ImportFilter"_ustr,
+             u"com.sun.star.document.ExtendedTypeDetection"_ustr };
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_Draw_FreehandImportFilter_get_implementation(
+    cpo::uno::XComponentContext* const context, const cpo::uno::Sequence<cpo::uno::Any>&)
+{
+    return cppu::acquire(new FreehandImportFilter(context));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

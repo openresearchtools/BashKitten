@@ -1,0 +1,65 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_SW_SOURCE_UI_VBA_VBAWINDOW_HXX
+#define INCLUDED_SW_SOURCE_UI_VBA_VBAWINDOW_HXX
+
+#include <cppuhelper/implbase.hxx>
+#include <ooo/vba/word/XWindow.hpp>
+#include <cpo/uno/XComponentContext.hpp>
+
+#include <vbahelper/vbahelperinterface.hxx>
+#include <vbahelper/vbawindowbase.hxx>
+#include <rtl/ref.hxx>
+
+class SwXTextDocument;
+
+typedef cppu::ImplInheritanceHelper< VbaWindowBase, ov::word::XWindow > WindowImpl_BASE;
+
+class SwVbaWindow : public WindowImpl_BASE
+{
+public:
+    /// @throws cpo::uno::RuntimeException
+    SwVbaWindow(
+        const cpo::uno::Reference< ov::XHelperInterface >& xParent,
+        const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext,
+        const rtl::Reference< SwXTextDocument >& xModel,
+        const cpo::uno::Reference< css::frame::XController >& xController );
+
+    // Attributes
+    virtual cpo::uno::Any getView() override;
+    virtual void setView( const cpo::uno::Any& _view ) override;
+    virtual cpo::uno::Any getWindowState() override;
+    virtual void setWindowState( const cpo::uno::Any& _windowstate ) override;
+    virtual OUString getCaption() override;
+    virtual void setCaption( const OUString& _caption ) override;
+    // Methods
+    virtual void Activate(  ) override;
+    virtual void Close( const cpo::uno::Any& SaveChanges, const cpo::uno::Any& RouteDocument ) override;
+    virtual cpo::uno::Any Panes( const cpo::uno::Any& aIndex ) override;
+    virtual cpo::uno::Any ActivePane() override;
+    // XHelperInterface
+    virtual OUString getServiceImplName() override;
+    virtual cpo::uno::Sequence<OUString> getServiceNames() override;
+private:
+    rtl::Reference< SwXTextDocument > m_xModel;
+};
+
+#endif // INCLUDED_SW_SOURCE_UI_VBA_VBAWINDOW_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

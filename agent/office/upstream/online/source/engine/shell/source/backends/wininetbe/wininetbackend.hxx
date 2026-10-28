@@ -1,0 +1,110 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_SHELL_SOURCE_BACKENDS_WININETBE_WININETBACKEND_HXX
+#define INCLUDED_SHELL_SOURCE_BACKENDS_WININETBE_WININETBACKEND_HXX
+
+#include <com/sun/star/beans/Optional.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cppuhelper/implbase.hxx>
+
+namespace uno = cpo::uno ;
+namespace lang = css::lang ;
+
+class WinInetBackend : public ::cppu::WeakImplHelper <
+        css::beans::XPropertySet,
+        lang::XServiceInfo > {
+
+    public:
+
+        // XServiceInfo
+        virtual OUString
+            getImplementationName(  ) override;
+
+        virtual bool
+            supportsService( const OUString& aServiceName ) override;
+
+        virtual cpo::uno::Sequence<OUString>
+            getSupportedServiceNames(  ) override;
+
+        // XPropertySet
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo >
+        getPropertySetInfo() override
+        { return cpo::uno::Reference< css::beans::XPropertySetInfo >(); }
+
+        virtual void setPropertyValue(
+            OUString const &, cpo::uno::Any const &) override;
+
+        virtual cpo::uno::Any getPropertyValue(
+            OUString const & PropertyName) override;
+
+        virtual void addPropertyChangeListener(
+            OUString const &,
+            cpo::uno::Reference< css::beans::XPropertyChangeListener > const &) override
+        {}
+
+        virtual void removePropertyChangeListener(
+            OUString const &,
+            cpo::uno::Reference< css::beans::XPropertyChangeListener > const &) override
+        {}
+
+        virtual void addVetoableChangeListener(
+            OUString const &,
+            cpo::uno::Reference< css::beans::XVetoableChangeListener > const &) override
+        {}
+
+        virtual void removeVetoableChangeListener(
+            OUString const &,
+            cpo::uno::Reference< css::beans::XVetoableChangeListener > const &) override
+        {}
+
+        /**
+          Service constructor from a service factory.
+
+          @param xContext   component context
+          */
+        WinInetBackend();
+
+        /** Destructor */
+        ~WinInetBackend() override;
+
+    private:
+        css::beans::Optional< cpo::uno::Any >
+            valueProxyType_;
+        css::beans::Optional< cpo::uno::Any >
+            valueNoProxy_;
+        css::beans::Optional< cpo::uno::Any >
+            valueHttpProxyName_;
+        css::beans::Optional< cpo::uno::Any >
+            valueHttpProxyPort_;
+        css::beans::Optional< cpo::uno::Any >
+            valueHttpsProxyName_;
+        css::beans::Optional< cpo::uno::Any >
+            valueHttpsProxyPort_;
+        css::beans::Optional< cpo::uno::Any >
+            valueFtpProxyName_;
+        css::beans::Optional< cpo::uno::Any >
+            valueFtpProxyPort_;
+} ;
+
+
+#endif // INCLUDED_SHELL_SOURCE_BACKENDS_WININETBE_WININETBACKEND_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

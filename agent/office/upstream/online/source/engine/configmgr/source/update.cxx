@@ -1,0 +1,139 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <cassert>
+
+#include <com/sun/star/configuration/XUpdate.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/Sequence.hxx>
+#include <cpo/uno/XInterface.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <cppuhelper/weak.hxx>
+#include <osl/mutex.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+#include "broadcaster.hxx"
+#include "components.hxx"
+#include "lock.hxx"
+#include "modifications.hxx"
+#include "rootaccess.hxx"
+
+namespace configmgr::update {
+
+namespace {
+
+class Service:
+    public cppu::WeakImplHelper< css::configuration::XUpdate, css::lang::XServiceInfo >
+{
+public:
+    explicit Service(const cpo::uno::Reference< cpo::uno::XComponentContext >& context):
+        context_(context)
+    {
+        assert(context.is());
+        lock_ = lock();
+    }
+
+private:
+    Service(const Service&) = delete;
+    Service& operator=(const Service&) = delete;
+
+    virtual ~Service() override {}
+
+    virtual void insertExtensionXcuFile(OUString const & fileUri) override;
+
+    virtual void insertModificationXcuFile(
+        OUString const & fileUri,
+        cpo::uno::Sequence< OUString > const & includedPaths,
+        cpo::uno::Sequence< OUString > const & excludedPaths) override;
+
+    virtual void writeModifications(OUString const & fileUri) override;
+
+    OUString getImplementationName() override {
+        return u"com.sun.star.comp.configuration.Update"_ustr;
+    }
+
+    bool supportsService(OUString const & ServiceName) override {
+        return cppu::supportsService(this, ServiceName);
+    }
+
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override {
+        return {u"com.sun.star.configuration.Update_Service"_ustr};
+    }
+
+    std::shared_ptr<osl::Mutex> lock_;
+    cpo::uno::Reference< cpo::uno::XComponentContext > context_;
+};
+
+void Service::insertExtensionXcuFile(OUString const & fileUri)
+{
+    Broadcaster bc;
+    {
+        osl::MutexGuard g(*lock_);
+        Components & components = Components::getSingleton(context_);
+        Modifications mods;
+        components.insertExtensionXcuFile(fileUri, &mods);
+        components.initGlobalBroadcaster(
+            mods, rtl::Reference< RootAccess >(), &bc);
+    }
+    bc.send();
+}
+
+void Service::insertModificationXcuFile(
+    OUString const & fileUri,
+    cpo::uno::Sequence< OUString > const & includedPaths,
+    cpo::uno::Sequence< OUString > const & excludedPaths)
+{
+    Broadcaster bc;
+    {
+        osl::MutexGuard g(*lock_);
+        Components & components = Components::getSingleton(context_);
+        Modifications mods;
+        components.insertModificationXcuFile(
+            fileUri, includedPaths, excludedPaths, &mods);
+        components.initGlobalBroadcaster(
+            mods, rtl::Reference< RootAccess >(), &bc);
+    }
+    bc.send();
+}
+
+void Service::writeModifications(OUString const & fileUri)
+{
+    // writeModificationsToFile takes the configmgr lock itself while it reads
+    // the modification tree, so unlike the other methods here this one must not
+    // hold the lock around the call.
+    Components::getSingleton(context_).writeModificationsToFile(fileUri);
+}
+
+}
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface*
+com_sun_star_comp_configuration_Update_get_implementation(
+    cpo::uno::XComponentContext* context, cpo::uno::Sequence<cpo::uno::Any> const& )
+{
+    return cppu::acquire(new configmgr::update::Service(context));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

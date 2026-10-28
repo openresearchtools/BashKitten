@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+	<!-- Draw browser UI text with the DejaVu fonts the engine bundles, so
+	     every machine renders it the same way the snapshot baselines were
+	     captured. The engine's font directory is the only one listed, so no
+	     font the machine has installed can win. conf.d still supplies the
+	     host's rendering settings. configure fills in the configured engine
+	     install path. -->
+	<include ignore_missing="yes">/etc/fonts/conf.d</include>
+	<cachedir prefix="xdg">fontconfig</cachedir>
+
+	<dir>@LO_PATH@/share/fonts/truetype</dir>
+
+	<alias binding="strong">
+		<family>sans-serif</family>
+		<prefer><family>DejaVu Sans</family></prefer>
+	</alias>
+	<alias binding="strong">
+		<family>system-ui</family>
+		<prefer><family>DejaVu Sans</family></prefer>
+	</alias>
+	<alias binding="strong">
+		<family>serif</family>
+		<prefer><family>DejaVu Serif</family></prefer>
+	</alias>
+	<alias binding="strong">
+		<family>monospace</family>
+		<prefer><family>DejaVu Sans Mono</family></prefer>
+	</alias>
+</fontconfig>

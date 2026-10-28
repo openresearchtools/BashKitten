@@ -1,0 +1,88 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/sdbcx/XUsersSupplier.hpp>
+#include <com/sun/star/container/XNamed.hpp>
+#include <comphelper/proparrhlp.hxx>
+#include <cppuhelper/compbase.hxx>
+#include <cppuhelper/basemutex.hxx>
+#include <connectivity/sdbcx/VCollection.hxx>
+#include <connectivity/sdbcx/IRefreshable.hxx>
+#include <connectivity/sdbcx/VDescriptor.hxx>
+#include <connectivity/dbtoolsdllapi.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+
+namespace connectivity::sdbcx
+{
+    typedef OCollection OUsers;
+
+    typedef ::cppu::WeakComponentImplHelper<   css::sdbcx::XUsersSupplier,
+                                               css::container::XNamed,
+                                               css::lang::XServiceInfo> OGroup_BASE;
+
+    class OOO_DLLPUBLIC_DBTOOLS OGroup :
+                    public cppu::BaseMutex,
+                    public OGroup_BASE,
+                    public IRefreshableUsers,
+                    public ::comphelper::OPropertyArrayUsageHelper<OGroup>,
+                    public ODescriptor
+    {
+    protected:
+        // no Reference! see OCollection::acquire
+        std::unique_ptr<OUsers> m_pUsers;
+
+        using OGroup_BASE::rBHelper;
+
+        // OPropertyArrayUsageHelper
+        virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
+        // OPropertySetHelper
+        virtual ::cppu::IPropertyArrayHelper & getInfoHelper() override;
+    public:
+        OGroup(bool _bCase);
+        OGroup( const OUString& Name, bool _bCase);
+        virtual ~OGroup() override;
+        DECLARE_SERVICE_INFO();
+
+        // XInterface
+        virtual void acquire() noexcept override;
+        virtual void release() noexcept override;
+
+        //XInterface
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type & rType ) override;
+        //XTypeProvider
+        virtual cpo::uno::Sequence< cpo::uno::Type > getTypes(  ) override;
+
+        // ::cppu::OComponentHelper
+        virtual void disposing() override;
+        // XPropertySet
+        virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo(  ) override;
+        // XUsersSupplier
+        virtual cpo::uno::Reference< css::container::XNameAccess > getUsers(  ) override;
+
+        // XNamed
+        virtual OUString getName(  ) override;
+        virtual void setName( const OUString& aName ) override;
+    };
+
+}
+
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

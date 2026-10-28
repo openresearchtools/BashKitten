@@ -1,0 +1,28 @@
+# -*- Mode: makefile-gmake; tab-width: 4; indent-tabs-mode: t -*-
+#
+# This file is part of the Collabora Office project.
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+$(eval $(call gb_CustomTarget_CustomTarget,android/loandroid3))
+
+loandroid3_DIR := $(gb_CustomTarget_workdir)/android/source
+
+$(call gb_CustomTarget_get_target,android/loandroid3) : \
+	$(loandroid3_DIR)/done
+
+$(loandroid3_DIR)/done : $(call gb_Postprocess_get_target,AllModulesButInstsetNative)
+	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),MAK,2)
+	$(call gb_Trace_StartRange,$(subst $(WORKDIR)/,,$@),MAK)
+	mkdir -p $(loandroid3_DIR)
+	cd $(loandroid3_DIR) && $(MAKE) -f $(SRCDIR)/android/source/Makefile all
+	$(call gb_Trace_EndRange,$(subst $(WORKDIR)/,,$@),MAK)
+
+$(call gb_CustomTarget_get_clean_target,android/loandroid3) :
+	$(call gb_Output_announce,$(subst $(WORKDIR)/Clean/,,$@),$(false),MAK,2)
+	rm -rf $(loandroid3_DIR) $(BUILDDIR)/android/obj $(BUILDDIR)/android/jniLibs
+	rm -f $(call gb_CustomTarget_get_target,android/loandroid3)
+
+# vim: set noet sw=4 ts=4:

@@ -1,0 +1,103 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include "X11_selection.hxx"
+
+#include <com/sun/star/datatransfer/clipboard/XSystemClipboard.hpp>
+#include <cppuhelper/compbase.hxx>
+
+inline constexpr OUString X11_CLIPBOARD_IMPLEMENTATION_NAME  = u"com.sun.star.datatransfer.X11ClipboardSupport"_ustr;
+
+namespace x11 {
+
+    class X11Clipboard :
+        public ::cppu::WeakComponentImplHelper <
+        css::datatransfer::clipboard::XSystemClipboard,
+        css::lang::XServiceInfo
+        >,
+        public SelectionAdaptor
+    {
+        cpo::uno::Reference< css::datatransfer::XTransferable > m_aContents;
+        cpo::uno::Reference< css::datatransfer::clipboard::XClipboardOwner > m_aOwner;
+
+        rtl::Reference<SelectionManager>                        m_xSelectionManager;
+        ::std::vector< cpo::uno::Reference< css::datatransfer::clipboard::XClipboardListener > > m_aListeners;
+        Atom                                                    m_aSelection;
+
+        X11Clipboard( SelectionManager& rManager, Atom aSelection );
+
+        friend class SelectionManager;
+
+        void fireChangedContentsEvent();
+        void clearContents();
+
+    public:
+
+        static cpo::uno::Reference<css::datatransfer::clipboard::XClipboard>
+        create( SelectionManager& rManager, Atom aSelection );
+
+        virtual ~X11Clipboard() override;
+
+        /*
+         * XServiceInfo
+         */
+
+        virtual OUString getImplementationName(  ) override;
+
+        virtual bool supportsService( const OUString& ServiceName ) override;
+
+        virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+        /*
+         * XClipboard
+         */
+
+        virtual cpo::uno::Reference< css::datatransfer::XTransferable > getContents() override;
+
+        virtual void setContents(
+            const cpo::uno::Reference< css::datatransfer::XTransferable >& xTrans,
+            const cpo::uno::Reference< css::datatransfer::clipboard::XClipboardOwner >& xClipboardOwner ) override;
+
+        virtual OUString getName() override;
+
+        /*
+         * XClipboardNotifier
+         */
+        virtual void addClipboardListener(
+            const cpo::uno::Reference< css::datatransfer::clipboard::XClipboardListener >& listener ) override;
+
+        virtual void removeClipboardListener(
+            const cpo::uno::Reference< css::datatransfer::clipboard::XClipboardListener >& listener ) override;
+
+        /*
+         *  SelectionAdaptor
+         */
+        virtual cpo::uno::Reference< css::datatransfer::XTransferable > getTransferable() override;
+        virtual void clearTransferable() override;
+        virtual void fireContentsChanged() override;
+        virtual cpo::uno::Reference< cpo::uno::XInterface > getReference() noexcept override;
+    };
+
+    cpo::uno::Sequence< OUString > X11Clipboard_getSupportedServiceNames();
+
+} // namespace
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

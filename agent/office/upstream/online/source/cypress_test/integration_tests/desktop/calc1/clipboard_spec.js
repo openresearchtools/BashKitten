@@ -1,0 +1,459 @@
+/* global describe it cy beforeEach require Cypress */
+
+var helper = require('../../common/helper');
+var calcHelper = require('../../common/calc_helper');
+var desktopHelper = require('../../common/desktop_helper');
+
+describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Calc clipboard tests.', { testIsolation: false }, function() {
+
+	desktopHelper.shareDocumentAcrossTests('calc/clipboard.ods', {
+		viewport: [1920, 1080],
+	});
+
+	beforeEach(function() {
+		cy.getFrameWindow().then((win) => {
+			this.win = win;
+
+			// A test that reads the clipboard installs the one it wants, so every
+			// test starts with the real one in place.
+			win.app.map._clip._dummyClipboard = undefined;
+		});
+
+		if (Cypress.env('INTEGRATION') === 'nextcloud') {
+			desktopHelper.showStatusBarIfHidden();
+		}
+		desktopHelper.shouldHaveZoomLevel('100');
+
+		// make it more complex and prevent form initial being A1
+		helper.typeIntoInputField(helper.addressInputSelector, 'D5');
+
+		cy.cGet('#map').focus();
+		calcHelper.clickOnFirstCell();
+		cy.cGet(helper.addressInputSelector).should('have.prop', 'value', 'A1');
+	});
+
+	function setDummyClipboard(type, content, image = false, fail = false, imageHtml = undefined) {
+		cy.window().then(win => {
+			var app = win['0'].app;
+			var metaURL = encodeURIComponent(app.map._clip.getMetaURL());
+			if (type === 'text/html') {
+				content = content.replace('%META_URL%', metaURL);
+			}
+			var blob = new Blob([content]);
+			var clipboard = app.map._clip;
+			var clipboardItem = {
+				getType: function(type) {
+					return {
+						then: function(resolve/*, reject*/) {
+							if (image && type === 'text/html') {
+								if (imageHtml === undefined) {
+									imageHtml = '<img></img>';
+								}
+								resolve(new Blob([imageHtml]));
+							} else {
+								resolve(blob);
+							}
+						},
+					};
+				},
+				types: image ? [type, 'text/html'] : [type],
+			};
+			var clipboardItems = [clipboardItem];
+			clipboard._dummyClipboard = {
+				read: function() {
+					return {
+						then: function(resolve, reject) {
+							if (fail) {
+								reject({
+									message: 'rejected',
+								});
+							} else {
+								resolve(clipboardItems);
+							}
+						},
+					};
+				},
+			};
+		});
+	}
+
+	it('HTML paste, internal case', function() {
+		// Given a document with a SUM() in C1, and copying that to the clipboard:
+		// A1 is 1, B1 is 2, so C1 is 3.
+		helper.typeIntoInputField(helper.addressInputSelector, 'C1');
+		cy.cGet(helper.addressInputSelector).should('have.prop', 'value', 'C1');
+		cy.window().then(win => {
+			var app = win['0'].app;
+			app.socket.sendMessage('uno .uno:Copy');
+		});
+		var html = '<div id="meta-origin" data-coolorigin="%META_URL%">ignored</div>';
+		setDummyClipboard('text/html', html);
+
+		helper.processToIdle(this.win);
+
+		// When pasting C1 to D1:
+		helper.typeIntoInputField(helper.addressInputSelector, 'D1');
+		cy.cGet(helper.addressInputSelector).should('have.prop', 'value', 'D1');
+		cy.spy(this.win.app.socket, 'sendMessage').as('sendMessage');
+		cy.cGet('#Home .ui-overflow-group-content > .unoPaste .arrowbackground').click();
+		helper.getMenuEntry(0).click(); // Paste
+		// The paste reads the clipboard asynchronously before it sends .uno:Paste, so the copy
+		// below waits for that to be sent.
+		cy.get('@sendMessage').should('have.been.calledWith', 'uno .uno:Paste');
+
+		// Then make sure the formula gets rewritten as expected:
+		// Internal paste: B1 is 2, C1 is 3, so D1 is 5.
+		// Without the accompanying fix in place, this test would have failed with:
+		// expected **#copy-paste-container table td:nth-of-type(1)** to have text **'5'**, but the text was **''**
+		// i.e. a popup dialog was shown, instead of working, like with Ctrl-V.
+		helper.setDummyClipboardForCopy();
+		helper.copy();
+		cy.cGet('#copy-paste-container table td:nth-of-type(1)').should('have.text', '5');
+	});
+
+	it('HTML paste, external case', function() {
+		cy.cGet(helper.addressInputSelector).should('have.prop', 'value', 'A1');
+
+		var html = '<div>clipboard</div>';
+		setDummyClipboard('text/html', html);
+
+		// When pasting the clipboard to A1:
+		cy.cGet('#Home .ui-overflow-group-content > .unoPaste .arrowbackground').click();
+		helper.getMenuEntry(0).click(); // Paste
+
+		// Then make sure we actually consider the content of the HTML:
+		cy.cGet('#sc_input_window.formulabar .ui-custom-textarea-text-layer').should('have.text', 'clipboard');
+	});
+
+	it('Plain text paste', function() {
+		var text = 'plain text';
+		setDummyClipboard('text/plain', text);
+
+		// When pasting the clipboard to A1:
+		cy.cGet('#Home .ui-overflow-group-content > .unoPaste .arrowbackground').click();
+		helper.getMenuEntry(0).click(); // Paste
+
+		// Then make the paste happened:
+		cy.cGet('#sc_input_window.formulabar .ui-custom-textarea-text-layer').should('have.text', 'plain text');
+	});
+
+	it('Image paste', function() {
+		var base64 = 'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEW10NBjBBbqAAAAH0lEQVRo';
+		base64 += 'ge3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAvg0hAAABmmDh1QAAAABJRU5ErkJggg==';
+		var blob = Cypress.Blob.base64StringToBlob(base64, 'image/png');
+		setDummyClipboard('image/png', blob, /*image=*/true);
+
+		// When pasting the clipboard:
+		cy.cGet('#Home .ui-overflow-group-content > .unoPaste .arrowbackground').click();
+		helper.getMenuEntry(0).click(); // Paste
+
+		// Then make sure the paste happened:
+		cy.cGet('#document-container svg g').should('exist');
+	});
+
+	it('Image paste with meta', function() {
+		let base64 = 'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEW10NBjBBbqAAAAH0lEQVRo';
+		base64 += 'ge3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAvg0hAAABmmDh1QAAAABJRU5ErkJggg==';
+		let blob = Cypress.Blob.base64StringToBlob(base64, 'image/png');
+		let imageHtml = '<meta http-equiv="content-type" content="text/html; charset=utf-8"><img></img>';
+		setDummyClipboard('image/png', blob, /*image=*/true, /*fail=*/false, imageHtml);
+
+		// When pasting the clipboard:
+		cy.cGet('#Home .ui-overflow-group-content > .unoPaste .arrowbackground').click();
+		helper.getMenuEntry(0).click(); // Paste
+
+		// Then make sure the paste happened:
+		// Without the accompanying fix in place, this test would have failed, no image was
+		// pasted.
+		cy.cGet('#document-container svg g').should('exist');
+	});
+
+	it('HTML paste, internal case failing', function() {
+		// Given a document with an A1 cell copied to the clipboard:
+		cy.window().then(win => {
+			var app = win['0'].app;
+			app.socket.sendMessage('uno .uno:Copy');
+		});
+		var html = '<div id="meta-origin" data-coolorigin="%META_URL%">ignored</div>';
+		setDummyClipboard('text/html', html, /*image=*/false, /*fail=*/true);
+
+		// When pasting the clipboard to B1, which fails:
+		helper.typeIntoInputField(helper.addressInputSelector, 'B1');
+		cy.cGet('#Home .ui-overflow-group-content > .unoPaste .arrowbackground').click();
+		helper.getMenuEntry(0).click(); // Paste
+
+		// Then make sure a warning popup is shown:
+		cy.cGet('#copy_paste_warning-box').should('exist');
+
+		// Close the dialog by clicking the OK button. Then try again to make sure the dialog appears again.
+		cy.cGet('#modal-dialog-copy_paste_warning-box #modal-dialog-copy_paste_warning-box-yesbutton').click();
+		cy.cGet('#Home .ui-overflow-group-content > .unoPaste .arrowbackground').click();
+		helper.getMenuEntry(0).click(); // Paste
+		cy.cGet('#copy_paste_warning-box').should('exist');
+
+		// Now when clicking the "Don't show again" button, the dialog should not appear again.
+		cy.cGet('#modal-dialog-copy_paste_warning-box #modal-dialog-copy_paste_warning-box-nobutton').click();
+		cy.cGet('#Home .ui-overflow-group-content > .unoPaste .arrowbackground').click();
+		helper.getMenuEntry(0).click(); // Paste
+		cy.cGet('#copy_paste_warning-box').should('not.exist');
+	});
+
+	it('Copy Hyperlink from pop-up', function () {
+		cy.getFrameWindow().then(function(win) {
+			cy.stub(win.navigator.clipboard, 'writeText').as('writeText');
+		});
+
+		desktopHelper.selectZoomLevel('100', false);
+
+		calcHelper.dblClickOnFirstCell();
+		// Wait for the inline cell editor to be active (blinking cursor over
+		// the cell). The formula bar shares .ui-custom-textarea-text-layer
+		// with the cell editor, so the previous assertion could pass while
+		// the cell was not yet in edit mode and the subsequent keystrokes
+		// would then move the cell selection instead of editing A1.
+		cy.cGet('.cursor-overlay .blinking-cursor').should('be.visible');
+
+		const url = 'http://www.example.com/';
+		helper.typeIntoDocument('{rightArrow}{backspace}' + url + '{enter}');
+		helper.processToIdle(this.win);
+
+		// We need to close the hyperlink popup because currently mouse cursor is on the cell and it opens hyperlink popup window.
+		helper.typeIntoDocument('{rightArrow}');
+		helper.typeIntoDocument('{leftArrow}');
+		helper.processToIdle(this.win);
+
+		calcHelper.clickOnFirstCell();
+		cy.cGet('.hyperlink-pop-up-container').should('be.visible');
+		// Confirm the popup belongs to our URL (not a stale popup left over
+		// from an earlier click) and that the kit considers A1 the current
+		// selection: the formula bar reflects the active cell's value.
+		cy.cGet('#hyperlink-pop-up').should('have.text', url);
+		cy.cGet('#sc_input_window.formulabar .ui-custom-textarea-text-layer').should('have.text', url);
+
+		helper.processToIdle(this.win);
+		cy.cGet('#hyperlink-pop-up-copy').click();
+
+		cy.get('@writeText').should('have.been.calledOnceWith', url);
+	});
+
+	it('URL shown in the pop-up preview area opens the link when clicked', function () {
+		desktopHelper.selectZoomLevel('100', false);
+
+		calcHelper.dblClickOnFirstCell();
+		cy.cGet('.cursor-overlay .blinking-cursor').should('be.visible');
+
+		// Autocorrect turns the typed URL into a hyperlink on enter.
+		const url = 'http://www.example.com/';
+		const title = 'Example Domain';
+		helper.typeIntoDocument('{rightArrow}{backspace}' + url + '{enter}');
+		helper.processToIdle(this.win);
+
+		// The mouse still rests on the cell after the double click, which
+		// pops up the hyperlink popup on its own. Moving the cell cursor
+		// closes it, so the click below opens a fresh popup instead of
+		// landing on the leftover one.
+		helper.typeIntoDocument('{rightArrow}');
+		helper.typeIntoDocument('{leftArrow}');
+		helper.processToIdle(this.win);
+
+		calcHelper.clickOnFirstCell();
+		cy.cGet('.hyperlink-pop-up-container').should('be.visible');
+		cy.cGet('#hyperlink-pop-up').should('have.text', url);
+
+		// Deliver a link preview response for the shown URL. The fetched
+		// page title takes over the link row and the raw URL moves to the
+		// preview area.
+		cy.getFrameWindow().then((win) => {
+			const popup = win.app.sectionContainer.getSectionWithName('URL PopUp');
+			popup.updatePreview({ url: url, title: title });
+		});
+
+		cy.cGet('#hyperlink-pop-up').should('have.text', title);
+		cy.cGet('#hyperlink-pop-up-preview a').should('have.text', url);
+
+		// The URL is what the user recognizes as the hyperlink, so clicking
+		// it in the preview area opens the link the same way the link row
+		// does: the external link confirmation shows the URL about to open.
+		cy.cGet('#hyperlink-pop-up-preview a').click();
+		cy.cGet('#modal-dialog-openlink').should('be.visible');
+		cy.cGet('#info-modal-label2').should('contain.text', url);
+	});
+
+	it('A link on a word keeps its address after text is typed before the word', function () {
+		// Typing into the selected A1 starts the cell edit.
+		helper.typeIntoDocument('here');
+		cy.cGet('.cursor-overlay .blinking-cursor').should('be.visible');
+
+		// The link is set on the whole text of the cell, so the dialog shows it as the link text.
+		helper.typeIntoDocument('{ctrl}a');
+		helper.processToIdle(this.win);
+		helper.typeIntoDocument('{ctrl}k');
+		cy.cGet('#target-input').should('be.visible');
+		helper.processToIdle(this.win);
+		cy.cGet('#indication-input').should('have.value', 'here');
+		cy.cGet('#target-input').type('https://example.com');
+		cy.cGet('#ok').click();
+		cy.cGet('#target-input').should('not.exist');
+		helper.processToIdle(this.win);
+
+		helper.typeIntoDocument('{enter}');
+		helper.typeIntoDocument('{upArrow}');
+		calcHelper.assertAddressAfterIdle(this.win, 'A1');
+
+		cy.realPress('F2');
+		cy.cGet('.cursor-overlay .blinking-cursor').should('be.visible');
+
+		helper.typeIntoDocument('{home}');
+		helper.typeIntoDocument(' hello ');
+
+		// The caret now sits at the start of the linked word. Its two ends give the point to
+		// click on once the edit is finished.
+		helper.getBlinkingCursorPosition('linkStart');
+		helper.typeIntoDocument('{end}');
+		helper.getBlinkingCursorPosition('linkEnd');
+
+		helper.typeIntoDocument('{enter}');
+		helper.processToIdle(this.win);
+
+		cy.get('@linkStart').then((start) => {
+			cy.get('@linkEnd').then((end) => {
+				cy.cGet('body').click((start.x + end.x) / 2, (start.y + end.y) / 2);
+			});
+		});
+
+		// The dialog stores the address with a slash after the host name.
+		cy.cGet('.hyperlink-pop-up-container').should('be.visible');
+		cy.cGet('#hyperlink-pop-up').should('have.text', 'https://example.com/');
+
+		// The edit button opens the dialog on the clicked link, so the link text is only the
+		// linked word and not the whole text of the cell.
+		helper.processToIdle(this.win);
+		cy.cGet('#hyperlink-pop-up-edit').click();
+		cy.cGet('#target-input').should('be.visible');
+		helper.processToIdle(this.win);
+		cy.cGet('#indication-input').should('have.value', 'here');
+		cy.cGet('#target-input').should('have.value', 'https://example.com/');
+		cy.cGet('#cancel').click();
+		cy.cGet('#target-input').should('not.exist');
+	});
+
+	it('HTML paste falls back to HTML content when server-side clipboard fetch fails', function() {
+		// Copy A1 first so the server registers a valid clipboard tag. The tag is
+		// needed later when the fallback uploads the HTML to the server's own
+		// clipboard endpoint.
+		calcHelper.clickOnFirstCell();
+		cy.window().then(win => {
+			win['0'].app.socket.sendMessage('uno .uno:Copy');
+		});
+		helper.processToIdle(this.win);
+
+		// Navigate to B1 as the paste destination.
+		helper.typeIntoInputField(helper.addressInputSelector, 'B1');
+		cy.cGet(helper.addressInputSelector).should('have.prop', 'value', 'B1');
+
+		// Build a dummy clipboard that simulates content copied from a different
+		// coolwsd instance. The data-coolorigin URL is the same server but with a
+		// wrong ServerId, so the server returns 400 on the clipboard GET. The HTML
+		// body holds real content (not a stub), which the fallback will paste.
+		cy.window().then(win => {
+			var clipboard = win['0'].app.map._clip;
+			var fakeUrl = clipboard.getMetaURL().replace(/ServerId=[^&]+/, 'ServerId=wrongserver');
+			var html = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">\n' +
+				'<html>\n<head>\n' +
+				'<meta http-equiv="content-type" content="text/html; charset=utf-8"/>\n' +
+				'</head>\n<body lang="en_US" dir="ltr">' +
+				'<div id="meta-origin" data-coolorigin="' + encodeURIComponent(fakeUrl) + '">' +
+				'<table><tr><td>crossservertext</td></tr></table>' +
+				'</div></body>\n</html>';
+			var blob = new Blob([html]);
+			clipboard._dummyClipboard = {
+				read: function() {
+					return {
+						then: function(resolve) {
+							resolve([{
+								getType: function() {
+									return { then: function(r) { r(blob); } };
+								},
+								types: ['text/html'],
+							}]);
+						},
+					};
+				},
+			};
+		});
+
+		// Paste using the notebookbar button.
+		cy.cGet('#Home .ui-overflow-group-content > .unoPaste .arrowbackground').click();
+		helper.getMenuEntry(0).click();
+
+		helper.processToIdle(this.win);
+
+		// The fallback should have pasted the HTML content into B1.
+		cy.cGet('#sc_input_window.formulabar .ui-custom-textarea-text-layer').should('have.text', 'crossservertext');
+		// No error dialog should have appeared.
+		cy.cGet('#copy_paste_warning-box').should('not.exist');
+	});
+
+	it('Paste-Special', function () {
+		helper.setDummyClipboardForCopy();
+
+		calcHelper.clickOnFirstCell();
+		helper.typeIntoDocument('Something to copy paste.');
+		helper.typeIntoDocument('{enter}');
+		helper.typeIntoDocument('{upArrow}');
+
+		cy.cGet('#canvas-container').then((items) => {
+			const rect = items[0].getBoundingClientRect();
+			cy.cGet('body').rightclick(rect.left + 55, rect.top + 40);
+		});
+
+		const copyEntry = helper.getContextMenuItem('Copy');
+		copyEntry.should('be.visible');
+		copyEntry.click();
+
+		helper.typeIntoDocument('{rightArrow}');
+		helper.typeIntoDocument('{rightArrow}');
+
+		cy.cGet('#canvas-container').rightclick(250, 35);
+		const pasteSpecialEntry = helper.getContextMenuItem('Paste Special');
+		pasteSpecialEntry.should('be.visible');
+		pasteSpecialEntry.click();
+
+		cy.cGet('#modal-dialog-paste_special_dialog-box').should('be.visible');
+
+		cy.cGet('#modal-dialog-paste_special_dialog-box-yesbutton').should('be.visible');
+		cy.cGet('#modal-dialog-paste_special_dialog-box-yesbutton').click();
+
+		cy.cGet('#PasteSpecial').should('be.visible');
+		cy.cGet('#ok').click();
+
+		cy.cGet('#formulabar').should('contain.text', 'Something to copy paste.');
+
+		cy.cGet('#PasteSpecial').should('not.exist');
+	});
+
+	it('Paste Special offers Markdown in cell edit mode.', function() {
+		// Given a Calc document in cell text edit mode and some text on the
+		// clipboard:
+		calcHelper.dblClickOnFirstCell();
+		cy.cGet('.cursor-overlay .blinking-cursor').should('be.visible');
+		helper.typeIntoDocument('foo *bar* baz');
+		helper.typeIntoDocument('{ctrl}a');
+		cy.getFrameWindow().then(function(win) {
+			win.app.map.sendUnoCommand('.uno:Copy');
+			helper.processToIdle(win);
+		});
+
+		// When triggering Paste Special:
+		cy.getFrameWindow().then(function(win) {
+			win.app.map.sendUnoCommand('.uno:PasteSpecial');
+		});
+
+		// Then the paste special dialog should offer a "Markdown" item:
+		cy.cGet('#PasteSpecialDialog').should('be.visible');
+		// Without the accompanying fix in place, this test would have failed,
+		// the list had no markdown item.
+		cy.cGet('#PasteSpecialDialog .ui-treeview-cell-text:contains("Markdown")')
+			.should('be.visible');
+	});
+});

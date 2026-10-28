@@ -1,0 +1,316 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include "UpDownBarWrapper.hxx"
+#include "Chart2ModelContact.hxx"
+#include <ChartType.hxx>
+#include <servicenames_charttypes.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <cppuhelper/propshlp.hxx>
+#include <comphelper/sequence.hxx>
+
+#include <LinePropertiesHelper.hxx>
+#include <FillProperties.hxx>
+#include <UserDefinedProperties.hxx>
+#include <utility>
+#include <comphelper/diagnose_ex.hxx>
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+using ::com::sun::star::beans::Property;
+using ::cpo::uno::Reference;
+using ::cpo::uno::Sequence;
+using ::cpo::uno::Any;
+
+namespace
+{
+
+const Sequence< Property > & StaticUpDownBarWrapperPropertyArray()
+{
+    static Sequence< Property > aPropSeq = []()
+        {
+            std::vector< css::beans::Property > aProperties;
+
+            ::chart::LinePropertiesHelper::AddPropertiesToVector( aProperties );
+            ::chart::FillProperties::AddPropertiesToVector( aProperties );
+            ::chart::UserDefinedProperties::AddPropertiesToVector( aProperties );
+
+            std::sort( aProperties.begin(), aProperties.end(),
+                         ::chart::PropertyNameLess() );
+
+            return comphelper::containerToSequence( aProperties );
+        }();
+    return aPropSeq;
+};
+
+::cppu::OPropertyArrayHelper& StaticUpDownBarWrapperInfoHelper()
+{
+    static ::cppu::OPropertyArrayHelper aPropHelper( StaticUpDownBarWrapperPropertyArray() );
+    return aPropHelper;
+};
+
+} // anonymous namespace
+
+namespace chart::wrapper
+{
+
+UpDownBarWrapper::UpDownBarWrapper(
+    bool bUp, std::shared_ptr<Chart2ModelContact> spChart2ModelContact)
+        : m_spChart2ModelContact(std::move( spChart2ModelContact ))
+        , m_aPropertySetName( bUp ? u"WhiteDay"_ustr : u"BlackDay"_ustr)
+{
+}
+
+UpDownBarWrapper::~UpDownBarWrapper()
+{
+}
+
+// ____ XComponent ____
+void UpDownBarWrapper::dispose()
+{
+    std::unique_lock g(m_aMutex);
+    Reference< cpo::uno::XInterface > xSource( static_cast< ::cppu::OWeakObject* >( this ) );
+    m_aEventListenerContainer.disposeAndClear( g, lang::EventObject( xSource ) );
+}
+
+void UpDownBarWrapper::addEventListener(
+    const Reference< lang::XEventListener >& xListener )
+{
+    std::unique_lock g(m_aMutex);
+    m_aEventListenerContainer.addInterface( g, xListener );
+}
+
+void UpDownBarWrapper::removeEventListener(
+    const Reference< lang::XEventListener >& aListener )
+{
+    std::unique_lock g(m_aMutex);
+    m_aEventListenerContainer.removeInterface( g, aListener );
+}
+
+//XPropertySet
+uno::Reference< beans::XPropertySetInfo > UpDownBarWrapper::getPropertySetInfo()
+{
+    static uno::Reference< beans::XPropertySetInfo > xPropertySetInfo(
+        ::cppu::OPropertySetHelper::createPropertySetInfo(StaticUpDownBarWrapperInfoHelper() ) );
+    return xPropertySetInfo;
+}
+
+void UpDownBarWrapper::setPropertyValue( const OUString& rPropertyName, const cpo::uno::Any& rValue )
+{
+    Reference< beans::XPropertySet > xPropSet;
+
+    const std::vector< rtl::Reference< ChartType > > aTypes =
+            m_spChart2ModelContact->getDiagram()->getChartTypes();
+    for( rtl::Reference< ChartType > const & xType : aTypes )
+    {
+        if( xType->getChartType() == CHART2_SERVICE_NAME_CHARTTYPE_CANDLESTICK )
+        {
+            xType->getPropertyValue( m_aPropertySetName ) >>= xPropSet;
+        }
+    }
+    if(xPropSet.is())
+        xPropSet->setPropertyValue( rPropertyName, rValue );
+}
+cpo::uno::Any UpDownBarWrapper::getPropertyValue( const OUString& rPropertyName )
+{
+    Any aRet;
+
+    Reference< beans::XPropertySet > xPropSet;
+
+    const std::vector< rtl::Reference< ChartType > > aTypes =
+            m_spChart2ModelContact->getDiagram()->getChartTypes();
+    for( rtl::Reference<ChartType > const & xType : aTypes )
+    {
+        if( xType->getChartType() == CHART2_SERVICE_NAME_CHARTTYPE_CANDLESTICK )
+        {
+            xType->getPropertyValue( m_aPropertySetName ) >>= xPropSet;
+        }
+    }
+    if(xPropSet.is())
+        aRet = xPropSet->getPropertyValue( rPropertyName );
+    return aRet;
+}
+
+void UpDownBarWrapper::addPropertyChangeListener( const OUString& /*aPropertyName*/, const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/ )
+{
+    OSL_FAIL("not implemented");
+}
+void UpDownBarWrapper::removePropertyChangeListener( const OUString& /*aPropertyName*/, const uno::Reference< beans::XPropertyChangeListener >& /*aListener*/ )
+{
+    OSL_FAIL("not implemented");
+}
+void UpDownBarWrapper::addVetoableChangeListener( const OUString& /*PropertyName*/, const uno::Reference< beans::XVetoableChangeListener >& /*aListener*/ )
+{
+    OSL_FAIL("not implemented");
+}
+void UpDownBarWrapper::removeVetoableChangeListener( const OUString& /*PropertyName*/, const uno::Reference< beans::XVetoableChangeListener >& /*aListener*/ )
+{
+    OSL_FAIL("not implemented");
+}
+
+//XMultiPropertySet
+//getPropertySetInfo() already declared in XPropertySet
+void UpDownBarWrapper::setPropertyValues( const cpo::uno::Sequence< OUString >& rNameSeq, const cpo::uno::Sequence< cpo::uno::Any >& rValueSeq )
+{
+    sal_Int32 nMinCount = std::min( rValueSeq.getLength(), rNameSeq.getLength() );
+    for(sal_Int32 nN=0; nN<nMinCount; nN++)
+    {
+        const OUString& aPropertyName( rNameSeq[nN] );
+        try
+        {
+            setPropertyValue( aPropertyName, rValueSeq[nN] );
+        }
+        catch( const beans::UnknownPropertyException& )
+        {
+            DBG_UNHANDLED_EXCEPTION("chart2");
+        }
+    }
+    //todo: store unknown properties elsewhere
+}
+cpo::uno::Sequence< cpo::uno::Any > UpDownBarWrapper::getPropertyValues( const cpo::uno::Sequence< OUString >& rNameSeq )
+{
+    Sequence< Any > aRetSeq;
+    if( rNameSeq.hasElements() )
+    {
+        aRetSeq.realloc( rNameSeq.getLength() );
+        auto pRetSeq = aRetSeq.getArray();
+        for(sal_Int32 nN=0; nN<rNameSeq.getLength(); nN++)
+        {
+            const OUString& aPropertyName( rNameSeq[nN] );
+            pRetSeq[nN] = getPropertyValue( aPropertyName );
+        }
+    }
+    return aRetSeq;
+}
+void UpDownBarWrapper::addPropertiesChangeListener( const cpo::uno::Sequence< OUString >& /* aPropertyNames */, const uno::Reference< beans::XPropertiesChangeListener >& /* xListener */ )
+{
+    OSL_FAIL("not implemented");
+}
+void UpDownBarWrapper::removePropertiesChangeListener( const uno::Reference< beans::XPropertiesChangeListener >& /* xListener */ )
+{
+    OSL_FAIL("not implemented");
+}
+void UpDownBarWrapper::firePropertiesChangeEvent( const cpo::uno::Sequence< OUString >& /* aPropertyNames */, const uno::Reference< beans::XPropertiesChangeListener >& /* xListener */ )
+{
+    OSL_FAIL("not implemented");
+}
+
+//XPropertyState
+beans::PropertyState UpDownBarWrapper::getPropertyState( const OUString& rPropertyName )
+{
+    cpo::uno::Any aDefault( getPropertyDefault( rPropertyName ) );
+    cpo::uno::Any aValue( getPropertyValue( rPropertyName ) );
+
+    if( aDefault == aValue )
+        return beans::PropertyState_DEFAULT_VALUE;
+
+    return beans::PropertyState_DIRECT_VALUE;
+}
+cpo::uno::Sequence< beans::PropertyState > UpDownBarWrapper::getPropertyStates( const cpo::uno::Sequence< OUString >& rNameSeq )
+{
+    Sequence< beans::PropertyState > aRetSeq;
+    if( rNameSeq.hasElements() )
+    {
+        aRetSeq.realloc( rNameSeq.getLength() );
+        auto pRetSeq = aRetSeq.getArray();
+        for(sal_Int32 nN=0; nN<rNameSeq.getLength(); nN++)
+        {
+            const OUString& aPropertyName( rNameSeq[nN] );
+            pRetSeq[nN] = getPropertyState( aPropertyName );
+        }
+    }
+    return aRetSeq;
+}
+void UpDownBarWrapper::setPropertyToDefault( const OUString& rPropertyName )
+{
+    setPropertyValue( rPropertyName, getPropertyDefault(rPropertyName) );
+}
+
+cpo::uno::Any UpDownBarWrapper::getPropertyDefault( const OUString& rPropertyName )
+{
+    static const ::chart::tPropertyValueMap aStaticDefaults = []()
+        {
+            ::chart::tPropertyValueMap aTmp;
+            ::chart::LinePropertiesHelper::AddDefaultsToMap( aTmp );
+            ::chart::FillProperties::AddDefaultsToMap( aTmp );
+            return aTmp;
+        }();
+    tPropertyValueMap::const_iterator aFound( aStaticDefaults.find( StaticUpDownBarWrapperInfoHelper().getHandleByName( rPropertyName ) ) );
+    if( aFound == aStaticDefaults.end() )
+        return cpo::uno::Any();
+    return (*aFound).second;
+}
+
+//XMultiPropertyStates
+//getPropertyStates() already declared in XPropertyState
+void UpDownBarWrapper::setAllPropertiesToDefault(  )
+{
+    const Sequence< beans::Property >& rPropSeq = StaticUpDownBarWrapperPropertyArray();
+    for(beans::Property const & prop : rPropSeq)
+    {
+        setPropertyToDefault( prop.Name );
+    }
+}
+void UpDownBarWrapper::setPropertiesToDefault( const cpo::uno::Sequence< OUString >& rNameSeq )
+{
+    for(OUString const & s : rNameSeq)
+    {
+        setPropertyToDefault( s );
+    }
+}
+cpo::uno::Sequence< cpo::uno::Any > UpDownBarWrapper::getPropertyDefaults( const cpo::uno::Sequence< OUString >& rNameSeq )
+{
+    Sequence< Any > aRetSeq;
+    if( rNameSeq.hasElements() )
+    {
+        aRetSeq.realloc( rNameSeq.getLength() );
+        auto pRetSeq = aRetSeq.getArray();
+        for(sal_Int32 nN=0; nN<rNameSeq.getLength(); nN++)
+        {
+            const OUString& aPropertyName( rNameSeq[nN] );
+            pRetSeq[nN] = getPropertyDefault( aPropertyName );
+        }
+    }
+    return aRetSeq;
+}
+
+OUString UpDownBarWrapper::getImplementationName()
+{
+    return u"com.sun.star.comp.chart.ChartArea"_ustr;
+}
+
+bool UpDownBarWrapper::supportsService( const OUString& rServiceName )
+{
+    return cppu::supportsService(this, rServiceName);
+}
+
+cpo::uno::Sequence< OUString > UpDownBarWrapper::getSupportedServiceNames()
+{
+    return {
+        u"com.sun.star.chart.ChartArea"_ustr,
+        u"com.sun.star.drawing.LineProperties"_ustr,
+        u"com.sun.star.drawing.FillProperties"_ustr,
+        u"com.sun.star.xml.UserDefinedAttributesSupplier"_ustr
+    };
+}
+
+} //  namespace chart::wrapper
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

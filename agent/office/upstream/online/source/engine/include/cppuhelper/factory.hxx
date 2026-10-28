@@ -1,0 +1,224 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#ifndef INCLUDED_CPPUHELPER_FACTORY_HXX
+#define INCLUDED_CPPUHELPER_FACTORY_HXX
+
+#include <sal/config.h>
+
+#include <cstddef>
+
+#include <rtl/ustring.hxx>
+#include <cpo/uno/Reference.h>
+#include <cppuhelper/cppuhelperdllapi.h>
+
+namespace com { namespace sun { namespace star { namespace lang { class XMultiServiceFactory; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XSingleComponentFactory; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XSingleServiceFactory; } } } }
+namespace com { namespace sun { namespace star { namespace registry { class XRegistryKey; } } } }
+namespace cpo::uno { class XComponentContext; }
+namespace cpo::uno { class XInterface; }
+namespace cpo::uno { template <class E> class Sequence; }
+
+#define COMPONENT_GETENV            "component_getImplementationEnvironment"
+#define COMPONENT_GETENVEXT         "component_getImplementationEnvironmentExt"
+#define COMPONENT_WRITEINFO         "component_writeInfo"
+#define COMPONENT_GETFACTORY        "component_getFactory"
+
+typedef struct _uno_Environment uno_Environment;
+
+/** Function pointer declaration.
+    Function determines the environment of the component implementation, i.e. which compiler
+    compiled it. If the environment is NOT session specific (needs no additional context),
+    then this function should return the environment type name and leave ppEnv (to 0).
+
+    @param ppEnvTypeName environment type name; string must be constant
+    @param ppEnv function returns its environment if the environment is session specific,
+                 i.e. has special context
+*/
+typedef void (* component_getImplementationEnvironmentFunc)(
+    const char ** ppEnvTypeName, uno_Environment ** ppEnv );
+
+/** Function pointer declaration.
+    Function determines the environment of the component implementation, i.e. the compiler.
+    If the environment is NOT session specific (needs no additional context),
+    then this function should return the environment type name and leave ppEnv (to 0).
+
+    @param ppEnvTypeName environment type name; string must be a constant
+    @param ppEnv         function returns an environment if the environment is session specific,
+                         i.e. has special context
+    @param pImplName
+*/
+typedef void (* component_getImplementationEnvironmentExtFunc)(
+    char        const ** ppEnvTypeName,
+    uno_Environment       ** ppEnv,
+    char        const  * pImplName,
+    uno_Environment        * pTargetEnv
+);
+
+/** Function pointer declaration.
+
+    @deprecated component_writeInfo should no longer be used in new components
+
+    Function writes component registry info, at least writing the supported service names.
+
+    @param pServiceManager
+    a service manager (the type is an XMultiServiceFactory that can be used
+    by the environment returned by component_getImplementationEnvironment)
+    @param pRegistryKey a registry key
+    (the type is XRegistryKey that can be used by the environment
+    returned by component_getImplementationEnvironment)
+    @return true if everything went fine
+*/
+typedef bool (* component_writeInfoFunc)(
+    void * pServiceManager, void * pRegistryKey );
+
+/** Function pointer declaration.
+    Retrieves a factory to create component instances.
+
+   @param pImplName
+   desired implementation name
+   @param pServiceManager
+   a service manager (the type is XMultiServiceFactory that can be used by the environment
+   returned by component_getImplementationEnvironment)
+   @param pRegistryKey
+   a registry key (the type is XRegistryKey that can be used by the environment
+   returned by component_getImplementationEnvironment)
+   @return acquired component factory
+   (the type is lang::XSingleComponentFactory or lang::XSingleServiceFactory to be used by the
+   environment returned by component_getImplementationEnvironment)
+*/
+typedef void * (* component_getFactoryFunc)(
+    const char * pImplName, void * pServiceManager, void * pRegistryKey );
+
+
+namespace cppu
+{
+
+/** Function pointer declaration.
+    Function creates component instance passing the component context to be used.
+
+    @param xContext component context to be used
+    @return component instance
+*/
+typedef cpo::uno::Reference< cpo::uno::XInterface >(
+    * ComponentFactoryFunc)(
+        cpo::uno::Reference< cpo::uno::XComponentContext > const & xContext );
+
+/** Creates a single component factory supporting the XSingleComponentFactory interface.
+
+    @param fptr function pointer for instantiating the object
+    @param rImplementationName implementation name of service
+    @param rServiceNames supported services
+    @param pModCount a backwards-compatibility remainder of a removed library
+           unloading feature; always set to null
+*/
+CPPUHELPER_DLLPUBLIC cpo::uno::Reference< css::lang::XSingleComponentFactory >
+createSingleComponentFactory(
+    ComponentFactoryFunc fptr,
+    ::rtl::OUString const & rImplementationName,
+    cpo::uno::Sequence< ::rtl::OUString > const & rServiceNames);
+
+/** Creates a single service factory which holds the instance created only once.
+
+    @param fptr function pointer for instantiating the object
+    @param rImplementationName implementation name of service
+    @param rServiceNames supported services
+    @param pModCount a backwards-compatibility remainder of a removed library
+           unloading feature; always set to null
+
+    @see createSingleComponentFactory
+*/
+CPPUHELPER_DLLPUBLIC cpo::uno::Reference< css::lang::XSingleComponentFactory >
+createOneInstanceComponentFactory(
+    ComponentFactoryFunc fptr,
+    ::rtl::OUString const & rImplementationName,
+    cpo::uno::Sequence< ::rtl::OUString > const & rServiceNames);
+
+/** Deprecated.  The type of the instantiate function used as argument of the create*Factory functions.
+
+    @see createSingleFactory
+    @see createOneInstanceFactory
+    @deprecated
+*/
+typedef cpo::uno::Reference< cpo::uno::XInterface >(* ComponentInstantiation)(
+    const cpo::uno::Reference< css::lang::XMultiServiceFactory > & rServiceManager );
+
+/** Deprecated.  Creates a single service factory.
+
+    @param rServiceManager      the service manager used by the implementation.
+    @param rImplementationName  the implementation name. An empty string is possible.
+    @param pCreateFunction      the function pointer to create an object.
+    @param rServiceNames        the service supported by the implementation.
+    @param pModCount a backwards-compatibility remainder of a removed library
+           unloading feature; always set to null.
+    @return a factory that support the interfaces XServiceProvider, XServiceInfo
+    XSingleServiceFactory and XComponent.
+
+    @see createOneInstanceFactory
+    @deprecated
+*/
+CPPUHELPER_DLLPUBLIC cpo::uno::Reference< css::lang::XSingleServiceFactory >
+createSingleFactory(
+    const cpo::uno::Reference< css::lang::XMultiServiceFactory > & rServiceManager,
+    const ::rtl::OUString & rImplementationName,
+    ComponentInstantiation pCreateFunction,
+    const cpo::uno::Sequence< ::rtl::OUString > & rServiceNames);
+
+/** Deprecated.  Creates a single service factory which holds the instance created only once.
+
+    @param rServiceManager      the service manager used by the implementation.
+    @param rComponentName       the implementation name. An empty string is possible.
+    @param pCreateFunction      the function pointer to create an object.
+    @param rServiceNames        the service supported by the implementation.
+    @param pModCount a backwards-compatibility remainder of a removed library
+           unloading feature; always set to null.
+    @return a factory that support the interfaces XServiceProvider, XServiceInfo
+    XSingleServiceFactory and XComponent.
+
+    @see createSingleFactory
+    @deprecated
+*/
+CPPUHELPER_DLLPUBLIC cpo::uno::Reference< css::lang::XSingleServiceFactory >
+createOneInstanceFactory(
+    const cpo::uno::Reference< css::lang::XMultiServiceFactory > & rServiceManager,
+    const ::rtl::OUString & rComponentName,
+    ComponentInstantiation pCreateFunction,
+    const cpo::uno::Sequence< ::rtl::OUString > & rServiceNames);
+
+/** Deprecated.  Creates a single service factory based on a registry.
+
+    @param rServiceManager      the service manager used by the implementation.
+    @param rImplementationName  the implementation name. An empty string is possible.
+    @param rImplementationKey   the registry key of the implementation section.
+    @return a factory that support the interfaces XServiceProvider, XServiceInfo
+    XSingleServiceFactory and XComponent.
+    @deprecated
+*/
+CPPUHELPER_DLLPUBLIC cpo::uno::Reference< css::lang::XSingleServiceFactory >
+createSingleRegistryFactory(
+    const cpo::uno::Reference< css::lang::XMultiServiceFactory > & rServiceManager,
+    const ::rtl::OUString & rImplementationName,
+    const cpo::uno::Reference< css::registry::XRegistryKey > & rImplementationKey );
+
+}
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

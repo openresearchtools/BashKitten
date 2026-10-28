@@ -1,0 +1,73 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/sdbc/XDriver.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <rtl/ref.hxx>
+#include <cpo/uno/XAggregation.hpp>
+
+
+namespace connectivity
+{
+
+
+    class OConnectionPool;
+
+    typedef ::cppu::WeakImplHelper< css::sdbc::XDriver >  ODriverWrapper_BASE;
+
+    class ODriverWrapper final : public ODriverWrapper_BASE
+    {
+        cpo::uno::Reference< cpo::uno::XAggregation >
+                            m_xDriverAggregate;
+        cpo::uno::Reference< css::sdbc::XDriver >
+                            m_xDriver;
+        rtl::Reference<OConnectionPool>
+                            m_pConnectionPool;
+
+    public:
+        /** creates a new wrapper for a driver
+            @param _rxAggregateDriver
+                the driver to aggregate. The object will be reset to <NULL/> when returning from the ctor.
+        */
+        ODriverWrapper(
+            cpo::uno::Reference< cpo::uno::XAggregation >& _rxAggregateDriver,
+            OConnectionPool* _pPool
+            );
+
+
+        // XInterface
+        virtual cpo::uno::Any queryInterface( const cpo::uno::Type& aType ) override;
+
+    private:
+        /// dtor
+        virtual ~ODriverWrapper() override;
+        // XDriver
+        virtual cpo::uno::Reference< css::sdbc::XConnection > connect( const OUString& url, const cpo::uno::Sequence< css::beans::PropertyValue >& info ) override;
+        virtual bool acceptsURL( const OUString& url ) override;
+        virtual cpo::uno::Sequence< css::sdbc::DriverPropertyInfo > getPropertyInfo( const OUString& url, const cpo::uno::Sequence< css::beans::PropertyValue >& info ) override;
+        virtual sal_Int32 getMajorVersion(  ) override;
+        virtual sal_Int32 getMinorVersion(  ) override;
+    };
+
+
+}   // namespace connectivity
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

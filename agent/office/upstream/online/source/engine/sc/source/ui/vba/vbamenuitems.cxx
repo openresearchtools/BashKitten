@@ -1,0 +1,140 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+#include "vbamenuitems.hxx"
+#include "vbamenuitem.hxx"
+#include "vbamenu.hxx"
+#include <cppuhelper/implbase.hxx>
+#include <ooo/vba/office/MsoControlType.hpp>
+#include <ooo/vba/XCommandBarControls.hpp>
+#include <utility>
+
+using namespace com::sun::star;
+using namespace ::cpo;
+using namespace ooo::vba;
+
+typedef ::cppu::WeakImplHelper< container::XEnumeration > MenuEnumeration_BASE;
+
+namespace {
+
+class MenuEnumeration : public MenuEnumeration_BASE
+{
+    uno::Reference< XHelperInterface > m_xParent;
+    uno::Reference< cpo::uno::XComponentContext > m_xContext;
+    uno::Reference< container::XEnumeration > m_xEnumeration;
+public:
+    /// @throws uno::RuntimeException
+    MenuEnumeration( uno::Reference< XHelperInterface > xParent, uno::Reference< cpo::uno::XComponentContext > xContext, uno::Reference< container::XEnumeration > xEnumeration) : m_xParent(std::move( xParent )), m_xContext(std::move( xContext )), m_xEnumeration(std::move( xEnumeration ))
+    {
+    }
+    virtual bool hasMoreElements() override
+    {
+        return m_xEnumeration->hasMoreElements();
+    }
+    virtual cpo::uno::Any nextElement() override
+    {
+        // FIXME: should be add menu
+        if( !hasMoreElements() )
+            throw container::NoSuchElementException();
+
+        uno::Reference< XCommandBarControl > xCommandBarControl( m_xEnumeration->nextElement(), uno::UNO_QUERY_THROW );
+        if( xCommandBarControl->getType() == office::MsoControlType::msoControlPopup )
+        {
+            uno::Reference< excel::XMenu > xMenu( new ScVbaMenu( m_xParent, m_xContext, xCommandBarControl ) );
+            return cpo::uno::Any( xMenu );
+        }
+        else if( xCommandBarControl->getType() == office::MsoControlType::msoControlButton )
+        {
+            uno::Reference< excel::XMenuItem > xMenuItem( new ScVbaMenuItem( m_xParent, m_xContext, xCommandBarControl ) );
+            return cpo::uno::Any( xMenuItem );
+        }
+        nextElement();
+
+        return cpo::uno::Any();
+    }
+};
+
+}
+
+ScVbaMenuItems::ScVbaMenuItems( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, uno::Reference< XCommandBarControls > xCommandBarControls ) : MenuItems_BASE( xParent, xContext, uno::Reference< container::XIndexAccess>() ), m_xCommandBarControls(std::move( xCommandBarControls ))
+{
+}
+
+// XEnumerationAccess
+cpo::uno::Type
+ScVbaMenuItems::getElementType()
+{
+    return cppu::UnoType<excel::XMenuItem>::get();
+}
+
+uno::Reference< container::XEnumeration >
+ScVbaMenuItems::createEnumeration()
+{
+    uno::Reference< container::XEnumerationAccess > xEnumAccess( m_xCommandBarControls, uno::UNO_QUERY_THROW );
+    return uno::Reference< container::XEnumeration >( new MenuEnumeration( this, mxContext, xEnumAccess->createEnumeration() ) );
+}
+
+cpo::uno::Any
+ScVbaMenuItems::createCollectionObject( const cpo::uno::Any& aSource )
+{
+    // make no sense
+    return aSource;
+}
+
+sal_Int32
+ScVbaMenuItems::getCount()
+{
+    // FIXME: should check if it is a popup menu
+    return m_xCommandBarControls->getCount();
+}
+
+// ScVbaCollectionBaseImpl
+cpo::uno::Any
+ScVbaMenuItems::Item( const cpo::uno::Any& aIndex, const cpo::uno::Any& /*aIndex2*/ )
+{
+    uno::Reference< XCommandBarControl > xCommandBarControl( m_xCommandBarControls->Item( aIndex, cpo::uno::Any() ), uno::UNO_QUERY_THROW );
+    if( xCommandBarControl->getType() == office::MsoControlType::msoControlPopup )
+        return cpo::uno::Any( uno::Reference< excel::XMenu > ( new ScVbaMenu( this, mxContext, xCommandBarControl ) ) );
+    else if( xCommandBarControl->getType() == office::MsoControlType::msoControlButton )
+        return cpo::uno::Any( uno::Reference< excel::XMenuItem > ( new ScVbaMenuItem( this, mxContext, xCommandBarControl ) ) );
+    throw cpo::uno::RuntimeException();
+}
+
+uno::Reference< excel::XMenuItem > ScVbaMenuItems::Add( const OUString& Caption, const cpo::uno::Any& OnAction, const cpo::uno::Any& /*ShortcutKey*/, const cpo::uno::Any& Before, const cpo::uno::Any& Restore, const cpo::uno::Any& /*StatusBar*/, const cpo::uno::Any& /*HelpFile*/, const cpo::uno::Any& /*HelpContextID*/ )
+{
+    uno::Reference< XCommandBarControl > xCommandBarControl = m_xCommandBarControls->Add(
+            cpo::uno::Any( office::MsoControlType::msoControlButton ),
+            cpo::uno::Any(), cpo::uno::Any(), Before, Restore );
+    xCommandBarControl->setCaption( Caption );
+    if( OnAction.hasValue() )
+    {
+        OUString sAction;
+        OnAction >>= sAction;
+        xCommandBarControl->setOnAction( sAction );
+    }
+    return uno::Reference< excel::XMenuItem >( new ScVbaMenuItem( this, mxContext, xCommandBarControl ) );
+}
+
+// XHelperInterface
+OUString
+ScVbaMenuItems::getServiceImplName()
+{
+    return u"ScVbaMenuItems"_ustr;
+}
+
+cpo::uno::Sequence<OUString>
+ScVbaMenuItems::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.excel.MenuItems"_ustr
+    };
+    return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

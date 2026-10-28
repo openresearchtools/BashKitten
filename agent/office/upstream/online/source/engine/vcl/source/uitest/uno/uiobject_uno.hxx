@@ -1,0 +1,55 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <comphelper/compbase.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/ui/test/XUIObject.hpp>
+
+#include <memory>
+
+#include <vcl/uitest/uiobject.hxx>
+
+typedef ::comphelper::WeakComponentImplHelper <
+    css::ui::test::XUIObject, css::lang::XServiceInfo
+    > UIObjectBase;
+
+class UIObjectUnoObj : public UIObjectBase
+{
+private:
+    std::unique_ptr<UIObject> mpObj;
+
+public:
+
+    explicit UIObjectUnoObj(std::unique_ptr<UIObject> pObj);
+    virtual ~UIObjectUnoObj() override;
+
+    cpo::uno::Reference<css::ui::test::XUIObject> getChild(const OUString& rID) override;
+
+    void executeAction(const OUString& rAction, const cpo::uno::Sequence<css::beans::PropertyValue>& xPropValues) override;
+
+    cpo::uno::Sequence<css::beans::PropertyValue> getState() override;
+
+    cpo::uno::Sequence<OUString> getChildren() override;
+
+    OUString getType() override;
+
+    OUString getImplementationName() override;
+
+    bool supportsService(OUString const & ServiceName) override;
+
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override;
+
+    OUString getHierarchy() override;
+
+    bool equals(const cpo::uno::Reference<css::ui::test::XUIObject>& rOther) override;
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

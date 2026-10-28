@@ -1,0 +1,137 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#ifndef INCLUDED_VBAHELPER_VBAHELPERINTERFACE_HXX
+#define INCLUDED_VBAHELPER_VBAHELPERINTERFACE_HXX
+
+#include <com/sun/star/container/XNameAccess.hpp>
+#include <cpo/uno/Any.hxx>
+#include <cpo/uno/Reference.hxx>
+#include <cpo/uno/Sequence.hxx>
+#include <cpo/uno/XComponentContext.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/weakref.hxx>
+#include <ooo/vba/XHelperInterface.hpp>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <utility>
+#include <vbahelper/vbahelper.hxx>
+
+// use this class when you have an object like
+// interface  XAnInterface which contains XHelperInterface in its inheritance hierarchy
+// interface XAnInterface
+// {
+//     interface XHelperInterface;
+//     [attribute, string] name;
+// }
+// or
+// interface XAnInterface : XHelperInterface;
+// {
+//     [attribute, string] name;
+// }
+//
+// then this class can provide a default implementation of XHelperInterface,
+// you can use it like this
+// typedef InheritedHelperInterfaceImpl< XAnInterface > > AnInterfaceImpl_BASE;
+// class AnInterfaceImpl : public AnInterfaceImpl_BASE
+// {
+// public:
+//     AnInterface( const Reference< HelperInterface >& xParent ) : AnInterfaceImpl_BASE( xParent ) {}
+//     // implement XAnInterface methods only, no need to implement the XHelperInterface
+//     // methods
+//     virtual void setName( const OUString& );
+//     virtual OUString getName();
+// }
+//
+
+template< typename... Ifc >
+class SAL_DLLPUBLIC_TEMPLATE InheritedHelperInterfaceImpl : public Ifc...
+{
+protected:
+    cpo::uno::WeakReference< ov::XHelperInterface > mxParent;
+    cpo::uno::Reference< cpo::uno::XComponentContext > mxContext;
+public:
+    InheritedHelperInterfaceImpl( const cpo::uno::Reference< ov::XHelperInterface >& xParent, cpo::uno::Reference< cpo::uno::XComponentContext > xContext ) : mxParent( xParent ), mxContext(std::move( xContext )) {}
+    virtual OUString getServiceImplName() = 0;
+    virtual cpo::uno::Sequence<OUString> getServiceNames() = 0;
+
+    // XHelperInterface Methods
+    virtual ::sal_Int32 getCreator() override
+    {
+        return 0x53756E4F;
+    }
+    virtual cpo::uno::Reference< ov::XHelperInterface > getParent(  ) override { return mxParent; }
+
+    virtual cpo::uno::Any Application(  ) override {
+            // The application could certainly be passed around in the context - seems
+            // to make sense
+            cpo::uno::Reference< css::container::XNameAccess > xNameAccess( mxContext, cpo::uno::UNO_QUERY_THROW );
+            return xNameAccess->getByName( u"Application"_ustr );
+    }
+
+    // XServiceInfo Methods
+    virtual OUString getImplementationName(  ) override { return getServiceImplName(); }
+    virtual bool supportsService( const OUString& ServiceName ) override
+    {
+        cpo::uno::Sequence< OUString > sServices = getSupportedServiceNames();
+        return std::find(sServices.begin(), sServices.end(), ServiceName) != sServices.end();
+    }
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override
+    {
+        cpo::uno::Sequence< OUString > aNames = getServiceNames();
+        return aNames;
+    }
+ };
+
+template <typename... Ifc >
+class SAL_DLLPUBLIC_TEMPLATE InheritedHelperInterfaceWeakImpl : public InheritedHelperInterfaceImpl< ::cppu::WeakImplHelper< Ifc... > >
+{
+    typedef InheritedHelperInterfaceImpl< ::cppu::WeakImplHelper< Ifc... > > Base;
+public:
+    InheritedHelperInterfaceWeakImpl( const cpo::uno::Reference< ov::XHelperInterface >& xParent, const cpo::uno::Reference< cpo::uno::XComponentContext >& xContext ) : Base( xParent, xContext ) {}
+};
+
+
+/** Helper macro to declare the methods 'getServiceImplName()' and
+    'getServiceNames()' of the 'ooo.vba.XHelperInterface' interface in a class
+    declaration.
+ */
+#define VBAHELPER_DECL_XHELPERINTERFACE \
+    virtual OUString getServiceImplName() override; \
+    virtual cpo::uno::Sequence< OUString > getServiceNames() override;
+
+
+/** Helper macro to implement the methods 'getServiceImplName()' and
+    'getServiceNames()' of the 'ooo.vba.XHelperInterface' interface. Will
+    return the class name as service implementation name.
+ */
+#define VBAHELPER_IMPL_XHELPERINTERFACE( classname, servicename ) \
+OUString classname::getServiceImplName() \
+{ \
+    return u"" #classname ""_ustr; \
+} \
+cpo::uno::Sequence< OUString > classname::getServiceNames() \
+{ \
+    static const cpo::uno::Sequence< OUString > saServiceNames { servicename }; \
+    return saServiceNames; \
+}
+
+
+#endif
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

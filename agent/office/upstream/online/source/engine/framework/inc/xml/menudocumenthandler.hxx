@@ -1,0 +1,222 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/xml/sax/XDocumentHandler.hpp>
+#include <com/sun/star/container/XIndexContainer.hpp>
+#include <com/sun/star/lang/XSingleComponentFactory.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <cpo/uno/Sequence.h>
+#include <cpo/uno/XComponentContext.hpp>
+
+#include <rtl/ustring.hxx>
+#include <comphelper/attributelist.hxx>
+#include <cppuhelper/implbase.hxx>
+
+namespace framework{
+
+class ReadMenuDocumentHandlerBase : public ::cppu::WeakImplHelper< css::xml::sax::XDocumentHandler >
+{
+    public:
+        ReadMenuDocumentHandlerBase();
+        virtual ~ReadMenuDocumentHandlerBase() override;
+
+        // XDocumentHandler
+        virtual void startDocument() override = 0;
+
+        virtual void endDocument() override = 0;
+
+        virtual void startElement(
+            const OUString& aName,
+            const cpo::uno::Reference< css::xml::sax::XAttributeList > &xAttribs) override = 0;
+
+        virtual void endElement(const OUString& aName) override = 0;
+
+        virtual void characters(const OUString& aChars) override = 0;
+
+        virtual void ignorableWhitespace(const OUString& aWhitespaces) override;
+
+        virtual void processingInstruction(const OUString& aTarget,
+                                                    const OUString& aData) override;
+
+        virtual void setDocumentLocator(
+            const cpo::uno::Reference< css::xml::sax::XLocator > &xLocator) override;
+
+    protected:
+        OUString getErrorLineString();
+
+        cpo::uno::Reference< css::xml::sax::XLocator > m_xLocator;
+        cpo::uno::Reference< css::xml::sax::XDocumentHandler> m_xReader;
+        void initPropertyCommon( cpo::uno::Sequence< css::beans::PropertyValue > &rProps,
+                                 const OUString &rCommandURL, const OUString &rHelpId,
+                                 const OUString &rLabel, sal_Int16 nItemStyleBits );
+    private:
+        OUString m_aType;
+        OUString m_aLabel;
+        OUString m_aContainer;
+        OUString m_aHelpURL;
+        OUString m_aCommandURL;
+        OUString m_aStyle;
+};
+
+class OReadMenuDocumentHandler final : public ReadMenuDocumentHandlerBase
+{
+    public:
+        OReadMenuDocumentHandler(
+            const cpo::uno::Reference< css::container::XIndexContainer >& rItemContainer );
+        virtual ~OReadMenuDocumentHandler() override;
+
+        // XDocumentHandler
+        virtual void startDocument() override;
+
+        virtual void endDocument() override;
+
+        virtual void startElement(
+            const OUString& aName,
+            const cpo::uno::Reference< css::xml::sax::XAttributeList > &xAttribs) override;
+
+        virtual void endElement(const OUString& aName) override;
+
+        virtual void characters(const OUString& aChars) override;
+
+    private:
+          int       m_nElementDepth;
+          enum class ReaderMode { None, MenuBar, MenuPopup };
+          ReaderMode m_eReaderMode;
+          cpo::uno::Reference< css::container::XIndexContainer > m_xMenuBarContainer;
+          cpo::uno::Reference< css::lang::XSingleComponentFactory > m_xContainerFactory;
+};  // OReadMenuDocumentHandler
+
+class OReadMenuBarHandler final : public ReadMenuDocumentHandlerBase
+{
+    public:
+        OReadMenuBarHandler(
+            const cpo::uno::Reference< css::container::XIndexContainer >& rMenuBarContainer,
+            const cpo::uno::Reference< css::lang::XSingleComponentFactory >& rContainerFactory );
+        virtual ~OReadMenuBarHandler() override;
+
+        // XDocumentHandler
+        virtual void startDocument() override;
+
+        virtual void endDocument() override;
+
+        virtual void startElement(
+            const OUString& aName,
+            const cpo::uno::Reference< css::xml::sax::XAttributeList > &xAttribs) override;
+
+        virtual void endElement(const OUString& aName) override;
+
+        virtual void characters(const OUString& aChars) override;
+
+    private:
+        int         m_nElementDepth;
+        bool    m_bMenuMode;
+        cpo::uno::Reference< css::container::XIndexContainer > m_xMenuBarContainer;
+        cpo::uno::Reference< css::lang::XSingleComponentFactory > m_xContainerFactory;
+};  // OReadMenuBarHandler
+
+class OReadMenuHandler final : public ReadMenuDocumentHandlerBase
+{
+    public:
+        OReadMenuHandler( const cpo::uno::Reference< css::container::XIndexContainer >& rMenuContainer,
+                          const cpo::uno::Reference< css::lang::XSingleComponentFactory >& rContainerFactory );
+        virtual ~OReadMenuHandler() override;
+
+        // XDocumentHandler
+        virtual void startDocument() override;
+
+        virtual void endDocument() override;
+
+        virtual void startElement(
+            const OUString& aName,
+            const cpo::uno::Reference< css::xml::sax::XAttributeList > &xAttribs) override;
+
+        virtual void endElement(const OUString& aName) override;
+
+        virtual void characters(const OUString& aChars) override;
+
+    private:
+        int                 m_nElementDepth;
+        bool            m_bMenuPopupMode;
+        cpo::uno::Reference< css::container::XIndexContainer > m_xMenuContainer;
+        cpo::uno::Reference< css::lang::XSingleComponentFactory > m_xContainerFactory;
+}; // OReadMenuHandler
+
+class OReadMenuPopupHandler final : public ReadMenuDocumentHandlerBase
+{
+    public:
+        OReadMenuPopupHandler( const cpo::uno::Reference< css::container::XIndexContainer >& rMenuContainer,
+                               const cpo::uno::Reference< css::lang::XSingleComponentFactory >& rContainerFactory );
+        virtual ~OReadMenuPopupHandler() override;
+
+        // XDocumentHandler
+        virtual void startDocument() override;
+
+        virtual void endDocument() override;
+
+        virtual void startElement(
+            const OUString& aName,
+            const cpo::uno::Reference<
+                css::xml::sax::XAttributeList > &xAttribs) override;
+
+        virtual void endElement(const OUString& aName) override;
+
+        virtual void characters(const OUString& aChars) override;
+
+    private:
+        enum NextElementClose { ELEM_CLOSE_NONE, ELEM_CLOSE_MENUITEM, ELEM_CLOSE_MENUSEPARATOR };
+
+        int                                                        m_nElementDepth;
+        bool                                                       m_bMenuMode;
+        cpo::uno::Reference< css::container::XIndexContainer >     m_xMenuContainer;
+        cpo::uno::Reference< css::lang::XSingleComponentFactory >  m_xContainerFactory;
+        cpo::uno::Reference< cpo::uno::XComponentContext >         m_xComponentContext;
+        NextElementClose                                           m_nNextElementExpected;
+}; // OReadMenuPopupHandler
+
+class OWriteMenuDocumentHandler final
+{
+    public:
+        OWriteMenuDocumentHandler(
+            const cpo::uno::Reference< css::container::XIndexAccess >& rMenuBarContainer,
+            const cpo::uno::Reference< css::xml::sax::XDocumentHandler >& rDocumentHandler,
+            bool bIsMenuBar );
+        ~OWriteMenuDocumentHandler();
+
+        /// @throws css::xml::sax::SAXException
+        /// @throws cpo::uno::RuntimeException
+        void WriteMenuDocument();
+    private:
+        /// @throws css::xml::sax::SAXException
+        /// @throws cpo::uno::RuntimeException
+        void WriteMenu( const cpo::uno::Reference< css::container::XIndexAccess >& rSubMenuContainer );
+
+        void WriteMenuItem( const OUString& aCommandURL, const OUString& aLabel, const OUString& aHelpURL, sal_Int16 nStyle );
+        void WriteMenuSeparator();
+
+        cpo::uno::Reference< css::container::XIndexAccess > m_xMenuBarContainer;
+        cpo::uno::Reference< css::xml::sax::XDocumentHandler > m_xWriteDocumentHandler;
+        rtl::Reference< ::comphelper::AttributeList > m_xEmptyList;
+        bool m_bIsMenuBar;
+};
+
+} // namespace framework
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

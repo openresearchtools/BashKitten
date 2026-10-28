@@ -1,0 +1,194 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <mouseevent.hxx>
+
+using namespace ::cpo::uno;
+using namespace css::xml::dom::events;
+using namespace css::xml::dom::views;
+
+namespace DOM::events
+{
+    CMouseEvent::CMouseEvent()
+        : m_screenX(0)
+        , m_screenY(0)
+        , m_clientX(0)
+        , m_clientY(0)
+        , m_ctrlKey(false)
+        , m_shiftKey(false)
+        , m_altKey(false)
+        , m_metaKey(false)
+        , m_button(0)
+    {
+    }
+
+    sal_Int32 CMouseEvent::getScreenX()
+    {
+        std::unique_lock const g(m_Mutex);
+        return m_screenX;
+    }
+    sal_Int32 CMouseEvent::getScreenY()
+    {
+        std::unique_lock const g(m_Mutex);
+        return m_screenY;
+    }
+    sal_Int32 CMouseEvent::getClientX()
+    {
+        std::unique_lock const g(m_Mutex);
+        return m_clientX;
+    }
+    sal_Int32 CMouseEvent::getClientY()
+    {
+        std::unique_lock const g(m_Mutex);
+        return m_clientY;
+    }
+    bool CMouseEvent::getCtrlKey()
+    {
+        std::unique_lock const g(m_Mutex);
+        return m_ctrlKey;
+    }
+    bool CMouseEvent::getShiftKey()
+    {
+        std::unique_lock const g(m_Mutex);
+        return m_shiftKey;
+    }
+    bool CMouseEvent::getAltKey()
+    {
+        std::unique_lock const g(m_Mutex);
+        return m_altKey;
+    }
+    bool CMouseEvent::getMetaKey()
+    {
+        std::unique_lock const g(m_Mutex);
+        return m_metaKey;
+    }
+    sal_Int16 CMouseEvent::getButton()
+    {
+        std::unique_lock const g(m_Mutex);
+        return m_button;
+    }
+    Reference< XEventTarget > CMouseEvent::getRelatedTarget()
+    {
+        return Reference< XEventTarget >();
+    }
+
+    void CMouseEvent::initMouseEvent(
+                        const OUString& typeArg,
+                        bool canBubbleArg,
+                        bool cancelableArg,
+                        const Reference< XAbstractView >& viewArg,
+                        sal_Int32 detailArg,
+                        sal_Int32 screenXArg,
+                        sal_Int32 screenYArg,
+                        sal_Int32 clientXArg,
+                        sal_Int32 clientYArg,
+                        bool ctrlKeyArg,
+                        bool altKeyArg,
+                        bool shiftKeyArg,
+                        bool metaKeyArg,
+                        sal_Int16 buttonArg,
+                        const Reference< XEventTarget >& /*relatedTargetArg*/)
+    {
+        CUIEvent::initUIEvent(typeArg, canBubbleArg, cancelableArg, viewArg, detailArg);
+        std::unique_lock const g(m_Mutex);
+        m_screenX = screenXArg;
+        m_screenY = screenYArg;
+        m_clientX = clientXArg;
+        m_clientY = clientYArg;
+        m_ctrlKey = ctrlKeyArg;
+        m_altKey = altKeyArg;
+        m_shiftKey = shiftKeyArg;
+        m_metaKey = metaKeyArg;
+        m_button = buttonArg;
+    }
+
+    // delegate to CUIEvent, since we are inheriting from CUIEvent and XUIEvent
+    Reference< XAbstractView > CMouseEvent::getView()
+    {
+        return CUIEvent::getView();
+    }
+
+    sal_Int32 CMouseEvent::getDetail()
+    {
+        return CUIEvent::getDetail();
+    }
+
+    void CMouseEvent::initUIEvent(const OUString& typeArg,
+                     bool canBubbleArg,
+                     bool cancelableArg,
+                     const Reference< XAbstractView >& viewArg,
+                     sal_Int32 detailArg)
+    {
+        CUIEvent::initUIEvent(typeArg, canBubbleArg, cancelableArg, viewArg, detailArg);
+    }
+
+    OUString CMouseEvent::getType()
+    {
+        return CUIEvent::getType();
+    }
+
+    Reference< XEventTarget > CMouseEvent::getTarget()
+    {
+        return CUIEvent::getTarget();
+    }
+
+    Reference< XEventTarget > CMouseEvent::getCurrentTarget()
+    {
+        return CUIEvent::getCurrentTarget();
+    }
+
+    PhaseType CMouseEvent::getEventPhase()
+    {
+        return CUIEvent::getEventPhase();
+    }
+
+    bool CMouseEvent::getBubbles()
+    {
+        return CEvent::getBubbles();
+    }
+
+    bool CMouseEvent::getCancelable()
+    {
+        return CUIEvent::getCancelable();
+    }
+
+    css::util::Time CMouseEvent::getTimeStamp()
+    {
+        return CUIEvent::getTimeStamp();
+    }
+
+    void CMouseEvent::stopPropagation()
+    {
+        CUIEvent::stopPropagation();
+    }
+
+    void CMouseEvent::preventDefault()
+    {
+        CUIEvent::preventDefault();
+    }
+
+    void CMouseEvent::initEvent(const OUString& eventTypeArg, bool canBubbleArg,
+        bool cancelableArg)
+    {
+        // base initializer
+        CUIEvent::initEvent(eventTypeArg, canBubbleArg, cancelableArg);
+    }
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

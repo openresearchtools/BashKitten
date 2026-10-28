@@ -1,0 +1,455 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <sal/config.h>
+
+#include <com/sun/star/awt/XVclWindowPeer.hpp>
+#include <com/sun/star/frame/XDispatch.hpp>
+#include <com/sun/star/frame/Frame.hpp>
+#include <com/sun/star/frame/XFrame2.hpp>
+#include <com/sun/star/frame/XSynchronousFrameLoader.hpp>
+#include <com/sun/star/task/InteractionHandler.hpp>
+#include <com/sun/star/util/URLTransformer.hpp>
+#include <com/sun/star/util/XURLTransformer.hpp>
+#include <com/sun/star/util/XCloseable.hpp>
+#include <com/sun/star/lang/XEventListener.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
+#include <com/sun/star/embed/XEmbeddedObject.hpp>
+
+#include <comphelper/propertyvalue.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <officecfg/Office/Common.hxx>
+#include <svl/itemprop.hxx>
+#include <sfx2/docfile.hxx>
+#include <sfx2/frmdescr.hxx>
+#include <sfx2/objsh.hxx>
+#include <sfx2/sfxdlg.hxx>
+#include <toolkit/helper/vclunohelper.hxx>
+#include <utility>
+#include <vcl/window.hxx>
+#include <tools/debug.hxx>
+#include <macroloader.hxx>
+#include <eventsupplier.hxx>
+
+using namespace ::com::sun::star;
+using namespace ::cpo;
+
+namespace {
+
+class IFrameObject : public ::cppu::WeakImplHelper <
+        css::util::XCloseable,
+        css::lang::XEventListener,
+        css::frame::XSynchronousFrameLoader,
+        css::ui::dialogs::XExecutableDialog,
+        css::lang::XServiceInfo,
+        css::beans::XPropertySet >
+{
+    cpo::uno::Reference < cpo::uno::XComponentContext > mxContext;
+    cpo::uno::Reference < css::frame::XFrame2 > mxFrame;
+    cpo::uno::Reference < css::embed::XEmbeddedObject > mxObj;
+    SfxItemPropertyMap  maPropMap;
+    SfxFrameDescriptor  maFrmDescr;
+
+public:
+    /// @throws cpo::uno::Exception
+    /// @throws cpo::uno::RuntimeException
+    IFrameObject(cpo::uno::Reference < cpo::uno::XComponentContext> xContext, const cpo::uno::Sequence< cpo::uno::Any >& aArguments);
+
+    virtual OUString getImplementationName() override
+    {
+        return u"com.sun.star.comp.sfx2.IFrameObject"_ustr;
+    }
+
+    virtual bool supportsService(OUString const & ServiceName) override
+    {
+        return cppu::supportsService(this, ServiceName);
+    }
+
+    virtual cpo::uno::Sequence<OUString> getSupportedServiceNames() override
+    {
+        cpo::uno::Sequence< OUString > aSeq { u"com.sun.star.frame.SpecialEmbeddedObject"_ustr };
+        return aSeq;
+    }
+
+    virtual bool load( const cpo::uno::Sequence < css::beans::PropertyValue >& lDescriptor,
+            const cpo::uno::Reference < css::frame::XFrame >& xFrame ) override;
+    virtual void cancel() override;
+    virtual void close( bool bDeliverOwnership ) override;
+    virtual void addCloseListener( const cpo::uno::Reference < css::util::XCloseListener >& xListener ) override;
+    virtual void removeCloseListener( const cpo::uno::Reference < css::util::XCloseListener >& xListener ) override;
+    virtual void disposing( const css::lang::EventObject& aEvent ) override ;
+    virtual void setTitle( const OUString& aTitle ) override;
+    virtual ::sal_Int16 execute(  ) override;
+    virtual cpo::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo() override;
+    virtual void addPropertyChangeListener(const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener > & aListener) override;
+    virtual void removePropertyChangeListener(const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XPropertyChangeListener > & aListener) override;
+    virtual void addVetoableChangeListener(const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener > & aListener) override;
+    virtual void removeVetoableChangeListener(const OUString& aPropertyName, const cpo::uno::Reference< css::beans::XVetoableChangeListener > & aListener) override;
+    virtual void setPropertyValue( const OUString& aPropertyName, const cpo::uno::Any& aValue ) override;
+    virtual cpo::uno::Any getPropertyValue( const OUString& PropertyName ) override;
+};
+
+class IFrameWindow_Impl : public vcl::Window
+{
+public:
+    IFrameWindow_Impl( vcl::Window *pParent, bool bHasBorder );
+};
+
+IFrameWindow_Impl::IFrameWindow_Impl( vcl::Window *pParent, bool bHasBorder )
+    : Window( pParent, WB_CLIPCHILDREN | WB_NODIALOGCONTROL )
+{
+    if ( !bHasBorder )
+        SetBorderStyle( WindowBorderStyle::NOBORDER );
+    else
+        SetBorderStyle( WindowBorderStyle::NORMAL );
+}
+
+#define PROPERTY_UNBOUND 0
+
+#define WID_FRAME_URL                   1
+#define WID_FRAME_NAME                  2
+#define WID_FRAME_IS_AUTO_SCROLL        3
+#define WID_FRAME_IS_SCROLLING_MODE     4
+#define WID_FRAME_IS_BORDER             5
+#define WID_FRAME_IS_AUTO_BORDER        6
+#define WID_FRAME_MARGIN_WIDTH          7
+#define WID_FRAME_MARGIN_HEIGHT         8
+
+std::span<const SfxItemPropertyMapEntry> lcl_GetIFramePropertyMap_Impl()
+{
+    static const SfxItemPropertyMapEntry aIFramePropertyMap_Impl[] =
+    {
+        { u"FrameIsAutoBorder"_ustr,    WID_FRAME_IS_AUTO_BORDER,   cppu::UnoType<bool>::get(), PROPERTY_UNBOUND, 0 },
+        { u"FrameIsAutoScroll"_ustr,    WID_FRAME_IS_AUTO_SCROLL,   cppu::UnoType<bool>::get(), PROPERTY_UNBOUND, 0 },
+        { u"FrameIsBorder"_ustr,        WID_FRAME_IS_BORDER,        cppu::UnoType<bool>::get(), PROPERTY_UNBOUND, 0 },
+        { u"FrameIsScrollingMode"_ustr, WID_FRAME_IS_SCROLLING_MODE,cppu::UnoType<bool>::get(), PROPERTY_UNBOUND, 0 },
+        { u"FrameMarginHeight"_ustr,    WID_FRAME_MARGIN_HEIGHT,    cppu::UnoType<sal_Int32>::get(), PROPERTY_UNBOUND, 0 },
+        { u"FrameMarginWidth"_ustr,     WID_FRAME_MARGIN_WIDTH,     cppu::UnoType<sal_Int32>::get(), PROPERTY_UNBOUND, 0 },
+        { u"FrameName"_ustr,            WID_FRAME_NAME,             cppu::UnoType<OUString>::get(), PROPERTY_UNBOUND, 0 },
+        { u"FrameURL"_ustr,             WID_FRAME_URL,              cppu::UnoType<OUString>::get(), PROPERTY_UNBOUND, 0 },
+    };
+    return aIFramePropertyMap_Impl;
+}
+
+IFrameObject::IFrameObject(uno::Reference < cpo::uno::XComponentContext > xContext, const cpo::uno::Sequence< cpo::uno::Any >& aArguments)
+    : mxContext(std::move( xContext ))
+    , maPropMap( lcl_GetIFramePropertyMap_Impl() )
+{
+    if ( aArguments.hasElements() )
+        aArguments[0] >>= mxObj;
+}
+
+bool IFrameObject::load(
+    const cpo::uno::Sequence < css::beans::PropertyValue >& /*lDescriptor*/,
+    const uno::Reference < frame::XFrame >& xFrame )
+{
+    if ( officecfg::Office::Common::Misc::PluginsEnabled::get() )
+    {
+        util::URL aTargetURL;
+        aTargetURL.Complete = maFrmDescr.GetURL().GetMainURL( INetURLObject::DecodeMechanism::NONE );
+        uno::Reference < util::XURLTransformer > xTrans( util::URLTransformer::create( mxContext ) );
+        xTrans->parseStrict( aTargetURL );
+
+        INetURLObject aURLObject(aTargetURL.Complete);
+        if (aURLObject.IsExoticProtocol())
+        {
+            SAL_WARN("sfx", "IFrameObject::load ignoring: " << aTargetURL.Complete);
+            return false;
+        }
+
+        uno::Reference<frame::XFramesSupplier> xParentFrame = xFrame->getCreator();
+        SfxObjectShell* pDoc = SfxMacroLoader::GetObjectShell(xParentFrame);
+
+        const bool bIsFactoryURL = aTargetURL.Complete.startsWith("private:factory/");
+        if (!bIsFactoryURL)
+        {
+            bool bUpdateAllowed(true);
+            if (pDoc)
+            {
+                comphelper::EmbeddedObjectContainer& rEmbeddedObjectContainer = pDoc->getEmbeddedObjectContainer();
+                bUpdateAllowed = rEmbeddedObjectContainer.getUserAllowsLinkUpdate();
+            }
+            if (!bUpdateAllowed)
+                return false;
+        }
+
+        OUString sReferer;
+        if (pDoc && pDoc->HasName())
+            sReferer = pDoc->GetMedium()->GetName();
+
+        uno::Reference<css::awt::XWindow> xParentWindow(xFrame->getContainerWindow());
+
+        if (!mxFrame.is())
+        {
+            VclPtr<vcl::Window> pParent = VCLUnoHelper::GetWindow(xParentWindow);
+            VclPtr<IFrameWindow_Impl> pWin = VclPtr<IFrameWindow_Impl>::Create( pParent, maFrmDescr.IsFrameBorderOn() );
+            pWin->SetSizePixel( pParent->GetOutputSizePixel() );
+            pWin->SetBackground();
+            pWin->Show();
+
+            uno::Reference < awt::XWindow > xWindow( pWin->GetComponentInterface(), uno::UNO_QUERY );
+            xFrame->setComponent( xWindow, uno::Reference < frame::XController >() );
+
+            // we must destroy the IFrame before the parent is destroyed
+            xWindow->addEventListener( this );
+
+            mxFrame = frame::Frame::create( mxContext );
+            uno::Reference < awt::XWindow > xWin( pWin->GetComponentInterface(), uno::UNO_QUERY );
+            mxFrame->initialize( xWin );
+            mxFrame->setName( maFrmDescr.GetName() );
+
+            uno::Reference < frame::XFramesSupplier > xFramesSupplier( xFrame, uno::UNO_QUERY );
+            if ( xFramesSupplier.is() )
+                mxFrame->setCreator( xFramesSupplier );
+        }
+
+        uno::Reference<task::XInteractionHandler> xInteractionHandler(task::InteractionHandler::createWithParent(mxContext, xParentWindow));
+        cpo::uno::Sequence < beans::PropertyValue > aProps{
+            comphelper::makePropertyValue(u"PluginMode"_ustr, sal_Int16(2)),
+            comphelper::makePropertyValue(u"ReadOnly"_ustr, true),
+            comphelper::makePropertyValue(u"InteractionHandler"_ustr, xInteractionHandler),
+            comphelper::makePropertyValue(u"Referer"_ustr, sReferer)
+        };
+        uno::Reference < frame::XDispatch > xDisp = mxFrame->queryDispatch( aTargetURL, u"_self"_ustr, 0 );
+        if ( xDisp.is() )
+            xDisp->dispatch( aTargetURL, aProps );
+
+        return true;
+    }
+
+    return false;
+}
+
+void IFrameObject::cancel()
+{
+    try
+    {
+        uno::Reference < util::XCloseable > xClose( mxFrame, uno::UNO_QUERY );
+        if ( xClose.is() )
+            xClose->close( true );
+        mxFrame = nullptr;
+    }
+    catch (const cpo::uno::Exception&)
+    {
+    }
+}
+
+void IFrameObject::close( bool /*bDeliverOwnership*/ )
+{
+}
+
+void IFrameObject::addCloseListener( const cpo::uno::Reference < css::util::XCloseListener >& )
+{
+}
+
+void IFrameObject::removeCloseListener( const cpo::uno::Reference < css::util::XCloseListener >& )
+{
+}
+
+void IFrameObject::disposing( const css::lang::EventObject& )
+{
+    cancel();
+}
+
+uno::Reference< beans::XPropertySetInfo > IFrameObject::getPropertySetInfo()
+{
+    static uno::Reference< beans::XPropertySetInfo > xInfo = new SfxItemPropertySetInfo( maPropMap );
+    return xInfo;
+}
+
+void IFrameObject::setPropertyValue(const OUString& aPropertyName, const cpo::uno::Any& aAny)
+{
+    const SfxItemPropertyMapEntry* pEntry = maPropMap.getByName( aPropertyName );
+    if( !pEntry )
+         throw beans::UnknownPropertyException(aPropertyName);
+    switch( pEntry->nWID )
+    {
+    case WID_FRAME_URL:
+    {
+        OUString aURL;
+        aAny >>= aURL;
+        maFrmDescr.SetURL( aURL );
+    }
+    break;
+    case WID_FRAME_NAME:
+    {
+        OUString aName;
+        if ( aAny >>= aName )
+            maFrmDescr.SetName( aName );
+    }
+    break;
+    case WID_FRAME_IS_AUTO_SCROLL:
+    {
+        bool bIsAutoScroll;
+        if ( (aAny >>= bIsAutoScroll) && bIsAutoScroll )
+            maFrmDescr.SetScrollingMode( ScrollingMode::Auto );
+    }
+    break;
+    case WID_FRAME_IS_SCROLLING_MODE:
+    {
+        bool bIsScroll;
+        if ( aAny >>= bIsScroll )
+            maFrmDescr.SetScrollingMode( bIsScroll ? ScrollingMode::Yes : ScrollingMode::No );
+    }
+    break;
+    case WID_FRAME_IS_BORDER:
+    {
+        bool bIsBorder;
+        if ( aAny >>= bIsBorder )
+            maFrmDescr.SetFrameBorder( bIsBorder );
+    }
+    break;
+    case WID_FRAME_IS_AUTO_BORDER:
+    {
+        bool bIsAutoBorder;
+        if ( aAny >>= bIsAutoBorder )
+        {
+            bool bBorder = maFrmDescr.IsFrameBorderOn();
+            maFrmDescr.ResetBorder();
+            if ( bIsAutoBorder )
+                maFrmDescr.SetFrameBorder( bBorder );
+        }
+    }
+    break;
+    case WID_FRAME_MARGIN_WIDTH:
+    {
+        sal_Int32 nMargin = 0;
+        Size aSize = maFrmDescr.GetMargin();
+        if ( aAny >>= nMargin )
+        {
+            aSize.setWidth( nMargin );
+            maFrmDescr.SetMargin( aSize );
+        }
+    }
+    break;
+    case WID_FRAME_MARGIN_HEIGHT:
+    {
+        sal_Int32 nMargin = 0;
+        Size aSize = maFrmDescr.GetMargin();
+        if ( aAny >>= nMargin )
+        {
+            aSize.setHeight( nMargin );
+            maFrmDescr.SetMargin( aSize );
+        }
+    }
+    break;
+    default: ;
+    }
+}
+
+cpo::uno::Any IFrameObject::getPropertyValue(const OUString& aPropertyName)
+{
+    const SfxItemPropertyMapEntry* pEntry = maPropMap.getByName( aPropertyName );
+    if( !pEntry )
+         throw beans::UnknownPropertyException(aPropertyName);
+    cpo::uno::Any aAny;
+    switch( pEntry->nWID )
+    {
+    case WID_FRAME_URL:
+    {
+        aAny <<= maFrmDescr.GetURL().GetMainURL( INetURLObject::DecodeMechanism::NONE );
+    }
+    break;
+    case WID_FRAME_NAME:
+    {
+        aAny <<= maFrmDescr.GetName();
+    }
+    break;
+    case WID_FRAME_IS_AUTO_SCROLL:
+    {
+        bool bIsAutoScroll = ( maFrmDescr.GetScrollingMode() == ScrollingMode::Auto );
+        aAny <<= bIsAutoScroll;
+    }
+    break;
+    case WID_FRAME_IS_SCROLLING_MODE:
+    {
+        bool bIsScroll = ( maFrmDescr.GetScrollingMode() == ScrollingMode::Yes );
+        aAny <<= bIsScroll;
+    }
+    break;
+    case WID_FRAME_IS_BORDER:
+    {
+        bool bIsBorder = maFrmDescr.IsFrameBorderOn();
+        aAny <<= bIsBorder;
+    }
+    break;
+    case WID_FRAME_IS_AUTO_BORDER:
+    {
+        bool bIsAutoBorder = !maFrmDescr.IsFrameBorderSet();
+        aAny <<= bIsAutoBorder;
+    }
+    break;
+    case WID_FRAME_MARGIN_WIDTH:
+    {
+        aAny <<= static_cast<sal_Int32>(maFrmDescr.GetMargin().Width());
+    }
+    break;
+    case WID_FRAME_MARGIN_HEIGHT:
+    {
+        aAny <<= static_cast<sal_Int32>(maFrmDescr.GetMargin().Height());
+    }
+    break;
+    default: ;
+    }
+    return aAny;
+}
+
+void IFrameObject::addPropertyChangeListener(const OUString&, const cpo::uno::Reference< css::beans::XPropertyChangeListener > & )
+{
+}
+
+void IFrameObject::removePropertyChangeListener(const OUString&, const cpo::uno::Reference< css::beans::XPropertyChangeListener > & )
+{
+}
+
+void IFrameObject::addVetoableChangeListener(const OUString&, const cpo::uno::Reference< css::beans::XVetoableChangeListener > & )
+{
+}
+
+void IFrameObject::removeVetoableChangeListener(const OUString&, const cpo::uno::Reference< css::beans::XVetoableChangeListener > & )
+{
+}
+
+::sal_Int16 IFrameObject::execute()
+{
+    SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
+    //we really should set a parent here
+    ScopedVclPtr<VclAbstractDialog> pDlg(pFact->CreateEditObjectDialog(nullptr, u".uno:InsertObjectFloatingFrame"_ustr, mxObj));
+    pDlg->Execute();
+    return 0;
+}
+
+void IFrameObject::setTitle( const OUString& )
+{
+}
+
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+com_sun_star_comp_sfx2_IFrameObject_get_implementation(
+    cpo::uno::XComponentContext *context,
+    cpo::uno::Sequence<cpo::uno::Any> const &arguments)
+{
+    return cppu::acquire(new IFrameObject(context, arguments));
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

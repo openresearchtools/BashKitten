@@ -1,0 +1,191 @@
+<!-- build-doc-start -->
+# Build Collabora Office
+
+This is the Collabora Office Windows desktop app (`windows/`).
+
+## Requirements
+
+Collabora Office for Windows is built with **Visual Studio 2026**, plus a
+Unix-style toolchain provided by Git Bash and an MSYS2 installation — no WSL
+needed. The `windows/.config/`
+directory in the repo ships
+[WinGet configuration](https://learn.microsoft.com/windows/package-manager/configuration/)
+files that set up a build machine for you; apply them, or follow them as a
+checklist if you prefer to install things by hand.
+
+## Clone the monorepo
+
+All the source code now lives in a single Gerrit monorepo; the former Collabora Office core is the `engine/` subdirectory of the `online` repo, so there is no separate repository to clone any more. Code review happens on [Gerrit](https://gerrit.collaboraoffice.com/), not GitHub pull requests; see the [first contribution guide](https://forum.collaboraonline.com/t/your-first-pull-request/41) for the full workflow.
+
+Install [Git Bash](https://gitforwindows.org/), then from that terminal, clone with protocol v2 and CRLF translation turned off:
+
+```bash
+git clone --config protocol.version=2 --config core.autocrlf=false \
+    ssh://YOUR_USERNAME@gerrit.collaboraoffice.com:29418/online collabora-office
+cd collabora-office
+```
+
+(If you applied `user_steps.winget`, those two git options are already set globally.) For an anonymous read-only clone, use `https://gerrit.collaboraoffice.com/online` in place of the SSH URL.
+
+### Visual Studio 2026
+
+Install Visual Studio 2026 Community with the "Desktop development with C++" and
+".NET desktop development" workloads. The exact component list is pinned in
+`windows/.config/2026.vsconfig`. To install Visual Studio and the required
+components in one step:
+
+```
+winget configure windows/.config/configuration.winget
+```
+
+(`windows/.config/2026_cross.vsconfig` lists the extra components for
+cross-compiling to ARM64.)
+
+### Build tools and MSYS2
+
+Two more WinGet configurations finish the setup. The first must be run **as
+administrator** — it downloads `jom`, `make`, `clang-format`, `pkgconf` and
+Strawberry Perl Portable, installs MSYS2 (to `C:\msys64`) and Node.js LTS, and
+enables Developer Mode (so `tar` can create native symlinks while unpacking
+tarballs):
+
+```
+winget configure windows/.config/admin_deps.winget
+```
+
+The second runs as your normal user. It places `make`, `jom`, `clang-format`
+and `pkgconf` in `~\bin`, extracts Strawberry Perl Portable to `~\co\spp`, sets
+the git options the build needs (`protocol.version=2`, `core.autocrlf=false`)
+and `MSYS=winsymlinks:nativestrict`, drops a sample `~\co\autogen.input`, and
+installs the MSYS2 packages the engine and online build need (autotools,
+`pkgconf`, `gcc`, `flex`, `bison`, `gperf`, `nasm`, `zip`, gettext, and Python
+with the `lxml`/`polib` helpers):
+
+```
+winget configure windows/.config/user_steps.winget
+```
+
+## Build everything with one command (optional)
+
+Rather than building the engine and the app through the separate steps below,
+`windows/coda/build/` offers a front-end that drives both from a single
+out-of-tree build directory - one `autogen.sh`, one `make`.
+
+From a **Git Bash** terminal, make an empty build directory outside the clone
+and create an `autogen.input` in it with the engine configure flags, then run
+the front-end and build:
+
+```bash
+mkdir C:/co-build && cd C:/co-build
+echo --with-distro=CODAWindows > autogen.input   # add the rest of the flags (see "Build the engine")
+C:/path/to/online.git/windows/coda/build/autogen.sh
+make
+```
+
+`autogen.sh` configures the engine; `make` then builds the engine, configures
+and builds the online part, and builds the Visual Studio solution, dispatching
+the steps that need a Unix environment to MSYS2 automatically. The build is
+incremental, and editing `autogen.input` reconfigures the engine on the next
+`make`. It is out-of-tree only, and the engine configure flags must live in
+`autogen.input` (they are not accepted as command-line arguments).
+
+The build produces a runnable tree in the build directory at
+`online/windows/coda/x64/<Configuration>/program/`, with `Collabora Office.exe`
+next to the engine and browser files copied in beside it.
+
+The app is built in the Debug configuration by default; pass `make CONFIG=Release`
+for a Release build. This has to match the engine: a Debug app needs an engine
+built with `--enable-dbgutil` or `--enable-msvc-debug-runtime`, so choose the
+engine flags in `autogen.input` to suit (see the note under "Build the engine").
+
+The online configure options are make variables: `APP_NAME`, `VENDOR`,
+`INFO_URL`, plus `ONLINE_CONFIGURE_ARGS` for anything else, e.g.
+`make CONFIG=Release APP_NAME='Collabora Office Preview' VENDOR='Collabora Productivity Limited'`.
+Changing any of them re-runs the online configure on the next `make`.
+
+The sections below describe the same build done by hand, which you still want
+when running or debugging the pieces individually.
+
+## Build the engine
+
+If you want a localized (translated) user interface, first clone the translations repository into `engine/translations` from the top of the clone; the engine's `--with-lang` picks up the `.po` files from there:
+
+```bash
+git clone https://gerrit.collaboraoffice.com/translations engine/translations
+```
+
+Change to the `engine` subdirectory and create an `autogen.input`.
+`user_steps.winget` writes a template to `~\co\autogen.input`; a typical Visual
+Studio 2026 configuration looks like:
+
+```
+--with-distro=CODAWindows
+--host=x86_64-pc-cygwin
+--with-visual-studio=2026
+--with-strawberry-perl-portable=C:\Users\<you>\co\spp
+--with-external-tar=C:\Users\<you>\co\co-externaltar
+```
+
+Adjust the paths to match where Strawberry Perl Portable was extracted and where
+you keep downloaded tarballs. Then, from Git Bash, run autogen through MSYS2
+(the `run-msys2` helper starts an MSYS2 shell with the right environment) and
+build with `make`:
+
+```bash
+cd engine
+./solenv/bin/run-msys2 ./autogen.sh
+make
+```
+
+If you build the Collabora Office project in Visual Studio in the Debug
+configuration, you *must* use an engine build with either `--enable-dbgutil` or
+`--enable-msvc-debug-runtime`.
+
+You will not end up with a runnable Collabora Office Classic — running
+`instdir/program/soffice.exe` just prints "no suitable windowing system found,
+exiting". You can attempt `make check`, but it will probably hit some false
+positives.
+
+## Build Collabora Office
+
+### Configure
+
+From the top of the clone, run autogen and configure through MSYS2. POCO, libpng
+and zstd are built as part of the engine and linked from its workdir by the
+Visual Studio project, so they no longer need to be built or passed separately
+(zlib likewise comes from the engine):
+
+```bash
+./engine/solenv/bin/run-msys2 ./autogen.sh
+./engine/solenv/bin/run-msys2 ./configure --enable-windowsapp --with-app-name='Collabora Office' --with-lo-builddir='/c/Users/<you>/collabora-office/engine' --with-lo-path='C:\Users\<you>\collabora-office\engine\instdir' --with-info-url=https://example.com/coda/info.html
+```
+
+`--with-lo-builddir` is a Unix (`/c/...`) path, while `--with-lo-path` is a
+Windows path — this matters. Change `--with-info-url` as appropriate; that is
+the web page shown when clicking the leftmost button in the toolbar.
+
+### Build the JavaScript bits
+
+```bash
+./engine/solenv/bin/run-msys2 make -C browser
+```
+
+### Build the app
+
+From a **Developer Command Prompt for VS 2026**, build the solution (`/restore`
+fetches the NuGet/.NET dependencies):
+
+```
+msbuild /restore /p:Configuration=Release /p:Platform=x64 windows\coda\CODA.sln
+```
+
+To clean first, run the same command with `/t:Clean`. You can also build from
+Git Bash, as long as PATH has what is needed and you use `-` instead of `/` for
+the msbuild switches (the MSYS argument conversion would rewrite `/nologo` and
+friends into paths).
+
+## Pre-built download
+
+If you just want a **pre-built snapshot for Windows**, you can download it here:
+👉 https://www.collaboraoffice.com/downloads/Collabora-Office-Windows-Snapshot/
+<!-- build-doc-end -->

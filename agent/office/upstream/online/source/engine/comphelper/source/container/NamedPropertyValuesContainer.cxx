@@ -1,0 +1,168 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <cpo/uno/Sequence.h>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <comphelper/sequence.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cppuhelper/supportsservice.hxx>
+#include <map>
+
+
+namespace cpo::uno { class XComponentContext; }
+using namespace com::sun::star;
+
+typedef std::map< OUString, cpo::uno::Sequence<beans::PropertyValue> > NamedPropertyValues;
+
+namespace {
+
+class NamedPropertyValuesContainer : public cppu::WeakImplHelper< container::XNameContainer, lang::XServiceInfo >
+{
+public:
+    NamedPropertyValuesContainer() noexcept;
+
+    // XNameContainer
+    virtual void insertByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
+    virtual void removeByName( const OUString& Name ) override;
+
+    // XNameReplace
+    virtual void replaceByName( const OUString& aName, const cpo::uno::Any& aElement ) override;
+
+    // XNameAccess
+    virtual cpo::uno::Any getByName( const OUString& aName ) override;
+    virtual cpo::uno::Sequence< OUString > getElementNames(  ) override;
+    virtual bool hasByName( const OUString& aName ) override;
+
+    // XElementAccess
+    virtual cpo::uno::Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
+
+    //XServiceInfo
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+
+private:
+    NamedPropertyValues maProperties;
+};
+
+}
+
+NamedPropertyValuesContainer::NamedPropertyValuesContainer() noexcept
+{
+}
+
+// XNameContainer
+void NamedPropertyValuesContainer::insertByName( const OUString& aName, const cpo::uno::Any& aElement )
+{
+    if( maProperties.find( aName ) != maProperties.end() )
+        throw container::ElementExistException();
+
+    cpo::uno::Sequence<beans::PropertyValue> aProps;
+    if( !(aElement >>= aProps ) )
+        throw lang::IllegalArgumentException(u"element is not beans::PropertyValue"_ustr, static_cast<cppu::OWeakObject*>(this), 2);
+
+    maProperties.emplace( aName, aProps );
+}
+
+void NamedPropertyValuesContainer::removeByName( const OUString& Name )
+{
+    NamedPropertyValues::iterator aIter = maProperties.find( Name );
+    if( aIter == maProperties.end() )
+        throw container::NoSuchElementException();
+
+    maProperties.erase( aIter );
+}
+
+// XNameReplace
+void NamedPropertyValuesContainer::replaceByName( const OUString& aName, const cpo::uno::Any& aElement )
+{
+    NamedPropertyValues::iterator aIter = maProperties.find( aName );
+    if( aIter == maProperties.end() )
+        throw container::NoSuchElementException();
+
+    cpo::uno::Sequence<beans::PropertyValue> aProps;
+    if( !(aElement >>= aProps) )
+        throw lang::IllegalArgumentException(u"element is not beans::PropertyValue"_ustr, static_cast<cppu::OWeakObject*>(this), 2);
+    (*aIter).second = std::move(aProps);
+}
+
+// XNameAccess
+cpo::uno::Any NamedPropertyValuesContainer::getByName( const OUString& aName )
+{
+    NamedPropertyValues::iterator aIter = maProperties.find( aName );
+    if( aIter == maProperties.end() )
+        throw container::NoSuchElementException();
+
+    cpo::uno::Any aElement;
+
+    aElement <<= (*aIter).second;
+
+    return aElement;
+}
+
+cpo::uno::Sequence< OUString > NamedPropertyValuesContainer::getElementNames(  )
+{
+    return comphelper::mapKeysToSequence(maProperties);
+}
+
+bool NamedPropertyValuesContainer::hasByName( const OUString& aName )
+{
+    NamedPropertyValues::iterator aIter = maProperties.find( aName );
+    return aIter != maProperties.end();
+}
+
+// XElementAccess
+cpo::uno::Type NamedPropertyValuesContainer::getElementType(  )
+{
+    return cppu::UnoType<cpo::uno::Sequence<beans::PropertyValue>>::get();
+}
+
+bool NamedPropertyValuesContainer::hasElements(  )
+{
+    return !maProperties.empty();
+}
+
+//XServiceInfo
+OUString NamedPropertyValuesContainer::getImplementationName(  )
+{
+    return u"NamedPropertyValuesContainer"_ustr;
+}
+
+bool NamedPropertyValuesContainer::supportsService( const OUString& ServiceName )
+{
+    return cppu::supportsService(this, ServiceName);
+}
+
+cpo::uno::Sequence< OUString > NamedPropertyValuesContainer::getSupportedServiceNames(  )
+{
+    return { u"com.sun.star.document.NamedPropertyValues"_ustr };
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT cpo::uno::XInterface *
+NamedPropertyValuesContainer_get_implementation(
+    cpo::uno::XComponentContext *,
+    cpo::uno::Sequence<cpo::uno::Any> const &)
+{
+    return cppu::acquire(new NamedPropertyValuesContainer());
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

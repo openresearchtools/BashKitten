@@ -1,0 +1,191 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#pragma once
+
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/container/XEnumeration.hpp>
+#include <com/sun/star/container/XIndexAccess.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <osl/diagnose.h>
+#include "scdllapi.h"
+
+#define SC_SIMPLE_SERVICE_INFO_IMPL( ClassName, ClassNameAscii )            \
+OUString ClassName::getImplementationName()                        \
+{                                                                           \
+    return ClassNameAscii;                                                  \
+}                                                                           \
+bool ClassName::supportsService( const OUString& ServiceName ) \
+{                                                                           \
+    return cppu::supportsService(this, ServiceName);                        \
+}
+
+#define SC_SIMPLE_SERVICE_INFO_NAME( ClassName, ServiceAscii ) \
+cpo::uno::Sequence< OUString >                                 \
+    ClassName::getSupportedServiceNames()             \
+{                                                              \
+    cpo::uno::Sequence< OUString > aRet { ServiceAscii };      \
+    return aRet;                                               \
+}
+
+// Place the old mistyped variant as first element so existing code can
+// continue to ask aRet[0] if it doesn't iterate; new code can iterate over the
+// sequence. This mostly should be used by supportsService() iterating anyway.
+#define SC_SIMPLE_SERVICE_INFO_TYPO( ClassName, ServiceAscii, ServiceAsciiMistyped ) \
+cpo::uno::Sequence< OUString >                                                       \
+    ClassName::getSupportedServiceNames()                                   \
+{                                                                                    \
+    cpo::uno::Sequence< OUString > aRet { ServiceAsciiMistyped, ServiceAscii };      \
+    return aRet;                                                                     \
+}
+
+#define SC_SIMPLE_SERVICE_INFO( ClassName, ClassNameAscii, ServiceAscii ) \
+    SC_SIMPLE_SERVICE_INFO_IMPL( ClassName, ClassNameAscii )              \
+    SC_SIMPLE_SERVICE_INFO_NAME( ClassName, ServiceAscii )
+
+#define SC_SIMPLE_SERVICE_INFO_COMPAT( ClassName, ClassNameAscii, ServiceAscii, ServiceAsciiMistyped ) \
+    SC_SIMPLE_SERVICE_INFO_IMPL( ClassName, ClassNameAscii )                                           \
+    SC_SIMPLE_SERVICE_INFO_TYPO( ClassName, ServiceAscii, ServiceAsciiMistyped )
+
+
+#define SC_IMPL_DUMMY_PROPERTY_LISTENER( ClassName )                                \
+    void ClassName::addPropertyChangeListener( const OUString&,       \
+                            const uno::Reference<beans::XPropertyChangeListener>&)  \
+    { OSL_FAIL("not implemented"); }                                                \
+    void ClassName::removePropertyChangeListener( const OUString&,    \
+                            const uno::Reference<beans::XPropertyChangeListener>&)  \
+    { OSL_FAIL("not implemented"); }                                                \
+    void ClassName::addVetoableChangeListener( const OUString&,       \
+                            const uno::Reference<beans::XVetoableChangeListener>&)  \
+    { OSL_FAIL("not implemented"); }                                                \
+    void ClassName::removeVetoableChangeListener( const OUString&,    \
+                            const uno::Reference<beans::XVetoableChangeListener>&)  \
+    { OSL_FAIL("not implemented"); }
+
+
+class ScIndexEnumeration final : public cppu::WeakImplHelper<
+                                css::container::XEnumeration,
+                                css::lang::XServiceInfo >
+{
+private:
+    cpo::uno::Reference<css::container::XIndexAccess> xIndex;
+    OUString                sServiceName;
+    sal_Int32               nPos;
+
+public:
+                            ScIndexEnumeration(cpo::uno::Reference<
+                                css::container::XIndexAccess> xInd, OUString aServiceName);
+    virtual                 ~ScIndexEnumeration() override;
+
+                            // XEnumeration
+    virtual bool hasMoreElements() override;
+    virtual cpo::uno::Any nextElement() override;
+
+                            // XServiceInfo
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+};
+
+//  new (uno 3) variant
+class SC_DLLPUBLIC ScNameToIndexAccess final : public cppu::WeakImplHelper<
+                                css::container::XIndexAccess,
+                                css::lang::XServiceInfo >
+{
+private:
+    cpo::uno::Reference<css::container::XNameAccess> xNameAccess;
+    cpo::uno::Sequence<OUString> aNames;
+
+public:
+                            ScNameToIndexAccess(
+                                cpo::uno::Reference< css::container::XNameAccess> xNameObj );
+    virtual                 ~ScNameToIndexAccess() override;
+
+                            // XIndexAccess
+    virtual sal_Int32 getCount(  ) override;
+    virtual cpo::uno::Any getByIndex( sal_Int32 Index ) override;
+
+                            // XElementAccess
+    virtual cpo::uno::Type getElementType(  ) override;
+    virtual bool hasElements(  ) override;
+
+                            // XServiceInfo
+    virtual OUString getImplementationName(  ) override;
+    virtual bool supportsService( const OUString& ServiceName ) override;
+    virtual cpo::uno::Sequence< OUString > getSupportedServiceNames(  ) override;
+};
+
+class SC_DLLPUBLIC ScUnoHelpFunctions
+{
+public:
+    static bool             GetBoolProperty( const cpo::uno::Reference< css::beans::XPropertySet>& xProp,
+                                            const OUString& rName, bool bDefault = false );
+    static sal_Int16        GetShortProperty( const cpo::uno::Reference< css::beans::XPropertySet>& xProp,
+                                            const OUString& rName, sal_Int16 nDefault );
+    static sal_Int32        GetLongProperty( const cpo::uno::Reference< css::beans::XPropertySet>& xProp,
+                                            const OUString& rName );
+    template<typename EnumT>
+    static EnumT            GetEnumProperty( const cpo::uno::Reference< css::beans::XPropertySet>& xProp,
+                                            const OUString& rName, EnumT nDefault )
+    { return static_cast<EnumT>(GetEnumPropertyImpl(xProp, rName, static_cast<sal_Int32>(nDefault))); }
+
+    static OUString  GetStringProperty(
+        const cpo::uno::Reference<css::beans::XPropertySet>& xProp,
+        const OUString& rName, const OUString& rDefault );
+
+    static bool        GetBoolFromAny( const cpo::uno::Any& aAny );
+    static sal_Int16   GetInt16FromAny( const cpo::uno::Any& aAny );
+    static sal_Int32        GetInt32FromAny( const cpo::uno::Any& aAny );
+    static sal_Int32        GetEnumFromAny( const cpo::uno::Any& aAny );
+
+    static void             SetOptionalPropertyValue(
+        const cpo::uno::Reference< css::beans::XPropertySet >& rPropSet,
+        const char* pPropName, const cpo::uno::Any& rVal );
+    static void             SetOptionalPropertyValue(
+        const cpo::uno::Reference< css::beans::XPropertySet >& rPropSet,
+        const OUString& rPropName, const cpo::uno::Any& rVal );
+
+    template<typename ValueType>
+    static void             SetOptionalPropertyValue(
+        const cpo::uno::Reference< css::beans::XPropertySet >& rPropSet,
+        const char* pPropName, const ValueType& rVal )
+    {
+        cpo::uno::Any any;
+        any <<= rVal;
+        SetOptionalPropertyValue(rPropSet, pPropName, any);
+    }
+    template<typename ValueType>
+    static void             SetOptionalPropertyValue(
+        const cpo::uno::Reference< css::beans::XPropertySet >& rPropSet,
+        const OUString& rPropName, const ValueType& rVal )
+    {
+        cpo::uno::Any any;
+        any <<= rVal;
+        SetOptionalPropertyValue(rPropSet, rPropName, any);
+    }
+
+private:
+    static sal_Int32        GetEnumPropertyImpl( const cpo::uno::Reference< css::beans::XPropertySet>& xProp,
+                                            const OUString& rName, sal_Int32 nDefault );
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

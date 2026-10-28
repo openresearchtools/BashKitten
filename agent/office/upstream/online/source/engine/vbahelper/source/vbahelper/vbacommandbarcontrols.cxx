@@ -1,0 +1,310 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+#include "vbacommandbarcontrols.hxx"
+#include "vbacommandbarcontrol.hxx"
+#include <com/sun/star/lang/XSingleComponentFactory.hpp>
+
+#include <comphelper/propertyvalue.hxx>
+#include <rtl/ref.hxx>
+#include <utility>
+
+using namespace com::sun::star;
+using namespace ::cpo;
+using namespace ooo::vba;
+
+namespace {
+
+class CommandBarControlEnumeration : public ::cppu::WeakImplHelper< container::XEnumeration >
+{
+    //uno::Reference< cpo::uno::XComponentContext > m_xContext;
+    CommandBarControls_BASE* m_pCommandBarControls;
+    sal_Int32 m_nCurrentPosition;
+public:
+    explicit CommandBarControlEnumeration( CommandBarControls_BASE* pCommandBarControls ) : m_pCommandBarControls( pCommandBarControls ), m_nCurrentPosition( 0 ) {}
+    virtual bool hasMoreElements() override
+    {
+        if( m_nCurrentPosition < m_pCommandBarControls->getCount() )
+            return true;
+        return false;
+    }
+    virtual cpo::uno::Any nextElement() override
+    {
+        if( !hasMoreElements() )
+            throw container::NoSuchElementException();
+
+        return m_pCommandBarControls->createCollectionObject( cpo::uno::Any( m_nCurrentPosition++ ) );
+    }
+};
+
+}
+
+ScVbaCommandBarControls::ScVbaCommandBarControls( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< cpo::uno::XComponentContext >& xContext, const uno::Reference< container::XIndexAccess>& xIndexAccess, VbaCommandBarHelperRef  pHelper, uno::Reference< container::XIndexAccess>  xBarSettings, const OUString& sResourceUrl ) : CommandBarControls_BASE( xParent, xContext, xIndexAccess ), pCBarHelper(std::move( pHelper )), m_xBarSettings(std::move( xBarSettings )), m_sResourceUrl( sResourceUrl )
+{
+    m_bIsMenu = sResourceUrl == ITEM_MENUBAR_URL;
+}
+
+cpo::uno::Sequence< beans::PropertyValue > ScVbaCommandBarControls::CreateMenuItemData( const OUString& sCommandURL,
+                                                                                   const OUString& sHelpURL,
+                                                                                   const OUString& sLabel,
+                                                                                   sal_uInt16 nType,
+                                                                                   const cpo::uno::Any& aSubMenu,
+                                                                                   bool isVisible,
+                                                                                   bool isEnabled )
+{
+    cpo::uno::Sequence< beans::PropertyValue > aProps{
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_COMMANDURL, sCommandURL),
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_HELPURL, sHelpURL),
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_LABEL, sLabel),
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_TYPE, nType),
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_CONTAINER, aSubMenu),
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_ISVISIBLE, isVisible),
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_ENABLED, isEnabled)
+    };
+
+    return aProps;
+}
+
+cpo::uno::Sequence< beans::PropertyValue > ScVbaCommandBarControls::CreateToolbarItemData( const OUString& sCommandURL,
+                                                                                      const OUString& sHelpURL,
+                                                                                      const OUString& sLabel,
+                                                                                      sal_uInt16 nType,
+                                                                                      const cpo::uno::Any& aSubMenu,
+                                                                                      bool isVisible,
+                                                                                      sal_Int32 nStyle )
+{
+    cpo::uno::Sequence< beans::PropertyValue > aProps{
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_COMMANDURL, sCommandURL),
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_HELPURL, sHelpURL),
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_LABEL, sLabel),
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_TYPE, nType),
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_CONTAINER, aSubMenu),
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_ISVISIBLE, isVisible),
+        comphelper::makePropertyValue(ITEM_DESCRIPTOR_STYLE, nStyle)
+    };
+
+    return aProps;
+}
+
+// XEnumerationAccess
+cpo::uno::Type
+ScVbaCommandBarControls::getElementType()
+{
+    return cppu::UnoType<XCommandBarControl>::get();
+}
+
+uno::Reference< container::XEnumeration >
+ScVbaCommandBarControls::createEnumeration()
+{
+    return uno::Reference< container::XEnumeration >( new CommandBarControlEnumeration( this ) );
+}
+
+cpo::uno::Any
+ScVbaCommandBarControls::createCollectionObject( const cpo::uno::Any& aSource )
+{
+    sal_Int32 nPosition = -1;
+    aSource >>= nPosition;
+    cpo::uno::Sequence< beans::PropertyValue > aProps;
+    m_xIndexAccess->getByIndex( nPosition ) >>= aProps;
+    uno::Reference< container::XIndexAccess > xSubMenu;
+    getPropertyValue( aProps, ITEM_DESCRIPTOR_CONTAINER ) >>= xSubMenu;
+    rtl::Reference<ScVbaCommandBarControl> pNewCommandBarControl;
+    if( xSubMenu.is() )
+        pNewCommandBarControl = new ScVbaCommandBarPopup( this, mxContext, m_xIndexAccess, pCBarHelper, m_xBarSettings, m_sResourceUrl, nPosition );
+    else
+        pNewCommandBarControl = new ScVbaCommandBarButton( this, mxContext, m_xIndexAccess, pCBarHelper, m_xBarSettings, m_sResourceUrl, nPosition );
+
+    return cpo::uno::Any( uno::Reference< XCommandBarControl > ( pNewCommandBarControl ) );
+}
+
+// Methods
+cpo::uno::Any
+ScVbaCommandBarControls::Item( const cpo::uno::Any& aIndex, const cpo::uno::Any& /*aIndex*/ )
+{
+    sal_Int32 nPosition = -1;
+    if( aIndex.getValueTypeClass() == cpo::uno::TypeClass_STRING )
+    {
+        OUString sName;
+        aIndex >>= sName;
+        nPosition = VbaCommandBarHelper::findControlByName( m_xIndexAccess, sName, m_bIsMenu );
+    }
+    else
+    {
+        aIndex >>= nPosition;
+    }
+
+    if( nPosition < 0 || nPosition >= getCount() )
+    {
+        throw cpo::uno::RuntimeException();
+    }
+
+    return createCollectionObject( cpo::uno::Any( nPosition ) );
+}
+
+uno::Reference< XCommandBarControl >
+ScVbaCommandBarControls::Add( const cpo::uno::Any& Type, const cpo::uno::Any& Id, const cpo::uno::Any& Parameter, const cpo::uno::Any& Before, SAL_UNUSED_PARAMETER const cpo::uno::Any& )
+{
+    // Parameter is not supported
+    // the following name needs to be individually created;
+    OUString sLabel(u"Custom"_ustr);
+    OUString sCommandUrl( CUSTOM_MENU_STR + sLabel);
+    sal_Int32 nType = office::MsoControlType::msoControlButton;
+    sal_Int32 nPosition = 0;
+
+    if( Type.hasValue() )
+    {
+        Type >>= nType;
+    }
+
+    if( nType != office::MsoControlType::msoControlButton &&
+        nType != office::MsoControlType::msoControlPopup )
+        throw cpo::uno::RuntimeException( u"Not implemented"_ustr );
+
+    if( Id.hasValue() || Parameter.hasValue( ) )
+    {
+        throw cpo::uno::RuntimeException( u"Not implemented"_ustr );
+    }
+
+    if( Before.hasValue() )
+        Before >>= nPosition;
+    else
+        nPosition = m_xIndexAccess->getCount();
+
+    cpo::uno::Any aSubMenu;
+    if( nType == office::MsoControlType::msoControlPopup )
+    {
+        // it is a Popmenu
+        uno::Reference< lang::XSingleComponentFactory > xSCF( m_xBarSettings, uno::UNO_QUERY_THROW );
+        aSubMenu <<= xSCF->createInstanceWithContext( mxContext );
+    }
+
+    // create control
+    cpo::uno::Sequence< beans::PropertyValue > aProps;
+    sal_uInt16 nItemType = 0;
+    if( m_bIsMenu )
+    {
+        aProps = CreateMenuItemData( sCommandUrl, u""_ustr, sLabel, nItemType, aSubMenu, true, true );
+    }
+    else
+    {
+        aProps = CreateToolbarItemData( sCommandUrl, u""_ustr, sLabel, nItemType, aSubMenu, true/*isVisible*/, 0/*nStyle*/ );
+    }
+
+
+    uno::Reference< container::XIndexContainer > xIndexContainer( m_xIndexAccess, uno::UNO_QUERY_THROW );
+    xIndexContainer->insertByIndex( nPosition, cpo::uno::Any( aProps ) );
+
+    pCBarHelper->ApplyTempChange( m_sResourceUrl, m_xBarSettings );
+
+    rtl::Reference<ScVbaCommandBarControl> pNewCommandBarControl;
+    if( nType == office::MsoControlType::msoControlPopup )
+        pNewCommandBarControl = new ScVbaCommandBarPopup( this, mxContext, m_xIndexAccess, pCBarHelper, m_xBarSettings, m_sResourceUrl, nPosition );
+    else
+        pNewCommandBarControl = new ScVbaCommandBarButton( this, mxContext, m_xIndexAccess, pCBarHelper, m_xBarSettings, m_sResourceUrl, nPosition );
+
+    return pNewCommandBarControl;
+}
+
+// XHelperInterface
+OUString
+ScVbaCommandBarControls::getServiceImplName()
+{
+    return u"ScVbaCommandBarControls"_ustr;
+}
+
+cpo::uno::Sequence<OUString>
+ScVbaCommandBarControls::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.CommandBarControls"_ustr
+    };
+    return aServiceNames;
+}
+
+namespace {
+
+class VbaDummyIndexAccess : public ::cppu::WeakImplHelper< container::XIndexAccess >
+{
+public:
+    VbaDummyIndexAccess() {}
+    // XIndexAccess
+    virtual ::sal_Int32 getCount(  ) override
+        { return 0; }
+    virtual cpo::uno::Any getByIndex( ::sal_Int32 /*Index*/ ) override
+        { throw lang::IndexOutOfBoundsException(); }
+    // XElementAccess
+    virtual cpo::uno::Type getElementType(  ) override
+        { return cppu::UnoType<XCommandBarControl>::get(); }
+    virtual bool hasElements(  ) override
+        { return false; }
+};
+
+}
+
+VbaDummyCommandBarControls::VbaDummyCommandBarControls(
+        const uno::Reference< XHelperInterface >& xParent,
+        const uno::Reference< cpo::uno::XComponentContext >& xContext ) :
+    CommandBarControls_BASE( xParent, xContext, new VbaDummyIndexAccess )
+{
+}
+
+// XEnumerationAccess
+cpo::uno::Type VbaDummyCommandBarControls::getElementType()
+{
+    return cppu::UnoType<XCommandBarControl>::get();
+}
+
+uno::Reference< container::XEnumeration > VbaDummyCommandBarControls::createEnumeration()
+{
+    return uno::Reference< container::XEnumeration >( new CommandBarControlEnumeration( this ) );
+}
+
+cpo::uno::Any VbaDummyCommandBarControls::createCollectionObject( const cpo::uno::Any& /*aSource*/ )
+{
+    return cpo::uno::Any( uno::Reference< XCommandBarControl >() );
+}
+
+// Methods
+cpo::uno::Any VbaDummyCommandBarControls::Item( const cpo::uno::Any& /*aIndex*/, const cpo::uno::Any& /*aIndex*/ )
+{
+    return cpo::uno::Any( uno::Reference< XCommandBarControl >() );
+}
+
+uno::Reference< XCommandBarControl > VbaDummyCommandBarControls::Add(
+        const cpo::uno::Any& /*Type*/, const cpo::uno::Any& /*Id*/, const cpo::uno::Any& /*Parameter*/, const cpo::uno::Any& /*Before*/, const cpo::uno::Any& /*Temporary*/ )
+{
+    return uno::Reference< XCommandBarControl >();
+}
+
+// XHelperInterface
+OUString VbaDummyCommandBarControls::getServiceImplName()
+{
+    return u"VbaDummyCommandBarControls"_ustr;
+}
+
+cpo::uno::Sequence<OUString> VbaDummyCommandBarControls::getServiceNames()
+{
+    static cpo::uno::Sequence< OUString > const aServiceNames
+    {
+        u"ooo.vba.CommandBarControls"_ustr
+    };
+    return aServiceNames;
+}
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */
