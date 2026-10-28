@@ -1,0 +1,171 @@
+{
+  "schema": 1,
+  "description": "Pristine exact released native dependency sources; Go checksum database verification and independent pinned Git license comparison completed. Adaptation selection is separate.",
+  "components": [
+    {
+      "ecosystem": "go",
+      "name": "github.com/patrickmn/go-cache",
+      "version": "v2.1.0+incompatible",
+      "sum": "h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=",
+      "goModSum": "h1:3Qf8kWWT7OJRJbdiICTKqZju1ZixQ/KpMGzzAfe6+WQ=",
+      "origin": {
+        "VCS": "git",
+        "URL": "https://github.com/patrickmn/go-cache",
+        "Hash": "a3647f8e31d79543b2d0f0ae2fe5c379d72cedc0",
+        "Ref": "refs/tags/v2.1.0"
+      },
+      "url": "https://proxy.golang.org/github.com/patrickmn/go-cache/@v/v2.1.0+incompatible.zip",
+      "license": "MIT",
+      "archive": {
+        "sha256": "d5d1c13e3c9cfeb04a943f656333ec68627dd6ce136af67e2aa5881ad7353c55",
+        "size": 15715,
+        "parts": [
+          {
+            "file": "archives/go/github.com__patrickmn__go-cache@v2.1.0+incompatible.zip",
+            "sha256": "d5d1c13e3c9cfeb04a943f656333ec68627dd6ce136af67e2aa5881ad7353c55",
+            "size": 15715
+          }
+        ]
+      },
+      "info": {
+        "sha256": "ab80b499e059e1c474fb2b68d3043903880eba782d31fb59a77890bd329d7be9",
+        "size": 63,
+        "parts": [
+          {
+            "file": "archives/go/github.com__patrickmn__go-cache@v2.1.0+incompatible.info",
+            "sha256": "ab80b499e059e1c474fb2b68d3043903880eba782d31fb59a77890bd329d7be9",
+            "size": 63
+          }
+        ]
+      },
+      "goMod": {
+        "sha256": "8ac649ac28dccfbf5c5035fbda59e02e85a07aeff71ceda16ff392f914b8bfc7",
+        "size": 37,
+        "parts": [
+          {
+            "file": "archives/go/github.com__patrickmn__go-cache@v2.1.0+incompatible.mod",
+            "sha256": "8ac649ac28dccfbf5c5035fbda59e02e85a07aeff71ceda16ff392f914b8bfc7",
+            "size": 37
+          }
+        ]
+      },
+      "notices": [
+        "github.com/patrickmn/go-cache@v2.1.0+incompatible/LICENSE"
+      ],
+      "noticeVerification": {
+        "url": "https://raw.githubusercontent.com/patrickmn/go-cache/a3647f8e31d79543b2d0f0ae2fe5c379d72cedc0/LICENSE",
+        "sha256": "0070a164e0fc28e82739a764c37b38c56de796f9a8d1862b4413eb6978cd4e04"
+      }
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/sirupsen/logrus",
+      "version": "v1.10.2",
+      "sum": "h1:G2SED73/qrAu6YwbdxOD6peLkCBI3z7L+ykJFTXJBBo=",
+      "goModSum": "h1:SLEg8TqYulVKKfIGHldVp2K2aYz2DKSVBq4g/H5bR7Q=",
+      "origin": {
+        "VCS": "git",
+        "URL": "https://github.com/sirupsen/logrus",
+        "Hash": "6d6a132bc03324d4ceb78e1b927f995d014cda20",
+        "Ref": "refs/tags/v1.10.2"
+      },
+      "url": "https://proxy.golang.org/github.com/sirupsen/logrus/@v/v1.10.2.zip",
+      "license": "MIT",
+      "archive": {
+        "sha256": "73a40737da86682dd536ec2c87dff0f589eeeed81873362b08ed009818747b52",
+        "size": 99228,
+        "parts": [
+          {
+            "file": "archives/go/github.com__sirupsen__logrus@v1.10.2.zip",
+            "sha256": "73a40737da86682dd536ec2c87dff0f589eeeed81873362b08ed009818747b52",
+            "size": 99228
+          }
+        ]
+      },
+      "info": {
+        "sha256": "dd97ba0ef1419706eeb948726b49d3707d909bd8a46081acfeefe48c692beeab",
+        "size": 193,
+        "parts": [
+          {
+            "file": "archives/go/github.com__sirupsen__logrus@v1.10.2.info",
+            "sha256": "dd97ba0ef1419706eeb948726b49d3707d909bd8a46081acfeefe48c692beeab",
+            "size": 193
+          }
+        ]
+      },
+      "goMod": {
+        "sha256": "0ae1e8f2e690807fd54e3c2e3cb8326815baa54dbb2b0bf7798c73f3ec061c48",
+        "size": 166,
+        "parts": [
+          {
+            "file": "archives/go/github.com__sirupsen__logrus@v1.10.2.mod",
+            "sha256": "0ae1e8f2e690807fd54e3c2e3cb8326815baa54dbb2b0bf7798c73f3ec061c48",
+            "size": 166
+          }
+        ]
+      },
+      "notices": [
+        "github.com/sirupsen/logrus@v1.10.2/LICENSE"
+      ],
+      "noticeVerification": {
+        "url": "https://raw.githubusercontent.com/sirupsen/logrus/6d6a132bc03324d4ceb78e1b927f995d014cda20/LICENSE",
+        "sha256": "51a0c9ec7f8b7634181b8d4c03e5b5d204ac21d6e72f46c313973424664b2e6b"
+      }
+    },
+    {
+      "ecosystem": "go",
+      "name": "github.com/gtsteffaniak/go-ffmpeg",
+      "version": "v1.0.0",
+      "sum": "h1:dUWvlZmWnkiujDtIMLGwrpfSAOnM+IOtk93HXF6HR0U=",
+      "goModSum": "h1:FefhoD+KZzHWqBaUpntcKp6lXtUzdFW00F74axnENUQ=",
+      "origin": {
+        "VCS": "git",
+        "URL": "https://github.com/gtsteffaniak/go-ffmpeg",
+        "Hash": "2e61b61d14ec3730547281898e397ca2099dbdf3",
+        "Ref": "refs/tags/v1.0.0"
+      },
+      "url": "https://proxy.golang.org/github.com/gtsteffaniak/go-ffmpeg/@v/v1.0.0.zip",
+      "license": "MIT",
+      "archive": {
+        "sha256": "46d21be857cdc8faca3db974a8332e4132ad10ee3c7a9cd99f703609257432a7",
+        "size": 2292194,
+        "parts": [
+          {
+            "file": "archives/go/github.com__gtsteffaniak__go-ffmpeg@v1.0.0.zip",
+            "sha256": "46d21be857cdc8faca3db974a8332e4132ad10ee3c7a9cd99f703609257432a7",
+            "size": 2292194
+          }
+        ]
+      },
+      "info": {
+        "sha256": "938055253364a3f6f64ee683431793b57d4663ec5cbf96efa57a4a4f7d7c9b87",
+        "size": 198,
+        "parts": [
+          {
+            "file": "archives/go/github.com__gtsteffaniak__go-ffmpeg@v1.0.0.info",
+            "sha256": "938055253364a3f6f64ee683431793b57d4663ec5cbf96efa57a4a4f7d7c9b87",
+            "size": 198
+          }
+        ]
+      },
+      "goMod": {
+        "sha256": "3b382ede6472139780dd8a99bebcf439c09695c01693450f5b30719a40ae7a87",
+        "size": 160,
+        "parts": [
+          {
+            "file": "archives/go/github.com__gtsteffaniak__go-ffmpeg@v1.0.0.mod",
+            "sha256": "3b382ede6472139780dd8a99bebcf439c09695c01693450f5b30719a40ae7a87",
+            "size": 160
+          }
+        ]
+      },
+      "notices": [
+        "github.com/gtsteffaniak/go-ffmpeg@v1.0.0/LICENSE"
+      ],
+      "noticeVerification": {
+        "url": "https://raw.githubusercontent.com/gtsteffaniak/go-ffmpeg/2e61b61d14ec3730547281898e397ca2099dbdf3/LICENSE",
+        "sha256": "4c2fe2f179879399ac01457df445c130d91a7ad0f3b9b9ba5c2640c85362d831"
+      }
+    }
+  ]
+}
