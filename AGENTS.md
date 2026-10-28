@@ -116,6 +116,12 @@ native APIs justifies a narrow extension seam. `RemoteDocumentBroker` remains a
 restricted read-only example and `/co/collab` a separate coordination route;
 neither is the agent editing endpoint. See the plan's section 11.1 acceptance.
 
+Latest editing clarification: native edits must work without requiring an open
+editor web UI, but agents may open the same file in ordinary BashKitten tabs to
+inspect rendering, preview and check native exports. Do not interpret this as a
+ban on browser use. Test standalone modules while the early browser batch is
+being prepared; all plan functions remain mandatory.
+
 Always open Collabora with light UI **and light document canvas**, preserving
 stored cell/font/slide colors. Use native `ui_defaults=UITheme=light;SavedUIState=false`
 and WOPI browser settings for dark-background preferences; verify runtime toggle/

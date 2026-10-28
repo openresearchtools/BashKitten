@@ -63,6 +63,15 @@ exception to the older requirement to finish every feature before any full
 browser build; it is an iteration build, not full feature acceptance or permission
 to remove unfinished requirements. See section 15.3 for its concrete boundary.
 
+### User clarification — 28 October 2026: editing and browser inspection
+
+Agent editing must work without requiring an open editor web UI. This is not a
+restriction on using the browser: agents can open the same document in an
+ordinary BashKitten tab to inspect its rendering, preview results and check
+exports whenever useful. Expose both native editing/export operations and normal
+browser-view URLs. Test the independently runnable modules in parallel with the
+early browser batch; neither sequence reduces the required feature scope.
+
 ### Mandatory implementation rule for all agents and subagents
 
 **If the selected native app can provide the requested function, use that
@@ -524,7 +533,7 @@ native document broker/kit owns the shared document, each participant's view,
 cursors, locks, merging, undo, autosave and reconnect behavior. A common document
 owner/broker does not make both participants the same user or cursor.
 
-Provide a **browserless native WebSocket participant** for Pi: the released
+Provide a **native editing participant that needs no open editor tab** for Pi: the released
 session handshake/load/UNO/script protocol can be driven by a small backend
 adapter. The server renders/edits through its existing kit. This is not ordinary
 REST file rewriting, and an HTTP conversion endpoint is not a live participant.
@@ -537,9 +546,11 @@ view selection, results/errors, disconnect/reconnect and safe disposal on the
 exact build. No permanent hidden browser or new Mozilla Office actor is assumed.
 If a required operation cannot yet run without a browser client, record that
 specific blocker and resolve the missing native API/adapter in the separately
-owned Office module. A browser client can help diagnosis; it is not accepted as
-a substitute for browserless agent operation. Do not replace live editing with
-disk writes or omit native Termux acceptance.
+owned Office module. Agents can also open ordinary BashKitten editor/preview tabs
+to inspect rendering, verify their work and view native exports; this is an
+intended tool capability, not only a diagnostic exception. Editing must still
+work when those tabs are closed. Do not replace live editing with disk writes or
+omit native Termux acceptance.
 
 Pi must open/create/read/inspect/edit/save/export all three document families,
 invoke the same citation operations as the UI and return an ordinary browser

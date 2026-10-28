@@ -69,6 +69,11 @@ allowed for required operations they do not expose. Isolate/test those calls on
 upgrades instead of silently dropping features. Research/import/enrichment/PDFs,
 managed citations/style/bibliography, edits, saves and exports must work end to
 end through native sessions and replaceable adapters.
+Editing must work without requiring an open editor web UI; agents may also open
+ordinary BashKitten tabs to inspect rendering, preview and check native exports.
+This is an explicit agent capability, not a prohibition on browser use. Iterate
+and verify standalone modules in parallel with the early browser batch, retaining
+the complete feature scope.
 References and its shared classic citation web modal must remain nonblocking and
 scrollable with lazy/virtualized lists and indexed backend queries for project
 libraries up to 100,000 records. Preserve classic donor behavior, creator search,
