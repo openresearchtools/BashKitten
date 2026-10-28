@@ -1,0 +1,32 @@
+--- a/frontend/src/views/files/Editor.vue
++++ b/frontend/src/views/files/Editor.vue
+@@ -9,7 +9,8 @@
+ import { resourcesApi } from "@/api";
+ import {pathsMatch, removeLastDir } from "@/utils/url.js";
+ import { notify } from "@/notify";
+-import ace, { version as ace_version } from "ace-builds";
++import ace from "ace-builds";
++import { globalVars } from "@/utils/constants";
+ import modelist from "ace-builds/src-noconflict/ext-modelist";
+ import "ace-builds/src-min-noconflict/theme-github";
+ import "ace-builds/src-min-noconflict/theme-tomorrow_night_bright";
+@@ -344,7 +345,7 @@
+       try {
+         ace.config.set(
+           "basePath",
+-          `https://cdn.jsdelivr.net/npm/ace-builds@${ace_version}/src-min-noconflict/`
++          `${globalVars.baseURL}public/static/ace/`
+         );
+ 
+         this.editor = ace.edit(editorEl, {
+--- a/backend/internal/web/static.go
++++ b/backend/internal/web/static.go
+@@ -61,7 +61,7 @@
+ // this header, blocking inline scripts without limiting frames, images, or API calls.
+ func spaContentSecurityPolicy(nonce string) string {
+ 	policy := fmt.Sprintf(
+-		"script-src 'self' 'nonce-%s' https://cdn.jsdelivr.net https://www.google.com https://www.gstatic.com",
++		"script-src 'self' 'nonce-%s'",
+ 		nonce,
+ 	)
+ 	for _, origin := range onlyOfficeScriptSrcOrigins() {

@@ -23,7 +23,7 @@ export async function prepareFiles({ dataRoot, scope, endpoint, privatePaths = [
   return serial(dataRoot, async () => {
     const directory = path.join(dataRoot, 'services', 'files'); await fs.mkdir(directory, { recursive: true, mode: 0o700 });
     await fs.mkdir(socketRoot, { recursive: true, mode: 0o700 }); const socketPath = path.join(socketRoot, 'quantum.sock');
-    if (Buffer.byteLength(socketPath) > 103) throw failure(503, 'The backend runtime directory is too long for a native Unix socket');
+    if (Buffer.byteLength(socketPath) > 107) throw failure(503, 'The backend runtime directory is too long for a native Unix socket');
     const root = await fs.realpath(scope.root); scope = { ...scope, root };
     const filename = path.join(directory, 'quantum.yaml');
     const previous = await load(filename, null);
@@ -73,13 +73,24 @@ async function reconcileAccount(dataRoot, scope, signal) {
   return { socketPath, username };
 }
 const deniedPaths = /^\/(?:api\/(?:settings|users|auth|tokens|sharing|office|access)|public\/share)(?:\/|$|\?)/;
+function nativeRoute(encoded) {
+  // Go's ServeMux unescapes each path segment before matching. Make the same
+  // decision here, then forward one canonical encoding, so encoded route names
+  // cannot skip host policy checks while reaching a protected native handler.
+  let segments;
+  try { segments = encoded.split('/').map(value => decodeURIComponent(value)); }
+  catch { throw failure(400, 'Invalid Files route encoding'); }
+  if (segments.some(value => /[\\/\x00-\x1f\x7f]/.test(value) || value === '.' || value === '..')) throw failure(400, 'Ambiguous Files route');
+  return { decoded: segments.join('/'), encoded: segments.map(value => encodeURIComponent(value)).join('/') };
+}
 export async function handleFiles(req, res, { dataRoot, scope, basePath, signal, authorizePath, openOffice }) {
   if (!/^\/apps\/files\/[A-Za-z0-9_-]+\/$/.test(basePath)) throw failure(400, 'Invalid scoped Files route');
   scope = { ...scope, root: await fs.realpath(scope.root) };
   const native = await serial('account:' + scope.id, () => reconcileAccount(dataRoot, scope, signal));
   const url = new URL(req.url, 'http://files');
   if (!url.pathname.startsWith(basePath)) throw failure(403, 'Wrong Files launch scope');
-  const relative = '/' + url.pathname.slice(basePath.length);
+  const route = nativeRoute('/' + url.pathname.slice(basePath.length));
+  const relative = route.decoded;
   for (const key of ['auth', 'jwt', 'access_token']) url.searchParams.delete(key);
   if (relative === '/api/document-provider/open') {
     if (req.method !== 'GET' || typeof openOffice !== 'function') throw failure(503, 'Office is unavailable');
@@ -94,7 +105,7 @@ export async function handleFiles(req, res, { dataRoot, scope, basePath, signal,
   // Native scopes remain the actual file authority. The host additionally checks
   // every explicit source path, including private state and symlink targets.
   for (const key of ['source', 'destinationSource', 'destSource', 'fromSource', 'toSource']) if (url.searchParams.has(key) && url.searchParams.get(key) !== sourceName(scope)) throw failure(403, 'Files source is outside the launch grant');
-  const tree = relative === '/api/resources/download' || relative === '/api/resources/archive' || relative === '/api/resources/unarchive' || (relative.startsWith('/api/resources') && ['DELETE', 'PATCH'].includes(req.method));
+  const tree = relative === '/api/raw' || relative === '/api/resources/download' || relative === '/api/resources/archive' || relative === '/api/resources/unarchive' || (relative.startsWith('/api/resources') && ['DELETE', 'PATCH'].includes(req.method));
   const checkPath = async value => { if (typeof value !== 'string') throw failure(400, 'Native file path must be text'); const filename = path.resolve(scope.root, value.replace(/^\//, '')); if (filename !== scope.root && !filename.startsWith(scope.root + path.sep)) throw failure(403, 'File path leaves this source'); if (authorizePath) await authorizePath(filename, { tree }); };
   for (const key of ['path', 'file', 'destination', 'destinationPath', 'destPath', 'fromPath', 'toPath']) for (const value of url.searchParams.getAll(key)) await checkPath(value);
   let forwardedBody = req;
@@ -107,8 +118,17 @@ export async function handleFiles(req, res, { dataRoot, scope, basePath, signal,
   const headers = { ...req.headers, 'X-BashKitten-Quantum-User': native.username, 'X-Forwarded-Prefix': basePath, 'X-BashKitten-Document-Provider': basePath + 'api/document-provider/open' };
   for (const key of Object.keys(headers)) if (key.toLowerCase().startsWith('x-bashkitten-') || ['cookie', 'authorization', 'x-bashkitten-quantum-user', 'x-forwarded-prefix', 'x-bashkitten-document-provider', 'forwarded', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip'].includes(key.toLowerCase())) delete headers[key];
   headers['X-BashKitten-Quantum-User'] = native.username; headers['X-Forwarded-Prefix'] = basePath; headers['X-BashKitten-Document-Provider'] = basePath + 'api/document-provider/open'; headers.host = 'files';
-  const upstream = await request(native.socketPath, req.method, relative + url.search, { headers, body: forwardedBody, signal });
+  const upstream = await request(native.socketPath, req.method, route.encoded + url.search, { headers, body: forwardedBody, signal });
   const responseHeaders = { ...upstream.headers }; delete responseHeaders['set-cookie'];
+  // Native inline content disables scripts, but a same-origin HTML form can
+  // still mutate Files. Isolate active file documents; PDF/media retain their
+  // normal browser path and the native sanitized HTML preview is unchanged.
+  const type = String(responseHeaders['content-type'] || '').split(';')[0].trim().toLowerCase();
+  if ((responseHeaders['content-disposition'] || relative.startsWith('/api/')) &&
+      (['text/html', 'application/xhtml+xml', 'image/svg+xml', 'application/xml', 'text/xml'].includes(type) || type.endsWith('+xml'))) {
+    responseHeaders['content-security-policy'] = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; form-action 'none'; base-uri 'none'";
+  }
+  responseHeaders['x-content-type-options'] = 'nosniff';
   if (responseHeaders.location?.startsWith('/') && !responseHeaders.location.startsWith(basePath)) responseHeaders.location = basePath + responseHeaders.location.replace(/^\//, '');
   res.writeHead(upstream.statusCode, responseHeaders); await pipeline(upstream, res, { signal });
 }

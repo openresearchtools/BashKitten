@@ -1,0 +1,19 @@
+BashKitten Files/Office add-on
+
+Protocol discovery, JWT signing, WOPI request dispatch and lock-table source are
+adapted from File Browser Quantum, copyright its contributors, Apache-2.0.
+Original source at commit fd64a470d3a521b0ad026f0f5307c20dd04b472f is retained
+verbatim in ../vendor/quantum-wopi/source, including its complete LICENSE.
+
+Modified by the BashKitten contributors, 28 October 2026: extracted package main;
+private file-owner callbacks instead of Quantum global users/files; authenticated
+participant/environment/generation claims; mandatory native RSA proof checks;
+real-lock requirement on saves; native browser settings and extension manifests.
+The upstream OnlyOffice implementation is not modified or embedded here.
+
+JWT dependency: github.com/golang-jwt/jwt/v4 v4.5.2, copyright its contributors,
+MIT license, retained in vendor/github.com/golang-jwt/jwt/v4/LICENSE.
+
+BashKitten additions are under the repository's GNU Affero General Public License
+version 3 (COPYING). Original Apache-2.0 and MIT source retains its original
+notices and permissions; LICENSE preserves the upstream Apache-2.0 text.

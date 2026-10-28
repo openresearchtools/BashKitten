@@ -155,10 +155,13 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
       const base = validName(wopiName(request.headers['x-wopi-requestedname'])); const name = base + path.extname(m.path);
       const target = await permitted(scope, path.join(path.dirname(m.path), name), { create: true });
       if (target === m.path) return { Name: base };
+      await fs.mkdir(path.join(root, 'recovery'), { recursive: true, mode: 0o700 });
+      const receipt = path.join(root, 'recovery', 'rename-' + randomUUID() + '.json');
+      await writeJSON(receipt, { operation: 'rename', documentId: m.id, generation: m.generation, original: m.path, target, phase: 'prepared' });
       signal?.throwIfAborted(); await fs.link(m.path, target); // atomic no-replace, same directory/filesystem
       try { signal?.throwIfAborted(); await fs.unlink(m.path); } catch (error) { await fs.unlink(target).catch(() => {}); throw error; }
       const old = m.path; m.path = target; await saveManifest(m);
-      const registryFile = path.join(root, 'documents.json'); const registry = await json(registryFile, { environmentId, paths: {} }); delete registry.paths[old]; registry.paths[target] = m.id; await writeJSON(registryFile, registry); await syncDir(path.dirname(target)); return { Name: base };
+      const registryFile = path.join(root, 'documents.json'); const registry = await json(registryFile, { environmentId, paths: {} }); delete registry.paths[old]; registry.paths[target] = m.id; await writeJSON(registryFile, registry); await syncDir(path.dirname(target)); await fs.unlink(receipt); return { Name: base };
     })));
   }
   async function relative(claims, request) {
@@ -174,23 +177,27 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
       const incoming = await fs.open(recovery, 'r'); try { await incoming.sync(); } finally { await incoming.close(); }
       const received = await fs.stat(recovery);
       if (request.headers['content-length'] !== undefined && BigInt(request.headers['content-length']) !== BigInt(received.size)) throw failure(400, 'Incomplete native Save As retained for recovery');
+      const id = randomUUID(); const receipt = recovery + '.json';
+      const record = { operation: 'save-as', documentId: id, sourceDocumentId: m.id, generation: m.generation, bytes: received.size, sha256: await digestFile(recovery), phase: 'received' };
+      await writeJSON(receipt, { ...record, target });
       const staging = path.join(path.dirname(m.path), `.bashkitten-save-${randomUUID()}`);
       let published = false;
       try {
         await fs.copyFile(recovery, staging, constants.COPYFILE_EXCL); const file = await fs.open(staging, 'r'); try { await file.sync(); } finally { await file.close(); }
         for (let index = 0; index < 1000; index++) {
           await permitted(scope, target, { create: true }); signal?.throwIfAborted();
+          await writeJSON(receipt, { ...record, target });
           try { await fs.link(staging, target); published = true; break; }
           catch (error) { if (error.code !== 'EEXIST' || !suggested) throw failure(error.code === 'EEXIST' ? 409 : 500, 'Save As target is unavailable'); name = path.basename(name, extension).replace(/ \(\d+\)$/, '') + ` (${index + 1})` + extension; target = path.join(path.dirname(m.path), name); }
         }
         if (!published) throw failure(409, 'No unused Save As name is available');
       } finally { await fs.unlink(staging).catch(() => {}); }
       await permitted(scope, target); signal?.throwIfAborted();
-      const id = randomUUID(); const stat = await fs.stat(target, { bigint: true });
+      const stat = await fs.stat(target, { bigint: true });
       const created = { id, environmentId, path: target, generation: 1, version: '1', fingerprint: fingerprint(stat), lastWrite: new Date().toISOString(), versions: [], grants: { [claims.grant]: { projectId: scope.id, participants: { [claims.participant]: participantName } } } };
       await fs.mkdir(path.join(directory(id), 'versions'), { recursive: true, mode: 0o700 }); await saveManifest(created); await retain(created, target, 'initial', { force: true });
       const registryFile = path.join(root, 'documents.json'); const registry = await json(registryFile, { environmentId, paths: {} }); registry.paths[target] = id; await writeJSON(registryFile, registry); await syncDir(path.dirname(target));
-      await fs.unlink(recovery); return { Name: name, documentId: id, generation: 1 };
+      await fs.unlink(recovery); await fs.unlink(receipt); return { Name: name, documentId: id, generation: 1 };
     }));
   }
   async function finalize(claims) { return serialized(claims.fid, () => authorize(claims, 'view', async m => { if (!claims.snapshot) await retain(m, m.path, 'final', { force: true }); return { finalized: true }; })); }
