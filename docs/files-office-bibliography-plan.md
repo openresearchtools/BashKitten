@@ -1984,3 +1984,51 @@ Required acceptance groups:
 None of these gates is a request to move library/editor logic into Mozilla or
 to reduce the requested feature scope. The architecture keeps the browser hooks
 small while making the substantial reusable module work explicit.
+
+## 18. Citation chooser and document library amendment — 28 October 2026
+
+The user's later citation-dialog screenshot and accompanying clarification
+supersede the collection-sidebar/three-pane classic chooser layout above.
+They do not remove the sidebar from the standalone References library manager
+or remove citation functions. The screenshot supplies layout and interaction;
+retain BashKitten colors, styling, names and icons.
+
+Use a vertically compact citation dialog with search at the top, selected
+citations, one results table and the rendered citation preview below. Default
+table columns are Title, Creator and Date. Let users choose additional metadata
+columns. The table scrolls vertically and horizontally; its rightmost add (+)
+column stays visible while scrolling horizontally. Keep headers, preview and
+confirmation controls usable without scrolling through the whole library.
+Search filters only the document's selected project database. Reuse the existing
+bounded lazy list, indexed search, stale-request cancellation and CSL renderer;
+do not load all citations to open, filter or sort the dialog. Retain multi-source
+citations, per-source locators/affixes/suppress-author, source ordering and custom
+preview through compact controls rather than permanent side panels. Phone
+layouts must remain usable with the keyboard open.
+
+On first citation use, show document settings for the project library and
+citation style. Populate the project dropdown from the owning backend's existing
+authorized project/library storage records. Bind exactly one library to the
+document; never aggregate project databases or resolve an old item key against a
+different database. Pi may establish the same document settings through the
+existing References Office plugin/API. Keep the binding durable through the
+existing native document metadata and expose later changes through settings.
+
+Changing the bound project with no managed citations or bibliography is a normal
+settings operation. When managed citations or a bibliography already exist,
+require an explicit confirmation before changing the library. Cancellation must
+leave the document and binding untouched. On confirmation, unlink the existing
+citations and bibliography, then bind the new library. The user's phrase
+"plain text" means ordinary **formatted document content**: retain the rendered
+text, rich text runs, italics, superscripts, numbering, spacing, hanging indents
+and applicable cell/shape formatting. Remove live reference fields/bookmarks and
+management metadata without flattening or reformatting the visible content.
+Existing unlinked citations must not start updating from the new database.
+Use native field/anchor operations and existing undo facilities in the replaceable
+plugin; do not add a new document engine or a Mozilla integration. The same
+behavior applies to Writer, Calc and Impress and their supported save formats.
+
+Verify this amendment with focused actual dialog and native document checks,
+including formatted unlink/cancel, project isolation, save/reopen, sticky add
+controls and phone keyboard/scroll behavior. This is a requirement amendment,
+not a claim that these flows have passed acceptance.
