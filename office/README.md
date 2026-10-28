@@ -122,8 +122,8 @@ fields/notes, cells/formulas/styles/merges/names, slides/shapes/themes and
 relationships. Uninterpreted/binary parts retain checksums and size differences;
 normalized-equal XML still reports raw changed parts. Office text containers and
 inherited `xml:space` preserve significant whitespace; adjacent SAX text chunks
-are coalesced so parser input boundaries do not create differences. It never extracts files,
-executes macros or resolves external XML/relationships. Worker time, memory,
+are coalesced so parser input boundaries do not create differences. It never
+extracts files, executes macros or resolves external XML/relationships. Worker time, memory,
 expanded sizes and output are bounded, and cancellation terminates the worker.
 It does not claim visual or full semantic equivalence, and has no UI/Git hook.
 

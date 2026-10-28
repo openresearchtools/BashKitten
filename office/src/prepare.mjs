@@ -77,7 +77,14 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
   // Drop the parent's unrelated Linux capability inheritance before native
   // startup; preserve ForKit's checks, namespace selection and seccomp policy.
   if (!termux) { try { await fs.access('/usr/bin/setpriv', fs.constants.X_OK); } catch { throw unavailable('the packaged Linux util-linux dependency is missing'); } }
-  const nativeEnvironment = termux ? { COOL_FORCE_LANDLOCK: '1', PREFIX: '/data/data/com.termux/files/usr', LD_LIBRARY_PATH: path.join(paths.engine, 'program'), SSL_CERT_FILE: process.env.SSL_CERT_FILE || '/data/data/com.termux/files/usr/etc/tls/cert.pem', OPENSSL_CONF: '/data/data/com.termux/files/usr/etc/tls/openssl.cnf' } : {};
+  const nativeEnvironment = termux ? {
+    COOL_FORCE_LANDLOCK: '1', PREFIX: '/data/data/com.termux/files/usr',
+    LD_LIBRARY_PATH: path.join(paths.engine, 'program'),
+    SSL_CERT_FILE: process.env.SSL_CERT_FILE || '/data/data/com.termux/files/usr/etc/tls/cert.pem',
+    OPENSSL_CONF: '/data/data/com.termux/files/usr/etc/tls/openssl.cnf',
+    FONTCONFIG_FILE: process.env.FONTCONFIG_FILE || '/data/data/com.termux/files/usr/etc/fonts/fonts.conf',
+    FONTCONFIG_PATH: process.env.FONTCONFIG_PATH || '/data/data/com.termux/files/usr/etc/fonts',
+  } : {};
   const argv = termux ? nativeArgv : ['/usr/bin/setpriv', '--inh-caps=-all', '--ambient-caps=-all', '--', ...nativeArgv];
   const launch = path.join(directory, 'launch.json');
   const artifactRevision = createHash('sha256').update(JSON.stringify(manifest)).digest('hex');

@@ -20,24 +20,49 @@ const namespaces = {
   'urn:oasis:names:tc:opendocument:xmlns:office:1.0': new Set(['annotation']),
   'urn:oasis:names:tc:opendocument:xmlns:presentation:1.0': new Set(['notes']),
 };
+// Whitespace inside Office text/value containers is data, even when it is the
+// entire text node. ODF paragraphs are mixed content, so their descendants inherit it.
+const significantText = {
+  'http://schemas.openxmlformats.org/wordprocessingml/2006/main': new Set(['t', 'delText', 'instrText', 'delInstrText']),
+  'http://schemas.openxmlformats.org/spreadsheetml/2006/main': new Set(['t', 'v', 'f', 'definedName']),
+  'http://schemas.openxmlformats.org/drawingml/2006/main': new Set(['t']),
+  'urn:oasis:names:tc:opendocument:xmlns:text:1.0': new Set(['p', 'h', 'span', 'a', 'ruby-base', 'ruby-text']),
+};
 function xml(bytes) {
   const source = bytes[0] === 255 && bytes[1] === 254 ? new TextDecoder('utf-16le').decode(bytes) : bytes[0] === 254 && bytes[1] === 255 ? new TextDecoder('utf-16be').decode(bytes) : new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  const tokens = [], records = [], active = []; let depth = 0, count = 0;
+  const tokens = [], records = [], active = [], contexts = []; let depth = 0, count = 0;
+  let pendingText = [], pendingCDATA = false;
   const parser = new SaxesParser({ xmlns: true });
   const push = value => { tokens.push(value); for (const record of active) { if (record.bytes + value.length > 262144) record.truncated = true; else { record.values.push(value); record.bytes += value.length; } } };
+  const flushText = () => {
+    if (!pendingText.length) return;
+    const value = pendingText.join(''), context = contexts.at(-1);
+    // Only XML's four whitespace characters can be indentation. NBSP and other
+    // Unicode spacing remain text. CDATA is explicit character data as before.
+    if (value && (pendingCDATA || context?.preserve || context?.significant || /[^\t\n\r ]/.test(value)))
+      push(JSON.stringify(['text', value]));
+    pendingText = []; pendingCDATA = false;
+  };
   parser.on('doctype', () => { throw Error('DTD-bearing XML is reported as an uninterpreted part'); });
   parser.on('opentag', node => {
+    flushText();
+    const parent = contexts.at(-1);
+    const space = Object.values(node.attributes).find(a => a.uri === 'http://www.w3.org/XML/1998/namespace' && a.local === 'space')?.value;
+    contexts.push({ preserve: space === 'preserve' || (space !== 'default' && !!parent?.preserve),
+      significant: !!parent?.significant || !!significantText[node.uri]?.has(node.local) });
     if (++depth > 128 || ++count > 250000) throw Error('XML structure exceeds the work bound');
     const attrs = Object.values(node.attributes).filter(a => a.uri !== 'http://www.w3.org/2000/xmlns/' && !(a.uri === 'http://schemas.openxmlformats.org/wordprocessingml/2006/main' && /^rsid/.test(a.local))).map(a => ['{' + a.uri + '}' + a.local, a.value]).sort((a, b) => a[0].localeCompare(b[0]));
     const kind = '{' + node.uri + '}' + node.local;
     if (namespaces[node.uri]?.has(node.local) && records.length + active.length < 20000) active.push({ depth, kind, index: count, values: [], bytes: 0 });
     push(JSON.stringify(['open', kind, attrs]));
   });
-  parser.on('closetag', node => { push(JSON.stringify(['close', '{' + node.uri + '}' + node.local])); if (active.at(-1)?.depth === depth) { const record = active.pop(); records.push({ kind: record.kind, index: record.index, value: record.values.join('\n'), truncated: !!record.truncated }); } depth--; });
-  parser.on('text', value => { if (value.trim()) push(JSON.stringify(['text', value])); });
-  parser.on('cdata', value => push(JSON.stringify(['text', value])));
+  parser.on('closetag', node => { flushText(); push(JSON.stringify(['close', '{' + node.uri + '}' + node.local])); if (active.at(-1)?.depth === depth) { const record = active.pop(); records.push({ kind: record.kind, index: record.index, value: record.values.join('\n'), truncated: !!record.truncated }); } depth--; contexts.pop(); });
+  // SAX may split one logical text run across input writes, entities or CDATA.
+  // Flush only at element boundaries, while its namespace/space context is active.
+  parser.on('text', value => pendingText.push(value));
+  parser.on('cdata', value => { pendingText.push(value); pendingCDATA = true; });
   // Feed bounded chunks; SAX preserves namespace identities and text, never resolves URLs.
-  for (let offset = 0; offset < source.length; offset += 65536) parser.write(source.slice(offset, offset + 65536)); parser.close();
+  for (let offset = 0; offset < source.length; offset += 65536) parser.write(source.slice(offset, offset + 65536)); parser.close(); flushText();
   return { tokens, records };
 }
 async function archive(snapshot) {
