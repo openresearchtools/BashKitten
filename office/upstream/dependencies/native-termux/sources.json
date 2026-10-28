@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "frameworkCommit": "f3b242999b604dab33639c8211c3b461aad79dc9",
+  "components": [
+    {
+      "name": "libcap",
+      "version": "2.78",
+      "url": "https://kernel.org/pub/linux/libs/security/linux-privs/libcap2/libcap-2.78.tar.xz",
+      "sha256": "0d621e562fd932ccf67b9660fb018e468a683d7b827541df27813228c996bb11",
+      "file": "libcap-2.78.tar.xz",
+      "size": 201040,
+      "licenseFile": "libcap-License",
+      "licenseSha256": "68467e731f4744bd6e0bb69e8df9c3a994e09cd6b203d0c41327ac6d079c581d",
+      "frameworkRecipe": "packages/libcap/build.sh"
+    }
+  ]
+}
