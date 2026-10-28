@@ -161,7 +161,7 @@ export async function chooseCitation({
         editor.focus();
         document.execCommand(command);
       },
-      { "aria-label": label,disabled:!customEnabled.checked },
+      { "aria-label": label, disabled: !customEnabled.checked },
     );
     control.addEventListener("mousedown", (event) => event.preventDefault());
     customControls.append(control);
@@ -169,7 +169,8 @@ export async function chooseCitation({
   d.body.append(customControls, editor);
   customEnabled.addEventListener("change", () => {
     editor.hidden = !customEnabled.checked;
-    for(const control of customControls.querySelectorAll('button'))control.disabled=!customEnabled.checked;
+    for (const control of customControls.querySelectorAll("button"))
+      control.disabled = !customEnabled.checked;
     if (customEnabled.checked) {
       renderedHTML(editor, previewResult?.html || "");
       if (!previewResult?.html) editor.textContent = previewResult?.text || "";
@@ -200,9 +201,11 @@ export async function chooseCitation({
     label: "Selected citation sources",
     rowHeight: 48,
     pageSize: 80,
+    total: sources.length,
     key: (entry) => entry.uid,
     load: async ({ start, limit }) => ({
       items: sources.slice(start, start + limit),
+      total: sources.length,
       hasMore: start + limit < sources.length,
     }),
     render: (entry) =>
@@ -335,7 +338,7 @@ export async function chooseCitation({
       if (input.type === "checkbox") input.checked = !!value;
       else input.value = value;
     }
-    if(active>=0)selectedList.focusIndex=active;
+    if (active >= 0) selectedList.focusIndex = active;
     selectedList.setSelection(source ? [source.uid] : []);
     confirm.disabled =
       loadingInitial ||
@@ -345,9 +348,18 @@ export async function chooseCitation({
   }
   function redrawSources() {
     const scroll = selectedList.root.scrollTop;
-    selectedList.reset({ preserveSelection: false });
+    selectedList.reset({ preserveSelection: false, total: sources.length });
     selectedList.root.scrollTop = scroll;
-    if(active>=0){const top=active*selectedList.rowHeight;if(top<selectedList.root.scrollTop)selectedList.root.scrollTop=top;else if(top+selectedList.rowHeight>selectedList.root.scrollTop+selectedList.root.clientHeight)selectedList.root.scrollTop=top+selectedList.rowHeight-selectedList.root.clientHeight;}
+    if (active >= 0) {
+      const top = active * selectedList.rowHeight;
+      if (top < selectedList.root.scrollTop) selectedList.root.scrollTop = top;
+      else if (
+        top + selectedList.rowHeight >
+        selectedList.root.scrollTop + selectedList.root.clientHeight
+      )
+        selectedList.root.scrollTop =
+          top + selectedList.rowHeight - selectedList.root.clientHeight;
+    }
     updateControls();
   }
   function invalidatePreview() {
@@ -367,7 +379,8 @@ export async function chooseCitation({
       delete cluster.customHTML;
       delete cluster.customText;
       customEnabled.checked = false;
-      for(const control of customControls.querySelectorAll('button'))control.disabled=true;
+      for (const control of customControls.querySelectorAll("button"))
+        control.disabled = true;
       editor.hidden = true;
     }
   }

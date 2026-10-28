@@ -191,6 +191,7 @@ h3 {
 .app {
   height: 100dvh;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
 }
@@ -236,8 +237,36 @@ h3 {
   overflow: auto;
   gap: 12px;
 }
-.projects-select {
+.project-list {
+  height: 160px;
+  min-height: 52px;
+  flex: 0 0 160px;
+  display: flex;
+  flex-direction: column;
+}
+.project-list .virtual-list {
+  min-height: 0;
+}
+.libraries > .toolbar button {
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.collection-tree-row {
+  display: flex;
+  align-items: center;
   width: 100%;
+  min-width: 0;
+}
+.collection-tree-row .collection-label {
+  padding: 8px 3px;
+}
+.tree-toggle {
+  flex: 0 0 28px;
+  border: 0;
+  background: transparent;
+  padding: 5px;
+  border-radius: 5px;
+  font-size: 16px;
 }
 .collection-list,
 .item-list,
@@ -615,12 +644,15 @@ h3 {
   }
   .app-header {
     padding: 8px;
+    flex-wrap: wrap;
   }
   .app-header h1 {
     font-size: 16px;
   }
   .mobile-tabs {
     display: flex;
+    flex-basis: 100%;
+    order: 1;
     gap: 4px;
   }
   .mobile-tabs button {

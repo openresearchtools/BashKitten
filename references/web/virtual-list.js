@@ -14,6 +14,10 @@ export class VirtualList {
     pageSize = 80,
     label = "Items",
     onStatus = () => {},
+    role = "listbox",
+    rowRole = "option",
+    rowAttributes = () => ({}),
+    total = null,
   }) {
     Object.assign(this, {
       element,
@@ -25,6 +29,8 @@ export class VirtualList {
       rowHeight,
       pageSize,
       onStatus,
+      rowRole,
+      rowAttributes,
     });
     this.pages = new Map();
     this.pending = new Map();
@@ -37,7 +43,7 @@ export class VirtualList {
     this.failures = new Set();
     this.root = node("div", {
       class: "virtual-list",
-      role: "listbox",
+      role,
       tabindex: "0",
       "aria-label": label,
       "aria-multiselectable": "true",
@@ -50,9 +56,13 @@ export class VirtualList {
     this.root.addEventListener("keydown", (event) => this.keydown(event));
     this.observer = new ResizeObserver(() => this.draw());
     this.observer.observe(this.root);
-    this.reset();
+    this.reset({ total });
   }
-  reset({ preserveSelection = true, preservePosition = false } = {}) {
+  reset({
+    preserveSelection = true,
+    preservePosition = false,
+    total = null,
+  } = {}) {
     const scroll = preservePosition ? this.root.scrollTop : 0;
     const length = preservePosition ? this.length : 0;
     const focus = preservePosition ? this.focusIndex : 0;
@@ -66,6 +76,7 @@ export class VirtualList {
     this.length = length;
     this.more = true;
     this.version = null;
+    this.total = total;
     this.focusIndex = focus;
     this.pendingSelection = null;
     this.root.scrollTop = scroll;
@@ -119,6 +130,8 @@ export class VirtualList {
           { status: 409 },
         );
       this.version = result.version ?? this.version;
+      if (Number.isSafeInteger(result.total) && result.total >= 0)
+        this.total = result.total;
       this.pages.set(page, result);
       if (result.next) this.cursors.set(page + 1, result.next);
       const end = page * this.pageSize + result.items.length;
@@ -154,7 +167,7 @@ export class VirtualList {
   }
   draw() {
     if (this.destroyed || !this.spacer) return;
-    const rows = this.length + (this.more ? this.pageSize : 0);
+    const rows = this.total ?? this.length + (this.more ? this.pageSize : 0);
     this.spacer.style.height =
       Math.max(rows * this.rowHeight, this.root.clientHeight) + "px";
     const start = Math.max(
@@ -175,13 +188,15 @@ export class VirtualList {
       pages.add(Math.floor(i / this.pageSize));
       const row = node("div", {
         class: "virtual-row",
-        role: "option",
+        role: this.rowRole,
         "aria-posinset": i + 1,
         id: "row-" + this.id + "-" + i,
       });
       row.style.top = i * this.rowHeight + "px";
       row.style.height = this.rowHeight + "px";
       if (item) {
+        for (const [name, value] of Object.entries(this.rowAttributes(item)))
+          row.setAttribute(name, String(value));
         row.setAttribute(
           "aria-selected",
           String(this.selected.has(this.key(item))),
@@ -240,7 +255,7 @@ export class VirtualList {
     else if (event.key === "PageDown") index += page;
     else if (event.key === "PageUp") index -= page;
     else if (event.key === "Home") index = 0;
-    else if (event.key === "End") index = this.length - 1;
+    else if (event.key === "End") index = (this.total ?? this.length) - 1;
     else if (event.key === "Enter") {
       const item = this.item(index);
       if (item) {
@@ -254,7 +269,10 @@ export class VirtualList {
       return;
     } else return;
     event.preventDefault();
-    index = Math.min(Math.max(0, index), Math.max(0, this.length - 1));
+    index = Math.min(
+      Math.max(0, index),
+      Math.max(0, (this.total ?? this.length) - 1),
+    );
     this.focusIndex = index;
     if (index * this.rowHeight < this.root.scrollTop)
       this.root.scrollTop = index * this.rowHeight;

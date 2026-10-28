@@ -19,16 +19,17 @@
           ><button type="button" data-pane="items">Items</button
           ><button type="button" data-pane="details">Details</button>
         </nav>
+        <button id="jobHistory" type="button">Jobs</button>
         <button id="settings" type="button">Settings</button>
       </header>
       <div class="library-layout">
         <aside class="libraries" aria-label="Project libraries">
           <h2>Project library</h2>
-          <select
+          <div
             id="projects"
-            class="projects-select"
-            aria-label="Project library"
-          ></select>
+            class="project-list"
+            aria-label="Project libraries"
+          ></div>
           <div class="toolbar">
             <button id="newCollection" type="button">New collection</button
             ><button id="collectionMenu" type="button">Collection…</button>

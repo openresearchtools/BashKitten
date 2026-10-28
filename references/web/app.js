@@ -25,6 +25,7 @@ let projectId,
   scope,
   schema,
   context,
+  projectList,
   items,
   collections,
   collection = null,
@@ -35,6 +36,7 @@ let projectId,
   view = 0,
   detailController,
   rangeController,
+  jobListController,
   anchor = 0,
   jobTimer,
   jobsPolling = false,
@@ -80,37 +82,56 @@ async function boot() {
   const list = Array.isArray(context.projects)
     ? context.projects
     : context.projects?.projects || [];
-  $("#projects").replaceChildren(
-    ...list.map(
-      (p) =>
-        new Option(
-          p.name +
-            (p.backendName
-              ? " · " + p.backendName
-              : list.filter((item) => item.name === p.name).length > 1
-                ? " · " +
-                  (context.backendName || context.backendId) +
-                  (p.cwd ? " · " + p.cwd : "")
-                : ""),
-          p.id,
+  const nameCounts = new Map();
+  $("#projects").style.flexBasis =
+    Math.max(52, Math.min(156, list.length * 52)) + "px";
+  for (const project of list)
+    nameCounts.set(project.name, (nameCounts.get(project.name) || 0) + 1);
+  projectList = new VirtualList({
+    element: $("#projects"),
+    label: "Project libraries",
+    rowHeight: 52,
+    total: list.length,
+    key: (project) => project.id,
+    load: async ({ start, limit }) => ({
+      items: list.slice(start, start + limit),
+      total: list.length,
+    }),
+    render: (project) =>
+      node(
+        "span",
+        { class: "source-label" },
+        node("strong", {}, project.name),
+        node(
+          "small",
+          {},
+          project.backendName || context.backendName || context.backendId,
+          nameCounts.get(project.name) > 1 && project.cwd
+            ? " · " + project.cwd
+            : "",
         ),
-    ),
-  );
+      ),
+    onSelect: (project) => selectProject(project.id),
+  });
   if (!list.length) {
     notify("Create a project in BashKitten to start its library.");
     return;
   }
-  $("#projects").value = context.projectId || list[0].id;
-  await selectProject($("#projects").value);
+  await selectProject(
+    list.some((project) => project.id === context.projectId)
+      ? context.projectId
+      : list[0].id,
+  );
 }
 async function selectProject(id) {
   if (detailDirty && !confirm("Discard unsaved item changes?")) {
-    $("#projects").value = projectId;
+    projectList.setSelection([projectId]);
     return;
   }
   const generation = ++view;
   detailController?.abort();
   rangeController?.abort();
+  jobListController?.abort();
   items?.destroy();
   collections?.destroy();
   $("#items").replaceChildren();
@@ -121,6 +142,7 @@ async function selectProject(id) {
   detail = null;
   detailDirty = false;
   projectId = id;
+  projectList.setSelection([id]);
   scope = api.project(id);
   notify("Loading library…");
   $("#details").replaceChildren(
@@ -168,6 +190,7 @@ async function selectProject(id) {
       },
     });
     notify("Library ready.");
+    void restoreJobs(id, generation);
     pollJobs();
   } catch (error) {
     if (generation === view) notify(error);
@@ -245,9 +268,6 @@ $("#search").addEventListener("input", () => {
   rangeController?.abort();
   searchChanged();
 });
-$("#projects").addEventListener("change", () =>
-  selectProject($("#projects").value),
-);
 $("#refresh").onclick = () => {
   rangeController?.abort();
   items?.reset({ preservePosition: true });
@@ -666,11 +686,25 @@ async function loadChildren(item, targetScope, target, cursor, history = []) {
     }
     if (!rows.length)
       target.append(node("p", { class: "notice" }, "No attachments or notes."));
-    if(history.length)target.append(button('Previous page',()=>loadChildren(item,targetScope,target,history.at(-1),history.slice(0,-1))));
+    if (history.length)
+      target.append(
+        button("Previous page", () =>
+          loadChildren(
+            item,
+            targetScope,
+            target,
+            history.at(-1),
+            history.slice(0, -1),
+          ),
+        ),
+      );
     if (result.next)
       target.append(
         button("Next page", () =>
-          loadChildren(item, targetScope, target, result.next, [...history,cursor]),
+          loadChildren(item, targetScope, target, result.next, [
+            ...history,
+            cursor,
+          ]),
         ),
       );
   } catch (error) {
@@ -953,6 +987,70 @@ function trackJob(id, job) {
   jobs.set(id + ":" + job.id, { projectId: id, ...job });
   pollJobs();
 }
+async function restoreJobs(id, generation) {
+  const controller = (jobListController = new AbortController());
+  try {
+    const result = await api
+      .project(id)
+      .request("jobs?limit=8", { signal: controller.signal });
+    if (generation !== view || controller.signal.aborted) return;
+    for (const job of result.items) {
+      const key = id + ":" + job.id;
+      if (!jobs.has(key)) jobs.set(key, { ...job, projectId: id });
+    }
+    pollJobs();
+  } catch (error) {
+    if (!controller.signal.aborted && generation === view) notify(error);
+  }
+}
+$("#jobHistory").onclick = () => {
+  if (!scope) return;
+  const id = projectId,
+    target = scope,
+    d = dialog("Library jobs"),
+    rows = node("div", { class: "search-results" });
+  d.body.append(rows);
+  const list = new VirtualList({
+    element: rows,
+    label: "Library jobs",
+    key: (job) => job.id,
+    rowHeight: 60,
+    load: async ({ start, limit, signal }) => {
+      const result = await target.request("jobs?" + query({ start, limit }), {
+        signal,
+      });
+      return {
+        items: result.items,
+        hasMore: result.nextStart !== null && result.nextStart !== undefined,
+      };
+    },
+    render: (job) =>
+      node(
+        "span",
+        { class: "source-label" },
+        node("strong", {}, human(job.kind) + " · " + human(job.status)),
+        node(
+          "small",
+          {},
+          job.completed +
+            "/" +
+            job.total +
+            " · " +
+            new Date(job.createdAt).toLocaleString(),
+        ),
+      ),
+    onSelect: (job) => showJob({ ...job, projectId: id }),
+    onStatus: (text, error) => {
+      d.notice.textContent = error?.message || text;
+    },
+  });
+  d.actions.append(
+    button("Close", () => d.el.close()),
+    button("Refresh", () => list.reset({ preservePosition: true })),
+  );
+  d.el.addEventListener("close", () => list.destroy(), { once: true });
+  d.open();
+};
 async function pollJobs() {
   clearTimeout(jobTimer);
   if (document.hidden || jobsPolling) return;
@@ -975,8 +1073,9 @@ async function pollJobs() {
     }
   }
   $("#jobs").replaceChildren();
-  for (const job of jobs.values()) {
-    if (job.projectId !== projectId) continue;
+  for (const job of [...jobs.values()]
+    .filter((job) => job.projectId === projectId)
+    .slice(-8)) {
     const label =
       human(job.kind) +
       " · " +
@@ -991,8 +1090,27 @@ async function pollJobs() {
     jobTimer = setTimeout(pollJobs, 1500);
   jobsPolling = false;
 }
-function showJob(job) {
-  const d = dialog(human(job.kind));
+async function showJob(job) {
+  const d = dialog(human(job.kind)),
+    controller = new AbortController();
+  d.actions.append(button("Close", () => d.el.close()));
+  d.el.addEventListener("close", () => controller.abort(), { once: true });
+  d.notice.textContent = "Loading operation…";
+  d.open();
+  try {
+    job = {
+      ...(await api
+        .project(job.projectId)
+        .request("jobs/" + job.id, { signal: controller.signal })),
+      projectId: job.projectId,
+    };
+    if (controller.signal.aborted) return;
+    jobs.set(job.projectId + ":" + job.id, job);
+    d.notice.textContent = "";
+  } catch (error) {
+    if (!controller.signal.aborted) d.notice.textContent = error.message;
+    return;
+  }
   d.body.append(
     node("p", {}, job.status + " · " + job.completed + "/" + job.total),
   );
@@ -1021,7 +1139,22 @@ function showJob(job) {
     onSelect: (result) => showJobResult(job, result),
   });
   d.el.addEventListener("close", () => list.destroy(), { once: true });
-  d.actions.append(button("Close", () => d.el.close()));
+  if (["interrupted", "failed", "partial"].includes(job.status))
+    d.actions.append(
+      button("Resume", async () => {
+        try {
+          trackJob(
+            job.projectId,
+            await api
+              .project(job.projectId)
+              .request("jobs/" + job.id + "/resume", { method: "POST" }),
+          );
+          d.el.close();
+        } catch (error) {
+          d.notice.textContent = error.message;
+        }
+      }),
+    );
   if (["queued", "running", "waiting-for-browser"].includes(job.status))
     d.actions.append(
       button("Cancel work", async () => {
@@ -1029,6 +1162,13 @@ function showJob(job) {
           await api
             .project(job.projectId)
             .request("jobs/" + job.id, { method: "DELETE" });
+          const latest = await api
+            .project(job.projectId)
+            .request("jobs/" + job.id);
+          jobs.set(job.projectId + ":" + job.id, {
+            ...latest,
+            projectId: job.projectId,
+          });
           d.el.close();
           pollJobs();
         } catch (e) {
@@ -1036,7 +1176,6 @@ function showJob(job) {
         }
       }),
     );
-  d.open();
 }
 function showJobResult(job, result) {
   const d = dialog("Operation result"),
@@ -1281,6 +1420,14 @@ $("#settings").onclick = async () => {
         type: "email",
         value: settings.crossrefEmail,
       });
+    const crossrefKey = node("input", {
+        type: "password",
+        autocomplete: "new-password",
+        placeholder: settings.crossrefKeyConfigured
+          ? "Configured · leave blank to retain"
+          : "Optional Metadata Plus API key",
+      }),
+      removeCrossrefKey = node("input", { type: "checkbox" });
     const unpaywall = node("input", {
         type: "email",
         value: settings.unpaywallEmail,
@@ -1300,6 +1447,8 @@ $("#settings").onclick = async () => {
       field("OpenAlex API key", key),
       field("Remove stored OpenAlex key", removeKey),
       field("Crossref contact email", crossref),
+      field("Crossref Metadata Plus key", crossrefKey),
+      field("Remove stored Crossref key", removeCrossrefKey),
       field("Unpaywall contact email", unpaywall),
       field("Find available PDFs after import", automatic),
       field("Custom PDF resolvers · native JSON configuration", resolvers),
@@ -1328,6 +1477,8 @@ $("#settings").onclick = async () => {
         };
         if (removeKey.checked) body.openalexKey = "";
         else if (key.value) body.openalexKey = key.value;
+        if (removeCrossrefKey.checked) body.crossrefKey = "";
+        else if (crossrefKey.value) body.crossrefKey = crossrefKey.value;
         await targetScope.request("settings", {
           method: "PATCH",
           body,
@@ -2016,7 +2167,8 @@ async function selectStyle(
     rows = node("div", { class: "search-results" }),
     locale = node("select");
   let chosen = initial.id,
-    accepted = false,term='';
+    accepted = false,
+    term = "";
   d.body.append(field("Find a style", search), rows, field("Language", locale));
   const list = new VirtualList({
     element: rows,
@@ -2038,8 +2190,14 @@ async function selectStyle(
       list.setSelection([chosen]);
     },
   });
-  const change = debounce(() => {term=search.value;list.reset();});
-  search.addEventListener("input", ()=>{list.controller.abort();change();});
+  const change = debounce(() => {
+    term = search.value;
+    list.reset();
+  });
+  search.addEventListener("input", () => {
+    list.controller.abort();
+    change();
+  });
   const controller = new AbortController();
   d.actions.append(
     button("Cancel", () => d.el.close()),
