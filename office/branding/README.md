@@ -35,6 +35,12 @@ These files use the actual branding facilities in the pinned
   native product-name global, retaining an upstream fallback. Existing
   dynamic loading/title/error branding needs no patch. Disabled update
   notices and disabled upstream Zotero integration are unchanged.
+- `0020-native-branding-installer-identity.patch` fixes a second native-template
+  gap: the installer product section, display names and vendor were hardcoded
+  despite the configured product identity. It uses the existing native
+  `PRODUCTNAME`, `PRODUCTNAME_WITHOUT_SPACES` and `OOO_VENDOR` substitutions,
+  allowing native packaging and SBOM generation to use Office. License and
+  notice text is unchanged.
 
 `ATTRIBUTION.txt` is an installed legal-metadata input. The local
 `branding-notices.html` page links complete, byte-identical copies of upstream
