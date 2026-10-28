@@ -95,6 +95,9 @@ Collabora; private filesystem descriptors never belong in browser/Pi responses.
 References dialog requests use a typed postMessage bridge bound to the exact
 native extension frame, origin and nonce. Credentials remain host-side. Requests
 are project-bound, bounded and cancellable on cancel/replacement/page closure.
+The Office settings route only accepts the citation regeneration preference;
+broader library settings remain in the References manager. The host canonicalizes
+native URL aliases before the existing gateway checks the captured project.
 The explicit export-with-text-citations action uses that same frame/nonce and
 request cancellation owner. The host captures the document and browser view,
 then calls the existing native Save As/citation-unlink operation. The frame can

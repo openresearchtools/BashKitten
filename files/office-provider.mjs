@@ -201,11 +201,29 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
       if (typeof referenceRequest !== 'function') throw fail(503, 'References is unavailable');
       const request = await body(req, 1 << 20);
       if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(request?.method) || typeof request?.path !== 'string' || !request.path.startsWith('/api/references/')) throw fail(400, 'Invalid References request');
+      // Match the References router's URL/segment decoding before the gateway
+      // checks the captured project. Encoded aliases cannot widen this bridge.
+      const referenceURL = new URL(request.path, 'https://references.invalid');
+      let segments;
+      try { segments = referenceURL.pathname.split('/').filter(Boolean).map(decodeURIComponent); } catch { throw fail(400, 'Invalid References path'); }
+      if (referenceURL.origin !== 'https://references.invalid' || segments.some(part => /[\x00-\x1f/\\]/.test(part)) || segments[0] !== 'api' || segments[1] !== 'references' || segments[2] !== 'projects' || !segments[3]) throw fail(400, 'An explicit References project is required');
+      request.path = '/' + segments.map(encodeURIComponent).join('/') + referenceURL.search;
+      let operation = segments.slice(4);
+      if (operation[0] === 'api' && operation[1] === 'users' && operation[2] === '0') operation = operation.slice(3);
+      if (operation[0] === 'settings' && request.method !== 'GET' && (request.method !== 'PATCH' || !request.body || Array.isArray(request.body) || Object.keys(request.body).length !== 1 || !Object.hasOwn(request.body, 'citationAutoRegenerate') || ![-1, 0, 1].includes(request.body.citationAutoRegenerate))) throw fail(403, 'Office may only change the citation regeneration preference');
       const abort = new AbortController(); const cancel = () => abort.abort();
       signal?.addEventListener('abort', cancel, { once: true }); res.once('close', cancel);
       try {
         if (signal?.aborted) cancel();
-        const result = await referenceRequest({ grantId, documentId: launch.session.documentId, participantId: launch.claims.participant, method: request.method, path: request.path, body: request.body, signal: abort.signal });
+        let result = await referenceRequest({ grantId, documentId: launch.session.documentId, participantId: launch.claims.participant, method: request.method, path: request.path, body: request.body, signal: abort.signal });
+        if (operation[0] === 'settings') {
+          const wrapped = result && Number.isInteger(result.status) && Object.hasOwn(result, 'body');
+          if (!wrapped || result.status < 400) {
+            const value = wrapped ? result.body : result;
+            const preference = { citationAutoRegenerate: [-1, 0, 1].includes(value?.citationAutoRegenerate) ? value.citationAutoRegenerate : -1 };
+            result = wrapped ? { ...result, body: preference } : preference;
+          }
+        }
         return result && Number.isInteger(result.status) && Object.hasOwn(result, 'body') ? send(res, result.status, result.body) : send(res, 200, result);
       } finally { signal?.removeEventListener('abort', cancel); res.off('close', cancel); }
     }
