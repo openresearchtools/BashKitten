@@ -11,7 +11,7 @@ The [Files, Office and References plan](files-office-bibliography-plan.md)
 records the user's replacement design. It supersedes this plan's conflicting
 internal Files/SheetJS/LibreOffice preview requirements while preserving the
 original baseline and unrelated features. Files becomes Quantum in an ordinary
-tab; Euro-Office and References are independent web/backend modules. Keep
+tab; Collabora Online and References are independent web/backend modules. Keep
 folder pickers and Git Changes. Cleanly remove obsolete viewer/conversion code
 during implementation, rather than retaining parallel paths.
 
@@ -25,8 +25,8 @@ The later clarification makes Files a one-click sidecar folder button opening
 the ordinary local or Chisel-forwarded loopback URL. Quantum opens Office itself;
 there is no Office-specific native browser integration. Office diffs are optional
 Pi/CLI comparisons of saved snapshots only, with no Git/Changes/UI integration.
-Use native Office coauthoring, its automatic save timer and its Version History
-choose/open/restore UI through minimum adapters. Pi uses native editing/export
+Use native Collabora coauthoring, its automatic save timer and WOPI writes;
+connect its history action/restore handshake to the minimal host version UI/store. Pi uses native editing/export
 APIs and normal browser-view URLs. Iterate modules without rebuilding the browser;
 capacity-driven build repos may supply collected Linux/Termux artifacts to the
 normal packages, without separate product releases. The manager/connector/tool
@@ -43,8 +43,8 @@ every delegation. References still excludes the full desktop Zotero app; reuse
 its relevant source/behavior while adapting it to the backend/connector split.
 
 Each owning native Linux, VM/container or Termux environment runs one shared
-Quantum server and one shared Office stack, including its database/queue/cache
-dependencies. All chats/projects/documents reuse those instances. Separate
+Quantum server and one shared Collabora server with its native kit workers
+and required dependencies. All chats/projects/documents reuse those instances. Separate
 project libraries and Office snapshots live outside repositories; attachments
 live in the selected project's Bibliography directory. Retain Office runtime
 defaults initially and measure actual usage. The new plan includes agent/user
@@ -55,11 +55,9 @@ and service-lifetime ownership remain in force.
 
 ### Later 28 October amendment: Collabora and immediate browser iteration
 
-The user now selects **Collabora Online** instead of Euro-Office throughout the
-active Files/Office/References plan. Earlier suite-specific paragraphs above
-record the previous choice; this amendment supersedes them. One shared
-`coolwsd`/kit/engine service per owning environment replaces the old Office
-PostgreSQL/RabbitMQ/Redis stack. Use native WOPI, separate human/agent session
+The user selects **Collabora Online** throughout the active Files/Office/
+References plan. Run one shared `coolwsd`/kit/engine service per owning
+environment, with no separate PostgreSQL/RabbitMQ/Redis requirement. Use native WOPI, separate human/agent session
 views, UNO/kit scripting, native saves/exports and the native history host
 handshake. Keep full snapshot retention and the required References/citation/
 Systematic Reviewer scope across Writer, Calc and Impress and native Termux.

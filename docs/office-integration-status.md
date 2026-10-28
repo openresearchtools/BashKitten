@@ -6,8 +6,7 @@ and installed-product acceptance. It does not claim completed integration.
 
 ## Decision and planning work
 
-The user selected Collabora Online instead of Euro-Office after the temporary
-stock-server comparison. The active plan, AGENTS instructions and current native
+The user selected Collabora Online after the temporary stock-server comparison. The active plan, AGENTS instructions and current native
 plan amendment now cover Collabora, a maintainable external Quantum add-on,
 light UI/document canvas and the immediate Android chat-height/browser-boundary
 iteration build. The frozen original native plan/tag is unchanged. No browser
@@ -23,7 +22,6 @@ sample XLSX/PPTX/DOCX files were copied from Downloads, not edited in place.
 | Collabora CODE | `26.04.5.2.1`, reported Online/kit hash `42745e44dd`; server 745.4 MB |
 | Temporary Collabora file host | Separate SDK-derived WOPI test host, 78.4 MB |
 | Collabora combined | About 823.8 MB |
-| Euro-Office | `v9.3.7`, complete container including example/PostgreSQL/RabbitMQ/Redis, 3.016 GB |
 
 Measurements are decimal container/service memory accounting, excluding browser
 memory, with differing active documents/sessions. They are not matched-workload
@@ -32,13 +30,11 @@ The CODE image digest observed was
 `sha256:808410e77b8695a35b93c7638fbba07c10cf0ba8307141b460248f18ab6e5c55`.
 This observation does not establish a source-complete distributable package pin.
 
-Verified locally: both editors displayed the BCT spreadsheet; Collabora saved a
-blank-document edit through the temporary WOPI host. The user reported Collabora
-working on the same devices where Euro-Office's presentation loader stalled.
-Euro-Office rendered in some desktop/mobile-layout desktop probes, but the user
-reported actual Android/iPhone stalls. Later fresh-session diagnostics showed
-native load callbacks eventually returning on iPhone/Firefox; visible rendering
-on both phones was not confirmed as fixed. Do not relabel that as mobile acceptance.
+Verified locally: Collabora displayed the BCT spreadsheet and saved a blank-
+document edit through the temporary WOPI host. The user reported successful
+Collabora use on the devices used for the comparison. Full installed-product
+mobile acceptance, controlled performance testing and native Termux verification
+remain pending. Earlier comparison observations remain in Git history.
 The temporary host is not the planned production Quantum add-on and does not
 prove its locking, history, source policy, authentication or lifetime acceptance.
 

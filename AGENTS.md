@@ -45,8 +45,8 @@ as needed for measured target cache capacity; do not substitute external storage
 
 Each owning native Linux, VM/container or Termux environment has exactly one
 Quantum server and one Collabora Online server with its native kit workers,
-shared by all chats, projects, folders and documents. Collabora does not inherit
-Euro-Office's PostgreSQL/RabbitMQ/Redis stack. Never launch the stack per
+shared by all chats, projects, folders and documents. Collabora requires no
+separate PostgreSQL/RabbitMQ/Redis stack. Never launch the stack per
 chat/project/tab. Libraries have separate project databases
 outside repositories, served by one References module; attachments belong in
 the project's Bibliography folder. Office snapshots stay outside projects.
@@ -80,8 +80,7 @@ identifier batch as native Zotero on the same machine/network with matched
 resolver/access conditions. Do not replace this with a minimal DOI lookup or
 aggressive parallel downloader; investigate and record parity differences.
 
-Latest 28 October amendments replace the active Euro-Office design with
-Collabora Online throughout. Use its native WOPI integration, separate human/Pi
+Latest 28 October amendments select Collabora Online throughout the active plan. Use its native WOPI integration, separate human/Pi
 views and authenticated browserless WebSocket/UNO/script sessions; verify actual
 released extension gates and native Termux support. Reuse upstream Quantum's
 pinned Collabora/WOPI work, but keep our integration as a separately versioned

@@ -36,14 +36,12 @@ identifiers do not require renaming merely to change the product label.
 
 ### User amendment — 28 October 2026: Collabora selection and browser-first iteration
 
-The user replaces Euro-Office with **Collabora Online** throughout the active
+The user selects **Collabora Online** throughout the active
 architecture: Quantum document opening, Pi live editing, native saves/exports,
 snapshot history, References citations, packaging, source/notices and builds.
-The earlier Euro-Office design remains recoverable at BashKitten commit
-`3720afeb76`; its DocumentServer/OnlyOffice APIs are no longer implementation
-requirements. The decision follows a local comparison showing substantially
-lower server memory for Collabora. That observation is not a controlled fourfold
-performance guarantee or installed-product acceptance.
+Earlier plan revisions remain recoverable in Git history. The selection follows
+a local runtime comparison; those observations are not a controlled performance
+guarantee or installed-product acceptance.
 
 Office must open with a **light UI and light document canvas**, independently of
 BashKitten's surrounding theme, the operating system's theme and old browser
@@ -120,16 +118,16 @@ The binding boundaries are:
 - **One service set per environment:** one Quantum server and one Collabora Online
   server with its native document-kit workers for the native Linux backend, one for each separate
   managed VM/container backend, and one for Termux. All chats, projects,
-  folders and documents in an environment share them. Do not carry over Euro-Office
-  PostgreSQL/Redis/RabbitMQ services: Collabora does not require that stack. Its
-  native per-document workers remain part of the one server, not per-chat servers.
+  folders and documents in an environment share them. Collabora needs no separate
+  PostgreSQL/Redis/RabbitMQ stack. Its native per-document workers remain part
+  of the one server, not per-chat servers.
 - **Platforms:** native Linux and native Termux/Android, including the supported
   amd64/x86_64 and arm64/aarch64 package targets. Remote connections reuse the
   server's existing instances through the existing authorized tunnel.
 - **Resources:** retain Collabora's upstream process/resource defaults initially;
-  measure the complete server, adapter and browser under matched workloads. The
-  previous Euro-Office 4 GB discussion is not a Collabora memory reservation,
-  hard limit or guarantee. Do not tune workers merely to reproduce the comparison.
+  measure the complete server, adapter and browser under matched workloads. Set
+  no unverified memory reservation, hard limit or guarantee. Do not tune workers
+  merely to reproduce the comparison.
 - **Implementation:** use configuration and upstream code first, narrow adapters
   where missing, and `gpt-6-astra` with `xhigh` reasoning for complex workstreams.
   A small main-browser diff is required; it does not imply that the backend
@@ -473,8 +471,7 @@ researched integration candidate, not a committed BashKitten binary/source pin.
 Freeze and verify its complete matching source/package graph before import.
 Use one `coolwsd` server, native forkit/kit workers and the Collabora rendering/
 editing engine per environment. Native workers per active document are expected;
-they are not independent deployments. Do not bundle the previous suite's Node
-DocumentServer, PostgreSQL, RabbitMQ or Redis merely because the old plan did.
+they are not independent deployments. Package only the dependencies required by the selected Collabora source graph.
 References keeps its separate project databases; WOPI/snapshot metadata needs
 only the add-on's small durable store under the existing backend data root.
 
@@ -490,8 +487,6 @@ server-side scripting and **native JavaScript extension facilities**. The
 released Online source includes `browser/extensions` for editor-specific menu/
 notebookbar items, sidebar/dialog UI and calls into kit scripts. Inspect/package
 those facilities rather than invent an OnlyOffice-shaped plugin/Automation API.
-Do not port `DocsAPI`, `Asc.plugin`, `callCommand`, `createConnector` or
-DocumentBuilder calls into the new design.
 
 The selected release gates extensions/`executescript` on its native experimental
 features configuration, writable sessions and WOPI copy/export/print permissions.
@@ -610,8 +605,7 @@ Use Collabora's own autosave/user-save/final-save behavior and authenticated WOP
 `PutFile` writes. The selected source already defaults to a 30-second idle save,
 300-second autosave and background autosave; retain that native save owner.
 [Released defaults](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/coolwsd.xml.in#L82). Inspect the released `per_document` save settings and WOPI
-save headers before selecting configuration; the removed Euro-Office
-`autoAssembly`, callback status `2`/`6` and `forcesavetype` are not Collabora APIs.
+save headers before selecting configuration.
 Preserve normal native save durability. For the requested approximately five-
 minute history interval, retain a completed native saved revision when the
 checkpoint interval is due, plus the initial/final saved revisions; do not slow
@@ -630,8 +624,8 @@ Do not promise every last unsent client edit is saved after abrupt termination.
 ### 6.2 Native history action, host-provided version list and restore
 
 Collabora exposes a native version-history action through WOPI/postMessage host
-integration; it does **not** supply Euro-Office's `refreshHistory`/`setHistoryData`
-UI or a standalone persistent snapshot database. Reuse the native entry point
+integration, with the host responsible for the version-list UI and persistent
+snapshot store. Reuse the native entry point
 and session close/reload events: `UI_FileVersions` requests host history;
 `Host_VersionRestore` with `Pre_Restore` starts native save/close coordination,
 and `App_VersionRestore` with `Pre_Restore_Ack` acknowledges readiness before
@@ -1101,8 +1095,7 @@ their native cell/shape anchors.
 Use Collabora Writer's existing Zotero integration code and native field/
 reference-mark/bookmark operations as the starting point. The adapter exposes
 rendered text together with the durable native field identity and embedded
-References metadata through UNO/kit APIs. Do not carry over OnlyOffice's
-`GetAllAddinFields`/`FieldId` object contract or assume Collabora emits it.
+References metadata through the actual released UNO/kit field APIs.
 Existing cloud Zotero endpoints/key handling must be replaced by our authorized
 References backend adapter, without bundling Zotero Desktop or requiring a
 Zotero cloud account. Preserve donor licensing and source provenance.
@@ -1374,8 +1367,8 @@ prefix. Investigate native jail/namespace/seccomp/mount/fork/user assumptions an
 Android process/background constraints. Reuse a supported native configuration
 where possible; otherwise record isolated source adaptations. Do not silently
 turn off isolation or substitute Docker/proot/a remote-only server as acceptance.
-The previous Node/V8 DocumentServer plus PostgreSQL/Redis/RabbitMQ port is removed
-from scope; do not carry those services into the Collabora package accidentally.
+The native package must include the actual Collabora server/engine dependencies
+and the independently packaged WOPI/Pi adapter.
 
 The server must remain owned by the existing environment supervisor, with one
 shared server and native kit workers, private data paths and honest readiness/
@@ -1444,9 +1437,7 @@ released SBOM tooling as part of complete dependency/source accounting. Do not
 combine a release server with moving `main` extension/API code or assume that the
 community LibreOffice engine alone reproduces the Collabora package.
 
-The earlier Euro-Office gitlink table is superseded and recoverable in the prior
-plan commit. It is not an additional required suite to build or ship. Keep
-pristine source imports followed by focused named adaptations, including any
+Keep pristine source imports followed by focused named adaptations, including any
 Termux, light-canvas, extension or Quantum hook patches. Extension and WOPI/Pi
 adapter packages have their own versions/compatibility contracts. Do not import
 a full desktop Office application merely to obtain legal UI or citations.
@@ -1486,15 +1477,13 @@ Extend the existing offline About **Bundled components** information with
 Collabora Online, its engine/dependencies and each add-on. Preserve source,
 version, full license/notices, original authors, dated modifications and matching
 source archive/checksum links. Use the existing shared BashKitten legal surface
-and retain required native interactive notices; no second Agent About menu or
-Euro-Office-specific About implementation is required.
+and retain required native interactive notices, without a second Agent About menu.
 
 Inventory actual licenses from the selected source graph: Online's MPL-2.0 and
 engine/transitive terms, fonts/dictionaries, Quantum's Apache-2.0 root and its
 Go/JS/MuPDF/FFmpeg dependencies, Zotero/Connector/translation AGPL and per-file
-exceptions, and CSL styles/locales CC BY-SA 3.0 attribution. Do not carry over an
-AGPL label for the whole Office stack merely because that was Euro-Office's
-license. The citeproc LICENSE offers AGPL v3-or-later or CPAL; verify the actual
+exceptions, and CSL styles/locales CC BY-SA 3.0 attribution. The citeproc LICENSE
+offers AGPL v3-or-later or CPAL; verify the actual
 chosen processor, not inconsistent registry metadata. Product UI uses BashKitten
 References branding without Zotero trademarks; retain donor attribution legally.
 
@@ -1624,8 +1613,7 @@ Retarget the existing `office-builds` repository to Collabora Online and its
 matched engine/dependencies, web/extensions and Linux/Termux packaging. Keep its
 requested minimal README and normal GitHub Actions caches/artifacts. Reuse
 upstream native build recipes but do not inherit external registry-cache or image
-publishing. The old Euro-Office core/SDK/web-apps/Node build graph is removed from
-the active workflow design. Re-measure Collabora cold/warm workspace, compiler
+publishing. Measure Collabora cold/warm workspace, compiler
 cache and artifact sizes; lower runtime RAM does not prove smaller build caches
 or that a four-target build fits one runner/cache allowance. Source-complete
 native Termux builds need their own verified recipes, not downloaded CODE images.
@@ -1744,7 +1732,7 @@ Required acceptance groups:
 - [ ] **Service sharing:** open several projects, chats, folders and documents
   concurrently on native, one container/VM and Termux. Inspect one Quantum and
   one Office stack plus one References service per owner, with separate project
-  databases; no per-chat Office servers or carried-over Euro-Office dependencies.
+  databases; no per-chat Office servers or unnecessary dependency services.
   Concurrent launch, restart, duplicate windows and CLI entry reuse that stack.
   With autostart disabled, browser/backend launch starts neither Quantum nor the
   Office stack. First Files use starts Quantum; first Office use starts Office
