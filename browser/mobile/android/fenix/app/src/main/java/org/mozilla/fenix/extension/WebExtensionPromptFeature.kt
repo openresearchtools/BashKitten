@@ -95,8 +95,14 @@ class WebExtensionPromptFeature(
 
                 when (promptRequest) {
                     is WebExtensionPromptRequest.InstallationRequested -> {
-                        // BashKitten ships its internal browser extensions only.
-                        consumePromptRequest()
+                        // Reuse Fenix's user-invoked HTTPS XPI flow. The package
+                        // identity is checked after Gecko's signature validation,
+                        // before permissions or activation; a URL is not an ID.
+                        if (android.net.Uri.parse(promptRequest.url).scheme == "https") {
+                            handleInstallationStartedRequest(promptRequest)
+                        } else {
+                            consumePromptRequest()
+                        }
                     }
 
                     is WebExtensionPromptRequest.AfterInstallation -> {
@@ -133,6 +139,22 @@ class WebExtensionPromptFeature(
 
     @VisibleForTesting
     internal fun handleAfterInstallationRequest(promptRequest: WebExtensionPromptRequest.AfterInstallation) {
+        if (promptRequest is WebExtensionPromptRequest.AfterInstallation.Permissions.Required &&
+            promptRequest.extension.id != "references@bashkitten.org"
+        ) {
+            handlePermissions(
+                promptRequest,
+                granted = false,
+                privateBrowsingAllowed = false,
+                technicalAndInteractionDataGranted = false,
+            )
+            MaterialAlertDialogBuilder(context)
+                .setTitle("References")
+                .setMessage("Only signed References capture updates can be installed in BashKitten.")
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+            return
+        }
         val installedState = addonManager.toInstalledState(promptRequest.extension)
         val addon = Addon.newFromWebExtension(promptRequest.extension, installedState)
         when (promptRequest) {

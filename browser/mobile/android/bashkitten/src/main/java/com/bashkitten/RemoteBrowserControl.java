@@ -156,6 +156,19 @@ final class RemoteBrowserControl {
             if (!completed.add(id)) throw new IllegalArgumentException("Duplicate Agent command");
             JSONObject request = new JSONObject().put("method", command.getString("method"))
                 .put("params", command.optJSONObject("params") == null ? new JSONObject() : command.getJSONObject("params"));
+            if (request.getString("method").equals("references.resolve")) {
+                // Retain the one result callback, but keep the existing command
+                // stream available while a human completes a visible challenge.
+                app.controller.execute(access, request.toString(), response -> {
+                    if (!active || version != generation) return;
+                    try {
+                        JSONObject value = new JSONObject(response).put("channelId", channel).put("id", id);
+                        request(version, "/api/browser-channel/result", value, ignored -> {});
+                    } catch (Exception error) { failed(version, "Resolver browser response failed"); }
+                });
+                next(version, commands, index + 1);
+                return;
+            }
             if (request.getString("method").equals("screenshot")) request.getJSONObject("params").remove("transfer");
             app.controller.execute(access, request.toString(), response -> {
                 if (!active || version != generation) return;

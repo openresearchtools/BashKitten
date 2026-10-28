@@ -33,14 +33,31 @@ for filename in ['api.js','oauthsimple.js','updaterFix.js','manifest-v3.json']:
 # Runtime package uses existing product icons; donor legal attribution stays in legal/.
 branding=REPO/'browser/bashkitten/browser/branding'
 for size in [16,32,64,128]:shutil.copy(branding/f'default{size}.png',OUT/f'Icon-{size}.png')
-for path in (OUT/'images').glob('*zotero*'):
- if path.suffix=='.png':shutil.copy(branding/'default32.png',path)
+for path in (OUT/'images').rglob('*zotero*'):
+ if path.suffix=='.png':shutil.copy(branding/('default16.png' if '-16px' in path.name else 'default32.png'),path)
+# Retired cloud/reporting/editor surfaces must not advertise donor services.
+retired_messages=('integration_', 'reports_', 'preferences_onlineLibrary_',
+ 'preferences_googleDocs', 'preferences_translators_reportErrors', 'firstRun_',
+ 'permissions_siteAccess_message_repo_required', 'permissions_siteAccess_message_api_required',
+ 'error_connection_enableSavingToOnlineLibrary')
+message_overrides={
+ 'browserAction_incompatibleVersion':'References capture $2 is incompatible with the selected backend$3. Install matching supported References components.',
+ 'expiredBetaBuild_message':'This References capture build has expired. Install a supported signed References package.',
+ 'progressWindow_savingToOnlineLibrary':'References backend unavailable',
+ 'progressWindow_error_noTranslator':'No items could be saved because this website is not supported by a References translator.',
+}
 for path in (OUT/'_locales').glob('*/messages.json'):
  data=json.loads(path.read_text())
- for record in data.values():
-  if isinstance(record,dict) and isinstance(record.get('message'),str):record['message']=record['message'].replace('Zotero Connector','References').replace('Zotero','References')
+ for key in list(data):
+  if key.startswith(retired_messages):
+   del data[key];continue
+  record=data[key]
+  if isinstance(record,dict) and isinstance(record.get('message'),str):
+   record['message']=message_overrides.get(key,record['message'].replace('Zotero Connector','References').replace('Zotero','References'))
+   if re.search(r'zotero\.org|References Forums',record['message'],re.I):raise SystemExit('Unadapted product locale: '+str(path)+': '+key)
  path.write_text(json.dumps(data,ensure_ascii=False)+'\n')
 for path in OUT.rglob('*.html'):
+ if path.is_relative_to(OUT/'references'):continue  # Authored product pages already retain intentional legal attribution.
  text=path.read_text(encoding='utf-8-sig').replace('Zotero Connector','References').replace('>Zotero<','>References<').replace('<title>Zotero - Confirm Import','<title>References — Confirm Import').replace('>Zotero Item Selector','>References Item Selector')
  path.write_text(text)
 manifest=json.loads((OUT/'manifest.json').read_text())

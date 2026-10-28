@@ -107,12 +107,14 @@ signed capture replacement instead of resetting it to the built-in version.
 Between-release distribution uses the browser's normal signed add-on mechanism.
 `ensureBuiltIn` accepts only APK resources; it is not an unsigned capture updater.
 
-A release/update must verify the signed package, fixed extension ID, component
-SHA-256, host API 1 and Connector API 3 before activation, retain the prior signed
-package, and use native add-on installation to roll back that verified package.
-The generated unsigned manifest is evidence, not a trusted update catalogue.
-**The authenticated release catalogue/signing/install/rollback wiring is still an
-open integration gate.** No signing check or browser privilege policy is weakened.
+The native signed add-on installer supplies package authentication, manifest
+version checks and manual rollback; no custom update catalogue is needed.
+[Manual update and rollback](UPDATE.md) records the exact source-verified paths,
+versioned artifact/signing procedure and remaining gates. The generated XPI is
+unsigned; no signing credentials or successful signed installation are claimed.
+Android uses the narrowly restored Fenix HTTPS install prompt, with verified
+References-ID restriction before activation, as documented there. Installed
+upgrade/restart/rollback acceptance remains pending on both targets.
 
 ## Evidence and remaining acceptance
 

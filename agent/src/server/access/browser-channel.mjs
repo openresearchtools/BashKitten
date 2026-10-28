@@ -25,7 +25,12 @@ export function closeBrowserChannels(key) {
 }
 function touch(channel) {
   clearTimeout(channel.expiry);
-  channel.expiry = setTimeout(() => close(channel, 'Browser authentication or connection expired'), 60000);
+  // Native clients finish each received batch before polling again. A visible
+  // References challenge can await the user; retain only that bounded command's
+  // channel while the existing authentication watcher continues to revoke it.
+  let deadline = Date.now() + 60000;
+  for (const value of channel.pending.values()) deadline = Math.max(deadline, value.resolverDeadline || 0);
+  channel.expiry = setTimeout(() => close(channel, 'Browser authentication or connection expired'), deadline - Date.now());
   channel.expiry.unref();
 }
 function deliver(channel) {
@@ -54,13 +59,48 @@ function targetFor(sessionId) {
 }
 function dispatch(sessionId, command) {
   const channel = targetFor(sessionId);
+  return dispatchOn(channel, sessionId, command);
+}
+function dispatchOn(channel, sessionId, command, { signal } = {}) {
   if (typeof command.method !== 'string' || command.method.length > 128 || !command.params || typeof command.params !== 'object' || Array.isArray(command.params)) throw failure('Invalid browser command', 'invalid_command');
+  signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const id = randomUUID();
-    channel.pending.set(id, { resolve, reject });
-    channel.queue.push({ id, sessionId, method: command.method, params: command.params });
+    const resolverDeadline = command.method === 'references.resolve' ? Date.now() + 630000 : 0;
+    let settled = false, timer;
+    const finish = (error, result) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer); signal?.removeEventListener('abort', abort);
+      pending.resolverDeadline = 0;
+      const queued = channel.queue.findIndex(command => command.id === id);
+      if (queued !== -1) { channel.queue.splice(queued, 1); channel.pending.delete(id); }
+      // A delivered cancelled request retains a minimal receipt slot until the
+      // native reply/connection closes. Never replay or reject its late receipt
+      // in a way that disconnects unrelated browser commands.
+      if (channels.has(channel.id)) touch(channel);
+      if (error) reject(error); else resolve(result);
+    };
+    const abort = () => finish(failure('Browser request cancelled', 'cancelled'));
+    const pending = { resolve: result => finish(null, result), reject: error => finish(error), resolverDeadline };
+    channel.pending.set(id, pending);
+    channel.queue.push({ id, ...(sessionId ? { sessionId } : {}), method: command.method, params: command.params });
+    if (resolverDeadline) { timer = setTimeout(() => finish(failure('Resolver browser response timed out; check the job status', 'timeout')), 630000); timer.unref(); }
+    signal?.addEventListener('abort', abort, { once: true });
+    if (resolverDeadline) touch(channel);
     deliver(channel);
   });
+}
+
+// The ordinary References app may resume only its already-authorized backend
+// job through the same browser owner used by Pi. No general web command bridge.
+export function dispatchReferenceResolver(record, { projectId, requestId }, { signal } = {}) {
+  if (!sessionPattern.test(projectId || '') || !sessionPattern.test(requestId || '') || !record?.key) throw failure('Invalid resolver job', 'invalid_command');
+  const candidates = [...channels.values()].filter(channel => channel.key === record.key && channel.owner === record.username);
+  if (candidates.length !== 1) throw failure(candidates.length ? 'Choose a single authorized BashKitten browser for this account' : 'Open BashKitten and allow browser control');
+  const channel = candidates[0];
+  if (!Array.isArray(channel.capabilities?.methods) || !channel.capabilities.methods.includes('references.resolve')) throw failure('Update this browser to enable References capture', 'unsupported');
+  if ([...channel.pending.values()].filter(value => value.resolverDeadline).length >= 32) throw failure('Too many pending resolver browser requests', 'busy');
+  return dispatchOn(channel, null, { method: 'references.resolve', params: { projectId, requestId } }, { signal });
 }
 export function ensureBrowserSocket(id, sessionId = id) {
   if (!sessionPattern.test(sessionId)) throw Error('Invalid Pi session');

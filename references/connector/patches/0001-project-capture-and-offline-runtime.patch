@@ -709,7 +709,37 @@
  	
  	_addMessageListeners() {
  		// add listener for translate message from background page
-@@ -301,54 +295,7 @@
+@@ -272,94 +266,15 @@
+ 		});
+ 	},
+ 
+-	async firstUsePrompt() {
+-		var clientName = ZOTERO_CONFIG.CLIENT_NAME;
+-		return this.confirm({
+-			title: Zotero.getString('firstRun_title', clientName),
+-			button1Text: Zotero.getString('firstRun_acceptButton'),
+-			button2Text: "",
+-			message: Zotero.getString(
+-					'firstRun_text1',
+-					[
+-						clientName,
+-						"https://www.zotero.org/support/adding_items_to_zotero"
+-					]
+-				)
+-				+ '<br><br>'
+-				+ Zotero.getString(
+-					'firstRun_text2',
+-					[
+-						clientName,
+-						// TODO: Make download URL configurable (instead of just base URL + "download")
+-						ZOTERO_CONFIG.WWW_BASE_URL + "download/"
+-					]
+-				)
+-		});
+-	},
++	async firstUsePrompt() { return this.confirm({title:'References',button1Text:Zotero.getString('general_ok'),button2Text:'',message:'Use References Add to choose a project and collection before saving.'}); },
+ 	
+ 	/**
  	 * @param {Boolean} localhostDenied - Zotero is unreachable because Safari denies the
  	 *     Connector access to 127.0.0.1, rather than because Zotero isn't running
  	 */
@@ -763,9 +793,21 @@
 -	},
 +
  	
- 	getConnectionErrorTroubleshootingString() {
- 		var clientName = ZOTERO_CONFIG.CLIENT_NAME;
-@@ -370,37 +317,7 @@
+-	getConnectionErrorTroubleshootingString() {
+-		var clientName = ZOTERO_CONFIG.CLIENT_NAME;
+-		var connectorName = Zotero.getString('appConnector', ZOTERO_CONFIG.CLIENT_NAME);
+-		var downloadLink = 'https://www.zotero.org/download/';
+-		var troubleshootLink = 'https://www.zotero.org/support/kb/connector_zotero_unavailable';
+-		return Zotero.getString(
+-			'error_connection_downloadOrTroubleshoot',
+-			[downloadLink, clientName, troubleshootLink]
+-		);
+-	},
++	getConnectionErrorTroubleshootingString() { return 'Select the owning backend and project in BashKitten, then try References Add again.'; },
+ 	
+ 	/**
+ 	 * If Zotero is offline and attempting action fallback to zotero.org for first time: prompts about it
+@@ -370,37 +285,7 @@
  	 *     the status check, e.g., on a retry after it has already been displayed
  	 * return {Promise<Boolean>} whether the action should proceed
  	 */
@@ -1410,6 +1452,35 @@
  				resolve();
  			}
  			catch (e) {
+--- a/src/common/ui/ProgressWindow.jsx
++++ b/src/common/ui/ProgressWindow.jsx
+@@ -1008,7 +1008,7 @@
+ 		var contents = "";
+ 		
+ 		if (err === "translationError") {
+-			let url = "https://www.zotero.org/support/troubleshooting_translator_issues";
++			let url = "https://github.com/openresearchtools/BashKitten/issues";
+ 			let pageName = Zotero.getString('progressWindow_error_troubleshootingTranslatorIssues');
+ 			let pageLink = `<a href="${url}" title="${url}">${pageName}</a>`;
+ 			let html = {
+@@ -1045,7 +1045,7 @@
+ 		}
+ 		else if (err === "siteAccessLimits") {
+ 			const translator = `<b>${args[0]}</b>`;
+-			const siteAccessURL = "https://www.zotero.org/support/kb/site_access_limits";
++			const siteAccessURL = "https://github.com/openresearchtools/BashKitten/issues";
+ 			const siteAccessTitle = Zotero.getString('progressWindow_error_siteAccessLimits');
+ 			let siteAccessLink = `<a href="${siteAccessURL}" title="${siteAccessTitle}">${siteAccessTitle}</a>`;
+ 			let html = {
+@@ -1054,7 +1054,7 @@
+ 			contents = <span dangerouslySetInnerHTML={html}/>;
+ 		}
+ 		else if (err === "unexpectedError") {
+-			let url = "https://www.zotero.org/support/getting_help";
++			let url = "https://github.com/openresearchtools/BashKitten/issues";
+ 			contents = <span dangerouslySetInnerHTML={{
+ 				__html: Zotero.getString('progressWindow_error_unexpected', url)
+ 			}}/>;
 --- a/src/common/zotero.js
 +++ b/src/common/zotero.js
 @@ -100,57 +100,7 @@
@@ -1567,7 +1638,7 @@
 -	},
 -	GOOGLE_DOCS_DEV_MODE: false
 -};
-+const ZOTERO_CONFIG = { CLIENT_NAME: 'References', DOMAIN_NAME: 'bashkitten.org', ALWAYS_FETCH_FROM_REPOSITORY:false, REPOSITORY_CHECK_INTERVAL:86400, REPOSITORY_RETRY_INTERVAL:3600 };
++const ZOTERO_CONFIG = { CLIENT_NAME: 'References', DOMAIN_NAME: 'bashkitten.org', CLIENT_DOWNLOAD_URL:'https://github.com/openresearchtools/BashKitten/releases', ALWAYS_FETCH_FROM_REPOSITORY:false, REPOSITORY_CHECK_INTERVAL:86400, REPOSITORY_RETRY_INTERVAL:3600 };
 --- a/src/messages.json
 +++ b/src/messages.json
 @@ -61,34 +61,34 @@

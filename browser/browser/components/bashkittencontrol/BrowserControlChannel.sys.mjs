@@ -240,7 +240,7 @@ export const BrowserControlChannel = {
       const response = await this.post(state, "poll", { channelId: state.channelId });
       const commands = response.commands ?? [];
       if (!Array.isArray(commands) || commands.length > 64) throw new Error("Invalid browser command batch");
-      await Promise.all(commands.map(async command => {
+      await Promise.all(commands.map(command => {
         if (!command || typeof command.id !== "string") throw new Error("Invalid browser command identity");
         let entry = state.results.get(command.id);
         if (!entry) {
@@ -250,14 +250,24 @@ export const BrowserControlChannel = {
           }).then(result => ({ result }), error => ({ error: { code: "browser_command_failed", message: error.message } }));
           state.results.set(command.id, entry);
         }
-        const result = await entry.promise;
-        entry.complete = true;
-        for (const [id, cached] of state.results) {
-          if (state.results.size <= 256) break;
-          if (cached.complete) state.results.delete(id);
+        entry.receipt ||= entry.promise.then(async result => {
+          entry.complete = true;
+          for (const [id, cached] of state.results) {
+            if (state.results.size <= 256) break;
+            if (cached.complete) state.results.delete(id);
+          }
+          if (state.controller.signal.aborted) return;
+          await this.post(state, "result", { channelId: state.channelId, id: command.id, ...result });
+        });
+        if (command.method === "references.resolve") {
+          // A visible human challenge must not hold the existing command poll.
+          // Keep the one receipt tied to this channel's authority and lifetime.
+          void entry.receipt.catch(() => {
+            if (this.current === state) void this.close("Resolver browser response could not be delivered");
+          });
+          return;
         }
-        if (state.controller.signal.aborted) return;
-        await this.post(state, "result", { channelId: state.channelId, id: command.id, ...result });
+        return entry.receipt;
       }));
       if (Date.now() - started < 1000) {
         await new Promise(resolve => {
