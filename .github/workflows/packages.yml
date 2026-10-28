@@ -126,8 +126,6 @@ jobs:
   sources:
     needs: node
     runs-on: ubuntu-24.04
-    env:
-      BASHKITTEN_SOURCE_CACHE: ${{ runner.temp }}/source-cache
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
@@ -153,7 +151,7 @@ jobs:
     - name: Reuse shared authentication source downloads
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
       with:
-        path: ${{ env.BASHKITTEN_SOURCE_CACHE }}
+        path: ${{ runner.temp }}/source-cache
         key: auth-source-archives-${{ hashFiles('auth/dependencies/**/sources.json') }}
         # Do not persist another multi-gigabyte copy of every component's
         # originals in the main repository's native compiler-cache budget.
