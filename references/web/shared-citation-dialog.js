@@ -27,6 +27,7 @@ export async function chooseCitation({
   style = { id: "apa", locale: "en-US" },
   signal,
   preview,
+  embeddedItems,
 } = {}) {
   if (!api || !projectId) throw Error("A project library is required");
   signal?.throwIfAborted();
@@ -35,6 +36,7 @@ export async function chooseCitation({
     d = dialog("Add / Edit Citation");
   d.el.classList.add("citation-dialog");
   const initialItems = structuredClone(initial?.items || []),
+    snapshotItems = Object.create(null),
     cluster = {
       ...structuredClone(initial || {}),
       id: initial?.id || crypto.randomUUID(),
@@ -218,7 +220,11 @@ export async function chooseCitation({
         node(
           "small",
           {},
-          entry.item ? creators(entry.item) : "Loading reference…",
+          entry.item
+            ? [creators(entry.item), year(entry.item)]
+                .filter(Boolean)
+                .join(" · ")
+            : "Loading reference…",
         ),
       ),
     onSelect: (entry) => {
@@ -533,6 +539,12 @@ export async function chooseCitation({
                   version: 1,
                   style,
                   citations: [{ ...value, noteIndex: value.noteIndex || 1 }],
+                  ...(embeddedItems
+                    ? {
+                        metadataSource: "snapshot",
+                        embeddedItems: snapshotItems,
+                      }
+                    : {}),
                 },
                 signal: previewSignal,
               })
@@ -597,6 +609,80 @@ export async function chooseCitation({
       inputs.label.add(new Option(locator.label, locator.id));
     for (const source of sources) {
       controller.signal.throwIfAborted();
+      const id = source.citation.id;
+      if (embeddedItems && Object.hasOwn(embeddedItems, id)) {
+        const snapshot = embeddedItems[id];
+        if (
+          !snapshot ||
+          snapshot.id !== id ||
+          typeof snapshot.title !== "string" ||
+          !snapshot.type
+        )
+          throw Error("The document contains an invalid reference snapshot.");
+        if (!Array.isArray(options.nameVariables))
+          throw Error(
+            "Update References to display the document’s snapshot creators.",
+          );
+        snapshotItems[id] = structuredClone(snapshot);
+        // Display-only labels from native CSL name variables. CSL rendering
+        // and explicit import still belong to the backend's native adapters.
+        source.item = {
+          id,
+          data: {
+            title: snapshot.title,
+            date: String(
+              snapshot.issued?.["date-parts"]?.[0]?.[0] ??
+                snapshot.issued?.literal ??
+                snapshot.issued?.raw ??
+                "",
+            ),
+            creators: options.nameVariables.flatMap((role) => {
+              const names = snapshot[role] ?? [];
+              if (
+                !Array.isArray(names) ||
+                names.some(
+                  (name) =>
+                    !name ||
+                    typeof name !== "object" ||
+                    Array.isArray(name) ||
+                    [
+                      "literal",
+                      "given",
+                      "family",
+                      "dropping-particle",
+                      "non-dropping-particle",
+                      "suffix",
+                    ].some(
+                      (key) =>
+                        name[key] !== undefined &&
+                        typeof name[key] !== "string",
+                    ),
+                )
+              )
+                throw Error(
+                  "The document contains invalid " +
+                    role +
+                    " names in a reference snapshot.",
+                );
+              return names.map((name) => ({
+                creatorType: role,
+                name:
+                  name.literal ||
+                  [
+                    name.given,
+                    name["dropping-particle"],
+                    name["non-dropping-particle"],
+                    name.family,
+                    name.suffix,
+                  ]
+                    .filter(Boolean)
+                    .join(" "),
+              }));
+            }),
+          },
+        };
+        continue;
+      }
       const key = source.citation.id.split("/").at(-1);
       const item = await scoped.request("items/" + encodeURIComponent(key), {
         signal: controller.signal,
