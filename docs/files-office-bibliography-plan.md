@@ -1,0 +1,1580 @@
+# BashKitten Files, Office and References integration plan
+
+Requested and researched **28 October 2026**. **Plan only:** this document does
+not claim that any component is imported, ported, integrated or accepted. The
+research baseline is BashKitten `dd8db0849b0f4a0bc3d3960b2d1953ffda007a86`.
+Implementation and acceptance evidence must be recorded separately.
+
+## 1. Controlling user decisions
+
+This is the dated replacement specification for Files, Office, document
+comparison, References and Systematic Reviewer. The user's latest request
+supersedes conflicting earlier viewer/conversion plans and implementations,
+including the internal Files manager, SheetJS spreadsheet viewer and
+LibreOffice-based document preview/export path. Remove those paths cleanly
+during implementation; do not preserve a second implementation behind a flag.
+
+Preserve the original native plan at
+`f71686dcb76402ec43bac3e6a7db8979ef0fb119`, tagged
+`bashkitten/plan/native-environments-2026-10-11`, and its historical evidence.
+The [current native plan](native-environments-display-plan.md) continues to
+govern unrelated features and existing ownership, transport and packaging.
+This amendment records the user's new requirements instead of rewriting the
+old baseline or treating obsolete requirements as a reason to retain old code.
+
+Later clarifications on the same date narrow the integration further: Files is
+only a folder-button link to its normal web tab; Office opens through Quantum's
+web UI; Office diffs are only an optional Pi/CLI tool for saved Office snapshots.
+There is no Office-diff UI, Git integration or browser bridge. Reuse native
+Office collaboration and history surfaces, with the minimum storage/API adapters.
+Most module work must be buildable and testable without rebuilding the browser.
+The library manager, capture connector and agent-facing descriptions are named
+**References**. Bibliography remains the formatted-output command in Office and
+the originally requested attachment folder name; internal storage/documentation
+identifiers do not require renaming merely to change the product label.
+
+### Mandatory implementation rule for all agents and subagents
+
+**If the selected native app can provide the requested function, use that
+function. Only implement a pluggable module for what is genuinely missing or
+cannot work through the app's existing facilities.** This applies to every
+implementing agent and all nested subagents, and must be included in each task
+handoff. It is an implementation constraint, not a suggestion to consider later.
+
+Inspect the pinned application's configuration, UI, APIs, plugin facilities and
+existing source before designing new machinery. Prefer configuration, then
+native APIs/plugins with a small adapter. A new module must name the concrete
+gap it fills; do not duplicate collaboration, save timers, history viewers,
+format conversion, editing engines, service ownership or other existing native
+behavior. Reuse BashKitten's existing facilities on its side of the connection
+too. When research finds the feature already exists, remove the proposed
+replacement from the implementation scope. Necessary missing features remain
+required, but belong in the smallest separately iterable adapter/module.
+
+**References has a packaging exception, not a blanket rewrite exception:** the
+full desktop Zotero app is not the requested backend-only component. Reuse the
+relevant reference-management, translator, resolver, citation and Connector
+code/behavior while adapting its persistence/runtime/UI boundary. Do not bundle
+the entire desktop application, and do not use that exclusion to rewrite
+reusable algorithms or save logic. The rest of the integrated applications
+should use their native functionality wherever it satisfies the request.
+
+The binding boundaries are:
+
+- **Files:** a one-click folder icon in our sidecar opens File Browser Quantum
+  as a normal web tab. Backend headings (Local/container/remote) can expose the
+  same button; a project launch selects its existing folder. No synchronized
+  copy, per-project home directory or new workspace folder is required.
+- **Office:** Euro-Office, connected from Files, with human and agent editing
+  the same live document using its actual editing APIs. Ordinary web tabs own
+  its UI. Clicking a document in Quantum uses its natural Office web integration;
+  there is no separate Mozilla Office-opening or rendering integration.
+- **References:** a BashKitten-branded web library manager and backend, with
+  one independent library per project, plus a small browser capture/resolver
+  extension. The screenshot specifies layout and functions, not its palette.
+- **Browser capture:** our own **References** extension, reusing Zotero
+  Connector's actual detection, selection, save and attachment logic. No
+  Zotero Connector product name, logo, trademark branding or misleading
+  affiliation in the product UI. Preserve required attribution and notices in
+  legal/source information and imported source.
+- **PDFs:** ordinary browser PDF tabs, including PDFs opened from Files or
+  References. No new native PDF reader or imported Zotero reader UI.
+- **Mozilla changes:** small tab-launch, built-in-extension packaging/lifecycle
+  and narrowly scoped privileged bridge hooks. Library management, Office
+  editing, citation dialogs, storage, search and resolution belong to separately
+  iterable modules. The Files button uses normal navigation; the privileged
+  extension is for References capture/resolvers. Keep folder pickers and the
+  existing Git Changes sidecar without adding Office comparison to it.
+- **One service set per environment:** one Quantum server and one Euro-Office
+  DocumentServer stack for the native Linux backend, one for each separate
+  managed VM/container backend, and one for Termux. All chats, projects,
+  folders and documents in an environment share them. Never start PostgreSQL,
+  Redis, RabbitMQ or another Office dependency per chat/project/document/tab.
+- **Platforms:** native Linux and native Termux/Android, including the supported
+  amd64/x86_64 and arm64/aarch64 package targets. Remote connections reuse the
+  server's existing instances through the existing authorized tunnel.
+- **Resources:** retain upstream Office worker/database/cache defaults initially.
+  The user accepts the documented 4 GB baseline and wants actual usage measured;
+  this is not authorization to reduce workers or impose an untested memory cap.
+- **Implementation:** use configuration and upstream code first, narrow adapters
+  where missing, and `gpt-6-astra` with `xhigh` reasoning for complex workstreams.
+  A small main-browser diff is required; it does not imply that the backend
+  port, citation engine integration and simultaneous editing are trivial.
+
+Every feature below remains in scope. A feasibility gate identifies work that
+must be proved, not an optional feature that can silently be omitted.
+
+## 2. Components and ownership
+
+Use the existing backend supervisor, identity, permissions, data root and
+packaging. Suggested module names below are implementation boundaries, not a
+requirement to introduce another package manager or permanent system service.
+
+| Component | Owns | Main-browser involvement |
+| --- | --- | --- |
+| Files adapter + Quantum | Source/account reconciliation, file operations, file web UI and native Office connector | One sidecar folder-button URL; ordinary navigation |
+| Office integration module + Euro-Office | Shared runtime, native collaboration configuration, minimum API/storage/history adapters, exports | None specific to Office; reached through Quantum/web URLs |
+| `office-diff` CLI/library | Optional Pi/CLI comparison of saved Office snapshots | None; no UI, Git or browser integration |
+| References backend | Project databases, metadata, imports, resolver jobs, search, attachments, CSL rendering, compatibility API | None |
+| References web UI | Project/collection sidebar, library table, item details, settings and search | Ordinary tab |
+| References browser extension | Page/PDF capture, translator execution where browser context is needed, authenticated retrieval and human challenge tabs | Small built-in host bridge |
+| Office References plugin | Classic citation modal, style dropdown, document/cell/slide adapters and live citation commands | None; runs inside Office web UI |
+| Pi Office/References skills and Systematic Reviewer | Thin authorized tools/CLIs and instructions using those modules | Existing Pi RPC/client only |
+
+```mermaid
+flowchart LR
+    B[Browser: normal tabs] --> G[Existing authenticated backend gateway]
+    E[References extension] --> G
+    P[Owned Pi tools / standalone CLI] --> G
+    G --> F[One Quantum instance]
+    G --> O[One Office module and DocumentServer stack]
+    G --> R[One References service]
+    O --> C[Office editing and citation plugins]
+    F --> W[Existing project folders]
+    O --> W
+    R --> A[Project References attachments]
+    O --> V[Snapshots outside projects]
+    R --> D[Separate per-project databases outside projects]
+    X[office-diff] --> V
+    P --> X
+```
+
+Remote access reaches this gateway through the existing Tor/Chisel/Caddy/
+Authelia path. The diagram is a logical module diagram, not a new direct network
+route. Existing local container control remains separate from published access.
+For a remote Files button, navigate to the exact normal service URL returned by
+the existing client: `scheme://127.0.0.1:<actual mapped port><openPath>`. Loopback
+is the local end of that authorized route, not an authentication bypass or a new
+connection to the remote server. Reuse ordinary service-tab storage and opening
+behavior; do not put the Files UI in the protected Agent context. Quantum's Office
+links/assets/sockets use the same forwarded web origin/routing.
+
+### 2.1 Exactly one runtime set per owning environment
+
+Key the service registry by the existing stable **backend/environment ID**,
+never chat ID, project ID or a browser tab. Native Linux is one owner; each
+separate container/VM is another; Termux is another. Two browser windows
+connected to the same owner must discover the same running services.
+
+`ensureRunning(environment, component)` must coalesce concurrent startup,
+acquire one owner lock, verify an existing instance's identity/readiness and
+return its endpoint. Use the current supervisor's lifecycle/lock machinery;
+do not add independent shell launches in Files, Office, Pi or capture handlers.
+After a crash, reconcile stale state before restarting one instance. Several
+Office processes/workers required by upstream are one shared stack; a document
+participant is a logical session, not another server deployment.
+
+Run Quantum with multiple explicit folder sources and scoped accounts. Run one
+Office stack with all authorized document sessions. Run one References service
+opening independent project databases as needed. Reuse Office's native save
+timers and one shared storage/history adapter. Bounded per-request workers
+do not become additional persistent service stacks.
+
+Start on demand through the existing owner, with saved startup choices handled
+by the existing autostart system. Closing a chat or tab must not stop a service
+used elsewhere. Backend Off and desktop Quit/crash follow the existing lifetime
+rules, including bounded cleanup; remote disconnect never shuts down the remote
+host. Termux retains its established background lifetime. A save that could not
+finish before termination remains an unresolved/recoverable save, not a success.
+
+Acceptance must inspect process ownership, sockets and database/service data
+paths while many projects/chats/tabs open concurrently. Verify one Quantum
+instance and one Office dependency stack in each owner, including races,
+restarts, duplicate browser windows and direct CLI use.
+
+## 3. Project identity and storage
+
+Reuse UUIDs and owning working directories from
+[`agent/src/server/projects.mjs`](../agent/src/server/projects.mjs). Display names
+are labels. Every launch, capture, mutation, citation and file-open operation
+carries the owning backend and project identity; a name change cannot retarget
+an existing request. Ungrouped chats retain their existing folder logic and
+receive a scoped Files launch. References capture requires an explicit project
+destination, with a create/select-project route rather than a global-library
+fallback.
+
+Proposed layout under each owner's existing `$BASHKITTEN_DATA_DIR`:
+
+```text
+services/files/                         # one Quantum config/database/cache
+services/office/                        # one Office config/dependency state
+office-sessions/documents/<document-id>/
+  manifest                             # native history entries and saved-file paths
+  versions/<version-id>.<format>        # complete saved files
+bibliography/<project-id>/
+  library.sqlite                       # one independent library database
+  ...                                  # indices, operation receipts, local state
+```
+
+Names are proposed; reuse established directory conventions when implementing.
+Service secrets/settings stay in private backend storage. Project files remain
+in place, and bibliography attachments live in:
+
+```text
+<project>/Bibliography/<library-id>/<item-key>/<attachment-key>-<name>.pdf
+```
+
+The nested stable IDs avoid collisions when projects share a folder or items
+share titles. PDFs, EPUBs and saved web snapshots use the appropriate extension;
+the requested `Bibliography` directory is created only when needed for imports.
+No Office history, SQL database, cache or credentials is stored in `.git` or
+automatically added to the repository.
+
+Extend the existing canonical private-path exclusions for the new service,
+Office-session and library-state directories. A broad home/project source must
+not expose them through Quantum, direct paths or symlink aliases. Retaining
+`access.mjs` alone is insufficient: its current list does not know these new
+paths. Authorized history/library APIs expose their intended records, not raw
+service secrets, databases or unrestricted private-directory downloads.
+
+Document identity is **environment-wide**, with a separate authorization binding
+to each project that can reach the file. Opening the same actual file through
+two projects must reuse its active Office room and save owner, not create two
+writers. Handle rename/move identity explicitly; do not identify documents by
+display title, current content hash alone, or a stale inode alone. New content
+generations and path authorization are distinct from durable document identity.
+
+Project rename preserves its library. Moving its root requires an explicit
+attachment-path reconciliation; unavailable roots remain unavailable. Removing
+a project from navigation must not silently erase its library or attachments.
+Provide archive/relink and deliberate deletion through the existing lifecycle
+patterns. Never merge two project databases because their names match.
+
+## 4. Files: Quantum configuration and integration
+
+Use the verified stable candidate
+[`v2.0.2-stable`](https://github.com/gtsteffaniak/filebrowser/releases/tag/v2.0.2-stable),
+commit `2c071d1e6eb48d4b88da2657885d345663a0a88b`. The previously inspected
+`b0f6d53…` is a beta, not this stable baseline. Recheck official stable releases
+when implementation begins, then freeze the chosen source graph.
+
+### 4.1 Scope and presentation
+
+- Register each existing authorized folder as a source in the **shared** server.
+  Disable automatic user-folder creation. Keep server DB/cache outside projects.
+- Reconcile actual non-admin users and explicit `scopes[].permissions`, including
+  existing records. `userDefaults` only seeds accounts and cannot enforce later
+  changes. Single-source auto-enabling must not broaden access.
+- A one-click sidecar folder button opens the ordinary Quantum URL at the owning
+  root, using the existing local or Chisel-forwarded endpoint. Preserve navigation and transfer
+  functionality inside that scope, including supported previews, text editing,
+  download/upload, new files/folders and rename/move/copy/delete/archive actions.
+  Do not add a separate administrative sidecar or manual first-run wizard.
+- Office documents open through Quantum's own web UI connector on click. Native
+  BashKitten only navigates normal URLs; it does not implement Office routing,
+  preview, export, version history or document-event handling.
+- Use supported branding/name/favicon/CSS/theme settings, match BashKitten's
+  palette and typography, and disable seasonal decoration. Non-admin roles and
+  `account.disableSettings` remove irrelevant administration; hidden CSS alone
+  never enforces permissions.
+- Route PDF opens to normal browser PDF tabs; keep ordinary image/download
+  behavior. Quantum's text editor can show patch files, but it is not a Git
+  Changes implementation. Preserve the existing Changes sidecar.
+
+Source documentation: [users](https://filebrowserquantum.com/en/docs/configuration/users/),
+[branding](https://filebrowserquantum.com/en/docs/configuration/frontend/branding/),
+[styling](https://filebrowserquantum.com/en/docs/configuration/frontend/styling/).
+
+### 4.2 Authentication and multiple simultaneous project tabs
+
+Use a private Unix listener where supported and the existing authenticated
+gateway as the only entry point. Keep `noAuth` disabled. Launch identities are
+non-admin and distinct from the reserved bootstrap administrator. The gateway
+must strip caller-supplied identity headers and derive identity from its own
+authenticated session and project grant.
+
+Quantum v2.0.x proxy authentication promotes a matching `auth.adminUsername`;
+newer documented proxy-role controls are not available in this stable version.
+Its JWT identities do not accept arbitrary project-scope claims, and an existing
+session cookie does not automatically refresh permissions. Therefore reconcile
+real account/source permissions, enforce revocation at the gateway and invalidate
+affected Quantum sessions. A URL token must not become a durable credential.
+
+Preserve the host-owned **Allow remote file manager** gate on remote Quantum
+launches, operations, active transfers, Office sessions and their subsequent
+save callbacks. Revocation stops further use of that grant; pending work cannot
+commit under revoked authority. Preserve unresolved save data for recovery or
+explicit adoption by an independently authorized local owner, rather than
+silently dropping it or treating a callback as a permission bypass. Keep ordinary
+chat attachments available under their existing separate policy when Files is
+Off. Apply equivalent explicit project/operation authorization to References
+capture and attachment access without broadening the existing remote gate.
+
+Multiple project tabs need isolated launch/session context through the shared
+gateway: a cookie or last-selected-folder change in one tab must not switch
+another tab's authority. Validate the chosen scoped path/origin/header arrangement
+against Quantum's actual redirects, cookies, assets and WebSockets before
+settling it. This is an integration adapter task, not a second Quantum instance.
+See [proxy auth](https://filebrowserquantum.com/en/docs/configuration/authentication/proxy/),
+[JWT](https://filebrowserquantum.com/en/docs/configuration/authentication/jwt/)
+and [HTTP/socket configuration](https://filebrowserquantum.com/en/docs/configuration/http/).
+
+### 4.3 Office connection and slow transport
+
+Reuse Quantum's existing OnlyOffice integration as the compatibility base. Verify
+Euro-Office's actual protocol against the pinned release. Configure browser UI
+URL (`integrations.office.url`), backend Office URL (`internalUrl`) and Office's
+authenticated download/callback URL (`http.internalUrl`) separately. Set the
+connector secret; the current source has a permissive branch when it is empty.
+Backend-local calls stay local to the owner. Every browser-facing remote route,
+asset, socket and transfer uses the existing authorized tunnel.
+
+Prefer one published web-service origin/path routing Files and Office together.
+Never overwrite the shared server's Office URL with the last client's loopback
+port: simultaneous clients can have different Chisel mappings. Use relative
+web routes or a small web-integration URL adapter; backend-local callback/download
+addresses stay fixed and separate from browser-facing URLs.
+
+The stable source has real short deadlines, not just configurable documentation:
+
+| Path | Observed stable default | Required adaptation |
+| --- | --- | --- |
+| Frontend `requestTimeoutSignal()` | 5 seconds | Audit callers; use service-appropriate connect/idle/progress handling |
+| View / preview / media | 60 / 30 / 60 seconds | Avoid terminating healthy long transfers; retain cancellation/stall handling |
+| Office callback file retrieval | 10-second total client timeout | Complete-file streaming with progress, size checks and bounded stalled-operation handling |
+| Download/general HTTP | Different/no equivalent wrapper | One deliberate policy across layers; not unlimited unowned operations |
+
+Patch the missing configuration seams narrowly in Quantum. Initial integration
+defaults: allow 120 seconds for remote connection/first response, 180 seconds of
+no application-level progress for an active transfer, and no fixed total deadline
+for a healthy streaming download. Treat these as **proposed BashKitten transport
+defaults to validate on Tor**, not upstream settings that already exist. Long
+conversion/search work returns an operation ID and progress/cancellation rather
+than holding a short ordinary request. Resume idempotent reads; do not blindly
+replay mutations after uncertain outcomes. Distinguish a live but slow peer from
+a dead connection and use bounded concurrency/buffers/backpressure.
+
+Reconcile Caddy's existing disabled write-idle wrapper with this end-to-end
+policy rather than enabling a conflicting short timeout or disabling every
+timeout. Office realtime reconnect behavior needs separate slow-link testing.
+[Connector configuration](https://filebrowserquantum.com/en/docs/integrations/office/configuration/),
+[stable request source](https://github.com/gtsteffaniak/filebrowser/blob/2c071d1e6eb48d4b88da2657885d345663a0a88b/frontend/src/api/utils.js),
+[router](https://github.com/gtsteffaniak/filebrowser/blob/2c071d1e6eb48d4b88da2657885d345663a0a88b/backend/internal/web/httpRouter.go).
+
+## 5. Office: shared runtime and real live editing
+
+Use Euro-Office's released component graph, initially researched at
+[`DocumentServer v9.3.7`](https://github.com/Euro-Office/DocumentServer/releases/tag/v9.3.7),
+`e8d67f92c8a8549ea03030af2422a2b6b5d87274`. Keep the existing database/queue/cache
+topology and default worker settings while measuring it. Do not substitute
+SQLite for an unsupported DocumentServer database, deploy a database per project,
+or promise that 4 GB is its measured RAM consumption.
+
+Measure the one whole stack and browser/editor contribution: idle, first open,
+one human, human plus agent, multiple documents, conversion, checkpoint and PDF
+export. Record RSS/PSS where available, peak memory, CPU and effective merged
+configuration. Keep measurement separate from optional later tuning.
+
+### 5.1 Available APIs and the missing public connector
+
+Released Euro-Office `server/license.js` already returns `advancedApi: true`.
+Use upstream capability reporting; no activation bypass is needed. However,
+the released `DocsAPI.DocEditor` does **not** export `createConnector` even though
+some internal connector plumbing exists. Do not equate that capability flag with
+a complete public Automation API, copy a commercial OnlyOffice connector, or
+invent a token to unlock it.
+
+The concrete released route is a bundled plugin using `Asc.plugin.executeMethod`,
+`callCommand` and the editor-specific Office APIs. Build the thin automation
+bridge on this route, probe actual capabilities, and reuse any subsequently
+released open Euro-Office automation implementation after inspecting its pinned
+source. Do not rely on newer OnlyOffice documentation for APIs absent in 9.3.7.
+[License capability source](https://github.com/Euro-Office/server/blob/a924935680de42df6b1c46cec923fdb60ff3fd30/Common/sources/license.js),
+[public API source](https://github.com/Euro-Office/web-apps/blob/ce0ba49545810a56a3878081ab762c6a7ae8dd4e/apps/api/documents/api.js),
+[plugin API](https://github.com/Euro-Office/sdkjs/blob/40d9b7780f11a5cadc259f9b9815a364de8caa96/common/plugins/plugin_base_api.js).
+
+### 5.2 Native collaboration and Pi editing APIs
+
+Use **DocumentServer's existing collaboration configuration and engine**. The
+small integration adapter supplies the authenticated configuration, shared live
+`document.key` and distinct `editorConfig.user.id`/names for the human and agent.
+Automatically create/reuse the agent participant when Pi first uses an editing
+API. Native Office owns collaboration, cursors, document state, merging, locking,
+undo, autosave and reconnect behavior. Do not build a replacement collaboration
+protocol, shadow document, participant database or independent editing engine.
+
+The plugin bridge only invokes the released Office APIs in that agent's own
+participant. Prefer upstream open automation facilities wherever actually
+available; the missing public connector in the researched release is still a
+capability to prove, not a reason to invent another collaboration system.
+If an editor instance is required, host it in the Office web module through its
+normal web page/configuration. No Office-specific Mozilla actor or native bridge
+is required. Prove the renderer's startup/background behavior on Linux and
+Android; an HTTP API or a user ID alone is not an editing renderer.
+
+Pi needs discoverable native-API operations to open/create a document, inspect
+its content, edit documents/cells/formulas/slides, invoke citations, save, export
+to supported formats (including PDF), and obtain/open an ordinary browser view
+URL. Use the same web service routes and existing normal URL-opening tool as the
+user; no custom browser preview path. Expose actual per-editor capabilities and
+conversion errors. Reuse upstream transactions/undo and stock Pi mutation queues;
+do not replay an edit whose result is uncertain.
+
+Live edits use the native coauthoring participant. DocumentBuilder/conversion
+APIs can handle creation or conversion of closed files, but must not overwrite
+an active coauthoring session. Report native save/export completion accurately;
+a command being accepted is not proof that its output file has been saved.
+
+## 6. Simple automatic snapshots and native Version History
+
+The feature is automatic full-file snapshots outside the project, with a maximum
+retained count. The user opens Office's existing **Version History**, chooses an
+older version to view, or restores it. There is no new history UI, manual change
+checking, mandatory comparison workflow or separate checkpoint engine.
+
+### 6.1 Use Office's own save timer and callbacks
+
+Enable the released native periodic force-save feature:
+
+```json
+{
+  "services": {
+    "CoAuthoring": {
+      "autoAssembly": {
+        "enable": true,
+        "interval": "5m",
+        "step": "1m"
+      }
+    }
+  }
+}
+```
+
+Upstream already defaults the interval/step to five minutes/one minute, with
+`enable:false`. Enabling it is the configuration for the requested history
+feature; worker, database and cache resource defaults remain unchanged. Accepted
+edits schedule/coalesce the native timer. Checkpoints are approximately five
+minutes apart, subject to the native scan and conversion time, rather than an
+exact deadline. No extra watcher, polling loop, content-hash change detector or
+custom snapshot scheduler is needed.
+
+Use Quantum's existing Office save callback path with a small storage adapter.
+Save complete successful timer/final-save outputs in the project's normal file
+and the external `office-sessions` store as appropriate; keep the initial version
+and the latest **50 versions per document**, configurable, pruning oldest versions
+after the new file is saved. The total retained count includes the initial
+version. Use existing callback identity to avoid duplicates on retries. There is
+no additional global storage-budget policy in this plan.
+
+Normal final-save callbacks use status `2`; native timer force-save callbacks
+use status `6`, `forcesavetype:2`. Keep callback authentication, complete-file
+writes and native error handling. Unsent client edits are not part of a server
+force-save; use native save/export completion rather than claiming those edits
+are already durable. Preserve the active room key during force-saves.
+[Native defaults](https://github.com/Euro-Office/server/blob/a924935680de42df6b1c46cec923fdb60ff3fd30/Common/config/default.json),
+[native timer owner](https://github.com/Euro-Office/server/blob/a924935680de42df6b1c46cec923fdb60ff3fd30/DocService/sources/gc.js),
+[save semantics](https://api.onlyoffice.com/docs/docs-api/get-started/how-it-works/saving-file).
+
+### 6.2 Supply the native history UI with our saved files
+
+Euro-Office v9.3.7 already has desktop and mobile Version History. Wire its
+existing web-integration events to the saved-version store:
+
+| Native event | Minimum web/backend adapter |
+| --- | --- |
+| `onRequestHistory` | Enumerate stored versions and call `refreshHistory({currentVersion, history})` |
+| `onRequestHistoryData` | Authorize the selected full snapshot and call `setHistoryData({version, key, url, fileType, token})` |
+| `onRequestRestore` | Restore that saved full file through the normal save owner, then refresh/reopen the current generation |
+| `onRequestHistoryClose` | Return to the current document |
+
+Provide native version/date/user metadata and a distinct immutable history key
+for each saved snapshot. Do not reuse the live room key for every historical
+file, since the editor caches by key. Full files are sufficient: omit optional
+`changes`, `changesUrl` and `previous` delta data. We do not manufacture delta
+archives or connect `office-diff` to this UI. These event adapters live in the
+Quantum/Office web integration and backend, not the browser application.
+[Desktop history](https://github.com/Euro-Office/web-apps/blob/ce0ba49545810a56a3878081ab762c6a7ae8dd4e/apps/common/main/lib/controller/History.js),
+[mobile history](https://github.com/Euro-Office/web-apps/blob/ce0ba49545810a56a3878081ab762c6a7ae8dd4e/apps/common/mobile/lib/controller/VersionHistory.jsx),
+[public history API](https://github.com/Euro-Office/web-apps/blob/ce0ba49545810a56a3878081ab762c6a7ae8dd4e/apps/api/documents/api.js).
+
+Restore follows native session/reload behavior and must not let an old callback
+overwrite the restored version. Keep ordinary save failures visible and recovery
+files intact; do not introduce a custom filesystem transaction/journaling system
+or claim protection against unrelated applications concurrently rewriting files.
+Code files and `.git` remain untouched by Office history. There is no directory
+synchronizer or automatic Git operation.
+
+OpenDocument editing may use an internal OOXML representation. Verify save-back,
+export and citation metadata round trips for DOCX/XLSX/PPTX and ODT/ODS/ODP;
+report unsupported conversions honestly and preserve the source master unless
+an explicit native save/export replaces it.
+
+## 7. Optional agent/CLI comparison of Office snapshots
+
+Create a separately packaged, read-only Node/JavaScript tool for the snapshots
+we save. Pi can call it **when useful**; it does not run continuously or become
+part of saving/restoring. A standalone CLI uses the same library. Proposed
+interface: `office-diff --document ID --from VERSION --to VERSION --format json|text`.
+The tool resolves complete immutable files from the authorized snapshot store.
+It needs no editor renderer, browser integration or running References service.
+
+**No diff UI, Git/Changes adapter, history compare button or browser hook is
+requested.** Leave the existing Git Changes feature alone. This tool does not
+interpret DocumentServer's internal collaborative-operation deltas.
+
+Compare package entries and namespace-aware XML with semantic adapters for:
+
+| Format family | Useful agent-readable differences |
+| --- | --- |
+| DOCX / ODT | Paragraphs, tables, styles, citations/fields, notes/comments, tracked revisions and embedded assets |
+| XLSX / ODS | Sheets, cells, values/formulas, styles, merges, names, comments and embedded assets |
+| PPTX / ODP | Slides, shapes/text, notes, layouts/themes, relationships and embedded assets |
+
+Report which snapshot versions were compared and unsupported/uninterpreted parts.
+Avoid noise from ZIP ordering or generated XML identifiers while retaining raw
+part differences where semantic interpretation is unavailable. Do not claim full
+equivalence when coverage is incomplete. Reuse pinned ZIP/XML/diff libraries;
+never rewrite snapshots, execute macros or fetch external relationships.
+Cancellation and bounded work belong to the tool, with no UI machinery.
+
+## 8. References service and project libraries
+
+Build a standalone backend module and ordinary web UI, derived from the useful
+Zotero source components. Do not embed the desktop XUL application, a second
+Gecko application, or one desktop Zotero instance per project. Existing native
+Zotero/LibreOffice work is reference evidence, not the requested architecture.
+
+Reuse schema/type/creator/field definitions, translators, translation utilities,
+import/export behavior, resolver logic and citation components. The translation
+runtime explicitly expects adapters for `Translators`, `HTTP`, `ItemSaver` and,
+for export, `ItemGetter`. The Node translation-server project supplies reusable
+adapters; integrate the necessary code into this module without deploying its
+unneeded serverless/AWS service graph. Zotero's database/XPCOM and UI code is not
+automatically a drop-in Node backend. Implement the narrow persistence and
+compatibility layer around the reused behavior, with explicit migrations.
+[Translation interfaces](https://github.com/zotero/translate),
+[Node adapter reference](https://github.com/zotero/translation-server).
+
+One service opens genuinely separate project library databases. Collections,
+items, notes, tags, related items, attachments, deleted items and searches belong
+to their library. No master library containing all projects as collections.
+Use a local transactional database suitable for the native package targets;
+SQLite is the proposed References store, independent of Office's PostgreSQL.
+Every transaction, search job, cached result and attachment operation is scoped.
+
+### 8.1 Web UI and screenshot fidelity
+
+The [user-supplied layout reference](design/bibliography-layout-reference.png)
+is retained for implementation. Use BashKitten colors, typography, icon family,
+spacing and responsive conventions throughout; replace branded donor artwork.
+
+- Add the requested left sidebar with project/library names, collection tree,
+  collection creation and a small settings action. Select one project's library
+  explicitly. Display duplicate project names with their owning backend context.
+- Retain the reference's compact toolbar and real actions: new collection, new
+  item with item-type menu, magic-wand Add by Identifier, attachment menu and
+  note creation. Match upstream functionality and dropdowns, not dead visual
+  replicas. Use our own icons with familiar meanings.
+- Keep all-fields/tags search and filtering above the item table. Columns include
+  Title, Creator, Item Type, Year and attachment presence, with selection,
+  ordering and normal keyboard/multi-item actions.
+- Keep the right details panel with editable type-appropriate Info fields,
+  creators, title, publication identifiers and other schema fields, expandable
+  Abstract and Attachments. Include notes/tags/related-item operations where
+  needed by the retained library behavior.
+- Add OpenAlex Search as a clear action with results/import status; it uses the
+  currently selected project's library. Settings include OpenAlex credentials,
+  Crossref contact email, resolver configuration and relevant service status.
+- PDFs open through authorized file URLs in normal browser PDF tabs, optionally
+  using Quantum's file route. Do not import Zotero's custom PDF reader.
+- On phones, retain all actions while moving panes into navigable responsive
+  views. Do not require desktop-width tables or tiny embedded modals to edit an
+  item, choose a collection, search or complete a capture.
+
+For the search web UI, also borrow the user's **Systematic Reviewer main-branch**
+Harvest interface ideas: query/field controls, supported search modes, sort/order,
+result limit/date filters, categorized searchable filters with removable chips,
+OA/PDF/abstract filters, result estimates, explicit import/PDF choices, saved
+search/source details, progress and partial-result presentation. Adapt these to
+the selected References project and BashKitten styling; expose only search modes
+and filters actually supported by the current provider. This supplements the
+requested library layout rather than replacing it with the old review workflow.
+Show any adopted defaults such as article-only or has-abstract filters explicitly;
+missing abstracts are not exclusion evidence. Keep provider semantic search and
+local embedding ranking distinct, and retain search-only/estimate operations.
+[Main-branch UI reference at the inspected commit](https://github.com/openresearchtools/systematic-reviewer/blob/859824b115731cb9932cdd45b130b8f4d222daac/src/ui/harvest.js).
+
+### 8.2 Library API and compatibility
+
+Provide a native project-qualified API plus the compatibility subset actually
+needed by the adapted Connector and Systematic Reviewer. Keep three protocols
+distinct: library Web-API-style endpoints, Connector capture RPC, and Office
+plugin commands. Current Zotero **10+ Local API supports writes**; older
+read-only descriptions are not the appropriate contract.
+[Official Local API](https://www.zotero.org/support/dev/web_api/v3/local_api).
+
+Preserve item/collection JSON schema, pagination, item versions, conditional
+writes, CSL JSON, instance identity, cancellation, rate-limit/backoff information
+and explicit errors. Use BashKitten's existing authentication and project grants,
+not Zotero's unauthenticated localhost-read policy or a global auto-authorize
+patch. A local CLI uses the same authorized module interface without a publicly
+reachable unauthenticated service.
+
+The reviewer currently needs:
+
+| Contract | Required behavior |
+| --- | --- |
+| `GET /api/{library}/items/top` | Search/filter/paginate; JSON data and CSL JSON; exclude attachment/note/annotation as requested |
+| `GET /api/{scope}/items/{key}` | Verified library/key, metadata, CSL item and version |
+| `GET …/items/{key}/children` | Attachment identity, parent relationship, MIME, link mode, name and source URL |
+| `GET …/items/{attachmentKey}/fulltext` | Complete cached content plus indexed/total page and character counts; missing text is explicit |
+| `POST /connector/getSelectedCollection` | Destination, hierarchy and editability for the authorized session |
+| `POST /connector/import?session=…` | RIS/PubMed XML/BibTeX import with verified result identities and stable receipt |
+
+Support `Zotero-API-Version: 3`, `Zotero-Server-ID`, `Total-Results`, `Backoff`
+and `Retry-After` where compatibility requires them; protocol identifiers are
+not product branding. Do not advertise full Zotero API parity without coverage.
+Add the item/collection CRUD, style and attachment operations used by our own UI
+through the same transaction owner. Reject stale version preconditions.
+
+Canonical new citation identities are our own stable backend/library/item IDs
+(for example `bkref:<backend-id>/<library-id>/<item-key>`). Compatibility routing
+aliases are separate from identities. Legacy real `users/…`, `groups/…` and
+`users/local/…` citation IDs retain explicit import/mapping records; never
+fabricate an upstream identity or silently reinterpret it as another project.
+
+### 8.3 Search, identifiers and resolver pipeline
+
+Centralize DOI/PMID/PMCID normalization and metadata resolution in References,
+shared by magic wand, capture, OpenAlex, CLI and Pi. Carry provenance and each
+original input through resolution. A PMID need not first be converted to DOI to
+be useful; use PubMed directly. Use NCBI's converter for valid PMC crosswalks,
+including version distinctions. A missing crosswalk is not evidence of a
+different article. Preserve arXiv/ISBN handling already present in the reviewer,
+including version/checksum validation and explicit unsupported cases.
+
+**Metadata parity:** reuse Zotero's actual identifier/search translators and
+item-schema mappings for Crossref, PubMed, publisher pages and other supported
+sources. Resolve the complete native item metadata, including all available
+type-specific fields, creator roles/order, identifiers, abstract, dates,
+publication/volume/issue/pages, language, URLs, rights and Extra information.
+Do not reduce imported records to title/author/year/DOI or persist only CSL JSON;
+CSL JSON is a derived citation view of the richer library record. Preserve source
+provenance and unmapped/raw provider data where needed, without inventing absent
+values or silently overwriting verified user metadata. Metadata resolution and
+PDF retrieval are both required; successful metadata alone is not PDF success.
+
+**Abstract retrieval/enrichment:** carry over Systematic Reviewer's rules into
+the shared References API so user and agent can retrieve, inspect and enrich
+abstracts. On an authorized Add/Import from identifiers or OpenAlex results,
+automatically resolve full metadata, apply eligible abstract enrichment and
+enqueue PDF retrieval when selected/configured. The user need not manually
+perform identifier conversion or run a separate enrichment tool after each
+import. Provide selected-item/batch enrichment in the UI and Pi API as well;
+an enrichment-only request must not create new library records.
+
+Preserve the V3 rule: after trimming, replace/enrich the existing abstract only
+when it has **fewer than 100 characters** and OpenAlex supplies a nonempty longer
+abstract; otherwise retain it. Reconstruct OpenAlex's inverted index with the
+V3 gap/collision validation, retaining raw metadata and warnings for malformed
+responses. Use exact DOI/PMID matches, refuse conflicting/ambiguous identities,
+and retain lookup provenance and the original input. Failed or missing enrichment
+must not clear existing text or synthesize an abstract. The main-branch UI donor
+does not override these stronger V3 data rules.
+Retain both source abstracts and the chosen text's origin, OpenAlex identity,
+library/item version and lookup details. Use native item-version checks to avoid
+clobbering an edit made during lookup. A changed chosen abstract invalidates only
+its affected embedding/text-hash entry. Report per-record imported/skipped/error/
+unresolved outcomes and resume interrupted imports without blindly repeating
+uncertain writes.
+
+Search OpenAlex directly with the same backend API for UI and agent use. Support
+filters, paging, selected-result import and a cancellable import of all results
+in an explicitly bounded search/result set. Show totals and partial failures;
+do not silently import only one page or expand an unbounded query. Resolve and
+deduplicate selected results within the target library using identifiers and
+verified relationships, not title similarity alone. Conflicting metadata is
+reviewable instead of silently merged.
+
+Store OpenAlex keys and Crossref/Unpaywall contact configuration privately under
+the owning backend. Expose safe status and editing through the web settings.
+OpenAlex currently permits basic keyless requests; its key increases allowance
+and enables cursor paging. Follow actual returned limits and official current
+behavior. Crossref uses `mailto` and an identifying User-Agent. Never log keys
+or place them in project files/URLs exposed to the browser history.
+Remove any hardcoded developer contact email from borrowed main-branch code;
+use the user's configured contact and our application's identity.
+[OpenAlex authentication](https://help.openalex.org/api/authentication/),
+[Crossref access](https://www.crossref.org/documentation/retrieve-metadata/rest-api/access-and-authentication),
+[NCBI conversion](https://pmc.ncbi.nlm.nih.gov/tools/id-converter-api/).
+
+Reuse Zotero's PDF resolver sequence, result shapes, retry/progress behavior and
+manual Find Available PDF flow. Put jobs in the backend; request browser help
+only for authenticated page/cookie/challenge work. Use the user's active browser
+context appropriately, open a visible challenge tab when needed, and resume the
+same operation after the human finishes. Do not add a CAPTCHA bypass.
+
+Reuse the source implementation of `getFileResolvers`, `addAvailableFiles`,
+`addFileFromURLs` and `downloadFirstAvailableFile`, with only the required
+backend/storage/browser adapters. In the pinned release the native queue spaces
+same-domain requests (normally one second), respects `Retry-After` on 429/503,
+backs off on transient failures and limits repeated domain failures. It can work
+on another domain while one is paused. Retain native resolver ordering, URL/redirect
+handling, retry bounds, deduplication and cancellation rather than replacing them
+with an eager parallel downloader. Reuse the relevant translator/HTTP throttling
+for metadata too, respecting each provider's actual limits.
+[Pinned resolution and queue source](https://github.com/zotero/zotero/blob/536244c2771f590abab9c09a3c27e615e0b318ff/chrome/content/zotero/xpcom/attachments.js).
+
+All UI, import and Pi requests go through the shared resolver service/queue;
+opening more projects or using more agents must not multiply requests to the
+same provider by bypassing it. Preserve project-scoped progress/cancellation and
+report waiting, retrying, challenge required, unavailable and completed states.
+Slower successful resolution is preferable to changing native pacing to appear
+faster. These are backend jobs, not synchronous browser operations.
+
+Custom resolvers must accept the existing Zotero JSON unchanged:
+
+- Array of objects, with the currently accepted single-object form retained.
+- `name`, `method` (`GET`/`POST`), `url` with `{doi}`, `mode` (`html`/`json`),
+  `selector`, optional `automatic`.
+- HTML: CSS selector, `attribute`/`index`; absent attribute uses text content;
+  relative result URLs resolve correctly.
+- JSON: **JSPath**, not JSONPath, plus `mappings.url`/`mappings.pageURL`.
+- Missing/false `automatic` applies only on the relevant explicit manual action.
+
+Provide validation and import/export without changing that language. Reuse the
+actual parser/runner, with normal backend network permissions and cancellation.
+[Resolver format](https://www.zotero.org/support/kb/custom_pdf_resolvers).
+
+The References settings UI must accept the same JSON the user would put in
+Zotero's developer preference `extensions.zotero.findPDFs.resolvers`, including
+its `automatic` semantics. A friendly editor may wrap it, but raw JSON remains
+editable and portable without a conversion step or a competing resolver syntax.
+
+Two dependencies require explicit replacement adapters:
+
+1. **PDF recognition:** upstream Connector expects a backend recognizer; Zotero
+   extracts initial-page text and submits it to a hosted recognition service.
+   The public Connector/translator sources do not include that server. Preserve
+   standalone PDF saving, progress and later parent-item recognition. Implement
+   the backend contract using bundled PDF extraction, identifiers and the selected
+   metadata/search providers, with confidence/no-match/manual-parent handling.
+   Reuse published compatible recognizer code if available after source review.
+   Do not claim identical matching quality to Zotero's hosted service.
+2. **OA lookup:** upstream uses a private Unpaywall mirror and directs other
+   projects to the public service. Use Unpaywall with the configured contact or
+   OpenAlex OA locations through the same resolver adapter; do not call Zotero's
+   private mirror. Browser/session retrieval still handles publisher access.
+
+These adapters preserve the save workflow while replacing external service
+dependencies. They are not permission to drop raw PDF capture or pretend that
+the Connector alone implements recognition.
+[Recognition behavior](https://www.zotero.org/support/retrieve_pdf_metadata).
+
+**Resolver acceptance target:** compare the same representative DOI/PMID/PMCID
+batch in native Zotero and References on the same machine/network, with matched
+translator versions, resolver JSON, provider configuration and equivalent
+authenticated publisher/proxy access. PDFs obtainable by native Zotero should
+also be obtainable through References' reused pipeline. Investigate each mismatch
+using metadata, resolver order, redirects, cookies, challenges and pacing; do
+not accept a reduced resolver as equivalent because it downloads some PDFs.
+Compare the document/version obtained, not just whether a `.pdf` file exists.
+Record time-varying/provider differences, including the explicit private-service
+replacement adapters above; never claim a universal success rate from code reuse.
+Run paired checks without doubling simultaneous load on the same hosts.
+
+## 9. Our References browser extension
+
+Import and adapt the actual released
+[Connector 5.0.217 source](https://github.com/zotero/zotero-connectors/tree/ce29dfa360d1ce17a3a1f15a9d338d638a073106).
+Use our extension ID, product name, icons, menu labels, onboarding/status/error
+wording and settings. Do not install a second product called Zotero Connector.
+Legal attribution remains factual and complete; product branding remains ours.
+[Upstream trademark distinction](https://www.zotero.org/support/terms/trademark).
+
+### 9.1 Reuse the save logic, not a rough imitation
+
+Retain/adapt the actual `background.js`, injection/page-saving chain, ItemSaver,
+background attachment saver, progress UI, item selector, content-type handler,
+HTTP/cookie handling and SingleFile integration. Preserve page detection,
+translator selection, one/many-item capture, website snapshots, direct PDFs,
+attachments, progress/retry and destination/tag/note updates. Add the explicit
+backend/project/library plus collection dropdown to that existing flow.
+
+Expose a **References Add** action in the browser toolbar on desktop and
+Android. Its order is Add → resolve/select backend, project/library and collection
+→ invoke the reused capture/save chain. A remembered destination is explicit and
+validated for that operation; selection is not a global mutable backend target.
+Cancelling destination selection creates no library item or attachment. Two tabs
+can capture to different libraries concurrently. Upstream's initial save to a
+global selected target must be adapted before writes, not merely relabelled in
+a popup after saving.
+
+The released code retrieves attachment bytes in the browser background and
+uploads them with the attachment MIME type, JSON `X-Metadata` and `sessionID`.
+Preserve the current protocol rather than reconstructing an older save design.
+The compatibility adapter needs Connector API **3**:
+
+```text
+ping, getTranslators, getTranslatorCode, getSelectedCollection
+saveItems, saveSnapshot, saveSingleFile
+saveAttachment, saveStandaloneAttachment, getRecognizedItem
+hasAttachmentResolvers, saveAttachmentFromResolver, updateSession
+import, installStyle
+```
+
+Current capture does not use the historical `attachmentProgress`,
+`sessionProgress` or `selectItems` HTTP calls. `delaySync` becomes explicitly
+inert or is removed with its timer. Retain `getClientHostnames` only if the
+associated optional proxy feature is retained. Google Docs `document/execCommand`
+and `document/respond` are separate integration code, not the required capture
+API. [Transport source](https://github.com/zotero/zotero-connectors/blob/ce29dfa360d1ce17a3a1f15a9d338d638a073106/src/common/connector.js).
+
+Bind each save session and its attachment uploads atomically to the selected
+backend/library/project. Changing the main library UI during a save cannot
+redirect it. An explicit destination update applies only to that save session,
+with validated transactional move/reconciliation of already saved parts; do not
+pretend a two-database transfer is atomic without recovery. Ambiguous outcomes
+retain receipts and are not blindly replayed. File downloads follow the same
+project authorization as metadata writes.
+
+Remove cloud-account/sync fallback: backend unavailable means unavailable, not
+save to Zotero online. Remove translator-failure/developer reporting, upstream
+Google Docs injection, update-fixer hacks, unneeded onboarding and branded
+assets. Hiding a reporting checkbox is insufficient. Audit extension requests
+and final packaged behavior, including `reportTranslationFailure` defaults.
+
+### 9.2 Minimal privileged host and Android adaptation
+
+Use the existing Gecko built-in extension privilege mechanism and a very small
+authenticated bridge. Keep native messaging in the trusted background side;
+page content gets only validated capture operations, never arbitrary privileged
+commands, filesystem access or project credentials. Translator execution is not
+a hostile-code sandbox merely because upstream calls its lexical-eval wrapper
+`SandboxManager`. Separate translator operations from privileged host entrypoints.
+
+Desktop and Android share capture logic. Android lacks desktop `windows` popup
+APIs used by the item selector and challenge flow: adapt those few host functions
+to show the **same HTML selector/challenge surfaces in ordinary tabs**, with
+matching completion/cancellation callbacks. Verify cookies/partitions, private
+contexts, redirects, closing tabs, authenticated downloads and human challenge
+completion on Fenix. No library table or resolver state machine belongs in Java,
+Kotlin or Mozilla chrome.
+
+GeckoView `installBuiltIn`/`ensureBuiltIn` supports APK resource extensions and
+native messaging, but accepts packaged `resource://android` assets, not arbitrary
+downloaded privileged code. Ordinary AMO installation does not grant equivalent
+privilege. Independent between-release iteration is required: keep the privileged
+host shim tiny, and provide an explicit authenticated/versioned component update
+and rollback path for the replaceable extension logic where built-in packaging
+cannot supply it. Development reload and distributable updating are distinct.
+Use verified packages and a narrow API version contract; do not weaken Gecko's
+extension-signing/privilege checks globally. Translator/style data updates are
+separate pinned component updates, not arbitrary remote executable downloads.
+[GeckoView extension APIs](https://firefox-source-docs.mozilla.org/mobile/android/geckoview/consumer/web-extensions.html),
+[system-addon update model](https://firefox-source-docs.mozilla.org/toolkit/mozapps/extensions/addon-manager/SystemAddons.html).
+
+## 10. Office citations and bibliographies
+
+Ship one shared citation model, CSL engine adapter and classic dialog, with
+three Office plugin adapters. Install all plugin assets locally with the Office
+component; do not require a marketplace or a remote helper script. Verify the
+selected Euro-Office release's actual plugin packaging: runtime support is not
+proof that a ready-made Zotero plugin is included.
+
+**Explicit plugin boundary:** citation behavior and dialogs belong to the
+separately installed **References Office plugin**, with library access and CSL
+processing in the References backend. Use Euro-Office's native fields, anchors,
+plugin UI and editing APIs. Do not hardcode citation parsing, styles, library
+management or a new citation engine into the Euro-Office application/SDK. The
+plugin must be replaceable/testable without rebuilding Euro-Office or BashKitten.
+Only a proven missing native API/event may justify a small isolated upstream
+integration patch; that patch exposes the missing capability, not citation logic.
+
+### 10.1 Common UI and API
+
+All three editors expose **Add/Edit Citation**, **Bibliography**, **Refresh**,
+**Style** dropdown and locale/settings. Use the classic Zotero interaction
+pattern: library/collection and item search, selected-reference list, single or
+multiple citations, reorder, locator/label, prefix/suffix, suppress-author and
+preview. Port the behavior to a normal web modal with BashKitten styling; do not
+embed the old XUL dialog or substitute the newer citation picker the user rejected.
+
+The classic donor remains in
+[Zotero 7.0.32 `addCitationDialog`](https://github.com/zotero/zotero/blob/188c54c186fbbaa6889145986d43ba64160a44fa/chrome/content/zotero/integration/addCitationDialog.xhtml),
+commit `188c54c186fbbaa6889145986d43ba64160a44fa`. Import only the needed historical
+behavior/reference with provenance; current core/translator code uses the newer
+selected release. Reuse this modal across document, spreadsheet and slide plugins.
+
+Agent citation commands invoke the exact same validation and adapter operations
+as the GUI, through the agent's own live editor participant. Include insert/edit
+cluster, bibliography insertion/update, style/locale change, refresh all, inspect
+citations and export/unlink-to-text. Style changes refresh every managed citation
+and bibliography in one consistent document state, with meaningful undo behavior.
+
+### 10.2 Identity, formatting and persistence
+
+Persist citation occurrence/cluster IDs, ordered item identities, embedded CSL
+item snapshots, locator/label/prefix/suffix/suppress-author data, style ID/version,
+locale and bibliography settings inside the Office file. Do not depend on a
+mutable title, a temporary selection, or the external library database alone.
+Existing files must retain readable/renderable citation data when their backend
+is temporarily unavailable; distinguish embedded metadata from refreshed library
+metadata. No requirement to emit Zotero's field-code format or support its plugin.
+
+#### What the human sees and what the agent reads
+
+The normal document displays **rendered in-text citations in the selected style**,
+such as `[3]`, a superscript number, `(Smith, 2024)` or a native note marker.
+The bibliography is formatted normally too. Citation codes and item identifiers
+are underlying field metadata, not a second visible text representation. Native
+field highlighting/selection may identify an editable citation without exposing
+its raw code in the finished prose.
+
+The agent's document-read/inspection tool must return the rendered text together
+with citation occurrences tied to their native anchors: stable occurrence ID,
+rendered label, referenced item IDs, locators/affixes and document style/locale.
+For example, the user reads `Previous work supports this [3].`; the agent also
+receives the field identity and the exact reference(s) behind `[3]`. A plain-text
+read alone is not enough to identify repeated citation labels reliably. The
+adapter combines existing native field/anchor reads with References metadata;
+it does not maintain a second document or infer identities from the visible
+number. Spreadsheet/slide adapters expose the same semantic information through
+their native cell/shape anchors.
+
+The released document API's `GetAllAddinFields`/`GetCurrentAddinField` returns
+`FieldId`, `Value` and `Content`; native add/update methods operate on those
+fields. Use these existing facilities for the bridge. The plugin owns the
+meaning of our citation metadata and CSL-rendered content.
+[Released field APIs](https://github.com/Euro-Office/sdkjs/blob/40d9b7780f11a5cadc259f9b9815a364de8caa96/word/api_plugins.js).
+
+Agent add/edit operations create or update those same managed citations, including
+multi-source clusters and locators, and the human sees the resulting formatted
+citation through native coediting. The agent can change style, refresh citations
+and insert/update the bibliography through the same plugin commands as the GUI.
+Ordinary agent prose edits must preserve citation fields; do not flatten a
+paragraph to plain text and inadvertently unlink its citations. Validate this
+through live edits and save/reopen. Typing `sr-cite:` is an optional input shortcut
+that becomes a field, not the required permanent representation in the document.
+
+Use one complete ordered citation state per document for numeric renumbering,
+first/subsequent references, disambiguation, author-year suffixes, ibid/note
+behavior and bibliography sorting. A refresh is not independent formatting of
+each marker. Preserve rich output (italics, superscripts, punctuation and links)
+through native editor APIs. Support dependent CSL styles, their parent styles
+and locales, including the styles Zotero bundles and the requested Vancouver/APA
+families. Include all selected bundled styles in the dropdown/search rather than
+a handpicked subset.
+
+Note styles require actual document footnote/endnote placement and indices.
+For sheets and slides, define and display their citation ordering and note/output
+placement in the editor adapter, rather than applying Word footnote assumptions
+to cells/shapes. Full CSL style rendering remains shared; unsupported native
+format representation must be disclosed and addressed in the adapter, not
+silently converted to plain numeric citations.
+
+### 10.3 Three concrete editor adapters
+
+| Editor | Released API evidence and implementation |
+| --- | --- |
+| Documents | `AddAddinField`, `GetAllAddinFields`, `GetCurrentAddinField`, `UpdateAddinFields`, `RemoveFieldWrapper`: managed cluster/bibliography fields with embedded metadata |
+| Spreadsheets | Named ranges (`AddDefName`), range/character APIs, custom properties/XML parts: a citation occupies a whole cell as the user permits; stable anchors survive row/sheet moves |
+| Presentations | Named shapes/drawings, text APIs, custom properties/XML parts: managed citation text objects/spans and bibliography objects with durable IDs |
+
+Only the document editor currently demonstrates a native add-in-field abstraction.
+Sheet and slide anchors require real implementation and round-trip validation.
+Do not describe this as an existing cross-editor Zotero plugin.
+[Word APIs](https://github.com/Euro-Office/sdkjs/blob/40d9b7780f11a5cadc259f9b9815a364de8caa96/word/api_plugins.js),
+[cell APIs](https://github.com/Euro-Office/sdkjs/blob/40d9b7780f11a5cadc259f9b9815a364de8caa96/cell/apiBuilder.js),
+[slide APIs](https://github.com/Euro-Office/sdkjs/blob/40d9b7780f11a5cadc259f9b9815a364de8caa96/slide/apiBuilder.js).
+
+For spreadsheets, use a plugin-managed whole cell initially; a formula-like input
+may be convenient, but do not promise a custom calculation function until the
+released API supports it. Preserve ordinary formulas, formatting and unrelated
+cells. Define ordering across sheets/rows explicitly. For slides, preserve object
+positions/styles and define ordering across slides/objects; copied slides/shapes
+must get distinct occurrence IDs while retaining item identities.
+
+Verify undo/redo, cut/copy/paste, duplicate objects, deleted references, moves,
+concurrent refresh, external item edits and reopen. Debounced change handling
+must not steal the human selection or overwrite edits made during formatting.
+Any missing editor event/API adaptation belongs in Euro-Office's separate source
+patches, not Mozilla. Phone modal usability needs attention: the released mobile
+plugin controller has a small height limit, so the classic chooser must be tested
+and adapted within the Office web component.
+
+### 10.4 Typed codes and text export
+
+Retain the reviewer's `sr-cite:` input grammar. A simple legacy example is
+`[cite](sr-cite:users/123/items/ABCD2345)`; new references use our stable IDs.
+Clusters retain the versioned encoded JSON structure with `items`, `id`, locator,
+label, prefix, suffix and suppress-author. Keep its validation limits and actual
+identity checks; an empty optional affix is omitted, not silently accepted if
+the parser rejects it.
+
+Promote complete, valid typed/pasted markers into managed citations through the
+live plugin API. Leave incomplete/unknown markers visible with a useful status.
+Do not transform examples, ordinary links, code blocks, formulas or arbitrary
+brackets. Debounce and reconcile the changed region, with a manual process-codes
+action for recovery. GUI insertion and agent insertion create the same objects.
+
+Export/unlink to plain text creates an explicit copy with visible citations and
+bibliography, including formatting where the output supports it, and removes
+active citation metadata. Keep the editable master intact. PDF export uses the
+Office renderer and the coherent current document, not LibreOffice.
+
+## 11. Systematic Reviewer and Pi integration
+
+Bring the user's existing `systematic-reviewerv3` repository, branch `V3`, into
+the bundled plugin set as **Systematic Reviewer**. The branch name is provenance,
+not a UI/version suffix. The inspected donor is at
+`3224958eac9f58a92173b177f4adde78f5bbc018` and currently has **17 modified tracked
+files and 31 untracked files**. Importing only HEAD would omit substantial
+identifier/import/attachment/OpenAlex/embedding/setup work.
+
+Before import, freeze the reviewed donor working state as an immutable source
+artifact with a full manifest/checksum. Preserve its pristine committed source
+and the local delta separately, then record BashKitten adaptations. Do not
+reset/stash/commit the user's donor checkout, import upstream Git ancestry, or
+leave runtime dependencies on that sibling directory. The audit fingerprints
+were `8939d8eba4291157ee58b0dd54ce7e7adf879def41593c1efc21875a8e8f6eba`
+for the source manifest and
+`98863cf33f642549599155a24ff31e1a0ce28ac145a2b5365b897a158c9ae595`
+for `git diff --binary HEAD`; they identify the inspected state, not a finished
+import archive. Recompute before importing if the donor changes.
+
+Preserve the existing capability set, documented in the donor's
+`docs/capabilities.md`, rather than replacing it with a narrow citation tool:
+
+- Four current tools: `review_zotero`, `review_citation`,
+  `review_render_citations`, `review_export_docx`.
+- `/review-setup`, including status and OpenAlex key setup/removal.
+- Standalone setup, OpenAlex, harvest, library, citation and embeddings CLIs.
+- The `systematic-review` skill and its protocol, harvesting, semantic search,
+  full-text/PDF, evidence reading, screening, extraction, appraisal, analysis,
+  writing and verification guides.
+
+Rename user-facing library/tool descriptions to References; retain necessary
+deprecated ABI aliases only where an existing integration needs them, with a
+documented migration. Move identifier resolution, imports and shared search
+configuration into References. Keep the reviewer a thin consumer of the same
+API instead of a second resolver/database. A capture/import destination is
+atomic and explicit, not the donor's current non-atomic check of the selected
+collection before and after retrieval.
+
+Preserve provenance, complete-source-reading guidance, uncertainty, the
+records/reports/studies distinction and optional researcher-selected workflows.
+Do not impose a new compulsory pipeline, schema, research database or subagent
+workflow. Preserve semantic ranking recipes/text hashes, explicit embedding
+endpoint/model configuration, deterministic ties, dimension/index validation
+and cache scoping. Do not add model/provider discovery or background downloads.
+Retain exact identifier matching and honest OpenAlex enrichment/abstract rules.
+
+The additional **main-branch UI donor** is
+`openresearchtools/systematic-reviewer` at
+`859824b115731cb9932cdd45b130b8f4d222daac` (local `origin/main` and the remote main
+ref matched during this audit). Relevant sources are `src/ui/harvest.js`,
+`src/ui/searchable-autocomplete.js`, `src/core/search-options.js` and
+`src/core/openalex.js`. Reuse search/filter/import presentation ideas, not its
+mandatory Harvest/Pending research schema. V3 remains the behavior authority:
+do not import main's weaker abstract-index reconstruction or its sole-item
+fallback for associating import results. Preserve strict identifier matching
+and the exact abstract rule in section 8.3. Pin the reviewed UI source alongside
+the V3 source/delta before adaptation; do not follow moving `main` at build time.
+
+Rewrite writing instructions and tools to create/edit/inspect live Office
+documents alongside the user. Replace bundled instructions that require
+LibreOffice save/export/PDF preview or a later Zotero Refresh. Keep Markdown
+import/export and existing citation-code compatibility where useful, but the
+normal requested writing path is now the live Office API. The current donor
+rejects note styles and emits plain text before a later external Refresh;
+those limitations are **not** acceptable substitutes for the new rich/full-CSL
+path. Do not copy its existing DOCX serializer and claim the Office integration
+is complete.
+
+Add concise Office and References Pi skills using the existing deferred tool
+discovery and stock Pi extension interfaces. The normal standalone CLIs call
+the same module contracts. Pi retains model/provider configuration, context,
+compaction, history and its mutation queues. No new agent loop, MCP server,
+provider/account system or duplicate compaction machinery. Keep `full-read` and
+`compact_context` behavior unchanged. The owned Pi session determines backend
+and authority; never use another backend's credentials merely because the
+browser has a tab open there.
+
+## 12. Clean removal of the old Files and preview implementation
+
+Make this deletion/refactor a bounded workstream after replacement interfaces
+are concrete. Preserve history and notices for old releases, but remove unused
+runtime code, assets, dependency sources and current-package notices. Do not
+comment out old code or keep a hidden fallback. Audit callers before deleting
+shared utilities.
+
+| Current area | Required change |
+| --- | --- |
+| `agent/src/web/web_ui.html` | Replace Files tree, manager actions, file jobs and prepared-preview state with normal-tab launch. Separate and preserve Changes, currently sharing panel/root/close/responsive state. |
+| `agent/src/server/files/previews.mjs`, `preview-worker.mjs`, `preview-render.mjs`, `preview-types.mjs` | Delete bespoke conversion/rendering pipeline and its lifecycle cleanup. |
+| `agent/src/server/http/server.mjs` | Remove preview content/job routes and manager-only list/upload/archive/job status/cancel/download routes once Quantum owns them; retain folder, Git and shared attachment routes. |
+| `agent/src/server/files/jobs.mjs`, `worker.mjs` | Remove manager-exclusive workers and their shutdown/revocation plumbing after checking remaining callers. |
+| Desktop `BashKittenAgent.sys.mjs` / `BashKittenAgentChild.sys.mjs` | Remove ViewFile/CancelFileView, temporary prepared-document transfer/context state; retain pickers and needed native attachment actions. |
+| Android `DocumentPreviews.java` | Delete the bespoke preview component. |
+| Android `BrowserApp.java`, `AgentRuntime.java`, `BrowserKeepAliveService.java`, `FenixAgentHost.kt` | Remove preview startup, commands, callbacks, pending state and cleanup. |
+| `BashKittenController.java`, `BashKittenHostChild.sys.mjs`, `BashKittenHostParent.sys.mjs` | Remove obsolete `view-file`/`cancel-file-view` allowlist/protocol entries; add only the narrow new launch/extension hooks. |
+| `agent/vendor/sheetjs` | Delete current bundled source, metadata/checksum inventory and `xlsx-0.20.3.tgz`; remove `xlsx` from package/lock and packaging exceptions/copying. |
+| Other orphan dependencies | Remove manager-only `yazl`/`buffer-crc32`; remove direct preview-only `marked`/`dompurify` after final caller audit, without deleting Pi's independently used transitive dependencies. |
+| `agent/packaging/build.py` and related source/notices scripts | Remove LibreOffice preview requirements and conversion profiles/scratch code; regenerate actual dependency/source/notices graphs. Do not uninstall unrelated user apps or discard shared fonts/X11 dependencies indiscriminately. |
+| Linux/Termux Pi context, skills and `docs/usage.md` | Replace obsolete internal-viewer/LibreOffice instructions with Files/Office/References use and normal PDF tabs. |
+
+Keep `folders.mjs`, `/api/folders`, project/chat folder validation and native
+pickers; keep `git.mjs`, `/api/git/changes`, `/api/git/diff` and their cancellation;
+keep `access.mjs` and live policy revocation. Retain shared `files.mjs` behavior
+used by chat images/attachments, safe streaming, references and root validation.
+Keep Android `AgentFilePicker`, `AgentFileProvider` and legitimate sharing uses.
+The ordinary browser PDF/image/download implementation remains.
+
+Inspect final source, package locks, APK/DEB/Termux payloads, route tables, generated
+notices and shipped instructions. A UI hiding the old viewer does not prove its
+removal. Old preview acceptance remains historical; it cannot be relabelled as
+Quantum/Euro-Office acceptance.
+
+## 13. Native Termux and Linux packaging gates
+
+The researched Euro-Office release ships **Linux amd64/arm64 DEB/RPM**, not an
+Android/Bionic DocumentServer. Linux ARM64 binaries cannot simply be used as
+native Termux executables. Its converter/core build targets glibc; standard
+installers assume system users, root paths and service management.
+[Released packages](https://github.com/Euro-Office/DocumentServer/releases/tag/v9.3.7),
+[core build](https://github.com/Euro-Office/core/blob/a4a1ba1e9c8e6b6c841c3f059b3a8f82177d63f5/.docker/core.bake.Dockerfile).
+
+Start a native-port feasibility workstream early. Build the selected converter,
+document/rendering/V8 tools, Node native modules such as sharp/libvips, fonts/theme
+generators and required database/queue services against Termux's Bionic/private
+prefix. Existing Termux recipes for Node, PostgreSQL, Redis, Erlang/RabbitMQ,
+nginx and libvips are useful inputs, not proof of the full stack. Own all required
+processes through BashKitten's existing environment supervisor, with one set of
+data directories and one stack per Termux environment.
+
+Quantum's Go/native preview dependencies, References's database/text extraction
+and Office plugins also need actual native package verification on both supported
+architectures. Do not infer support from JavaScript source alone. Keep reusable
+platform adaptations in component recipes/patches, not Firefox core.
+
+Prove open/edit/coedit/save/reopen/export and citation metadata preservation on
+native Termux. Docker, proot or a remote-only Office server is not an implicit
+replacement for the requested native implementation. If a port is blocked,
+record the concrete source/build/runtime blocker; do not mark Android complete.
+
+Use the existing build workspace and caches under
+`/run/media/user/Data/BashkittenBuild`; re-read its current README, verification
+and acceptance records plus the build-environment chat before implementation.
+Historical successful native Zotero/LibreOffice work does not establish this
+architecture. Preserve unrelated pending native features and existing daughter-CI
+ownership of AI engine builds.
+
+## 14. Source imports, notices and branding
+
+Follow the existing pristine-source/import/named-patch discipline for every
+component we ship. Source presence, a successful build and installed acceptance
+are separate claims. Never track moving tags, import nested Git repositories or
+silently replace adapted donor code.
+
+### 14.1 Verified release candidates as of 28 October 2026
+
+These are researched candidates, not already selected package pins. At import,
+recheck official releases, peel the selected tag and record archive checksums,
+all gitlinks/locks, patches and build inputs. A newer version needs a deliberate
+compatibility review rather than an unbounded source refresh.
+
+| Component | Candidate and exact commit |
+| --- | --- |
+| Quantum | `v2.0.2-stable` — `2c071d1e6eb48d4b88da2657885d345663a0a88b` |
+| Euro-Office DocumentServer | `v9.3.7` — `e8d67f92c8a8549ea03030af2422a2b6b5d87274` |
+| Euro-Office DesktopEditors, About reference only | `v9.3.6` — `8b25e8ace5e00121bfafe86d5cd25d5ef588b404` |
+| Zotero core/schema/resolver donor | `10.0.6` — `536244c2771f590abab9c09a3c27e615e0b318ff` |
+| Zotero Connector donor | `5.0.217` — `ce29dfa360d1ce17a3a1f15a9d338d638a073106` |
+| Classic citation-dialog reference only | Zotero `7.0.32` — `188c54c186fbbaa6889145986d43ba64160a44fa` |
+| CSL styles | `v1.0.14` — `e98c3b8a5371ad571abcf2192b75dfdd392243f2` |
+| CSL locales | `v0.0.106` — `8bef426f89f38c0789223c50e53ec2197bc50bb3` |
+| citeproc-js candidate used by reviewer | npm `citeproc 2.4.63` — `73bc1b44bc7d54d0bfec4e070fd27f5efe024ff9` |
+
+References: [Zotero release history](https://www.zotero.org/support/changelog),
+[Connector source](https://github.com/zotero/zotero-connectors/tree/ce29dfa360d1ce17a3a1f15a9d338d638a073106),
+[styles release](https://github.com/citation-style-language/styles/releases/tag/v1.0.14),
+[locales release](https://github.com/citation-style-language/locales/releases/tag/v0.0.106).
+
+Quantum commit archive SHA-256 observed during research:
+`f9f783bda505d47ff86b290519338c8b4f28069bb2a29f8e35ad56bc66de7a1e`.
+Connector tag ZIP SHA-256 observed:
+`461edf029367b1af8f7df66c885b4e54c108ff2fe942a07d6e19b9cb5c3b87d3`.
+Record archive URL/format with hashes at import; archives made from the same
+commit through different formats/URLs are not necessarily byte-identical.
+
+### 14.2 Euro-Office released component graph
+
+Keep the v9.3.7 gitlinks together unless an explicitly tested update changes them:
+
+| Repository | Commit |
+| --- | --- |
+| `server` | `a924935680de42df6b1c46cec923fdb60ff3fd30` |
+| `web-apps` | `ce0ba49545810a56a3878081ab762c6a7ae8dd4e` |
+| `sdkjs` | `40d9b7780f11a5cadc259f9b9815a364de8caa96` |
+| `core` | `a4a1ba1e9c8e6b6c841c3f059b3a8f82177d63f5` |
+| `sdkjs-forms` | `5c2f5a010dae3581adda34d9bab20b1903c94081` |
+| `core-fonts` | `9cd64d6eedc72b75b7271f325f075cb8c73e59fa` |
+| `dictionaries` | `0020f5ed5174e2a213171c4c7da9ec06ca140869` |
+| `document-templates` | `40cc88d509bac3283539b80b9534a41191d7c4ff` |
+| `document-formats` | `f6cef0b2977a180cbc541cf1d923264a3d89322d` |
+| `document-server-integration` | `d88f09562d0f08a8f852164dfb8d0401d55556ee` |
+| `document-server-package` | `c695b1b421ee452875652908668f4cada8e214f1` |
+
+The [DocumentServer manifest](https://github.com/Euro-Office/DocumentServer/blob/e8d67f92c8a8549ea03030af2422a2b6b5d87274/.gitmodules)
+and build/lock files govern additional transitive dependencies; four headline
+repositories are insufficient. Materialize the graph without shipping a desktop
+Office app merely to reuse its About pattern.
+
+### 14.3 Zotero-derived sources and CSL
+
+Zotero 10.0.6 pins translators
+`c83003773b65359e41466e1d419b2d1df5512af7`, translation engine
+`d08300c2c01a4d6ef325f05cbefc6c138a99f811`, utilities
+`1dd38e27edf81e9d9c4161c957b7efb7f5681ac3`, schema
+`70c3aa98627413d6a30dca955886eafbde085ce9`, bundled styles
+`dff7452b247935809c93c993f92ad135ffb1dd91` and locales
+`bc0a222b4ca526126faf892c35b2b7b1215c10eb`. Connector 5.0.217 has its own released
+dependency pins; preserve them before selecting a shared compatible graph.
+Import necessary document-worker/PDF extraction and SingleFile dependencies with
+their exact donor gitlinks too. Do not import the reader/note-editor UI just
+because they are submodules of the full desktop repository.
+
+Translators lack a current regular release series. For updates beyond the
+released donor set, select a reviewed immutable snapshot with provenance;
+research observed `8fdb26b68c732b5810ffb037304c99e68aadd62b`. Never download and
+execute moving translator heads at startup. Retain translator-specific licenses:
+not every translator has the same license.
+
+Bundle all required styles and dependent parents, plus the complete supported
+locale set. Compare the newer released CSL datasets to the selected processor's
+schema support. Zotero's bundled processor reports 1.4.61 whereas the reviewer
+uses published `citeproc 2.4.63`; inspect actual source/adaptations before choosing
+one shared processor. Avoid two divergent citation engines between agent and UI.
+
+### 14.4 Offline legal/source information and reporting removal
+
+Extend the existing offline About **Bundled components** information. Use
+Euro-Office's shared
+[`about-html.mjs`](https://github.com/Euro-Office/web-apps/blob/ce0ba49545810a56a3878081ab762c6a7ae8dd4e/build/about-html.mjs)
+and [metadata](https://github.com/Euro-Office/web-apps/blob/ce0ba49545810a56a3878081ab762c6a7ae8dd4e/theme/euro-office/meta/about.json)
+as the wording/data/layout reference. Its current source/license/modification
+links go to GitHub and commit history; that is not already complete offline
+delivery. Supply full offline licenses/notices, original copyright holders,
+dated BashKitten modifications and exact corresponding-source archive/checksum.
+Keep legally required interactive notices in the Office UI as applicable, using
+the shared legal component rather than adding a duplicate Agent About menu.
+
+Inventory actual per-component terms: Quantum's Apache-2.0 root plus all Go/JS/
+MuPDF/FFmpeg/font dependencies; Office's principal AGPL sources and inherited
+notices, CC BY-SA 4.0 artwork/documentation, Apache-2.0 templates and individual
+font/dictionary terms; Zotero/Connector/translation AGPL and per-file exceptions;
+CSL styles/locales CC BY-SA 3.0 with creator/translator attribution. The actual
+citeproc LICENSE offers AGPL v3-or-later or CPAL; do not reproduce its inconsistent
+npm `AGPL-1.0` metadata as fact.
+
+Upstream Office installers request Microsoft core fonts. Select source-complete,
+redistributable font inputs consistent with BashKitten's package policy and
+verify document layout with them; do not silently add an EULA-only binary font
+download. This is separate from keeping runtime worker/memory defaults unchanged.
+
+Remove reporting and remote-code dependencies in adapted builds. Quantum stable
+builds enable an analytics publisher; it must not ship as active reporting.
+Bundle Ace modes/assets locally instead of its current jsDelivr base path.
+Bundle Office plugin helpers/assets and all required styles/translators locally.
+Remove Connector failure reporting and upstream online fallback. Audit transitive
+components and verify source, artifact and traffic; a top-level preference is
+not sufficient evidence. User-requested Crossref/OpenAlex/metadata/publisher
+requests remain functional service requests with explicit provenance.
+
+Source archive completeness, full notices and reproducible pin records are
+release gates. Keep pristine upstream tests/examples where necessary for source
+provenance, but exclude them and local audit output from shipped runtime payloads.
+
+## 15. Independent iteration and integration sequence
+
+Use small component interfaces and a thin browser patch list. Component packages
+must run against a development backend outside the full browser build, using
+ordinary tabs and their real APIs. Manual replacement/reload of versioned module
+and extension packages must support quick iteration and rollback between main
+browser releases. Do not add an unsolicited background updater or moving-source
+download service. State which changes require rebuilding the fixed privileged
+host shim; most capture/UI/backend changes must not.
+
+The primary development loop is to build/start the changed module, open its
+ordinary web URL in an already installed browser, exercise the real UI/API and
+replace/restart that module. Quantum launches Office directly in this loop;
+Pi invokes the same API for open/edit/export/view. Use an existing Chisel mapping
+to repeat remote flows. Rebuild BashKitten only for actual sidebar/extension-host
+source changes and the final installed integration checks, not every document,
+Office plugin, snapshot adapter or References change.
+
+### 15.1 Heavy-component build repositories and collected artifacts
+
+The user authorizes additional **build repositories if needed** when Office or
+the file stack cannot fit alongside the existing builds/caches. Measure their
+workspace, compiler-cache and artifact requirements first. Prefer one build
+repository with a target matrix; split by component/target only when the measured
+runner storage/time/cache constraints justify it. Do not create four repositories
+merely because there are four targets.
+
+Cover Linux amd64/arm64 and native Termux aarch64/x86_64. Each build consumes an
+exact BashKitten source revision or verified corresponding-source bundle and
+its locked component/dependency graph. Keep the canonical imported/adapted
+sources and notices under the existing source policy; build repos contain build
+orchestration, not divergent copies or moving upstream branches.
+
+Use persistent compiler caches for native code and appropriate Go/Node dependency
+caches, separated by target/toolchain/configuration with bounded retention.
+The user's explicit storage choice is **ordinary GitHub Actions only**: use
+Actions cache (`actions/cache` and/or ccache/sccache with an Actions backend)
+and Actions upload/download artifacts. Do not use GHCR registry caches, publish
+build images to GHCR, or introduce another remote build-cache service. BuildKit
+may be a local build tool where upstream requires it; that does not authorize
+its registry-backed cache configuration.
+Produce collectable package/build artifacts with target, source revision,
+toolchain, checksums, full notices and matching source provenance. The main
+BashKitten packaging job collects an exact successful run's artifacts by manifest
+and checksum and includes them in the normal product packages. A cache hit or a
+dispatched build is not a completed artifact; expiring CI storage must not leave
+the final package/source delivery incomplete.
+
+These repositories produce **artifacts, not separate product releases**: no
+independent Office/Files release channel, product installer or user update flow.
+They reduce rebuild/capacity pressure while preserving the one shared runtime
+stack per environment. Keep existing AI-runtime daughter-CI arrangements separate.
+
+#### Capacity check and recommended initial split — 28 October 2026
+
+A read-only live GitHub Actions API check found the following stored cache sizes.
+The latest successful browser builds were on 24 October. These are current
+stored cache bytes converted to GiB, not build workspace sizes, artifact storage,
+peak memory, or proof that every possible build input is cached.
+
+| Repository | All Actions caches (GiB) | Mozilla `sccache` portion (GiB) |
+| --- | ---: | ---: |
+| `BashKitten` | 9.459 | None; component/dependency caches |
+| `bashkitten-build-amd64` | 0.728 | 0.728 |
+| `bashkitten-build-arm64` | 0.719 | 0.719 |
+| `bashkitten-build-android` | 2.643 | 0.900 |
+| `bashkitten-build-android-x86_64` | 2.655 | 0.911 |
+
+The four browser caches are already isolated in separate repositories. Android's
+remainder is principally Gradle downloads (1.644 GiB in each repo), plus Go
+cache. The main repo's 9.459 GiB comprises Termux OS payloads (2.604), native
+environments (1.087), Go caches (1.691) and other component caches (4.078).
+The workflow uses **sccache** for Mozilla. Complete browser artifacts and Android
+Gradle task-output snapshots are deliberately stored as artifacts separately.
+
+GitHub documents a default **10 GB per-repository Actions cache allowance**,
+eviction and optional paid increases. The API policy endpoint did not expose
+the configured override here, so this check does not assert a custom account
+limit. A new repository isolates a cache namespace; it does not increase an
+individual runner's disk/RAM. Each job already gets its own runner, and the
+documented standard public Linux runner has 16 GB RAM and 14 GB available storage
+before workflow-specific preparation/reclamation.
+[Cache policy](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching),
+[runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
+**Planning recommendation:** start with **one additional Office artifact-build
+repository**, using the Linux/Termux four-target matrix. Keep Quantum in a
+separate bounded job in the main repo initially, with completed-artifact reuse
+and a deliberate small cache budget. Do not add its dependencies blindly to the
+already busy main cache, or mix Office caches into the existing browser repos.
+No measured evidence currently warrants four additional target-specific repos
+or a dedicated Quantum repo. Split further only if measured cache churn/build
+capacity shows the need. The cache audit itself changed no cache policy and
+dispatched no build.
+
+The user subsequently requested the builder repository, now created at
+[openresearchtools/office-builds](https://github.com/openresearchtools/office-builds).
+It is public like the existing browser builder repos and currently contains only
+the requested short README. On 28 October the user confirmed adding this repo to
+the existing fine-grained token's repository access; no duplicate token secret
+is requested in the new repo. Verify actual dispatch/artifact permissions when
+wiring CI, without reading or recording secret values.
+Workflows, cross-repository dispatch and artifact collection remain implementation
+work; repository creation does not establish any successful Office build.
+
+Upstream Office already separates core/core-wasm, SDK, web apps, server and
+packaging stages and uses **GHCR BuildKit registry caches** for much of that
+graph. **The user explicitly rejects that storage approach for BashKitten.**
+Reuse the applicable native build steps but adapt caching to ordinary GitHub
+Actions compiler/dependency caches and collect completed outputs as Actions
+artifacts. Do not copy the upstream GHCR cache/image publishing setup. Its cache
+of the whole recursive source checkout is also not a requirement to duplicate
+our full source tree in Actions cache. Native Termux needs its own proven Bionic
+adaptations.
+[Pinned Office workflow](https://github.com/Euro-Office/DocumentServer/blob/e8d67f92c8a8549ea03030af2422a2b6b5d87274/.github/workflows/build.yml),
+[build graph](https://github.com/Euro-Office/DocumentServer/blob/e8d67f92c8a8549ea03030af2422a2b6b5d87274/build/docker-bake.hcl).
+
+Quantum's frontend/Go pipeline is structurally smaller, but its selected release
+also uses CGO/MuPDF and FFmpeg; native source-complete builds must include those
+selected dependencies. Neither upstream provides a measured full cache/peak-disk
+number sufficient to promise a fit. Record cold/warm measurements before adding
+more repositories or changing cache retention.
+[Pinned Quantum build](https://github.com/gtsteffaniak/filebrowser/blob/2c071d1e6eb48d4b88da2657885d345663a0a88b/backend/.goreleaser.yaml).
+
+The one-Office-repo recommendation is an initial organization choice, not a
+claim that all four targets' useful Actions cache working sets fit its allowance.
+Measure that exact Actions-only configuration. If targets repeatedly evict each
+other's useful caches, split the Office builder repositories by platform/target
+as needed rather than substituting GHCR storage. Continue collecting their
+artifacts into the same BashKitten packages and releases.
+
+The existing latest combined candidate artifact is already about **12.36 GiB**
+(API size 13,270,909,814 bytes); that is distinct from Actions cache usage. Plan
+main-package collection/assembly in stages so moving compilation to another
+repository does not merely shift a disk-space problem into the final packaging
+job. Retain the ordinary BashKitten releases and complete source/notices delivery.
+
+### 15.2 Workstreams
+
+The work can run in parallel with explicit file/interface ownership. Complex
+Office, native-port, bibliography/citation and lifecycle implementations use the
+requested **Astra xhigh** agents. Coordinate shared gateway/supervisor/package
+files through one integration owner rather than concurrent overlapping edits.
+
+| Workstream | Concrete deliverable and gate |
+| --- | --- |
+| A. Runtime/interface contracts | Reuse environment-singleton supervisor, one Files button URL, existing service mappings/auth, minimum native API adapters and data ownership |
+| B. Source/package groundwork | Pristine pinned sources, dependency materialization, notices, offline assets; safe freeze of the dirty reviewer donor |
+| C. Early Office proofs | Shared DocumentServer stack; native coauthoring configuration and plugin API execution; distinct human/agent participants; native history; Termux core/build path |
+| D. Files migration | Shared Quantum with reconciled project scopes, theme, transfer behavior, Office link, timeouts, retained pickers/Changes and clean old-viewer removal |
+| E. References and capture | Independent project DBs, UI matching requested layout, compatibility APIs, real Connector-derived save flow, browser resolver/challenge host adapters |
+| F. Office persistence/diff | Native automatic force-save, full snapshot retention, native Version History adapter; optional six-format snapshot comparison through Pi/CLI only |
+| G. Citations/Reviewer | Shared full-CSL engine, classic modal and three live editor adapters, code promotion, text/PDF export, Pi skills and complete reviewer migration |
+| H. Builds/packaging/acceptance | Independently built modules, optional capacity-driven build repos and collected artifacts; final installed flows, singleton/resource/transport/source/removal evidence |
+
+Every workstream handoff repeats the mandatory native-function rule above.
+Before a new bridge/module is implemented, record briefly which native facility
+is reused and the exact remaining gap; if no gap exists, configure/use the native
+facility instead. Review module boundaries for duplicated upstream functionality
+as work is integrated, not only after the implementation is finished.
+
+Early proof order is intended to uncover incompatible APIs/native dependencies
+before broad integration. It does not permit omitting a mandatory platform or
+shipping a partial replacement as complete. Iterate/build independent modules
+first; integrate the full requested scope before full main-app candidate builds
+under the existing batched acceptance discipline. No need to rebuild Mozilla for
+every web UI, translator, CLI or citation-plugin iteration.
+
+## 16. Acceptance checklist and evidence
+
+Keep evidence and current blockers in a separate implementation-status record,
+with candidate revisions, package checksums, actual environment and dates.
+Do not turn this requirement document into a progress log or rewrite it to fit
+what happened to work. Use fresh acceptance profiles and existing build caches;
+do not copy credentials or seed normal profiles with test data.
+
+Existing repository rules keep BashKitten-owned fixtures/probes outside this
+repository and release artifacts and use installed real UI flows for product
+acceptance. Source/build/artifact inspection and upstream checks are useful but
+do not replace those flows. Most component UI/API checks use an already installed
+ordinary browser and independently started modules, without a browser rebuild.
+Final native checks verify the small Files button, References extension host,
+service lifetime/packaging and complete flows in the installed product.
+On Android, use ADB/direct Termux for setup and
+diagnosis, then the Cuttlefish web UI in the desktop BashKitten browser for the
+actual user interaction. Exercise native Linux on Wayland and the required real
+Xorg VM. Record unverified physical-device/architecture coverage honestly.
+
+Required acceptance groups:
+
+- [ ] **Service sharing:** open several projects, chats, folders and documents
+  concurrently on native, one container/VM and Termux. Inspect one Quantum and
+  one Office stack plus one References service per owner, with separate project
+  databases; no per-chat PostgreSQL/Redis/RabbitMQ startup.
+  Concurrent launch, restart, duplicate windows and CLI entry reuse that stack.
+- [ ] **Scope/launch:** correct owning folder, no manual server/admin setup,
+  multiple scoped project tabs, rename/move/revocation behavior, inaccessible
+  backend errors, and no project identity drift from cookies/global selection.
+  Verify private service/history/database paths and symlink aliases stay excluded.
+  Turn Allow remote file manager Off during active work: affected routes, sockets
+  and callbacks lose authority while ordinary chat attachments remain available.
+  The folder icon opens the exact ordinary local or Chisel-mapped URL; Quantum
+  opens Office from its own UI with no native Office-specific integration.
+- [ ] **Files:** browse, create/rename/copy/move/delete/archive, upload/download,
+  images, text/Markdown and ordinary PDF tabs; all supported previews/Office opens
+  work on desktop and phone with BashKitten styling.
+- [ ] **Retained behavior:** project/chat folder pickers, native sharing, chat
+  image/attachment operations, Git Changes/diff/cancellation and normal browser
+  functions remain working after old-code deletion.
+- [ ] **Live Office:** document, sheet and presentation editing by two distinct
+  authenticated participants using native collaboration configuration and APIs;
+  automatic agent participation, native cursors/undo/reconnect and Pi operations
+  for open/create/read/edit/save/export plus ordinary browser viewing.
+- [ ] **Persistence:** normal authenticated save/force-save callbacks, visible
+  failures, complete-file saves, callback retry handling and close/reopen.
+- [ ] **Snapshots:** automatic full versions outside the project, maximum-count
+  pruning, and native Office Version History to choose/open/restore an older
+  version on desktop and mobile. No manual change checking or custom history UI.
+- [ ] **Optional snapshot tool:** Pi/CLI comparison works on saved versions in
+  all six formats and reports unsupported parts without modifying inputs. No
+  comparison UI, browser hook or Git/Changes integration is present.
+- [ ] **Library isolation:** two projects, duplicate names/shared folder roots,
+  separate databases, stable identities, collection/item CRUD, metadata fields,
+  tags/notes/relations, attachments in `Bibliography`, archive/relink/delete.
+- [ ] **Capture:** single item, many-item page, website snapshot, PDF with/without
+  detectable metadata, attachment progress, authenticated publisher retrieval,
+  human challenge tab, selector cancellation, and changing selected library
+  during a save without redirecting its destination.
+  Exercise toolbar Add on desktop/Fenix, cancellation before writes with no new
+  items/files, and two tabs saving concurrently to different selected libraries.
+- [ ] **Resolvers/search:** DOI/PMID/PMCID with and without conversions, conflicts,
+  custom HTML/JSPath resolvers, OpenAlex paging/import selected/all, limits,
+  Crossref contact handling, keyless/keyed status, interruption and no-match PDF
+  recognition without fabricated metadata.
+  Verify complete native item-field preservation, abstract retrieval/enrichment
+  through both UI and Pi, exact V3 replacement/index-validation rules, and the
+  main-branch-inspired search controls. Paste the user's unchanged Zotero resolver
+  JSON and verify native request pacing/backoff across UI/agent/project batches.
+  Compare metadata and actual resolved PDFs with native Zotero for the same
+  identifier list under matched machine/network/access conditions; investigate
+  and record every difference rather than accepting partial retrieval parity.
+- [ ] **Citations:** classic modal, single/multi clusters, locators/affixes,
+  suppress-author, typed markers, style dropdown, locale/dependent styles,
+  numeric/author-year/note styles, global refresh/disambiguation, bibliography,
+  copy/move/delete/undo and concurrent human/agent edits in all three editors.
+  The user sees only normal rendered citations; agent reads identify the same
+  fields and their references, and agent insert/edit/prose updates preserve them.
+  Citation logic ships in the replaceable References Office plugin/backend,
+  without a large hardcoded Euro-Office modification.
+- [ ] **Round trips/export:** DOCX/XLSX/PPTX and ODT/ODS/ODP save/reopen with durable
+  citation identity; source-preserving conversion behavior; plain-text citation
+  export copy; current-revision PDF/preview with Office, no LibreOffice path.
+- [ ] **Systematic Reviewer:** existing harvesting, identifiers, full-text,
+  semantic ranking, screening/extraction/analysis and writing capabilities remain
+  discoverable through stock Pi; writes use our library/live Office API.
+- [ ] **Transport/lifetime:** long healthy Tor transfers, long initial latency,
+  stalls, cancellation, backpressure, auth expiry, reconnection and permission
+  revocation without direct fallback; backend Off and Quit ownership, remote
+  disconnect isolation, tab-close behavior and Android background handling.
+- [ ] **Resources/responsiveness:** measured one-stack idle/edit/export/checkpoint
+  usage with unchanged resource defaults and the requested native save timer;
+  many chats do not multiply stacks; browsing,
+  typing, navigation and tab close remain responsive under load.
+- [ ] **Independent updates:** manually update/reload backend web modules and
+  connector logic between browser releases, with API version checks and rollback;
+  verify privileged shim constraints and Android install/update behavior.
+- [ ] **Independent builds:** change/test Files, Office, References and plugins
+  without rebuilding the browser; if build repos are needed, collect exact
+  Linux/Termux target artifacts into the normal packages without separate releases.
+- [ ] **Removal/packaging:** obsolete viewer/SheetJS/conversion code and current
+  package requirements gone; all selected sources/licenses/assets present;
+  offline About/source/modification information correct; product branding ours;
+  reporting and remote script/CDN dependencies removed and traffic checked.
+
+## 17. Open technical gates, with required resolution
+
+| Gate | Evidence now | Resolution required before completion |
+| --- | --- | --- |
+| Native Termux Office | Released packages target glibc Linux; complete Bionic server unverified | Native source port and installed flows on supported targets |
+| Agent automation | Open plugin APIs exist; public `createConnector` missing in researched release | Prove bundled plugin bridge and an actual automatically joined second editor |
+| Background/no-human renderer | A service endpoint is not a live editor | Prove automatic native participant use through the released Office client/APIs on Android/Linux; keep it in the web module |
+| Cross-editor citations | Word fields exist; cells/slides offer lower-level anchors | Implement stable metadata/anchors and concurrent edit/round-trip coverage |
+| Full CSL | Existing reviewer excludes note styles and relies on external Refresh | Complete shared rich renderer and per-editor note/order behavior |
+| Privileged independent updates | Android built-in installer accepts APK resources | Narrow fixed host plus verified replaceable logic/update path; no global privilege relaxation |
+| PDF recognition/OA | Upstream calls hosted services outside Connector source | Own backend adapters with explicit confidence and no private-service dependency |
+| Tor defaults | Several stable Quantum hardcoded short deadlines | Small configuration patches and measured end-to-end stall/progress policy |
+| Shared stack/project isolation | One server can have many sources; admin and cookie semantics matter | Prove singleton lifecycle and concurrent scoped tabs without duplicate deployments |
+| Donor/source completeness | Reviewer has material uncommitted work; multiple upstream graphs/licenses | Freeze reviewed source and materialize full chosen dependency/notices graph |
+
+None of these gates is a request to move library/editor logic into Mozilla or
+to reduce the requested feature scope. The architecture keeps the browser hooks
+small while making the substantial reusable module work explicit.

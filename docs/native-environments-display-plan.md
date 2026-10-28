@@ -5,6 +5,54 @@ No application code, package, installed runtime or working user flow is delivere
 by this document. Research used BashKitten `a39f8b1d1ab8ab0ee202a5bb174f905578e83333`
 and the pinned sources below; integration and acceptance remain future work.
 
+## User amendment — 28 October 2026: Files, Office and References
+
+The [Files, Office and References plan](files-office-bibliography-plan.md)
+records the user's replacement design. It supersedes this plan's conflicting
+internal Files/SheetJS/LibreOffice preview requirements while preserving the
+original baseline and unrelated features. Files becomes Quantum in an ordinary
+tab; Euro-Office and References are independent web/backend modules. Keep
+folder pickers and Git Changes. Cleanly remove obsolete viewer/conversion code
+during implementation, rather than retaining parallel paths.
+
+The main browser only needs small tab-launch/lifecycle hooks and a small
+privileged References capture/resolver extension. Reuse Zotero Connector's
+actual save logic with BashKitten branding; upstream names/notices belong in
+legal/source information. PDFs open in normal browser tabs. The supplied
+screenshot defines library layout/functions, with BashKitten colors and styling.
+
+The later clarification makes Files a one-click sidecar folder button opening
+the ordinary local or Chisel-forwarded loopback URL. Quantum opens Office itself;
+there is no Office-specific native browser integration. Office diffs are optional
+Pi/CLI comparisons of saved snapshots only, with no Git/Changes/UI integration.
+Use native Office coauthoring, its automatic save timer and its Version History
+choose/open/restore UI through minimum adapters. Pi uses native editing/export
+APIs and normal browser-view URLs. Iterate modules without rebuilding the browser;
+capacity-driven build repos may supply collected Linux/Termux artifacts to the
+normal packages, without separate product releases. The manager/connector/tool
+descriptions are named References; Bibliography remains the document output action.
+The later build-storage clarification requires ordinary GitHub Actions caches
+and uploaded artifacts, with no GHCR registry-cache/image publishing. Additional
+builder repos may isolate target caches if measurement shows that is needed.
+
+The user makes native reuse mandatory for every implementing agent/subagent:
+use the selected application's existing configuration, UI, APIs and plugin
+functions whenever they meet the requirement. Only build small pluggable modules
+for verified missing/unworkable capabilities, and carry this instruction into
+every delegation. References still excludes the full desktop Zotero app; reuse
+its relevant source/behavior while adapting it to the backend/connector split.
+
+Each owning native Linux, VM/container or Termux environment runs one shared
+Quantum server and one shared Office stack, including its database/queue/cache
+dependencies. All chats/projects/documents reuse those instances. Separate
+project libraries and Office snapshots live outside repositories; attachments
+live in the selected project's Bibliography directory. Retain Office runtime
+defaults initially and measure actual usage. The new plan includes agent/user
+live coediting, citations across documents/sheets/slides, native Termux work,
+source/notices, modular updates and clean-removal acceptance. It is researched
+planning, not delivered implementation. Existing remote transport/authorization
+and service-lifetime ownership remain in force.
+
 ## Agreed original baseline
 
 The user-agreed starting plan is frozen at commit

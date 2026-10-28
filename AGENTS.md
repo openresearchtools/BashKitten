@@ -1,5 +1,79 @@
 # BashKitten · native Pi / Linux and Termux
 
+## 28 October Files, Office and References replacement plan
+
+The user's new specification is recorded in
+[docs/files-office-bibliography-plan.md](docs/files-office-bibliography-plan.md).
+It supersedes conflicting older Files/SheetJS/LibreOffice viewer requirements;
+preserve the frozen original native-plan history and unrelated requirements.
+This is a plan, not a claim of implementation or acceptance.
+
+**Mandatory for every implementing agent and subagent:** if the selected app
+can provide a requested function through its native configuration, UI, APIs or
+plugin facilities, use that native function. Do not reimplement it. First inspect
+the pinned release's actual capabilities; write a small pluggable module/bridge
+only for a specific required capability that is genuinely missing or cannot work
+natively. Reuse existing BashKitten owners too. Include this rule in every
+delegation and review proposed modules against it before writing them. The
+References exception concerns the application boundary: do not bundle the whole
+desktop Zotero application as a backend. Reuse its relevant reference-management,
+translation, resolver and capture source/behavior in our backend and connector,
+adapting only what that separation requires.
+
+Use ordinary web tabs for File Browser Quantum, Euro-Office and our References
+manager. Keep main Mozilla changes limited to small launch/lifecycle hooks and
+a small privileged References capture/resolver extension. Reuse actual Zotero
+Connector save logic with BashKitten names/icons/styling; retain donor attribution
+in legal/source information, not product branding. PDFs use normal browser tabs.
+Keep existing folder pickers, Git Changes and shared chat attachments; cleanly
+delete the superseded internal manager, spreadsheet viewer and conversion paths
+during implementation. The screenshot specifies layout/functions, not colors.
+
+Latest clarification: Files is only a one-click sidecar folder button opening
+the ordinary local service URL or the exact Chisel-forwarded loopback mapping.
+Quantum opens Office through its own web UI; add no Office-specific Mozilla
+integration. `office-diff` is an optional Pi/CLI tool over our Office snapshots
+only, with no UI/Git/Changes integration. Reuse native Office collaboration,
+automatic force-save and Version History choose/open/restore with minimal
+storage/API adapters. Pi can open/edit/save/export and view via the native APIs
+and normal browser URLs. Test modules independently without browser rebuilds.
+If large component builds need more capacity, additional build repos may produce
+collected Linux/Termux artifacts for the normal packages, not separate releases.
+Use ordinary GitHub Actions caches and uploaded artifacts only; the user rejects
+GHCR registry-cache/image publishing for these builds. Split builder repos only
+as needed for measured target cache capacity; do not substitute external storage.
+
+Each owning native Linux, VM/container or Termux environment has exactly one
+Quantum server and one Euro-Office stack, including its required database/queue/
+cache services, shared by all its chats, projects, folders and documents. Never
+launch the stack per chat/project/tab. Libraries have separate project databases
+outside repositories, served by one References module; attachments belong in
+the project's Bibliography folder. Office snapshots stay outside projects.
+Keep actual Office resource defaults initially and measure the whole shared
+stack. All remote access retains the existing authorized Tor/Chisel/Caddy/
+Authelia route. Complex implementation work uses Astra with xhigh reasoning.
+Native Termux support, live human/agent editing, full citation features across
+all three editors and independently iterable modules remain required; record
+technical blockers honestly rather than silently reducing scope.
+
+Citations belong to a replaceable References Office plugin and the References
+backend, using native Euro-Office fields/anchors/APIs/dialogs, not a large
+hardcoded Office fork. Users see normal style-rendered citations; Pi reads the
+rendered text plus field/reference identities and can insert/edit those same
+citations through the plugin. Preserve citation fields during ordinary prose
+edits. Typed citation codes are optional input that becomes managed fields.
+
+References must preserve Systematic Reviewer's abstract retrieval/enrichment
+rules and automatic identifier/OpenAlex import flows for both UI and Pi. Borrow
+search web UI ideas from the reviewer's main branch while retaining V3's stronger
+identifier/provenance/abstract validation. Reuse Zotero's complete metadata
+translators/schema and PDF resolver implementation, including its conservative
+request queue, per-domain pacing/retries and unchanged custom-resolver JSON
+syntax. The acceptance target is equivalent metadata/PDF retrieval for the same
+identifier batch as native Zotero on the same machine/network with matched
+resolver/access conditions. Do not replace this with a minimal DOI lookup or
+aggressive parallel downloader; investigate and record parity differences.
+
 ## 19 October Android SDK removal and source updates
 
 The user explicitly authorizes removing Android website WebPush and the bundled
