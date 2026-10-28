@@ -85,10 +85,9 @@ are inside Termux home, displayed as `~`.
   new chat's composer.
 - Attach images/files using the ordinary picker, paste or drag/drop. Follow-ups
   queued during a turn support editing, steering and removal.
-- Files supports uploads, downloads, backend ZIP downloads and confirmed bulk
-  operations. Changes displays Git differences without staging or committing.
-  Both panels are available on Linux and Android; Linux also has native folder
-  opening.
+- **Files** opens the owning folder's file manager in an ordinary browser tab.
+  **Changes** retains the Git differences panel without staging or committing.
+  Folder pickers and chat attachments keep their existing controls.
 - **Settings → Providers → Open an existing Pi session** adds a native session to
   the sidebar. Avoid opening the same session concurrently in another Pi client.
 - **Local → LocalAI → Models** saves selected Hugging Face files to the local
@@ -106,19 +105,23 @@ matches the authorized client platform.
 
 ## Viewing files
 
-In **Files**, choose **View** beside a supported file or the download arrow to
-save its original. Images open in the image viewer. Other previews open in a
-normal browser tab when ready; preparation can be cancelled.
+The replacement Files, Office and References modules are being integrated;
+[current implementation and verification status](office-integration-status.md)
+records what has actually been built and checked. An unavailable component is
+reported explicitly until its matching package is installed.
 
-PDFs use the browser's PDF viewer. Text and code show their contents; Markdown
-opens rendered, with a **Raw** toggle and horizontally scrollable tables. Word,
-PowerPoint and OpenDocument text/presentation files are converted to PDF by
-LibreOffice on the selected host. Spreadsheets use a read-only scrolling grid
-with sheet selection. Formulas show saved results; missing results are labelled
-as not calculated. The original document remains available through Download.
+Files uses File Browser Quantum directly on the existing folder. Office documents
+open from that web UI in Collabora Online; PDFs use normal browser PDF tabs.
+These web apps use HTTPS through the owning BashKitten connection. The old
+internal file tree, spreadsheet grid and PDF conversion viewer are removed.
+The backend starts each shared component on first use and keeps its data outside
+project folders; it does not create another server for each chat or tab.
 
-The [manual preview verification record](file-preview-verification.md) identifies
-the installed revisions, observed Android flows and remaining acceptance cases.
+References keeps a separate library for each project. Imported attachments go in
+that project's `Bibliography` folder. Office editing and exports use native
+Collabora operations; an agent can edit without an open editor tab and can also
+open a tab to inspect rendering. Citation dialogs and managed citation operations
+belong to the replaceable References Office plugin.
 
 ## Local models, dictation and speech
 
