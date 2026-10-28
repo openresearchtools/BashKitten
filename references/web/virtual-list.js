@@ -98,6 +98,38 @@ export class VirtualList {
       index % this.pageSize
     ];
   }
+  async *range(from, to, { signal } = {}) {
+    if (
+      !Number.isSafeInteger(from) ||
+      !Number.isSafeInteger(to) ||
+      from < 0 ||
+      to < from
+    )
+      throw Error("Invalid selection range");
+    const generation = this.generation,
+      version = this.version,
+      combined = AbortSignal.any([
+        this.controller.signal,
+        ...(signal ? [signal] : []),
+      ]);
+    let cursor;
+    for (let start = from; start <= to; start += this.pageSize) {
+      combined.throwIfAborted();
+      const limit = Math.min(this.pageSize, to - start + 1),
+        result = await this.load({ start, limit, cursor, signal: combined });
+      combined.throwIfAborted();
+      if (generation !== this.generation) return;
+      if (
+        version !== null &&
+        result.version !== undefined &&
+        result.version !== version
+      )
+        throw Error("The library changed. Refresh before selecting a range.");
+      yield result.items;
+      if (result.items.length < limit) break;
+      cursor = result.next;
+    }
+  }
   async fetch(page) {
     if (
       this.destroyed ||

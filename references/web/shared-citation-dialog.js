@@ -44,6 +44,8 @@ export async function chooseCitation({
     serial = 0,
     active = -1,
     librarySelection = new Map(),
+    selectionAnchor = 0,
+    rangeController = null,
     collection = null,
     previewGeneration = 0,
     previewController = null,
@@ -255,7 +257,10 @@ export async function chooseCitation({
           [creators(item), year(item)].filter(Boolean).join(" · "),
         ),
       ),
-    onSelect: (item, event) => {
+    onSelect: async (item, event) => {
+      rangeController?.abort();
+      rangeController = null;
+      if (!event.range || !multiple) selectionAnchor = event.index;
       if (!multiple) {
         const previous = sources[0]?.citation || {};
         sources = [
@@ -264,6 +269,36 @@ export async function chooseCitation({
         active = 0;
         librarySelection = new Map([[item.key, item]]);
         changed();
+      } else if (event.range) {
+        const current = (rangeController = new AbortController());
+        librarySelection.clear();
+        library.setSelection([]);
+        active = -1;
+        updateControls();
+        try {
+          for await (const page of library.range(
+            Math.min(selectionAnchor, event.index),
+            Math.max(selectionAnchor, event.index),
+            { signal: current.signal },
+          )) {
+            for (const record of page) librarySelection.set(record.key, record);
+            library.setSelection(librarySelection.keys());
+            d.notice.textContent =
+              librarySelection.size + " references selected";
+          }
+        } catch (error) {
+          if (error.name !== "AbortError" && rangeController === current) {
+            librarySelection.clear();
+            library.setSelection([]);
+            d.notice.textContent = error.message;
+          }
+        } finally {
+          if (rangeController === current) {
+            rangeController = null;
+            updateControls();
+          }
+        }
+        return;
       } else {
         if (!event.toggle) librarySelection.clear();
         if (event.toggle && librarySelection.has(item.key))
@@ -287,6 +322,9 @@ export async function chooseCitation({
     api: scoped,
     onSelect: (item) => {
       collection = item;
+      rangeController?.abort();
+      rangeController = null;
+      selectionAnchor = 0;
       librarySelection.clear();
       library.reset({ preserveSelection: false });
       updateControls();
@@ -294,11 +332,14 @@ export async function chooseCitation({
   });
   const searchChanged = debounce(() => {
     searchTerm = search.value;
+    selectionAnchor = 0;
     librarySelection.clear();
     library.reset({ preserveSelection: false });
     updateControls();
   });
   search.addEventListener("input", () => {
+    rangeController?.abort();
+    rangeController = null;
     library.controller.abort();
     searchChanged();
   });
@@ -321,7 +362,7 @@ export async function chooseCitation({
     selectedPane.hidden = !multiple;
     mode.textContent = multiple ? "Single source" : "Multiple sources";
     mode.disabled = multiple && sources.length > 1;
-    add.disabled = !multiple || !librarySelection.size;
+    add.disabled = !multiple || !librarySelection.size || !!rangeController;
     remove.disabled = active < 0;
     up.disabled = active <= 0;
     down.disabled = active < 0 || active >= sources.length - 1;
@@ -391,13 +432,15 @@ export async function chooseCitation({
   }
   function toggleMode() {
     if (multiple && sources.length > 1) return;
+    rangeController?.abort();
+    rangeController = null;
     multiple = !multiple;
     if (!multiple && sources.length) active = 0;
     updateControls();
     schedulePreview();
   }
   function addSelected() {
-    if (!librarySelection.size) return;
+    if (!librarySelection.size || rangeController) return;
     for (const item of librarySelection.values())
       sources.push({ uid: ++serial, item, citation: { id: item.id } });
     active = sources.length - 1;
@@ -529,6 +572,7 @@ export async function chooseCitation({
       "close",
       () => {
         controller.abort();
+        rangeController?.abort();
         previewController?.abort();
         searchChanged.cancel();
         schedulePreview.cancel();
