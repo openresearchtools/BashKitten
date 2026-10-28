@@ -3,24 +3,48 @@
 """Build BashKitten OS using the tracked native Termux framework and recipe."""
 import argparse,hashlib,json,os,pathlib,shutil,subprocess,tarfile,urllib.request
 ROOT=pathlib.Path(__file__).resolve().parents[3]
-def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--architecture',choices=['aarch64','x86_64'],required=True);p.add_argument('--work',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);a=p.parse_args()
- work=a.work.resolve();out=a.output.resolve()
- if work.is_relative_to(ROOT) or out.is_relative_to(ROOT):p.error('Work and output must be outside the source checkout')
- lock=json.loads((ROOT/'agent/packaging/node/lock.json').read_text())['termux']['recipes'];archive=ROOT/'agent/vendor/node'/(lock['sha256']+'-'+lock['url'].rsplit('/',1)[-1])
- if hashlib.sha256(archive.read_bytes()).hexdigest()!=lock['sha256']:raise ValueError('Termux framework source checksum mismatch')
- framework=work/'framework';framework.mkdir(parents=True,exist_ok=True)
- if not (framework/'build-package.sh').is_file():
+def prepare_framework(work,archive,checksum):
+ # Keep each pinned framework separate. A build-package.sh from an older
+ # release is not evidence that the cached recipes match the current lock.
+ framework=work/('framework-'+checksum[:16])
+ marker=framework/'.bashkitten-source-sha256'
+ if framework.exists() and (not marker.is_file() or marker.read_text().strip()!=checksum):
+  raise ValueError('Incomplete or mismatched Termux framework cache: '+str(framework))
+ if not framework.exists():
+  framework.mkdir(parents=True)
   with tarfile.open(archive) as source:
    prefix=source.getmembers()[0].name.split('/')[0]+'/'
    for member in source:
     if not member.name.startswith(prefix):continue
     member.name=member.name[len(prefix):]
     if member.name:source.extract(member,framework,filter='data')
+  marker.write_text(checksum+'\n')
+ # The framework is executable build input. Detect local edits as well as a
+ # changed pin before claiming the archive's provenance in the package record.
+ with tarfile.open(archive) as source:
+  for member in source:
+   parts=member.name.split('/',1)
+   if len(parts)!=2 or not parts[1]:continue
+   actual=framework/parts[1]
+   if member.isfile():
+    if not actual.is_file() or actual.is_symlink():raise ValueError('Missing pinned Termux source: '+parts[1])
+    with actual.open('rb') as stream:
+     digest=hashlib.file_digest(stream,'sha256').digest()
+    if digest!=hashlib.file_digest(source.extractfile(member),'sha256').digest():raise ValueError('Changed pinned Termux source: '+parts[1])
+   elif member.issym() and (not actual.is_symlink() or os.readlink(actual)!=member.linkname):
+    raise ValueError('Changed pinned Termux symlink: '+parts[1])
+ return framework
+def main():
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--architecture',choices=['aarch64','x86_64'],required=True);p.add_argument('--work',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);a=p.parse_args()
+ work=a.work.resolve();out=a.output.resolve()
+ if work.is_relative_to(ROOT) or out.is_relative_to(ROOT):p.error('Work and output must be outside the source checkout')
+ lock=json.loads((ROOT/'agent/packaging/node/lock.json').read_text())['termux']['recipes'];archive=ROOT/'agent/vendor/node'/(lock['sha256']+'-'+lock['url'].rsplit('/',1)[-1])
+ if hashlib.sha256(archive.read_bytes()).hexdigest()!=lock['sha256']:raise ValueError('Termux framework source checksum mismatch')
+ framework=prepare_framework(work,archive,lock['sha256'])
  recipe=framework/'x11-packages/bashkitten-os';recipe.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/'os/packaging/termux/build.sh',recipe/'build.sh')
  cache=work/'build-cache';cache.mkdir(exist_ok=True)
  data=work/'data';data.mkdir(exist_ok=True)
- container='bashkitten-os-'+a.architecture
+ container='bashkitten-os-'+a.architecture+'-'+lock['sha256'][:16]
  ndk_pin=json.loads((ROOT/'agent/packaging/node/lock.json').read_text())['termux']['dependency_sources']['libc++']
  ndk_archive=work/'android-ndk-r30-linux.zip'
  if not ndk_archive.exists():
