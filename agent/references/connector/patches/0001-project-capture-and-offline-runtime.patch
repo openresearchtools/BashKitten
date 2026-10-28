@@ -1,0 +1,1898 @@
+--- a/build.sh
++++ b/build.sh
+@@ -177,12 +177,6 @@
+ 	cp -r "$EXTENSION_TRANSLATE_DIR/src" "$browser_builddir/translate"
+ 	cp -r "$EXTENSION_UTILITIES_DIR" "$browser_builddir/utilities"
+ 
+-	# Copy google docs integration code
+-	cp -r "$SRCDIR/zotero-google-docs-integration/src/connector" \
+-		 "$browser_builddir/zotero-google-docs-integration"
+-	cp -r "$SRCDIR/zotero-google-docs-integration/package.json" \
+-		 "$browser_builddir/zotero-google-docs-integration"
+-		 
+ 	# Copy locales
+ 	mkdir -p "$browser_builddir/_locales/en"
+ 	# Get English strings from this repo
+--- a/gulpfile.js
++++ b/gulpfile.js
+@@ -74,7 +74,6 @@
+ 	'translateWeb.js',
+ 	'itemSaver.js',
+ 	'inject/pageSaving.js',
+-	'integration/connectorIntegration.js',
+ 	'cachedTypes.js',
+ 	'schema.js',
+ 	'messages.js',
+@@ -98,19 +97,19 @@
+ }
+ var injectIncludeFirefox = ['browser-polyfill.js'].concat(
+ 	injectInclude,
+-	['api.js'],
++	[],
+ 	injectIncludeLast);
+ 
+ var injectIncludeSafari = ['reinjectGuard.js', 'browser-polyfill.js'].concat(
+ 	injectInclude,
+-	['api.js'],
++	[],
+ 	['frameMessaging.js'],
+ 	['historyMonitor.js'],
+ 	injectIncludeLast);
+ 	
+ var injectIncludeManifestV3 = ['browser-polyfill.js'].concat(
+ 	injectInclude,
+-	['api.js'],
++	[],
+ 	['inject/virtualOffscreenTranslate.js'],
+ 	injectIncludeLast);
+ 
+@@ -129,12 +128,10 @@
+ 	'utilities/resource/zoteroTypeSchemaData.js',
+ 	'utilities.js',
+ 	'prefs.js',
+-	'api.js',
+ 	'http.js',
+-	'oauthsimple.js',
+ 	'proxy.js',
+ 	'connector.js',
+-	'updaterFix.js',
++	'references.js',
+ 	'repo.js',
+ 	'translate/debug.js',
+ 	'translate/tlds.js',
+@@ -144,7 +141,6 @@
+ 	'translators.js',
+ 	'cachedTypes.js',
+ 	'errors_webkit.js',
+-	'zotero-google-docs-integration/api.js',
+ 	'messages.js',
+ 	'messaging.js',
+ ];
+--- a/src/browserExt/background.js
++++ b/src/browserExt/background.js
+@@ -1,4 +1,4 @@
+-﻿/*
++/*
+     ***** BEGIN LICENSE BLOCK *****
+     
+     Copyright © 2009-2012 Center for History and New Media
+@@ -279,7 +279,7 @@
+ 		await Zotero.Connector_Browser.openWindow(
+ 			browser.runtime.getURL("itemSelector/itemSelector.html")
+ 				+ "#" + encodeURIComponent(JSON.stringify([tab.id, items])),
+-			{width: 600, height: 325}, tab
++			{width: 600, height: 325, onClose: () => this.getTabInfo(tab.id).selectCallback?.({})}, tab
+ 		);
+ 		try {
+ 			Zotero.Connector_Browser.setKeepServiceWorkerAlive(true);
+@@ -560,58 +560,10 @@
+ 		await this.injectScripts('singlefile-config.js', tab, frameId);
+ 	};
+ 	
+-	this.openWindow = async function(url, options={}, tab=null) {
+-		if (!tab) {
+-			tab = await getCurrentTab();
+-		}
+-		options = Object.assign({
+-			width: 800,
+-			height: 600,
+-			type: "popup"
+-		}, options);
+-		let win = await browser.windows.get(tab.windowId, null);
+-		options.left = Math.floor(win.left + (win.width / 2) - (options.width / 2));
+-		options.top = Math.floor(win.top + (win.height / 2) - (options.height / 2));
+-			
+-		win = await browser.windows.create({
+-			url,
+-			type: options.type,
+-			width: options.width,
+-			height: options.height,
+-			left: options.left,
+-			top: options.top
+-		});
+-		
+-		// Fix positioning in Chrome when window is on second monitor
+-		// https://bugs.chromium.org/p/chromium/issues/detail?id=137681
+-		if (win.left < options.left) {
+-			browser.windows.update(win.id, { left: options.left });
+-		}
+-		// Fix a Firefox bug where content does not appear before resize on linux
+-		// https://bugzilla.mozilla.org/show_bug.cgi?id=1402110
+-		// this one might actually get fixed, unlike the one above
+-		if (Zotero.isFirefox) {
+-			await Zotero.Promise.delay(1000);
+-			browser.windows.update(win.id, {width: win.width+1});
+-		}
+-		if (typeof options.onClose == 'function') {
+-			browser.windows.onRemoved.addListener(function onClose(id) {
+-				if (id == win.id) options.onClose();
+-				browser.windows.onRemoved.removeListener(onClose);
+-			});
+-		}
+-		return win;
+-	};
++	this.openWindow = (url, options={}, tab=null) => References.openTabSurface(url, options, tab);
+ 	
+ 	this.bringToFront = async function(drawAttention=false, tab) {
+-		var windowId;
+-		if (tab && tab.windowId) {
+-			windowId = tab.windowId;
+-		} else {
+-			let win = await browser.windows.getLastFocused();
+-			windowId = win.id;
+-		}
+-		browser.windows.update(windowId, {drawAttention, focused: true});
++		if (tab) await browser.tabs.update(tab.id, {active:true});
+ 	}
+ 
+ 	this.openTab = async function(url, tab) {
+@@ -627,11 +579,11 @@
+ 	};
+ 	
+ 	this.openPreferences = function(paneID, tab) {
+-		this.openTab(browser.runtime.getURL(`preferences/preferences.html#${paneID}`), tab);
++		this.openTab(browser.runtime.getURL(`references/about.html#${paneID}`), tab);
+ 	};
+ 	
+ 	this.openConfigEditor = function(tab) {
+-		this.openTab(browser.runtime.getURL(`preferences/config.html`), tab);
++		this.openTab(browser.runtime.getURL(`references/about.html`), tab);
+ 	};
+ 	
+ 	this.waitForTabToLoad = async function(tab) {
+@@ -1194,7 +1146,10 @@
+ 	 * 		- note <String> add string as a note to the saved item
+ 	 * @returns {Promise<*>}
+ 	 */
+-	this.saveWithTranslator = function(tab, i, options={}) {
++	this.saveWithTranslator = async function(tab, i, options={}) {
++		options.referencesSessionID = await References.select(tab);
++		if (!options.referencesSessionID) return;
++		options.resave = true;
+ 		let tabInfo = this.getTabInfo(tab.id);
+ 		var translator = tabInfo.translators[i];
+ 		
+@@ -1213,9 +1168,12 @@
+ 	}
+ 	
+ 	this.saveAsWebpage = async function(tab, frameId, options={}) {
++		options.referencesSessionID = await References.select(tab);
++		if (!options.referencesSessionID) return;
++		options.resave = true;
+ 		let tabInfo = this.getTabInfo(tab.id);
+ 		if (tabInfo.uninjectable) {
+-			return Zotero.Utilities.saveWithoutProgressWindow(tab, frameId);
++			return Zotero.Utilities.saveWithoutProgressWindow(tab, frameId, options.referencesSessionID);
+ 		}
+ 	
+ 		if (tab.id != -1) {
+@@ -1241,8 +1199,7 @@
+ 	});
+ 
+ 	async function getCurrentTab() {
+-		let window = await browser.windows.getCurrent();
+-		let tabs = await browser.tabs.query({ active: true, windowId: window.id });
++		let tabs = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+ 		if (tabs.length === 0) {
+ 			throw new Error("No active tab found");
+ 		}
+--- a/src/browserExt/contentTypeHandler.js
++++ b/src/browserExt/contentTypeHandler.js
+@@ -342,7 +342,8 @@
+ 	 * Send an XHR request to retrieve and import the file into Standalone
+ 	 */
+ 	importFile: async function(url, tabId, type) {
+-		var sessionID = Zotero.Utilities.randomString();
++		var sessionID = await References.select(await browser.tabs.get(tabId));
++		if (!sessionID) return;
+ 		var headline = type == 'csl' ? Zotero.getString('contentTypeHandler_installingStyle') : null;
+ 		var readOnly = type == 'csl';
+ 		var tab = await browser.tabs.get(tabId);
+@@ -371,9 +372,9 @@
+ 		// Style installation
+ 		if (type == 'csl') {
+ 			options.method = 'installStyle';
+-			options.queryString = 'origin=' + encodeURIComponent(url);
++			options.queryString = `sessionID=${sessionID}`;
+ 			try {
+-				let result = await Zotero.Connector.callMethod(options, responseText);
++				let result = await Zotero.Connector.callMethod(options, responseText, tab);
+ 				Zotero.Messaging.sendMessage(
+ 					'progressWindow.itemProgress',
+ 					{
+@@ -396,7 +397,7 @@
+ 			options.method = 'import';
+ 			options.queryString = `session=${sessionID}`;
+ 			try {
+-				let result = await Zotero.Connector.callMethod(options, responseText);
++				let result = await Zotero.Connector.callMethod(options, responseText, tab);
+ 				Zotero.Messaging.sendMessage("progressWindow.sessionCreated", { sessionID }, tab);
+ 				for (let i = 0; i < result.length && i < 20; i++) {
+ 					let item = result[i];
+--- a/src/browserExt/itemSelector/itemSelector_browserSpecific.js
++++ b/src/browserExt/itemSelector/itemSelector_browserSpecific.js
+@@ -1,4 +1,4 @@
+-﻿/*
++/*
+ 	***** BEGIN LICENSE BLOCK *****
+ 	
+ 	Copyright © 2010 Center for History and New Media
+@@ -30,7 +30,7 @@
+ 	if(responseSent) return;
+ 	responseSent = true;
+ 	browser.runtime.sendMessage(["selectDone", [tabID, items]]);
+-	browser.windows.getCurrent().then(function (win) {
+-		browser.windows.remove(win.id);
++	browser.tabs.getCurrent().then(function (tab) {
++		browser.tabs.remove(tab.id);
+ 	});
+ }
+\ No newline at end of file
+--- a/src/browserExt/saveWithoutProgressWindow.js
++++ b/src/browserExt/saveWithoutProgressWindow.js
+@@ -71,7 +71,7 @@
+ 	}, 100);
+ });
+ 
+-Zotero.Utilities.saveWithoutProgressWindow = async function (tab, frameId) {
++Zotero.Utilities.saveWithoutProgressWindow = async function (tab, frameId, referencesSessionID) {
+ 	let url = tab.url;
+ 	let tabInfo = Zotero.Connector_Browser.getTabInfo(tab.id);
+ 	const pdf = tabInfo.isPDF;
+@@ -84,7 +84,7 @@
+ 		url,
+ 		pdf,
+ 		mimeType: tabInfo.contentType,
+-		sessionID: Zotero.Utilities.randomString()
++		sessionID: referencesSessionID
+ 	};
+ 	if (pdf) {
+ 		data.title = tab.title || new URL(url).pathname.split('/').pop();
+@@ -105,16 +105,8 @@
+ 			title: Zotero.getString('browserAction_saving')
+ 		});
+ 		
+-		try {
+-			// Check availability before fetching the attachment
+-			await Zotero.Connector.ping();
+-			await Zotero.ItemSaver.saveStandaloneAttachmentToZotero(data, data.sessionID, tab);
+-		}
+-		catch (e) {
+-			if (e.status !== 0 || !pdf) throw e;
+-			data.linkMode = 'imported_url';
+-			await Zotero.ItemSaver.saveAttachmentToServer(data, tab);
+-		}
++		await Zotero.Connector.ping({}, {}, tab);
++		await Zotero.ItemSaver.saveStandaloneAttachmentToZotero(data, data.sessionID, tab);
+ 		
+ 		browser.browserAction.setIcon({
+ 			tabId:tab.id,
+--- a/src/common/botBypass.js
++++ b/src/common/botBypass.js
+@@ -186,23 +186,16 @@
+ 	
+ 	// Create window for CAPTCHA solving
+ 	const monitorUrl = Zotero.getExtensionURL("browserAttachmentMonitor/browserAttachmentMonitor.html");
+-	const window = await browser.windows.create({
+-		url: monitorUrl,
+-		type: 'popup',
+-		width,
+-		height,
+-		left,
+-		top
+-	});
++	const challengeTab = await browser.tabs.create({url: monitorUrl, active: true});
+ 	
+ 	try {
+ 		// Wait for successful PDF URL capture
+-		const pdfURL = await Zotero.BrowserAttachmentMonitor.waitForAttachment(window.tabs[0].id, url);
++		const pdfURL = await Zotero.BrowserAttachmentMonitor.waitForAttachment(challengeTab.id, url);
+ 		Zotero.debug(`Successfully passed JS bot detection for URL: ${url}`);
+ 		return pdfURL;
+ 	}
+ 	finally {
+ 		// Clean up: close the window
+-		await browser.windows.remove(window.id);
++		await browser.tabs.remove(challengeTab.id).catch(() => {});
+ 	}
+ };
+--- a/src/common/connector.js
++++ b/src/common/connector.js
+@@ -31,7 +31,7 @@
+ 	this.isOnline = (Zotero.isSafari || Zotero.isFirefox) ? false : null;
+ 	this.clientVersion = '';
+ 	this.prefs = {
+-		reportActiveURL: true
++		reportActiveURL: false
+ 	};
+ 	
+ 	/**
+@@ -88,8 +88,8 @@
+ 	}
+ 	
+ 	// For use in injected pages
+-	this.getPref = function(pref) {
+-		return Zotero.Connector.prefs[pref];
++	this.getPref = function(pref, sessionID=null, tab=null) {
++		return References.getPref(pref, sessionID, tab);
+ 	}
+ 	
+ 	/**
+@@ -158,121 +158,7 @@
+ 	 * @param {Function} callback - Function to be called when requests complete.
+ 	 */
+ 	this.callMethod = async function(options, data = null, tab = null) {
+-		if (typeof options == 'string') {
+-			options = {method: options};
+-		}
+-		var method = options.method;
+-		let localhostPermissionMissing = false;
+-		if (Zotero.isSafari) {
+-			const hasLocalhostPermission = await browser.permissions.contains({
+-				origins: ["http://127.0.0.1/*"]
+-			});
+-			if (!hasLocalhostPermission) {
+-				localhostPermissionMissing = true;
+-				const isActive = options.active || !PASSIVE_METHODS.has(method);
+-				if (!isActive) {
+-					throw new Zotero.Connector.CommunicationError(
+-						`Connector: Skipping passive ${method} request without localhost permission`
+-					);
+-				}
+-				// Skip the explanation once a blocked request has shown that Safari won't
+-				// display its permission dialog -- the error handling for the failed request
+-				// points to Safari Settings instead
+-				if (!options.permissionPromptShown && !Zotero.HostPermissions.localhostRequestBlocked) {
+-					// This request can trigger Safari's own permission dialog for localhost, where
+-					// the user can also grant all-websites access
+-					await Zotero.HostPermissions.prompt(
+-						{domains: ['127.0.0.1'], recommendAllHosts: true, nativePromptToFollow: true},
+-						tab
+-					);
+-				}
+-			}
+-		}
+-		var headers = Object.assign({
+-				"Content-Type":"application/json",
+-				"X-Zotero-Version":Zotero.version,
+-				"X-Zotero-Connector-API-Version":CONNECTOR_API_VERSION
+-			}, options.headers || {});
+-		var timeout = "timeout" in options ? options.timeout : 15000;
+-		var queryString = options.queryString ? ("?" + options.queryString) : "";
+-		
+-		var uri = Zotero.Prefs.get('connector.url') + "connector/" + method + queryString;
+-		if (headers["Content-Type"] == 'application/json') {
+-			data = JSON.stringify(data);
+-		}
+-		else if (headers["Content-Type"] == 'multipart/form-data') {
+-			let formData = new FormData();
+-			for (const entry in data) {
+-				// For SingleFile binary arrays, convert them to blobs
+-				if (entry.startsWith('binary-')) {
+-					const int8array = new Uint8Array(Object.values(data[entry]));
+-					formData.append(entry, new Blob([int8array]));
+-				}
+-				else {
+-					formData.append(entry, data[entry]);
+-				}
+-			}
+-			data = formData;
+-		}
+-		options = { body: data, headers, successCodes: false, timeout };
+-		let httpMethod = data === null ? "GET" : "POST";
+-		try {
+-			const xhr = await Zotero.HTTP.request(httpMethod, uri, options);
+-			Zotero.Connector.clientVersion = xhr.getResponseHeader('X-Zotero-Version');
+-			if (Zotero.Connector.isOnline !== true) {
+-				Zotero.Connector.isOnline = true;
+-				Zotero.Connector.onStateChange(Zotero.Connector.clientVersion)
+-			}
+-			var val = xhr.response
+-			if (xhr.responseText) {
+-				let contentType = xhr.getResponseHeader("Content-Type") || ""
+-				if (contentType.includes("application/json")) {
+-					val = JSON.parse(xhr.responseText);
+-				} else {
+-					val = xhr.responseText;
+-				}
+-			}
+-			// Zotero error responses bear an identifying header. If it's missing, treat the
+-			// response like a connection failure so existing save flows show their "Is Zotero
+-			// Running?" prompt instead of reporting an error from an unrelated localhost server.
+-			if (xhr.status === 0 || (xhr.status >= 400
+-					&& !xhr.getResponseHeader('X-Zotero-Version'))) {
+-				if (Zotero.Connector.isOnline !== false) {
+-					Zotero.Connector.isOnline = false;
+-					Zotero.Connector.onStateChange(Zotero.Connector.clientVersion)
+-				}
+-				throw new Zotero.Connector.CommunicationError('Connector: Zotero is offline');
+-			}
+-			else if (xhr.status >= 400) {
+-				// Check for incompatible version
+-				if (xhr.status === 412) {
+-					if (Zotero.Connector_Browser && Zotero.Connector_Browser.onIncompatibleStandaloneVersion) {
+-						var standaloneVersion = xhr.getResponseHeader("X-Zotero-Version");
+-						Zotero.Connector_Browser.onIncompatibleStandaloneVersion(Zotero.version, standaloneVersion);
+-						throw new Zotero.Connector.CommunicationError(`Connector: Version mismatch: Connector version ${Zotero.version}, Standalone version ${standaloneVersion ? standaloneVersion : "<unknown>"}`, xhr.status, val);
+-					}
+-				}
+-				
+-				Zotero.debug("Connector: Method "+method+" failed with status "+xhr.status);
+-				throw new Zotero.Connector.CommunicationError(`Method ${method} failed`, xhr.status, val);
+-			} else {
+-				Zotero.debug("Connector: Method "+method+" succeeded");
+-				return val;
+-			}
+-		} catch (e) {
+-			if (localhostPermissionMissing && e.status == 0
+-					&& !await browser.permissions.contains({origins: ["http://127.0.0.1/*"]})) {
+-				Zotero.HostPermissions.localhostRequestBlocked = true;
+-			}
+-			if (!(e instanceof Zotero.Connector.CommunicationError) && !(e instanceof Zotero.HTTP.StatusError)){
+-				// Unexpected error, including a timeout
+-				Zotero.logError(e);
+-			}
+-			throw e;
+-		}
+-		finally {
+-			this._handleIntegrationTabClosed(method, tab);
+-		}
++		return References.call(options, data, tab);
+ 	},
+ 	
+ 	/**
+@@ -282,8 +168,8 @@
+ 	 * getChunkedPayload to split the `snapshotContent` field across multiple
+ 	 * runtime messages, working around MV3 Chromium's 64 MB per-message limit.
+ 	 */
+-	this.saveSingleFile = async function(options, data) {
+-		return this.callMethod(options, data);
++	this.saveSingleFile = async function(options, data, tab) {
++		return this.callMethod(options, data, tab);
+ 	}
+ 
+ 	/**
+@@ -357,26 +243,5 @@
+ 	/**
+ 	 * Submit data to the server
+ 	 */
+-	this.submitReport = async function() {
+-		let body = await Zotero.Debug.get();
+-		let sysInfo = JSON.parse(await Zotero.Errors.getSystemInfo());
+-		let errors = (await Zotero.Errors.getErrors()).join('\n');
+-		sysInfo.timestamp = new Date().toString();
+-		body = `${errors}\n\n${JSON.stringify(sysInfo, null, 2)}\n\n${body}`;
+-		let xmlhttp = await Zotero.HTTP.request("POST", ZOTERO_CONFIG.REPOSITORY_URL + "report?debug=1", {body});
+-
+-		let responseXML;
+-		try {
+-			let parser = new DOMParser();
+-			responseXML = parser.parseFromString(xmlhttp.responseText, "text/xml");
+-		}
+-		catch (e) {
+-			throw new Error('Invalid response from server');
+-		}
+-		var reported = responseXML.getElementsByTagName('reported');
+-		if (reported.length != 1) {
+-			throw new Error('The server returned an error. Please try again.');
+-		}
+-		return reported[0].getAttribute('reportID');
+-	};
+-}
++	this.submitReport = async function() { throw new Error("Remote debug reporting is not part of References"); };
++};
+--- a/src/common/errors_webkit.js
++++ b/src/common/errors_webkit.js
+@@ -112,39 +112,5 @@
+ 	 * since responseXML or DOMParser are unavailable
+ 	 * in the global page
+ 	 */
+-	this.sendErrorReport = async function() {
+-		var info = await this.getSystemInfo();
+-		var parts = {
+-			error: "true",
+-			errorData: (await this.getErrors()).join('\n'),
+-			extraData: '',
+-			diagnostic: info
+-		};
+-		
+-		var body = '';
+-		for (var key in parts) {
+-			body += key + '=' + encodeURIComponent(parts[key]) + '&';
+-		}
+-		body = body.substr(0, body.length - 1);
+-		let headers = {'Content-Type': 'application/x-www-form-urlencoded'};
+-		let options = {body, headers};
+-		var xmlhttp = await Zotero.HTTP.request("POST", "https://www.zotero.org/repo/report", options);
+-		let responseXML;
+-		try {
+-			let parser = new DOMParser();
+-			responseXML = parser.parseFromString(xmlhttp.responseText, "text/xml");
+-		}
+-		catch (e) {
+-			throw new Error('Invalid response from repository');
+-		}
+-		var reported = responseXML.getElementsByTagName('reported');
+-		if (reported.length != 1) {
+-			throw new Error('Invalid response from repository');
+-		}
+-		return reported[0].getAttribute('reportID');
+-	}
+-}
+-
+-if (typeof Zotero.Debug != "undefined") {
+-	Zotero.Debug.bgInit = Zotero.Debug.init;
+-}
++	this.sendErrorReport = async function() { throw new Error("Remote error reporting is not part of References"); };
++};
+--- a/src/common/inject/inject.jsx
++++ b/src/common/inject/inject.jsx
+@@ -90,7 +90,7 @@
+ 		this._addMessageListeners();
+ 		this._addZoteroButtonElementListener();
+ 		
+-		this._handleOAuthComplete()
++
+ 
+ 		if(document.readyState !== "complete") {
+ 			window.addEventListener("pageshow", function(e) {
+@@ -105,13 +105,7 @@
+ 	/**
+ 	 * Call OAuth complete listeners if on the relevant URL
+ 	 */
+-	_handleOAuthComplete() {
+-		if(document.location.href.substr(0, ZOTERO_CONFIG.OAUTH.ZOTERO.CALLBACK_URL.length+1) === ZOTERO_CONFIG.OAUTH.ZOTERO.CALLBACK_URL+"?") {
+-			Zotero.API.onAuthorizationComplete(document.location.href.substr(ZOTERO_CONFIG.OAUTH.ZOTERO.CALLBACK_URL.length+1));
+-		} else if (document.location.href.substr(0, ZOTERO_CONFIG.OAUTH.ZOTERO.CALLBACK_URL.length+1) === ZOTERO_CONFIG.OAUTH.GOOGLE_DOCS.CALLBACK_URL+"#") {
+-			Zotero.GoogleDocs_API.onAuthComplete(document.location.href);
+-		}
+-	},
++
+ 	
+ 	_addMessageListeners() {
+ 		// add listener for translate message from background page
+@@ -301,54 +295,7 @@
+ 	 * @param {Boolean} localhostDenied - Zotero is unreachable because Safari denies the
+ 	 *     Connector access to 127.0.0.1, rather than because Zotero isn't running
+ 	 */
+-	async firstSaveToServerPrompt(localhostDenied=false) {
+-		var clientName = ZOTERO_CONFIG.CLIENT_NAME;
+-		
+-		let title, message;
+-		if (localhostDenied) {
+-			title = Zotero.getString('permissions_siteAccess_title');
+-			message = Zotero.getString('permissions_siteAccess_message_localhost_required')
+-				+ Zotero.getString(
+-					'permissions_siteAccess_message_domain_safari',
+-					[Zotero.getString('appConnector', clientName), '<b>127.0.0.1</b>']
+-				)
+-				+ Zotero.getString(
+-					'permissions_siteAccess_message_saveToServer',
+-					[Zotero.getString('appConnector', clientName), ZOTERO_CONFIG.DOMAIN_NAME]
+-				);
+-		}
+-		else {
+-			title = Zotero.getString('error_connection_isAppRunning', clientName);
+-			message = Zotero.getString(
+-					'error_connection_save',
+-					[
+-						Zotero.getString('appConnector', clientName),
+-						clientName,
+-						ZOTERO_CONFIG.DOMAIN_NAME
+-					]
+-				)
+-				+ '<br /><br />'
+-				+ Zotero.Inject.getConnectionErrorTroubleshootingString();
+-		}
+-		var result = await this.confirm({
+-			button1Text: Zotero.getString('general_tryAgain'),
+-			button2Text: Zotero.getString('general_cancel'),
+-			button3Text: Zotero.getString('error_connection_enableSavingToOnlineLibrary'),
+-			title,
+-			message
+-		});
+-		
+-		switch (result.button) {
+-			case 1:
+-				return 'retry';
+-			
+-			case 3:
+-				return 'server';
+-			
+-			default:
+-				return 'cancel';
+-		}
+-	},
++
+ 	
+ 	getConnectionErrorTroubleshootingString() {
+ 		var clientName = ZOTERO_CONFIG.CLIENT_NAME;
+@@ -370,37 +317,7 @@
+ 	 *     the status check, e.g., on a retry after it has already been displayed
+ 	 * return {Promise<Boolean>} whether the action should proceed
+ 	 */
+-	async checkActionToServer(permissionPromptShown=false) {
+-		var [firstSaveToServer, zoteroIsOnline] = await Zotero.Promise.all([
+-			Zotero.Prefs.getAsync('firstSaveToServer'),
+-			Zotero.Connector.checkIsOnline({active: true, permissionPromptShown})
+-		]);
+-		if (zoteroIsOnline) {
+-			return true;
+-		}
+-		// null means Safari blocked the localhost request, leaving Zotero's status unknown
+-		let localhostDenied = zoteroIsOnline === null;
+-		if (!localhostDenied && Zotero.isSafari) {
+-			await Zotero.HostPermissions.prompt({
+-				domains: ['repo.zotero.org', 'api.zotero.org']
+-			});
+-		}
+-		if (!firstSaveToServer) {
+-			return true;
+-		}
+-		var result = await this.firstSaveToServerPrompt(localhostDenied);
+-		if (result == 'server') {
+-			Zotero.Prefs.set('firstSaveToServer', false);
+-			return true;
+-		}
+-		else if (result == 'retry') {
+-			// If we perform the retry immediately and Zotero is still unavailable the prompt returns instantly
+-			// making the user interaction confusing so we wait a bit first
+-			await Zotero.Promise.delay(500);
+-			return this.checkActionToServer(true);
+-		}
+-		return false;
+-	},
++	async checkActionToServer() { return true; },
+ 	
+ 	addKeyboardShortcut(eventDescriptor, fn, elem) {
+ 		elem = elem || document;
+--- a/src/common/inject/pageSaving.js
++++ b/src/common/inject/pageSaving.js
+@@ -123,7 +123,7 @@
+ 		if (!saveOptions.resave && this.sessionDetails.id) {
+ 			return this.sessionDetails.id;
+ 		}
+-		const sessionID = Zotero.Utilities.randomString();
++		const sessionID = saveOptions.referencesSessionID || Zotero.Utilities.randomString();
+ 		this.sessionDetails = {
+ 			id: sessionID,
+ 			url: document.location.href,
+@@ -364,24 +364,7 @@
+ 			});
+ 			return result;
+ 		} catch (e) {
+-			// Client unavailable
+-			if (e.status === 0) {
+-				let itemSaver = new Zotero.ItemSaver({});
+-				this.sessionDetails.itemSaver = itemSaver;
+-				let result = await itemSaver.saveAsWebpage();
+-				items[0].key = result[0].key;
+-				Zotero.Messaging.sendMessage("progressWindow.itemProgress", { ...items[0], progress: 100 });
+-				const automaticSnapshots = await Zotero.Prefs.getAsync("automaticSnapshots")
+-				if (automaticSnapshots) {
+-					await this._saveSingleFile(items[0], data, true);
+-				}
+-				Zotero.Messaging.sendMessage("progressWindow.done", [true]);
+-				return;
+-			}
+-			// Unexpected error, including a timeout (which we don't want to
+-			// result in a save to the server, because it's possible the request
+-			// will still be processed)
+-			else if (!e.value || e.value.libraryEditable != false) {
++			if (!e.value || e.value.libraryEditable != false) {
+ 				Zotero.Messaging.sendMessage("progressWindow.done", [false, 'unexpectedError']);
+ 			}
+ 			throw e;
+@@ -413,11 +396,7 @@
+ 			try {
+ 				const snapshotContent = await Zotero.SingleFile.retrievePageData();
+ 
+-				if (toServer) {
+-					snapshotItem.data = snapshotContent;
+-					await Zotero.ItemSaver.saveAttachmentToServer(snapshotItem);
+-				}
+-				else {
++				{
+ 					data.snapshotContent = snapshotContent;
+ 					await Zotero.Connector.saveSingleFile({
+ 							method: "saveSingleFile",
+@@ -500,15 +479,7 @@
+ 				url: document.location.href,
+ 			});
+ 		} catch (e) {
+-			// Client unavailable
+-			if (e.status === 0) {
+-				Zotero.Messaging.sendMessage("progressWindow.itemProgress", { ...progressItem, ...{ progress: 0 } });
+-				await Zotero.ItemSaver.saveAttachmentToServer(standaloneAttachment);
+-				Zotero.Messaging.sendMessage("progressWindow.itemProgress", { ...progressItem, ...{ progress: 100 } });
+-				Zotero.Messaging.sendMessage("progressWindow.done", [true]);
+-				return;
+-			}
+-			else if (!e.value || e.value.libraryEditable != false) {
++			if (!e.value || e.value.libraryEditable != false) {
+ 				// Unexpected error, including a timeout (which we don't want to
+ 				// result in a save to the server, because it's possible the request
+ 				// will still be processed)
+--- a/src/common/inject/progressWindow_inject.js
++++ b/src/common/inject/progressWindow_inject.js
+@@ -99,11 +99,11 @@
+ 	 */
+ 	async function updateFromClient(prefix, retryOnReadOnly = true) {
+ 		try {
+-			var response = await Zotero.Connector.callMethod("getSelectedCollection", { switchToReadableLibrary: true })
++			var response = await Zotero.Connector.callMethod("getSelectedCollection", { switchToReadableLibrary: true, sessionID: currentSessionID })
+ 		}
+ 		catch (e) {
+ 			// TODO: Shouldn't this be coupled to the actual save process?
+-			changeHeadline(Zotero.getString('progressWindow_savingToOnlineLibrary'));
++			changeHeadline('References backend unavailable');
+ 			return;
+ 		}
+ 		
+--- a/src/common/itemSaver.js
++++ b/src/common/itemSaver.js
+@@ -92,15 +92,7 @@
+ 	 */
+ 	saveItems: async function (items, attachmentCallback, itemsDoneCallback=()=>0) {
+ 		Zotero.debug(`ItemSaver.saveItems: Saving ${items.length} items`);
+-		try {
+-			return await this._saveToZotero(items, attachmentCallback, itemsDoneCallback);
+-		}
+-		catch (e) {
+-			if (e.status == 0) {
+-				return this._saveToServer(items, attachmentCallback, itemsDoneCallback);
+-			}
+-  			throw e;
+-		}
++		return this._saveToZotero(items, attachmentCallback, itemsDoneCallback);
+ 	},
+ 	
+ 	_saveToZotero: async function (items, attachmentCallback, itemsDoneCallback=()=>0) {
+@@ -109,8 +101,8 @@
+ 			sessionID: this._sessionID,
+ 			uri: this._baseURI,
+ 		};
+-		const automaticSnapshots = await Zotero.Connector.getPref('automaticSnapshots');
+-		const downloadAssociatedFiles = await Zotero.Connector.getPref('downloadAssociatedFiles');
++		const automaticSnapshots = await Zotero.Connector.getPref('automaticSnapshots', this._sessionID);
++		const downloadAssociatedFiles = await Zotero.Connector.getPref('downloadAssociatedFiles', this._sessionID);
+ 
+ 		payload.proxy = this._proxy && this._proxy.toJSON();
+ 
+@@ -186,7 +178,7 @@
+ 		Zotero.debug("Translate: Save via Zotero succeeded");
+ 		Zotero.Messaging.sendMessage("progressWindow.sessionCreated", { sessionID: this._sessionID });
+ 		
+-		const response = await Zotero.Connector.callMethod("getSelectedCollection", {})
++		const response = await Zotero.Connector.callMethod("getSelectedCollection", {sessionID: this._sessionID})
+ 		if (response.filesEditable) {
+ 			await this.saveAttachmentsToZotero(attachmentCallback);
+ 		}
+@@ -231,7 +223,7 @@
+ 	},
+ 	
+ 	async _saveAttachmentsToZotero(attachmentCallback) {
+-		const shouldAttemptToDownloadOAAttachments = await Zotero.Connector.getPref('downloadAssociatedFiles')
++		const shouldAttemptToDownloadOAAttachments = await Zotero.Connector.getPref('downloadAssociatedFiles', this._sessionID)
+ 		for (let item of this._items) {
+ 			item.hasPrimaryAttachment = false;
+ 			for (let attachment of item.attachments) {
+@@ -375,132 +367,6 @@
+ 	 *     on failure or attachmentCallback(attachment, progressPercent) periodically during saving.
+ 	 *     attachmentCallback() will be called with all attachments that will be saved
+ 	 */
+-	_saveToServer: async function (items, attachmentCallback, itemsDoneCallback=()=>0) {
+-		Zotero.debug(`ItemSaver._saveToServer: Saving ${items.length} items to server`);
+-		var newItems = [], itemIndices = [];
+-		const automaticTags = await Zotero.Prefs.getAsync("automaticTags");
+-		
+-		for(var i=0, n=items.length; i<n; i++) {
+-			var item = items[i];
+-			// deproxify url
+-			if (this._proxy && item.url) {
+-				item.url = this._proxy.toProper(item.url);
+-			}
+-			itemIndices[i] = newItems.length;
+-			let apiItem = Zotero.Utilities.deepCopy(item);
+-			if (!automaticTags && Array.isArray(apiItem.tags)) {
+-				apiItem.tags = apiItem.tags.filter(tag => typeof tag !== 'object' || tag.type !== 1);
+-			}
+-			newItems = newItems.concat(Zotero.Utilities.Item.itemToAPIJSON(apiItem));
+-			for (let attachment of item.attachments) {
+-				attachment.id = Zotero.Utilities.randomString();
+-			}
+-		}
+-		
+-		let response = await Zotero.API.createItem(newItems);
+-		try {
+-			var resp = JSON.parse(response);
+-		} catch(e) {
+-			throw new Error("Unexpected response received from server");
+-		}
+-		
+-		for (var key in resp.failed) {
+-			throw new Error("Save to server failed with " + response.statusCode + " " + response);
+-		}
+-		
+-		Zotero.debug("Translate: Save to server complete");
+-		itemsDoneCallback(items);
+-		
+-		const prefs = await Zotero.Prefs.getAsync(["downloadAssociatedFiles", "automaticSnapshots"])
+-
+-		for (const item of items) {
+-			for (const attachment of item.attachments) {
+-				this._setAttachmentReferer(attachment);
+-				
+-				if (attachment.mimeType === 'text/html') {
+-					if (prefs.automaticSnapshots) {
+-						attachmentCallback(attachment, 0);
+-					}
+-				}
+-				else if (prefs.downloadAssociatedFiles) {
+-					attachmentCallback(attachment, 0);
+-				}
+-			}
+-		}
+-		for (var i=0; i<items.length; i++) {
+-			var item = items[i], key = resp.success[itemIndices[i]];
+-			item.key = key;
+-			if (item.attachments && item.attachments.length) {
+-				await this._saveAttachmentsToServer(key, this._getFileBaseNameFromItem(item),
+-					item.attachments, prefs, attachmentCallback);
+-			}
+-		}
+-		
+-		return items;
+-	},
+-
+-	/**
+-	 *
+-	 * @param {String} itemKey The key of the parent item
+-	 * @param {String} baseName A string to use as the base name for attachments
+-	 * @param {Object[]} attachments An array of attachment objects
+-	 * @param {Object} prefs An object with the values of the downloadAssociatedFiles and automaticSnapshots preferences
+-	 * @param {Function} attachmentCallback A callback that receives information about attachment
+-	 *     save progress. The callback will be called as attachmentCallback(attachment, false, error)
+-	 *     on failure or attachmentCallback(attachment, progressPercent) periodically during saving.
+-	 * @private
+-	 */
+-	_saveAttachmentsToServer: async function(itemKey, baseName, attachments, prefs, attachmentCallback=()=>0) {
+-		let promises = []
+-		for (let attachment of attachments) {
+-			Zotero.debug(`ItemSaver._saveAttachmentsToServer: Saving attachment ${attachment.title} to server`);
+-			let isSnapshot = false;
+-			if (attachment.mimeType) {
+-				switch (attachment.mimeType.toLowerCase()) {
+-					case "text/html":
+-					case "application/xhtml+xml":
+-						isSnapshot = true;
+-				}
+-			}
+-
+-			if ((isSnapshot && !prefs.automaticSnapshots) || (!isSnapshot && !prefs.downloadAssociatedFiles)) {
+-				// Skip attachment due to prefs
+-				continue;
+-			}
+-
+-			attachment.parentKey = itemKey;
+-
+-			promises.push((async () => {
+-				try {
+-					switch (attachment.mimeType.toLowerCase()) {
+-					case "application/pdf":
+-						attachment.filename = baseName+".pdf";
+-						break;
+-					case "text/html":
+-					case "application/xhtml+xml":
+-						attachment.filename = baseName+".html";
+-						attachment.data = await Zotero.SingleFile.retrievePageData();
+-						break;
+-					default:
+-						attachment.filename = baseName;
+-					}
+-
+-					// Don't download attachment if snapshot is specifically set to false
+-					attachment.linkMode = attachment.snapshot === false ? "linked_url" : "imported_url";
+-
+-					await ItemSaver.fetchAttachmentSafari(attachment);
+-					await Zotero.ItemSaver.saveAttachmentToServer(attachment);
+-					attachmentCallback(attachment, 100);
+-				}
+-				catch (e) {
+-					attachmentCallback(attachment, false, e);
+-					Zotero.logError(e);
+-				}
+-			})());
+-		}
+-		await Promise.all(promises);
+-	},
+-	
+ 	_setAttachmentReferer(attachment) {
+ 		const url = new URL(document.location.href);
+ 
+--- a/src/common/itemSaver_background.js
++++ b/src/common/itemSaver_background.js
+@@ -104,7 +104,7 @@
+ 			"X-Metadata": metadata
+ 		},
+ 		queryString: `sessionID=${sessionID}`
+-	}, arrayBuffer);
++	}, arrayBuffer, tab);
+ }
+ 
+ Zotero.ItemSaver.saveStandaloneAttachmentToZotero = async function(attachment, sessionID, tab) {
+@@ -131,76 +131,9 @@
+ 		},
+ 		queryString: `sessionID=${sessionID}`,
+ 		timeout: 60e3
+-	}, arrayBuffer);
++	}, arrayBuffer, tab);
+ }
+ 
+-Zotero.ItemSaver.saveAttachmentToServer = async function(attachment, tab) {
+-	let promises = []
+-	promises.push(this._createServerAttachmentItem(attachment));
+-
+-	// SingleFile snapshot
+-	if (typeof attachment.data === 'string' && attachment.mimeType === 'text/html') {
+-		let snapshotString = attachment.data;
+-		attachment.data = new Uint8Array(Zotero.Utilities.getStringByteLength(snapshotString));
+-		Zotero.Utilities.stringToUTF8Array(snapshotString, attachment.data);
+-	}
+-	else if (Zotero.isSafari && attachment.data) {
+-		// Safari fetches binary attachments in content script when possible
+-		attachment.data = new Uint8Array(this._unpackSafariAttachmentData(attachment.data));
+-	}
+-
+-	// Don't download if the attachment is supposed to be linked
+-	if (!attachment.data || attachment.linkMode !== "imported_url") {
+-		promises.push(this._fetchAttachment(attachment, tab));
+-	}
+-
+-	const [itemKey, arrayBuffer] = await Promise.all(promises);
+-
+-	attachment.data = attachment.data || new Uint8Array(arrayBuffer);
+-	// If no data then no need to upload
+-	if (!attachment.data) return;
+-
+-	attachment.key = itemKey;
+-	attachment.md5 = this.md5(attachment.data);
+-
+-	// Do not return here or a message is attempted to pass back to injected page
+-	// which causes a failure due to it sometimes exceeding max message length.
+-	await Zotero.API.uploadAttachment(attachment);
+-}
+-
+-
+-/**
+- * Creates an attachment item on the Zotero server. This assigns a "key" to the item
+- * and allows to upload the attachment data
+- *
+- * @param parentItemKey
+- * @param attachment
+- * @returns {Promise.<String>} Item key
+- * @private
+- */
+-Zotero.ItemSaver._createServerAttachmentItem = async function(attachment) {
+-	var item = [{
+-		itemType: "attachment",
+-		linkMode: attachment.linkMode,
+-		title: attachment.title ? attachment.title.toString() : "Untitled Attachment",
+-		accessDate: "CURRENT_TIMESTAMP",
+-		url: attachment.url,
+-		tags: Array.isArray(attachment.tags) ? attachment.tags : []
+-	}];
+-	if (attachment.parentKey) {
+-		item[0].parentItem = attachment.parentKey;
+-	}
+-	
+-	let response = await Zotero.API.createItem(item);
+-	try {
+-		response = JSON.parse(response);
+-	} catch(e) {
+-		throw new Error(`Unexpected response from server ${response}`);
+-	}
+-	Zotero.debug(`Attachment item created for ${attachment.title}`);
+-	return response.success[0];
+-},
+-
+ Zotero.ItemSaver._fetchAttachment = async function(attachment, tab, attemptBotProtectionBypass=true) {
+ 	let options = { responseType: "arraybuffer", timeout: 60000, successCodes: false };
+ 	let cookies;
+--- a/src/common/messages.js
++++ b/src/common/messages.js
+@@ -140,7 +140,7 @@
+ 		checkIsOnline: {
+ 			background: {minArgs: 1}
+ 		},
+-		callMethod: true,
++		callMethod: {background: {minArgs: 2}},
+ 		saveSingleFile: {
+ 			inject: {
+ 				preSend: async function(args) {
+@@ -151,10 +151,11 @@
+ 				},
+ 			},
+ 			background: {
+-				postReceive: async function(args) {
++				postReceive: async function(args, tab) {
+ 					if (Zotero.isChromium) {
+ 						args[1].snapshotContent = Zotero.Messaging.getChunkedPayload(args[1].snapshotContent);
+ 					}
++					args.push(tab);
+ 					return args;
+ 				}
+ 			}
+@@ -163,7 +164,7 @@
+ 			background: {minArgs: 1}
+ 		},
+ 		reportActiveURL: false,
+-		getPref: true
++		getPref: {background: {minArgs: 2}}
+ 	},
+ 	HostPermissions: {
+ 		onPageLoad: true,
+@@ -200,31 +201,6 @@
+ 	ItemSaver: {
+ 		saveAttachmentToZotero: true,
+ 		saveStandaloneAttachmentToZotero: true,
+-		saveAttachmentToServer: {
+-			inject: {
+-				preSend: async function(args) {
+-					if (Zotero.isChromium) {
+-						let attachment = args[0];
+-						if (typeof attachment.data === 'string' && attachment.mimeType === 'text/html') {
+-							attachment.data = await Zotero.Messaging.sendAsChunks(attachment.data);
+-						}
+-					}
+-					return args;
+-				},
+-			},
+-			background: {
+-				postReceive: async function(args, tab) {
+-					if (Zotero.isChromium) {
+-						let attachment = args[0];
+-						if (typeof attachment.data === 'string' && attachment.mimeType === 'text/html') {
+-							attachment.data = Zotero.Messaging.getChunkedPayload(attachment.data);
+-						}
+-					}
+-					args.push(tab);
+-					return args;
+-				}
+-			}
+-		}
+ 	},
+ 	Errors: {
+ 		log: false,
+--- a/src/common/repo.js
++++ b/src/common/repo.js
+@@ -1,131 +1,16 @@
+-/*
+-    ***** BEGIN LICENSE BLOCK *****
+-    
+-    Copyright © 2011 Center for History and New Media
+-                     George Mason University, Fairfax, Virginia, USA
+-                     http://zotero.org
+-    
+-    This file is part of Zotero.
+-    
+-    Zotero is free software: you can redistribute it and/or modify
+-    it under the terms of the GNU Affero General Public License as published by
+-    the Free Software Foundation, either version 3 of the License, or
+-    (at your option) any later version.
+-    
+-    Zotero is distributed in the hope that it will be useful,
+-    but WITHOUT ANY WARRANTY; without even the implied warranty of
+-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-    GNU Affero General Public License for more details.
+-    
+-    You should have received a copy of the GNU Affero General Public License
+-    along with Zotero.  If not, see <http://www.gnu.org/licenses/>.
+-    
+-    ***** END LICENSE BLOCK *****
+-*/
+-
+-/**
+- * Intended behavior as follows:
+- * 1. Check for translator updates every REPOSITORY_CHECK_INTERVAL (24hrs) starting with
+- *    Zotero and cascading to the Zotero Repo
+- * 2. When translators retrieved from Zotero we get the full up-to-date translator metadata
+- * 3. When translators retrieved from the Zotero Repo we only fetch the diff between the last time
+- *    we checked the Repo and now
+- * 4. Can override to fetch all metadata from Zotero Repo if needed
+- */
+-Zotero.Repo = new function() {
+-	this.infoRe = /^\s*{[\S\s]*?}\s*?[\r\n]/;
+-
+-	async function checkRepositoryAccess() {
+-		if (!Zotero.isSafari) return;
+-		const hasPermission = await browser.permissions.contains({
+-			origins: ["https://repo.zotero.org/*"]
+-		});
+-		if (!hasPermission) {
+-			throw new Error('Repo: Skipping request without repo.zotero.org permission');
+-		}
+-	}
+-	
+-	/**
+-	 * Get translator code from repository
+-	 * @param {String} translatorID ID of the translator to retrieve code for
+-	 * @param {Boolean} debugMode used in translator tester to prevent fetching from repo
+-	 */
+-	this.getTranslatorCode = async function (translatorID, debugMode) {
+-		var translator = await Zotero.Translators.getWithoutCode(translatorID);
+-		var code;
+-		
+-		if (!ZOTERO_CONFIG.ALWAYS_FETCH_FROM_REPOSITORY) {
+-			// try standalone
+-			try {
+-				code = await Zotero.Connector.callMethod("getTranslatorCode", { translatorID: translatorID })
+-			}
+-			catch (e) {}
+-		}
+-		
+-		// Don't fetch from repo in debug mode
+-		if (!code && !debugMode) {
+-			// then try repo
+-			const url = `${ZOTERO_CONFIG.REPOSITORY_URL}code/${translatorID}?version=${Zotero.version}`;
+-			try {
+-				await checkRepositoryAccess();
+-				let xhr = await Zotero.HTTP.request("GET", url);
+-				code = xhr.responseText;
+-			}
+-			catch (e) {}
+-		}
+-		
+-		if (!code) {
+-			throw new Error(`Failed to fetch code for translator ${translator.label}`)
+-		}
+-		
+-		var m = Zotero.Repo.infoRe.exec(code);
+-		if (!m) {
+-			throw new Error("Invalid or missing translator metadata JSON object for " + translator.label);
+-		}
+-
+-		try {
+-			var metadata = JSON.parse(m[0]);
+-		} catch(e) {
+-			throw new Error("Invalid or missing translator metadata JSON object for " + translator.label);
+-		}
+-
+-		if(metadata.lastUpdated !== translator.lastUpdated) {
+-			if (Zotero.Date.sqlToDate(metadata.lastUpdated) > Zotero.Date.sqlToDate(translator.lastUpdated)) {
+-				Zotero.debug("Repo: Retrieved code for "+metadata.label+" newer than stored metadata; updating");
+-				await Zotero.Translators.updateTranslator(metadata);
+-			}
+-			// else {
+-			// 	Zotero.debug("Repo: Retrieved code for "+metadata.label+" older than stored metadata; not caching");
+-			// }
+-		}
+-		return code;
+-	};
+-	
+-	/**
+-	 * Retrieve translator metadata from Zotero Standalone
+-	 */
+-	this.getTranslatorMetadataFromZotero = async function() {
+-		if (ZOTERO_CONFIG.ALWAYS_FETCH_FROM_REPOSITORY) {
+-			throw new Error("Cannot fetch metadata from Zotero when ALWAYS_FETCH_FROM_REPOSITORY is enabled");
+-		}
+-		let translatorMetadata = await Zotero.Connector.callMethod("getTranslators", {});
+-		Zotero.Prefs.set("connector.repo.lastCheck.localTime", Date.now());
+-		return translatorMetadata;
+-	}
+-	
+-	/**
+-	 * Retrieve metadata from repository
+-	 * @param reset {Boolean} When false only retrieves updates since last repo check
+-	 */
+-	this.getTranslatorMetadataFromServer = async function(reset=false) {
+-		var url = ZOTERO_CONFIG.REPOSITORY_URL + "metadata?version=" + Zotero.version + "&last="+
+-				(reset ? "0" : Zotero.Prefs.get("connector.repo.lastCheck.repoTime"));
+-
+-		await checkRepositoryAccess();
+-		xhr = await Zotero.HTTP.request('GET', url);
+-		var date = xhr.getResponseHeader("Date");
+-		Zotero.Prefs.set("connector.repo.lastCheck.localTime", Date.now());
+-		Zotero.Prefs.set("connector.repo.lastCheck.repoTime", Math.floor(Date.parse(date)/1000));
+-		return JSON.parse(xhr.responseText);
+-	}
+-}
+\ No newline at end of file
++/* References pinned translator data adapter. AGPL-3.0-or-later. */
++Zotero.Repo = new function () {
++  this.infoRe = /^\s*{[\S\s]*?}\s*?[\r\n]/;
++  this.getTranslatorCode = async function (id) {
++    if (!/^[a-f0-9-]{36}$/.test(id)) throw new Error('Invalid translator identity');
++    const response = await fetch(browser.runtime.getURL(`translators/${id}.js`));
++    if (!response.ok) throw new Error('Pinned translator unavailable');
++    return response.text();
++  };
++  this.getTranslatorMetadataFromZotero = async function () {
++    const response = await fetch(browser.runtime.getURL('translators/metadata.json'));
++    if (!response.ok) throw new Error('Pinned translator metadata unavailable');
++    return response.json();
++  };
++  this.getTranslatorMetadataFromServer = this.getTranslatorMetadataFromZotero;
++};
+--- a/src/common/translators.js
++++ b/src/common/translators.js
+@@ -59,7 +59,7 @@
+ 				else {
+ 					this._load(translators);
+ 				}
+-				this.keepTranslatorsUpdated();
++
+ 				resolve();
+ 			}
+ 			catch (e) {
+--- a/src/common/zotero.js
++++ b/src/common/zotero.js
+@@ -100,57 +100,7 @@
+ 	// this.Promise = window.Promise;
+ 	this.Promise = Promise;
+ 	
+-	this.migrate = async function() {
+-		let lastVersion = Zotero.Prefs.get('lastVersion') || Zotero.version;
+-		if (Zotero.Utilities.semverCompare(lastVersion, Zotero.version) > 0) {
+-			Zotero.debug(`Zotero.migrate: implausible stored lastVersion ${lastVersion} `
+-				+ `> ${Zotero.version}; resetting for migration evaluation`);
+-			lastVersion = "5.0.100";
+-		}
+-		// Skip first-use dialog for existing users when enabled for non-Firefox browsers
+-		if (Zotero.Utilities.semverCompare(lastVersion, "5.0.87") < 0 && !this.isFirefox) {
+-			Zotero.Prefs.set('firstUse', false);
+-		}
+-		if (Zotero.Utilities.semverCompare(lastVersion, "5.0.110") < 0) {
+-			Zotero.Prefs.set('integration.googleDocs.useGoogleDocsAPI', false)
+-		}
+-		if (Zotero.Utilities.semverCompare(lastVersion, "5.0.168") < 0 && Zotero.isFirefox) {
+-			// We were setting DNR header replacement rules on Firefox http.js without
+-			// removing them, and this breaks translation sometimes
+-			// See https://github.com/zotero/translate/issues/41
+-			const rules = await browser.declarativeNetRequest.getDynamicRules({});
+-			let ruleIDs = [];
+-			for (const rule of rules) {
+-				if (rule.action.type === 'modifyHeaders') {
+-					ruleIDs.push(rule.id);
+-				}
+-			}
+-			if (ruleIDs.length) {
+-				await browser.declarativeNetRequest.updateDynamicRules({ removeRuleIds: ruleIDs });
+-			}
+-		}
+-		if (Zotero.isChromium) {
+-			let done = false;
+-			try { done = !!Zotero.Prefs.get('migration.resetTranslators'); } catch (e) {}
+-			if (!done) {
+-				Zotero.debug("Migration: resetting translator caches");
+-				try {
+-					Zotero.Prefs.clear('translatorMetadata');
+-					Zotero.Prefs.clear('connector.repo.lastCheck.localTime');
+-					Zotero.Prefs.clear('connector.repo.lastCheck.repoTime');
+-					await Zotero.Prefs.removeAllCachedTranslators();
+-					await Zotero.Translators.updateFromRemote(true);
+-				}
+-				catch (e) {
+-					Zotero.logError(e);
+-					return;
+-				}
+-				await Zotero.API.clearCredentials();
+-				Zotero.Prefs.set('migration.resetTranslators', true);
+-			}
+-		}
+-		Zotero.Prefs.set('lastVersion', Zotero.version);
+-	};
++
+ 
+ 	/**
+ 	 * Gets Connector version. Used in API restricted JS environments (offscreen, sandbox).
+@@ -195,9 +145,8 @@
+ 		await Zotero.Prefs.init();
+ 		// The Safari extension is bundled with the Zotero app, so the generic first-use prompt
+ 		// telling users to install Zotero is unnecessary.
+-		if (Zotero.isSafari) {
+-			Zotero.Prefs.set('firstUse', false);
+-		}
++		Zotero.Prefs.set('firstUse', false);
++		Zotero.Prefs.set('reportTranslationFailure', false);
+ 		
+ 		Zotero.Debug.init();
+ 		let storingDebugOnRestart = Zotero.Prefs.get('debug.store');
+@@ -207,23 +156,20 @@
+ 		Zotero.ContentTypeHandler.init();
+ 		await Zotero.Connector_Browser.init();
+ 		await Zotero.i18n.init();
++		await References.init();
+ 		Zotero.Translators.init();
+ 		await Zotero.Proxies.init();
+ 		await this._initDateFormatsJSON();
+ 		Zotero.initDeferred.resolve();
+-		if (Zotero.GoogleDocs.API.init) {
+-			await Zotero.GoogleDocs.API.init();
+-		}
++
+ 		Zotero.initialized = true;
+ 
+-		await Zotero.migrate();
++
+ 
+ 		// Flush any previously-failed server-side API key revocation.
+ 		// Fire-and-forget: a network failure here just means we try again on
+ 		// the next startup (pref stays set).
+-		if (Zotero.API && Zotero.API.retryPendingRevocation) {
+-			Zotero.API.retryPendingRevocation().catch(e => Zotero.logError(e));
+-		}
++
+ 	};
+ 	
+ 	/**
+@@ -236,7 +182,7 @@
+ 		if (Zotero.isSafari) {
+ 			await Zotero.i18n.init();
+ 		}
+-		Zotero.ConnectorIntegration.init();
++
+ 		Zotero.Connector_Types.init();
+ 		Zotero.Schema.init();
+ 		await this._initDateFormatsJSON();
+@@ -352,7 +298,7 @@
+ 		"firstUse": true,
+ 		"firstSaveToServer": true,
+ 		"suppressAllHostsRecommendation": false,
+-		"reportTranslationFailure": true,
++		"reportTranslationFailure": false,
+ 		"singleFileConfig": {},
+ 		"translatorMetadata": [],
+ 		
+--- a/src/common/zotero_config.js
++++ b/src/common/zotero_config.js
+@@ -23,35 +23,4 @@
+     ***** END LICENSE BLOCK *****
+ */
+ 
+-const ZOTERO_CONFIG = {
+-	CLIENT_NAME: 'Zotero',
+-	DOMAIN_NAME: 'zotero.org',
+-	SETTINGS_URL: 'https://repo.zotero.org/settings',
+-	REPOSITORY_URL: 'https://repo.zotero.org/repo/',
+-	REPOSITORY_CHECK_INTERVAL: 86400, // 24 hours
+-	REPOSITORY_RETRY_INTERVAL: 3600, // 1 hour
+-	REPOSITORY_CHANNEL: 'trunk',
+-	ALWAYS_FETCH_FROM_REPOSITORY: false,
+-	BASE_URI: 'https://zotero.org/',
+-	WWW_BASE_URL: 'https://www.zotero.org/',
+-	CLIENT_DOWNLOAD_URL: 'https://www.zotero.org/download',
+-	API_URL: 'https://api.zotero.org/',
+-	GOOGLE_DOCS_API_URL: "https://script.googleapis.com/v1/scripts/AKfycbwWSWNnwB-8otbBPAD7j84fBOFnditdwmauqC0-yrZYdCKOTxif7L0TLZ8TkpGRrE1xaw:run",
+-	OAUTH: {
+-		ZOTERO: {
+-			REQUEST_URL: 'https://www.zotero.org/oauth/request',
+-			ACCESS_URL: 'https://www.zotero.org/oauth/access',
+-			AUTHORIZE_URL: 'https://www.zotero.org/oauth/authorize',
+-			CALLBACK_URL: 'https://www.zotero.org/connector_auth_complete',
+-			CLIENT_KEY: '05a4e25d3d9af8922eb9',
+-			CLIENT_SECRET: '8dda1d6aa188bdd3126e'
+-		},
+-		GOOGLE_DOCS: {
+-			AUTHORIZE_URL: 'https://accounts.google.com/o/oauth2/v2/auth',
+-			ACCESS_URL: 'https://www.googleapis.com/oauth2/v3/tokeninfo',
+-			CALLBACK_URL: 'https://www.zotero.org/connector_auth_complete',
+-			CLIENT_KEY: '222339878061-13uqre19u268oo9pdapuaifklbu8d6js.apps.googleusercontent.com',
+-		}
+-	},
+-	GOOGLE_DOCS_DEV_MODE: false
+-};
++const ZOTERO_CONFIG = { CLIENT_NAME: 'References', DOMAIN_NAME: 'bashkitten.org', ALWAYS_FETCH_FROM_REPOSITORY:false, REPOSITORY_CHECK_INTERVAL:86400, REPOSITORY_RETRY_INTERVAL:3600 };
+--- a/src/messages.json
++++ b/src/messages.json
+@@ -61,34 +61,34 @@
+ 	},
+ 
+ 	"extension_description": {
+-		"message": "Save references to Zotero from your web browser"
++		"message": "Save references to References from your web browser"
+ 	},
+ 	"extension_defaultTitle": {
+-		"message": "Save to Zotero"
++		"message": "Save to References"
+ 	},
+ 	"browserAction_status_online": {
+ 		"message": "$1 is Online",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"browserAction_status_offline": {
+ 		"message": "$1 is Offline",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"browserAction_saveWebpageWithSnapshot": {
+ 		"message": "Save to $1 (Web Page with Snapshot)",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"browserAction_saveWebpageWithoutSnapshot": {
+ 		"message": "Save to $1 (Web Page without Snapshot)",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"browserAction_savePDF": {
+ 		"message": "Save to $1 (PDF)",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"browserAction_saveWithTranslator": {
+ 		"message": "Save to $1 ($2)",
+-		"description": "$1 is the client name (e.g., Zotero); $2 is the name of a translator"
++		"description": "$1 is the client name (e.g., References); $2 is the name of a translator"
+ 	},
+ 	"browserAction_saving": {
+ 		"message": "Saving…"
+@@ -98,19 +98,19 @@
+ 	},
+ 	"browserAction_saveFailed": {
+ 		"message": "Saving failed. Is $1 running?",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"contextMenu_saveWithNote": {
+ 		"message": "Create $1 Item and Note from Selection",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"confirmImport_title": {
+ 		"message": "$1 - Confirm Import",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"browserAction_incompatibleVersion": {
+ 		"message": "$1 Connector $2 is incompatible with the running version of the $1 client$3. $1 Connector will continue to operate, but functionality that relies upon the $1 client may be unavailable.\n\nPlease ensure that you have installed the latest version of these components. See https://www.zotero.org/download for more details.",
+-		"description": "$1 is the client name (e.g., Zotero); $2 is the Connector version; $3 is the client version in parentheses or an empty string"
++		"description": "$1 is the client name (e.g., References); $2 is the Connector version; $3 is the client version in parentheses or an empty string"
+ 	},
+ 
+ 	"expiredBetaBuild_title": {
+@@ -118,15 +118,15 @@
+ 	},
+ 	"expiredBetaBuild_message": {
+ 		"message": "This $1 Connector beta build has expired. Please download the latest version from zotero.org.",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"contentTypeHandler_addStyle": {
+ 		"message": "Add citation style to $1?",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"contentTypeHandler_import": {
+ 		"message": "Import items from $2 into $1?<br/><br/>You can manage automatic file importing in $1 Connector preferences.",
+-		"description": "$1 is the client name (e.g., Zotero); $2 is a website hostname"
++		"description": "$1 is the client name (e.g., References); $2 is a website hostname"
+ 	},
+ 	"contentTypeHandler_import_allow": {
+ 		"message": "Always allow for this site"
+@@ -229,7 +229,7 @@
+ 	},
+ 	"progressWindow_error_fallback": {
+ 		"message": "An error occurred saving with $1. Attempting to save using $2 instead.",
+-		"description": "The placeholders will contain the names of Zotero translators (e.g., JSTOR or Embedded Metadata)."
++		"description": "The placeholders will contain the names of References translators (e.g., JSTOR or Embedded Metadata)."
+ 	},
+ 	"progressWindow_error_upgradeClient": {
+ 		"message": "This feature is not supported by your version of $1. Please upgrade to the $2.",
+@@ -240,11 +240,11 @@
+ 	},
+ 	"progressWindow_error_noTranslator": {
+ 		"message": "No items could be saved because this website is not supported by any $1 translator. If $1 is not open, try opening it to increase the number of supported sites.",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"progressWindow_error_collectionNotEditable": {
+ 		"message": "The currently selected collection is not editable. Please select a different collection in $1.",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"progressWindow_error_clientRequired": {
+ 		"message": "This item could not be saved because $1 is not open or is unreachable. Please open $1 and try again."
+@@ -266,12 +266,12 @@
+ 	},
+ 	"itemSelector_windowTitle": {
+ 		"message": "$1 Item Selector",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 
+ 	"preferences_title": {
+ 		"message": "$1 Connector Preferences",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"preferences_general": {
+ 		"message": "General"
+@@ -290,21 +290,21 @@
+ 	},
+ 	"preferences_zoteroStatus_unavailable": {
+ 		"message": "$1 is currently unavailable. If $1 is open, see the <a href=\"$2\">troubleshooting page</a>.",
+-		"description": "$1 is the client name (e.g., Zotero); $2 is the URL of the troubleshooting page"
++		"description": "$1 is the client name (e.g., References); $2 is the URL of the troubleshooting page"
+ 	},
+ 	"preferences_zoteroStatus_update": {
+ 		"message": "Update Status"
+ 	},
+ 	"preferences_saveToOnlineLibrary": {
+-		"message": "Save to Zotero.org"
++		"message": "Save to References.org"
+ 	},
+ 	"preferences_onlineLibrary_notAuthorized": {
+ 		"message": "$1 Connector is not currently authorized to save items to zotero.org. You will be prompted for authorization if you try to save items while $1 is not open.",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"preferences_onlineLibrary_authorized": {
+ 		"message": "$1 Connector will save items to zotero.org as $2 when $1 is not open.",
+-		"description": "$1 is the client name (e.g., Zotero); $2 is a username"
++		"description": "$1 is the client name (e.g., References); $2 is a username"
+ 	},
+ 	"preferences_onlineLibrary_clearCredentials": {
+ 		"message": "Clear Credentials"
+@@ -326,7 +326,7 @@
+ 	},
+ 	"preferences_fileImporting_enable": {
+ 		"message": "Import BibTeX/RIS/Refer files into $1",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"preferences_fileImporting_hostnames": {
+ 		"message": "Enabled Hostnames"
+@@ -342,7 +342,7 @@
+ 	},
+ 	"preferences_reportErrors_subtitle": {
+ 		"message": "The following errors have occurred since the $1 Connector was started:",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"preferences_reportErrors_submit": {
+ 		"message": "Submit Report"
+@@ -352,7 +352,7 @@
+ 	},
+ 	"preferences_debugOutput_description": {
+ 		"message": "Debug output can help $1 developers diagnose problems. Debug logging may slow down your browser, so you should generally leave it disabled unless a $1 developer requests debug output.",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"preferences_debugOutput_enable": {
+ 		"message": "Enable Logging"
+@@ -404,7 +404,7 @@
+ 	},
+ 	"preferences_proxySettings_description": {
+ 		"message": "$1 will transparently redirect requests through saved proxies. See the <a href=\"$2\">proxy documentation</a> for more information.",
+-		"description": "$1 is the client name (e.g., Zotero); $2 is the URL of the proxy documentation"
++		"description": "$1 is the client name (e.g., References); $2 is the URL of the proxy documentation"
+ 	},
+ 	"preferences_proxySettings_configured": {
+ 		"message": "Configured Proxies"
+@@ -420,11 +420,11 @@
+ 	},
+ 	"preferences_proxySettings_disableByDomain": {
+ 		"message": "Disable proxy redirection when my domain name contains (available when $1 is running)",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"preferences_proxySettings_redirectLoop": {
+ 		"message": "$1 detected a proxy redirect loop and has temporarily suspended automatic proxy redirection.",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"preferences_proxySettings_reenable": {
+ 		"message": "Re-enable proxy redirection"
+@@ -492,14 +492,14 @@
+ 	},
+ 	"proxy_newProxy_message": {
+ 		"message": "$1 detected that you are accessing $2 through a proxy. Would you like to automatically redirect future requests to $2 through $3?",
+-		"description": "$1 is the client name (e.g., Zotero); $2 is a website hostname; $3 is a proxy name"
++		"description": "$1 is the client name (e.g., References); $2 is a website hostname; $3 is a proxy name"
+ 	},
+ 	"proxy_addProxy_title": {
+ 		"message": "Only add proxies linked from your library, school, or corporate website"
+ 	},
+ 	"proxy_addProxy_message": {
+ 		"message": "Adding other proxies allows malicious sites to masquerade as sites you trust.<br/><br/>Adding this proxy will allow $1 to recognize items from proxied pages and will automatically redirect future requests to $2 through $3.",
+-		"description": "$1 is the client name (e.g., Zotero); $2 is a website hostname; $3 is a proxy name"
++		"description": "$1 is the client name (e.g., References); $2 is a website hostname; $3 is a proxy name"
+ 	},
+ 	"proxy_addProxy": {
+ 		"message": "Add Proxy"
+@@ -509,15 +509,15 @@
+ 	},
+ 	"proxy_newHost_message": {
+ 		"message": "$1 automatically associated $2 with a previously defined proxy. Future requests to this site will be redirected through $3.",
+-		"description": "$1 is the client name (e.g., Zotero); $2 is a website hostname; $3 is a proxy name"
++		"description": "$1 is the client name (e.g., References); $2 is a website hostname; $3 is a proxy name"
+ 	},
+ 	"proxy_redirect_title": {
+ 		"message": "$1 Proxy Redirection",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"proxy_redirect_message": {
+ 		"message": "$1 automatically redirected your request to $2 through the proxy at $3.",
+-		"description": "$1 is the client name (e.g., Zotero); $2 is a website hostname; $3 is a proxy name"
++		"description": "$1 is the client name (e.g., References); $2 is a website hostname; $3 is a proxy name"
+ 	},
+ 	
+ 	"extensionIsDisabled": {
+@@ -556,7 +556,7 @@
+ 	},
+ 	"error_connection_save": {
+ 		"message": "The $1 was unable to communicate with the $2 desktop application. The Connector can save some pages directly to your $3 account, but for best results you should make sure $2 is open before attempting to save.",
+-		"description": "$1 will contain the localized string 'Zotero Connector'. $2 will contain the app name. $3 will contain the domain name."
++		"description": "$1 will contain the localized string 'References'. $2 will contain the app name. $3 will contain the domain name."
+ 	},
+ 	"error_connection_downloadOrTroubleshoot": {
+ 		"message": "You can <a href=\"$1\">download $2</a> or <a href=\"$3\">troubleshoot the connection</a> if necessary."
+@@ -566,7 +566,7 @@
+ 	},
+ 	
+ 	"reports_report_submitted": {
+-		"message": "Your error report has been submitted.\n\nReport ID: $1\n\nPlease post a message to the Zotero Forums with this Report ID, a description of the problem, and any steps necessary to reproduce it.\n\nError reports are not reviewed unless referred to in the forums."
++		"message": "Your error report has been submitted.\n\nReport ID: $1\n\nPlease post a message to the References Forums with this Report ID, a description of the problem, and any steps necessary to reproduce it.\n\nError reports are not reviewed unless referred to in the forums."
+ 	},
+ 	
+ 	"reports_debug_output_submitted": {
+@@ -574,8 +574,8 @@
+ 	},
+ 
+ 	"reports_submission_failed": {
+-		"message": "An error occurred submitting your report.\n\n$1\n\nPlease check your internet connection. If the problem persists, post a message to the Zotero Forums.",
+-		"description": "$1 will be the error message sent to the Zotero servers"
++		"message": "An error occurred submitting your report.\n\n$1\n\nPlease check your internet connection. If the problem persists, post a message to the References Forums.",
++		"description": "$1 will be the error message sent to the References servers"
+ 	},
+ 	
+ 	"integration_error_clientUpgrade": {
+@@ -583,14 +583,14 @@
+ 	},
+ 	"integration_error_connection": {
+ 		"message": "The $1 was unable to communicate with the $2 desktop application. $2 must be open to use web-based citing.",
+-		"description": "$1 will be the localized string for the extension (e.g., Zotero Connector). $2 will be the app name (e.g., Zotero)."
++		"description": "$1 will be the localized string for the extension (e.g., References). $2 will be the app name (e.g., References)."
+ 	},
+ 	
+ 	"integration_googleDocs_unlinkBeforeSaving_warning": {
+-		"message": "This document contains active Zotero citations that will appear as zotero.org links in a downloaded copy."
++		"message": "This document contains active References citations that will appear as zotero.org links in a downloaded copy."
+ 	},
+ 	"integration_googleDocs_unlinkBeforeSaving_instructions": {
+-		"message": "To generate a version suitable for sharing, select <b>Make a copy…</b> from the File menu, select <b>Unlink Citations</b> from the Zotero menu in the new document, and then download the unlinked version. Keep this original linked document in case you need to make further changes."
++		"message": "To generate a version suitable for sharing, select <b>Make a copy…</b> from the File menu, select <b>Unlink Citations</b> from the References menu in the new document, and then download the unlinked version. Keep this original linked document in case you need to make further changes."
+ 	},
+ 	"integration_googleDocs_unlinkBeforeSaving_downloadAnyway": {
+ 		"message": "Download Linked Version Anyway"
+@@ -600,14 +600,14 @@
+ 	},
+ 	"integration_googleDocs_tabNotActive": {
+ 		"message": "$1 needs the Google Docs tab to stay active for the current operation. Please do not switch away from the browser until the operation is complete.",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"integration_googleDocs_uiChanged": {
+-		"message": "Google Docs has changed in a way that affects Zotero integration. Please submit a <a href=\"https://www.zotero.org/support/reporting_problems\">Report ID</a> from the Zotero Connector on the <a href=\"https://forums.zotero.org\">Zotero Forums</a>."
++		"message": "Google Docs has changed in a way that affects References integration. Please submit a <a href=\"https://www.zotero.org/support/reporting_problems\">Report ID</a> from the References on the <a href=\"https://forums.zotero.org\">References Forums</a>."
+ 	},
+ 	"integration_googleDocs_unexpectedError": {
+ 		"message": "An unexpected error occurred while working with your document. Please try again. If the problem persists, restart your browser and $1.",
+-		"description": "$1 is the client name (e.g., Zotero)"
++		"description": "$1 is the client name (e.g., References)"
+ 	},
+ 	"integration_googleDocs_docxAlert": {
+ 		"message": "$1 integration is not available when editing Microsoft Word .docx files directly in Google Docs. Choose File → Save as Google Docs to enable this functionality.<br/><br/>If you want to transfer a Word document with $1 citations to Google Docs, see <a href=\"https://www.zotero.org/support/kb/moving_documents_between_word_processors\">Moving Documents Between Word Processors</a>."
+@@ -686,48 +686,48 @@
+ 		"message": "Open Extension Preferences"
+ 	},
+ 	"permissions_siteAccess_message_intro": {
+-		"message": "<p>Zotero Connector requires permission to run on all websites to function properly.</p>"
++		"message": "<p>References requires permission to run on all websites to function properly.</p>"
+ 	},
+ 	"permissions_siteAccess_message": {
+ 		"message": "<p>To enable this, change the \"Site Access\" setting to \"On all sites\" in the Extension Preferences page.</p>"
+ 	},
+ 	"permissions_siteAccess_message_safari_functionality": {
+-		"message": "<p>For full Zotero Connector functionality, including updating of the save button for each webpage, more reliable saving, and proxy redirection, allow Zotero Connector to run on all websites.</p>"
++		"message": "<p>For full References functionality, including updating of the save button for each webpage, more reliable saving, and proxy redirection, allow References to run on all websites.</p>"
+ 	},
+ 	"permissions_siteAccess_message_safari": {
+ 		"message": "<p>To enable this, open Safari Settings, select <b>Websites</b> at the top, select <b>$1</b> in the sidebar, and change the <b>For other websites</b> option to <b>Allow</b>.</p>",
+-		"description": "$1 is the connector name (e.g., Zotero Connector)"
++		"description": "$1 is the connector name (e.g., References)"
+ 	},
+ 	"permissions_siteAccess_message_localhost_required": {
+-		"message": "<p>To communicate with Zotero, Zotero Connector requires access to <b>127.0.0.1</b>, an address that refers to your own computer.</p>"
++		"message": "<p>To communicate with References, References requires access to <b>127.0.0.1</b>, an address that refers to your own computer.</p>"
+ 	},
+ 	"permissions_siteAccess_message_repo_required": {
+-		"message": "<p>Access to <b>repo.zotero.org</b> is required to download translators when Zotero is unavailable.</p>"
++		"message": "<p>Access to <b>repo.zotero.org</b> is required to download translators when References is unavailable.</p>"
+ 	},
+ 	"permissions_siteAccess_message_api_required": {
+-		"message": "<p>Access to <b>api.zotero.org</b> is required to save to your online Zotero library when Zotero is unavailable.</p>"
++		"message": "<p>Access to <b>api.zotero.org</b> is required to save to your online References library when References is unavailable.</p>"
+ 	},
+ 	"permissions_siteAccess_message_domain_safari": {
+ 		"message": "<p>To enable this, open Safari Settings, select <b>Websites</b> at the top, select <b>$1</b> in the sidebar, and set $2 to <b>Allow</b>.</p>",
+-		"description": "$1 is the connector name (e.g., Zotero Connector); $2 is the required domain with markup (e.g., \"<b>127.0.0.1</b>\")"
++		"description": "$1 is the connector name (e.g., References); $2 is the required domain with markup (e.g., \"<b>127.0.0.1</b>\")"
+ 	},
+ 	"permissions_siteAccess_message_domains_safari": {
+ 		"message": "<p>To enable these, open Safari Settings, select <b>Websites</b> at the top, select <b>$1</b> in the sidebar, and set $2 to <b>Allow</b>.</p>",
+-		"description": "$1 is the connector name (e.g., Zotero Connector); $2 is a list of required domains with markup (e.g., \"<b>repo.zotero.org</b> and <b>api.zotero.org</b>\")"
++		"description": "$1 is the connector name (e.g., References); $2 is a list of required domains with markup (e.g., \"<b>repo.zotero.org</b> and <b>api.zotero.org</b>\")"
+ 	},
+ 	"permissions_siteAccess_message_domains_allHosts_safari": {
+ 		"message": "<p>To enable these, open Safari Settings, select <b>Websites</b> at the top, select <b>$1</b> in the sidebar, set $2 to <b>Allow</b>, and change the <b>For other websites</b> option to <b>Allow</b>.</p>",
+-		"description": "$1 is the connector name (e.g., Zotero Connector); $2 is a list of required domains with markup (e.g., \"<b>repo.zotero.org</b> and <b>api.zotero.org</b>\")"
++		"description": "$1 is the connector name (e.g., References); $2 is a list of required domains with markup (e.g., \"<b>repo.zotero.org</b> and <b>api.zotero.org</b>\")"
+ 	},
+ 	"permissions_siteAccess_message_nativePrompt_safari": {
+ 		"message": "<p>Safari may now ask whether to allow this access. Choose <b>Always Allow</b> to continue.</p>"
+ 	},
+ 	"permissions_siteAccess_message_allHosts_nativePrompt_safari": {
+-		"message": "<p>For full Zotero Connector functionality, including updating of the save button for each webpage, more reliable saving, and proxy redirection, allow Zotero Connector to run on all websites by checking <b>Remember for other websites</b> in the same dialog.</p>",
++		"message": "<p>For full References functionality, including updating of the save button for each webpage, more reliable saving, and proxy redirection, allow References to run on all websites by checking <b>Remember for other websites</b> in the same dialog.</p>",
+ 		"description": "All-websites recommendation shown when Safari's own permission dialog is expected to follow"
+ 	},
+ 	"permissions_siteAccess_message_saveToServer": {
+ 		"message": "<p>Alternatively, $1 can save some pages directly to your $2 account.</p>",
+-		"description": "$1 will contain the localized string 'Zotero Connector'. $2 will contain the domain name."
++		"description": "$1 will contain the localized string 'References'. $2 will contain the domain name."
+ 	}
+ }
+--- a/src/translate/src/translation/translate.js
++++ b/src/translate/src/translation/translate.js
+@@ -2202,32 +2202,8 @@
+  * Overload _translateTranslatorLoaded to send an RPC call if necessary
+  */
+ Zotero.Translate.Web.prototype._translateTranslatorLoaded = async function() {
+-	var runMode = this.translator[0].runMode;
+-	if(runMode === Zotero.Translator.RUN_MODE_IN_BROWSER || this._parentTranslator) {
+-		Zotero.Translate.Base.prototype._translateTranslatorLoaded.apply(this);
+-	} else if(runMode === Zotero.Translator.RUN_MODE_ZOTERO_STANDALONE ||
+-			(runMode === Zotero.Translator.RUN_MODE_ZOTERO_SERVER && await Zotero.Connector.checkIsOnline())) {
+-		var me = this;
+-		let html = this.document.documentElement.innerHTML;
+-		html = html.replace(new RegExp(Zotero.Utilities.quotemeta(ZOTERO_CONFIG.BOOKMARKLET_URL), 'g'), "about:blank")
+-		// Higher timeout since translation might take a while if additional HTTP requests are made
+-		Zotero.Connector.callMethod({method: "savePage", timeout: 60*1000}, {
+-				sessionID: this._sessionID,
+-				uri: this.location.toString(),
+-				translatorID: (typeof this.translator[0] === "object"
+-				                ? this.translator[0].translatorID : this.translator[0]),
+-				cookie: this.document.cookie,
+-				proxy: this._proxy ? this._proxy.toJSON() : null,
+-				html
+-			}).then(me._translateRPCComplete.bind(me), me._translateRPCComplete.bind(me, null));
+-	} else if(runMode === Zotero.Translator.RUN_MODE_ZOTERO_SERVER) {
+-		var me = this;
+-		Zotero.API.createItem({"url":this.document.location.href.toString()}).then(function(response) {
+-				me._translateServerComplete(201, response);
+-			}, function(error) {
+-				me._translateServerComplete(error.status, error.responseText);
+-			});
+-	}
++	if (this.translator[0].runMode !== Zotero.Translator.RUN_MODE_IN_BROWSER && !this._parentTranslator) throw new Error("Translator requires an unavailable native capability");
++	return Zotero.Translate.Base.prototype._translateTranslatorLoaded.apply(this);
+ }
+ 	
+ /**
+@@ -2270,88 +2246,13 @@
+ /**
+  * Called when an call to the Zotero Translator Server for translation completes
+  */
+-Zotero.Translate.Web.prototype._translateServerComplete = function(statusCode, response) {
+-	if(statusCode === 300) {
+-		// Multiple Choices
+-		try {
+-			response = JSON.parse(response);
+-		} catch(e) {
+-			Zotero.logError(e);
+-			this.complete(false, "Invalid JSON response received from server");
+-			return;
+-		}
+-		var me = this;
+-		this._runHandler("select", response.items,
+-			function(selectedItems) {
+-				Zotero.API.createItem({
+-					url: me.document.location.href.toString(),
+-					items: selectedItems,
+-					token: response.token
+-				}).then(function(response) {
+-					me._translateServerComplete(201, response);
+-				}, function(error) {
+-					me._translateServerComplete(error.status, error.responseText);
+-				});
+-			}
+-		);
+-	} else if(statusCode === 201) {
+-		// Created
+-		try {
+-			response = JSON.parse(response);
+-		} catch(e) {
+-			Zotero.logError(e);
+-			this.complete(false, "Invalid JSON response received from server");
+-			return;
+-		}
+-		
+-		let items = [];
+-		for (let key in response.successful) {
+-			var item = response.successful[key].data;
+-			
+-			if(!("attachments" in item)) item.attachments = [];
+-			this._runHandler("itemDone", null, item);
+-			items.push(item);
+-		}
+-		this.newItems = items;
+-		this._runHandler("itemsDone", null, item);
+-		this.complete(true);
+-	} else {
+-		this.complete(false, response);
+-	}
+-}
++
+ 
+ /**
+  * Overload complete to report translation failure
+  */
+-Zotero.Translate.Web.prototype.complete = async function(returnValue, error) {
+-	// call super
+-	var oldState = this._currentState;
+-	var errorString = Zotero.Translate.Base.prototype.complete.apply(this, [returnValue, error]);
+-	
+-	var promise;
+-	if (Zotero.Prefs.getAsync) {
+-		promise = Zotero.Prefs.getAsync('reportTranslationFailure');
+-	} else {
+-		promise = Zotero.Promise.resolve(Zotero.Prefs.get("reportTranslationFailure"));
+-	}
+-	var reportTranslationFailure = await promise;
+-	// Report translation failure if we failed
+-	if(oldState == "translate" && errorString && !this._parentTranslator && this.translator.length
+-		&& this.translator[0].inRepository && reportTranslationFailure) {
+-		// Don't report failure if in private browsing mode
+-		if (Zotero.isConnector && !Zotero.isBookmarklet && await Zotero.Connector_Browser.isIncognito()) {
+-			return
+-		}
+-		
+-		var translator = this.translator[0];
+-		var info = await Zotero.getSystemInfo();
+-		
+-		var postBody = "id=" + encodeURIComponent(translator.translatorID) +
+-					   "&lastUpdated=" + encodeURIComponent(translator.lastUpdated) +
+-					   "&diagnostic=" + encodeURIComponent(info) +
+-					   "&errorData=" + encodeURIComponent(errorString);
+-		return Zotero.HTTP.doPost(ZOTERO_CONFIG.REPOSITORY_URL + "report", postBody);
+-	}
++Zotero.Translate.Web.prototype.complete = function(returnValue, error) {
++	return Zotero.Translate.Base.prototype.complete.apply(this, [returnValue, error]);
+ }
+ 
+ /**
