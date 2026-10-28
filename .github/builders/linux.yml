@@ -65,6 +65,9 @@ jobs:
     - id: component
       name: Restore a matching completed browser artifact
       run: python3 source/bashkitten/agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '24'
     - name: Prepare runner
       if: steps.component.outputs.hit != 'true'
       run: source/bashkitten/agent/packaging/linux/prepare-runner.sh
@@ -102,9 +105,6 @@ jobs:
         path: ${{ runner.temp }}/browser/stage/
         compression-level: 0
         if-no-files-found: error
-    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-      with:
-        node-version: '24'
     - name: Install assembly tools
       run: sudo apt-get update && sudo apt-get install -y zstd python3
     - name: Download native components for this source

@@ -24,7 +24,8 @@ ANDROID_ONLY_MODULE = 'browser/mobile/shared/modules/geckoview/BashKittenAndroid
 def fingerprint(target, legacy_verifier=None, legacy_android_module=None):
     # Cache policy is not compiler input. Preserve the old calculation only to
     # prove equivalence of already-published artifacts; no producer is relabelled.
-    paths = ['browser'] + ([VERIFIER] if legacy_verifier else [])
+    paths = ['browser', 'references/connector', 'references/vendor/translators',
+             'agent/packaging/references-component.py'] + ([VERIFIER] if legacy_verifier else [])
     if target.startswith('android'):
         paths += ['.github/builders/android.yml', 'auth', 'agent/native/remote', 'agent/native/phone-control',
                   'agent/packaging/android-notices.py', 'agent/packaging/build.py',

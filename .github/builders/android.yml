@@ -173,6 +173,12 @@ jobs:
         bash auth/build/remote-android.sh "$RUNNER_TEMP/remote-android"
         echo "BASHKITTEN_REMOTE_CLIENT_DIR=$RUNNER_TEMP/remote-android" >> "$GITHUB_ENV"
       if: (success()) && steps.component.outputs.hit != 'true'
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '24'
+    - name: Build the pinned References capture extension
+      run: python3 -B agent/packaging/references-component.py
+      if: (success()) && steps.component.outputs.hit != 'true'
     - name: Build Gecko for the selected architecture
       working-directory: browser
       run: set -o pipefail; ./mach build 2>&1 | tee ../artifacts/gecko-build.log
@@ -182,9 +188,6 @@ jobs:
       run: |
         "$SCCACHE_PATH" --show-stats --stats-format=json > artifacts/sccache-gecko.json
         "$SCCACHE_PATH" --show-stats >> "$GITHUB_STEP_SUMMARY"
-    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-      with:
-        node-version: '24'
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Obtain the actual companion component licenses
       env:

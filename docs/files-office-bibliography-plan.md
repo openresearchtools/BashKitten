@@ -90,6 +90,15 @@ independent web UI behavior but does not establish BashKitten trust acceptance.
 
 ### Mandatory implementation rule for all agents and subagents
 
+The standalone components have their own repository roots: `files/`, `office/`
+and `references/`. Keep only existing backend lifecycle/authorization adapters
+and Pi-facing tools under `agent/`; source placement must not imply that Pi owns
+the applications. Reuse the existing package installation layout where useful.
+An agent's separate native Office participant is authorized by the existing
+backend. It does not require the user to create another account or log in to
+another service. References remains a normal web app; the browser capture host
+and the Office citation plugin are separate, narrow integration components.
+
 **If the selected native app can provide the requested function, use that
 function. Only implement a pluggable module for what is genuinely missing or
 cannot work through the app's existing facilities.** This applies to every

@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import shutil
 from build import checked_archive
+from source_archive import archive_revision
 from android_native_sources import collect as collect_android_native
 import subprocess
 import tarfile
@@ -36,7 +37,7 @@ records = {}
 for location, value in lock['packages'].items():
     if not location or value.get('dev') or not value.get('resolved'): continue
     url = value['resolved']
-    assert url.startswith('https://registry.npmjs.org/') or url == 'file:vendor/sheetjs/xlsx-0.20.3.tgz'
+    assert url.startswith('https://registry.npmjs.org/')
     records.setdefault(url, {**value, 'name': value.get('name') or location.rsplit('node_modules/', 1)[-1]})
 
 npm_sources = {item['url']: item for item in json.loads(tracked('agent/vendor/npm/sources.json'))['components']}
@@ -76,7 +77,7 @@ pi_source.write_bytes(pi_payload)
 with pi_source.open('rb') as stream: pi_sha = hashlib.file_digest(stream, 'sha256').hexdigest()
 manifest = {'sourceCommit': revision, 'pi': {'commit': pi_commit, 'file': pi_source.name, 'sha256': pi_sha}, 'components': components}
 manifest_path = args.output / 'components.json'; manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
-# These retained inputs are included by git archive. Verify the exact committed
+# These retained inputs are included by the complete Git-blob archive. Verify the exact committed
 # revision before producing a release source bundle; a checkout cache is not
 # authority for either dependency identity or lock freshness.
 def check_file(base, record):
@@ -106,7 +107,7 @@ base = 'auth/dependencies/go-toolchain'
 check_file(base, json.loads(tracked(base + '/sources.json')))
 
 source = args.output / ('bashkitten-source-' + revision[:12] + '.tar.gz')
-subprocess.run(['git', 'archive', '--format=tar.gz', '--prefix=bashkitten/', '-o', str(source.resolve()), revision], cwd=ROOT, check=True)
+archive_revision(ROOT, revision, source)
 with tarfile.open(args.output / ('bashkitten-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
     archive.add(manifest_path, arcname='dependencies/components.json')
     archive.add(pi_source, arcname='dependencies/' + pi_source.name)

@@ -35,8 +35,10 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
         shutil.copy2(ROOT / name, stage / name)
     for name in ('licenses', 'pi', 'search', 'src/server/models/third_party'):
         shutil.copytree(ROOT / name, stage / name, ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'runtime'))
-    (stage / 'vendor/sheetjs').mkdir(parents=True)
-    shutil.copy2(ROOT / 'vendor/sheetjs/xlsx-0.20.3.tgz', stage / 'vendor/sheetjs/xlsx-0.20.3.tgz')
+    reviewer_legal = stage / 'systematic-reviewer'
+    reviewer_legal.mkdir()
+    for name in ('package.json', 'LICENSE', 'NOTICE'):
+        shutil.copy2(ROOT / 'systematic-reviewer' / name, reviewer_legal / name)
     cache = stage / 'npm-cache'
     subprocess.run(['python3', str(ROOT / 'packaging/npm-sources.py'), '--cache', str(cache)], check=True)
     subprocess.run(['npm', 'ci', '--offline', '--cache', str(cache), '--prefix', str(stage), '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--os=android', '--cpu=' + cpu], check=True)

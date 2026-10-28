@@ -47,6 +47,43 @@ No new browser iteration build or installed integration acceptance is claimed
 by this checkpoint. The sizing change still needs installed Android verification;
 all acceptance groups in the plan remain open until their actual flows pass.
 
+### Subsequent implementation checkpoint
+
+The independent components now live at top-level `files/`, `office/` and
+`references/` (`3ec354c0d4`). Existing imported file contents were preserved in
+the move. Lifecycle/authorization adapters and Pi tools remain under `agent/`.
+The agent's native Office connection uses existing backend authorization, with
+no additional user account or login.
+
+- Native capture adaptations were committed in `2cf37b2120`; its independent
+  offline build passed. The ordinary capture extension and fixed privileged
+  host are separate packages. Installed capture, challenge handling and signed
+  independent update/rollback remain unverified.
+- The backend HTTPS gateway diagnostic passed certificate validation against
+  the existing backend CA, one-use launch, secure scoped cookies, nonce-replay
+  rejection and origin checks. Evidence is outside the repository at
+  `BashkittenBuild/verification/apps-boundary-20261028/https-gateway-evidence.json`.
+  This does not establish normal-tab trust in the installed browser. The narrow
+  native service-context trust changes require a new browser build.
+- Native citation persistence diagnostics passed for DOCX, ODT, XLSX, ODS,
+  PPTX and ODP after reopening saved copies. A separate check found missing
+  native undo support for document metadata; the proposed generic native patch
+  still needs compilation and runtime verification. UI, complete editing,
+  concurrent users and mobile acceptance remain open.
+- Native Linux Office compilation is in progress. All 121 selected engine
+  dependency archives passed checksum verification. Large retained source
+  archives use lossless parts for GitHub's individual-file limit.
+- Landlock calls succeeded inside the real Termux app domain on the existing
+  Android 17 emulator. Native engine/server porting and a running Termux Office
+  server remain outstanding; this kernel diagnostic is not platform acceptance.
+- The composer retains its original two-row baseline. Content sizing and resize
+  remeasurement changes still need installed Android verification.
+
+Upstream archive attributes omit 57 text schema files. The pristine source import
+retains them, and release source collection now reads all tracked Git file
+contents instead of applying those exclusions. This source-completeness change
+does not substitute prebuilt executable binaries for native builds.
+
 Build-history reconciliation uses the existing BashkittenBuild README, current
 verification/acceptance records and the build-environment thread. The README
 contains older candidate identities; the 24 October records include newer
@@ -88,7 +125,10 @@ remain pending. Earlier comparison observations remain in Git history.
 The temporary host is not the planned production Quantum add-on and does not
 prove its locking, history, source policy, authentication or lifetime acceptance.
 
-## Verified source capabilities, not implemented bridges
+## Research baseline before implementation
+
+The following records the original source investigation; subsequent work and
+remaining acceptance are tracked in the implementation checkpoints above.
 
 - Released Collabora `cp-26.04.5-2`, commit
   `42745e44dd8530fac7acd5f46cb7571ceea63c6a`, contains native document WebSocket,
