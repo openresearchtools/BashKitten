@@ -14,7 +14,8 @@ export class NativeComponents {
       }
       this.pending.delete(id);
       p.cleanup();
-      if (!p.cancelled)
+      if (p.cancelled && p.waitForCancellation) p.reject(p.abortReason);
+      else if (!p.cancelled)
         error
           ? p.reject(Object.assign(Error(error.message), error))
           : p.resolve(result);
@@ -27,7 +28,13 @@ export class NativeComponents {
       this.pending.clear();
     });
   }
-  call(method, args = [], signal, onProgress) {
+  call(
+    method,
+    args = [],
+    signal,
+    onProgress,
+    { waitForCancellation = false } = {},
+  ) {
     signal?.throwIfAborted();
     if (this.pending.size > 32)
       throw Object.assign(Error("Native reference work is busy"), {
@@ -35,11 +42,18 @@ export class NativeComponents {
       });
     return new Promise((resolve, reject) => {
       const id = ++this.next,
-        p = { resolve, reject, cancelled: false, onProgress };
+        p = {
+          resolve,
+          reject,
+          cancelled: false,
+          onProgress,
+          waitForCancellation,
+        };
       const abort = () => {
         p.cancelled = true;
+        p.abortReason = signal.reason;
         this.worker.postMessage({ id, cancel: true });
-        reject(signal.reason);
+        if (!waitForCancellation) reject(signal.reason);
       };
       p.cleanup = () => signal?.removeEventListener("abort", abort);
       signal?.addEventListener("abort", abort, { once: true });

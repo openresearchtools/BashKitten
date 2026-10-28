@@ -580,6 +580,8 @@ const operations = {
     const row = db.prepare(`SELECT data FROM ${table} WHERE id=?`).get(id);
     return row ? JSON.parse(row.data) : null;
   },
+  deleteReceipt: (db, { id }) =>
+    db.prepare("DELETE FROM receipts WHERE id=?").run(id).changes,
   recordPage: (
     db,
     { prefix, cursor = "", start = 0, limit = 80, expectedVersion },

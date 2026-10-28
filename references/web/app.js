@@ -1664,7 +1664,15 @@ $("#settings").onclick = async () => {
       automatic = node("input", {
         type: "checkbox",
         checked: settings.automaticPDFs,
-      });
+      }),
+      regeneration = node("select");
+    for (const [value, text] of [
+      [-1, "Ask before changing edited citations"],
+      [1, "Always regenerate edited citations"],
+      [0, "Keep edited citation text"],
+    ])
+      regeneration.add(new Option(text, String(value)));
+    regeneration.value = String(settings.citationAutoRegenerate ?? -1);
     const resolvers = node("textarea", {
       rows: 10,
       value: settings.resolvers,
@@ -1680,6 +1688,7 @@ $("#settings").onclick = async () => {
       field("Remove stored Crossref key", removeCrossrefKey),
       field("Unpaywall contact email", unpaywall),
       field("Find available PDFs after import", automatic),
+      field("Edited citation previews", regeneration),
       field("Custom PDF resolvers · native JSON configuration", resolvers),
     );
     d.body.append(
@@ -1702,6 +1711,7 @@ $("#settings").onclick = async () => {
           crossrefEmail: crossref.value,
           unpaywallEmail: unpaywall.value,
           automaticPDFs: automatic.checked,
+          citationAutoRegenerate: Number(regeneration.value),
           resolvers: resolvers.value,
         };
         if (removeKey.checked) body.openalexKey = "";

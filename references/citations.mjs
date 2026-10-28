@@ -5,9 +5,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
-import { toCSL } from "./translation.mjs";
+import { toCSL, translationRuntime } from "./translation.mjs";
 const require = createRequire(import.meta.url),
   CSL = require("citeproc");
+async function nativeCite() {
+  const Z = await translationRuntime();
+  return (Z.Cite ||= require("./vendor/zotero/source/chrome/content/zotero/xpcom/cite.js"));
+}
 const { JSDOM } = require("jsdom"),
   purify = require("dompurify")(new JSDOM("").window);
 purify.addHook("afterSanitizeAttributes", (node) => {
@@ -345,6 +349,9 @@ export async function renderDocument(state, { signal, resolveItem } = {}) {
           textEntries: textBibliography?.[1] || [],
           entryIds: bibliography[0].entry_ids,
           parameters: bibliography[0],
+          format: (await nativeCite()).getBibliographyFormatParameters(
+            bibliography,
+          ),
         }
       : null,
   };
@@ -357,14 +364,7 @@ export async function citationOptions({ locale = "en-US" } = {}) {
     "utf8",
   );
   const doc = new JSDOM(text, { contentType: "text/xml" }).window.document;
-  const source = await fs.readFile(
-    new URL(
-      "./vendor/zotero/source/chrome/content/zotero/xpcom/cite.js",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  const labels = JSON.parse(source.match(/"labels":\s*(\[[\s\S]*?\])/)[1]);
+  const labels = (await nativeCite()).labels;
   return {
     nameVariables: [...CSL.NAME_VARIABLES],
     locales: (await fs.readdir(localeRoot))

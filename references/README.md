@@ -136,3 +136,11 @@ outside the repository. They do not establish installed Linux/Termux browser
 acceptance, native Office citation anchoring, authenticated publisher access or
 same-network PDF retrieval parity. Those require the separate product and donor
 comparison checks recorded by the coordinating implementation status owner.
+
+Native metadata export can return a private download with `delivery:"file"`.
+Outputs above 1 MiB automatically use this path so the shared agent channel stays
+bounded. Export receipts expire after 24 hours; the next export prunes at most 100
+expired receipts/files through the existing private store. No project file or
+library item is created. The native translator still owns every format; its Node
+IO.String output is written in the native worker because upstream IO.Write uses
+XPCOM. The shared file-response owner streams only an opened, validated receipt.

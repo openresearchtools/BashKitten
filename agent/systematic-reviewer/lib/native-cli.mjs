@@ -66,6 +66,6 @@ export async function run(main) {
   const interrupt = () => controller.abort(Error('Operation interrupted'));
   process.once('SIGINT', interrupt); process.once('SIGTERM', interrupt);
   try { await main(process.argv.slice(2), controller.signal); }
-  catch (error) { process.stderr.write(`${controller.signal.aborted ? 'Operation interrupted' : error.message}\n`); process.exitCode = controller.signal.aborted ? 130 : 1; }
+  catch (error) { process.stderr.write(`${controller.signal.aborted ? 'Operation interrupted' : error.message}\n`); if (error.details?.requestId) process.stderr.write(`Transfer request ID: ${error.details.requestId}. Retry the same file and request ID to recover its receipt.\n`); process.exitCode = controller.signal.aborted ? 130 : 1; }
   finally { process.removeListener('SIGINT', interrupt); process.removeListener('SIGTERM', interrupt); }
 }

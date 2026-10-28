@@ -201,16 +201,25 @@ export async function exportReferences({ scope, keys }) {
         for (const [name, input] of fields) values[name] = input.checked;
         const result = await scope.request("items/export", {
           method: "POST",
-          body: { keys, translatorID: translator.id, options: values },
+          body: {
+            keys,
+            translatorID: translator.id,
+            options: values,
+            delivery: "file",
+          },
           signal: controller.signal,
         });
         controller.signal.throwIfAborted();
-        objectURL = URL.createObjectURL(
-          new Blob([result.text], {
-            type: result.contentType || "text/plain;charset=utf-8",
-          }),
-        );
-        download.href = objectURL;
+        if (typeof result.downloadPath === "string") {
+          download.href = scope.url(result.downloadPath).href;
+        } else if (typeof result.text === "string") {
+          objectURL = URL.createObjectURL(
+            new Blob([result.text], {
+              type: result.contentType || "text/plain;charset=utf-8",
+            }),
+          );
+          download.href = objectURL;
+        } else throw Error("The export did not provide a download.");
         download.download =
           "references." +
           (/^[a-z0-9]+$/i.test(result.extension) ? result.extension : "txt");

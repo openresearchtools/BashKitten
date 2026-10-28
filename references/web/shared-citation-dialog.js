@@ -53,6 +53,8 @@ export async function chooseCitation({
     previewController = null,
     previewResult = null,
     queuedConfirm = null,
+    autoRegenerate = -1,
+    regenerationWork = null,
     accepted = false,
     loadingInitial = true;
   let searchTerm = "";
@@ -235,6 +237,7 @@ export async function chooseCitation({
       library.setSelection([]);
       updateControls();
     },
+    onActivate: () => void requestConfirmation(),
     onStatus: () => {},
   });
   selectedList.root.setAttribute("aria-multiselectable", "false");
@@ -320,13 +323,7 @@ export async function chooseCitation({
     },
     onActivate: () => {
       if (multiple) addSelected();
-      else if (!loadingInitial && sources.length) {
-        if (!confirm.disabled) finish();
-        else {
-          queuedConfirm = previewGeneration;
-          schedulePreview();
-        }
-      }
+      else void requestConfirmation();
     },
     onStatus: (text, error) => {
       if (error) d.notice.textContent = text;
@@ -425,32 +422,107 @@ export async function chooseCitation({
     }
     updateControls();
   }
-  function invalidatePreview() {
+  function invalidatePreview(schedule = true) {
     queuedConfirm = null;
     ++previewGeneration;
     previewController?.abort();
     previewResult = null;
     confirm.disabled = true;
-    schedulePreview();
+    if (schedule) schedulePreview();
+    else schedulePreview.cancel();
   }
   function hasCustomPreview() {
     return cluster.customHTML !== undefined || cluster.customText !== undefined;
   }
-  function regenerateCustom() {
-    if (
-      hasCustomPreview() &&
-      window.confirm(
-        "Regenerate your edited preview using the changed citation?",
-      )
-    ) {
-      delete cluster.customHTML;
-      delete cluster.customText;
+  function clearCustomPreview() {
+    delete cluster.customHTML;
+    delete cluster.customText;
+  }
+  async function regenerateCustom() {
+    if (!hasCustomPreview()) return { cancelled: false };
+    let choice = { regenerate: autoRegenerate === 1, cancelled: false };
+    if (autoRegenerate === -1) {
+      const prompt = dialog("Regenerate edited citation?"),
+        remember = node("input", { type: "checkbox" }),
+        pending = new AbortController();
+      prompt.body.append(
+        node(
+          "p",
+          {},
+          "Use the changed references and fields to regenerate the preview, or keep your edited text.",
+        ),
+        field("Remember this choice", remember),
+      );
+      let answer;
+      const decide = async (regenerate) => {
+        for (const control of prompt.actions.querySelectorAll("button"))
+          control.disabled = true;
+        remember.disabled = true;
+        try {
+          if (remember.checked) {
+            const value = regenerate ? 1 : 0;
+            await scoped.request("settings", {
+              method: "PATCH",
+              body: { citationAutoRegenerate: value },
+              signal: pending.signal,
+            });
+            pending.signal.throwIfAborted();
+            autoRegenerate = value;
+          }
+          answer = { regenerate, cancelled: false };
+          prompt.el.close();
+        } catch (error) {
+          if (!pending.signal.aborted) {
+            prompt.notice.textContent = error.message;
+            for (const control of prompt.actions.querySelectorAll("button"))
+              control.disabled = false;
+            remember.disabled = false;
+          }
+        }
+      };
+      const regenerate = button("Regenerate", () => void decide(true), {
+        class: "primary",
+      });
+      prompt.actions.append(
+        button("Keep edited text", () => void decide(false)),
+        regenerate,
+      );
+      choice = await new Promise((resolve) => {
+        const close = () => prompt.el.close();
+        controller.signal.addEventListener("abort", close, { once: true });
+        prompt.el.addEventListener(
+          "close",
+          () => {
+            pending.abort();
+            controller.signal.removeEventListener("abort", close);
+            resolve(answer || { regenerate: false, cancelled: true });
+          },
+          { once: true },
+        );
+        prompt.open();
+        if (controller.signal.aborted) close();
+        else regenerate.focus();
+      });
     }
+    if (choice.regenerate) clearCustomPreview();
+    return choice;
+  }
+  function regenerateAndPreview() {
+    if (regenerationWork) return regenerationWork;
+    invalidatePreview(false);
+    regenerationWork = regenerateCustom()
+      .then((choice) => {
+        if (!controller.signal.aborted) invalidatePreview();
+        return choice;
+      })
+      .finally(() => {
+        regenerationWork = null;
+      });
+    return regenerationWork;
   }
   function changed() {
-    regenerateCustom();
     redrawSources();
-    invalidatePreview();
+    void regenerateAndPreview();
   }
   function toggleMode() {
     if (multiple && sources.length > 1) return;
@@ -491,18 +563,31 @@ export async function chooseCitation({
         input.type === "checkbox" ? input.checked : input.value;
       if (key === "suppressAuthor")
         delete sources[active].citation["suppress-author"];
+      if (autoRegenerate === 1) clearCustomPreview();
       invalidatePreview();
     });
     // The classic dialog asks on change/focus, not for every typed character.
     input.addEventListener("change", () => {
       if (!sources[active] || !hasCustomPreview()) return;
-      regenerateCustom();
-      invalidatePreview();
+      void regenerateAndPreview();
     });
+    if (input.type === "text")
+      input.addEventListener("keydown", (event) => {
+        if (
+          event.key !== "Enter" ||
+          event.isComposing ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey
+        )
+          return;
+        event.preventDefault();
+        input.blur();
+        void requestConfirmation();
+      });
   }
   sort.addEventListener("change", () => {
-    regenerateCustom();
-    invalidatePreview();
+    void regenerateAndPreview();
   });
   function applySorted(sortedItems) {
     if (
@@ -602,7 +687,16 @@ export async function chooseCitation({
       }
     }
   });
-  async function finish() {
+  async function requestConfirmation() {
+    if (regenerationWork && (await regenerationWork).cancelled) return;
+    if (controller.signal.aborted || loadingInitial || !sources.length) return;
+    if (!confirm.disabled) finish();
+    else {
+      queuedConfirm = previewGeneration;
+      schedulePreview();
+    }
+  }
+  function finish() {
     if (confirm.disabled) return;
     if (
       hasCustomPreview() &&
@@ -652,6 +746,9 @@ export async function chooseCitation({
       "citation-options?" + query({ locale: style.locale }),
       { signal: controller.signal },
     );
+    autoRegenerate = [-1, 0, 1].includes(options.citationAutoRegenerate)
+      ? options.citationAutoRegenerate
+      : -1;
     for (const locator of options.locators || [])
       inputs.label.add(new Option(locator.label, locator.id));
     for (const source of sources) {

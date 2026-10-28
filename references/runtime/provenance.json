@@ -108,7 +108,7 @@
         "ExportEndpoint.handle",
         "ItemGetter.nextItem"
       ],
-      "adaptation": "Native export endpoint preparation and ItemGetter retained; Koa response replaced by project-authorized bounded metadata response. Native format MIME mapping is copied unchanged. Explicit file-copy requests are rejected by metadata export, with project Bibliography available through existing Files.",
+      "adaptation": "Native export endpoint preparation and ItemGetter retained; Koa response replaced by project-authorized bounded metadata response. Native format MIME mapping is copied unchanged. Explicit file-copy requests are rejected by metadata export, with project Bibliography available through existing Files. Node native exporter supports IO.String; its XPCOM-only IO.Write cannot run here. Exact format output can be spooled asynchronously in the existing native worker to a private, expiring project-scoped export receipt, delivered through the shared file-response owner without project edits or large JSON transfer.",
       "sourceSha256": "879f6b7dd342ade7c8eaf747d94917465b699fd364128f9cc35781adf02aba1c"
     },
     {

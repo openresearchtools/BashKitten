@@ -38,7 +38,7 @@ a citation identity. Map legacy identities explicitly before using them.
 | Jobs | `GET /jobs?limit=80` recovers recent work; `GET /jobs/ID` reads progress, DELETE cancels, POST `/jobs/ID/resume` resumes partial/interrupted work. Search-import summaries contain only 80 samples; read `/jobs/ID/results?limit=80&cursor=...` (or `start`) for remaining outcomes. Carry returned `version`; reload on 409. |
 | Bulk management | `POST /items/manage` with `{operation:'add-collection'|'remove-collection'|'delete'|'restore',items:[{key,version}],collection?,requestId}`; at most 1,000 selected records. |
 | Saved searches | Versioned GET/POST `/searches` and GET/PATCH/DELETE `/searches/KEY` preserve the shared UI search specification. |
-| Native import/export | Small pasted text: POST `/import` with `{text,target?,requestId,summary:true}`. Actual files: use `file`. GET `/translators/export` lists formats/options; POST `/items/export` with `keys`, `translatorID`, `options` exports selected metadata/notes/URLs. Attachment bytes use normal download routes; `exportFileData` is explicitly unsupported by metadata export. |
+| Native import/export | Small pasted text: POST `/import` with `{text,target?,requestId,summary:true}`. Actual files: use `file`. GET `/translators/export` lists formats/options; POST `/items/export` with `keys`, `translatorID`, `options` exports selected metadata/notes/URLs. Use `delivery:'file'` to return an expiring private export descriptor; GET its project-relative `downloadPath` for a local `filePath` and scoped browser `url`. No project files or library items are added. Large inline outputs automatically return the same descriptor. Attachment bytes use normal download routes; `exportFileData` is explicitly unsupported by metadata export. |
 | Schema/styles | `GET /schema`, `GET /styles?query=TEXT&limit=50`; whole-state `POST /citations/render` is shared with Office. |
 | Safe service configuration | `GET /settings`; user `/review-setup` or native References settings owns key entry. Never solicit API keys in model messages. |
 | Copied snapshots | Explicit POST `/citations/import-snapshots` with `{items:{OLD_ID:CSL,...},requestId,target?}` imports up to 100 snapshots/4 MiB through native CSL conversion and returns `mapping`. Existing current-project IDs are reused; foreign IDs never silently retarget. Office's `citations.import-snapshots` also safely relinks managed fields. |
@@ -51,6 +51,10 @@ history. DELETE `/projects/ID` unregisters navigation while retaining archived
 metadata. Separate deliberate deletion, DELETE `/projects/ID/library`, requires
 `{confirmProjectId:ID,attachments:'keep'|'delete'}` and permanently retires that
 library identity. Archive is not permission to delete.
+
+An attachment or export GET returns its authorized owning-backend `filePath` and
+ordinary browser `url`. To view it, use the existing browser `tabs.create` with
+`{url,application:true}`; keep the returned exact service mapping.
 
 For a returned PDF `challenge-required` request, use backend-relative POST
 `/resolve {projectId,requestId}`. The same authorized browser helper used by the UI

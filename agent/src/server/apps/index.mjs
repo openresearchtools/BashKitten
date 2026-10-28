@@ -10,7 +10,7 @@ import { paths } from '../access/paths.mjs';
 import { controlRequest } from '../control.mjs';
 import { dispatchReferenceResolver } from '../access/browser-channel.mjs';
 import { projects, createProject, renameProject, removeProject, archiveProject, relinkProject, withProjectOperation, withProjectTransition } from '../projects.mjs';
-import { fileDirectory, sendFile } from '../files/files.mjs';
+import { fileDirectory, sendFile, sendFileHandle } from '../files/files.mjs';
 import { authorizeApplicationPath, privateManagerPaths, managerAllowed, runManagerOperation } from '../files/access.mjs';
 import { ApplicationGateway } from './gateway.mjs';
 import { applicationModules as modules, referencesWebRoot } from './locations.mjs';
@@ -65,10 +65,10 @@ export class ApplicationModules {
     if (!project) throw Object.assign(Error('Project not found'), { status: 404 });
     const cwd = (await fileDirectory(project.cwd)).path;
     await authorizeApplicationPath(cwd);
-    return { ...project, cwd, runAuthorized: work => withProjectOperation(id, projectSignal => this.authorize(record, async operation => {
+    return { ...project, cwd, runAuthorized: (work, { write = true } = {}) => withProjectOperation(id, projectSignal => this.authorize(record, async operation => {
       const current = (await projects({ includeArchived })).projects.find(item => item.id === id);
       if (!current || current.cwd !== project.cwd) throw Object.assign(Error('The project changed during this operation'), { status: 409 });
-      if (current.archived) throw Object.assign(Error('Unarchive this library before changing it'), { status: 409 });
+      if (current.archived && write !== false) throw Object.assign(Error('Unarchive this library before changing it'), { status: 409 });
       const signal = AbortSignal.any([projectSignal, operation.signal]); signal.throwIfAborted();
       return work(signal);
     })) };
@@ -485,7 +485,7 @@ export class ApplicationModules {
           result.body = { ...result.body, reopen: { component: descriptor.component, serviceId: descriptor.serviceId, openPath: descriptor.openPath } };
         } catch (error) { result.body = { ...result.body, reopenError: error.message }; }
       }
-      return this.sendResult(req, res, result);
+      return this.sendResult(req, res, result, context.grant.record, context.signal);
     }
     if (!['GET', 'HEAD'].includes(req.method)) throw Object.assign(Error('Method not allowed'), { status: 405 });
     const root = fileURLToPath(referencesWebRoot);
@@ -496,7 +496,18 @@ export class ApplicationModules {
     res.writeHead(200, { 'Content-Type': mime, 'Content-Length': bytes.length, 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
     res.end(req.method === 'HEAD' ? undefined : bytes);
   }
-  async sendResult(req, res, result, authority) {
+  async sendResult(req, res, result, authority, signal) {
+    if (result.referenceExport) {
+      if (!authority) throw Object.assign(Error('Library export authority is required'), { status: 403 });
+      return this.authorize(authority, async operation => {
+        const activeSignal = signal ? AbortSignal.any([signal, operation.signal]) : operation.signal;
+        const references = await this.references();
+        if (typeof references.openExport !== 'function') throw unavailable('References', 'the native export receipt is unavailable');
+        const opened = await references.openExport({ authority, projectId: result.referenceExport.projectId, exportId: result.referenceExport.exportId, signal: activeSignal });
+        return sendFileHandle(req, res, opened.handle, { name: opened.name, contentType: opened.contentType, download: true, signal: activeSignal });
+      }, { cancel: () => { req.destroy(); res.destroy(); },
+        watch: abort => { res.once('close', abort); return () => res.off('close', abort); } });
+    }
     if (result.filePath) {
       const send = async () => { await authorizeApplicationPath(result.filePath); return sendFile(req, res, result.filePath, false); };
       return authority ? this.authorize(authority, send, { cancel: () => { req.destroy(); res.destroy(); },

@@ -97,18 +97,26 @@ export async function sessionImage(meta, reference, view) {
 export async function sendFile(req, res, file, download = false, name = path.basename(file)) {
   await authorizeManagerPath(file);
   const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try { await authorizeManagerPath(`/proc/self/fd/${handle.fd}`); }
+  catch (error) { await handle.close(); throw error; }
+  return sendFileHandle(req, res, handle, { name, contentType: mimeType(file), download });
+}
+// The caller owns authorization and opens the exact file through its existing
+// owner. This shared sender takes handle ownership; it never accepts a path or
+// relaxes ordinary Files access to private backend state.
+export async function sendFileHandle(req, res, handle, { name = 'download', contentType = 'application/octet-stream', download = false, signal = managerContext()?.signal } = {}) {
   try {
-    await authorizeManagerPath(`/proc/self/fd/${handle.fd}`);
     const stat = await handle.stat();
     if (!stat.isFile()) throw Error('Choose a regular file');
+    signal?.throwIfAborted();
     // Repository HTML/SVG remains a passive download, never application code.
     const policy = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:";
-    const headers = { 'Content-Type': mimeType(file), 'Content-Length': stat.size,
+    const headers = { 'Content-Type': contentType, 'Content-Length': stat.size,
       'Content-Disposition': disposition(name, download), 'X-Content-Type-Options': 'nosniff',
       'Content-Security-Policy': policy, 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store' };
     res.writeHead(200, headers);
     if (req.method === 'HEAD') { res.end(); return; }
-    await pipeline(handle.createReadStream({ autoClose: false }), res, { signal: managerContext()?.signal });
+    await pipeline(handle.createReadStream({ autoClose: false }), res, { signal });
   } finally { await handle.close(); }
 }
 export async function saveAttachments(files) {

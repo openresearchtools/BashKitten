@@ -112,6 +112,7 @@ export async function createReferencesService({
         "deleteSearch",
         "importCollections",
         "eraseSessionNote",
+        "deleteReceipt",
       ].includes(op) ||
       (["record", "fulltext"].includes(op) && args.data !== undefined);
     if (!mutation) return store.call(p.file, op, args, signal);
@@ -1157,6 +1158,69 @@ export async function createReferencesService({
       { resume: body.resume },
     );
   }
+  const exportFile = (p, id) => {
+    if (!/^\d{13}-[0-9a-f-]{36}$/.test(id || ""))
+      fail("Export is unavailable", 404);
+    return path.join(path.dirname(p.file), "exports", id);
+  };
+  async function exportReceipt(p, id, signal) {
+    const filePath = exportFile(p, id);
+    const receipt = await call(p, "record", { id: "export:" + id }, signal);
+    if (!receipt?.complete || receipt.expiresAt < Date.now())
+      fail("Export has expired or is unavailable", 410);
+    return { ...receipt, filePath };
+  }
+  async function openExport({ authority, projectId, exportId, signal }) {
+    const p = await project(authority, projectId);
+    const receipt = await exportReceipt(p, exportId, signal);
+    const handle = await fs.open(
+      receipt.filePath,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+    );
+    try {
+      signal?.throwIfAborted();
+      const info = await handle.stat();
+      const actual = await fs.realpath("/proc/self/fd/" + handle.fd);
+      const expected = path.join(
+        await fs.realpath(root),
+        digest(p.id),
+        "exports",
+        exportId,
+      );
+      if (
+        !info.isFile() ||
+        info.size !== receipt.byteLength ||
+        actual !== expected
+      )
+        fail("Export file changed", 409);
+      return {
+        handle,
+        name: "references." + receipt.extension,
+        contentType: receipt.contentType,
+      };
+    } catch (error) {
+      await handle.close();
+      throw error;
+    }
+  }
+  async function pruneExports(p, signal) {
+    const page = await call(
+      p,
+      "recordPage",
+      { prefix: "export:", limit: 100 },
+      signal,
+    );
+    for (const receipt of page.items) {
+      if (receipt.expiresAt >= Date.now()) break;
+      await fs.rm(exportFile(p, receipt.exportId), { force: true });
+      await call(
+        p,
+        "deleteReceipt",
+        { id: "export:" + receipt.exportId },
+        signal,
+      );
+    }
+  }
   async function saveAttachment(p, authority, meta, body, sessionID) {
     if (p.runAuthorized)
       return p.runAuthorized(async (ownerSignal) => {
@@ -1466,6 +1530,10 @@ export async function createReferencesService({
         await store.call(p.file, "closeLibrary", {});
         for (const suffix of ["", "-wal", "-shm"])
           await fs.rm(p.file + suffix, { force: true });
+        await fs.rm(path.join(path.dirname(p.file), "exports"), {
+          recursive: true,
+          force: true,
+        });
         await fs.rm(path.join(path.dirname(p.file), "imports"), {
           recursive: true,
           force: true,
@@ -2539,11 +2607,14 @@ export async function createReferencesService({
         );
         if (key === "saveAttachmentFromResolver") status = 201;
       } else if (op === "citation-options")
-        result = await native.call(
-          "citationOptions",
-          [Object.fromEntries(query)],
-          signal,
-        );
+        result = {
+          ...(await native.call(
+            "citationOptions",
+            [Object.fromEntries(query)],
+            signal,
+          )),
+          citationAutoRegenerate: settings.citationAutoRegenerate ?? -1,
+        };
       else if (op === "translators" && key === "export")
         result = { items: await native.call("exportTranslators", [], signal) };
       else if (op === "import") {
@@ -2599,11 +2670,105 @@ export async function createReferencesService({
               })),
           });
         }
-        result = await native.call(
-          "translateExport",
-          [{ items, translatorID: body.translatorID, options: body.options }],
-          signal,
-        );
+        if (
+          body.delivery !== undefined &&
+          !["file", "inline"].includes(body.delivery)
+        )
+          fail("Unknown export delivery");
+        const create = async (ownerSignal) => {
+          const activeSignal =
+            ownerSignal && signal
+              ? AbortSignal.any([ownerSignal, signal])
+              : ownerSignal || signal;
+          activeSignal?.throwIfAborted();
+          await pruneExports({ ...p, runAuthorized: undefined }, activeSignal);
+          const exportId = Date.now() + "-" + randomUUID();
+          const outputFile = exportFile(p, exportId);
+          await fs.mkdir(path.dirname(outputFile), {
+            recursive: true,
+            mode: 0o700,
+          });
+          const expected = path.join(
+            await fs.realpath(root),
+            digest(p.id),
+            "exports",
+          );
+          if ((await fs.realpath(path.dirname(outputFile))) !== expected)
+            fail("Export spool is outside its library", 403);
+          const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+          await call(
+            { ...p, runAuthorized: undefined },
+            "record",
+            {
+              id: "export:" + exportId,
+              data: { exportId, expiresAt, complete: false },
+            },
+            activeSignal,
+          );
+          try {
+            const output = await native.call(
+              "translateExport",
+              [
+                {
+                  items,
+                  translatorID: body.translatorID,
+                  options: body.options,
+                },
+                { outputFile, delivery: body.delivery },
+              ],
+              activeSignal,
+              undefined,
+              { waitForCancellation: true },
+            );
+            activeSignal?.throwIfAborted();
+            if (!output.file) {
+              await call(
+                { ...p, runAuthorized: undefined },
+                "deleteReceipt",
+                { id: "export:" + exportId },
+                activeSignal,
+              );
+              return output;
+            }
+            const { file, ...metadata } = output;
+            const receipt = {
+              ...metadata,
+              exportId,
+              downloadPath: "exports/" + exportId + "/file",
+              expiresAt,
+              complete: true,
+            };
+            await call(
+              { ...p, runAuthorized: undefined },
+              "record",
+              { id: "export:" + exportId, data: receipt },
+              activeSignal,
+            );
+            return receipt;
+          } catch (error) {
+            await fs.rm(outputFile, { force: true });
+            await call({ ...p, runAuthorized: undefined }, "deleteReceipt", {
+              id: "export:" + exportId,
+            });
+            throw error;
+          }
+        };
+        result = p.runAuthorized
+          ? await p.runAuthorized(create, { write: false })
+          : await create(signal);
+      } else if (
+        op === "exports" &&
+        key &&
+        action === "file" &&
+        method === "GET"
+      ) {
+        const receipt = await exportReceipt(p, key, signal);
+        return {
+          status: 200,
+          headers: { "Cache-Control": "no-store" },
+          filePath: receipt.filePath,
+          referenceExport: { projectId: p.id, exportId: key },
+        };
       } else if (op === "schema")
         result = await native.call("schema", [], signal);
       else if (op === "settings") {
@@ -2615,6 +2780,7 @@ export async function createReferencesService({
             "unpaywallEmail",
             "resolvers",
             "automaticPDFs",
+            "citationAutoRegenerate",
           ];
           for (const name of Object.keys(body))
             if (!allowed.includes(name)) fail("Unknown setting");
@@ -2626,6 +2792,11 @@ export async function createReferencesService({
                 /[\r\n\u0000]/.test(body[name]))
             )
               fail("Invalid service key");
+          if (
+            body.citationAutoRegenerate !== undefined &&
+            ![-1, 0, 1].includes(body.citationAutoRegenerate)
+          )
+            fail("Citation regeneration preference must be -1, 0 or 1");
           if (body.resolvers !== undefined)
             await native.call("validateResolvers", [body.resolvers], signal);
           for (const name of ["crossrefEmail", "unpaywallEmail"])
@@ -2669,6 +2840,7 @@ export async function createReferencesService({
           unpaywallEmail: settings.unpaywallEmail || "",
           resolvers: settings.resolvers || "[]",
           automaticPDFs: !!settings.automaticPDFs,
+          citationAutoRegenerate: settings.citationAutoRegenerate ?? -1,
         };
       } else if (op === "jobs") {
         if (key && action === "results" && method === "GET") {
@@ -3470,6 +3642,7 @@ export async function createReferencesService({
   }
   return {
     handle,
+    openExport,
     validateLibraryRelink,
     deleteLibrary,
     importSnapshots: async (body, { authority, projectId, signal } = {}) => {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { createRequire } from "node:module";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 const require = createRequire(import.meta.url);
 const { FORMATS, CONTENT_TYPES } = require("./runtime/formats.js");
@@ -165,7 +165,7 @@ export async function exportTranslators() {
 // Adapted from the pinned translation-server ExportEndpoint; native ItemGetter owns field conversion.
 export async function translateExport(
   { items, translatorID, options = {} },
-  { signal } = {},
+  { signal, outputFile, delivery } = {},
 ) {
   signal?.throwIfAborted();
   if (options.exportFileData)
@@ -184,7 +184,7 @@ export async function translateExport(
   if (
     !Array.isArray(items) ||
     items.length > 1000 ||
-    JSON.stringify(items).length > 32 * 1024 * 1024
+    Buffer.byteLength(JSON.stringify(items)) > 32 * 1024 * 1024
   )
     throw Object.assign(
       Error(
@@ -210,19 +210,44 @@ export async function translateExport(
   translate.setItems(items);
   await translate.translate({ libraryID: false });
   signal?.throwIfAborted();
-  if (translate.string.length > 32 * 1024 * 1024)
+  if (Buffer.byteLength(translate.string) > 32 * 1024 * 1024)
     throw Object.assign(Error("Export exceeds 32 MiB"), { status: 413 });
   const format = Object.keys(FORMATS).find(
     (name) => FORMATS[name] === translatorID,
   );
-  return {
-    text: translate.string,
+  const metadata = {
     contentType: (CONTENT_TYPES[format] || "text/plain") + "; charset=utf-8",
     extension: /^[a-z0-9]+$/i.test(translator.target)
       ? translator.target
       : "txt",
     translatorID,
   };
+  // Native Node translation uses IO.String. Native IO.Write depends on XPCOM;
+  // materialize its unchanged output in this worker, never over the UI/agent JSON channel.
+  if (
+    outputFile &&
+    (delivery === "file" ||
+      Buffer.byteLength(JSON.stringify(translate.string)) > 1024 * 1024)
+  ) {
+    try {
+      await writeFile(outputFile, translate.string, {
+        flag: "wx",
+        mode: 0o600,
+        signal,
+      });
+      signal?.throwIfAborted();
+    } catch (error) {
+      await rm(outputFile, { force: true });
+      throw error;
+    }
+    return {
+      ...metadata,
+      byteLength: Buffer.byteLength(translate.string),
+      sha256: createHash("sha256").update(translate.string).digest("hex"),
+      file: true,
+    };
+  }
+  return { ...metadata, text: translate.string };
 }
 export async function translatorMetadata(url) {
   const Z = await translationRuntime();
