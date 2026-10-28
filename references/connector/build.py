@@ -81,7 +81,7 @@ manifest['browser_specific_settings']={
  'gecko_android':{'strict_min_version':'142.0'},
 }
 manifest['content_scripts']=[script for script in manifest['content_scripts'] if script['matches']==['http://*/*','https://*/*']]
-manifest['permissions']=[p for p in manifest['permissions'] if p not in ['http://127.0.0.1/*','https://repo.zotero.org/*','https://api.zotero.org/*','declarativeNetRequest']]
+manifest['permissions']=[p for p in manifest['permissions'] if p not in ['http://127.0.0.1/*','https://repo.zotero.org/*','https://api.zotero.org/*']]
 manifest['options_ui']={'page':'references/about.html','open_in_tab':True}
 manifest['web_accessible_resources']=[p for p in manifest['web_accessible_resources'] if not p.startswith('test/')]
 manifest.pop('minimum_chrome_version',None)
