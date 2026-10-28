@@ -1,5 +1,32 @@
 # BashKitten · native Pi / Linux and Termux
 
+## 28 October Office and Files branding and compact citation amendment
+
+User-facing bundled product names are **Office** and **Files**, within BashKitten.
+Use native upstream branding configuration/assets, retain copyright/full licenses,
+and explain the BashKitten integrations and their Collabora Online/LibreOffice or
+File Browser Quantum origins in About/legal information. Preserve pristine source;
+use narrow named patches only for branding gaps the native facilities cannot cover.
+Citation dialogs must be compact on both desktop and phone, with wrapped Title,
+Authors and Year visible by default, draggable column dividers, optional additional
+columns and a fixed add button during horizontal scrolling. Keep bounded lazy rows
+and reachable search, preview and actions with the phone keyboard open.
+Routine implementation, build/research and browser-driving subagents use GPT-6.1 Sol
+at xhigh; reserve Astra for work that needs its additional reasoning. Rebuild all
+required components in the existing GitHub Actions pipelines, fix regressions and
+publish prereleases only. Complete license/source collection remains mandatory.
+See the [dated amendments](docs/files-office-bibliography-plan.md#20-office-and-files-branding-amendment--28-october-2026).
+
+Resolver acceptance must compare our normal import/PDF workflow first against
+native Zotero second for the same ten real DOIs on the same machine/network,
+including full metadata and actual PDFs. Exercise the installed privileged
+extension connection, not just backend downloads. Resolver pages use new
+background tabs in the existing browser window, preserving the current tab and
+focus; they remain visible to the user and existing agent browser controls.
+Continue automatically through the existing authorized resolver owner when
+browser retrieval is needed, with clear pending status for human challenges.
+Separate network/access differences from product failures; no CAPTCHA bypass.
+
 ## 28 October downloaded dependency archive amendment
 
 Downloaded dependency archives and their split parts belong in the external

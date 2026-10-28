@@ -2064,3 +2064,63 @@ upstream fixtures, held `node_shrinkpack` inputs or Maven source JARs.
 This changes dependency storage and delivery, not the required product feature
 scope or installed acceptance. Cache, source and build checks do not establish
 that the full product has passed testing.
+
+## 20. Office and Files branding amendment — 28 October 2026
+
+The user names the modified, bundled editor **Office**, as an integrated part of
+BashKitten. Its About/license UI must explain that it is BashKitten's integrated
+Office built on Collabora Online and LibreOffice technology. Replace product
+branding through the native engine/server asset and name configuration, with a
+narrow named patch only where the pinned release hardcodes product presentation.
+Keep upstream copyright, license, modification and source information intact;
+legal attribution is not product branding. Apply the corresponding native Files
+branding to File Browser Quantum, preserving its Apache license and attribution.
+No broad source-name substitution, new browser integration or pristine-source
+edits are authorized by this branding work.
+
+The user requests a full rebuild using existing GitHub Actions component and
+package pipelines, fixing archive-removal/build integration failures and retaining
+complete matching source and full notices for every bundled component. Publish
+only the normal prerelease, not a stable release. Routine implementation, build,
+research and browser-driving subagents use GPT-6.1 Sol at xhigh; reserve Astra for
+problems needing its additional reasoning. A started build or old artifact is not
+new acceptance evidence.
+
+## 21. Compact, readable citation table amendment — 28 October 2026
+
+The user's phone screenshot and subsequent desktop clarification require a small
+citation dialog on both desktop and mobile. On desktop, use a compact centred
+modal with a bounded scrolling results area rather than filling the screen. On
+phones, fit the actual space available with the software keyboard open. Keep the
+native Office outer dialog/frame compact too, not only its inner web content.
+
+Title, Authors and Year are the essential default columns and must fit together
+with the fixed add (+) column on a phone. Wrap long titles and authors onto a few
+lines rather than letting Title consume the width and hide Authors/Year. Provide
+draggable column dividers for pointer and touch on both layouts. Additional
+user-selected metadata columns may scroll horizontally while the add button stays
+visible. Preserve optional-column selection, selected citation chips, source
+locators/affixes, preview and confirmation. Reuse bounded lazy rendering and row
+measurement/height rules; do not materialize the library or allow wrapping to
+break virtualization. Verify readable real titles/authors/year, resize gestures,
+scrolling and keyboard reachability in the actual desktop and phone UI.
+
+## 22. Real resolver parity and background tabs — 28 October 2026
+
+Compare the normal References identifier import, full metadata translation and PDF
+retrieval with native Zotero for the same ten real DOIs, preferably including
+diverse open-access publishers located through OpenAlex. Run References first,
+then Zotero on the same machine/network with matched resolver and access settings.
+Record exact fields and actual downloaded PDFs, and investigate differences.
+Later-request blocking, access conditions or network failures must be reported
+separately rather than treated as proof of superiority or a product regression.
+
+The existing privileged References extension must connect to backend resolver
+jobs and invoke the reused browser retrieval facilities automatically when needed.
+Verify this installed path as well as ordinary server-side retrieval. Open resolver
+pages in new background tabs in the existing browser window; preserve the user's
+current tab, navigation and focus, and do not spawn windows. These ordinary tabs
+must be visible to users and the existing agent browser-control API, with pending
+status and a way to visit the tab when human input is required. Captcha completion
+remains human work. Reuse the existing authorized dispatch and durable resolver
+request; no separate browser, resolver credential store or transport fallback.
