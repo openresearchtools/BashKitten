@@ -30,13 +30,13 @@ globalThis.References = new function () {
   this.rpc = (destination, method, data, options={}) => transport({operation: 'request',
     backendId: destination.backendId, projectId: destination.projectId, method, data,
     headers: options.headers || {}, queryString: options.queryString || '', bodyEncoding: options.bodyEncoding || 'json'});
-  this.select = async (tab) => {
+  this.select = async (tab, mode='capture') => {
     if (!tab || tab.id < 0) throw new Error('References requires an ordinary source tab');
     const id = crypto.randomUUID();
     let finish;
     const result = new Promise(resolve => { finish = resolve; });
-    choices.set(id, {source: tab, finish, destination: destinations.get(tab.id)});
-    const choiceTab = await browser.tabs.create({url: browser.runtime.getURL('references/destination.html') + '#' + id, active: true});
+    choices.set(id, {source: tab, finish, mode, destination: destinations.get(tab.id)});
+    const choiceTab = (await this.openTabSurface(browser.runtime.getURL('references/destination.html') + '#' + id, {}, tab)).tabs[0];
     const close = tabId => {
       if (tabId !== choiceTab.id && tabId !== tab.id) return;
       browser.tabs.onRemoved.removeListener(close);
@@ -48,6 +48,7 @@ globalThis.References = new function () {
     try {
       const destination = await result;
       if (!destination) return false;
+      if (mode === 'open' || destination.openManager) return transport({operation:'open',backendId:destination.backendId,projectId:destination.projectId});
       // Validate once more immediately before any capture operation; grants remain backend-owned.
       const readiness = await this.rpc(destination, 'ping', {});
       destination.prefs = Object.freeze({...readiness.prefs});
@@ -68,6 +69,51 @@ globalThis.References = new function () {
       await browser.tabs.remove(choiceTab.id).catch(() => {});
     }
   };
+  const resolverJobs = new Map();
+  this.resolveRequest = async (binding) => {
+    await Zotero.initDeferred.promise;
+    const pending = await this.rpc(binding, 'getResolverRequest', {requestId:binding.requestId});
+    if (pending.status === 'complete') return {status:'complete',requestId:binding.requestId,receipt:pending.receipt};
+    if (pending.status !== 'challenge-required' || pending.requestId !== binding.requestId
+        || typeof pending.sessionID !== 'string' || !pending.attachment || pending.expiresAt <= Date.now()) {
+      throw new Error('Resolver request is unavailable or expired');
+    }
+    const url = new URL(pending.attachment.url);
+    if (!['http:','https:'].includes(url.protocol) || url.username || url.password) throw new Error('Invalid resolver URL');
+    const source = (await browser.tabs.query({active:true,lastFocusedWindow:true}))[0];
+    if (!source) throw new Error('Open an ordinary browser tab for this resolver request');
+    const attachment = {...pending.attachment,mimeType:pending.attachment.contentType || 'application/pdf',parentItem:pending.attachment.parentItemID};
+    let bytes;
+    try {
+      bytes = await Zotero.ItemSaver._fetchAttachment(attachment, source, false);
+    } catch (_) {
+      // The native donor's monitor waits for a human in an ordinary tab. Never run
+      // its Amazon CAPTCHA solver or its hidden-iframe challenge path.
+      attachment.url = await Zotero.BotBypass.passJSDetectionViaWindowPrompt(attachment.url, source);
+      bytes = await Zotero.ItemSaver._fetchAttachment(attachment, source, false);
+    }
+    // Validate the same pending job again after interactive browsing, before any write.
+    const current = await this.rpc(binding, 'getResolverRequest', {requestId:binding.requestId});
+    if (current.status !== 'challenge-required' || current.sessionID !== pending.sessionID || current.expiresAt <= Date.now()) throw new Error('Resolver authorization changed');
+    const metadata = {id:attachment.id,url:attachment.url,contentType:attachment.mimeType,
+      parentItemID:attachment.parentItemID,title:Zotero.ItemSaver._rfc2047Encode(attachment.title),resolverRequestId:binding.requestId};
+    const receipt = await this.upload(binding, 'saveAttachment', new Uint8Array(bytes), {
+      bodyEncoding:'binary',queryString:new URLSearchParams({sessionID:pending.sessionID}).toString(),
+      headers:{'Content-Type':attachment.mimeType,'X-Metadata':JSON.stringify(metadata)}});
+    return {status:'complete',requestId:binding.requestId,receipt};
+  };
+  browser.runtime.onMessageExternal.addListener((message, sender) => {
+    if (sender.id !== HOST || sender.tab || message?.apiVersion !== 1 || message.operation !== 'resolver') return undefined;
+    const binding = {backendId:message.backendId,projectId:message.projectId,requestId:message.requestId};
+    if (Object.values(binding).some(value => typeof value !== 'string' || !/^[A-Za-z0-9_.:-]{1,256}$/.test(value))) throw new Error('Invalid resolver identity');
+    const key = JSON.stringify(binding);
+    if (!resolverJobs.has(key)) {
+      if (resolverJobs.size >= 8) throw new Error('Wait for an existing References resolver request to finish');
+      const task = this.resolveRequest(Object.freeze(binding)).finally(() => resolverJobs.delete(key));
+      resolverJobs.set(key, task);
+    }
+    return resolverJobs.get(key);
+  });
   this.getPref = (name, sessionID, tab) => {
     const binding = sessionID ? sessions.get(sessionID) : destinations.get(tab?.id);
     return binding?.prefs?.[name] ?? Zotero.Connector.prefs[name];
@@ -131,7 +177,10 @@ globalThis.References = new function () {
     }
   };
   this.openTabSurface = async (url, options={}, source=null) => {
-    const tab = await browser.tabs.create({url, active:true});
+    const properties = {url, active:true};
+    if (Number.isInteger(source?.windowId)) properties.windowId = source.windowId;
+    if (source?.cookieStoreId) properties.cookieStoreId = source.cookieStoreId;
+    const tab = await browser.tabs.create(properties);
     if (options.onClose) {
       const closed = id => { if (id === tab.id) { browser.tabs.onRemoved.removeListener(closed); options.onClose(); } };
       browser.tabs.onRemoved.addListener(closed);
@@ -151,10 +200,10 @@ globalThis.References = new function () {
     }
     const pending = choices.get(message.id);
     if (!pending) throw new Error('References destination choice expired');
-    if (message.action === 'context') return {...await this.context(), previous:pending.destination};
+    if (message.action === 'context') return {...await this.context(), previous:pending.destination, mode:pending.mode};
     if (message.action === 'collections') return this.rpc(message.destination, 'getSelectedCollection', {
       target:message.destination.target, parent:message.parent || null, q:String(message.q || '').slice(0,200), start:Math.max(0,Number(message.start)||0), limit:100});
-    if (message.action === 'confirm') { pending.finish(message.destination); return true; }
+    if (message.action === 'confirm') { pending.finish({...message.destination,openManager:message.openManager === true}); return true; }
     if (message.action === 'cancel') { pending.finish(null); return true; }
     throw new Error('Unknown References chooser operation');
     })();

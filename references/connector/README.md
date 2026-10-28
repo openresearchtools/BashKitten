@@ -20,7 +20,7 @@ pinned References dataset `c83003773b65359e41466e1d419b2d1df5512af7`.
 Build without Mozilla:
 
 ```sh
-python3 agent/references/connector/build.py
+python3 references/connector/build.py
 ```
 
 This applies the patch to an ignored temporary source copy, uses the release's
@@ -42,7 +42,9 @@ for translator detection; metadata/code comes from the package.
 Every save begins with an explicit backend/project/collection choice and a fresh
 capture session generated in the background before translation starts. The
 session is permanently bound to that destination and source tab. Collection
-choice traverses collection hierarchy using bounded pages (at most 100 targets); stale search responses are discarded. Closing
+The action menu and destination chooser also offer **Open manager**, using the
+same backend/project and the native shared application-launch owner. It passes
+no URL or credential into page scripts. Collection choice traverses collection hierarchy using bounded pages (at most 100 targets); stale search responses are discarded. Closing
 or cancelling the chooser makes no item or attachment. Upstream progress updates
 retain the same bound session; the server is the final authorization owner.
 
@@ -57,8 +59,8 @@ Native/back-end errors remain errors; there is no cloud account or sync fallback
 API 3 capture methods are `ping`, `getTranslators`, `getTranslatorCode`,
 `getSelectedCollection`, `saveItems`, `saveSnapshot`, `saveSingleFile`,
 `saveAttachment`, `saveStandaloneAttachment`, `getRecognizedItem`,
-`hasAttachmentResolvers`, `saveAttachmentFromResolver`, `updateSession`, `import`
-and `installStyle`. Historical progress/select RPCs are not advertised.
+`hasAttachmentResolvers`, `saveAttachmentFromResolver`, `updateSession`, `import`,
+`installStyle` and `getResolverRequest`. Historical progress/select RPCs are not advertised.
 
 Binary attachment/snapshot uploads preserve API 3 MIME, X-Metadata and sessionID:
 
@@ -73,6 +75,25 @@ error and never repeats the write automatically. The upstream browser attachment
 fetch still returns its native ArrayBuffer; chunking prevents whole-attachment
 JSON copies across Gecko/native messaging. Large SingleFile payload creation is
 upstream behavior and still needs installed responsiveness evidence.
+
+## Explicit browser-assisted resolver handoff
+
+The existing authenticated browser-control operation `references.resolve` carries
+only `{backendId,projectId,requestId}`. The fixed host receives that immutable event
+through its desktop Experiment event or Android native-message port and forwards
+it to the capture background. The capture verifies `getResolverRequest` against
+the same project before and after interaction, reuses native cookie-aware
+attachment retrieval and the donor attachment-response monitor, and uploads the
+PDF with `X-Metadata.resolverRequestId`. The backend validates the session,
+attachment and parent, then completes the originating receipt/job.
+
+The fixed host returns the bounded receipt through native
+`operation:'resolver-result'`; backend changes, Off and stale requests fail.
+There is no polling, arbitrary page-to-host listener, cookie export or supplied
+native fetch URL. Challenges use visible ordinary tabs for human completion;
+automated Amazon and hidden-iframe bypass paths are removed from runtime.
+Tab creation preserves the source window and cookie store through native tab
+properties. Private/partitioned behavior still requires installed verification.
 
 ## Independent install, update and rollback
 

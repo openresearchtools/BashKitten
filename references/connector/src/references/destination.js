@@ -7,6 +7,8 @@ const destination = () => ({backendId:$('backend').value,projectId:$('project').
 const option = (value, text) => {const node=document.createElement('option');node.value=value;node.textContent=text;return node;};
 async function collections() {
   const version=++generation;
+  $('manager').disabled=!$('project').value;
+  if(context?.mode==='open'){$('add').disabled=!$('project').value;$('status').textContent='';return;}
   $('add').disabled=true; $('status').textContent='Loading collections…';
   try {
     const result=await send('collections',{destination:destination(),q:$('search').value,start,parent:parents.at(-1)?.id || null});
@@ -39,5 +41,6 @@ $('next').onclick=()=>{if(nextStart!==null){start=nextStart;collections();}};
 $('up').onclick=()=>{parents.pop();start=0;collections();};
 $('open').onclick=()=>{const selected=$('collection').selectedOptions[0];if(selected?.value && selected.value!==parents.at(-1)?.id){parents.push({id:selected.value,name:selected.textContent});start=0;collections();}};
 $('cancel').onclick=()=>send('cancel');
+$('manager').onclick=async()=>{try{await send('confirm',{destination:destination(),openManager:true});}catch(error){$('status').textContent=error.message;}};
 document.querySelector('form').onsubmit=async event=>{event.preventDefault();$('add').disabled=true;try{await send('confirm',{destination:destination()});}catch(error){$('status').textContent=error.message;}};
-(async()=>{try{context=await send('context');for(const backend of context.backends || [context])$('backend').append(option(backend.backendId,backend.name || backend.backendId));if(context.previous)$('backend').value=context.previous.backendId;projects();}catch(error){$('status').textContent=error.message;$('add').disabled=true;}})();
+(async()=>{try{context=await send('context');if(context.mode==='open'){$('manager').hidden=true;document.querySelector('main>p').textContent='Choose the project library to open.';document.title='References';document.querySelector('h1').textContent='Open References';$('add').textContent='Open manager';for(const element of [$('search').closest('label'),$('collection').closest('label'),$('path'),...document.querySelectorAll('.pages')])element.hidden=true;}for(const backend of context.backends || [context])$('backend').append(option(backend.backendId,backend.name || backend.backendId));if(context.previous)$('backend').value=context.previous.backendId;projects();}catch(error){$('status').textContent=error.message;$('add').disabled=true;}})();

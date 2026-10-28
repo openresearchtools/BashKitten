@@ -160,7 +160,34 @@
  	};
  	
  	this.waitForTabToLoad = async function(tab) {
-@@ -1194,7 +1146,10 @@
+@@ -708,7 +660,8 @@
+ 			// A new fun bug from Chrome where the url is sometimes an empty string
+ 			return;
+ 		}
+-		browser.contextMenus.removeAll();
++		await browser.contextMenus.removeAll();
++		browser.contextMenus.create({id:'references-open-manager',title:'Open manager',contexts:['browser_action']});
+ 		if (!browser.contextMenus.onClicked.hasListener(_handleContextMenuClick)) {
+ 			browser.contextMenus.onClicked.addListener(_handleContextMenuClick);
+ 		}
+@@ -804,7 +757,7 @@
+ 			Zotero.Connector_Browser.saveAsWebpage(tab);
+ 		},
+ 		"zotero-context-menu-preferences": function () {
+-			browser.tabs.create({url: browser.runtime.getURL('preferences/preferences.html')});
++			browser.tabs.create({url: browser.runtime.getURL('references/about.html')});
+ 		},
+ 		"zotero-context-menu-copy-unproxied-url": async (info, tab) => {
+ 			// navigator.clipboard.writeText doesn't work in the background page because it has no focus
+@@ -825,6 +778,7 @@
+ 	
+ 	async function _handleContextMenuClick(info, tab) {
+ 		const id = info.menuItemId;
++		if (id === 'references-open-manager') return References.select(tab, 'open');
+ 		if (id.startsWith("zotero-context-menu-copy-unproxied")) {
+ 			// Request permissions before other async actions otherwise
+ 			// it's not treated like we do it within a gesture
+@@ -1194,7 +1148,10 @@
  	 * 		- note <String> add string as a note to the saved item
  	 * @returns {Promise<*>}
  	 */
@@ -172,7 +199,7 @@
  		let tabInfo = this.getTabInfo(tab.id);
  		var translator = tabInfo.translators[i];
  		
-@@ -1213,9 +1168,12 @@
+@@ -1213,9 +1170,12 @@
  	}
  	
  	this.saveAsWebpage = async function(tab, frameId, options={}) {
@@ -186,7 +213,7 @@
  		}
  	
  		if (tab.id != -1) {
-@@ -1241,8 +1199,7 @@
+@@ -1241,8 +1201,7 @@
  	});
  
  	async function getCurrentTab() {
@@ -289,9 +316,120 @@
  			tabId:tab.id,
 --- a/src/common/botBypass.js
 +++ b/src/common/botBypass.js
-@@ -186,23 +186,16 @@
+@@ -76,133 +76,21 @@
+ 	return false;
+ };
+ 
+-Zotero.BotBypass.bypassAmazonCaptcha = async function(attachment, options) {
+-	Zotero.debug(`Attempting Amazon CAPTCHA bot bypass for ${attachment.url}`);
+-	options = Zotero.Utilities.deepCopy(options);
+-	options.headers = Object.assign({}, options.headers, {
+-		'Sec-Fetch-Site': 'same-origin',
+-	});
+-
+-	let xhr = await Zotero.HTTP.request("GET", attachment.url, options);
+-	let validationError = Zotero.ItemSaver._validateResponse(attachment, xhr);
+-	if (!validationError) {
+-		return xhr.response;
+-	}
+-	throw new Error(validationError);
+-};
+-
+-Zotero.BotBypass.passJSDetectionViaHiddenIframe = async function(url, tab) {
+-	const id = Math.random().toString(36).slice(2, 11);
+-	const iframeUrl = Zotero.getExtensionURL("browserAttachmentMonitor/browserAttachmentMonitor.html");
+-
+-	Zotero.debug(`Attempting to pass JS bot detection via hidden iframe for URL: ${url}`);
+-
+-	// Wait for the monitor frame to load
+-	let messageListener;
+-	const waitForAttachmentPromise = new Promise((resolve) => {
+-		// WARNING: Do not make this listener async. The browser-polyfill wraps async
+-		// onMessage listeners such that they call sendResponse(undefined) for messages
+-		// they don't handle, stealing responses from other listeners. This will be safe
+-		// to change once Chromium fully supports native browser.* APIs.
+-		messageListener = (message, sender) => {
+-			if (message?.type === 'attachment-monitor-loaded'
+-				&& !message.success
+-				&& sender.tab?.id === tab.id
+-				&& Zotero.BrowserAttachmentMonitor._isMonitorPageSender(sender)) {
+-				Zotero.debug(`Iframe loaded for ${url}`);
+-				browser.runtime.onMessage.removeListener(messageListener);
+-				// Wait for 5s. Any longer means we've probably hit a Captcha page
+-				resolve(Zotero.BrowserAttachmentMonitor.waitForAttachment(tab.id, url, 5000))
+-			}
+-		};
+-		browser.runtime.onMessage.addListener(messageListener);
+-	});
+-
+-	await browser.scripting.executeScript({
+-		target: { tabId: tab.id },
+-		func: (url, id) => {
+-			return new Promise((resolve, reject) => {
+-				let iframe = document.createElement('iframe');
+-				iframe.style.display = 'none';
+-				iframe.src = url;
+-				iframe.id = id;
+-
+-				iframe.onload = () => {
+-					resolve();
+-				};
+-
+-				document.body.appendChild(iframe);
+-			});
+-		},
+-		args: [iframeUrl, id]
+-	});
+-
+-	try {
+-		let pdfURL = await waitForAttachmentPromise;
+-		Zotero.debug(`Successfully passed JS bot detection for URL: ${url}`);
+-		return pdfURL;
+-	}
+-	finally {
+-		browser.runtime.onMessage.removeListener(messageListener);
+-		await browser.scripting.executeScript({
+-			target: { tabId: tab.id },
+-			func: (id) => {
+-				const iframe = document.getElementById(id);
+-				if (iframe) {
+-					iframe.parentNode.removeChild(iframe);
+-				}
+-			},
+-			args: [id]
+-		});
+-	}
+-};
+-
+ Zotero.BotBypass.passJSDetectionViaWindowPrompt = async function(url, tab) {
+ 	Zotero.debug(`Attempting to pass JS bot detection via window prompt for URL: ${url}`);
  	
- 	// Create window for CAPTCHA solving
+-	// Get screen dimensions and position
+-	let left, top, width, height;
+-	try {
+-		const screenInfo = await browser.scripting.executeScript({
+-			target: { tabId: tab.id },
+-			func: () => {
+-				return {
+-					width: window.screen.availWidth,
+-					height: window.screen.availHeight,
+-					left: window.screen.availLeft,
+-					top: window.screen.availTop
+-				};
+-			}
+-		});
+-		const screen = screenInfo[0].result;
+-		width = Math.floor(screen.width * 0.8);
+-		height = Math.floor(screen.height * 0.8);
+-		left = screen.left + Math.floor((screen.width - width) / 2);
+-		top = screen.top + Math.floor((screen.height - height) / 2);
+-	} catch (e) {
+-		Zotero.debug(`Error getting screen dimensions and position for window prompt for ${url}`);
+-		Zotero.debug(e);
+-	}
+-	
+-	// Create window for CAPTCHA solving
++	// Open an ordinary tab for human challenge completion
  	const monitorUrl = Zotero.getExtensionURL("browserAttachmentMonitor/browserAttachmentMonitor.html");
 -	const window = await browser.windows.create({
 -		url: monitorUrl,
@@ -301,7 +439,7 @@
 -		left,
 -		top
 -	});
-+	const challengeTab = await browser.tabs.create({url: monitorUrl, active: true});
++	const challengeTab = (await References.openTabSurface(monitorUrl, {}, tab)).tabs[0];
  	
  	try {
  		// Wait for successful PDF URL capture
@@ -1019,6 +1157,32 @@
  Zotero.ItemSaver._fetchAttachment = async function(attachment, tab, attemptBotProtectionBypass=true) {
  	let options = { responseType: "arraybuffer", timeout: 60000, successCodes: false };
  	let cookies;
+@@ -253,23 +186,8 @@
+ 	}
+ 	Zotero.debug(`Error downloading attachment ${attachment.url}: ${errorMessage}. Attempting bot protection bypass`);
+ 	
+-	if (botBypassType === BYPASS_TYPE.AMAZON_CAPTCHA) {
+-		return Zotero.BotBypass.bypassAmazonCaptcha(attachment, options)
+-	}
+-	
+-	let originalUrl = attachment.url;
+-	try {
+-		let pdfURL = await Zotero.BotBypass.passJSDetectionViaHiddenIframe(attachment.url, tab);
+-		attachment.url = pdfURL;
+-		return await this._fetchAttachment(attachment, tab);
+-	}
+-	catch (e) {
+-		Zotero.debug(`Failed to pass JS bot detection via hidden iframe for URL: ${attachment.url}`);
+-		Zotero.debug(e);
+-		let pdfURL = await Zotero.BotBypass.passJSDetectionViaWindowPrompt(originalUrl, tab);
+-		attachment.url = pdfURL;
+-		return this._fetchAttachment(attachment, tab);
+-	}
++	attachment.url = await Zotero.BotBypass.passJSDetectionViaWindowPrompt(attachment.url, tab);
++	return this._fetchAttachment(attachment, tab, false);
+ };
+ 
+ Zotero.ItemSaver._validateResponse = function(attachment, xhr, contentType) {
 --- a/src/common/messages.js
 +++ b/src/common/messages.js
 @@ -140,7 +140,7 @@

@@ -3,7 +3,7 @@
 from pathlib import Path
 import hashlib,json,re,shutil,subprocess,zipfile,os
 ROOT=Path(__file__).resolve().parent
-REPO=ROOT.parents[2]
+REPO=ROOT.parents[1]
 WORK=ROOT/'.build/source'
 OUT=ROOT/'dist/references'
 VERSION='1.0.0'
