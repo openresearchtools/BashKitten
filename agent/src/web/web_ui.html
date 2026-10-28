@@ -3505,6 +3505,11 @@
       }
       refreshChanges(); updateBackdrop();
     }
+    function requestFilesLaunch(value) {
+      return api('/api/apps/files/open', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({
+        ...(value.projectId ? {projectId:value.projectId} : {}), ...(value.cwd ? {cwd:value.cwd} : {})
+      })});
+    }
     async function openFiles(cwd, projectId = null) {
       if (!fileManagerAllowed || (!cwd && !projectId)) return;
       const view=sessionView, destination={...(projectId ? {projectId} : {}), ...(cwd ? {cwd} : {})};
@@ -3518,14 +3523,15 @@
           tab=window.open('about:blank', '_blank');
           if (!tab) throw Error('Allow a new tab to open Files.');
           tab.opener=null;
-          const launch=await api('/api/apps/files/open', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(destination)});
+          const launch=await requestFilesLaunch(destination);
           const url=new URL(launch.url);
           if (launch.component!=='files' || !['http:', 'https:'].includes(url.protocol) || url.hostname!=='127.0.0.1' || url.username || url.password) throw Error('The backend did not return an authorized Files URL.');
           if (!fileManagerAllowed) throw Error('The host has disabled Files for this connection.');
+          if (tab.closed || tab.location.href!=='about:blank') return;
           tab.location.replace(url.href);
         }
       } catch (error) {
-        tab?.close();
+        try { if (tab && !tab.closed && tab.location.href==='about:blank') tab.close(); } catch {}
         if (sessionView===view) $('#composerHint').textContent=error.message;
       }
     }
@@ -3842,11 +3848,7 @@
           showSettingsView(action === 'providers' ? 'services' : 'app');
           return true;
         }
-        if (action === 'files-open') {
-          return api('/api/apps/files/open', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({
-            ...(value.projectId ? {projectId:value.projectId} : {}), ...(value.cwd ? {cwd:value.cwd} : {})
-          })});
-        }
+        if (action === 'files-open') return requestFilesLaunch(value);
         if (action === 'folders') {
           if (typeof value.requestId !== 'string' || !value.requestId) throw Error('Missing folder request identity');
           nativeFolderRequests.get(value.requestId)?.abort();
