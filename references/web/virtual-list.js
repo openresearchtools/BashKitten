@@ -18,6 +18,7 @@ export class VirtualList {
     rowRole = "option",
     rowAttributes = () => ({}),
     total = null,
+    header = null,
   }) {
     Object.assign(this, {
       element,
@@ -31,6 +32,7 @@ export class VirtualList {
       onStatus,
       rowRole,
       rowAttributes,
+      header,
     });
     this.pages = new Map();
     this.renderedRows = new Map();
@@ -50,6 +52,7 @@ export class VirtualList {
       "aria-multiselectable": "true",
     });
     this.spacer = node("div", { class: "virtual-space" });
+    if (header) this.root.append(header);
     this.root.append(this.spacer);
     element.append(this.root);
     this.scroll = () => this.draw();
@@ -320,7 +323,10 @@ export class VirtualList {
     let index = this.focusIndex;
     const page = Math.max(
       1,
-      Math.floor(this.root.clientHeight / this.rowHeight),
+      Math.floor(
+        (this.root.clientHeight - (this.header?.offsetHeight || 0)) /
+          this.rowHeight,
+      ),
     );
     if (event.key === "ArrowDown") index++;
     else if (event.key === "ArrowUp") index--;
@@ -350,10 +356,14 @@ export class VirtualList {
       this.root.scrollTop = index * this.rowHeight;
     else if (
       (index + 1) * this.rowHeight >
-      this.root.scrollTop + this.root.clientHeight
+      this.root.scrollTop +
+        this.root.clientHeight -
+        (this.header?.offsetHeight || 0)
     )
       this.root.scrollTop =
-        (index + 1) * this.rowHeight - this.root.clientHeight;
+        (index + 1) * this.rowHeight -
+        this.root.clientHeight +
+        (this.header?.offsetHeight || 0);
     this.select(index, event);
     this.draw();
   }

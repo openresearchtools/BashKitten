@@ -1,10 +1,9 @@
 /*
  * Copyright © 2009 Center for History and New Media, George Mason University.
  * BashKitten web adaptation, 2026. SPDX-License-Identifier: AGPL-3.0-or-later
- * Behavior port of Zotero 7.0.32 addCitationDialog.js/.xhtml, exact donor
- * 188c54c186fbbaa6889145986d43ba64160a44fa, preserved in vendor/classic-dialog.
- * Native DOM replaces XUL; API pages replace Zotero's native virtualized trees.
- * The caller retains the explicit document/view and owns the final mutation.
+ * Retains pinned classic citation behavior and native CSL processing. The
+ * compact table/chip layout follows the user's 28 October UI amendment.
+ * The caller owns the captured project, document/view and final mutation.
  */
 import {
   node,
@@ -14,12 +13,13 @@ import {
   title,
   creators,
   year,
+  human,
   query,
   debounce,
   renderedHTML,
 } from "./common.js";
 import { VirtualList } from "./virtual-list.js";
-import { Collections } from "./collections.js";
+
 export async function chooseCitation({
   api,
   projectId,
@@ -33,7 +33,8 @@ export async function chooseCitation({
   signal?.throwIfAborted();
   const scoped = api.project(projectId),
     controller = new AbortController(),
-    d = dialog("Add / Edit Citation");
+    d = dialog("Add / Edit Citation"),
+    phoneLayout = matchMedia("(max-width: 700px)");
   d.el.classList.add("citation-dialog");
   const initialItems = structuredClone(initial?.items || []),
     snapshotItems = Object.create(null),
@@ -42,13 +43,11 @@ export async function chooseCitation({
       id: initial?.id || crypto.randomUUID(),
       items: initialItems,
     };
-  let multiple = initialItems.length > 1,
-    serial = 0,
+  let serial = 0,
     active = -1,
     librarySelection = new Map(),
-    selectionAnchor = 0,
+    selectionAnchor = null,
     rangeController = null,
-    collection = null,
     previewGeneration = 0,
     previewController = null,
     previewResult = null,
@@ -56,57 +55,59 @@ export async function chooseCitation({
     autoRegenerate = -1,
     regenerationWork = null,
     accepted = false,
-    loadingInitial = true;
-  let searchTerm = "";
+    loadingInitial = true,
+    searchTerm = "",
+    tableSort = "title",
+    tableDirection = "asc",
+    selectedList = null,
+    sourceDialog = null,
+    sourceHeading = null;
   let sources = initialItems.map((item) => ({
     uid: ++serial,
     citation: item,
     item: null,
   }));
-  const body = node("div", { class: "citation-layout" }),
-    collectionPane = node("section", {
-      class: "citation-collections",
-      "aria-label": "Collections",
-    }),
-    libraryPane = node("section", {
-      class: "citation-library",
-      "aria-label": "Library references",
-    }),
-    selectedPane = node("section", {
-      class: "citation-selected",
-      "aria-label": "Citation sources",
+  const children = new Set(),
+    extraColumns = new Map();
+  const defaultColumns = [
+    { id: "title", label: "Title", width: 300, sort: "title" },
+    { id: "creator", label: "Creator", width: 220, sort: "creator" },
+    { id: "date", label: "Date", width: 110, sort: "year" },
+  ];
+  const chips = node("div", {
+      class: "citation-chips",
+      "aria-label": "Selected citation sources",
     }),
     search = node("input", {
       type: "search",
-      placeholder: "Title, creator, year, fields or tags",
+      placeholder: "Search this project library",
       "aria-label": "Search references",
     }),
-    libraryRows = node("div", { class: "citation-results" }),
-    selectedRows = node("div", { class: "citation-results" });
-  const mode = button("Multiple sources", () => toggleMode()),
-    sort = node("input", { type: "checkbox", checked: !initial?.unsorted }),
-    sortLabel = field("Keep sources sorted by style", sort),
-    add = button("Add →", () => addSelected()),
-    remove = button("Remove", () => removeSelected()),
-    up = button("Move up", () => move(-1)),
-    down = button("Move down", () => move(1));
-  const sourceActions = node(
-    "div",
-    { class: "toolbar" },
-    add,
-    remove,
-    up,
-    down,
-  );
-  selectedPane.append(
-    node("h3", {}, "Citation sources"),
-    sortLabel,
-    selectedRows,
-    sourceActions,
-  );
-  libraryPane.append(field("Search this library", search), libraryRows);
-  body.append(collectionPane, libraryPane, selectedPane);
-  d.body.append(body);
+    addSelection = button("Add selected", () => addSelected(), {
+      hidden: true,
+    }),
+    columnButton = button("Columns", () => void chooseColumns()),
+    searchRow = node(
+      "div",
+      { class: "citation-search" },
+      search,
+      addSelection,
+      columnButton,
+    ),
+    libraryRows = node("div", { class: "citation-table" }),
+    tableHeader = node("div", {
+      class: "citation-table-header",
+      role: "row",
+      "aria-label": "Reference columns",
+    }),
+    previewBox = node("section", {
+      class: "citation-preview",
+      "aria-label": "Citation preview",
+      "aria-live": "polite",
+    }),
+    previewNotice = node("p", { class: "notice", role: "status" });
+  d.body.append(chips, searchRow, libraryRows, previewBox, previewNotice);
+
   const inputs = {
     prefix: node("input", { type: "text" }),
     suffix: node("input", { type: "text" }),
@@ -123,135 +124,164 @@ export async function chooseCitation({
     field("Locator", inputs.locator),
     field("Suppress author", inputs.suppressAuthor),
   );
-  d.body.append(controls);
-  const previewBox = node("section", {
-      class: "citation-preview",
-      "aria-label": "Citation preview",
-      "aria-live": "polite",
+  const remove = button("Remove source", () => removeSelected()),
+    up = button("↑", () => move(-1), {
+      "aria-label": "Move up",
+      title: "Move up",
     }),
-    previewNotice = node("p", { class: "notice", role: "status" }),
-    previewToggle = button("Hide preview", () => {
-      previewBox.hidden = !previewBox.hidden;
-      previewToggle.textContent = previewBox.hidden
-        ? "Show preview"
-        : "Hide preview";
-    });
-  d.body.append(previewBox, previewNotice);
-  const customEnabled = node("input", {
-    type: "checkbox",
-    checked: hasCustomPreview(),
-  });
-  const editor = node("div", {
-    class: "citation-preview custom-preview",
-    contenteditable: "true",
-    role: "textbox",
-    "aria-multiline": "true",
-    "aria-label": "Custom citation preview",
-    hidden: !customEnabled.checked,
-  });
-  if (cluster.customHTML) renderedHTML(editor, cluster.customHTML);
-  else editor.textContent = cluster.customText || "";
-  const customControls = node(
-    "div",
-    { class: "toolbar" },
-    field("Edit preview", customEnabled),
-  );
+    down = button("↓", () => move(1), {
+      "aria-label": "Move down",
+      title: "Move down",
+    }),
+    sourceActions = node("div", { class: "toolbar" }, remove, up, down);
+  const sort = node("input", { type: "checkbox", checked: !initial?.unsorted }),
+    sortLabel = field("Sort by style", sort),
+    editor = node("div", {
+      class: "citation-preview custom-preview",
+      contenteditable: "true",
+      role: "textbox",
+      "aria-multiline": "true",
+      "aria-label": "Custom citation preview",
+    }),
+    customControls = node("div", { class: "toolbar" });
   for (const [label, command] of [
     ["Bold", "bold"],
     ["Italic", "italic"],
     ["Superscript", "superscript"],
     ["Subscript", "subscript"],
   ]) {
-    const control = button(
-      label,
-      () => {
-        editor.focus();
-        document.execCommand(command);
-      },
-      { "aria-label": label, disabled: !customEnabled.checked },
-    );
+    const control = button(label, () => {
+      editor.focus();
+      document.execCommand(command);
+    });
     control.addEventListener("mousedown", (event) => event.preventDefault());
     customControls.append(control);
   }
-  d.body.append(customControls, editor);
-  customEnabled.addEventListener("change", () => {
-    editor.hidden = !customEnabled.checked;
-    updateControls();
-    if (customEnabled.checked) {
-      renderedHTML(editor, previewResult?.html || "");
-      if (!previewResult?.html) editor.textContent = previewResult?.text || "";
-      editor.focus();
-    } else {
-      delete cluster.customHTML;
-      delete cluster.customText;
-      invalidatePreview();
-    }
-  });
   editor.addEventListener("input", () => {
     cluster.customHTML = editor.innerHTML;
     delete cluster.customText;
     invalidatePreview();
   });
-  const confirm = button("Confirm", () => finish(), {
-    class: "primary",
-    disabled: true,
-  });
+  const editPreview = button("Edit preview", () => openPreviewEditor()),
+    confirm = button("Confirm", () => finish(), {
+      class: "primary",
+      disabled: true,
+    });
   d.actions.append(
-    mode,
-    previewToggle,
+    sortLabel,
+    editPreview,
     button("Cancel", () => d.el.close()),
     confirm,
   );
-  const selectedList = new VirtualList({
-    element: selectedRows,
-    label: "Selected citation sources",
-    rowHeight: 48,
-    pageSize: 80,
-    total: sources.length,
-    key: (entry) => entry.uid,
-    load: async ({ start, limit }) => ({
-      items: sources.slice(start, start + limit),
-      total: sources.length,
-      hasMore: start + limit < sources.length,
-    }),
-    render: (entry) =>
+
+  function childDialog(label) {
+    const child = dialog(label);
+    child.el.classList.add("citation-tool-dialog");
+    for (const name of ["pointerdown", "keydown", "input"])
+      child.el.addEventListener(
+        name,
+        () => {
+          queuedConfirm = null;
+        },
+        { capture: true },
+      );
+    children.add(child);
+    child.el.addEventListener("close", () => children.delete(child), {
+      once: true,
+    });
+    return child;
+  }
+  function columns() {
+    return [...defaultColumns, ...extraColumns.values()];
+  }
+  function cellValue(item, column) {
+    if (column.id === "title") return title(item);
+    if (column.id === "creator") return creators(item);
+    return String(item.data?.[column.id] ?? "");
+  }
+  function renderTableHeader() {
+    const list = columns();
+    libraryRows.style.setProperty(
+      "--citation-columns",
+      list
+        .map((column, index) =>
+          index === 0
+            ? "minmax(" + column.width + "px,1fr)"
+            : column.width + "px",
+        )
+        .join(" ") + " 44px",
+    );
+    libraryRows.style.setProperty(
+      "--citation-table-width",
+      list.reduce((sum, column) => sum + column.width, 0) + 44 + "px",
+    );
+    tableHeader.replaceChildren(
+      ...list.map((column) => {
+        if (!column.sort)
+          return node(
+            "span",
+            { role: "columnheader", title: column.label },
+            column.label,
+          );
+        const control = button(
+          column.label +
+            (tableSort === column.sort
+              ? tableDirection === "asc"
+                ? " ↑"
+                : " ↓"
+              : ""),
+          () => {
+            tableDirection =
+              tableSort === column.sort && tableDirection === "asc"
+                ? "desc"
+                : "asc";
+            tableSort = column.sort;
+            resetLibrary();
+            renderTableHeader();
+          },
+        );
+        return node(
+          "span",
+          {
+            role: "columnheader",
+            "aria-sort":
+              tableSort === column.sort
+                ? tableDirection === "asc"
+                  ? "ascending"
+                  : "descending"
+                : "none",
+          },
+          control,
+        );
+      }),
       node(
         "span",
-        { class: "source-label" },
-        node("strong", {}, entry.item ? title(entry.item) : entry.citation.id),
-        node(
-          "small",
-          {},
-          entry.item
-            ? [creators(entry.item), year(entry.item)]
-                .filter(Boolean)
-                .join(" · ")
-            : "Loading reference…",
-        ),
+        {
+          class: "citation-add-cell",
+          role: "columnheader",
+          "aria-label": "Add reference",
+        },
+        "+",
       ),
-    onSelect: (entry) => {
-      rangeController?.abort();
-      rangeController = null;
-      active = sources.findIndex((x) => x.uid === entry.uid);
-      librarySelection.clear();
-      library.setSelection([]);
-      updateControls();
-    },
-    onActivate: () => void requestConfirmation(),
-    onStatus: () => {},
-  });
-  selectedList.root.setAttribute("aria-multiselectable", "false");
+    );
+  }
   const library = new VirtualList({
     element: libraryRows,
-    label: "Search results",
-    rowHeight: 48,
+    label: "Library references",
+    header: tableHeader,
+    role: "grid",
+    rowRole: "row",
+    rowHeight: phoneLayout.matches ? 44 : 30,
     load: (args) =>
       scoped.request(
         "items?" +
           query({
             q: searchTerm,
-            collection: collection?.key,
-            sort: "title",
+            sort: tableSort,
+            direction: tableDirection,
+            fields: [...extraColumns.keys()]
+              .filter((key) => key !== "itemType")
+              .join(","),
             start: args.start,
             limit: args.limit,
             cursor: args.cursor,
@@ -260,43 +290,50 @@ export async function chooseCitation({
       ),
     render: (item) =>
       node(
-        "span",
-        { class: "source-label", title: title(item) + " · " + creators(item) },
-        node("strong", {}, title(item)),
+        "div",
+        { class: "citation-table-row" },
+        ...columns().map((column) => {
+          const value = cellValue(item, column),
+            truncated = item.meta?.truncatedFields?.includes(column.id);
+          return node(
+            "span",
+            { class: "citation-cell", role: "gridcell", title: value },
+            truncated
+              ? button(value + "…", () => void showFullValue(item, column), {
+                  class: "citation-cell-value",
+                  "aria-label":
+                    "Read full " + column.label + " for " + title(item),
+                })
+              : value,
+          );
+        }),
         node(
-          "small",
-          {},
-          [creators(item), year(item)].filter(Boolean).join(" · "),
+          "span",
+          { class: "citation-add-cell", role: "gridcell" },
+          button("+", () => addItem(item), {
+            class: "citation-add-button",
+            "aria-label": "Add " + title(item),
+            title: "Add reference",
+            disabled: loadingInitial,
+          }),
         ),
       ),
     onSelect: async (item, event) => {
       rangeController?.abort();
       rangeController = null;
-      if (!event.range || !multiple) selectionAnchor = event.index;
-      if (!multiple) {
-        const previous = sources[0]?.citation || {};
-        sources = [
-          { uid: ++serial, citation: { ...previous, id: item.id }, item },
-        ];
-        active = 0;
-        librarySelection = new Map([[item.key, item]]);
-        changed();
-      } else if (event.range) {
+      if (event.range && selectionAnchor?.generation === library.generation) {
         const current = (rangeController = new AbortController());
         librarySelection.clear();
         library.setSelection([]);
-        active = -1;
         updateControls();
         try {
           for await (const page of library.range(
-            Math.min(selectionAnchor, event.index),
-            Math.max(selectionAnchor, event.index),
+            Math.min(selectionAnchor.index, event.index),
+            Math.max(selectionAnchor.index, event.index),
             { signal: current.signal },
           )) {
             for (const record of page) librarySelection.set(record.key, record);
             library.setSelection(librarySelection.keys());
-            d.notice.textContent =
-              librarySelection.size + " references selected";
           }
         } catch (error) {
           if (error.name !== "AbortError" && rangeController === current) {
@@ -310,44 +347,36 @@ export async function chooseCitation({
             updateControls();
           }
         }
-        return;
       } else {
+        selectionAnchor = {
+          index: event.index,
+          generation: library.generation,
+        };
         if (!event.toggle) librarySelection.clear();
         if (event.toggle && librarySelection.has(item.key))
           librarySelection.delete(item.key);
         else librarySelection.set(item.key, item);
-        active = -1;
+        library.setSelection(librarySelection.keys());
         updateControls();
       }
-      library.setSelection(librarySelection.keys());
     },
-    onActivate: () => {
-      if (multiple) addSelected();
-      else void requestConfirmation();
-    },
+    onActivate: (item) => addItem(item),
     onStatus: (text, error) => {
-      if (error) d.notice.textContent = text;
+      d.notice.textContent = error?.message || text;
     },
   });
-  const collections = new Collections({
-    element: collectionPane,
-    api: scoped,
-    onSelect: (item) => {
-      collection = item;
-      rangeController?.abort();
-      rangeController = null;
-      selectionAnchor = 0;
-      librarySelection.clear();
-      library.reset({ preserveSelection: false });
-      updateControls();
-    },
-  });
-  const searchChanged = debounce(() => {
-    searchTerm = search.value;
-    selectionAnchor = 0;
+  renderTableHeader();
+  function resetLibrary() {
+    rangeController?.abort();
+    rangeController = null;
+    selectionAnchor = null;
     librarySelection.clear();
     library.reset({ preserveSelection: false });
     updateControls();
+  }
+  const searchChanged = debounce(() => {
+    searchTerm = search.value;
+    resetLibrary();
   });
   search.addEventListener("input", () => {
     rangeController?.abort();
@@ -355,6 +384,226 @@ export async function chooseCitation({
     library.controller.abort();
     searchChanged();
   });
+  const sizeRows = () => {
+    const position = library.root.scrollTop / library.rowHeight;
+    library.rowHeight = phoneLayout.matches ? 44 : 30;
+    library.root.scrollTop = position * library.rowHeight;
+    library.draw();
+  };
+  phoneLayout.addEventListener("change", sizeRows);
+
+  async function chooseColumns() {
+    const child = childDialog("Reference columns"),
+      request = new AbortController();
+    child.el.addEventListener("close", () => request.abort(), { once: true });
+    const options = node("div", { class: "citation-column-options" }),
+      searchColumns = node("input", {
+        type: "search",
+        placeholder: "Find a metadata field",
+        "aria-label": "Find a column",
+      });
+    child.body.append(field("Extra metadata columns", searchColumns), options);
+    child.notice.textContent = "Title, Creator and Date are always shown.";
+    child.actions.append(button("Cancel", () => child.el.close()));
+    child.open();
+    try {
+      const schema = await scoped.request("schema", { signal: request.signal });
+      if (request.signal.aborted) return;
+      const names = new Set(["itemType", "dateAdded", "dateModified"]);
+      for (const type of schema.itemTypes)
+        for (const entry of type.fields || []) {
+          names.add(entry.field);
+          if (entry.baseField) names.add(entry.baseField);
+        }
+      names.delete("title");
+      names.delete("date");
+      names.delete(undefined);
+      const entries = [...names]
+        .map((id) => ({
+          id,
+          label: schema.locales?.["en-US"]?.fields?.[id] || human(id),
+          width: id === "abstractNote" || id === "extra" ? 300 : 180,
+          sort: ["itemType", "dateModified"].includes(id) ? id : undefined,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      const controls = entries.map((column) => {
+        const input = node("input", {
+            type: "checkbox",
+            checked: extraColumns.has(column.id),
+          }),
+          row = field(column.label, input);
+        options.append(row);
+        return { column, input, row };
+      });
+      searchColumns.addEventListener("input", () => {
+        const term = searchColumns.value.toLocaleLowerCase();
+        for (const { column, row } of controls)
+          row.hidden = !column.label.toLocaleLowerCase().includes(term);
+      });
+      child.actions.append(
+        button(
+          "Apply columns",
+          () => {
+            extraColumns.clear();
+            for (const { column, input } of controls)
+              if (input.checked) extraColumns.set(column.id, column);
+            renderTableHeader();
+            resetLibrary();
+            child.el.close();
+          },
+          { class: "primary" },
+        ),
+      );
+    } catch (error) {
+      if (!request.signal.aborted) child.notice.textContent = error.message;
+    }
+  }
+  async function showFullValue(item, column) {
+    const child = childDialog(column.label),
+      request = new AbortController();
+    child.el.addEventListener("close", () => request.abort(), { once: true });
+    child.body.append(node("p", {}, title(item)));
+    child.actions.append(button("Close", () => child.el.close()));
+    child.open();
+    try {
+      const full = await scoped.request(
+        "items/" + encodeURIComponent(item.key),
+        { signal: request.signal },
+      );
+      if (!request.signal.aborted)
+        child.body.append(
+          node("p", { class: "citation-full-value" }, cellValue(full, column)),
+        );
+    } catch (error) {
+      if (!request.signal.aborted) child.notice.textContent = error.message;
+    }
+  }
+  function sourceLabel(source) {
+    if (!source.item) return "Loading reference…";
+    return [
+      source.item.meta?.creatorSummary ||
+        creators(source.item) ||
+        title(source.item),
+      year(source.item),
+    ]
+      .filter(Boolean)
+      .join(", ");
+  }
+  function showSource(uid) {
+    rangeController?.abort();
+    rangeController = null;
+    active = sources.findIndex((source) => source.uid === uid);
+    if (active < 0) return;
+    sourceDialog?.el.close();
+    const child = (sourceDialog = childDialog("Citation source"));
+    sourceHeading = node(
+      "p",
+      { class: "detail-title" },
+      title(sources[active].item),
+    );
+    sourceDialog.body.append(
+      sourceHeading,
+      node("p", { class: "notice" }, sourceLabel(sources[active])),
+      controls,
+      sourceActions,
+    );
+    sourceDialog.actions.append(
+      button("Done", () => child.el.close(), { class: "primary" }),
+    );
+    sourceDialog.el.addEventListener(
+      "close",
+      () => {
+        if (sourceDialog === child) {
+          sourceDialog = null;
+          sourceHeading = null;
+        }
+      },
+      { once: true },
+    );
+    updateControls();
+    sourceDialog.open();
+    inputs.locator.focus();
+  }
+  function showAllSources() {
+    const child = childDialog("Citation sources"),
+      rows = node("div", { class: "search-results" });
+    child.body.append(rows);
+    selectedList = new VirtualList({
+      element: rows,
+      label: "Selected citation sources",
+      rowHeight: 48,
+      key: (source) => source.uid,
+      total: sources.length,
+      load: async ({ start, limit }) => ({
+        items: sources.slice(start, start + limit),
+        total: sources.length,
+        hasMore: start + limit < sources.length,
+      }),
+      render: (source) =>
+        node(
+          "span",
+          { class: "source-label" },
+          node("strong", {}, title(source.item)),
+          node("small", {}, sourceLabel(source)),
+        ),
+      onSelect: (source) => showSource(source.uid),
+      onActivate: (source) => showSource(source.uid),
+    });
+    child.actions.append(button("Close", () => child.el.close()));
+    child.el.addEventListener(
+      "close",
+      () => {
+        selectedList?.destroy();
+        selectedList = null;
+      },
+      { once: true },
+    );
+    child.open();
+  }
+  function redrawSources() {
+    const start = Math.max(0, Math.floor(active / 8) * 8);
+    chips.replaceChildren(
+      ...sources
+        .slice(start, start + 8)
+        .map((source) =>
+          button(sourceLabel(source) + " ▾", () => showSource(source.uid), {
+            class: "citation-chip",
+            title: title(source.item) + " · " + sourceLabel(source),
+            "aria-label": "Edit " + title(source.item),
+          }),
+        ),
+    );
+    if (sources.length > 8)
+      chips.append(
+        button("All sources (" + sources.length + ")", () => showAllSources()),
+      );
+    chips.hidden = !sources.length;
+    selectedList?.reset({ preservePosition: true, total: sources.length });
+    if (sourceHeading && sources[active])
+      sourceHeading.textContent = title(sources[active].item);
+    updateControls();
+  }
+  function openPreviewEditor() {
+    const child = childDialog("Edit citation preview");
+    if (cluster.customHTML !== undefined)
+      renderedHTML(editor, cluster.customHTML);
+    else if (cluster.customText !== undefined)
+      editor.textContent = cluster.customText;
+    else renderedHTML(editor, previewResult?.html || "");
+    if (!editor.textContent && !hasCustomPreview())
+      editor.textContent = previewResult?.text || "";
+    child.body.append(customControls, editor);
+    child.actions.append(
+      button("Use generated preview", () => {
+        clearCustomPreview();
+        invalidatePreview();
+        child.el.close();
+      }),
+      button("Done", () => child.el.close(), { class: "primary" }),
+    );
+    child.open();
+    editor.focus();
+  }
   function snapshot() {
     return {
       ...cluster,
@@ -371,15 +620,10 @@ export async function chooseCitation({
     };
   }
   function updateControls() {
-    library.root.setAttribute("aria-multiselectable", String(multiple));
-    selectedPane.hidden = !multiple;
-    mode.textContent = multiple ? "Single source" : "Multiple sources";
-    mode.disabled = multiple && sources.length > 1;
-    add.disabled = !multiple || !librarySelection.size || !!rangeController;
-    remove.disabled = active < 0;
+    const source = sources[active];
+    remove.disabled = !source;
     up.disabled = active <= 0;
     down.disabled = active < 0 || active >= sources.length - 1;
-    const source = sources[active];
     for (const [key, input] of Object.entries(inputs)) {
       input.disabled = !source;
       const value =
@@ -390,39 +634,19 @@ export async function chooseCitation({
             ? !!source?.citation["suppress-author"]
             : "");
       if (input.type === "checkbox") input.checked = !!value;
-      // Background previews need no DOM write when the field already shows
-      // its source value; leave the native editing control alone in that case.
       else if (input.value !== String(value)) input.value = value;
     }
-    if (active >= 0) selectedList.focusIndex = active;
-    selectedList.setSelection(source ? [source.uid] : []);
     confirm.disabled =
       loadingInitial ||
       !sources.length ||
-      sources.some((s) => !s.item) ||
+      sources.some((source) => !source.item) ||
       !previewResult;
-    customEnabled.disabled = loadingInitial || !sources.length;
-    editor.contentEditable = String(
-      customEnabled.checked && !customEnabled.disabled,
-    );
-    for (const control of customControls.querySelectorAll("button"))
-      control.disabled = !customEnabled.checked || customEnabled.disabled;
-  }
-  function redrawSources() {
-    const scroll = selectedList.root.scrollTop;
-    selectedList.reset({ preserveSelection: false, total: sources.length });
-    selectedList.root.scrollTop = scroll;
-    if (active >= 0) {
-      const top = active * selectedList.rowHeight;
-      if (top < selectedList.root.scrollTop) selectedList.root.scrollTop = top;
-      else if (
-        top + selectedList.rowHeight >
-        selectedList.root.scrollTop + selectedList.root.clientHeight
-      )
-        selectedList.root.scrollTop =
-          top + selectedList.rowHeight - selectedList.root.clientHeight;
-    }
-    updateControls();
+    editPreview.disabled = loadingInitial || !sources.length;
+    addSelection.hidden = librarySelection.size < 2;
+    addSelection.disabled =
+      loadingInitial || !!rangeController || !librarySelection.size;
+    for (const control of libraryRows.querySelectorAll(".citation-add-button"))
+      control.disabled = loadingInitial;
   }
   function invalidatePreview(schedule = true) {
     queuedConfirm = null;
@@ -526,17 +750,17 @@ export async function chooseCitation({
     redrawSources();
     void regenerateAndPreview();
   }
-  function toggleMode() {
-    if (multiple && sources.length > 1) return;
+
+  function addItem(item) {
+    if (loadingInitial) return;
     rangeController?.abort();
     rangeController = null;
-    multiple = !multiple;
-    if (!multiple && sources.length) active = 0;
-    updateControls();
-    schedulePreview();
+    sources.push({ uid: ++serial, item, citation: { id: item.id } });
+    active = sources.length - 1;
+    changed();
   }
   function addSelected() {
-    if (!librarySelection.size || rangeController) return;
+    if (loadingInitial || rangeController) return;
     for (const item of librarySelection.values())
       sources.push({ uid: ++serial, item, citation: { id: item.id } });
     active = sources.length - 1;
@@ -548,6 +772,7 @@ export async function chooseCitation({
     if (active < 0) return;
     sources.splice(active, 1);
     active = Math.min(active, sources.length - 1);
+    sourceDialog?.el.close();
     changed();
   }
   function move(direction) {
@@ -665,7 +890,7 @@ export async function chooseCitation({
       previewResult = result;
       renderedHTML(previewBox, result.html || "");
       if (!result.html) previewBox.textContent = result.text || "";
-      if (customEnabled.checked && !hasCustomPreview()) {
+      if (editor.isConnected && !hasCustomPreview()) {
         renderedHTML(editor, result.html || "");
         if (!result.html) editor.textContent = result.text || "";
       }
@@ -731,9 +956,10 @@ export async function chooseCitation({
         previewController?.abort();
         searchChanged.cancel();
         schedulePreview.cancel();
+        phoneLayout.removeEventListener("change", sizeRows);
         library.destroy();
-        selectedList.destroy();
-        collections.destroy();
+        selectedList?.destroy();
+        for (const child of [...children]) child.el.close();
         signal?.removeEventListener("abort", abort);
         resolve(accepted ? snapshot() : null);
       },

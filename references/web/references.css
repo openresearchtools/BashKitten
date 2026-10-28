@@ -269,8 +269,7 @@ h3 {
   font-size: 16px;
 }
 .collection-list,
-.item-list,
-.citation-results {
+.item-list {
   min-height: 120px;
   flex: 1;
   display: flex;
@@ -466,9 +465,13 @@ h3 {
 .dialog-actions .primary {
   margin-left: auto;
 }
+/* The citation chooser uses one project-scoped, windowed table. */
 .citation-dialog {
-  width: min(1100px, calc(100vw - 24px));
-  height: min(760px, calc(100dvh - 24px));
+  width: min(980px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  height: min(560px, calc(100dvh - 24px));
+  padding: 12px;
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -476,35 +479,186 @@ h3 {
 .citation-dialog:not([open]) {
   display: none;
 }
+.citation-dialog > h2 {
+  flex-shrink: 0;
+  font-size: 16px;
+  margin-bottom: 8px;
+}
 .citation-dialog .dialog-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
+  min-height: 0;
   overflow: auto;
 }
-.citation-layout {
-  display: grid;
-  grid-template-columns: minmax(140px, 0.8fr) minmax(200px, 2fr) minmax(
-      180px,
-      1fr
-    );
-  gap: 12px;
-  flex: 1;
-  min-height: 220px;
+.citation-dialog .notice:empty {
+  display: none;
 }
-.citation-collections,
-.citation-library,
-.citation-selected {
+.citation-dialog > .notice,
+.citation-dialog .dialog-actions {
+  flex-shrink: 0;
+}
+.citation-dialog .dialog-actions {
+  margin-top: 8px;
+}
+.citation-dialog button,
+.citation-dialog input,
+.citation-dialog select,
+.citation-tool-dialog button,
+.citation-tool-dialog input,
+.citation-tool-dialog select {
+  border-radius: 4px;
+}
+.citation-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 76px;
+  overflow: auto;
+  flex-shrink: 0;
+}
+.citation-chip {
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.citation-search {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.citation-search input {
+  flex: 1;
+  width: 0;
+}
+.citation-table {
+  display: flex;
+  flex-direction: column;
+  min-height: 100px;
+  flex: 1;
+}
+.citation-table .virtual-list {
+  border: 1px solid var(--line);
+  min-height: 80px;
+}
+.citation-table .virtual-space {
+  min-width: var(--citation-table-width);
+}
+.citation-table-header,
+.citation-table-row {
+  display: grid;
+  grid-template-columns: var(--citation-columns);
+  min-width: var(--citation-table-width);
+  width: 100%;
+  align-items: stretch;
+}
+.citation-table-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  min-height: 30px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.citation-table-header > span {
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.citation-table-header button {
+  padding: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  font-weight: 600;
+  text-align: left;
+}
+.citation-table .virtual-row {
+  overflow: visible;
+  border-radius: 0;
+  background: var(--surface);
+}
+.citation-table .virtual-row:nth-child(even) {
+  background: color-mix(in srgb, var(--panel) 55%, var(--surface));
+}
+.citation-table .virtual-row[aria-selected="true"] {
+  background: var(--accent);
+  color: #111;
+}
+.citation-table-row {
+  height: 100%;
+}
+.citation-cell {
+  min-width: 0;
+  padding: 5px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.citation-cell-value {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+}
+.citation-add-cell {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+.citation-table-header .citation-add-cell {
+  background: var(--panel);
+}
+.citation-table .virtual-row[aria-selected="true"] .citation-add-cell {
+  background: var(--accent);
+  color: #111;
+}
+.citation-add-button {
+  width: 30px;
+  min-height: 26px;
+  padding: 0;
+  line-height: 1;
+  font-size: 18px;
+}
+.citation-dialog .citation-preview {
+  flex-shrink: 0;
+  min-height: 36px;
+  max-height: 100px;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.citation-tool-dialog {
+  width: min(560px, calc(100vw - 24px));
+  border-radius: 8px;
+}
+.citation-tool-dialog .dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.citation-column-options {
+  max-height: 45dvh;
+  overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-width: 0;
-  min-height: 0;
 }
-.citation-collections {
-  border-right: 1px solid var(--line);
-  padding-right: 10px;
+.citation-full-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .source-label {
   display: flex;
@@ -527,8 +681,37 @@ h3 {
 }
 .citation-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
+}
+.citation-fields .field:last-child {
+  grid-column: 1/-1;
+}
+@media (min-width: 701px) {
+  .citation-dialog button,
+  .citation-dialog input,
+  .citation-dialog select {
+    font-size: 12px;
+    line-height: 1.25;
+    padding: 4px 7px;
+    min-height: 26px;
+  }
+  .citation-dialog input[type="checkbox"] {
+    min-height: 0;
+    margin: 0;
+  }
+  .citation-dialog .field {
+    gap: 3px;
+  }
+  .citation-dialog .citation-add-button {
+    padding: 0;
+    font-size: 18px;
+  }
+  .citation-dialog .citation-table-header button,
+  .citation-dialog .citation-cell-value {
+    min-height: 0;
+    padding: 0;
+  }
 }
 .citation-preview {
   max-height: 120px;
@@ -631,12 +814,6 @@ h3 {
   .creator-row select {
     grid-column: 1/-1;
   }
-  .citation-layout {
-    grid-template-columns: 130px minmax(180px, 1fr) minmax(160px, 1fr);
-  }
-  .citation-fields {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 @media (max-width: 700px) {
   .filter-groups {
@@ -683,39 +860,51 @@ h3 {
   .citation-dialog {
     height: calc(100dvh - 12px);
     width: calc(100vw - 12px);
+    max-width: calc(100vw - 12px);
     max-height: calc(100dvh - 12px);
-    padding: 12px;
+    padding: 10px;
   }
-  .citation-layout {
-    display: flex;
-    flex-direction: column;
-    flex: none;
-    min-height: 0;
-  }
-  .citation-collections {
-    max-height: 180px;
-    min-height: 130px;
-    border: 0;
-    padding: 0;
-  }
-  .citation-library {
-    height: 260px;
-  }
-  .citation-selected {
-    height: 240px;
-  }
-  .citation-fields {
-    grid-template-columns: 1fr 1fr;
-  }
-  .citation-fields .field:last-child {
-    grid-column: 1/-1;
+  .citation-dialog button,
+  .citation-dialog input:not([type="checkbox"]),
+  .citation-dialog select,
+  .citation-tool-dialog button,
+  .citation-tool-dialog input:not([type="checkbox"]),
+  .citation-tool-dialog select {
+    min-height: 40px;
   }
   .citation-dialog .dialog-actions {
     gap: 4px;
   }
   .citation-dialog .dialog-actions button {
     font-size: 12px;
-    padding: 7px 9px;
+    padding: 6px 8px;
+  }
+  .citation-dialog .dialog-actions .field {
+    font-size: 11px;
+    gap: 3px;
+  }
+  .citation-table .virtual-list {
+    overscroll-behavior: auto;
+  }
+  .citation-table-header {
+    min-height: 40px;
+  }
+  .citation-table-header button {
+    min-height: 30px;
+  }
+  .citation-cell {
+    padding-block: 12px;
+  }
+  .citation-add-button {
+    width: 40px;
+    min-height: 40px;
+  }
+  .citation-dialog .citation-chip {
+    min-height: 36px;
+    font-size: 12px;
+  }
+  .citation-tool-dialog {
+    max-width: calc(100vw - 12px);
   }
   .reference-dialog {
     padding: 14px;
