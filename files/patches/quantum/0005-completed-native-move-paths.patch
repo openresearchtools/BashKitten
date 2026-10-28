@@ -1,0 +1,446 @@
+--- a/backend/internal/web/httpRouter.go
++++ b/backend/internal/web/httpRouter.go
+@@ -62,6 +62,7 @@
+ 	api.HandleFunc("POST /resources", withUser(ResourcePostHandler))
+ 	api.HandleFunc("PUT /resources", withUser(resourcePutHandler))
+ 	api.HandleFunc("PATCH /resources", withUser(ResourcePatchHandler))
++	api.HandleFunc("OPTIONS /resources", withUser(resourcePatchCapabilitiesHandler))
+ 	api.HandleFunc("DELETE /resources/bulk", withUser(ResourceBulkDeleteHandler))
+ 	api.HandleFunc("POST /resources/archive", withUser(archiveCreateHandler))
+ 	api.HandleFunc("POST /resources/unarchive", withUser(unarchiveHandler))
+--- a/backend/internal/web/resource.go
++++ b/backend/internal/web/resource.go
+@@ -318,6 +318,8 @@
+ 
+ // MoveCopyItem represents a single item in a move/copy request
+ type MoveCopyItem struct {
++	Phase      string `json:"phase,omitempty"`
++	Position   int    `json:"position"` // Native request order, never caller supplied.
+ 	FromSource string `json:"fromSource,omitempty"`
+ 	FromPath   string `json:"fromPath,omitempty"`
+ 	ToSource   string `json:"toSource,omitempty"`
+@@ -327,6 +329,7 @@
+ 
+ // MoveCopyRequest represents a move/copy operation request
+ type MoveCopyRequest struct {
++	Observe   []string       `json:"observe,omitempty"` // Scoped paths whose atomic publication needs a receipt.
+ 	Items     []MoveCopyItem `json:"items"`
+ 	Action    string         `json:"action"`    // "copy", "move", or "rename"
+ 	Overwrite bool           `json:"overwrite"` // Overwrite if destination exists
+@@ -334,9 +337,15 @@
+ }
+ 
+ // MoveCopyResponse represents the response from a move/copy operation
++type completedCopyPath struct {
++	Position int    `json:"position"`
++	ToPath   string `json:"toPath"`
++}
++
+ type MoveCopyResponse struct {
+-	Succeeded []MoveCopyItem `json:"succeeded"`
+-	Failed    []MoveCopyItem `json:"failed"`
++	Changed   []completedCopyPath `json:"changed"`
++	Succeeded []MoveCopyItem      `json:"succeeded"`
++	Failed    []MoveCopyItem      `json:"failed"`
+ }
+ 
+ // resourceBulkDeleteHandler deletes multiple resources in a single request.
+@@ -1187,6 +1196,11 @@
+ 	return http.StatusOK, nil
+ }
+ 
++// resourcePatchCapabilitiesHandler lets a host check native receipts before mutation.
++func resourcePatchCapabilitiesHandler(w http.ResponseWriter, r *http.Request, _ *Context) (int, error) {
++	return RenderJSON(w, r, map[string]string{"completedPaths": "scoped-v1", "atomicCopy": "observed-v1"})
++}
++
+ // resourcePatchHandler performs a patch operation (e.g., move, copy, rename) on resources.
+ // @Summary Move, copy, or rename resources
+ // @Description Performs move, copy, or rename operations on multiple resources. All operations are performed atomically.
+@@ -1224,12 +1238,25 @@
+ 	}
+ 
+ 	response := MoveCopyResponse{
++		Changed:   make([]completedCopyPath, 0),
+ 		Succeeded: make([]MoveCopyItem, 0),
+ 		Failed:    make([]MoveCopyItem, 0),
+ 	}
+ 
+-	// Process each item
+-	for _, item := range req.Items {
++	observed := make(map[string]bool, len(req.Observe))
++	if d.Share.Hash == "" {
++		for _, name := range req.Observe {
++			clean, err := utils.SanitizePath(name)
++			if err != nil {
++				return http.StatusBadRequest, err
++			}
++			observed["/"+strings.Trim(clean, "/")] = true
++		}
++	}
++	// Process each item, preserving request order even in partial failures.
++	for position, item := range req.Items {
++		item.Position = position
++		item.Phase = ""
+ 		clientFromPath := item.FromPath
+ 		clientToPath := item.ToPath
+ 
+@@ -1444,6 +1471,15 @@
+ 			dst:      realDest,
+ 			d:        d,
+ 			isSrcDir: isSrcDir,
++			onCopy: func(destination string) {
++				name := completedMovePath(dstIdx.MakeIndexPath(destination, false).String(), userscopeDst)
++				info, statErr := os.Stat(destination)
++				for candidate := range observed {
++					if candidate == name || (statErr == nil && info.IsDir() && strings.HasPrefix(candidate, strings.TrimRight(name, "/")+"/")) {
++						response.Changed = append(response.Changed, completedCopyPath{Position: position, ToPath: candidate})
++					}
++				}
++			},
+ 		})
+ 		if err != nil {
+ 			logger.Errorf("Could not run patch action. src=%v dst=%v err=%v", realSrc, realDest, err)
+@@ -1455,12 +1491,31 @@
+ 				continue
+ 			}
+ 			item.Message = err.Error()
++			if _, removalFailed := err.(*fileutils.MoveSourceRemovalError); removalFailed {
++				item.Phase = "remove-source"
++			}
+ 			response.Failed = append(response.Failed, moveCopyWithClientPaths(item, clientFromPath, clientToPath))
+ 			continue
+ 		}
+ 
+-		// Success
+-		response.Succeeded = append(response.Succeeded, moveCopyWithClientPaths(item, clientFromPath, clientToPath))
++		// Auto-rename may have selected a different actual destination.
++		completedFrom := completedMovePath(srcIdx.MakeIndexPath(realSrc, isSrcDir).String(), userscopeSrc)
++		completedTo := completedMovePath(dstIdx.MakeIndexPath(realDest, isSrcDir).String(), userscopeDst)
++		response.Succeeded = append(response.Succeeded, moveCopyWithClientPaths(item, completedFrom, completedTo))
++		// Later batch items must observe identities carried by this completed move.
++		if req.Action != "copy" {
++			from := strings.TrimRight(completedFrom, "/")
++			to := strings.TrimRight(completedTo, "/")
++			carried := make([]string, 0)
++			for candidate := range observed {
++				if candidate == from || strings.HasPrefix(candidate, from+"/") {
++					carried = append(carried, to+strings.TrimPrefix(candidate, from))
++				}
++			}
++			for _, candidate := range carried {
++				observed[candidate] = true
++			}
++		}
+ 		activity.RecordPatchItem(r, toActor(d), req.Action, activity.MoveCopyItem{FromSource: item.FromSource, FromPath: clientFromPath, ToPath: clientToPath})
+ 	}
+ 
+@@ -1585,6 +1640,7 @@
+ }
+ 
+ type patchActionParams struct {
++	onCopy   func(string)
+ 	action   string
+ 	srcIndex string
+ 	dstIndex string
+@@ -1597,7 +1653,7 @@
+ func patchAction(ctx context.Context, params patchActionParams) error {
+ 	switch params.action {
+ 	case "copy":
+-		err := files.CopyResource(params.isSrcDir, params.srcIndex, params.dstIndex, params.src, params.dst)
++		err := files.CopyResource(params.isSrcDir, params.srcIndex, params.dstIndex, params.src, params.dst, params.onCopy)
+ 		return err
+ 	case "rename", "move":
+ 		idx := indexing.GetIndex(params.srcIndex)
+@@ -1624,7 +1680,7 @@
+ 
+ 		// delete thumbnails
+ 		preview.DelThumbs(ctx, *fileInfo)
+-		err = files.MoveResource(params.isSrcDir, params.srcIndex, params.dstIndex, params.src, params.dst)
++		err = files.MoveResource(params.isSrcDir, params.srcIndex, params.dstIndex, params.src, params.dst, params.onCopy)
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -1742,6 +1798,13 @@
+ 	return RenderJSON(w, r, items)
+ }
+ 
++func completedMovePath(indexPath, scope string) string {
++	if scope != "" && scope != "/" {
++		indexPath = strings.TrimPrefix(indexPath, strings.TrimRight(scope, "/"))
++	}
++	return "/" + strings.TrimLeft(indexPath, "/")
++}
++
+ func moveCopyWithClientPaths(item MoveCopyItem, clientFrom, clientTo string) MoveCopyItem {
+ 	item.FromPath = clientFrom
+ 	item.ToPath = clientTo
+--- a/backend/internal/adapters/fs/fileutils/file.go
++++ b/backend/internal/adapters/fs/fileutils/file.go
+@@ -55,34 +55,79 @@
+ 	return m
+ }
+ 
++// CopyOptions carries the owning native source policy and bounded publication observer.
++type CopyOptions struct {
++	RejectSymlinks bool
++	Completed      func(string)
++}
++
++func rejectsSymlinks(options []CopyOptions) bool {
++	for _, option := range options {
++		if option.RejectSymlinks {
++			return true
++		}
++	}
++	return false
++}
++func checkCopyLink(name string, options []CopyOptions) error {
++	if !rejectsSymlinks(options) {
++		return nil
++	}
++	info, err := os.Lstat(name)
++	if os.IsNotExist(err) {
++		return nil
++	}
++	if err != nil {
++		return err
++	}
++	if info.Mode()&os.ModeSymlink != 0 {
++		return &os.PathError{Op: "copy", Path: name, Err: syscall.ELOOP}
++	}
++	return nil
++}
++
++// MoveSourceRemovalError identifies a copied move whose source cleanup failed.
++type MoveSourceRemovalError struct{ Err error }
++
++func (e *MoveSourceRemovalError) Error() string { return e.Err.Error() }
++func (e *MoveSourceRemovalError) Unwrap() error { return e.Err }
++
+ // MoveFile moves a file from src to dst.
+ // By default, the rename system call is used. If src and dst point to different volumes,
+ // the file copy is used as a fallback.
+-func MoveFile(src, dst string) error {
++func MoveFile(src, dst string, options ...CopyOptions) error {
+ 	err := os.Rename(src, dst)
+ 	if err == nil {
++		for _, option := range options {
++			if option.Completed != nil {
++				option.Completed(dst)
++			}
++		}
+ 		return nil
+ 	}
+ 
+ 	// fallback
+-	err = CopyFile(src, dst)
++	err = CopyFile(src, dst, options...)
+ 	if err != nil {
+ 		logger.Errorf("CopyFile failed %v", err)
+ 		return err
+ 	}
+ 
+-	go func() {
+-		err = os.RemoveAll(src)
+-		if err != nil {
+-			logger.Errorf("os.Remove failed %v", err)
+-		}
+-	}()
+-
++	// Report completion only after the native source removal finishes.
++	if err := os.RemoveAll(src); err != nil {
++		return &MoveSourceRemovalError{Err: err}
++	}
+ 	return nil
+ }
+ 
+ // CopyFile copies a file or directory from source to dest and returns an error if any.
+-func CopyFile(source, dest string) error {
++func CopyFile(source, dest string, options ...CopyOptions) error {
++	if err := checkCopyLink(source, options); err != nil {
++		return err
++	}
++	if err := checkCopyLink(dest, options); err != nil {
++		return err
++	}
+ 	// Check if the source exists and whether it's a file or directory.
+ 	info, err := os.Stat(source)
+ 	if err != nil {
+@@ -91,15 +136,21 @@
+ 
+ 	if info.IsDir() {
+ 		// If the source is a directory, copy it recursively.
+-		return copyDirectory(source, dest)
++		return copyDirectory(source, dest, options...)
+ 	}
+ 
+ 	// If the source is a file, copy the file.
+-	return copySingleFile(source, dest)
++	return copySingleFile(source, dest, options...)
+ }
+ 
+ // copySingleFile handles copying a single file.
+-func copySingleFile(source, dest string) error {
++func copySingleFile(source, dest string, options ...CopyOptions) error {
++	if err := checkCopyLink(source, options); err != nil {
++		return err
++	}
++	if err := checkCopyLink(dest, options); err != nil {
++		return err
++	}
+ 	// Get source file info to preserve permissions
+ 	srcInfo, err := os.Stat(source)
+ 	if err != nil {
+@@ -108,7 +159,11 @@
+ 	sourcePerms := srcInfo.Mode().Perm()
+ 
+ 	// Open the source file.
+-	src, err := os.Open(source)
++	flags := os.O_RDONLY
++	if rejectsSymlinks(options) {
++		flags |= syscall.O_NOFOLLOW
++	}
++	src, err := os.OpenFile(source, flags, 0)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -120,12 +175,15 @@
+ 		return err
+ 	}
+ 
+-	// Create the destination file with source permissions
+-	dst, err := os.OpenFile(dest, os.O_RDWR|os.O_CREATE|os.O_TRUNC, sourcePerms)
++	// Stage in the destination directory, as native uploads do. A failed
++	// copy must not truncate an existing destination.
++	dst, err := os.CreateTemp(filepath.Dir(dest), ".filebrowser-copy-*")
+ 	if err != nil {
+ 		return err
+ 	}
+ 	defer dst.Close()
++	temporary := dst.Name()
++	defer os.Remove(temporary)
+ 
+ 	// Copy the contents of the file.
+ 	if err = copyFileContents(dst, src); err != nil {
+@@ -134,15 +192,29 @@
+ 
+ 	// Preserve source file permissions
+ 	// Handle chmod errors gracefully (e.g., in rootless containers where chmod may be restricted)
+-	err = os.Chmod(dest, sourcePerms)
++	err = os.Chmod(temporary, sourcePerms)
+ 	if err != nil {
+ 		// Log but don't fail - chmod may be restricted in some environments
+ 		// The file was copied successfully, so we continue
+ 		logger.Debugf("Could not set file permissions for %s (this may be expected in restricted environments): %v", dest, err)
+ 	}
+ 	// Preserve source file mod time
+-	if err := os.Chtimes(dest, srcInfo.ModTime(), srcInfo.ModTime()); err != nil {
++	if err := os.Chtimes(temporary, srcInfo.ModTime(), srcInfo.ModTime()); err != nil {
+ 		logger.Debugf("Could not preserve modification time for %s: %v", dest, err)
++	}
++	if err := dst.Sync(); err != nil {
++		return err
++	}
++	if err := dst.Close(); err != nil {
++		return err
++	}
++	if err := os.Rename(temporary, dest); err != nil {
++		return err
++	}
++	for _, option := range options {
++		if option.Completed != nil {
++			option.Completed(dest)
++		}
+ 	}
+ 	return nil
+ }
+@@ -160,7 +232,13 @@
+ }
+ 
+ // copyDirectory handles copying directories recursively.
+-func copyDirectory(source, dest string) error {
++func copyDirectory(source, dest string, options ...CopyOptions) error {
++	if err := checkCopyLink(source, options); err != nil {
++		return err
++	}
++	if err := checkCopyLink(dest, options); err != nil {
++		return err
++	}
+ 	srcInfo, err := os.Stat(source)
+ 	if err != nil {
+ 		return err
+@@ -184,13 +262,13 @@
+ 
+ 		if entry.IsDir() {
+ 			// Recursively copy subdirectories.
+-			err = copyDirectory(srcPath, destPath)
++			err = copyDirectory(srcPath, destPath, options...)
+ 			if err != nil {
+ 				return err
+ 			}
+ 		} else {
+ 			// Copy files.
+-			err = copySingleFile(srcPath, destPath)
++			err = copySingleFile(srcPath, destPath, options...)
+ 			if err != nil {
+ 				return err
+ 			}
+--- a/backend/internal/adapters/fs/files/files.go
++++ b/backend/internal/adapters/fs/files/files.go
+@@ -768,11 +768,11 @@
+ 	return nil
+ }
+ 
+-func MoveResource(isSrcDir bool, sourceIndex, destIndex, realsrc, realdst string) error {
+-	return moveResourceImpl(isSrcDir, sourceIndex, destIndex, realsrc, realdst, svc())
+-}
+-
+-func moveResourceImpl(isSrcDir bool, sourceIndex, destIndex, realsrc, realdst string, s *Service) error {
++func MoveResource(isSrcDir bool, sourceIndex, destIndex, realsrc, realdst string, onCopy ...func(string)) error {
++	return moveResourceImpl(isSrcDir, sourceIndex, destIndex, realsrc, realdst, svc(), onCopy...)
++}
++
++func moveResourceImpl(isSrcDir bool, sourceIndex, destIndex, realsrc, realdst string, s *Service, onCopy ...func(string)) error {
+ 	// Check if source and destination are the same file
+ 	if realsrc == realdst {
+ 		return fmt.Errorf("cannot move a file to itself: %s", realsrc)
+@@ -798,7 +798,7 @@
+ 	srcParentPath := filepath.Dir(realsrc)
+ 
+ 	// Perform the physical move
+-	err := fileutils.MoveFile(realsrc, realdst)
++	err := fileutils.MoveFile(realsrc, realdst, copyOptions(sourceIndex, onCopy)...)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -856,7 +856,19 @@
+ 	return nil
+ }
+ 
+-func CopyResource(isSrcDir bool, sourceIndex, destIndex, realsrc, realdst string) error {
++func copyOptions(source string, callbacks []func(string)) []fileutils.CopyOptions {
++	policy := fileutils.CopyOptions{}
++	if idx := indexing.GetIndex(source); idx != nil {
++		policy.RejectSymlinks = idx.Config.ResolvedRules.IgnoreAllSymlinks
++	}
++	options := []fileutils.CopyOptions{policy}
++	for _, callback := range callbacks {
++		options = append(options, fileutils.CopyOptions{Completed: callback})
++	}
++	return options
++}
++
++func CopyResource(isSrcDir bool, sourceIndex, destIndex, realsrc, realdst string, onCopy ...func(string)) error {
+ 	// Check if source and destination are the same file
+ 	if realsrc == realdst {
+ 		return fmt.Errorf("cannot copy a file to itself: %s", realsrc)
+@@ -869,7 +881,7 @@
+ 	}
+ 
+ 	// Perform the physical copy
+-	err := fileutils.CopyFile(realsrc, realdst)
++	err := fileutils.CopyFile(realsrc, realdst, copyOptions(sourceIndex, onCopy)...)
+ 	if err != nil {
+ 		logger.Errorf("[COPY] Physical copy failed: %v", err)
+ 		return err

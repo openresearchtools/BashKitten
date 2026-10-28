@@ -25,6 +25,19 @@ unaltered in the pristine native Files build.
 
 `patches/quantum/series` contains the scoped launch/provider seam, configurable
 request budget, native locally packaged Ace assets and licensed dependency imports.
+The native mutation receipt patch reports actual scoped destinations after
+auto-renaming, preserves request positions in partial batches, and advertises
+that contract through authenticated `OPTIONS /api/resources`. Native file copy
+reuses its existing byte-copy routine with upload-style temporary publication;
+source deletion finishes before a move is reported complete. Registered target
+observers receive bounded, exact publication receipts, including partial folder
+copies and the explicit source-removal failure phase. Successful moves carry
+request-local observers to their actual destinations before later batch items.
+The host rejects an older
+binary before mutation and never performs the filesystem move itself.
+Copy traversal also honors the native source's configured `IgnoreAllSymlinks`
+policy for nested source and destination paths, rejecting links visibly and
+opening source files without following links on the Linux/Termux targets.
 `patches/collabora/series` contains only the proven missing
 locked-light preference hook. Adaptation is applied to an external build copy.
 Updates must apply with zero fuzz; do not edit pristine source to make a patch fit.
@@ -84,6 +97,10 @@ Before an upstream update is accepted, repeat these focused external contracts:
 3. Exercise native non-admin proxy login, explicit source permissions, private
    files/links and bulk-operation denial, two simultaneous scoped tabs, source
    reconfiguration draining, and one-process lifecycle through real Caddy HTTPS.
+   Verify actual auto-suffix receipts, ordered partial batches, atomic overwrite
+   failure, source-removal failure and registered-child publication receipts;
+   moves retain document identities, while copies and overwritten identities
+   retain their separate history/authorization boundaries.
 4. Verify proof rejection/rotation, independent human/Pi identities on one broker,
    all six formats, native edit/save/Save As/export, lock conflicts, interruption,
    permission revocation, durable save/version reconciliation and restart recovery.

@@ -114,6 +114,26 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
   These are development validations; final sealing correctly refused dirty
   source. A clean committed rebuild and normal package collector acceptance
   remain required, including the final capability patch.
+- Native move/copy receipts now report actual auto-suffixed paths, request
+  positions and observed atomic publications during partial directory operations.
+  The actual native HTTP checks passed rename, folder move, mixed 207 results,
+  safe overwrite, partial-copy receipts and rejection of browser-supplied
+  observers. A chained native move followed by an overwrite also reported the
+  newly occupied destination at the exact later batch position. An older native binary returned 503 before any file mutation.
+  Forced mid-copy failure preserved the old destination without a false receipt;
+  a real cross-device source-cleanup failure retained its explicit failure phase.
+  Configured symlink exclusion also rejected source and destination traversal
+  without copying outside content or writing outside the selected folder.
+  Evidence: `BashkittenBuild/verification/files-moves-20261028/`.
+- The runtime owner's actual gateway proof preserved document ID/history across
+  active-document rename, directory move and auto-suffixing, and rejected the old
+  native session. An overwritten target's old ID opened only retained history;
+  a copy received a new ID. Partial directory failure retired only destinations
+  whose native publications were reported. Explicit project-root relinking
+  preserved ID/history and rejected unrelated replacement bytes. Cold documents
+  do not start Office merely for a file operation. Source-removal failures and
+  lost native receipts remain explicit recovery states; no inferred move, inode
+  adoption, hidden retry or permanent history-based overwrite lock is used.
 
 ## Remaining coverage
 
@@ -134,3 +154,21 @@ Quantum thumbnail/metadata/streaming operations. Optional external hardware and
 filter libraries are not silently inherited from the build host. Native Termux
 compatibility is not claimed from Linux compilation. Expiry/long-session save
 behavior and crash recovery receipts still require end-to-end exercises.
+
+### 28 October history and native Files mutation owner follow-up
+
+The existing shared gateway and compiled Collabora0016 passed actual native API
+list/configure/open/restore checks: default50, saved count3, distinct immutable
+snapshot participant, rejected edit, exact snapshot preserved by ordinary URL
+resolution, fresh restored generation and rejection of the old live session.
+Evidence: `apps-native-gateway-20261028/office-history-api-evidence.json` in the
+external build verification directory; module checkpoint `f2dd71fb6c`.
+
+The prepared Quantum0005 binary and current owner passed active-source rename,
+exact auto-suffix/directory move, copy with a fresh ID, unregistered-source
+overwrite with retired destination history still readable, and partial-directory
+publication receipts. Explicit project-root relinking preserved ID/history and
+rejected unrelated destination bytes. Evidence: `files-move-gateway-evidence.json`
+and `files-partial-root-evidence.json` in that same verification directory.
+These are actual native/gateway diagnostics, not installed browser UI/platform
+acceptance. No full-library or browser-build campaign was run.

@@ -139,6 +139,7 @@ export function createOfficeService({ resolveOpen, authorizeOpen, authorizeSessi
   }
   return {
     open, execute,
+    hasDocumentViews: documentId => [...sessions.values()].some(session => session.grant.documentId === documentId && !session.grant.snapshot && !session.native.closed) || [...opening.keys()].some(key => key.endsWith(':' + documentId + ':')),
     async dispatch({ method, path, body = {}, identity, signal }) {
       if (method === 'POST' && path === '/snapshots') {
         ownerKey(identity);
@@ -177,6 +178,7 @@ export function createOfficeService({ resolveOpen, authorizeOpen, authorizeSessi
     },
     async coordinateNativeRestore(documentId, { grant, signal } = {}) {
       if (!grant || grant.documentId !== documentId || grant.mode !== 'edit') throw new OfficeError('invalid_grant', 'Native history restore needs an authorized editable document grant');
+      await Promise.allSettled([...opening].filter(([key]) => key.endsWith(':' + documentId + ':')).map(([, task]) => task));
       const native = await connectNative(grant, signal);
       try { return await native.prepareRestore({ signal }); }
       finally { native.close(); }

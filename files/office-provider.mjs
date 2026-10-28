@@ -16,7 +16,7 @@ function call(socketPath, token, target, value, signal) {
     req.once('error', reject); req.setTimeout(120000, () => req.destroy(fail(504, 'Office did not respond'))); req.end(JSON.stringify(value));
   });
 }
-export function createOfficeProvider({ dataRoot, environmentId, authorizeOperation, authorizePath, ensureRunning, collaboraInternalURL, wopiURL, extension, coordinateNativeRestore, referenceContext, referenceRequest, officeCopy, addonBinary = path.join(root, 'bin', 'files-office-addon'), socketRoot = path.join(dataRoot, 'run') }) {
+export function createOfficeProvider({ dataRoot, environmentId, authorizeOperation, authorizePath, ensureRunning, collaboraInternalURL, wopiURL, extension, coordinateNativeRestore, hasNativeViews, referenceContext, referenceRequest, officeCopy, addonBinary = path.join(root, 'bin', 'files-office-addon'), socketRoot = path.join(dataRoot, 'run') }) {
   const owner = createDocumentOwner({ dataRoot, environmentId, authorizeOperation, authorizePath });
   const launches = new Map(), issued = new Map(), downloads = new Map(); let starting; let callback; let callbackToken; let config;
   function configure(value) {
@@ -89,6 +89,7 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     await ensureRunning('office'); const definition = await prepare(); await ensureRunning('office-addon', definition);
     const registered = await owner.register(input);
     const session = await call(config.socket, callbackToken, '/v1/session', { ...registered, origin: input.origin, editorBaseUrl: input.editorBaseUrl, locale: input.locale || 'en-GB', snapshot: input.snapshot || '' });
+    if (owner.isRestoring(registered.documentId) && !input.restoreCoordinator) throw fail(409, 'This document is changing; reopen it after the operation');
     issued.set(session.accessToken, { session, input: { ...registered, origin: input.origin, editorBaseUrl: input.editorBaseUrl, locale: input.locale || 'en-GB', snapshot: input.snapshot || '' }, grantId: input.grantId, origin: input.origin, issuedAt: Date.now() });
     return session;
   }
@@ -167,12 +168,23 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
   }
   async function history(input, { operation, versionId, maxVersions }, { signal } = {}) {
     signal?.throwIfAborted();
-    const registered = await owner.register(input);
+    const registered = await owner.register({ ...input, historyOnly: true });
     const claims = { env: environmentId, grant: input.grantId, fid: registered.documentId, participant: input.participantId };
     if (operation === 'list') return owner.list(claims);
     if (operation === 'configure') return owner.configureHistory(claims, maxVersions);
     if (operation === 'restore') return restoreVersion(input, claims, versionId, signal);
     throw fail(400, 'Unknown history operation');
+  }
+  async function withNativeMove(input, perform) {
+    return owner.withNativeMove(input, perform, async (documentId, signal) => {
+      const entries = [...issued.values()].filter(entry => entry.session.documentId === documentId && !entry.input.snapshot && entry.session.accessTokenTtl > Date.now());
+      const active = (hasNativeViews?.(documentId) || entries.some(entry => entry.activity?.sockets > 0)) && entries.find(entry => entry.session.mode === 'edit');
+      if (!active) return; // Cold registered documents require no renderer startup.
+      const grant = { ...await createSession({ ...active.input, grantId: input.grantId, documentId, snapshot: '',
+        participantId: 'files:' + randomUUID(), participantName: 'Files', restoreCoordinator: true }), editorInternalURL: collaboraInternalURL };
+      if (typeof coordinateNativeRestore !== 'function') throw fail(503, 'Native file-operation coordination is unavailable');
+      await coordinateNativeRestore(documentId, { grant, signal });
+    });
   }
   async function handle(req, res, { grantId, basePath, origin, signal }) {
     let mapped;
@@ -316,7 +328,8 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
         socket.write(`HTTP/1.1 ${response.statusCode} ${response.statusMessage}\r\n` + Object.entries(response.headers).filter(([key]) => key !== 'set-cookie').flatMap(([key, value]) => (Array.isArray(value) ? value : [value]).map(entry => `${key}: ${entry}\r\n`)).join('') + '\r\n');
         if (upstreamHead.length) socket.write(upstreamHead); if (head.length) upstream.write(head);
         upstream.pipe(socket); socket.pipe(upstream);
-        const stop = () => { upstream.destroy(); socket.destroy(); resolve(); }; socket.once('close', stop); upstream.once('close', stop); socket.once('error', stop); upstream.once('error', stop); context.signal?.addEventListener('abort', stop, { once: true });
+        const entry = req.officeIssuedSession; entry.activity ||= { sockets: 0 }; entry.activity.sockets++; let stopped = false;
+        const stop = () => { if (stopped) return; stopped = true; entry.activity.sockets--; context.signal?.removeEventListener('abort', stop); upstream.destroy(); socket.destroy(); resolve(); }; socket.once('close', stop); upstream.once('close', stop); socket.once('error', stop); upstream.once('error', stop); context.signal?.addEventListener('abort', stop, { once: true });
       }); request.end();
     });
   }
@@ -338,5 +351,5 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     return open({ ...input, editorBaseUrl: input.editorBaseUrl || new URL('/apps/office', input.origin).href, documentId: old.session.documentId, snapshot: old.input.snapshot || '', create: undefined, relativePath: undefined, participantKind: 'human' });
   }
   async function close() { launches.clear(); issued.clear(); downloads.clear(); if (callback) await new Promise(resolve => { const timer = setTimeout(() => { callback.closeAllConnections(); resolve(); }, 2000); timer.unref(); callback.close(() => { clearTimeout(timer); resolve(); }); }); if (config) await fs.unlink(config.callbackSocket).catch(() => {}); }
-  return { configure, prepare, open, renew, registerExport, status, snapshot, history, handle, owner, resolveEditorGrant, handleEditor, upgradeEditor, reopenBrowser, close };
+  return { configure, prepare, open, renew, registerExport, status, snapshot, history, withNativeMove, handle, owner, resolveEditorGrant, handleEditor, upgradeEditor, reopenBrowser, close };
 }

@@ -85,7 +85,7 @@ function nativeRoute(encoded) {
   if (segments.some(value => /[\\/\x00-\x1f\x7f]/.test(value) || value === '.' || value === '..')) throw failure(400, 'Ambiguous Files route');
   return { decoded: segments.join('/'), encoded: segments.map(value => encodeURIComponent(value)).join('/') };
 }
-export async function handleFiles(req, res, { dataRoot, scope, basePath, signal, authorizePath, openOffice }) {
+export async function handleFiles(req, res, { dataRoot, scope, basePath, signal, authorizePath, openOffice, withNativeMove }) {
   if (!/^\/apps\/files\/[A-Za-z0-9_-]+\/$/.test(basePath)) throw failure(400, 'Invalid scoped Files route');
   scope = { ...scope, root: await fs.realpath(scope.root) };
   const native = await serial('account:' + scope.id, () => reconcileAccount(dataRoot, scope, signal));
@@ -108,18 +108,73 @@ export async function handleFiles(req, res, { dataRoot, scope, basePath, signal,
   // every explicit source path, including private state and symlink targets.
   for (const key of ['source', 'destinationSource', 'destSource', 'fromSource', 'toSource']) if (url.searchParams.has(key) && url.searchParams.get(key) !== sourceName(scope)) throw failure(403, 'Files source is outside the launch grant');
   const tree = relative === '/api/raw' || relative === '/api/resources/download' || relative === '/api/resources/archive' || relative === '/api/resources/unarchive' || (relative.startsWith('/api/resources') && ['DELETE', 'PATCH'].includes(req.method));
-  const checkPath = async value => { if (typeof value !== 'string') throw failure(400, 'Native file path must be text'); const filename = path.resolve(scope.root, value.replace(/^\//, '')); if (filename !== scope.root && !filename.startsWith(scope.root + path.sep)) throw failure(403, 'File path leaves this source'); if (authorizePath) await authorizePath(filename, { tree }); };
+  const checkPath = async value => { if (typeof value !== 'string' || /[\\\x00-\x1f\x7f]/.test(value)) throw failure(400, 'Native file path must be unambiguous text'); const filename = path.resolve(scope.root, value.replace(/^\/+/, '')); if (filename !== scope.root && !filename.startsWith(scope.root + path.sep)) throw failure(403, 'File path leaves this source'); if (authorizePath) await authorizePath(filename, { tree }); return '/' + path.relative(scope.root, filename).split(path.sep).join('/'); };
   for (const key of ['path', 'file', 'destination', 'destinationPath', 'destPath', 'fromPath', 'toPath']) for (const value of url.searchParams.getAll(key)) await checkPath(value);
-  let forwardedBody = req;
+  let forwardedBody = req, nativeMove;
   if ((req.method === 'PATCH' && relative === '/api/resources') || (req.method === 'DELETE' && relative === '/api/resources/bulk') || (req.method === 'POST' && ['/api/resources/archive', '/api/resources/unarchive', '/api/resources/view-token'].includes(relative))) {
     let size = 0; const parts = []; for await (const part of req) { size += part.length; if (size > 4 << 20) throw failure(413, 'Native operation list is too large'); parts.push(part); }
     forwardedBody = Buffer.concat(parts); const operation = JSON.parse(forwardedBody.toString('utf8'));
     const inspect = async value => { if (!value || typeof value !== 'object') return; for (const [key, entry] of Object.entries(value)) { if (['source', 'fromSource', 'toSource'].includes(key) && entry !== sourceName(scope)) throw failure(403, 'Files source is outside the launch grant'); if (['path', 'fromPath', 'toPath', 'destination', 'destinationPath'].includes(key)) await checkPath(entry); else if (key === 'paths' && Array.isArray(entry)) { for (const filename of entry) await checkPath(filename); } else if (typeof entry === 'object') await inspect(entry); } };
     await inspect(operation);
+    if (req.method === 'PATCH' && relative === '/api/resources') {
+      if (Object.hasOwn(operation || {}, 'observe')) throw failure(400, 'Native completion observers belong to the document owner');
+      if (!['copy', 'move', 'rename'].includes(operation?.action) || !Array.isArray(operation.items) || !operation.items.length) throw failure(400, 'A native copy, move or rename operation is required');
+      const source = sourceName(scope), items = [];
+      for (const item of operation.items) {
+        if (item?.fromSource !== source || item?.toSource !== source) throw failure(403, 'Files source is outside the launch grant');
+        items.push({ fromSource: source, fromPath: await checkPath(item.fromPath), toSource: source, toPath: await checkPath(item.toPath) });
+      }
+      if (['overwrite', 'rename'].some(key => operation[key] !== undefined && typeof operation[key] !== 'boolean')) throw failure(400, 'Invalid native conflict option');
+      nativeMove = { source, action: operation.action, overwrite: operation.overwrite === true, rename: operation.rename === true, items };
+      forwardedBody = Buffer.from(JSON.stringify({ ...nativeMove, source: undefined }));
+    }
   }
   const headers = { ...req.headers, 'X-BashKitten-Quantum-User': native.username, 'X-Forwarded-Prefix': basePath, 'X-BashKitten-Document-Provider': basePath + 'api/document-provider/open' };
   for (const key of Object.keys(headers)) if (key.toLowerCase().startsWith('x-bashkitten-') || ['cookie', 'authorization', 'x-bashkitten-quantum-user', 'x-forwarded-prefix', 'x-bashkitten-document-provider', 'forwarded', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip'].includes(key.toLowerCase())) delete headers[key];
   headers['X-BashKitten-Quantum-User'] = native.username; headers['X-Forwarded-Prefix'] = basePath; headers['X-BashKitten-Document-Provider'] = basePath + 'api/document-provider/open'; headers.host = 'files';
+  if (Buffer.isBuffer(forwardedBody)) { delete headers['transfer-encoding']; headers['content-length'] = String(forwardedBody.length); }
+  if (nativeMove) {
+    if (typeof withNativeMove !== 'function') throw failure(503, 'The document owner is unavailable for this file operation');
+    let capability;
+    try { capability = await jsonRequest(native.socketPath, 'OPTIONS', '/api/resources', native.username, undefined, signal); }
+    catch { throw failure(503, 'Native Files must be updated before moving or copying documents'); }
+    if (capability?.completedPaths !== 'scoped-v1' || capability?.atomicCopy !== 'observed-v1') throw failure(503, 'Native Files does not report completed document paths');
+    const result = await withNativeMove(nativeMove, async ({ observe = [] } = {}) => {
+      if (!Array.isArray(observe)) throw failure(500, 'Invalid document owner completion observers');
+      const observed = new Set(); for (const name of observe) observed.add(await checkPath(name));
+      const nativeBody = Buffer.from(JSON.stringify({ ...nativeMove, source: undefined, observe: [...observed] }));
+      if (nativeBody.length > 4 << 20) throw failure(413, 'The native file operation and completion observers exceed their bound');
+      const response = await request(native.socketPath, req.method, route.encoded + url.search, { headers: { ...headers, 'content-length': String(nativeBody.length) }, body: nativeBody, signal });
+      let bytes = 0; const parts = [];
+      for await (const part of response) { bytes += part.length; if (bytes > 16 << 20) { response.destroy(); throw failure(502, 'Native move receipt exceeds its bound'); } parts.push(part); }
+      let completed; try { completed = JSON.parse(Buffer.concat(parts).toString('utf8')); } catch { throw failure(502, 'Native Files returned an incomplete move receipt'); }
+      if (![200, 207, 500].includes(response.statusCode) || !Array.isArray(completed?.succeeded) || !Array.isArray(completed?.failed) || !Array.isArray(completed?.changed)) throw failure(response.statusCode >= 400 ? response.statusCode : 502, 'Native Files did not confirm the file operation');
+      for (const item of completed.succeeded) {
+        if (item.fromSource !== nativeMove.source || item.toSource !== nativeMove.source) throw failure(502, 'Native move receipt changed its source');
+        item.fromPath = await checkPath(item.fromPath); item.toPath = await checkPath(item.toPath);
+      }
+      const publications = new Map(), successes = new Map();
+      for (const item of completed.succeeded) successes.set(item.position, item);
+      for (const item of completed.changed) {
+        item.toPath = await checkPath(item.toPath);
+        if (!Number.isInteger(item.position) || item.position < 0 || item.position >= nativeMove.items.length) throw failure(502, 'Native file publication has no matching operation');
+        if (!publications.has(item.position)) publications.set(item.position, []);
+        publications.get(item.position).push(item.toPath);
+      }
+      for (let position = 0; position < nativeMove.items.length; position++) {
+        for (const name of publications.get(position) || []) if (!observed.has(name)) throw failure(502, 'Native file publication has no matching observer');
+        const moved = successes.get(position);
+        if (moved && nativeMove.action !== 'copy') {
+          const from = moved.fromPath.replace(/\/$/, ''), to = moved.toPath.replace(/\/$/, '');
+          const carried = [];
+          for (const name of observed) if (name === from || name.startsWith(from + '/')) carried.push(to + name.slice(from.length));
+          for (const name of carried) observed.add(name);
+        }
+      }
+      return { status: response.statusCode, body: completed };
+    });
+    res.writeHead(result.status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(result.body)); return;
+  }
   const upstream = await request(native.socketPath, req.method, route.encoded + url.search, { headers, body: forwardedBody, signal });
   const responseHeaders = { ...upstream.headers }; delete responseHeaders['set-cookie'];
   // Native inline content disables scripts, but a same-origin HTML form can

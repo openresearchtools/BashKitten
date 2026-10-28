@@ -98,6 +98,19 @@ Snapshot opens use separate read-only native sessions and preserve the selected
 version through ordinary browser mapping; restoration uses the real native
 Pre_Restore_Ack before replacing the live file and reopening a fresh participant.
 
+Native Quantum move/copy/rename completion receipts feed the same document owner.
+The owner reserves affected document paths, drains native views for moved sources
+or overwritten destinations, and serializes against WOPI writes. A copy reads
+current saved bytes and leaves its source view running. Successful moves preserve
+source IDs/history; copies get fresh IDs. Overwritten destination IDs are retired
+while their immutable snapshots remain accessible by explicit history identity.
+Only exact native publication receipts retire targets after a partial directory
+failure. A lost completion keeps a private recovery receipt and blocks ambiguous
+live identity reuse. No watcher or independent file-move implementation exists.
+Explicit project-root relinking preserves IDs only after verifying matching
+registered file content in the selected root; unrelated files and registered-ID
+collisions are rejected. It never moves files or merges histories implicitly.
+
 References dialog requests use a typed postMessage bridge bound to the exact
 native extension frame, origin and nonce. Credentials remain host-side. Requests
 are project-bound, bounded and cancellable on cancel/replacement/page closure.

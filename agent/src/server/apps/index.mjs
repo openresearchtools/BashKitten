@@ -140,7 +140,9 @@ export class ApplicationModules {
         const reconciliation = await references.validateLibraryRelink({ projectId: id, previousRoot: project.cwd, newRoot: cwd, authority: record, signal });
         if (!reconciliation.canRelink) return { status: 409, body: { error: 'The new folder does not contain the matching library attachments', reconciliation } };
         signal?.throwIfAborted();
-        return { status: 200, body: { project: await relinkProject(id, cwd, { expectedCwd: project.cwd }), reconciliation } };
+        await this.office();
+        const moved = await this.officeProvider.owner.relinkRoot({ previousRoot: project.cwd, newRoot: cwd, signal }, () => relinkProject(id, cwd, { expectedCwd: project.cwd }));
+        return { status: 200, body: { ...moved, reconciliation } };
       }
       if (input.confirmProjectId !== id || !['keep', 'delete'].includes(input.attachments)) throw Object.assign(Error('Confirm this exact library and choose whether to keep its attachments'), { status: 400 });
       await this.revokeProject(id, { response });
@@ -182,6 +184,7 @@ export class ApplicationModules {
             await this.validateGrant(context.grant);
             return work(context.grant.scope, context.signal);
           }),
+          hasNativeViews: documentId => service?.hasDocumentViews(documentId) === true,
           coordinateNativeRestore: (documentId, options) => {
             if (typeof service?.coordinateNativeRestore !== 'function') throw unavailable('Office', 'native restore coordination is unavailable');
             return service.coordinateNativeRestore(documentId, options);
@@ -247,7 +250,7 @@ export class ApplicationModules {
           }),
           authorizeSnapshot: async ({ documentId, versionId }, identity, { signal } = {}) => {
             const participantId = 'agent:' + identity.backendId + ':' + identity.workerId;
-            await provider.owner.register({ grantId: identity.grantId, documentId, participantId, participantName: 'Pi' });
+            await provider.owner.register({ grantId: identity.grantId, documentId, participantId, participantName: 'Pi', historyOnly: true });
             return provider.snapshot({ grantId: identity.grantId, documentId, participantId, versionId }, { signal });
           },
           references: { renderDocument: referenceOperation('renderDocument'), parseDocument: referenceOperation('parseDocument'), importSnapshots: referenceOperation('importSnapshots') } });
@@ -273,7 +276,7 @@ export class ApplicationModules {
       // Resolve through the existing storage authority before the native-view
       // cache. Repeated opens need no unused tokens or browser bootstrap grants.
       await this.prepareOfficeRuntime(); signal?.throwIfAborted();
-      const document = await this.officeProvider.owner.register({ grantId: grant.id, documentId: body.documentId, relativePath: body.relativePath, create: body.create,
+      const document = await this.officeProvider.owner.register({ grantId: grant.id, documentId: body.documentId, relativePath: body.relativePath, create: body.create, snapshot: body.snapshot,
         participantId: identity.kind === 'browser' ? 'browser-control:' + identity.backendId + ':' + identity.viewId + ':' + identity.operationId : 'agent:' + identity.backendId + ':' + identity.workerId,
         participantName: identity.kind === 'browser' ? 'Office export' : 'Pi' });
       if (body.snapshot) await this.officeProvider.owner.metadata({ env: await this.identity(), grant: grant.id, fid: document.documentId, participant: identity.kind === 'browser' ? 'browser-control:' + identity.backendId + ':' + identity.viewId + ':' + identity.operationId : 'agent:' + identity.backendId + ':' + identity.workerId, snapshot: body.snapshot });
@@ -465,6 +468,7 @@ export class ApplicationModules {
     }
     if (component === 'files') return (await this.module('files')).handleFiles(req, res, { ...context, dataRoot: dataDir,
       scope: context.grant.scope, endpoint: context.grant.scope.endpoint, authorizePath: authorizeApplicationPath,
+      withNativeMove: async (value, perform) => { await this.office(); return this.officeProvider.withNativeMove({ ...value, grantId: context.grant.id }, perform); },
       openOffice: async value => {
         await this.office();
         return this.officeProvider.open({ ...value, grantId: context.grant.id, participantId: 'human:' + context.grant.id,
