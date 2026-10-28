@@ -1,0 +1,86 @@
+--- a/engine/sw/source/uibase/shells/textfld.cxx
++++ b/engine/sw/source/uibase/shells/textfld.cxx
+@@ -85,8 +85,55 @@
+ #include <ndtxt.hxx>
+ #include <translatehelper.hxx>
+ #include <sfx2/dispatch.hxx>
++#include <undobj.hxx>
++#include <UndoCore.hxx>
+ 
+ using namespace css;
++
++
++// Field results already have native undo actions. Keep the native field command
++// in the same group, including insertion redo (which first recreates an empty mark).
++class FieldCommandUndo final : public SwUndo
++{
++    SwMarkName maName;
++    bool mbHadBefore;
++    cpo::uno::Any maBefore;
++    cpo::uno::Any maAfter;
++
++    void apply(sw::UndoRedoContext& rContext, bool exists, const cpo::uno::Any& value)
++    {
++        auto* access = rContext.GetDoc().getIDocumentMarkAccess();
++        const auto found = access->findMark(maName);
++        if (found == access->getAllMarksEnd())
++            return;
++        auto* field = dynamic_cast<sw::mark::Fieldmark*>(*found);
++        if (!field)
++            return;
++        if (exists)
++            (*field->GetParameters())[ODF_CODE_PARAM] = value;
++        else
++            field->GetParameters()->erase(ODF_CODE_PARAM);
++    }
++public:
++    FieldCommandUndo(SwDoc& doc, sw::mark::Fieldmark& field, cpo::uno::Any after)
++        : SwUndo(SwUndoId::UPDATE_FORM_FIELD, doc), maName(field.GetName()),
++          mbHadBefore(field.GetParameters()->count(ODF_CODE_PARAM) != 0),
++          maAfter(std::move(after))
++    {
++        if (mbHadBefore)
++            maBefore = field.GetParameters()->at(ODF_CODE_PARAM);
++    }
++    void UndoImpl(sw::UndoRedoContext& context) override { apply(context, mbHadBefore, maBefore); }
++    void RedoImpl(sw::UndoRedoContext& context) override { apply(context, true, maAfter); }
++};
++
++static void SetFieldCommandWithUndo(SwDoc& doc, sw::mark::Fieldmark& field,
++                                    const cpo::uno::Any& value)
++{
++    if (doc.GetIDocumentUndoRedo().DoesUndo())
++        doc.GetIDocumentUndoRedo().AppendUndo(std::make_unique<FieldCommandUndo>(doc, field, value));
++    (*field.GetParameters())[ODF_CODE_PARAM] = value;
++}
+ 
+ static OUString lcl_BuildTitleWithRedline( const SwRangeRedline *pRedline )
+ {
+@@ -1018,8 +1065,7 @@
+                         aFieldPam, SwMarkName(), aFieldType, aFieldPam.Start());
+                     if (pFieldmark && !aFieldCode.isEmpty())
+                     {
+-                        pFieldmark->GetParameters()->insert(
+-                            std::pair<OUString, cpo::uno::Any>(ODF_CODE_PARAM, cpo::uno::Any(aFieldCode)));
++                        SetFieldCommandWithUndo(*rSh.GetDoc(), *pFieldmark, cpo::uno::Any(aFieldCode));
+                     }
+                 }
+                 rSh.EndAction();
+@@ -1146,7 +1192,7 @@
+             }
+ 
+             comphelper::SequenceAsHashMap aMap(aFields[nFieldIndex++]);
+-            itParam->second = aMap[u"FieldCommand"_ustr];
++            SetFieldCommandWithUndo(*rSh.GetDoc(), *pFieldmark, aMap[u"FieldCommand"_ustr]);
+             SwPaM aPaM(pFieldmark->GetMarkPos(), pFieldmark->GetOtherMarkPos());
+             aPaM.Normalize();
+             // Skip field start & separator.
+@@ -1651,7 +1697,7 @@
+         rSh.GetDoc()->GetIDocumentUndoRedo().StartUndo(SwUndoId::UPDATE_FORM_FIELD, nullptr);
+         rSh.StartAction();
+         comphelper::SequenceAsHashMap aMap(aField);
+-        itParam->second = aMap[u"FieldCommand"_ustr];
++        SetFieldCommandWithUndo(*rSh.GetDoc(), *pFieldmark, aMap[u"FieldCommand"_ustr]);
+         SwPaM aPaM(pFieldmark->GetMarkPos(), pFieldmark->GetOtherMarkPos());
+         aPaM.Normalize();
+         // Skip field start & separator.

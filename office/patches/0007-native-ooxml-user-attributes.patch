@@ -1,0 +1,405 @@
+--- /dev/null
++++ b/engine/include/oox/helper/userattributes.hxx
+@@ -0,0 +1,85 @@
++/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
++/*
++ * This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
++ */
++#pragma once
++
++#include <functional>
++#include <utility>
++#include <com/sun/star/container/XNameContainer.hpp>
++#include <com/sun/star/xml/AttributeData.hpp>
++#include <com/sun/star/xml/sax/SAXException.hpp>
++#include <oox/core/contexthandler2.hxx>
++#include <oox/helper/attributelist.hxx>
++#include <oox/token/namespaces.hxx>
++#include <oox/token/tokens.hxx>
++#include <sax/fshelper.hxx>
++#include <sfx2/XmlIdRegistry.hxx>
++#include <xmloff/unoatrcn.hxx>
++
++namespace oox {
++
++// Generic persistence for the existing native UserDefinedAttributes property.
++// No application-specific interpretation belongs in this extension.
++inline constexpr OUString UserAttributesExtensionURI
++    = u"http://schemas.libreoffice.org/user-defined-attributes"_ustr;
++
++inline void writeUserAttributes(const sax_fastparser::FSHelperPtr& xStream,
++    const cpo::uno::Reference<css::container::XNameAccess>& xAttributes)
++{
++    for (const auto& rName : xAttributes->getElementNames())
++    {
++        css::xml::AttributeData aData;
++        if (!(xAttributes->getByName(rName) >>= aData))
++            throw css::xml::sax::SAXException(u"Invalid user-defined attribute"_ustr, {}, {});
++        xStream->singleElementNS(XML_loext, XML_attribute,
++            FSNS(XML_xmlns, XML_loext), u"http://schemas.libreoffice.org/"_ustr,
++            XML_name, rName, XML_uri, aData.Namespace, XML_value, aData.Value);
++    }
++}
++
++// Reads one extension or range containing loext:attribute children. Native UNO
++// insertion retains namespace/prefix validation and rejects duplicate names.
++class UserAttributesContext final : public core::ContextHandler2
++{
++public:
++    using Completion = std::function<void(const cpo::uno::Reference<css::container::XNameContainer>&)>;
++    UserAttributesContext(const core::ContextHandler2Helper& rParent, Completion aComplete)
++        : ContextHandler2(rParent), mxAttributes(new SvUnoAttributeContainer),
++          maComplete(std::move(aComplete)) {}
++
++    core::ContextHandlerRef onCreateContext(sal_Int32 nElement, const AttributeList& rAttributes) override
++    {
++        if (nElement != LOEXT_TOKEN(attribute))
++            return nullptr;
++        const OUString aName = rAttributes.getXString(XML_name, OUString());
++        const sal_Int32 nColon = aName.indexOf(':');
++        const OUString aPrefix = nColon < 0 ? OUString() : aName.copy(0, nColon);
++        const OUString aLocal = nColon < 0 ? aName : aName.copy(nColon + 1);
++        const OUString aNamespace = rAttributes.getXString(XML_uri, OUString());
++        if (!sfx2::isValidNCName(aLocal)
++            || (nColon >= 0 && (!sfx2::isValidNCName(aPrefix) || aNamespace.isEmpty()))
++            || (nColon < 0 && !aNamespace.isEmpty())
++            || mxAttributes->getElementNames().getLength() >= SAL_MAX_UINT16)
++            throw css::xml::sax::SAXException(u"Invalid user-defined attribute name"_ustr, {}, {});
++        css::xml::AttributeData aData;
++        aData.Namespace = aNamespace;
++        aData.Type = u"CDATA"_ustr;
++        aData.Value = rAttributes.getXString(XML_value, OUString());
++        mxAttributes->insertByName(aName, cpo::uno::Any(aData));
++        return nullptr;
++    }
++
++    void onEndElement() override
++    {
++        if (mxAttributes->hasElements())
++            maComplete(mxAttributes);
++    }
++
++private:
++    cpo::uno::Reference<css::container::XNameContainer> mxAttributes;
++    Completion maComplete;
++};
++}
+--- a/engine/oox/source/export/shapes.cxx
++++ b/engine/oox/source/export/shapes.cxx
+@@ -28,6 +28,7 @@
+ #include <oox/core/xmlfilterbase.hxx>
+ #include <oox/export/shapes.hxx>
+ #include <oox/export/utils.hxx>
++#include <oox/helper/userattributes.hxx>
+ #include <oox/token/namespaces.hxx>
+ #include <oox/token/relationship.hxx>
+ #include <oox/token/tokens.hxx>
+@@ -400,10 +401,17 @@
+ 
+ static void AddExtLst(FSHelperPtr const& pFS, Reference<XPropertySet> const& xShape)
+ {
+-    if (xShape->getPropertySetInfo()->hasPropertyByName(u"Decorative"_ustr)
+-        && xShape->getPropertyValue(u"Decorative"_ustr).get<bool>())
+-    {
+-        pFS->startElementNS(XML_a, XML_extLst);
++    cpo::uno::Reference<css::container::XNameAccess> xAttributes;
++    if (xShape->getPropertySetInfo()->hasPropertyByName(u"UserDefinedAttributes"_ustr))
++        xShape->getPropertyValue(u"UserDefinedAttributes"_ustr) >>= xAttributes;
++    const bool bAttributes = xAttributes.is() && xAttributes->hasElements();
++    const bool bDecorative = xShape->getPropertySetInfo()->hasPropertyByName(u"Decorative"_ustr)
++        && xShape->getPropertyValue(u"Decorative"_ustr).get<bool>();
++    if (!bAttributes && !bDecorative)
++        return;
++    pFS->startElementNS(XML_a, XML_extLst);
++    if (bDecorative)
++    {
+ //            FSNS(XML_xmlns, XML_a), GetExport().GetFilter().getNamespaceURL(OOX_NS(dml)));
+         pFS->startElementNS(XML_a, XML_ext,
+             // MSO uses this "URI" which is obviously not a URI
+@@ -412,8 +420,14 @@
+             FSNS(XML_xmlns, XML_adec), "http://schemas.microsoft.com/office/drawing/2017/decorative",
+             XML_val, "1");
+         pFS->endElementNS(XML_a, XML_ext);
+-        pFS->endElementNS(XML_a, XML_extLst);
+-    }
++    }
++    if (bAttributes)
++    {
++        pFS->startElementNS(XML_a, XML_ext, XML_uri, oox::UserAttributesExtensionURI);
++        oox::writeUserAttributes(pFS, xAttributes);
++        pFS->endElementNS(XML_a, XML_ext);
++    }
++    pFS->endElementNS(XML_a, XML_extLst);
+ }
+ 
+ ShapeExport& ShapeExport::WritePolyPolygonShape( const Reference< XShape >& xShape, const bool bClosed )
+--- a/engine/include/oox/drawingml/shape.hxx
++++ b/engine/include/oox/drawingml/shape.hxx
+@@ -136,6 +136,7 @@
+     void setDiagramDataModelID( const OUString& rDiagramDataModelID ) { msDiagramDataModelID = rDiagramDataModelID; }
+ 
+     PropertyMap&                    getShapeProperties(){ return maShapeProperties; }
++    cpo::uno::Any& getUserDefinedAttributes() { return maUserDefinedAttributes; }
+ 
+     LineProperties&          getLineProperties() { return *mpLinePropertiesPtr; }
+     const LineProperties&    getLineProperties() const { return *mpLinePropertiesPtr; }
+@@ -385,6 +386,7 @@
+     /// the shape lies within an opaque rectangle of the group.
+     EffectPropertiesPtr         mpGroupShadowPtr;
+     PropertyMap                 maShapeProperties;
++    cpo::uno::Any                maUserDefinedAttributes;
+     PropertyMap                 maDefaultShapeProperties;
+     TextListStylePtr            mpMasterTextListStyle;
+     cpo::uno::Reference< css::drawing::XShape > mxShape;
+--- a/engine/oox/source/drawingml/shapecontext.cxx
++++ b/engine/oox/source/drawingml/shapecontext.cxx
+@@ -22,6 +22,7 @@
+ #include <com/sun/star/beans/XMultiPropertySet.hpp>
+ 
+ #include <oox/helper/attributelist.hxx>
++#include <oox/helper/userattributes.hxx>
+ #include <oox/drawingml/shapecontext.hxx>
+ #include <drawingml/shapepropertiescontext.hxx>
+ #include <drawingml/shapestylecontext.hxx>
+@@ -63,7 +64,12 @@
+ //  case XML_drElemPr:
+ //      break;
+     case XML_extLst:
++        break;
+     case XML_ext:
++        if (rAttribs.getStringDefaulted(XML_uri) == UserAttributesExtensionURI)
++            return new UserAttributesContext(*this, [pShape = mpShapePtr](const auto& xAttributes) {
++                pShape->getUserDefinedAttributes() <<= xAttributes;
++            });
+         break;
+     case XML_decorative:
+         {
+--- a/engine/oox/source/drawingml/shape.cxx
++++ b/engine/oox/source/drawingml/shape.cxx
+@@ -2262,6 +2262,9 @@
+             }
+ 
+             PropertySet( xSet ).setProperties( aShapeProps );
++            if (maUserDefinedAttributes.hasValue()
++                && xSet->getPropertySetInfo()->hasPropertyByName(u"UserDefinedAttributes"_ustr))
++                xSet->setPropertyValue(u"UserDefinedAttributes"_ustr, maUserDefinedAttributes);
+ 
+             if (mpTablePropertiesPtr && aServiceName == "com.sun.star.drawing.TableShape")
+             {
+--- a/engine/sc/source/filter/inc/xeextlst.hxx
++++ b/engine/sc/source/filter/inc/xeextlst.hxx
+@@ -191,7 +191,7 @@
+ class XclExtLst : public XclExpRecordBase, public XclExpRoot
+ {
+ public:
+-    explicit XclExtLst( const XclExpRoot& rRoot);
++    explicit XclExtLst( const XclExpRoot& rRoot, bool bUserAttributes = false);
+     virtual void SaveXml( XclExpXmlStream& rStrm ) override;
+ 
+     void AddRecord( XclExpExt* pEntry );
+@@ -201,6 +201,7 @@
+ 
+ private:
+     XclExpRecordList< XclExpExt > maExtEntries;
++    SCTAB mnUserAttributesTab;
+ };
+ 
+ typedef rtl::Reference< XclExtLst > XclExtLstRef;
+--- a/engine/sc/source/filter/excel/xeextlst.cxx
++++ b/engine/sc/source/filter/excel/xeextlst.cxx
+@@ -23,6 +23,11 @@
+ #include <svl/intitem.hxx>
+ 
+ #include <oox/export/utils.hxx>
++#include <oox/helper/userattributes.hxx>
++#include <editeng/xmlcnitm.hxx>
++#include <dociter.hxx>
++#include <document.hxx>
++#include <patattr.hxx>
+ #include <oox/token/namespaces.hxx>
+ 
+ using namespace ::oox;
+@@ -32,8 +37,8 @@
+ {
+ }
+ 
+-XclExtLst::XclExtLst( const XclExpRoot& rRoot ):
+-    XclExpRoot(rRoot)
++XclExtLst::XclExtLst( const XclExpRoot& rRoot, bool bUserAttributes ):
++    XclExpRoot(rRoot), mnUserAttributesTab(bUserAttributes ? rRoot.GetCurrScTab() : -1)
+ {
+ }
+ 
+@@ -623,15 +628,51 @@
+ 
+ void XclExtLst::SaveXml( XclExpXmlStream& rStrm )
+ {
+-    if(maExtEntries.IsEmpty())
+-        return;
+-
+-    sax_fastparser::FSHelperPtr& rWorksheet = rStrm.GetCurrentStream();
+-    rWorksheet->startElement(XML_extLst);
+-
+-    maExtEntries.SaveXml(rStrm);
+-
+-    rWorksheet->endElement( XML_extLst );
++    sax_fastparser::FSHelperPtr& rWorksheet = rStrm.GetCurrentStream();
++    bool bOpen = !maExtEntries.IsEmpty();
++    if (bOpen)
++    {
++        rWorksheet->startElement(XML_extLst);
++        maExtEntries.SaveXml(rStrm);
++    }
++    bool bAttributesOpen = false;
++    if (mnUserAttributesTab >= 0)
++    {
++        ScDocument& rDoc = GetDoc();
++        ScAttrRectIterator aIterator(rDoc, mnUserAttributesTab, 0, 0,
++                                    GetMaxPos().Col(), GetMaxPos().Row());
++        SCCOL nCol1, nCol2;
++        SCROW nRow1, nRow2;
++        while (const ScPatternAttr* pPattern = aIterator.GetNext(nCol1, nCol2, nRow1, nRow2))
++        {
++            const auto& rAttributes = pPattern->GetItem(ATTR_USERDEF);
++            if (!rAttributes.GetAttrCount())
++                continue;
++            if (!bOpen)
++            {
++                rWorksheet->startElement(XML_extLst);
++                bOpen = true;
++            }
++            if (!bAttributesOpen)
++            {
++                rWorksheet->startElement(XML_ext, XML_uri, oox::UserAttributesExtensionURI);
++                bAttributesOpen = true;
++            }
++            cpo::uno::Any aValue;
++            rAttributes.QueryValue(aValue);
++            cpo::uno::Reference<css::container::XNameAccess> xAttributes(aValue, cpo::uno::UNO_QUERY_THROW);
++            ScRange aRange(nCol1, nRow1, mnUserAttributesTab, nCol2, nRow2, mnUserAttributesTab);
++            rWorksheet->startElementNS(XML_loext, XML_range,
++                FSNS(XML_xmlns, XML_loext), u"http://schemas.libreoffice.org/"_ustr,
++                XML_ref, XclXmlUtils::ToOString(rDoc, aRange));
++            oox::writeUserAttributes(rWorksheet, xAttributes);
++            rWorksheet->endElementNS(XML_loext, XML_range);
++        }
++    }
++    if (bAttributesOpen)
++        rWorksheet->endElement(XML_ext);
++    if (bOpen)
++        rWorksheet->endElement(XML_extLst);
+ }
+ 
+ void XclExtLst::AddRecord( XclExpExt* pEntry )
+--- a/engine/sc/source/filter/excel/excdoc.cxx
++++ b/engine/sc/source/filter/excel/excdoc.cxx
+@@ -701,7 +701,7 @@
+ 
+     // WSBOOL needs data from page settings, create it here, add it later
+     rtl::Reference<XclExpPageSettings> xPageSett = new XclExpPageSettings( GetRoot() );
+-    XclExtLstRef xExtLst = new XclExtLst( GetRoot() );
++    XclExtLstRef xExtLst = new XclExtLst( GetRoot(), true );
+     bool bFitToPages = xPageSett->GetPageData().mbFitToPages;
+ 
+     bool bSummaryBelow = GetRoot().GetDoc().GetTotalsRowBelow(mnScTab);
+--- a/engine/sc/source/filter/inc/sheetdatabuffer.hxx
++++ b/engine/sc/source/filter/inc/sheetdatabuffer.hxx
+@@ -127,6 +127,9 @@
+     /** Processes the cell formatting data of the passed cell. */
+     void                setCellFormat( const CellModel& rModel );
+ 
++    void setUserAttributes(const ScRange& rRange, const cpo::uno::Any& rAttributes)
++    { maUserAttributes.emplace_back(rRange, rAttributes); }
++
+     /** Final processing after the sheet has been imported. */
+     void                finalizeImport();
+ 
+@@ -218,6 +221,7 @@
+     };
+     typedef ::std::vector< MergedRange > MergedRangeVector;
+ 
++    std::vector<std::pair<ScRange, cpo::uno::Any>> maUserAttributes;
+     ColStyles           maStylesPerColumn;      /// Stores cell styles by column ( in row ranges )
+     std::vector< InCellImage >
+                         maInCellImages;         /// All cells of the sheet that hold a picture.
+--- a/engine/sc/source/filter/oox/sheetdatabuffer.cxx
++++ b/engine/sc/source/filter/oox/sheetdatabuffer.cxx
+@@ -30,6 +30,7 @@
+ #include <sal/log.hxx>
+ #include <osl/diagnose.h>
+ #include <editeng/boxitem.hxx>
++#include <editeng/xmlcnitm.hxx>
+ #include <oox/helper/containerhelper.hxx>
+ #include <oox/helper/propertyset.hxx>
+ #include <oox/token/properties.hxx>
+@@ -568,6 +569,20 @@
+         applyCellMerging( rMergedRange.maRange );
+     for( const auto& rCenterFillRange : maCenterFillRanges )
+         applyCellMerging( rCenterFillRange.maRange );
++
++    // Apply after visual styles, using native range/pattern merging so that
++    // formulas, formatting, clipboard and undo retain their existing owners.
++    for (const auto& [rRange, rValue] : maUserAttributes)
++    {
++        SvXMLAttrContainerItem aAttributes(ATTR_USERDEF);
++        if (!aAttributes.PutValue(rValue, 0))
++            throw cpo::uno::RuntimeException(u"Invalid user-defined attributes"_ustr);
++        ScPatternAttr aPattern(rDoc.getCellAttributeHelper());
++        aPattern.ItemSetPut(aAttributes);
++        rDoc.ApplyPatternAreaTab(rRange.aStart.Col(), rRange.aStart.Row(),
++            rRange.aEnd.Col(), rRange.aEnd.Row(), getSheetIndex(), aPattern);
++    }
++    maUserAttributes.clear();
+ }
+ 
+ // private --------------------------------------------------------------------
+--- a/engine/sc/source/filter/oox/extlstcontext.cxx
++++ b/engine/sc/source/filter/oox/extlstcontext.cxx
+@@ -12,6 +12,8 @@
+ #include <worksheethelper.hxx>
+ #include <oox/core/contexthandler.hxx>
+ #include <oox/helper/attributelist.hxx>
++#include <oox/helper/userattributes.hxx>
++#include <sheetdatabuffer.hxx>
+ #include <oox/token/namespaces.hxx>
+ #include <oox/token/tokens.hxx>
+ #include <colorscale.hxx>
+@@ -418,10 +420,35 @@
+ {
+ }
+ 
+-ContextHandlerRef ExtLstGlobalContext::onCreateContext( sal_Int32 nElement, const AttributeList& )
++namespace {
++class UserAttributeRangesContext final : public WorksheetContextBase
++{
++public:
++    explicit UserAttributeRangesContext(WorksheetContextBase& rParent)
++        : WorksheetContextBase(rParent) {}
++    ContextHandlerRef onCreateContext(sal_Int32 nElement, const AttributeList& rAttributes) override
++    {
++        if (nElement != LOEXT_TOKEN(range))
++            return nullptr;
++        ScRange aRange;
++        if (!getAddressConverter().convertToCellRange(aRange,
++                rAttributes.getStringDefaulted(XML_ref), getSheetIndex(), true, true))
++            throw css::xml::sax::SAXException(u"Invalid user attribute cell range"_ustr, {}, {});
++        return new UserAttributesContext(*this, [this, aRange](const auto& xAttributes) {
++            getSheetData().setUserAttributes(aRange, cpo::uno::Any(xAttributes));
++        });
++    }
++};
++}
++
++ContextHandlerRef ExtLstGlobalContext::onCreateContext( sal_Int32 nElement, const AttributeList& rAttributes )
+ {
+     if (nElement == XLS_TOKEN( ext ))
++    {
++        if (rAttributes.getXString(XML_uri, OUString()) == UserAttributesExtensionURI)
++            return new UserAttributeRangesContext(*this);
+         return new ExtGlobalContext( *this );
++    }
+ 
+     return this;
+ }
