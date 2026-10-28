@@ -1,0 +1,101 @@
+--- a/engine/include/framework/undomanagerhelper.hxx
++++ b/engine/include/framework/undomanagerhelper.hxx
+@@ -21,6 +21,7 @@
+ 
+ #include <config_options.h>
+ #include <framework/fwkdllapi.h>
++#include <svl/undo.hxx>
+ #include <cpo/uno/Sequence.hxx>
+ #include <cpo/uno/Reference.hxx>
+ 
+@@ -73,6 +74,12 @@
+                 when the instance is not initialized, yet, and no SfxUndoManager can be provided
+         */
+         virtual SfxUndoManager&        getImplUndoManager() = 0;
++
++        /** Native document implementations bind UNO actions to their current
++            view, so collaborative Undo retains the ordinary view ownership
++            checks. Non-document implementations keep the unknown-view default.
++        */
++        virtual ViewShellId getViewShellId() const { return ViewShellId(-1); }
+ 
+         /** provides access to a UNO interface for the XUndoManager implementation. Used when throwing exceptions.
+         */
+--- a/engine/sfx2/source/doc/docundomanager.cxx
++++ b/engine/sfx2/source/doc/docundomanager.cxx
+@@ -71,6 +71,7 @@
+         // IUndoManagerImplementation
+         virtual SfxUndoManager&        getImplUndoManager() override;
+         virtual Reference< XUndoManager >   getThis() override;
++        virtual ViewShellId getViewShellId() const override;
+ 
+         void disposing()
+         {
+@@ -111,6 +112,15 @@
+     }
+ 
+ 
++    ViewShellId DocumentUndoManager_Impl::getViewShellId() const
++    {
++        SfxViewShell* pView = SfxViewShell::Current();
++        if (pView && pView->GetObjectShell() == rAntiImpl.getBaseModel().GetObjectShell())
++            return pView->GetViewShellId();
++        return ViewShellId(-1);
++    }
++
++
+     Reference< XUndoManager > DocumentUndoManager_Impl::getThis()
+     {
+         return static_cast< XUndoManager* >( &rAntiImpl );
+--- a/engine/framework/source/fwe/helper/undomanagerhelper.cxx
++++ b/engine/framework/source/fwe/helper/undomanagerhelper.cxx
+@@ -76,7 +76,7 @@
+     {
+     public:
+         explicit            UndoActionWrapper(
+-                                Reference< XUndoAction > const& i_undoAction
++                                Reference< XUndoAction > const& i_undoAction, ViewShellId viewShellId
+                             );
+         virtual             ~UndoActionWrapper() override;
+ 
+@@ -84,15 +84,18 @@
+         virtual void        Undo() override;
+         virtual void        Redo() override;
+         virtual bool        CanRepeat(SfxRepeatTarget&) const override;
++        virtual ViewShellId GetViewShellId() const override { return m_nViewShellId; }
+ 
+     private:
+         const Reference< XUndoAction >  m_xUndoAction;
++        const ViewShellId m_nViewShellId;
+     };
+ 
+     }
+ 
+-    UndoActionWrapper::UndoActionWrapper( Reference< XUndoAction > const& i_undoAction )
+-        : m_xUndoAction( i_undoAction )
++    UndoActionWrapper::UndoActionWrapper( Reference< XUndoAction > const& i_undoAction,
++                                        ViewShellId viewShellId )
++        : m_xUndoAction( i_undoAction ), m_nViewShellId(viewShellId)
+     {
+         ENSURE_OR_THROW( m_xUndoAction.is(), "illegal undo action" );
+     }
+@@ -541,7 +544,8 @@
+ 
+         {
+             ::comphelper::FlagGuard aNotificationGuard( m_bAPIActionRunning );
+-            rUndoManager.EnterListAction( i_title, OUString(), 0, ViewShellId(-1) );
++            rUndoManager.EnterListAction( i_title, OUString(), 0,
++                                         m_rUndoManagerImplementation.getViewShellId() );
+         }
+ 
+         m_aContextVisibilities.push( i_hidden );
+@@ -682,7 +686,8 @@
+         const bool bHadRedoActions = ( rUndoManager.GetRedoActionCount() > 0 );
+         {
+             ::comphelper::FlagGuard aNotificationGuard( m_bAPIActionRunning );
+-            rUndoManager.AddUndoAction( std::make_unique<UndoActionWrapper>( i_action ) );
++            rUndoManager.AddUndoAction( std::make_unique<UndoActionWrapper>(
++                i_action, m_rUndoManagerImplementation.getViewShellId() ) );
+         }
+         const bool bHasRedoActions = ( rUndoManager.GetRedoActionCount() > 0 );
+ 

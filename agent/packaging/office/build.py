@@ -29,6 +29,7 @@ PATCHES = [
     'office/patches/0006-source-archive-build-id.patch',
     'office/patches/0007-native-ooxml-user-attributes.patch',
     'office/patches/0008-native-bounded-config-cache-keys.patch',
+    'office/patches/0009-native-uno-undo-view.patch',
 ]
 ENGINE_OPTIONS = ['--with-distro=CPLinux-LOKit', '--disable-epm',
                   '--without-package-format', '--disable-symbols',
