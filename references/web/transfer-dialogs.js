@@ -3,6 +3,9 @@
 // This ordinary web dialog adapts their exportOptions controls to an explicit
 // project and selected item set; it does not implement a citation file format.
 import { node, button, field, human, dialog } from "./common.js";
+import { uploadFile } from "./uploads.js";
+
+const pastedByteLimit = 256 * 1024;
 
 export function importReferences({ scope, target = null, onJob }) {
   const d = dialog("Import references"),
@@ -11,9 +14,26 @@ export function importReferences({ scope, target = null, onJob }) {
     encoding = node("select"),
     text = node("textarea", {
       rows: 5,
+      maxlength: pastedByteLimit,
       placeholder: "Or paste reference data",
-    });
+    }),
+    progress = node("progress", { max: 1, value: 0, hidden: true });
   const requestId = crypto.randomUUID();
+  text.addEventListener("paste", (event) => {
+    const pasted = event.clipboardData?.getData("text/plain");
+    if (pasted === undefined) return;
+    const length =
+      text.value.length -
+      (text.selectionEnd - text.selectionStart) +
+      pasted.length;
+    // Reject an oversized paste before maxlength could silently truncate a
+    // reference record. Byte validation below also covers non-ASCII text.
+    if (length > pastedByteLimit) {
+      event.preventDefault();
+      d.notice.textContent =
+        "Use a reference file for more than 256 KiB of text.";
+    }
+  });
   for (const [value, label] of [
     ["utf-8", "UTF-8"],
     ["utf-16le", "UTF-16 little endian"],
@@ -27,45 +47,73 @@ export function importReferences({ scope, target = null, onJob }) {
     node(
       "p",
       { class: "notice" },
-      "The file format is detected automatically. Import progress and partial results appear in Jobs.",
+      "The file format is detected automatically. Choose a file up to 32 MiB or paste up to 256 KiB of text. Import progress and partial results appear in Jobs.",
     ),
     field("Reference file", file),
     field("File encoding", encoding),
     field("Reference data", text),
+    progress,
   );
   let submitted = false;
   const submit = button(
     "Import",
     async () => {
       submit.disabled = true;
-      d.notice.textContent = "Reading reference data…";
+      file.disabled = encoding.disabled = text.disabled = true;
+      d.notice.textContent = "Submitting import…";
       try {
         const selected = file.files[0];
+        if (text.value.length > pastedByteLimit)
+          throw Error("Use a reference file for more than 256 KiB of text.");
         if (selected && text.value.trim())
           throw Error("Choose a file or pasted data for this import.");
         if (selected?.size > 32 * 1024 * 1024)
           throw Error("Choose a reference file of at most 32 MiB.");
-        const content = selected
-          ? new TextDecoder(encoding.value, { fatal: true }).decode(
-              await selected.arrayBuffer(),
-            )
-          : text.value;
-        controller.signal.throwIfAborted();
-        if (!content.trim())
-          throw Error("Choose a reference file or paste reference data.");
-        if (new Blob([content]).size > 32 * 1024 * 1024)
-          throw Error("Import data must be at most 32 MiB in UTF-8.");
-        d.notice.textContent = "Submitting import…";
-        const job = await scope.request("import", {
-          method: "POST",
-          body: {
-            text: content,
-            target: target?.key || null,
-            requestId,
-            summary: true,
-          },
-          signal: controller.signal,
-        });
+        let job;
+        if (selected) {
+          if (!selected.size) throw Error("Choose a nonempty reference file.");
+          job = await uploadFile({
+            scope,
+            file: selected,
+            body: {
+              method: "import",
+              requestId,
+              encoding: encoding.value,
+              queryString: new URLSearchParams({
+                sessionID: requestId,
+                summary: "true",
+                target: target?.key || "",
+              }).toString(),
+            },
+            signal: controller.signal,
+            onProgress({ loaded, total }) {
+              progress.hidden = false;
+              progress.value = loaded / total;
+              d.notice.textContent =
+                loaded === total
+                  ? "Starting native import…"
+                  : "Uploading · " + Math.round(progress.value * 100) + "%";
+            },
+          });
+        } else {
+          const content = text.value;
+          if (!content.trim())
+            throw Error("Choose a reference file or paste reference data.");
+          if (new TextEncoder().encode(content).byteLength > pastedByteLimit)
+            throw Error(
+              "Use a reference file for more than 256 KiB of UTF-8 text.",
+            );
+          job = await scope.request("import", {
+            method: "POST",
+            body: {
+              text: content,
+              target: target?.key || null,
+              requestId,
+              summary: true,
+            },
+            signal: controller.signal,
+          });
+        }
         controller.signal.throwIfAborted();
         submitted = true;
         onJob(job);
@@ -74,6 +122,7 @@ export function importReferences({ scope, target = null, onJob }) {
         if (!controller.signal.aborted) d.notice.textContent = error.message;
       } finally {
         submit.disabled = false;
+        file.disabled = encoding.disabled = text.disabled = false;
       }
     },
     { class: "primary" },

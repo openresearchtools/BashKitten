@@ -19,6 +19,7 @@ import { Collections } from "./collections.js";
 import { chooseCitation } from "./shared-citation-dialog.js";
 import { exportReferences, importReferences } from "./transfer-dialogs.js";
 import { manageLibrary } from "./library-dialog.js";
+import { uploadFile } from "./uploads.js";
 const $ = (selector) => document.querySelector(selector),
   api = createApi(),
   selection = new Map(),
@@ -1017,15 +1018,25 @@ $("#identifiers").onclick = async () => {
   if (!scope) return;
   const targetScope = scope,
     id = projectId,
+    targetCollection = collection,
     input = node("textarea", {
       rows: 7,
       required: true,
       placeholder: "DOI, PMID, PMCID, ISBN or arXiv identifiers — one per line",
     });
   if (
-    !(await promptFields("Add by Identifier", [field("Identifiers", input)], {
-      submit: "Import",
-    }))
+    !(await promptFields(
+      "Add by Identifier",
+      [
+        node(
+          "p",
+          {},
+          "Destination: " + (targetCollection?.data.name || "All references"),
+        ),
+        field("Identifiers", input),
+      ],
+      { submit: "Import" },
+    ))
   )
     return;
   try {
@@ -1037,6 +1048,7 @@ $("#identifiers").onclick = async () => {
           .map((x) => x.trim())
           .filter(Boolean),
         requestId: crypto.randomUUID(),
+        target: targetCollection?.key || null,
       },
     });
     trackJob(id, job);
@@ -1442,8 +1454,6 @@ async function uploadDialog(parentKey, targetScope = scope) {
     field("Title", name),
     progress,
   );
-  let uploadId,
-    committed = false;
   const controller = new AbortController();
   const submit = button(
     "Add attachment",
@@ -1473,8 +1483,9 @@ async function uploadDialog(parentKey, targetScope = scope) {
           const selected = file.files[0];
           if (!selected) throw Error("Choose a file or enter a web address.");
           const requestId = crypto.randomUUID();
-          const begin = await targetScope.request("connector/upload-begin", {
-            method: "POST",
+          await uploadFile({
+            scope: targetScope,
+            file: selected,
             body: {
               method: parentKey ? "saveAttachment" : "saveStandaloneAttachment",
               ...(parentKey ? { parentKey } : {}),
@@ -1488,38 +1499,17 @@ async function uploadDialog(parentKey, targetScope = scope) {
                   filename: selected.name,
                 }),
               },
-              bodyEncoding: "binary",
-              byteLength: selected.size,
             },
             signal: controller.signal,
-          });
-          uploadId = begin.uploadId;
-          progress.hidden = false;
-          for (let offset = 0; offset < selected.size; offset += 262144) {
-            controller.signal.throwIfAborted();
-            const bytes = new Uint8Array(
-              await selected.slice(offset, offset + 262144).arrayBuffer(),
-            );
-            let binary = "";
-            for (let i = 0; i < bytes.length; i += 16384)
-              binary += String.fromCharCode(...bytes.subarray(i, i + 16384));
-            await targetScope.request("connector/upload-chunk", {
-              method: "POST",
-              body: { uploadId, offset, data: btoa(binary) },
-              signal: controller.signal,
-            });
-            progress.value =
-              (offset + bytes.length) / Math.max(1, selected.size);
-            d.notice.textContent =
-              "Uploading · " + Math.round(progress.value * 100) + "%";
-          }
-          await targetScope.request("connector/upload-commit", {
-            method: "POST",
-            body: { uploadId },
-            signal: controller.signal,
+            onProgress({ loaded, total }) {
+              progress.hidden = false;
+              progress.value = loaded / Math.max(1, total);
+              d.notice.textContent =
+                "Uploading · " + Math.round(progress.value * 100) + "%";
+            },
           });
         }
-        committed = true;
+        controller.signal.throwIfAborted();
         d.el.close();
         if (projectId === targetProject) {
           items.reset();
@@ -1538,20 +1528,7 @@ async function uploadDialog(parentKey, targetScope = scope) {
     button("Cancel", () => d.el.close()),
     submit,
   );
-  d.el.addEventListener(
-    "close",
-    () => {
-      controller.abort();
-      if (uploadId && !committed)
-        void targetScope
-          .request("connector/upload-cancel", {
-            method: "POST",
-            body: { uploadId },
-          })
-          .catch(() => {});
-    },
-    { once: true },
-  );
+  d.el.addEventListener("close", () => controller.abort(), { once: true });
   d.open();
 }
 $("#attachment").onclick = () =>
@@ -1662,6 +1639,7 @@ function openAlexDialog(saved) {
   if (!scope) return;
   const targetScope = scope,
     targetProject = projectId,
+    targetCollection = collection,
     d = dialog("OpenAlex Search");
   const text = node("input", { type: "search", placeholder: "Search works" }),
     searchMode = node("select"),
@@ -1761,6 +1739,12 @@ function openAlexDialog(saved) {
     request,
     generation = 0;
   d.body.append(
+    node(
+      "p",
+      {},
+      "Import destination: " +
+        (targetCollection?.data.name || "All references"),
+    ),
     form,
     summary,
     results,
@@ -1996,6 +1980,7 @@ function openAlexDialog(saved) {
             records: [...selection.values()].map((x) => x.raw),
             resolvePDFs: resolve.checked,
             requestId: crypto.randomUUID(),
+            target: targetCollection?.key || null,
           },
         });
         trackJob(targetProject, job);
