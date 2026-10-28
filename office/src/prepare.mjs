@@ -8,7 +8,7 @@ const keyPair = promisify(generateKeyPair);
 const defaultRoot = fileURLToPath(new URL('../runtime/', import.meta.url));
 const unavailable = message => Object.assign(new Error('Office unavailable: ' + message), { status: 503, code: 'office_runtime_unavailable' });
 const exact = '42745e44dd8530fac7acd5f46cb7571ceea63c6a';
-const requiredPatches = ['native-locked-light-theme', 'native-extensions-small-screen-dialog', 'native-proof-key-path', 'native-document-property-undo', 'native-field-command-undo', 'native-ooxml-user-attributes', 'source-archive-build-id', 'native-bounded-config-cache-keys', 'native-uno-undo-view', 'native-uno-shape-undo', 'native-text-edit-state'];
+const requiredPatches = ['native-locked-light-theme', 'native-extensions-small-screen-dialog', 'native-proof-key-path', 'native-document-property-undo', 'native-field-command-undo', 'native-ooxml-user-attributes', 'source-archive-build-id', 'native-bounded-config-cache-keys', 'native-uno-undo-view', 'native-uno-shape-undo', 'native-text-edit-state', 'native-attribute-undo-text', 'native-product-branding'];
 function relative(root, value) {
   if (typeof value !== 'string' || !value || path.isAbsolute(value) || value.split(/[\\/]/).some(part => part === '..') || value.includes('\0')) throw unavailable('invalid native artifact path');
   return path.join(root, value);
@@ -24,6 +24,8 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
   try { manifest = JSON.parse(await fs.readFile(path.join(componentRoot, 'manifest.json'), 'utf8')); }
   catch { throw unavailable('the native component artifact is not installed'); }
   if (manifest.schema !== 1 || manifest.revision !== exact || manifest.apiVersion !== 1 || requiredPatches.some(id => !manifest.patches?.includes(id))) throw unavailable('the native component does not match the pinned API, field/attribute persistence, undo and UI policy contracts');
+  if ((manifest.target || manifest.platform) === 'termux' && !manifest.patches?.includes('native-fontconfig-paths')) throw unavailable('the native Termux font configuration does not match its bundled fontconfig library');
+  if ((manifest.target || manifest.platform) === 'termux' && !manifest.patches?.includes('native-iconv-library')) throw unavailable('the native Termux runtime requires its bundled GNU libiconv with UTF-7 support');
   const paths = Object.fromEntries(['coolwsd', 'engine', 'web', 'config', 'systemplateSetup'].map(key => [key, relative(componentRoot, manifest.paths?.[key])]));
   for (const [name, value] of Object.entries(paths)) {
     try { await fs.access(value, ['coolwsd', 'systemplateSetup'].includes(name) ? fs.constants.X_OK : fs.constants.R_OK); }
@@ -66,6 +68,8 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
     'ssl.enable': 'false', 'ssl.termination': 'true', 'experimental_features': 'true',
     'storage.wopi[@allow]': 'true',
     'admin_console.enable': 'false', 'zotero.enable': 'false',
+    'user_interface.brandProductName': 'Office',
+    'user_interface.brandProductURL': 'https://github.com/openresearchtools/BashKitten',
     'fetch_update_check': '0', 'allow_update_popup': 'false',
     'remote_config.remote_url': '', 'remote_font_config.url': '',
     'logging.level': 'warning', 'logging.level_startup': 'warning', 'logging.protocol': 'false',
@@ -82,8 +86,8 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
     LD_LIBRARY_PATH: path.join(paths.engine, 'program'),
     SSL_CERT_FILE: process.env.SSL_CERT_FILE || '/data/data/com.termux/files/usr/etc/tls/cert.pem',
     OPENSSL_CONF: '/data/data/com.termux/files/usr/etc/tls/openssl.cnf',
-    FONTCONFIG_FILE: process.env.FONTCONFIG_FILE || '/data/data/com.termux/files/usr/etc/fonts/fonts.conf',
-    FONTCONFIG_PATH: process.env.FONTCONFIG_PATH || '/data/data/com.termux/files/usr/etc/fonts',
+    FONTCONFIG_FILE: process.env.FONTCONFIG_FILE || path.join(paths.engine, 'share', 'fontconfig', 'fonts.conf'),
+    FONTCONFIG_PATH: process.env.FONTCONFIG_PATH || path.join(paths.engine, 'share', 'fontconfig'),
   } : {};
   const argv = termux ? nativeArgv : ['/usr/bin/setpriv', '--inh-caps=-all', '--ambient-caps=-all', '--', ...nativeArgv];
   const launch = path.join(directory, 'launch.json');

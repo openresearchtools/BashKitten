@@ -50,6 +50,17 @@ abstract, PDF and full-text work. Verify the destination project and returned
 [harvesting](../harvesting/SKILL.md) for provenance and identity conflicts; never
 turn a DOI, PMID or title into an invented item key.
 
+Inspect the document's citation binding first. If unset, use the existing Office
+`citations.bind` operation with one registered `projectId`, `style:{id,locale}`
+and `expectedRevision` plus `expectedNativeSnapshot` from the same
+`citations.inspect` result. Search only that bound library;
+do not aggregate project databases or retarget an old key. Changing libraries
+with managed citations/bibliography needs explicit authorization before
+`convertExistingToText:true`: this removes management anchors/metadata while
+preserving rich rendered content and native formatting, without rerendering old
+citations against the new library. Cancellation sends no mutation. See the
+[citation contract](../../../../docs/citations.md) for binding and stale-state handling.
+
 Insert/edit managed citations through `office` `citations.insert`/`citations.edit`,
 including ordered multi-source clusters, locators, affixes and suppress-author.
 Read rendered citation text plus identities. Set style/locale and refresh the whole

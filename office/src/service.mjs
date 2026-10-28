@@ -78,9 +78,9 @@ export function createOfficeService({ resolveOpen, authorizeOpen, authorizeSessi
     if (typeof references?.renderDocument !== 'function') throw new OfficeError('references_unavailable', 'The References renderer is not available');
     return runCitationCommand({
       invoke: async (operation, options) => (await session.native.call(nativeOperation, operation, options)).value,
-      renderDocument: (state, options) => references.renderDocument(state, { ...options, identity: session.identity, projectId: session.projectId }),
-      importSnapshots: typeof references.importSnapshots === 'function' ? (body, options) => references.importSnapshots(body, { ...options, identity: session.identity, projectId: session.projectId }) : undefined,
-      documentType: session.native.status?.type, projectId: session.projectId, request, signal,
+      renderDocument: (state, options) => references.renderDocument(state, { ...options, identity: session.identity }),
+      importSnapshots: typeof references.importSnapshots === 'function' ? (body, options) => references.importSnapshots(body, { ...options, identity: session.identity }) : undefined,
+      documentType: session.native.status?.type, request, signal,
     });
   }
   async function exportDocument(session, request, signal) {
@@ -130,9 +130,9 @@ export function createOfficeService({ resolveOpen, authorizeOpen, authorizeSessi
     if (request.operation === 'citations.codes') {
       if (typeof references?.parseDocument !== 'function') throw new OfficeError('references_unavailable', 'The References citation parser is unavailable');
       return promoteCitationCodes({ invoke: async (operation, options) => (await session.native.call(nativeOperation, operation, options)).value,
-        parse: (text, options) => references.parseDocument(text, { ...options, identity: session.identity, projectId: session.projectId }),
-        renderDocument: (state, options) => references.renderDocument(state, { ...options, identity: session.identity, projectId: session.projectId }),
-        documentType: session.native.status?.type, projectId: session.projectId, target: request.target, signal });
+        parse: (text, options) => references.parseDocument(text, { ...options, identity: session.identity }),
+        renderDocument: (state, options) => references.renderDocument(state, { ...options, identity: session.identity }),
+        documentType: session.native.status?.type, target: request.target, signal });
     }
     if (request.operation.startsWith('citations.')) return citationCommand(session, request, { signal });
     throw new OfficeError('invalid_operation', 'Unknown Office operation');

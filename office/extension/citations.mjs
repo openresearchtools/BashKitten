@@ -1,12 +1,41 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Shared UI/Pi command preparation. Only the native participant mutates a document.
 import { citationRuns, bibliographyRuns } from './rich-text.mjs';
+export function documentBinding(state) {
+  return state?.bindingVersion === 1 && typeof state.libraryId === 'string' && state.style?.id ? { projectId: state.libraryId, style: state.style } : null;
+}
+export function managedContentCount(state) {
+  return (state?.citations || []).filter(citation => !citation.missing).length + (state?.bibliography && !state.bibliography.missing ? 1 : 0) + (state?.bibliography?.copies || []).filter(copy => !copy.missing).length;
+}
+function bindingError(code, message, details) { return Object.assign(new Error(message), { code, details }); }
 export async function runCitationCommand({ invoke, renderDocument, importSnapshots, documentType, projectId, request, signal, preview = false }) {
+  if (request.noteType !== undefined && !['footnote', 'endnote'].includes(request.noteType)) throw Error('Invalid native note placement');
   const current = await invoke({ operation: 'citations.inspect' }, { signal });
-  if (request.expectedRevision !== undefined && request.expectedRevision !== current.revision) throw new Error('Citation state changed; inspect it again');
-  let state = structuredClone(current); state.projectId = projectId;
-  state.libraryId ||= request.libraryId || projectId;
-  state.style ||= { id: 'apa', locale: 'en-US' };
+  if (request.expectedRevision !== undefined && request.expectedRevision !== current.revision) throw bindingError('citation_state_changed', 'Citation state changed; inspect it again');
+  const binding = documentBinding(current), configuring = request.operation === 'citations.bind';
+  if (configuring) {
+    if (!Number.isInteger(request.expectedRevision)) throw bindingError('binding_revision_required', 'Inspect the document and provide its revision before changing document settings');
+    if (typeof request.expectedNativeSnapshot !== 'string') throw bindingError('binding_snapshot_required', 'Provide the inspected native snapshot before changing document settings');
+    if (request.expectedNativeSnapshot !== current.nativeSnapshot) throw bindingError('citation_state_changed', 'Native citations or bibliography changed; inspect and confirm the document settings again');
+    if (typeof request.projectId !== 'string' || !request.projectId || !request.style?.id) throw bindingError('invalid_binding', 'Choose a project library and citation style');
+    projectId = request.projectId;
+    const changingLibrary = current.libraryId !== projectId, managed = managedContentCount(current);
+    if (changingLibrary && managed && request.convertExistingToText !== true) throw bindingError('binding_confirmation_required', 'Changing the project library converts existing citations and bibliography to ordinary formatted content. Confirm this conversion explicitly.', { previousProjectId: current.libraryId || null, projectId, managed, revision: current.revision });
+    if (changingLibrary || !managed) {
+      // Validate only the selected library/style. Existing rendered content is
+      // never sent through the new style when changing the bound library.
+      const rendered = await renderDocument({ version: 1, revision: current.revision, projectId, libraryId: projectId, bindingVersion: 1, style: request.style, citations: [], bibliography: null }, { signal, projectId });
+      if (preview) return { binding: { projectId, style: rendered.style }, convertsExisting: changingLibrary && !!managed };
+      return invoke({ operation: 'citations.bind', expectedRevision: current.revision, nativeSnapshot: current.nativeSnapshot, projectId, style: rendered.style, noteType: request.noteType || current.noteType, convertExistingToText: request.convertExistingToText === true }, { signal, mutation: true });
+    }
+  } else {
+    if (!binding) throw bindingError('binding_required', 'Choose this document’s project library and citation style in Document settings before using citations');
+    projectId = binding.projectId;
+    if (request.projectId !== undefined && request.projectId !== projectId) throw bindingError('binding_project_mismatch', 'The citation request must use this document’s bound project library');
+  }
+  let state = structuredClone(current); delete state.binding;
+  state.projectId = projectId; state.libraryId = projectId; state.bindingVersion = 1;
+  if (configuring) state.style = request.style;
   if (request.metadataSource !== undefined && !['library', 'snapshot'].includes(request.metadataSource)) throw Error('Choose library metadata or embedded snapshots');
   state.metadataSource = request.metadataSource || state.metadataSource || 'library';
   let occurrenceId = request.id, imported;
@@ -46,15 +75,15 @@ export async function runCitationCommand({ invoke, renderDocument, importSnapsho
       state.libraryId = projectId; state.metadataSource = 'library';
     } catch (error) { error.details = { ...error.details, imported }; throw error; }
   } else if (request.operation === 'citations.bibliography') state.bibliography = { ...(state.bibliography?.missing ? {} : state.bibliography || {}), id: 'bibliography', target: request.target };
-  else if (request.operation !== 'citations.refresh') throw new Error('Unknown citation operation');
+  else if (!configuring && request.operation !== 'citations.refresh') throw new Error('Unknown citation operation');
   // A native user deletion removes the occurrence. Refresh reconciles the
   // metadata with those actual anchors instead of resurrecting deleted text.
-  if (['citations.refresh', 'citations.style', 'citations.bibliography'].includes(request.operation)) {
+  if (['citations.refresh', 'citations.style', 'citations.bibliography', 'citations.bind'].includes(request.operation)) {
     state.citations = state.citations.filter(citation => !citation.missing);
     if (state.bibliography?.missing && request.operation !== 'citations.bibliography') state.bibliography = null;
   }
   try {
-    state = await invoke({ operation: 'citations.prepare', expectedRevision: current.revision, state }, { signal });
+    state = await invoke({ operation: 'citations.prepare', expectedRevision: current.revision, configure: configuring, state }, { signal });
     const rendered = await renderDocument(state, { signal, projectId });
     const byId = new Map(rendered.citations.map(citation => [citation.id, citation]));
     state.style = rendered.style;
@@ -74,7 +103,7 @@ export async function runCitationCommand({ invoke, renderDocument, importSnapsho
       state.bibliography = { ...state.bibliography, ...bibliographyRuns(rendered.bibliography.entries), html: rendered.bibliography.html, entries: rendered.bibliography.entries, entryIds: rendered.bibliography.entryIds, parameters: rendered.bibliography.parameters, format: rendered.bibliography.format, layoutStyle: JSON.stringify([rendered.style.id, rendered.style.version, rendered.bibliography.format]) };
     }
     if (preview) return { state, rendered, occurrenceId };
-    const result = await invoke({ operation: 'citations.apply', expectedRevision: current.revision, state }, { signal, mutation: true });
+    const result = await invoke({ operation: 'citations.apply', expectedRevision: current.revision, configure: configuring, state }, { signal, mutation: true });
     return imported ? { ...result, imported } : result;
   } catch (error) { if (imported) error.details = { ...error.details, imported }; throw error; }
 }

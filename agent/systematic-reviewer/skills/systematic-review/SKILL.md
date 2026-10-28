@@ -44,6 +44,10 @@ For References metadata, snapshots, citation markers and live Office work, read
 Discover the bundled `references` and `office` tools and their concise skills.
 References owns shared identifier/OpenAlex lookup, imports, abstract enrichment,
 PDF resolution and CSL. A project is explicit and stays fixed throughout a job.
+Live Office citations also use one durable document-bound library and style;
+establish these through the existing Office plugin before citing. Never switch
+a document's library with managed content without explicit authorization to
+unlink its anchors while preserving the rich rendered content and formatting.
 For optional service configuration, read [setup](../../docs/setup.md).
 Other researcher-selected artifacts remain valid inputs; do not require migration.
 

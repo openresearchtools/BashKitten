@@ -68,11 +68,13 @@ export async function chooseCitation({
     item: null,
   }));
   const children = new Set(),
-    extraColumns = new Map();
+    extraColumns = new Map(),
+    columnPreferences = { phone: new Map(), wide: new Map() };
+  let tableWidths = [], columnDrag = null, lastTableLayout = "";
   const defaultColumns = [
-    { id: "title", label: "Title", width: 300, sort: "title" },
-    { id: "creator", label: "Creator", width: 220, sort: "creator" },
-    { id: "date", label: "Date", width: 110, sort: "year" },
+    { id: "title", label: "Title", width: 300, minWidth: 80, sort: "title" },
+    { id: "creator", label: "Authors", width: 220, minWidth: 70, sort: "creator" },
+    { id: "year", label: "Year", width: 54, minWidth: 44, sort: "year" },
   ];
   const chips = node("div", {
       class: "citation-chips",
@@ -197,33 +199,123 @@ export async function chooseCitation({
   function cellValue(item, column) {
     if (column.id === "title") return title(item);
     if (column.id === "creator") return creators(item);
+    if (column.id === "year") return year(item);
     return String(item.data?.[column.id] ?? "");
+  }
+  function minimumWidth(column) {
+    return column.minWidth || 80;
+  }
+  function rememberColumnWidths() {
+    const saved = columnPreferences[phoneLayout.matches ? "phone" : "wide"];
+    columns().forEach((column, index) => saved.set(column.id, tableWidths[index]));
+  }
+  function applyColumnWidths(widths) {
+    tableWidths = widths;
+    libraryRows.style.setProperty(
+      "--citation-columns", widths.map((width) => width + "px").join(" ") + " 44px",
+    );
+    libraryRows.style.setProperty(
+      "--citation-table-width", widths.reduce((sum, width) => sum + width, 44) + "px",
+    );
+    for (const separator of tableHeader.querySelectorAll("[data-citation-resize]")) {
+      const index = Number(separator.dataset.citationResize), list = columns();
+      separator.setAttribute("aria-valuenow", String(Math.round(widths[index])));
+      separator.setAttribute("aria-valuemin", String(minimumWidth(list[index])));
+      separator.setAttribute("aria-valuemax", String(Math.round(
+        widths[index] + widths[index + 1] - minimumWidth(list[index + 1]),
+      )));
+    }
+  }
+  function layoutColumns(force = false) {
+    if (columnDrag) return;
+    const width = library.root.clientWidth || (phoneLayout.matches ? 320 : 700),
+      mode = phoneLayout.matches ? "phone" : "wide",
+      list = columns(),
+      signature = [mode, width, ...list.map((column) => column.id)].join(":");
+    if (!force && signature === lastTableLayout) return;
+    lastTableLayout = signature;
+    const saved = columnPreferences[mode],
+      total = Math.max(194, width - 44),
+      yearWidth = phoneLayout.matches ? 46 : 54,
+      normal = [Math.round((total - yearWidth) * 0.58), 0, yearWidth];
+    normal[1] = total - normal[0] - normal[2];
+    let defaults = defaultColumns.map((column, index) => saved.get(column.id) || normal[index]);
+    const savedTotal = defaults.reduce((sum, value) => sum + value, 0);
+    defaults = defaults.map((value, index) => Math.max(
+      minimumWidth(defaultColumns[index]), value / savedTotal * total,
+    ));
+    // Distribute only the default fields inside the viewport. Optional metadata
+    // adds horizontal space; its add column remains sticky at the visible edge.
+    let spare = total - defaults.reduce((sum, value) => sum + value, 0);
+    for (let index = 0; index < defaults.length && spare < -0.01; index++) {
+      const shrink = Math.min(-spare, defaults[index] - minimumWidth(defaultColumns[index]));
+      defaults[index] -= shrink;
+      spare += shrink;
+    }
+    defaults[0] += Math.max(0, spare);
+    applyColumnWidths([...defaults, ...list.slice(3).map((column) =>
+      Math.max(minimumWidth(column), saved.get(column.id) || column.width),
+    )]);
+  }
+  function resizeColumn(index, delta, widths = tableWidths) {
+    const list = columns(), sum = widths[index] + widths[index + 1],
+      left = Math.max(minimumWidth(list[index]), Math.min(
+        sum - minimumWidth(list[index + 1]), widths[index] + delta,
+      )),
+      changed = [...widths];
+    changed[index] = left;
+    changed[index + 1] = sum - left;
+    applyColumnWidths(changed);
+    rememberColumnWidths();
+  }
+  function columnSeparator(column, index) {
+    const separator = node("span", {
+      class: "citation-column-resizer",
+      role: "separator", tabindex: "0", "aria-orientation": "vertical",
+      "aria-label": "Resize " + column.label + " column",
+      title: "Drag to resize " + column.label + " · arrow keys also resize",
+      "data-citation-resize": index,
+    });
+    separator.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      columnDrag = { pointerId: event.pointerId, x: event.clientX, widths: [...tableWidths] };
+      separator.setPointerCapture(event.pointerId);
+      d.el.classList.add("resizing-citation-columns");
+    });
+    separator.addEventListener("pointermove", (event) => {
+      if (columnDrag?.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      resizeColumn(index, event.clientX - columnDrag.x, columnDrag.widths);
+    });
+    const stop = (event) => {
+      if (columnDrag?.pointerId !== event.pointerId) return;
+      columnDrag = null;
+      d.el.classList.remove("resizing-citation-columns");
+      if (separator.hasPointerCapture(event.pointerId)) separator.releasePointerCapture(event.pointerId);
+      layoutColumns(true);
+    };
+    separator.addEventListener("pointerup", stop);
+    separator.addEventListener("pointercancel", stop);
+    separator.addEventListener("lostpointercapture", stop);
+    separator.addEventListener("click", (event) => event.stopPropagation());
+    separator.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "Home") {
+        columnPreferences[phoneLayout.matches ? "phone" : "wide"].clear();
+        layoutColumns(true);
+      } else resizeColumn(index, (event.key === "ArrowLeft" ? -1 : 1) * (event.shiftKey ? 24 : 8));
+    });
+    return separator;
   }
   function renderTableHeader() {
     const list = columns();
-    libraryRows.style.setProperty(
-      "--citation-columns",
-      list
-        .map((column, index) =>
-          index === 0
-            ? "minmax(" + column.width + "px,1fr)"
-            : column.width + "px",
-        )
-        .join(" ") + " 44px",
-    );
-    libraryRows.style.setProperty(
-      "--citation-table-width",
-      list.reduce((sum, column) => sum + column.width, 0) + 44 + "px",
-    );
     tableHeader.replaceChildren(
-      ...list.map((column) => {
-        if (!column.sort)
-          return node(
-            "span",
-            { role: "columnheader", title: column.label },
-            column.label,
-          );
-        const control = button(
+      ...list.map((column, index) => {
+        const control = column.sort ? button(
           column.label +
             (tableSort === column.sort
               ? tableDirection === "asc"
@@ -239,7 +331,7 @@ export async function chooseCitation({
             resetLibrary();
             renderTableHeader();
           },
-        );
+        ) : node("span", {}, column.label);
         return node(
           "span",
           {
@@ -252,6 +344,7 @@ export async function chooseCitation({
                 : "none",
           },
           control,
+          index < list.length - 1 ? columnSeparator(column, index) : null,
         );
       }),
       node(
@@ -264,6 +357,7 @@ export async function chooseCitation({
         "+",
       ),
     );
+    if (tableWidths.length) layoutColumns(true);
   }
   const library = new VirtualList({
     element: libraryRows,
@@ -271,7 +365,7 @@ export async function chooseCitation({
     header: tableHeader,
     role: "grid",
     rowRole: "row",
-    rowHeight: phoneLayout.matches ? 44 : 30,
+    rowHeight: phoneLayout.matches ? 64 : 44,
     load: (args) =>
       scoped.request(
         "items?" +
@@ -297,14 +391,14 @@ export async function chooseCitation({
             truncated = item.meta?.truncatedFields?.includes(column.id);
           return node(
             "span",
-            { class: "citation-cell", role: "gridcell", title: value },
+            { class: "citation-cell" + (column.id === "year" ? " citation-cell-year" : ""), role: "gridcell", title: value },
             truncated
               ? button(value + "…", () => void showFullValue(item, column), {
                   class: "citation-cell-value",
                   "aria-label":
                     "Read full " + column.label + " for " + title(item),
                 })
-              : value,
+              : node("span", { class: "citation-cell-text" }, value),
           );
         }),
         node(
@@ -386,10 +480,13 @@ export async function chooseCitation({
   });
   const sizeRows = () => {
     const position = library.root.scrollTop / library.rowHeight;
-    library.rowHeight = phoneLayout.matches ? 44 : 30;
+    library.rowHeight = phoneLayout.matches ? 64 : 44;
     library.root.scrollTop = position * library.rowHeight;
     library.draw();
+    layoutColumns(true);
   };
+  const tableResize = new ResizeObserver(() => layoutColumns());
+  tableResize.observe(library.root);
   phoneLayout.addEventListener("change", sizeRows);
 
   async function chooseColumns() {
@@ -403,7 +500,7 @@ export async function chooseCitation({
         "aria-label": "Find a column",
       });
     child.body.append(field("Extra metadata columns", searchColumns), options);
-    child.notice.textContent = "Title, Creator and Date are always shown.";
+    child.notice.textContent = "Title, Authors and Year are always shown. Drag a divider to resize columns.";
     child.actions.append(button("Cancel", () => child.el.close()));
     child.open();
     try {
@@ -416,7 +513,7 @@ export async function chooseCitation({
           if (entry.baseField) names.add(entry.baseField);
         }
       names.delete("title");
-      names.delete("date");
+      names.delete("year");
       names.delete(undefined);
       const entries = [...names]
         .map((id) => ({
@@ -957,6 +1054,7 @@ export async function chooseCitation({
         searchChanged.cancel();
         schedulePreview.cancel();
         phoneLayout.removeEventListener("change", sizeRows);
+        tableResize.disconnect();
         library.destroy();
         selectedList?.destroy();
         for (const child of [...children]) child.el.close();
@@ -967,6 +1065,7 @@ export async function chooseCitation({
     ),
   );
   d.open();
+  layoutColumns(true);
   search.focus();
   updateControls();
   try {

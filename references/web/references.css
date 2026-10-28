@@ -467,9 +467,9 @@ h3 {
 }
 /* The citation chooser uses one project-scoped, windowed table. */
 .citation-dialog {
-  width: min(980px, calc(100vw - 24px));
+  width: min(760px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
-  height: min(560px, calc(100dvh - 24px));
+  height: min(480px, calc(100dvh - 24px));
   padding: 12px;
   border-radius: 8px;
   display: flex;
@@ -563,6 +563,7 @@ h3 {
   border-bottom: 1px solid var(--line);
 }
 .citation-table-header > span {
+  position: relative;
   min-width: 0;
   padding: 4px 6px;
   font-size: 12px;
@@ -591,24 +592,71 @@ h3 {
   height: 100%;
 }
 .citation-cell {
+  display: flex;
+  align-items: center;
   min-width: 0;
   padding: 5px 6px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: 12px;
+  line-height: 1.3;
+}
+.citation-cell-text,
+.citation-cell-value {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  max-height: 2.6em;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.citation-cell-year {
+  align-items: flex-start;
+  padding-top: 7px;
+  font-variant-numeric: tabular-nums;
 }
 .citation-cell-value {
-  display: block;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   padding: 0;
   border: 0;
   background: transparent;
   text-align: left;
   font: inherit;
+}
+.citation-column-resizer {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  right: -7px;
+  bottom: 0;
+  width: 14px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+.citation-column-resizer::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 6px;
+  width: 1px;
+  background: var(--line);
+}
+.citation-column-resizer:hover::after,
+.citation-column-resizer:focus-visible::after {
+  width: 3px;
+  background: var(--accent);
+}
+.citation-column-resizer:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+.resizing-citation-columns,
+.resizing-citation-columns * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 .citation-add-cell {
   position: sticky;
@@ -858,7 +906,7 @@ h3 {
     grid-template-columns: minmax(110px, 3fr) minmax(70px, 1.5fr) 42px 20px;
   }
   .citation-dialog {
-    height: calc(100dvh - 12px);
+    height: min(480px, calc(100dvh - 12px));
     width: calc(100vw - 12px);
     max-width: calc(100vw - 12px);
     max-height: calc(100dvh - 12px);
@@ -893,7 +941,16 @@ h3 {
     min-height: 30px;
   }
   .citation-cell {
-    padding-block: 12px;
+    padding-block: 7px;
+  }
+  .citation-cell-text,
+  .citation-cell-value {
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    max-height: 3.9em;
+  }
+  .citation-cell-year {
+    padding-top: 9px;
   }
   .citation-add-button {
     width: 40px;

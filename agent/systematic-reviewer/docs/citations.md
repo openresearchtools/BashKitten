@@ -12,6 +12,43 @@ Canonical IDs are `bkref:<backend>/<project>/<item>`. Obtain them from Reference
 Never invent an ID, use `users/0` as an identity, or silently reinterpret a legacy
 library ID. Explicit legacy mappings preserve their source provenance.
 
+## Document library and style
+
+Use the existing `office` tool's `execute` action with `citations.inspect` before
+first use. Its state includes `revision`, `nativeSnapshot` and
+`binding:{projectId,style}` or null.
+For an unbound document, choose one registered library from References
+`GET /projects` and an installed style, then execute
+`{operation:'citations.bind',projectId,style:{id,locale},expectedRevision,expectedNativeSnapshot}`.
+Both guards must come from the same inspection. Native paste/deletion can change
+managed content without changing the stored revision. `noteType` is optional for native
+note placement. No separate binding tool or direct document-property write is
+needed. The returned native citation state contains the durable binding.
+
+All subsequent library-backed citation searches and commands use that project's
+database, which may differ from the document file's owning project. Do not combine
+databases or reinterpret an existing key in another library. An explicit
+`projectId` on a regular citation command must match the binding. Embedded copied
+snapshots may be rendered without foreign-library reads; importing/remapping them
+into the bound library remains a separate explicit operation.
+
+If a different library is selected while managed citations or a bibliography
+exist, require explicit user authorization before sending
+`convertExistingToText:true` with the bind command. This parameter unlinks the
+native anchors/fields and management metadata; it preserves rich rendered text,
+italics, superscripts, numbering, spacing, hanging indents and applicable
+cell/shape formatting. It does not flatten content or rerender old citations in
+the new library/style. On cancellation, send no mutation. A library change with
+no managed content is an ordinary settings operation; a same-library style
+change refreshes the managed citations normally.
+
+`binding_required`, `binding_revision_required`, `binding_snapshot_required`, `binding_project_mismatch` and
+`binding_confirmation_required` require the corresponding explicit settings or
+authorization; never silently set the conversion flag to clear an error.
+On `citation_state_changed`, inspect again and reconcile the changed document
+before a new mutation. Keep the existing operation-receipt reconciliation after
+an uncertain write; do not replay a timed-out binding change.
+
 ## Optional Markdown interchange
 
 `review_citation` creates `[cite](sr-cite:bkref:backend/project/KEY)`. A multi-source

@@ -2,11 +2,9 @@
 <html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>References</title><link rel="stylesheet" href="./office.css"><link rel="stylesheet" href="./shared/references.css"><script src="../cool.js"></script></head><body>
 <main id="references-panel"><div class="actions"><button id="citation">Add/Edit Citation</button><button id="bibliography">Bibliography</button><button id="refresh">Refresh</button></div>
 <label for="occurrence">Citation</label><select id="occurrence"><option value="">Insert at selection</option></select><button id="remove-citation">Remove selected citation</button>
-<label for="style-search">Style</label><input id="style-search" type="search" placeholder="Search citation styles"><select id="style" aria-label="Citation style"></select>
-<label for="locale">Locale</label><input id="locale" value="en-US" list="locales"><datalist id="locales"></datalist>
-<div id="note-placement"><label for="note-type">Note style placement</label><select id="note-type"><option value="footnote">Footnotes</option><option value="endnote">Endnotes</option></select></div><button id="apply-style">Apply style and locale</button>
-<label for="metadata-source">Reference data</label><select id="metadata-source"><option value="library">Current project library</option><option value="snapshot">Embedded document snapshots</option></select>
-<button id="import-snapshots">Import copied references into this project</button>
+<p id="binding-summary"></p><button id="settings">Document settings</button>
+<label for="metadata-source">Reference data</label><select id="metadata-source"><option value="library">Bound project library</option><option value="snapshot">Embedded document snapshots</option></select>
+<button id="import-snapshots">Import copied references into the bound library</button>
 <label for="copy-name">Copy with text citations</label><input id="copy-name" aria-label="Copy filename"><select id="copy-format" aria-label="Copy format"></select><button id="text-copy">Save copy with text citations</button><a id="copy-result" target="_blank" rel="noopener" hidden>Open the text citation copy</a>
 <button id="codes">Process citation codes</button><p id="status" role="status" aria-live="polite">Connecting to References…</p></main>
 <script type="module" src="./panel.mjs"></script></body></html>

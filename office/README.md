@@ -100,12 +100,30 @@ each frame/origin/nonce and exposes project-scoped References requests without
 another browser bearer token. The native experimental feature and actual write,
 copy, print and export gates remain enforced.
 
+Each document explicitly binds one project library and citation style in its
+native document property. First citation use opens Document settings, using the
+existing authorized project catalogue and bounded style search. The file's
+project remains its file authority; References requests are separately authorized
+for the single bound library. The chooser never searches across databases.
+`citations.inspect.binding` is `{projectId,style}` or `null`. Pi uses
+`citations.bind {projectId,style:{id,locale},expectedRevision,expectedNativeSnapshot,noteType?}` with the
+revision and nativeSnapshot from inspection. Native paste/deletion can change
+managed content without changing the plugin revision, so both guards are required. Unbound citation commands fail with `binding_required`.
+Changing the library with live managed citations or bibliography requires
+`convertExistingToText:true`; the UI asks explicitly before issuing it. Cancel
+issues no native mutation. The native operation unlinks fields/attributes while
+preserving rich rendered content, paragraph layout and cell/shape formatting,
+then records the new empty binding in the same native Undo group. It does not
+render the old content with the new style. A same-library style change uses the
+existing render/apply path. Revision and native-position checks reject stale
+settings or rendering; typed-code promotion also captures the bound library.
+
 Refresh/style commands accept `metadataSource: 'library' | 'snapshot'`; embedded
 snapshot rendering preserves original identities without reading other projects.
 `citations.import-snapshots {requestId?,collection?}` explicitly imports copied
 references with the native CSL JSON translator, in bounded receipt-deduplicated
 batches, then checks native revision/positions before relinking the document.
-Current-project identities are reused. If the document changed after import,
+Bound-library identities are reused. If the document changed after import,
 the error retains the request ID and mapping; imported library records remain
 available and the document is not silently retargeted.
 
@@ -121,8 +139,11 @@ released native client API even in a preset extension.
 The named native patches cover only observed missing facilities: small-screen
 extension access, a runtime proof-key path, generic document-property undo,
 Writer field-command undo/redo, generic OOXML user-defined attributes, and native
-view ownership for UNO undo contexts/actions, background shape undo, and a
-read-only native text-edit state property. These retain the existing
+view ownership for UNO undo contexts/actions, background shape undo, a
+read-only native text-edit state property, and rich-text snapshots in the native
+shape-attribute Undo action. The latter selects the existing native text-saving
+option so unlink Undo restores both attributes and paragraph/rich-text layout.
+These retain the existing
 collaborative ownership checks; they do not allow one participant to undo another.
 The light-canvas and Termux changes belong to their respective native owners.
 No citation algorithm is added to Office core. Recheck and retire seams when
@@ -224,6 +245,25 @@ leave the editor untouched. The preflight and mutation execute in one synchronou
 native script under the native SolarMutex; another view cannot start editing
 between those two steps. CSL rendering occurs before that script and still uses
 revision/anchor checks.
+
+The subsequent document-binding regression used the rebuilt native runtime
+(manifest SHA256
+`4227675632bb46547c8248a9c03223a8a8066270916fd18b87a41012a664724e`,
+adapter source SHA256
+`8d37f4cbbaf8cf1571507c91885bf5b956eddbabf84700134a097023633404df`).
+All six formats passed unbound-operation rejection, unconfirmed-switch
+nonmutation, stale-revision rejection, exact rich unlink, ordinary native
+Undo/Redo of the binding and managed content, and binding persistence after
+save/reopen. The 0018 correction selects the existing native attribute-Undo
+text snapshot option; Undo remains an ordinary editor regression check.
+Separate focused checks on the preceding 0016 runtime proved native paste can
+change the anchor snapshot without changing the stored revision, and that the
+snapshot guard rejects stale confirmation without mutation in all three editors.
+Byte-identical source copies also passed matched normal-save versus
+unlink/save/reopen comparisons in all six formats: normal export normalization
+was identical on both paths. Those earlier receipts retain their original
+runtime identities; none of these module checks establishes installed UI or
+platform acceptance.
 
 Native Calc cell input follows its existing last-commit behavior: both raw UNO
 cell writes and ordinary native `EnterString` can be superseded by a human's

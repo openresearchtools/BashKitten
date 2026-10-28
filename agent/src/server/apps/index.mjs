@@ -9,6 +9,7 @@ import { dataDir, readJson, json, body as readBody } from '../common.mjs';
 import { paths } from '../access/paths.mjs';
 import { controlRequest } from '../control.mjs';
 import { dispatchReferenceResolver } from '../access/browser-channel.mjs';
+import { publishNewFile } from '../localai/files.mjs';
 import { projects, createProject, renameProject, removeProject, archiveProject, relinkProject, withProjectOperation, withProjectTransition } from '../projects.mjs';
 import { fileDirectory, sendFile, sendFileHandle } from '../files/files.mjs';
 import { authorizeApplicationPath, privateManagerPaths, managerAllowed, runManagerOperation } from '../files/access.mjs';
@@ -88,6 +89,12 @@ export class ApplicationModules {
           target: { network: 'unix', address: endpoint.socketPath }, openPath: '/', enabled: false, startup: false, command: null }, false);
         return module.createReferencesService({ dataDir, backendId: await this.identity(), authorizeProject: (authority, id) => this.project(authority, id, { includeArchived: true }),
           authorizeLibraryLifecycle: (authority, id, options) => this.libraryAuthority(authority, id, options),
+          resolveInBrowser: ({ authority, projectId, requestId, signal }) => this.authorize(authority, async operation => {
+            await this.project(authority, projectId);
+            const activeSignal = signal ? AbortSignal.any([signal, operation.signal]) : operation.signal;
+            activeSignal.throwIfAborted();
+            return dispatchReferenceResolver(authority, { projectId, requestId }, { signal: activeSignal });
+          }),
           listProjects: async authority => { if (!await this.auth.valid(authority) || !await managerAllowed(authority)) throw Object.assign(Error('Project access is not authorized'), { status: 403 }); return (await projects()).projects.map(({ id, name }) => ({ id, name })); } });
       })().catch(error => { this.instances.delete('references'); throw error; });
       this.instances.set('references', pending);
@@ -168,7 +175,7 @@ export class ApplicationModules {
         this.prepareOfficeRuntime = prepareNative;
         let service;
         const provider = files.createOfficeProvider({ dataRoot: dataDir, environmentId: await this.identity(),
-          authorizePath: authorizeApplicationPath,
+          authorizePath: authorizeApplicationPath, publishNewFile,
           ensureRunning: async (name, definition) => {
             // A saved autostart may have loaded the previous package's config.
             // Reconcile once before this backend has issued any document views.
@@ -207,25 +214,30 @@ export class ApplicationModules {
           }),
           referenceContext: ({ grantId }) => this.gateway.authorizeOperation(grantId, 'references-context', async ({ grant }) => {
             await this.validateGrant(grant);
-            if (!grant.scope.projectId) return null;
-            await this.project(grant.record, grant.scope.projectId);
-            return { projectId: grant.scope.projectId };
+            // File ownership is independent of the one library stored in the
+            // native document. This is only a default-selection hint.
+            return { projectId: grant.scope.projectId || null };
           }),
           referenceRequest: ({ grantId, method, path: requestPath, body, signal: callerSignal }) => this.gateway.authorizeOperation(grantId, 'references-request', async ({ grant, signal }) => {
             await this.validateGrant(grant);
-            const projectId = /^\/api\/references\/projects\/([^/]+)(?:\/|$)/.exec(requestPath)?.[1];
-            if (!projectId || projectId !== grant.scope.projectId) throw Object.assign(Error('References request leaves the document project'), { status: 403 });
+            const uri = new URL(requestPath, 'https://references.invalid');
+            const catalogue = method === 'GET' && uri.pathname === '/api/references/projects';
+            const projectId = /^\/api\/references\/projects\/([^/]+)(?:\/|$)/.exec(uri.pathname)?.[1];
+            if (!catalogue) {
+              if (!projectId) throw Object.assign(Error('Choose one registered References library'), { status: 403 });
+              await this.project(grant.record, projectId, { includeArchived: true });
+            }
             return this.request({ component: 'references', method, path: requestPath.slice('/api/references'.length), body }, grant.record,
               { signal: callerSignal ? AbortSignal.any([callerSignal, signal]) : signal });
           }) });
         this.officeProvider = provider;
         const referenceOperation = name => (value, { identity, projectId, signal } = {}) => this.gateway.authorizeOperation(identity?.grantId, 'references-' + name, async context => {
           await this.validateGrant(context.grant);
-          const ownedProject = context.grant.scope.projectId;
-          if (!ownedProject || (projectId && projectId !== ownedProject)) throw Object.assign(Error('References request leaves the document project'), { status: 403 });
+          if (typeof projectId !== 'string' || !projectId) throw Object.assign(Error('The native document must choose one References library'), { status: 400 });
+          const selected = await this.project(context.grant.record, projectId, { includeArchived: true });
           const references = await this.references();
           if (typeof references[name] !== 'function') throw unavailable('References', 'the native citation operation is unavailable');
-          return references[name](value, { authority: context.grant.record, projectId: ownedProject, signal: signal ? AbortSignal.any([signal, context.signal]) : context.signal });
+          return references[name](value, { authority: context.grant.record, projectId: selected.id, signal: signal ? AbortSignal.any([signal, context.signal]) : context.signal });
         });
         service = module.createOfficeService({ resolveOpen: (body, identity, options) => this.resolveOfficeDocument(body, identity, options),
           authorizeOpen: (body, identity, options) => this.openOffice(body, identity, options),

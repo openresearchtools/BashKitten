@@ -168,6 +168,11 @@ export function nativeOperation(request) {
   const checkRevision = state => {
     if (request.expectedRevision !== state.revision) fail('Citation state changed; read it again before applying this operation');
   };
+  function checkBoundLibrary(current, desired) {
+    if (desired?.bindingVersion !== 1 || !desired.libraryId || !desired.style?.id) fail('Choose a document project library and citation style first');
+    if (current.bindingVersion !== 1 && request.configure !== true) fail('Choose a document project library and citation style first');
+    if (desired.libraryId !== current.libraryId) fail('Change the project library through the explicit binding operation');
+  }
   const requireType = type => { if (type !== documentType) fail('Operation requires ' + type); };
   function writerOwner(target) {
     return target?.table ? model.getTextTables().getByName(text(target.table, 80)).getCellByName(text(target.cell, 30)) : model.getText();
@@ -233,6 +238,20 @@ export function nativeOperation(request) {
     return page.getByIndex(integer(target?.index ?? 0, 0, page.getCount() - 1, 'shape index'));
   }
   function anchorName(id) { return 'BKREF_' + text(id, 4096).replace(/[^a-zA-Z0-9]/g, '').slice(0, 32); }
+  function uniqueShapeName(id, target) {
+    const names = new Set(); let visited = 0;
+    function collect(page) {
+      for (let index = 0; index < page.getCount(); index++) {
+        if (++visited > 20000) fail('Native shape name inspection exceeds the document bound');
+        const shape = page.getByIndex(index); if (shape !== target) names.add(shape.getName());
+        if (shape.supportsService('com.sun.star.drawing.GroupShape')) collect(shape);
+      }
+    }
+    for (const page of drawingPages()) collect(page);
+    const base = anchorName(id); let name = base, suffix = 0;
+    while (names.has(name)) name = base + ' ' + (++suffix);
+    return name;
+  }
   function portableMatch(item, citation) {
     return item.anchor.nativeKey === citation.anchor.nativeKey && (item.payload.citation.id === citation.id || item.payload.citation.id + ':copy:' + item.anchor.nativeKey === citation.id);
   }
@@ -351,6 +370,7 @@ export function nativeOperation(request) {
     const live = state.citations.filter(c => !c.missing);
     state.citations = [...orderCitations(live), ...state.citations.filter(c => c.missing)];
     state.nativeSnapshot = snapshot(state);
+    state.binding = state.bindingVersion === 1 && state.libraryId && state.style?.id ? { projectId: state.libraryId, style: state.style } : null;
     return state;
   }
   function intersectsManaged(range) {
@@ -535,7 +555,7 @@ export function nativeOperation(request) {
           anchor = findShape(target);
           if (intersectsManaged(anchor) || anchor.getString() !== target.expectedText) fail('The citation code shape changed');
         } else { anchor = model.createInstance('com.sun.star.drawing.TextShape'); page.add(anchor); anchor.setPropertyValue('TextAutoGrowHeight', isBibliography); anchor.setPropertyValue('TextAutoGrowWidth', false); }
-        anchor.setName(anchorName(citation.id));
+        anchor.setName(uniqueShapeName(citation.id, anchor));
         const nativeCell = spreadsheet ? cell(target) : null, position = nativeCell?.getPropertyValue('Position');
         if (nativeCell) anchor.setPropertyValue('Anchor', nativeCell);
         if (!target?.existingShape) anchor.setPosition(new css.awt.Point({ X: integer(target?.x ?? position?.X ?? 1000, 0, 2000000, 'x'), Y: integer(target?.y ?? position?.Y ?? 1000, 0, 2000000, 'y') }));
@@ -599,6 +619,7 @@ export function nativeOperation(request) {
   if (operation === 'citations.prepare') {
     const current = metadata(); checkRevision(current);
     const desired = request.state;
+    checkBoundLibrary(current, desired);
     if (desired.nativeSnapshot !== undefined && desired.nativeSnapshot !== snapshot(current)) fail('Native citation positions or text changed; inspect before preparing this operation');
     const removedNotes = documentType === 'text' ? current.citations.filter(old => old.anchor?.note && !desired.citations.some(citation => citation.id === old.id)).map(old => anchorFor(old)).filter(anchor => anchor && anchor.getString().trim() === anchor.getText().getString().trim()).map(anchor => anchor.getText()) : [];
     for (const citation of desired.citations) {
@@ -751,10 +772,27 @@ export function nativeOperation(request) {
       for (const [name, value] of Object.entries(request.properties || {})) { if (!allowed.includes(name)) fail('Unsupported property ' + name); target.setPropertyValue(name, value); }
       return { formatted: true };
     }
+    if (operation === 'citations.bind') {
+      const state = metadata(); checkRevision(state);
+      const projectId = text(request.projectId, 128);
+      if (!projectId || !request.style?.id || typeof request.style.id !== 'string') fail('Choose a project library and citation style');
+      if (request.nativeSnapshot !== snapshot(state)) fail('Native citation positions or text changed; inspect before changing the document library');
+      const managed = [...state.citations, ...bibliographies(state)].filter(citation => anchorFor(citation));
+      if (managed.length && state.libraryId !== projectId && request.convertExistingToText !== true) fail('Confirm conversion of existing citations and bibliography to ordinary formatted content before changing libraries');
+      if (managed.length && state.libraryId === projectId) fail('Refresh the existing citations when changing the bound library style');
+      preflightCitationShapes(state);
+      // Unlink only: preserve all native characters, fields' displayed runs,
+      // paragraph/cell/shape formatting, notes and bibliography layout.
+      for (const citation of [...state.citations, ...bibliographies(state)]) removeAnchor(citation, true);
+      persist({ version: 1, revision: state.revision, bindingVersion: 1, libraryId: projectId, projectId, style: request.style, noteType: request.noteType || state.noteType || 'footnote', metadataSource: 'library', citations: [], bibliography: null });
+      return inspectCitations();
+    }
     if (operation === 'citations.apply') {
       const state = metadata(); checkRevision(state);
       if (!request.state || request.state.version !== 1 || !Array.isArray(request.state.citations) || request.state.citations.length > 10000) fail('Invalid citation state');
       const desired = request.state;
+      checkBoundLibrary(state, desired);
+      delete desired.binding;
       preflightCitationShapes(state, desired);
       applyingState = desired;
       if (desired.nativeSnapshot !== undefined && desired.nativeSnapshot !== snapshot(state)) fail('Native citation positions or text changed during rendering; refresh before applying');

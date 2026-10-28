@@ -13,7 +13,7 @@ export async function connectReferencesHost({ signal, timeoutMs = 15000 } = {}) 
     let data; try { data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data; } catch { return; }
     if (data?.nonce !== nonce || origin && event.origin !== origin) return;
     if (data.MessageId === 'BashKitten_ReferencesContext') {
-      if (!/^https?:\/\//.test(event.origin) || !data.projectId || !data.documentId) return;
+      if (!/^https:\/\//.test(event.origin) || !data.documentId) return;
       origin = event.origin; clearTimeout(timer); resolveReady(data);
     } else if (data.MessageId === 'BashKitten_ReferencesResult') {
       const waiter = pending.get(data.requestId); if (!waiter) return; pending.delete(data.requestId); waiter.cleanup();
@@ -40,11 +40,15 @@ export async function connectReferencesHost({ signal, timeoutMs = 15000 } = {}) 
   }
   function request(path, { method = 'GET', body, signal } = {}) {
     if (!path.startsWith('/')) path = '/api/references/' + path;
-    const prefix = '/api/references/projects/' + encodeURIComponent(context.projectId);
-    if (!(path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix + '?'))) return Promise.reject(new Error('The References request is outside this document’s project'));
+    const pathname = path.split('?')[0];
+    const catalogue = method === 'GET' && pathname === '/api/references/projects';
+    const match = /^\/api\/references\/projects\/([^/?]+)(?:\/|$)/.exec(pathname);
+    if (!catalogue && !match) return Promise.reject(new Error('Select one project library for this References request'));
+    const prefix = match ? '/api/references/projects/' + match[1] : '';
+    // The host reauthorizes the selected library while retaining file authority.
     if (path.split('?')[0] === prefix + '/settings' && method !== 'GET' && (method !== 'PATCH' || !body || Object.keys(body).length !== 1 || ![-1, 0, 1].includes(body.citationAutoRegenerate))) return Promise.reject(new Error('Office may only change the citation regeneration preference'));
     if (!['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) return Promise.reject(new Error('Invalid References method'));
     return send({ MessageId: 'BashKitten_ReferencesRequest', method, path, body }, { signal });
   }
-  return { context, dispose, officeCopy: ({ name, format }, options) => send({ MessageId: 'BashKitten_OfficeCopy', name, format }, options), api: { request, project(projectId) { if (projectId !== context.projectId) throw new Error('References project mismatch'); return { request: (path, options) => request('/api/references/projects/' + encodeURIComponent(projectId) + '/' + path.replace(/^\//, ''), options) }; } } };
+  return { context, dispose, officeCopy: ({ name, format }, options) => send({ MessageId: 'BashKitten_OfficeCopy', name, format }, options), api: { request, project(projectId) { if (typeof projectId !== 'string' || !projectId) throw new Error('Select a project library'); return { request: (path, options) => request('/api/references/projects/' + encodeURIComponent(projectId) + '/' + path.replace(/^\//, ''), options) }; } } };
 }

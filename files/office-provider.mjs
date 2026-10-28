@@ -16,8 +16,8 @@ function call(socketPath, token, target, value, signal) {
     req.once('error', reject); req.setTimeout(120000, () => req.destroy(fail(504, 'Office did not respond'))); req.end(JSON.stringify(value));
   });
 }
-export function createOfficeProvider({ dataRoot, environmentId, authorizeOperation, authorizePath, ensureRunning, collaboraInternalURL, wopiURL, extension, coordinateNativeRestore, hasNativeViews, referenceContext, referenceRequest, officeCopy, addonBinary = path.join(root, 'bin', 'files-office-addon'), socketRoot = path.join(dataRoot, 'run') }) {
-  const owner = createDocumentOwner({ dataRoot, environmentId, authorizeOperation, authorizePath });
+export function createOfficeProvider({ dataRoot, environmentId, authorizeOperation, authorizePath, publishNewFile, ensureRunning, collaboraInternalURL, wopiURL, extension, coordinateNativeRestore, hasNativeViews, referenceContext, referenceRequest, officeCopy, addonBinary = path.join(root, 'bin', 'files-office-addon'), socketRoot = path.join(dataRoot, 'run') }) {
+  const owner = createDocumentOwner({ dataRoot, environmentId, authorizeOperation, authorizePath, publishNewFile });
   const launches = new Map(), issued = new Map(), downloads = new Map(); let starting; let callback; let callbackToken; let config;
   function configure(value) {
     const changed = value.collaboraInternalURL !== collaboraInternalURL || value.wopiURL !== wopiURL || JSON.stringify(value.extension) !== JSON.stringify(extension);
@@ -230,11 +230,12 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
       const request = await body(req, 1 << 20);
       if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(request?.method) || typeof request?.path !== 'string' || !request.path.startsWith('/api/references/')) throw fail(400, 'Invalid References request');
       // Match the References router's URL/segment decoding before the gateway
-      // checks the captured project. Encoded aliases cannot widen this bridge.
+      // authorizes the selected library. Encoded aliases cannot widen settings access.
       const referenceURL = new URL(request.path, 'https://references.invalid');
       let segments;
       try { segments = referenceURL.pathname.split('/').filter(Boolean).map(decodeURIComponent); } catch { throw fail(400, 'Invalid References path'); }
-      if (referenceURL.origin !== 'https://references.invalid' || segments.some(part => /[\x00-\x1f/\\]/.test(part)) || segments[0] !== 'api' || segments[1] !== 'references' || segments[2] !== 'projects' || !segments[3]) throw fail(400, 'An explicit References project is required');
+      const catalogue = request.method === 'GET' && segments.length === 3;
+      if (referenceURL.origin !== 'https://references.invalid' || segments.some(part => /[\x00-\x1f/\\]/.test(part)) || segments[0] !== 'api' || segments[1] !== 'references' || segments[2] !== 'projects' || (!catalogue && !segments[3])) throw fail(400, 'Choose an explicit References library or its registered catalogue');
       request.path = '/' + segments.map(encodeURIComponent).join('/') + referenceURL.search;
       let operation = segments.slice(4);
       if (operation[0] === 'api' && operation[1] === 'users' && operation[2] === '0') operation = operation.slice(3);

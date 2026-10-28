@@ -80,7 +80,17 @@ Retain both texts, raw index warnings, source IDs and version checks. Failed
 lookup must not erase text or invent an abstract. Respect human challenge flows.
 
 Use `office` for native citation insertion/editing, style/locale, whole-document
-refresh and bibliography. Library edits alone do not change a live document.
+refresh and bibliography. First inspect its document binding; if unset, use
+Office's existing `citations.bind` with one registered `projectId`,
+`style:{id,locale}`, `expectedRevision` and `expectedNativeSnapshot` from the same
+inspection. Search/read/import for
+that document only within its bound project database; never resolve a bare key
+against another library. The file's owning project or a browser selection does
+not replace this binding. A library switch with managed citations/bibliography
+requires explicit user authorization before `convertExistingToText:true`: it
+unlinks managed anchors while retaining rich rendered content and formatting.
+Cancellation leaves the binding/content untouched. Library metadata edits alone
+do not change a live document; refresh through the plugin afterward.
 `review_references` saves bounded verified CSL snapshots; `review_zotero` is its
 migration alias. `systematic-review` provides optional research methods and
 source-reading guidance without imposing a review database or pipeline.

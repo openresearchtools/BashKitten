@@ -113,7 +113,11 @@ collisions are rejected. It never moves files or merges histories implicitly.
 
 References dialog requests use a typed postMessage bridge bound to the exact
 native extension frame, origin and nonce. Credentials remain host-side. Requests
-are project-bound, bounded and cancellable on cancel/replacement/page closure.
+name one registered library, are bounded and are cancellable on
+cancel/replacement/page closure. The native document stores its one library/style
+binding. The host retains the original document file grant while reauthorizing
+each explicitly selected library request through the existing project owner;
+the first-use chooser lists the existing catalogue without scanning databases.
 The Office settings route only accepts the citation regeneration preference;
 broader library settings remain in the References manager. The host canonicalizes
 native URL aliases before the existing gateway checks the captured project.

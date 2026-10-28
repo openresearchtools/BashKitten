@@ -20,7 +20,7 @@ async function writeJSON(filename, value) { const temporary = filename + '.' + r
 async function digestFile(filename) { const hash = createHash('sha256'); for await (const chunk of createReadStream(filename)) hash.update(chunk); return hash.digest('hex'); }
 function validName(name) { if (typeof name !== 'string' || !name || name !== path.basename(name) || /[\x00-\x1f/\\]/.test(name) || name === '.' || name === '..' || Buffer.byteLength(name) > 240) throw failure(400, 'A plain file name is required'); return name; }
 
-export function createDocumentOwner({ dataRoot, environmentId, authorizeOperation, authorizePath, maxVersions = 50, snapshotIntervalMs = 300000 }) {
+export function createDocumentOwner({ dataRoot, environmentId, authorizeOperation, authorizePath, publishNewFile, maxVersions = 50, snapshotIntervalMs = 300000 }) {
   if (!path.isAbsolute(dataRoot) || !environmentId || typeof authorizeOperation !== 'function' || typeof authorizePath !== 'function') throw Error('An existing backend authority and private data root are required');
   const root = path.join(dataRoot, 'office-sessions');
   const queue = new Map();
@@ -30,6 +30,25 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
   const directory = id => { if (!uuid(id)) throw failure(400, 'Invalid document identity'); return path.join(root, 'documents', id); };
   const manifestFile = id => path.join(directory(id), 'manifest.json');
   const load = async id => { const entry = await json(manifestFile(id), null); if (!entry || entry.environmentId !== environmentId) throw failure(404, 'Document is unavailable'); return entry; };
+  async function publishCompleteFile(temporary, target) {
+    // Reuse the host's pinned-parent native publication owner. Android SELinux
+    // denies hard links; that owner uses Termux's renameat2 no-replace path.
+    // Standalone Linux modules retain their existing native link publication.
+    if (typeof publishNewFile !== 'function') {
+      if (process.platform === 'android' || process.env.BASHKITTEN_TERMUX === '1') throw failure(503, 'The owning native file publisher is unavailable');
+      return fs.link(temporary, target);
+    }
+    const source = await fs.stat(temporary, { bigint: true });
+    try { await publishNewFile(temporary, target); }
+    catch (error) {
+      const occupied = await fs.lstat(target, { bigint: true }).catch(e => { if (e.code !== 'ENOENT') throw e; return null; });
+      // The shared mv owner reports a skipped collision as an error after inode
+      // verification. Only a different existing inode is a naming collision;
+      // a durability failure after our publication must retain its receipt.
+      if (occupied && (occupied.dev !== source.dev || occupied.ino !== source.ino)) throw failure(409, 'The output file already exists', 'EEXIST');
+      throw error;
+    }
+  }
   async function permitted(scope, filename, { create = false } = {}) {
     const scopeRoot = await fs.realpath(scope.root);
     const canonical = create ? path.join(await fs.realpath(path.dirname(filename)), path.basename(filename)) : await fs.realpath(filename);
@@ -167,12 +186,15 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
     }));
   }
   function wopiName(value) {
-    // MS-WOPI encodes file-name headers using modified UTF-7, not URL decoding.
-    return String(value || '').replace(/\+([A-Za-z0-9+,/]*)-/g, (_all, encoded) => {
-      if (!encoded) return '+';
-      const bytes = Buffer.from(encoded.replace(/,/g, '/'), 'base64'); if (bytes.length % 2) throw failure(400, 'Invalid WOPI file name');
-      for (let i = 0; i < bytes.length; i += 2) { const first = bytes[i]; bytes[i] = bytes[i + 1]; bytes[i + 1] = first; }
-      return bytes.toString('utf16le');
+    // WOPI uses standard UTF-7. A shifted run ends at '-', a non-base64
+    // character (for example a space), or the end of the header. Collabora's
+    // native iconv converter legitimately omits the optional '-' terminator.
+    return String(value || '').replace(/\+([A-Za-z0-9+/]*)(-?)/g, (_all, encoded, terminator) => {
+      if (!encoded) { if (terminator) return '+'; throw failure(400, 'Invalid WOPI file name'); }
+      const bytes = Buffer.from(encoded, 'base64');
+      if (bytes.length % 2 || bytes.toString('base64').replace(/=+$/, '') !== encoded) throw failure(400, 'Invalid WOPI file name');
+      try { return new TextDecoder('utf-16be', { fatal: true, ignoreBOM: true }).decode(bytes); }
+      catch { throw failure(400, 'Invalid WOPI file name'); }
     });
   }
   async function rename(claims, request) {
@@ -186,9 +208,29 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
       await fs.mkdir(path.join(root, 'recovery'), { recursive: true, mode: 0o700 });
       const receipt = path.join(root, 'recovery', 'rename-' + randomUUID() + '.json');
       await writeJSON(receipt, { operation: 'rename', documentId: m.id, generation: m.generation, original: m.path, target, phase: 'prepared' });
-      signal?.throwIfAborted(); await fs.link(m.path, target); // atomic no-replace, same directory/filesystem
-      try { signal?.throwIfAborted(); await fs.unlink(m.path); } catch (error) { await fs.unlink(target).catch(() => {}); throw error; }
-      const old = m.path; m.path = target; await saveManifest(m);
+      const original = await fs.stat(m.path, { bigint: true });
+      const staged = path.join(path.dirname(m.path), `.bashkitten-save-${randomUUID()}`);
+      let published = false, removed = false, stagedIdentity;
+      try {
+        // Publish a complete sibling copy. The Android native publisher moves
+        // its input, so passing the live source would lose it on cancellation.
+        await fs.copyFile(m.path, staged, constants.COPYFILE_EXCL); await fs.chmod(staged, Number(original.mode & 0o777n));
+        const file = await fs.open(staged, 'r'); try { await file.sync(); stagedIdentity = await file.stat({ bigint: true }); } finally { await file.close(); }
+        await permitted(scope, m.path); await permitted(scope, target, { create: true });
+        if (fingerprint(await fs.stat(m.path, { bigint: true })) !== fingerprint(original)) throw failure(409, 'Document changed during native rename', 'STORAGE_CHANGED');
+        signal?.throwIfAborted(); await publishCompleteFile(staged, target); published = true;
+        await permitted(scope, m.path);
+        if (fingerprint(await fs.stat(m.path, { bigint: true })) !== fingerprint(original)) throw failure(409, 'Document changed during native rename', 'STORAGE_CHANGED');
+        signal?.throwIfAborted(); await fs.unlink(m.path); removed = true;
+      } catch (error) {
+        if (published && !removed) {
+          const current = await fs.lstat(target, { bigint: true }).catch(() => null);
+          // Retain a published copy if another writer has already changed it.
+          if (current && fingerprint(current) === fingerprint(stagedIdentity)) { await fs.unlink(target); await syncDir(path.dirname(target)); }
+        }
+        throw error;
+      } finally { await fs.unlink(staged).catch(() => {}); }
+      const old = m.path; m.path = target; m.fingerprint = fingerprint(await fs.stat(target, { bigint: true })); await saveManifest(m);
       const registryFile = path.join(root, 'documents.json'); const registry = await json(registryFile, { environmentId, paths: {} }); delete registry.paths[old]; registry.paths[target] = m.id; await writeJSON(registryFile, registry); await syncDir(path.dirname(target)); await fs.unlink(receipt); return { Name: base };
     })); });
   }
@@ -215,7 +257,7 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
         for (let index = 0; index < 1000; index++) {
           await permitted(scope, target, { create: true }); availablePath(target); signal?.throwIfAborted();
           await writeJSON(receipt, { ...record, target });
-          try { await fs.link(staging, target); published = true; break; }
+          try { await publishCompleteFile(staging, target); published = true; break; }
           catch (error) { if (error.code !== 'EEXIST' || !suggested) throw failure(error.code === 'EEXIST' ? 409 : 500, 'Save As target is unavailable'); name = path.basename(name, extension).replace(/ \(\d+\)$/, '') + ` (${index + 1})` + extension; target = path.join(path.dirname(m.path), name); }
         }
         if (!published) throw failure(409, 'No unused Save As name is available');
