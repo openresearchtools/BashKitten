@@ -8,3 +8,4 @@
 0008-native-libffi-executable-mappings.patch
 0009-native-boost-bionic-selection.patch
 0010-native-openssl-trust-path.patch
+0011-native-host-tool-flags.patch

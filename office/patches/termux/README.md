@@ -72,6 +72,10 @@ original MPL-2.0/Apache-2.0 notices. These rebased source changes are MPL-2.0.
   recipe's native certificate directory through OpenSSL's own Configure option.
   The runtime declares the existing `ca-certificates` package; normal certificate
   validation remains enabled.
+- `0011-native-host-tool-flags.patch`: clears target flags from the host-tool
+  environment, allowing each native host dependency to retain its own compiler
+  flags. Empty recursive make command-line assignments previously overrode ICU
+  include paths and C++ settings on a fresh build.
 
 The semaphore source, licenses and Python patch are materialized directly from
 the already retained immutable framework archive before applying the named
@@ -142,3 +146,8 @@ app, the default certificate store changed from zero CAs at `/usr/local/ssl` to
 121 CAs from the installed Termux bundle, including under native Landlock and
 seccomp. This used no environment certificate override and did not bypass
 verification; external HTTPS and full Office acceptance remain separate checks.
+
+A fresh ARM64 cross-build exposed the donor's recursive host-flag override.
+After patch 0011 and native clean/unpack of the affected host dependencies,
+ICU's complete host build and `makeconv -V` passed without stale system ICU 74
+references. Full ARM64 target compilation and runtime remain open gates.

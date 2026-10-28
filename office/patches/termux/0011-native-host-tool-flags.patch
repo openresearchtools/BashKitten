@@ -1,0 +1,16 @@
+diff --git a/engine/Makefile.in b/engine/Makefile.in
+--- a/engine/Makefile.in
++++ b/engine/Makefile.in
+@@ -331,9 +331,9 @@
+ cross-toolset: bootstrap fetch install-gdb-printers
+ # fetch again in case there are externals only needed on build platform
+ ifneq ($(OS),iOS)
+-	$(MAKE) gb_Side=build CPPFLAGS= CFLAGS= CXXFLAGS= LDFLAGS= $(PARALLELISM_OPTION) $(GMAKE_OPTIONS) -f $(BUILDDIR)/Makefile fetch
+-endif
+-	$(gb_Top_PIPEFAIL) $(MAKE) gb_Side=build CPPFLAGS= CFLAGS= CXXFLAGS= LDFLAGS= $(PARALLELISM_OPTION) $(GMAKE_OPTIONS) -f $(SRCDIR)/Makefile.gbuild build-tools $(gb_Top_PIPE)
++	env -u CPPFLAGS -u CFLAGS -u CXXFLAGS -u LDFLAGS $(MAKE) gb_Side=build $(PARALLELISM_OPTION) $(GMAKE_OPTIONS) -f $(BUILDDIR)/Makefile fetch
++endif
++	$(gb_Top_PIPEFAIL) env -u CPPFLAGS -u CFLAGS -u CXXFLAGS -u LDFLAGS $(MAKE) gb_Side=build $(PARALLELISM_OPTION) $(GMAKE_OPTIONS) -f $(SRCDIR)/Makefile.gbuild build-tools $(gb_Top_PIPE)
+ 
+ install-gdb-printers:
+ ifneq ($(filter-out WNT MACOSX iOS,$(OS)),)
