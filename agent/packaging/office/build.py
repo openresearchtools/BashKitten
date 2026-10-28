@@ -39,6 +39,7 @@ PATCHES = [
     'office/patches/0018-native-attribute-undo-text.patch',
     'office/patches/0019-native-product-branding.patch',
     'office/patches/0020-native-branding-installer-identity.patch',
+    'office/patches/0021-native-user-preset-extensions.patch',
 ]
 ENGINE_OPTIONS = ['--with-distro=CPLinux-LOKit', '--disable-epm',
                   '--without-package-format', '--disable-symbols',

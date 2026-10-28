@@ -1,0 +1,19 @@
+From: BashKitten contributors
+Subject: [PATCH] Discover extensions from the existing native user preset
+
+The released server installs UserSettings extensions and sends
+userpresetconfigid, but the browser loader only fetches the built-in and shared
+preset indexes. Reuse its existing preset loader for the native user stream,
+after shared settings so the existing per-ID merge preserves user precedence.
+No new extension protocol, authorization or preset storage is introduced.
+
+--- a/browser/src/control/Control.Extension.ts
++++ b/browser/src/control/Control.Extension.ts
+@@ -2340,6 +2340,7 @@ window.L.loadExtensions = async function (map: any, docType: string) {
+ 	const builtinIds = await fetchIndex('extensions/');
+ 	sources.push({ baseRel: 'extensions/', ids: builtinIds });
+ 	if (app.presetConfigId) await addPresetSource(app.presetConfigId);
++	if (app.userPresetConfigId) await addPresetSource(app.userPresetConfigId);
+ 
+ 	// Flatten the sources into one list of (id, baseRel) entries; Map.set's last-write-wins
+ 	// behavior causes admin extensions to override built-in
