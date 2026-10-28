@@ -988,3 +988,41 @@ h3 {
     overflow: auto;
   }
 }
+/* A landscape IME can leave less than a single toolbar row. Keep every
+   citation control reachable by scrolling the dialog itself in that case. */
+@media (max-height: 320px) {
+  .citation-dialog {
+    display: block;
+    overflow: auto;
+    padding: 6px;
+  }
+  .citation-dialog .dialog-content {
+    overflow: visible;
+    min-height: auto;
+  }
+  .citation-dialog .citation-table {
+    height: 160px;
+    flex: none;
+  }
+  .citation-dialog .citation-preview {
+    max-height: 80px;
+  }
+}
+@media (max-height: 180px) {
+  .citation-dialog {
+    height: 100dvh;
+    max-height: 100dvh;
+    padding: 2px;
+    margin-block: 0;
+  }
+  .citation-dialog > h2 {
+    display: none;
+  }
+  .citation-dialog button,
+  .citation-dialog input:not([type="checkbox"]),
+  .citation-dialog select {
+    min-height: 36px;
+    font-size: 12px;
+    padding: 4px 6px;
+  }
+}
