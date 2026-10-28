@@ -1,0 +1,81 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+import { connectReferencesHost } from './host-api.mjs';
+import { nativeOperation } from './kit.mjs';
+import { runCitationCommand } from './citations.mjs';
+import { promoteCitationCodes } from './code-promotion.mjs';
+import { chooseCitation } from './shared/shared-citation-dialog.js';
+const status = document.querySelector('#status'), controls = [...document.querySelectorAll('button')];
+const invoke = (request) => window.cool.callRemote(nativeOperation, request);
+let api, context, documentType, current, busy = false, styleAbort;
+function message(text, error = false) { status.textContent = text; status.dataset.error = String(error); }
+async function run(work) {
+  if (busy) return; busy = true; controls.forEach(control => control.disabled = true);
+  try { await work(); } catch (error) { message(error.message, true); }
+  finally { busy = false; controls.forEach(control => control.disabled = false); }
+}
+const renderDocument = (state, { signal } = {}) => api.project(context.projectId).request('citations/render', { method: 'POST', body: state, signal });
+async function command(request, preview = false, signal) {
+  return runCitationCommand({ invoke, renderDocument, documentType, projectId: context.projectId, request, preview, signal });
+}
+async function update() {
+  current = await invoke({ operation: 'citations.inspect' });
+  const select = document.querySelector('#occurrence'), selected = select.value;
+  select.replaceChildren(new Option('Insert at selection', ''));
+  for (const citation of current.citations) select.append(new Option((citation.rendered || citation.text || citation.id) + (citation.missing ? ' — anchor missing' : ''), citation.id));
+  select.value = selected; document.querySelector('#locale').value = current.style?.locale || 'en-US';
+  message(current.citations.length + ' managed citation' + (current.citations.length === 1 ? '' : 's'));
+}
+async function cite() {
+  const selection = await invoke({ operation: 'selection' });
+  const id = document.querySelector('#occurrence').value;
+  const initial = current.citations.find(citation => citation.id === id) || { items: [] };
+  const operation = id ? 'citations.edit' : 'citations.insert';
+  const target = selection.target;
+  const expectedRevision = current.revision;
+  let cluster;
+  if (new URLSearchParams(location.search).get('coolRole') !== 'dialog') {
+    const key = 'references-citation-' + crypto.randomUUID();
+    sessionStorage.setItem(key, JSON.stringify({ projectId: context.projectId, initial, style: current.style, operation, id, target, documentType }));
+    try { const result = await window.cool.dialog.open({ url: 'citation.html?invocation=' + encodeURIComponent(key), title: 'Add/Edit Citation', width: 880, height: 650 }); cluster = result.cancelled ? null : result.value; }
+    finally { sessionStorage.removeItem(key); }
+  } else cluster = await chooseCitation({ api, projectId: context.projectId, initial, style: current.style, preview: async (cluster, { style, signal } = {}) => {
+    const result = await command({ operation, id, cluster, target }, true, signal);
+    const occurrence = id ? result.state.citations.find(citation => citation.id === id) : result.state.citations.find(citation => citation.target);
+    return { html: occurrence?.html || '', text: occurrence?.text || '', sortedItems: occurrence?.sortedItems || occurrence?.items, sortable: result.rendered.style.sortable };
+  } });
+  if (!cluster) { message('Citation cancelled'); return; }
+  await command({ operation, id, cluster, target, expectedRevision }); await update();
+}
+async function styles() {
+  styleAbort?.abort(); const controller = styleAbort = new AbortController();
+  try {
+    const result = await api.request('/api/references/styles?query=' + encodeURIComponent(document.querySelector('#style-search').value) + '&limit=80', { signal: controller.signal });
+    if (controller !== styleAbort) return;
+    const select = document.querySelector('#style'); select.replaceChildren();
+    const selected = current?.style?.id || 'apa';
+    if (!result.items.some(item => item.id === selected)) select.append(new Option(selected, selected));
+    for (const item of result.items) select.append(new Option(item.title, item.id)); select.value = selected;
+  } catch (error) { if (error.name !== 'AbortError') message(error.message, true); }
+}
+try {
+  ({ api, context } = await connectReferencesHost());
+  ({ documentType } = await invoke({ operation: 'capabilities' }));
+  await update(); await styles();
+  const actions = {
+    citation: cite,
+    bibliography: async () => { const { target } = await invoke({ operation: 'selection' }); await command({ operation: 'citations.bibliography', target }); await update(); },
+    refresh: async () => { await command({ operation: 'citations.refresh' }); await update(); },
+    style: async () => document.querySelector('#style-search').focus(),
+    codes: async () => {
+      const result = await promoteCitationCodes({ invoke, parse: (text, { signal } = {}) => api.project(context.projectId).request('citations/parse', { method: 'POST', body: { text }, signal }), renderDocument, documentType, projectId: context.projectId });
+      await update(); message(result.promoted ? 'Promoted ' + result.promoted + ' citation code(s)' : result.skipped || 'No complete citation codes in the current region');
+    },
+  };
+  for (const [id, action] of Object.entries(actions)) document.querySelector('#' + (id === 'style' ? 'style-search' : id))?.addEventListener(id === 'style' ? 'focus' : 'click', () => id !== 'style' && run(action));
+  document.querySelector('#apply-style').addEventListener('click', () => run(async () => { await command({ operation: 'citations.style', style: { id: document.querySelector('#style').value, locale: document.querySelector('#locale').value } }); await update(); }));
+  let debounce; document.querySelector('#style-search').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(styles, 180); });
+  let changedRegionTimer;
+  window.cool.document.onModified = () => { clearTimeout(changedRegionTimer); changedRegionTimer = setTimeout(() => { if (!busy) run(actions.codes); }, 500); };
+  window.addEventListener('pagehide', () => { clearTimeout(changedRegionTimer); window.cool.document.onModified = null; }, { once: true });
+  window.cool.onCommand = id => run(actions[id] || (() => { throw new Error('Unknown References action'); }));
+} catch (error) { message(error.message, true); controls.forEach(control => control.disabled = true); }

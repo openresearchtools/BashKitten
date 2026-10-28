@@ -1,0 +1,75 @@
+--- a/backend/internal/web/static.go
++++ b/backend/internal/web/static.go
+@@ -131,8 +131,20 @@
+ 		externalLinks = newExternalLinks
+ 	}
+ 
++	// Optional trusted-gateway presentation hook. File operations still use native
++	// accounts/scopes; the gateway is the sole client of the private Unix socket.
++	baseURL := settings.Config.Http.BaseURL
++	documentProvider := ""
++	if settings.Config.Http.TrustProxyHeaders && settings.Config.Http.Socket != "" {
++		prefix := r.Header.Get("X-Forwarded-Prefix")
++		if strings.HasPrefix(prefix, "/apps/files/") && strings.HasSuffix(prefix, "/") && !strings.ContainsAny(prefix, "\\?#\r\n") && !strings.Contains(prefix, "..") {
++			baseURL = prefix
++			provider := r.Header.Get("X-BashKitten-Document-Provider")
++			if provider == prefix+"api/document-provider/open" { documentProvider = provider }
++		}
++	}
+ 	defaultThemeColor := settings.DefaultBackgroundColor()
+-	staticURL := settings.Config.Http.BaseURL + "public/static"
++	staticURL := baseURL + "public/static"
+ 	description := settings.Config.Frontend.Description
+ 	title := settings.Config.Frontend.Name
+ 	banner := staticURL + "/icons/pwa-icon-512.png" // largest generated PWA icon
+@@ -205,7 +217,7 @@
+ 
+ 	manifestURL := staticURL + "/site.webmanifest"
+ 	if shareHash != "" {
+-		pwaStartURL := settings.Config.Http.BaseURL + "public/share/" + shareHash + "/"
++		pwaStartURL := baseURL + "public/share/" + shareHash + "/"
+ 		query := url.Values{}
+ 		query.Set("start", pwaStartURL)
+ 		if title != settings.Config.Frontend.Name {
+@@ -225,7 +237,7 @@
+ 		"lightBackground":    settings.Config.Frontend.Styling.LightBackground,
+ 		"darkBackground":     settings.Config.Frontend.Styling.DarkBackground,
+ 		"staticURL":          staticURL,
+-		"baseURL":            settings.Config.Http.BaseURL,
++		"baseURL":            baseURL,
+ 		"favicon":            favicon,
+ 		"loginIcon":          loginIcon,
+ 		"color":              defaultThemeColor,
+@@ -247,7 +259,8 @@
+ 		"minSearchLength":        settings.Config.Server.MinSearchLength,
+ 		"disableExternal":        settings.Config.Frontend.DisableDefaultLinks,
+ 		"darkMode":               settings.Config.UserDefaults.UI.DarkMode,
+-		"baseURL":                settings.Config.Http.BaseURL,
++		"baseURL":                baseURL,
++		"documentProvider":       documentProvider,
+ 		"version":                versionString,
+ 		"commitSHA":              commitSHAString,
+ 		"signup":                 settings.Config.Auth.Methods.PasswordAuth.Signup,
+--- a/frontend/src/views/Files.vue
++++ b/frontend/src/views/Files.vue
+@@ -89,6 +89,20 @@
+   let res = await resourcesApi.fetchFiles(fetchSource, fetchPath, false, false);
+   if (res.type === "directory") {
+     return res;
++  }
++  // Versioned optional document provider: only a normal web navigation. The
++  // add-on owns Office protocol, identity, history and native editor lifecycle.
++  if (globalVars.documentProvider) {
++    const ext = res.name.split(".").pop().toLowerCase();
++    if (["docx", "xlsx", "pptx", "odt", "ods", "odp"].includes(ext)) {
++      const query = new URLSearchParams({ source: res.source, path: res.path });
++      window.location.assign(globalVars.documentProvider + "?" + query);
++      return new Promise(() => {});
++    }
++    if (ext === "pdf") {
++      window.location.assign(resourcesApi.getRawViewURL(res.source, res.path, res.viewToken));
++      return new Promise(() => {});
++    }
+   }
+   let directoryPath = removeLastDir(res.path);
+   if (!directoryPath || directoryPath === "") {

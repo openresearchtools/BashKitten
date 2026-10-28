@@ -1,0 +1,112 @@
+--- a/engine/sfx2/source/doc/objserv.cxx
++++ b/engine/sfx2/source/doc/objserv.cxx
+@@ -26,6 +26,9 @@
+ #include <com/sun/star/beans/PropertyValue.hpp>
+ #include <com/sun/star/beans/PropertyAttribute.hpp>
+ #include <com/sun/star/document/XCmisDocument.hpp>
++#include <com/sun/star/document/XUndoAction.hpp>
++#include <com/sun/star/document/XUndoManagerSupplier.hpp>
++#include <algorithm>
+ #include <com/sun/star/drawing/LineStyle.hpp>
+ #include <com/sun/star/lang/XServiceInfo.hpp>
+ #include <com/sun/star/security/XCertificate.hpp>
+@@ -466,8 +469,58 @@
+ 
+ namespace
+ {
++// User-defined document properties are native persistent metadata. Their changes
++// must join the same native undo context as extension edits, and remain undoable
++// after the originating client disconnects. No client callback is retained.
++struct StoredDocumentProperty
++{
++    beans::Property descriptor;
++    uno::Any value;
++};
++
++std::vector<StoredDocumentProperty> ReadDocumentProperties(
++    const uno::Reference<beans::XPropertySet>& xSet, const std::vector<OUString>& rNames)
++{
++    std::vector<StoredDocumentProperty> result;
++    const auto info = xSet->getPropertySetInfo();
++    for (const auto& name : rNames)
++        if (info->hasPropertyByName(name))
++            result.push_back({ info->getPropertyByName(name), xSet->getPropertyValue(name) });
++    return result;
++}
++
++class DocumentPropertiesUndo final : public cppu::WeakImplHelper<document::XUndoAction>
++{
++    uno::Reference<beans::XPropertyContainer> mxProperties;
++    std::vector<OUString> maNames;
++    std::vector<StoredDocumentProperty> maBefore;
++    std::vector<StoredDocumentProperty> maAfter;
++
++    void apply(const std::vector<StoredDocumentProperty>& rValues)
++    {
++        const uno::Reference<beans::XPropertySet> xSet(mxProperties, UNO_QUERY_THROW);
++        for (const auto& name : maNames)
++            if (xSet->getPropertySetInfo()->hasPropertyByName(name))
++                mxProperties->removeProperty(name);
++        for (const auto& property : rValues)
++            mxProperties->addProperty(property.descriptor.Name, property.descriptor.Attributes,
++                                      property.value);
++    }
++public:
++    DocumentPropertiesUndo(uno::Reference<beans::XPropertyContainer> properties,
++                           std::vector<OUString> names,
++                           std::vector<StoredDocumentProperty> before,
++                           std::vector<StoredDocumentProperty> after)
++        : mxProperties(std::move(properties)), maNames(std::move(names)),
++          maBefore(std::move(before)), maAfter(std::move(after)) {}
++    void undo() override { apply(maBefore); }
++    void redo() override { apply(maAfter); }
++    OUString getTitle() override { return u"Document properties"_ustr; }
++};
++
+ void SetDocProperties(const uno::Reference<document::XDocumentProperties>& xDP,
+-                      const cpo::uno::Sequence<beans::PropertyValue>& rUpdatedProperties)
++                      const cpo::uno::Sequence<beans::PropertyValue>& rUpdatedProperties,
++                      const uno::Reference<document::XUndoManager>& xUndoManager)
+ {
+     comphelper::SequenceAsHashMap aMap(rUpdatedProperties);
+     OUString aNamePrefix;
+@@ -485,6 +538,17 @@
+     }
+ 
+     uno::Reference<beans::XPropertyContainer> xUDP = xDP->getUserDefinedProperties();
++    uno::Reference<beans::XPropertySet> xPropertySet(xUDP, UNO_QUERY_THROW);
++    std::vector<OUString> aTouchedNames;
++    if (!aNamePrefix.isEmpty())
++        for (const auto& property : xPropertySet->getPropertySetInfo()->getProperties())
++            if (property.Name.startsWith(aNamePrefix)
++                && (property.Attributes & beans::PropertyAttribute::REMOVABLE))
++                aTouchedNames.push_back(property.Name);
++    for (const auto& property : aUserDefinedProperties)
++        if (std::find(aTouchedNames.begin(), aTouchedNames.end(), property.Name) == aTouchedNames.end())
++            aTouchedNames.push_back(property.Name);
++    const auto aBefore = ReadDocumentProperties(xPropertySet, aTouchedNames);
+     if (!aNamePrefix.isEmpty())
+     {
+         uno::Reference<beans::XPropertySet> xSet(xUDP, UNO_QUERY);
+@@ -511,6 +575,9 @@
+         xUDP->addProperty(rUserDefinedProperty.Name, beans::PropertyAttribute::REMOVABLE,
+                           rUserDefinedProperty.Value);
+     }
++    if (xUndoManager.is() && !xUndoManager->isLocked() && !aTouchedNames.empty())
++        xUndoManager->addUndoAction(new DocumentPropertiesUndo(
++            xUDP, aTouchedNames, aBefore, ReadDocumentProperties(xPropertySet, aTouchedNames)));
+ }
+ }
+ 
+@@ -712,7 +779,10 @@
+             {
+                 cpo::uno::Sequence<beans::PropertyValue> aUpdatedProperties;
+                 pItem->GetValue() >>= aUpdatedProperties;
+-                SetDocProperties(getDocProperties(), aUpdatedProperties);
++                uno::Reference<document::XUndoManagerSupplier> xUndoSupplier(GetModel(), UNO_QUERY);
++                SetDocProperties(getDocProperties(), aUpdatedProperties,
++                    xUndoSupplier.is() ? xUndoSupplier->getUndoManager()
++                                      : uno::Reference<document::XUndoManager>());
+             }
+             else
+             {

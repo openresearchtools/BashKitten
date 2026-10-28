@@ -1,0 +1,72 @@
+--- a/wsd/FileServerUtil.cpp
++++ b/wsd/FileServerUtil.cpp
+@@ -241,6 +241,13 @@
+             uiTheme = keyValue[1];
+             continue;
+         }
++        // Optional integrator policy, independent of authored document colors.
++        if (keyValue.equals(0, "LockedUITheme") && keyValue.equals(1, "light"))
++        {
++            json.set("lockedUITheme", "light");
++            json.set("darkTheme", "false");
++            continue;
++        }
+         if (keyValue.equals(0, "SavedUIState"))
+         {
+             if (keyValue.equals(1, "false"))
+--- a/browser/js/global.js
++++ b/browser/js/global.js
+@@ -1084,6 +1084,9 @@
+ 		},
+ 
+ 		get: function(key, defaultValue = undefined) {
++			if (global.uiDefaults && global.uiDefaults.lockedUITheme === 'light' &&
++				(key === 'darkTheme' || key.startsWith('darkBackgroundForTheme.')))
++				return 'false';
+ 			if (global.prefs._localStorageCache[key] !== undefined) {
+ 				return global.prefs._localStorageCache[key];
+ 			}
+@@ -1196,6 +1199,9 @@
+ 		},
+ 
+ 		set: function(key, value) {
++			if (global.uiDefaults && global.uiDefaults.lockedUITheme === 'light' &&
++				(key === 'darkTheme' || key.startsWith('darkBackgroundForTheme.')))
++				value = false;
+ 			value = String(value); // NOT "new String(...)". We cannot use .toString here because value could be null/undefined
+ 			if (global.prefs.useBrowserSetting) {
+ 				const oldValue = global.prefs._userBrowserSetting[key];
+--- a/browser/src/control/Control.UIManager.ts
++++ b/browser/src/control/Control.UIManager.ts
+@@ -310,6 +310,7 @@
+ 	 * Switches the UI to dark mode.
+ 	 */
+ 	loadDarkMode(): void {
++		if ((window as any).uiDefaults?.lockedUITheme === 'light') { this.loadLightMode(); return; }
+ 		document.documentElement.setAttribute('data-theme','dark');
+ 		this._map.fire('commandstatechanged', {commandName : 'toggledarktheme', state : 'true'});
+ 		this.map.fire('darkmodechanged');
+@@ -346,6 +347,7 @@
+ 	 * Sets the document background based on the activation flag.
+ 	 */
+ 	setDarkBackground(activate: boolean): void {
++		if ((window as any).uiDefaults?.lockedUITheme === 'light') activate = false;
+ 		var cmd = { 'NewTheme': { 'type': 'string', 'value': '' } };
+ 		activate ? cmd.NewTheme.value = 'Dark' : cmd.NewTheme.value = 'Light';
+ 		app.socket.sendMessage('uno .uno:InvertBackground ' + JSON.stringify(cmd));
+@@ -450,6 +452,7 @@
+ 	 * neither overwrites the saved choice nor flips the other windows.
+ 	 */
+ 	applyDarkMode(dark: boolean, persist: boolean): void {
++		if ((window as any).uiDefaults?.lockedUITheme === 'light') dark = false;
+ 		if (persist) {
+ 			window.prefs.set('darkTheme', dark);
+ 		} else {
+@@ -642,6 +645,7 @@
+ 	 * Informs the core system about the dark mode change.
+ 	 */
+ 	activateDarkModeInCore(activate: boolean): void {
++		if ((window as any).uiDefaults?.lockedUITheme === 'light') activate = false;
+ 		var cmd = { 'NewTheme': { 'type': 'string', 'value': '' } };
+ 		activate ? cmd.NewTheme.value = 'Dark' : cmd.NewTheme.value = 'Light';
+ 		app.socket.sendMessage('uno .uno:ChangeTheme ' + JSON.stringify(cmd));

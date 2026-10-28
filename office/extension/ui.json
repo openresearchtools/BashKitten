@@ -1,0 +1,13 @@
+{
+  "commands": [
+    {"id":"citation","title":"Add/Edit Citation","panel":true,"icon":"references.svg"},
+    {"id":"bibliography","title":"Bibliography","panel":true,"icon":"references.svg"},
+    {"id":"refresh","title":"Refresh Citations","panel":true,"icon":"references.svg"},
+    {"id":"style","title":"Citation Style","panel":true,"icon":"references.svg"},
+    {"id":"codes","title":"Process Citation Codes","panel":true,"icon":"references.svg"}
+  ],
+  "extensionsMenu": [{"command":"citation"},{"command":"bibliography"},{"command":"refresh"},{"command":"style"},{"command":"codes"}],
+  "menus": {"insert":["citation","bibliography"],"tools":["refresh","style","codes"]},
+  "notebookbar": [{"tab":"References","insertAfter":"Insert","groups":[{"id":"citations","label":"References","items":[{"type":"button","command":"citation","size":"large"},{"type":"button","command":"bibliography"},{"type":"button","command":"refresh"},{"type":"button","command":"style"}]}]}],
+  "keybindings": [{"command":"citation","key":"c","modifier":["ctrl","alt"]}]
+}

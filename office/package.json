@@ -1,0 +1,11 @@
+{
+  "name": "@bashkitten/office-diff",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "engines": {"node": ">=22.19.0"},
+  "bin": {"office-diff": "cli/office-diff.mjs"},
+  "files": ["index.mjs", "src", "cli", "extension", "package-extension.mjs", "package.json", "package-lock.json"],
+  "dependencies": {"yauzl": "3.4.0", "saxes": "6.0.0", "diff": "9.0.0"}
+}

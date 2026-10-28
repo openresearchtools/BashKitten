@@ -1,0 +1,57 @@
+// Native Collabora host postMessage bridge, adapted from Quantum WopiEditor.vue.
+// Only the missing host history chooser and References context are added.
+const context = JSON.parse(document.getElementById('host-context').textContent);
+const editor = document.getElementById('editor');
+const history = document.getElementById('history');
+const errorBox = document.getElementById('error');
+function post(MessageId, Values = {}) { editor.contentWindow.postMessage(JSON.stringify({ MessageId, Values, SendTime: Date.now() }), context.origin); }
+function report(error) { errorBox.textContent = error.message || String(error); errorBox.hidden = false; }
+async function api(action, body, signal) { const response = await fetch(location.pathname + '/' + action, { method: body ? 'POST' : 'GET', credentials: 'same-origin', signal, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); const value = await response.json(); if (!response.ok) throw Error(value.error || 'Office operation failed'); return value; }
+async function showHistory() {
+  const result = await api('history'); const list = history.querySelector('ol'); list.replaceChildren();
+  for (const version of result.versions) {
+    const row = document.createElement('li'); const label = document.createElement('span'); label.textContent = new Date(version.savedAt).toLocaleString(); row.append(label);
+    const open = document.createElement('button'); open.textContent = 'Open'; open.onclick = () => api('version', { versionId: version.id }).then(value => location.assign(value.url)).catch(report); row.append(open);
+    if (context.writable) { const restore = document.createElement('button'); restore.textContent = 'Restore'; restore.onclick = async () => { try { restore.disabled = true; const value = await api('restore', { versionId: version.id }); location.assign(value.reopen); } catch (error) { restore.disabled = false; report(error); } }; row.append(restore); }
+    list.append(row);
+  }
+  history.showModal();
+}
+document.getElementById('close-history').onclick = () => history.close();
+const extensionFrames = new Map();
+function abortFrame(frame) { const entry = extensionFrames.get(frame); if (entry) for (const request of entry.requests.values()) request.abort(); }
+window.addEventListener('pagehide', () => { for (const frame of extensionFrames.keys()) abortFrame(frame); extensionFrames.clear(); });
+window.addEventListener('message', event => {
+  if (event.origin !== context.origin) return;
+  let message = event.data; if (typeof message === 'string') { try { message = JSON.parse(message); } catch { return; } }
+  if (message?.MessageId === 'BashKitten_ReferencesReady') {
+    let child = false; try { child = event.source === editor.contentWindow || event.source.parent === editor.contentWindow; } catch { return; }
+    if (!child || !context.referenceContext || typeof message.nonce !== 'string' || message.nonce.length > 128) return;
+    abortFrame(event.source);
+    extensionFrames.set(event.source, { nonce: message.nonce, requests: new Map() });
+    event.source.postMessage({ MessageId: 'BashKitten_ReferencesContext', nonce: message.nonce, ...context.referenceContext }, context.origin); return;
+  }
+  if (['BashKitten_ReferencesRequest', 'BashKitten_ReferencesCancel'].includes(message?.MessageId)) {
+    const frame = extensionFrames.get(event.source);
+    if (frame?.nonce !== message.nonce || typeof message.requestId !== 'string' || message.requestId.length > 128) return;
+    frame.requests.get(message.requestId)?.abort();
+    if (message.MessageId === 'BashKitten_ReferencesCancel') { frame.requests.delete(message.requestId); return; }
+    if (frame.requests.size >= 32) return;
+    const target = event.source, request = new AbortController(); frame.requests.set(message.requestId, request);
+    api('references', { method: message.method, path: message.path, body: message.body }, request.signal).then(
+      result => { if (!request.signal.aborted) target.postMessage({ MessageId: 'BashKitten_ReferencesResult', nonce: message.nonce, requestId: message.requestId, result }, context.origin); },
+      error => { if (!request.signal.aborted) target.postMessage({ MessageId: 'BashKitten_ReferencesResult', nonce: message.nonce, requestId: message.requestId, error: error.message }, context.origin); }
+    ).finally(() => { if (frame.requests.get(message.requestId) === request) frame.requests.delete(message.requestId); });
+    return;
+  }
+  if (event.source !== editor.contentWindow) return;
+  switch (message?.MessageId) {
+    case 'App_LoadingStatus':
+      if (['Frame_Ready', 'Document_Loaded'].includes(message.Values?.Status)) {
+        post('Host_PostmessageReady'); post('Hide_Button', { id: 'toggledarktheme' }); post('Hide_Button', { id: 'invertbackground' }); post('Hide_Menu_Item', { id: 'toggledarktheme' }); post('Hide_Menu_Item', { id: 'invertbackground' });
+      } break;
+    case 'UI_FileVersions': showHistory().catch(report); break;
+    case 'UI_Close': window.close(); break;
+  }
+});
+document.getElementById('launch').submit();

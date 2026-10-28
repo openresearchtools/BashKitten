@@ -1,0 +1,115 @@
+--- a/frontend/src/api/utils.js
++++ b/frontend/src/api/utils.js
+@@ -1,7 +1,9 @@
+ import i18n from "@/i18n";
+ import { state } from "@/store";
+ 
+-const defaultRequestTimeoutMs = 5000;
++import { globalVars } from "@/utils/constants";
++
++const defaultRequestTimeoutMs = Number(globalVars.requestTimeoutMs) || 5000;
+ 
+ export function requestTimeoutSignal(ms = defaultRequestTimeoutMs) {
+   if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+--- a/backend/internal/web/static.go
++++ b/backend/internal/web/static.go
+@@ -140,7 +140,9 @@
+ 		if strings.HasPrefix(prefix, "/apps/files/") && strings.HasSuffix(prefix, "/") && !strings.ContainsAny(prefix, "\\?#\r\n") && !strings.Contains(prefix, "..") {
+ 			baseURL = prefix
+ 			provider := r.Header.Get("X-BashKitten-Document-Provider")
+-			if provider == prefix+"api/document-provider/open" { documentProvider = provider }
++			if provider == prefix+"api/document-provider/open" {
++				documentProvider = provider
++			}
+ 		}
+ 	}
+ 	defaultThemeColor := settings.DefaultBackgroundColor()
+@@ -257,6 +259,7 @@
+ 	data["globalVars"] = map[string]interface{}{
+ 		"name":                   settings.Config.Frontend.Name,
+ 		"minSearchLength":        settings.Config.Server.MinSearchLength,
++		"requestTimeoutMs":       settings.Config.Http.RequestTimeoutMs,
+ 		"disableExternal":        settings.Config.Frontend.DisableDefaultLinks,
+ 		"darkMode":               settings.Config.UserDefaults.UI.DarkMode,
+ 		"baseURL":                baseURL,
+--- a/backend/pkg/settings/structs.go
++++ b/backend/pkg/settings/structs.go
+@@ -24,17 +24,20 @@
+ }
+ 
+ type Http struct {
+-	Socket              string   `json:"socket"`           // socket to listen on - eg. /var/run/filebrowser.sock
+-	TLSKey              string   `json:"tlsKey"`           // path to TLS key
+-	TLSCert             string   `json:"tlsCert"`          // path to TLS cert
+-	Port                int      `json:"port"`             // port to listen on
+-	ListenAddress       string   `json:"listen"`           // address to listen on (default: 0.0.0.0)
+-	BaseURL             string   `json:"baseURL"`          // base URL for the server, the subpath that the server is running on.
+-	ExternalUrl         string   `json:"externalUrl"`      // used by share links if set (eg. http://mydomain.com)
+-	InternalUrl         string   `json:"internalUrl"`      // used by integrations if set, this is the base domain that an integration service will use to communicate with filebrowser (eg. http://localhost:8080)
+-	DisableWebDAV       bool `json:"disableWebDAV"`       // disable webdav support (default: false)
+-	TrustProxyHeaders   bool `json:"trustProxyHeaders"`   // honor X-Forwarded-* and X-Real-IP from a reverse proxy (default: false)
+-	DisableRateLimit    bool `json:"disableRateLimit"`    // turns off built-in auth route rate limiting and failed-login lockout (default false).
++	RequestTimeoutMs      int  `json:"requestTimeoutMs"`      // native request deadline; zero retains upstream default
++	ProxyTransferTimeouts bool `json:"proxyTransferTimeouts"` // private Unix proxy owns progress deadlines for streams
++
++	Socket            string `json:"socket"`            // socket to listen on - eg. /var/run/filebrowser.sock
++	TLSKey            string `json:"tlsKey"`            // path to TLS key
++	TLSCert           string `json:"tlsCert"`           // path to TLS cert
++	Port              int    `json:"port"`              // port to listen on
++	ListenAddress     string `json:"listen"`            // address to listen on (default: 0.0.0.0)
++	BaseURL           string `json:"baseURL"`           // base URL for the server, the subpath that the server is running on.
++	ExternalUrl       string `json:"externalUrl"`       // used by share links if set (eg. http://mydomain.com)
++	InternalUrl       string `json:"internalUrl"`       // used by integrations if set, this is the base domain that an integration service will use to communicate with filebrowser (eg. http://localhost:8080)
++	DisableWebDAV     bool   `json:"disableWebDAV"`     // disable webdav support (default: false)
++	TrustProxyHeaders bool   `json:"trustProxyHeaders"` // honor X-Forwarded-* and X-Real-IP from a reverse proxy (default: false)
++	DisableRateLimit  bool   `json:"disableRateLimit"`  // turns off built-in auth route rate limiting and failed-login lockout (default false).
+ }
+ 
+ type Environment struct {
+@@ -46,17 +49,17 @@
+ 	ConfigUserDefaultsSpecifiedPaths []string `json:"-"` // dot-paths explicitly set under userDefaults in config
+ 	// ConfigSourceDefaultPermissions maps permission flags explicitly set in config defaultPermissions (e.g. view -> true).
+ 	ConfigSourceDefaultPermissions map[string]bool `json:"-"`
+-	MuPdfAvailable                   bool     `json:"-"` // used internally if compiled with mupdf support
+-	EmbeddedFs                       bool     `json:"-"` // used internally if compiled with embedded fs support
+-	FFmpegPath                       string   `json:"-"`
+-	FFprobePath                      string   `json:"-"`
+-	FFmpegAvailable                  bool     `json:"-"`
+-	LoginIconPath                    string   `json:"-"` // resolved login icon path (filesystem or embedded)
+-	LoginIconIsCustom                bool     `json:"-"` // true if login icon is from custom filesystem path
+-	LoginIconEmbeddedPath            string   `json:"-"` // embedded asset path for default icon
+-	FaviconPath                      string   `json:"-"` // resolved favicon path (filesystem or embedded)
+-	FaviconIsCustom                  bool     `json:"-"` // true if favicon is from custom filesystem path
+-	FaviconEmbeddedPath              string   `json:"-"` // embedded asset path for default favicon
++	MuPdfAvailable                 bool            `json:"-"` // used internally if compiled with mupdf support
++	EmbeddedFs                     bool            `json:"-"` // used internally if compiled with embedded fs support
++	FFmpegPath                     string          `json:"-"`
++	FFprobePath                    string          `json:"-"`
++	FFmpegAvailable                bool            `json:"-"`
++	LoginIconPath                  string          `json:"-"` // resolved login icon path (filesystem or embedded)
++	LoginIconIsCustom              bool            `json:"-"` // true if login icon is from custom filesystem path
++	LoginIconEmbeddedPath          string          `json:"-"` // embedded asset path for default icon
++	FaviconPath                    string          `json:"-"` // resolved favicon path (filesystem or embedded)
++	FaviconIsCustom                bool            `json:"-"` // true if favicon is from custom filesystem path
++	FaviconEmbeddedPath            string          `json:"-"` // embedded asset path for default favicon
+ }
+ 
+ type Server struct {
+--- a/backend/internal/web/middleware.go
++++ b/backend/internal/web/middleware.go
+@@ -769,6 +769,15 @@
+ // withTimeoutHelper adds a configurable timeout context to any operation.
+ func withTimeoutHelper(timeout time.Duration, fn handleFunc) handleFunc {
+ 	return func(w http.ResponseWriter, r *http.Request, data *requestContext) (int, error) {
++		// A trusted private Unix gateway can own idle/progress deadlines for
++		// healthy byte streams, while ordinary API work retains a total budget.
++		if settings.Config.Http.ProxyTransferTimeouts && settings.Config.Http.Socket != "" && settings.Config.Http.TrustProxyHeaders &&
++			r.Method == http.MethodGet && (strings.HasSuffix(r.URL.Path, "/resources/view") || strings.HasSuffix(r.URL.Path, "/media/stream")) {
++			return fn(w, r, data)
++		}
++		if settings.Config.Http.RequestTimeoutMs > 0 {
++			timeout = time.Duration(settings.Config.Http.RequestTimeoutMs) * time.Millisecond
++		}
+ 		// Create a context with the specified timeout
+ 		ctx, cancel := context.WithTimeout(r.Context(), timeout)
+ 		defer cancel()

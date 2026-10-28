@@ -1,0 +1,3 @@
+/* Native Quantum branding hook; permissions are enforced by scoped accounts. */
+:root { --primaryColor: #e99032; --primaryColorDark: #c76d17; --font-family: system-ui, sans-serif; }
+body { font-family: system-ui, sans-serif; }

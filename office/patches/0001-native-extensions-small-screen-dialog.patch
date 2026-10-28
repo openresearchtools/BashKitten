@@ -1,0 +1,76 @@
+--- a/browser/src/control/Control.Extension.ts
++++ b/browser/src/control/Control.Extension.ts
+@@ -900,7 +900,10 @@
+ 	// which case the message goes out once it has loaded.
+ 	invokePanelCommand: function (commandId: string): void {
+ 		const sidebar = this.map.sidebar;
+-		if (!sidebar) return;
++		if (!sidebar) {
++			this._openEntryDialog(commandId);
++			return;
++		}
+ 		const deliver = () => {
+ 			this._postToIframe({ msgId: 'Extension_Command', commandId: commandId });
+ 		};
+@@ -924,7 +927,11 @@
+ 	// extension that is already showing takes it down again.
+ 	toggle: function () {
+ 		const sidebar = this.map.sidebar;
+-		if (!sidebar) return;
++		if (!sidebar) {
++			if (this._dialog) this._closeDialog({ cancelled: true });
++			else this._openEntryDialog();
++			return;
++		}
+ 
+ 		if (sidebar.hasExtensionDeck(this)) {
+ 			this._closeExtension();
+@@ -936,6 +943,23 @@
+ 		if (!this._panel) return;
+ 		sidebar.takeExtensionDeckSlot(this);
+ 		this._setToolitemHighlight(true);
++	},
++
++	// Small-screen UI has no native sidebar. Reuse the existing extension dialog
++	// host so independently installed panel commands remain available there.
++	_openEntryDialog: function (commandId?: string) {
++		const manifest: ExtensionManifest = this.options.manifest;
++		if (!manifest.entry || manifest.isGasExtension) return;
++		const deliver = () => this._postToWindow(
++			this._dialog?.iframeDialog._iframe.contentWindow,
++			{ msgId: 'Extension_Command', commandId: commandId },
++		);
++		if (this._dialog) { if (commandId) deliver(); return; }
++		const url = new URL(this.options.baseUrl + manifest.entry, document.baseURI);
++		url.searchParams.set('coolRole', 'dialog');
++		this._showDialogFrame(url.href, { dialogId: null, title: manifest.name });
++		if (commandId && this._dialog)
++			this._dialog.iframeDialog._iframe.addEventListener('load', deliver, { once: true });
+ 	},
+ 
+ 	_setToolitemHighlight: function (on: boolean) {
+@@ -1378,6 +1402,9 @@
+ 		if (msg.height !== undefined) {
+ 			iframeDialog._iframe.style.height = msg.height + 'px';
+ 		}
++		iframeDialog._container.style.maxWidth = 'calc(100vw - 16px)';
++		iframeDialog._container.style.maxHeight = 'calc(100dvh - 16px)';
++		iframeDialog._container.style.overflow = 'auto';
+ 		const origRemove = iframeDialog.remove.bind(iframeDialog);
+ 		// Titlebar X and in-iframe Esc both call remove() directly.  Turn
+ 		// either of those user gestures into a cancel result on the sidebar
+--- a/browser/src/control/Control.Menubar.ts
++++ b/browser/src/control/Control.Menubar.ts
+@@ -3318,6 +3318,12 @@
+ 		if (!Array.isArray(items))
+ 			return topMenu;
+ 
++		const extensionItems = items as MenuItem[];
++		if (!extensionItems.some((item) => item.id === 'extensions-menu'))
++			extensionItems.push({ name: _('Extensions'), id: 'extensions-menu', type: 'menu', menu: [] });
++		this._refreshExtensionsMenu(extensionItems);
++		this._applyExtensionMenuContributions(extensionItems);
++
+ 		for (var i = 0; i < items.length; i++) {
+ 			if (this._checkItemVisibility(items[i]) === true) {
+ 				var item = this._generateMenuStructure(items[i], docType, false);

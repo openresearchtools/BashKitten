@@ -1,0 +1,42 @@
+From: BashKitten contributors
+Subject: [PATCH] Allow a private environment WOPI proof key path
+
+The native proof-key loader only used a compile-time configuration directory.
+Reuse the existing native configuration owner to select an environment-owned
+key, preserving the released default and proof signing protocol.
+
+--- a/wsd/ProofKey.cpp
++++ b/wsd/ProofKey.cpp
+@@ -18,6 +18,7 @@
+ 
+ #include "ProofKey.hpp"
+ 
++#include <common/ConfigUtil.hpp>
+ #include <common/Log.hpp>
+ #include <common/NumUtil.hpp>
+ #include <common/Util.hpp>
+@@ -163,7 +164,10 @@
+         COOLWSD_CONFIGDIR
+ #endif
+         "/proof_key";
+-    return keyPath;
++    // A user-owned server keeps keys with its environment's private state.
++    // Preserve the released system-wide path when no override is configured.
++    const auto configured = ConfigUtil::getConfigValue<std::string>("proof_key.path", "");
++    return configured.empty() ? keyPath : configured;
+ }
+ 
+ // https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-mqqb/ade9efde-3ec8-4e47-9ae9-34b64d8081bb
+--- a/coolwsd.xml.in
++++ b/coolwsd.xml.in
+@@ -313,6 +313,10 @@
+         <file_extensions desc="List of file extensions that should be opened in view mode by default." type="string" default=""></file_extensions>
+     </view_mode>
+ 
++    <proof_key desc="WOPI proof signing key">
++        <path type="path" desc="Private RSA PEM key path. Empty uses the compiled configuration directory."></path>
++    </proof_key>
++
+     <storage desc="Backend storage">
+         <filesystem allow="false" />
+         <wopi desc="Allow/deny wopi storage." allow="true">
