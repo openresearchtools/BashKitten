@@ -3,6 +3,7 @@
 """Stage the pinned donor, apply recorded patches, build offline native Display."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import platform
@@ -75,6 +76,11 @@ def main():
     shutil.copy2(ROOT.parents[2]/'LICENSE',notice/'BashKitten-LICENSE')
     license_inventory = [{'name':'BuzzardOS Display','license':'AGPL-3.0-or-later','texts':[str(p.relative_to(payload)) for p in (notice/'buzzardos').iterdir()]},
                          {'name':'BashKitten Display','license':'AGPL-3.0-only','texts':['notices/BashKitten-LICENSE']}]
+    spec = importlib.util.spec_from_file_location('machine_build', repository/'agent/packaging/machines/build.py')
+    machine_build = importlib.util.module_from_spec(spec); spec.loader.exec_module(machine_build)
+    rust = machine_build.rust_toolchain_notices(notice/'rust-toolchain')
+    license_inventory.append({key: value for key, value in rust.items() if key != 'text'} |
+                             {'texts': ['notices/rust-toolchain/LICENSE-Rust.txt']})
     dependencies = []
     for package in tomllib.loads((source / 'Cargo.lock').read_text())['package']:
         if 'source' not in package:

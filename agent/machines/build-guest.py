@@ -68,6 +68,7 @@ def main():
     docs=stage/'usr/share/bashkitten-machines-guest';docs.mkdir(parents=True)
     shutil.copy2(ROOT/'upstream/buzzard-runtime/LICENSE',docs/'COPYING')
     shutil.copy2(ROOT/'NOTICE',docs/'copyright')
+    machine_build.rust_toolchain_notices(docs/'rust-toolchain')
     libc=ROOT/'guest/sudo-bridge/vendor/libc'
     for license in libc.glob('LICENSE*'):shutil.copy2(license,docs/('libc-'+license.name))
     for license in fuse_record['license_paths']:

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Pinned-source preparation and offline Files build. Never edits pristine imports."""
-import argparse, hashlib, io, json, os, pathlib, platform, re, shutil, subprocess, sys, tarfile, zipfile
+import argparse, hashlib, io, json, os, pathlib, platform, re, runpy, shutil, subprocess, sys, tarfile, zipfile
 import notices
 import go_runtime
 ROOT = pathlib.Path(__file__).resolve().parent
 DEPS = ROOT / 'vendor/dependencies'
 sys.path.insert(0, str(ROOT.parent / 'agent/packaging'))
 import source_cache
+go_notices = runpy.run_path(str(ROOT.parent / 'auth/build/go-notices.py'))
 def sha(data): return hashlib.sha256(data).hexdigest()
 def run(argv, cwd, env=None):
     print('+', ' '.join(map(str, argv)), flush=True)
@@ -70,7 +71,7 @@ def main():
     if args.source_cache == ROOT.parent or ROOT.parent in args.source_cache.parents: raise ValueError('Source cache must stay outside the repository')
     if args.target == 'linux' and args.architecture != {'x86_64':'amd64','aarch64':'arm64'}.get(platform.machine()): raise ValueError('Linux builds require the native runner architecture')
     if args.target == 'termux' and (args.architecture not in ['aarch64','x86_64'] or not args.ndk): raise ValueError('Termux requires --architecture aarch64|x86_64 and the pinned --ndk')
-    inputs = ['files','auth/dependencies/go-toolchain','agent/packaging/source_cache.py',*notices.source_inputs()]
+    inputs = ['files','auth/dependencies/go-toolchain','agent/packaging/source_cache.py','auth/build/go-notices.py',*notices.source_inputs()]
     if args.target == 'termux': inputs += ['agent/packaging/termux/native_toolchain.py','agent/packaging/node/lock.json','agent/vendor/node/libcxx']
     source_tree, source_dirty = input_state(inputs)
     if not args.prepare_only:
@@ -94,7 +95,7 @@ def main():
                 shutil.copyfile(metadata, target.with_suffix(extension))
         elif entry['ecosystem'] == 'npm': npm_archives.append(destination)
     go_source = ROOT.parent/'auth/dependencies/go-toolchain'; go_pin = json.loads((go_source/'sources.json').read_text())
-    go_archive = source_cache.fetch(go_pin, args.source_cache, local=go_source/go_pin['file'], offline=args.offline_sources)
+    source_cache.fetch(go_pin, args.source_cache, local=go_source/go_pin['file'], offline=args.offline_sources)
     if args.target == 'termux':
         import termux
         termux.recipe_archive(args)
@@ -127,6 +128,7 @@ def main():
     env.update({'GOPROXY':proxy.as_uri(),'GOSUMDB':'off','GOTOOLCHAIN':'local','GOMODCACHE':str(work/'gomodcache'),'CGO_ENABLED':'1','GOTELEMETRY':'off','GOMAXPROCS':str(max(1,args.jobs))})
     version = subprocess.check_output([args.go,'version'],env=env,text=True)
     if version.split()[2] != 'go'+go_pin['version']: raise ValueError('Go compiler must match retained release '+go_pin['version'])
+    go_legal = go_notices['toolchain_notices'](args.go, env, args.source_cache, args.offline_sources)
     prefix = work/'prefix'; prefix.mkdir(exist_ok=True)
     env['PATH'] = str(prefix/'bin') + os.pathsep + env['PATH']; env['PKG_CONFIG_PATH'] = str(prefix/'lib/pkgconfig')
     env['PKG_CONFIG_LIBDIR'] = str(prefix/'lib/pkgconfig')
@@ -169,10 +171,8 @@ def main():
     shutil.copy2(ROOT/'vendor/quantum/source/LICENSE',payload/'legal/Quantum-LICENSE')
     for name in ['COPYING','LICENSE','NOTICE']: shutil.copy2(ROOT/'addon'/name,payload/'legal'/('addon-'+name))
     licenses.extend([{'name':'File Browser Quantum','version':'2.0.2-stable','license':'Apache-2.0','text':(payload/'legal/Quantum-LICENSE').read_text()}, {'name':'BashKitten Files adapters and Office add-on','license':'AGPL-3.0-only AND Apache-2.0 AND MIT','text':'\n\n'.join((ROOT/'addon'/name).read_text() for name in ['NOTICE','COPYING','LICENSE'])}])
-    with tarfile.open(go_archive) as archive:
-        go_text = '\n\n'.join(archive.extractfile(name).read().decode(errors='replace') for name in go_pin['licenses'])
-    (payload/'legal/Go-NOTICES').write_text(go_text)
-    licenses.append({'name':'Go runtime and standard library','version':go_pin['version'],'source':go_pin['url'],'license':'BSD-3-Clause and included notices','text':go_text})
+    go_notices['write_toolchain_notices'](go_legal, payload/'legal/go-toolchain')
+    licenses.append(go_legal['record'])
     if toolchain: licenses.extend(termux.notices(args,toolchain))
     write_json(payload/'licenses.json',licenses)
     (payload/'sources').mkdir(exist_ok=True); write_json(payload/'sources/dependencies.json', {**graph, 'components': [{key:value for key,value in entry.items() if key != 'localArchive'} for entry in graph['components']]});shutil.copy2(DEPS/'native-sources.json',payload/'sources/native-dependencies.json')

@@ -9,11 +9,13 @@ Go modules or Rust crates is permitted.
 # SPDX-License-Identifier: AGPL-3.0-only
 import argparse
 import hashlib
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
 import platform
 import re
+import runpy
 import shlex
 import shutil
 import subprocess
@@ -24,6 +26,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'agent/packaging'))
 from source_cache import fetch
+GO_NOTICES = runpy.run_path(str(ROOT / 'auth/build/go-notices.py'))
 VENDOR = ROOT / 'agent/machines/vendor'
 COMPONENTS = ('podman', 'crun', 'conmon', 'netavark', 'aardvark-dns',
               'passt', 'libfuse', 'fuse-overlayfs', 'catatonit')
@@ -102,10 +105,14 @@ def license_records(record, source, rust_vendor=None):
         tree = output(['cargo', 'tree', '--locked', '--offline', '--target', host,
                        '--edges', 'normal,build', '--prefix', 'none', '--format', '{p}'], source)
         selected = {tuple(line.split()[:2]) for line in tree.splitlines() if len(line.split()) >= 2}
+        root_package = tomllib.loads((source / 'Cargo.toml').read_text())['package']
+        covered = {(root_package['name'], 'v' + root_package['version'])}
         for manifest in sorted(rust_vendor.glob('*/Cargo.toml')):
             pkg = tomllib.loads(manifest.read_text())['package']
-            if (pkg['name'], 'v' + pkg['version']) not in selected:
+            identity = (pkg['name'], 'v' + pkg['version'])
+            if identity not in selected:
                 continue
+            covered.add(identity)
             files = [p for p in manifest.parent.rglob('*') if p.is_file() and
                      re.match(r'^(licen[cs]e|copying|notice|copyright)([.\-_]|$)', p.name, re.I)]
             extra = pkg.get('license-file')
@@ -125,7 +132,71 @@ def license_records(record, source, rust_vendor=None):
                             'source': pkg.get('repository'), 'license': pkg.get('license', 'See included license text'),
                             'text': '\n\n'.join(p.read_text(encoding='utf-8') for p in sorted(set(files))),
                             'distribution': 'bundled'})
+        require(selected <= covered, 'Rust closure lacks retained crate notices: ' +
+                ', '.join(name + ' ' + version for name, version in sorted(selected - covered)))
     return records
+
+
+def rust_toolchain_notices(destination):
+    """Reuse Rust's released full standard-library notices for native binaries.
+
+    Cargo's dependency graph excludes its statically linked standard library and
+    compiler builtins. Rust publishes their own complete copyright inventory;
+    retain that inventory and the source runtime exceptions without substituting
+    a generic SPDX license. Guest and Display packaging share this owner.
+    """
+    retained = ROOT / 'agent/machines/rust-toolchain'
+    pin = json.loads((retained / 'sources.json').read_text())
+    compiler = dict(line.split(': ', 1) for line in output(['rustc', '-vV']).splitlines() if ': ' in line)
+    require(compiler.get('release') == pin['version'] and compiler.get('commit-hash') == pin['commit'],
+            'Rust compiler does not match retained standard-library release source')
+    fetch(pin, local=retained / pin['file'])
+    docs = Path(output(['rustc', '--print', 'sysroot'])) / 'share/doc/rust'
+    destination = Path(destination)
+    texts = []
+
+    class PlainText(HTMLParser):
+        def handle_data(self, data):
+            self.parts.append(data)
+
+    for entry in pin['licenseFiles'] + pin['sourceLicenseFiles']:
+        relative = Path(entry['file'])
+        require(not relative.is_absolute() and '..' not in relative.parts, 'Invalid retained Rust legal path')
+        path = retained / relative
+        require(sha(path) == entry['sha256'], 'Rust notice checksum mismatch: ' + str(relative))
+        data = path.read_text(encoding='utf-8')
+        require(data.strip(), 'Empty Rust legal text: ' + str(relative))
+        if entry in pin['licenseFiles']:
+            require(sha(docs / relative) == entry['sha256'], 'Installed Rust release notices differ: ' + str(relative))
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, target)
+        if relative.suffix == '.html':
+            parser = PlainText(convert_charrefs=True)
+            parser.parts = []
+            parser.feed(data)
+            parser.close()
+            data = ''.join(parser.parts)
+        texts.append(str(relative) + '\n\n' + data)
+    text = '\n\n'.join(texts)
+    (destination / 'LICENSE-Rust.txt').write_text(text)
+    (destination / 'source.json').write_text(json.dumps(pin, indent=2) + '\n')
+    return {'name': 'Rust standard library and compiler runtime', 'version': pin['version'],
+            'source': pin['url'], 'license': 'Apache-2.0 OR MIT and included notices',
+            'text': text, 'distribution': 'bundled', 'sourceCommit': pin['commit']}
+
+
+def verify_go_closure(binary, record):
+    """Reconcile linked native Go modules with the retained donor notices."""
+    metadata = json.loads(output(['go', 'version', '-m', '-json', str(binary)]))
+    pin = json.loads((ROOT / 'auth/dependencies/go-toolchain/sources.json').read_text())
+    require(metadata['GoVersion'] == 'go' + pin['version'], 'Linked Go runtime differs from retained source')
+    for module in metadata.get('Deps', []):
+        module_path = 'source/vendor/' + module['Path'] + '/'
+        notices = [name for name in record['license_paths'] if name.startswith(module_path) and
+                   re.match(r'^(licen[cs]e|unlicense|copying)([.\-_]|$)', Path(name).name, re.I)]
+        require(notices, 'Linked Go module lacks retained full license: ' + module['Path'])
+    return metadata
 
 
 def build(args):
@@ -143,12 +214,13 @@ def build(args):
     records = {name: verify_source(VENDOR / name) for name in COMPONENTS}
     toolchain = {name: output([name, '--version']).splitlines()[0] for name in ('cc', 'cargo', 'rustc')}
     toolchain['go'] = output(['go', 'version'])
-    require(re.search(r'go1\.(2[6-9]|[3-9]\d)\.', toolchain['go']), 'Podman requires Go >=1.26')
+    go_legal = GO_NOTICES['toolchain_notices']()
     patch_root = ROOT / 'agent/machines/patches'
     patches = {str(path.relative_to(patch_root)): sha(path)
                for path in sorted(patch_root.glob('*/*.patch'))}
     key = hashlib.sha256(json.dumps({'sources': records, 'toolchain': toolchain, 'patches': patches,
-        'architecture': architecture, 'licenseSupplements': sha(ROOT / 'agent/machines/license-supplements/sources.json'), 'recipe': sha(Path(__file__))}, sort_keys=True).encode()).hexdigest()
+        'architecture': architecture, 'licenseSupplements': sha(ROOT / 'agent/machines/license-supplements/sources.json'), 'recipe': sha(Path(__file__)), 'goNotices': sha(ROOT / 'auth/build/go-notices.py'),
+        'goSource': go_legal['pin'], 'rustSource': sha(ROOT / 'agent/machines/rust-toolchain/sources.json')}, sort_keys=True).encode()).hexdigest()
     cache = work / key; cache.mkdir(exist_ok=True)
     runtime = cache / 'machines'; (runtime / 'bin').mkdir(parents=True, exist_ok=True)
     epoch = output(['git', 'log', '-1', '--format=%ct'], ROOT)
@@ -162,7 +234,8 @@ def build(args):
     env.setdefault('GOCACHE', str(work / 'go-cache'))
     env.setdefault('CARGO_TARGET_DIR', str(work / 'cargo-target' / architecture))
     jobs = str(args.jobs)
-    licenses = []
+    licenses = [go_legal['record'], rust_toolchain_notices(runtime / 'licenses/rust-toolchain')]
+    GO_NOTICES['write_toolchain_notices'](go_legal, runtime / 'licenses/go-toolchain')
     for name, record in records.items():
         source = cache / name
         if not source.exists():
@@ -256,6 +329,8 @@ def build(args):
         (source / '.bashkitten-built').touch()
     for binary in binaries:
         require(os.access(runtime / 'bin' / binary, os.X_OK), 'Missing runtime executable: ' + binary)
+    linked_go = {name: verify_go_closure(runtime / 'bin' / name, records['podman'])
+                 for name in ('podman', 'rootlessport')}
     dependency_work = cache / 'dependencies'; (dependency_work / 'debian').mkdir(parents=True, exist_ok=True)
     (dependency_work / 'debian/control').write_text('Source: bashkitten\nSection: utils\nPriority: optional\n'
         'Maintainer: Open Research Tools <openresearchtools@gmail.com>\n\nPackage: bashkitten\n'
@@ -274,6 +349,8 @@ def build(args):
         shutil.copy2(VENDOR / name / 'source.json', provenance / (name + '.json'))
     shutil.copytree(patch_root, provenance / 'patches', dirs_exist_ok=True)
     shutil.copy2(ROOT / 'agent/machines/NOTICE', provenance / 'BASHKITTEN-NOTICE')
+    shutil.copy2(ROOT / 'auth/dependencies/go-toolchain/sources.json', provenance / 'go-toolchain.json')
+    (provenance / 'linked-go-modules.json').write_text(json.dumps(linked_go, indent=2) + '\n')
     manifest = {'schema': 1, 'platform': 'linux', 'architecture': architecture,
                 'buildKey': key, 'sourceCommit': output(['git', 'rev-parse', 'HEAD'], ROOT),
                 'toolchain': toolchain, 'components': list(records.values()), 'patches': patches, 'depends': depends,

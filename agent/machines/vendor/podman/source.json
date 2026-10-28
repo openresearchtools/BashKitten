@@ -251,6 +251,8 @@
     "source/vendor/github.com/u-root/uio/LICENSE",
     "source/vendor/github.com/ulikunitz/xz/LICENSE",
     "source/vendor/github.com/vbatts/tar-split/LICENSE",
+    "source/vendor/github.com/vbauerster/cupwriter/UNLICENSE",
+    "source/vendor/github.com/vbauerster/mpb/v8/UNLICENSE",
     "source/vendor/github.com/vishvananda/netlink/LICENSE",
     "source/vendor/github.com/vishvananda/netns/LICENSE",
     "source/vendor/github.com/youmark/pkcs8/LICENSE",

@@ -37,7 +37,7 @@ jobs:
           path: |
             ${{ runner.temp }}/machines-cache
             ${{ runner.temp }}/display-cache
-          key: native-environments-${{ matrix.architecture }}-${{ hashFiles('agent/packaging/machines/**', 'agent/machines/vendor/**/source.json', 'agent/machines/license-supplements/**', 'browser/bashkitten/display/**') }}
+          key: native-environments-${{ matrix.architecture }}-${{ hashFiles('agent/packaging/machines/**', 'agent/machines/vendor/**/source.json', 'agent/machines/license-supplements/**', 'agent/machines/rust-toolchain/**', 'auth/build/go-notices.py', 'auth/dependencies/go-toolchain/**', 'browser/bashkitten/display/**') }}
           restore-keys: native-environments-${{ matrix.architecture }}-
       - name: Build private engine and display from tracked sources
         run: |
@@ -72,7 +72,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/guest-cache
-          key: guest-native-${{ matrix.architecture }}-${{ hashFiles('os/**', 'agent/machines/guest/**', 'agent/machines/build-guest.py', 'agent/machines/vendor/libfuse/**', 'agent/packaging/machines/build.py') }}
+          key: guest-native-${{ matrix.architecture }}-${{ hashFiles('os/**', 'agent/machines/guest/**', 'agent/machines/build-guest.py', 'agent/machines/vendor/libfuse/**', 'agent/packaging/machines/build.py', 'agent/machines/rust-toolchain/**', 'auth/build/go-notices.py') }}
           restore-keys: guest-native-${{ matrix.architecture }}-
       - name: Build guest packages against the pinned Debian guest ABI
         env:

@@ -80,7 +80,7 @@ def records(read):
         manifest = base + '/source.json'
         add(manifest, document(manifest), [base + '/upstream.tar.gz'])
 
-    for base in ('agent/vendor/pi', 'auth/dependencies/go-toolchain'):
+    for base in ('agent/vendor/pi', 'auth/dependencies/go-toolchain', 'agent/machines/rust-toolchain'):
         manifest = base + ('/source.json' if base.endswith('/pi') else '/sources.json')
         row = document(manifest)
         add(manifest, row, [base + '/' + row['file']])
