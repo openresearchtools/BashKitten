@@ -1,4 +1,4 @@
-name: Collect native Office components
+name: Collect native Files and Office components
 'on':
   workflow_call:
     secrets:
@@ -27,6 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        component: [office, files]
         target: [linux-amd64, linux-arm64, termux-aarch64, termux-x86_64]
     runs-on: ubuntu-24.04
     timeout-minutes: 360
@@ -40,10 +41,11 @@ jobs:
           REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
           BUILD_RUN: ${{ needs.dispatch.outputs.run }}
           TARGET: ${{ matrix.target }}
-        run: python3 agent/packaging/remote-office.py collect --request "$REQUEST_ID" --run "$BUILD_RUN" --target "$TARGET" --directory "$RUNNER_TEMP/office"
+          COMPONENT: ${{ matrix.component }}
+        run: python3 agent/packaging/remote-office.py collect --component "$COMPONENT" --request "$REQUEST_ID" --run "$BUILD_RUN" --target "$TARGET" --directory "$RUNNER_TEMP/office"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: office-${{ matrix.target }}
+          name: ${{ matrix.component }}-${{ matrix.target }}
           path: ${{ runner.temp }}/office/
           if-no-files-found: error
           compression-level: 0

@@ -27,6 +27,8 @@ PATCHES = [
     'office/patches/0004-native-document-property-undo.patch',
     'office/patches/0005-native-field-command-undo.patch',
     'office/patches/0006-source-archive-build-id.patch',
+    'office/patches/0007-native-ooxml-user-attributes.patch',
+    'office/patches/0008-native-bounded-config-cache-keys.patch',
 ]
 ENGINE_OPTIONS = ['--with-distro=CPLinux-LOKit', '--disable-epm',
                   '--without-package-format', '--disable-symbols',
@@ -143,7 +145,8 @@ def package(source, work, output, architecture, env):
         'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         'development': bool(subprocess.check_output(['git', 'status', '--porcelain', '--',
             'agent/packaging/office', 'office/upstream', 'office/patches',
-            'files/patches/collabora'], cwd=ROOT, text=True).strip()),
+            'files/patches/collabora', 'agent/packaging/termux/native_toolchain.py',
+            'agent/packaging/node/lock.json', 'agent/vendor/node/libcxx'], cwd=ROOT, text=True).strip()),
         'upstream': pin, 'compiledPrefix': PREFIX,
         'paths': {'coolwsd': 'bin/coolwsd', 'forkitNamespace': 'bin/coolforkit-ns',
                   'forkitCapabilities': 'bin/coolforkit-caps', 'mount': 'bin/coolmount',

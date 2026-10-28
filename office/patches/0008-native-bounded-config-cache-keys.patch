@@ -1,0 +1,70 @@
+From: BashKitten contributors
+Subject: [PATCH] Bound native configuration cache directory keys
+
+The released cache encodes the complete settings identity and resource URL into
+single path components. Signed preset/settings URLs exceed NAME_MAX and Poco
+reports PathSyntaxException, preventing native cache writes and later reuse.
+Use the already bundled Poco SHA-256 implementation for stable 64-byte directory
+keys on both write and supply. URLs, authentication, cache stamps, expiry and
+native file handling stay with their existing owners. Previous disposable
+cache entries expire normally; no durable document data is migrated.
+
+--- a/wsd/CacheUtil.cpp
++++ b/wsd/CacheUtil.cpp
+@@ -28,12 +28,25 @@
+ 
+ #include <Poco/File.h>
+ #include <Poco/Path.h>
++#include <Poco/SHA2Engine.h>
+ #include <Poco/URI.h>
+ 
+ #include <chrono>
+ #include <fstream>
+ #include <mutex>
+ #include <set>
++
++namespace
++{
++// URLs may exceed filesystem component limits, especially with signed queries.
++// Preserve the complete cache identity while using a bounded native digest key.
++std::string cacheKey(const std::string& value)
++{
++    Poco::SHA2Engine engine(Poco::SHA2Engine::SHA_256);
++    engine.update(value);
++    return Poco::DigestEngine::digestToHex(engine.digest());
++}
++}
+ 
+ static std::mutex CacheMutex;
+ static std::string CachePath;
+@@ -79,10 +92,10 @@
+     {
+         std::unique_lock<std::mutex> lock(CacheMutex);
+ 
+-        Poco::Path rootPath(CachePath, Uri::encode(configId));
++        Poco::Path rootPath(CachePath, cacheKey(configId));
+         rootPath.makeDirectory();
+ 
+-        Poco::Path cachePath(rootPath, Uri::encode(uri));
++        Poco::Path cachePath(rootPath, cacheKey(uri));
+         cachePath.makeDirectory();
+ 
+         Poco::File(cachePath).createDirectories();
+@@ -149,7 +162,7 @@
+ 
+     std::unique_lock<std::mutex> lock(CacheMutex);
+ 
+-    Poco::Path rootPath(CachePath, Uri::encode(configId));
++    Poco::Path rootPath(CachePath, cacheKey(configId));
+     rootPath.makeDirectory();
+     Poco::File(rootPath).createDirectories();
+ 
+@@ -158,7 +171,7 @@
+     auto it = queries.begin();
+     while (it != queries.end())
+     {
+-        std::string cachename = Uri::encode(it->_uri);
++        std::string cachename = cacheKey(it->_uri);
+ 
+         Poco::Path cacheDir(rootPath, cachename);
+ 

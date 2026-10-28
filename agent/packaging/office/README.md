@@ -38,10 +38,16 @@ compiled target does not establish installed Termux acceptance.
 
 The canonical daughter workflow is `.github/builders/office.yml`, mirrored in
 `openresearchtools/office-builds`. It accepts an exact main-repository commit and
-uploads one ordinary Actions artifact per Linux or Termux target. It uses
+builds Files and Office and uploads one ordinary Actions artifact per component
+and Linux or Termux target. It uses
 ordinary Actions caches, without registry images, registry cache or separate
 product releases. `remote-office.py` checks the producer workflow, requested
 commit, target, archive checksums and complete file inventory before collection.
 The normal BashKitten package and corresponding-source flows retain ownership
 of product delivery. Native compile and package success remain separate from
 installed editing, collaboration and citation acceptance.
+
+The initial shared cache allowance is one GiB per component/target, plus one
+shared NDK archive cache. Each job records actual compiler-cache statistics and
+workspace size. Those measurements determine whether useful target caches need
+a further repository split; a declared budget alone is not a cache-fit result.

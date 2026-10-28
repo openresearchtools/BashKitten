@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Collect exact native Office artifacts through ordinary GitHub Actions."""
+"""Collect exact native Files/Office artifacts through ordinary GitHub Actions."""
 import argparse
 import base64
 import importlib.util
@@ -75,24 +75,29 @@ def dispatch(request):
             summary.write(f'- [Native Office builds and artifacts]({run["html_url"]})\n')
 
 
-def verify_artifact(directory, target, source):
+def verify_artifact(directory, target, source, component='office'):
     platform, architecture = target.split('-', 1)
-    archive = directory / f'office-{target}.tar.xz'
+    extension = 'tar.xz' if component == 'office' else 'tar.gz'
+    archive = directory / f'{component}-{target}.{extension}'
     digest = package.checked_archive(archive)
     sidecar = archive.with_name(archive.name + '.json')
-    package.checked_archive(sidecar)
+    if component == 'office':
+        package.checked_archive(sidecar)
     with tempfile.TemporaryDirectory(prefix='office-verify-', dir=directory.parent) as temporary:
         incoming = Path(temporary)
         package.extract(archive, incoming)
-        if {path.name for path in incoming.iterdir()} != {'runtime'}:
+        if component == 'office' and {path.name for path in incoming.iterdir()} != {'runtime'}:
             raise ValueError('Unexpected Office artifact root')
-        runtime = incoming / 'runtime'
+        if component == 'files' and not {path.name for path in incoming.iterdir()}.issubset(
+                {'bin', 'lib', 'share', 'legal', 'sources', 'manifest.json', 'licenses.json'}):
+            raise ValueError('Unexpected Files artifact boundary')
+        runtime = incoming / 'runtime' if component == 'office' else incoming
         metadata = json.loads((runtime / 'manifest.json').read_text())
         if (metadata.get('schema') != 1 or metadata.get('target') != platform
                 or metadata.get('architecture') != architecture
                 or metadata.get('sourceCommit') != source or metadata.get('development')):
             raise ValueError('Office artifact source/target provenance mismatch')
-        if json.loads(sidecar.read_text()) != {key: value for key, value in metadata.items() if key != 'files'}:
+        if component == 'office' and json.loads(sidecar.read_text()) != {key: value for key, value in metadata.items() if key != 'files'}:
             raise ValueError('Office archive and provenance receipt differ')
         applications.verify_files(runtime, metadata['files'])
         if not isinstance(metadata.get('depends'), list) or not (runtime / 'licenses.json').is_file():
@@ -100,13 +105,13 @@ def verify_artifact(directory, target, source):
     return digest
 
 
-def collect(run_id, request, target, directory):
+def collect(run_id, request, target, directory, component):
     source = source_revision()
     endpoint = f'repos/{REPOSITORY}/actions/runs/{run_id}'
     run = remote.api(endpoint)
     verify_run(run, source, request)
     verify_workflow(run['head_sha'])
-    name = f'office-{target}-{source}'
+    name = f'{component}-{target}-{source}'
     deadline = time.monotonic() + 6 * 60 * 60
     while time.monotonic() < deadline:
         artifacts = remote.api(endpoint + '/artifacts?per_page=100')['artifacts']
@@ -115,12 +120,12 @@ def collect(run_id, request, target, directory):
             directory.mkdir(parents=True, exist_ok=True)
             subprocess.run(['gh', 'run', 'download', str(run_id), '--repo', REPOSITORY,
                             '--name', name, '--dir', str(directory)], check=True)
-            digest = verify_artifact(directory, target, source)
+            digest = verify_artifact(directory, target, source, component)
             (directory / 'builder-provenance.json').write_text(json.dumps({
                 'repository': REPOSITORY, 'run': run_id, 'artifact': artifact['id'],
                 'source': source, 'workflowCommit': run['head_sha'], 'sha256': digest,
                 'url': run['html_url']}, indent=2) + '\n')
-            print(f'Collected verified {target} Office component from {run["html_url"]}', flush=True)
+            print(f'Collected verified {target} {component} component from {run["html_url"]}', flush=True)
             return
         run = remote.api(endpoint)
         if run['status'] == 'completed':
@@ -135,6 +140,7 @@ def main():
     parser.add_argument('--request', required=True)
     parser.add_argument('--run', type=int)
     parser.add_argument('--target', choices=TARGETS)
+    parser.add_argument('--component', choices=['office', 'files'], default='office')
     parser.add_argument('--directory', type=Path)
     args = parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9_.-]+', args.request):
@@ -144,7 +150,7 @@ def main():
     else:
         if not args.run or not args.target or not args.directory:
             parser.error('collect requires --run, --target and --directory')
-        collect(args.run, args.request, args.target, args.directory.resolve())
+        collect(args.run, args.request, args.target, args.directory.resolve(), args.component)
 
 
 if __name__ == '__main__':
