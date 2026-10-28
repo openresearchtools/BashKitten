@@ -256,6 +256,8 @@ def main():
             if any(archive.namelist().count(name) != 1 for name in (TERMUX_UPDATE_ASSET, TERMUX_BOOTSTRAP_ASSET, TERMUX_PREPARER_ASSET)):
                 raise ValueError('APK must contain one immutable companion update manifest and bootstrap')
             pairing = validate_termux_update(json.loads(archive.read(TERMUX_UPDATE_ASSET)), version, abi)
+            if pairing.get('integrationIteration'):
+                raise ValueError('A browser integration iteration APK is not a complete release candidate')
             if hashlib.sha256(archive.read(TERMUX_BOOTSTRAP_ASSET)).hexdigest() != pairing['bootstrapSha256']:
                 raise ValueError('APK companion update bootstrap checksum mismatch')
             if archive.read(TERMUX_PREPARER_ASSET) != (ROOT / 'agent/src/server/platform/termux/updates-prepare.py').read_bytes():
@@ -308,6 +310,8 @@ def main():
             raise ValueError('Unexpected package name/version: ' + file.name)
         if architecture in architectures or architecture not in {'amd64', 'arm64', 'aarch64', 'x86_64'}:
             raise ValueError('Duplicate or unexpected package architecture')
+        if stamp.get('integrationIteration'):
+            raise ValueError('A browser integration iteration is not a complete release candidate')
         if stamp.get('revision') != revision or stamp.get('architecture') != architecture:
             raise ValueError('Package build provenance mismatch')
         node = stamp.get('components', {}).get('node', {}).get('metadata', {})

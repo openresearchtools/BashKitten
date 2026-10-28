@@ -10,6 +10,7 @@ import tempfile
 
 from build import checked_archive, extract, install_node, install_termux_display, collect_termux_os
 from release import validate_termux_update, termux_os_identity
+from applications import install as install_applications
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -17,11 +18,15 @@ parser.add_argument('--architecture', choices=['aarch64', 'x86_64'], default='aa
 parser.add_argument('--auth-archive', type=Path, required=True)
 parser.add_argument('--search-archive', type=Path, required=True)
 parser.add_argument('--node-archive', type=Path, required=True)
+parser.add_argument('--files-archive', type=Path)
+parser.add_argument('--office-archive', type=Path)
+parser.add_argument('--integration-iteration', action='store_true')
 parser.add_argument('--termux-display-dir', type=Path, required=True)
 parser.add_argument('--os-package', type=Path, required=True)
 parser.add_argument('--development-signing', type=Path)
 parser.add_argument('--output', type=Path, required=True)
 args = parser.parse_args()
+args.target = 'termux'
 cpu = 'x64' if args.architecture == 'x86_64' else 'arm64'
 target = 'termux-' + args.architecture
 for archive in (args.auth_archive, args.search_archive):
@@ -45,6 +50,7 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
     subprocess.run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(stage), 'android', cpu], check=True)
     install_node(args.node_archive, stage, 'termux', args.architecture)
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    install_applications(args, stage, revision, cache, checked_archive, extract)
     install_termux_display(args, stage, revision, stage / 'bin')
     os_metadata = collect_termux_os(args.os_package, stage, revision, args.architecture, version)
     os_identity = termux_os_identity(args.os_package)
@@ -63,6 +69,7 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
     # package is already an input, so retain its actual checksum and provenance.
     pairing = validate_termux_update({
         'schema': 1, 'productVersion': version, 'sourceCommit': revision,
+        'integrationIteration': args.integration_iteration,
         'bootstrapSha256': hashlib.sha256((ROOT / 'src/server/platform/termux/updates-bootstrap.mjs').read_bytes()).hexdigest(),
         'architecture': args.architecture,
         'apkAbi': 'x86_64' if args.architecture == 'x86_64' else 'arm64-v8a',

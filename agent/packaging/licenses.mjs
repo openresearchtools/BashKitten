@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { isUtf8 } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { bundledLicenses } from '../src/server/licenses.mjs';
+import { bundledLicenses, npmLicenses } from '../src/server/licenses.mjs';
 
 const json = async file => JSON.parse(await fs.readFile(file, 'utf8'));
 async function legalText(file) {
@@ -63,6 +63,31 @@ async function sourceNotices(root, component, specifications) {
   }
   return records;
 }
+async function reviewerInventory(root) {
+  const base = path.join(root, 'systematic-reviewer');
+  const metadata = await json(path.join(base, 'package.json'));
+  return sourceNotices(base, 'Systematic Reviewer', [
+    [metadata.name, metadata.license, ['LICENSE', 'NOTICE'], { version: metadata.version }],
+  ]);
+}
+
+async function applicationInventory(root) {
+  const references = path.join(root, 'references');
+  const records = await arrayInventory(path.join(references, 'source-licenses.json'), 'References');
+  records.push(...(await npmLicenses(references, { supplementRoot: path.join(root, 'licenses/upstream') }))
+    .map(value => record(value.name === 'citeproc'
+      ? { ...value, license: 'AGPL-3.0-or-later (selected from the upstream dual license)' }
+      : value, 'References / npm')));
+  records.push(...(await npmLicenses(path.join(root, 'office'), { supplementRoot: path.join(root, 'licenses/upstream') }))
+    .map(value => record(value, 'Office / npm')));
+  for (const [component, directory] of [['Files', 'files'], ['Office', 'office/runtime']]) {
+    const location = path.join(root, directory, 'licenses.json');
+    try { records.push(...await arrayInventory(location, component)); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  return records;
+}
+
 async function searchInventory(root, expectedTarget) {
   const runtime = path.join(root, 'search/runtime'), manifest = await json(path.join(runtime, 'manifest.json'));
   if (manifest.target !== expectedTarget) throw Error(`Search runtime target ${manifest.target} does not match ${expectedTarget}`);
@@ -139,6 +164,8 @@ export async function collectLicenses(root, { target, version, browser, 'backend
   records.push(...await sourceNotices(path.join(root, 'src/server/access'), 'Access integration', [
     ['Torkitten configuration patterns', 'Apache-2.0', ['NOTICE', 'TORKITTEN-LICENSE']],
   ]));
+  records.push(...await reviewerInventory(root));
+  records.push(...await applicationInventory(root));
   records.push(...await searchInventory(root, auth.target));
   records.push(...await nodeInventory(root, target, auth.architecture));
   const integration = await json(path.join(root, 'pi/package.json'));

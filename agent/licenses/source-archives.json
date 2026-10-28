@@ -643,5 +643,15 @@
     "url": "https://codeload.github.com/danielealbano/android-remote-control-mcp/tar.gz/3777403d148283c5a18a3e8122ff819da4eed808",
     "sha256": "95b04ce23acb14bc4f8aa381564d09ad28375877cf2cb56bfe896305e23be946",
     "license": "MIT"
+  },
+  {
+    "name": "saxes",
+    "version": "6.0.0",
+    "repository": "https://github.com/lddubeau/saxes",
+    "commit": "211fa0ebec9b628affc09219199639887174bfc3",
+    "file": "saxes-211fa0ebec9b628affc09219199639887174bfc3.tar.gz",
+    "url": "https://codeload.github.com/lddubeau/saxes/tar.gz/211fa0ebec9b628affc09219199639887174bfc3",
+    "sha256": "220974846392c1066935c239cc73d1701d7271f7d5c400d080080f564fd1399c",
+    "license": "ISC"
   }
 ]

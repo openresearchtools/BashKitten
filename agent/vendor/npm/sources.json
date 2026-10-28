@@ -378,6 +378,30 @@
       "sha256": "0130711d2e0d3f87436c7825db1f35bd6134fba2eda64b0df43d781f9b6a596a"
     },
     {
+      "name": "@types/debug",
+      "version": "4.1.13",
+      "url": "https://registry.npmjs.org/@types/debug/-/debug-4.1.13.tgz",
+      "integrity": "sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw==",
+      "file": "cbdb80773402187ae5cc.tgz",
+      "sha256": "19bb8d72e15e4fd407fb1d416aba3c42dde61fc9d50cdfdd313b85d351e56388"
+    },
+    {
+      "name": "@types/mdast",
+      "version": "4.0.4",
+      "url": "https://registry.npmjs.org/@types/mdast/-/mdast-4.0.4.tgz",
+      "integrity": "sha512-kGaNbPh1k7AFzgpud/gMdvIm5xuECykRR+JnWKQno9TAXVa6WIVCGTPvYGekIDL4uwCZQSYbUxNBSb1aUo79oA==",
+      "file": "76485c0c3e6590f8b22f.tgz",
+      "sha256": "ca9d3f571a96c57b9412fa9ccc009a356990e5334ce2c56587218a2fa2d57ef3"
+    },
+    {
+      "name": "@types/ms",
+      "version": "2.1.0",
+      "url": "https://registry.npmjs.org/@types/ms/-/ms-2.1.0.tgz",
+      "integrity": "sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==",
+      "file": "783011a4c9f6be2c67bb.tgz",
+      "sha256": "a07f7b4d84e44bd8c55e44ee084f3529d5b3bbb2f212ef1749aced718bcb6c09"
+    },
+    {
       "name": "@types/node",
       "version": "26.6.2",
       "url": "https://registry.npmjs.org/@types/node/-/node-26.6.2.tgz",
@@ -394,12 +418,12 @@
       "sha256": "7c97db75aba1e8cb911b9ff349ddeae6153fd3b11fa3f3b772c1dd474ea9f8c8"
     },
     {
-      "name": "@types/trusted-types",
-      "version": "2.0.7",
-      "url": "https://registry.npmjs.org/@types/trusted-types/-/trusted-types-2.0.7.tgz",
-      "integrity": "sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==",
-      "file": "bddeb1b701e5836c0dc7.tgz",
-      "sha256": "28521d6d9bcb45f9527cf45b9346e9e2142e81b17c6518229973df04044941d3"
+      "name": "@types/unist",
+      "version": "3.0.3",
+      "url": "https://registry.npmjs.org/@types/unist/-/unist-3.0.3.tgz",
+      "integrity": "sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==",
+      "file": "df518fd0857001d7d0e3.tgz",
+      "sha256": "b50fd32f739207d1e8c96ef0b0c9dd003ef9cb0403c5b4eb71796b87332a2843"
     },
     {
       "name": "agent-base",
@@ -458,14 +482,6 @@
       "sha256": "ef8448ec78f20b692f04fa6d01f39b5ab34c66404bea3429f5a39c6c9e0be8b4"
     },
     {
-      "name": "buffer-crc32",
-      "version": "1.0.0",
-      "url": "https://registry.npmjs.org/buffer-crc32/-/buffer-crc32-1.0.0.tgz",
-      "integrity": "sha512-Db1SbgBS/fg/392AblrMJk97KggmvYhr4pB5ZIMTWtaivCPMWLkmb7m21cJvpvgK+J3nsU2CmmixNBZx4vFj/w==",
-      "file": "91ecafb0ecdb5133866c.tgz",
-      "sha256": "bbedaab7c94b9d392ea85da0a77c18c3a0bce3d47a1ca1685af11a747b2883ee"
-    },
-    {
       "name": "buffer-equal-constant-time",
       "version": "1.0.1",
       "url": "https://registry.npmjs.org/buffer-equal-constant-time/-/buffer-equal-constant-time-1.0.1.tgz",
@@ -488,6 +504,14 @@
       "integrity": "sha512-2uNTXIuTTxk7ciZgAU1BQcgnchcG0xXnrs6jzkQfj9SsRa9M2s5zE8WT96hS6KmG4MzWHSrvH43DF1m4XRkrFg==",
       "file": "ba1f8373784611a0f40c.tgz",
       "sha256": "85d0ce26b8a6098d3826d9ec17cf16c7a9326dfce3f2545ecc1133581c981399"
+    },
+    {
+      "name": "character-entities",
+      "version": "2.0.2",
+      "url": "https://registry.npmjs.org/character-entities/-/character-entities-2.0.2.tgz",
+      "integrity": "sha512-shx7oQ0Awen/BRIdkjkvz54PnEEI/EjwXDSIZp86/KKdbafHh1Df/RYGBhn4hbe2+uKC9FnT5UCEdyPz3ai9hQ==",
+      "file": "3f27f268c35939cecc77.tgz",
+      "sha256": "0805c120e1147a250a87ed8752265b3bce7a76c44e9728dec1d11380e21fbc3d"
     },
     {
       "name": "cross-spawn",
@@ -514,20 +538,36 @@
       "sha256": "89c1ac9c946ee8905a875837114528e97eeae35e03be3190584b2216af43e4a7"
     },
     {
+      "name": "decode-named-character-reference",
+      "version": "1.3.0",
+      "url": "https://registry.npmjs.org/decode-named-character-reference/-/decode-named-character-reference-1.3.0.tgz",
+      "integrity": "sha512-GtpQYB283KrPp6nRw50q3U9/VfOutZOe103qlN7BPP6Ad27xYnOIWv4lPzo8HCAL+mMZofJ9KEy30fq6MfaK6Q==",
+      "file": "945ac6b34a461c18ee4f.tgz",
+      "sha256": "b4399b50188513b31e4642b25437c9c309776aa34b6acb3eb18a0ee792e16f38"
+    },
+    {
+      "name": "dequal",
+      "version": "2.0.3",
+      "url": "https://registry.npmjs.org/dequal/-/dequal-2.0.3.tgz",
+      "integrity": "sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==",
+      "file": "d5c2d5f377dc118552a6.tgz",
+      "sha256": "941d90d6629878167d10d2a05d8c6df8f8fa13acc826616abb49db63ac6a5c35"
+    },
+    {
+      "name": "devlop",
+      "version": "1.1.0",
+      "url": "https://registry.npmjs.org/devlop/-/devlop-1.1.0.tgz",
+      "integrity": "sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==",
+      "file": "50c1a3a3db60dbdf414d.tgz",
+      "sha256": "aed0b5ba97cc3aba851946766b1e4804e92a0d3b2051e047eed4e8bf508ecd5f"
+    },
+    {
       "name": "diff",
       "version": "8.0.4",
       "url": "https://registry.npmjs.org/diff/-/diff-8.0.4.tgz",
       "integrity": "sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==",
       "file": "d92c79741f1a7300941d.tgz",
       "sha256": "ef51327ad58243cf533326219f5ebaa5029280bd0fafcc11f7c23156639593d6"
-    },
-    {
-      "name": "dompurify",
-      "version": "3.4.17",
-      "url": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.17.tgz",
-      "integrity": "sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==",
-      "file": "adefc3f51eafcb90bd93.tgz",
-      "sha256": "056cbdae276897208b88c21d1d779adfa09ad7be488a2f510a28e900d3bbffe7"
     },
     {
       "name": "ecdsa-sig-formatter",
@@ -730,12 +770,28 @@
       "sha256": "68033e466773df7d52c9e59341bb729d83716cd920c56460395724456d646b26"
     },
     {
+      "name": "longest-streak",
+      "version": "3.1.0",
+      "url": "https://registry.npmjs.org/longest-streak/-/longest-streak-3.1.0.tgz",
+      "integrity": "sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g==",
+      "file": "e06ed279ad87d7445d01.tgz",
+      "sha256": "384446c12b28a0f29cd68b22871cff7c1001fdca5c173930e4eeb4811de210f6"
+    },
+    {
       "name": "lru-cache",
       "version": "11.4.0",
       "url": "https://registry.npmjs.org/lru-cache/-/lru-cache-11.4.0.tgz",
       "integrity": "sha512-W+R+kFL4HgVxONq2bhXPi3bGpzGe/yEhVOp233qw9wCRtgncJ15P3bC+e4zZMu4Cq7d+WAJjXGW0uUkifhcatA==",
       "file": "08714dd739a886db89af.tgz",
       "sha256": "4186336adb1fd4a994d7fa8d6813112fd9e8a15a71d641b2b831f8aa7d18173d"
+    },
+    {
+      "name": "markdown-table",
+      "version": "3.0.4",
+      "url": "https://registry.npmjs.org/markdown-table/-/markdown-table-3.0.4.tgz",
+      "integrity": "sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw==",
+      "file": "bbc54975373b75313988.tgz",
+      "sha256": "14e8b7c711b0be872cba307c2561ed991b089aa2e4dc4a8de74692a6d51bce58"
     },
     {
       "name": "marked",
@@ -746,12 +802,228 @@
       "sha256": "cef55476c7551e73e1a89118fa69fee9f7eef9960e9c774ad266e22ee966b994"
     },
     {
-      "name": "marked",
-      "version": "18.1.1",
-      "url": "https://registry.npmjs.org/marked/-/marked-18.1.1.tgz",
-      "integrity": "sha512-zEGgrtUG8crk+TrMacJSVABU4DYDDkS8uqgU3ohrn/2fW9C2AEfUrO3m6IhpIpQpl7YcVpiXXC9cSMWDANT3dg==",
-      "file": "1af0404af17decb44bc9.tgz",
-      "sha256": "c05b3cff890d35e1208805a01fd0501571d09a81e725de0559b10bdfae90adad"
+      "name": "mdast-util-from-markdown",
+      "version": "2.1.0",
+      "url": "https://registry.npmjs.org/mdast-util-from-markdown/-/mdast-util-from-markdown-2.1.0.tgz",
+      "integrity": "sha512-KRLgmPaP2H1ul2bpoJkOS+9pAcDAAj9Nu1mqLnh8NLeJG5tlvj42TH80PIGBpROWlRXLk0lDrWNuZCFy/tsB4A==",
+      "file": "9128c5a7535bc16d5a84.tgz",
+      "sha256": "cd8c31a2d16c256c340322f19ad6673353ef2cd498ba0fca6dead0a310e90ced"
+    },
+    {
+      "name": "mdast-util-gfm-table",
+      "version": "2.0.0",
+      "url": "https://registry.npmjs.org/mdast-util-gfm-table/-/mdast-util-gfm-table-2.0.0.tgz",
+      "integrity": "sha512-78UEvebzz/rJIxLvE7ZtDd/vIQ0RHv+3Mh5DR96p7cS7HsBhYIICDBCu8csTNWNO6tBWfqXPWekRuj2FNOGOZg==",
+      "file": "3c136edb618a66fc48e9.tgz",
+      "sha256": "c1d7b61db521f2279c32f1051dc42c98e99ac33538ae9f859b2f3daafb34366e"
+    },
+    {
+      "name": "mdast-util-phrasing",
+      "version": "4.1.0",
+      "url": "https://registry.npmjs.org/mdast-util-phrasing/-/mdast-util-phrasing-4.1.0.tgz",
+      "integrity": "sha512-TqICwyvJJpBwvGAMZjj4J2n0X8QWp21b9l0o7eXyVJ25YNWYbJDVIyD1bZXE6WtV6RmKJVYmQAKWa0zWOABz2w==",
+      "file": "2de501fdd8c07c210e0b.tgz",
+      "sha256": "001c22ccbb8f66b889e468ba33c86df25aaf9e2cea1ee1d827fb172431f09835"
+    },
+    {
+      "name": "mdast-util-to-markdown",
+      "version": "2.2.1",
+      "url": "https://registry.npmjs.org/mdast-util-to-markdown/-/mdast-util-to-markdown-2.2.1.tgz",
+      "integrity": "sha512-ThatlCBxG2GE+mljhNSfZPv56d3QrGiRh97jjYgIk80IzS4uU6d7cHAaexCYSAmUCCcOs3grJ07kX3oTGsFUOw==",
+      "file": "415b75ee652af1658e67.tgz",
+      "sha256": "2ece468bcfca9c4f758f1c5124b2e5da921078ad53fc961b9edb0e5d8d008093"
+    },
+    {
+      "name": "mdast-util-to-string",
+      "version": "4.0.0",
+      "url": "https://registry.npmjs.org/mdast-util-to-string/-/mdast-util-to-string-4.0.0.tgz",
+      "integrity": "sha512-0H44vDimn51F0YwvxSJSm0eCDOJTRlmN0R1yBh4HLj9wiV1Dn0QoXGbvFAWj2hSItVTlCmBF1hqKlIyUBVFLPg==",
+      "file": "b9a3ff462ca9d967aece.tgz",
+      "sha256": "bbfe70a5652305df7e8e484f674975c69bddbbad048ced52dc71835e64bba37a"
+    },
+    {
+      "name": "micromark",
+      "version": "4.0.3",
+      "url": "https://registry.npmjs.org/micromark/-/micromark-4.0.3.tgz",
+      "integrity": "sha512-oGYfQzHSG5dOMovQcJ3fyTmZlWAWpi0XA0sJwJs+i6OT88o1+Jtw/8z0CmdowSLxGhhFK89rQ/oXph/wN02PNw==",
+      "file": "d7804baa1abe1e5af424.tgz",
+      "sha256": "2f3f1e4dfc15279ffd246cb739200dd7ce823d047d9648938c3e3ee50be5ee02"
+    },
+    {
+      "name": "micromark-core-commonmark",
+      "version": "2.0.4",
+      "url": "https://registry.npmjs.org/micromark-core-commonmark/-/micromark-core-commonmark-2.0.4.tgz",
+      "integrity": "sha512-wxEeE8v8XVvOrxn1TZj74qYhAtTQsSqufHVS3uNVyT1MupXxhyaHk8/9xDNPh9BmL77QNDgWTkZ3RsYHB2ry7w==",
+      "file": "fb046d15cbc8d682de1d.tgz",
+      "sha256": "84979e673035ced9448b39f2c6eabc9d6d543b53ec211d1be77fedf72564a5eb"
+    },
+    {
+      "name": "micromark-extension-gfm-table",
+      "version": "2.1.2",
+      "url": "https://registry.npmjs.org/micromark-extension-gfm-table/-/micromark-extension-gfm-table-2.1.2.tgz",
+      "integrity": "sha512-pRzm4kDTu0MjlmBkxmS9yYhw60nncfcEwu9NNdPFSQEFXS95ZKyIIyTSHu/o3ReBUrLKYEq+7YaXCRn/bPB4MA==",
+      "file": "34795ea21d2b5f8eac40.tgz",
+      "sha256": "8398e26854cb955c07dfe6394203b9a491d4b77d0a23166102b7acd6030a63e1"
+    },
+    {
+      "name": "micromark-factory-destination",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-factory-destination/-/micromark-factory-destination-2.0.1.tgz",
+      "integrity": "sha512-Xe6rDdJlkmbFRExpTOmRj9N3MaWmbAgdpSrBQvCFqhezUn4AHqJHbaEnfbVYYiexVSs//tqOdY/DxhjdCiJnIA==",
+      "file": "141e02c7482e61a1825e.tgz",
+      "sha256": "b4acd1721e4756a61f2482c3424344b8b01bdbf79180cf6e411ed491887bd8db"
+    },
+    {
+      "name": "micromark-factory-label",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-factory-label/-/micromark-factory-label-2.0.1.tgz",
+      "integrity": "sha512-VFMekyQExqIW7xIChcXn4ok29YE3rnuyveW3wZQWWqF4Nv9Wk5rgJ99KzPvHjkmPXF93FXIbBp6YdW3t71/7Vg==",
+      "file": "b36e3c2862a79696741a.tgz",
+      "sha256": "c65fb436893844fb5be29814dc2528a596236423c4c7e5b1130cd49b5bae8c1d"
+    },
+    {
+      "name": "micromark-factory-space",
+      "version": "2.1.0",
+      "url": "https://registry.npmjs.org/micromark-factory-space/-/micromark-factory-space-2.1.0.tgz",
+      "integrity": "sha512-fS8hnLIjnjvdQIj39Geug8wWsR0HrYZ43KShKxNfwT7t2LOHo/LbWZEzEaSOjwtjdCsjoE6syHhonEzW0zv0+Q==",
+      "file": "a33ed2fe91f7d90af757.tgz",
+      "sha256": "5218d07cfd00f867e94f4197c9aac409fb8ea17c26ab38a124f9dd79ba8b8a3d"
+    },
+    {
+      "name": "micromark-factory-title",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-factory-title/-/micromark-factory-title-2.0.1.tgz",
+      "integrity": "sha512-5bZ+3CjhAd9eChYTHsjy6TGxpOFSKgKKJPJxr293jTbfry2KDoWkhBb6TcPVB4NmzaPhMs1Frm9AZH7OD4Cjzw==",
+      "file": "74d0ea6b92ea90ba01b5.tgz",
+      "sha256": "2e247f3d7ddef39cde036ee828a66ec410059b3963ce3e376160e48011f257b0"
+    },
+    {
+      "name": "micromark-factory-whitespace",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-factory-whitespace/-/micromark-factory-whitespace-2.0.1.tgz",
+      "integrity": "sha512-Ob0nuZ3PKt/n0hORHyvoD9uZhr+Za8sFoP+OnMcnWK5lngSzALgQYKMr9RJVOWLqQYuyn6ulqGWSXdwf6F80lQ==",
+      "file": "e9f2ce960d30483534e5.tgz",
+      "sha256": "57dc50841f76fac5cf46e093b8325397079e10406febebb6c58a58e1528a4fec"
+    },
+    {
+      "name": "micromark-util-character",
+      "version": "2.1.1",
+      "url": "https://registry.npmjs.org/micromark-util-character/-/micromark-util-character-2.1.1.tgz",
+      "integrity": "sha512-wv8tdUTJ3thSFFFJKtpYKOYiGP2+v96Hvk4Tu8KpCAsTMs6yi+nVmGh1syvSCsaxz45J6Jbw+9DD6g97+NV67Q==",
+      "file": "d6a6a6d89cb7649b2229.tgz",
+      "sha256": "bacefea968d21cedf290ec319ec92e2bc20e4f7b02f62cb4ad1e7b07c5a45185"
+    },
+    {
+      "name": "micromark-util-chunked",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-util-chunked/-/micromark-util-chunked-2.0.1.tgz",
+      "integrity": "sha512-QUNFEOPELfmvv+4xiNg2sRYeS/P84pTW0TCgP5zc9FpXetHY0ab7SxKyAQCNCc1eK0459uoLI1y5oO5Vc1dbhA==",
+      "file": "31e60e2301c54717d3c7.tgz",
+      "sha256": "a7b753059876eda10e9e14c024d1cf6eb3a2eb2021c79ef59fb483d72cda754a"
+    },
+    {
+      "name": "micromark-util-classify-character",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-util-classify-character/-/micromark-util-classify-character-2.0.1.tgz",
+      "integrity": "sha512-K0kHzM6afW/MbeWYWLjoHQv1sgg2Q9EccHEDzSkxiP/EaagNzCm7T/WMKZ3rjMbvIpvBiZgwR3dKMygtA4mG1Q==",
+      "file": "e21407522961b72a2160.tgz",
+      "sha256": "ae1040e3100c019e183e474cb7f174eb436d856013169a0c8783a52519bacced"
+    },
+    {
+      "name": "micromark-util-combine-extensions",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-util-combine-extensions/-/micromark-util-combine-extensions-2.0.1.tgz",
+      "integrity": "sha512-OnAnH8Ujmy59JcyZw8JSbK9cGpdVY44NKgSM7E9Eh7DiLS2E9RNQf0dONaGDzEG9yjEl5hcqeIsj4hfRkLH/Bg==",
+      "file": "55de07f7e2efa4dcbae8.tgz",
+      "sha256": "717cb91921ff540a2c776317f31ad005c3c45ec0ae1c188f1b99de621521b4b5"
+    },
+    {
+      "name": "micromark-util-decode-numeric-character-reference",
+      "version": "2.0.2",
+      "url": "https://registry.npmjs.org/micromark-util-decode-numeric-character-reference/-/micromark-util-decode-numeric-character-reference-2.0.2.tgz",
+      "integrity": "sha512-ccUbYk6CwVdkmCQMyr64dXz42EfHGkPQlBj5p7YVGzq8I7CtjXZJrubAYezf7Rp+bjPseiROqe7G6foFd+lEuw==",
+      "file": "d7ae948d6d25549cb9ae.tgz",
+      "sha256": "cd26a08f068727f3cc892e8f2549b85065362bd920506649386c791fe349db98"
+    },
+    {
+      "name": "micromark-util-decode-string",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-util-decode-string/-/micromark-util-decode-string-2.0.1.tgz",
+      "integrity": "sha512-nDV/77Fj6eH1ynwscYTOsbK7rR//Uj0bZXBwJZRfaLEJ1iGBR6kIfNmlNqaqJf649EP0F3NWNdeJi03elllNUQ==",
+      "file": "5761ce1497674ba72865.tgz",
+      "sha256": "09ab2cda2d2f4fec4e3b829042866fa3d619d4c48c895233495a4ac49f325059"
+    },
+    {
+      "name": "micromark-util-edit-map",
+      "version": "1.0.0",
+      "url": "https://registry.npmjs.org/micromark-util-edit-map/-/micromark-util-edit-map-1.0.0.tgz",
+      "integrity": "sha512-Pa2ljlsEL6sVwFaYeyrOLSYbQt73JvGbPOYFq+9AElXiSnfI5Q4465RRZ1sHv7lDjDOnGRDDaqPXqClqWK/q1Q==",
+      "file": "75359d8a5c3ab5c85ef8.tgz",
+      "sha256": "da60526f11a9853fdc86c18ceaa8eb7b5058c2537433e66b6ba7cf9d24cac334"
+    },
+    {
+      "name": "micromark-util-encode",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-util-encode/-/micromark-util-encode-2.0.1.tgz",
+      "integrity": "sha512-c3cVx2y4KqUnwopcO9b/SCdo2O67LwJJ/UyqGfbigahfegL9myoEFoDYZgkT7f36T0bLrM9hZTAaAyH+PCAXjw==",
+      "file": "c74a8a0615f619bf29c6.tgz",
+      "sha256": "c553824f256f5f99f8f8b172d25caa7b2270ece5a00774cd1dbbc8bf9cd9090a"
+    },
+    {
+      "name": "micromark-util-html-tag-name",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-util-html-tag-name/-/micromark-util-html-tag-name-2.0.1.tgz",
+      "integrity": "sha512-2cNEiYDhCWKI+Gs9T0Tiysk136SnR13hhO8yW6BGNyhOC4qYFnwF1nKfD3HFAIXA5c45RrIG1ub11GiXeYd1xA==",
+      "file": "0a85a66390f3401b38c2.tgz",
+      "sha256": "9d56df2779bb23785d208136430484ccedca4378bd36976c4793ace4c1cae077"
+    },
+    {
+      "name": "micromark-util-normalize-identifier",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-util-normalize-identifier/-/micromark-util-normalize-identifier-2.0.1.tgz",
+      "integrity": "sha512-sxPqmo70LyARJs0w2UclACPUUEqltCkJ6PhKdMIDuJ3gSf/Q+/GIe3WKl0Ijb/GyH9lOpUkRAO2wp0GVkLvS9Q==",
+      "file": "f37e4fb927e055a3de92.tgz",
+      "sha256": "6687cbaaa6a420bad0e5ca2ea0dfaea409ba8dc9e13ca03059291da8b68ceb2d"
+    },
+    {
+      "name": "micromark-util-resolve-all",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-util-resolve-all/-/micromark-util-resolve-all-2.0.1.tgz",
+      "integrity": "sha512-VdQyxFWFT2/FGJgwQnJYbe1jjQoNTS4RjglmSjTUlpUMa95Htx9NHeYW4rGDJzbjvCsl9eLjMQwGeElsqmzcHg==",
+      "file": "02e294697203996ed398.tgz",
+      "sha256": "f7c8f03bdbdb16113879dadabc7091aa4277a1c106f202e05af164a917964555"
+    },
+    {
+      "name": "micromark-util-sanitize-uri",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-util-sanitize-uri/-/micromark-util-sanitize-uri-2.0.1.tgz",
+      "integrity": "sha512-9N9IomZ/YuGGZZmQec1MbgxtlgougxTodVwDzzEouPKo3qFWvymFHWcnDi2vzV1ff6kas9ucW+o3yzJK9YB1AQ==",
+      "file": "81807743f5e1199c4b54.tgz",
+      "sha256": "8fcf4cf2900f807194fc89fb3e4dd5e5b28143cb44e55955a9f31d764264547e"
+    },
+    {
+      "name": "micromark-util-subtokenize",
+      "version": "2.1.0",
+      "url": "https://registry.npmjs.org/micromark-util-subtokenize/-/micromark-util-subtokenize-2.1.0.tgz",
+      "integrity": "sha512-XQLu552iSctvnEcgXw6+Sx75GflAPNED1qx7eBJ+wydBb2KCbRZe+NwvIEEMM83uml1+2WSXpBAcp9IUCgCYWA==",
+      "file": "86cdb0d26f8aca26a17f.tgz",
+      "sha256": "10aca3d9ae4d1776f029fa6dbf5d9706291cbafc55ff39ba88141e65b7c59a8b"
+    },
+    {
+      "name": "micromark-util-symbol",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/micromark-util-symbol/-/micromark-util-symbol-2.0.1.tgz",
+      "integrity": "sha512-vs5t8Apaud9N28kgCrRUdEed4UJ+wWNvicHLPxCa9ENlYuAY31M0ETy5y1vA33YoNPDFTghEbnh6efaE8h4x0Q==",
+      "file": "b28c4d41957a7041d938.tgz",
+      "sha256": "d8d698fae34d4e5bcdc5caf552449dea8aa46709dc76caea815c931cbd61e222"
+    },
+    {
+      "name": "micromark-util-types",
+      "version": "2.0.3",
+      "url": "https://registry.npmjs.org/micromark-util-types/-/micromark-util-types-2.0.3.tgz",
+      "integrity": "sha512-oxB2Ik03hI0gv+VNn9tnh1t1YEe9MDPptViAEgfdf3YQHsn0pzGTgCdlSCJXcwhqm8phaEuM7zeEu3QQzVBrPg==",
+      "file": "d3fa8638b262a92bd56f.tgz",
+      "sha256": "766abb7b986c167f5d00feb235344b491241bb6299a04fe83f027e13239862f9"
     },
     {
       "name": "minimatch",
@@ -962,6 +1234,38 @@
       "sha256": "3a587851ccbf1021b20eac8a38eb819d7e2a1ab77aa477cb24cae5473a3e78c6"
     },
     {
+      "name": "unist-util-is",
+      "version": "6.0.1",
+      "url": "https://registry.npmjs.org/unist-util-is/-/unist-util-is-6.0.1.tgz",
+      "integrity": "sha512-LsiILbtBETkDz8I9p1dQ0uyRUWuaQzd/cuEeS1hoRSyW5E5XGmTzlwY1OrNzzakGowI9Dr/I8HVaw4hTtnxy8g==",
+      "file": "2ad5520af51991836396.tgz",
+      "sha256": "6d406238b6e281d38d30c30f77287ce8d70f6d9c4503612f979333865aaafff5"
+    },
+    {
+      "name": "unist-util-stringify-position",
+      "version": "4.0.0",
+      "url": "https://registry.npmjs.org/unist-util-stringify-position/-/unist-util-stringify-position-4.0.0.tgz",
+      "integrity": "sha512-0ASV06AAoKCDkS2+xw5RXJywruurpbC4JZSm7nr7MOt1ojAzvyyaO+UxZf18j8FCF6kmzCZKcAgN/yu2gm2XgQ==",
+      "file": "d26237ef5e0929d60b6b.tgz",
+      "sha256": "8692d2396f091680fe342c344acc4594534a9a811b0a9cbcfae7d71c694168b4"
+    },
+    {
+      "name": "unist-util-visit",
+      "version": "5.2.0",
+      "url": "https://registry.npmjs.org/unist-util-visit/-/unist-util-visit-5.2.0.tgz",
+      "integrity": "sha512-fpsYs/VVoZxfGY9/j3FQpZmN8wdLJaV1Pt38AaJNZu9uKIHcFU3halCdBveEq1HGKO1OEfJY65w1zvoFV1b3qQ==",
+      "file": "02c4167dff98060f22bd.tgz",
+      "sha256": "d11174ce27d62827bd8e1f573756ff4e8b601d466041ddaa693755a37ac917fc"
+    },
+    {
+      "name": "unist-util-visit-parents",
+      "version": "6.1.0",
+      "url": "https://registry.npmjs.org/unist-util-visit-parents/-/unist-util-visit-parents-6.1.0.tgz",
+      "integrity": "sha512-vKXxz6O38sKDj1mtx/k2cWvkkFBuYGx6uGrlzBkVeWCRF/F8sdI0j3Wbkz/5rVNRRuVc8UrgRdbCxNhmYXgP3w==",
+      "file": "a0d362238249761d3d94.tgz",
+      "sha256": "8db8c8c35f8f786cc42e1c9b8934ef1cf32d1f38e8bc126e3ab71c91243d97f4"
+    },
+    {
       "name": "web-streams-polyfill",
       "version": "3.3.3",
       "url": "https://registry.npmjs.org/web-streams-polyfill/-/web-streams-polyfill-3.3.3.tgz",
@@ -994,12 +1298,12 @@
       "sha256": "008fa204cb1ba700e0272ba045abbf09a6ffe63456e8146ba97cac6c2ad1ef91"
     },
     {
-      "name": "yazl",
-      "version": "3.3.1",
-      "url": "https://registry.npmjs.org/yazl/-/yazl-3.3.1.tgz",
-      "integrity": "sha512-BbETDVWG+VcMUle37k5Fqp//7SDOK2/1+T7X8TD96M3D9G8jK5VLUdQVdVjGi8im7FGkazX7kk5hkU8X4L5Bng==",
-      "file": "38d9edb71b18fe3c6a1c.tgz",
-      "sha256": "24a97a443e47d83d9e2ea2bb4b99b7f91a8ba5a5b9e4b49ffdd2be9e0ca00e38"
+      "name": "zwitch",
+      "version": "2.0.4",
+      "url": "https://registry.npmjs.org/zwitch/-/zwitch-2.0.4.tgz",
+      "integrity": "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==",
+      "file": "2c263de31c3bdeeef859.tgz",
+      "sha256": "2c162e000f5fb5a816987d6f8ad7aad295203f777a5992d514ae4660778a51a4"
     }
   ]
 }

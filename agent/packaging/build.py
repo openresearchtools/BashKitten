@@ -418,6 +418,20 @@ def assemble(args):
             shutil.copytree(ROOT / folder, app / folder,
                             ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'pillama', 'pi-codex-usage') if folder == 'pi'
                             else shutil.ignore_patterns('__pycache__', '*.pyc'))
+        # The reviewer is an independently versioned Pi package. Its parser
+        # dependencies are part of the same verified root npm closure.
+        reviewer = ROOT / 'systematic-reviewer'
+        reviewer_meta = read_json(reviewer / 'package.json')
+        for name in ['package.json', *reviewer_meta['files']]:
+            source = reviewer / name
+            require(source.exists() and source.resolve().is_relative_to(reviewer.resolve()),
+                    f'Invalid reviewer runtime file: {name}')
+            destination = app / 'systematic-reviewer' / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if source.is_dir():
+                shutil.copytree(source, destination, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+            else:
+                shutil.copy2(source, destination)
         run(['python3', str(ROOT / 'packaging/pi-skills.py'), str(app / 'pi'), args.target])
         usage_notice = app / 'pi/vendor/pi-codex-usage/LICENSE'
         usage_notice.parent.mkdir(parents=True, exist_ok=True)
@@ -446,8 +460,6 @@ def assemble(args):
             shutil.copy2(source, app / 'search' / name)
         for name in ['package.json', 'package-lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'PI_UPSTREAM.md']:
             shutil.copy2(ROOT / name, app / name)
-        spreadsheet = app / 'vendor/sheetjs'; spreadsheet.mkdir(parents=True)
-        shutil.copy2(ROOT / 'vendor/sheetjs/xlsx-0.20.3.tgz', spreadsheet / 'xlsx-0.20.3.tgz')
         npm_cache = Path(temporary) / 'npm-cache'
         run(['python3', str(ROOT / 'packaging/npm-sources.py'), '--cache', str(npm_cache)])
         command = ['npm', 'ci', '--prefix', str(app), '--cache', str(npm_cache), '--offline',
@@ -456,6 +468,8 @@ def assemble(args):
         require(int(subprocess.check_output(['npm', '--version'], text=True).split('.')[0]) >= 10,
                 'Use npm >=10 for explicit target dependency selection')
         run(command)
+        from applications import install as install_applications
+        application_components = install_applications(args, app, revision, npm_cache, checked_archive, extract)
         run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(app),
              'android' if termux else 'linux', 'x64' if args.architecture in {'amd64', 'x86_64'} else 'arm64'])
         auth_hash = checked_archive(args.auth_archive)
@@ -475,6 +489,7 @@ def assemble(args):
         search_meta = read_json(app / 'search/runtime/manifest.json')
         require(search_meta['target'] == target, 'Native search target mismatch')
         components = {
+            **application_components,
             'node': install_node(args.node_archive, app, args.target, args.architecture),
             'auth': {'archive': args.auth_archive.name, 'sha256': auth_hash, 'metadata': auth_meta},
             'search': {'archive': args.search_archive.name, 'sha256': search_hash, 'metadata': search_meta},
@@ -501,7 +516,8 @@ def assemble(args):
         runtime = (prefix + '/var/lib' if termux else '/var/lib') + '/bashkitten/runtimes/' + pi_version + '-' + lock_hash[:12]
         stamp = {'format': 2, 'platform': 'android' if termux else 'linux', 'architecture': args.architecture,
                  'version': version, 'packageVersion': package_version, 'lockSha256': lock_hash, 'piVersion': pi_version,
-                 'installationStamp': installation, 'revision': revision, 'components': components}
+                 'installationStamp': installation, 'revision': revision, 'components': components,
+                 'integrationIteration': args.integration_iteration}
         write_json(app / 'build-platform.json', stamp)
         write_json(app / 'runtime-default.json', {'root': runtime, 'version': pi_version})
         bin_dir = stage / prefix.lstrip('/') / 'bin'
@@ -525,6 +541,7 @@ def assemble(args):
         else:
             node_environment += 'unset BASHKITTEN_EXECUTION_ROLE\n'
         executable(app / 'node/bin/pi', f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/rpc/launcher.mjs "$@"\n')
+        executable(bin_dir / 'office-diff', f'#!{shell}\n{node_environment}exec {node} {installed_app}/office/cli/office-diff.mjs "$@"\n')
         for name, script, extra in [('bashkittenctl', 'control.mjs', ''), ('bashkitten-web', 'control.mjs', 'start'),
                                     ('bashkitten-pi', 'rpc/launcher.mjs', '')]:
             executable(bin_dir / name, f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/{script} {extra} "$@"\n')
@@ -577,13 +594,15 @@ fi
             profile.write_text('export PI_TELEMETRY=0 PI_OFFLINE=1 GH_TELEMETRY=0 DO_NOT_TRACK=1\n'
                                'export GH_NO_UPDATE_NOTIFIER=1 GH_NO_EXTENSION_UPDATE_NOTIFIER=1\n')
         base_deps = (['python', 'git', 'gh', 'ripgrep', 'fd', 'ca-certificates', 'curl', 'coreutils', 'unzip', 'zip', 'tar',
-                      'x11-repo', 'xkeyboard-config', 'xorg-server-xvfb', 'xorg-xprop', 'xdotool', 'xfce4', 'mesa', 'gtk3', 'dbus', 'libreoffice', 'ttf-dejavu'] if termux else
+                      'x11-repo', 'xkeyboard-config', 'xorg-server-xvfb', 'xorg-xprop', 'xdotool', 'xfce4', 'mesa', 'gtk3', 'dbus', 'ttf-dejavu'] if termux else
                      ['python3', 'git', 'gh', 'ripgrep', 'fd-find', 'ca-certificates', 'curl', 'unzip', 'zip', 'tar',
                       'libasound2t64 | libasound2', 'libdbus-glib-1-2', 'libgtk-3-0t64 | libgtk-3-0', 'libx11-xcb1', 'libdbusmenu-glib4', 'libdbusmenu-gtk3-4', 'libgomp1', 'libstdc++6', 'libvulkan1',
-                      'libreoffice-writer', 'libreoffice-impress', 'libreoffice-draw', 'fonts-dejavu-core'])
+                      'fonts-dejavu-core'])
         depends = dependencies(base_deps, auth_meta['dependencies'], search_meta['depends'], components['node']['metadata']['depends'],
                                components.get('machines', {}).get('metadata', {}).get('depends', []),
                                components.get('display', {}).get('metadata', {}).get('depends', []),
+                               components.get('files', {}).get('metadata', {}).get('depends', []),
+                               components.get('office', {}).get('metadata', {}).get('depends', []),
                                [f'bashkitten-os (= {version}-1)'] if termux else [])
         replacements = '' if termux or args.backend_only else 'Replaces: bashkitten-desktop\nBreaks: bashkitten-desktop\nProvides: bashkitten-desktop\n'
         doc = stage / prefix.lstrip('/') / 'share/doc/bashkitten'
@@ -616,6 +635,10 @@ def main():
     parser.add_argument('--auth-archive', type=Path, required=True)
     parser.add_argument('--search-archive', type=Path, required=True)
     parser.add_argument('--node-archive', type=Path, required=True)
+    parser.add_argument('--files-archive', type=Path)
+    parser.add_argument('--office-archive', type=Path)
+    parser.add_argument('--integration-iteration', action='store_true',
+                        help='Authorized browser integration iteration only; permits unavailable native Files/Office components')
     parser.add_argument('--machines-archive', type=Path)
     parser.add_argument('--display-archive', type=Path)
     parser.add_argument('--termux-display-dir', type=Path)

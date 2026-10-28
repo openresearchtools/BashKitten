@@ -11,6 +11,13 @@ async function texts(folder) {
     const file = path.join(folder, entry.name);
     if (entry.isDirectory()) result.push(...await texts(file));
     else if (legal.test(entry.name) || entry.name.endsWith('-NOTICES.txt')) result.push(await fs.readFile(file, 'utf8'));
+    else if (/^readme(?:\.[^.]+)?$/i.test(entry.name)) {
+      // Some pinned npm distributions (for example assert-plus) put the full
+      // license in README instead of a separate LICENSE file.
+      const text = await fs.readFile(file, 'utf8');
+      const section = text.match(/(?:^|\n)#{1,6}\s+(?:licen[cs]e|copyright)[^\n]*\n([\s\S]*?)(?=\n#{1,6}\s|$)/i)?.[0];
+      if (section && /permission is hereby granted|redistribution and use|GNU (?:GENERAL|LESSER|AFFERO)/i.test(section)) result.push(section.trim());
+    }
   }
   return result;
 }
@@ -18,7 +25,6 @@ async function texts(folder) {
 // Used at packaging time; source installs generate once when Licenses is opened.
 export async function bundledLicenses(root = appRoot) {
   const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json')));
-  const lock = JSON.parse(await fs.readFile(path.join(root, 'package-lock.json')));
   const piPin = await fs.readFile(path.join(root, 'PI_UPSTREAM.md'), 'utf8');
   const piVersion = piPin.match(/Release: `v([^`]+)`/)?.[1];
   const piCommit = piPin.match(/Commit: `([a-f0-9]{40})`/)?.[1];
@@ -43,6 +49,15 @@ export async function bundledLicenses(root = appRoot) {
     if (!text.trim()) throw Error('Missing model downloader license: ' + name);
     records.push({ name, license, component: 'Model downloads', text: modelProvenance + '\n\n' + text });
   }
+  records.push(...await npmLicenses(root, { piVersion, piCommit }));
+  return records;
+}
+
+// Reuse the same locked production dependency notice owner for independently
+// versioned modules installed beside the Agent package.
+export async function npmLicenses(root, { piVersion, piCommit, supplementRoot = path.join(root, 'licenses/upstream') } = {}) {
+  const lock = JSON.parse(await fs.readFile(path.join(root, 'package-lock.json')));
+  const records = [];
   const seen = new Set();
   for (const [location, item] of Object.entries(lock.packages)) {
     if (!location || item.dev) continue;
@@ -61,8 +76,8 @@ export async function bundledLicenses(root = appRoot) {
       : value.name.startsWith('@aws-sdk/') ? 'aws'
       : ({ 'data-uri-to-buffer': 'data-uri-to-buffer', standardwebhooks: 'standardwebhooks',
         'xml-naming': 'xml-naming', '@nodable/entities': 'entities',
-        'proxy-agent-negotiate': 'proxy-agent-negotiate' })[value.name];
-    if (supplement) notices.push(...await texts(path.join(root, 'licenses/upstream', supplement)));
+        'proxy-agent-negotiate': 'proxy-agent-negotiate', saxes: 'saxes' })[value.name];
+    if (supplement) notices.push(...await texts(path.join(supplementRoot, supplement)));
     if (!notices.length) throw Error('Missing license text: ' + key);
     const pinnedPi = ['@earendil-works/chord', '@earendil-works/pi-ai', '@earendil-works/pi-agent-core',
       '@earendil-works/pi-codemode', '@earendil-works/pi-coding-agent', '@earendil-works/pi-mcp',
