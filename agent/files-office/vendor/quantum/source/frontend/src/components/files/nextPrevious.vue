@@ -1,0 +1,1179 @@
+<template>
+  <!-- Left edge detection zone -->
+  <div
+    v-if="enabled && hasPrevious"
+    class="nav-zone nav-zone-left"
+    :style="leftZoneStyle"
+    @touchstart="(e) => { handleTouchStart(e); toggleNavigation(e); }"
+    @touchmove="handleTouchMove"
+  ></div>
+
+  <!-- Right edge detection zone -->
+  <div
+    v-if="enabled && hasNext"
+    class="nav-zone nav-zone-right"
+    @touchstart="(e) => { handleTouchStart(e); toggleNavigation(e); }"
+    @touchmove="handleTouchMove"
+  ></div>
+
+  <!-- Previous button -->
+  <button
+    v-if="enabled && hasPrevious"
+    type="button"
+    @click.prevent="handlePrevClick"
+    @mousedown="startDrag($event, 'previous')"
+    @touchstart="handleTouchStart($event, 'previous')"
+    @touchmove="handleButtonTouchMove"
+    @touchend.prevent="handleTouchEnd"
+    @mouseover="setHoverNav(true)"
+    @mouseleave="setHoverNav(false)"
+    class="nav-button nav-previous"
+    :class="{
+      hidden: !showNav,
+      disabled: !hasPrevious,
+      dragging: dragState.type === 'previous',
+      active: (dragState.atFullExtent && dragState.type === 'previous') || (gestureHint === 'previous' && gestureHintCommitReady),
+      'dark-mode': isDarkMode,
+      'media-mode': isMediaQueueMode,
+      'sidebar-resizing': isSidebarResizing,
+    }"
+    :style="previousButtonStyle"
+    :aria-label="$t('general.previous')"
+    :title="$t('general.previous')"
+  >
+    <i class="material-symbols">
+      {{ dragState.type === 'previous' && dragState.atFullExtent ? 'list_alt' : 'chevron_left' }} <!-- eslint-disable-line @intlify/vue-i18n/no-raw-text -->
+    </i>
+  </button>
+
+  <!-- Next button -->
+  <button
+    v-if="enabled && hasNext"
+    type="button"
+    @click.prevent="handleNextClick"
+    @mousedown="startDrag($event, 'next')"
+    @touchstart="handleTouchStart($event, 'next')"
+    @touchmove="handleButtonTouchMove"
+    @touchend.prevent="handleTouchEnd"
+    @mouseover="setHoverNav(true)"
+    @mouseleave="setHoverNav(false)"
+    class="nav-button nav-next"
+    :class="{ hidden: !showNav, dragging: dragState.type === 'next', active: (dragState.atFullExtent && dragState.type === 'next') || (gestureHint === 'next' && gestureHintCommitReady), 'dark-mode': isDarkMode, 'media-mode': isMediaQueueMode}"
+    :style="nextButtonStyle"
+    :aria-label="$t('general.next')"
+    :title="$t('general.next')"
+  >
+    <i class="material-symbols">
+      {{ dragState.type === 'next' && dragState.atFullExtent ? 'list_alt' : 'chevron_right' }} <!-- eslint-disable-line @intlify/vue-i18n/no-raw-text -->
+    </i>
+  </button>
+
+  <!-- Close preview (same control as swipe-down / back) -->
+  <button
+    v-if="enabled && showPreviewCloseButton"
+    type="button"
+    @click.prevent="handleClosePreviewClick"
+    class="nav-button nav-close"
+    :class="{
+      hidden: !showCloseNavChrome,
+      active: gestureHint === 'close' && gestureHintCommitReady,
+      'dark-mode': isDarkMode,
+      'media-mode': isMediaQueueMode,
+      'gesture-flash': gestureHintFlashClose,
+      'sidebar-resizing': isSidebarResizing,
+    }"
+    :style="closeButtonStyle"
+  >
+    <i class="material-symbols">close</i>
+  </button>
+
+  <!-- Prefetch links for better performance -->
+  <link v-if="previousRaw" rel="prefetch" :href="previousRaw" />
+  <link v-if="nextRaw" rel="prefetch" :href="nextRaw" />
+</template>
+
+<script>
+import { state, getters, mutations } from "@/store";
+import throttle from "@/utils/throttle";
+import { previewViews } from "@/utils/constants";
+import { url } from "@/utils";
+import { resourcesApi } from "@/api";
+import { navigatePlaybackQueue } from "@/utils/playbackQueue.js";
+import {
+  isInLeftNavHoverZone,
+  isInLeftNavTapZone,
+  isInRightNavHoverZone,
+  isInRightNavTapZone,
+} from "@/utils/navigationEdgeZones.js";
+
+export default {
+  name: "NextPrevious",
+  data() {
+    return {
+      hoverNav: false,
+      dragState: {
+        isDragging: false,
+        type: null, // 'previous' or 'next'
+        startX: 0,
+        startY: 0,
+        deltaX: 0,
+        deltaY: 0,
+        threshold: 0, // Will be calculated as 10em in pixels
+        atFullExtent: false,
+        triggered: false,
+      },
+      // State tracking
+      navigationTimeout: null,
+      /** Bumps on each setupNavigationForCurrentItem start; stale async completions skip applying. */
+      navigationSetupGeneration: 0,
+      isSwipe: false,
+      touchStartX: 0,
+      touchStartY: 0,
+      // Button touch handling
+      touchState: {
+        isButtonTouch: false,
+        buttonType: null,
+        startTime: 0,
+        hasMoved: false,
+        tapTimeout: null,
+        triggered: false
+      },
+      isSidebarResizing: false, // Track if sidebar is being resized
+    };
+  },
+  computed: {
+    isDarkMode() { return getters.isDarkMode(); },
+    moveWithSidebar() {
+      return getters.isSidebarVisible() && getters.isStickySidebar();
+    },
+    sidebarWidth() {
+      return state.sidebar?.width || 20;
+    },
+    enabled() {
+      return state.navigation.enabled && getters.currentPrompt() === null;
+    },
+    showNav() {
+      return state.navigation.show || this.hoverNav || !!state.navigation.gestureHint;
+    },
+    gestureHint() {
+      return state.navigation.gestureHint;
+    },
+    gestureHintCommitReady() {
+      return state.navigation.gestureHintCommitReady;
+    },
+    gestureHintFlashClose() {
+      return state.navigation.gestureHintFlashClose;
+    },
+    showPreviewCloseButton() {
+      return (
+        previewViews.includes(this.currentView) &&
+        state.req &&
+        state.req.type !== 'directory'
+      );
+    },
+    autoShowNavForMediaPreview() {
+      return getters.previewType() === 'video';
+    },
+    isImagePreview() {
+      return getters.previewType() === 'image';
+    },
+    /** Close mirrors swipe-down dismiss only (not with prev/next on load or edge hover). */
+    showCloseNavChrome() {
+      return (
+        this.enabled &&
+        this.showPreviewCloseButton &&
+        this.gestureHint === 'close'
+      );
+    },
+    /** Centers on the main column when #main has padding-left matching the sticky sidebar (same offset as StatusBar). */
+    closeButtonStyle() {
+      const styles = { right: 'auto' };
+      if (this.moveWithSidebar) {
+        const half = this.sidebarWidth / 2;
+        styles.left = `calc(50% + ${half}em)`;
+      } else {
+        styles.left = '50%';
+      }
+      return styles;
+    },
+    hasPrevious() {
+      if (this.isMediaQueueMode) {
+        return getters.playbackQueueCanGoPrevious();
+      }
+      return state.navigation.previousLink !== "";
+    },
+    hasNext() {
+      if (this.isMediaQueueMode) {
+        return getters.playbackQueueCanGoNext();
+      }
+      return state.navigation.nextLink !== "";
+    },
+    previousRaw() {
+      return state.navigation.previousRaw;
+    },
+    nextRaw() {
+      return state.navigation.nextRaw;
+    },
+    currentView() {
+      const view = getters.currentView();
+      return view;
+    },
+    isMediaFile() {
+      const previewType = getters.previewType();
+      return previewType === 'audio' || previewType === 'video';
+    },
+    isMediaQueueMode() {
+      return getters.isPreviewPlaybackQueueNavMode();
+    },
+    leftZoneStyle() {
+      const styles = {
+        pointerEvents: 'none',
+        zIndex: '-1',
+        background: 'transparent',
+        position: 'fixed',
+        top: '25%',
+        bottom: '25%',
+        width: '5em',
+      };
+      if (this.moveWithSidebar) {
+        styles.left = `${this.sidebarWidth}em`;
+      } else {
+        styles.left = '0';
+      }
+      return styles;
+    },
+    previousButtonStyle() {
+      const styles = {};
+      if (this.dragState.type === 'previous') {
+        styles.transform = `translateY(-50%) translate(${this.dragState.deltaX}px, 0)`;
+      }
+      // Calculate left position based on sidebar
+      if (this.moveWithSidebar) {
+        styles.left = `calc(${this.sidebarWidth}em + 1em)`; // When sidebar is sticky the position of the button will have a tiny padding
+      } else {
+        styles.left = '1em';
+      }
+      return styles;
+    },
+    nextButtonStyle() {
+      const styles = {};
+      if (this.dragState.type === 'next') {
+        styles.transform = `translateY(-50%) translate(${this.dragState.deltaX}px, 0)`;
+      }
+      // Next button doesn't need account for the sidebar
+      styles.right = '1em';
+      return styles;
+    }
+  },
+  watch: {
+    currentView() {
+      this.updateNavigationEnabled();
+
+      // Also trigger navigation setup if we're now in a preview view
+      this.$nextTick(() => {
+        if (this.enabled && state.req) {
+          this.setupNavigationForCurrentItem();
+        }
+      });
+    },
+    'state.req': {
+      handler() {
+        this.updateNavigationEnabled();
+        // Auto-setup navigation when request changes and we're enabled
+        if (this.enabled) {
+          this.$nextTick(() => {
+            this.setupNavigationForCurrentItem();
+          });
+        }
+      },
+      deep: true,
+      immediate: false
+    },
+    enabled(newEnabled) {
+      if (newEnabled && state.req) {
+        this.$nextTick(() => {
+          this.setupNavigationForCurrentItem();
+        });
+      }
+    },
+    '$route'() {
+      // Give time for state.req to be updated, then setup navigation
+      setTimeout(() => {
+        this.$nextTick(() => {
+          if (this.enabled && state.req) {
+            this.setupNavigationForCurrentItem();
+          }
+        });
+      }, 100);
+    },
+    // Watch for when navigation links are set up
+    'state.navigation.previousLink'() {
+      this.showInitialNavigation();
+    },
+    'state.navigation.nextLink'() {
+      this.showInitialNavigation();
+    },
+    'state.sidebar.isResizing'(newVal) {
+      // Track when sidebar is being resized to disable transitions
+      this.isSidebarResizing = newVal;
+    },
+  },
+  mounted() {
+    window.addEventListener("keydown", this.keyEvent);
+    window.addEventListener("mousemove", this.handleDrag);
+    window.addEventListener("mouseup", this.endDrag);
+    window.addEventListener("touchmove", this.handleDrag, { passive: false });
+    window.addEventListener("touchend", this.endDrag);
+    document.addEventListener("click", this.handleDocumentClick);
+    // Capture phase: run before preview gesture handlers (document-level capture mousemove)
+    // that may stopPropagation, which would skip bubble-phase window listeners.
+    window.addEventListener("mousemove", this.handleGlobalMouseMove, true);
+
+    // Calculate 10em threshold in pixels
+    const emSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    this.dragState.threshold = 10 * emSize;
+
+    this.updateNavigationEnabled();
+
+    // Setup navigation if enabled and we have a current item
+    if (this.enabled && state.req) {
+      this.$nextTick(() => {
+        this.setupNavigationForCurrentItem();
+      });
+    } else {
+      this.$nextTick(() => {
+        this.showInitialNavigation();
+      });
+    }
+  },
+  beforeUnmount() {
+    window.removeEventListener("keydown", this.keyEvent);
+    window.removeEventListener("mousemove", this.handleDrag);
+    window.removeEventListener("mouseup", this.endDrag);
+    window.removeEventListener("touchmove", this.handleDrag);
+    window.removeEventListener("touchend", this.endDrag);
+    document.removeEventListener("click", this.handleDocumentClick);
+    window.removeEventListener("mousemove", this.handleGlobalMouseMove, true);
+
+    // Clear our local timeout
+    if (this.navigationTimeout) {
+      clearTimeout(this.navigationTimeout);
+      this.navigationTimeout = null;
+    }
+
+    // Clean up touch state
+    this.resetTouchState();
+
+    mutations.clearNavigation();
+  },
+  methods: {
+    updateNavigationEnabled() {
+      const shouldEnable = previewViews.includes(this.currentView);
+      mutations.setNavigationEnabled(shouldEnable);
+    },
+    async checkForUnsavedChanges() {
+      // Check if editor has unsaved changes
+      const editorDirty = state.editorDirty || false;
+      if (!editorDirty) {
+        return true; // No unsaved changes, allow navigation
+      }
+
+      // There are unsaved changes - show prompt
+      return new Promise((resolve) => {
+        mutations.showPrompt({
+          name: "SaveBeforeExit",
+          pinned: true,
+          confirm: async () => {
+            // Save and proceed
+            try {
+              const saveHandler = state.editorSaveHandler;
+              if (saveHandler && typeof saveHandler === 'function') {
+                await saveHandler();
+              }
+              // Close the prompt after successful save
+              mutations.closeTopPrompt();
+              resolve(true); // Allow navigation
+            } catch (_e) {
+              // Save failed - keep prompt open by not resolving
+              resolve(false); // Block navigation
+            }
+          },
+          discard: () => {
+            // Discard changes and proceed
+            mutations.setEditorDirty(false);
+            // Close the prompt
+            mutations.closeTopPrompt();
+            resolve(true); // Allow navigation
+          },
+          cancel: () => {
+            // Cancel navigation
+            // Close the prompt
+            mutations.closeTopPrompt();
+            resolve(false); // Block navigation
+          },
+        });
+      });
+    },
+    async setupNavigationForCurrentItem() {
+      const gen = ++this.navigationSetupGeneration;
+
+      if (!this.enabled || !state.req || state.req.type === 'directory') {
+        if (gen !== this.navigationSetupGeneration) {
+          return;
+        }
+        mutations.clearNavigation();
+        return;
+      }
+
+      let directoryPath = url.removeLastDir(state.req.path);
+
+      // If directoryPath is empty, the file is in root - use '/' as the directory
+      if (!directoryPath || directoryPath === '') {
+        directoryPath = '/';
+      }
+
+      // Special case: if we're viewing a shared single file (where the share itself is the file)
+      // and directoryPath equals req.path, there's no directory to navigate within
+      if (getters.isShare() && directoryPath === state.req.path) {
+        if (gen !== this.navigationSetupGeneration) {
+          return;
+        }
+        mutations.clearNavigation();
+        return;
+      }
+
+      let listing;
+
+      // Try to get listing from current request first
+      if (state.req.items) {
+        listing = state.req.items;
+      } else if (state.req.parentDirItems) {
+        // Use pre-fetched parent directory items from Files.vue
+        listing = state.req.parentDirItems;
+      } else if (directoryPath !== state.req.path) {
+        // Fetch directory listing (now with '/' for root files)
+        try {
+          let res;
+          if (getters.isShare()) {
+            res = await resourcesApi.fetchFilesPublic(directoryPath, state.shareInfo.hash);
+          } else {
+            res = await resourcesApi.fetchFiles(state.req.source, directoryPath);
+          }
+          listing = res.items;
+        } catch (_e) {
+          if (gen !== this.navigationSetupGeneration) {
+            return;
+          }
+          mutations.clearNavigation();
+          return;
+        }
+      } else {
+        if (gen !== this.navigationSetupGeneration) {
+          return;
+        }
+        mutations.clearNavigation();
+        return;
+      }
+
+      if (gen !== this.navigationSetupGeneration) {
+        return;
+      }
+      mutations.setupNavigation({
+        listing: listing,
+        currentItem: state.req,
+        directoryPath: directoryPath
+      });
+    },
+    showInitialNavigation() {
+      if (!this.enabled) {
+        return;
+      }
+      if (!(this.hasPrevious || this.hasNext || this.autoShowNavForMediaPreview || this.isImagePreview)) {
+        return;
+      }
+
+      mutations.clearNavigationTimeout();
+      if (this.navigationTimeout) {
+        clearTimeout(this.navigationTimeout);
+        this.navigationTimeout = null;
+      }
+
+      if (this.isImagePreview) {
+        mutations.showNavigationChromePersistent();
+        return;
+      }
+
+      mutations.setNavigationShow(true);
+      this.navigationTimeout = setTimeout(() => {
+        if (!this.hoverNav) {
+          mutations.setNavigationShow(false);
+        }
+        this.navigationTimeout = null;
+      }, 3000);
+      mutations.setNavigationTimeout(this.navigationTimeout);
+    },
+    async handleClosePreviewClick() {
+      if (!(await this.checkForUnsavedChanges())) {
+        return;
+      }
+      mutations.closeHovers();
+      this.hoverNav = false;
+      mutations.setNavigationGestureHint({});
+      if (state.previousHistoryItem?.name) {
+        url.goToItem(
+          state.previousHistoryItem.source,
+          state.previousHistoryItem.path,
+          state.previousHistoryItem,
+          false,
+          state.previousHistoryItem.isShare
+        );
+        return;
+      }
+      const parentPath = url.removeLastDir(state.route.path);
+      this.$router.push({ path: parentPath });
+    },
+    async prev() {
+      if (this.hasPrevious) {
+        this.hoverNav = false;
+
+        // Check for unsaved changes in editor before navigating
+        if (!await this.checkForUnsavedChanges()) {
+          return; // Navigation blocked
+        }
+
+        // Set transitioning state - keeps old req visible until new one loads
+        // Editor and other components check isTransitioning to prevent saves
+        if (this.isMediaQueueMode) {
+          navigatePlaybackQueue(-1);
+        } else {
+          mutations.setNavigationTransitioning(true);
+          this.$router.replace({ path: state.navigation.previousLink });
+        }
+      }
+    },
+    async next() {
+      if (this.hasNext) {
+        this.hoverNav = false;
+
+        // Check for unsaved changes in editor before navigating
+        if (!await this.checkForUnsavedChanges()) {
+          return; // Navigation blocked
+        }
+
+        // Set transitioning state - keeps old req visible until new one loads
+        // Editor and other components check isTransitioning to prevent saves
+        if (this.isMediaQueueMode) {
+          navigatePlaybackQueue(1);
+        } else {
+          mutations.setNavigationTransitioning(true);
+          this.$router.replace({ path: state.navigation.nextLink });
+        }
+      }
+    },
+    keyEvent(event) {
+      // Only handle navigation if enabled and no prompt is active
+      if (!this.enabled || state.prompts.length > 0) {
+        return;
+      }
+
+      // If we're in plyr, only handle arrow keys if Ctrl is pressed
+      if (this.isMediaFile && !event.ctrlKey || event.repeat) {
+        return;
+      }
+      // If we're in the editor, don't handle arrow keys to avoid change of file mistakenly.
+      const blockedViews = ['editor'];
+      if (blockedViews.includes(this.currentView)) {
+        return;
+      }
+
+      const { key } = event;
+
+      switch (key) {
+        case "ArrowRight":
+          if (this.hasNext) {
+            event.preventDefault();
+            void this.next();
+          }
+          break;
+        case "ArrowLeft":
+          if (this.hasPrevious) {
+            event.preventDefault();
+            void this.prev();
+          }
+          break;
+      }
+    },
+    handleClick() {
+      // Don't show navigation if this is part of a swipe gesture
+      if (this.isSwipe) {
+        return;
+      }
+
+      // Simplified: clicking anywhere in the CSS zones shows navigation
+      if (!this.enabled || (!this.hasPrevious && !this.hasNext)) {
+        return;
+      }
+
+      this.showNavigation();
+    },
+    handleDocumentClick(event) {
+      // Only handle clicks if navigation is enabled
+      if (!this.enabled) {
+        return;
+      }
+
+      // Don't show navigation if this is part of a swipe gesture
+      if (this.isSwipe) {
+        return;
+      }
+
+      // Check if click is in the left edge zone
+      if (this.hasPrevious && this.isClickInLeftZone(event)) {
+        this.showNavigation();
+        return;
+      }
+
+      // Check if click is in the right edge zone
+      if (this.hasNext && this.isClickInRightZone(event)) {
+        this.showNavigation();
+        return;
+      }
+    },
+    isClickInLeftZone(event) {
+      return isInLeftNavTapZone(event.clientX, {
+        moveWithSidebar: this.moveWithSidebar,
+        sidebarWidthEm: this.sidebarWidth,
+      });
+    },
+    isClickInRightZone(event) {
+      return isInRightNavTapZone(event.clientX);
+    },
+    showNavigation() {
+      mutations.peekNavigationChrome();
+    },
+    toggleNavigation: throttle(function () {
+      if (!this.enabled) {
+        return;
+      }
+      if (this.isSwipe) {
+        return;
+      }
+      this.showNavigation();
+    }, 100),
+    setHoverNav(value) {
+      this.hoverNav = value;
+      mutations.setNavigationHover(value);
+    },
+
+    // Touch handling and swipe detection (similar to ListingItem.vue)
+    handleTouchStart(event, buttonType = null) {
+      if (event.touches && event.touches.length > 0) {
+        const touch = event.touches[0];
+        this.touchStartX = touch.clientX;
+        this.touchStartY = touch.clientY;
+        this.isSwipe = false;
+
+        // Handle button-specific touch
+        if (buttonType) {
+          this.touchState = {
+            isButtonTouch: true,
+            buttonType: buttonType,
+            startTime: Date.now(),
+            hasMoved: false,
+            tapTimeout: null,
+            triggered: false
+          };
+        }
+      }
+    },
+
+    handleTouchMove(event) {
+      if (!event.touches || event.touches.length === 0) return;
+
+      const touch = event.touches[0];
+      const deltaX = Math.abs(touch.clientX - this.touchStartX);
+      const deltaY = Math.abs(touch.clientY - this.touchStartY);
+      const movementThreshold = 10;
+
+      if (deltaX > movementThreshold || deltaY > movementThreshold) {
+        this.isSwipe = true;
+        this.cancelNavigationTimeout();
+      }
+    },
+
+    // Handle touch movement specifically for navigation buttons
+    handleButtonTouchMove(event) {
+      if (!event.touches || event.touches.length === 0) return;
+      if (!this.touchState.isButtonTouch) return;
+
+      event.preventDefault(); // Prevent scrolling while dragging
+
+      const touch = event.touches[0];
+      const deltaX = Math.abs(touch.clientX - this.touchStartX);
+      const deltaY = Math.abs(touch.clientY - this.touchStartY);
+      const movementThreshold = 10;
+
+      // Check if user has moved enough to start dragging
+      if (deltaX > movementThreshold || deltaY > movementThreshold) {
+        this.touchState.hasMoved = true;
+
+        // Cancel tap timeout since user is dragging
+        if (this.touchState.tapTimeout) {
+          clearTimeout(this.touchState.tapTimeout);
+          this.touchState.tapTimeout = null;
+        }
+
+        // Initialize drag state if not already dragging
+        if (!this.dragState.isDragging) {
+          // Calculate 10em threshold in pixels if not set
+          if (!this.dragState.threshold) {
+            const emSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+            this.dragState.threshold = 10 * emSize;
+          }
+
+          this.dragState = {
+            isDragging: true,
+            type: this.touchState.buttonType,
+            startX: this.touchStartX,
+            startY: this.touchStartY,
+            deltaX: 0,
+            deltaY: 0,
+            threshold: this.dragState.threshold,
+            atFullExtent: false,
+            triggered: false,
+          };
+        }
+
+        // Update drag position - implement drag logic directly
+        if (this.dragState.isDragging) {
+          let dragDeltaX = touch.clientX - this.dragState.startX;
+          const maxDrag = this.dragState.threshold; // 10em
+
+          // Constrain drag to correct direction and max distance
+          if (this.dragState.type === 'previous') {
+            // Left button: only allow rightward drag (positive deltaX)
+            dragDeltaX = Math.max(0, Math.min(maxDrag, dragDeltaX));
+          } else if (this.dragState.type === 'next') {
+            // Right button: only allow leftward drag (negative deltaX)
+            dragDeltaX = Math.min(0, Math.max(-maxDrag, dragDeltaX));
+          }
+
+          this.dragState.deltaX = dragDeltaX;
+
+          // Check if we've reached the full extent
+          const atFullExtent = Math.abs(dragDeltaX) >= maxDrag;
+          this.dragState.atFullExtent = atFullExtent;
+        }
+      }
+    },
+    handleTouchEnd() {
+      // Handle touch end for buttons
+      if (this.touchState.isButtonTouch) {
+        // Only navigate on release if  we didn't move our finger significantly (not a drag)
+        if (!this.touchState.hasMoved &&
+            !this.dragState.triggered &&
+            !this.touchState.triggered) {
+
+          // Mark as triggered to prevent double navigation
+          this.touchState.triggered = true;
+
+          // Navigate based on button type
+          if (this.touchState.buttonType === 'previous' && this.hasPrevious) {
+            void this.prev();
+          } else if (this.touchState.buttonType === 'next' && this.hasNext) {
+            void this.next();
+          }
+        }
+
+        // Reset touch state
+        this.resetTouchState();
+      }
+
+      // Reset navigation swipe state
+      this.isSwipe = false;
+
+      // Let endDrag handle the drag cleanup
+      if (this.dragState.isDragging) {
+        this.endDrag();
+      }
+    },
+
+    cancelNavigationTimeout() {
+      mutations.clearNavigationTimeout();
+      if (this.navigationTimeout) {
+        clearTimeout(this.navigationTimeout);
+        this.navigationTimeout = null;
+      }
+    },
+
+    resetTouchState() {
+      if (this.touchState.tapTimeout) {
+        clearTimeout(this.touchState.tapTimeout);
+      }
+      this.touchState = {
+        isButtonTouch: false,
+        buttonType: null,
+        startTime: 0,
+        hasMoved: false,
+        tapTimeout: null,
+        triggered: false
+      };
+    },
+
+    // Drag functionality for navigation buttons
+    startDrag(event, type) {
+      event.preventDefault();
+
+      const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+      const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+      this.dragState = {
+        isDragging: true,
+        type: type,
+        startX: clientX,
+        startY: clientY,
+        deltaX: 0,
+        deltaY: 0,
+        threshold: this.dragState.threshold,
+        atFullExtent: false,
+        triggered: false,
+      };
+
+    },
+
+    handleDrag(event) {
+      if (!this.dragState.isDragging) return;
+
+      const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+
+      let deltaX = clientX - this.dragState.startX;
+
+      // Constrain drag to correct direction and max distance
+      const maxDrag = this.dragState.threshold; // 10em
+      if (this.dragState.type === 'previous') {
+        // Left button: only allow rightward drag (positive deltaX)
+        deltaX = Math.max(0, Math.min(maxDrag, deltaX));
+      } else if (this.dragState.type === 'next') {
+        // Right button: only allow leftward drag (negative deltaX)
+        deltaX = Math.min(0, Math.max(-maxDrag, deltaX));
+      }
+
+      this.dragState.deltaX = deltaX;
+
+      // Check if we've reached the full extent
+      const atFullExtent = Math.abs(deltaX) >= maxDrag;
+      this.dragState.atFullExtent = atFullExtent;
+
+      // Prevent default to avoid text selection during drag
+      event.preventDefault();
+    },
+
+    endDrag() {
+      if (!this.dragState.isDragging && !this.touchState.isButtonTouch) return;
+
+      // Only show file list if user released at full extent
+      if (this.dragState.atFullExtent) {
+        this.showFileList(this.dragState.type);
+        this.dragState.triggered = true; // Mark that drag triggered an action
+      }
+
+      // We check if there was any movement (deltaX != 0) to distinguish from a simple click
+      if (this.dragState.deltaX !== 0) {
+        this.dragState.wasDrag = true;
+      }
+      this.resetDragState();
+      this.resetTouchState();
+    },
+
+    resetDragState() {
+      this.dragState = {
+        isDragging: false,
+        type: null,
+        startX: 0,
+        startY: 0,
+        deltaX: 0,
+        deltaY: 0,
+        threshold: this.dragState.threshold,
+        atFullExtent: false,
+        triggered: false,
+        wasDrag: this.dragState.wasDrag,
+      };
+    },
+
+    handlePrevClick() {
+      // If a drag was not at the maximum, don't navigate and return the button to its initial position
+      if (this.dragState.wasDrag) {
+        this.dragState.wasDrag = false;
+        this.resetDragState();
+        return;
+      }
+      // Only navigate if this wasn't a drag
+      if (!this.dragState.triggered) {
+        void this.prev();
+      }
+      this.resetDragState();
+    },
+
+    handleNextClick() {
+      // If a drag was not at the maximum, don't navigate and return the button to its initial position
+      if (this.dragState.wasDrag) {
+        this.dragState.wasDrag = false;
+        this.resetDragState();
+        return;
+      }
+      // Only navigate if this wasn't a drag
+      if (!this.dragState.triggered) {
+        void this.next();
+      }
+      this.resetDragState();
+    },
+
+    showFileList(type) {
+      // Hide navigation buttons when showing file list
+      mutations.setNavigationShow(false);
+
+      if (type === 'previous' || type === 'next') {
+        // Show current listing items for quick jumping
+        this.showCurrentListing();
+      }
+    },
+
+    showCurrentListing() {
+      const currentItems = this.getCurrentListingItems();
+      mutations.showPrompt({
+        name: "file-list",
+        props: {
+          fileList: currentItems,
+          title: this.$t("prompts.quickJump")
+        }
+      });
+    },
+
+    getCurrentListingItems() {
+      // Get items from the current navigation listing (files in same directory)
+      const listing = state.navigation.listing || [];
+      return listing.map(item => ({
+        name: item.name, // Keep original names without emojis
+        path: item.path,
+        source: item.source || state.req.source,
+        type: item.type,
+        isDirectory: item.type === 'directory',
+        originalItem: item
+      }));
+    },
+
+    handleGlobalMouseMove(event) {
+      // Check if mouse is in the nav zone areas to show navigation buttons
+      if (!this.enabled) return;
+
+      const opts = {
+        moveWithSidebar: this.moveWithSidebar,
+        sidebarWidthEm: this.sidebarWidth,
+      };
+
+      if (this.hasPrevious && isInLeftNavHoverZone(event.clientX, opts)) {
+        const viewportHeight = window.innerHeight;
+        const zoneTop = viewportHeight * 0.25;
+        const zoneBottom = viewportHeight * 0.75;
+
+        if (event.clientY >= zoneTop && event.clientY <= zoneBottom) {
+          this.toggleNavigation();
+        }
+      }
+
+      if (this.hasNext && isInRightNavHoverZone(event.clientX)) {
+        const viewportHeight = window.innerHeight;
+        const zoneTop = viewportHeight * 0.25;
+        const zoneBottom = viewportHeight * 0.75;
+
+        if (event.clientY >= zoneTop && event.clientY <= zoneBottom) {
+          this.toggleNavigation();
+        }
+      }
+    },
+  },
+};
+</script>
+
+<style scoped>
+/* Thin edge detection zones - minimal interference with content */
+.nav-zone {
+  position: fixed;
+  top: 25%; /* Start at 25% from top */
+  bottom: 25%; /* End at 25% from bottom (so middle 50%) */
+  width: 5em;
+  pointer-events: none; /* Allow clicks and interactions to pass through */
+  z-index: -1; /* Behind content, only used for geometric detection */
+  background: transparent; /* Invisible zones for mouse/touch detection */
+}
+
+.nav-zone-right {
+  right: 0;
+}
+
+/* Removed navigation-buttons container to prevent content interaction blocking */
+
+.nav-button {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 50px;
+  height: 50px;
+  border: var(--borderWidth) solid var(--divider);
+  border-radius: 50%;
+  background: var(--background);
+  color: var(--textPrimary);
+  cursor: pointer;
+  transition: opacity 0.4s ease, transform 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease, left 0.2s ease;
+  pointer-events: auto;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  opacity: 1;
+  margin-top: 2em;
+  user-select: none;
+}
+
+.nav-button.dark-mode {
+  background: var(--surfacePrimary);
+  color: var(--textPrimary);
+}
+
+.nav-button.media-mode {
+  color: var(--primaryColor);
+}
+
+.nav-button:hover,
+.nav-button.active {
+  background: var(--primaryColor);
+  transform: translateY(-50%) scale(1.1);
+  box-shadow:
+        inset 0 -3em 3em rgba(217, 217, 217, 0.211),
+        0 0 0 2px var(--alt-background),
+        0 4px 20px rgba(0, 0, 0, 0.4);
+  color: white;
+  opacity: 1;
+}
+
+/* Disable transitions during sidebar resizing */
+.nav-button.sidebar-resizing {
+  transition: opacity 0.4s ease, transform 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.nav-button.hidden {
+  opacity: 0;
+  transform: translateY(-50%) scale(0.9);
+  pointer-events: none !important; /* Ensure no interaction when hidden */
+  z-index: -1; /* Move behind content when hidden */
+}
+
+/* Smooth show animation for better UX */
+.nav-button:not(.hidden):not(.sidebar-resizing):not(.nav-close) {
+  animation: nav-button-show 0.4s ease-out;
+}
+
+.nav-button.nav-close {
+  /* Below header; +4em vs previous placement; horizontal position from closeButtonStyle when sidebar offsets main */
+  top: calc(1.25em + 4em);
+  right: auto;
+  margin-top: 0;
+  transform: translateX(-50%);
+}
+
+.nav-button.nav-close.hidden {
+  transform: translateX(-50%) scale(0.9);
+}
+
+.nav-button.nav-close:not(.hidden):not(.sidebar-resizing) {
+  animation: nav-button-show-close 0.4s ease-out;
+}
+
+@keyframes nav-button-show-close {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+.nav-button.nav-close:hover:not(.hidden),
+.nav-button.nav-close.active:not(.hidden) {
+  transform: translateX(-50%) scale(1.1);
+}
+
+.nav-button.nav-close.gesture-flash:not(.hidden) {
+  animation: nav-close-gesture-flash 0.38s ease-out;
+}
+
+@keyframes nav-close-gesture-flash {
+  0% {
+    transform: translateX(-50%) scale(1);
+    filter: brightness(1);
+  }
+  40% {
+    transform: translateX(-50%) scale(1.12);
+    filter: brightness(1.08);
+  }
+  100% {
+    transform: translateX(-50%) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes nav-button-show {
+  0% {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+.nav-button.dragging {
+  z-index: 1002;
+  cursor: grabbing;
+  transition: none !important; /* Disable transitions during drag */
+}
+
+.nav-button i.material-symbols {
+  font-size: 24px;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.nav-button:hover i.material-symbols,
+.nav-button.active i.material-symbols {
+  transform: scale(1.1);
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+  .nav-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .nav-button i.material-symbols {
+    font-size: 20px;
+  }
+
+  /* Reduce animation intensity on mobile for better performance */
+  .nav-button:not(.hidden) {
+    animation-duration: 0.3s;
+  }
+}
+
+/* Ensure buttons don't interfere with scrollbars */
+@media (max-width: 480px) {
+  .nav-next {
+    right: 8px;
+  }
+}
+</style>

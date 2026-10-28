@@ -1,0 +1,235 @@
+/**
+ * Maps flat runtime user objects ↔ nested user-defaults / profile sections (matches backend ProfileFromUser).
+ */
+
+import { getNestedProperty, getObjectProperty } from "@/utils/object.js";
+
+function boolPtr(val, defaultValue = true) {
+  if (val === undefined || val === null) {
+    return defaultValue;
+  }
+  return !!val;
+}
+
+export function emptyProfileSections() {
+  return {
+    sidebar: {},
+    listing: {},
+    preview: {},
+    fileViewer: {},
+    search: {},
+    ui: {},
+    account: { permissions: {} },
+    fileLoading: {},
+  };
+}
+
+export function sectionsFromFlatUser(user) {
+  const u = user || {};
+  const preview = u.preview || {};
+  return {
+    sidebar: {
+      disableQuickToggles: !!u.disableQuickToggles,
+      hideFileActions: !!u.hideSidebarFileActions,
+      disableHideOnPreview: !!preview.disableHideSidebar,
+      sticky: !!u.stickySidebar,
+      hideFiles: !!u.hideFilesInTree,
+      showTools: u.showToolsInSidebar === undefined || u.showToolsInSidebar === null
+        ? true
+        : !!u.showToolsInSidebar,
+    },
+    listing: {
+      deleteWithoutConfirming: !!u.deleteWithoutConfirming,
+      dateFormat: !!u.dateFormat,
+      showHidden: !!u.showHidden,
+      quickDownload: !!u.quickDownload,
+      showSelectMultiple: !!u.showSelectMultiple,
+      singleClick: !!u.singleClick,
+      hideFileExt: u.hideFileExt || "",
+      showCopyPath: !!u.showCopyPath,
+      deleteAfterArchive: !!u.deleteAfterArchive,
+      viewMode: u.viewMode,
+      gallerySize: u.gallerySize,
+    },
+    preview: {
+      image: boolPtr(preview.image),
+      video: boolPtr(preview.video),
+      audio: boolPtr(preview.audio),
+      office: boolPtr(preview.office),
+      folder: boolPtr(preview.folder),
+      models: boolPtr(preview.models),
+      popup: boolPtr(preview.popup),
+      motionVideoPreview: boolPtr(preview.motionVideoPreview),
+      disablePreviewExt: u.disablePreviewExt || "",
+    },
+    fileViewer: {
+      autoplayMedia: boolPtr(preview.autoplayMedia),
+      editorQuickSave: !!u.editorQuickSave,
+      preferEditorForMarkdown: !!u.preferEditorForMarkdown,
+      debugOffice: !!u.debugOffice,
+      disableViewingExt: u.disableViewingExt || "",
+      disableOnlyOfficeExt: u.disableOnlyOfficeExt || "",
+    },
+    search: {
+      disableOptions: !!u.disableSearchOptions,
+    },
+    ui: {
+      darkMode: boolPtr(u.darkMode),
+      themeColor: u.themeColor || "",
+      customTheme: u.customTheme || "",
+      locale: u.locale || "",
+    },
+    account: {
+      lockPassword: !!u.lockPassword,
+      requirePasswordChange: !!u.requirePasswordChange,
+      disableSettings: !!u.disableSettings,
+      disableUpdateNotifications: !!u.disableUpdateNotifications,
+      loginMethod: u.loginMethod || "",
+      permissions: { ...(u.permissions || {}) },
+    },
+    fileLoading: { ...(u.fileLoading || {}) },
+  };
+}
+
+export function applySectionsToFlatUser(user, sections) {
+  if (!user || !sections) {
+    return;
+  }
+  if (!user.preview) {
+    user.preview = {};
+  }
+  const s = sections;
+  const sidebar = s.sidebar || {};
+  const listing = s.listing || {};
+  const preview = s.preview || {};
+  const fileViewer = s.fileViewer || {};
+  const search = s.search || {};
+  const ui = s.ui || {};
+  const account = s.account || {};
+
+  user.disableQuickToggles = !!sidebar.disableQuickToggles;
+  user.hideSidebarFileActions = !!sidebar.hideFileActions;
+  user.preview.disableHideSidebar = !!sidebar.disableHideOnPreview;
+  user.stickySidebar = !!sidebar.sticky;
+  user.hideFilesInTree = !!sidebar.hideFiles;
+  user.showToolsInSidebar = sidebar.showTools === undefined || sidebar.showTools === null
+    ? true
+    : !!sidebar.showTools;
+
+  user.deleteWithoutConfirming = !!listing.deleteWithoutConfirming;
+  user.dateFormat = !!listing.dateFormat;
+  user.showHidden = !!listing.showHidden;
+  user.quickDownload = !!listing.quickDownload;
+  user.showSelectMultiple = !!listing.showSelectMultiple;
+  user.singleClick = !!listing.singleClick;
+  user.hideFileExt = listing.hideFileExt || "";
+  user.showCopyPath = !!listing.showCopyPath;
+  user.deleteAfterArchive = !!listing.deleteAfterArchive;
+  if (listing.viewMode !== undefined) {
+    user.viewMode = listing.viewMode;
+  }
+  if (listing.gallerySize !== undefined) {
+    user.gallerySize = listing.gallerySize;
+  }
+
+  user.preview.image = boolPtr(preview.image);
+  user.preview.video = boolPtr(preview.video);
+  user.preview.audio = boolPtr(preview.audio);
+  user.preview.office = boolPtr(preview.office);
+  user.preview.folder = boolPtr(preview.folder);
+  user.preview.models = boolPtr(preview.models);
+  user.preview.popup = boolPtr(preview.popup);
+  user.preview.motionVideoPreview = boolPtr(preview.motionVideoPreview);
+  user.disablePreviewExt = preview.disablePreviewExt || "";
+
+  user.preview.autoplayMedia = boolPtr(fileViewer.autoplayMedia);
+  user.editorQuickSave = !!fileViewer.editorQuickSave;
+  user.preferEditorForMarkdown = !!fileViewer.preferEditorForMarkdown;
+  user.debugOffice = !!fileViewer.debugOffice;
+  user.disableViewingExt = fileViewer.disableViewingExt || "";
+  user.disableOnlyOfficeExt = fileViewer.disableOnlyOfficeExt || "";
+
+  user.disableSearchOptions = !!search.disableOptions;
+
+  user.darkMode = boolPtr(ui.darkMode);
+  user.themeColor = ui.themeColor || "";
+  user.customTheme = ui.customTheme || "";
+  if (ui.locale !== undefined) {
+    user.locale = ui.locale;
+  }
+
+  if (account.lockPassword !== undefined) {
+    user.lockPassword = !!account.lockPassword;
+  }
+  if (account.requirePasswordChange !== undefined) {
+    user.requirePasswordChange = !!account.requirePasswordChange;
+  }
+  if (account.disableSettings !== undefined) {
+    user.disableSettings = !!account.disableSettings;
+  }
+  if (account.disableUpdateNotifications !== undefined) {
+    user.disableUpdateNotifications = !!account.disableUpdateNotifications;
+  }
+  if (account.loginMethod) {
+    user.loginMethod = account.loginMethod;
+  }
+  if (account.permissions) {
+    user.permissions = { ...(user.permissions || {}), ...account.permissions };
+  }
+  if (s.fileLoading) {
+    user.fileLoading = { ...(user.fileLoading || {}), ...s.fileLoading };
+  }
+}
+
+/** Maps flat PATCH field names to nested enforced user-default paths. */
+const FLAT_PROFILE_FIELD_ENFORCED_PATHS = {
+  locale: ["ui", "locale"],
+  dateFormat: ["listing", "dateFormat"],
+  themeColor: ["ui", "themeColor"],
+  customTheme: ["ui", "customTheme"],
+  quickDownload: ["listing", "quickDownload"],
+  stickySidebar: ["sidebar", "sticky"],
+  singleClick: ["listing", "singleClick"],
+  darkMode: ["ui", "darkMode"],
+  showHidden: ["listing", "showHidden"],
+  showToolsInSidebar: ["sidebar", "showTools"],
+  deleteAfterArchive: ["listing", "deleteAfterArchive"],
+  deleteWithoutConfirming: ["listing", "deleteWithoutConfirming"],
+  preferEditorForMarkdown: ["fileViewer", "preferEditorForMarkdown"],
+  disablePreviewExt: ["preview", "disablePreviewExt"],
+  disableViewingExt: ["fileViewer", "disableViewingExt"],
+  disableOnlyOfficeExt: ["fileViewer", "disableOnlyOfficeExt"],
+  hideFileExt: ["listing", "hideFileExt"],
+  disableQuickToggles: ["sidebar", "disableQuickToggles"],
+  disableSearchOptions: ["search", "disableOptions"],
+  hideSidebarFileActions: ["sidebar", "hideFileActions"],
+  showCopyPath: ["listing", "showCopyPath"],
+  hideFilesInTree: ["sidebar", "hideFiles"],
+  editorQuickSave: ["fileViewer", "editorQuickSave"],
+  showSelectMultiple: ["listing", "showSelectMultiple"],
+  debugOffice: ["fileViewer", "debugOffice"],
+  viewMode: ["listing", "viewMode"],
+  gallerySize: ["listing", "gallerySize"],
+};
+
+function enforcedFlagAt(enforced, section, field) {
+  if (!enforced || !section) {
+    return false;
+  }
+  return !!getNestedProperty(enforced, section, field);
+}
+
+/** True when global user-default enforcement locks a flat profile PATCH field. */
+export function isFlatProfileFieldEnforced(enforced, flatField) {
+  if (!enforced || !flatField) {
+    return false;
+  }
+  if (flatField === "preview" || flatField === "fileLoading") {
+    return false;
+  }
+  const path = getObjectProperty(FLAT_PROFILE_FIELD_ENFORCED_PATHS, flatField);
+  if (!Array.isArray(path)) {
+    return false;
+  }
+  return enforcedFlagAt(enforced, path[0], path[1]);
+}

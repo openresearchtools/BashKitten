@@ -1,0 +1,545 @@
+.listing-items {
+  --item-selected: white;
+  animation-duration: 0.25s;
+  transition: 0.25s ease;
+  user-select: none;
+  padding-bottom: 2.5em; /* Space for status bar - this prevents items from going behind */
+}
+
+body.rtl .listing-items {
+  margin-right: 16em;
+}
+
+.listing-items h2 {
+  margin: 0 0 0 0.5em;
+  font-size: .9em;
+  font-weight: 500;
+  padding-bottom: 0.25em;
+  background: transparent;
+}
+
+.listing-item div:last-of-type * {
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.listing-items>div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.listing-item {
+  display: flex;
+  flex-wrap: nowrap;
+  transition: 0.25s ease;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+  width: var(--item-width);
+  height: var(--item-height);
+  border-radius: 1em;
+  padding: 0.5em;
+  color: var(--textPrimary);
+  border-color: var(--divider);
+  background: var(--surfacePrimary);
+  /* Performance optimizations */
+  contain: layout style paint;
+  content-visibility: auto;
+  will-change: auto;
+  position: relative;
+}
+
+.listing-item div:last-of-type {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.listing-item p {
+  margin: 0;
+}
+
+.listing-item .size,
+.listing-item .modified,
+.listing-item .duration {
+  font-size: 0.9em;
+}
+
+.listing-items.normal {
+  --icon-size: 3.5em;
+  --icon-font-size: 2.5em;
+}
+
+.listing-items.list,
+.listing-items.compact {
+  --icon-size: 2.5em;
+  --icon-font-size: 1.8em;
+}
+
+.listing-items.icons {
+  --icon-size: 60px;
+  --icon-font-size: 3em;
+}
+
+.listing-items.gallery {
+  --icon-font-size: 4em;
+}
+
+/* Apply icon font size from variable */
+.listing-items .image-preview i {
+  font-size: var(--icon-font-size);
+}
+
+.message {
+  text-align: center;
+  font-size: 2em;
+  margin: 1em auto;
+  display: block !important;
+  width: 95%;
+  color: rgba(0, 0, 0, 0.3);
+  font-weight: 500;
+}
+
+.message i {
+  font-size: 2.5em;
+  margin-bottom: .2em;
+  display: block;
+}
+
+.listing-items.gallery .listing-item,
+.listing-items.compact .listing-item,
+.listing-items.normal .listing-item,
+.listing-items.icons .listing-item {
+  margin: .5em;
+  padding: 0.5em;
+  box-shadow: rgba(0, 0, 0, 0.06) 0px 1px 3px, rgba(0, 0, 0, 0.12) 0px 1px 2px;
+}
+
+.listing-items.compact .listing-item:hover,
+.listing-items.list .listing-item:hover,
+.search-entry:hover {
+  width: 98% !important;
+  margin-left: 1% !important;
+  padding-left: 0.5em !important;
+}
+
+.listing-items.list .listing-item,
+.listing-items.compact .listing-item {
+  max-width: 100%;
+  border-radius: 0em;
+}
+
+/* Pin styles  */
+.pin-icon-wrapper {
+  position: absolute;
+  z-index: 15;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 50%;
+  width: 1.8em;
+  height: 1.8em;
+}
+
+/*==============*/
+/* Gallery view */
+/*==============*/
+.listing-items.gallery .listing-item {
+  display: flex;
+  flex-direction: column;
+  align-content: center;
+  overflow: hidden;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: var(--item-height);
+  flex-shrink: 0;
+}
+
+.listing-items.gallery .listing-item .gallery-div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
+  transition: all 0.25s ease-out;
+  position: relative;
+}
+
+.listing-items.gallery .listing-item .text {
+  color: white;
+  text-shadow: 0 0 2px black;
+  pointer-events: none;
+  font-weight: 700;
+  position: absolute;
+  z-index: 1;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 1em;
+}
+
+.listing-items.gallery .listing-item .text .name {
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.listing-items.gallery .listing-item[data-type=image] div:last-of-type {
+  color: white;
+}
+
+.listing-items.gallery .listing-item i {
+  margin: auto;
+  font-size: 8em;
+  background: none;
+}
+
+.listing-items.gallery .listing-item span {
+  display: flex;
+}
+
+.listing-items.gallery .listing-item img {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
+  transition: all 0.25s ease-out;
+}
+.listing-items.gallery .image-preview {
+  width: 100% !important;
+  height: 100% !important;
+}
+.listing-items.gallery .listing-item .size,
+.listing-items.gallery .listing-item .modified,
+.listing-items.gallery .listing-item .duration {
+  display: none !important;
+}
+
+/* Grid layouts for folders/files/pinned */
+.listing-items.gallery .folder-items,
+.listing-items.gallery .file-items,
+.listing-items.gallery .pinned-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--item-width, 200px), 1fr));
+  gap: 1em;
+  padding: 0.5em;
+  width: 100%;
+  transition: grid-template-columns 0.25s ease-out;
+}
+
+/*============*/
+/* Icons view */
+/*============*/
+.listing-items.icons .listing-item {
+  display: flex;
+  flex-direction: column;
+  align-content: center;
+  overflow: hidden;
+  justify-content: flex-start;
+  padding: 0.5em;
+  margin: 0.25em;
+  width: 100%;
+  height: auto;
+  min-height: calc(var(--icon-size, 60px) + 2em);
+}
+
+.listing-items.icons .listing-item .text {
+  display: block !important;
+  width: 100%;
+  margin-top: 0.3em;
+  padding: 0;
+  flex: 1;
+  text-align: center;
+}
+
+.listing-items.icons .listing-item .size,
+.listing-items.icons .listing-item .modified,
+.listing-items.icons .listing-item .duration {
+  display: none !important;
+}
+
+.listing-items.icons .image-preview.download-icon {
+    width: 100%;
+    height: 2em;
+}
+
+.listing-items.icons .image-preview.download-icon .material-symbols {
+    font-size: 2em;
+    width: 100%;
+    text-align: center;
+}
+
+.listing-items.icons .folder-items,
+.listing-items.icons .file-items,
+.listing-items.icons .pinned-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--icons-view-cell-size, 100px), 1fr));
+  gap: 0.5em;
+  padding: 0.25em;
+  width: 100%;
+  transition: grid-template-columns 0.25s ease-out;
+}
+
+/*=============*/
+/* Normal view */
+/*=============*/
+.listing-items.normal .listing-item,
+.listing-items.gallery .listing-item,
+.listing-items.icons .listing-item {
+  transition: width 0.25s ease-out, height 0.25s ease-out, box-shadow 0.2s ease-in-out, transform 0.1s ease-in-out;
+}
+
+/* Reserve a bit of space so the pin doesn't overlap the text */
+.listing-items.normal .listing-item.pinned-item .text .name span {
+  padding-right: 1.65em;
+}
+
+/* Disable transitions during resize for better performance */
+.listing-items.resizing .listing-item {
+  transition: none !important;
+}
+
+.listing-items.list .listing-item img,
+.listing-items.compact .listing-item img {
+  min-width: unset;
+}
+
+.listing-items .listing-item img {
+  object-fit: cover;
+}
+
+/*==============*/
+/* Compact view */
+/*==============*/
+.listing-items.compact {
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+}
+
+.listing-items.compact .listing-item {
+  width: 100%;
+  margin: 0;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 0;
+  border-top: 0;
+  padding-left: .5em;
+}
+
+.listing-items.compact h2 {
+  display: none;
+}
+
+.listing-items.compact .listing-item:first-child {
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.listing-items.compact .lastGroup>div:last-child {
+  border-bottom-left-radius: 1em;
+  border-bottom-right-radius: 1em;
+}
+
+/*===========*/
+/* List view */
+/*===========*/
+.listing-items.list {
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+}
+
+.listing-items.list .listing-item {
+  width: 100%;
+  margin: 0;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: .5em;
+  border-top: 0;
+}
+
+.listing-items.list .listing-item:first-child {
+  border-top-left-radius: 1em;
+  border-top-right-radius: 1em;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.listing-items.list .listing-item:last-child {
+  border-bottom-left-radius: 1em;
+  border-bottom-right-radius: 1em;
+  margin-bottom: .5em;
+}
+
+/*=====================*/
+/* List/Compact layout */
+/*=====================*/
+.listing-items.compact .listing-item div:last-of-type,
+.listing-items.list .listing-item div:last-of-type {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.listing-items.list .listing-item .name,
+.listing-items.compact .listing-item .name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  overflow: hidden;
+}
+
+.listing-items.list .name span,
+.listing-items.compact .name span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* size, modified, duration */
+.listing-items.list .listing-item .size,
+.listing-items.compact .listing-item .size {
+  width: 8%;
+  min-width: 80px;
+  flex-shrink: 0;
+  text-align: right;
+  padding-right: 1em;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.listing-items.list .listing-item .modified,
+.listing-items.compact .listing-item .modified {
+  width: 18%;
+  min-width: 100px;
+  flex-shrink: 0;
+  text-align: right;
+  padding-right: 1em;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.listing-items.list .listing-item .duration,
+.listing-items.compact .listing-item .duration {
+  width: 12%;
+  min-width: 70px;
+  flex-shrink: 0;
+  text-align: right;
+  padding-right: 1em;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.listing-items.list .pinned-indicator,
+.listing-items.compact .pinned-indicator {
+  flex-shrink: 0;
+  font-size: 1rem;
+  color: var(--primaryColor);
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 50%;
+  width: 1.4em;
+  height: 1.4em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  line-height: 1;
+  margin-left: 0.25em;
+}
+
+/*=============*/
+/*     etc     */
+/*=============*/
+.listing-item .text {
+  padding-left: 0.5em;
+  flex: 1;
+  min-width: 0;
+}
+
+.placeholder {
+  width: var(--icon-size);
+  background: transparent;
+}
+
+.listing-item[aria-selected=true] {
+  background-color: color-mix(in srgb, var(--primaryColor) 85%, transparent) !important;
+  color: var(--item-selected) !important;
+  scroll-margin-top: 9em;
+  scroll-margin-bottom: 3em;
+}
+
+.listing-items.gallery .listing-item[aria-selected=true] {
+  border: 0.45em solid var(--primaryColor) !important;
+}
+
+.listing-items .name {
+  font-weight: normal;
+}
+
+.half-selected {
+  border-color: var(--primaryColor) !important;
+}
+
+/* Search results with icon size overrides */
+.search-entry.large-icons .image-preview {
+  --icon-size: 5em;
+  max-height: 4em;
+  max-width: 4em;
+}
+
+.search-entry.small-icons .image-preview {
+  --icon-size: 2em;
+  --icon-font-size: 1.5em;
+}
+
+@media (max-width: 768px) {
+  .listing-items.gallery .folder-items,
+  .listing-items.gallery .file-items,
+  .listing-items.gallery .pinned-items {
+    grid-template-columns: repeat(auto-fill, minmax(var(--gallery-mobile-min-width, 140px), 1fr));
+  }
+  .listing-items.icons .folder-items,
+  .listing-items.icons .file-items,
+  .listing-items.icons .pinned-items {
+    grid-template-columns: repeat(auto-fill, minmax(var(--icons-view-cell-size, 100px), 1fr));
+  }
+}
+
+.listing-items.normal .pin-icon-wrapper,
+.listing-items.icons .pin-icon-wrapper,
+.listing-items.gallery .pin-icon-wrapper {
+  top: 0.5em;
+  right: 0.5em;
+}
+
+.pinned-indicator {
+  font-size: 1.2em !important;
+  color: var(--primaryColor);
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3));
+  line-height: 1;
+}
+
+/* Ellipsis for long names */
+.listing-items.gallery .listing-item .text .name span,
+.listing-items.icons .listing-item .text .name span,
+.listing-items.normal .listing-item .text .name span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}

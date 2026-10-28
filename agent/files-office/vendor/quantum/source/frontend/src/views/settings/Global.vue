@@ -1,0 +1,73 @@
+<template>
+  <errors v-if="error" :errorCode="error.status" />
+  <div class="card-title">
+    <h2>{{ globalSettingsLabel() }}</h2>
+  </div>
+
+  <div class="card-content"> {{ $t('settings.emptyGlobal') }} </div>
+
+  <div class="card-actions">
+    <input class="button button--flat" type="submit" :value="$t('general.update')" />
+  </div>
+</template>
+
+<script>
+import { notify } from "@/notify";
+import { state, mutations, getters } from "@/store";
+import { settingsApi } from "@/api";
+import Errors from "@/views/Errors.vue";
+
+export default {
+  name: "settings",
+  components: {
+    Errors,
+  },
+  data: () => ({
+    error: null,
+    originalSettings: null,
+    selectedSettings: state.settings,
+  }),
+  computed: {
+    loading() {
+      return getters.isLoading();
+    },
+    user() {
+      return state.user;
+    },
+  },
+  async created() {
+    mutations.setLoading("settings", true);
+    const original = await settingsApi.get();
+    mutations.setSettings(original);
+    mutations.setLoading("settings", false);
+  },
+  methods: {
+    globalSettingsLabel() {
+      return this.$t("general.globalSettings");
+    },
+    updateRules(updatedRules) {
+      this.selectedSettings = { ...this.selectedSettings, rules: updatedRules };
+    },
+    capitalize(name, where = "_") {
+      if (where === "caps") where = /(?=[A-Z])/;
+      const splitted = name.split(where);
+      name = "";
+
+      for (const part of splitted) {
+        name += `${part.charAt(0).toUpperCase() + part.slice(1)} `;
+      }
+
+      return name.slice(0, -1);
+    },
+    async save() {
+      try {
+        mutations.setSettings(this.selectedSettings);
+        await settingsApi.update(state.settings);
+        notify.showSuccessToast(this.$t("settings.settingsUpdated"));
+      } catch (e) {
+        console.error(e);
+      }
+    },
+  },
+};
+</script>

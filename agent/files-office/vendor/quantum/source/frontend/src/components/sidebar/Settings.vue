@@ -1,0 +1,98 @@
+<template>
+  <div v-if="isMobile" class="card item clickable settings-card" @click="closeSettings">
+    <span class="settings-item-content">
+      <span class="material-symbols-outlined settings-icon">close</span> <!-- eslint-disable-line @intlify/vue-i18n/no-raw-text -->
+      {{ $t("general.exit") }}
+    </span>
+  </div>
+  <div v-for="setting in settings" :key="`${setting.id}-sidebar`" :id="`${setting.id}-sidebar`" class="card item clickable settings-card"
+    @click="setView(`${setting.id}-main`)" :class="{
+      hidden: !shouldShow(setting),
+      'active-settings': active(`${setting.id}-main`),
+    }">
+    <span v-if="shouldShow(setting)" class="settings-item-content">
+      <span class="material-symbols-outlined settings-icon">{{ setting.icon }}</span>
+      {{ settingLabel(setting) }}
+    </span>
+  </div>
+</template>
+
+<script>
+import { state, getters, mutations } from "@/store";
+import { getObjectProperty } from '@/utils/object.js';
+import { settings } from "@/utils/constants";
+import { router } from "@/router";
+
+export default {
+  name: "SidebarSettings",
+  data() {
+    return {
+      settings, // Initialize the settings array in data
+    };
+  },
+  computed: {
+    currentHash: () => getters.currentHash(),
+    isMobile: () => getters.isMobile(),
+  },
+  methods: {
+    closeSettings() {
+      router.go(-1);
+    },
+    shouldShow(setting) {
+      const perm = setting?.permissions || {};
+      // Check if all keys in setting.perm exist in state.user.perm and have truthy values
+      return Object.keys(perm).every((key) => getObjectProperty(state.user.permissions, key));
+    },
+    active: (view) => state.activeSettingsView === view,
+    setView(view) {
+      mutations.closeHovers();
+      mutations.closeTopPrompt();
+      if (state.route.path !== "/settings") {
+        void router.push({ path: "/settings", hash: `#${view}` }, () => {});
+      } else {
+        mutations.setActiveSettingsView(view);
+      }
+    },
+    settingLabel(setting) {
+      switch (setting.id) {
+        case "profile":
+          return this.$t("general.profileSettings");
+        case "shares":
+          return this.$t("general.shareSettings");
+        case "users":
+          return this.$t("general.userManagement");
+        default:
+          return this.$t(setting.label);
+      }
+    },
+  },
+};
+</script>
+<style>
+.active-settings {
+  background: var(--primaryColor) !important;
+  color: white !important;
+}
+
+.active-settings .settings-icon,
+.settings-card:hover .material-symbols-outlined {
+  font-variation-settings: 'FILL' 1;
+}
+
+.settings-card {
+  display: flex;
+  align-items: center;
+  overflow: unset !important;
+  padding: 1em;
+}
+
+.settings-item-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.settings-icon {
+  font-size: 1.2em;
+}
+</style>

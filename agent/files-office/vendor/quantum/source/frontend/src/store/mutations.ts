@@ -1,0 +1,1269 @@
+import { setActiveViewGrantScope } from "@/api/viewToken.js";
+import { markRaw } from "vue";
+import { resourcesApi, usersApi } from "@/api";
+import { getEnforcedUserDefaults } from "@/api/settings";
+import { detectLocale, setLocale } from "@/i18n";
+import { notify } from "@/notify";
+import { url } from "@/utils";
+import { getTypeInfo } from "@/utils/mimetype";
+import { getObjectProperty, setObjectProperty, omitObjectProperty } from '@/utils/object.js';
+import { sortedItems } from "@/utils/sort.js";
+import { isSourceSidebarCategory } from "@/utils/sidebarCategory";
+import { updateManifestLink } from "@/utils/pwaManifest";
+import { syncEventTheme } from "@/utils/theme";
+import {
+  cancelCloseUploadPrompt,
+  confirmCloseUploadPrompt,
+  hasCloseWithActiveUploadsPrompt,
+} from "@/utils/uploadNavigationGuard";
+import { emitStateChanged } from './eventBus';
+import { getters } from "./getters";
+import { state } from "./state";
+import type { SourceInfo, SourceInfoUpdate, UserObject } from "./types";
+
+const uploadBeforeUnloadHandler = (event: BeforeUnloadEvent) => {
+  if (!state.upload.isUploading) {
+    return;
+  }
+  event.preventDefault();
+  event.returnValue = "";
+};
+
+export const mutations = {
+  disableEventThemes: () => {
+    if (state.disableEventThemes) {
+      return;
+    }
+    localStorage.setItem("disableEventThemes", "true");
+    state.disableEventThemes = true;
+    syncEventTheme(false);
+    // Set theme color back to user's preference or default
+    if (state.user.themeColor) {
+      document.documentElement.style.setProperty("--primaryColor", state.user.themeColor);
+    } else {
+      // Remove the override to use the default CSS variable
+      document.documentElement.style.removeProperty("--primaryColor");
+    }
+    emitStateChanged();
+  },
+  setPreviousHistoryItem: (value) => {
+    if (value === state.previousHistoryItem) {
+      return;
+    }
+    if (value !== null) {
+      value.isShare = getters.isShare();
+    }
+    state.previousHistoryItem = value;
+    emitStateChanged();
+  },
+  setContextMenuHasItems: (value) => {
+    if (value === state.contextMenuHasItems) {
+      return;
+    }
+    state.contextMenuHasItems = value;
+    emitStateChanged();
+  },
+  setEditorDirty: (value) => {
+    if (value === state.editorDirty) {
+      return;
+    }
+    state.editorDirty = value;
+    emitStateChanged();
+  },
+  setEditorSaveHandler: (handler) => {
+    state.editorSaveHandler = handler;
+    emitStateChanged();
+  },
+  setEditorStats: (stats) => {
+    if (JSON.stringify(state.editorStats) === JSON.stringify(stats)) return;
+    state.editorStats = stats;
+    emitStateChanged();
+  },
+  setEditorFontSize: (size) => {
+    if (state.editorFontSize === size) return;
+    state.editorFontSize = size;
+    localStorage.setItem('editorFontSize', size);
+    emitStateChanged();
+  },
+  setDeletedItem: (value) => {
+    if (value === state.deletedItem) {
+      return;
+    }
+    state.deletedItem = value;
+    emitStateChanged();
+  },
+  setSeenUpdate: (value) => {
+    if (value === state.seenUpdate) {
+      return;
+    }
+    state.seenUpdate = value
+    localStorage.setItem("seenUpdate", value);
+    emitStateChanged();
+  },
+  toggleOverflowMenu: () => {
+    state.showOverflowMenu = !state.showOverflowMenu;
+    emitStateChanged();
+  },
+  setWatchDirChangeAvailable() {
+    state.req.hasUpdate = true;
+  },
+  setPreviewSource: (value) => {
+    if (value === state.popupPreviewSourceInfo?.url) {
+      return;
+    }
+    if (value) {
+      state.popupPreviewSourceInfo = {
+        ...state.popupPreviewSourceInfo,
+        url: value,
+        size: "xlarge",
+      };
+    } else {
+      state.popupPreviewSourceInfo = null;
+    }
+    emitStateChanged();
+  },
+  updateListing: (value) => {
+    if (value === state.listing) {
+      return;
+    }
+    state.listing = value;
+    emitStateChanged();
+  },
+  setCurrentSource: (value) => {
+    if (value === state.sources.current) {
+      return;
+    }
+    state.sources.current = value;
+    emitStateChanged();
+  },
+  updateSource: (sourcename, value) => {
+    if (getObjectProperty(state.sources.info, sourcename)) {
+      state.sources.info = setObjectProperty(state.sources.info, sourcename, value) as Record<string, SourceInfo>;
+    }
+    emitStateChanged();
+  },
+  updateSourceInfo: (value: Record<string, SourceInfoUpdate> | "error") => {
+    if (value === "error") {
+      state.realtimeActive = false;
+      let info = state.sources.info;
+      for (const k of Object.keys(info)) {
+        info = setObjectProperty(info, k, { ...(getObjectProperty(info, k) as SourceInfo), status: "error" }) as Record<string, SourceInfo>;
+      }
+      state.sources.info = info;
+    } else {
+      let info = state.sources.info;
+      let hasAny = false;
+      for (const [k, source] of Object.entries(value)) {
+        const existing = getObjectProperty(info, k) as SourceInfo | undefined;
+        if (existing) {
+          const used = Number(source.used) || 0;
+          const total = Number(source.total) || 0;
+          const updated: SourceInfo = {
+            ...existing,
+            used,
+            usedAlt: source.usedAlt || 0,
+            totalRoot: source.totalRoot || 0,
+            usedAltRoot: source.usedAltRoot || 0,
+            total,
+            usedPercentage: total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0,
+            usageScopeMismatch:
+              source.usageScopeMismatch === true || (total > 0 && used > total),
+            status: source.status || "unknown",
+            name: source.name || k,
+            files: source.numFiles || 0,
+            folders: source.numDirs || 0,
+            lastIndex: source.lastIndexedUnixTime || 0,
+            quickScanDurationSeconds: source.quickScanDurationSeconds || 0,
+            fullScanDurationSeconds: source.fullScanDurationSeconds || 0,
+            complexity: source.complexity || 0,
+            scanners: source.scanners || [],
+            readOnly: source.readOnly || false,
+            private: source.private || false,
+          };
+          info = setObjectProperty(info, k, updated) as Record<string, SourceInfo>;
+          if (updated.total > 0 || updated.used > 0 || updated.usedAlt > 0) hasAny = true;
+        }
+      }
+      state.sources.info = info;
+      state.sources.hasSourceInfo = hasAny;
+    }
+    emitStateChanged();
+  },
+  setRealtimeActive: (value) => {
+    if ( value === false ) {
+      state.realtimeDownCount = state.realtimeDownCount + 1;
+    } else {
+      state.realtimeDownCount = 0;
+    }
+    if (value === state.realtimeActive) {
+      return;
+    }
+    state.realtimeActive = value;
+    emitStateChanged();
+  },
+  setSources: (user) => {
+    // Rebuilding sources from /api/users must not wipe stats already merged from
+    // /api/settings/sources, SSE, or a prior validateLogin — otherwise the sidebar
+    // shows "unknown"/red until a full page reload (common after OTP: initAuth then
+    // router beforeResolve both refresh the user).
+    const sameUser = Boolean(state.user && user.username === state.user.username);
+    const prevInfo = sameUser && state.sources.info ? state.sources.info : {};
+    let currentSource = user.scopes.length > 0 ? user.scopes[0].name : "";
+    if (
+      sameUser &&
+      state.sources.current &&
+      user.scopes.some((s) => s.name === state.sources.current)
+    ) {
+      currentSource = state.sources.current;
+    }
+    const sources: {
+      info: Record<string, SourceInfo>;
+      current: string;
+      count: number;
+      hasSourceInfo: boolean;
+      defaultSource?: string;
+    } = { info: {}, current: currentSource, count: user.scopes.length, hasSourceInfo: false };
+    for (const source of user.scopes) {
+      const prev = prevInfo[source.name];
+      const merge = Boolean(prev);
+      sources.info[source.name] = {
+        pathPrefix: sources.count === 1 ? "" : encodeURIComponent(source.name),
+        used: merge ? prev.used : 0,
+        total: merge ? prev.total : 0,
+        usedAlt: merge ? prev.usedAlt : 0,
+        totalRoot: merge ? prev.totalRoot : 0,
+        usedAltRoot: merge ? prev.usedAltRoot : 0,
+        usedPercentage: merge ? prev.usedPercentage : 0,
+        usageScopeMismatch: merge ? prev.usageScopeMismatch : false,
+        status: merge ? prev.status : "unknown",
+        name: merge ? prev.name : source.name,
+        files: merge ? prev.files : 0,
+        folders: merge ? prev.folders : 0,
+        lastIndex: merge ? prev.lastIndex : 0,
+        quickScanDurationSeconds: merge ? prev.quickScanDurationSeconds : 0,
+        fullScanDurationSeconds: merge ? prev.fullScanDurationSeconds : 0,
+        complexity: merge ? prev.complexity : 0,
+        scanners: merge && prev.scanners ? [...prev.scanners] : [],
+        readOnly: merge ? prev.readOnly : false,
+        private: merge ? prev.private : false,
+      };
+    }
+    // Sidebar usage bar uses hasSourceInfo + per-source used/total; must survive object replace
+    sources.hasSourceInfo = user.scopes.some((s) => {
+      const e = sources.info[s.name];
+      return e && (e.total > 0 || e.used > 0 || e.usedAlt > 0);
+    });
+    // Check if user has custom sidebar links with sources
+    let targetSource = sources.current;
+    if (state.user?.sidebarLinks && state.user.sidebarLinks.length > 0) {
+      // Find first source link in user's sidebar links
+      const firstSourceLink = state.user.sidebarLinks.find(link =>
+        isSourceSidebarCategory(link.category) && link.sourceName
+      );
+      if (firstSourceLink) {
+        targetSource = firstSourceLink.sourceName;
+      }
+    }
+    sources.defaultSource = targetSource;
+    state.sources = sources;
+    emitStateChanged();
+  },
+  setGallerySize: (value) => {
+    if (value === state.user.gallerySize) {
+      return;
+    }
+    state.user.gallerySize = value
+    const isAnonymous = state.user.username === 'anonymous';
+    if (!isAnonymous) {
+      const encoded = url.base64Encode(state.user.username);
+      localStorage.setItem(`GallerySize_${encoded}`, value);
+    }
+    emitStateChanged();
+  },
+  setActiveSettingsView: (value) => {
+    if (value === state.activeSettingsView) {
+      return;
+    }
+    state.activeSettingsView = value;
+    // Update the hash in the URL without reloading or changing history state
+    window.history.replaceState(null, "", `#${value}`);
+    const container = document.getElementById("main");
+    const element = document.getElementById(value);
+    if (container && element) {
+      const offset = 4 * parseFloat(getComputedStyle(document.documentElement).fontSize); // 4em in px
+      const containerTop = container.getBoundingClientRect().top;
+      const elementTop = element.getBoundingClientRect().top;
+      const scrollOffset = elementTop - containerTop - offset;
+      container.scrollTo({
+        top: container.scrollTop + scrollOffset,
+        behavior: "smooth",
+      });
+    }
+    emitStateChanged();
+  },
+  setSettings: (value) => {
+    state.settings = value;
+    emitStateChanged();
+  },
+  toggleDarkMode() {
+    void mutations.updateCurrentUser({ "darkMode": !state.user.darkMode });
+    emitStateChanged();
+  },
+  toggleSidebar() {
+    state.showSidebar = !state.showSidebar;
+    emitStateChanged();
+  },
+  closeSidebar() {
+    if (!state.showSidebar) {
+      return;
+    }
+    state.showSidebar = false;
+    emitStateChanged();
+  },
+  setSidebarVisible(value) {
+    if (value === state.showSidebar) {
+      return;
+    }
+    state.showSidebar = value;
+    emitStateChanged();
+  },
+  setIsUploading(value) {
+    if (value === state.upload.isUploading) {
+      return;
+    }
+    state.upload.isUploading = value;
+    if (typeof window !== "undefined") {
+      if (value) {
+        window.addEventListener("beforeunload", uploadBeforeUnloadHandler);
+      } else {
+        window.removeEventListener("beforeunload", uploadBeforeUnloadHandler);
+      }
+    }
+    emitStateChanged();
+  },
+  closeHovers: () => {
+    // Close only specific lightweight/ephemeral hovers. Like ContextMenu, OverflowMenu, tooltip or sidebar (if not pinned and floating)
+    const closeableHovers = ['ContextMenu', 'OverflowMenu'];
+    state.prompts = state.prompts.filter(p => !closeableHovers.includes(p.name));
+    mutations.closeSidebar();
+    mutations.hideTooltip(true);
+  },
+  closeTopPrompt: (id, options) => {
+    if (!options?.force && state.prompts.length > 0) {
+      const targetId =
+        id ?? state.prompts[state.prompts.length - 1]?.id;
+      const promptToClose = state.prompts.find((p) => p.id === targetId);
+      if (
+        promptToClose?.name === "upload" &&
+        state.upload.isUploading &&
+        !hasCloseWithActiveUploadsPrompt()
+      ) {
+        mutations.showPrompt({
+          name: "CloseWithActiveUploads",
+          pinned: true,
+          confirm: () => {
+            confirmCloseUploadPrompt(targetId);
+          },
+          cancel: () => {
+            cancelCloseUploadPrompt();
+          },
+        });
+        return;
+      }
+    }
+
+    if (id === undefined) {
+      // close topmost prompt
+      if (state.prompts.length === 0) return;
+      mutations.closeHovers();
+      state.prompts.pop();
+    } else {
+      // close prompt by ID
+      const idx = state.prompts.findIndex(p => p.id === id);
+      if (idx === -1) return;
+      state.prompts.splice(idx, 1);
+    }
+    // Pre-existing: no top-level state.stickySidebar (only state.user.stickySidebar), so this
+    // is always truthy-negated. Left as-is; see PR description.
+    if (state.prompts.length === 0 && !(state as unknown as { stickySidebar?: boolean }).stickySidebar) {
+      state.showSidebar = false;
+    }
+    emitStateChanged();
+  },
+  showPrompt: (value) => {
+    state.promptIdCounter += 1;
+    const id = state.promptIdCounter;
+    // Set parentId to the current topmost prompt, unless the prompt is pinned.
+    let parentId = value?.parentId;
+    if (!parentId && !value?.pinned) {
+      const topPrompt = state.prompts[state.prompts.length - 1];
+      if (topPrompt) {
+        parentId = topPrompt.id;
+      }
+    }
+    const entry = typeof value === "object" ? {
+      id,
+      name: value?.name,
+      parentId,
+      pinned: value?.pinned || false,
+      confirm: value?.confirm,
+      action: value?.action,
+      props: value?.props || {},
+      discard: value?.discard,
+      cancel: value?.cancel,
+    } : {
+      id,
+      name: value,
+      parentId,
+      pinned: false,
+      confirm: value?.confirm,
+      action: value?.action,
+      props: value?.props || {},
+      discard: value?.discard,
+      cancel: value?.cancel,
+    };
+    const pinnedCount = state.prompts.filter(p => p.pinned).length;
+    if (entry.pinned) {
+      state.prompts.push(entry);
+    } else {
+      // Non‑pinned prompts go just before the first pinned prompt
+      const insertIndex = state.prompts.length - pinnedCount;
+      state.prompts.splice(insertIndex, 0, entry);
+    }
+    mutations.hideTooltip(true);
+  },
+  updatePromptTitle: (id, title) => {
+    const prompt = state.prompts.find((p) => p.id === id);
+    if (!prompt) {
+      return;
+    }
+    prompt.props.title = title;
+    emitStateChanged();
+  },
+  setLoading: (loadType, status) => {
+    if (status === false) {
+      state.loading = omitObjectProperty(state.loading, loadType);
+    } else {
+      state.loading = setObjectProperty(state.loading, loadType, true);
+    }
+    emitStateChanged();
+  },
+  setReload: (value) => {
+    if (value === state.reload) {
+      return;
+    }
+    state.reload = value;
+    emitStateChanged();
+  },
+  setCurrentUser: async (value) => {
+    try {
+      // If value is null or undefined, emit state change and exit early
+      if (!value) {
+        state.user = value;
+        state.enforcedUserDefaults = {};
+        emitStateChanged();
+        return;
+      }
+      if (value.username !== "anonymous") {
+        mutations.setSources(value);
+      }
+      // Ensure locale exists and is valid
+      if (!value.locale) {
+        value.locale = detectLocale();
+      }
+      await setLocale(value.locale);
+      state.user = value;
+      state.user.sorting = {} as { by: string; asc: boolean };
+      state.user.sorting.by = "name";
+      state.user.sorting.asc = true;
+
+      // Ensure fileLoading defaults are set
+      if (!state.user.fileLoading) {
+        state.user.fileLoading = {
+          maxConcurrentUpload: 3,
+          uploadChunkSizeMb: 5,
+          downloadChunkSizeMb: 0,
+          clearAll: false
+        };
+      } else {
+        // Ensure each property has a default if missing
+        if (state.user.fileLoading.maxConcurrentUpload === undefined) {
+          state.user.fileLoading.maxConcurrentUpload = 3;
+        }
+        if (state.user.fileLoading.uploadChunkSizeMb === undefined) {
+          state.user.fileLoading.uploadChunkSizeMb = 5;
+        }
+        if (state.user.fileLoading.clearAll === undefined) {
+          state.user.fileLoading.clearAll = false;
+        }
+        if (state.user.fileLoading.downloadChunkSizeMb === undefined) {
+          state.user.fileLoading.downloadChunkSizeMb = 0;
+        }
+      }
+
+      // Load stored values or use defaults as fallback
+      const isAnonymous = state.user.username === 'anonymous';
+      const encoded = !isAnonymous ? url.base64Encode(state.user.username) : '';
+      let viewMode = (!isAnonymous && localStorage.getItem(`ViewMode_${encoded}`)) || state.user.viewMode || 'normal';
+      let gallerySize = (!isAnonymous && parseInt(localStorage.getItem(`GallerySize_${encoded}`), 10)) || state.user.gallerySize || 3;
+      gallerySize = Math.min(9, Math.max(1, gallerySize)); // ensure 1–9 since this is the slider min and max size
+
+      // Normalize to use the view families too
+      // for example if someone sets 'gallery' with size of 1 in the config file
+      if (viewMode === 'gallery' || viewMode === 'icons') {
+        viewMode = gallerySize <= 4 ? 'icons' : 'gallery';
+      } else if (viewMode === 'list' || viewMode === 'compact') {
+        viewMode = gallerySize <= 3 ? 'compact' : 'list';
+      }
+
+      state.user.viewMode = viewMode;
+      state.user.gallerySize = gallerySize;
+
+      if (!isAnonymous) {
+        localStorage.setItem(`ViewMode_${encoded}`, viewMode);
+        localStorage.setItem(`GallerySize_${encoded}`, String(gallerySize));
+      }
+
+      // Load display preferences for the current user
+      const allPreferences = JSON.parse(localStorage.getItem("displayPreferences") || "{}");
+      state.displayPreferences = allPreferences[state.user.username] || {};
+
+    } catch (_error) {
+      // Silently ignore errors when loading preferences
+    }
+    emitStateChanged();
+  },
+  syncEnforcedUserDefaults: async () => {
+    if (
+      !getters.isLoggedIn() ||
+      getters.isShare() ||
+      state.user?.username === "anonymous"
+    ) {
+      state.enforcedUserDefaults = {};
+      emitStateChanged();
+      return;
+    }
+    try {
+      const data = await getEnforcedUserDefaults();
+      state.enforcedUserDefaults = data.enforced || {};
+    } catch {
+      state.enforcedUserDefaults = {};
+    }
+    emitStateChanged();
+  },
+  setShareData: (shareData) => {
+    const newShare = { ...state.shareInfo, ...shareData };
+    if (JSON.stringify(newShare) === JSON.stringify(state.shareInfo)) {
+      return;
+    }
+    state.shareInfo = newShare;
+    updateManifestLink();
+    emitStateChanged();
+  },
+  clearShareData: () => {
+    state.shareInfo = {
+      isShare: false,
+      disableThumbnails: false,
+      hash: "",
+      token: "",
+      subPath: "",
+      passwordValid: false,
+      enforceDarkLightMode: "",
+      disableSidebar: false,
+      isValid: true,
+      shareType: "",
+      title: "",
+      description: "",
+    };
+    updateManifestLink();
+    emitStateChanged();
+  },
+  setSession: (value) => {
+    if (value === state.sessionId) {
+      return;
+    }
+    state.sessionId = value;
+    emitStateChanged();
+  },
+  setMultiple: (value) => {
+    if (value === state.multiple) return;
+    state.multiple = value;
+    if (value) {
+      notify.showMultipleSelection();
+    } else {
+      notify.hideMultipleSelection();
+    }
+    emitStateChanged();
+  },
+  addSelected: (value) => {
+    state.selected.push(value);
+    emitStateChanged();
+  },
+  removeSelected: (value) => {
+    const i = state.selected.indexOf(value);
+    if (i === -1) return;
+    state.selected.splice(i, 1);
+    emitStateChanged();
+  },
+  resetSelected: () => {
+    state.selected = [];
+    mutations.setMultiple(false);
+    emitStateChanged();
+  },
+  selectAllItems: (options = { multiple: true }) => {
+    if (state.req?.items?.length > 0) {
+      // Close hovers
+      mutations.closeHovers();
+      // Clear current selection first
+      mutations.resetSelected();
+      // Add all items from current directory to selection by their indices
+      state.req.items.forEach((_item, index) => {
+        mutations.addSelected(index);
+      });
+      if (options.multiple) {
+        mutations.setMultiple(true);
+      }
+    }
+  },
+  setLastSelectedIndex: (index) => {
+    if (index === state.lastSelectedIndex) {
+      return;
+    }
+    state.lastSelectedIndex = index;
+    emitStateChanged();
+  },
+  setRaw: (value) => {
+    if (value === state.previewRaw) {
+      return;
+    }
+    state.previewRaw = value;
+    emitStateChanged();
+  },
+  updateCurrentUser: async (value) => {
+    // Ensure the input is a valid object
+    if (typeof value !== "object" || value === null) return;
+
+    // Initialize state.user if it's null
+    if (!state.user) {
+      state.user = {} as UserObject;
+    }
+    // Store previous state for comparison
+    const previousUser = { ...state.user };
+
+    // Merge the new values into the current user state
+    state.user = { ...state.user, ...value };
+
+    const isAnonymous = state.user.username === 'anonymous';
+
+    if (value.viewMode !== undefined && !isAnonymous) {
+      const encoded = url.base64Encode(state.user.username);
+      localStorage.setItem(`ViewMode_${encoded}`, value.viewMode);
+    }
+    if (value.gallerySize !== undefined && !isAnonymous) {
+      const encoded = url.base64Encode(state.user.username);
+      localStorage.setItem(`GallerySize_${encoded}`, value.gallerySize);
+    }
+
+    // Handle locale change
+    if (state.user.locale !== previousUser.locale) {
+      await setLocale(state.user.locale);
+      localStorage.setItem("userLocale", state.user.locale);
+    }
+    // Update users if there's any change in state.user
+    if (JSON.stringify(state.user) !== JSON.stringify(previousUser)) {
+      const syncableProperties = [
+        "locale",
+        "dateFormat",
+        "themeColor",
+        "customTheme",
+        "quickDownload",
+        "preview",
+        "stickySidebar",
+        "singleClick",
+        "darkMode",
+        "showHidden",
+        "sorting",
+        "showFirstLogin",
+        "sidebarLinks",
+        "showToolsInSidebar",
+        "fileLoading",
+        "deleteAfterArchive",
+        "deleteWithoutConfirming",
+        "preferEditorForMarkdown",
+        "disablePreviewExt",
+        "disableViewingExt",
+        "disableOnlyOfficeExt",
+        "hideFileExt",
+        "disableQuickToggles",
+        "disableSearchOptions",
+        "hideSidebarFileActions",
+        "showCopyPath",
+        "hideFilesInTree",
+        "editorQuickSave",
+        "showSelectMultiple",
+        "debugOffice",
+        "disableUpdateNotifications",
+        "viewMode",
+        "gallerySize",
+      ];
+      const updatedProperties = Object.keys(value).filter(
+        (key) =>
+          syncableProperties.includes(key) &&
+          JSON.stringify(getObjectProperty(previousUser, key)) !==
+            JSON.stringify(getObjectProperty(value, key)),
+      );
+      if (updatedProperties.length > 0) {
+        try {
+          await usersApi.update(state.user, updatedProperties);
+        } catch (e) {
+          state.user = { ...previousUser };
+          if (
+            value.locale !== undefined &&
+            value.locale !== previousUser.locale
+          ) {
+            const prevLocale = previousUser.locale || "en";
+            await setLocale(prevLocale);
+            if (previousUser.locale) {
+              localStorage.setItem("userLocale", previousUser.locale);
+            } else {
+              localStorage.removeItem("userLocale");
+            }
+          }
+          notify.showError(e);
+          emitStateChanged();
+          throw e;
+        }
+      }
+    }
+    // Emit state change event
+    emitStateChanged();
+  },
+  replaceRequest: (value) => {
+    state.selected = [];
+    mutations.setMultiple(false);
+    if (!value?.items) {
+      state.req = value;
+      setActiveViewGrantScope(value?.source ?? "");
+      emitStateChanged();
+      return
+    }
+    const sorting = getters.sorting();
+    const sortby = sorting.by;
+    const asc = sorting.asc;
+    // Separate directories and files
+    const dirs = value.items.filter((item) => item.type === 'directory');
+    const files = value.items.filter((item) => item.type !== 'directory');
+    // Sort them separately
+    const sortedDirs = sortedItems(dirs, sortby, asc);
+    const sortedFiles = sortedItems(files, sortby, asc);
+    value.items = [...sortedDirs, ...sortedFiles];
+    value.items.forEach((item, index) => {
+      item.index = index;
+    });
+    state.req = value;
+    setActiveViewGrantScope(value?.source ?? "");
+    emitStateChanged();
+  },
+  patchListingMetadata: (items, metadataMap, mergeForPath = null) => {
+    if (!items?.length || !metadataMap?.size) {
+      return;
+    }
+    for (const item of items) {
+      if (!metadataMap.has(item.name)) continue;
+      const metadata = metadataMap.get(item.name);
+      item.metadata = item.path === mergeForPath
+        ? { ...metadata, ...item.metadata }
+        : metadata;
+    }
+    emitStateChanged();
+  },
+  patchRequestMetadata: (metadataItems) => {
+    if (!state.req?.items || !metadataItems?.length) {
+      return;
+    }
+    const byName = new Map();
+    for (const e of metadataItems) {
+      if (e.metadata !== null) {
+        byName.set(e.name, e.metadata);
+      }
+    }
+    mutations.patchListingMetadata(state.req.items, byName);
+  },
+  /** Merge media fields from GET /api/media/metadata (single file). Replace req object so Vue watchers see the update. */
+  patchRequestFileMediaMetadata: (enriched) => {
+    if (
+      !state.req ||
+      state.req.type === "directory" ||
+      !enriched ||
+      enriched.type === "directory"
+    ) {
+      return;
+    }
+    const next = { ...state.req };
+    if (enriched.metadata !== undefined) {
+      next.metadata = enriched.metadata;
+    }
+    if (enriched.subtitles !== undefined) {
+      next.subtitles = enriched.subtitles;
+    }
+    if (enriched.hasPreview !== undefined) {
+      next.hasPreview = enriched.hasPreview;
+    }
+    state.req = next;
+    emitStateChanged();
+  },
+  setRequestViewToken: (viewToken) => {
+    if (!state.req || !viewToken || state.req.viewToken === viewToken) {
+      return;
+    }
+    state.req = { ...state.req, viewToken };
+    emitStateChanged();
+  },
+  clearRequest: () => {
+    // Set req to null to prevent API calls with empty paths
+    // Components should check for null req before accessing
+    state.req = null;
+    state.selected = [];
+    mutations.setMultiple(false);
+    emitStateChanged();
+  },
+  setRoute: (value) => {
+    if (value === state.route) {
+      return;
+    }
+    state.route = value;
+    emitStateChanged();
+  },
+  updateListingSortConfig: ({ field, asc }) => {
+    if (!state.user.sorting) {
+      state.user.sorting = {} as { by: string; asc: boolean };
+    }
+    state.user.sorting.by = field;
+    state.user.sorting.asc = asc;
+    mutations.updateDisplayPreferences({ sorting: { by: field, asc: asc } });
+    emitStateChanged();
+  },
+  updateListingItems: () => {
+    mutations.replaceRequest(state.req);
+    emitStateChanged();
+  },
+  updateClipboard: (value) => {
+    if (value.key === state.clipboard.key &&
+        JSON.stringify(value.items) === JSON.stringify(state.clipboard.items) &&
+        value.path === state.clipboard.path) {
+      return;
+    }
+    state.clipboard.key = value.key;
+    state.clipboard.items = value.items;
+    state.clipboard.path = value.path;
+    emitStateChanged();
+  },
+  resetClipboard: () => {
+    state.clipboard.key = "";
+    state.clipboard.items = [];
+    emitStateChanged();
+  },
+  setSharePassword: (value) => {
+    if (value === state.sharePassword) {
+      return;
+    }
+    state.sharePassword = value;
+    emitStateChanged();
+  },
+  setSearch: (value) => {
+    if (value === state.isSearchActive) {
+      return;
+    }
+    state.isSearchActive = value;
+    emitStateChanged();
+  },
+  resetAll: () => {
+    state.isSearchActive = false;
+    state.selected = [];
+    mutations.setMultiple(false);
+    emitStateChanged();
+  },
+  showTooltip(value) {
+    const useComponent = Boolean(value.component);
+    state.tooltip.content = useComponent ? "" : (value.content ?? "");
+    state.tooltip.component = useComponent ? markRaw(value.component) : null;
+    state.tooltip.componentProps = useComponent ? (value.componentProps ?? {}) : null;
+    state.tooltip.x = value.x;
+    state.tooltip.y = value.y;
+    state.tooltip.width = value.width ?? null;
+    state.tooltip.pointerEvents = value.pointerEvents ?? false;
+    state.tooltip.show = true;
+    emitStateChanged();
+  },
+  hideTooltip(force=false) {
+    if (!state.tooltip.show) {
+      if (force) {
+        emitStateChanged();
+      }
+      return;
+    }
+    state.tooltip.show = false;
+    state.tooltip.content = "";
+    state.tooltip.component = null;
+    state.tooltip.componentProps = null;
+    state.tooltip.width = null;
+    state.tooltip.pointerEvents = false;
+    emitStateChanged();
+  },
+  setMaxConcurrentUpload: (value) => {
+    if (!state.user.fileLoading) {
+      state.user.fileLoading = {};
+    }
+    if (value === state.user.fileLoading.maxConcurrentUpload) {
+      return;
+    }
+    state.user.fileLoading.maxConcurrentUpload = value;
+    emitStateChanged();
+  },
+  updateDisplayPreferences: (payload) => {
+    let source = state.sources.current;
+    if (getters.isShare()) {
+      source = getters.currentHash();
+    }
+    const path = state.route.path;
+
+    if (!source || path === null || path === "") return;
+
+    let prefs = state.displayPreferences || {};
+
+    let sourceLevel = getObjectProperty(prefs, source);
+    if (!sourceLevel) sourceLevel = {};
+
+    let pathLevel = getObjectProperty(sourceLevel, path) as Record<string, unknown> | undefined;
+    if (!pathLevel) pathLevel = {};
+
+    const newPathLevel = { ...pathLevel, ...payload };
+    const newSourceLevel = setObjectProperty(sourceLevel, path, newPathLevel);
+    prefs = setObjectProperty(prefs, source, newSourceLevel);
+    state.displayPreferences = prefs;
+
+    const isAnonymous = state.user.username === 'anonymous';
+    if (!isAnonymous) {
+      let allPrefs = JSON.parse(localStorage.getItem("displayPreferences") || "{}");
+      allPrefs = setObjectProperty(allPrefs, state.user.username, prefs);
+      localStorage.setItem("displayPreferences", JSON.stringify(allPrefs));
+    }
+    emitStateChanged();
+  },
+  setNavigationEnabled: (enabled) => {
+    if (state.navigation.enabled === enabled) {
+      return;
+    }
+    state.navigation.enabled = enabled;
+    if (!enabled) {
+      mutations.clearNavigation();
+    }
+    emitStateChanged();
+  },
+  setupNavigation: ({ listing, currentItem, directoryPath }) => {
+    // Cancel any pending auto-hide from a previous setupNavigation; the raw
+    // setTimeout used to leak and could fire setNavigationShow(false) right
+    // after opening a new image (nextPrevious flicker).
+    mutations.clearNavigationTimeout();
+    state.navigation.listing = listing;
+    state.navigation.currentIndex = -1;
+    state.navigation.previousItem = null;
+    state.navigation.nextItem = null;
+    state.navigation.previousLink = "";
+    state.navigation.nextLink = "";
+    state.navigation.previousRaw = "";
+    state.navigation.nextRaw = "";
+
+    if (!listing || !currentItem) {
+      emitStateChanged();
+      return;
+    }
+
+    // Sort listing according to sorting preferences
+    const sorting = getters.sorting();
+    listing = sortedItems(listing, sorting.by, sorting.asc);
+
+    // Find current item index in the listing
+    for (let i = 0; i < listing.length; i++) {
+      if (listing.at(i).name === currentItem.name) {
+        state.navigation.currentIndex = i;
+        break;
+      }
+    }
+
+    if (state.navigation.currentIndex === -1) {
+      emitStateChanged();
+      return;
+    }
+
+    // Find previous item (skip directories)
+    for (const item of listing.slice(0, state.navigation.currentIndex).reverse()) {
+      if (item.type === 'directory') continue;
+
+      item.path = url.joinPath(directoryPath, item.name);
+      state.navigation.previousItem = item;
+      state.navigation.previousLink = url.buildItemUrl(item.source, item.path);
+
+      if (getTypeInfo(item.type).simpleType === "image") {
+        const prefetch = mutations.getPrefetchUrl(item);
+        if (prefetch) {
+          state.navigation.previousRaw = prefetch;
+        }
+      }
+      break;
+    }
+
+    // Find next item (skip directories)
+    for (const item of listing.slice(state.navigation.currentIndex + 1)) {
+      if (item.type === 'directory') continue;
+
+      item.path = url.joinPath(directoryPath, item.name);
+      state.navigation.nextItem = item;
+      state.navigation.nextLink = url.buildItemUrl(item.source, item.path);
+
+      if (getTypeInfo(item.type).simpleType === "image") {
+        const prefetch = mutations.getPrefetchUrl(item);
+        if (prefetch) {
+          state.navigation.nextRaw = prefetch;
+        }
+      }
+      break;
+    }
+
+    emitStateChanged();
+
+    // Auto-show navigation when it's first set up (timer tracked so new opens clear it)
+    if (state.navigation.enabled && (state.navigation.previousLink || state.navigation.nextLink)) {
+      const isImage = getTypeInfo(currentItem.type).simpleType === 'image';
+      if (isImage) {
+        mutations.showNavigationChromePersistent();
+      } else {
+        mutations.setNavigationShow(true);
+        const hideTimer = setTimeout(() => {
+          if (!state.navigation.hoverNav) {
+            mutations.setNavigationShow(false);
+          }
+        }, 3000);
+        mutations.setNavigationTimeout(hideTimer);
+      }
+    }
+  },
+  getPrefetchUrl: (item) => {
+    const viewToken = item.viewToken;
+    const typeHint = item.type || item.name;
+    if (getters.isShare()) {
+      return resourcesApi.getViewURL(
+        item.source,
+        item.path,
+        viewToken,
+        {
+          path: item.path,
+          hash: state.shareInfo.hash,
+        },
+        false,
+        typeHint,
+      );
+    }
+    return resourcesApi.getViewURL(item.source, item.path, viewToken, null, false, typeHint);
+  },
+  setNavigationShow: (show) => {
+    if (state.navigation.show === show) {
+      return;
+    }
+    state.navigation.show = show;
+    emitStateChanged();
+  },
+  showNavigationChromePersistent: () => {
+    if (!state.navigation.enabled) {
+      return;
+    }
+    mutations.clearNavigationTimeout();
+    mutations.setNavigationShow(true);
+  },
+  toggleNavigationChrome: () => {
+    if (!state.navigation.enabled) {
+      return;
+    }
+    mutations.clearNavigationTimeout();
+    mutations.setNavigationShow(!state.navigation.show);
+  },
+  /** Briefly reveal prev/next chrome (e.g. edge tap on video while gestures capture the event). */
+  peekNavigationChrome: (side = null) => {
+    if (!state.navigation.enabled) {
+      return;
+    }
+    const queueNav = getters.isPreviewPlaybackQueueNavMode();
+    const hasPrevious = queueNav
+      ? getters.playbackQueueCanGoPrevious()
+      : Boolean(state.navigation.previousLink);
+    const hasNext = queueNav
+      ? getters.playbackQueueCanGoNext()
+      : Boolean(state.navigation.nextLink);
+    if (side === 'left' && !hasPrevious) {
+      return;
+    }
+    if (side === 'right' && !hasNext) {
+      return;
+    }
+    if (!side && !hasPrevious && !hasNext) {
+      return;
+    }
+    if (getters.previewType() === 'image') {
+      mutations.showNavigationChromePersistent();
+      return;
+    }
+    mutations.setNavigationShow(true);
+    mutations.clearNavigationTimeout();
+    const hideTimer = setTimeout(() => {
+      if (!state.navigation.hoverNav) {
+        mutations.setNavigationShow(false);
+      }
+      mutations.clearNavigationTimeout();
+    }, 3000);
+    mutations.setNavigationTimeout(hideTimer);
+  },
+  setNavigationHover: (hover) => {
+    if (state.navigation.hoverNav === hover) {
+      return;
+    }
+    state.navigation.hoverNav = hover;
+    emitStateChanged();
+  },
+  setNavigationGestureHint: (payload: { kind?: null | 'previous' | 'next' | 'close', commitReady?: boolean, flashClose?: boolean } = {}) => {
+    const kind = payload.kind ?? null;
+    const commitReady = !!payload.commitReady;
+    const flashClose = !!payload.flashClose;
+    if (
+      state.navigation.gestureHint === kind &&
+      state.navigation.gestureHintCommitReady === commitReady &&
+      state.navigation.gestureHintFlashClose === flashClose
+    ) {
+      return;
+    }
+    state.navigation.gestureHint = kind;
+    state.navigation.gestureHintCommitReady = commitReady;
+    state.navigation.gestureHintFlashClose = flashClose;
+    emitStateChanged();
+  },
+  setNavigationTimeout: (timeout) => {
+    if (state.navigation.timeout) {
+      clearTimeout(state.navigation.timeout);
+    }
+    state.navigation.timeout = timeout;
+  },
+  clearNavigationTimeout: () => {
+    if (state.navigation.timeout) {
+      clearTimeout(state.navigation.timeout);
+      state.navigation.timeout = null;
+    }
+  },
+  clearNavigation: () => {
+    state.navigation.show = false;
+    state.navigation.hoverNav = false;
+    state.navigation.gestureHint = null;
+    state.navigation.gestureHintCommitReady = false;
+    state.navigation.gestureHintFlashClose = false;
+    state.navigation.listing = null;
+    state.navigation.currentIndex = -1;
+    state.navigation.previousItem = null;
+    state.navigation.nextItem = null;
+    state.navigation.previousLink = "";
+    state.navigation.nextLink = "";
+    state.navigation.previousRaw = "";
+    state.navigation.nextRaw = "";
+    mutations.clearNavigationTimeout();
+    emitStateChanged();
+  },
+  setNavigationTransitioning: (isTransitioning) => {
+    if (isTransitioning === state.navigation.isTransitioning) {
+      return;
+    }
+    state.navigation.isTransitioning = isTransitioning;
+    if (isTransitioning) {
+      state.navigation.transitionStartTime = Date.now();
+      // Safety timeout: if transition takes more than 5 seconds, clear it
+      setTimeout(() => {
+        if (state.navigation.isTransitioning &&
+            state.navigation.transitionStartTime &&
+            Date.now() - state.navigation.transitionStartTime > 5000) {
+          mutations.setNavigationTransitioning(false);
+        }
+      }, 5500);
+    } else {
+      state.navigation.transitionStartTime = null;
+    }
+    emitStateChanged();
+  },
+  setPlaybackQueue: (playback) => {
+    state.playbackQueue.queue = playback.queue || [];
+    state.playbackQueue.currentIndex = playback.currentIndex ?? -1;
+    state.playbackQueue.mode = playback.mode || 'single';
+    state.playbackQueue.loop = playback.loop || 'off';
+    try {
+      sessionStorage.setItem('playbackQueue', JSON.stringify({
+        queue: state.playbackQueue.queue,
+        currentIndex: state.playbackQueue.currentIndex,
+        mode: state.playbackQueue.mode,
+        loop: state.playbackQueue.loop,
+      }));
+    } catch (_) { /* ignore */ }
+    emitStateChanged();
+  },
+  setPlaybackState: (isPlaying) => {
+    if (isPlaying === state.playbackQueue.isPlaying) {
+      return;
+    }
+    state.playbackQueue.isPlaying = isPlaying;
+    emitStateChanged();
+  },
+  navigateToQueueIndex: (index) => {
+    if (index < 0 || index >= state.playbackQueue.queue.length) return;
+    const item = state.playbackQueue.queue.at(index);
+    state.playbackQueue.currentIndex = index;
+    // Update the current request to trigger navigation
+    mutations.replaceRequest(item);
+    emitStateChanged();
+  },
+  togglePlayPause: () => {
+    state.playbackQueue.shouldTogglePlayPause = !state.playbackQueue.shouldTogglePlayPause;
+    emitStateChanged();
+  },
+  setShareInfo: (shareInfo) => {
+    const merged = { ...state.shareInfo, ...shareInfo };
+    if (shareInfo.passwordValid === undefined && state.shareInfo.passwordValid !== undefined) {
+      merged.passwordValid = state.shareInfo.passwordValid;
+    }
+    if (JSON.stringify(merged) === JSON.stringify(state.shareInfo)) {
+      return;
+    }
+    state.shareInfo = merged;
+    updateManifestLink();
+    emitStateChanged();
+  },
+  setSidebarWidth: (value) => {
+    // Ensure width is within bounds
+    const minWidth = state.sidebar.minWidth;
+    const maxWidth = state.sidebar.maxWidth;
+    const newWidth = Math.max(minWidth, Math.min(value, maxWidth));
+    if (newWidth === state.sidebar.width) {
+      return;
+    }
+    state.sidebar.width = newWidth;
+    localStorage.setItem("sidebarWidth", newWidth.toString());
+    emitStateChanged();
+  },
+  setSidebarResizing: (value) => {
+    if (value === state.sidebar.isResizing) {
+      return;
+    }
+    state.sidebar.isResizing = value;
+    emitStateChanged();
+  },
+  setSidebarMode(value) {
+    const newMode = value === 'navigation' ? 'navigation' : 'links';
+    if (newMode === state.sidebar.mode) return;
+    state.sidebar.mode = newMode;
+    localStorage.setItem('sidebarMode', newMode);
+    emitStateChanged();
+  },
+};

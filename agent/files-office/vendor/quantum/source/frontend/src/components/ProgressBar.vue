@@ -1,0 +1,357 @@
+<!-- This component taken directly from vue-simple-progress
+since it didnt support Vue 3 but the component itself does
+https://raw.githubusercontent.com/dzwillia/vue-simple-progress/master/src/components/Progress.vue -->
+<template>
+  <div class="vue-simple-progress" :style="progress_style">
+    <div
+      class="vue-simple-progress-text"
+      :style="text_style"
+      v-if="textPosition === 'middle'"
+    >
+      {{ displayed_text }}
+    </div>
+
+    <div v-if="valBackground !== null" class="vue-simple-progress-bar vue-simple-progress-bar-background" :style="bar_background_style"></div>
+    <div class="vue-simple-progress-bar" :style="bar_style"></div>
+    <div
+      class="vue-simple-progress-text"
+      :style="text_style"
+      v-if="textPosition === 'inside'"
+    >
+      {{ displayed_text }}
+      <HelpTooltipIcon v-if="helpText && status === 'error'" :text="helpText" />
+    </div>
+  </div>
+</template>
+
+<script>
+import HelpTooltipIcon from "@/components/HelpTooltipIcon.vue";
+import { getHumanReadableFilesize } from "@/utils/filesizes.js";
+import { cappedUsagePercent } from "@/utils/progressDisplay.js";
+
+// We're leaving this untouched as you can read in the beginning
+const isNumber = (n) => {
+  const num = Number(n);
+  // Since 'isNaN' nd 'isFinite' are marked as unsafe. We need to do this
+  // to still matching the old behavior (the styling).
+  if (num === 0 && (n === null || n === '' || n === false)) return true;
+  return !Number.isNaN(num) && Number.isFinite(num);
+};
+
+export default {
+  name: "progress-bar",
+  components: { HelpTooltipIcon },
+  props: {
+    val: {
+      default: 0,
+    },
+    max: {
+      default: 100,
+    },
+    "val-background": {
+      default: null,
+    },
+    "val-text": {
+      default: null,
+    },
+    unit: {
+      type: String,
+      default: "",
+    },
+    size: {
+      // either a number (pixel width/height) or 'tiny', 'small',
+      // 'medium', 'large', 'huge', 'massive' for common sizes
+      default: "big",
+    },
+    "bg-color": {
+      type: String,
+      default: "#eee",
+    },
+    "bar-color": {
+      type: String,
+      default: "var(--primaryColor)", // match .blue color to Material Design's 'Blue 500' color
+    },
+    "bar-transition": {
+      type: String,
+      default: "all 0.5s ease",
+    },
+    "bar-border-radius": {
+      type: Number,
+      default: 8, // ~0.5em at default font size
+    },
+    spacing: {
+      type: Number,
+      default: 4,
+    },
+    text: {
+      type: String,
+      default: "",
+    },
+    "text-align": {
+      type: String,
+      default: "center", // 'left', 'right'
+    },
+    "text-position": {
+      type: String,
+      default: "inside", // 'bottom', 'top', 'middle', 'inside'
+    },
+    "font-size": {
+      type: Number,
+      default: 13,
+    },
+    "text-fg-color": {
+      type: String,
+      default: "#000",
+    },
+    status: {
+      type: String,
+      default: 'default',
+    },
+    "help-text": {
+      type: String,
+      default: "",
+    },
+  },
+  computed: {
+    isValNumeric() {
+      return isNumber(this.val);
+    },
+    pct() {
+      if (!this.isValNumeric) return 100;
+      if (this.max <= 0) return 0;
+      const pct = (this.val / this.max) * 100;
+      return Math.max(0, Math.min(pct.toFixed(2), 100));
+    },
+    pctBackground() {
+      if (this.valBackground === null) return 0;
+      if (!isNumber(this.valBackground)) return 0;
+      if (this.max <= 0) return 0;
+      const pct = (this.valBackground / this.max) * 100;
+      return Math.max(0, Math.min(pct.toFixed(2), 100));
+    },
+    displayed_text() {
+      // Use valText if provided (for hybrid mode text override), otherwise use val
+      const displayVal = this.valText !== null ? this.valText : this.val;
+      
+      if (!isNumber(displayVal)) return displayVal;
+
+      // Cap % like the bar fill so nested-mount indexed size > partition total
+      // does not show absurd values (e.g. 1294%); keep byte sizes honest.
+      const percentage = cappedUsagePercent(displayVal, this.max);
+
+      if (this.unit === "bytes" && isNumber(displayVal)) {
+        const valFormatted = getHumanReadableFilesize(displayVal);
+        const maxFormatted = getHumanReadableFilesize(this.max);
+        return `${valFormatted} / ${maxFormatted} (${percentage}%)`;
+      }
+
+      const unit_string = this.unit ? ` ${this.unit}` : "";
+      return `${displayVal}${unit_string} / ${this.max}${unit_string} (${percentage}%)`;
+    },
+    size_px() {
+      switch (this.size) {
+        case "tiny":
+          return 2;
+        case "small":
+          return 4;
+        case "medium":
+          return 8;
+        case "large":
+          return 10;
+        case "big":
+          return 16;
+        case "huge":
+          return 32;
+        case "massive":
+          return 64;
+      }
+
+      return isNumber(this.size) ? this.size : 32;
+    },
+    text_padding() {
+      switch (this.size) {
+        case "tiny":
+        case "small":
+        case "medium":
+        case "large":
+        case "big":
+        case "huge":
+        case "massive":
+          return Math.min(Math.max(Math.ceil(this.size_px / 8), 3), 12);
+      }
+
+      return isNumber(this.spacing) ? this.spacing : 4;
+    },
+    text_font_size() {
+      switch (this.size) {
+        case "tiny":
+        case "small":
+        case "medium":
+        case "large":
+        case "big":
+        case "huge":
+        case "massive":
+          return Math.min(Math.max(Math.ceil(this.size_px * 0.8), 11), 32);
+      }
+
+      return isNumber(this.fontSize) ? this.fontSize : 13;
+    },
+    progress_style() {
+      const style = {
+        background: this.bgColor,
+        position: 'relative'
+      };
+
+      if (this.status === 'indexing') {
+        style.background = '#fff8d6'; // Muted yellow/amber color
+      }
+
+      if (this.textPosition === "middle" || this.textPosition === "inside") {
+        style.minHeight = `${this.size_px}px`;
+      }
+
+      if (this.barBorderRadius > 0) {
+        style.borderRadius = `${this.barBorderRadius}px`;
+      }
+
+      return style;
+    },
+    bar_style() {
+      let barColor = this.barColor;
+      if (this.status === 'error') {
+        barColor = '#f44336';
+      } else if (this.status === 'conflict') {
+        barColor = '#ff9800';
+      } else if (this.status === 'disk') {
+        barColor = '#9e9e9e'; // Gray for disk usage
+      }
+
+      let percentage = this.pct >= 1 && this.pct < 7 ? 6 : this.pct;
+      if (percentage < 1) {
+        percentage = 0;
+      }
+      const style = {
+        width: `${percentage}%`,
+        height: `${this.size_px}px`,
+        background: barColor,
+        transition: this.barTransition,
+        position: this.valBackground !== null ? 'relative' : undefined,
+        zIndex: this.valBackground !== null ? 1 : undefined,
+      };
+
+      // Add pulse animation for indexing status
+      if (this.status === 'indexing') {
+        style.animation = 'progress-pulse 4s ease-in-out infinite';
+        style.background = 'rgb(237 161 41)'; // orange
+      }
+
+      if (this.barBorderRadius > 0) {
+        style.borderRadius = `${this.barBorderRadius}px`;
+      }
+
+      if (this.textPosition === "middle") {
+        style.position = 'absolute';
+        style.top = '0';
+        style.height = '100%';
+        style.minWidth = '1.5em';
+        style.minHeight = `${this.size_px}px`;
+        style.zIndex = '-1';
+      }
+
+      return style;
+    },
+    bar_background_style() {
+      let percentage = this.pctBackground >= 1 && this.pctBackground < 7 ? 6 : this.pctBackground;
+      if (percentage < 1) {
+        percentage = 0;
+      }
+      const style = {
+        width: `${percentage}%`,
+        height: `${this.size_px}px`,
+        background: '#9e9e9e',
+        transition: this.barTransition,
+        position: 'absolute',
+        top: '0',
+        left: '0',
+      };
+
+      if (this.barBorderRadius > 0) {
+        style.borderRadius = `${this.barBorderRadius}px`;
+      }
+
+      return style;
+    },
+    text_style() {
+      const style = {
+        "color": this.textFgColor,
+        "font-size": `${this.text_font_size}px`,
+        "text-align": this.textAlign,
+      };
+
+      if (this.textPosition === 'inside') {
+        style.position = 'absolute';
+        style.left = '0';
+        style.right = '0';
+        style.top = '50%';
+        style.transform = 'translateY(-50%)';
+        style.width = '100%';
+        style.padding = '0 0.5em';
+        style.boxSizing = 'border-box';
+        style.zIndex = this.valBackground !== null ? 2 : undefined;
+      }
+
+      if (
+        this.textPosition === "top" ||
+        this.textPosition === "middle"
+      )
+        style.paddingBottom = `${this.text_padding}px`;
+      if (
+        this.textPosition === "bottom" ||
+        this.textPosition === "middle"
+      )
+        style.paddingTop = `${this.text_padding}px`;
+      return style;
+    },
+  },
+};
+</script>
+
+<style>
+.vue-simple-progress {
+  margin: 0.5em;
+}
+
+.vue-simple-progress,
+.vue-simple-progress-bar {
+  border-radius: 0.5em;
+}
+
+.vue-simple-progress {
+  background: var(--primaryColor);
+}
+.vue-simple-progress-text {
+  color: black;
+}
+
+.tooltip-info-icon {
+  font-size: 1rem;
+  cursor: pointer;
+  vertical-align: middle;
+  opacity: 0.7;
+}
+
+.tooltip-info-icon:hover,
+.tooltip-info-icon:hover .material-symbols-outlined {
+  font-variation-settings: 'FILL' 1;
+  opacity: 1;
+}
+
+@keyframes progress-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+</style>

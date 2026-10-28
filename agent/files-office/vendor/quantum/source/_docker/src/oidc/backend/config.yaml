@@ -1,0 +1,53 @@
+server:
+  logging:
+    - levels: "info|error|warning|debug"
+      apiFilter: 'disabled'
+  sources:
+    - path: "../frontend/tests/playwright-files"
+      config:
+        defaultEnabled: true
+        createUserDir: true
+        defaultPermissions:
+          view: true
+          download: true
+          modify: true
+          create: true
+
+frontend:
+  name: "Graham's Filebrowser"
+  disableDefaultLinks: true
+  externalLinks:
+    - text: "A playwright test"
+      url: "https://playwright.dev/"
+      title: "Playwright"
+  styling:
+    disableEventThemes: true
+auth:
+  methods:
+    password:
+      enabled: false
+    oidc:
+      enabled: true
+      createUser: true
+      clientId: "vyBrzOmcrU3OokiWEZoObdGBscw0eYPNJauBtOJr"
+      clientSecret: "gIMKbkEcckUhlGrnE2Vxi8eZhEcfxQqfwFgM0ATzk4DciHGrW2YRtQfqcpRTsmzrxEETkKvZ8yeK3sfoXnUV1IQTzqK7wxw3lEMtmeXi5clj0h7nH1rVGFq2Q3HL8zUe"
+      issuerUrl: "http://localhost:8080"
+      adminGroup: "Admins"
+
+userDefaults:
+  preview:
+    image: true
+    popup: true
+    video: true
+    office: true
+    highQuality: true
+  ui:
+    darkMode: true
+  listing:
+    singleClick: false
+  account:
+    disableSettings: false
+    permissions:
+      admin: false
+      share: false
+      api: false

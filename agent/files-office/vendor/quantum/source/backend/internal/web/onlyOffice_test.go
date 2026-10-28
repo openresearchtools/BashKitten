@@ -1,0 +1,600 @@
+package web
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+
+	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/fs/files"
+	"github.com/gtsteffaniak/filebrowser/backend/internal/database/share"
+	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
+	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
+	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
+	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+)
+
+func TestOnlyOfficeClientConfigDeniedWithoutView(t *testing.T) {
+	initStreamTestSources(t)
+
+	origOnlyOffice := settings.Config.Integrations.OnlyOffice
+	origNameToSource := settings.Config.Server.NameToSource
+	t.Cleanup(func() {
+		settings.Config.Integrations.OnlyOffice = origOnlyOffice
+		settings.Config.Server.NameToSource = origNameToSource
+	})
+
+	settings.Config.Integrations.OnlyOffice.Url = "http://onlyoffice.example"
+	settings.Config.Server.NameToSource = map[string]*settings.Source{
+		"default": {Name: "default", Path: "/default"},
+	}
+
+	originalFileInfoFaster := files.FileInfoFasterFunc
+	t.Cleanup(func() { files.FileInfoFasterFunc = originalFileInfoFaster })
+	files.FileInfoFasterFunc = func(opts utils.FileOptions, user *users.User) (*iteminfo.ExtendedFileInfo, error) {
+		return &iteminfo.ExtendedFileInfo{
+			FileInfo: iteminfo.FileInfo{
+				ItemInfo: iteminfo.ItemInfo{Name: "doc.docx", Type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+				Path:     opts.Path,
+			},
+			RealPath: "/tmp/doc.docx",
+		}, nil
+	}
+
+	user := testUserWithSourcePerms("/default", users.SourceFilePermissions{
+		View: false, Download: true, Modify: true,
+	})
+	d := &requestContext{User: user}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/office/config?source=default&path=/doc.docx", nil)
+	status, err := onlyofficeClientConfigGetHandler(httptest.NewRecorder(), req, d)
+	if status != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d (err: %v)", status, http.StatusForbidden, err)
+	}
+}
+
+func TestOnlyOfficeClientConfigDeniedWhenShareDisablesOnlyOffice(t *testing.T) {
+	initStreamTestSources(t)
+
+	origOnlyOffice := settings.Config.Integrations.OnlyOffice
+	t.Cleanup(func() { settings.Config.Integrations.OnlyOffice = origOnlyOffice })
+	settings.Config.Integrations.OnlyOffice.Url = "http://onlyoffice.example"
+
+	d := &requestContext{
+		User: testUserWithView(1, "srv"),
+		Share: share.Share{
+			ShareColumns: share.ShareColumns{Hash: "abc123"},
+			SourcePath:   "/srv",
+			ShareSettings: share.ShareSettings{
+				FrontendShareInfo: share.FrontendShareInfo{EnableOnlyOffice: false},
+			},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/public/api/office/config?hash=abc123&path=/doc.docx", nil)
+	status, err := onlyofficeClientConfigGetHandler(httptest.NewRecorder(), req, d)
+	if status != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d (err: %v)", status, http.StatusForbidden, err)
+	}
+}
+
+func TestOnlyOfficeClientConfigAllowedWhenShareEnablesOnlyOffice(t *testing.T) {
+	initStreamTestSources(t)
+
+	origOnlyOffice := settings.Config.Integrations.OnlyOffice
+	origSourceMap := settings.Config.Server.SourceMap
+	t.Cleanup(func() {
+		settings.Config.Integrations.OnlyOffice = origOnlyOffice
+		settings.Config.Server.SourceMap = origSourceMap
+	})
+	settings.Config.Integrations.OnlyOffice.Url = "http://onlyoffice.example"
+	settings.Config.Server.SourceMap = map[string]*settings.Source{
+		"/srv": {Path: "/srv", Name: "srv"},
+	}
+
+	const realPath = "/srv/docs/doc.docx"
+	utils.OnlyOfficeCache.Set(realPath, "doc-key")
+	t.Cleanup(func() { utils.OnlyOfficeCache.Delete(realPath) })
+
+	d := &requestContext{
+		User: testUserWithView(1, "srv"),
+		Share: share.Share{
+			ShareColumns: share.ShareColumns{Hash: "abc123", Path: "/docs/doc.docx"},
+			SourcePath:   "/srv",
+			ShareSettings: share.ShareSettings{
+				FrontendShareInfo: share.FrontendShareInfo{EnableOnlyOffice: true},
+			},
+		},
+		FileInfo: iteminfo.ExtendedFileInfo{
+			FileInfo: iteminfo.FileInfo{
+				ItemInfo: iteminfo.ItemInfo{Name: "doc.docx", Type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+			},
+			RealPath: realPath,
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/public/api/office/config?hash=abc123&path=/doc.docx", nil)
+	rec := httptest.NewRecorder()
+	status, err := onlyofficeClientConfigGetHandler(rec, req, d)
+	if err != nil || status != http.StatusOK {
+		t.Fatalf("status = %d, want %d (err: %v)", status, http.StatusOK, err)
+	}
+}
+
+func TestBuildOnlyOfficeViewURL(t *testing.T) {
+	origHTTP := settings.Config.Http
+	t.Cleanup(func() { settings.Config.Http = origHTTP })
+	settings.Config.Http.InternalUrl = "http://filebrowser:8080"
+	settings.Config.Http.BaseURL = "/testing/"
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	got := buildOnlyOfficeViewURL(req, "Downloads", "/doc.docx", "", "view-token", "session.jwt.token", "")
+	want := "http://filebrowser:8080/testing/api/resources/view?auth=session.jwt.token&file=%2Fdoc.docx&source=Downloads&viewToken=view-token"
+	if got != want {
+		t.Fatalf("buildOnlyOfficeViewURL() = %q, want %q", got, want)
+	}
+
+	shareGot := buildOnlyOfficeViewURL(req, "Downloads", "/doc.docx", "share-hash", "view-token", "session.jwt.token", "")
+	shareWant := "http://filebrowser:8080/testing/public/api/resources/view?file=%2Fdoc.docx&hash=share-hash&viewToken=view-token"
+	if shareGot != shareWant {
+		t.Fatalf("buildOnlyOfficeViewURL(share) = %q, want %q", shareGot, shareWant)
+	}
+}
+
+func TestBuildOnlyOfficeShareURLs(t *testing.T) {
+	origHTTP := settings.Config.Http
+	t.Cleanup(func() { settings.Config.Http = origHTTP })
+	settings.Config.Http.BaseURL = "/files/"
+	settings.Config.Http.InternalUrl = ""
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/files/public/api/office/config?hash=abc", nil)
+
+	t.Run("share view URL includes share token", func(t *testing.T) {
+		got := buildOnlyOfficeViewURL(req, "source", "/doc.docx", "shareHash", "view-token", "jwt-token", "share-download-token")
+		parsed, err := url.Parse(got)
+		if err != nil {
+			t.Fatalf("parse view URL: %v", err)
+		}
+		q := parsed.Query()
+		if q.Get("hash") != "shareHash" {
+			t.Errorf("hash = %q, want shareHash", q.Get("hash"))
+		}
+		if q.Get("viewToken") != "view-token" {
+			t.Errorf("viewToken = %q, want view-token", q.Get("viewToken"))
+		}
+		if q.Get("token") != "share-download-token" {
+			t.Errorf("token = %q, want share-download-token", q.Get("token"))
+		}
+		if q.Get("file") != "/doc.docx" {
+			t.Errorf("file = %q, want /doc.docx", q.Get("file"))
+		}
+	})
+
+	t.Run("share view URL omits token when empty", func(t *testing.T) {
+		got := buildOnlyOfficeViewURL(req, "source", "/doc.docx", "shareHash", "view-token", "jwt-token", "")
+		parsed, err := url.Parse(got)
+		if err != nil {
+			t.Fatalf("parse view URL: %v", err)
+		}
+		if parsed.Query().Get("token") != "" {
+			t.Errorf("expected no token param, got %q", parsed.Query().Get("token"))
+		}
+	})
+
+	t.Run("non-share view URL unchanged", func(t *testing.T) {
+		got := buildOnlyOfficeViewURL(req, "my-source", "/doc.docx", "", "view-token", "jwt-token", "share-download-token")
+		if strings.Contains(got, "token=") {
+			t.Errorf("non-share URL should not include share token: %q", got)
+		}
+		if !strings.Contains(got, "source=my-source") {
+			t.Errorf("expected source in URL, got %q", got)
+		}
+	})
+
+	t.Run("share callback URL includes share token", func(t *testing.T) {
+		got := buildOnlyOfficeCallbackURL(req, "source", "/doc.docx", "shareHash", "jwt-token", "share-download-token")
+		parsed, err := url.Parse(got)
+		if err != nil {
+			t.Fatalf("parse callback URL: %v", err)
+		}
+		q := parsed.Query()
+		if q.Get("token") != "share-download-token" {
+			t.Errorf("token = %q, want share-download-token", q.Get("token"))
+		}
+		if q.Get("auth") != "jwt-token" {
+			t.Errorf("auth = %q, want jwt-token", q.Get("auth"))
+		}
+	})
+
+	t.Run("share callback URL omits token when empty", func(t *testing.T) {
+		got := buildOnlyOfficeCallbackURL(req, "source", "/doc.docx", "shareHash", "jwt-token", "")
+		parsed, err := url.Parse(got)
+		if err != nil {
+			t.Fatalf("parse callback URL: %v", err)
+		}
+		if parsed.Query().Get("token") != "" {
+			t.Errorf("expected no token param, got %q", parsed.Query().Get("token"))
+		}
+	})
+}
+
+func TestJoinOnlyOfficeAPIURL(t *testing.T) {
+	tests := []struct {
+		base string
+		path string
+		want string
+	}{
+		{"http://host/testing/", "api/resources/view", "http://host/testing/api/resources/view"},
+		{"http://host/testing", "api/resources/view", "http://host/testing/api/resources/view"},
+		{"http://host/", "public/api/resources/view", "http://host/public/api/resources/view"},
+		{"http://host//", "/api/office/callback", "http://host/api/office/callback"},
+	}
+	for _, tt := range tests {
+		got := joinOnlyOfficeAPIURL(tt.base, tt.path)
+		if got != tt.want {
+			t.Fatalf("joinOnlyOfficeAPIURL(%q, %q) = %q, want %q", tt.base, tt.path, got, tt.want)
+		}
+	}
+}
+
+func TestOnlyOfficeUsesIndexedViewGrant(t *testing.T) {
+	initStreamTestSources(t)
+
+	user := testUserWithView(42, "default")
+	d := &requestContext{User: user}
+
+	token1, err := mintViewGrant(d, "default")
+	if err != nil {
+		t.Fatalf("mintViewGrant: %v", err)
+	}
+	token2, err := mintViewGrant(d, "default")
+	if err != nil {
+		t.Fatalf("mintViewGrant second: %v", err)
+	}
+	if token1 != token2 {
+		t.Fatalf("expected same indexed token, got %q and %q", token1, token2)
+	}
+	grant, ok := utils.ViewGrantsCache.Get(token1)
+	if !ok {
+		t.Fatal("grant not in cache")
+	}
+	if grant.Source != "default" {
+		t.Fatalf("grant.Source = %q, want default", grant.Source)
+	}
+}
+
+func TestResolveOnlyOfficeDownloadURL(t *testing.T) {
+	orig := settings.Config.Integrations.OnlyOffice
+	t.Cleanup(func() {
+		settings.Config.Integrations.OnlyOffice = orig
+	})
+
+	settings.Config.Integrations.OnlyOffice.Url = "http://192.168.88.100:8282"
+	settings.Config.Integrations.OnlyOffice.InternalUrl = "http://onlyoffice"
+
+	cachePath := "/cache/files/data/doc_1/output.ods/output.ods?md5=abc&expires=1"
+	publicURL := "http://192.168.88.100:8282" + cachePath
+	internalURL := "http://onlyoffice" + cachePath
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "rewrites public cache URL to internal host",
+			input: publicURL,
+			want:  internalURL,
+		},
+		{
+			name:  "empty URL",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "untrusted host rejected",
+			input: "http://other-host:8282" + cachePath,
+			want:  "",
+		},
+		{
+			name:  "non-http scheme rejected",
+			input: "ftp://192.168.88.100:8282" + cachePath,
+			want:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveOnlyOfficeDownloadURL(tt.input)
+			if got != tt.want {
+				t.Errorf("resolveOnlyOfficeDownloadURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("pass through public URL when internalUrl unset", func(t *testing.T) {
+		settings.Config.Integrations.OnlyOffice.InternalUrl = ""
+		got := resolveOnlyOfficeDownloadURL(publicURL)
+		if got != publicURL {
+			t.Errorf("resolveOnlyOfficeDownloadURL() = %q, want %q", got, publicURL)
+		}
+	})
+
+	t.Run("hostname match with default http port", func(t *testing.T) {
+		settings.Config.Integrations.OnlyOffice.Url = "http://office.local"
+		settings.Config.Integrations.OnlyOffice.InternalUrl = "http://onlyoffice"
+		input := "http://office.local:80" + cachePath
+		want := "http://onlyoffice" + cachePath
+		got := resolveOnlyOfficeDownloadURL(input)
+		if got != want {
+			t.Errorf("resolveOnlyOfficeDownloadURL() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("reject when public url not configured", func(t *testing.T) {
+		settings.Config.Integrations.OnlyOffice.Url = ""
+		settings.Config.Integrations.OnlyOffice.InternalUrl = "http://onlyoffice"
+		got := resolveOnlyOfficeDownloadURL(publicURL)
+		if got != "" {
+			t.Errorf("resolveOnlyOfficeDownloadURL() = %q, want empty", got)
+		}
+	})
+}
+
+func TestOnlyOfficeDownloadClientRedirects(t *testing.T) {
+	orig := settings.Config.Integrations.OnlyOffice
+	t.Cleanup(func() { settings.Config.Integrations.OnlyOffice = orig })
+
+	t.Run("rejects redirect to a different host", func(t *testing.T) {
+		target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer target.Close()
+
+		office := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, target.URL+"/doc", http.StatusFound)
+		}))
+		defer office.Close()
+
+		settings.Config.Integrations.OnlyOffice.Url = office.URL
+		settings.Config.Integrations.OnlyOffice.InternalUrl = ""
+
+		downloadURL := resolveOnlyOfficeDownloadURL(office.URL + "/cache/doc.docx")
+		if downloadURL == "" {
+			t.Fatal("expected download URL to resolve")
+		}
+		resp, err := onlyOfficeDownloadClient.Get(downloadURL)
+		if err == nil {
+			t.Fatal("expected cross-host redirect to be rejected")
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+	})
+
+	t.Run("follows redirect on the same host", func(t *testing.T) {
+		var base string
+		mux := http.NewServeMux()
+		mux.HandleFunc("/redirect", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, base+"/final", http.StatusFound)
+		})
+		mux.HandleFunc("/final", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+		base = server.URL
+
+		settings.Config.Integrations.OnlyOffice.Url = server.URL
+		settings.Config.Integrations.OnlyOffice.InternalUrl = ""
+
+		downloadURL := resolveOnlyOfficeDownloadURL(server.URL + "/redirect")
+		if downloadURL == "" {
+			t.Fatal("expected download URL to resolve")
+		}
+		resp, err := onlyOfficeDownloadClient.Get(downloadURL)
+		if err != nil {
+			t.Fatalf("same-host redirect should be followed: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+	})
+
+	t.Run("rejects scheme downgrade redirect", func(t *testing.T) {
+		orig, _ := url.Parse("https://office.example.com/doc")
+		downgrade, _ := url.Parse("http://office.example.com/doc")
+		err := onlyOfficeDownloadClient.CheckRedirect(
+			&http.Request{URL: downgrade}, []*http.Request{{URL: orig}})
+		if err == nil {
+			t.Fatal("expected https→http scheme downgrade redirect to be rejected")
+		}
+
+		same, _ := url.Parse("https://office.example.com/other")
+		if err := onlyOfficeDownloadClient.CheckRedirect(
+			&http.Request{URL: same}, []*http.Request{{URL: orig}}); err != nil {
+			t.Fatalf("same-scheme same-host redirect should be allowed: %v", err)
+		}
+	})
+}
+
+func TestDeleteOfficeId(t *testing.T) {
+	const rawPath = "/docs/document.docx"
+
+	tests := []struct {
+		name      string
+		resolve   func(utils.FileOptions) (*iteminfo.ExtendedFileInfo, error)
+		deleteKey string
+		remainKey string
+	}{
+		{
+			name: "deletes resolved realpath",
+			resolve: func(utils.FileOptions) (*iteminfo.ExtendedFileInfo, error) {
+				return &iteminfo.ExtendedFileInfo{RealPath: "/some/path/document.docx"}, nil
+			},
+			deleteKey: "/some/path/document.docx",
+			remainKey: rawPath,
+		},
+		{
+			name: "fallback to raw path on error",
+			resolve: func(utils.FileOptions) (*iteminfo.ExtendedFileInfo, error) {
+				return nil, fmt.Errorf("could not resolve path")
+			},
+			deleteKey: rawPath,
+			remainKey: "/some/path/document.docx",
+		},
+		{
+			name: "also deletes realpath when partially resolved before erroring",
+			resolve: func(utils.FileOptions) (*iteminfo.ExtendedFileInfo, error) {
+				return &iteminfo.ExtendedFileInfo{RealPath: "/some/path/document.docx"}, fmt.Errorf("access check failed")
+			},
+			deleteKey: "/some/path/document.docx",
+			remainKey: rawPath,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			origFunc := files.FileInfoFasterFunc
+			t.Cleanup(func() { files.FileInfoFasterFunc = origFunc })
+			files.FileInfoFasterFunc = func(opts utils.FileOptions, user *users.User) (*iteminfo.ExtendedFileInfo, error) {
+				if opts.Path != rawPath {
+					t.Errorf("expected opts.Path=%q, got %q", rawPath, opts.Path)
+				}
+				if opts.Source != "source" {
+					t.Errorf("expected opts.Source=%q, got %q", "source", opts.Source)
+				}
+				if !opts.FollowSymlinks {
+					t.Error("expected FollowSymlinks=true")
+				}
+				return tt.resolve(opts)
+			}
+			utils.OnlyOfficeCache.Set(tt.deleteKey, "document-key")
+			utils.OnlyOfficeCache.Set(tt.remainKey, "other-key")
+			t.Cleanup(func() {
+				utils.OnlyOfficeCache.Delete(tt.deleteKey)
+				utils.OnlyOfficeCache.Delete(tt.remainKey)
+			})
+			deleteOfficeId("source", rawPath, &users.User{})
+			if _, err := GetOnlyOfficeId(tt.deleteKey); err == nil {
+				t.Errorf("expected cache entry %q to be deleted", tt.deleteKey)
+			}
+			if _, err := GetOnlyOfficeId(tt.remainKey); err != nil {
+				t.Errorf("expected cache entry %q to remain, but it was deleted", tt.remainKey)
+			}
+		})
+	}
+}
+
+func TestOnlyOfficeFileBrowserBaseURL(t *testing.T) {
+	origHTTP := settings.Config.Http
+	t.Cleanup(func() { settings.Config.Http = origHTTP })
+
+	settings.Config.Http.BaseURL = "/files/"
+
+	tests := []struct {
+		name          string
+		internalURL   string
+		externalURL   string
+		reqHost       string
+		forwardedHost string
+		reqProto      string
+		trustProxy    bool
+		want          string
+	}{
+		{
+			name:        "internalUrl wins",
+			internalURL: "http://filebrowser:80",
+			externalURL: "https://files.example.com",
+			want:        "http://filebrowser:80/files/",
+		},
+		{
+			name:        "externalUrl when internal unset",
+			externalURL: "https://files.example.com",
+			want:        "https://files.example.com/files/",
+		},
+		{
+			name:       "request fallback with trustProxyHeaders",
+			reqHost:    "proxy.local",
+			reqProto:   "https",
+			trustProxy: true,
+			want:       "https://proxy.local/files/",
+		},
+		{
+			name:          "ignores untrusted forwarded host",
+			reqHost:       "internal.local:8080",
+			forwardedHost: "evil.example.com",
+			want:          "http://internal.local:8080/files/",
+		},
+		{
+			name:          "trusted host without proto defaults to https",
+			reqHost:       "internal.local:8080",
+			forwardedHost: "public.example.com",
+			trustProxy:    true,
+			want:          "https://public.example.com/files/",
+		},
+		{
+			name:          "trusted host with proto honors proto",
+			reqHost:       "internal.local:8080",
+			forwardedHost: "public.example.com",
+			reqProto:      "http",
+			trustProxy:    true,
+			want:          "http://public.example.com/files/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings.Config.Http.InternalUrl = tt.internalURL
+			settings.Config.Http.ExternalUrl = tt.externalURL
+			settings.Config.Http.TrustProxyHeaders = tt.trustProxy
+
+			req := httptest.NewRequest(http.MethodGet, "/files/", nil)
+			req.Host = tt.reqHost
+			if tt.reqProto != "" {
+				req.Header.Set("X-Forwarded-Proto", tt.reqProto)
+			}
+			if fh := tt.forwardedHost; fh != "" {
+				req.Header.Set("X-Forwarded-Host", fh)
+			} else if tt.reqHost != "" && tt.trustProxy {
+				req.Header.Set("X-Forwarded-Host", tt.reqHost)
+			}
+
+			got := onlyOfficeFileBrowserBaseURL(req)
+			if got != tt.want {
+				t.Errorf("onlyOfficeFileBrowserBaseURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOnlyOfficeURLHostsMatch(t *testing.T) {
+	mustParse := func(raw string) *url.URL {
+		t.Helper()
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatalf("url.Parse(%q): %v", raw, err)
+		}
+		return u
+	}
+
+	if !onlyOfficeURLHostsMatch(mustParse("http://office.local:80/x"), mustParse("http://office.local/x")) {
+		t.Fatal("expected office.local:80 to match office.local with default port")
+	}
+	if onlyOfficeURLHostsMatch(mustParse("http://evil.example/x"), mustParse("http://office.local/x")) {
+		t.Fatal("expected different hostnames not to match")
+	}
+}
+
+func testUserWithSourcePerms(sourcePath string, perms users.SourceFilePermissions) *users.User {
+	return &users.User{
+		FrontendUser: users.FrontendUser{Username: "alice"},
+		BackendScopes: []users.BackendScope{
+			{Path: sourcePath, Scope: "/", Permissions: perms},
+		},
+		BackendSourcePermissions: map[string]users.SourceFilePermissions{
+			sourcePath: perms,
+		},
+		Version: users.SourcePermissionsMigrationVersion,
+	}
+}

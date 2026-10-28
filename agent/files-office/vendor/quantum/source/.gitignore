@@ -1,0 +1,77 @@
+*.db
+*.db.old
+# Playwright settings migration fixture (BoltDB → SQLite tests + Docker settings image)
+!_docker/src/settings/backend/database.db.old
+*.sqlite**
+*.bak
+*.log
+*.mjs
+!frontend/scripts/serve-perf-dashboard.mjs
+_old
+rice-box.go
+.idea/
+/backend/backend
+/backend/filebrowser
+/backend/filebrowser.exe
+frontend/tsconfig.tsbuildinfo
+/backend/backend.exe
+/backend/playwright-files.db
+/backend/tmp
+/backend/dist
+/frontend/dist
+/frontend/pkg
+/frontend/.cache
+/frontend/test-results
+# Playwright's default HTML report output dir (written when a config enables the
+# "html" reporter). Generated output, never committed.
+/frontend/playwright-report
+/frontend/playwright-files
+/frontend/screenshots
+/frontend/generated
+frontend/.venv-icons
+frontend/.tmp-icons-*
+/frontend/tests/playwright-files/demo*
+/frontend/loginAuth.json
+/frontend/tests/playwright/performance/results.json
+# Generated perf report artifacts. NOTE: perf-baseline.json is intentionally NOT
+# ignored — it is the committed chromium baseline that CI gates against.
+/frontend/tests/playwright/performance/report.json
+/frontend/tests/playwright/performance/report.md
+/frontend/sharePrepStorage.json
+/backend/vendor
+/backend/*.cov
+/backend/*test_config.yaml
+/backend/generated.yaml
+/backend/srv
+/backend/internal/web/dist
+/backend/internal/web/embed
+/backend/debug
+
+.DS_Store
+node_modules
+
+# local env files
+.env.local
+.env.*.local
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw*
+bin/
+/build/
+*__debug*
+backend/custom.css
+
+# Runtime cache directories created by tests/application
+backend/preview/heic/
+backend/preview/thumbnails/

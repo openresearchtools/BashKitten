@@ -1,0 +1,42 @@
+<template>
+  <div class="card-content">
+    <p>{{ $t("prompts.replaceMessage") }}</p>
+  </div>
+
+  <div class="card-actions">
+    <button
+      type="button"
+      class="button button--flat button--grey"
+      @click="closeTopPrompt" :aria-label="$t('general.cancel')"
+      :title="$t('general.cancel')"
+    >
+      {{ $t("general.cancel") }}
+    </button>
+    <button
+      type="button"
+      class="button button--flat button--red"
+      @click="currentPrompt.confirm"
+      :aria-label="$t('general.replace')"
+      :title="$t('general.replace')"
+    >
+      {{ $t("general.replace") }}
+    </button>
+  </div>
+</template>
+<script>
+import { getters, mutations } from "@/store"; // Import your custom store
+
+export default {
+  name: "replace",
+  computed: {
+    currentPrompt() {
+      return getters.currentPrompt(); // Access the getter directly from the store
+    },
+  },
+  methods: {
+    closeTopPrompt() {
+      mutations.closeTopPrompt();
+    },
+  },
+};
+</script>

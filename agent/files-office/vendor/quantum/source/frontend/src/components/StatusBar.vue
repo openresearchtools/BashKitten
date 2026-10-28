@@ -1,0 +1,353 @@
+<template>
+  <div id="status-bar" :style="moveWithSidebar" :class="{ 'dark-mode-header': isDarkMode, 'active': showStatusBar }" @contextmenu.prevent.stop @touchstart.stop @touchend.stop>
+    <div class="status-content" @contextmenu.prevent.stop @touchstart.stop @touchend.stop>
+      <!-- Left side: selection/directory info and stats for the editor and markdown viewer -->
+      <div class="status-info">
+        <template v-if="isEditorOrMarkdownView">
+          <span>{{ editorStatsText }}</span>
+        </template>
+        <template v-else>
+          <span v-if="selectedCount > 0" class="button">{{ selectedCount }}</span>
+          <span v-if="selectedCount > 0">{{ selectedItemsText }}</span>
+          <span v-else>{{ directoryInfoText }}</span>
+        </template>
+      </div>
+      <!-- Right side: Slider to control the listing size or the font size in editor -->
+      <div class="status-controls">
+        <div v-if="showGallerySizeSlider" class="gallery-size-control">
+          <span class="size-label">{{ $t("general.size") }}</span>
+          <input
+            v-model="gallerySize"
+            type="range"
+            id="gallery-size"
+            name="gallery-size"
+            min="1"
+            max="9"
+            @input="updateGallerySize"
+            @change="commitGallerySize"
+          />
+        </div>
+        <div v-if="currentView === 'editor'" class="gallery-size-control">
+          <span class="size-label">{{ $t("general.size") }}</span>
+          <input
+            v-model="editorFontSize"
+            type="range"
+            min="8"
+            max="24"
+            step="1"
+          />
+          <span class="size-label">{{ editorFontSize }}px</span> <!-- eslint-disable-line @intlify/vue-i18n/no-raw-text -->
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { getters, mutations, state } from "@/store";
+import { getHumanReadableFilesize } from "@/utils/filesizes";
+
+export default {
+  name: "StatusBar",
+  data() {
+    return {
+      gallerySize: state.user?.gallerySize,
+    };
+  },
+  computed: {
+    currentView() {
+      return getters.currentView();
+    },
+    isEditorOrMarkdownView() {
+      return getters.isEditorOrMarkdownView();
+    },
+    showStatusBar() {
+      return getters.showStatusBar();
+    },
+    showGallerySizeSlider() {
+      return getters.showGallerySizeSlider();
+    },
+    isDarkMode() {
+      return getters.isDarkMode();
+    },
+    selectedCount() {
+      return getters.selectedCount();
+    },
+    numDirs() {
+      return getters.reqNumDirs();
+    },
+    numFiles() {
+      return getters.reqNumFiles();
+    },
+    totalDirectorySize() {
+      if (!Array.isArray(state.req?.items)) return 0;
+      return state.req.items.reduce((total, item) => total + (item.size || 0), 0);
+    },
+    // Calculate total size of selected items
+    totalSelectedSize() {
+      if (this.selectedCount === 0) return 0;
+      if (!Array.isArray(state.req?.items)) {
+        return 0;
+      }
+      let total = 0;
+      state.selected.forEach(index => {
+        if (index >= 0 && index < state.req?.items.length) {
+          const item = state.req.items.at(index);
+          if (item?.size) {
+            total += item.size;
+          }
+        }
+      });
+      return total;
+    },
+    // Total size
+    displayTotalSize() {
+      const size = this.selectedCount > 0 ? this.totalSelectedSize : this.totalDirectorySize;
+      return getHumanReadableFilesize(size);
+    },
+    // i18n labels with compile-time checked keys
+    itemsSelectedLabel() {
+      if (this.selectedCount === 1) {
+        return this.$t("general.selectionSingle");
+      }
+      return this.$t("general.selectionMultiple");
+    },
+    foldersLabel() {
+      return this.numDirs === 1
+        ? this.$t("general.folder")
+        : this.$t("general.folders");
+    },
+    filesLabel() {
+      return this.numFiles === 1
+        ? this.$t("general.file")
+        : this.$t("general.files");
+    },
+    // Complete text with raw characters moved from template
+    selectedItemsText() {
+      return `${this.itemsSelectedLabel} (${this.displayTotalSize})`;
+    },
+    directoryInfoText() {
+      const dirs = this.numDirs;
+      const files = this.numFiles;
+      const sizeText = `(${this.displayTotalSize})`;
+
+      if (dirs === 0 && files === 0) {
+        return this.$t('files.lonely');
+      }
+      const parts = [];
+      if (dirs > 0) parts.push(`${dirs} ${this.foldersLabel}`);
+      if (files > 0) parts.push(`${files} ${this.filesLabel}`);
+
+      return `${parts.join(' | ')} ${sizeText}`;
+    },
+    moveWithSidebar() {
+      if (getters.isStickySidebar() && getters.isSidebarVisible()) {
+        return {
+          left: `${state.sidebar.width}em`,
+        };
+      }
+      return {};
+    },
+    editorStatsText() {
+      const { lines, words, chars } = state.editorStats;
+      const parts = [];
+      if (words !== null) parts.push(this.$t('editor.words', { count: words }));
+      if (chars !== null) parts.push(this.$t('editor.chars', { count: chars }));
+      if (lines !== null) parts.push(this.$t('editor.lines', { count: lines }));
+      return parts.join(' | ');
+    },
+    editorFontSize: {
+      get() {
+        return state.editorFontSize;
+      },
+      set(value) {
+        mutations.setEditorFontSize(value);
+      }
+    },
+  },
+  mounted() {
+    window.addEventListener('wheel', this.handleWheel, { passive: false });
+  },
+  beforeUnmount() {
+    window.removeEventListener('wheel', this.handleWheel);
+  },
+  methods: {
+    updateGallerySize(event) {
+      const newValue = parseInt(event.target.value, 10);
+      this.gallerySize = newValue;
+    },
+    commitGallerySize() {
+      mutations.setGallerySize(this.gallerySize);
+      // Automatically adjust view mode based on gallery size
+      this.adjustViewMode();
+    },
+    adjustViewMode() {
+      const currentMode = getters.viewMode();
+      let newMode = currentMode;
+      const size = this.gallerySize;
+
+      // Gallery/Icons family - switch based on size
+      if (currentMode === "gallery" || currentMode === "icons") {
+        if (size <= 4) {
+          newMode = "icons";
+        } else {
+          newMode = "gallery";
+        }
+      }
+
+      // List/Compact family - switch based on size
+      if (currentMode === "list" || currentMode === "compact") {
+        if (size <= 3) {
+          newMode = "compact";
+        } else {
+          newMode = "list";
+        }
+      }
+
+      // Only update if the mode actually changed
+      if (newMode !== currentMode) {
+        mutations.updateDisplayPreferences({ viewMode: newMode });
+        void mutations.updateCurrentUser({ viewMode: newMode });
+      }
+    },
+    // Ctrl + Mouse Wheel to adjust the slider sizes
+    handleWheel(event) {
+      if (!(event.ctrlKey || event.metaKey)) return;
+
+      const delta = event.deltaY > 0 ? 1 : -1; // Scroll down increases, up decreases
+
+      const advSearch = (state.route.path || "").startsWith("/tools/advancedSearch");
+      if (this.currentView === "listingView" || advSearch) {
+        event.preventDefault();
+        const newSize = Math.min(9, Math.max(1, this.gallerySize - delta));
+        if (newSize !== this.gallerySize) {
+          this.gallerySize = newSize;
+          mutations.setGallerySize(newSize);
+          this.adjustViewMode();
+        }
+      } else if (this.currentView === 'editor') {
+        event.preventDefault();
+        const newSize = Math.min(24, Math.max(8, this.editorFontSize - delta));
+        if (newSize !== this.editorFontSize) {
+          this.editorFontSize = newSize;
+        }
+      }
+    }
+  },
+};
+</script>
+
+<style scoped>
+#status-bar {
+  background-color: color-mix(in srgb, var(--alt-background) 15%, transparent);
+  height: 2.5em;
+  display: flex;
+  align-items: center;
+  position: fixed;
+  bottom: -2.5em;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  transition: bottom 0.5s ease, left 0.2s ease, width 0.2s ease;
+  pointer-events: none;
+}
+
+#status-bar.active {
+  bottom: 0;
+  pointer-events: auto;
+}
+
+.status-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 1em;
+  height: 100%;
+  font-size: 0.85em;
+}
+
+.status-info {
+  display: flex;
+  align-items: center;
+  color: var(--textSecondary);
+  font-weight: 500;
+  gap: 0.25em;
+}
+
+.button {
+  padding: 0 0.5em;
+  font-size: 0.9em;
+  font-weight: bold;
+  cursor: unset;
+}
+
+.status-controls {
+  display: flex;
+  align-items: center;
+  gap: 1.5em;
+}
+
+.gallery-size-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.size-label {
+  color: var(--textSecondary);
+  font-size: 0.875em;
+  white-space: nowrap;
+}
+
+input[type="range"] {
+  accent-color: var(--primaryColor);
+  width: 8em;
+}
+
+/* Backdrop filter support */
+@supports (backdrop-filter: none) {
+  #status-bar {
+    backdrop-filter: blur(16px) invert(0.1);
+  }
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+  #status-bar {
+    height: 3em;
+    bottom: -3em;
+    font-size: 0.9em;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  }
+
+  #status-bar.active {
+    bottom: 0;
+    pointer-events: auto;
+  }
+
+  .status-content {
+    padding: 0 0.8em;
+  }
+
+  .status-controls {
+    gap: 1.2em;
+  }
+
+  input[type="range"] {
+    width: 7em;
+  }
+
+  .status-info {
+    font-size: 1em;
+  }
+
+  .size-label {
+    font-size: 0.9em;
+  }
+}
+</style>

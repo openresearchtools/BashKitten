@@ -1,0 +1,18 @@
+http:
+  port: 8080
+  baseURL:  "/files/"
+frontend:
+  styling:
+    disableEventThemes: true
+auth:
+  adminPassword: "playwright-password"
+
+server:
+  logging:
+    - levels: "info|error|warning|debug"
+      apiFilter: 'disabled'
+  sources:
+    - path: "../frontend/tests/playwright-files"
+      name: "playwright"
+      config:
+        defaultEnabled: true

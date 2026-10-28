@@ -1,0 +1,67 @@
+http:
+  port: 80
+  baseURL:  "/files/"
+server:
+  logging:
+    - levels: "info|error|warning|debug"
+      apiFilter: 'disabled'
+  sources:
+    - path: "../frontend/tests/playwright-files"
+      name: "exclude"
+      config:
+        defaultEnabled: true
+        defaultPermissions:
+          view: true
+          download: true
+          modify: true
+          create: true
+        rules:
+          - folderPath: "excluded"
+          - folderPath: "excludedButVisible"
+            viewable: true
+          - fileStartsWith: "startsWith"
+          - fileName: "dontshow.txt"
+    - path: "../frontend/tests/playwright-files2"
+      name: "include"
+      config:
+        defaultEnabled: true
+        useLogicalSize: true
+        rules:
+          - includeRootItem: "myfolder"
+          - includeRootItem: "subfolderExclusions"
+          - includeRootItem: "folder#hash"
+          - includeRootItem: "files"
+          - filePath: "/subfolderExclusions/exclusionlist.sh"
+          - folderPath: "/subfolderExclusions/folderItem"
+            viewable: true
+          - fileStartsWith: "startsWith"
+          - folderEndsWith: "Folder"
+          - folderName: "folderName"
+          - fileName: "fileName"
+          - fileName: "fileNames"
+          - folderName: ".hiddenDir"
+          - fileName: ".hidden"
+
+auth:
+  methods:
+    noauth: true
+
+frontend:
+  name: "Graham's Filebrowser"
+  disableDefaultLinks: true
+  externalLinks:
+    - text: "A playwright test"
+      url: "https://playwright.dev/"
+      title: "Playwright"
+  styling:
+    disableEventThemes: true
+
+userDefaults:
+  listing:
+    showHidden: true
+  preview:
+    image: true
+    popup: true
+    video: true
+    office: true
+    highQuality: true

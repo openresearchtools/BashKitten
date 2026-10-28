@@ -1,0 +1,51 @@
+http:
+  port: 80
+  baseURL:  "/"
+server:
+  database:
+    migrateFrom: "database.db.old"
+  logging:
+    - levels: "info|error|warning|debug"
+      apiFilter: 'disabled'
+  sources:
+    - path: "../frontend/tests/playwright-files"
+      name: "playwright + files"
+      config:
+        defaultEnabled: true
+        defaultPermissions:
+          modify: false
+    - path: "."
+      name: "docker"
+      config:
+        defaultEnabled: true
+        rules:
+          - folderPath: "/"
+            viewable: true
+    - path: "/tests/playwright-files"
+      name: "access"
+      config:
+        defaultEnabled: true
+        denyByDefault: true
+frontend:
+  name: "Graham's Filebrowser"
+  disableDefaultLinks: true
+  styling:
+    disableEventThemes: true
+    customThemes:
+      no-rounded:
+        description: "No rounded corners" # The description of the theme to display in the UI.
+        css: "no-rounded.css" # The css file path and filename to use for the theme.
+  externalLinks:
+    - text: "A playwright test"
+      url: "https://playwright.dev/"
+      title: "Playwright"
+
+auth:
+  adminPassword: "playwright-password"
+  methods:
+    password:
+      signup: true
+
+userDefaults:
+  listing:
+    showHidden: true

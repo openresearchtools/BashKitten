@@ -1,0 +1,973 @@
+<template>
+  <div class="sidebar-links card">
+
+    <!-- Links section header -->
+    <div class="sidebar-links-header"
+      :class="{ 'with-top-spacing': isShare && !disableShareCard }">
+      <i :class="{ 'disabled': !isLoggedIn }"
+        aria-label="Navigate Home"
+        @click="goHome()" class="material-symbols action">home</i>
+      <!-- Mode button (is the title) -->
+      <button type="button" @click="cycleMode" class="mode-toggle" @mouseenter="showTooltip($event, $t('sidebar.switchMode'))" @mouseleave="hideTooltip">
+        {{ mode === 'links' ? $t('general.links') : $t('general.navigation') }}
+      </button>
+      <i v-if="isShare" aria-label="Edit Share" @mouseenter="showTooltip($event, editShareText)" @mouseleave="hideTooltip"
+        :class="{ 'disabled': !canEdit }"
+        @click="showEditShareHover" class="material-symbols action">edit</i>
+      <i v-else @mouseenter="showTooltip($event, $t('sidebar.customizeLinks'))" @mouseleave="hideTooltip"
+        aria-label="Edit Links"
+        @click="openSidebarLinksPrompt" class="material-symbols action">edit</i>
+    </div>
+    <!-- Scrollable Content Area -->
+    <div class="sidebar-links-content">
+      <!-- Links Mode -->
+      <template v-if="mode === 'links'">
+        <!-- Share Info section - shown when viewing a share -->
+        <div v-if="isShare && !disableShareCard" class="share-info-section">
+          <ShareInfo :hash="hash" :token="token" :sub-path="subPath" />
+        </div>
+        <transition-group name="expand" tag="div" class="inner-card">
+          <template v-for="(link, index) in sidebarLinksToDisplay" :key="`link-${index}-${link.category}`">
+            <!-- Divider: renders as hr line or text label -->
+            <div v-if="link.category === 'divider'" class="sidebar-divider-container">
+              <hr v-if="!link.name || link.name.toLowerCase() === 'divider'" class="sidebar-divider" />
+              <span v-else class="sidebar-divider-text">{{ link.name }}</span>
+            </div>
+            <!-- Source Location custom link -->
+            <a v-else-if="link.category === 'custom' && link.name === 'sourceLocation'" :href="link.target"
+              :aria-label="link.name" class="action button sidebar-link-button" @click.prevent="handleLinkClick(link)">
+              <div class="link-container">
+                <i class="material-symbols link-icon">open_in_new</i>
+                <span>{{ $t('buttons.goToSource') }}</span>
+              </div>
+            </a>
+            <!-- Source-type links (source, source-minimal, source-alt, source-hybrid, source-hybrid-2); usage bar hidden for source-minimal -->
+            <a v-else-if="isSourceCategory(link.category)" :href="getLinkHref(link)"
+              class="action button source-button sidebar-link-button" :class="{
+                active: isLinkActive(link),
+                disabled: !isLinkAccessible(link)
+              }" @click.prevent="handleLinkClick(link)" :aria-label="link.name">
+              <div class="source-container" :class="{ 'has-usage-info': hasUsageInfo(link) }">
+                <!-- Show custom icon if user has set one -->
+                <i v-if="link.icon" :class="`${getIconClass(link.icon)} link-icon`">{{ link.icon }}</i>
+                <!-- Otherwise show animated status indicator -->
+                <svg v-else-if="isLinkAccessible(link)" class="realtime-pulse" :class="{
+                  active: realtimeActive,
+                  danger: sourceInfo[link.sourceName]?.status !== 'indexing' && sourceInfo[link.sourceName]?.status !== 'ready',
+                  warning: sourceInfo[link.sourceName]?.status === 'indexing',
+                  ready: sourceInfo[link.sourceName]?.status === 'ready',
+                }">
+                  <circle class="center" cx="50%" cy="50%" r="7px"></circle>
+                  <circle class="pulse" cx="50%" cy="50%" r="10px"></circle>
+                </svg>
+                <HelpTooltipIcon
+                  v-else
+                  icon="warning"
+                  icon-style="symbols"
+                  icon-class="warning-icon"
+                  :text="$t('sidebar.sourceNotAccessible')"
+                />
+                <span>{{ link.name }}</span>
+                <i v-if="hasUsageInfo(link)" class="no-select material-symbols-outlined tooltip-info-icon"
+                  :class="{ 'tooltip-info-icon--pressed': pressedSourceInfo === link.sourceName }"
+                  role="button"
+                  tabindex="0"
+                  @touchstart.stop="onSourceInfoTouchStart(link.sourceName)"
+                  @touchend.stop="onSourceInfoTouchEnd($event, sourceInfo[link.sourceName] || {})"
+                  @touchcancel.stop="onSourceInfoTouchCancel"
+                  @click.stop="onSourceInfoClick($event, sourceInfo[link.sourceName] || {})"
+                  @mouseenter="onSourceInfoMouseEnter($event, sourceInfo[link.sourceName] || {})"
+                  @mouseleave="onSourceInfoMouseLeave">
+                  info
+                </i>
+              </div>
+              <div v-if="hasUsageInfo(link) && baseSidebarCategory(link.category) !== 'source-minimal'" class="usage-info">
+                <!-- For source-hybrid, show single bar with background value for disk usage -->
+                <ProgressBar
+                  v-if="isHybridCategory(link.category)"
+                  :key="`progress-hybrid-${link.sourceName}-${sourceInfo[link.sourceName]?.used || 0}-${getDiskUsed(link, sourceInfo[link.sourceName] || {})}-${getUsageTotal(link, sourceInfo[link.sourceName] || {})}`"
+                  :val="sourceInfo[link.sourceName]?.used || 0"
+                  :val-background="getDiskUsed(link, sourceInfo[link.sourceName] || {})"
+                  :val-text="baseSidebarCategory(link.category) === 'source-hybrid-2' ? getDiskUsed(link, sourceInfo[link.sourceName] || {}) : null"
+                  :max="getUsageTotal(link, sourceInfo[link.sourceName] || {})"
+                  :status="getProgressBarStatus(link, sourceInfo[link.sourceName] || {})"
+                  unit="bytes">
+                </ProgressBar>
+                <!-- For other source types, show single bar -->
+                <ProgressBar
+                  v-else
+                  :key="`progress-${link.sourceName}-${sourceInfo[link.sourceName]?.used || 0}-${getDiskUsed(link, sourceInfo[link.sourceName] || {})}-${getUsageTotal(link, sourceInfo[link.sourceName] || {})}`"
+                  :val="getProgressBarValue(link, sourceInfo[link.sourceName] || {})"
+                  :max="getUsageTotal(link, sourceInfo[link.sourceName] || {})"
+                  :status="getProgressBarStatus(link, sourceInfo[link.sourceName] || {})"
+                  unit="bytes">
+                </ProgressBar>
+              </div>
+            </a>
+
+            <!-- Non-source links: tool and custom links with simple icon style -->
+            <a v-else :aria-label="link.name" :href="getLinkHref(link)" class="action button sidebar-link-button"
+              :class="{ active: isLinkActive(link) }" @click.prevent="handleLinkClick(link)">
+              <div  class="link-container">
+                <i v-if="link.icon" :class="`${getIconClass(link.icon)} link-icon`">{{ link.icon }}</i>
+                <span>{{ link.name }}</span>
+              </div>
+            </a>
+          </template>
+        </transition-group>
+      </template>
+      <!-- Navigation Mode -->
+      <template v-else>
+        <!-- Source card (hidden in shares) -->
+        <div v-if="!isShare" class="source-card-container" ref="sourceCardContainer">
+          <!-- Current Source Card -->
+          <div class="action button source-button navigation-source-card"
+               :class="{ 'has-usage': hasUsageInfo(activeSourceLink) }"
+               @click="navigateToSource(activeSource)" role="button" tabindex="0">
+            <div class="source-container" :class="{ 'has-usage-info': hasUsageInfo(activeSourceLink) }">
+              <i v-if="activeSourceLink.icon && isLinkAccessible(activeSourceLink)"
+                 :class="`${getIconClass(activeSourceLink.icon)} link-icon`">
+                {{ activeSourceLink.icon }}
+              </i>
+              <svg v-else-if="isLinkAccessible(activeSourceLink)"
+                   class="realtime-pulse"
+                   :class="{
+                     active: realtimeActive,
+                     danger: activeSourceInfo.status !== 'indexing' && activeSourceInfo.status !== 'ready',
+                     warning: activeSourceInfo.status === 'indexing',
+                     ready: activeSourceInfo.status === 'ready',
+                   }">
+                <circle class="center" cx="50%" cy="50%" r="7px"></circle>
+                <circle class="pulse" cx="50%" cy="50%" r="10px"></circle>
+              </svg>
+              <HelpTooltipIcon
+                v-else
+                icon="warning"
+                icon-style="symbols"
+                icon-class="warning-icon"
+                :text="$t('sidebar.sourceNotAccessible')"
+              />
+              <!-- Source name -->
+              <span>{{ activeSourceLink.name }}</span>
+              <i v-if="hasUsageInfo(activeSourceLink)"
+                 class="no-select material-symbols-outlined tooltip-info-icon"
+                 :class="{ 'tooltip-info-icon--pressed': pressedSourceInfo === activeSource }"
+                 role="button"
+                 tabindex="0"
+                 @touchstart.stop="onSourceInfoTouchStart(activeSource)"
+                 @touchend.stop="onSourceInfoTouchEnd($event, activeSourceInfo)"
+                 @touchcancel.stop="onSourceInfoTouchCancel"
+                 @click.stop="onSourceInfoClick($event, activeSourceInfo)"
+                 @mouseenter="onSourceInfoMouseEnter($event, activeSourceInfo)"
+                 @mouseleave="onSourceInfoMouseLeave">
+                info
+              </i>
+            </div>
+            <div v-if="hasUsageInfo(activeSourceLink)" class="usage-info">
+              <ProgressBar
+                v-if="isHybridCategory(activeSourceLink.category)"
+                :val="(activeSourceInfo).used || 0"
+                :val-background="getDiskUsed(activeSourceLink, activeSourceInfo)"
+                :val-text="baseSidebarCategory(activeSourceLink.category) === 'source-hybrid-2' ? getDiskUsed(activeSourceLink, activeSourceInfo) : null"
+                :max="getUsageTotal(activeSourceLink, activeSourceInfo)"
+                :status="getProgressBarStatus(activeSourceLink, activeSourceInfo)"
+                unit="bytes">
+              </ProgressBar>
+              <ProgressBar
+                v-else
+                :val="getProgressBarValue(activeSourceLink, activeSourceInfo)"
+                :max="getUsageTotal(activeSourceLink, activeSourceInfo)"
+                :status="getProgressBarStatus(activeSourceLink, activeSourceInfo)"
+                unit="bytes">
+              </ProgressBar>
+            </div>
+          </div>
+          <ExpandDropdown
+            v-if="sourceNames.length > 1"
+            class="sidebar-source-switcher"
+            :model-value="activeSource"
+            :options="sourceDropdownOptions"
+            :aria-label="$t('general.source')"
+            @update:model-value="navigateToSource"
+          />
+        </div>
+        <FileTree
+          :currentPath="currentPath"
+          :currentSource="currentSource"
+          class="file-tree-container"
+        />
+      </template>
+    </div>
+  </div>
+</template>
+
+<script>
+import HelpTooltipIcon from "@/components/HelpTooltipIcon.vue";
+import { state, getters, mutations } from "@/store";
+import {
+  hideInteractiveTooltip,
+  onComponentTooltipClick,
+  onComponentTooltipTouchEnd,
+  showHoverComponentTooltip,
+  showHoverTooltip,
+  useTapForTooltip,
+} from "@/utils/tooltipHelp.js";
+import ProgressBar from "@/components/ProgressBar.vue";
+import { goToItem } from "@/utils/url";
+import { getIconClass } from "@/utils/material-symbols";
+import { baseSidebarCategory, isRootOnlySidebarCategory, isSourceSidebarCategory } from "@/utils/sidebarCategory";
+import { getObjectProperty } from '@/utils/object.js';
+import IndexInfo from "@/components/files/IndexInfo.vue";
+import { globalVars } from "@/utils/constants";
+import { showShareDownloadPrompt } from "@/utils/download.js";
+import ShareInfo from "@/components/files/ShareInfo.vue";
+import FileTree from '@/components/files/FileTree.vue';
+import ExpandDropdown from "@/components/settings/ExpandDropdown.vue";
+export default {
+  name: "SidebarLinks",
+  components: {
+    HelpTooltipIcon,
+    ProgressBar,
+    ShareInfo,
+    FileTree,
+    ExpandDropdown,
+  },
+  data() {
+    return {
+      pressedSourceInfo: null,
+    };
+  },
+  computed: {
+    useTapForSourceTooltip() {
+      return useTapForTooltip();
+    },
+    editShareText() {
+      return this.$t("general.shareManagement");
+    },
+    canEdit() {
+      return state.shareInfo?.canEditShare || false;
+    },
+    isLoggedIn() {
+      return getters.isLoggedIn();
+    },
+    currentSource() {
+      return state.req?.source || null;
+    },
+    currentPath() {
+      return state.req?.path || '/';
+    },
+    isShare: () => getters.isShare(),
+    hasLinks() {
+      return this.sidebarLinksToDisplay.length > 0;
+    },
+    user: () => (state.user || {username: 'anonymous'}),
+    sourceInfo() {
+      // Access state.sources.info to create reactive dependency
+      return state.sources.info;
+    },
+    activeSource: () => state.sources.current,
+    realtimeActive: () => state.realtimeActive,
+    hasSourceInfo: () => state.sources.hasSourceInfo,
+    showSidebarLinks() {
+      // Always show sidebar links section (replaces sources)
+      return true;
+    },
+    hasCustomLinks() {
+      // Check if user has customized their links
+      return this.user?.sidebarLinks && this.user.sidebarLinks.length > 0;
+    },
+    // Share info card props
+    disableShareCard() {
+      return state.shareInfo?.disableShareCard;
+    },
+    hash() {
+      return state.shareInfo?.hash || this.$route.params.hash || "";
+    },
+    token() {
+      return state.shareInfo?.token || this.$route.query.token || "";
+    },
+    subPath() {
+      return state.shareInfo?.path || "/";
+    },
+    sidebarLinksToDisplay() {
+      // If viewing a share, use share's links
+      if (getters.isShare() && state.shareInfo?.sidebarLinks?.length > 0) {
+        return state.shareInfo.sidebarLinks;
+      }
+      // If user has custom links, use those
+      if (this.hasCustomLinks) {
+        return this.user.sidebarLinks;
+      }
+      // Otherwise, return default links (sources)
+      return this.getDefaultLinks();
+    },
+    // List all source names for the dropdown menu
+    sourceNames() {
+      return Object.keys(state.sources.info || {});
+    },
+    activeSourceInfo() {
+      return this.sourceInfo[this.activeSource] || {};
+    },
+    mode() {
+      return getters.sidebarMode();
+    },
+    // Build a map from source name to its custom link (if any)
+    sourceLinkMap() {
+      const map = {};
+      if (this.user?.sidebarLinks) {
+        this.user.sidebarLinks.forEach(link => {
+          if (this.isSourceCategory(link.category) && link.sourceName && !map[link.sourceName]) {
+            map[link.sourceName] = link;
+          }
+        });
+      }
+      return map;
+    },
+    activeSourceLink() {
+      // If user has a custom link for this source, use it
+      const customLink = this.sourceLinkMap[this.activeSource];
+      if (customLink) {
+        return customLink;
+      }
+      return {
+        name: this.activeSource,
+        category: 'source',
+        target: '/',
+        icon: '',
+        sourceName: this.activeSource,
+      };
+    },
+    dropdownSourceItems() {
+      return this.sourceNames.map(rawName => {
+        const customLink = getObjectProperty(this.sourceLinkMap, rawName);
+        return {
+          rawName,
+          displayName: customLink ? customLink.name : rawName,
+        };
+      });
+    },
+    sourceDropdownOptions() {
+      return this.dropdownSourceItems.map((item) => ({
+        value: item.rawName,
+        label: item.displayName,
+      }));
+    },
+  },
+  beforeUnmount() {
+    hideInteractiveTooltip(true);
+  },
+  methods: {
+    isSourceCategory(category) {
+      return isSourceSidebarCategory(category);
+    },
+    isHybridCategory(category) {
+      const base = baseSidebarCategory(category);
+      return base === 'source-hybrid' || base === 'source-hybrid-2';
+    },
+    baseSidebarCategory,
+    /** Disk capacity for the link's scope: aggregated nested mounts (default) or root filesystem only (-root categories). */
+    getUsageTotal(link, sourceInfo) {
+      const root = isRootOnlySidebarCategory(link.category);
+      const total = root ? (sourceInfo.totalRoot || 0) : (sourceInfo.total || 0);
+      return total > 0 ? total : (sourceInfo.total || 1);
+    },
+    /** Disk-reported used bytes for the link's scope. */
+    getDiskUsed(link, sourceInfo) {
+      return isRootOnlySidebarCategory(link.category)
+        ? (sourceInfo.usedAltRoot || 0)
+        : (sourceInfo.usedAlt || 0);
+    },
+    getIconClass,
+    hasUsageInfo(link) {
+      // Check if usage info should be displayed for this link (source only; source-minimal hides usage)
+      // Returns true when link is accessible and has usage > 0
+      if (!this.isSourceCategory(link.category) || !link.sourceName) return false;
+      if (!this.hasSourceInfo || !this.isLinkAccessible(link)) return false;
+      if (baseSidebarCategory(link.category) === 'source-minimal') return false;
+      const info = this.sourceInfo[link.sourceName] || {};
+      return (info.used || 0) > 0 || (info.usedAlt || 0) > 0;
+    },
+    getLinkHref(link) {
+      // Add baseURL to target for href display
+      if (!link.target) return '#';
+      const lowerTarget = link.target.toLowerCase();
+      if (lowerTarget.startsWith('http://') || lowerTarget.startsWith('https://')) return link.target;
+
+      const baseURL = globalVars.baseURL || '';
+      let fullPath;
+
+      // Construct full path based on link category
+      if (this.isSourceCategory(link.category)) {
+        // For source links, use sourceName and relative target
+        if (!link.sourceName) return '#';
+        const sourceInfo = this.sourceInfo[link.sourceName];
+        if (!sourceInfo) return '#'; // Source not found
+        const encodedSourceName = encodeURIComponent(link.sourceName);
+        const targetPath = link.target.startsWith('/') ? link.target.substring(1) : link.target;
+        fullPath = `/files/${encodedSourceName}/${targetPath}`;
+      } else {
+        // For other links (tools, custom, share), use target as-is
+        fullPath = link.target;
+      }
+
+      const target = fullPath.startsWith('/') ? fullPath.substring(1) : fullPath;
+      return baseURL + target;
+    },
+    goHome() {
+      if (!this.isLoggedIn) {
+        return;
+      }
+      this.$router.push('/');
+    },
+    getDefaultLinks() {
+      // Generate default links from sources the user can access.
+      const defaultLinks = [];
+      const scopedSourceNames = new Set(
+        (this.user?.scopes || [])
+          .map((scope) => scope?.name)
+          .filter((name) => typeof name === "string" && name.length > 0),
+      );
+      const limitToScopes = scopedSourceNames.size > 0;
+
+      if (this.sourceInfo) {
+        Object.keys(this.sourceInfo).forEach((sourceName) => {
+          if (limitToScopes && !scopedSourceNames.has(sourceName)) {
+            return;
+          }
+          defaultLinks.push({
+            name: sourceName,
+            category: "source",
+            target: "/",
+            icon: "",
+            sourceName: sourceName,
+          });
+        });
+      }
+
+      return defaultLinks;
+    },
+    isLinkAccessible(link) {
+      // Check if link is accessible
+      if (this.isSourceCategory(link.category)) {
+        // Use sourceName to check if the source is accessible
+        if (!link.sourceName) return false;
+        for (const [name] of Object.entries(this.sourceInfo || {})) {
+          if (name === link.sourceName) {
+            return true;
+          }
+        }
+        return false;
+      }
+      // Tools and custom links are always accessible
+      return true;
+    },
+    isLinkActive(link) {
+      // Check if the current route matches this link
+      if (this.isSourceCategory(link.category)) {
+        // Use sourceName to check if we're currently in this source
+        return link.sourceName && state.req.source === link.sourceName;
+      }
+      // For all other links (tools, custom, share), compare target with route path
+      return this.$route.path === link.target;
+    },
+    getSourceInfoForLink(link) {
+      // Method that directly accesses reactive sourceInfo
+      // Vue will track this dependency when called in template
+      if (!this.isSourceCategory(link.category) || !link.sourceName) return {};
+      // Direct access to reactive computed property ensures Vue tracks changes
+      return this.sourceInfo && link.sourceName ? this.sourceInfo[link.sourceName] || {} : {};
+    },
+    getProgressBarStatus(link, sourceInfo) {
+      if (sourceInfo.status === 'indexing' && sourceInfo.complexity === 0) {
+        return 'indexing';
+      }
+      if (this.hasUsageScopeMismatch(link, sourceInfo)) {
+        return 'conflict';
+      }
+      return 'default';
+    },
+    hasUsageScopeMismatch(link, sourceInfo) {
+      if (!link || !sourceInfo) return false;
+      const base = baseSidebarCategory(link.category);
+      if (base !== 'source' && base !== 'source-hybrid' && base !== 'source-hybrid-2') {
+        return false;
+      }
+      if (sourceInfo.usageScopeMismatch && !isRootOnlySidebarCategory(link.category)) {
+        return true;
+      }
+      const used = Number(sourceInfo.used) || 0;
+      const total = Number(this.getUsageTotal(link, sourceInfo)) || 0;
+      return total > 0 && used > total;
+    },
+    getProgressBarValue(link, sourceInfo) {
+      // Called with (link, sourceInfo) from both modes
+      if (baseSidebarCategory(link.category) === 'source-alt') {
+        return this.getDiskUsed(link, sourceInfo);
+      }
+      return sourceInfo.used || 0;
+    },
+    handleLinkClick(link) {
+      // Handle special share actions
+      if (link.category === 'shareInfo') {
+        mutations.showPrompt({ name: "ShareInfo" });
+        return;
+      }
+      if (link.category === 'download') {
+        this.goToDownload();
+        return;
+      }
+
+      // Don't navigate if link is not accessible
+      if (!this.isLinkAccessible(link)) {
+        return;
+      }
+
+      if (this.isSourceCategory(link.category)) {
+        // For source links, use sourceName and target (relative path)
+        if (!link.sourceName) return;
+        const path = link.target || "/";
+        goToItem(link.sourceName, path, {}, false, false);
+        return;
+      }
+
+      const lowerTarget = link.target.toLowerCase();
+      if (lowerTarget.startsWith('http://') || lowerTarget.startsWith('https://')) {
+        window.open(link.target, "_blank");
+        return;
+      }
+      // For all other links (tools, custom, share), navigate using target directly
+      const currentBase = this.$route.path;
+      const targetBase = link.target.split('?')[0]; // strip any query from target -- this to avoid an error when navigating back with browser history
+
+      if (currentBase === targetBase) {
+        this.$router.replace(link.target);
+      } else {
+        this.$router.push(link.target);
+      }
+      mutations.closeTopPrompt();
+    },
+    goToDownload() {
+      showShareDownloadPrompt([{
+        path: state.req?.path || "/",
+        name: state.req?.name,
+        type: state.req?.type,
+        size: state.req?.size,
+        isDir: state.req?.type === "directory",
+      }]);
+    },
+    navigateTo(path, hash) {
+      mutations.setPreviousHistoryItem({
+        name: state.req?.name,
+        source: state.req?.source,
+        path: state.req?.path,
+      });
+      this.$router.push({ path: path, hash: hash });
+      mutations.closeTopPrompt();
+    },
+    openSidebarLinksPrompt() {
+      if (!this.isLoggedIn) {
+        return;
+      }
+      mutations.showPrompt({
+        name: "SidebarLinks",
+      });
+    },
+    beforeEnter(el) {
+      el.style.height = '0';
+      el.style.opacity = '0';
+    },
+    enter(el, done) {
+      el.style.transition = '';
+      el.style.height = '0';
+      el.style.opacity = '0';
+      // Force reflow
+      void el.offsetHeight;
+      el.style.transition = 'height 0.3s, opacity 0.3s';
+      el.style.height = `${el.scrollHeight}px`;
+      el.style.opacity = '1';
+      setTimeout(() => {
+        el.style.height = 'auto';
+        done();
+      }, 300);
+    },
+    leave(el, done) {
+      el.style.transition = 'height 0.3s, opacity 0.3s';
+      el.style.height = `${el.scrollHeight}px`;
+      void el.offsetHeight;
+      el.style.height = '0';
+      el.style.opacity = '0';
+      setTimeout(done, 300);
+    },
+    showTooltip(event, text) {
+      if (text) {
+        showHoverTooltip(text, event);
+      }
+    },
+    hideTooltip() {
+      hideInteractiveTooltip();
+    },
+    onSourceInfoClick(event, info) {
+      onComponentTooltipClick(this.sourceInfoTooltipOptions(event, info));
+    },
+    onSourceInfoTouchStart(sourceName) {
+      if (useTapForTooltip()) {
+        this.pressedSourceInfo = sourceName;
+      }
+    },
+    onSourceInfoTouchEnd(event, info) {
+      this.pressedSourceInfo = null;
+      onComponentTooltipTouchEnd(this.sourceInfoTooltipOptions(event, info));
+    },
+    onSourceInfoTouchCancel() {
+      this.pressedSourceInfo = null;
+    },
+    sourceInfoTooltipOptions(event, info) {
+      return {
+        event,
+        component: IndexInfo,
+        componentProps: { info },
+        pointerEvents: this.useTapForSourceTooltip,
+        propsMatcher: (props) => props.info?.name === info?.name,
+      };
+    },
+    onSourceInfoMouseEnter(event, info) {
+      this.showSourceHoverTooltip(event, info);
+    },
+    onSourceInfoMouseLeave() {
+      this.pressedSourceInfo = null;
+      if (this.useTapForSourceTooltip) {
+        return;
+      }
+      this.hideTooltip();
+    },
+    showSourceHoverTooltip(event, info) {
+      if (!info?.name) {
+        return;
+      }
+      showHoverComponentTooltip({
+        component: IndexInfo,
+        componentProps: { info },
+        event,
+      });
+    },
+    async showEditShareHover() {
+      if (!this.canEdit) {
+        return;
+      }
+      // Get the current share hash and fetch full share details
+      const shareHash = state.shareInfo?.hash;
+      if (!shareHash) {
+        console.error("No share hash found");
+        return;
+      }
+
+      try {
+        // Fetch the full share details to pass to the edit dialog
+        // The shareInfo object should already have most details we need
+        const shareData = {
+          ...state.shareInfo,
+          hash: shareHash,
+        };
+
+        mutations.showPrompt({
+          name: "share",
+          props: {
+            editing: true,
+            link: shareData,
+          },
+        });
+      } catch (err) {
+        console.error("Failed to open edit share dialog:", err);
+      }
+    },
+    cycleMode() {
+      const newMode = state.sidebar.mode === 'links' ? 'navigation' : 'links';
+      mutations.setSidebarMode(newMode);
+    },
+    navigateToSource(sourceName) {
+      if (!sourceName || sourceName === this.activeSource) {
+        return;
+      }
+      goToItem(sourceName, '/', {}, false, false);
+    },
+  },
+};
+</script>
+
+<style scoped>
+.sidebar-links {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 1em;
+  overflow: auto;
+}
+
+.sidebar-links-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.sidebar-links-header .material-symbols.action {
+  padding: 0.25em 0.25em;
+  border-radius: 0.5em;
+  transition: background 0.2s;
+}
+
+.sidebar-links-header .material-symbols.action:hover {
+  background: var(--surfaceSecondary);
+}
+
+.sidebar-links-header .mode-toggle {
+  background: none;
+  border: none;
+  font-weight: 500;
+  color: var(--textPrimary);
+  font-size: 1em;
+  padding: 0.25em 0.5em;
+  border-radius: 0.5em;
+  transition: background 0.2s;
+}
+
+.sidebar-links-header .mode-toggle:hover {
+  background: var(--surfaceSecondary);
+  cursor: pointer;
+}
+
+.sidebar-links-content {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  margin-top: 0.5em;
+}
+
+.file-tree-container {
+  margin-top: 0;
+}
+
+.no-edit-options {
+  justify-content: center !important;
+}
+
+.share-info-section {
+  margin-top: 0 !important;
+  margin-bottom: 0.5em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--borderColor);
+}
+
+.usage-info .vue-simple-progress {
+  border: var(--borderWidth) solid var(--surfaceSecondary);
+  border-radius: 1em !important;
+}
+
+.sidebar-links .inner-card {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Non-source link styles (tools, custom) */
+.sidebar-link-button {
+  margin: 0;
+  margin-top: 0.25em;
+  padding-left: 0.5em;
+  padding-right: 0.5em;
+  border-radius: 0.5em;
+  justify-content: flex-start;
+  max-width: 98%;
+}
+
+.sidebar-link-button:first-child {
+  margin-top: 0 !important;
+}
+
+.sidebar-link-button.active {
+  background: var(--alt-background);
+}
+
+/* Make anchor tags behave like buttons */
+a.source-button,
+a.sidebar-link-button {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.link-container {
+  display: flex;
+  flex-direction: row;
+  color: var(--textPrimary);
+  align-content: center;
+  align-items: center;
+  gap: 0.5em;
+  min-height: 2.75em;
+}
+
+.link-icon {
+  color: var(--primaryColor);
+}
+
+/* Warning icon for inaccessible sources */
+.source-button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.source-button.disabled:hover {
+  background: var(--surfaceSecondary);
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.expand-enter-active,
+.expand-leave-active {
+  transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  will-change: opacity, max-height;
+}
+
+.expand-enter,
+.expand-leave-to {
+  height: 0 !important;
+  opacity: 0;
+}
+
+.source-button {
+  display: block;
+}
+
+.source-button.active {
+  background: var(--alt-background);
+}
+
+.realtime-pulse>.pulse {
+  display: none;
+  fill-opacity: 0;
+  transform-origin: 50% 50%;
+  animation: pulse 10s infinite backwards;
+}
+
+.realtime-pulse.active>.pulse {
+  display: block;
+}
+
+.realtime-pulse.ready>.pulse {
+  fill: #21d721;
+  stroke: #21d721;
+}
+
+.realtime-pulse.danger>.pulse {
+  fill: rgb(190, 147, 147);
+  stroke: rgb(235, 55, 55);
+}
+
+.realtime-pulse.warning>.pulse {
+  fill: rgb(255, 157, 0);
+  stroke: rgb(255, 157, 0);
+}
+
+@keyframes pulse {
+  from {
+    stroke-width: 3px;
+    stroke-opacity: 1;
+    transform: scale(0.3);
+  }
+  to {
+    stroke-width: 0;
+    stroke-opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+.disabled .source-container {
+  display: block;
+}
+
+.source-container {
+  display: flex;
+  flex-direction: row;
+  color: var(--textPrimary);
+  align-content: center;
+  align-items: center;
+  min-height: 3em;
+}
+
+.source-container.has-usage-info {
+  min-height: 2.5em;
+}
+
+.realtime-pulse {
+  width: 2em;
+  height: 2em;
+  margin: 0.25em;
+}
+
+.realtime-pulse.ready>.center {
+  fill: #21d721;
+}
+
+.realtime-pulse.danger>.center {
+  fill: rgb(235, 55, 55);
+}
+
+.realtime-pulse.warning>.center {
+  fill: rgb(255, 157, 0);
+}
+.vue-simple-progress {
+  margin-top: 0 !important;
+}
+
+.edit-share-button {
+  margin-top: 0.5em;
+  border-top: 1px solid var(--surfaceSecondary);
+  padding-top: 0.5em;
+}
+
+.edit-share-button .link-icon {
+  color: var(--primaryColor);
+}
+
+.source-card-container {
+  position: relative;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: 1px solid var(--borderColor);
+}
+
+.sidebar-source-switcher {
+  margin-top: 0.5em;
+}
+
+.navigation-source-card {
+  margin-top: 0;
+  max-width: 98%;
+}
+
+.sidebar-divider-container {
+  width: 100%;
+  margin-top: 0.5em;
+}
+
+.sidebar-divider {
+  width: 50%;
+  border: none;
+  border-top: 0.1em solid var(--divider);
+}
+
+.sidebar-divider-text {
+  display: flex;
+  font-size: .85em;
+  color: var(--textSecondary);
+  letter-spacing: .05em;
+  justify-content: center;
+  align-content: center;
+  align-items: center;
+}
+
+</style>

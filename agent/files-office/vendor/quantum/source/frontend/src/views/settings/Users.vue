@@ -1,0 +1,184 @@
+<template>
+  <button
+    v-if="isAdmin"
+    type="button"
+    @click="openPrompt(null)"
+    class="button floating-action-button"
+    :aria-label="newUserLabel()"
+  >
+    {{ $t("general.new") }}
+  </button>
+  <errors v-if="error" :errorCode="error.status" />
+  <div class="card-title">
+    <h2>{{ $t("general.users") }}</h2>
+  </div>
+
+  <div class="card-content full">
+    <div v-if="isAdmin" class="settings-items user-defaults-entry">
+      <SettingsButton
+        class="item"
+        :name="$t('settings.userDefaults')"
+        :description="$t('settings.userDefaultsDescription')"
+        @click="openUserDefaultsPrompt"
+      />
+      <ActivityViewerButton class="item" :href="activityViewerHref" />
+    </div>
+    <settings-table
+      :columns="userTableColumns"
+      :items="users"
+      item-key="username"
+      default-sort-key="username"
+      :aria-label="$t('general.users')"
+      :loading="loading"
+    >
+      <template #cell-admin="{ row }">
+        <i v-if="row.permissions.admin" class="material-symbols">done</i>
+        <i v-else class="material-symbols">close</i>
+      </template>
+      <template #cell-scopes="{ row }">{{ formatScopes(row.scopes) }}</template>
+      <template #cell-actions="{ row }">
+        <div
+          @click="openPrompt(row.username)"
+          class="clickable action button"
+          role="button"
+          tabindex="0"
+          :aria-label="$t('general.edit')"
+          :title="$t('general.edit')"
+          @keydown.enter.prevent="openPrompt(row.username)"
+          @keydown.space.prevent="openPrompt(row.username)"
+        >
+          <i class="material-symbols">edit</i>
+        </div>
+      </template>
+    </settings-table>
+  </div>
+
+</template>
+
+<script>
+import { state, mutations } from "@/store";
+import { usersApi } from "@/api";
+import Errors from "@/views/Errors.vue";
+import SettingsTable from "@/components/settings/Table.vue";
+import SettingsButton from "@/components/settings/SettingsButton.vue";
+import ActivityViewerButton from "@/components/settings/ActivityViewerButton.vue";
+import { activityViewerPresets } from "@/utils/activityViewerLink";
+import { eventBus } from "@/store/eventBus";
+
+export default {
+  name: "users",
+  components: {
+    Errors,
+    SettingsTable,
+    SettingsButton,
+    ActivityViewerButton,
+  },
+  data: function () {
+    return {
+      error: null,
+      users: [],
+      /** Local fetch state; avoids global Settings overlay spinner (table shows its own). */
+      loading: true,
+    };
+  },
+  async created() {
+    await this.reloadUsers();
+  },
+  mounted() {
+    // Listen for user changes
+    eventBus.on('usersChanged', this.reloadUsers);
+  },
+  beforeUnmount() {
+    // Clean up event listener
+    eventBus.off('usersChanged', this.reloadUsers);
+  },
+  computed: {
+    settings() {
+      return state.settings;
+    },
+    isAdmin() {
+      return state.user.permissions.admin;
+    },
+    userTableColumns() {
+      return [
+        {
+          key: "username",
+          label: this.$t("general.username"),
+          sortable: true,
+        },
+        {
+          key: "loginMethod",
+          label: this.$t("settings.loginMethod"),
+          sortable: true,
+        },
+        {
+          key: "admin",
+          label: this.$t("general.admin"),
+        },
+        {
+          key: "scopes",
+          label: this.$t("general.scopes"),
+        },
+        {
+          key: "actions",
+          label: "",
+          align: "right",
+          narrow: true,
+        },
+      ];
+    },
+    activityViewerHref() {
+      return activityViewerPresets.users();
+    },
+  },
+  methods: {
+    newUserLabel() {
+      return this.$t("general.newUser");
+    },
+    async reloadUsers() {
+      this.loading = true;
+      try {
+        this.users = await usersApi.getAllUsers();
+        this.error = null; // Clear any previous errors
+      } catch (e) {
+        this.error = e;
+      } finally {
+        this.loading = false;
+      }
+    },
+    formatScopes(scopes) {
+      if (!Array.isArray(scopes)) {
+        return scopes;
+      }
+      return scopes
+        .map((scope) => `"${scope.name}": "${scope.scope}"`)
+        .join(", ");
+    },
+    openPrompt(targetUsername) {
+      if (targetUsername) {
+        mutations.showPrompt({ name: "user-edit", props: { targetUsername } });
+      } else {
+        mutations.showPrompt({ name: "user-edit" });
+      }
+    },
+    openUserDefaultsPrompt() {
+      mutations.showPrompt({
+        name: "user-defaults",
+        props: {
+          title: this.$t("settings.userDefaults"),
+        },
+      });
+    },
+  },
+};
+</script>
+
+<style scoped>
+.card-content.full :deep(.settings-table-wrapper) {
+  margin-top: 0.75rem;
+}
+
+.clickable {
+  cursor: pointer;
+}
+</style>

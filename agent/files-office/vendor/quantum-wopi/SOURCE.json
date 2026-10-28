@@ -1,0 +1,21 @@
+{
+  "repository": "https://github.com/gtsteffaniak/filebrowser",
+  "revision": "fd64a470d3a521b0ad026f0f5307c20dd04b472f",
+  "release": null,
+  "archive": "https://codeload.github.com/gtsteffaniak/filebrowser/tar.gz/fd64a470d3a521b0ad026f0f5307c20dd04b472f",
+  "archiveSha256": "e63fd8f9f2c91989d7258925d24d7eada246d1083a486f68b60935fafc7b060e",
+  "selection": [
+    "LICENSE",
+    "backend/go.mod",
+    "backend/go.sum",
+    "backend/internal/web/wopi.go",
+    "backend/internal/web/wopi_discovery.go",
+    "backend/internal/web/wopi_locks.go",
+    "backend/internal/web/wopi_token.go",
+    "backend/internal/web/wopi_test.go",
+    "frontend/src/api/wopi.js",
+    "frontend/src/views/files/WopiEditor.vue"
+  ],
+  "pristine": true,
+  "wopiIntroduction": "c5112cd51c8479c21cfca49e376cd207242c2595"
+}

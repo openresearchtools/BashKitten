@@ -1,0 +1,64 @@
+http:
+  port: 8080
+  baseURL:  "/"
+server:
+  database: "playwright-files.db"
+  logging:
+    - levels: "info|warning|debug|error"
+  sources:
+    - path: "../frontend/playwright-files"
+      config:
+        defaultEnabled: true
+        defaultPermissions:
+          view: true
+          download: true
+          modify: false
+          create: false
+          delete: false
+
+userDefaults:
+  fileViewer:
+    editorQuickSave: false
+    disableOnlyOfficeExt: ".md .txt .pdf"
+    disableViewingExt: ""
+  sidebar:
+    hideFileActions: false
+    disableQuickToggles: false
+    sticky: true
+    disableHideOnPreview: true
+  search:
+    disableOptions: false
+  ui:
+    darkMode: true
+    themeColor: "var(--blue)"
+    locale: ""
+  listing:
+    singleClick: false
+    showHidden: false
+    dateFormat: false
+    viewMode: "normal"
+    gallerySize: 3
+    quickDownload: false
+    showSelectMultiple: false
+    deleteWithoutConfirming: false
+  preview:
+    image: true
+    video: true
+    motionVideoPreview: true
+    office: true
+    popup: true
+    folder: true
+    disablePreviewExt: ""
+  account:
+    lockPassword: false
+    disableSettings: false
+    disableUpdateNotifications: false
+    permissions:
+      api: false
+      admin: false
+      share: false
+      realtime: false
+
+#office:
+#  url: "http://localhost:9052"
+#  secret: "6H1H7GzUk2alRkNxAPav0W02g8JS5oUd"

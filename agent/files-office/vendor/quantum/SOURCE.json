@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/gtsteffaniak/filebrowser",
+  "revision": "2c071d1e6eb48d4b88da2657885d345663a0a88b",
+  "release": "v2.0.2-stable",
+  "archive": "https://codeload.github.com/gtsteffaniak/filebrowser/tar.gz/2c071d1e6eb48d4b88da2657885d345663a0a88b",
+  "archiveSha256": "f9f783bda505d47ff86b290519338c8b4f28069bb2a29f8e35ad56bc66de7a1e",
+  "selection": "complete source archive",
+  "pristine": true,
+  "wopiIntroduction": null
+}

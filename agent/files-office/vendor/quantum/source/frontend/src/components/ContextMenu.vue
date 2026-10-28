@@ -1,0 +1,1066 @@
+<template>
+  <transition
+    name="expand"
+    @before-enter="beforeEnter"
+    @enter="enter"
+    @leave="leave"
+  >
+    <div
+      id="context-menu"
+      ref="contextMenu"
+      v-if="showContext"
+      :style="centered ? {} : { top: `${posY}px`, left: `${posX}px` }"
+      class="no-select floating-window"
+      :class="{ 'dark-mode': isDarkMode, 'centered': centered }"
+      :key="showCreate ? 'create-mode' : 'normal-mode'"
+    >
+      <div
+        v-if="showCreateToggle"
+        class="context-menu-header"
+      >
+        <div
+          v-if="showCreateToggle"
+          class="action button clickable context-menu-create-toggle"
+          aria-label="Create Actions Toggle"
+          :class="{ 'context-menu-create-toggle--disabled': createToggleDisabled }"
+          role="button"
+          :aria-disabled="createToggleDisabled ? 'true' : 'false'"
+          :tabindex="createToggleDisabled ? -1 : 0"
+          @click="onCreateToggleClick"
+          @keydown.enter.prevent="onCreateToggleClick"
+          @keydown.space.prevent="onCreateToggleClick"
+          @mouseenter="onCreateToggleMouseEnter"
+          @mouseleave="hideTooltip"
+        >
+          <i v-if="!showCreate" class="material-symbols">add</i>
+          <i v-else class="material-symbols">arrow_back</i>
+        </div>
+        <div
+          v-if="selectedCount > 0"
+          @mouseleave="hideTooltip"
+          @mouseenter="showTooltip($event, $t('buttons.selectedCount'))"
+          class="button selected-count-header"
+          :class="{ 'selected-count-header--circle': selectedCount <= 99 }"
+        >
+          <span>{{ selectedCount }}</span>
+        </div>
+      </div>
+      <hr v-if="showDivider" class="divider">
+      <action
+        v-if="showCreateFileActions"
+        icon="create_new_folder"
+        :label="$t('files.newFolder')"
+        @action="showNewDirPrompt"
+      />
+      <action
+        v-if="showCreateFileActions"
+        icon="note_add"
+        :label="$t('files.newFile')"
+        @action="showPrompt('newFile')"
+      />
+      <action
+        v-if="showCreateFileActions"
+        icon="file_upload"
+        :label="$t('general.upload')"
+        @action="showUploadPrompt"
+      />
+      <action
+        v-if="showArchive"
+        icon="archive"
+        :label="$t('prompts.archive')"
+        @action="showArchivePrompt"
+      />
+      <action
+        v-if="showInfo"
+        icon="info"
+        :label="$t('general.info')"
+        @action="showInfoPrompt"
+      />
+      <action
+        v-if="showDownload"
+        icon="file_download"
+        :label="$t('general.download')"
+        @action="startDownload"
+      />
+      <action
+        v-if="showSendToApp"
+        icon="ios_share"
+        :label="$t('buttons.sendToApp')"
+        @action="sendToApp"
+      />
+      <action
+        v-if="showUnarchive"
+        icon="unarchive"
+        :label="$t('prompts.unarchive')"
+        @action="showUnarchivePrompt"
+      />
+      <action
+        v-if="showShareAction"
+        icon="share"
+        :label="$t('general.share')"
+        @action="showSharePrompt"
+      />
+      <action
+        v-if="showPinAction"
+        icon="push_pin"
+        :label="pinActionLabel"
+        @action="togglePin"
+      />
+      <action
+        v-if="showRename"
+        icon="edit"
+        :label="$t('general.rename')"
+        @action="showRenamePrompt"
+      />
+      <action
+        v-if="showCopy"
+        icon="file_copy"
+        :label="$t('buttons.copyFile')"
+        @action="showCopyPrompt"
+      />
+      <action
+        v-if="showCopyPath"
+        icon="copy_all"
+        :label="$t('buttons.copyPath')"
+        @action="copyPathToClipboard"
+      />
+      <action
+        v-if="showOpenParentFolder"
+        icon="folder"
+        :label="$t('buttons.openParentFolder')"
+        @action="openParentFolder"
+      />
+      <action
+        v-if="showGoToItem"
+        icon="folder"
+        :label="$t('buttons.goToItem')"
+        @action="goToItem"
+      />
+      <action
+        v-if="showMove"
+        icon="forward"
+        :label="$t('buttons.moveFile')"
+        @action="showMovePrompt"
+      />
+      <action
+        v-if="showSelectAll"
+        icon="select_all"
+        :label="$t('buttons.selectAll')"
+        @action="selectAllItems"
+      />
+      <action
+        v-if="showDelete"
+        icon="delete"
+        :label="$t('general.delete')"
+        @action="showDeletePrompt"
+      />
+      <action
+        v-if="showAccess"
+        icon="lock"
+        :label="$t('access.rules')"
+        @action="showAccessPrompt"
+      />
+      <action
+        v-if="showSelectMultiple"
+        icon="check_circle"
+        :label="$t('buttons.selectMultiple')"
+        @action="toggleMultipleSelection"
+      />
+    </div>
+  </transition>
+  <transition
+    name="expand"
+    @before-enter="beforeEnter"
+    @enter="enter"
+    @leave="leave"
+  >
+    <div
+      id="context-menu"
+      ref="contextMenu"
+      v-if="showOverflow"
+      :style="{
+        top: '3em',
+        right: '1em',
+      }"
+      class="no-select floating-window"
+      :class="{ 'dark-mode': isDarkMode }"
+    >
+      <action icon="info" :label="$t('general.info')" @action="showInfoPrompt"/>
+      <action v-if="showGoToRaw" icon="open_in_new" :label="$t('general.openFile')" @action="goToRaw()" />
+      <action v-if="shouldShowParentFolder()" icon="folder" :label="$t('buttons.openParentFolder')" @action="openParentFolder" />
+      <action v-if="isPreview && permissions.modify" icon="edit" :label="$t('general.rename')" @action="showRenamePromptForPreview" />
+      <action v-if="showWatch" icon="visibility" :label="$t('buttons.watchFile')" @action="watchFile()" />
+      <action v-if="hasDownload" icon="file_download" :label="$t('general.download')" @action="startDownload" />
+      <action v-if="showSendToAppInPreview" icon="ios_share" :label="$t('buttons.sendToApp')" @action="sendToAppFromPreview" />
+      <action v-if="showUnarchiveInOverflow" icon="folder_open" :label="$t('prompts.unarchive')" @action="showUnarchivePromptFromPreview" />
+      <action v-if="showEdit" icon="edit" :label="$t('general.edit')" @action="edit()" />
+      <action v-if="markdownPreview" icon="visibility" :label="$t('general.preview')" @action="switchToMarkdown" />
+      <action v-if="showSave" icon="save" :label="$t('general.save')" @action="save()" />
+      <action v-if="showDelete" icon="delete" :label="$t('general.delete')" @action="showDeletePrompt" />
+    </div>
+  </transition>
+</template>
+
+<script>
+import { resourcesApi, shareApi, usersApi } from "@/api";
+import Action from "@/components/Action.vue";
+import { notify } from "@/notify";
+import { getters, mutations, state } from "@/store";
+import {
+  hideInteractiveTooltip,
+  showHoverTooltip,
+} from "@/utils/tooltipHelp.js";
+import { url } from "@/utils";
+import buttons from "@/utils/buttons";
+import { copyToClipboard } from "@/utils/clipboard";
+import { globalVars } from "@/utils/constants.js";
+import downloadFiles from "@/utils/download";
+import { canNativeShare, nativeShareFile } from "@/utils/nativeShare";
+import { isRichTextPreviewMimeType } from "@/utils/mimetype";
+import { isMediaRequest } from "@/utils/mediaFile";
+
+function isArchivePath(pathOrName) {
+  if (!pathOrName || typeof pathOrName !== "string") return false;
+  const lower = pathOrName.toLowerCase();
+  return lower.endsWith(".zip") || lower.endsWith(".tar.gz") || lower.endsWith(".tgz");
+}
+
+export default {
+  name: "ContextMenu",
+  components: {
+    Action,
+  },
+  data() {
+    return {
+      posX: 0,
+      posY: 0,
+      showCreate: false,
+      isAnimating: false,
+      createStateInitialized: false,
+    };
+  },
+  props: {
+    createOnly: {
+      type: Boolean,
+      default: false,
+    },
+    showCentered: {
+      type: Boolean,
+      default: false,
+    },
+    showLimitedOptions: {
+      type: Boolean,
+      default: false,
+    },
+    items: {
+      type: Array,
+      default: null, // Array of item objects { name, path, source, isDir, type, ... }
+    },
+  },
+  computed: {
+    // Either from prop or from state
+    providedItems() {
+      // Only treat non-empty explicit `items` as overriding selection ([] means "use global state")
+      if (Array.isArray(this.items) && this.items.length > 0) {
+        return this.items;
+      }
+      // Fallback to global selection (indices or objects)
+      if (state.selected.length === 0) return [];
+      // Map to actual items from state.req
+      if (typeof state.selected[0] === 'number') {
+        return state.selected
+          .map(index => state.req.items.at(index))
+          .filter(item => item !== null);
+      }
+      return state.selected;
+    },
+    selectedCount() {
+      return this.providedItems.length;
+    },
+    firstSelected() {
+      return this.providedItems[0] || null;
+    },
+    showWatch() {
+      if (isMediaRequest(this.req)) {
+        return false;
+      }
+      return this.hasDownload && !this.req.isDir && !this.isShare;
+    },
+    showGoToItem() {
+      return this.showLimitedOptions && this.selectedCount === 1;
+    },
+    permissions() {
+      const global = getters.globalPermissions();
+      const items = this.providedItems;
+
+      if (items.length > 0) {
+        const merged = {
+          view: true,
+          download: true,
+          modify: true,
+          create: false,
+          delete: true,
+        };
+        for (const item of items) {
+          const source = item.source || state.sources?.current || "";
+          const perms = getters.sourcePermissions(source);
+          merged.view = merged.view && perms.view;
+          merged.download = merged.download && perms.download;
+          merged.modify = merged.modify && perms.modify;
+          merged.create = merged.create || perms.create;
+          merged.delete = merged.delete && perms.delete;
+        }
+        return { ...global, ...merged };
+      }
+
+      const source = state.req?.source || state.sources?.current || "";
+      return { ...global, ...getters.sourcePermissions(source) };
+    },
+    /**
+     * Whether the (+) panel can be opened (create file ops and/or admin-only rows like access rules).
+     */
+    canOpenCreatePanel() {
+      if (getters.isShare()) {
+        return !!getters.sourcePermissions().create;
+      }
+      return getters.isAdmin() || !!getters.sourcePermissions().create;
+    },
+    /** New folder / new file / upload — requires permissions.create only (not admin alone). */
+    showCreateFileActions() {
+      if (this.showLimitedOptions) return false;
+      if (!this.permissions.create) return false;
+      return this.showCreate && !this.isSearchActive;
+    },
+    req() {
+      return state.req;
+    },
+    isShare() {
+      return getters.isShare();
+    },
+    showInfo() {
+      if (this.showLimitedOptions) return this.selectedCount === 1;
+      return !this.showCreate && this.selectedCount === 1;
+    },
+    showDownload() {
+      if (this.showLimitedOptions) return false;
+      return (
+        !this.showCreate &&
+        !!this.permissions.download &&
+        this.selectedCount > 0
+      );
+    },
+    showArchive() {
+      if (this.showLimitedOptions || getters.isShare()) return false;
+      if (!this.permissions.create) return false;
+      return (
+        this.showCreate &&
+        this.selectedCount > 0 &&
+        !this.showUnarchive &&
+        !this.isSearchActive
+      );
+    },
+    showUnarchive() {
+      if (this.showLimitedOptions || getters.isShare()) return false;
+      if (!this.permissions.create) return false;
+      if (this.showCreate) return false;
+      if (this.selectedCount !== 1) return false;
+      const item = this.firstSelected;
+      return item && isArchivePath(item.path || item.from || item.name);
+    },
+    showShareAction() {
+      if (this.showLimitedOptions) return false;
+      return this.selectedCount <= 1 && this.showShare;
+    },
+    showSendToApp() {
+      if (!canNativeShare()) return false;
+      if (this.showLimitedOptions || this.showCreate) return false;
+      if (!this.permissions.download || this.selectedCount !== 1) return false;
+      const item = this.firstSelected;
+      return item && !item.isDir && item.type !== "directory";
+    },
+    showSendToAppInPreview() {
+      if (!canNativeShare()) return false;
+      if (!this.hasDownload || this.req?.isDir) return false;
+      return this.isPreview;
+    },
+    showRename() {
+      if (this.showLimitedOptions) return false;
+      return !this.showCreate && this.selectedCount === 1 && this.permissions.modify && !this.isSearchActive;
+    },
+    showPinAction() {
+      if (this.showLimitedOptions) return false;
+      if (!getters.isLoggedIn()) return false;
+      if (getters.isShare() && !state.shareInfo?.canEditShare) return false;
+      if (this.showCreate || this.isSearchActive) return false;
+      if (this.selectedCount !== 1) return false;
+      return getters.currentView() === "listingView";
+    },
+    pinActionLabel() {
+      return this.isPinnedSelection ? this.$t("buttons.unpinItem") : this.$t("buttons.pinItem");
+    },
+    isPinnedSelection() {
+      return !!this.firstSelected?.pinned;
+    },
+    showCopy() {
+      if (this.showLimitedOptions) return false;
+      return !this.showCreate && this.selectedCount > 0 && this.permissions.modify;
+    },
+    showCopyPath() {
+      if (this.showLimitedOptions) return false;
+      return !this.showCreate && this.selectedCount === 1 && !!state.user?.showCopyPath;
+    },
+    showOpenParentFolder() {
+      return (
+        !this.showCreate &&
+        this.selectedCount === 1 &&
+        (this.isSearchActive || this.showLimitedOptions || getters.currentTool()?.component === "AdvancedSearch")
+      );
+    },
+    showMove() {
+      if (this.showLimitedOptions) return false;
+      return !this.showCreate && this.selectedCount > 0 && this.permissions.modify;
+    },
+    showSelectAll() {
+      if (this.showLimitedOptions) return false;
+      return !this.showCreate && !this.isSearchActive && this.req?.items?.length > 0;
+    },
+    /** + control in listing / share directory context; disabled when the panel cannot be opened. */
+    showCreateToggle() {
+      if (this.showLimitedOptions || this.createOnly) return false;
+      return !this.isSearchActive;
+    },
+    createToggleDisabled() {
+      return !this.canOpenCreatePanel;
+    },
+    showDivider() {
+      if (this.showLimitedOptions || this.createOnly) return false;
+      return this.showCreateToggle || this.selectedCount > 0;
+    },
+    showSelectMultiple() {
+      if (this.showLimitedOptions) return false;
+      if (this.isMultiple || this.isSearchActive) {
+        return false;
+      }
+      if (state.user?.showSelectMultiple) {
+        return true;
+      }
+      if (getters.isMobile()) {
+        return true;
+      }
+      return false
+    },
+    hasOverflowItems() {
+      return this.showEdit || this.showDelete || this.showSave || this.showGoToRaw || this.hasDownload || this.showUnarchiveInOverflow;
+    },
+    showUnarchiveInOverflow() {
+      if (!this.permissions.create || getters.isShare()) return false;
+      const req = state.req;
+      return req && !req.isDir && isArchivePath(req.path || req.name);
+    },
+    showGoToRaw() {
+      if (!this.permissions.download) {
+        return false;
+      }
+      if (isMediaRequest(this.req)) {
+        return false;
+      }
+      const cv = getters.currentView();
+      return cv === "preview" || cv === "markdownViewer" || cv === "editor";
+    },
+    showEdit() {
+      const cv = getters.currentView();
+      return cv === "markdownViewer" && this.permissions.modify;
+    },
+    showDelete() {
+      if (this.showLimitedOptions) return false;
+      if (this.selectedCount === 0) {
+        return false;
+      }
+      const cv = getters.currentView();
+      return (
+        cv !== "settings" &&
+        !this.isSearchActive &&
+        !!this.permissions.delete
+      );
+    },
+    hasDownload() {
+      return this.selectedCount > 0 && !!this.permissions.download;
+    },
+    isPreview() {
+      return getters.isPreviewView();
+    },
+    showSave() {
+      const allowEdit = this.permissions.modify || (getters.isShare() && state.shareInfo.allowEdit);
+      return getters.currentView() === "editor" && allowEdit;
+    },
+    showOverflow() {
+      return getters.currentPromptName() === "OverflowMenu";
+    },
+    showAccess() {
+      if (this.showLimitedOptions) return false;
+      if (getters.isShare()) {
+        return false;
+      }
+      if (this.selectedCount > 1) {
+        return false;
+      }
+      return getters.isAdmin() && this.showCreate;
+    },
+    showShare() {
+      if (getters.isShare()) {
+        return false;
+      }
+      return this.permissions.share;
+    },
+    showContext() {
+      return getters.currentPromptName() === "ContextMenu";
+    },
+    onlyofficeEnabled() {
+      return globalVars.onlyOfficeUrl !== "";
+    },
+    isSearchActive() {
+      return state.isSearchActive;
+    },
+    isMultiple() {
+      return state.multiple;
+    },
+    user() {
+      return state.user;
+    },
+    centered() {
+      return this.showCentered || this.isMobileDevice || !this.posX || !this.posY;
+    },
+    isMobileDevice() {
+      return getters.isMobile();
+    },
+    isDarkMode() {
+      return getters.isDarkMode();
+    },
+    currentPrompt() {
+      return getters.currentPrompt();
+    },
+    markdownPreview() {
+      if (getters.currentView() !== 'editor') return false;
+      return isRichTextPreviewMimeType(state.req.type);
+    },
+  },
+  watch: {
+    hasOverflowItems: {
+      handler(hasItems) {
+        mutations.setContextMenuHasItems(hasItems);
+      },
+      immediate: true,
+    },
+    showContext: {
+      handler(newVal) {
+        if (newVal) {
+          // Always set positions when not animating to check for position props.
+          if (!this.isAnimating) {
+            this.setPositions();
+          }
+          // Initialize create state only once per menu session
+          if (!this.createStateInitialized) {
+            this.initializeCreateState();
+            this.createStateInitialized = true;
+          }
+        } else {
+          // Reset the flag when menu is hidden so it reinitializes next time
+          this.createStateInitialized = false;
+        }
+      },
+      immediate: true
+    }
+  },
+  methods: {
+    showInfoPrompt() {
+      if (!this.isPreview) {
+        mutations.closeHovers();
+      } else {
+        mutations.closeTopPrompt();
+      }
+      mutations.showPrompt({
+        name: "info",
+        props: {
+          item: this.firstSelected,
+        },
+      });
+    },
+    goToItem() {
+      const item = this.firstSelected;
+      url.goToItem(item.source, item.path, {}, true, getters.isShare());
+      mutations.closeHovers();
+    },
+    hideTooltip() {
+      hideInteractiveTooltip();
+    },
+    showTooltip(event, text) {
+      showHoverTooltip(text, event);
+    },
+    onCreateToggleClick() {
+      if (this.createToggleDisabled) return;
+      this.toggleShowCreate();
+    },
+    onCreateToggleMouseEnter(event) {
+      if (!this.createToggleDisabled) return;
+      this.showTooltip(event, this.$t("messages.noCreateOptions"));
+    },
+    toggleShowCreate() {
+      if (!this.canOpenCreatePanel) {
+        this.showCreate = false;
+        return;
+      }
+      this.showCreate = !this.showCreate;
+    },
+    shouldShowParentFolder() {
+      return this.isPreview && state.req.path !== "/";
+    },
+    showAccessPrompt() {
+      mutations.closeHovers();
+      const item = this.firstSelected;
+      const sourceName = item?.source || state.req.source;
+      const path = item?.path || state.req.path;
+      mutations.showPrompt({
+        name: "access",
+        props: {
+          sourceName: sourceName,
+          path: path,
+        },
+      });
+    },
+    // Animation methods
+    beforeEnter(el) {
+      this.isAnimating = true;
+      el.style.height = '0';
+      el.style.opacity = '0';
+    },
+    enter(el, done) {
+      el.style.transition = '';
+      el.style.height = '0';
+      el.style.opacity = '0';
+      // Force reflow
+      void el.offsetHeight;
+      // Calculate the height after ensuring all content is rendered
+      this.$nextTick(() => {
+        // Temporarily set to auto to get true height, then measure
+        el.style.height = 'auto';
+        el.style.visibility = 'hidden';
+        void el.offsetHeight; // Force reflow
+        const fullHeight = el.scrollHeight;
+        const fullWidth = el.scrollWidth;
+
+        // Adjust position now that we have dimensions
+        const BUFFER = 8;
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+        let newX = this.posX;
+        let newY = this.posY;
+
+        if (newX + fullWidth + BUFFER > screenWidth) newX = screenWidth - fullWidth - BUFFER;
+        if (newX < BUFFER) newX = BUFFER;
+        if (newY + fullHeight + BUFFER > screenHeight) newY = screenHeight - fullHeight - BUFFER;
+        if (newY < BUFFER) newY = BUFFER;
+
+        this.posX = newX;
+        this.posY = newY;
+
+        // Reset to 0 for animation
+        el.style.height = '0';
+        el.style.visibility = 'visible';
+        el.style.transition = 'height 0.3s, opacity 0.3s';
+        void el.offsetHeight; // Force reflow
+        // Animate to full height
+        el.style.height = `${fullHeight}px`;
+        el.style.opacity = '1';
+        setTimeout(() => {
+          this.isAnimating = false;
+          done();
+        }, 300);
+      });
+    },
+    leave(el, done) {
+      this.isAnimating = true;
+      el.style.transition = 'height 0.3s, opacity 0.3s';
+      el.style.height = `${el.scrollHeight}px`;
+      void el.offsetHeight;
+      el.style.height = '0';
+      el.style.opacity = '0';
+      setTimeout(() => {
+        this.isAnimating = false;
+        done();
+      }, 300);
+    },
+    startShowCreate() {
+      if (!this.canOpenCreatePanel) {
+        return;
+      }
+      this.showCreate = true;
+    },
+    showPrompt(value) {
+      return mutations.showPrompt(value);
+    },
+    showSharePrompt() {
+      mutations.closeHovers();
+      mutations.showPrompt({
+        name: "share",
+        props: {
+          item: this.selectedCount === 1 ? this.firstSelected : state.req
+        },
+      });
+    },
+    showRenamePrompt() {
+      mutations.closeHovers();
+      mutations.showPrompt({
+        name: "rename",
+        props: {
+          item: this.selectedCount === 1 ? this.firstSelected : state.req,
+          parentItems: []
+        },
+      });
+    },
+    showRenamePromptForPreview() {
+      mutations.closeTopPrompt(); // Close the ContextMenu (if it was open from preview)
+      // Get parent items from the listing
+      const parentItems = state.navigation.listing || [];
+      mutations.showPrompt({
+        name: "rename",
+        props: {
+          item: state.req,
+          parentItems: parentItems,
+        },
+      });
+    },
+    setPositions() {
+      const contextProps = getters.currentPrompt().props;
+      this.posX = contextProps.posX;
+      this.posY = contextProps.posY;
+    },
+    initializeCreateState() {
+      if (this.createOnly) {
+        this.showCreate = true;
+        return;
+      }
+      // Right-click / prompt: start in normal mode; user opens create via + or sidebar (createOnly).
+      this.showCreate = false;
+    },
+    toggleMultipleSelection() {
+      mutations.setMultiple(true);
+      mutations.closeHovers();
+    },
+    startDownload() {
+      mutations.closeTopPrompt();
+      const items = this.providedItems;
+      downloadFiles(items);
+    },
+    async sendToApp() {
+      mutations.closeTopPrompt();
+      const item = this.firstSelected;
+      if (!item) return;
+      await nativeShareFile(item);
+    },
+    async sendToAppFromPreview() {
+      mutations.closeTopPrompt();
+      if (!this.req) return;
+      await nativeShareFile(this.req);
+    },
+    showDeletePrompt() {
+      mutations.closeTopPrompt();
+      mutations.showPrompt({
+        name: 'delete',
+        props: {
+          items: this.providedItems,
+        },
+      });
+    },
+    showMovePrompt() {
+      mutations.closeHovers();
+      mutations.showPrompt({
+        name: 'move',
+        props: {
+          items: this.providedItems,
+          operation: 'move',
+        },
+      });
+    },
+    showCopyPrompt() {
+      mutations.closeHovers();
+      mutations.showPrompt({
+        name: 'copy',
+        props: {
+          items: this.providedItems,
+          operation: 'copy',
+        },
+      });
+    },
+    async togglePin() {
+      const item = this.firstSelected;
+      if (!item?.name || !getters.isLoggedIn()) {
+        return;
+      }
+      if (getters.isShare() && !state.shareInfo?.canEditShare) {
+        return;
+      }
+      mutations.closeHovers();
+      const directoryPath = state.req?.type === "directory"
+        ? state.req.path
+        : url.getParentDir(item.path);
+      const action = item.pinned ? "remove" : "add";
+      try {
+        if (getters.isShare()) {
+          await shareApi.patchPinnedItem({
+            hash: state.shareInfo.hash,
+            path: directoryPath,
+            name: item.name,
+            action,
+          });
+        } else {
+          const source = item.source || state.req?.source || state.sources.current;
+          if (!source) {
+            return;
+          }
+          await usersApi.patchPinnedItem({
+            source,
+            path: directoryPath,
+            name: item.name,
+            action,
+          });
+        }
+        mutations.setReload(true);
+      } catch (e) {
+        notify.showError(e);
+      }
+    },
+    async copyPathToClipboard() {
+      const item = this.firstSelected;
+      const path = item?.path || "";
+
+      await copyToClipboard(path);
+      mutations.closeHovers();
+    },
+    showNewDirPrompt() {
+      mutations.closeHovers();
+      // If the context menu was triggered on a directory, pass its path as base
+      const selectedItem = this.firstSelected;
+      let base = null;
+      if (selectedItem?.isDir) {
+        // Pass both path and source
+        base = {
+          path: selectedItem.path,
+          source: selectedItem.source,
+        };
+      }
+      mutations.showPrompt({
+        name: "newDir",
+        props: {
+          base: base,
+        },
+      });
+    },
+    showArchivePrompt() {
+      mutations.closeTopPrompt();
+      const items = this.providedItems.map(item => ({
+        path: item.path,
+        name: item.name,
+        source: item.source || state.req.source,
+      }));
+      if (items.length === 0) return;
+      mutations.showPrompt({
+        name: "archive",
+        props: {
+          items,
+          source: state.req.source,
+          currentPath: state.req.path || "/",
+        },
+      });
+    },
+    showUnarchivePrompt() {
+      mutations.closeTopPrompt();
+      const item = this.firstSelected;
+      if (!item) return;
+      this.openUnarchivePrompt(item);
+    },
+    showUnarchivePromptFromPreview() {
+      mutations.closeTopPrompt();
+      const req = state.req;
+      if (!req) return;
+      this.openUnarchivePrompt({ path: req.path, source: req.source, name: req.name });
+    },
+    openUnarchivePrompt(item) {
+      const path = item.path || item.from;
+      const source = item.source || state.req.source;
+      mutations.showPrompt({
+        name: "unarchive",
+        props: {
+          item: { path, source, name: item.name },
+        },
+      });
+    },
+    goToRaw() {
+      const source = state.req?.source || "";
+      const path = state.req?.path || "";
+      const openUrl = getters.isShare()
+        ? resourcesApi.getOpenFileURL(source, path, {
+            path: state.shareInfo.subPath,
+            hash: state.shareInfo.hash,
+          })
+        : resourcesApi.getOpenFileURL(source, path);
+      window.open(openUrl, "_blank");
+      mutations.closeHovers();
+    },
+    watchFile() {
+      mutations.closeHovers();
+      const source = state.req?.source || state.sources.current || "";
+      const path = state.req?.path || "/";
+      this.$router.push({
+        path: "/tools/fileWatcher",
+        query: {
+          path: path,
+          source: source,
+        },
+      });
+    },
+    async edit() {
+      this.$router.replace({ hash: '#edit' });
+    },
+    async switchToMarkdown() {
+      this.$router.replace({ hash: '#preview' });
+    },
+    async save() {
+      const button = "save";
+      buttons.loading("save");
+      try {
+        // Call the editor save handler directly and await completion
+        if (state.editorSaveHandler) {
+          await state.editorSaveHandler();
+        } else {
+          throw new Error("Editor save handler not found");
+        }
+        buttons.success(button);
+        notify.showSuccessToast(this.$t("editor.fileSaved"));
+      } catch (_e) {
+        // Don't show error notification here - API layer already showed it
+        buttons.done(button);
+      }
+      mutations.closeHovers();
+    },
+    showUploadPrompt() {
+      mutations.closeHovers();
+      let targetPath = state.req.path;
+      let targetSource = state.req.source;
+      const selectedItem = this.firstSelected;
+      if (selectedItem?.isDir) {
+        targetPath = selectedItem.path;
+        targetSource = selectedItem.source;
+      }
+      mutations.showPrompt({
+        name: "upload",
+        props: {
+          targetPath: targetPath,
+          targetSource: targetSource,
+        },
+      });
+    },
+    openParentFolder() {
+      const item = this.firstSelected;
+      const parentPath = url.removeLastDir(item.path) || "/";
+      url.goToItem(item.source, parentPath, {}, this.showLimitedOptions);
+      mutations.closeHovers();
+    },
+    selectAllItems() {
+      mutations.selectAllItems()
+    },
+  },
+};
+</script>
+
+<style scoped>
+#context-menu {
+  position: absolute;
+  z-index: 1000;
+  background-color: var(--background);
+  max-width: 20em;
+  min-width: 13em;
+  min-height: 4em;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-radius: 1em;
+  padding: 0.5em;
+}
+
+#context-menu.centered {
+  top: 50% !important;
+  left: 50% !important;
+  -webkit-transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%);
+}
+
+.selected-count-header {
+  border-radius: 1em;
+  cursor: unset;
+}
+
+/* Circle for up to 3 digits; 1000+ keeps pill shape from .button */
+.selected-count-header--circle {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: 2em;
+  height: 2em;
+  min-width: 2em;
+  min-height: 2em;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.context-menu-header > .action i {
+  padding: 0.25em;
+}
+
+.context-menu-create-toggle--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#context-menu .action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+#context-menu > div,
+#context-menu > button {
+  width: 100%;
+}
+
+#context-menu > span {
+  display: inline-block;
+  margin-left: 1em;
+  color: var(--textPrimary);
+  margin-right: auto;
+}
+
+#context-menu .action span {
+  display: none;
+}
+
+/* Animation styles */
+.expand-enter-active,
+.expand-leave-active {
+  transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.expand-enter,
+.expand-leave-to {
+  height: 0 !important;
+  opacity: 0;
+}
+
+.context-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 0.5em;
+  padding-right: 0.5em;
+}
+</style>

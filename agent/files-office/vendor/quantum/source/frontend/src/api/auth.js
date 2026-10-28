@@ -1,0 +1,488 @@
+import { fetchJSON, fetchURL } from '@/api/utils'
+import { notify } from '@/notify'
+import { getApiPath } from '@/utils/url.js'
+import { state, mutations } from '@/store'
+import i18n from '@/i18n'
+
+// POST /api/auth/password/change-required
+export async function changeRequiredPassword(username, currentPassword, newPassword, otp) {
+  if (!otp) {
+    otp = "";
+  }
+  const params = { username };
+  const apiPath = getApiPath("auth/password/change-required", params);
+  const res = await fetch(apiPath, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Password": encodeURIComponent(currentPassword),
+      "X-Secret": otp,
+    },
+    body: JSON.stringify({
+      password: newPassword,
+      passwordConfirm: newPassword,
+    }),
+  });
+
+  const bodyText = await res.text();
+  let body;
+  try {
+    body = JSON.parse(bodyText);
+  } catch {
+    body = { message: bodyText };
+  }
+  if (res.status !== 200) {
+    const msg = body.message || "Forbidden";
+    throw new Error(msg);
+  }
+}
+
+// POST /api/auth/login
+export async function login(username, password, recaptcha, otp) {
+  if (!otp) {
+    otp = ''
+  }
+  if (!recaptcha) {
+    recaptcha = ''
+  }
+  if (!password) {
+    password = ''
+  }
+
+  try {
+    const params = { username, recaptcha };
+    const apiPath = getApiPath('auth/login', params);
+    const res = await fetch(apiPath, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'X-Password': encodeURIComponent(password),
+        'X-Secret': otp,
+      }
+    });
+
+    const bodyText = await res.text();
+    let body;
+
+    try {
+      body = JSON.parse(bodyText);
+    } catch {
+      body = { message: bodyText };
+    }
+
+    if (res.status !== 200) {
+      const msg = body.message || 'Forbidden';
+      throw new Error(msg);
+    }
+  } catch (err) {
+    throw err instanceof Error ? err : new Error(String(err));
+  }
+}
+
+// POST /api/auth/logout
+export async function logout() {
+  try {
+    const apiPath = getApiPath('auth/logout')
+    await fetchURL(apiPath, { method: 'POST' })
+  } catch (err) {
+    notify.showError(err.message || 'Failed to logout')
+    throw err
+  }
+}
+
+// POST /api/auth/signup
+export async function signup(username, password, otp) {
+  const apiPath = getApiPath('auth/signup')
+  const res = await fetch(apiPath, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      username,
+      password,
+      ...(otp ? { otp } : {}),
+    }),
+  })
+
+  if (res.status !== 201) {
+    let errorMessage = res.status
+    try {
+      const errorData = await res.json()
+      if (errorData.message) {
+        errorMessage = errorData.message
+      }
+    } catch (_parseError) {
+      // If parsing fails, keep the status code as error message
+    }
+    throw new Error(errorMessage)
+  }
+}
+
+// POST /api/auth/otp/generate
+export async function generateOTP(username, password) {
+  const params = { username }
+  try {
+    const apiPath = getApiPath('auth/otp/generate', params)
+    const res = await fetch(apiPath, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'X-Password': encodeURIComponent(password),
+      }
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const msg = body.message || 'Failed to generate OTP'
+      throw new Error(msg)
+    }
+    return body
+  } catch (error) {
+    notify.showError(error.message || error || 'Failed to generate OTP')
+    throw error
+  }
+}
+
+// POST /api/auth/otp/verify
+export async function verifyOTP(username, password, otp) {
+  const params = { username }
+  try {
+    const apiPath = getApiPath('auth/otp/verify', params)
+    const res = await fetch(apiPath, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'X-Password': encodeURIComponent(password),
+        'X-Secret': otp,
+      }
+    })
+    if (res.status !== 200) {
+      let msg = 'Failed to verify OTP'
+      try {
+        const errBody = await res.json()
+        if (errBody.message) {
+          msg = errBody.message
+        }
+      } catch {
+        // keep default message
+      }
+      throw new Error(msg)
+    }
+  } catch (error) {
+    notify.showError(error.message || error || 'Failed to verify OTP')
+    throw error
+  }
+}
+
+// POST /api/auth/renew
+export async function renew() {
+  try {
+    const apiPath = getApiPath('auth/renew')
+    await fetchURL(apiPath, { method: 'POST' })
+  } catch (err) {
+    notify.showError(err.message || 'Failed to renew token')
+    throw err
+  }
+}
+
+// GET /api/auth/token/list
+export async function getApiKeys() {
+  try {
+    const apiPath = getApiPath('auth/token/list')
+    return await fetchJSON(apiPath)
+  } catch (err) {
+    // ignore 404 errors
+    if (err.status !== 404) {
+      notify.showError(err.message || 'Failed to get API tokens')
+      throw err
+    }
+    throw err
+  }
+}
+
+// PUT /api/auth/token
+export async function createApiKey(params) {
+  try {
+    const apiPath = getApiPath('auth/token', params)
+    await fetchURL(apiPath, {
+      method: 'POST'
+    })
+  } catch (err) {
+    notify.showError(err.message || 'Failed to create API token')
+    throw err
+  }
+}
+
+// DELETE /api/auth/token
+export async function deleteApiKey(params) {
+  try {
+    const apiPath = getApiPath('auth/token', params)
+    await fetchURL(apiPath, {
+      method: 'DELETE'
+    })
+  } catch (err) {
+    notify.showError(err.message || 'Failed to delete API token')
+    throw err
+  }
+}
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (const b of bytes) {
+    binary += String.fromCharCode(b)
+  }
+  return btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+}
+
+function base64ToArrayBuffer(base64url) {
+  // Convert URL-safe base64 to standard base64
+  let base64 = base64url.replace(/-/g, '+').replace(/_/g, '/')
+  while (base64.length % 4) base64 += '='
+  const binary = atob(base64)
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+  return bytes.buffer
+}
+
+function preprocessPublicKeyOptions(options) {
+  const opts = { ...options }
+  if (typeof opts.challenge === 'string') {
+    opts.challenge = base64ToArrayBuffer(opts.challenge)
+  }
+  if (opts.user && typeof opts.user.id === 'string') {
+    opts.user = { ...opts.user, id: base64ToArrayBuffer(opts.user.id) }
+  }
+  if (opts.allowCredentials && Array.isArray(opts.allowCredentials)) {
+    opts.allowCredentials = opts.allowCredentials.map(c => ({
+      ...c,
+      id: typeof c.id === 'string' ? base64ToArrayBuffer(c.id) : c.id,
+    }))
+  }
+  if (opts.excludeCredentials && Array.isArray(opts.excludeCredentials)) {
+    opts.excludeCredentials = opts.excludeCredentials.map(c => ({
+      ...c,
+      id: typeof c.id === 'string' ? base64ToArrayBuffer(c.id) : c.id,
+    }))
+  }
+  return opts
+}
+
+function formatCredentialResponse(cred) {
+  return {
+    id: cred.id,
+    rawId: arrayBufferToBase64(cred.rawId),
+    type: cred.type,
+    response: {
+      clientDataJSON: arrayBufferToBase64(cred.response.clientDataJSON),
+      authenticatorData: arrayBufferToBase64(cred.response.authenticatorData),
+      signature: arrayBufferToBase64(cred.response.signature),
+      userHandle: cred.response.userHandle ? arrayBufferToBase64(cred.response.userHandle) : null,
+    },
+  }
+}
+
+function formatAttestationResponse(cred) {
+  return {
+    id: cred.id,
+    rawId: arrayBufferToBase64(cred.rawId),
+    type: cred.type,
+    response: {
+      clientDataJSON: arrayBufferToBase64(cred.response.clientDataJSON),
+      attestationObject: arrayBufferToBase64(cred.response.attestationObject),
+      transports: cred.response.getTransports ? cred.response.getTransports() : [],
+    },
+  }
+}
+
+export async function beginPasskeyLogin(username, password) {
+  const apiPath = getApiPath('auth/webauthn/begin-login', { username })
+  const res = await fetch(apiPath, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'X-Password': encodeURIComponent(password),
+    },
+  })
+
+  const body = await res.json().catch(() => ({}))
+  if (res.status !== 200) {
+    const msg = body.message || 'Passkey login failed'
+    throw new Error(msg)
+  }
+
+  const credential = await navigator.credentials.get({ publicKey: preprocessPublicKeyOptions(body.publicKey) })
+  const formatted = formatCredentialResponse(credential)
+
+  const finishPath = getApiPath('auth/webauthn/finish-login', { session_id: body.sessionID })
+  const finishRes = await fetch(finishPath, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(formatted),
+  })
+
+  if (finishRes.status !== 200) {
+    const errBody = await finishRes.json().catch(() => ({}))
+    throw new Error(errBody.message || 'Passkey login failed')
+  }
+}
+
+function passkeyActorPasswordHeaders(actorPassword) {
+  if (actorPassword === undefined || actorPassword === null) {
+    return {}
+  }
+  return { 'X-Password': encodeURIComponent(actorPassword) }
+}
+
+function isPasskeyActorPasswordRequired(status, message) {
+  if (status !== 401) {
+    return false
+  }
+  const msg = message || ''
+  return (
+    msg.includes('X-Password') ||
+    msg.includes('password is required') ||
+    msg.includes('invalid password')
+  )
+}
+
+function passkeyHttpError(message, status) {
+  const err = new Error(message)
+  err.status = status
+  return err
+}
+
+export function isPasskeyActorPasswordCancelled(err) {
+  return err?.cancelled === true || err?.name === 'PasskeyActorPasswordCancelled'
+}
+
+function passkeyActorPasswordCancelledError() {
+  const err = new Error('Password confirmation cancelled')
+  err.name = 'PasskeyActorPasswordCancelled'
+  err.cancelled = true
+  return err
+}
+
+function promptPasskeyActorPassword(i18nKey) {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (fn, value) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      fn(value)
+    }
+    mutations.showPrompt({
+      name: 'password',
+      cancel: () => {
+        finish(reject, passkeyActorPasswordCancelledError())
+      },
+      props: {
+        infoText: i18n.global.t(i18nKey || 'prompts.confirmPasswordToSaveUser'),
+        submitLabel: i18n.global.t('general.confirm'),
+        submitCallback: async (actorPassword) => {
+          finish(resolve, actorPassword)
+        },
+      },
+    })
+  })
+}
+
+async function runBeginPasskeyRegistration(actorPassword) {
+  const passwordHeaders = passkeyActorPasswordHeaders(actorPassword)
+  const apiPath = getApiPath('auth/webauthn/begin-register')
+  const res = await fetch(apiPath, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: passwordHeaders,
+  })
+
+  const body = await res.json().catch(() => ({}))
+  if (res.status !== 200) {
+    const msg = body.message || 'Failed to begin passkey registration'
+    throw passkeyHttpError(msg, res.status)
+  }
+
+  const credential = await navigator.credentials.create({ publicKey: preprocessPublicKeyOptions(body.publicKey) })
+  const formatted = formatAttestationResponse(credential)
+
+  const name = prompt('Name for this passkey (e.g. "iPhone", "YubiKey"):') || 'Passkey'
+  const finishPath = getApiPath('auth/webauthn/finish-register', { session_id: body.sessionID, name })
+  const finishRes = await fetch(finishPath, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      ...passwordHeaders,
+    },
+    body: JSON.stringify(formatted),
+  })
+
+  if (finishRes.status !== 200) {
+    const errBody = await finishRes.json().catch(() => ({}))
+    throw passkeyHttpError(errBody.message || 'Failed to register passkey', finishRes.status)
+  }
+}
+
+export async function beginPasskeyRegistration(options = {}) {
+  if (options.actorPassword !== undefined) {
+    return runBeginPasskeyRegistration(options.actorPassword)
+  }
+  try {
+    return await runBeginPasskeyRegistration(undefined)
+  } catch (err) {
+    const canRetry =
+      state.user?.loginMethod === 'password' &&
+      options.skipActorPasswordConfirm !== true &&
+      isPasskeyActorPasswordRequired(err.status, err.message)
+    if (!canRetry) {
+      throw err
+    }
+    const actorPassword = await promptPasskeyActorPassword(options.actorPasswordPromptI18nKey)
+    return beginPasskeyRegistration({
+      ...options,
+      actorPassword,
+      skipActorPasswordConfirm: true,
+    })
+  }
+}
+
+async function runDeletePasskeyCredential(credentialId, actorPassword) {
+  const apiPath = getApiPath(`auth/webauthn/${encodeURIComponent(credentialId)}`)
+  const res = await fetch(apiPath, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+    headers: passkeyActorPasswordHeaders(actorPassword),
+  })
+
+  if (res.status !== 200) {
+    const errBody = await res.json().catch(() => ({}))
+    throw passkeyHttpError(errBody.message || 'Failed to delete passkey', res.status)
+  }
+}
+
+export async function deletePasskeyCredential(credentialId, options = {}) {
+  if (options.actorPassword !== undefined) {
+    return runDeletePasskeyCredential(credentialId, options.actorPassword)
+  }
+  try {
+    return await runDeletePasskeyCredential(credentialId, undefined)
+  } catch (err) {
+    const canRetry =
+      state.user?.loginMethod === 'password' &&
+      options.skipActorPasswordConfirm !== true &&
+      isPasskeyActorPasswordRequired(err.status, err.message)
+    if (!canRetry) {
+      throw err
+    }
+    const actorPassword = await promptPasskeyActorPassword(options.actorPasswordPromptI18nKey)
+    return deletePasskeyCredential(credentialId, {
+      ...options,
+      actorPassword,
+      skipActorPasswordConfirm: true,
+    })
+  }
+}

@@ -1,0 +1,249 @@
+import { reactive } from 'vue';
+import { detectLocale } from "@/i18n";
+import { globalVars } from "@/utils/constants";
+import type { StoreState } from "./types";
+
+export const state: StoreState = reactive({
+  disableEventThemes: eventTheme(),
+  tooltip: {
+    show: false,
+    content: "",
+    component: null,
+    componentProps: null,
+    x: 0,
+    y: 0,
+    pointerEvents: false,
+    width: null,
+  },
+  previousHistoryItem: {
+    name: "",
+    source: "",
+    path: "",
+    isShare: false,
+  },
+  contextMenuHasItems: false,
+  deletedItem: false,
+  showOverflowMenu: false,
+  sessionId: "",
+  isSafari: /^((?!chrome|android).)*safari/i.test(navigator.userAgent),
+  activeSettingsView: "",
+  isSearchActive: false,
+  showSidebar: false,
+  displayPreferences: {},
+  enforcedUserDefaults: {},
+  usages: {},
+  editor: null,
+  editorDirty: false,
+  editorSaveHandler: null, // Function to save editor content
+  editorStats: {
+    lines: 0,
+    words: 0,
+    chars: 0,
+  },
+  editorFontSize: parseInt(localStorage.getItem('editorFontSize'), 10) || 14,
+  realtimeActive: undefined,
+  realtimeDownCount: 0,
+  popupPreviewSourceInfo: null, // { source, path, size, url, modified } - set by Icon when hovering
+  sources: {
+    current: "",
+    count: 1,
+    hasSourceInfo: false,
+    info: {},
+  },
+  user: {
+    preview: {
+      audio: true,
+      video: true,
+      image: true,
+      popup: true,
+      models: true,
+    },
+    loginType: "",
+    username: "",
+    quickDownloadEnabled: false,
+    gallerySize: 3,
+    singleClick: false,
+    stickySidebar: stickyStartup(),
+    hideFilesInTree: false,
+    deleteAfterArchive: true,
+    locale: detectLocale(), // Default to the locale from moment
+    viewMode: 'normal', // Default to mosaic view
+    showHidden: false, // Default to false, assuming this is a boolean
+    scopes: [],
+    permissions: {}, // Default to an empty object for permissions
+    darkMode: globalVars.darkMode === true,
+    disableSettings: false,
+    debugOffice: false, // Debug mode for OnlyOffice integration
+    preferEditorForMarkdown: false,
+    hideFileExt: "",   // files with certain extensions to hide in UI
+    profile: { // Example of additional user properties
+      username: '', // Default to an empty string
+      email: '', // Default to an empty string
+      avatarUrl: '' // Default to an empty string
+    },
+    fileLoading: {
+      maxConcurrentUpload: 3,
+      uploadChunkSizeMb: 5,
+      clearAll: false
+    }
+  },
+  req: {
+    sorting: {
+      by: 'name', // Initial sorting field
+      asc: true,  // Initial sorting order
+    },
+    items: [],
+    numDirs: 0,
+    numFiles: 0,
+  },
+  listing: {
+    category: "folders",
+    letter: "A",
+    scrolling: false,
+    scrollRatio: 0,
+    listingScrollTop: 0,
+  },
+  previewRaw: "",
+  oldReq: {},
+  clipboard: {
+    key: "",
+    items: [],
+  },
+  sharePassword: "",
+  loading: {}, // map of loadType -> true, see mutations.setLoading
+  reload: false,
+  selected: [],
+  lastSelectedIndex: null,
+  multiple: false,
+  upload: {
+    uploads: {},
+    queue: [],
+    progress: [],
+    sizes: [],
+    isUploading: false,
+  },
+  prompts: [],
+  promptIdCounter: 0,
+  show: null,
+  showConfirm: null,
+  route: {},
+  settings: {
+    signup: false,
+    createUserDir: false,
+    userHomeBasePath: "",
+    rules: [],
+    frontend: {
+      disableExternal: false,
+      name: "",
+      files: "",
+    },
+  },
+  navigation: {
+    show: false,
+    hoverNav: false,
+    listing: null,
+    currentIndex: -1,
+    previousItem: null,
+    nextItem: null,
+    previousLink: "",
+    nextLink: "",
+    previousRaw: "",
+    nextRaw: "",
+    timeout: null,
+    enabled: false,
+    isTransitioning: false,
+    transitionStartTime: null,
+    /** Drives nextPrevious nav buttons during image/video swipe gestures */
+    gestureHint: null,
+    gestureHintCommitReady: false,
+    gestureHintFlashClose: false,
+  },
+  playbackQueue: loadPlaybackQueue(),
+  shareInfo: {
+    isShare: false,
+    disableThumbnails: false,
+    hash: "",
+    token: "",
+    subPath: "",
+    passwordValid: false,
+    enforceDarkLightMode: "",
+    disableSidebar: false,
+    isValid: true,
+    shareType: "",
+    title: "",
+    description: "",
+  },
+  notificationHistory: loadNotificationHistory(), // Session-based notification history (persists across refreshes)
+  sidebar: {
+    width: getSidebarWidth(), // in em
+    mode: getSidebarMode(),
+    isResizing: false,
+    minWidth: 17, // in em
+    maxWidth: 48, // in em
+  },
+});
+
+/**
+ * Load notification history from sessionStorage
+ * @returns {Array}
+ */
+function loadNotificationHistory() {
+  try {
+    const stored = sessionStorage.getItem('notificationHistory');
+    return stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    console.error('Failed to load notification history:', error);
+    return [];
+  }
+}
+
+/**
+ * Load sidebar width from localStorage or use default size
+ * @returns {number}
+ */
+function getSidebarWidth() {
+  const savedWidth = localStorage.getItem("sidebarWidth");
+  return savedWidth ? parseFloat(savedWidth) : 20; // 20em
+}
+
+function getSidebarMode() {
+  const savedMode = localStorage.getItem('sidebarMode');
+  return savedMode === 'navigation' ? 'navigation' : 'links'; // default 'links'
+}
+
+function stickyStartup() {
+  const stickyStatus = localStorage.getItem("stickySidebar");
+  return stickyStatus === "true"
+}
+
+function eventTheme() {
+  const disableEventThemes = localStorage.getItem("disableEventThemes");
+  return disableEventThemes === "true"
+}
+
+/**
+ * Loads playback queue from localStorage.
+ * @returns {Object} The playback queue state
+ *   @property {Array}  queue          - Array of media items
+ *   @property {number} currentIndex   - Index of the currently playing item, or -1
+ *   @property {string} mode           - 'single' | 'sequential' | 'shuffle'
+ *   @property {boolean} isPlaying     - False on load
+ *   @property {string} loop           - 'off' | 'all' | 'single'
+ */
+function loadPlaybackQueue() {
+  try {
+    const storedQueue = sessionStorage.getItem('playbackQueue');
+    if (!storedQueue) return { queue: [], currentIndex: -1, mode: 'single', isPlaying: false, loop: 'off' };
+    const playback = JSON.parse(storedQueue);
+    if (Array.isArray(playback.queue) && typeof playback.currentIndex === 'number' && typeof playback.mode === 'string') {
+      return {
+        queue: playback.queue,
+        currentIndex: playback.currentIndex,
+        mode: playback.mode,
+        isPlaying: false,
+        loop: playback.loop || 'off',
+      };
+    }
+  } catch (_) { /* ignore */ }
+  return { queue: [], currentIndex: -1, mode: 'single', isPlaying: false, loop: 'off' };
+}
