@@ -1,6 +1,6 @@
 ---
 name: subagents
-description: Coordinate other BashKitten agent sessions: delegate child work, send peer messages and receive results. Use normal assistant replies to talk to the user. Read before using agents.
+description: "Coordinate other BashKitten agent sessions: delegate child work, send peer messages and receive results. Use normal assistant replies to talk to the user. Read before using agents."
 ---
 
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
