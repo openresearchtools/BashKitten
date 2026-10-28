@@ -53,6 +53,41 @@ source/notices, modular updates and clean-removal acceptance. It is researched
 planning, not delivered implementation. Existing remote transport/authorization
 and service-lifetime ownership remain in force.
 
+### Later 28 October amendment: Collabora and immediate browser iteration
+
+The user now selects **Collabora Online** instead of Euro-Office throughout the
+active Files/Office/References plan. Earlier suite-specific paragraphs above
+record the previous choice; this amendment supersedes them. One shared
+`coolwsd`/kit/engine service per owning environment replaces the old Office
+PostgreSQL/RabbitMQ/Redis stack. Use native WOPI, separate human/agent session
+views, UNO/kit scripting, native saves/exports and the native history host
+handshake. Keep full snapshot retention and the required References/citation/
+Systematic Reviewer scope across Writer, Calc and Impress and native Termux.
+The detailed plan records capability gates rather than claiming implementation.
+
+Keep Quantum updatable through a separately versioned Collabora add-on, reusing
+pinned upstream WOPI source and a minimal documented provider/launch hook. No
+large changes to Quantum internals or Mozilla; no new sync engine. Office opens
+with light UI and light document canvas, independent of OS/saved dark settings,
+without changing authored cell/slide/document colors. Prefer native launch and
+WOPI settings; expose only a missing policy seam if required.
+
+The immediate browser batch includes clean old-manager/viewer removal while
+retaining pickers/Changes/attachments, normal Files tab-launch hooks, the small
+privileged References extension host, and the reported Android excessively tall
+default chat/message-window regression. Diagnose shared CSS/autogrow/viewport
+ownership and apply the smallest correct sizing fix; verify keyboard, rotation,
+drafts, content growth/shrink and desktop behavior. Do not assume it is a one-line
+native Gecko defect before reproducing it.
+
+The user expressly authorizes building/installing this boundary as an **early
+integration iteration build**, even while the pluggable backends are unfinished,
+so their development/testing does not require repeated browser rebuilds. This
+narrowly supersedes conflicting first-build sequencing below for that batch.
+It does not drop any feature, permit false completion claims, change AI build
+ownership or replace full final installed acceptance. The frozen original/tag
+is unchanged. See the detailed plan section 15.3 for the build boundary.
+
 ## Agreed original baseline
 
 The user-agreed starting plan is frozen at commit
@@ -80,7 +115,8 @@ updates. Explicit later user decisions take precedence where they amend a
 requirement, without erasing the original record.
 
 **Implementation mandate:** every feature in this plan is equally required.
-Implement and integrate the complete scope before the first full BashKitten
+Except for the later-authorized 28 October browser-boundary iteration build,
+implement and integrate the complete scope before the first full BashKitten
 main-app candidate builds, then test all features, fix blockers across the
 scope and batch the next builds. Independent component builds can iterate
 earlier and faster. Section 17 defines this execution rule; feature order is
@@ -3067,7 +3103,8 @@ repositories, build inputs, artifacts, documentation and logs.
    dependencies, package recipes and matching companion components. Keep a
    per-feature completion/blocker record against this plan's requirements and
    acceptance cases; broad workstream labels must not conceal missing subfeatures.
-   Before the first full Android/Linux main-app builds, review the integrated
+   Apart from the explicitly authorized 28 October browser-boundary iteration
+   build, before the first full Android/Linux main-app builds review the integrated
    source for the complete scope. No feature stub or “wire after this build”
    item may pass that checkpoint. Feature code being present is not yet proof
    of runtime correctness; that is established after installing the candidate.
@@ -3075,8 +3112,9 @@ repositories, build inputs, artifacts, documentation and logs.
    modules and iterate independently buildable XFCE, Termux, native helpers and
    packages without waiting for unrelated features. Use early source/API checks
    and isolated native probes for uncertain interfaces. These checks do not
-   authorize a preliminary full BashKitten build containing only Display, Phone
-   or another subset. They also do not replace installed product acceptance.
+   authorize other preliminary full BashKitten builds containing only Display,
+   Phone or another subset; the later 28 October browser-boundary exception is
+   specifically authorized above. They also do not replace installed product acceptance.
    Downloadable AI runtimes still build only in the daughter GitHub Actions;
    their existing build ownership is unchanged.
 3. **Build the first integrated main-app candidates with all features included.**

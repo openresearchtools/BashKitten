@@ -20,7 +20,7 @@ desktop Zotero application as a backend. Reuse its relevant reference-management
 translation, resolver and capture source/behavior in our backend and connector,
 adapting only what that separation requires.
 
-Use ordinary web tabs for File Browser Quantum, Euro-Office and our References
+Use ordinary web tabs for File Browser Quantum, Collabora Online and our References
 manager. Keep main Mozilla changes limited to small launch/lifecycle hooks and
 a small privileged References capture/resolver extension. Reuse actual Zotero
 Connector save logic with BashKitten names/icons/styling; retain donor attribution
@@ -34,9 +34,9 @@ the ordinary local service URL or the exact Chisel-forwarded loopback mapping.
 Quantum opens Office through its own web UI; add no Office-specific Mozilla
 integration. `office-diff` is an optional Pi/CLI tool over our Office snapshots
 only, with no UI/Git/Changes integration. Reuse native Office collaboration,
-automatic force-save and Version History choose/open/restore with minimal
-storage/API adapters. Pi can open/edit/save/export and view via the native APIs
-and normal browser URLs. Test modules independently without browser rebuilds.
+native autosave/WOPI writes and the native history action/restore handshake,
+with a minimal host snapshot list/storage adapter where required. Pi can
+open/edit/save/export and view via native APIs and normal browser URLs. Test modules independently without browser rebuilds.
 If large component builds need more capacity, additional build repos may produce
 collected Linux/Termux artifacts for the normal packages, not separate releases.
 Use ordinary GitHub Actions caches and uploaded artifacts only; the user rejects
@@ -44,9 +44,10 @@ GHCR registry-cache/image publishing for these builds. Split builder repos only
 as needed for measured target cache capacity; do not substitute external storage.
 
 Each owning native Linux, VM/container or Termux environment has exactly one
-Quantum server and one Euro-Office stack, including its required database/queue/
-cache services, shared by all its chats, projects, folders and documents. Never
-launch the stack per chat/project/tab. Libraries have separate project databases
+Quantum server and one Collabora Online server with its native kit workers,
+shared by all chats, projects, folders and documents. Collabora does not inherit
+Euro-Office's PostgreSQL/RabbitMQ/Redis stack. Never launch the stack per
+chat/project/tab. Libraries have separate project databases
 outside repositories, served by one References module; attachments belong in
 the project's Bibliography folder. Office snapshots stay outside projects.
 Default to on-demand component startup through the existing backend owner:
@@ -62,8 +63,8 @@ all three editors and independently iterable modules remain required; record
 technical blockers honestly rather than silently reducing scope.
 
 Citations belong to a replaceable References Office plugin and the References
-backend, using native Euro-Office fields/anchors/APIs/dialogs, not a large
-hardcoded Office fork. Users see normal style-rendered citations; Pi reads the
+backend, using native Collabora fields/anchors, UNO/kit APIs and JS extension
+dialogs, not a large hardcoded Office fork. Users see normal style-rendered citations; Pi reads the
 rendered text plus field/reference identities and can insert/edit those same
 citations through the plugin. Preserve citation fields during ordinary prose
 edits. Typed citation codes are optional input that becomes managed fields.
@@ -78,6 +79,32 @@ syntax. The acceptance target is equivalent metadata/PDF retrieval for the same
 identifier batch as native Zotero on the same machine/network with matched
 resolver/access conditions. Do not replace this with a minimal DOI lookup or
 aggressive parallel downloader; investigate and record parity differences.
+
+Latest 28 October amendments replace the active Euro-Office design with
+Collabora Online throughout. Use its native WOPI integration, separate human/Pi
+views and authenticated browserless WebSocket/UNO/script sessions; verify actual
+released extension gates and native Termux support. Reuse upstream Quantum's
+pinned Collabora/WOPI work, but keep our integration as a separately versioned
+add-on with only a tiny documented provider/launch hook in Quantum. Do not spread
+WOPI, snapshot, Pi or citation logic through Quantum internals or modify its
+OnlyOffice protocol. Maintain a small named patch series and upstream-update
+contract tests. Prefer native upstream support and remove redundant adapters.
+
+Always open Collabora with light UI **and light document canvas**, preserving
+stored cell/font/slide colors. Use native `ui_defaults=UITheme=light;SavedUIState=false`
+and WOPI browser settings for dark-background preferences; verify runtime toggle/
+Interface Settings policy rather than assuming launch defaults lock the canvas.
+Only a proven missing policy hook justifies a small isolated Collabora patch.
+
+The user explicitly authorizes an early **browser integration iteration build**
+after the small Files launch/References host hooks, clean old-viewer removal and
+Android excessively tall default chat/message-window sizing fix. Inspect the
+existing shared UI/viewport/autogrow owner and make the smallest correct fix;
+do not assume the root cause or guarantee one line. Preserve folder pickers,
+Git Changes, attachments and desktop/keyboard/rotation behavior. This narrowly
+supersedes older no-partial-browser-build sequencing for that batch, allowing
+pluggable backends to be completed/tested without rebuilding Mozilla repeatedly.
+It is not complete feature acceptance; all backend/platform requirements remain.
 
 ## 19 October Android SDK removal and source updates
 
@@ -190,8 +217,8 @@ supersedes older display/frontend/lifetime requirements only where stated, and
 does not authorize transport/authentication fallbacks or a Pi reimplementation.
 The Pi runtime update is now pinned below; installed acceptance remains pending.
 All features in this plan are equally mandatory, including user-optional or
-default-Off functions and their integration, packaging and acceptance. Implement
-and integrate the complete feature scope before the first full BashKitten
+default-Off functions and their integration, packaging and acceptance. Except for the explicitly authorized 28 October browser-boundary iteration
+build above, implement and integrate the complete feature scope before the first full BashKitten
 Android/Linux candidate builds. Then test all features, fix blockers across
 workstreams, batch the next necessary full builds and repeat until complete.
 Do not run a 40–60+ minute full build/test cycle for one feature before starting

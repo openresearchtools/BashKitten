@@ -3,7 +3,8 @@
 Requested and researched **28 October 2026**. **Plan only:** this document does
 not claim that any component is imported, ported, integrated or accepted. The
 research baseline is BashKitten `dd8db0849b0f4a0bc3d3960b2d1953ffda007a86`.
-Implementation and acceptance evidence must be recorded separately.
+Implementation and acceptance evidence must be recorded separately in
+[the Office status record](office-integration-status.md).
 
 ## 1. Controlling user decisions
 
@@ -32,6 +33,37 @@ The library manager, capture connector and agent-facing descriptions are named
 **References**. Bibliography remains the formatted-output command in Office and
 the originally requested attachment folder name; internal storage/documentation
 identifiers do not require renaming merely to change the product label.
+
+### User amendment — 28 October 2026: Collabora selection and browser-first iteration
+
+The user replaces Euro-Office with **Collabora Online** throughout the active
+architecture: Quantum document opening, Pi live editing, native saves/exports,
+snapshot history, References citations, packaging, source/notices and builds.
+The earlier Euro-Office design remains recoverable at BashKitten commit
+`3720afeb76`; its DocumentServer/OnlyOffice APIs are no longer implementation
+requirements. The decision follows a local comparison showing substantially
+lower server memory for Collabora. That observation is not a controlled fourfold
+performance guarantee or installed-product acceptance.
+
+Office must open with a **light UI and light document canvas**, independently of
+BashKitten's surrounding theme, the operating system's theme and old browser
+preferences. Preserve actual stored cell fills, font colors, slide backgrounds
+and document formatting. Do not recolor document data to simulate a light view.
+
+Keep Quantum mergeable/updatable: the Collabora/WOPI adapter is a separately
+versioned add-on module with its own tests and package. Reuse an upstream hook if
+available; otherwise keep one small, named, documented launcher/registration
+patch. Do not fold WOPI, storage/history, agent editing or citation logic into
+Quantum's existing OnlyOffice implementation or spread it across its internals.
+Recheck released upstream Collabora support on upgrades and retire our hook when
+an equivalent native extension point becomes available without losing scope.
+
+The user additionally authorizes an **early browser integration build** after the
+small native hooks, old file-manager removal and Android chat-height regression
+fix. Backends/plugins may still be under development. This is an explicit narrow
+exception to the older requirement to finish every feature before any full
+browser build; it is an iteration build, not full feature acceptance or permission
+to remove unfinished requirements. See section 15.3 for its concrete boundary.
 
 ### Mandatory implementation rule for all agents and subagents
 
@@ -65,7 +97,7 @@ The binding boundaries are:
   as a normal web tab. Backend headings (Local/container/remote) can expose the
   same button; a project launch selects its existing folder. No synchronized
   copy, per-project home directory or new workspace folder is required.
-- **Office:** Euro-Office, connected from Files, with human and agent editing
+- **Office:** Collabora Online, connected from Files, with human and agent editing
   the same live document using its actual editing APIs. Ordinary web tabs own
   its UI. Clicking a document in Quantum uses its natural Office web integration;
   there is no separate Mozilla Office-opening or rendering integration.
@@ -85,17 +117,19 @@ The binding boundaries are:
   iterable modules. The Files button uses normal navigation; the privileged
   extension is for References capture/resolvers. Keep folder pickers and the
   existing Git Changes sidecar without adding Office comparison to it.
-- **One service set per environment:** one Quantum server and one Euro-Office
-  DocumentServer stack for the native Linux backend, one for each separate
+- **One service set per environment:** one Quantum server and one Collabora Online
+  server with its native document-kit workers for the native Linux backend, one for each separate
   managed VM/container backend, and one for Termux. All chats, projects,
-  folders and documents in an environment share them. Never start PostgreSQL,
-  Redis, RabbitMQ or another Office dependency per chat/project/document/tab.
+  folders and documents in an environment share them. Do not carry over Euro-Office
+  PostgreSQL/Redis/RabbitMQ services: Collabora does not require that stack. Its
+  native per-document workers remain part of the one server, not per-chat servers.
 - **Platforms:** native Linux and native Termux/Android, including the supported
   amd64/x86_64 and arm64/aarch64 package targets. Remote connections reuse the
   server's existing instances through the existing authorized tunnel.
-- **Resources:** retain upstream Office worker/database/cache defaults initially.
-  The user accepts the documented 4 GB baseline and wants actual usage measured;
-  this is not authorization to reduce workers or impose an untested memory cap.
+- **Resources:** retain Collabora's upstream process/resource defaults initially;
+  measure the complete server, adapter and browser under matched workloads. The
+  previous Euro-Office 4 GB discussion is not a Collabora memory reservation,
+  hard limit or guarantee. Do not tune workers merely to reproduce the comparison.
 - **Implementation:** use configuration and upstream code first, narrow adapters
   where missing, and `gpt-6-astra` with `xhigh` reasoning for complex workstreams.
   A small main-browser diff is required; it does not imply that the backend
@@ -112,8 +146,8 @@ requirement to introduce another package manager or permanent system service.
 
 | Component | Owns | Main-browser involvement |
 | --- | --- | --- |
-| Files adapter + Quantum | Source/account reconciliation, file operations, file web UI and native Office connector | One sidecar folder-button URL; ordinary navigation |
-| Office integration module + Euro-Office | Shared runtime, native collaboration configuration, minimum API/storage/history adapters, exports | None specific to Office; reached through Quantum/web URLs |
+| Files adapter + Quantum | Source/account reconciliation, file operations, file web UI and a small document-launch hook | One sidecar folder-button URL; ordinary navigation |
+| Collabora add-on module + Online | Shared runtime, WOPI storage/launch, native sessions, minimum history/Pi adapters, exports | None specific to Office; reached through Quantum/web URLs |
 | `office-diff` CLI/library | Optional Pi/CLI comparison of saved Office snapshots | None; no UI, Git or browser integration |
 | References backend | Project databases, metadata, imports, resolver jobs, search, attachments, CSL rendering, compatibility API | None |
 | References web UI | Project/collection sidebar, library table, item details, settings and search | Ordinary tab |
@@ -127,7 +161,7 @@ flowchart LR
     E[References extension] --> G
     P[Owned Pi tools / standalone CLI] --> G
     G --> F[One Quantum instance]
-    G --> O[One Office module and DocumentServer stack]
+    G --> O[One Collabora add-on and Online server]
     G --> R[One References service]
     O --> C[Office editing and citation plugins]
     F --> W[Existing project folders]
@@ -167,7 +201,7 @@ participant is a logical session, not another server deployment.
 Run Quantum with multiple explicit folder sources and scoped accounts. Run one
 Office stack with all authorized document sessions. Run one References service
 opening independent project databases as needed. Reuse Office's native save
-timers and one shared storage/history adapter. Bounded per-request workers
+timers and one shared WOPI storage/history adapter. Bounded per-request workers
 do not become additional persistent service stacks.
 
 Start on demand through the existing owner, with saved startup choices handled
@@ -195,9 +229,10 @@ additional permanent host daemon is needed. A remote uses the same mechanism
 through its established Chisel mapping; an unavailable/off remote backend cannot
 be woken merely by opening a loopback URL.
 
-Pi's direct Office path must also ensure the download/save-callback service is
-running; with Quantum as the connector, this can start Quantum even if the user
-has not opened Files. Keep those dependencies alive while documents, conversions,
+Pi's direct Office path must also ensure the WOPI storage service is
+running; reuse Quantum for file authorization/operations where needed, even if the user
+has not opened Files. The external add-on owns WOPI endpoints and must work for
+direct Pi use without requiring a Files tab. Keep those dependencies alive while documents, conversions,
 exports or pending saves need them. Browsing code/images/PDFs must not start the
 Office stack unnecessarily, and startup probes/indexing must not eagerly wake it.
 Explicit saved autostart choices may prewarm components; they are not required.
@@ -341,195 +376,278 @@ See [proxy auth](https://filebrowserquantum.com/en/docs/configuration/authentica
 [JWT](https://filebrowserquantum.com/en/docs/configuration/authentication/jwt/)
 and [HTTP/socket configuration](https://filebrowserquantum.com/en/docs/configuration/http/).
 
-### 4.3 Office connection and slow transport
+### 4.3 Maintainable Collabora add-on and slow transport
 
-Reuse Quantum's existing OnlyOffice integration as the compatibility base. Verify
-Euro-Office's actual protocol against the pinned release. Configure browser UI
-URL (`integrations.office.url`), backend Office URL (`internalUrl`) and Office's
-authenticated download/callback URL (`http.internalUrl`) separately. Set the
-connector secret; the current source has a permissive branch when it is empty.
-Backend-local calls stay local to the owner. Every browser-facing remote route,
-asset, socket and transfer uses the existing authorized tunnel.
+Quantum `v2.0.2-stable` has an OnlyOffice connector, not a released Collabora/WOPI
+connector. Its `integrations.office` configuration and OnlyOffice callback/JWT
+protocol cannot be pointed at Collabora as if they were compatible. Inspect
+newer released support before implementation; unreleased main-branch work is
+reference material, not a replacement for a pinned release. Upstream already merged Collabora/WOPI
+work into `dev/v2.2.0`: [PR #3108](https://github.com/gtsteffaniak/filebrowser/pull/3108),
+commit `c5112cd51c8479c21cfca49e376cd207242c2595`, followed by the
+[token-signing correction #3173](https://github.com/gtsteffaniak/filebrowser/pull/3173),
+commit `fd64a470d3a521b0ad026f0f5307c20dd04b472f`. Audit and reuse that donor source
+(`backend/internal/web/wopi*.go`, `frontend/src/api/wopi.js`,
+`frontend/src/views/files/WopiEditor.vue`) and its native
+`integrations.office.product: collabora` configuration semantics. If a suitable
+stable release includes it at implementation time, use that release's native
+support instead of backporting. Do not write a second WOPI algorithm because the
+originally selected stable predates it.
 
-Prefer one published web-service origin/path routing Files and Office together.
-Never overwrite the shared server's Office URL with the last client's loopback
-port: simultaneous clients can have different Chisel mappings. Use relative
-web routes or a small web-integration URL adapter; backend-local callback/download
-addresses stay fixed and separate from browser-facing URLs.
+Implement **one separately packaged Collabora add-on** outside Quantum's core.
+Reuse the upstream WOPI implementation in that package where possible, with its
+pristine source/revision and a small adaptation layer to Quantum's file owner;
+move only the necessary boundary rather than redesign token/lock/save behavior.
+Where upstream code cannot be packaged separately without adaptation, document
+the dependency and keep a focused mechanical patch series. The user explicitly
+prefers this maintainable module boundary over a broad in-tree connector fork.
+The boundary is a versioned document-launch registration/handler: source/file
+identity, existing user/project authority, permitted operation and returned normal
+web URL. Never pass long-lived credentials or raw privileged filesystem handles
+through that contract. Keep the WOPI host, discovery client, token issuance,
+snapshot adapter,
+Pi protocol adapter and References extension assets in that module. Prefer a
+native extension registry; if absent, add a narrow optional provider hook and a
+small office-file action in Quantum. Submit/maintain it as an isolated upstream-
+compatible patch, not a second file manager or a fork of the OnlyOffice connector.
+An absent/unavailable module must produce a clear unavailable/open-download path,
+not silently start the old suite or route a file to an unauthorized handler.
 
-The stable source has real short deadlines, not just configurable documentation:
+The adapter discovers Collabora actions from `/hosting/discovery`, selects the
+supported edit/view action and launches the normal editor with `WOPISrc` and a
+short-lived file/user-scoped access token, preferably through the native POST
+launch form. Implement required WOPI CheckFileInfo/GetFile/PutFile/lock semantics
+and the selected native optional operations; advertise only supported properties.
+Reuse Quantum's authorized source/file operations or an existing backend file
+owner. Audit donor gaps: the initial upstream work omits proof-key verification,
+PutRelativeFile/Save As, editor rename, public shares and Collabora previews.
+Implement required Save As/create/export behavior using native operations and
+the minimum missing host adapter; preserve permission/file-identity rules on
+rename. Public sharing is not newly requested. Verify WOPI proof/token/trusted-
+peer protection rather than treating the incomplete donor as complete security.
+Native discovery refresh must not start Office during ordinary Files startup;
+route first use through the existing lazy owner and cache discovery appropriately.
+Do not bypass source scopes, private-path exclusions or live revocation
+by granting the add-on unrestricted filesystem access. Use authoritative file IDs,
+versions, locks and atomic complete saves; never take a browser-supplied path as
+WOPI authority. Bind every token to environment, file, participant and rights.
 
-| Path | Observed stable default | Required adaptation |
-| --- | --- | --- |
-| Frontend `requestTimeoutSignal()` | 5 seconds | Audit callers; use service-appropriate connect/idle/progress handling |
-| View / preview / media | 60 / 30 / 60 seconds | Avoid terminating healthy long transfers; retain cancellation/stall handling |
-| Office callback file retrieval | 10-second total client timeout | Complete-file streaming with progress, size checks and bounded stalled-operation handling |
-| Download/general HTTP | Different/no equivalent wrapper | One deliberate policy across layers; not unlimited unowned operations |
+Browser-facing discovery/editor/assets/WebSocket/export/history URLs use the
+existing authorized Tor/Chisel/Caddy/Authelia route. Server-to-WOPI calls stay
+inside the owning backend, with a fixed authorized internal endpoint. Configure
+Collabora's WOPI allowlist and frame ancestors for the actual integration origin.
+Never overwrite a shared server URL with one client's ephemeral Chisel port;
+multiple clients must use their own mapped normal web origins concurrently.
+The add-on supplies client-aware relative routes/launch URLs as needed.
 
-Patch the missing configuration seams narrowly in Quantum. Initial integration
-defaults: allow 120 seconds for remote connection/first response, 180 seconds of
-no application-level progress for an active transfer, and no fixed total deadline
-for a healthy streaming download. Treat these as **proposed BashKitten transport
-defaults to validate on Tor**, not upstream settings that already exist. Long
-conversion/search work returns an operation ID and progress/cancellation rather
-than holding a short ordinary request. Resume idempotent reads; do not blindly
-replay mutations after uncertain outcomes. Distinguish a live but slow peer from
-a dead connection and use bounded concurrency/buffers/backpressure.
+Keep Quantum's stable native code as close to upstream as possible. Document the
+small hook's contract, patch series and supported Quantum/Collabora versions.
+Run the external contract/real-UI checks against each proposed upstream update;
+keep adapted source imports and revisions recoverable. If native upstream WOPI
+support later meets the requirements, reuse it and shrink/remove our adapter
+responsibilities rather than maintain two WOPI implementations.
 
-Reconcile Caddy's existing disabled write-idle wrapper with this end-to-end
-policy rather than enabling a conflicting short timeout or disabling every
-timeout. Office realtime reconnect behavior needs separate slow-link testing.
-[Connector configuration](https://filebrowserquantum.com/en/docs/integrations/office/configuration/),
+Quantum stable still contains 5-second generic request, 60/30/60-second
+view/preview/media defaults. Its old 10-second OnlyOffice callback client is
+**not** the Collabora save path. Audit applicable Files callers and the new WOPI,
+editor WebSocket and gateway paths separately. Prefer configuration; narrowly
+expose missing timeout configuration seams without moving transport logic into
+Mozilla. Proposed Tor defaults remain 120 seconds for connection/first response,
+180 seconds without application-level transfer progress, and no fixed total
+limit on a healthy streaming download. Validate them, retain cancellation,
+backpressure and bounded buffers, and respect native session reconnect behavior.
+Do not blindly replay an uncertain mutation. Reconcile existing Caddy idle
+handling instead of disabling all timeouts. Long operations use existing
+operation/progress mechanisms or native Collabora responses, not short ordinary
+request deadlines.
+
+[Quantum stable connector configuration](https://filebrowserquantum.com/en/docs/integrations/office/configuration/),
 [stable request source](https://github.com/gtsteffaniak/filebrowser/blob/2c071d1e6eb48d4b88da2657885d345663a0a88b/frontend/src/api/utils.js),
-[router](https://github.com/gtsteffaniak/filebrowser/blob/2c071d1e6eb48d4b88da2657885d345663a0a88b/backend/internal/web/httpRouter.go).
+[Collabora integration SDK](https://sdk.collaboraonline.com/docs/How_to_integrate.html).
 
-## 5. Office: shared runtime and real live editing
+## 5. Office: shared Collabora runtime and real live editing
 
-Use Euro-Office's released component graph, initially researched at
-[`DocumentServer v9.3.7`](https://github.com/Euro-Office/DocumentServer/releases/tag/v9.3.7),
-`e8d67f92c8a8549ea03030af2422a2b6b5d87274`. Keep the existing database/queue/cache
-topology and default worker settings while measuring it. Do not substitute
-SQLite for an unsupported DocumentServer database, deploy a database per project,
-or promise that 4 GB is its measured RAM consumption.
+The comparison used official **CODE `26.04.5.2.1`**, reporting Online revision
+`42745e44dd8530fac7acd5f46cb7571ceea63c6a` (peeled `cp-26.04.5-2`). This is a
+researched integration candidate, not a committed BashKitten binary/source pin.
+Freeze and verify its complete matching source/package graph before import.
+Use one `coolwsd` server, native forkit/kit workers and the Collabora rendering/
+editing engine per environment. Native workers per active document are expected;
+they are not independent deployments. Do not bundle the previous suite's Node
+DocumentServer, PostgreSQL, RabbitMQ or Redis merely because the old plan did.
+References keeps its separate project databases; WOPI/snapshot metadata needs
+only the add-on's small durable store under the existing backend data root.
 
-Measure the one whole stack and browser/editor contribution: idle, first open,
-one human, human plus agent, multiple documents, conversion, checkpoint and PDF
-export. Record RSS/PSS where available, peak memory, CPU and effective merged
-configuration. Keep measurement separate from optional later tuning.
+Measure idle, first open, the same documents/users, human plus agent, multiple
+files, save/history and export. Include the WOPI adapter and browser separately,
+and report peak memory/CPU and effective native configuration. The temporary
+local RAM comparison is motivation, not a performance acceptance result.
 
-### 5.1 Available APIs and the missing public connector
+### 5.1 Native APIs and independently installed extensions
 
-Released Euro-Office `server/license.js` already returns `advancedApi: true`.
-Use upstream capability reporting; no activation bypass is needed. However,
-the released `DocsAPI.DocEditor` does **not** export `createConnector` even though
-some internal connector plumbing exists. Do not equate that capability flag with
-a complete public Automation API, copy a commercial OnlyOffice connector, or
-invent a token to unlock it.
+Use Collabora's released WOPI integration, postMessage protocol, UNO commands,
+server-side scripting and **native JavaScript extension facilities**. The
+released Online source includes `browser/extensions` for editor-specific menu/
+notebookbar items, sidebar/dialog UI and calls into kit scripts. Inspect/package
+those facilities rather than invent an OnlyOffice-shaped plugin/Automation API.
+Do not port `DocsAPI`, `Asc.plugin`, `callCommand`, `createConnector` or
+DocumentBuilder calls into the new design.
 
-The concrete released route is a bundled plugin using `Asc.plugin.executeMethod`,
-`callCommand` and the editor-specific Office APIs. Build the thin automation
-bridge on this route, probe actual capabilities, and reuse any subsequently
-released open Euro-Office automation implementation after inspecting its pinned
-source. Do not rely on newer OnlyOffice documentation for APIs absent in 9.3.7.
-[License capability source](https://github.com/Euro-Office/server/blob/a924935680de42df6b1c46cec923fdb60ff3fd30/Common/sources/license.js),
-[public API source](https://github.com/Euro-Office/web-apps/blob/ce0ba49545810a56a3878081ab762c6a7ae8dd4e/apps/api/documents/api.js),
-[plugin API](https://github.com/Euro-Office/sdkjs/blob/40d9b7780f11a5cadc259f9b9815a364de8caa96/common/plugins/plugin_base_api.js).
+The selected release gates extensions/`executescript` on its native experimental
+features configuration, writable sessions and WOPI copy/export/print permissions.
+Enable the native feature for our authorized editable profiles after verifying
+its merged configuration and package contents. A genuinely restricted/read-only
+session remains restricted; do not advertise false rights or disable permissions
+to make automation work. Probe and report supported operations per editor.
 
-### 5.2 Native collaboration and Pi editing APIs
+[Released extension contract](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/browser/extensions/README.md),
+[extension permission gate](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/wsd/ClientSession.hpp#L591).
 
-Use **DocumentServer's existing collaboration configuration and engine**. The
-small integration adapter supplies the authenticated configuration, shared live
-`document.key` and distinct `editorConfig.user.id`/names for the human and agent.
-Automatically create/reuse the agent participant when Pi first uses an editing
-API. Native Office owns collaboration, cursors, document state, merging, locking,
-undo, autosave and reconnect behavior. Do not build a replacement collaboration
-protocol, shadow document, participant database or independent editing engine.
+The Pi adapter uses native authenticated document sessions and operations. Keep
+it replaceable with the backend modules, without browser rebuilds. Native UNO/
+kit scripting can express text, tables, cell values/formulas, ranges and drawing/
+slide operations, but every required operation needs a released-source capability
+check and end-to-end result verification. Prefer released `cool`/`scriptinterop` operations where they cover the need;
+the release warns about future removal of legacy `com.sun.star` compatibility,
+so isolate any required legacy UNO calls and test upgrades. Selection-only UI
+commands are not sufficient for reliable structured agent edits. Avoid a second document engine.
 
-The plugin bridge only invokes the released Office APIs in that agent's own
-participant. Prefer upstream open automation facilities wherever actually
-available; the missing public connector in the researched release is still a
-capability to prove, not a reason to invent another collaboration system.
-If an editor instance is required, host it in the Office web module through its
-normal web page/configuration. No Office-specific Mozilla actor or native bridge
-is required. Prove the renderer's startup/background behavior on Linux and
-Android; an HTTP API or a user ID alone is not an editing renderer.
+### 5.2 Separate human and agent participants in the same document
 
-Pi needs discoverable native-API operations to open/create a document, inspect
-its content, edit documents/cells/formulas/slides, invoke citations, save, export
-to supported formats (including PDF), and obtain/open an ordinary browser view
-URL. Use the same web service routes and existing normal URL-opening tool as the
-user; no custom browser preview path. Expose actual per-editor capabilities and
-conversion errors. Reuse upstream transactions/undo and stock Pi mutation queues;
-do not replay an edit whose result is uncertain.
+Use a stable WOPI file identity/URL for the same actual file, with distinct
+WOPI `UserId`/`UserFriendlyName` and authorized tokens for human and agent.
+Automatically open/reuse an agent session on its first operation. Collabora's
+native document broker/kit owns the shared document, each participant's view,
+cursors, locks, merging, undo, autosave and reconnect behavior. A common document
+owner/broker does not make both participants the same user or cursor.
 
-Live edits use the native coauthoring participant. DocumentBuilder/conversion
-APIs can handle creation or conversion of closed files, but must not overwrite
-an active coauthoring session. Report native save/export completion accurately;
-a command being accepted is not proof that its output file has been saved.
+Provide a **browserless native WebSocket participant** for Pi: the released
+session handshake/load/UNO/script protocol can be driven by a small backend
+adapter. The server renders/edits through its existing kit. This is not ordinary
+REST file rewriting, and an HTTP conversion endpoint is not a live participant.
+The internal read-only remote-document client is evidence of the protocol, not
+an editable agent endpoint to bypass. `/co/collab` is a separate desktop/WASM
+coordination route, not the general live editing API. Verify authenticated script execution,
+view selection, results/errors, disconnect/reconnect and safe disposal on the
+exact build. No permanent hidden browser or new Mozilla Office actor is assumed.
+If a required operation cannot yet run without a browser client, record that
+specific blocker and resolve the missing native API/adapter in the separately
+owned Office module. A browser client can help diagnosis; it is not accepted as
+a substitute for browserless agent operation. Do not replace live editing with
+disk writes or omit native Termux acceptance.
 
-## 6. Simple automatic snapshots and native Version History
+Pi must open/create/read/inspect/edit/save/export all three document families,
+invoke the same citation operations as the UI and return an ordinary browser
+URL. Native command/result/save acknowledgements establish success; enqueueing
+is not a durable save. Reuse existing Pi mutation queues and native undo grouping.
+Never replay an uncertain edit without reconciliation. Conversion/closed-file
+creation uses native conversion only when it cannot overwrite an active room;
+live exports use the current native document session.
 
-The feature is automatic full-file snapshots outside the project, with a maximum
-retained count. The user opens Office's existing **Version History**, chooses an
-older version to view, or restores it. There is no new history UI, manual change
-checking, mandatory comparison workflow or separate checkpoint engine.
+[Released document protocol](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/wsd/protocol.txt),
+[script execution in the session view](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/kit/ChildSession.cpp#L5032).
 
-### 6.1 Use Office's own save timer and callbacks
+### 5.3 Always-light editor and document canvas
 
-Enable the released native periodic force-save feature:
+Pass the native launch `ui_defaults` form parameter with
+`UITheme=light;SavedUIState=false` (semicolon-separated, exact case). The released
+parser maps `UITheme` to light UI and `SavedUIState=false` prevents an old browser
+UI choice overriding that launch default. A branding `theme` parameter alone is
+not a light-mode setting. Include these settings in every Quantum, Pi, history
+and direct add-on launch, including phone layouts.
+
+Light chrome alone is insufficient: Collabora has separate dark document-canvas
+state. Reuse native WOPI `UserSettings`/`browsersetting.json` storage to supply:
 
 ```json
 {
-  "services": {
-    "CoAuthoring": {
-      "autoAssembly": {
-        "enable": true,
-        "interval": "5m",
-        "step": "1m"
-      }
-    }
-  }
+  "darkTheme": "false",
+  "darkBackgroundForTheme": { "light": "false", "dark": "false" }
 }
 ```
 
-Upstream already defaults the interval/step to five minutes/one minute, with
-`enable:false`. Enabling it is the configuration for the requested history
-feature; worker, database and cache resource defaults remain unchanged. Accepted
-edits schedule/coalesce the native timer. Checkpoints are approximately five
-minutes apart, subject to the native scan and conversion time, rather than an
-exact deadline. No extra watcher, polling loop, content-hash change detector or
-custom snapshot scheduler is needed.
+These are the released setting values, not a proposed invented POST parameter.
+Use the native authenticated settings manifest/URI/stamp and upload contract;
+keep display settings outside document content and project repositories. Retain
+unrelated user settings. Enforce the selected light/background policy on every
+launch and persisted update. Native `Hide_Button`/`Hide_Menu_Item` can suppress
+`toggledarktheme` and `invertbackground`, but the Interface Settings dialog has
+another dark-mode control. The launch default does not itself prohibit a user
+switching during the session. Verify all controls and native policy facilities;
+if a runtime always-light policy cannot be expressed natively, add only the
+small isolated configuration hook to Collabora's existing theme owner. Do not
+reimplement rendering, mutate browser internals, inject inversion CSS or modify
+actual authored cell/slide/document colors. Test OS dark mode, stale saved state,
+reconnect, desktop/mobile and document exports. References Office dialogs follow
+the light Office surface; Files/References manager and BashKitten chrome keep
+their requested branding.
 
-Use Quantum's existing Office save callback path with a small storage adapter.
-Save complete successful timer/final-save outputs in the project's normal file
-and the external `office-sessions` store as appropriate; keep the initial version
-and the latest **50 versions per document**, configurable, pruning oldest versions
-after the new file is saved. The total retained count includes the initial
-version. Use existing callback identity to avoid duplicates on retries. There is
-no additional global storage-budget policy in this plan.
+[Native launch parser](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/wsd/FileServerUtil.cpp#L191),
+[settings precedence](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/browser/js/global.js#L1086),
+[native background application](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/wsd/ClientSession.cpp#L2538).
 
-Normal final-save callbacks use status `2`; native timer force-save callbacks
-use status `6`, `forcesavetype:2`. Keep callback authentication, complete-file
-writes and native error handling. Unsent client edits are not part of a server
-force-save; use native save/export completion rather than claiming those edits
-are already durable. Preserve the active room key during force-saves.
-[Native defaults](https://github.com/Euro-Office/server/blob/a924935680de42df6b1c46cec923fdb60ff3fd30/Common/config/default.json),
-[native timer owner](https://github.com/Euro-Office/server/blob/a924935680de42df6b1c46cec923fdb60ff3fd30/DocService/sources/gc.js),
-[save semantics](https://api.onlyoffice.com/docs/docs-api/get-started/how-it-works/saving-file).
+## 6. Simple snapshots and Collabora's history integration
 
-### 6.2 Supply the native history UI with our saved files
+Retain automatic full snapshots outside project folders and the most recent
+**50 versions per document**, configurable, including the initial version.
+Users must choose/open/restore versions from the Office history entry point on
+desktop and phone. No manual change checking, second comparison workflow,
+filesystem synchronizer, polling watcher or mandatory diff UI is introduced.
 
-Euro-Office v9.3.7 already has desktop and mobile Version History. Wire its
-existing web-integration events to the saved-version store:
+### 6.1 Native saves plus a small snapshot-storage adapter
 
-| Native event | Minimum web/backend adapter |
-| --- | --- |
-| `onRequestHistory` | Enumerate stored versions and call `refreshHistory({currentVersion, history})` |
-| `onRequestHistoryData` | Authorize the selected full snapshot and call `setHistoryData({version, key, url, fileType, token})` |
-| `onRequestRestore` | Restore that saved full file through the normal save owner, then refresh/reopen the current generation |
-| `onRequestHistoryClose` | Return to the current document |
+Use Collabora's own autosave/user-save/final-save behavior and authenticated WOPI
+`PutFile` writes. The selected source already defaults to a 30-second idle save,
+300-second autosave and background autosave; retain that native save owner.
+[Released defaults](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/coolwsd.xml.in#L82). Inspect the released `per_document` save settings and WOPI
+save headers before selecting configuration; the removed Euro-Office
+`autoAssembly`, callback status `2`/`6` and `forcesavetype` are not Collabora APIs.
+Preserve normal native save durability. For the requested approximately five-
+minute history interval, retain a completed native saved revision when the
+checkpoint interval is due, plus the initial/final saved revisions; do not slow
+ordinary saves down to five minutes merely to limit snapshot count. Use native
+save timing/change state and WOPI versions/receipts; no extra hash scanner or
+checkpoint scheduler. Retry of the same save/version must not duplicate history.
 
-Provide native version/date/user metadata and a distinct immutable history key
-for each saved snapshot. Do not reuse the live room key for every historical
-file, since the editor caches by key. Full files are sufficient: omit optional
-`changes`, `changesUrl` and `previous` delta data. We do not manufacture delta
-archives or connect `office-diff` to this UI. These event adapters live in the
-Quantum/Office web integration and backend, not the browser application.
-[Desktop history](https://github.com/Euro-Office/web-apps/blob/ce0ba49545810a56a3878081ab762c6a7ae8dd4e/apps/common/main/lib/controller/History.js),
-[mobile history](https://github.com/Euro-Office/web-apps/blob/ce0ba49545810a56a3878081ab762c6a7ae8dd4e/apps/common/mobile/lib/controller/VersionHistory.jsx),
-[public history API](https://github.com/Euro-Office/web-apps/blob/ce0ba49545810a56a3878081ab762c6a7ae8dd4e/apps/api/documents/api.js).
+The WOPI storage adapter streams a complete authorized save, validates native
+lock/version/conflict metadata and atomically replaces only the selected project
+file. After success it stores eligible full versions outside the project and
+prunes oldest entries beyond the count. Keep failures visible, preserve recovery
+files and reject stale generations after a restore. WOPI locking governs our
+integration, not arbitrary unrelated processes writing the same filesystem file.
+Do not promise every last unsent client edit is saved after abrupt termination.
 
-Restore follows native session/reload behavior and must not let an old callback
-overwrite the restored version. Keep ordinary save failures visible and recovery
-files intact; do not introduce a custom filesystem transaction/journaling system
-or claim protection against unrelated applications concurrently rewriting files.
-Code files and `.git` remain untouched by Office history. There is no directory
-synchronizer or automatic Git operation.
+### 6.2 Native history action, host-provided version list and restore
 
-OpenDocument editing may use an internal OOXML representation. Verify save-back,
-export and citation metadata round trips for DOCX/XLSX/PPTX and ODT/ODS/ODP;
-report unsupported conversions honestly and preserve the source master unless
-an explicit native save/export replaces it.
+Collabora exposes a native version-history action through WOPI/postMessage host
+integration; it does **not** supply Euro-Office's `refreshHistory`/`setHistoryData`
+UI or a standalone persistent snapshot database. Reuse the native entry point
+and session close/reload events: `UI_FileVersions` requests host history;
+`Host_VersionRestore` with `Pre_Restore` starts native save/close coordination,
+and `App_VersionRestore` with `Pre_Restore_Ack` acknowledges readiness before
+host storage replacement. Reuse any sufficient existing host/Quantum history
+facility rather than adding a second chooser.
+[History action](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/browser/src/control/Toolbar.js#L893),
+[restore handshake](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/browser/src/map/handler/Map.WOPI.js#L945). Where the native action delegates history UI to
+the host, the add-on supplies the smallest version-list/choose/open/restore web
+dialog required by that contract, backed by the same snapshot store. This is a
+specific missing host responsibility, not authorization for a second history
+application or browser-native history panel.
+
+Open an authorized immutable snapshot with a distinct WOPI identity and read-
+only rights in the normal editor. Restore goes through the current save owner,
+native session coordination/close-reload and a new current version so an old
+participant cannot later overwrite the restored contents. Retain the pre-restore
+version, honor permissions and test user/agent concurrency. Do not manufacture
+operational deltas; full snapshots suffice. The optional `office-diff` tool stays
+Pi/CLI-only and disconnected from the history UI and Git Changes.
+
+Preserve DOCX/XLSX/PPTX and ODT/ODS/ODP save-back and native export behavior,
+including citation metadata. Collabora uses its own LibreOffice-derived engine;
+removing BashKitten's old external LibreOffice-to-PDF preview process does not
+mean removing this required internal engine. Native Office export creates a copy
+unless the user explicitly saves/replaces the source master. Code files and
+`.git` remain untouched by Office snapshots.
 
 ## 7. Optional agent/CLI comparison of Office snapshots
 
@@ -542,7 +660,7 @@ It needs no editor renderer, browser integration or running References service.
 
 **No diff UI, Git/Changes adapter, history compare button or browser hook is
 requested.** Leave the existing Git Changes feature alone. This tool does not
-interpret DocumentServer's internal collaborative-operation deltas.
+interpret Collabora's internal collaboration operations.
 
 Compare package entries and namespace-aware XML with semantic adapters for:
 
@@ -581,7 +699,7 @@ One service opens genuinely separate project library databases. Collections,
 items, notes, tags, related items, attachments, deleted items and searches belong
 to their library. No master library containing all projects as collections.
 Use a local transactional database suitable for the native package targets;
-SQLite is the proposed References store, independent of Office's PostgreSQL.
+SQLite is the proposed References store, separate from the Collabora/WOPI state.
 Every transaction, search job, cached result and attachment operation is scoped.
 
 ### 8.1 Web UI and screenshot fidelity
@@ -901,15 +1019,21 @@ separate pinned component updates, not arbitrary remote executable downloads.
 Ship one shared citation model, CSL engine adapter and classic dialog, with
 three Office plugin adapters. Install all plugin assets locally with the Office
 component; do not require a marketplace or a remote helper script. Verify the
-selected Euro-Office release's actual plugin packaging: runtime support is not
-proof that a ready-made Zotero plugin is included.
+selected Collabora release's extension packaging and experimental-feature gates.
+Its native Writer Zotero integration is reusable source/behavior, not already a
+local References connector or a complete Calc/Impress citation implementation.
+Its native Zotero initialization excludes small screens and its visible citation
+UI is Writer-only; those restrictions must be addressed through the shared
+References extension adapters, not accepted as a scope reduction.
+[Released Zotero control](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/browser/src/control/Control.Zotero.js),
+[initialization gates](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/browser/src/app/ServerConnectionService.ts#L133).
 
 **Explicit plugin boundary:** citation behavior and dialogs belong to the
 separately installed **References Office plugin**, with library access and CSL
-processing in the References backend. Use Euro-Office's native fields, anchors,
-plugin UI and editing APIs. Do not hardcode citation parsing, styles, library
-management or a new citation engine into the Euro-Office application/SDK. The
-plugin must be replaceable/testable without rebuilding Euro-Office or BashKitten.
+processing in the References backend. Use Collabora's native fields/reference marks, UNO/kit APIs and
+JavaScript extension dialogs/menu hooks. Do not hardcode citation parsing, styles, library
+management or a new citation engine into the Collabora application/engine. The
+plugin must be replaceable/testable without rebuilding Collabora or BashKitten.
 Only a proven missing native API/event may justify a small isolated upstream
 integration patch; that patch exposes the missing capability, not citation logic.
 
@@ -964,11 +1088,14 @@ it does not maintain a second document or infer identities from the visible
 number. Spreadsheet/slide adapters expose the same semantic information through
 their native cell/shape anchors.
 
-The released document API's `GetAllAddinFields`/`GetCurrentAddinField` returns
-`FieldId`, `Value` and `Content`; native add/update methods operate on those
-fields. Use these existing facilities for the bridge. The plugin owns the
-meaning of our citation metadata and CSL-rendered content.
-[Released field APIs](https://github.com/Euro-Office/sdkjs/blob/40d9b7780f11a5cadc259f9b9815a364de8caa96/word/api_plugins.js).
+Use Collabora Writer's existing Zotero integration code and native field/
+reference-mark/bookmark operations as the starting point. The adapter exposes
+rendered text together with the durable native field identity and embedded
+References metadata through UNO/kit APIs. Do not carry over OnlyOffice's
+`GetAllAddinFields`/`FieldId` object contract or assume Collabora emits it.
+Existing cloud Zotero endpoints/key handling must be replaced by our authorized
+References backend adapter, without bundling Zotero Desktop or requiring a
+Zotero cloud account. Preserve donor licensing and source provenance.
 
 Agent add/edit operations create or update those same managed citations, including
 multi-source clusters and locators, and the human sees the resulting formatted
@@ -995,35 +1122,39 @@ to cells/shapes. Full CSL style rendering remains shared; unsupported native
 format representation must be disclosed and addressed in the adapter, not
 silently converted to plain numeric citations.
 
-### 10.3 Three concrete editor adapters
+### 10.3 Three concrete Collabora editor adapters
 
-| Editor | Released API evidence and implementation |
+| Editor | Native basis and required adapter |
 | --- | --- |
-| Documents | `AddAddinField`, `GetAllAddinFields`, `GetCurrentAddinField`, `UpdateAddinFields`, `RemoveFieldWrapper`: managed cluster/bibliography fields with embedded metadata |
-| Spreadsheets | Named ranges (`AddDefName`), range/character APIs, custom properties/XML parts: a citation occupies a whole cell as the user permits; stable anchors survive row/sheet moves |
-| Presentations | Named shapes/drawings, text APIs, custom properties/XML parts: managed citation text objects/spans and bibliography objects with durable IDs |
+| Writer | Existing Zotero integration behavior and native reference marks/bookmarks/fields; UNO/kit reads and updates of rendered clusters and embedded metadata |
+| Calc | Native cell/range/formula and named-range/metadata APIs; a managed citation occupies a whole cell, with stable identities across row/sheet changes |
+| Impress | Native drawing/text/shape APIs and persistent metadata; managed citation spans/objects and bibliography shapes, preserving object geometry |
 
-Only the document editor currently demonstrates a native add-in-field abstraction.
-Sheet and slide anchors require real implementation and round-trip validation.
-Do not describe this as an existing cross-editor Zotero plugin.
-[Word APIs](https://github.com/Euro-Office/sdkjs/blob/40d9b7780f11a5cadc259f9b9815a364de8caa96/word/api_plugins.js),
-[cell APIs](https://github.com/Euro-Office/sdkjs/blob/40d9b7780f11a5cadc259f9b9815a364de8caa96/cell/apiBuilder.js),
-[slide APIs](https://github.com/Euro-Office/sdkjs/blob/40d9b7780f11a5cadc259f9b9815a364de8caa96/slide/apiBuilder.js).
+Use the released extension facilities for menu/notebookbar buttons, classic web
+dialogs and native kit operations. Package Writer/Calc/Impress adapters separately
+from Collabora core and share validation/CSL logic in References. Existing Writer
+Zotero commands do not establish full CSL, local-library or cross-editor support.
+Audit native dialog and extension support on phone layouts too; no assumption
+that a desktop UNO extension installer exists in the Online UI.
 
-For spreadsheets, use a plugin-managed whole cell initially; a formula-like input
-may be convenient, but do not promise a custom calculation function until the
-released API supports it. Preserve ordinary formulas, formatting and unrelated
-cells. Define ordering across sheets/rows explicitly. For slides, preserve object
-positions/styles and define ordering across slides/objects; copied slides/shapes
-must get distinct occurrence IDs while retaining item identities.
+For Calc, a formula-like typed input is optional; do not invent a custom formula
+function until its released server-side calculation support is proved. Preserve
+ordinary formulas, fills, formatting and unrelated cells. Define citation order
+across sheets/rows. For Impress, define order across slides/objects, preserve
+styles/positions and give copied citation occurrences distinct identities.
 
-Verify undo/redo, cut/copy/paste, duplicate objects, deleted references, moves,
-concurrent refresh, external item edits and reopen. Debounced change handling
-must not steal the human selection or overwrite edits made during formatting.
-Any missing editor event/API adaptation belongs in Euro-Office's separate source
-patches, not Mozilla. Phone modal usability needs attention: the released mobile
-plugin controller has a small height limit, so the classic chooser must be tested
-and adapted within the Office web component.
+Choose format-persistent native anchors/metadata after round-trip tests in all
+six formats. A named cell/shape or transient view ID alone is not proof of durable
+citation identity. Verify actual footnotes/endnotes in Writer and explicit note/
+output placement in Calc/Impress for note styles. Unsupported operations remain
+mandatory implementation gates, not silent plain-text fallbacks.
+
+Test undo/redo, copy/paste, deletion, moves, concurrent refresh and human edits,
+reopen and external library updates. Use the agent's separate native view and
+transactions so a citation operation does not steal the human's selection.
+A missing native API/event may require a small named extension-interface patch;
+citation rules, library code and CSL stay in the replaceable module, not Mozilla
+or a large Collabora fork.
 
 ### 10.4 Typed codes and text export
 
@@ -1043,7 +1174,8 @@ action for recovery. GUI insertion and agent insertion create the same objects.
 Export/unlink to plain text creates an explicit copy with visible citations and
 bibliography, including formatting where the output supports it, and removes
 active citation metadata. Keep the editable master intact. PDF export uses the
-Office renderer and the coherent current document, not LibreOffice.
+Collabora renderer and the coherent current document, without the removed
+standalone LibreOffice conversion/preview path.
 
 ## 11. Systematic Reviewer and Pi integration
 
@@ -1108,7 +1240,8 @@ Rewrite writing instructions and tools to create/edit/inspect live Office
 documents alongside the user. Replace bundled instructions that require
 LibreOffice save/export/PDF preview or a later Zotero Refresh. Keep Markdown
 import/export and existing citation-code compatibility where useful, but the
-normal requested writing path is now the live Office API. The current donor
+normal requested writing path is now the live Collabora session/extension API.
+The current donor
 rejects note styles and emits plain text before a later external Refresh;
 those limitations are **not** acceptable substitutes for the new rich/full-CSL
 path. Do not copy its existing DOCX serializer and claim the Office integration
@@ -1135,7 +1268,7 @@ shared utilities.
 | --- | --- |
 | `agent/src/web/web_ui.html` | Replace Files tree, manager actions, file jobs and prepared-preview state with normal-tab launch. Separate and preserve Changes, currently sharing panel/root/close/responsive state. |
 | `agent/src/server/files/previews.mjs`, `preview-worker.mjs`, `preview-render.mjs`, `preview-types.mjs` | Delete bespoke conversion/rendering pipeline and its lifecycle cleanup. |
-| `agent/src/server/http/server.mjs` | Remove preview content/job routes and manager-only list/upload/archive/job status/cancel/download routes once Quantum owns them; retain folder, Git and shared attachment routes. |
+| `agent/src/server/http/server.mjs` | Remove preview content/job routes and manager-only list/upload/archive/job status/cancel/download routes as part of the authorized browser-boundary batch; report the replacement as unavailable until its module is connected; retain folder, Git and shared attachment routes. |
 | `agent/src/server/files/jobs.mjs`, `worker.mjs` | Remove manager-exclusive workers and their shutdown/revocation plumbing after checking remaining callers. |
 | Desktop `BashKittenAgent.sys.mjs` / `BashKittenAgentChild.sys.mjs` | Remove ViewFile/CancelFileView, temporary prepared-document transfer/context state; retain pickers and needed native attachment actions. |
 | Android `DocumentPreviews.java` | Delete the bespoke preview component. |
@@ -1156,41 +1289,39 @@ The ordinary browser PDF/image/download implementation remains.
 Inspect final source, package locks, APK/DEB/Termux payloads, route tables, generated
 notices and shipped instructions. A UI hiding the old viewer does not prove its
 removal. Old preview acceptance remains historical; it cannot be relabelled as
-Quantum/Euro-Office acceptance.
+Quantum/Collabora acceptance.
 
 ## 13. Native Termux and Linux packaging gates
 
-The researched Euro-Office release ships **Linux amd64/arm64 DEB/RPM**, not an
-Android/Bionic DocumentServer. Linux ARM64 binaries cannot simply be used as
-native Termux executables. Its converter/core build targets glibc; standard
-installers assume system users, root paths and service management.
-[Released packages](https://github.com/Euro-Office/DocumentServer/releases/tag/v9.3.7),
-[core build](https://github.com/Euro-Office/core/blob/a4a1ba1e9c8e6b6c841c3f059b3a8f82177d63f5/.docker/core.bake.Dockerfile).
+The tested CODE container is a Linux server build, not native Android/Bionic
+support. Collabora's Android application or a Linux ARM64 container does not
+establish that `coolwsd`/forkit/kit and its engine run natively inside Termux.
+Recheck official released target support and freeze matching recipes before
+building Linux amd64/arm64 and native Termux aarch64/x86_64 packages.
 
-Start a native-port feasibility workstream early. Build the selected converter,
-document/rendering/V8 tools, Node native modules such as sharp/libvips, fonts/theme
-generators and required database/queue services against Termux's Bionic/private
-prefix. Existing Termux recipes for Node, PostgreSQL, Redis, Erlang/RabbitMQ,
-nginx and libvips are useful inputs, not proof of the full stack. Own all required
-processes through BashKitten's existing environment supervisor, with one set of
-data directories and one stack per Termux environment.
+Start native-port work early: audit/build the Online C++ server, kit/engine,
+UNO and selected script runtime, fonts/dictionaries, image/PDF/filter libraries,
+TLS/WebSocket dependencies and the WOPI/Pi adapter under Termux's Bionic/private
+prefix. Investigate native jail/namespace/seccomp/mount/fork/user assumptions and
+Android process/background constraints. Reuse a supported native configuration
+where possible; otherwise record isolated source adaptations. Do not silently
+turn off isolation or substitute Docker/proot/a remote-only server as acceptance.
+The previous Node/V8 DocumentServer plus PostgreSQL/Redis/RabbitMQ port is removed
+from scope; do not carry those services into the Collabora package accidentally.
 
-Quantum's Go/native preview dependencies, References's database/text extraction
-and Office plugins also need actual native package verification on both supported
-architectures. Do not infer support from JavaScript source alone. Keep reusable
-platform adaptations in component recipes/patches, not Firefox core.
+The server must remain owned by the existing environment supervisor, with one
+shared server and native kit workers, private data paths and honest readiness/
+shutdown handling. Quantum's Go/native preview dependencies, References database/
+text extraction and extension assets also require native package verification.
+Prove document open/edit/coedit/save/reopen/export, browserless agent operation,
+light UI/canvas and all citation formats on native Termux and Linux. Record
+concrete blockers instead of inferring support from JavaScript or desktop apps.
 
-Prove open/edit/coedit/save/reopen/export and citation metadata preservation on
-native Termux. Docker, proot or a remote-only Office server is not an implicit
-replacement for the requested native implementation. If a port is blocked,
-record the concrete source/build/runtime blocker; do not mark Android complete.
-
-Use the existing build workspace and caches under
-`/run/media/user/Data/BashkittenBuild`; re-read its current README, verification
-and acceptance records plus the build-environment chat before implementation.
-Historical successful native Zotero/LibreOffice work does not establish this
-architecture. Preserve unrelated pending native features and existing daughter-CI
-ownership of AI engine builds.
+Use `/run/media/user/Data/BashkittenBuild` and its existing caches; re-read current
+README/verification/acceptance records and the build-environment thread before
+implementation. Preserve unrelated unfinished work and AI daughter-CI ownership.
+The small browser integration build may precede completion of these ports under
+the explicit 28 October iteration-build amendment; full acceptance may not.
 
 ## 14. Source imports, notices and branding
 
@@ -1209,8 +1340,7 @@ compatibility review rather than an unbounded source refresh.
 | Component | Candidate and exact commit |
 | --- | --- |
 | Quantum | `v2.0.2-stable` — `2c071d1e6eb48d4b88da2657885d345663a0a88b` |
-| Euro-Office DocumentServer | `v9.3.7` — `e8d67f92c8a8549ea03030af2422a2b6b5d87274` |
-| Euro-Office DesktopEditors, About reference only | `v9.3.6` — `8b25e8ace5e00121bfafe86d5cd25d5ef588b404` |
+| Collabora Online / tested CODE | CODE `26.04.5.2.1`; Online `cp-26.04.5-2` — `42745e44dd8530fac7acd5f46cb7571ceea63c6a`; complete engine/package graph still to freeze |
 | Zotero core/schema/resolver donor | `10.0.6` — `536244c2771f590abab9c09a3c27e615e0b318ff` |
 | Zotero Connector donor | `5.0.217` — `ce29dfa360d1ce17a3a1f15a9d338d638a073106` |
 | Classic citation-dialog reference only | Zotero `7.0.32` — `188c54c186fbbaa6889145986d43ba64160a44fa` |
@@ -1230,28 +1360,31 @@ Connector tag ZIP SHA-256 observed:
 Record archive URL/format with hashes at import; archives made from the same
 commit through different formats/URLs are not necessarily byte-identical.
 
-### 14.2 Euro-Office released component graph
+### 14.2 Collabora released component and dependency graph
 
-Keep the v9.3.7 gitlinks together unless an explicitly tested update changes them:
+This released Online tree contains `engine/`, `wsd/`, `kit/` and `browser/`;
+build the engine first, then Online. The engine subtree at this commit has tree
+ID `89ba6d3d5c33779d2d04ec7e522afb6f20b9eec5`. Use the actual matched source,
+browser client/extensions, fonts/dictionaries, build recipes and transitive
+native/JavaScript dependencies for the selected CODE build. The tested image's
+reported Online revision matches `cp-26.04.5-2`; the container tag suffix is not
+itself a complete source manifest. Record engine revisions, vendor patches,
+external tarball hashes (`engine/download.lst`), `browser/package-lock.json`,
+build options and package/image digests. Preserve `browser/LICENSE`,
+`THIRDPARTYLICENSES`, `engine/readlicense_oo/license/license.xml` and use the
+released SBOM tooling as part of complete dependency/source accounting. Do not
+combine a release server with moving `main` extension/API code or assume that the
+community LibreOffice engine alone reproduces the Collabora package.
 
-| Repository | Commit |
-| --- | --- |
-| `server` | `a924935680de42df6b1c46cec923fdb60ff3fd30` |
-| `web-apps` | `ce0ba49545810a56a3878081ab762c6a7ae8dd4e` |
-| `sdkjs` | `40d9b7780f11a5cadc259f9b9815a364de8caa96` |
-| `core` | `a4a1ba1e9c8e6b6c841c3f059b3a8f82177d63f5` |
-| `sdkjs-forms` | `5c2f5a010dae3581adda34d9bab20b1903c94081` |
-| `core-fonts` | `9cd64d6eedc72b75b7271f325f075cb8c73e59fa` |
-| `dictionaries` | `0020f5ed5174e2a213171c4c7da9ec06ca140869` |
-| `document-templates` | `40cc88d509bac3283539b80b9534a41191d7c4ff` |
-| `document-formats` | `f6cef0b2977a180cbc541cf1d923264a3d89322d` |
-| `document-server-integration` | `d88f09562d0f08a8f852164dfb8d0401d55556ee` |
-| `document-server-package` | `c695b1b421ee452875652908668f4cada8e214f1` |
+The earlier Euro-Office gitlink table is superseded and recoverable in the prior
+plan commit. It is not an additional required suite to build or ship. Keep
+pristine source imports followed by focused named adaptations, including any
+Termux, light-canvas, extension or Quantum hook patches. Extension and WOPI/Pi
+adapter packages have their own versions/compatibility contracts. Do not import
+a full desktop Office application merely to obtain legal UI or citations.
 
-The [DocumentServer manifest](https://github.com/Euro-Office/DocumentServer/blob/e8d67f92c8a8549ea03030af2422a2b6b5d87274/.gitmodules)
-and build/lock files govern additional transitive dependencies; four headline
-repositories are insufficient. Materialize the graph without shipping a desktop
-Office app merely to reuse its About pattern.
+[Released Online source](https://github.com/CollaboraOnline/online.mirror/tree/42745e44dd8530fac7acd5f46cb7571ceea63c6a),
+[Collabora SDK](https://sdk.collaboraonline.com/).
 
 ### 14.3 Zotero-derived sources and CSL
 
@@ -1281,29 +1414,25 @@ one shared processor. Avoid two divergent citation engines between agent and UI.
 
 ### 14.4 Offline legal/source information and reporting removal
 
-Extend the existing offline About **Bundled components** information. Use
-Euro-Office's shared
-[`about-html.mjs`](https://github.com/Euro-Office/web-apps/blob/ce0ba49545810a56a3878081ab762c6a7ae8dd4e/build/about-html.mjs)
-and [metadata](https://github.com/Euro-Office/web-apps/blob/ce0ba49545810a56a3878081ab762c6a7ae8dd4e/theme/euro-office/meta/about.json)
-as the wording/data/layout reference. Its current source/license/modification
-links go to GitHub and commit history; that is not already complete offline
-delivery. Supply full offline licenses/notices, original copyright holders,
-dated BashKitten modifications and exact corresponding-source archive/checksum.
-Keep legally required interactive notices in the Office UI as applicable, using
-the shared legal component rather than adding a duplicate Agent About menu.
+Extend the existing offline About **Bundled components** information with
+Collabora Online, its engine/dependencies and each add-on. Preserve source,
+version, full license/notices, original authors, dated modifications and matching
+source archive/checksum links. Use the existing shared BashKitten legal surface
+and retain required native interactive notices; no second Agent About menu or
+Euro-Office-specific About implementation is required.
 
-Inventory actual per-component terms: Quantum's Apache-2.0 root plus all Go/JS/
-MuPDF/FFmpeg/font dependencies; Office's principal AGPL sources and inherited
-notices, CC BY-SA 4.0 artwork/documentation, Apache-2.0 templates and individual
-font/dictionary terms; Zotero/Connector/translation AGPL and per-file exceptions;
-CSL styles/locales CC BY-SA 3.0 with creator/translator attribution. The actual
-citeproc LICENSE offers AGPL v3-or-later or CPAL; do not reproduce its inconsistent
-npm `AGPL-1.0` metadata as fact.
+Inventory actual licenses from the selected source graph: Online's MPL-2.0 and
+engine/transitive terms, fonts/dictionaries, Quantum's Apache-2.0 root and its
+Go/JS/MuPDF/FFmpeg dependencies, Zotero/Connector/translation AGPL and per-file
+exceptions, and CSL styles/locales CC BY-SA 3.0 attribution. Do not carry over an
+AGPL label for the whole Office stack merely because that was Euro-Office's
+license. The citeproc LICENSE offers AGPL v3-or-later or CPAL; verify the actual
+chosen processor, not inconsistent registry metadata. Product UI uses BashKitten
+References branding without Zotero trademarks; retain donor attribution legally.
 
-Upstream Office installers request Microsoft core fonts. Select source-complete,
-redistributable font inputs consistent with BashKitten's package policy and
-verify document layout with them; do not silently add an EULA-only binary font
-download. This is separate from keeping runtime worker/memory defaults unchanged.
+Select source-complete redistributable fonts and verify layout with them. Do not
+add proprietary font downloads or accept external font EULAs implicitly. Retain
+native Collabora runtime defaults separately from font/package policy decisions.
 
 Remove reporting and remote-code dependencies in adapted builds. Quantum stable
 builds enable an analytics publisher; it must not ship as active reporting.
@@ -1423,17 +1552,15 @@ wiring CI, without reading or recording secret values.
 Workflows, cross-repository dispatch and artifact collection remain implementation
 work; repository creation does not establish any successful Office build.
 
-Upstream Office already separates core/core-wasm, SDK, web apps, server and
-packaging stages and uses **GHCR BuildKit registry caches** for much of that
-graph. **The user explicitly rejects that storage approach for BashKitten.**
-Reuse the applicable native build steps but adapt caching to ordinary GitHub
-Actions compiler/dependency caches and collect completed outputs as Actions
-artifacts. Do not copy the upstream GHCR cache/image publishing setup. Its cache
-of the whole recursive source checkout is also not a requirement to duplicate
-our full source tree in Actions cache. Native Termux needs its own proven Bionic
-adaptations.
-[Pinned Office workflow](https://github.com/Euro-Office/DocumentServer/blob/e8d67f92c8a8549ea03030af2422a2b6b5d87274/.github/workflows/build.yml),
-[build graph](https://github.com/Euro-Office/DocumentServer/blob/e8d67f92c8a8549ea03030af2422a2b6b5d87274/build/docker-bake.hcl).
+Retarget the existing `office-builds` repository to Collabora Online and its
+matched engine/dependencies, web/extensions and Linux/Termux packaging. Keep its
+requested minimal README and normal GitHub Actions caches/artifacts. Reuse
+upstream native build recipes but do not inherit external registry-cache or image
+publishing. The old Euro-Office core/SDK/web-apps/Node build graph is removed from
+the active workflow design. Re-measure Collabora cold/warm workspace, compiler
+cache and artifact sizes; lower runtime RAM does not prove smaller build caches
+or that a four-target build fits one runner/cache allowance. Source-complete
+native Termux builds need their own verified recipes, not downloaded CODE images.
 
 Quantum's frontend/Go pipeline is structurally smaller, but its selected release
 also uses CGO/MuPDF and FFmpeg; native source-complete builds must include those
@@ -1466,10 +1593,10 @@ files through one integration owner rather than concurrent overlapping edits.
 | --- | --- |
 | A. Runtime/interface contracts | Reuse environment-singleton supervisor, one Files button URL, existing service mappings/auth, minimum native API adapters and data ownership |
 | B. Source/package groundwork | Pristine pinned sources, dependency materialization, notices, offline assets; safe freeze of the dirty reviewer donor |
-| C. Early Office proofs | Shared DocumentServer stack; native coauthoring configuration and plugin API execution; distinct human/agent participants; native history; Termux core/build path |
+| C. Early Office proofs | Shared Collabora server; WOPI and browserless native session/extension execution; separate human/agent views; host-integrated history; always-light UI/canvas; Termux engine/kit path |
 | D. Files migration | Shared Quantum with reconciled project scopes, theme, transfer behavior, Office link, timeouts, retained pickers/Changes and clean old-viewer removal |
 | E. References and capture | Independent project DBs, UI matching requested layout, compatibility APIs, real Connector-derived save flow, browser resolver/challenge host adapters |
-| F. Office persistence/diff | Native automatic force-save, full snapshot retention, native Version History adapter; optional six-format snapshot comparison through Pi/CLI only |
+| F. Office persistence/diff | Native saves/WOPI PutFile, full snapshot retention, native history entry plus minimal host list/restore adapter; optional six-format snapshot comparison through Pi/CLI only |
 | G. Citations/Reviewer | Shared full-CSL engine, classic modal and three live editor adapters, code promotion, text/PDF export, Pi skills and complete reviewer migration |
 | H. Builds/packaging/acceptance | Independently built modules, optional capacity-driven build repos and collected artifacts; final installed flows, singleton/resource/transport/source/removal evidence |
 
@@ -1482,9 +1609,47 @@ as work is integrated, not only after the implementation is finished.
 Early proof order is intended to uncover incompatible APIs/native dependencies
 before broad integration. It does not permit omitting a mandatory platform or
 shipping a partial replacement as complete. Iterate/build independent modules
-first; integrate the full requested scope before full main-app candidate builds
-under the existing batched acceptance discipline. No need to rebuild Mozilla for
+first. The user authorizes the narrow browser integration iteration build below
+before backend completion; full feature acceptance still follows the existing
+batched installed-app verification discipline. No need to rebuild Mozilla for
 every web UI, translator, CLI or citation-plugin iteration.
+
+### 15.3 Immediate Mozilla boundary and Android message-height correction
+
+Prepare one small browser integration batch so independently deployed Files,
+Collabora and References modules can be tested against an installed browser:
+
+1. Remove the superseded internal Files UI, spreadsheet viewer and old standalone
+   LibreOffice preview/export paths cleanly. Preserve shared attachment/file APIs,
+   folder pickers, Git Changes/diff/cancellation and ordinary PDF tabs.
+2. Add only the sidecar folder-button normal-tab launch and existing local/remote
+   endpoint/lifecycle hookup. Launch uses the exact Chisel mapping; no embedded
+   Quantum or Office UI, Office-specific actor or new transport/authentication.
+3. Package the small privileged References extension host and fixed narrow
+   capture/resolver bridge. Keep replaceable logic, translators and backend/UI
+   modules versioned outside Mozilla. Document API compatibility and supported
+   manual development reload/update; do not weaken extension signing globally.
+4. Reproduce/fix the user's Android **excessively tall default chat/message
+   window** regression. Inspect the shared `agent/src/web/web_ui.html` layout,
+   message region, `#prompt` sizing/autogrow and Android viewport/inset host rules
+   before identifying the cause. Prefer the smallest CSS/sizing fix in the
+   existing owner; a one-line change is a hypothesis, not a promised diagnosis.
+   Empty/short input should start compact, grow only with content up to its bound,
+   shrink after send/clear, and leave the transcript usable. Verify keyboard
+   open/close, rotation, wrapped header/toolbars, restored drafts and long input
+   on Android, and preserve normal desktop sizing/scrolling.
+5. Build/install this browser boundary using the existing target builders/caches
+   as an explicitly labelled **integration iteration build**. It may precede
+   unfinished pluggable backends. Record unavailable modules honestly; the hooks
+   must not claim a stub implements Files, Office or References. Thereafter
+   change/restart/reload modules independently; only actual native hook/host
+   changes require another browser build. Final packages and installed acceptance
+   still cover all mandatory features/platforms and unrelated existing scope.
+
+This user-authorized ordering supersedes conflicting no-early-browser-build
+wording only for this boundary/fix batch. It does not authorize new giant Mozilla
+modules, a reduced final product, dropping native Termux or moving AI builds out
+of daughter CI. Do not start builds merely because this plan was amended.
 
 ## 16. Acceptance checklist and evidence
 
@@ -1511,7 +1676,7 @@ Required acceptance groups:
 - [ ] **Service sharing:** open several projects, chats, folders and documents
   concurrently on native, one container/VM and Termux. Inspect one Quantum and
   one Office stack plus one References service per owner, with separate project
-  databases; no per-chat PostgreSQL/Redis/RabbitMQ startup.
+  databases; no per-chat Office servers or carried-over Euro-Office dependencies.
   Concurrent launch, restart, duplicate windows and CLI entry reuse that stack.
   With autostart disabled, browser/backend launch starts neither Quantum nor the
   Office stack. First Files use starts Quantum; first Office use starts Office
@@ -1536,11 +1701,11 @@ Required acceptance groups:
   authenticated participants using native collaboration configuration and APIs;
   automatic agent participation, native cursors/undo/reconnect and Pi operations
   for open/create/read/edit/save/export plus ordinary browser viewing.
-- [ ] **Persistence:** normal authenticated save/force-save callbacks, visible
-  failures, complete-file saves, callback retry handling and close/reopen.
+- [ ] **Persistence:** authenticated WOPI saves/locks/version conflicts, visible
+  failures, complete-file writes, retry reconciliation and close/reopen.
 - [ ] **Snapshots:** automatic full versions outside the project, maximum-count
-  pruning, and native Office Version History to choose/open/restore an older
-  version on desktop and mobile. No manual change checking or custom history UI.
+  pruning, and Collabora's native history action plus minimal host version-list/restore
+  adapter on desktop and mobile. No manual change checking or separate history app.
 - [ ] **Optional snapshot tool:** Pi/CLI comparison works on saved versions in
   all six formats and reports unsupported parts without modifying inputs. No
   comparison UI, browser hook or Git/Changes integration is present.
@@ -1571,7 +1736,7 @@ Required acceptance groups:
   The user sees only normal rendered citations; agent reads identify the same
   fields and their references, and agent insert/edit/prose updates preserve them.
   Citation logic ships in the replaceable References Office plugin/backend,
-  without a large hardcoded Euro-Office modification.
+  without a large hardcoded Collabora modification.
 - [ ] **Round trips/export:** DOCX/XLSX/PPTX and ODT/ODS/ODP save/reopen with durable
   citation identity; source-preserving conversion behavior; plain-text citation
   export copy; current-revision PDF/preview with Office, no LibreOffice path.
@@ -1582,6 +1747,16 @@ Required acceptance groups:
   stalls, cancellation, backpressure, auth expiry, reconnection and permission
   revocation without direct fallback; backend Off and Quit ownership, remote
   disconnect isolation, tab-close behavior and Android background handling.
+- [ ] **Always-light Office:** native launch settings, stored dark preferences,
+  OS dark mode, canvas-background controls and phone layouts all keep light UI/
+  canvas; real cell/slide/document colors and exported file data remain intact.
+- [ ] **Maintainable Quantum add-on:** WOPI/storage/Pi/citation logic lives outside
+  Quantum; tiny documented hook patch, no modified OnlyOffice protocol, explicit
+  module/version contract and an upstream-update merge/contract test.
+- [ ] **Immediate browser fixes/build:** compact Android default message/input
+  height, content growth/shrink, keyboard/rotation/drafts and desktop regression
+  coverage; old viewer gone, pickers/Changes/attachments retained, ordinary launch
+  hooks and privileged host installed, modules iterate without browser rebuilds.
 - [ ] **Resources/responsiveness:** measured one-stack idle/edit/export/checkpoint
   usage with unchanged resource defaults and the requested native save timer;
   many chats do not multiply stacks; browsing,
@@ -1601,10 +1776,13 @@ Required acceptance groups:
 
 | Gate | Evidence now | Resolution required before completion |
 | --- | --- | --- |
-| Native Termux Office | Released packages target glibc Linux; complete Bionic server unverified | Native source port and installed flows on supported targets |
-| Agent automation | Open plugin APIs exist; public `createConnector` missing in researched release | Prove bundled plugin bridge and an actual automatically joined second editor |
-| Background/no-human renderer | A service endpoint is not a live editor | Prove automatic native participant use through the released Office client/APIs on Android/Linux; keep it in the web module |
-| Cross-editor citations | Word fields exist; cells/slides offer lower-level anchors | Implement stable metadata/anchors and concurrent edit/round-trip coverage |
+| Native Termux Office | Linux CODE is not a native Bionic coolwsd/kit/engine proof | Native source port, supported process isolation and installed flows on all targets |
+| Agent automation | Released native UNO/script/extension routes exist with permission/experimental gates | Prove structured operations/results and a distinct authenticated agent view |
+| Browserless agent | Native document WebSocket sessions/kit exist; complete Pi adapter unverified | Prove no-human-tab live coediting, view isolation, exports, reconnect and saves on Linux/Termux |
+| Cross-editor citations | Writer Zotero/field primitives exist; Calc/Impress require adapters | Local References connector, classic modal, persistent anchors and complete live/round-trip coverage |
+| Quantum WOPI add-on | Selected stable has OnlyOffice only | External versioned module and minimal mergeable hook; authenticated WOPI and normal tab launch |
+| History | Native action delegates version history to the host | Minimal host list/immutable views/safe restore backed by external snapshots |
+| Light canvas | Native UI defaults exist; background preference is separate | Prove light canvas despite saved state, using native controls or smallest isolated hook |
 | Full CSL | Existing reviewer excludes note styles and relies on external Refresh | Complete shared rich renderer and per-editor note/order behavior |
 | Privileged independent updates | Android built-in installer accepts APK resources | Narrow fixed host plus verified replaceable logic/update path; no global privilege relaxation |
 | PDF recognition/OA | Upstream calls hosted services outside Connector source | Own backend adapters with explicit confidence and no private-service dependency |
