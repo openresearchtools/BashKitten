@@ -186,6 +186,22 @@ export class ApplicationModules {
             if (typeof service?.coordinateNativeRestore !== 'function') throw unavailable('Office', 'native restore coordination is unavailable');
             return service.coordinateNativeRestore(documentId, options);
           },
+          officeCopy: ({ grantId, viewId, documentId, name, format, signal: callerSignal, origin }) => this.gateway.authorizeOperation(grantId, 'office-copy', async context => {
+            await this.validateGrant(context.grant);
+            const signal = callerSignal ? AbortSignal.any([callerSignal, context.signal]) : context.signal;
+            const identity = { kind: 'browser', backendId: await this.identity(), viewId, operationId: randomUUID(), grantId, projectId: context.grant.scope.projectId, origin };
+            const sessions = new Set();
+            try {
+              const opened = await service.dispatch({ method: 'POST', path: '/sessions', body: { documentId, projectId: identity.projectId }, identity, signal });
+              sessions.add(opened.sessionId);
+              const copied = await service.dispatch({ method: 'POST', path: `/sessions/${opened.sessionId}/commands`, body: { operation: 'export.copy', name, format }, identity, signal });
+              sessions.add(copied.sessionId);
+              // The normal copied-document view opens its own human session.
+              // Do not expose a download/session that this action will close.
+              return { browserUrl: copied.browserUrl, documentId: copied.documentId, sourceDocumentId: copied.sourceDocumentId, citations: copied.citations };
+            } catch (error) { if (error.details?.copySessionId) sessions.add(error.details.copySessionId); throw error; }
+            finally { await Promise.allSettled([...sessions].map(id => service.dispatch({ method: 'DELETE', path: `/sessions/${id}`, identity }))); }
+          }),
           referenceContext: ({ grantId }) => this.gateway.authorizeOperation(grantId, 'references-context', async ({ grant }) => {
             await this.validateGrant(grant);
             if (!grant.scope.projectId) return null;
@@ -208,14 +224,24 @@ export class ApplicationModules {
           if (typeof references[name] !== 'function') throw unavailable('References', 'the native citation operation is unavailable');
           return references[name](value, { authority: context.grant.record, projectId: ownedProject, signal: signal ? AbortSignal.any([signal, context.signal]) : context.signal });
         });
-        service = module.createOfficeService({ authorizeOpen: (body, identity, options) => this.openOffice(body, identity, options),
+        service = module.createOfficeService({ resolveOpen: (body, identity, options) => this.resolveOfficeDocument(body, identity, options),
+          authorizeOpen: (body, identity, options) => this.openOffice(body, identity, options),
           authorizeSession: identity => this.gateway.authorizeOperation(identity?.grantId, 'office-session', ({ grant }) => this.validateGrant(grant)),
+          authorizeRenew: (session, identity, { signal } = {}) => this.gateway.authorizeOperation(identity?.grantId, 'office-renew', async context => {
+            await this.validateGrant(context.grant);
+            return provider.renew({ grantId: identity.grantId, documentId: session.documentId, participantId: session.participantId, accessToken: session.accessToken },
+              { signal: signal ? AbortSignal.any([signal, context.signal]) : context.signal });
+          }),
+          registerExport: (exported, { signal } = {}) => this.gateway.authorizeOperation(exported.grantId, 'office-export', async context => {
+            await this.validateGrant(context.grant);
+            return provider.registerExport(exported, { signal: signal ? AbortSignal.any([signal, context.signal]) : context.signal });
+          }),
           authorizeSnapshot: async ({ documentId, versionId }, identity, { signal } = {}) => {
             const participantId = 'agent:' + identity.backendId + ':' + identity.workerId;
             await provider.owner.register({ grantId: identity.grantId, documentId, participantId, participantName: 'Pi' });
             return provider.snapshot({ grantId: identity.grantId, documentId, participantId, versionId }, { signal });
           },
-          references: { renderDocument: referenceOperation('renderDocument'), parseDocument: referenceOperation('parseDocument') } });
+          references: { renderDocument: referenceOperation('renderDocument'), parseDocument: referenceOperation('parseDocument'), importSnapshots: referenceOperation('importSnapshots') } });
         this.officeService = service;
         return service;
       })().catch(error => { this.instances.delete('office'); throw error; });
@@ -230,20 +256,36 @@ export class ApplicationModules {
     }
     await authorizeApplicationPath(grant.scope.root);
   }
+  async resolveOfficeDocument(body, identity, { signal } = {}) {
+    return this.gateway.authorizeOperation(identity.grantId, 'office-document', async ({ grant }) => {
+      await this.validateGrant(grant); signal?.throwIfAborted();
+      if (!body || Object.keys(body).some(key => !['projectId', 'documentId', 'relativePath', 'create', 'locale'].includes(key)) ||
+          [body.documentId, body.relativePath, body.create].filter(Boolean).length !== 1 || (body.projectId ?? null) !== (grant.scope.projectId ?? null)) throw Object.assign(Error('Choose one document in the authorized project'), { status: 400 });
+      // Resolve through the existing storage authority before the native-view
+      // cache. Repeated opens need no unused tokens or browser bootstrap grants.
+      await this.prepareOfficeRuntime(); signal?.throwIfAborted();
+      const document = await this.officeProvider.owner.register({ grantId: grant.id, documentId: body.documentId, relativePath: body.relativePath, create: body.create,
+        participantId: identity.kind === 'browser' ? 'browser-control:' + identity.backendId + ':' + identity.viewId + ':' + identity.operationId : 'agent:' + identity.backendId + ':' + identity.workerId,
+        participantName: identity.kind === 'browser' ? 'Office export' : 'Pi' });
+      return { documentId: document.documentId, projectId: grant.scope.projectId, ...(body.locale ? { locale: body.locale } : {}) };
+    });
+  }
   async openOffice(body, identity, { signal } = {}) {
     return this.gateway.authorizeOperation(identity.grantId, 'office-open', async ({ grant }) => {
       await this.validateGrant(grant); signal?.throwIfAborted();
       if (!body || Object.keys(body).some(key => !['projectId', 'documentId', 'relativePath', 'create', 'locale'].includes(key)) ||
-          [body.documentId, body.relativePath, body.create].filter(Boolean).length !== 1 || body.projectId !== grant.scope.projectId) throw Object.assign(Error('Choose one document in the authorized project'), { status: 400 });
+          [body.documentId, body.relativePath, body.create].filter(Boolean).length !== 1 || (body.projectId ?? null) !== (grant.scope.projectId ?? null)) throw Object.assign(Error('Choose one document in the authorized project'), { status: 400 });
       // Verify installed native artifacts before creating a new project file.
       await this.prepareOfficeRuntime(); signal?.throwIfAborted();
       const endpoint = await this.gateway.endpoint();
+      const origin = identity.kind === 'browser' ? identity.origin : endpoint.origin;
       const view = await this.gateway.open('files', grant.record, { ...grant.scope, workerId: undefined, id: randomUUID(), identity: 'bk_' + randomUUID().replaceAll('-', ''), openPath: '/' });
       const human = this.gateway.resolve(view.url).grant;
       try {
-        const opened = await this.officeProvider.open({ ...body, grantId: grant.id, participantId: 'agent:' + identity.backendId + ':' + identity.workerId,
-          participantName: 'Pi', participantKind: 'agent', origin: endpoint.origin, editorBaseUrl: endpoint.origin + '/apps/office', basePath: human.basePath,
-          browserView: { grantId: human.id, basePath: human.basePath, origin: endpoint.origin, editorBaseUrl: endpoint.origin + '/apps/office', bootstrapQuery: '?launch=' + human.nonce } });
+        const opened = await this.officeProvider.open({ ...body, grantId: grant.id,
+          participantId: identity.kind === 'browser' ? 'browser-control:' + identity.backendId + ':' + identity.viewId + ':' + identity.operationId : 'agent:' + identity.backendId + ':' + identity.workerId,
+          participantName: identity.kind === 'browser' ? 'Office export' : 'Pi', participantKind: 'agent', origin, editorBaseUrl: origin + '/apps/office', basePath: human.basePath,
+          browserView: { grantId: human.id, basePath: human.basePath, origin, editorBaseUrl: origin + '/apps/office', bootstrapQuery: '?launch=' + human.nonce } });
         return { ...opened, projectId: grant.scope.projectId };
       } catch (error) { this.gateway.grants.delete(human.id); throw error; }
     });
@@ -307,6 +349,10 @@ export class ApplicationModules {
       const url = new URL(input.path, 'http://application.invalid');
       if (['files', 'references'].includes(input.component) && url.pathname === '/open' && input.method === 'POST') return { status: 200, body: await this.open(input.component, input.body || {}, record) };
       if (input.component === 'references') {
+        if (url.pathname === '/resolve') {
+          if (input.method !== 'POST') throw Object.assign(Error('Method not allowed'), { status: 405 });
+          return this.resolveReferences(input.body, record, { signal: activeSignal });
+        }
         const lifecycle = /^\/projects\/([a-f0-9-]{36})\/(archive|relink|library)$/.exec(url.pathname);
         if (lifecycle && ['POST', 'DELETE'].includes(input.method)) return this.projectLifecycle(lifecycle[1], lifecycle[2], input.method, input.body || {}, record, { signal: activeSignal, response });
         const projectRoute = /^\/projects(?:\/([a-f0-9-]{36}))?$/.exec(url.pathname);
@@ -328,25 +374,53 @@ export class ApplicationModules {
         }
         const projectId = /^\/projects\/([^/]+)/.exec(url.pathname)?.[1];
         if (projectId) await this.project(record, projectId, { includeArchived: true });
-        return (await this.references()).handle({ method: input.method || 'GET', path: url.pathname, query: url.searchParams,
+        const result = await (await this.references()).handle({ method: input.method || 'GET', path: url.pathname, query: url.searchParams,
           body: input.body, headers: {}, signal: activeSignal, authority: record });
+        if (result.filePath && workerId && projectId && (input.method || 'GET') === 'GET') {
+          // Pi runs on the owning backend and can use the authorized file path.
+          // Its optional ordinary browser view uses the same scoped gateway and
+          // native service mapping as the References manager, including PDFs.
+          const descriptor = await this.open('references', { projectId }, record), target = new URL(descriptor.url);
+          target.pathname += 'api' + url.pathname;
+          for (const [key, value] of url.searchParams) if (key !== 'launch') target.searchParams.append(key, value);
+          result.body = { filePath: result.filePath, url: target.href };
+        }
+        return result;
       }
       if (input.component === 'office') {
         if (!workerId) throw Object.assign(Error('Office operations require an owned Pi session'), { status: 403 });
-        const session = await this.resolveSession(workerId);
+        await this.resolveSession(workerId);
         const projectRequest = ['/sessions', '/snapshots/diff'].includes(url.pathname);
         const projectId = projectRequest ? input.body?.projectId : null;
         const project = projectId ? await this.project(record, projectId) : null;
         if (projectRequest && !project) throw Object.assign(Error('Choose the document project'), { status: 400 });
-        const root = project?.cwd || (await fileDirectory(session.cwd)).path;
-        await authorizeApplicationPath(root);
-        const grant = this.gateway.grant(record, { id: randomUUID(), root, projectRoot: project?.cwd, projectId: project?.id, workerId,
-          identity: 'bk_' + randomUUID().replaceAll('-', ''), permissions: { view: true, download: true, modify: true, create: true, delete: true }, backendId: await this.identity() });
-        return { status: 200, body: await (await this.office()).dispatch({ method: input.method || 'GET', path: url.pathname, body: input.body,
-          identity: { backendId: await this.identity(), workerId, sessionId: workerId, grantId: grant.id, projectId: project?.id }, signal: activeSignal }) };
+        let grant, createdGrant = false;
+        if (project) {
+          await authorizeApplicationPath(project.cwd);
+          const scope = { id: randomUUID(), root: project.cwd, projectRoot: project.cwd, projectId: project.id,
+            workerId: url.pathname === '/snapshots/diff' ? undefined : workerId,
+            identity: 'bk_' + randomUUID().replaceAll('-', ''), permissions: { view: true, download: true, modify: true, create: true, delete: true }, backendId: await this.identity() };
+          grant = this.gateway.grant(record, scope); createdGrant = grant.scope === scope;
+        }
+        // Commands keep the session's original captured grant. They must not
+        // mint a new folder authority on every edit or follow a regrouped chat.
+        try {
+          return { status: 200, body: await (await this.office()).dispatch({ method: input.method || 'GET', path: url.pathname, body: input.body,
+            identity: { backendId: await this.identity(), workerId, sessionId: workerId, grantId: grant?.id, projectId: project?.id }, signal: activeSignal }) };
+        } catch (error) { if (createdGrant) this.gateway.grants.delete(grant.id); throw error; }
+        finally { if (grant && url.pathname === '/snapshots/diff') this.gateway.grants.delete(grant.id); }
       }
       throw Object.assign(Error('Application route not found'), { status: 404 });
     }, { watch: abort => { signal?.addEventListener('abort', abort, { once: true }); return () => signal?.removeEventListener('abort', abort); } });
+  }
+  async resolveReferences(input, record, { signal } = {}) {
+    if (!input || Object.keys(input).some(key => !['projectId', 'requestId'].includes(key)) || typeof input.requestId !== 'string' || !input.requestId || input.requestId.length > 128) throw Object.assign(Error('Choose a pending resolver request'), { status: 400 });
+    await this.project(record, input.projectId);
+    const pending = await (await this.references()).handle({ method: 'POST', path: `/projects/${input.projectId}/connector/getResolverRequest`,
+      query: new URLSearchParams(), body: { requestId: input.requestId }, headers: {}, authority: record, signal });
+    if (pending.status !== 200 || pending.body?.status === 'complete') return pending;
+    if (pending.body?.status !== 'challenge-required') throw Object.assign(Error('This resolver request does not need a browser'), { status: 409 });
+    return { status: 200, body: await dispatchReferenceResolver(record, input, { signal }) };
   }
   async connector(input, record, { signal } = {}) {
     const backendId = await this.identity();
@@ -377,7 +451,7 @@ export class ApplicationModules {
     if (component === 'office') return this.officeProvider.handleEditor(req, res, context);
     if (component === 'files' && context.url.pathname.slice(context.basePath.length).startsWith('office/')) {
       await this.office();
-      return this.officeProvider.handle(req, res, { grantId: context.grant.id, basePath: context.basePath });
+      return this.officeProvider.handle(req, res, { grantId: context.grant.id, basePath: context.basePath, origin: context.origin, signal: context.signal });
     }
     if (component === 'files') return (await this.module('files')).handleFiles(req, res, { ...context, dataRoot: dataDir,
       scope: context.grant.scope, endpoint: context.grant.scope.endpoint, authorizePath: authorizeApplicationPath,
@@ -390,18 +464,6 @@ export class ApplicationModules {
     if (route === 'api/context') {
       if (req.method !== 'GET') throw Object.assign(Error('Method not allowed'), { status: 405 });
       return json(res, { backendId: await this.identity(), projectId: context.grant.scope.projectId, projects: (await projects()).projects.map(({ id, name }) => ({ id, name })) });
-    }
-    if (route === 'api/resolve') {
-      if (req.method !== 'POST') throw Object.assign(Error('Method not allowed'), { status: 405 });
-      const input = await applicationBody(req);
-      if (!input || Object.keys(input).some(key => !['projectId', 'requestId'].includes(key)) || typeof input.requestId !== 'string' || input.requestId.length > 128) throw Object.assign(Error('Choose a pending resolver request'), { status: 400 });
-      await this.project(context.grant.record, input.projectId);
-      const pending = await (await this.references()).handle({ method: 'POST', path: `/projects/${input.projectId}/connector/getResolverRequest`,
-        query: new URLSearchParams(), body: { requestId: input.requestId }, headers: {}, authority: context.grant.record, signal: context.signal });
-      if (pending.status !== 200) return this.sendResult(req, res, pending);
-      if (pending.body?.status === 'complete') return json(res, pending.body);
-      if (pending.body?.status !== 'challenge-required') throw Object.assign(Error('This resolver request does not need a browser'), { status: 409 });
-      return json(res, await dispatchReferenceResolver(context.grant.record, input, { signal: context.signal }));
     }
     if (route.startsWith('api/')) {
       let result;
