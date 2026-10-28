@@ -485,7 +485,7 @@ export class ApplicationModules {
           result.body = { ...result.body, reopen: { component: descriptor.component, serviceId: descriptor.serviceId, openPath: descriptor.openPath } };
         } catch (error) { result.body = { ...result.body, reopenError: error.message }; }
       }
-      return this.sendResult(req, res, result, context.grant.record, context.signal);
+      return this.sendResult(req, res, result, context.grant.record, context.signal, /^api\/projects\/([a-f0-9-]{36})\//.exec(route)?.[1]);
     }
     if (!['GET', 'HEAD'].includes(req.method)) throw Object.assign(Error('Method not allowed'), { status: 405 });
     const root = fileURLToPath(referencesWebRoot);
@@ -496,22 +496,27 @@ export class ApplicationModules {
     res.writeHead(200, { 'Content-Type': mime, 'Content-Length': bytes.length, 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
     res.end(req.method === 'HEAD' ? undefined : bytes);
   }
-  async sendResult(req, res, result, authority, signal) {
-    if (result.referenceExport) {
-      if (!authority) throw Object.assign(Error('Library export authority is required'), { status: 403 });
+  async sendResult(req, res, result, authority, signal, projectId) {
+    if (result.filePath) {
+      if (!authority || !projectId) throw Object.assign(Error('Library file authority is required'), { status: 403 });
       return this.authorize(authority, async operation => {
-        const activeSignal = signal ? AbortSignal.any([signal, operation.signal]) : operation.signal;
-        const references = await this.references();
-        if (typeof references.openExport !== 'function') throw unavailable('References', 'the native export receipt is unavailable');
-        const opened = await references.openExport({ authority, projectId: result.referenceExport.projectId, exportId: result.referenceExport.exportId, signal: activeSignal });
-        return sendFileHandle(req, res, opened.handle, { name: opened.name, contentType: opened.contentType, download: true, signal: activeSignal });
+        const project = await this.project(authority, projectId, { includeArchived: true });
+        // A manager can select another authorized library. Hold that library's
+        // existing drain guard through streaming, independently of its tab root.
+        return project.runAuthorized(async projectSignal => {
+          const activeSignal = AbortSignal.any([projectSignal, operation.signal, ...(signal ? [signal] : [])]);
+          if (result.referenceExport) {
+            if (result.referenceExport.projectId !== projectId) throw Object.assign(Error('The export belongs to another library'), { status: 403 });
+            const references = await this.references();
+            if (typeof references.openExport !== 'function') throw unavailable('References', 'the native export receipt is unavailable');
+            const opened = await references.openExport({ authority, projectId, exportId: result.referenceExport.exportId, signal: activeSignal });
+            return sendFileHandle(req, res, opened.handle, { name: opened.name, contentType: opened.contentType, download: true, signal: activeSignal });
+          }
+          await authorizeApplicationPath(result.filePath);
+          return sendFile(req, res, result.filePath, false, path.basename(result.filePath), activeSignal);
+        }, { write: false });
       }, { cancel: () => { req.destroy(); res.destroy(); },
         watch: abort => { res.once('close', abort); return () => res.off('close', abort); } });
-    }
-    if (result.filePath) {
-      const send = async () => { await authorizeApplicationPath(result.filePath); return sendFile(req, res, result.filePath, false); };
-      return authority ? this.authorize(authority, send, { cancel: () => { req.destroy(); res.destroy(); },
-        watch: abort => { res.once('close', abort); return () => res.off('close', abort); } }) : send();
     }
     res.writeHead(result.status || 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...result.headers });
     res.end(JSON.stringify(result.body ?? null));

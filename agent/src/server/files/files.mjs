@@ -94,12 +94,12 @@ export async function sessionImage(meta, reference, view) {
   if (!mimeType(file).startsWith('image/')) throw Object.assign(Error('This file is not a supported image'), { status: 415 });
   return file;
 }
-export async function sendFile(req, res, file, download = false, name = path.basename(file)) {
+export async function sendFile(req, res, file, download = false, name = path.basename(file), signal = managerContext()?.signal) {
   await authorizeManagerPath(file);
   const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try { await authorizeManagerPath(`/proc/self/fd/${handle.fd}`); }
   catch (error) { await handle.close(); throw error; }
-  return sendFileHandle(req, res, handle, { name, contentType: mimeType(file), download });
+  return sendFileHandle(req, res, handle, { name, contentType: mimeType(file), download, signal });
 }
 // The caller owns authorization and opens the exact file through its existing
 // owner. This shared sender takes handle ownership; it never accepts a path or
