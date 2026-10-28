@@ -468,56 +468,16 @@
     .question-card input:disabled { opacity:.52; }
     .question-card :is(button,input):focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     #sidebarToggle { display:none; }
-    #app.files-open { grid-template-columns:260px minmax(0,1fr) 300px; }
-    #filePanel { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border-left:1px solid var(--line-soft); background:var(--sidebar); padding:8px; }
-    .file-heading { display:flex; flex-shrink:0; align-items:center; gap:5px; min-height:42px; }
-    .file-heading strong { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .file-tabs, .file-toolbar { display:flex; flex-shrink:0; flex-wrap:wrap; gap:6px; align-items:center; }
-    .file-tabs { margin-bottom:8px; border-bottom:1px solid var(--line-soft); }
-    .file-tabs button { margin:3px 0; padding:8px 10px; border:0; background:transparent; color:var(--muted); }
-    .file-tabs button:hover, .file-tabs button[aria-selected="true"] { background:var(--surface-2); color:var(--text); }
-    .file-toolbar button, .file-toolbar a, .file-path button { padding:7px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-pill); color:var(--text); font-size:12px; text-decoration:none; }
-    .file-toolbar [aria-pressed="true"] { background:var(--surface-2); border-color:var(--text); }
-    .file-toolbar button.danger { color:var(--danger); }
+    #app.changes-open { grid-template-columns:260px minmax(0,1fr) 300px; }
+    #changesPanel { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border-left:1px solid var(--line-soft); background:var(--sidebar); padding:8px; }
+    .changes-heading { display:flex; flex-shrink:0; align-items:center; gap:5px; min-height:42px; }
+    .changes-heading strong { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .changes-toolbar { display:flex; flex-shrink:0; flex-wrap:wrap; gap:6px; align-items:center; }
+    .changes-toolbar button { padding:7px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-pill); color:var(--text); font-size:12px; }
     .file-icon { display:block; width:16px; height:16px; flex:0 0 16px; }
-    #fileActions { flex-wrap:nowrap; gap:2px; }
-    #fileActions button, .file-path button, .file-toolbar .file-icon-action { display:inline-flex; align-items:center; justify-content:center; gap:5px; height:32px; padding:6px; border-color:transparent; background:transparent; white-space:nowrap; }
-    #fileActions button:hover, .file-path button:hover, .file-toolbar .file-icon-action:hover { background:var(--surface-2); }
-    #fileActions button[aria-pressed="true"] { background:var(--surface-2); color:var(--text); box-shadow:inset 0 0 0 1px var(--line); }
-    #fileActions .file-icon-action, .file-path button, .file-toolbar .file-icon-action { width:32px; flex-shrink:0; border-radius:50%; }
-    #fileActions button:focus-visible, .file-path button:focus-visible { outline:1px solid var(--text); outline-offset:-1px; }
-    #fileSelection { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:28px; padding:0 5px; color:var(--muted); }
-    #fileSelection label { display:inline-flex; align-items:center; gap:7px; font-size:12px; cursor:pointer; }
-    #fileSelection input { margin:0; accent-color:var(--ok); }
-    #fileNotice:empty { display:none; }
-    .file-pane { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; gap:8px; }
-    .file-path { display:flex; gap:4px; }
-    .file-path input { flex:1; width:0; min-width:0; padding:7px; border:1px solid var(--line); background:var(--bg); font-size:12px; }
-    #fileDestination, #fileNotice, #changesNotice, #changesRoot, #fileJobText { overflow-wrap:anywhere; margin:0; padding:3px 2px; }
-    #fileTree, #changesList { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; }
-    #fileTree details { margin-left:10px; }
-    #fileTree > details { margin-left:0; }
-    #fileTree summary { display:flex; align-items:center; gap:7px; cursor:pointer; padding:8px 4px; list-style:none; overflow-wrap:anywhere; font-size:12px; }
-    #fileTree summary::-webkit-details-marker { display:none; }
-    #fileTree .file-disclosure { width:11px; height:11px; flex-basis:11px; }
-    #fileTree details[open] > summary .file-disclosure { transform:rotate(90deg); }
-    #fileTree .file-icon { color:var(--muted); }
-    #fileTree summary, .file-row { border-radius:var(--radius-control); }
-    #fileTree summary:hover, .file-row:hover { background:var(--surface-2); }
-    #fileTree input[type="checkbox"] { margin:0; vertical-align:middle; accent-color:var(--ok); }
-    #fileTree:not(.selecting) input[type="checkbox"] { display:none; }
-    .file-row { display:flex; gap:7px; padding:8px 4px 8px 22px; align-items:center; font-size:12px; }
-    .file-row { flex-wrap:wrap; }
-    .file-row .file-name { flex:1; min-width:80px; overflow-wrap:anywhere; }
-    .file-row .file-item-actions { display:flex; flex-wrap:wrap; gap:5px; margin-left:auto; }
-    .file-item-actions button, .file-item-actions a { padding:5px 7px; border:1px solid var(--line); border-radius:var(--radius-pill); background:var(--surface); color:var(--text); font-size:11px; white-space:nowrap; }
-    .file-item-actions .file-reference-button { display:inline-flex; align-items:center; justify-content:center; min-width:28px; padding:5px; }
-    .file-row a { color:var(--text); text-decoration:none; }
-    .file-row a:hover { text-decoration:underline; }
-    .file-empty { padding:16px 4px; color:var(--muted); font-size:12px; }
-    #fileJob { flex-shrink:0; margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
-    #fileJob progress { width:100%; height:5px; }
-    #fileActionPaths { max-height:28dvh; overflow:auto; overflow-wrap:anywhere; padding-left:20px; font-size:12px; }
+    #changesView { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; gap:8px; }
+    #changesNotice, #changesRoot { overflow-wrap:anywhere; margin:0; padding:3px 2px; }
+    #changesList { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; }
     .change-row { display:flex; width:100%; align-items:center; gap:7px; padding:9px 4px; border:0; border-bottom:1px solid var(--line-soft); background:transparent; text-align:left; }
     .change-row:hover, .change-row[aria-pressed="true"] { background:var(--surface-2); }
     .change-path { flex:1; min-width:0; overflow-wrap:anywhere; font-size:12px; }
@@ -569,15 +529,15 @@
     #serviceLogin input, #serviceLogin select, #piDialogInput input, #piDialogInput textarea, #piDialogInput select { width:100%; padding:9px; border:1px solid var(--line); background:var(--bg); }
     @media (max-width:1100px) and (min-width:701px) {
       #app { grid-template-columns:220px minmax(0,1fr); }
-      #app.files-open { grid-template-columns:220px minmax(0,1fr); }
-      #filePanel { position:absolute; z-index:30; right:0; top:58px; bottom:0; width:320px; border-start-start-radius:var(--radius-card); box-shadow:-10px 0 30px var(--shadow); }
+      #app.changes-open { grid-template-columns:220px minmax(0,1fr); }
+      #changesPanel { position:absolute; z-index:30; right:0; top:58px; bottom:0; width:320px; border-start-start-radius:var(--radius-card); box-shadow:-10px 0 30px var(--shadow); }
     }
     @media (max-width:700px) {
-      #app, #app.files-open { grid-template-columns:minmax(0,1fr); }
+      #app, #app.changes-open { grid-template-columns:minmax(0,1fr); }
       #sidebarToggle { display:inline-grid; flex-shrink:0; }
       #sidebar { display:none; position:absolute; z-index:40; inset:0 auto 0 0; width:min(86vw,300px); border-radius:0 var(--radius-card) var(--radius-card) 0; box-shadow:10px 0 30px var(--shadow); }
       #app.sidebar-open #sidebar { display:flex; }
-      #filePanel { position:absolute; z-index:40; inset:0 0 0 auto; width:min(90vw,340px); border-radius:var(--radius-card) 0 0 var(--radius-card); }
+      #changesPanel { position:absolute; z-index:40; inset:0 0 0 auto; width:min(90vw,340px); border-radius:var(--radius-card) 0 0 var(--radius-card); }
       #drawerBackdrop:not(.hidden) { display:block; position:absolute; inset:0; z-index:35; border:0; border-radius:0; background:#0006; }
       .topbar { flex-wrap:nowrap; gap:4px; padding:5px 8px; }
       #folderBtn { max-width:100%; padding:0; }
@@ -599,8 +559,8 @@
       .settings-page { padding-top: 8px; }
     }
     #app.native-navigation { grid-template-columns: minmax(0, 1fr); }
-    #app.native-navigation.files-open { grid-template-columns: minmax(0, 1fr) 300px; }
-    @media (max-width: 1000px) { #app.native-navigation.files-open { grid-template-columns: minmax(0, 1fr); } }
+    #app.native-navigation.changes-open { grid-template-columns: minmax(0, 1fr) 300px; }
+    @media (max-width: 1000px) { #app.native-navigation.changes-open { grid-template-columns: minmax(0, 1fr); } }
     #app.native-navigation #sidebar, #app.native-navigation #sidebarToggle { display:none; }
   </style>
 </head>
@@ -632,7 +592,8 @@
           <button id="folderBtn" type="button" title="Set working folder" aria-label="Working folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v2M3 7h7l2 3h8a1 1 0 0 1 1 1l-2 9H3L1 9a2 2 0 0 1 2-2Z"/></svg><span id="folderLabel">Set folder</span></button>
           <span id="usage"><span id="usageSummary"></span><span id="pillamaStatus" class="hidden" tabindex="0" aria-label="llama.cpp performance"></span><span id="chatgptUsage" class="hidden" tabindex="0" aria-label="ChatGPT subscription usage"></span></span>
         </div>
-        <button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/></svg></button>
+        <button id="filesToggle" class="icon-button" type="button" aria-label="Open working folder in Files" title="Files"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/></svg></button>
+        <button id="changesToggle" class="icon-button" type="button" aria-label="Git Changes" title="Changes" aria-expanded="false" aria-controls="changesPanel"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H5v18h14V8l-5-5Zm0 0v5h5M8 12h5m-2.5-2.5v5M8 18h5"/></svg></button>
       </header>
       </div>
       <div id="chat"><div class="chat-inner"><div id="chatInner"></div><div id="questionCards" aria-live="polite"></div><div id="pendingAgentMessages" aria-live="polite"></div></div></div>
@@ -673,7 +634,7 @@
           <div id="queuePanel" class="hidden" aria-label="Queued messages"></div>
           <div class="compose-box">
             <div id="attachmentTray" class="hidden"></div>
-            <textarea id="prompt" rows="2" placeholder="Message BashKitten…" aria-label="Message BashKitten"></textarea>
+            <textarea id="prompt" rows="1" placeholder="Message BashKitten…" aria-label="Message BashKitten"></textarea>
             <div id="goalChip" class="hidden"><span>Goal</span><button id="removeGoalChip" type="button" aria-label="Remove goal from message">×</button></div>
             <div class="composer-toolbar">
               <input id="files" class="hidden" type="file" multiple>
@@ -713,26 +674,15 @@
         <div id="imageViewport"><div id="imageStage"><img id="viewerImage" alt=""><span id="viewerError" class="hidden" role="status"></span></div></div>
       </section>
     </main>
-    <aside id="filePanel" class="hidden" aria-label="Project files and changes">
-      <div class="file-heading"><strong id="fileRootLabel">Project</strong><button id="closeFiles" type="button" class="icon-button" aria-label="Close project panel">×</button></div>
-      <nav class="file-tabs" role="tablist" aria-label="Project view"><button id="filesTab" type="button" role="tab" aria-selected="true" aria-controls="filesView">Files</button><button id="changesTab" type="button" role="tab" aria-selected="false" aria-controls="changesView" tabindex="-1">Changes</button></nav>
-      <section id="filesView" class="file-pane" role="tabpanel" aria-labelledby="filesTab">
-        <form id="filePathForm" class="file-path"><button id="fileUp" type="button" aria-label="Parent folder" title="Parent folder"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button><input id="filePath" aria-label="File browser path; press Enter to open" autocomplete="off" spellcheck="false"><button id="refreshFiles" type="button" aria-label="Refresh files" title="Refresh files"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.8-2L20 8M4 16l2.1 3A7 7 0 0 0 17.9 17"/></svg></button></form>
-        <div id="fileActions" class="file-toolbar"><button id="selectFiles" type="button" aria-pressed="false" title="Select files and folders"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 12 3 3 5-6M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg><span>Select</span></button><button id="uploadRepo" type="button" title="Upload files to this folder"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg><span>Upload</span></button><button id="downloadFiles" type="button" title="Download this folder as ZIP"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg><span>Download</span></button><button id="copySelected" type="button" class="file-icon-action hidden" title="Copy selected items to another folder" aria-label="Copy selected items to another folder"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 8h12v13H8ZM16 8V3H3v13h5"/></svg></button><button id="deleteSelected" type="button" class="file-icon-action danger hidden" title="Delete selected items" aria-label="Delete selected items"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button><input id="repoUpload" type="file" multiple class="hidden"></div>
-        <div id="fileSelection" class="hidden"><label title="Select all files and folders. Selected folders include their contents."><input id="allFiles" type="checkbox">All items</label><span id="fileSelectionCount" class="meta" role="status" title="Selected folders include their contents"></span></div>
-        <div id="fileDestination" class="meta hidden"></div><p id="fileNotice" class="meta" role="status"></p><div id="fileTree"></div>
-      </section>
-      <section id="changesView" class="file-pane hidden" role="tabpanel" aria-labelledby="changesTab">
-        <div class="file-toolbar"><button id="refreshChanges" type="button">Refresh</button><button id="openProjectFolder" type="button" class="hidden">Open folder ↗</button><span id="changesCounts" class="change-count"></span></div>
+    <aside id="changesPanel" class="hidden" aria-label="Git Changes">
+      <div class="changes-heading"><strong id="changesRootLabel">Changes</strong><button id="closeChanges" type="button" class="icon-button" aria-label="Close Changes">×</button></div>
+      <section id="changesView" aria-label="Changed files">
+        <div class="changes-toolbar"><button id="refreshChanges" type="button">Refresh</button><button id="openProjectFolder" type="button" class="hidden">Open folder ↗</button><span id="changesCounts" class="change-count"></span></div>
         <p id="changesRoot" class="meta"></p><p id="changesNotice" class="meta" role="status"></p><div id="changesList"></div>
-
       </section>
-      <section id="fileJob" class="hidden" aria-label="File operation"><p id="fileJobText" class="meta" role="status"></p><progress id="fileJobProgress" aria-label="File operation progress"></progress><div class="file-toolbar"><button id="cancelFileJob" type="button">Cancel</button><button id="refreshFileJob" class="hidden" type="button">Refresh status</button><a id="downloadFileJob" class="hidden" download aria-hidden="true" tabindex="-1"></a><button id="dismissFileJob" class="hidden file-icon-action" type="button" title="Dismiss status" aria-label="Dismiss status"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div></section>
     </aside>
     <button id="drawerBackdrop" class="hidden" type="button" aria-label="Close panel"></button>
   </section>
-  <dialog id="fileActionDialog" aria-labelledby="fileActionTitle"><form id="fileActionForm" class="dialog-body"><h2 id="fileActionTitle"></h2><p id="fileActionDescription"></p><ul id="fileActionPaths"></ul><label id="copyDestinationLabel">Destination folder<input id="copyDestination" autocomplete="off" spellcheck="false" placeholder="Absolute folder path"></label><p id="fileActionError" class="meta" role="alert"></p><div class="dialog-actions"><button type="button" data-close autofocus>Cancel</button><button id="confirmFileAction" class="primary">Continue</button></div></form></dialog>
-  <dialog id="filePreview" aria-labelledby="filePreviewTitle"><div class="dialog-body"><h2 id="filePreviewTitle"></h2><p id="filePreviewStatus" role="status">Preparing preview…</p><progress id="filePreviewProgress" aria-label="Preparing preview"></progress><p id="filePreviewError" class="meta" role="alert"></p><div class="dialog-actions"><a id="filePreviewDownload" download>Download original</a><button id="filePreviewClose" type="button" data-close>Cancel</button></div></div></dialog>
   <dialog id="forkDialog" aria-labelledby="forkHeading"><div class="dialog-body"><h2 id="forkHeading">Fork chat</h2><p>Choose a message to return to. Pi opens the fork before that message.</p><div id="forkMessages"></div><p id="forkError" class="meta" role="status"></p><div class="dialog-actions"><button type="button" data-close>Cancel</button></div></div></dialog>
   <dialog id="subagentDialog" aria-labelledby="subagentHeading"><form id="subagentForm" class="dialog-body">
     <h2 id="subagentHeading">Subagents for this chat</h2>
@@ -908,12 +858,9 @@
       nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
       $('#app').classList.toggle('native-navigation', Boolean(nativeHost?.navigation));
       $('#filesToggle').classList.toggle('hidden', !fileManagerAllowed);
-      $('#filesToggle').title = 'Files and changes';
-      $('#filesToggle').setAttribute('aria-label', 'Browse project files and changes');
-      $('#filesTab').classList.remove('hidden');
+      $('#changesToggle').classList.toggle('hidden', !fileManagerAllowed);
       $('#openProjectFolder').classList.toggle('hidden', !nativeLinux);
       showAgentChoice();
-      if (initialized && !$('#filePanel').classList.contains('hidden')) setFileTab(fileTab);
     }
     window.addEventListener('bashkitten-host-ready', configureNativeHost);
     configureNativeHost();
@@ -1006,7 +953,7 @@
           /[\x00-\x1f\x7f]/.test(reference) || reference.startsWith('//') || reference.startsWith('#') ||
           (/^[a-z][a-z0-9+.-]*:/i.test(reference) && !reference.startsWith('file:'))) return null;
       const query = '?session=' + encodeURIComponent(session) + '&path=' + encodeURIComponent(reference);
-      return { content: '/api/files/content' + query, preview: '/api/files/previews/content' + query };
+      return { content: '/api/files/content' + query };
     }
 
     function fileReferenceName(reference) {
@@ -1014,10 +961,9 @@
       try { name = decodeURIComponent(reference.startsWith('file:') ? new URL(reference).pathname : reference); } catch {}
       return name.split('/').pop() || 'File';
     }
-    function fileReferenceKind(reference) {
-      const name = fileReferenceName(reference);
-      return /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i.test(name) ? 'image' :
-          /\.(pdf|xlsx?|xls[bm]|xlt[xm]?|ods|ots|fods|csv|tsv|doc[xm]?|dot[xm]?|odt|ott|odm|otm|oth|fodt|rtf|ppt[xm]?|pot[xm]?|pps[xm]?|odp|otp|fodp|odg|otg|fodg|md|markdown|mdown|mkd|txt|log|json|jsonl|html?|xml|ya?ml|toml|ini|cfg|conf|css|[cm]?js|jsx|tsx?|py|sh|bash|zsh|fish|c|h|cc|cpp|hpp|cs|java|kt|kts|rs|go|rb|php|sql|tex|rst|diff|patch)$/i.test(name) ? 'document' : null;
+
+    function isImageReference(reference) {
+      return /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i.test(fileReferenceName(reference));
     }
 
     function inlineMarkdown(value) {
@@ -1045,7 +991,7 @@
         if (/^https?:\/\//i.test(target)) html += `<a href="${escapeHtml(target)}" target="_blank" rel="noreferrer">${escapeHtml(label || target)}</a>`;
         else {
           const urls = !image && fileReferenceUrls(current?.id, target);
-          if (urls) html += `<a class="file-reference" ${fileReferenceKind(target) ? '' : 'download="' + escapeHtml(fileReferenceName(target)) + '"'} href="${escapeHtml(urls.content + '&download=true')}" data-file-session="${escapeHtml(current.id)}" data-file-reference="${escapeHtml(target)}" aria-disabled="${!fileManagerAllowed}" title="${fileReferenceKind(target) ? 'View' : 'Download'} file · ${escapeHtml(target)}">${escapeHtml(label || target)}</a>`;
+          if (urls) html += `<a class="file-reference" href="${escapeHtml(urls.content + '&download=true')}" download="${escapeHtml(fileReferenceName(target))}" data-file-session="${escapeHtml(current.id)}" data-file-reference="${escapeHtml(target)}" aria-disabled="${!fileManagerAllowed}" title="${isImageReference(target) ? 'View image' : 'Download file'} · ${escapeHtml(target)}">${escapeHtml(label || target)}</a>`;
           else html += escapeHtml(match[0]);
         }
       }
@@ -1194,11 +1140,10 @@
         if (reference.dataset.fileSession !== current?.id) { event.preventDefault(); return; }
         const target = reference.dataset.fileReference, urls = fileReferenceUrls(current.id, target);
         if (!urls) return;
-        const name = fileReferenceName(target), previewKind = fileReferenceKind(target);
-        // Unsupported links retain the original download gesture and route.
-        if (!previewKind) return;
-        event.preventDefault();
-        openFilePreview(null, { name, previewKind }, urls);
+        if (isImageReference(target)) {
+          event.preventDefault();
+          openImageViewer(urls.content, fileReferenceName(target), {manager:true, download:urls.content + '&download=true'});
+        }
         return;
       }
       const image = event.target.closest('.inline-image img');
@@ -2332,7 +2277,7 @@
       editingQueueSnapshot = null;
       $('#prompt').value = '';
       pendingRetainedAttachments = [];
-      $('#prompt').style.height = 'auto';
+      resizePrompt();
       $('#composerHint').textContent = queueState.busy ? 'Agent is working' : '';
       $('#attachBtn').disabled = false;
       renderAttachments();
@@ -2374,7 +2319,7 @@
         const label = document.createElement('span');
         label.textContent = folderDisplayName(folder);
         heading.append(label);
-        const browse = document.createElement('button'); browse.type='button'; browse.className='icon-button'; browse.textContent='▤'; browse.title='Browse project files'; browse.setAttribute('aria-label','Browse files in '+folder); browse.classList.add('file-manager-action');browse.classList.toggle('hidden',!fileManagerAllowed); browse.onclick=event=>{event.stopPropagation();openFiles(folder);setSidebar(false);}; heading.append(browse);
+        const browse = document.createElement('button'); browse.type='button'; browse.className='icon-button'; browse.append($('#filesToggle svg').cloneNode(true)); browse.title='Files'; browse.setAttribute('aria-label','Open '+displayFolder(folder)+' in Files'); browse.classList.add('file-manager-action');browse.classList.toggle('hidden',!fileManagerAllowed); browse.onclick=event=>{event.stopPropagation();openFiles(folder);setSidebar(false);}; heading.append(browse);
 
         if(folder)bindSessionContextMenu(heading,{cwd:folder,project:true});
         group.append(heading);
@@ -2591,7 +2536,7 @@
     function showSettingsView(section = 'app') {
       closeImageViewer();
       setSidebar(false);
-      closeFiles();
+      closeChanges();
       closeFileDiff();
       activeSettingsSection = section;
       const heading = section === 'services' ? 'Providers' : 'General settings';
@@ -2730,7 +2675,7 @@
         } else { await loadModels(); await connectSession(session.id, renderEvent, view); }
         if (sessionView !== view) return;
         setSidebar(false);
-        if (!$('#filePanel').classList.contains('hidden')) openFiles(current.cwd);
+        if (!$('#changesPanel').classList.contains('hidden')) openChanges(current.cwd);
         document.querySelectorAll('.session').forEach(element => element.classList.toggle('active', element.dataset.id === session.id));
         if (scrollRevision === chatScrollRevision) $('#chat').scrollTop = savedScroll === undefined ? $('#chat').scrollHeight : Number(savedScroll) || 0;
       } catch (error) {
@@ -2789,7 +2734,7 @@
       if (sessionView !== view) return;
       document.querySelectorAll('.session').forEach(element => element.classList.remove('active'));
       showWelcome();
-      if (!$('#filePanel').classList.contains('hidden')) openFiles(pendingCwd);
+      if (!$('#changesPanel').classList.contains('hidden')) openChanges(pendingCwd);
       setSidebar(false);
       $('#prompt').focus();
     }
@@ -3118,7 +3063,21 @@
     composeBox.addEventListener('dragover', event => { event.preventDefault(); composeBox.classList.add('dragging'); });
     composeBox.addEventListener('dragleave', event => { if (!event.relatedTarget || !composeBox.contains(event.relatedTarget)) composeBox.classList.remove('dragging'); });
     composeBox.addEventListener('drop', event => { event.preventDefault(); composeBox.classList.remove('dragging'); addAttachments(event.dataTransfer.files); });
-    $('#prompt').addEventListener('input', event => { draftChanged(); event.target.style.height = 'auto'; event.target.style.height = `${Math.min(event.target.scrollHeight, 190)}px`; setRunButton(queueState.busy || Boolean(current?.running)); const match = /^\/([a-z]*)$/.exec(event.target.value); if (match && !editingQueueId && !pendingFiles.length && !pendingRetainedAttachments.length) { slashMenu=true; showComposerActions(match[1]); } else if (slashMenu) closeComposerActions(); });
+    function resizePrompt() {
+      const prompt=$('#prompt');
+      if (!prompt.getClientRects().length) return;
+      // Reset the old height before measuring so edits/clear can shrink too.
+      // CSS owns the min/max, including the short keyboard viewport limit.
+      prompt.style.height='0px';
+      prompt.style.height=prompt.scrollHeight+'px';
+    }
+    let composerWidth=0;
+    new ResizeObserver(entries=>{
+      const width=entries[0].contentRect.width;
+      if (width!==composerWidth) { composerWidth=width; resizePrompt(); }
+    }).observe($('#composer'));
+    window.addEventListener('resize', resizePrompt);
+    $('#prompt').addEventListener('input', event => { draftChanged(); resizePrompt(); setRunButton(queueState.busy || Boolean(current?.running)); const match = /^\/([a-z]*)$/.exec(event.target.value); if (match && !editingQueueId && !pendingFiles.length && !pendingRetainedAttachments.length) { slashMenu=true; showComposerActions(match[1]); } else if (slashMenu) closeComposerActions(); });
     $('#prompt').addEventListener('keydown', event => {
       if (event.key === 'ArrowDown' && slashMenu) { event.preventDefault(); commandButtons.find(button=>!button.disabled&&!button.classList.contains('hidden'))?.focus(); }
       else if (event.key === 'Escape' && slashMenu) { event.preventDefault(); closeComposerActions(); }
@@ -3493,7 +3452,7 @@
           current.cwd = data.cwd;
           $('#folderLabel').textContent = displayFolder(data.cwd);
           $('#folderBtn').title = `Saved working folder: ${displayFolder(data.cwd)}. Start a new chat to choose another.`;
-          if (!$('#filePanel').classList.contains('hidden')) openFiles(data.cwd);
+          if (!$('#changesPanel').classList.contains('hidden')) openChanges(data.cwd);
           loadSessions().catch(() => {});
         }
       }
@@ -3507,285 +3466,75 @@
       updateBackdrop();
     }
     function updateBackdrop() {
-      $('#drawerBackdrop').classList.toggle('hidden', !matchMedia('(max-width:700px)').matches || (!$('#app').classList.contains('sidebar-open') && !$('#app').classList.contains('files-open')));
+      $('#drawerBackdrop').classList.toggle('hidden', !matchMedia('(max-width:700px)').matches || (!$('#app').classList.contains('sidebar-open') && !$('#app').classList.contains('changes-open')));
     }
     function applyFilePermission(allowed) {
       fileManagerAllowed = allowed;
-      $('#filesToggle').classList.toggle('hidden', !allowed);
+      for (const id of ['filesToggle', 'changesToggle']) $('#'+id).classList.toggle('hidden', !allowed);
       for (const button of document.querySelectorAll('.file-manager-action')) button.classList.toggle('hidden', !allowed);
       for (const link of document.querySelectorAll('.file-reference')) link.setAttribute('aria-disabled', String(!allowed));
       $('#folderBtn').disabled = !allowed || Boolean(current || pendingProjectId);
       $('#defaultCwdBrowse').disabled = !allowed;
       if (allowed) return;
-      closeFiles(); closeFileDiff();
+      closeChanges(); closeFileDiff();
       if (fileManagerImage) closeImageViewer();
-      ++fileGeneration; ++changesGeneration; ++folderGeneration;
-      diffAbort?.abort();
-      for (const id of ['fileTree', 'changesList', 'changesCounts', 'fileNotice']) $('#'+id).replaceChildren();
-      for (const id of ['folderDialog', 'fileActionDialog', 'filePreview']) if ($('#'+id)?.open) $('#'+id).close();
-      fileRoot = fileFolder = projectRoot = changesRoot = ''; selectedFiles.clear();
-      pendingFileAction = null; fileJob = null;
-      $('#fileJob').classList.add('hidden'); $('#fileJobText').textContent = '';
-      $('#downloadFileJob').removeAttribute('href');
-      sessionStorage.removeItem('bashkitten.fileJob');
+      ++changesGeneration; ++folderGeneration;
+      changesLoading=false; changesDirty=true;
+      for (const id of ['changesList', 'changesCounts']) $('#'+id).replaceChildren();
+      if ($('#folderDialog').open) $('#folderDialog').close();
+      projectRoot = changesRoot = '';
     }
-    function projectPanelVisible() { return !document.hidden && !$('#filePanel').classList.contains('hidden') && !$('#app').classList.contains('hidden'); }
-    function closeFiles() {
-      $('#filePanel').classList.add('hidden'); $('#app').classList.remove('files-open');
-      $('#filesToggle').setAttribute('aria-expanded','false'); clearTimeout(fileJobTimer); updateBackdrop();
+    function projectPanelVisible() { return !document.hidden && !$('#changesPanel').classList.contains('hidden') && !$('#app').classList.contains('hidden'); }
+    function closeChanges() {
+      $('#changesPanel').classList.add('hidden'); $('#app').classList.remove('changes-open');
+      $('#changesToggle').setAttribute('aria-expanded','false'); updateBackdrop();
     }
     $('#sidebarToggle').onclick=()=>setSidebar(!$('#app').classList.contains('sidebar-open'));
-    $('#drawerBackdrop').onclick=()=>{setSidebar(false);closeFiles();};
-    $('#closeFiles').onclick=closeFiles;
+    $('#drawerBackdrop').onclick=()=>{setSidebar(false);closeChanges();};
+    $('#closeChanges').onclick=closeChanges;
     window.addEventListener('resize', updateBackdrop);
-    let fileRoot='', fileFolder='', fileParent=null, fileScope='', fileGeneration=0, fileTab='files', projectRoot='';
-    let selectingFiles=false, selectedFiles=new Set(), fileJob=null, fileJobTimer=null, fileJobReading=false, fileJobStarting=false, pendingFileAction=null;
-    try { const saved=JSON.parse(sessionStorage.getItem('bashkitten.fileJob')); if(saved&&typeof saved.id==='string')fileJob=saved; } catch {}
-    let changesGeneration=0, changesRoot='', changesLoading=false, changesLoadedAt=0, changesDirty=true, diffPath=null, diffRequest=0, diffAbort=null, diffChatScroll=0;
-    const fileUrl=(suffix,relative='',root=fileRoot)=>'/api/files'+suffix+'?root='+encodeURIComponent(root)+'&path='+encodeURIComponent(relative);
-    const filePost=(url,value)=>api(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(value)});
-    const absoluteFilePath=(relative,root=fileRoot)=>root.replace(/\/$/,'')+(relative?'/'+relative:'');
-    function selectFileFolder(relative) {
-      fileFolder=relative;
-      $('#fileDestination').textContent=relative?'Upload to: '+relative:'';
-      $('#fileDestination').classList.toggle('hidden',!relative||selectingFiles);
-      $('#uploadRepo').title='Upload files to '+absoluteFilePath(relative);
-    }
-    function updateFileSelection() {
-      $('#fileTree').classList.toggle('selecting',selectingFiles);
-      $('#fileSelection').classList.toggle('hidden',!selectingFiles);
-      $('#selectFiles').setAttribute('aria-pressed',String(selectingFiles));
-      $('#uploadRepo').classList.toggle('hidden',selectingFiles);
-      $('#fileDestination').classList.toggle('hidden',!fileFolder||selectingFiles);
-      for(const id of ['copySelected','deleteSelected'])$('#'+id).classList.toggle('hidden',!selectingFiles);
-      $('#fileSelectionCount').textContent=selectedFiles.size+' selected';
-      for(const input of $('#fileTree').querySelectorAll('input[data-file-path]')) {
-        const inherited=[...selectedFiles].some(parent=>input.dataset.filePath.startsWith(parent+'/'));
-        input.checked=inherited||selectedFiles.has(input.dataset.filePath);input.disabled=inherited;input.title=inherited?'Included with its selected folder':'';
-      }
-      const roots=[...$('#fileTree').querySelectorAll('input[data-file-path]')].filter(input=>!input.dataset.filePath.includes('/'));
-      $('#allFiles').checked=Boolean(roots.length)&&roots.every(input=>selectedFiles.has(input.dataset.filePath));
-      $('#allFiles').indeterminate=Boolean(selectedFiles.size)&&!$('#allFiles').checked;$('#allFiles').disabled=!roots.length;
-      for(const id of ['copySelected','deleteSelected']) $('#'+id).disabled=!selectedFiles.size || fileJob?.status==='running' || fileJobStarting;
-      $('#downloadFiles').disabled=(selectingFiles&&!selectedFiles.size)||fileJob?.status==='running'||fileJobStarting;
-      $('#downloadFiles').title=selectingFiles?'Download selected items as ZIP':'Download this folder as ZIP';
-    }
-    function fileIcon(kind) {
-      const paths={"folder":"M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z","file":"M14 3H5v18h14V8l-5-5Zm0 0v5h5","chevron":"m9 5 7 7-7 7","reference":"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10ZM9 10h6m-3-3v6"};
-      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),line=document.createElementNS(svg.namespaceURI,'path');
-      svg.setAttribute('class','file-icon'+(kind==='chevron'?' file-disclosure':''));svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.7');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');line.setAttribute('d',paths[kind]);svg.append(line);return svg;
-    }
-    function fileCheckbox(entry) {
-      const input=document.createElement('input'); input.type='checkbox'; input.dataset.filePath=entry.path;
-      input.setAttribute('aria-label','Select '+entry.path); input.checked=selectedFiles.has(entry.path);
-      input.onclick=event=>event.stopPropagation();
-      input.onchange=()=>{
-        if(input.checked){for(const path of selectedFiles)if(path.startsWith(entry.path+'/'))selectedFiles.delete(path);selectedFiles.add(entry.path);}
-        else selectedFiles.delete(entry.path);updateFileSelection();
-      };
-      return input;
-    }
-    async function renderFileBranch(target, relative, generation) {
-      const result=await api(fileUrl('',relative));
-      if(generation!==fileGeneration)return;
-      if(!relative) {
-        fileRoot=result.currentPath||fileRoot; fileParent=result.parent; fileScope=result.scopeRoot||fileRoot;
-        $('#filePath').value=fileRoot; $('#filePath').title='Browse within '+fileScope;
-        $('#fileUp').disabled=!fileParent; selectFileFolder('');
-      }
-      target.replaceChildren();
-      if(relative&&result.root&&result.root!==fileRoot) {
-        const row=document.createElement('div'),button=document.createElement('button');row.className='file-toolbar';button.type='button';button.textContent='Open linked folder ↗';button.title=result.currentPath;button.onclick=()=>loadFileTree(result.currentPath);row.append(button);target.append(row);return;
-      }
-      for(const entry of result.entries) {
-        if(entry.blocked) {
-          const row=document.createElement('div');row.className='file-row meta';if(entry.symlink)row.append(fileCheckbox(entry));const label=document.createElement('span');label.textContent=entry.name+' (unavailable'+(entry.symlink?' link':'')+')';row.append(label);target.append(row);
-        } else if(entry.directory) {
-          const details=document.createElement('details'),summary=document.createElement('summary'),children=document.createElement('div');
-          const label=document.createElement('span');label.textContent=entry.name;summary.append(fileIcon('chevron'),fileCheckbox(entry),fileIcon('folder'),label);details.append(summary,children);
-          let loaded=false;
-          summary.onclick=()=>selectFileFolder(entry.path);
-          details.ontoggle=async()=>{
-            if(details.open&&!loaded){loaded=true;children.textContent='Loading…';try{await renderFileBranch(children,entry.path,generation);}catch(error){children.textContent=error.message;loaded=false;}}
-          };
-          target.append(details);
-        } else {
-          const row=document.createElement('div');row.className='file-row';
-          const root=fileRoot, label=document.createElement('span');label.className='file-name';label.textContent=entry.name;
-          row.append(fileCheckbox(entry),fileIcon('file'),label);
-          const actions=document.createElement('span');actions.className='file-item-actions';
-          if(entry.previewKind) {
-            const view=document.createElement('button');view.type='button';view.textContent='View';view.title='View '+entry.name;
-            view.onclick=()=>openFilePreview(root,entry);actions.append(view);
-          }
-          const download=document.createElement('a');download.href=fileUrl('/content',entry.path,root)+'&download=true';download.download=entry.name;download.textContent='Download';download.title='Download '+entry.name;actions.append(download);
-          const reference=document.createElement('button');reference.type='button';reference.className='file-reference-button';reference.title='Reference in chat';reference.setAttribute('aria-label','Reference '+entry.name+' in chat');reference.append(fileIcon('reference'));
-          reference.onclick=()=>{
-            if(!fileManagerAllowed)return;
-            const prompt=$('#prompt'),path=absoluteFilePath(entry.path,root);
-            const link='['+entry.name.replace(/[\\\[\]]/g,'\\$&')+'](<'+path.replaceAll('%','%25').replaceAll('<','%3C').replaceAll('>','%3E').replaceAll('\n','%0A').replaceAll('\r','%0D')+'>)';
-            prompt.setRangeText(link+' ',prompt.selectionStart,prompt.selectionEnd,'end');
-            prompt.dispatchEvent(new Event('input',{bubbles:true}));prompt.focus();
-            if(matchMedia('(max-width:700px)').matches)closeFiles();
-          };
-          actions.append(reference);row.append(actions);target.append(row);
-        }
-      }
-      if(!result.entries.length){const empty=document.createElement('p');empty.className='file-empty';empty.textContent='Empty folder';target.append(empty);}
-      updateFileSelection();
-    }
-    async function loadFileTree(root=fileRoot) {
-      if(!root)return;
-      fileRoot=root;fileFolder='';selectedFiles.clear();updateFileSelection();
-      const generation=++fileGeneration;
-      $('#fileNotice').textContent='';$('#fileTree').textContent='Loading…';$('#filePath').value=root;$('#fileUp').disabled=true;
-      try{await renderFileBranch($('#fileTree'),'',generation);}catch(error){if(generation===fileGeneration){$('#fileNotice').textContent=error.message;$('#fileTree').replaceChildren();}}
-    }
-    function setFileTab(tab) {
-      fileTab=tab;
-      for(const name of ['files','changes']) {
-        const selected=name===fileTab,button=$('#'+name+'Tab');
-        button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;
-        $('#'+name+'View').classList.toggle('hidden',!selected);
-      }
-      if(fileTab==='changes') refreshChanges();
-      else if(!$('#fileTree').childNodes.length) loadFileTree();
-      if(fileJob)renderFileJob();
-    }
-    async function openFiles(root) {
-      if(!root || !fileManagerAllowed)return;
+    let projectRoot='', changesGeneration=0, changesRoot='', changesLoading=false, changesLoadedAt=0, changesDirty=true, diffPath=null, diffRequest=0, diffAbort=null, diffChatScroll=0;
+    function openChanges(root) {
+      if (!root || !fileManagerAllowed) return;
       const changed=projectRoot!==root; projectRoot=root;
-      $('#filePanel').classList.remove('hidden');$('#app').classList.add('files-open');$('#filesToggle').setAttribute('aria-expanded','true');
-      $('#fileRootLabel').textContent=folderDisplayName(root);$('#fileRootLabel').title=displayFolder(root);
-      if(changed){fileRoot=root;selectedFiles.clear();$('#fileTree').replaceChildren();++fileGeneration;++changesGeneration;changesLoading=false;changesLoadedAt=0;changesDirty=true;closeFileDiff();$('#changesList').replaceChildren();$('#changesCounts').replaceChildren();}
-      setFileTab(fileTab);updateBackdrop();
-      if(fileJob){renderFileJob();pollFileJob();}
+      $('#changesPanel').classList.remove('hidden'); $('#app').classList.add('changes-open'); $('#changesToggle').setAttribute('aria-expanded','true');
+      $('#changesRootLabel').textContent='Changes · '+folderDisplayName(root); $('#changesRootLabel').title=displayFolder(root);
+      if (changed) {
+        ++changesGeneration; changesLoading=false; changesLoadedAt=0; changesDirty=true;
+        closeFileDiff(); $('#changesList').replaceChildren(); $('#changesCounts').replaceChildren();
+      }
+      refreshChanges(); updateBackdrop();
     }
-    let filePreview = null, filePreviewGeneration = 0;
-    function cancelPreparedPreview() {
-      if(filePreview && !filePreview.handedOff) nativeHost?.call('cancel-file-view').catch(()=>{});
-      filePreview=null;
+    async function openFiles(cwd, projectId = null) {
+      if (!fileManagerAllowed || (!cwd && !projectId)) return;
+      const view=sessionView, destination={...(projectId ? {projectId} : {}), ...(cwd ? {cwd} : {})};
+      let tab;
+      try {
+        // The native owner retains the selected backend and opens its exact
+        // authorized service mapping in an ordinary tab, outside Agent storage.
+        if (nativeHost) await nativeHost.call('open-files', destination);
+        else {
+          // Reserve the tab during the click; first use may start the service.
+          tab=window.open('about:blank', '_blank');
+          if (!tab) throw Error('Allow a new tab to open Files.');
+          tab.opener=null;
+          const launch=await api('/api/apps/files/open', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(destination)});
+          const url=new URL(launch.url);
+          if (launch.component!=='files' || !['http:', 'https:'].includes(url.protocol) || url.hostname!=='127.0.0.1' || url.username || url.password) throw Error('The backend did not return an authorized Files URL.');
+          if (!fileManagerAllowed) throw Error('The host has disabled Files for this connection.');
+          tab.location.replace(url.href);
+        }
+      } catch (error) {
+        tab?.close();
+        if (sessionView===view) $('#composerHint').textContent=error.message;
+      }
     }
-    function openFilePreview(root, entry, urls = {}) {
-      if(!fileManagerAllowed)return;
-      const content=urls.content || fileUrl('/content',entry.path,root);
-      if(entry.previewKind==='image') { openImageViewer(content,entry.name,{manager:true,download:content+'&download=true'});return; }
-      const url=new URL(urls.preview || fileUrl('/previews/content',entry.path,root),location.href);
-      if(!nativeHost) { window.open(url.href,'_blank','noopener,noreferrer');return; }
-      if($('#filePreview').open)return;
-      const generation=++filePreviewGeneration,job={handedOff:false};filePreview=job;
-      $('#filePreviewTitle').textContent=entry.name;$('#filePreviewDownload').href=content+'&download=true';$('#filePreviewDownload').download=entry.name;
-      $('#filePreviewStatus').textContent='Preparing and opening preview…';$('#filePreviewError').textContent='';
-      $('#filePreviewProgress').classList.remove('hidden');$('#filePreviewClose').textContent='Cancel';$('#filePreview').showModal();
-      // This call starts during the original View gesture. Native streaming waits
-      // for the guarded backend conversion; no credentials reach the new tab.
-      nativeHost.call('view-file',{url:url.href}).then(()=>{
-        if(generation!==filePreviewGeneration)return;
-        job.handedOff=true;$('#filePreview').close();
-      }).catch(error=>{
-        if(generation!==filePreviewGeneration||!$('#filePreview').open)return;
-        $('#filePreviewStatus').textContent='Unable to open this preview.';$('#filePreviewError').textContent=error.message;
-        $('#filePreviewProgress').classList.add('hidden');$('#filePreviewClose').textContent='Close';
-      });
-    }
-    $('#filePreview').addEventListener('close',()=>{
-      ++filePreviewGeneration;cancelPreparedPreview();$('#filePreviewDownload').removeAttribute('href');$('#filePreviewError').textContent='';
-    });
-    window.addEventListener('pagehide',()=>{++filePreviewGeneration;cancelPreparedPreview();});
+    $('#filesToggle').onclick=()=>openFiles(current?.cwd||pendingCwd, current?.projectId||pendingProjectId);
     function refreshProjectPanel() {
       changesDirty=true;
-      if(projectPanelVisible()&&fileTab==='changes') refreshChanges();
+      if (projectPanelVisible()) refreshChanges();
     }
-    $('#filesToggle').onclick=()=>$('#filePanel').classList.contains('hidden')?openFiles(current?.cwd||pendingCwd):closeFiles();
-    $('#filesTab').onclick=()=>setFileTab('files');$('#changesTab').onclick=()=>setFileTab('changes');
-    $('.file-tabs').onkeydown=event=>{
-      if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
-      event.preventDefault();setFileTab(event.key==='End'?'changes':event.key==='Home'?'files':fileTab==='files'?'changes':'files');$('#'+fileTab+'Tab').focus();
-    };
-    $('#filePathForm').onsubmit=event=>{event.preventDefault();const path=$('#filePath').value.trim();if(path)loadFileTree(path);};
-    $('#fileUp').onclick=()=>{if(fileParent)loadFileTree(fileParent);};
-    $('#refreshFiles').onclick=()=>loadFileTree();
-    $('#selectFiles').onclick=()=>{selectingFiles=!selectingFiles;if(!selectingFiles)selectedFiles.clear();updateFileSelection();};
-    $('#allFiles').onchange=()=>{selectedFiles.clear();if($('#allFiles').checked)for(const input of $('#fileTree').querySelectorAll('input[data-file-path]'))if(!input.dataset.filePath.includes('/'))selectedFiles.add(input.dataset.filePath);updateFileSelection();};
-    $('#uploadRepo').onclick=()=>$('#repoUpload').click();
-    $('#repoUpload').onchange=async event=>{
-      const files=[...event.target.files];event.target.value='';if(!files.length)return;
-      const root=fileRoot,relative=fileFolder,form=new FormData();for(const file of files)form.append('file',file);
-      $('#uploadRepo').disabled=true;$('#fileNotice').textContent='Uploading '+files.length+' '+(files.length===1?'file…':'files…');
-      try{await api(fileUrl('',relative,root),{method:'POST',body:form});if(root===fileRoot){await loadFileTree();$('#fileNotice').textContent='Files uploaded.';}refreshProjectPanel();}
-      catch(error){$('#fileNotice').textContent=error.message;}
-      finally{$('#uploadRepo').disabled=false;}
-    };
-    function showFileAction(operation) {
-      if(!selectedFiles.size)return;
-      pendingFileAction={operation,root:fileRoot,paths:[...selectedFiles]};
-      const deleting=operation==='delete',count=pendingFileAction.paths.length;
-      $('#fileActionTitle').textContent=deleting?'Delete selected items?':'Copy selected items';
-      $('#fileActionDescription').textContent=deleting?`Permanently delete these ${count} selected ${count===1?'item':'items'} and all contents of selected folders. This cannot be undone.`:`Copy ${count} selected ${count===1?'item':'items'} into an existing folder. Existing files will not be overwritten.`;
-      const paths=$('#fileActionPaths');paths.replaceChildren();
-      for(const path of pendingFileAction.paths){const li=document.createElement('li');li.textContent=absoluteFilePath(path);paths.append(li);}
-      $('#copyDestinationLabel').classList.toggle('hidden',deleting);$('#copyDestination').required=!deleting;$('#copyDestination').value=fileRoot;
-      $('#fileActionError').textContent='';$('#confirmFileAction').textContent=deleting?'Delete':'Copy';$('#confirmFileAction').classList.toggle('delete-confirm',deleting);
-      $('#fileActionDialog').showModal();$('#fileActionDialog [data-close]').focus();
-    }
-    $('#copySelected').onclick=()=>showFileAction('copy');$('#deleteSelected').onclick=()=>showFileAction('delete');
-    $('#fileActionDialog').addEventListener('close',()=>{pendingFileAction=null;});
-    $('#fileActionForm').onsubmit=async event=>{
-      event.preventDefault();if(!pendingFileAction)return;
-      const value={...pendingFileAction};if(value.operation==='copy')value.destination=$('#copyDestination').value.trim();
-      $('#confirmFileAction').disabled=true;
-      try{await startFileJob(value);$('#fileActionDialog').close();}catch(error){$('#fileActionError').textContent=error.message;}
-      finally{$('#confirmFileAction').disabled=false;}
-    };
-    $('#downloadFiles').onclick=()=>startFileJob({operation:'archive',root:fileRoot,paths:[...selectedFiles]},!selectingFiles).catch(error=>$('#fileNotice').textContent=error.message);
-    async function startFileJob(value,whole=false) {
-      if(fileJob?.status==='running'||fileJobStarting)throw Error('Wait for the current file operation to finish.');
-      fileJobStarting=true;updateFileSelection();
-      try{fileJob=await filePost(whole?'/api/files/archive':'/api/files/jobs',whole?{root:value.root}:value);fileJob.root=value.root;fileJob.autoDownload=value.operation==='archive';renderFileJob();pollFileJob();}
-      finally{fileJobStarting=false;updateFileSelection();}
-    }
-    function renderFileJob() {
-      if(!fileJob)return;
-      try { sessionStorage.setItem('bashkitten.fileJob',JSON.stringify({id:fileJob.id,operation:fileJob.operation,status:fileJob.status,root:fileJob.root,autoDownload:fileJob.autoDownload})); } catch {}
-      const running=fileJob.status==='running',label={copy:'Copy',delete:'Delete',archive:'Archive'}[fileJob.operation]||'File operation';
-      $('#fileJob').classList.toggle('hidden',fileTab==='changes'&&!running);
-      $('#fileJobText').textContent=label+' · '+fileJob.status+(fileJob.completed!==undefined?' · '+fileJob.completed+' processed':'')+(fileJob.current?' · '+fileJob.current:'')+(fileJob.error?' · '+fileJob.error:'')+(['cancelled','failed'].includes(fileJob.status)&&fileJob.operation!=='archive'?' · Completed changes remain.':'');
-      if(fileJob.operation==='archive'&&fileJob.status==='done')$('#fileJobText').textContent='Download started.';
-      const progress=$('#fileJobProgress');progress.classList.toggle('hidden',!running);
-      if(fileJob.total>0){progress.max=fileJob.total;progress.value=fileJob.completed||0;}else progress.removeAttribute('value');
-      $('#cancelFileJob').classList.toggle('hidden',!running);$('#cancelFileJob').disabled=false;
-      $('#dismissFileJob').classList.toggle('hidden',running);$('#refreshFileJob').classList.add('hidden');
-      const download=$('#downloadFileJob');
-      // The job ID belongs to our authenticated backend; do not navigate an arbitrary response URL.
-      download.href='/api/files/jobs/'+encodeURIComponent(fileJob.id)+'/download';
-      updateFileSelection();
-    }
-    async function pollFileJob() {
-      clearTimeout(fileJobTimer);
-      if(!fileJob||fileJobReading||!projectPanelVisible())return;
-      const id=fileJob.id,root=fileJob.root,autoDownload=fileJob.autoDownload;fileJobReading=true;
-      try{
-        const value=await api('/api/files/jobs/'+encodeURIComponent(id));if(fileJob?.id!==id)return;
-        const wasRunning=fileJob.status==='running';fileJob={...value,root,autoDownload};renderFileJob();
-        if(fileJob.status==='done'&&fileJob.operation==='archive'&&fileJob.autoDownload){fileJob.autoDownload=false;renderFileJob();$('#downloadFileJob').click();}
-        if(wasRunning&&fileJob.status!=='running'){
-          selectedFiles.clear();updateFileSelection();refreshProjectPanel();
-          if(root===fileRoot)loadFileTree();
-        }
-        if(fileJob.status==='running'&&projectPanelVisible())fileJobTimer=setTimeout(pollFileJob,1000);
-      }catch(error){
-        if(error.status===404){fileJob={...fileJob,status:'expired',current:'',error:'The server no longer has this operation. Check the files before repeating it.'};renderFileJob();}
-        else{$('#fileJobText').textContent=error.message;$('#refreshFileJob').classList.remove('hidden');}
-      }
-      finally{fileJobReading=false;}
-    }
-    $('#refreshFileJob').onclick=pollFileJob;
-    $('#cancelFileJob').onclick=async()=>{
-      if(!fileJob)return;$('#cancelFileJob').disabled=true;
-      try{await filePost('/api/files/jobs/'+encodeURIComponent(fileJob.id)+'/cancel',{});await pollFileJob();}
-      catch(error){$('#fileJobText').textContent=error.message;$('#cancelFileJob').disabled=false;}
-    };
-    $('#dismissFileJob').onclick=()=>{fileJob=null;try{sessionStorage.removeItem('bashkitten.fileJob');}catch{}$('#fileJob').classList.add('hidden');};
+    $('#changesToggle').onclick=()=>$('#changesPanel').classList.contains('hidden')?openChanges(current?.cwd||pendingCwd):closeChanges();
     function changeCount(added,deleted) {
       const span=document.createElement('span');span.className='change-count';
       for(const [value,sign,kind] of [[added,'+','added'],[deleted,'−','deleted']]){const count=document.createElement('span');count.className='diff-'+kind;count.textContent=sign+value+' ';span.append(count);}
@@ -3801,7 +3550,7 @@
       }
     }
     async function refreshChanges(force=false) {
-      if(!projectPanelVisible()||fileTab!=='changes'||!projectRoot||changesLoading)return;
+      if(!projectPanelVisible()||!projectRoot||changesLoading)return;
       if(!force&&!changesDirty&&Date.now()-changesLoadedAt<1500)return;
       const generation=++changesGeneration,root=projectRoot;let refreshed=false;changesLoading=true;changesDirty=false;
       $('#refreshChanges').disabled=true;$('#changesNotice').textContent='Checking changes…';
@@ -3869,8 +3618,8 @@
       $('#chat').classList.add('hidden');$('#composerWrap').classList.add('hidden');$('#diffView').classList.remove('hidden');
       $('#diffTitle').textContent=path;$('#diffNotice').textContent='Loading changes…';$('#fileDiff').replaceChildren();
       for(const button of $('#changesList').querySelectorAll('.change-row'))button.setAttribute('aria-pressed',String(button.dataset.diffPath===path));
-      const mobile=matchMedia('(max-width:700px)').matches;$('#closeDiff span').textContent=mobile?'Back to files':'Close diff';
-      if(mobile)closeFiles();
+      const mobile=matchMedia('(max-width:700px)').matches;$('#closeDiff span').textContent=mobile?'Back to changes':'Close diff';
+      if(mobile)closeChanges();
       try{
         const result=await api('/api/git/diff?root='+encodeURIComponent(root)+'&path='+encodeURIComponent(path),{signal:diffAbort.signal});
         if(diffPath!==path||generation!==changesGeneration||request!==diffRequest)return;
@@ -3883,17 +3632,16 @@
         $('#fileDiff').scrollTop=scroll;
       }catch(error){if(diffPath===path&&generation===changesGeneration&&request===diffRequest)$('#diffNotice').textContent=error.message;}
     }
-    $('#closeDiff').onclick=()=>{const mobile=matchMedia('(max-width:700px)').matches;closeFileDiff();if(mobile){openFiles(projectRoot);setFileTab('changes');}};
+    $('#closeDiff').onclick=()=>{const mobile=matchMedia('(max-width:700px)').matches;closeFileDiff();if(mobile)openChanges(projectRoot);};
     $('#refreshChanges').onclick=()=>refreshChanges(true);
-    matchMedia('(max-width:700px)').addEventListener('change',event=>{if(!diffPath)return;$('#closeDiff span').textContent=event.matches?'Back to files':'Close diff';if(event.matches)closeFiles();else openFiles(projectRoot);});
+    matchMedia('(max-width:700px)').addEventListener('change',event=>{if(!diffPath)return;$('#closeDiff span').textContent=event.matches?'Back to changes':'Close diff';if(event.matches)closeChanges();else openChanges(projectRoot);});
     $('#openProjectFolder').onclick=()=>nativeHost?.call('open-folder',{path:projectRoot}).catch(error=>$('#changesNotice').textContent=error.message);
     function refreshVisibleProject() {
       if(!csrf||!projectPanelVisible())return;
-      if(fileTab==='changes')refreshChanges();
-      if(fileJob?.status==='running')pollFileJob();
+      refreshChanges();
     }
     window.addEventListener('focus',refreshVisibleProject);
-    document.addEventListener('visibilitychange',()=>{if(document.hidden)clearTimeout(fileJobTimer);else refreshVisibleProject();});
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshVisibleProject();});
 
     let serviceRows=[], servicesRender='', serviceLogin=null, loginRender='', loginPromptId=null, loginPending=false;
     const serviceLoginRoot=$('#serviceLogin'), serviceNotices=new Map(), serviceBusy=new Set();
@@ -4093,6 +3841,11 @@
         if (action === 'settings' || action === 'general' || action === 'providers') {
           showSettingsView(action === 'providers' ? 'services' : 'app');
           return true;
+        }
+        if (action === 'files-open') {
+          return api('/api/apps/files/open', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({
+            ...(value.projectId ? {projectId:value.projectId} : {}), ...(value.cwd ? {cwd:value.cwd} : {})
+          })});
         }
         if (action === 'folders') {
           if (typeof value.requestId !== 'string' || !value.requestId) throw Error('Missing folder request identity');
