@@ -1,0 +1,399 @@
+diff --git a/engine/Makefile.in b/engine/Makefile.in
+--- a/engine/Makefile.in
++++ b/engine/Makefile.in
+@@ -331,9 +331,9 @@
+ cross-toolset: bootstrap fetch install-gdb-printers
+ # fetch again in case there are externals only needed on build platform
+ ifneq ($(OS),iOS)
+-	$(MAKE) gb_Side=build $(PARALLELISM_OPTION) $(GMAKE_OPTIONS) -f $(BUILDDIR)/Makefile fetch
+-endif
+-	$(gb_Top_PIPEFAIL) $(MAKE) gb_Side=build $(PARALLELISM_OPTION) $(GMAKE_OPTIONS) -f $(SRCDIR)/Makefile.gbuild build-tools $(gb_Top_PIPE)
++	$(MAKE) gb_Side=build CPPFLAGS= CFLAGS= CXXFLAGS= LDFLAGS= $(PARALLELISM_OPTION) $(GMAKE_OPTIONS) -f $(BUILDDIR)/Makefile fetch
++endif
++	$(gb_Top_PIPEFAIL) $(MAKE) gb_Side=build CPPFLAGS= CFLAGS= CXXFLAGS= LDFLAGS= $(PARALLELISM_OPTION) $(GMAKE_OPTIONS) -f $(SRCDIR)/Makefile.gbuild build-tools $(gb_Top_PIPE)
+ 
+ install-gdb-printers:
+ ifneq ($(filter-out WNT MACOSX iOS,$(OS)),)
+diff --git a/engine/Repository.mk b/engine/Repository.mk
+--- a/engine/Repository.mk
++++ b/engine/Repository.mk
+@@ -727,7 +727,7 @@
+ 
+ $(eval $(call gb_Helper_register_packages_for_install,ooo_fonts,\
+ 	extras_fonts \
+-	$(if $(USING_X11)$(DISABLE_GUI)$(filter FONTCONFIG,$(BUILD_TYPE))$(filter ANDROID EMSCRIPTEN,$(OS)), \
++	$(if $(USE_HEADLESS_CODE)$(USING_X11)$(DISABLE_GUI)$(filter FONTCONFIG,$(BUILD_TYPE))$(filter ANDROID EMSCRIPTEN,$(OS)), \
+ 		postprocess_fontconfig) \
+ ))
+ 
+diff --git a/engine/bridges/source/cpp_uno/gcc3_linux_aarch64/abi.cxx b/engine/bridges/source/cpp_uno/gcc3_linux_aarch64/abi.cxx
+--- a/engine/bridges/source/cpp_uno/gcc3_linux_aarch64/abi.cxx
++++ b/engine/bridges/source/cpp_uno/gcc3_linux_aarch64/abi.cxx
+@@ -75,9 +75,15 @@
+ 
+ class Rtti {
+ public:
++#if defined(__ANDROID__)
++    Rtti(): app_(RTLD_DEFAULT) {}
++
++    ~Rtti() {}
++#else
+     Rtti(): app_(dlopen(nullptr, RTLD_LAZY)) {}
+ 
+     ~Rtti() { dlclose(app_); }
++#endif
+ 
+     std::type_info * getRtti(typelib_TypeDescription const & type);
+ 
+diff --git a/engine/bridges/source/cpp_uno/gcc3_linux_aarch64/callvirtualfunction.cxx b/engine/bridges/source/cpp_uno/gcc3_linux_aarch64/callvirtualfunction.cxx
+--- a/engine/bridges/source/cpp_uno/gcc3_linux_aarch64/callvirtualfunction.cxx
++++ b/engine/bridges/source/cpp_uno/gcc3_linux_aarch64/callvirtualfunction.cxx
+@@ -55,7 +55,7 @@
+            "m" (stackargs) // dummy input to prevent optimizing the alloca away
+         : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10",
+           "r11", "r12", "r13", "r14", "r15", "r16", "r17",
+-#if !defined ANDROID && !defined MACOSX
++#if !defined __ANDROID__ && !defined MACOSX
+           "r18"/*TODO?*/,
+ #endif
+           "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11",
+diff --git a/engine/bridges/source/cpp_uno/gcc3_linux_aarch64/cpp2uno.cxx b/engine/bridges/source/cpp_uno/gcc3_linux_aarch64/cpp2uno.cxx
+--- a/engine/bridges/source/cpp_uno/gcc3_linux_aarch64/cpp2uno.cxx
++++ b/engine/bridges/source/cpp_uno/gcc3_linux_aarch64/cpp2uno.cxx
+@@ -583,7 +583,7 @@
+ void bridges::cpp_uno::shared::VtableFactory::flushCode(
+     unsigned char const * begin, unsigned char const * end)
+ {
+-#if !defined ANDROID && !defined MACOSX
++#if !defined __ANDROID__ && !defined MACOSX
+     static void (*clear_cache)(unsigned char const *, unsigned char const *)
+         = reinterpret_cast<void (*)(unsigned char const *, unsigned char const *)>
+             (dlsym(RTLD_DEFAULT, "__clear_cache"));
+@@ -601,7 +601,7 @@
+         reinterpret_cast<char *>(const_cast<unsigned char *>(begin)),
+         reinterpret_cast<char *>(const_cast<unsigned char *>(end)));
+ #else
+-    __builtin___clear_cache(const_cast<unsigned char *>(begin), const_cast<unsigned char *>(end));
++    __builtin___clear_cache(reinterpret_cast<char *>(const_cast<unsigned char *>(begin)), reinterpret_cast<char *>(const_cast<unsigned char *>(end)));
+ #endif
+ }
+ 
+diff --git a/engine/bridges/source/cpp_uno/gcc3_linux_x86-64/rtti.cxx b/engine/bridges/source/cpp_uno/gcc3_linux_x86-64/rtti.cxx
+--- a/engine/bridges/source/cpp_uno/gcc3_linux_x86-64/rtti.cxx
++++ b/engine/bridges/source/cpp_uno/gcc3_linux_x86-64/rtti.cxx
+@@ -79,7 +79,7 @@
+     std::vector<OString> m_rttiNames;
+     std::unordered_map<OUString, std::unique_ptr<Generated>> m_generatedRttis;
+ 
+-#if !defined ANDROID
++#if !defined __ANDROID__
+     void * m_hApp;
+ #endif
+ 
+@@ -91,7 +91,7 @@
+ };
+ 
+ RTTI::RTTI()
+-#if !defined ANDROID
++#if !defined __ANDROID__
+     : m_hApp( dlopen( nullptr, RTLD_LAZY ) )
+ #endif
+ {
+@@ -99,7 +99,7 @@
+ 
+ RTTI::~RTTI()
+ {
+-#if !defined ANDROID
++#if !defined __ANDROID__
+     dlclose( m_hApp );
+ #endif
+ }
+@@ -129,7 +129,7 @@
+     buf.append( 'E' );
+ 
+     OString symName( buf.makeStringAndClear() );
+-#if !defined ANDROID
++#if !defined __ANDROID__
+     rtti = static_cast<std::type_info *>(dlsym( m_hApp, symName.getStr() ));
+ #else
+     rtti = static_cast<std::type_info *>(dlsym( RTLD_DEFAULT, symName.getStr() ));
+diff --git a/engine/bridges/source/cpp_uno/shared/vtablefactory.cxx b/engine/bridges/source/cpp_uno/shared/vtablefactory.cxx
+--- a/engine/bridges/source/cpp_uno/shared/vtablefactory.cxx
++++ b/engine/bridges/source/cpp_uno/shared/vtablefactory.cxx
+@@ -271,7 +271,7 @@
+     {
+         OStringBuffer aTmpName(strDirectory);
+         if (aTmpName.isEmpty())
+-            aTmpName = "/tmp";
++            aTmpName = "@TERMUX_PREFIX@/tmp";
+ 
+         aTmpName.append("/.execoooXXXXXX");
+         if ((block.fd = mkstemp(aTmpName.getMutableStr())) == -1)
+diff --git a/engine/config_host.mk.in b/engine/config_host.mk.in
+--- a/engine/config_host.mk.in
++++ b/engine/config_host.mk.in
+@@ -58,6 +58,7 @@
+ export CDR_CFLAGS=$(gb_SPACE)@CDR_CFLAGS@
+ export CDR_LIBS=$(gb_SPACE)@CDR_LIBS@
+ @x_CFLAGS@ export CFLAGS=@CFLAGS@
++@x_CPPFLAGS@ export CPPFLAGS=@CPPFLAGS@
+ export CLANG_USE_LD=@CLANG_USE_LD@
+ export CLANGDIR=@CLANGDIR@
+ export CLANGLIBDIR=@CLANGLIBDIR@
+@@ -82,6 +83,7 @@
+ export COMPILER_PLUGINS_TOOLING_ARGS=@COMPILER_PLUGINS_TOOLING_ARGS@
+ export COMPRESSIONTOOL=@COMPRESSIONTOOL@
+ export COM_IS_CLANG=@COM_IS_CLANG@
++export COM_IS_BIONIC=@COM_IS_BIONIC@
+ export COREDUMPCTL=@COREDUMPCTL@
+ export CPDB_CFLAGS=@CPDB_CFLAGS@
+ export CPDB_LIBS=@CPDB_LIBS@
+diff --git a/engine/configure.ac b/engine/configure.ac
+--- a/engine/configure.ac
++++ b/engine/configure.ac
+@@ -1351,7 +1351,7 @@
+ AC_SUBST(PTHREAD_CFLAGS)
+ AC_SUBST(PTHREAD_LIBS)
+ 
+-# Check for explicit A/C/CXX/OBJC/OBJCXX/LDFLAGS.
++# Check for explicit A/C/CPP/CXX/OBJC/OBJCXX/LDFLAGS.
+ # By default use the ones specified by our build system,
+ # but explicit override is possible.
+ AC_MSG_CHECKING(for explicit AFLAGS)
+@@ -1369,6 +1369,14 @@
+ else
+     AC_MSG_RESULT(no)
+     x_CFLAGS=[\#]
++fi
++AC_MSG_CHECKING(for explicit CPPFLAGS)
++if test -n "$CPPFLAGS"; then
++    AC_MSG_RESULT([$CPPFLAGS])
++    x_CPPFLAGS=
++else
++    AC_MSG_RESULT(no)
++    x_CPPFLAGS=[\#]
+ fi
+ AC_MSG_CHECKING(for explicit CXXFLAGS)
+ if test -n "$CXXFLAGS"; then
+@@ -1420,12 +1428,14 @@
+ 
+ AC_SUBST(AFLAGS)
+ AC_SUBST(CFLAGS)
++AC_SUBST(CPPFLAGS)
+ AC_SUBST(CXXFLAGS)
+ AC_SUBST(OBJCFLAGS)
+ AC_SUBST(OBJCXXFLAGS)
+ AC_SUBST(LDFLAGS)
+ AC_SUBST(x_AFLAGS)
+ AC_SUBST(x_CFLAGS)
++AC_SUBST(x_CPPFLAGS)
+ AC_SUBST(x_CXXFLAGS)
+ AC_SUBST(x_OBJCFLAGS)
+ AC_SUBST(x_OBJCXXFLAGS)
+@@ -3983,7 +3993,7 @@
+ # Use -isystem (gcc) if possible, to avoid warnings in 3rd party headers.
+ # NOTE: must _not_ be used for bundled external libraries!
+ ISYSTEM=
+-if test "$GCC" = "yes"; then
++if test "$GCC" = "yes" -a "$cross_compiling" != "yes"; then
+     AC_MSG_CHECKING( for -isystem )
+     save_CFLAGS=$CFLAGS
+     CFLAGS="$CFLAGS -isystem /usr/include -Werror"
+@@ -4441,6 +4451,17 @@
+      COM_IS_CLANG=TRUE],
+     [AC_MSG_RESULT([no])])
+ AC_SUBST(COM_IS_CLANG)
++
++# Native Bionic is a libc choice, independent of the Android MOBILEAPP target.
++AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
++#include <unistd.h>
++#ifndef __BIONIC__
++#error not Bionic
++#endif
++int main() { return 0; }
++]])], [COM_IS_BIONIC=TRUE], [COM_IS_BIONIC=])
++AC_SUBST(COM_IS_BIONIC)
++
+ 
+ CLANGVER=
+ if test "$COM_IS_CLANG" = TRUE; then
+@@ -5959,11 +5980,12 @@
+     test -d config_build && cp -p config_build/*.h CONF-FOR-BUILD/config_host 2>/dev/null
+     (
+     unset COM USING_X11 OS CPUNAME
+-    unset CC CXX SYSBASE CFLAGS
++    unset CC CXX CPP SYSBASE CFLAGS CPPFLAGS CXXFLAGS LDFLAGS
+     unset AR LD NM OBJDUMP PKG_CONFIG RANLIB READELF STRIP
+     unset CPPUNIT_CFLAGS CPPUNIT_LIBS
+     unset LIBXML_CFLAGS LIBXML_LIBS LIBXSLT_CFLAGS LIBXSLT_LIBS XSLTPROC
+     unset PKG_CONFIG_LIBDIR PKG_CONFIG_PATH
++    unset CPLUS_INCLUDE_PATH C_INCLUDE_PATH LIBRARY_PATH
+     if test -n "$CC_FOR_BUILD"; then
+         export CC="$CC_FOR_BUILD"
+         CC_BASE=`first_arg_basename "$CC"`
+@@ -6035,6 +6057,7 @@
+         --without-tls \
+         --without-webdav \
+         --without-x \
++        --with-system-curl \
+ "
+     # single quotes added for better readability in case of spaces
+     echo "    Running CONF-FOR-BUILD/configure" \
+@@ -10291,7 +10314,16 @@
+     fi
+     if test "$OS" = LINUX ; then
+         PKG_CHECK_MODULES(_UUID, uuid, [], [
+-            AC_MSG_ERROR([uuid is required for internal Python])
++            dnl CPython natively supports Bionic without the optional _uuid module;
++            dnl Lib/uuid.py uses its own supported implementations in that case.
++            AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
++#include <unistd.h>
++#ifndef __BIONIC__
++#error not Bionic
++#endif
++int main() { return 0; }
++            ]])], [AC_MSG_NOTICE([using CPython native UUID support on Bionic])],
++            [AC_MSG_ERROR([uuid is required for internal Python])])
+         ])
+     fi
+     ;;
+diff --git a/engine/i18nlangtag/source/languagetag/languagetag.cxx b/engine/i18nlangtag/source/languagetag/languagetag.cxx
+--- a/engine/i18nlangtag/source/languagetag/languagetag.cxx
++++ b/engine/i18nlangtag/source/languagetag/languagetag.cxx
+@@ -200,8 +200,10 @@
+ 
+ LiblangtagDataRef::~LiblangtagDataRef()
+ {
++#if !defined(__ANDROID__)
+     if (mbInitialized)
+         teardown();
++#endif
+ }
+ 
+ void LiblangtagDataRef::setup()
+diff --git a/engine/i18nutil/source/utility/paper.cxx b/engine/i18nutil/source/utility/paper.cxx
+--- a/engine/i18nutil/source/utility/paper.cxx
++++ b/engine/i18nutil/source/utility/paper.cxx
+@@ -306,7 +306,7 @@
+ #endif
+ 
+ // _NL_PAPER_WIDTH / HEIGHT not available with android unified headers
+-#if defined(LC_PAPER) && defined(_GNU_SOURCE) && !defined(ANDROID)
++#if defined(LC_PAPER) && defined(_GNU_SOURCE) && !defined(__ANDROID__)
+         // try LC_PAPER
+         locale_t loc = newlocale(LC_PAPER_MASK, "", static_cast<locale_t>(0));
+         if (loc != static_cast<locale_t>(0))
+diff --git a/engine/include/systools/opensslinit.hxx b/engine/include/systools/opensslinit.hxx
+--- a/engine/include/systools/opensslinit.hxx
++++ b/engine/include/systools/opensslinit.hxx
+@@ -22,6 +22,10 @@
+     // try system ones first; inspired by:
+     // https://www.happyassassin.net/posts/2015/01/12/a-note-about-ssltls-trusted-certificate-stores-and-platforms/
+     auto const candidates = {
++#ifdef __TERMUX__
++        "@TERMUX_PREFIX@/etc/tls/cert.pem",
++        "@TERMUX_PREFIX@/etc/tls/certs/ca-certificates.crt",
++#endif
+         "/etc/pki/tls/certs/ca-bundle.crt",
+         "/etc/pki/tls/certs/ca-bundle.trust.crt",
+         "/etc/ssl/certs/ca-certificates.crt",
+diff --git a/engine/sal/osl/unx/file.cxx b/engine/sal/osl/unx/file.cxx
+--- a/engine/sal/osl/unx/file.cxx
++++ b/engine/sal/osl/unx/file.cxx
+@@ -69,7 +69,8 @@
+ 
+ #include <vector>
+ 
+-#ifdef LINUX
++#include <sys/vfs.h>
++#if defined(LINUX) && !defined(__ANDROID__)
+ #include <sys/vfs.h>
+ // As documented by the kernel
+ constexpr decltype(std::declval<struct statfs>().f_type) SMB_SUPER_MAGIC = 0x517B;
+diff --git a/engine/sal/osl/unx/pipe.cxx b/engine/sal/osl/unx/pipe.cxx
+--- a/engine/sal/osl/unx/pipe.cxx
++++ b/engine/sal/osl/unx/pipe.cxx
+@@ -38,8 +38,8 @@
+ #include <sys/stat.h>
+ #include <unistd.h>
+ 
+-constexpr OString PIPEDEFAULTPATH = "/tmp"_ostr;
+-constexpr OString PIPEALTERNATEPATH = "/var/tmp"_ostr;
++constexpr OString PIPEDEFAULTPATH = "@TERMUX_PREFIX@/tmp"_ostr;
++constexpr OString PIPEALTERNATEPATH = "@TERMUX_PREFIX@/var/tmp"_ostr;
+ 
+ static oslPipe osl_psz_createPipe(const char *pszPipeName, oslPipeOptions Options, oslSecurity Security);
+ 
+diff --git a/engine/sal/osl/unx/salinit.cxx b/engine/sal/osl/unx/salinit.cxx
+--- a/engine/sal/osl/unx/salinit.cxx
++++ b/engine/sal/osl/unx/salinit.cxx
+@@ -42,9 +42,45 @@
+ #include <syslog.h>
+ #endif
+ 
++#ifdef __TERMUX__
++#include <dlfcn.h>
++#include <android/api-level.h>
++
++#ifndef M_BIONIC_SET_HEAP_TAGGING_LEVEL
++#define M_BIONIC_SET_HEAP_TAGGING_LEVEL (-204)
++#endif
++
++// Bionic tags heap pointers in the top byte (0xb4...), which breaks the
++// signed toInt64 round-trips LibreOffice uses to pass raw pointers through
++// strings (gtksalmenu.cxx GAction names, cellfml.cxx table formulas,
++// tree-view row ids). Turn tagging off for the whole process before any
++// such pointer can be allocated.
++static void android_disable_heap_tagging() {
++    void* lib_handle = dlopen("libc.so", RTLD_LAZY);
++    if (!lib_handle)
++        return;
++    if (android_get_device_api_level() >= 31) {
++        auto mallopt_func
++            = reinterpret_cast<int (*)(int, int)>(dlsym(lib_handle, "mallopt"));
++        if (mallopt_func)
++            mallopt_func(M_BIONIC_SET_HEAP_TAGGING_LEVEL, 0);
++        return;
++    }
++    auto android_mallopt = reinterpret_cast<bool (*)(int, void*, size_t)>(
++        dlsym(lib_handle, "android_mallopt"));
++    if (android_mallopt) {
++        int tag_level = 0;
++        android_mallopt(8, &tag_level, sizeof(tag_level));
++    }
++}
++#endif
++
+ extern "C" {
+ 
+ void sal_detail_initialize(int argc, char ** argv) {
++#ifdef __TERMUX__
++    android_disable_heap_tagging();
++#endif
+     if (argc == sal::detail::InitializeSoffice)
+     {
+         sal::detail::setSoffice();
+diff --git a/engine/sal/osl/unx/tempfile.cxx b/engine/sal/osl/unx/tempfile.cxx
+--- a/engine/sal/osl/unx/tempfile.cxx
++++ b/engine/sal/osl/unx/tempfile.cxx
+@@ -46,7 +46,7 @@
+         pValue = getenv( "TMP" );
+ 
+     if ( !pValue )
+-        pValue = "/tmp";
++        pValue = "@TERMUX_PREFIX@/tmp";
+ 
+     auto nLen = strlen(pValue);
+     while (nLen > 1 && pValue[nLen - 1] == '/') // Allow path consisting of single "/"
+diff --git a/engine/solenv/gbuild/platform/com_GCC_defs.mk b/engine/solenv/gbuild/platform/com_GCC_defs.mk
+--- a/engine/solenv/gbuild/platform/com_GCC_defs.mk
++++ b/engine/solenv/gbuild/platform/com_GCC_defs.mk
+@@ -190,7 +190,7 @@
+ ifeq ($(COM_IS_CLANG),TRUE)
+ gb_LTOFLAGS := -flto=thin
+ ifeq (,$(index,iOS MACOSX,$(OS)))
+-gb_LTOPLUGINFLAGS := --plugin $(if $(LD_PLUGIN),$(LD_PLUGIN),LLVMgold.so)
++gb_LTOPLUGINFLAGS := $(if $(LD_PLUGIN),--plugin $(LD_PLUGIN))
+ endif
+ else
+ # use parallelism based on make's job handling

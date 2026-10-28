@@ -1,0 +1,97 @@
+diff --git a/common/Landlock.cpp b/common/Landlock.cpp
+--- a/common/Landlock.cpp
++++ b/common/Landlock.cpp
+@@ -252,7 +252,13 @@
+ 
+ bool isSupported()
+ {
++#if defined(__ANDROID__) && defined(BASHKITTEN_TERMUX_PREFIX)
++    // Earlier ABIs cannot restrict truncation and therefore cannot provide
++    // the only document filesystem boundary available in this environment.
++    return getAbi() >= TruncateAbi;
++#else
+     return getAbi() >= 1;
++#endif
+ }
+ 
+ bool allowsCrossDirectoryRename()
+@@ -283,6 +289,13 @@
+     {
+         expandGlobReadOnly(pattern, GlobPaths);
+     }
++
++#if defined(__ANDROID__) && defined(BASHKITTEN_TERMUX_PREFIX)
++    // Only shared objects at the native package prefix: never all app data,
++    // HOME, projects, or the whole PREFIX tree. The engine gets its own
++    // explicit read-only allowance from Kit.cpp.
++    expandGlobReadOnly(BASHKITTEN_TERMUX_PREFIX "/lib/*.so*", GlobPaths);
++#endif
+ 
+     GlobPathsExpanded = true;
+     LOG_DBG("Landlock: " << GlobPaths.size() << " library paths expanded from the glob patterns");
+@@ -351,6 +364,37 @@
+     success = success && addPerm(rulesetFd, Permission("/usr/share/ghostscript/fonts", Access::ReadOnlyDir));
+     success = success && addPerm(rulesetFd, Permission("/usr/local/share/fonts", Access::ReadOnlyDir));
+ 
++#if defined(__ANDROID__) && defined(BASHKITTEN_TERMUX_PREFIX)
++    // Bionic's linker and read-only Android runtime live outside Termux.
++    // Landlock still denies every other application/project path.
++    for (const char* file : {
++            "/system/bin/linker64",
++            "/apex/com.android.runtime/bin/linker64",
++            "/linkerconfig/ld.config.txt",
++            "/system/etc/hosts",
++            BASHKITTEN_TERMUX_PREFIX "/etc/tls/cert.pem",
++            BASHKITTEN_TERMUX_PREFIX "/etc/tls/certs/ca-certificates.crt",
++            BASHKITTEN_TERMUX_PREFIX "/etc/resolv.conf",
++        })
++        success = success && addPerm(rulesetFd, Permission(file, Access::ReadOnly));
++    for (const char* dir : {
++            "/system/lib64",
++            "/apex/com.android.runtime/lib64/bionic",
++            "/apex/com.android.i18n/lib64",
++            "/apex/com.android.i18n/etc/icu",
++            "/apex/com.android.tzdata/etc/tz",
++            "/apex/com.android.conscrypt/cacerts",
++            "/system/etc/security/cacerts",
++            "/system/fonts",
++            "/dev/__properties__",
++            BASHKITTEN_TERMUX_PREFIX "/etc/fonts",
++            BASHKITTEN_TERMUX_PREFIX "/share/fontconfig",
++            BASHKITTEN_TERMUX_PREFIX "/share/fonts",
++            BASHKITTEN_TERMUX_PREFIX "/var/cache/fontconfig",
++        })
++        success = success && addPerm(rulesetFd, Permission(dir, Access::ReadOnlyDir));
++#endif
++
+     for (const auto& perm : GlobPaths)
+         success = success && addPerm(rulesetFd, perm);
+ 
+diff --git a/coolwsd-systemplate-setup b/coolwsd-systemplate-setup
+--- a/coolwsd-systemplate-setup
++++ b/coolwsd-systemplate-setup
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env bash
++#!@TERMUX_PREFIX@/bin/bash
+ # set -x
+ 
+ test $# -eq 2 || { echo "Usage: $0 <chroot template directory for system libs to create> <LO installation directory>"; exit 1; }
+@@ -32,6 +32,18 @@
+     CP=gcp
+     REALPATH=grealpath
+     LOCALBASE=usr/local/
++fi
++
++# Native Termux kits use upstream's mandatory Landlock path, not chroot.
++# The engine/libraries/fonts remain at their real, narrowly allowed paths.
++# Do not run glibc/musl ldd or copy Android/APEX/app data into a fake jail.
++if [ -x /system/bin/linker64 ] && [ "${COOL_FORCE_LANDLOCK:-}" = 1 ]; then
++    test "${PREFIX:-}" = "@TERMUX_PREFIX@" || {
++        echo "$0: unexpected native Termux prefix" >&2; exit 1;
++    }
++    mkdir -p "$CHROOT/etc" "$CHROOT/tmp/user" "$CHROOT/dev" "$CHROOT/lo" "$CHROOT/presets" || exit 1
++    if command -v fc-cache >/dev/null 2>&1; then fc-cache 2>/dev/null; fi
++    exit 0
+ fi
+ 
+ # Detect C library

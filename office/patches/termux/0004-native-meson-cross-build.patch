@@ -1,0 +1,67 @@
+diff --git a/engine/external/harfbuzz/ExternalProject_harfbuzz.mk b/engine/external/harfbuzz/ExternalProject_harfbuzz.mk
+--- a/engine/external/harfbuzz/ExternalProject_harfbuzz.mk
++++ b/engine/external/harfbuzz/ExternalProject_harfbuzz.mk
+@@ -42,9 +42,11 @@
+ # TODO: this is pretty ugly...
+ [host_machine]
+ system = '$(if $(filter WNT,$(OS)),windows,$(if $(filter MACOSX,$(OS)),darwin,$(if $(filter ANDROID,$(OS)),android,linux)))'
+-cpu_family = '$(subst X86_64,x86_64,$(RTL_ARCH))'
++cpu_family = '$(subst X86_64,x86_64,$(subst AARCH64,aarch64,$(RTL_ARCH)))'
+ cpu = '$(if $(filter x86,$(RTL_ARCH)),i686,$(if $(filter X86_64,$(RTL_ARCH)),x86_64,$(if $(filter AARCH64,$(RTL_ARCH)),aarch64,armv7)))'
+ endian = '$(ENDIANNESS)'
++[properties]
++needs_exe_wrapper = $(if $(CROSS_COMPILING),true,false)
+ endef
+ 
+ # cannot use CROSS_COMPILING as condition since we have cross-compilation "light" for cases where
+@@ -70,7 +72,7 @@
+ 			-Dicu=enabled \
+ 			-Dicu_builtin=true \
+ 			-Dgraphite2=enabled \
+-			$(if $(filter-out $(BUILD_PLATFORM),$(HOST_PLATFORM))$(UNIX_HELPER),--cross-file cross-file.txt) && \
++			$(if $(CROSS_COMPILING)$(filter-out $(BUILD_PLATFORM),$(HOST_PLATFORM))$(UNIX_HELPER),--cross-file cross-file.txt) && \
+ 		$(MESON) compile -C builddir libs \
+ 			$(gb_MESON_LOAD_AVERAGE) \
+ 			$(if $(verbose),--verbose) \
+diff --git a/engine/external/cairo/ExternalProject_cairo.mk b/engine/external/cairo/ExternalProject_cairo.mk
+--- a/engine/external/cairo/ExternalProject_cairo.mk
++++ b/engine/external/cairo/ExternalProject_cairo.mk
+@@ -46,6 +46,8 @@
+ cpu_family = '$(subst X86_64,x86_64,$(subst AARCH64,aarch64,$(subst ARM,arm,$(RTL_ARCH))))'
+ cpu = '$(if $(filter x86,$(RTL_ARCH)),i686,$(if $(filter X86_64,$(RTL_ARCH)),x86_64,$(if $(filter AARCH64,$(RTL_ARCH)),aarch64,armv7)))'
+ endian = '$(ENDIANNESS)'
++[properties]
++needs_exe_wrapper = $(if $(CROSS_COMPILING),true,false)
+ endef
+ 
+ # Including -rtlib=compiler-rt in pixman_LIBS is a BAD HACK:  At least when compiling with Clang
+@@ -109,7 +111,7 @@
+ 			$(if $(CROSS_COMPILING),--cross-file cross-file.txt) \
+ 			$(if $(filter MACOSX,$(OS)),--prefix=/@.__________________________________________________OOO) \
+ 			$(if $(filter LINUX FREEBSD,$(OS)),--prefix=$(gb_UnpackedTarball_workdir)/cairo/inst --libdir=lib) \
+-			$(if $(filter-out $(BUILD_PLATFORM),$(HOST_PLATFORM))$(UNIX_HELPER),--cross-file cross-file.txt) && \
++			$(if $(CROSS_COMPILING)$(filter-out $(BUILD_PLATFORM),$(HOST_PLATFORM))$(UNIX_HELPER),--cross-file cross-file.txt) && \
+ 		$(MESON) compile -C builddir \
+ 			$(gb_MESON_LOAD_AVERAGE) \
+ 			$(if $(verbose),--verbose) \
+diff --git a/engine/external/cairo/ExternalProject_pixman.mk b/engine/external/cairo/ExternalProject_pixman.mk
+--- a/engine/external/cairo/ExternalProject_pixman.mk
++++ b/engine/external/cairo/ExternalProject_pixman.mk
+@@ -39,6 +39,8 @@
+ cpu_family = '$(subst X86_64,x86_64,$(subst AARCH64,aarch64,$(subst ARM,arm,$(RTL_ARCH))))'
+ cpu = '$(if $(filter x86,$(RTL_ARCH)),i686,$(if $(filter X86_64,$(RTL_ARCH)),x86_64,$(if $(filter AARCH64,$(RTL_ARCH)),aarch64,armv7)))'
+ endian = '$(ENDIANNESS)'
++[properties]
++needs_exe_wrapper = $(if $(CROSS_COMPILING),true,false)
+ endef
+ 
+ # A shared library is not linked against the sanitizer runtime, which belongs
+@@ -67,7 +69,7 @@
+ 			$(if $(filter ARM,$(RTL_ARCH)),-Darm-simd=enabled -Dneon=enabled) \
+ 			-Dtests=disabled \
+ 			$(if $(filter MACOSX,$(OS)),--prefix=/@.__________________________________________________OOO) \
+-			$(if $(filter-out $(BUILD_PLATFORM),$(HOST_PLATFORM))$(UNIX_HELPER),--cross-file cross-file.txt) && \
++			$(if $(CROSS_COMPILING)$(filter-out $(BUILD_PLATFORM),$(HOST_PLATFORM))$(UNIX_HELPER),--cross-file cross-file.txt) && \
+ 		$(MESON) compile -C builddir \
+ 			$(gb_MESON_LOAD_AVERAGE) \
+ 			$(if $(verbose),--verbose) \

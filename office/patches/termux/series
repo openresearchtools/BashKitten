@@ -1,0 +1,8 @@
+0001-bionic-engine-and-cross-tools.patch
+0002-native-landlock-and-systemplate.patch
+0003-optional-native-pam-build.patch
+0004-native-meson-cross-build.patch
+0005-native-external-cross-targets.patch
+0006-native-python-cross-build.patch
+0007-native-python-semaphores.patch
+0008-native-libffi-executable-mappings.patch

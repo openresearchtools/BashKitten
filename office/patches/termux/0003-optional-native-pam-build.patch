@@ -1,0 +1,14 @@
+diff --git a/configure.ac b/configure.ac
+--- a/configure.ac
++++ b/configure.ac
+@@ -2259,7 +2259,9 @@
+ dnl admin-console PAM auth. Only the header is needed at build time (for the
+ dnl PAM types); the library is not required and not linked. Only the server
+ dnl needs it, so a --disable-server qt app tree skips the check.
+-AS_IF([test "$ENABLE_SERVER" = "true" -a "$host_os" != "emscripten"],
++AC_ARG_ENABLE([pam],
++    AS_HELP_STRING([--disable-pam], [Build without optional admin-console PAM authentication.]))
++AS_IF([test "$enable_pam" != "no" -a "$ENABLE_SERVER" = "true" -a "$host_os" != "emscripten"],
+       [AC_CHECK_HEADERS([security/pam_appl.h],
+                         [],
+                         [AC_MSG_ERROR([header security/pam_appl.h not found, install PAM development package])])])

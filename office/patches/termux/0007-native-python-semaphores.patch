@@ -1,0 +1,266 @@
+diff --git a/engine/external/python3/termux/semaphore.c b/engine/external/python3/termux/semaphore.c
+--- a/engine/external/python3/termux/semaphore.c
++++ b/engine/external/python3/termux/semaphore.c
+@@ -44,7 +44,7 @@
+ #define SEM_NSEMS_MAX 256
+ #endif // !SEM_NSEMS_MAX
+ 
+-#define SEM_PREFIX _PATH_TMP "sem."
++/* The owning native kit supplies its private writable TMPDIR. */
+ 
+ static __inline__ char *__strchrnul(const char *s, int c)
+ {
+@@ -68,7 +68,7 @@
+ 
+ #define FLAGS (O_RDWR|O_NOFOLLOW|O_CLOEXEC|O_NONBLOCK)
+ 
+-static char *__sem_mapname(const char *name, char *buf)
++static char *__sem_mapname(const char *name, char *buf, const char *tmpdir)
+ {
+     char *p;
+     while (*name == '/') name++;
+@@ -81,8 +81,10 @@
+         errno = ENAMETOOLONG;
+         return 0;
+     }
+-    memcpy(buf, SEM_PREFIX, strlen(SEM_PREFIX));
+-    memcpy(buf+strlen(SEM_PREFIX), name, p-name+1);
++    size_t length = strlen(tmpdir);
++    memcpy(buf, tmpdir, length);
++    memcpy(buf + length, "/sem.", 5);
++    memcpy(buf + length + 5, name, p-name+1);
+     return buf;
+ }
+ 
+@@ -95,9 +97,11 @@
+     sem_t newsem;
+     void *map;
+     struct stat st;
+-    char buf[NAME_MAX+strlen(SEM_PREFIX)+1];
+-
+-    if (!(name = __sem_mapname(name, buf)))
++    const char *tmpdir = getenv("TMPDIR");
++    if (!tmpdir || tmpdir[0] != '/') { errno = ENOENT; return SEM_FAILED; }
++    char buf[NAME_MAX + strlen(tmpdir) + 6];
++
++    if (!(name = __sem_mapname(name, buf, tmpdir)))
+         return SEM_FAILED;
+ 
+     LOCK(lock);
+@@ -246,8 +250,10 @@
+ 
+ int sem_unlink(const char *name)
+ {
+-    char buf[NAME_MAX+strlen(SEM_PREFIX)+1];
+-    if (!(name = __sem_mapname(name, buf))) return -1;
++    const char *tmpdir = getenv("TMPDIR");
++    if (!tmpdir || tmpdir[0] != '/') { errno = ENOENT; return -1; }
++    char buf[NAME_MAX + strlen(tmpdir) + 6];
++    if (!(name = __sem_mapname(name, buf, tmpdir))) return -1;
+     return unlink(name);
+ }
+ 
+diff --git a/engine/external/python3/termux/multiprocessing.patch.1 b/engine/external/python3/termux/multiprocessing.patch.1
+--- a/engine/external/python3/termux/multiprocessing.patch.1
++++ b/engine/external/python3/termux/multiprocessing.patch.1
+@@ -1,15 +1,6 @@
+-sem_open() and sem_unlink() are implemented in Termux by libandroid-posix-semaphore
+-https://github.com/termux/termux-packages/issues/28777
+-
+-Important: patch this check out of both configure and configure.ac,
+-because the one that gets used seems to be random when 'autoreconf -fi' is used
+-(observed the configure.ac change fail sometimes
+-to apply to configure during 'autoreconf -fi')
+-https://github.com/termux/termux-packages/issues/29278
+-
+ --- a/configure
+ +++ b/configure
+-@@ -18137,10 +18137,6 @@ if test "$ac_sys_system" = "Linux-android"; then
++@@ -19357,10 +19357,6 @@
+    blocked_funcs="chroot initgroups setegid seteuid setgid sethostname
+      setregid setresgid setresuid setreuid setuid"
+  
+@@ -22,7 +13,7 @@
+    # follows the symlink.
+ --- a/configure.ac
+ +++ b/configure.ac
+-@@ -5197,10 +5197,6 @@ if test "$ac_sys_system" = "Linux-android"; then
++@@ -5299,10 +5299,6 @@
+    blocked_funcs="chroot initgroups setegid seteuid setgid sethostname
+      setregid setresgid setresuid setreuid setuid"
+  
+@@ -44,13 +35,13 @@
+          else:
+              _dir_candidates = []
+  
+-
+ --- a/Modules/_multiprocessing/posixshmem.c
+ +++ b/Modules/_multiprocessing/posixshmem.c
+-@@ -11,6 +11,72 @@
+- #include <sys/mman.h>
++@@ -16,6 +16,86 @@
++ #  include <sys/mman.h>           // shm_open(), shm_unlink()
+  #endif
+  
+++
+ +#ifdef __ANDROID__
+ +#include <alloca.h>
+ +#include <fcntl.h>
+@@ -71,9 +62,16 @@
+ +    }
+ +
+ +    namelen = strlen(name);
+-+    fname = (char *) alloca(sizeof("@TERMUX_PREFIX@/tmp/") - 1 + namelen + 1);
+-+    memcpy(fname, "@TERMUX_PREFIX@/tmp/", sizeof("@TERMUX_PREFIX@/tmp/") - 1);
+-+    memcpy(fname + sizeof("@TERMUX_PREFIX@/tmp/") - 1, name, namelen + 1);
+++    const char *tmpdir = getenv("TMPDIR");
+++    if (!tmpdir || tmpdir[0] != '/') { errno = ENOENT; return -1; }
+++    if (strchr(name, '/') || !strcmp(name, ".") || !strcmp(name, "..")) {
+++        errno = EINVAL; return -1;
+++    }
+++    size_t dirlen = strlen(tmpdir);
+++    fname = (char *) alloca(dirlen + 1 + namelen + 1);
+++    memcpy(fname, tmpdir, dirlen);
+++    fname[dirlen] = '/';
+++    memcpy(fname + dirlen + 1, name, namelen + 1);
+ +
+ +    return unlink(fname);
+ +}
+@@ -93,9 +91,16 @@
+ +    }
+ +
+ +    namelen = strlen(name);
+-+    fname = (char *) alloca(sizeof("@TERMUX_PREFIX@/tmp/") - 1 + namelen + 1);
+-+    memcpy(fname, "@TERMUX_PREFIX@/tmp/", sizeof("@TERMUX_PREFIX@/tmp/") - 1);
+-+    memcpy(fname + sizeof("@TERMUX_PREFIX@/tmp/") - 1, name, namelen + 1);
+++    const char *tmpdir = getenv("TMPDIR");
+++    if (!tmpdir || tmpdir[0] != '/') { errno = ENOENT; return -1; }
+++    if (strchr(name, '/') || !strcmp(name, ".") || !strcmp(name, "..")) {
+++        errno = EINVAL; return -1;
+++    }
+++    size_t dirlen = strlen(tmpdir);
+++    fname = (char *) alloca(dirlen + 1 + namelen + 1);
+++    memcpy(fname, tmpdir, dirlen);
+++    fname[dirlen] = '/';
+++    memcpy(fname + dirlen + 1, name, namelen + 1);
+ +
+ +    fd = open(fname, oflag, mode);
+ +    if (fd != -1) {
+@@ -116,7 +121,6 @@
+ +    return fd;
+ +}
+ +#endif
+-+
++ 
+  /*[clinic input]
+  module _posixshmem
+- [clinic start generated code]*/
+diff --git a/engine/external/python3/ExternalProject_python3.mk b/engine/external/python3/ExternalProject_python3.mk
+--- a/engine/external/python3/ExternalProject_python3.mk
++++ b/engine/external/python3/ExternalProject_python3.mk
+@@ -76,6 +76,9 @@
+ # create a symlink "LO_lib" because the .so are in a directory with platform
+ # specific name like build/lib.linux-x86_64-3.3
+ 
++# Match the retained native Termux NDK semaphore symbol aliases.
++python3_termux_sem_flags = -Dsem_open=libandroid_sem_open -Dsem_close=libandroid_sem_close -Dsem_unlink=libandroid_sem_unlink
++
+ python3_cflags = $(ZLIB_CFLAGS)
+ ifneq (,$(ENABLE_VALGRIND))
+     python3_cflags += $(VALGRIND_CFLAGS)
+@@ -96,11 +99,13 @@
+ 				ac_cv_func_clock_gettime=no \
+ 			) \
+ 		) \
++		$(if $(COM_IS_BIONIC),$(CC) $(CFLAGS) $(CPPFLAGS) $(python3_termux_sem_flags) -fPIC -shared $(SRCDIR)/external/python3/termux/semaphore.c -o libandroid-posix-semaphore.so $(LDFLAGS) &&) \
+ 		$(if $(CROSS_COMPILING),export LD_LIBRARY_PATH="$(WORKDIR_FOR_BUILD)/UnpackedTarball/python3$${LD_LIBRARY_PATH:+:$$LD_LIBRARY_PATH}" &&) \
+ 		$(gb_RUN_CONFIGURE) ./configure \
+ 		$(gb_CONFIGURE_PLATFORMS) \
+ 		$(if $(CROSS_COMPILING),--with-build-python=$(WORKDIR_FOR_BUILD)/UnpackedTarball/python3/python) \
+ 		$(if $(COM_IS_BIONIC),--host=$(if $(filter AARCH64,$(CPUNAME)),aarch64,x86_64)-unknown-linux-android) \
++		$(if $(COM_IS_BIONIC),ac_cv_posix_semaphores_enabled=yes ac_cv_func_sem_open=yes ac_cv_func_sem_timedwait=yes ac_cv_func_sem_getvalue=yes ac_cv_func_sem_unlink=yes ac_cv_func_shm_open=yes ac_cv_func_shm_unlink=yes) \
+ 		$(if $(ENABLE_VALGRIND),--with-valgrind) \
+ 		$(if $(ENABLE_DBGUTIL),--with-pydebug) \
+ 		--prefix=/python-inst \
+@@ -115,7 +120,7 @@
+ 		$(if $(filter LINUX,$(OS)), \
+ 			PKG_CONFIG_LIBDIR="$(gb_UnpackedTarball_workdir)/libffi/$(HOST_PLATFORM)$${PKG_CONFIG_LIBDIR:+:$$PKG_CONFIG_LIBDIR}" \
+ 		) \
+-		CC="$(strip $(CC) \
++		CC="$(strip $(CC) $(if $(COM_IS_BIONIC),$(python3_termux_sem_flags)) \
+ 			$(if $(filter -fsanitize=undefined,$(CC)),-fno-sanitize=function) \
+ 			$(if $(SYSTEM_BZIP2),,-I$(gb_UnpackedTarball_workdir)/bzip2) \
+ 			$(if $(SYSTEM_EXPAT),,\
+@@ -128,6 +133,7 @@
+ 		$(if $(python3_cflags),CFLAGS='$(python3_cflags)') \
+ 		$(if $(filter -fsanitize=%,$(CC)),LINKCC="$(CXX) -pthread") \
+ 		LDFLAGS="$(strip $(call gb_ExternalProject_get_link_flags,python3) \
++			$(if $(COM_IS_BIONIC),-L$(EXTERNAL_WORKDIR) -landroid-posix-semaphore) \
+ 			$(if $(filter LINUX,$(OS)),-L$(gb_UnpackedTarball_workdir)/libffi/$(HOST_PLATFORM)/.libs) \
+ 			$(if $(SYSTEM_BZIP2),,-L$(gb_UnpackedTarball_workdir)/bzip2) \
+ 			$(if $(SYSTEM_EXPAT),,-L$(gb_StaticLibrary_WORKDIR)) \
+diff --git a/engine/external/python3/UnpackedTarball_python3.mk b/engine/external/python3/UnpackedTarball_python3.mk
+--- a/engine/external/python3/UnpackedTarball_python3.mk
++++ b/engine/external/python3/UnpackedTarball_python3.mk
+@@ -45,6 +45,7 @@
+ 	external/python3/setuptools.patch.1 \
+ 	external/python3/sqlite3.patch.1 \
+ 	external/python3/no-xopen-source.patch.0 \
++	$(if $(COM_IS_BIONIC),external/python3/termux/multiprocessing.patch.1) \
+ ))
+ 
+ ifneq ($(filter DRAGONFLY FREEBSD LINUX NETBSD OPENBSD,$(OS)),)
+diff --git a/engine/external/python3/ExternalPackage_python3.mk b/engine/external/python3/ExternalPackage_python3.mk
+--- a/engine/external/python3/ExternalPackage_python3.mk
++++ b/engine/external/python3/ExternalPackage_python3.mk
+@@ -10,6 +10,10 @@
+ $(eval $(call gb_ExternalPackage_ExternalPackage,python3,python3))
+ 
+ $(eval $(call gb_ExternalPackage_use_external_project,python3,python3))
++
++ifneq ($(COM_IS_BIONIC),)
++$(eval $(call gb_ExternalPackage_add_file,python3,$(LIBO_BIN_FOLDER)/libandroid-posix-semaphore.so,libandroid-posix-semaphore.so))
++endif
+ 
+ ifeq ($(OS),WNT)
+ ifeq ($(CPUNAME),X86_64)
+@@ -66,6 +70,9 @@
+ # Derive SOABI platform suffix from HOST_PLATFORM (e.g. x86_64-pc-linux-gnu
+ # or aarch64-alpine-linux-musl), stripping the vendor field.
+ SOABI=-$(word 1,$(subst -, ,$(HOST_PLATFORM)))-$(word 3,$(subst -, ,$(HOST_PLATFORM)))-$(word 4,$(subst -, ,$(HOST_PLATFORM)))
++ifneq ($(COM_IS_BIONIC),)
++SOABI=-$(if $(filter AARCH64,$(CPUNAME)),aarch64,x86_64)-linux-android
++endif
+ python3_EXTENSION_MODULE_SUFFIX=cpython-$(PYTHON_VERSION_MAJOR)$(PYTHON_VERSION_MINOR)$(if $(ENABLE_DBGUTIL),d)$(SOABI)
+ python3_EXTENSION_MODULES= \
+ 	Modules/array.$(python3_EXTENSION_MODULE_SUFFIX).so \
+@@ -123,7 +130,7 @@
+ 	Modules/syslog.$(python3_EXTENSION_MODULE_SUFFIX).so \
+ 	Modules/termios.$(python3_EXTENSION_MODULE_SUFFIX).so \
+ 	Modules/unicodedata.$(python3_EXTENSION_MODULE_SUFFIX).so \
+-	Modules/_uuid.$(python3_EXTENSION_MODULE_SUFFIX).so \
++	$(if $(COM_IS_BIONIC),,Modules/_uuid.$(python3_EXTENSION_MODULE_SUFFIX).so) \
+ 	Modules/zlib.$(python3_EXTENSION_MODULE_SUFFIX).so \
+ 	Modules/_zoneinfo.$(python3_EXTENSION_MODULE_SUFFIX).so \
+ 
+@@ -137,6 +144,11 @@
+ # (+ toplevel for pyconfig.h)
+ 
+ # that one is generated...
++ifneq ($(COM_IS_BIONIC),)
++$(eval $(call gb_ExternalPackage_add_files,python3,$(LIBO_BIN_FOLDER)/python-core-$(PYTHON_VERSION)/lib,\
++    LO_lib/_sysconfigdata_$(if $(ENABLE_DBGUTIL),d)_android_$(if $(filter AARCH64,$(CPUNAME)),aarch64,x86_64)-linux-android.py \
++))
++else
+ ifeq ($(HOST_PLATFORM),powerpc64le-unknown-linux-gnu)
+ $(eval $(call gb_ExternalPackage_add_files,python3,$(LIBO_BIN_FOLDER)/python-core-$(PYTHON_VERSION)/lib,\
+         LO_lib/_sysconfigdata_$(if $(ENABLE_DBGUTIL),d)_linux_powerpc64le-linux-gnu.py \
+@@ -163,6 +175,8 @@
+ endif
+ endif
+ 
++
++endif # native Android sysconfig data
+ 
+ # packages not shipped:
+ # curses - need curses to build the C module

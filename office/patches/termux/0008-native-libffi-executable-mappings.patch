@@ -1,0 +1,11 @@
+diff --git a/engine/external/libffi/ExternalProject_libffi.mk b/engine/external/libffi/ExternalProject_libffi.mk
+--- a/engine/external/libffi/ExternalProject_libffi.mk
++++ b/engine/external/libffi/ExternalProject_libffi.mk
+@@ -32,6 +32,7 @@
+ 		MAKE=$(MAKE) $(gb_RUN_CONFIGURE) ./configure \
+ 			--enable-option-checking=fatal \
+ 			$(gb_CONFIGURE_PLATFORMS) \
++			$(if $(COM_IS_BIONIC),ac_cv_func_memfd_create=no CPPFLAGS="$(CPPFLAGS) -DFFI_MMAP_EXEC_WRIT=1") \
+ 			$(gb_CONFIGURE_DEPENDENCY_TRACKING) \
+ 			$(if $(filter LINUX,$(OS)), \
+ 			    --disable-shared \

@@ -1,0 +1,181 @@
+{
+  "schema": 1,
+  "donor": {
+    "url": "https://codeload.github.com/termux/termux-packages/tar.gz/f3b242999b604dab33639c8211c3b461aad79dc9",
+    "sha256": "ed546336bdfa680956bb4f3039e4bc186a91896c4b2f2fd7a8c9cdbec4b3a6d2"
+  },
+  "sourceArchive": "agent/vendor/node/ed546336bdfa680956bb4f3039e4bc186a91896c4b2f2fd7a8c9cdbec4b3a6d2-f3b242999b604dab33639c8211c3b461aad79dc9",
+  "files": [
+    {
+      "file": "x11-packages/libreoffice/0001-configure-inherit-more-flags.patch",
+      "sha256": "eca349e524cb0a3905ef0c41cb6779c5e829e3bc439d3b436b58f0d11555ce43"
+    },
+    {
+      "file": "x11-packages/libreoffice/0002-configure-error-and-disable-isystem.patch",
+      "sha256": "c34f0b76f18f0631a1aacf4c14d7c227b94355f86df6dc6e478f991f158f7592"
+    },
+    {
+      "file": "x11-packages/libreoffice/0003-no-lcpaper.patch",
+      "sha256": "143abec7ee5fd2eac4e85cc12330abd029617962fbf743d0e123a370d029b02b"
+    },
+    {
+      "file": "x11-packages/libreoffice/0004-apply-some-android-specific-patch.patch",
+      "sha256": "f3bc88ce9b6ecc1ae0fa63746c0dd4cd2261413d3526a8135cf1beb4ced58ab5"
+    },
+    {
+      "file": "x11-packages/libreoffice/0005-icu-76.patch",
+      "sha256": "6bfec74eda9bdbaad18e16b784e32eca22c82bb2d0f6fb136305123664bffea3"
+    },
+    {
+      "file": "x11-packages/libreoffice/0006-install-without-destdir.patch",
+      "sha256": "76dfaca700a82767089b2320497230e362740b51b176b149f8e64cb9613acfb8"
+    },
+    {
+      "file": "x11-packages/libreoffice/0007-proc-version.patch",
+      "sha256": "865d832bdadcc67ac17f7b135deb4f3841db137b62d4b4fb38b47dc4291bddb0"
+    },
+    {
+      "file": "x11-packages/libreoffice/0008-no-redefine-super-magic.patch",
+      "sha256": "0eeb938a071de705edca2fb31d603b40b30a919e9365129ae93e0ad6f8d90bf4"
+    },
+    {
+      "file": "x11-packages/libreoffice/0009-clear-cppflags-for-build.patch",
+      "sha256": "9507b0e52b1f289a651889c73e53dac4f6bdc43a51b9a0e7d36cf2cad77a55ae"
+    },
+    {
+      "file": "x11-packages/libreoffice/0010-skip-argon2-test.patch",
+      "sha256": "5fc01293407adc9f9dd5e4e0079912a4800640d97f825d58225e7cb76b0622f5"
+    },
+    {
+      "file": "x11-packages/libreoffice/0011-system-icu-for-build.patch",
+      "sha256": "6eedcca54189de22c9515d5681a3bc19c500fbf2a125d12e1fb12e527ca497a5"
+    },
+    {
+      "file": "x11-packages/libreoffice/0012-clear-cache-cast.patch",
+      "sha256": "3ce0613963b6391a0c3927ae5d8b3f5ac14ec0ce51ebcfb63fb0de5be8d203c5"
+    },
+    {
+      "file": "x11-packages/libreoffice/0013-mythes-cross-compile.patch",
+      "sha256": "7a4a7f3aa3e79ecdb46981e100835d6e7238b955ab61d94d27ba8deba807fd15"
+    },
+    {
+      "file": "x11-packages/libreoffice/0014-coinmp-cross-compile.patch",
+      "sha256": "dd38beb9ade3a2040ba591e40941fd9e3095a152fd167b2bbc460da54b575475"
+    },
+    {
+      "file": "x11-packages/libreoffice/0016-fix-hardcoded-paths-for-termux.patch",
+      "sha256": "6e22dd9db2d25ae946138dd0615e882dc8e8a957640387fd546c6c85546dc8da"
+    },
+    {
+      "file": "x11-packages/libreoffice/0017-coinmp-32bit-builtins-as-wl-flag.patch",
+      "sha256": "c1e4a25fb34024f37f41e3284b428c6af620cae06490064726034cfbad3c58c0"
+    },
+    {
+      "file": "x11-packages/libreoffice/0018-resolves-rhbz-1432468-disable-opencl-by-default.patch",
+      "sha256": "a64bce412f84d82dbde7280fb2140eaeebb62342c25ebe616c3885e9e052bd64"
+    },
+    {
+      "file": "x11-packages/libreoffice/0019-no-packagekit-per-default.patch",
+      "sha256": "d888833ccbda5dac289c03ae0906b4a0c6fa50cd724894a8a3e591941a28f24d"
+    },
+    {
+      "file": "x11-packages/libreoffice/0020-fix-uno-bridge-rtti-lookup-scope-on-bionic.patch",
+      "sha256": "1135b3c2a6d4a21c3cab7e882d7fe65a382f1c88f4ed77283602e4d97e5de9c6"
+    },
+    {
+      "file": "x11-packages/libreoffice/0021-disable-bionic-heap-pointer-tagging.patch",
+      "sha256": "345959cf299186452163dc751cdc7133d640113d4d8acf19b2015622907b6950"
+    },
+    {
+      "file": "x11-packages/libreoffice/0022-skip-liblangtag-exit-teardown-on-bionic-destroyed-mutex.patch",
+      "sha256": "be7a1a8c40b32215eef421c551c2a9e9388ce45996cb4a92af33477709d6bf98"
+    },
+    {
+      "file": "x11-packages/libreoffice/0023-register-postprocess-fontconfig-for-headless-code.patch",
+      "sha256": "b096c95ee0c776a81ca3a7f2c6d4588e73b5aa0917480299258c41af221fd062"
+    },
+    {
+      "file": "x11-packages/libreoffice/0024-system-box2d-3.x.patch",
+      "sha256": "fb3713c1f9bf246b75e4363b70d049b2c85f7629d9e2b5d9781fd4177913e2bc"
+    },
+    {
+      "file": "x11-packages/libreoffice/0025-lto-no-nm-plugin-default.patch",
+      "sha256": "15df66aad35784bdadae1e6a49100e4523961a319f1a2d7bcfff1f872224771d"
+    },
+    {
+      "file": "x11-packages/libreoffice/build.sh",
+      "sha256": "d68538ac8deb131b69173ffacc87c045efa63a63ceafed987904160f18dfb9cb"
+    }
+  ],
+  "targetRelease": "cp-26.04.5-2",
+  "targetCommit": "42745e44dd8530fac7acd5f46cb7571ceea63c6a",
+  "nativeFrameworkReferences": [
+    {
+      "file": "packages/libnspr/build.sh",
+      "sha256": "aeceb7c245446fb53d60f2fd7d1b5ed392a8cf6e5b9bc8f6d7fdc646a1d4f5f3"
+    },
+    {
+      "file": "packages/libnspr/configure.patch",
+      "sha256": "51b9c65d551040da14ac469bb5f2063027f04c6d7bdd0545edb7d5603c52b58c"
+    },
+    {
+      "file": "packages/libnss/build.sh",
+      "sha256": "6e077f5dbb7786f62ebdbd6ac2d30c010281eede65e66c28dde18fc88add1b8e"
+    },
+    {
+      "file": "packages/libnss/coreconf-rules.mk.patch",
+      "sha256": "c6ee5773c1fd7c0ff8d783dc4b8fa919873d678f4e0087e5e9f04ba8b9b438ec"
+    },
+    {
+      "file": "packages/libnss/lib-freebl-stubs.c.patch",
+      "sha256": "651b3d6e7e49d372a79beac5ca36fbb85babf001dfdb9a350e86afadbff4e803"
+    },
+    {
+      "file": "scripts/build/termux_step_start_build.sh",
+      "sha256": "c0493dfca494564c023f6d304ac206be0aba967a29c40bb6a434c8dbfc60397b"
+    },
+    {
+      "file": "packages/libandroid-posix-semaphore/build.sh",
+      "sha256": "ef7431b10b8f6c9e60e0c785e435138f6de39fa2a301a6fe73fabf2948dd6fec"
+    },
+    {
+      "file": "packages/libandroid-shmem/build.sh",
+      "sha256": "db55b10b90c54dd4d39b76b5b074835c09c7c7534a84a12bc29c6a63717ff2fd"
+    },
+    {
+      "file": "packages/python/build.sh",
+      "sha256": "22e359914b12965fafc4a2e7a552334a03e0be9652ac33bac2aa62ee1dfcd472"
+    },
+    {
+      "file": "ndk-patches/30/semaphore.h.patch",
+      "sha256": "d29dc21078e36e708460597eb1879a89f9f1496a0c1eec3a7dbe7ad088358c5a"
+    },
+    {
+      "file": "packages/libffi/build.sh",
+      "sha256": "0a7f2e44163fe2d43a48680968a5254bad0ee1032f89fe20cfcfe5dbddb2555e"
+    }
+  ],
+  "archiveRoot": "termux-packages-f3b242999b604dab33639c8211c3b461aad79dc9",
+  "nativeBuildInputs": [
+    {
+      "file": "packages/libandroid-posix-semaphore/semaphore.c",
+      "destination": "engine/external/python3/termux/semaphore.c",
+      "sha256": "333e0027667d8a82568fbe5617b1ef381a8c6a920d1a44a07570fb695a302253"
+    },
+    {
+      "file": "packages/libandroid-posix-semaphore/LICENSE",
+      "destination": "engine/external/python3/termux/LICENSE",
+      "sha256": "e239ef69c9c4eead9406bdc6a34f2bd1220c3dcd3b17c8377cb2fb73fdaf0d38"
+    },
+    {
+      "file": "packages/python/0005-impl-multiprocessing.patch",
+      "destination": "engine/external/python3/termux/multiprocessing.patch.1",
+      "sha256": "fef12316d17d64cb7a753d728d7db8706c39b84e05d2ae879e10d379014197d2"
+    },
+    {
+      "file": "LICENSE.md",
+      "destination": "engine/external/python3/termux/FRAMEWORK-LICENSE",
+      "sha256": "e86f899e394c692ce10dff53614f93ce473f02cddb4d88c5d49cb0c728ba5f68"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+diff --git a/engine/external/bzip2/ExternalProject_bzip2.mk b/engine/external/bzip2/ExternalProject_bzip2.mk
+--- a/engine/external/bzip2/ExternalProject_bzip2.mk
++++ b/engine/external/bzip2/ExternalProject_bzip2.mk
+@@ -26,7 +26,7 @@
+ $(call gb_ExternalProject_get_state_target,bzip2,build):
+ 	$(call gb_Trace_StartRange,bzip2,EXTERNAL)
+ 	$(call gb_ExternalProject_run,build,\
+-		$(MAKE) \
++		$(MAKE) $(if $(CROSS_COMPILING),libbz2.a bzip2 bzip2recover) \
+ 		CC="$(CC) -fPIC" \
+ 	)
+ 	$(call gb_Trace_EndRange,bzip2,EXTERNAL)
+diff --git a/engine/external/nss/ExternalProject_nss.mk b/engine/external/nss/ExternalProject_nss.mk
+--- a/engine/external/nss/ExternalProject_nss.mk
++++ b/engine/external/nss/ExternalProject_nss.mk
+@@ -113,7 +113,7 @@
+ 
+ endif
+ 
+-else ifeq ($(OS),LINUX)
++else ifeq ($(OS)-$(COM_IS_BIONIC),LINUX-)
+ # Linux builds nss with gyp and ninja through build.sh instead of coreconf.
+ # build.sh also builds nspr. It writes dist/Release, or dist/Debug for a debug
+ # build, with the nspr headers in a nspr subdirectory, so the recipe copies the
+@@ -161,7 +161,8 @@
+ 			NSS_USE_SYSTEM_SQLITE=1) \
+ 		$(if $(filter LINUX,$(OS)),$(if $(ENABLE_DBGUTIL),,BUILD_OPT=1)) \
+ 		$(if $(filter ARM,$(CPUNAME)),NSS_DISABLE_ARM32_NEON=1) \
+-		NSPR_CONFIGURE_OPTS="$(gb_CONFIGURE_PLATFORMS)" \
++		$(if $(COM_IS_BIONIC),CPPFLAGS="$(CPPFLAGS) -DANDROID" LDFLAGS="$(LDFLAGS) -llog" HOST_CC="$(CC_FOR_BUILD)") \
++		NSPR_CONFIGURE_OPTS="$(gb_CONFIGURE_PLATFORMS) $(if $(COM_IS_BIONIC),--host=$(if $(filter AARCH64,$(CPUNAME)),aarch64,x86_64)-unknown-linux-gnu --enable-64bit)" \
+ 		$(if $(CROSS_COMPILING),CROSS_COMPILE=1) \
+ 		NSDISTMODE=copy \
+ 		$(MAKE) \
+@@ -169,6 +170,7 @@
+ 			RANLIB="$(RANLIB)" \
+ 			NMEDIT="$(NM)edit" \
+ 			COMMA=$(COMMA) \
++			$(if $(COM_IS_BIONIC),OS_TARGET=Linux OS_TEST=$(if $(filter AARCH64,$(CPUNAME)),aarch64,x86_64) CC_IS_CLANG=1 NSS_ENABLE_WERROR=0 NSS_SEED_ONLY_DEV_URANDOM=1) \
+ 			CC="$(CC) $(gb_DEBUGINFO_FLAGS) \
+ 				$(if $(filter -fsanitize=undefined,$(CC)),-fno-sanitize=function) \
+ 				$(if $(filter iOS,$(OS)), -DNSS_STATIC_SOFTOKEN=1 -DNSS_STATIC_FREEBL=1 -DNSS_STATIC_PKCS11=1) \
+diff --git a/engine/external/nss/UnpackedTarball_nss.mk b/engine/external/nss/UnpackedTarball_nss.mk
+--- a/engine/external/nss/UnpackedTarball_nss.mk
++++ b/engine/external/nss/UnpackedTarball_nss.mk
+@@ -32,6 +32,9 @@
+         external/nss/nss.disablefsync.patch \
+         external/nss/nss.getrandom.patch \
+         external/nss/nss-gyp-rpath.patch.1) \
++    $(if $(COM_IS_BIONIC), \
++        external/nss/nss-bionic-link-flags.patch.1 \
++        external/nss/nss-bionic-env.patch.1) \
+     $(if $(filter iOS,$(OS)), \
+         external/nss/nss-ios.patch) \
+     $(if $(filter ANDROID,$(OS)), \
+diff --git a/engine/external/nss/nss-bionic-link-flags.patch.1 b/engine/external/nss/nss-bionic-link-flags.patch.1
+--- /dev/null
++++ b/engine/external/nss/nss-bionic-link-flags.patch.1
+@@ -0,0 +1,11 @@
++--- a/nss/coreconf/rules.mk
+++++ b/nss/coreconf/rules.mk
++@@ -223,7 +223,7 @@
++ endif	# MSVC with manifest tool
++ endif
++ else
++-	$(MKSHLIB) -o $@ $(OBJS) $(SUB_SHLOBJS) $(LD_LIBS) $(EXTRA_LIBS) $(EXTRA_SHARED_LIBS) $(OS_LIBS)
+++	$(MKSHLIB) -o $@ $(OBJS) $(SUB_SHLOBJS) $(LDFLAGS) $(LD_LIBS) $(EXTRA_LIBS) $(EXTRA_SHARED_LIBS) $(OS_LIBS)
++ 	chmod +x $@
++ endif
++ endif
+diff --git a/engine/external/nss/nss-bionic-env.patch.1 b/engine/external/nss/nss-bionic-env.patch.1
+--- /dev/null
++++ b/engine/external/nss/nss-bionic-env.patch.1
+@@ -0,0 +1,11 @@
++--- a/nss/lib/freebl/stubs.c
+++++ b/nss/lib/freebl/stubs.c
++@@ -574,7 +574,7 @@
++ PR_GetEnvSecure_stub(const char *var)
++ {
++     STUB_SAFE_CALL1(PR_GetEnvSecure, var);
++-#ifdef __USE_GNU
+++#if defined __USE_GNU && !defined __ANDROID__
++     return secure_getenv(var);
++ #else
++     return getenv(var);
+diff --git a/engine/external/poco/StaticLibrary_PocoFoundation.mk b/engine/external/poco/StaticLibrary_PocoFoundation.mk
+--- a/engine/external/poco/StaticLibrary_PocoFoundation.mk
++++ b/engine/external/poco/StaticLibrary_PocoFoundation.mk
+@@ -44,7 +44,7 @@
+ 
+ # Android's Bionic libc has no POSIX shared memory (shm_open/shm_unlink), so use
+ # POCO's dummy SharedMemory implementation there.
+-ifeq ($(OS),ANDROID)
++ifneq ($(filter ANDROID,$(OS))$(COM_IS_BIONIC),)
+ $(eval $(call gb_StaticLibrary_add_defs,PocoFoundation,\
+ 	-DPOCO_NO_SHAREDMEMORY \
+ ))

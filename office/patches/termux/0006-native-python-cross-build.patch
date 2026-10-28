@@ -1,0 +1,35 @@
+diff --git a/engine/solenv/gbuild/extensions/pre_BuildTools.mk b/engine/solenv/gbuild/extensions/pre_BuildTools.mk
+--- a/engine/solenv/gbuild/extensions/pre_BuildTools.mk
++++ b/engine/solenv/gbuild/extensions/pre_BuildTools.mk
+@@ -50,6 +50,7 @@
+     $(foreach executable,$(gb_BUILD_TOOLS_executables_extern),$(call gb_ExternalExecutable_get_dependencies,$(executable))) \
+ 	$(INSTROOT)/$(LIBO_URE_ETC_FOLDER)/$(call gb_Helper_get_rcfile,uno) \
+ 	$(if $(SYSTEM_ZXCVBN),,$(call gb_ExternalProject_get_target_for_build,zxcvbn-c)) \
++	$(if $(filter PYTHON,$(BUILD_TYPE_FOR_HOST)),$(call gb_ExternalProject_get_target_for_build,python3)) \
+ 
+ endif
+ 
+diff --git a/engine/external/python3/ExternalProject_python3.mk b/engine/external/python3/ExternalProject_python3.mk
+--- a/engine/external/python3/ExternalProject_python3.mk
++++ b/engine/external/python3/ExternalProject_python3.mk
+@@ -96,8 +96,11 @@
+ 				ac_cv_func_clock_gettime=no \
+ 			) \
+ 		) \
++		$(if $(CROSS_COMPILING),export LD_LIBRARY_PATH="$(WORKDIR_FOR_BUILD)/UnpackedTarball/python3$${LD_LIBRARY_PATH:+:$$LD_LIBRARY_PATH}" &&) \
+ 		$(gb_RUN_CONFIGURE) ./configure \
+ 		$(gb_CONFIGURE_PLATFORMS) \
++		$(if $(CROSS_COMPILING),--with-build-python=$(WORKDIR_FOR_BUILD)/UnpackedTarball/python3/python) \
++		$(if $(COM_IS_BIONIC),--host=$(if $(filter AARCH64,$(CPUNAME)),aarch64,x86_64)-unknown-linux-android) \
+ 		$(if $(ENABLE_VALGRIND),--with-valgrind) \
+ 		$(if $(ENABLE_DBGUTIL),--with-pydebug) \
+ 		--prefix=/python-inst \
+@@ -120,7 +123,7 @@
+ 				-I$(gb_UnpackedTarball_workdir)/expat) \
+ 			$(if $(SYSTEM_SQLITE3),,-I$(gb_UnpackedTarball_workdir)/sqlite3) \
+ 			$(if $(SYSBASE), -I$(SYSBASE)/usr/include) \
+-			$(if $(filter LINUX,$(OS)),-I/usr/include/ncursesw) \
++			$(if $(filter LINUX-,$(OS)-$(COM_IS_BIONIC)),-I/usr/include/ncursesw) \
+ 			)" \
+ 		$(if $(python3_cflags),CFLAGS='$(python3_cflags)') \
+ 		$(if $(filter -fsanitize=%,$(CC)),LINKCC="$(CXX) -pthread") \
