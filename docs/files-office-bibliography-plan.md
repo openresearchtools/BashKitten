@@ -748,6 +748,57 @@ missing abstracts are not exclusion evidence. Keep provider semantic search and
 local embedding ranking distinct, and retain search-only/estimate operations.
 [Main-branch UI reference at the inspected commit](https://github.com/openresearchtools/systematic-reviewer/blob/859824b115731cb9932cdd45b130b8f4d222daac/src/ui/harvest.js).
 
+#### Large-library responsiveness — user clarification, 28 October 2026
+
+Design and verify the References web UI and shared citation chooser for project
+libraries containing **up to 100,000 reference records**, including lists/search
+results with many thousands of items. This is a required supported workload,
+not permission to load the entire database into a browser or an arbitrary limit
+on the number of items that can be stored. Library records and citation
+occurrences inside a document are different counts; test both realistically.
+
+- Use scrollable virtualized/windowed item lists with bounded overscan and lazy
+  paged fetching. Render/fetch the visible region plus a small prefetch window;
+  never create one DOM row per library item or download all records on modal
+  open. Apply the same principle to large collection trees, result lists and
+  selected-citation lists where needed. Keep headers, actions and focus usable
+  while scrolling, with responsive phone panes and accessible keyboard access.
+- Query/search/filter/sort in the project backend using appropriate database
+  indexes and the existing selected database's search facilities. Use stable
+  ordering with a unique tie-breaker and cursor/keyset pagination where suitable;
+  do not scan/decode the whole library on the UI thread or fetch it just to sort.
+  Preserve pagination/version semantics required by compatibility APIs.
+- Debounce cancellable incremental search and discard stale responses after a
+  query, collection or project changes. Preserve current results while the next
+  page arrives; use bounded request concurrency, backpressure and honest loading/
+  empty/error states. Do not wait for exact whole-library counts before showing
+  useful results, or fabricate totals when only a partial result is available.
+- Fetch detailed metadata, abstracts, attachments, previews and formatted labels
+  on demand. Cache bounded results by project, query and item version; evict old
+  pages and invalidate affected records after user/agent changes. Selecting an
+  off-screen item must not depend on its DOM row staying mounted. Retain stable
+  selection, scroll position and keyboard focus across paging and updates.
+- Batch import/enrichment/PDF resolution, indexing, large metadata edits and CSL
+  rendering run asynchronously through existing backend job/worker facilities.
+  Avoid blocking either the web UI thread or the backend request loop with long
+  synchronous work. Provide progress, cancellation and partial-failure status;
+  native resolver pacing remains in force, not aggressive parallel downloading.
+- Reuse existing source/framework virtualization, search and async primitives
+  where available. Keep this behavior in References/backend/plugin modules;
+  no Mozilla-specific list, extra transcript/index service or custom DB engine.
+
+Acceptance uses realistic multi-author metadata and attachments in libraries of
+1,000, 10,000 and 100,000 records. Measure cold/warm first usable list, indexed
+search and first-page latency, input-to-paint/scroll responsiveness, memory,
+network payload and long tasks on desktop and actual supported Android/Termux
+profiles. Test rapid query changes, keyboard navigation into unloaded pages,
+large multi-selection, cancellation and concurrent import/agent edits. Rows,
+resident page data and initial transfer remain bounded by viewport/page policy,
+not proportional to all 100,000 records. Scrolling, typing, opening/closing the
+chooser and continuing document edits must stay responsive while work runs.
+Record reproducible hardware/workload and failures; a small-library screenshot
+or desktop-only test does not establish this acceptance.
+
 ### 8.2 Library API and compatibility
 
 Provide a native project-qualified API plus the compatibility subset actually
@@ -1055,6 +1106,39 @@ The classic donor remains in
 commit `188c54c186fbbaa6889145986d43ba64160a44fa`. Import only the needed historical
 behavior/reference with provenance; current core/translator code uses the newer
 selected release. Reuse this modal across document, spreadsheet and slide plugins.
+
+**Required classic-dialog parity:** adapt the pinned classic dialog's actual
+controls and behavior into the shared web citation modal, rather than copying
+only its appearance. Keep collection/library navigation, live item search,
+creator/title/year discovery, single- and multiple-item citation modes,
+add/remove/reorder of selected items, per-item locator/label/prefix/suffix and
+suppress-author, citation preview and native style-dependent sorting behavior.
+Preserve full creator lists and names for multi-author references; search must
+find the relevant authors/creators, not only the first displayed surname.
+Multi-author records and multi-source citation clusters are distinct and both
+must work. CSL controls author rendering, including et al. and disambiguation.
+
+Compare the implementation against the pinned classic donor for keyboard/focus,
+selection, editing an existing cluster, sorting/reordering, preview and confirm/
+cancel behavior, recording any real missing control as unfinished work. Keep
+our own styling/names/icons and use web-native accessible controls. Do not
+substitute the modern quick-format picker or retain an XUL runtime. All classic
+functions must remain reachable on phone layouts, with scrollable panes and a
+usable action area rather than a clipped desktop dialog.
+
+Use this same independently packaged chooser in the References web UI's citing
+flow and the Writer/Calc/Impress References extension. The ordinary library view
+may select a cluster or copy its representation; inserting it requires an
+explicit target document/agent participant, never the last globally active tab.
+The chooser uses section 8.1's virtualized/paged search over the **100,000-record
+project database**. Opening it must not fetch or format every library item.
+Selected references are identified by stable IDs and remain selected across
+search/page changes. Async preview/CSL work is cancellable/versioned; discard
+stale results and validate the target's current native state before insertion.
+Cancel does not mutate the document. Confirm uses the existing native citation
+operation and undo semantics without freezing the human's editor or stealing
+their selection. Large reference sets remain nonblocking for both user and agent.
+
 
 Agent citation commands invoke the exact same validation and adapter operations
 as the GUI, through the agent's own live editor participant. Include insert/edit
@@ -1768,6 +1852,13 @@ Required acceptance groups:
 - [ ] **Library isolation:** two projects, duplicate names/shared folder roots,
   separate databases, stable identities, collection/item CRUD, metadata fields,
   tags/notes/relations, attachments in `Bibliography`, archive/relink/delete.
+- [ ] **Large libraries/classic chooser:** exercise 1k/10k/100k project records,
+  virtualized scrolling and bounded lazy pages, indexed search/sort/filter,
+  multi-author search and metadata, large multi-selection, keyboard/focus and
+  phone panes. Verify classic donor control/behavior parity, multi-source cluster
+  editing, cancellable previews, stale-response rejection, confirm/cancel and
+  concurrent human/agent use without UI or backend request-loop blocking.
+  Record latency/long-task/memory/transfer evidence, not only visible results.
 - [ ] **Capture:** single item, many-item page, website snapshot, PDF with/without
   detectable metadata, attachment progress, authenticated publisher retrieval,
   human challenge tab, selector cancellation, and changing selected library

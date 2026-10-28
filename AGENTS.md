@@ -80,6 +80,17 @@ identifier batch as native Zotero on the same machine/network with matched
 resolver/access conditions. Do not replace this with a minimal DOI lookup or
 aggressive parallel downloader; investigate and record parity differences.
 
+References web UI and the shared classic citation modal must support up to
+100,000 records per project database, with scrollable virtualized lists, bounded
+lazy pages, indexed backend search/sort and nonblocking cancellable work. Do not
+fetch/render the whole library or freeze the UI/backend loop for large jobs.
+Port the actual pinned Zotero classic citation-dialog behavior into the web UI
+and all three Office extension adapters: creator/item search, full multi-author
+records, single/multi-source clusters, ordering, locators/affixes/suppress-author,
+preview and confirm/cancel, with keyboard and phone parity. Use the same chooser
+and References API for user and agent; test 1k/10k/100k libraries, stale responses,
+concurrent changes and bounded memory/transfer, not only a small fixture.
+
 Latest 28 October amendments select Collabora Online throughout the active plan. Use its native WOPI integration, separate human/Pi
 views and authenticated browserless WebSocket/UNO/script sessions; verify actual
 released extension gates and native Termux support. Reuse upstream Quantum's

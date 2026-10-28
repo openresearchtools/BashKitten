@@ -69,6 +69,12 @@ allowed for required operations they do not expose. Isolate/test those calls on
 upgrades instead of silently dropping features. Research/import/enrichment/PDFs,
 managed citations/style/bibliography, edits, saves and exports must work end to
 end through native sessions and replaceable adapters.
+References and its shared classic citation web modal must remain nonblocking and
+scrollable with lazy/virtualized lists and indexed backend queries for project
+libraries up to 100,000 records. Preserve classic donor behavior, creator search,
+multi-author items and multi-source citation clusters across the web UI and all
+three Office plugins, including responsive phone/keyboard interaction. Verify
+large-library latency, memory, cancellation and concurrent user/agent work.
 
 Keep Quantum updatable through a separately versioned Collabora add-on, reusing
 pinned upstream WOPI source and a minimal documented provider/launch hook. No
