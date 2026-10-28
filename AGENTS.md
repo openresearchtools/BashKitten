@@ -11,7 +11,9 @@ commit metadata and the frozen original plan/tag. This is not permission for
 general history cleanup. Use `BASHKITTEN_OFFLINE_SOURCES=1` with a verified warm
 cache; normal source artifacts must include the original corresponding-source
 archives and notices, not just download links. Use ordinary Actions caches and
-artifacts, never GHCR. See the [dated amendment](docs/files-office-bibliography-plan.md#19-downloaded-dependency-archive-amendment--28-october-2026).
+artifacts, never GHCR. Historical source IDs are mapped in
+[docs/history](docs/history/README.md); do not relabel old build/test evidence.
+See the [dated amendment](docs/files-office-bibliography-plan.md#19-downloaded-dependency-archive-amendment--28-october-2026).
 
 ## 28 October Files, Office and References replacement plan
 
