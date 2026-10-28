@@ -1,0 +1,39 @@
+{
+  "components": [
+    {
+      "url": "https://registry.npmjs.org/diff/-/diff-9.0.0.tgz",
+      "file": "a67682ae7e92e1c809f8.tgz",
+      "version": "9.0.0",
+      "integrity": "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==",
+      "sha256": "b898bf23c95594607576e25ddd4013f1d51ed0e862aaf0732815830c87b3b58f"
+    },
+    {
+      "url": "https://registry.npmjs.org/pend/-/pend-1.2.0.tgz",
+      "file": "922e227c50a8d55ae3df.tgz",
+      "version": "1.2.0",
+      "integrity": "sha512-F3asv42UuXchdzt+xXqfW1OGlVBe+mxa2mqI0pg5yAHZPvFmY3Y6drSf/GQ1A86WgWEN9Kzh/WrgKa6iGcHXLg==",
+      "sha256": "a12f279b25a9df710b52a9892bad00bdeeb862a9b5d1e4f4db77131129436d7f"
+    },
+    {
+      "url": "https://registry.npmjs.org/saxes/-/saxes-6.0.0.tgz",
+      "file": "9d7c403cfeb895988e65.tgz",
+      "version": "6.0.0",
+      "integrity": "sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA==",
+      "sha256": "1cdf52fbbe1ccbd175c365d2b8e63f46e590e74aff23fa6a44a6ec51522e96db"
+    },
+    {
+      "url": "https://registry.npmjs.org/xmlchars/-/xmlchars-2.2.0.tgz",
+      "file": "f4abd4ccdd3dc378f6a6.tgz",
+      "version": "2.2.0",
+      "integrity": "sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==",
+      "sha256": "bdf900298963e4bd95b76aa95e96d29f05687e6ae662d617061778267b576da8"
+    },
+    {
+      "url": "https://registry.npmjs.org/yauzl/-/yauzl-3.4.0.tgz",
+      "file": "36a79cc676609b454c03.tgz",
+      "version": "3.4.0",
+      "integrity": "sha512-jIH9yLR9wqr0wOS0TpBvo/g/2UgZH5qePVbjgRliiF0BYvOZyaBknKsF+x9Iht0O6sqgnB93rCICdOZFecJuDw==",
+      "sha256": "ec962fa3205d4be5849f0fc3bebd0492b0abe8acf402656fd80490531fa8ba88"
+    }
+  ]
+}
