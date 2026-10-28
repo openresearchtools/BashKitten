@@ -73,8 +73,10 @@ References and its shared classic citation web modal must remain nonblocking and
 scrollable with lazy/virtualized lists and indexed backend queries for project
 libraries up to 100,000 records. Preserve classic donor behavior, creator search,
 multi-author items and multi-source citation clusters across the web UI and all
-three Office plugins, including responsive phone/keyboard interaction. Verify
-large-library latency, memory, cancellation and concurrent user/agent work.
+three Office plugins, including responsive phone/keyboard interaction. Implement
+scalable code and use focused local checks; the user rejects a mandatory
+1k/10k/100k benchmark campaign or bulk citation/PDF resolution just for testing.
+Keep validation proportionate, using existing/synthetic metadata when needed.
 
 Keep Quantum updatable through a separately versioned Collabora add-on, reusing
 pinned upstream WOPI source and a minimal documented provider/launch hook. No

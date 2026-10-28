@@ -88,8 +88,11 @@ Port the actual pinned Zotero classic citation-dialog behavior into the web UI
 and all three Office extension adapters: creator/item search, full multi-author
 records, single/multi-source clusters, ordering, locators/affixes/suppress-author,
 preview and confirm/cancel, with keyboard and phone parity. Use the same chooser
-and References API for user and agent; test 1k/10k/100k libraries, stale responses,
-concurrent changes and bounded memory/transfer, not only a small fixture.
+and References API for user and agent. The user rejects a mandatory 1k/10k/100k
+benchmark campaign: implement scalable code and use proportionate focused local
+checks with existing/synthetic metadata. Do not resolve or harvest large batches
+of real citations/PDFs for testing. Verify bounded work, stale-response handling
+and concurrent changes without hours-long load runs.
 
 Latest 28 October amendments select Collabora Online throughout the active plan. Use its native WOPI integration, separate human/Pi
 views and authenticated browserless WebSocket/UNO/script sessions; verify actual

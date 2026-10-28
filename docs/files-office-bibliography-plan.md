@@ -787,17 +787,20 @@ occurrences inside a document are different counts; test both realistically.
   where available. Keep this behavior in References/backend/plugin modules;
   no Mozilla-specific list, extra transcript/index service or custom DB engine.
 
-Acceptance uses realistic multi-author metadata and attachments in libraries of
-1,000, 10,000 and 100,000 records. Measure cold/warm first usable list, indexed
-search and first-page latency, input-to-paint/scroll responsiveness, memory,
-network payload and long tasks on desktop and actual supported Android/Termux
-profiles. Test rapid query changes, keyboard navigation into unloaded pages,
-large multi-selection, cancellation and concurrent import/agent edits. Rows,
-resident page data and initial transfer remain bounded by viewport/page policy,
-not proportional to all 100,000 records. Scrolling, typing, opening/closing the
-chooser and continuing document edits must stay responsive while work runs.
-Record reproducible hardware/workload and failures; a small-library screenshot
-or desktop-only test does not establish this acceptance.
+**Validation scope — latest user clarification:** implement the scalable paths
+correctly, without a mandatory 1k/10k/100k benchmark or large-dataset acceptance
+campaign. Do not harvest or resolve thousands of real identifiers, abstracts or
+PDFs merely to test list performance. Library capacity concerns already stored
+records; it is not an instruction to populate a 100,000-item project through
+network resolvers. Bulk retrieval happens only when requested for actual work.
+
+Use focused local checks of pagination, bounded rendering/data transfer, indexed
+queries, stale-response handling and selection/cancellation behavior. Reuse small
+existing or synthetic metadata fixtures where needed, without live provider
+traffic. Keep validation proportionate to the code change; no hours-long load
+runs or three-size/device benchmark matrix is required. Rows, resident page data
+and initial transfer must remain bounded by viewport/page policy, not total
+library size. Scrolling, typing and document editing must remain nonblocking.
 
 ### 8.2 Library API and compatibility
 
@@ -1852,13 +1855,11 @@ Required acceptance groups:
 - [ ] **Library isolation:** two projects, duplicate names/shared folder roots,
   separate databases, stable identities, collection/item CRUD, metadata fields,
   tags/notes/relations, attachments in `Bibliography`, archive/relink/delete.
-- [ ] **Large libraries/classic chooser:** exercise 1k/10k/100k project records,
-  virtualized scrolling and bounded lazy pages, indexed search/sort/filter,
-  multi-author search and metadata, large multi-selection, keyboard/focus and
-  phone panes. Verify classic donor control/behavior parity, multi-source cluster
-  editing, cancellable previews, stale-response rejection, confirm/cancel and
-  concurrent human/agent use without UI or backend request-loop blocking.
-  Record latency/long-task/memory/transfer evidence, not only visible results.
+- [ ] **Scalable library/classic chooser:** implement bounded virtualized/lazy
+  lists, indexed queries, stable selections and nonblocking/cancellable work.
+  Use focused local checks for classic controls, multi-author/multi-source
+  citations, stale responses and user/agent changes. No mandatory 1k/10k/100k
+  benchmark matrix, mass identifier/PDF resolution or extended load campaign.
 - [ ] **Capture:** single item, many-item page, website snapshot, PDF with/without
   detectable metadata, attachment progress, authenticated publisher retrieval,
   human challenge tab, selector cancellation, and changing selected library
