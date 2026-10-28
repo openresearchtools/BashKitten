@@ -13,3 +13,4 @@
 0013-native-server-app-boundary.patch
 0014-native-sbom-build-python.patch
 0015-native-online-configured-flags.patch
+0016-native-libetonyek-builtins.patch

@@ -225,6 +225,12 @@ def package(source, args, env, toolchain):
                     'license': toolchain['pin']['license'],
                     'source': toolchain['pin']['url'],
                     'text': (args.ndk / 'NOTICE').read_text() + '\n' + (args.ndk / 'NOTICE.toolchain').read_text()})
+    llvm_source = ROOT / 'agent/vendor/node/libcxx'
+    llvm_pin = json.loads((llvm_source / 'source.json').read_text())
+    notices.append({'name': 'Android NDK compiler-rt builtins',
+                    'license': 'Apache-2.0 WITH LLVM-exception',
+                    'source': llvm_pin['archive'], 'revision': llvm_pin['commit'],
+                    'text': (llvm_source / 'source/compiler-rt/LICENSE.TXT').read_text()})
     notices.append({'name': 'Termux POSIX semaphore compatibility library', 'license': 'MIT',
                     'source': json.loads((PATCH_ROOT / 'donor.json').read_text())['donor']['url'],
                     'text': (source / 'engine/external/python3/termux/LICENSE').read_text()})

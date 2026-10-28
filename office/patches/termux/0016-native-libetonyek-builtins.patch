@@ -1,0 +1,22 @@
+diff --git a/engine/external/libetonyek/ExternalProject_libetonyek.mk b/engine/external/libetonyek/ExternalProject_libetonyek.mk
+--- a/engine/external/libetonyek/ExternalProject_libetonyek.mk
++++ b/engine/external/libetonyek/ExternalProject_libetonyek.mk
+@@ -6,6 +6,8 @@
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ #
++
++libetonyek_builtins := $(if $(COM_IS_BIONIC),$(shell $(CC) -print-libgcc-file-name))
+ 
+ $(eval $(call gb_ExternalProject_ExternalProject,libetonyek))
+ 
+@@ -48,7 +50,8 @@
+ 			$(if $(verbose),--disable-silent-rules,--enable-silent-rules) \
+ 			$(if $(filter LINUX,$(OS)), \
+ 				'LDFLAGS=-Wl$(COMMA)-z$(COMMA)origin \
+-					-Wl$(COMMA)-rpath$(COMMA)\$$$$ORIGIN') \
++					-Wl$(COMMA)-rpath$(COMMA)\$$$$ORIGIN \
++					$(if $(libetonyek_builtins),-L$(dir $(libetonyek_builtins)) -l:$(notdir $(libetonyek_builtins)))') \
+ 			CPPFLAGS="$(CPPFLAGS) $(BOOST_CPPFLAGS)" \
+ 			CXXFLAGS="$(gb_CXXFLAGS) $(call gb_ExternalProject_get_build_flags,libetonyek)" \
+ 			LANGTAG_CFLAGS="$(LIBLANGTAG_CFLAGS)" \

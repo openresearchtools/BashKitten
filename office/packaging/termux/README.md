@@ -46,6 +46,12 @@ configuration. Its original full license and source receipt enter the runtime
 inventory. Online's normal capability detection remains required; no missing
 header is treated as permission to remove capability checks.
 
+Libetonyek uses the pinned Termux package's explicit compiler-builtins link
+flags. Its bundled libtool otherwise omits those Android runtime helpers from
+the shared library, allowing the build to finish but failing when the native kit
+loads it. The compiler chooses its own builtins archive; the existing NDK source
+owner retains the matching compiler-rt source and full license.
+
 The output root is `runtime/`, with native files, upstream SBOMs, full notices,
 resolved ELF dependencies and `manifest.json`. The existing environment owner
 launches the actual server with `COOL_FORCE_LANDLOCK=1`, the fixed Termux prefix,
