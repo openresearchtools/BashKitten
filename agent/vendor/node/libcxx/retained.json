@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "inventorySha256": "e3f77657e42228468fbab1834655518a2d39c2105ac075d5cef8ef99bfc9f3b2",
+  "inventorySha256": "ba1fda3afcfb736bb9f1dc401115820ce9158139e943aa079f1cbfc313eac2d8",
   "sourceArchive": "The complete selected runtime directories and the Android patch/build repository are retained in the matching BashKitten source archive.",
   "modified": false
 }

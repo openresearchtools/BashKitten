@@ -1,5 +1,5 @@
 {
-  "component": "NDK r30 libc++ / libc++abi / libunwind",
+  "component": "NDK r30 libc++ / libc++abi / libunwind / compiler-rt",
   "repository": "https://github.com/llvm/llvm-project",
   "commit": "2d287f51eff2a5fbf84458a33f7fb2493cf67965",
   "archive": "https://codeload.github.com/llvm/llvm-project/tar.gz/2d287f51eff2a5fbf84458a33f7fb2493cf67965",
@@ -10,7 +10,8 @@
     "libunwind/",
     "runtimes/",
     "cmake/",
-    "llvm/cmake/"
+    "llvm/cmake/",
+    "compiler-rt/"
   ],
   "androidPatchesCommit": "9e20ac0b949feedcfe3da791189310f6ebcbc7a8",
   "ndkArchiveSha256": "753611f410d002cfcd3f3dc2ef49aad532089d3180b436c060a90bf0fcb64df2",
