@@ -77,7 +77,15 @@
         "chrome/skin/default/zotero",
         "chrome/locale",
         "COPYING",
-        "README.md"
+        "README.md",
+        "chrome/content/zotero/xpcom/singlefile.js"
+      ],
+      "supplementalFiles": [
+        {
+          "path": "chrome/content/zotero/xpcom/singlefile.js",
+          "url": "https://raw.githubusercontent.com/zotero/zotero/01ebeb183439bbd79797bbcd4a41e99aad099ab8/chrome/content/zotero/xpcom/singlefile.js",
+          "sha256": "468bcddaf9fb2ec181366adbd513fcb070416289d9c005172a0d39feb91ee062"
+        }
       ]
     }
   ],
