@@ -9,6 +9,7 @@ import re
 import runpy
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import zipfile
 
@@ -102,6 +103,18 @@ def verify_files(root, records):
             if not path.is_symlink() or os.readlink(path) != item['symlink']:
                 raise ValueError('Native component symlink mismatch: ' + name)
         else:
+            mode = item.get('mode')
+            if isinstance(mode, str):
+                mode = int(mode, 8)
+            if path.is_symlink() or not isinstance(mode, int):
+                raise ValueError('Native component file type/mode mismatch: ' + name)
+            member = tarfile.TarInfo(name)
+            member.mode = mode
+            # The existing extraction owner uses the standard data filter,
+            # which removes group/other write and unsafe executable bits.
+            expected_mode = tarfile.data_filter(member, root).mode
+            if path.stat().st_mode & 0o777 != expected_mode:
+                raise ValueError('Native component file mode mismatch: ' + name)
             with path.open('rb') as stream:
                 if hashlib.file_digest(stream, 'sha256').hexdigest() != item['sha256']:
                     raise ValueError('Native component file checksum mismatch: ' + name)
