@@ -12,7 +12,7 @@ CONNECTOR = ROOT / 'references/connector'
 
 def fingerprint():
     result = hashlib.sha256()
-    roots = [CONNECTOR, ROOT / 'references/vendor/translators']
+    roots = [CONNECTOR, ROOT / 'references/vendor/translators', ROOT / 'references/legal']
     paths = [path for base in roots for path in base.rglob('*') if path.is_file()
              and not {'.build', 'dist', 'node_modules', '__pycache__'}.intersection(path.relative_to(base).parts)]
     paths += [ROOT / f'browser/bashkitten/browser/branding/default{size}.png' for size in [16, 32, 64, 128]]

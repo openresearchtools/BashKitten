@@ -74,9 +74,11 @@ async function reviewerInventory(root) {
 async function applicationInventory(root) {
   const references = path.join(root, 'references');
   const records = await arrayInventory(path.join(references, 'source-licenses.json'), 'References');
+  const agpl = await relativeText(root, 'LICENSE');
   records.push(...(await npmLicenses(references, { supplementRoot: path.join(root, 'licenses/upstream') }))
     .map(value => record(value.name === 'citeproc'
-      ? { ...value, license: 'AGPL-3.0-or-later (selected from the upstream dual license)' }
+      ? { ...value, license: 'AGPL-3.0-or-later (selected from the upstream dual license)',
+          text: value.text + '\n\n' + agpl }
       : value, 'References / npm')));
   records.push(...(await npmLicenses(path.join(root, 'office'), { supplementRoot: path.join(root, 'licenses/upstream') }))
     .map(value => record(value, 'Office / npm')));

@@ -242,9 +242,27 @@ def license_inventory(component_list):
     return result
 
 
-def packaged_inventory(browser_dir):
+def packaged_inventory(browser_dir, require_connector=True):
     # The built page has Mozilla's build conditions resolved and includes this
     # product's retained notices. Source license.html is not an artifact inventory.
+    connector = []
+    for archive in (browser_dir / "omni.ja", browser_dir / "browser" / "omni.ja"):
+        if not archive.is_file():
+            continue
+        with zipfile.ZipFile(archive) as bundle:
+            for name in bundle.namelist():
+                if name.endswith("builtin-addons/references/legal/licenses.json"):
+                    if connector:
+                        raise ValidationError("built browser contains multiple References license inventories")
+                    connector = json.loads(bundle.read(name))
+                    if not isinstance(connector, list) or not connector:
+                        raise ValidationError("built browser has no References full license inventory")
+                    for record in connector:
+                        if not record.get("name") or not isinstance(record.get("text"), str) or not record["text"].strip():
+                            raise ValidationError("built browser contains an incomplete References license record")
+                        record["name"] = "References capture: " + record["name"]
+    if require_connector and not connector:
+        raise ValidationError("built browser is missing its References capture licenses")
     for archive in (browser_dir / "omni.ja", browser_dir / "browser" / "omni.ja"):
         if not archive.is_file():
             continue
@@ -276,7 +294,7 @@ def packaged_inventory(browser_dir):
                         records.append({"name": name, "version": "", "license": license_name,
                                         "source": "about:license#" + anchor,
                                         "text": text})
-                    return records
+                    return records + connector
     raise ValidationError("built browser has no complete about:license page")
 
 

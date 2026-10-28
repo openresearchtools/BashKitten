@@ -129,12 +129,27 @@ spec.loader.exec_module(module)
 archives = list((obj / 'dist').rglob('omni.ja'))
 for archive in archives:
     try:
-        records.extend(module.packaged_inventory(archive.parent))
+        # Android stages capture as native APK assets, separately from Gecko.
+        records.extend(module.packaged_inventory(archive.parent, require_connector=False))
         break
     except module.ValidationError:
         continue
 else:
     raise SystemExit('The built Gecko component license inventory is missing')
+capture_spec = importlib.util.spec_from_file_location('references_host', root / 'browser/bashkitten/references/stage_host.py')
+capture = importlib.util.module_from_spec(capture_spec)
+capture_spec.loader.exec_module(capture)
+# Reuse the asset owner's complete checksum verification and the exact component
+# files it installs, rather than a source-tree approximation of addon licenses.
+capture_files = capture.capture_files()
+capture_records = json.loads(capture_files['legal/licenses.json'].read_text())
+if not isinstance(capture_records, list) or not capture_records:
+    raise SystemExit('The built References capture full license inventory is missing')
+for record in capture_records:
+    if not record.get('name') or not isinstance(record.get('text'), str):
+        raise SystemExit('Incomplete References capture license record')
+    record['name'] = 'References capture: ' + record['name']
+records.extend(capture_records)
 a.output.mkdir(parents=True, exist_ok=True)
 shutil.copy2(pairing_path, a.output / 'termux-update.json')
 (a.output / 'updates-bootstrap.mjs').write_bytes(bootstrap)

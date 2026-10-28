@@ -43,7 +43,7 @@ capture package; replacing a package does not download executable translators.
 
 The review source bundle must preserve the repository-relative paths for
 `references/connector/` (excluding generated `.build/` and `dist/`),
-`references/vendor/translators/`, `agent/packaging/source_cache.py`, and the branding `LICENSE` plus
+`references/vendor/translators/`, `references/legal/`, `agent/packaging/source_cache.py`, and the branding `LICENSE` plus
 `default16.png`, `default32.png`, `default64.png` and `default128.png` under
 `browser/bashkitten/browser/branding/`. These are the build's complete source and
 asset inputs; a whole Mozilla checkout is not needed. Run the command above from

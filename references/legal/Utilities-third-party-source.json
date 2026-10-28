@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/zotero/utilities",
+  "revision": "1dd38e27edf81e9d9c4161c957b7efb7f5681ac3",
+  "description": "Full original third-party legal texts supplement the preserved embedded notices in the selected Utilities source; the Utilities donor license remains unchanged. No copyright or license grant has been rewritten.",
+  "components": [
+    {
+      "name": "XRegExp",
+      "version": "3.2.0",
+      "revision": "ddf24c536821faf2493625ed6bdc3cb5ce2c6fdd",
+      "license": "MIT",
+      "url": "https://raw.githubusercontent.com/slevithan/xregexp/ddf24c536821faf2493625ed6bdc3cb5ce2c6fdd/LICENSE",
+      "file": "XRegExp-3.2.0-LICENSE",
+      "sha256": "c6760b87818be101b84b51bf256c05fc0475f2b63d2a6af00f7931abb3d364dc",
+      "match": {
+        "runtimeFile": "vendor/utilities/source/xregexp-all.js",
+        "runtimeSha256": "5b15fc6764e3c05b9945c6f732c4ef53ac485d6ee364ca25f88da85e91b0d820",
+        "upstreamFile": "https://registry.npmjs.org/xregexp/-/xregexp-3.2.0.tgz#package/xregexp-all.js",
+        "upstreamSha256": "c9378103d1ebea1e861de4f1b78f6a87f45d6ca311352977f785b7c869e564d9",
+        "comparison": "Identical after CRLF to LF normalization; original npm archive integrity was verified against its published SHA-512."
+      }
+    },
+    {
+      "name": "Underscore throttle adaptation",
+      "version": "1.9.1 license/copyright reference",
+      "revision": "ae037f7c41323807ae6f1533c45512e6d31a1574",
+      "license": "MIT",
+      "url": "https://raw.githubusercontent.com/jashkenas/underscore/ae037f7c41323807ae6f1533c45512e6d31a1574/LICENSE",
+      "file": "Underscore-1.9.1-LICENSE",
+      "sha256": "46917c0c6f9ca746322b8e35b46565c573fe705193679e1f24462665df48e9e8",
+      "match": {
+        "runtimeFile": "vendor/utilities/source/utilities.js",
+        "runtimeSha256": "a761a8af45a5ef40a6592c9793e3bf185a8efa7313fa1b59eacbbb99cba1a00f",
+        "comparison": "The retained throttle attribution names the exact 2009-2018 upstream copyright. This is an adapted function, not a claim that the whole 1.9.1 file is shipped."
+      }
+    },
+    {
+      "name": "php.js number_format",
+      "version": "2008-09-24 source snapshot",
+      "revision": "396a2165f2c72dfd3e8f8404e0c86d9b87b37d8f",
+      "license": "MIT (selected from upstream MIT/GPL dual license)",
+      "url": "https://raw.githubusercontent.com/locutusjs/locutus/396a2165f2c72dfd3e8f8404e0c86d9b87b37d8f/php.js",
+      "originalFileSha256": "f62758e9d61d0a51effce401db45d6a6306aaeab1fec7db4002980c53c87363f",
+      "extraction": "Complete original leading copyright/license block, byte-for-byte including comment delimiters",
+      "file": "phpjs-number-format-NOTICE.txt",
+      "sha256": "e2b2faf986df4e1325696d30ef4d7a7b66cc823fa5407eef1d0355ba3d0d302d",
+      "match": {
+        "runtimeFile": "vendor/utilities/source/utilities.js",
+        "runtimeSha256": "a761a8af45a5ef40a6592c9793e3bf185a8efa7313fa1b59eacbbb99cba1a00f",
+        "upstreamFile": "https://raw.githubusercontent.com/locutusjs/locutus/396a2165f2c72dfd3e8f8404e0c86d9b87b37d8f/functions/strings/number_format.js",
+        "upstreamSha256": "7f4cb962cf4afab7d4377e9427d90118cd57db92001c45c4b300cc43ae543221",
+        "comparison": "Function statements match after whitespace normalization; the original per-function contributor list is preserved from the shipped utilities source."
+      }
+    },
+    {
+      "name": "SIMILE Piggy Bank utility adaptations",
+      "version": "2.1.1 donor attribution",
+      "license": "BSD-3-Clause",
+      "url": "https://simile.mit.edu/license.html",
+      "file": "SIMILE-BSD-LICENSE.txt",
+      "sha256": "8b9297fc8494498187e7bd2653d70e35ddbf236fdc96a9ae0393c4152d20d43a",
+      "originalFile": "SIMILE-BSD-source.html",
+      "originalFileSha256": "617a0d8cec906630541c54d194f30fbcb03fcc82adaf9bd1286c1d08bc713a58",
+      "extraction": "Complete original license <pre> block, preserving all text and whitespace; only the HTML copyright entity is decoded. The original HTML is retained alongside it.",
+      "match": {
+        "runtimeFiles": [
+          "vendor/utilities/source/utilities.js",
+          "vendor/translate/source/src/utilities_translate.js"
+        ],
+        "comparison": "Both pinned donor source headers identify Piggy Bank2.1.1 as BSD-licensed. The official SIMILE license retains its original2003-2005 copyright, matching the donor release period."
+      }
+    }
+  ]
+}

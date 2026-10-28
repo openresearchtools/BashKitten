@@ -102,6 +102,30 @@ for path in sorted(translators.glob('*.js')):
 for name in ['COPYING','LICENSE','LICENSE.md','README.md']:
  if (translators/name).is_file():shutil.copy(translators/name,OUT/'legal'/f'translators-{name}')
 # Preserve actual shipped dependency licenses from the pinned npm installation.
+legal_records=[]
+def legal_record(name,version,license,files):
+ if not files:raise SystemExit('Missing full Connector license: '+name)
+ texts=[]
+ for path in files:
+  data=path.read_bytes()
+  try:text=data.decode('utf-8')
+  except UnicodeDecodeError:text=data.decode('latin1')
+  if not text.strip():raise SystemExit('Empty Connector license: '+str(path))
+  texts.append(str(path.relative_to(OUT))+'\n'+text)
+ legal_records.append({'name':name,'version':version,'license':license,'text':'\n\n'.join(texts)})
+
+supplements=json.loads((ROOT/'legal/sources.json').read_text())
+for entry in supplements['components']:
+ file=ROOT/'legal'/entry['file'];selection=entry['appliesTo']
+ package=WORK/'node_modules'/selection['package']
+ package_metadata=json.loads((package/'package.json').read_text())
+ if (Path(entry['file']).is_absolute() or '..' in Path(entry['file']).parts
+     or Path(selection['file']).is_absolute() or '..' in Path(selection['file']).parts
+     or hashlib.sha256(file.read_bytes()).hexdigest()!=entry['sha256']
+     or package_metadata['version']!=selection['version']
+     or hashlib.sha256((package/selection['file']).read_bytes()).hexdigest()!=selection['sha256']):
+  raise SystemExit('Connector legal supplement or selected source changed: '+entry['name'])
+ legal_record(entry['name'],entry['version'],entry['license'],[OUT/'legal'/entry['file']])
 runtime_packages=['react','react-dom','react-dom-factories','prop-types','dompurify','single-file-core']
 visited=set()
 while runtime_packages:
@@ -111,12 +135,65 @@ while runtime_packages:
  folder=WORK/'node_modules'/package
  package_json=json.loads((folder/'package.json').read_text())
  runtime_packages.extend(package_json.get('dependencies',{}))
+ texts=[]
  for path in folder.iterdir():
   if path.is_file() and re.match(r'^(LICENSE|LICENCE|COPYING|NOTICE)',path.name,re.I):
-   shutil.copy(path,OUT/'legal'/(package.replace('/','-')+'-'+path.name))
+   target=OUT/'legal'/(package.replace('/','-')+'-'+path.name)
+   shutil.copy(path,target);texts.append(target)
+ if not texts:
+  texts=[OUT/'legal'/entry['file'] for entry in supplements['components']
+         if entry['appliesTo']['package']==package]
+ legal_record(package,package_json['version'],package_json.get('license','See original notices'),texts)
+ if package=='single-file-core':
+  # Upstream's prebuilt bundle removes comments. Keep the actual imported
+  # vendor sources' full grants and attributions alongside its AGPL notice.
+  comments=[];seen=set()
+  for path in sorted((folder/'vendor').rglob('*.js')):
+   for comment in re.findall(r'/\*[\s\S]*?\*/',path.read_text()):
+    if re.search(r'copyright|licen[cs]e',comment,re.I) and comment not in seen:
+     seen.add(comment);comments.append(str(path.relative_to(folder))+'\n'+comment)
+  if not comments:raise SystemExit('Missing SingleFile vendor source notices')
+  target=OUT/'legal/SingleFile-vendor-NOTICES.txt';target.write_text('\n\n'.join(comments)+'\n')
+  legal_record('SingleFile embedded vendor sources',package_json['version'],'Original per-file MIT/BSD/AGPL and other terms',[target])
+if any(entry['appliesTo']['package'] not in visited for entry in supplements['components']):
+ raise SystemExit('Connector legal supplement no longer belongs to a shipped package')
 for package in ['translate','utilities','zotero-schema']:
+ texts=[]
  for path in (ROOT/'upstream/source/src'/package).iterdir():
-  if path.is_file() and re.match(r'^(LICENSE|LICENCE|COPYING|NOTICE)',path.name,re.I):shutil.copy(path,OUT/'legal'/(package+'-'+path.name))
+  if path.is_file() and re.match(r'^(LICENSE|LICENCE|COPYING|NOTICE)',path.name,re.I):
+   target=OUT/'legal'/(package+'-'+path.name);shutil.copy(path,target);texts.append(target)
+ # Schema is part of the donor's retained COPYING; its own source has no
+ # standalone license. Keep that actual upstream ownership distinction.
+ legal_record('Zotero '+package,'Pinned in connector-source.json','See original notices',texts or [OUT/'COPYING'])
+shared=ROOT.parent/'legal';shared_pin=json.loads((shared/'Utilities-third-party-source.json').read_text())
+for entry in shared_pin['components']:
+ path=shared/entry['file']
+ if hashlib.sha256(path.read_bytes()).hexdigest()!=entry['sha256']:
+  raise SystemExit('Shared Utilities license checksum changed: '+entry['name'])
+ target=OUT/'legal'/entry['file'];shutil.copy(path,target)
+ legal_record('Utilities: '+entry['name'],entry['version'],entry['license'],[target])
+ if entry.get('originalFile'):
+  original=shared/entry['originalFile']
+  if hashlib.sha256(original.read_bytes()).hexdigest()!=entry['originalFileSha256']:
+   raise SystemExit('Shared Utilities original notice checksum changed: '+entry['name'])
+  shutil.copy(original,OUT/'legal'/entry['originalFile'])
+shutil.copy(shared/'Utilities-third-party-source.json',OUT/'legal/Utilities-third-party-source.json')
+comments=[];seen=set()
+for path in sorted(OUT.rglob('*.js')):
+ if path.is_relative_to(OUT/'lib/SingleFile'):continue # Collected from its unminified pinned source above.
+ for comment in re.findall(r'/\*[\s\S]*?\*/',path.read_text()):
+  if re.search(r'copyright|licen[cs]e',comment,re.I) and comment not in seen:
+   seen.add(comment);comments.append(str(path.relative_to(OUT))+'\n'+comment)
+target=OUT/'legal/Connector-source-NOTICES.txt';target.write_text('\n\n'.join(comments)+'\n')
+legal_record('Connector and translator source copyrights','Pinned in connector-source.json','Original per-file terms',[target,OUT/'COPYING',OUT/'legal/NOTICE.md'])
+# DOMPurify's retained full dual-license text also contains the complete MPL2
+# required by the shipped Mozilla browser-polyfill source.
+mpl=OUT/'legal/dompurify-LICENSE'
+if 'Mozilla Public License, version 2.0' not in mpl.read_text():raise SystemExit('Missing full browser-polyfill MPL2 license')
+legal_record('Mozilla WebExtension browser-polyfill','0.1.1','MPL-2.0',[mpl])
+(OUT/'legal/licenses.json').write_text(json.dumps(legal_records,indent=2)+'\n')
+(OUT/'legal/THIRD_PARTY_NOTICES.txt').write_text('\n\n'.join(
+ entry['name']+' '+entry['version']+'\n'+entry['license']+'\n\n'+entry['text'] for entry in legal_records)+'\n')
 # Verify resource graph and compile syntax only; product behavior is checked in the installed app.
 for name in manifest['background']['scripts']+sum([x['js'] for x in manifest['content_scripts']],[]):
  if not (OUT/name).is_file():raise SystemExit('Missing manifest resource: '+name)

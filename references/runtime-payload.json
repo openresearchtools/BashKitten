@@ -46,21 +46,40 @@
       "version": "d08300c2c01a4d6ef325f05cbefc6c138a99f811",
       "license": "AGPL-3.0-or-later",
       "source": "vendor/translate/source.json",
-      "files": ["vendor/translate/source/COPYING"]
+      "files": ["vendor/translate/source/COPYING"],
+      "sourceNotices": ["vendor/translate/source/src/**/*.js"]
     },
     {
       "name": "utilities",
       "version": "1dd38e27edf81e9d9c4161c957b7efb7f5681ac3",
       "license": "AGPL-3.0-or-later; embedded notices retained",
       "source": "vendor/utilities/source.json",
-      "files": ["vendor/utilities/source/COPYING"]
+      "files": ["vendor/utilities/source/COPYING"],
+      "sourceNotices": [
+        "vendor/utilities/source/*.js",
+        "vendor/utilities/source/resource/*.js"
+      ]
+    },
+    {
+      "name": "Utilities embedded third-party components",
+      "version": "Exact source/license revisions in Utilities-third-party-source.json",
+      "license": "MIT and BSD-3-Clause; original dual-license options and contributor notices retained",
+      "source": "legal/Utilities-third-party-source.json",
+      "files": [
+        "legal/XRegExp-3.2.0-LICENSE",
+        "legal/Underscore-1.9.1-LICENSE",
+        "legal/phpjs-number-format-NOTICE.txt",
+        "legal/SIMILE-BSD-LICENSE.txt",
+        "legal/SIMILE-BSD-source.html"
+      ]
     },
     {
       "name": "translators",
       "version": "c83003773b65359e41466e1d419b2d1df5512af7",
       "license": "Per-file license and copyright notices; common AGPL-3.0-or-later license included where applicable",
       "source": "vendor/translators/source.json",
-      "files": ["vendor/zotero/source/COPYING"]
+      "files": ["vendor/zotero/source/COPYING"],
+      "sourceNotices": ["vendor/translators/source/*.js"]
     },
     {
       "name": "schema",

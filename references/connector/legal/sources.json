@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "description": "Original full license supplements for actual shipped package/vendor source. Per-file source notices are retained separately by the existing Connector build collector. A package or source hash change requires review.",
+  "components": [
+    {
+      "name": "React DOM Factories",
+      "license": "MIT",
+      "file": "React-DOM-Factories-MIT.txt",
+      "sha256": "f657f99d3fb9647db92628e96007aabb46e5f04f33e49999075aab8e250ca7ce",
+      "url": "https://raw.githubusercontent.com/facebook/react/5c6ef4044610a2a325780261f41730a33a919f98/LICENSE",
+      "revision": "5c6ef4044610a2a325780261f41730a33a919f98",
+      "appliesTo": {
+        "package": "react-dom-factories",
+        "version": "1.0.2",
+        "file": "index.js",
+        "sha256": "a4ec207beb24936406c43535c9f1bafef7dc30f485e4d8d2f02746539c92aec4"
+      },
+      "evidence": "The exact published react-dom-factories 1.0.2 package declares MIT, points to facebook/react, and retains its 2015-present Facebook copyright. Its tarball omits the declared LICENSE. This original full React MIT grant is from the same upstream released on the package publication date; the shipped source copyright remains unchanged.",
+      "version": "1.0.2"
+    },
+    {
+      "name": "fflate",
+      "license": "MIT",
+      "file": "fflate-0.8.3-LICENSE",
+      "sha256": "0a1df3a083d0c010560aa342e87959c8c1070e6fd54545741f083f22d0c8b551",
+      "url": "https://raw.githubusercontent.com/101arrowz/fflate/dcb3714a6c25db3a2748641019c5277413d09714/LICENSE",
+      "revision": "dcb3714a6c25db3a2748641019c5277413d09714",
+      "appliesTo": {
+        "package": "single-file-core",
+        "version": "1.5.98",
+        "file": "zip-build/lib/fflate.js",
+        "sha256": "b7ca4450b19559a1d50eb381adcee94b82449674be4cd17789d9beba7e6122a1"
+      },
+      "evidence": "zip-build/README.md declares fflate 0.8.3; zip-build/lib/fflate.js is byte-identical to the official npm 0.8.3 package esm/browser.js.",
+      "version": "0.8.3"
+    },
+    {
+      "name": "UglifyCSS adaptation",
+      "license": "MIT",
+      "file": "UglifyCSS-LICENSE",
+      "sha256": "b02206c19375be475990a7de1d2048bb1923406f44a4b4e33349344ca473eaff",
+      "url": "https://raw.githubusercontent.com/fmarcia/uglifycss/3a4312ef9a321643ab27cf7438b85c92498af19b/LICENSE",
+      "revision": "3a4312ef9a321643ab27cf7438b85c92498af19b",
+      "appliesTo": {
+        "package": "single-file-core",
+        "version": "1.5.98",
+        "file": "vendor/css-minifier.js",
+        "sha256": "30f453e459480226b71744c9cb2b528b4e4bdb1a85e679dc16a4866ed9fc37e7"
+      },
+      "evidence": "The installed vendor/css-minifier.js retains its original UglifyCSS/Franck Marcia MIT declaration; the full original upstream grant supplements that declaration without claiming the adapted code equals a particular unmodified release.",
+      "version": "Adapted source in SingleFile Core1.5.98"
+    },
+    {
+      "name": "YUI Compressor adaptation",
+      "license": "BSD-3-Clause",
+      "file": "YUI-Compressor-LICENSE.txt",
+      "sha256": "cceeb0f6ccc97ab92a05c3150a60a42a8617f5893b430301f54c3253fbcb1867",
+      "url": "https://raw.githubusercontent.com/yui/yuicompressor/223fbcc4e3b1907ff3bdd35e2a486572c2bb8c63/LICENSE.TXT",
+      "revision": "223fbcc4e3b1907ff3bdd35e2a486572c2bb8c63",
+      "appliesTo": {
+        "package": "single-file-core",
+        "version": "1.5.98",
+        "file": "vendor/css-minifier.js",
+        "sha256": "30f453e459480226b71744c9cb2b528b4e4bdb1a85e679dc16a4866ed9fc37e7"
+      },
+      "evidence": "The installed vendor/css-minifier.js retains the exact 2011 Yahoo BSD declaration; the original full upstream 2011 license is preserved.",
+      "version": "Adapted source in SingleFile Core1.5.98"
+    },
+    {
+      "name": "Srcset Parser adaptation",
+      "license": "MIT",
+      "file": "Srcset-Parser-LICENSE",
+      "sha256": "240b6a23478dc1b044a457f1e9260c725d50b66b2502f7c3240f54f79c13ab58",
+      "url": "https://raw.githubusercontent.com/albell/parse-srcset/03104fe7a2cdfd898e3717fef402fce528740370/LICENSE",
+      "revision": "03104fe7a2cdfd898e3717fef402fce528740370",
+      "appliesTo": {
+        "package": "single-file-core",
+        "version": "1.5.98",
+        "file": "vendor/html-srcset-parser.js",
+        "sha256": "b563ce8b16ce31d02bd260637238f13917e65c96f21bad12d1252d41d5038fd3"
+      },
+      "evidence": "The installed vendor/html-srcset-parser.js retains its original Alex Bell MIT declaration; the full original upstream grant supplements it.",
+      "version": "Adapted source in SingleFile Core1.5.98"
+    },
+    {
+      "name": "Stanford Javascript Crypto Library adaptation",
+      "license": "BSD-2-Clause (upstream GPL choice retained)",
+      "file": "SJCL-LICENSE.txt",
+      "sha256": "ef430277d3cca1d3e7cdb6d4a61d7ff1eb208c4c2058602d2b361aaab60cd9c0",
+      "url": "https://raw.githubusercontent.com/bitwiseshiftleft/sjcl/2a6ed4a22449334de2dd9b4e960af679e0e87303/LICENSE.txt",
+      "revision": "2a6ed4a22449334de2dd9b4e960af679e0e87303",
+      "appliesTo": {
+        "package": "single-file-core",
+        "version": "1.5.98",
+        "file": "vendor/zip/zip.js",
+        "sha256": "667c16edc9a01516ea2744a9483323ee3c4dcb0a598df777a70e7800b1324dc7"
+      },
+      "evidence": "zip-build/package-lock.json pins zip.js 2.8.60; its lib/core/streams/codecs/sjcl.js identifies the SJCL donor/authors and BSD/GPL choice, retained in vendor/zip/zip.js. This preserves the original SJCL full BSD grant and upstream licensing alternatives.",
+      "version": "Adapted source in SingleFile Core1.5.98"
+    }
+  ]
+}

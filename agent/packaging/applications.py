@@ -54,17 +54,35 @@ def references(destination, cache, target, architecture, *, source_cache=None, o
         provenance = source / item['source']
         copy_file(provenance, source, destination)
         metadata = json.loads(provenance.read_text())
+        # Supplemental legal texts retain the original upstream bytes and a
+        # checksum in their existing source provenance, just like source inputs.
+        for component in metadata.get('components', []):
+            files = [(component['file'], component['sha256'])]
+            if component.get('originalFile'):
+                files.append((component['originalFile'], component['originalFileSha256']))
+            for name, expected in files:
+                relative = Path(name)
+                path = provenance.parent / relative
+                if (relative.is_absolute() or '..' in relative.parts
+                        or str(path.relative_to(source)) not in item['files']
+                        or hashlib.sha256(path.read_bytes()).hexdigest() != expected):
+                    raise ValueError('References supplemental notice checksum differs: ' + component['name'])
         texts = []
         for relative in item['files']:
             path = source / relative
             copy_file(path, source, destination)
             texts.append(relative + '\n' + path.read_text(errors='replace'))
-        if item['name'] == 'translators':
-            for path in sorted((destination / 'vendor/translators/source').glob('*.js')):
+        # Preserve embedded donor copyrights and separately licensed fragments,
+        # including Utilities' MIT code, in the offline About inventory. Select
+        # only source files that the existing payload owner actually installed.
+        for pattern in item.get('sourceNotices', []):
+            if Path(pattern).is_absolute() or '..' in Path(pattern).parts:
+                raise ValueError('Invalid References source notice pattern')
+            for path in sorted(destination.glob(pattern)):
                 comments = re.findall(r'/\*[\s\S]*?\*/', path.read_text())
                 notices = [comment for comment in comments if re.search(r'copyright|licen[cs]e', comment, re.I)]
                 if notices:
-                    texts.append(path.name + '\n' + '\n'.join(notices))
+                    texts.append(str(path.relative_to(destination)) + '\n' + '\n'.join(notices))
         if not texts:
             raise ValueError('Missing References legal text: ' + item['name'])
         records.append({'name': item['name'], 'version': item['version'], 'license': item['license'],
