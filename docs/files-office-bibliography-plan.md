@@ -72,6 +72,22 @@ exports whenever useful. Expose both native editing/export operations and normal
 browser-view URLs. Test the independently runnable modules in parallel with the
 early browser batch; neither sequence reduces the required feature scope.
 
+### User clarification — 28 October 2026: HTTPS and existing browser trust
+
+Files, Collabora and References browser-facing URLs must use HTTPS with
+BashKitten's existing certificate identity/trust handling, including ordinary
+tabs and the exact authorized Chisel service mapping. Reuse the existing TLS
+owner and local certificate mechanism; do not add warning bypasses, global
+certificate exceptions or a second trust system. Internal private Unix/backend
+connections may retain their existing transport. Editor assets, sockets,
+downloads and callbacks must retain the appropriate external HTTPS/WSS versus
+internal endpoint distinction without mixed-content failures.
+
+The privileged References host provides capture and browser-assisted resolver
+access. It is not a certificate-validation bypass. Verify the trusted HTTPS
+loading flows in the installed BashKitten browser; another browser can exercise
+independent web UI behavior but does not establish BashKitten trust acceptance.
+
 ### Mandatory implementation rule for all agents and subagents
 
 **If the selected native app can provide the requested function, use that
@@ -1788,7 +1804,9 @@ Collabora and References modules can be tested against an installed browser:
    message region, `#prompt` sizing/autogrow and Android viewport/inset host rules
    before identifying the cause. Prefer the smallest CSS/sizing fix in the
    existing owner; a one-line change is a hypothesis, not a promised diagnosis.
-   Empty/short input should start compact, grow only with content up to its bound,
+   Preserve the normal two-row input baseline; the user explicitly rejected
+   changing it to a single-row default as part of this repair. Empty/short input
+   should start compact, grow only with content up to its bound,
    shrink after send/clear, and leave the transcript usable. Verify keyboard
    open/close, rotation, wrapped header/toolbars, restored drafts and long input
    on Android, and preserve normal desktop sizing/scrolling.

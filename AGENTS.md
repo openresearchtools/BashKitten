@@ -122,6 +122,14 @@ inspect rendering, preview and check native exports. Do not interpret this as a
 ban on browser use. Test standalone modules while the early browser batch is
 being prepared; all plan functions remain mandatory.
 
+Browser-facing Files, Collabora and References use HTTPS and the existing
+BashKitten certificate identity/trust owner, including ordinary tabs and exact
+Chisel mappings. No certificate-warning bypass, global trust relaxation or new
+certificate system. References privileges cover capture/browser-assisted
+resolvers, not TLS bypass. Verify real HTTPS loading in installed BashKitten.
+The chat-height repair preserves the existing two-row default; do not redesign
+it as a single-line composer.
+
 Always open Collabora with light UI **and light document canvas**, preserving
 stored cell/font/slide colors. Use native `ui_defaults=UITheme=light;SavedUIState=false`
 and WOPI browser settings for dark-background preferences; verify runtime toggle/

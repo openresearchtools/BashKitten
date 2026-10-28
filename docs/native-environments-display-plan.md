@@ -74,6 +74,10 @@ ordinary BashKitten tabs to inspect rendering, preview and check native exports.
 This is an explicit agent capability, not a prohibition on browser use. Iterate
 and verify standalone modules in parallel with the early browser batch, retaining
 the complete feature scope.
+Browser-facing Files/Office/References URLs use HTTPS with the existing native
+certificate identity/trust and exact Chisel service mappings. The References
+extension does not bypass certificate checks. Verify HTTPS loading in installed
+BashKitten, alongside independent module checks in ordinary browsers.
 References and its shared classic citation web modal must remain nonblocking and
 scrollable with lazy/virtualized lists and indexed backend queries for project
 libraries up to 100,000 records. Preserve classic donor behavior, creator search,
@@ -97,6 +101,8 @@ default chat/message-window regression. Diagnose shared CSS/autogrow/viewport
 ownership and apply the smallest correct sizing fix; verify keyboard, rotation,
 drafts, content growth/shrink and desktop behavior. Do not assume it is a one-line
 native Gecko defect before reproducing it.
+Preserve the normal two-row composer baseline; the sizing repair does not change
+that default to one row.
 
 The user expressly authorizes building/installing this boundary as an **early
 integration iteration build**, even while the pluggable backends are unfinished,
