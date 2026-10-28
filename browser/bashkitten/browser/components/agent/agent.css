@@ -59,6 +59,9 @@
 #bashkitten-native-sidecar summary:hover { background: var(--sidecar-active); }
 #bashkitten-agent-pane[data-connections] #bashkitten-native-workspace { display: none; }
 :root[bashkitten-agent-layout="split"] #bashkitten-native-sidecar { width: 220px; }
+#bashkitten-agent-pane-toggle { min-width: 100px; }
+#bashkitten-agent-pane-toggle > .toolbarbutton-text { display: block !important; }
+#bashkitten-agent-pane-toggle > .toolbarbutton-icon { display: none !important; }
 :root[bashkitten-agent-layout="full"] .tabbrowser-tab .tab-background { background: transparent !important; box-shadow: none !important; }
 .bashkitten-agent-dialog { --dialog-bg: light-dark(#f3f3f3, #1e1e1e); --dialog-surface: light-dark(#fff, #2b2b2b); --dialog-text: light-dark(#242426, #e8e8e8); --dialog-muted: light-dark(#66666b, #a6a6aa); --dialog-line: light-dark(#c8c8cc, #48484d); --dialog-button: light-dark(#e5e5e7, #333337); width: min(650px, 85vw); max-height: 85vh; overflow: auto; padding: 24px; background: var(--dialog-surface); color: var(--dialog-text); border: 1px solid var(--dialog-line); border-radius: 24px; box-shadow: 0 24px 80px light-dark(#0002, #0006); font: 14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .bashkitten-agent-dialog::backdrop { background: #0008; }

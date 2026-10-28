@@ -18,6 +18,22 @@ earlier toolbar Hide Agent placement; the frozen original plan/tag remains
 unchanged. Source implementation and installed desktop/Android acceptance are
 separate evidence.
 
+### Later 28 October desktop amendment: address-bar controls
+
+The user's latest desktop clarification retains the original **Show Agent** /
+**Hide Agent** control in its existing address-bar toolbar position, using the
+same saved side-by-side browsing choice. Add a small native sidebar icon beside
+it that toggles only the existing projects/chats sidebar. Show that icon only
+while the Agent pane is actually visible; hide it when Agent is hidden. Remove
+desktop's inside-sidebar **Hide Agent** button and its unused action glue; the
+full desktop Agent view gains no Hide Agent button. Keep the main logo's original
+full-Agent/sidebar behavior and full-Agent mode's collapsed navigation toolbar
+unchanged. This supersedes the preceding desktop toolbar-removal and
+inside-sidebar placement requirements; Android alone retains its sidebar-top
+**Hide Agent** button. Reuse the existing native owners without new visibility
+or sidebar state. Preserve the original frozen plan/tag; installed acceptance
+remains separate from source checks.
+
 ## User amendment — 28 October 2026: Files, Office and References
 
 The [Files, Office and References plan](files-office-bibliography-plan.md)

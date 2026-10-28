@@ -11,7 +11,6 @@ export class NativeSidecar {
     this.sharing = new Map(); this.sharingPending = new Set(); this.sharingEpoch = new Map();
     host.win.addEventListener("unload", () => { this.closed = true; this.renderEpoch++; clearTimeout(this.catalogueTimer); this.resize.disconnect(); }, { once: true });
     this.root = this.node("aside", { id: "bashkitten-native-sidecar", "aria-label": "Environments, projects and chats" });
-    this.root.append(this.button("Hide Agent", "Hide Agent", () => host.hide()));
     this.notice = this.node("p", { role: "status" }); this.root.append(this.notice);
     this.groups = new Map();
     for (const kind of ["local", "machine", "remote"]) {
@@ -47,7 +46,7 @@ export class NativeSidecar {
     heading.append(this.node("span", {}, title), this.button("+", label, action)); return heading;
   }
   isOpen() { return this.host.pane.getAttribute("data-sidecar-open") !== "false"; }
-  setOpen(open) { this.host.pane.setAttribute("data-sidecar-open", String(open)); this.host.chatsToggle?.setAttribute("aria-expanded", String(open)); }
+  setOpen(open) { this.host.pane.setAttribute("data-sidecar-open", String(open)); this.host.chatsToggle?.setAttribute("aria-expanded", String(open)); this.host.sidebarToggle?.setAttribute("aria-expanded", String(open)); }
   open() { this.setOpen(true); if (this.backends) void this.refresh().catch(error => { this.notice.textContent = error.message; }); }
   close() { this.actionPanel?.close(); this.setOpen(false); }
   toggle() { if (this.isOpen()) this.close(); else this.open(); }
