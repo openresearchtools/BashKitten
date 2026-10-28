@@ -19,6 +19,15 @@ run-name: Office ${{ inputs.source_sha }} / ${{ inputs.request_id }}
         options:
           - all
           - linux-arm64
+      component:
+        description: Native components to build
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - office
+          - files
 permissions:
   contents: read
 concurrency:
@@ -29,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [office, files]
+        component: ${{ fromJSON(inputs.component == 'office' && '["office"]' || inputs.component == 'files' && '["files"]' || '["office","files"]') }}
         platform: >-
           ${{ fromJSON(inputs.target == 'linux-arm64' &&
           '[{"target":"linux","architecture":"arm64","runner":"ubuntu-24.04-arm"}]' ||
@@ -79,7 +88,8 @@ jobs:
           cache: false
       - name: Prepare native build prerequisites
         run: bash source/agent/packaging/office/prepare-runner.sh
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: native-cache
         with:
           path: ${{ env.CCACHE_DIR }}
           key: native-ccache-${{ matrix.component }}-${{ matrix.platform.target }}-${{ matrix.platform.architecture }}-${{ hashFiles('source/office/upstream/online/source.json', 'source/office/upstream/dependencies/sources.json', 'source/agent/packaging/office/**', 'source/agent/packaging/termux/native_toolchain.py', 'source/agent/packaging/node/lock.json', 'source/office/patches/**', 'source/files/patches/**', 'source/files/build.py', 'source/files/termux.py', 'source/files/vendor/dependencies/*sources.json') }}-${{ github.run_id }}
@@ -112,14 +122,14 @@ jobs:
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/office-output"
           native_args=()
-          if [[ "$TARGET" = termux ]]; then
+          if [[ "$BASHKITTEN_BUILD_TARGET" = termux ]]; then
             native_args=(--ndk "$OFFICE_NDK" --ndk-archive "$OFFICE_NDK_ARCHIVE")
           fi
-          if [[ "$COMPONENT" = office ]]; then
+          if [[ "$BASHKITTEN_BUILD_COMPONENT" = office ]]; then
             recipe=build.py
-            if [[ "$TARGET" = termux ]]; then
+            if [[ "$BASHKITTEN_BUILD_TARGET" = termux ]]; then
               recipe=termux.py
-              native_args+=(--architecture "$ARCHITECTURE")
+              native_args+=(--architecture "$BASHKITTEN_BUILD_ARCHITECTURE")
             fi
             command=(python3 -B "source/agent/packaging/office/$recipe" "${native_args[@]}"
               --work "$RUNNER_TEMP/office-work" --cache "$RUNNER_TEMP/office-tarballs"
@@ -127,14 +137,20 @@ jobs:
           else
             export CC='ccache gcc' CXX='ccache g++'
             command=(python3 -B source/files/build.py "${native_args[@]}"
-              --work-dir "$RUNNER_TEMP/office-work" --target "$TARGET" --architecture "$ARCHITECTURE"
-              --output "$RUNNER_TEMP/office-output/files-$TARGET-$ARCHITECTURE.tar.gz" --jobs 2)
+              --work-dir "$RUNNER_TEMP/office-work" --target "$BASHKITTEN_BUILD_TARGET" --architecture "$BASHKITTEN_BUILD_ARCHITECTURE"
+              --output "$RUNNER_TEMP/office-output/files-$BASHKITTEN_BUILD_TARGET-$BASHKITTEN_BUILD_ARCHITECTURE.tar.gz" --jobs 2)
           fi
           "${command[@]}" 2>&1 | tee "$RUNNER_TEMP/office-build.log"
         env:
-          COMPONENT: ${{ matrix.component }}
-          TARGET: ${{ matrix.platform.target }}
-          ARCHITECTURE: ${{ matrix.platform.architecture }}
+          BASHKITTEN_BUILD_COMPONENT: ${{ matrix.component }}
+          BASHKITTEN_BUILD_TARGET: ${{ matrix.platform.target }}
+          BASHKITTEN_BUILD_ARCHITECTURE: ${{ matrix.platform.architecture }}
+      - name: Preserve native compiler cache after the build
+        if: always() && steps.native-cache.outcome == 'success'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ matrix.component }}-${{ matrix.platform.target }}-${{ matrix.platform.architecture }}-${{ inputs.source_sha }}
