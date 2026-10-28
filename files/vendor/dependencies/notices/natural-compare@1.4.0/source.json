@@ -1,0 +1,18 @@
+{
+  "name": "natural-compare",
+  "version": "1.4.0",
+  "commit": "eec83eee67cfac84d6db30cdd65363f155673770",
+  "scope": "Exact published package metadata declares SPDX MIT; its pinned source tree has no complete standalone license text. Canonical matching text is separately pinned, without invented copyright attribution or a claim that upstream shipped a LICENSE.",
+  "files": [
+    {
+      "file": "npm-metadata.json",
+      "url": "https://registry.npmjs.org/natural-compare/1.4.0",
+      "sha256": "8b910f6ec433d27eb98fa7d846e586b7ce571ed92e0da5685d6e77c1689cc9d4"
+    },
+    {
+      "file": "git-tree.json",
+      "url": "https://api.github.com/repos/litejs/natural-compare-lite/git/trees/eec83eee67cfac84d6db30cdd65363f155673770?recursive=1",
+      "sha256": "bab3ddb41e41d575f7b28c27f425dbfda9e20b039eaf228569526629363f1d0c"
+    }
+  ]
+}

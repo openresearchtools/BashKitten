@@ -1,0 +1,18 @@
+{
+  "name": "eastasianwidth",
+  "version": "0.2.0",
+  "commit": "b89f04d44dc786885615e94cd6e2ba1ef7866fa4",
+  "scope": "Exact published package metadata declares SPDX MIT; its pinned source tree has no complete standalone license text. Canonical matching text is separately pinned, without invented copyright attribution or a claim that upstream shipped a LICENSE.",
+  "files": [
+    {
+      "file": "npm-metadata.json",
+      "url": "https://registry.npmjs.org/eastasianwidth/0.2.0",
+      "sha256": "69eee30a00108372f9fbc4af8795347d35c7a1f0d0abe7a84883cbf77a1f0894"
+    },
+    {
+      "file": "git-tree.json",
+      "url": "https://api.github.com/repos/komagata/eastasianwidth/git/trees/b89f04d44dc786885615e94cd6e2ba1ef7866fa4?recursive=1",
+      "sha256": "6b54dce572c5350bb013325e97b4419da6f2c49608d7976885d98fd332810524"
+    }
+  ]
+}

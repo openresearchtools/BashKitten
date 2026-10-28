@@ -1,0 +1,18 @@
+{
+  "name": "de-indent",
+  "version": "1.0.2",
+  "commit": "5861bd7a39c09f0056fd361d82e570e56bd2c275",
+  "scope": "Exact published package metadata declares SPDX MIT; its pinned source tree has no complete standalone license text. Canonical matching text is separately pinned, without invented copyright attribution or a claim that upstream shipped a LICENSE.",
+  "files": [
+    {
+      "file": "npm-metadata.json",
+      "url": "https://registry.npmjs.org/de-indent/1.0.2",
+      "sha256": "b0675f02740943538017211c6bb68e2ef32636f0ef8a35963369e5edbe3fc396"
+    },
+    {
+      "file": "git-tree.json",
+      "url": "https://api.github.com/repos/yyx990803/de-indent/git/trees/5861bd7a39c09f0056fd361d82e570e56bd2c275?recursive=1",
+      "sha256": "95bedcc557e9af65b1bc96b2b47f0ded109e35549adc268b3aa4f646ac329dc9"
+    }
+  ]
+}

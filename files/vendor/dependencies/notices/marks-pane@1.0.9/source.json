@@ -1,0 +1,18 @@
+{
+  "name": "marks-pane",
+  "version": "1.0.9",
+  "commit": "2f5bb3ccfb237a2575e12c4db9188651a0b21d9a",
+  "scope": "Exact published package metadata declares SPDX MIT; its pinned source tree has no complete standalone license text. Canonical matching text is separately pinned, without invented copyright attribution or a claim that upstream shipped a LICENSE.",
+  "files": [
+    {
+      "file": "npm-metadata.json",
+      "url": "https://registry.npmjs.org/marks-pane/1.0.9",
+      "sha256": "52ed9687f6e5315eb85e937964262f045f3a10120c9665d6253b26e92a21ccb5"
+    },
+    {
+      "file": "git-tree.json",
+      "url": "https://api.github.com/repos/fchasen/marks/git/trees/2f5bb3ccfb237a2575e12c4db9188651a0b21d9a?recursive=1",
+      "sha256": "4ec7ee1b69311eda3f843aa0bbcc5f382109da4274b10bca08fa80211461d0eb"
+    }
+  ]
+}

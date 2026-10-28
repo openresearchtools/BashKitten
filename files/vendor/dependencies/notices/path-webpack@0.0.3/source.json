@@ -1,0 +1,18 @@
+{
+  "name": "path-webpack",
+  "version": "0.0.3",
+  "commit": "a8e7bf91e3646e3265c69fe4e8d414aad41b3e30",
+  "scope": "Exact published package metadata declares SPDX MIT; its pinned source tree has no complete standalone license text. Canonical matching text is separately pinned, without invented copyright attribution or a claim that upstream shipped a LICENSE.",
+  "files": [
+    {
+      "file": "npm-metadata.json",
+      "url": "https://registry.npmjs.org/path-webpack/0.0.3",
+      "sha256": "7143f557d4f092c7c0e7843a95b523e57f5844a6ecd6d01514a6638fd075dadd"
+    },
+    {
+      "file": "git-tree.json",
+      "url": "https://api.github.com/repos/fchasen/path-webpack/git/trees/a8e7bf91e3646e3265c69fe4e8d414aad41b3e30?recursive=1",
+      "sha256": "2803e60fc9f0c0cbca84f233f3f5eeed3c7c5b88fefe94c5024df2c81df250f2"
+    }
+  ]
+}

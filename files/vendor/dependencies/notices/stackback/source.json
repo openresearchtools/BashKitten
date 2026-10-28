@@ -1,0 +1,73 @@
+{
+  "release": "v0.0.2",
+  "commit": "2963095372abf7b75ba55f01cef08ab1e62c2ff4",
+  "repository": "https://github.com/defunctzombie/node-stackback",
+  "licenseDeclaration": "MIT",
+  "authorDeclaration": "Roman Shtylman <shtylman@gmail.com>",
+  "fullLicenseTextPresent": false,
+  "files": [
+    {
+      "file": "README.md",
+      "url": "https://raw.githubusercontent.com/defunctzombie/node-stackback/2963095372abf7b75ba55f01cef08ab1e62c2ff4/README.md",
+      "sha256": "0ac49857291755487f92130e4e2eec3e88b8012a7e42a6549763929ba4e6a4e5"
+    },
+    {
+      "file": "package.json",
+      "url": "https://raw.githubusercontent.com/defunctzombie/node-stackback/2963095372abf7b75ba55f01cef08ab1e62c2ff4/package.json",
+      "sha256": "de9168ece7ce11c0a933ee447dd907da610f1745e6dd418d7f6b23c91e29bd7c"
+    },
+    {
+      "file": "index.js",
+      "url": "https://raw.githubusercontent.com/defunctzombie/node-stackback/2963095372abf7b75ba55f01cef08ab1e62c2ff4/index.js",
+      "sha256": "bc58b3118cb8b3d1a674a7e70c2d6091de3dd31deeb3e1d1f06a54a1a452fd34"
+    },
+    {
+      "file": "formatstack.js",
+      "url": "https://raw.githubusercontent.com/defunctzombie/node-stackback/2963095372abf7b75ba55f01cef08ab1e62c2ff4/formatstack.js",
+      "sha256": "3c1191bd7094a36098418e7d1606e2a49e7ee25b5ddee54b0b2514ea1a43b8a7"
+    },
+    {
+      "file": "npm-package.json",
+      "archive": "archives/npm/stackback@0.0.2-a6ef1dc594fca17e.tgz",
+      "member": "package/package.json",
+      "sha256": "4d984909b27d37d2f1a379b9cda7292a6e3a133c076df166d740a17514ac6e60"
+    }
+  ],
+  "scope": "Original release has no LICENSE or full MIT terms. Exact published package declares MIT. Vitest/why-is-node-running development dependency; not invoked by normal frontend build.",
+  "schema": 1,
+  "npmArchiveSha256": "3e663c82d1ccf9748ed446b648ec21a7dd6c5895ecf4a95310a60a320ca55858",
+  "releaseEquivalence": [
+    {
+      "file": "README.md",
+      "sha256": "0ac49857291755487f92130e4e2eec3e88b8012a7e42a6549763929ba4e6a4e5",
+      "exactNpmMatch": true,
+      "difference": null
+    },
+    {
+      "file": "package.json",
+      "sha256": "de9168ece7ce11c0a933ee447dd907da610f1745e6dd418d7f6b23c91e29bd7c",
+      "exactNpmMatch": false,
+      "difference": "npm package.json additionally declares development-only mocha ~1.6.0"
+    },
+    {
+      "file": "index.js",
+      "sha256": "bc58b3118cb8b3d1a674a7e70c2d6091de3dd31deeb3e1d1f06a54a1a452fd34",
+      "exactNpmMatch": true,
+      "difference": null
+    },
+    {
+      "file": "formatstack.js",
+      "sha256": "3c1191bd7094a36098418e7d1606e2a49e7ee25b5ddee54b0b2514ea1a43b8a7",
+      "exactNpmMatch": true,
+      "difference": null
+    }
+  ],
+  "gitTreePaths": [
+    ".travis.yml",
+    "README.md",
+    "formatstack.js",
+    "index.js",
+    "package.json",
+    "test.js"
+  ]
+}

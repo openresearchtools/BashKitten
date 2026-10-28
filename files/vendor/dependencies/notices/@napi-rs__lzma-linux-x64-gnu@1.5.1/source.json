@@ -1,0 +1,18 @@
+{
+  "name": "@napi-rs/lzma-linux-x64-gnu",
+  "version": "1.5.1",
+  "commit": "f164df92d83e095f195d628b1a68a141ae2eb638",
+  "scope": "Exact published package metadata declares SPDX MIT; its pinned source tree has no complete standalone license text. Canonical matching text is separately pinned, without invented copyright attribution or a claim that upstream shipped a LICENSE.",
+  "files": [
+    {
+      "file": "npm-metadata.json",
+      "url": "https://registry.npmjs.org/@napi-rs/lzma-linux-x64-gnu/1.5.1",
+      "sha256": "583f8b4bfc4c8838baea2394986c9deb1e915ba2a8948481903aa266229ec6cb"
+    },
+    {
+      "file": "git-tree.json",
+      "url": "https://api.github.com/repos/Brooooooklyn/lzma/git/trees/f164df92d83e095f195d628b1a68a141ae2eb638?recursive=1",
+      "sha256": "b95faafda3ea3b18b9de5800da540bc1a63334cd38183239b16632b34b05fbc0"
+    }
+  ]
+}
