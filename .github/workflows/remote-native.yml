@@ -103,6 +103,7 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             agent/native/remote
+            /agent/packaging/source_cache.py
             auth/chisel
             auth/age
             auth/barcode

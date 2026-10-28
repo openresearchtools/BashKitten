@@ -67,6 +67,7 @@ jobs:
           sparse-checkout: |
             auth
             agent/native/remote
+            agent/packaging
             agent/src/server/access
       - uses: actions/setup-go@v6
         if: matrix.component == 'authelia' || matrix.component == 'caddy' || matrix.component == 'chisel' || matrix.component == 'remote'
@@ -157,6 +158,7 @@ jobs:
           sparse-checkout: |
             auth
             agent/native/remote
+            agent/packaging
             agent/src/server/access
       - uses: actions/download-artifact@v4
         with:
