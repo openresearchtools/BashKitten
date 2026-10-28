@@ -634,7 +634,7 @@
           <div id="queuePanel" class="hidden" aria-label="Queued messages"></div>
           <div class="compose-box">
             <div id="attachmentTray" class="hidden"></div>
-            <textarea id="prompt" rows="1" placeholder="Message BashKitten…" aria-label="Message BashKitten"></textarea>
+            <textarea id="prompt" rows="2" placeholder="Message BashKitten…" aria-label="Message BashKitten"></textarea>
             <div id="goalChip" class="hidden"><span>Goal</span><button id="removeGoalChip" type="button" aria-label="Remove goal from message">×</button></div>
             <div class="composer-toolbar">
               <input id="files" class="hidden" type="file" multiple>
@@ -844,7 +844,7 @@
     let nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
     let phoneAvailable = false;
     const visibilityClient = crypto.randomUUID();
-    let serverPlatform = '';
+    let serverPlatform = '', localSession = false;
     let fileManagerAllowed = false, filePolicyEvents = null;
     function sendVisibility() {
       if (serverPlatform === 'termux' && csrf) api('/api/visibility', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({client:visibilityClient, id:current?.id, visible:!document.hidden && document.hasFocus()})}).catch(()=>{});
@@ -881,6 +881,7 @@
     function requireLogin() {
       authRequired = true;
       csrf = '';
+      localSession = false;
       sessionCatalogueReady = false;
       phoneAvailable = false;
       showAgentChoice();
@@ -2862,7 +2863,8 @@
           try { applyFilePermission(JSON.parse(event.data).fileManager === true); } catch { applyFilePermission(false); }
         };
         filePolicyEvents.onerror = () => applyFilePermission(false);
-        $('#signOut').classList.toggle('hidden', value.local === true);
+        localSession = value.local === true;
+        $('#signOut').classList.toggle('hidden', localSession);
         authRequired = false;
         $('#auth').classList.add('hidden');
         $('#app').classList.remove('hidden');
@@ -3066,9 +3068,9 @@
     function resizePrompt() {
       const prompt=$('#prompt');
       if (!prompt.getClientRects().length) return;
-      // Reset the old height before measuring so edits/clear can shrink too.
+      // Restore the native two-row baseline so edits/clear shrink normally.
       // CSS owns the min/max, including the short keyboard viewport limit.
-      prompt.style.height='0px';
+      prompt.style.height='auto';
       prompt.style.height=prompt.scrollHeight+'px';
     }
     let composerWidth=0;
@@ -3519,6 +3521,7 @@
         // authorized service mapping in an ordinary tab, outside Agent storage.
         if (nativeHost) await nativeHost.call('open-files', destination);
         else {
+          if (!localSession) throw Error('Open remote Files through its saved BashKitten service connection.');
           // Reserve the tab during the click; first use may start the service.
           tab=window.open('about:blank', '_blank');
           if (!tab) throw Error('Allow a new tab to open Files.');
@@ -3535,7 +3538,7 @@
         if (sessionView===view) $('#composerHint').textContent=error.message;
       }
     }
-    $('#filesToggle').onclick=()=>openFiles(current?.cwd||pendingCwd, current?.projectId||pendingProjectId);
+    $('#filesToggle').onclick=()=>openFiles(current?.cwd||pendingCwd, current ? null : pendingProjectId);
     function refreshProjectPanel() {
       changesDirty=true;
       if (projectPanelVisible()) refreshChanges();
