@@ -386,6 +386,15 @@ ${backend('remote')}
     }
     return { port, wopiURL: origin, serviceRoot: '/apps/office' };
   }
+  async applicationModule(component, action, signal) {
+    if (!this.ready || this.stopping || component !== 'references' || !['start', 'stop'].includes(action)) throw Error('The owning application backend is unavailable');
+    const response = await unixRequest(paths.backend, '/api/instance/apps', { method: 'POST', signal, timeout: 120000, limit: 65536,
+      headers: { host: new URL(this.origin).host, authorization: 'Bearer ' + this.instanceToken, 'content-type': 'application/json' },
+      body: JSON.stringify({ operation: 'lifecycle', component, action }) });
+    const value = JSON.parse(response.body);
+    if (response.status !== 200) throw Object.assign(Error(value.error || 'Application lifecycle failed'), { code: value.code });
+    return value;
+  }
   async reconfigureRemote() {
     if (!this.ready || this.stopping) throw Error('Turn on Agent before changing remote access');
     this.reconfiguring = true;

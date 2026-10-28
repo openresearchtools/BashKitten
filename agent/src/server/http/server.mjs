@@ -281,6 +281,7 @@ async function handler(req, res) {
     if (route === '/api/instance/apps') {
       if (req.method !== 'POST' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
       const input = await applicationBody(req);
+      if (input.operation === 'lifecycle') return json(res, await apps.lifecycle(input.component, input.action));
       if (input.session) await readMeta(input.session);
       const controller = new AbortController(), cancel = () => controller.abort(Error('Application caller disconnected'));
       res.once('close', cancel);
@@ -492,7 +493,9 @@ async function handler(req, res) {
       const input = await jsonBody(req);
       if (req.method === 'PATCH') return json(res, { project: await renameProject(projectMatch[1], input.name) });
       if (input.confirm !== true) throw Error('Confirm removing the project grouping; its chats are kept');
-      return json(res, await removeProject(projectMatch[1]));
+      const removed = await removeProject(projectMatch[1]);
+      await apps.revokeProject(projectMatch[1]);
+      return json(res, removed);
     }
     if (route === '/api/session-groups') {
       requireMethod(req, ['GET', 'POST', 'DELETE']);

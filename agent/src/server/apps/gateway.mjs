@@ -17,10 +17,11 @@ const endpointFile = path.join(dataDir, 'run/apps.json');
 const safePath = value => typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') && !/[\x00-\x20\x7f\\#]/.test(value);
 
 export class ApplicationGateway {
-  constructor({ authorize, handle, upgrade, register, ensureTLS, validateProxy, resolveEditor }) {
+  constructor({ authorize, handle, upgrade, register, ensureTLS, validateProxy, resolveEditor, validateGrant }) {
     this.authorize = authorize; this.handle = handle; this.upgrade = upgrade; this.register = register;
     this.ensureTLS = ensureTLS; this.validateProxy = validateProxy;
     this.resolveEditor = resolveEditor;
+    this.validateGrant = validateGrant;
     this.grants = new Map(); this.sockets = new Set(); this.servers = []; this.closing = false;
     this.configuring = new Map(); this.active = new Set();
   }
@@ -38,6 +39,7 @@ export class ApplicationGateway {
     return this.starting;
   }
   async listen() {
+    if ([applicationSocket, httpSocket].some(value => Buffer.byteLength(value) > 103)) throw unavailable('The owning backend runtime directory is too long for a native application socket');
     await privateDir(path.dirname(applicationSocket));
     // The backend's existing kernel instance lock is held before construction.
     await fs.rm(httpSocket, { force: true }); await fs.rm(applicationSocket, { force: true });
@@ -79,7 +81,11 @@ export class ApplicationGateway {
   async open(component, record, scope) {
     const endpoint = await this.endpoint();
     if (!['files', 'references'].includes(component)) throw Error('Unknown web application');
-    for (const [id, grant] of this.grants) if (grant.nonce && grant.expires <= Date.now()) this.grants.delete(id);
+    for (const grant of this.grants.values()) if (grant.nonce && grant.expires <= Date.now()) {
+      // A short bootstrap must expire, but an authenticated native opener can
+      // still resolve the document identity into a fresh human grant later.
+      delete grant.nonce; delete grant.expires; delete grant.secret;
+    }
     const grant = this.grant(record, scope);
     grant.component = component; grant.nonce = randomToken(); grant.secret = randomToken(); grant.expires = Date.now() + 120000;
     grant.basePath = `/apps/${component}/${grant.id}/`;
@@ -195,13 +201,22 @@ export class ApplicationGateway {
   async authorizeOperation(id, operation, work, options) {
     const grant = this.grants.get(id);
     if (!grant || grant.revoked) throw Object.assign(Error('The application grant expired'), { status: 403 });
-    return this.authorize(grant.record, context => {
+    return this.authorize(grant.record, async context => {
       if (grant.revoked || this.closing) throw Object.assign(Error('The application grant was revoked'), { status: 403 });
-      return work({ ...context, grant, operation });
+      const controller = new AbortController(), stop = () => controller.abort(Error('The application grant was revoked'));
+      grant.active.add(stop);
+      try {
+        await this.validateGrant?.(grant);
+        const signal = AbortSignal.any([context.signal, controller.signal]); signal.throwIfAborted();
+        return await work({ ...context, signal, grant, operation });
+      } finally { grant.active.delete(stop); }
     }, options);
   }
+  revokeWhere(predicate) {
+    for (const grant of this.grants.values()) if (predicate(grant)) { grant.revoked = true; for (const stop of grant.active) stop(); }
+  }
   async revokeRemote() {
-    for (const grant of this.grants.values()) if (!grant.record.local) { grant.revoked = true; for (const stop of grant.active) stop(); }
+    this.revokeWhere(grant => !grant.record.local);
   }
   async close() {
     this.closing = true;

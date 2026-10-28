@@ -5,9 +5,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { dataDir, readJson, json, jsonBody } from '../common.mjs';
+import { dataDir, readJson, json, body as readBody } from '../common.mjs';
 import { paths } from '../access/paths.mjs';
 import { controlRequest } from '../control.mjs';
+import { dispatchReferenceResolver } from '../access/browser-channel.mjs';
 import { projects, createProject, renameProject, removeProject } from '../projects.mjs';
 import { fileDirectory, sendFile } from '../files/files.mjs';
 import { authorizeApplicationPath, privateManagerPaths, managerAllowed, runManagerOperation } from '../files/access.mjs';
@@ -18,6 +19,7 @@ const connectorMethods = new Set(['ping', 'getTranslators', 'getTranslatorCode',
   'saveAttachment', 'saveStandaloneAttachment', 'getRecognizedItem', 'getResolverRequest', 'hasAttachmentResolvers', 'saveAttachmentFromResolver', 'updateSession', 'import', 'installStyle',
   'upload-begin', 'upload-chunk', 'upload-commit', 'upload-cancel']);
 const requestHeaders = new Set(['content-type', 'x-metadata', 'zotero-api-version', 'x-zotero-connector-api-version', 'if-match', 'if-none-match', 'if-unmodified-since-version']);
+const applicationBody = async req => JSON.parse((await readBody(req, 16 * 1024 * 1024)).toString('utf8') || '{}');
 
 export class ApplicationModules {
   constructor({ auth, resolveSession }) {
@@ -30,6 +32,7 @@ export class ApplicationModules {
         if (!this.officeProvider) throw Object.assign(Error('Open the Office document from Files or Pi first'), { status: 401 });
         return this.officeProvider.resolveEditorGrant(req, { candidateGrantIds });
       },
+      validateGrant: grant => this.validateGrant(grant),
       register: service => this.ensureRunning(service, false),
       ensureTLS: () => controlRequest('application-gateway', {}), validateProxy: req => auth.origin(req) });
   }
@@ -79,6 +82,9 @@ export class ApplicationModules {
       const pending = (async () => {
         const module = await this.module('references');
         if (typeof module.createReferencesService !== 'function') throw unavailable('References', 'incompatible component API');
+        const endpoint = await this.gateway.endpoint();
+        await this.ensureRunning({ id: 'references', name: 'References', kind: 'web', scheme: 'https',
+          target: { network: 'unix', address: endpoint.socketPath }, openPath: '/', enabled: false, startup: false, command: null }, false);
         return module.createReferencesService({ dataDir, backendId: await this.identity(), authorizeProject: (authority, id) => this.project(authority, id),
           listProjects: async authority => { if (!await this.auth.valid(authority) || !await managerAllowed(authority)) throw Object.assign(Error('Project access is not authorized'), { status: 403 }); return (await projects()).projects.map(({ id, name }) => ({ id, name })); } });
       })().catch(error => { this.instances.delete('references'); throw error; });
@@ -86,20 +92,45 @@ export class ApplicationModules {
     }
     return this.instances.get('references');
   }
+  async lifecycle(component, action) {
+    if (component !== 'references' || !['start', 'stop'].includes(action)) throw Object.assign(Error('Unknown application lifecycle operation'), { status: 400 });
+    if (action === 'start') { await this.references(); return { running: true }; }
+    const pending = this.instances.get('references');
+    if (pending) {
+      const service = await pending.catch(() => null);
+      await service?.close?.();
+      if (this.instances.get('references') === pending) this.instances.delete('references');
+    }
+    return { running: false };
+  }
   async office() {
     if (!this.instances.has('office')) {
       const pending = (async () => {
         const [module, files, runtime] = await Promise.all([this.module('office'), this.module('officeProvider'), this.module('officePrepare')]);
         if (typeof module.createOfficeService !== 'function' || typeof files.createOfficeProvider !== 'function' || typeof runtime.prepareOffice !== 'function') throw unavailable('Office', 'incompatible native provider API');
-        const endpoint = await this.gateway.endpoint();
-        const layout = await controlRequest('application-office-layout', {});
-        const prepared = await runtime.prepareOffice({ dataRoot: dataDir, ...layout, publicOrigins: [endpoint.origin] });
+        let preparing;
+        const prepareNative = () => {
+          if (!preparing) preparing = (async () => {
+            await this.gateway.endpoint();
+            const layout = await controlRequest('application-office-layout', {});
+            // Native frame policy uses the validated connection/WOPI hosts;
+            // mapped client ports do not change the shared configuration.
+            return runtime.prepareOffice({ dataRoot: dataDir, ...layout, publicOrigins: [] });
+          })().catch(error => { preparing = undefined; throw error; });
+          return preparing;
+        };
+        this.prepareOfficeRuntime = prepareNative;
         let service;
         const provider = files.createOfficeProvider({ dataRoot: dataDir, environmentId: await this.identity(),
-          collaboraInternalURL: prepared.collaboraInternalURL, wopiURL: prepared.wopiURL,
           authorizePath: authorizeApplicationPath,
-          ensureRunning: (name, definition) => {
-            if (name === 'office') return this.ensureRunning(prepared.service);
+          ensureRunning: async (name, definition) => {
+            // A saved autostart may have loaded the previous package's config.
+            // Reconcile once before this backend has issued any document views.
+            if (name === 'office') {
+              const prepared = await prepareNative();
+              provider.configure(prepared);
+              return this.ensureRunning(prepared.service, true, true);
+            }
             if (name === 'office-addon' && definition?.id === name) return this.ensureRunning(definition);
             throw unavailable('Office', 'invalid native dependency');
           },
@@ -107,9 +138,9 @@ export class ApplicationModules {
             await this.validateGrant(context.grant);
             return work(context.grant.scope, context.signal);
           }),
-          coordinateNativeRestore: documentId => {
+          coordinateNativeRestore: (documentId, options) => {
             if (typeof service?.coordinateNativeRestore !== 'function') throw unavailable('Office', 'native restore coordination is unavailable');
-            return service.coordinateNativeRestore(documentId);
+            return service.coordinateNativeRestore(documentId, options);
           },
           referenceContext: ({ grantId }) => this.gateway.authorizeOperation(grantId, 'references-context', async ({ grant }) => {
             await this.validateGrant(grant);
@@ -134,7 +165,13 @@ export class ApplicationModules {
         });
         service = module.createOfficeService({ authorizeOpen: (body, identity, options) => this.openOffice(body, identity, options),
           authorizeSession: identity => this.gateway.authorizeOperation(identity?.grantId, 'office-session', ({ grant }) => this.validateGrant(grant)),
+          authorizeSnapshot: async ({ documentId, versionId }, identity, { signal } = {}) => {
+            const participantId = 'agent:' + identity.backendId + ':' + identity.workerId;
+            await provider.owner.register({ grantId: identity.grantId, documentId, participantId, participantName: 'Pi' });
+            return provider.snapshot({ grantId: identity.grantId, documentId, participantId, versionId }, { signal });
+          },
           references: { renderDocument: referenceOperation('renderDocument'), parseDocument: referenceOperation('parseDocument') } });
+        this.officeService = service;
         return service;
       })().catch(error => { this.instances.delete('office'); throw error; });
       this.instances.set('office', pending);
@@ -153,6 +190,8 @@ export class ApplicationModules {
       await this.validateGrant(grant); signal?.throwIfAborted();
       if (!body || Object.keys(body).some(key => !['projectId', 'documentId', 'relativePath', 'create', 'locale'].includes(key)) ||
           [body.documentId, body.relativePath, body.create].filter(Boolean).length !== 1 || body.projectId !== grant.scope.projectId) throw Object.assign(Error('Choose one document in the authorized project'), { status: 400 });
+      // Verify installed native artifacts before creating a new project file.
+      await this.prepareOfficeRuntime(); signal?.throwIfAborted();
       const endpoint = await this.gateway.endpoint();
       const view = await this.gateway.open('files', grant.record, { ...grant.scope, workerId: undefined, id: randomUUID(), identity: 'bk_' + randomUUID().replaceAll('-', ''), openPath: '/' });
       const human = this.gateway.resolve(view.url).grant;
@@ -192,7 +231,8 @@ export class ApplicationModules {
     return this.authorize(record, async () => {
       const { grant, path: openPath } = this.gateway.resolve(input.url);
       const project = grant.scope.projectId ? await this.project(record, grant.scope.projectId) : null;
-      const root = project?.cwd || (await fileDirectory(grant.scope.root)).path;
+      if (project && grant.scope.projectRoot && project.cwd !== grant.scope.projectRoot) throw Object.assign(Error('The application project folder changed'), { status: 409 });
+      const root = (await fileDirectory(grant.scope.root)).path;
       if (root !== grant.scope.root) throw Object.assign(Error('The application project folder changed'), { status: 409 });
       await authorizeApplicationPath(root);
       // A newly opened ordinary context receives a fresh one-use bootstrap.
@@ -235,7 +275,7 @@ export class ApplicationModules {
             const project = await this.project(record, id);
             if (method === 'GET') return { status: 200, body: { id, name: project.name, cwd: project.cwd } };
             if (method === 'PATCH') return { status: 200, body: await renameProject(id, input.body?.name) };
-            if (method === 'DELETE') return { status: 200, body: await removeProject(id) };
+            if (method === 'DELETE') { const result = await removeProject(id); await this.revokeProject(id); return { status: 200, body: result }; }
           }
           throw Object.assign(Error('Method not allowed'), { status: 405 });
         }
@@ -247,9 +287,10 @@ export class ApplicationModules {
       if (input.component === 'office') {
         if (!workerId) throw Object.assign(Error('Office operations require an owned Pi session'), { status: 403 });
         const session = await this.resolveSession(workerId);
-        const projectId = url.pathname === '/sessions' ? input.body?.projectId : null;
+        const projectRequest = ['/sessions', '/snapshots/diff'].includes(url.pathname);
+        const projectId = projectRequest ? input.body?.projectId : null;
         const project = projectId ? await this.project(record, projectId) : null;
-        if (url.pathname === '/sessions' && !project) throw Object.assign(Error('Choose the document project'), { status: 400 });
+        if (projectRequest && !project) throw Object.assign(Error('Choose the document project'), { status: 400 });
         const root = project?.cwd || (await fileDirectory(session.cwd)).path;
         await authorizeApplicationPath(root);
         const grant = this.gateway.grant(record, { id: randomUUID(), root, projectRoot: project?.cwd, projectId: project?.id, workerId,
@@ -303,9 +344,21 @@ export class ApplicationModules {
       if (req.method !== 'GET') throw Object.assign(Error('Method not allowed'), { status: 405 });
       return json(res, { backendId: await this.identity(), projectId: context.grant.scope.projectId, projects: (await projects()).projects.map(({ id, name }) => ({ id, name })) });
     }
+    if (route === 'api/resolve') {
+      if (req.method !== 'POST') throw Object.assign(Error('Method not allowed'), { status: 405 });
+      const input = await applicationBody(req);
+      if (!input || Object.keys(input).some(key => !['projectId', 'requestId'].includes(key)) || typeof input.requestId !== 'string' || input.requestId.length > 128) throw Object.assign(Error('Choose a pending resolver request'), { status: 400 });
+      await this.project(context.grant.record, input.projectId);
+      const pending = await (await this.references()).handle({ method: 'POST', path: `/projects/${input.projectId}/connector/getResolverRequest`,
+        query: new URLSearchParams(), body: { requestId: input.requestId }, headers: {}, authority: context.grant.record, signal: context.signal });
+      if (pending.status !== 200) return this.sendResult(req, res, pending);
+      if (pending.body?.status === 'complete') return json(res, pending.body);
+      if (pending.body?.status !== 'challenge-required') throw Object.assign(Error('This resolver request does not need a browser'), { status: 409 });
+      return json(res, await dispatchReferenceResolver(context.grant.record, input, { signal: context.signal }));
+    }
     if (route.startsWith('api/')) {
       const result = await this.request({ component: 'references', method: req.method, path: '/' + route.slice(4) + context.url.search,
-        body: ['GET', 'HEAD'].includes(req.method) ? undefined : await jsonBody(req) }, context.grant.record, { signal: context.signal });
+        body: ['GET', 'HEAD'].includes(req.method) ? undefined : await applicationBody(req) }, context.grant.record, { signal: context.signal });
       return this.sendResult(req, res, result);
     }
     if (!['GET', 'HEAD'].includes(req.method)) throw Object.assign(Error('Method not allowed'), { status: 405 });
@@ -333,9 +386,14 @@ export class ApplicationModules {
     return module.upgradeFiles(req, socket, head, { ...context, scope: context.grant.scope, endpoint: context.grant.scope.endpoint });
   }
   async revokeRemote() {
-    const office = this.instances.has('office') ? await this.instances.get('office').catch(() => null) : null;
-    for (const grant of this.gateway.grants.values()) if (!grant.record.local) office?.revoke({ grantId: grant.id });
+    for (const grant of this.gateway.grants.values()) if (!grant.record.local) this.officeService?.revoke({ grantId: grant.id });
     await this.gateway.revokeRemote();
+  }
+  async revokeProject(projectId) {
+    this.gateway.revokeWhere(grant => {
+      if (grant.scope.projectId !== projectId) return false;
+      this.officeService?.revoke({ grantId: grant.id }); return true;
+    });
   }
   async close() {
     this.closed = true;

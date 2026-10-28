@@ -510,6 +510,7 @@ async function serve() {
       // owner coalesces/serializes its catalogue and rejects late starts during
       // shutdown; do not hold the controller command queue while waiting.
       if (req.url === '/application-service') return json(res, await action('application-service', value));
+      if (req.url === '/service-action' && value.id === 'references') return json(res, await action('service-action', value));
       // Sampling is local, read-only and on demand. It must not queue behind a
       // model loading or package operation, and never starts/stops a workload.
       if (req.url === '/performance-sample') return json(res, await performance.sample(value));

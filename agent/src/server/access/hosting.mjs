@@ -44,7 +44,7 @@ function definition(value) {
     if (!env || typeof env !== 'object' || Array.isArray(env) || Object.entries(env).some(([name, value]) => !/^[A-Za-z_][A-Za-z_0-9]*$/.test(name) || !text(value))) throw Error('Invalid command environment');
     command = { argv, cwd, env };
   }
-  if (value.startup && !command) throw Error('Launch on startup needs an owned command');
+  if (value.startup && !command && value.application !== 'references') throw Error('Launch on startup needs an owned command');
   if (value.application !== undefined && (!applications.has(value.application) || value.application !== value.id)) throw Error('Invalid managed application identity');
   return { id: value.id, name: value.name.trim(), target: target(value.target), kind: value.kind, scheme: value.scheme,
     ...(value.application ? { application: value.application } : {}),
@@ -83,7 +83,7 @@ export class HostedServices {
       const owner = this.running.get(entry.id), online = await reachable(entry.target);
       const value = { id: entry.id, name: entry.name, kind: entry.kind, scheme: entry.scheme, openPath: entry.openPath,
         state: owner?.state || (entry.command ? 'stopped' : 'external'), reachable: online,
-        actions: entry.command ? ['start', 'stop', 'reload'] : [], error: owner?.error || '' };
+        actions: entry.command || entry.application === 'references' ? ['start', 'stop', 'reload'] : [], error: owner?.error || '' };
       return remote ? value : { ...entry, ...value, output: owner?.output || '', savedForNextStart: Boolean(owner?.child && owner.revision !== digest(JSON.stringify(entry))) };
     }));
     if (remote) services.unshift({ id: 'agent', name: 'Agent', kind: 'agent', scheme: 'https', openPath: '/',
@@ -110,7 +110,9 @@ export class HostedServices {
     const entries = await this.entries();
     if (value.revision !== digest(JSON.stringify(entries))) throw Error('Services changed. Refresh before saving.');
     if (localAI(value.service?.id) && !value.internal) throw Error('Configure this service in LocalAI');
-    let entry = definition({ ...value.service, id: value.service?.id || randomUUID() });
+    const requestedId = value.service?.id || randomUUID();
+    const owned = entries.find(item => item.id === requestedId)?.application;
+    let entry = definition({ ...value.service, id: requestedId, ...(owned ? { application: owned } : {}) });
     if (entry.id === 'localai-whisper' && entry.enabled) throw Error('Whisper is available only through authenticated dictation');
     const index = entries.findIndex(item => item.id === entry.id);
     if (entries[index]?.application) {
@@ -143,7 +145,7 @@ export class HostedServices {
   async action({ id, action }, { remote = false } = {}) {
     const entry = (await this.entries()).find(entry => entry.id === id && (!remote || entry.enabled));
     if (!entry) throw Error('Service is not available');
-    if (!entry.command) throw Error('This external service has no BashKitten launch command');
+    if (!entry.command && entry.application !== 'references') throw Error('This external service has no BashKitten launch command');
     if (!['start', 'stop', 'reload'].includes(action)) throw Error('Unknown service action');
     if (action !== 'start') {
       await this.unpublish(id);
@@ -154,6 +156,7 @@ export class HostedServices {
   }
   async start(entry) {
     if (this.stopping) throw Error('Hosted services are stopping');
+    if (entry.application && (!this.stack.ready || this.stack.stopping)) throw Error('Turn on the owning backend before starting this application');
     if (this.starts.has(entry.id)) return this.starts.get(entry.id);
     const pending = this.startOwned(entry);
     this.starts.set(entry.id, pending);
@@ -161,13 +164,25 @@ export class HostedServices {
   }
   async startOwned(entry) {
     const generation = this.generation;
+    if (entry.application === 'references') {
+      if (this.running.get(entry.id)?.state === 'running') return;
+      const controller = new AbortController();
+      const owner = { module: true, state: 'starting', controller, revision: digest(JSON.stringify(entry)) };
+      this.running.set(entry.id, owner);
+      try {
+        await this.stack.applicationModule('references', 'start', controller.signal);
+        if (this.stopping || generation !== this.generation) throw Error('Hosted services are stopping');
+        owner.state = 'running';
+      } catch (error) { owner.state = 'failed'; owner.error = error.message; throw error; }
+      return;
+    }
     if (this.running.get(entry.id)?.child) return;
     const { argv, cwd } = entry.command;
     await fs.access(argv[0], fs.constants.X_OK);
     if (!(await fs.stat(cwd)).isDirectory()) throw Error('The service working directory no longer exists');
     await privateDir(runningDir);
     await writeJson(path.join(runningDir, entry.id + '.json'), entry);
-    if (this.stopping || generation !== this.generation) throw Error('Hosted services are stopping');
+    if (this.stopping || generation !== this.generation || (entry.application && (!this.stack.ready || this.stack.stopping))) throw Error('Hosted services are stopping');
     const child = spawn(binary('runtime-guard'), [process.execPath, script, entry.id, 'serve'], { stdio: ['ignore', 'pipe', 'pipe'] });
     const owner = { child, state: 'starting', error: '', output: '', revision: digest(JSON.stringify(entry)), stopping: false };
     this.running.set(entry.id, owner);
@@ -196,8 +211,14 @@ export class HostedServices {
     owner.state = 'running';
   }
   async stop(id) {
+    const pendingOwner = this.running.get(id);
+    if (pendingOwner?.module) pendingOwner.controller?.abort(Error('Application stopped'));
     await this.starts.get(id)?.catch(() => {});
     const owner = this.running.get(id);
+    if (owner?.module) {
+      if (this.stack.ready && !this.stack.stopping) await this.stack.applicationModule(id, 'stop');
+      owner.state = 'stopped'; return;
+    }
     if (!owner?.child) return;
     owner.stopping = true; owner.state = 'stopping';
     // The guard still owns the scope's descendants, including if systemd or
@@ -215,12 +236,17 @@ export class HostedServices {
   }
   async startup() {
     for (const entry of await this.entries()) if (entry.startup && !localAI(entry.id)) {
+      // The module is hosted by the existing backend. Its first initialization
+      // may call the controller for the shared gateway; release this startup
+      // action before waiting for that callback. The same owner tracks errors.
+      if (entry.application === 'references') { void this.start(entry).catch(() => {}); continue; }
       try { await this.start(entry); }
       catch (error) { this.running.set(entry.id, { state: 'failed', error: error.message }); }
     }
   }
   async stopAll() {
     this.stopping = true; this.generation++;
+    for (const owner of this.running.values()) if (owner.module) owner.controller?.abort(Error('Backend stopped'));
     await Promise.allSettled([...this.starts.values()]);
     const results = await Promise.allSettled([...this.running.keys()].map(id => this.stop(id)));
     this.stopping = false;
@@ -257,6 +283,10 @@ export class HostedServices {
       });
       this.reconcile = reconcile.catch(() => {}); await reconcile;
       if (generation !== this.generation || this.stopping || !this.stack.ready || this.stack.stopping) throw Error('The owning backend is stopping');
+      if (key === 'references' && !start) {
+        const owner = this.running.get(key);
+        if (!owner || owner.state === 'stopped' || owner.state === 'failed') this.running.set(key, { module: true, state: 'running', revision: digest(JSON.stringify(entry)) });
+      }
       if (start && entry.command) {
         // A live port alone cannot prove process ownership. Never adopt an
         // unrelated service left at the configured target after a crash.
