@@ -390,7 +390,9 @@ export async function chooseCitation({
             ? !!source?.citation["suppress-author"]
             : "");
       if (input.type === "checkbox") input.checked = !!value;
-      else input.value = value;
+      // Background previews need no DOM write when the field already shows
+      // its source value; leave the native editing control alone in that case.
+      else if (input.value !== String(value)) input.value = value;
     }
     if (active >= 0) selectedList.focusIndex = active;
     selectedList.setSelection(source ? [source.uid] : []);
