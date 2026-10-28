@@ -79,8 +79,11 @@ jobs:
       with:
         version: v0.17.0
     - name: Install the compatible Rust toolchain
-      if: steps.component.outputs.hit != 'true'
-      run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      run: |
+        version=$(python3 -c 'import json; print(json.load(open("source/bashkitten/agent/machines/rust-toolchain/sources.json"))["version"])')
+        test "$RUSTUP_TOOLCHAIN" = "$version"
+        rustup toolchain install "$version" --profile minimal --component rust-docs --target wasm32-unknown-unknown
+        printf '%s\n' "BASHKITTEN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "BASHKITTEN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
     - name: Bootstrap pinned Mozilla toolchain
       if: steps.component.outputs.hit != 'true'
       working-directory: source/bashkitten/browser

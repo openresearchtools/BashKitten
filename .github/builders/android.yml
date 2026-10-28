@@ -144,7 +144,12 @@ jobs:
         version: v0.17.0
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Install the compatible Rust toolchain
-      run: rustup toolchain install 1.96.0 --profile minimal --target "$BASHKITTEN_ANDROID_TARGET"
+      run: |
+        version=$(python3 -c 'import json; print(json.load(open("agent/machines/rust-toolchain/sources.json"))["version"])')
+        test "$RUSTUP_TOOLCHAIN" = "$version"
+        rustup toolchain install "$version" --profile minimal --component rust-docs --target "$BASHKITTEN_ANDROID_TARGET"
+        rustup target add --toolchain "$version" wasm32-unknown-unknown
+        printf '%s\n' "BASHKITTEN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "BASHKITTEN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Bootstrap the pinned Mozilla Android toolchain
       working-directory: browser

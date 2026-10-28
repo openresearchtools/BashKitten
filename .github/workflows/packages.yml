@@ -78,6 +78,11 @@ jobs:
         node-version: '24'
     - name: Install assembly tools
       run: sudo apt-get update && sudo apt-get install -y zstd python3
+    - name: Install the existing pinned Rust toolchain for Photon
+      run: |
+        version=$(python3 -c 'import json; print(json.load(open("agent/machines/rust-toolchain/sources.json"))["version"])')
+        rustup toolchain install "$version" --profile minimal --component rust-docs --target wasm32-unknown-unknown
+        printf '%s\n' "RUSTUP_TOOLCHAIN=$version" "BASHKITTEN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "BASHKITTEN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: auth-termux-${{ matrix.architecture }}
