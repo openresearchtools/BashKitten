@@ -91,6 +91,59 @@ artifact-build and rollback evidence. The 11 October Cuttlefish audio-buffer
 repair supersedes the earlier silent-input diagnosis for that old candidate,
 but does not establish dictation acceptance on the forthcoming iteration build.
 
+### Native build and module checkpoint — 28 October 2026
+
+The early desktop and Android browser compilations passed at
+`4be2563e5efea3d396da2970a00e12885057cb10`. That revision fixes the desktop
+generated-file jar syntax found in the first iteration. Package assembly is
+separate: stale companion-source checks correctly stopped assembly, and the
+companions are being rebuilt from the frozen source. Android OS and Display
+companions have been rebuilt with the actual `153.5.2` version and verified
+source/signing provenance. Neither compilation nor companion rebuilding is an
+installed-browser acceptance claim.
+
+The independently built Linux Files and Office components passed native
+compilation. Generic native field-command undo and OOXML user-attribute
+preservation are committed in `b24989fd68`; the Office plugin/API checkpoint is
+`d76ed855d7`. The latter keeps distinct native participants, native token renewal,
+the shared web citation chooser and explicit copied-reference import. Native
+OOXML diagnostics preserved a 43,709-byte attribute payload through XLSX/ODS and
+PPTX/ODP conversion and cross-document clipboard operations. Complete citation
+undo/redo and human interaction still need the updated running artifact and UI.
+
+The real native Termux Files component ran under the Android app UID and SELinux
+domain. Listing, private-path rejection, PDF/video thumbnails, native SQLite and
+the add-on health route passed; owned child processes exited. The single-frame
+video seek edge case remains recorded. Evidence is in
+`BashkittenBuild/verification/files-termux-20261028/native-termux-evidence.json`.
+Native Termux Office engine/server compilation is still in progress; Files
+success does not establish Office support on that platform.
+
+The isolated native Linux gateway diagnostics exercised two project launches
+sharing one Quantum process, native Pi editing/save/PDF export, project-scoped
+References, managed citations, snapshot history/restore and stale-session
+rejection. Backend shutdown removed its owned processes; reopening with
+autostart disabled left heavy services stopped. Evidence is in
+`BashkittenBuild/verification/apps-native-gateway-20261028/`. These are native
+module/API diagnostics, not installed desktop/phone UI acceptance or real Tor
+transport coverage. Mapped-origin browser forms and sockets are being checked
+separately against the exact forwarded HTTPS origin.
+
+References UI source now uses bounded uploads and paged range selection
+(`508019e9eb`, `4beec00cb3`). Earlier available browser checks covered collection
+navigation, metadata, classic citation controls and native reference import/export
+with small local data. Bulk identifier resolution and a 100k-record benchmark
+were not run. Same-machine native Zotero metadata/PDF parity, installed capture
+and challenge flows, signed connector update/rollback, native browser TLS trust,
+complete phone/desktop editing and final package acceptance remain open.
+
+The authorized `office-builds` repository now builds Files and Office target
+artifacts with ordinary Actions caches/uploads (`bb16c986ba` in the main source).
+Development and early integration packages remain distinguishable from complete
+release packages; missing native artifacts are not silently accepted by the
+normal release collector. Hosted builds and the remaining architecture/runtime
+coverage must still be recorded separately.
+
 ## Decision and planning work
 
 The user selected Collabora Online after the temporary stock-server comparison. The active plan, AGENTS instructions and current native
