@@ -6,7 +6,7 @@ import { promoteCitationCodes } from './code-promotion.mjs';
 import { chooseCitation } from './shared/shared-citation-dialog.js';
 const status = document.querySelector('#status'), controls = [...document.querySelectorAll('button')];
 const invoke = (request) => window.cool.callRemote(nativeOperation, request);
-let api, context, documentType, current, busy = false, styleAbort, importRequestId, importFingerprint;
+let api, context, officeCopy, documentType, current, busy = false, styleAbort, importRequestId, importFingerprint;
 function message(text, error = false) { status.textContent = text; status.dataset.error = String(error); }
 async function run(work) {
   if (busy) return; busy = true; controls.forEach(control => control.disabled = true);
@@ -34,20 +34,21 @@ async function cite() {
   const initial = current.citations.find(citation => citation.id === id) || { items: [] };
   const operation = id ? 'citations.edit' : 'citations.insert';
   const target = selection.target;
+  const metadataSource = document.querySelector('#metadata-source').value;
   const expectedRevision = current.revision;
   let cluster;
   if (new URLSearchParams(location.search).get('coolRole') !== 'dialog') {
     const key = 'references-citation-' + crypto.randomUUID();
-    sessionStorage.setItem(key, JSON.stringify({ projectId: context.projectId, initial, style: current.style, operation, id, target, documentType }));
+    sessionStorage.setItem(key, JSON.stringify({ projectId: context.projectId, initial, style: current.style, metadataSource, embeddedItems: metadataSource === 'snapshot' ? current.embeddedItems : undefined, operation, id, target, documentType }));
     try { const result = await window.cool.dialog.open({ url: 'citation.html?invocation=' + encodeURIComponent(key), title: 'Add/Edit Citation', width: 880, height: 650 }); cluster = result.cancelled ? null : result.value; }
     finally { sessionStorage.removeItem(key); }
-  } else cluster = await chooseCitation({ api, projectId: context.projectId, initial, style: current.style, preview: async (cluster, { style, signal } = {}) => {
-    const result = await command({ operation, id, cluster, target }, true, signal);
+  } else cluster = await chooseCitation({ api, projectId: context.projectId, initial, style: current.style, embeddedItems: metadataSource === 'snapshot' ? current.embeddedItems : undefined, preview: async (cluster, { style, signal } = {}) => {
+    const result = await command({ operation, id, cluster, target, metadataSource }, true, signal);
     const occurrence = result.state.citations.find(citation => citation.id === result.occurrenceId);
     return { html: occurrence?.html || '', text: occurrence?.text || '', sortedItems: occurrence?.sortedItems || occurrence?.items, sortable: result.rendered.style.sortable };
   } });
   if (!cluster) { message('Citation cancelled'); return; }
-  await command({ operation, id, cluster, target, expectedRevision }); await update();
+  await command({ operation, id, cluster, target, expectedRevision, metadataSource }); await update();
 }
 async function styles() {
   styleAbort?.abort(); const controller = styleAbort = new AbortController();
@@ -61,8 +62,12 @@ async function styles() {
   } catch (error) { if (error.name !== 'AbortError') message(error.message, true); }
 }
 try {
-  ({ api, context } = await connectReferencesHost());
-  ({ documentType } = await invoke({ operation: 'capabilities' }));
+  ({ api, context, officeCopy } = await connectReferencesHost());
+  const capabilities = await invoke({ operation: 'capabilities' }); documentType = capabilities.documentType;
+  const formats = ({ text: ['docx', 'odt'], spreadsheet: ['xlsx', 'ods'], presentation: ['pptx', 'odp'] })[documentType] || [];
+  for (const format of formats) document.querySelector('#copy-format').append(new Option(format.toUpperCase(), format));
+  document.querySelector('#copy-format').value = capabilities.format;
+  document.querySelector('#copy-name').value = 'Document copy.' + capabilities.format;
   await update(); await styles();
   const options = await api.project(context.projectId).request('citation-options');
   for (const locale of options.locales) document.querySelector('#locales').append(new Option(locale, locale));
@@ -86,6 +91,13 @@ try {
     try { await command({ operation: 'citations.import-snapshots', requestId: importRequestId, expectedRevision: current.revision }); }
     catch (error) { await update(); throw error; }
     importRequestId = null; await update(); message('Copied references imported and linked to this project library');
+  }));
+  document.querySelector('#copy-format').addEventListener('change', () => { const name = document.querySelector('#copy-name'); name.value = name.value.replace(/\.(docx|odt|xlsx|ods|pptx|odp)$/i, '') + '.' + document.querySelector('#copy-format').value; });
+  document.querySelector('#text-copy').addEventListener('click', () => run(async () => {
+    const result = await officeCopy({ name: document.querySelector('#copy-name').value, format: document.querySelector('#copy-format').value });
+    const url = new URL(result.browserUrl); if (url.protocol !== 'https:') throw Error('The copy did not return an authorized HTTPS view');
+    const link = document.querySelector('#copy-result'); link.href = url.href; link.hidden = false;
+    message('Saved a separate copy with formatted text citations.');
   }));
   let debounce; document.querySelector('#style-search').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(styles, 180); });
   let changedRegionTimer;

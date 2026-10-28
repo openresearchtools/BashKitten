@@ -10,13 +10,14 @@ import { compareSnapshots } from './snapshot-diff.mjs';
 const reads = new Set(['inspect', 'codes.region', 'selection', 'capabilities', 'citations.inspect', 'citations.prepare']);
 const nativeOperations = new Set([...reads, 'text.edit', 'text.append', 'table.insert', 'table.set', 'sheet.set', 'sheet.insert', 'sheet.rows', 'sheet.columns', 'slide.insert', 'slide.remove', 'shape.insert', 'shape.edit', 'format', 'native.uno']);
 const ownerKey = identity => {
+  if (identity?.kind === 'browser' && identity.backendId && identity.viewId && identity.grantId && identity.operationId) return identity.backendId + ':browser:' + identity.viewId + ':' + identity.operationId;
   if (!identity?.backendId || !identity?.workerId) throw new OfficeError('unauthorized', 'An active backend worker identity is required');
   return identity.backendId + ':' + identity.workerId;
 };
 
 // AuthorizeOpen belongs to the existing backend + WOPI file owner. Caller-supplied
 // tokens, origins and paths cannot become a session grant through this module.
-export function createOfficeService({ authorizeOpen, authorizeSession, authorizeRenew, authorizeSnapshot, references, sessionOptions = {}, Session = NativeOfficeSession } = {}) {
+export function createOfficeService({ resolveOpen, authorizeOpen, authorizeSession, authorizeRenew, authorizeSnapshot, registerExport, references, sessionOptions = {}, Session = NativeOfficeSession } = {}) {
   if (typeof authorizeOpen !== 'function') throw new Error('Office requires the backend authorized-open owner');
   const sessions = new Map(), opening = new Map();
   async function connectNative(grant, signal) {
@@ -36,12 +37,20 @@ export function createOfficeService({ authorizeOpen, authorizeSession, authorize
   }
   async function open(body, identity, signal) {
     const owner = ownerKey(identity);
-    const grant = await authorizeOpen(body, identity, { signal });
-    if (!grant?.documentId || !grant?.participantId) throw new OfficeError('invalid_grant', 'The Office host did not issue a document participant grant');
-    const key = owner + ':' + grant.documentId;
-    for (const session of sessions.values()) if (session.key === key && !session.native.closed) return describe(session);
+    // Resolve file authority through the existing registry before allocating a
+    // native token/browser launch. Repeated opens share one participant rather
+    // than leaking an unused launch for every cache hit.
+    const resolved = resolveOpen ? await resolveOpen(body, identity, { signal }) : null;
+    let grant = resolved ? null : await authorizeOpen(body, identity, { signal });
+    const documentId = resolved?.documentId || grant?.documentId;
+    const projectId = resolved ? resolved.projectId : grant?.projectId || identity.projectId || body.projectId;
+    if (!documentId) throw new OfficeError('invalid_grant', 'The Office host did not resolve an authorized document');
+    const key = owner + ':' + (projectId || '') + ':' + documentId;
+    for (const session of sessions.values()) if (session.key === key && !session.native.closed) { await authorizeSession?.(session.identity, { signal }); return describe(session); }
     if (opening.has(key)) return opening.get(key);
     const task = (async () => {
+      grant ||= await authorizeOpen(resolved, identity, { signal });
+      if (grant?.documentId !== documentId || !grant?.participantId || (resolved && (grant.projectId || '') !== (projectId || ''))) throw new OfficeError('invalid_grant', 'The Office host did not issue the resolved document participant grant');
       const native = await connectNative(grant, signal);
       try {
         if (authorizeRenew) native.startTokenRenewal((current, options) => authorizeRenew(current, identity, options));
@@ -73,6 +82,13 @@ export function createOfficeService({ authorizeOpen, authorizeSession, authorize
       documentType: session.native.status?.type, projectId: session.projectId, request, signal,
     });
   }
+  async function exportDocument(session, request, signal) {
+    const result = await session.native.export({ ...request, signal });
+    if (!registerExport) return result;
+    const registered = await registerExport({ grantId: session.identity.grantId, documentId: session.grant.documentId, participantId: session.grant.participantId, downloadUrl: result.downloadUrl, filename: result.name }, { signal });
+    if (typeof registered?.downloadUrl !== 'string' || new URL(registered.downloadUrl).protocol !== 'https:') throw new OfficeError('export_scope', 'The document host did not register an authorized HTTPS export');
+    return { ...result, downloadUrl: registered.downloadUrl };
+  }
 
   async function execute(sessionId, request, identity, { signal } = {}) {
     const session = owned(sessionId, identity);
@@ -83,7 +99,7 @@ export function createOfficeService({ authorizeOpen, authorizeSession, authorize
     if (request.operation === 'save') return session.native.save({ signal });
     if (request.operation === 'export') {
       if (Object.keys(request).some(key => !['operation', 'format', 'name'].includes(key))) throw new OfficeError('invalid_export', 'Export accepts format and name; unlinking or output paths need an explicit copy operation');
-      return session.native.export({ ...request, signal });
+      return exportDocument(session, request, signal);
     }
     if (request.operation === 'export.copy') {
       if (Object.keys(request).some(key => !['operation', 'format', 'name'].includes(key))) throw new OfficeError('invalid_export', 'A static citation copy accepts only format and name');
@@ -96,7 +112,8 @@ export function createOfficeService({ authorizeOpen, authorizeSession, authorize
         const { value: state } = await copy.native.call(nativeOperation, { operation: 'citations.inspect' }, { signal });
         await copy.native.call(nativeOperation, { operation: 'citations.unlink', expectedRevision: state.revision }, { signal, mutation: true });
         await copy.native.save({ signal });
-        const exported = await copy.native.export({ format: request.format, name: copied.name, signal });
+        if (identity.kind === 'browser') return { ...description, format: request.format, name: copied.name, citations: 'static-text', sourceDocumentId: session.grant.documentId };
+        const exported = await exportDocument(copy, { format: request.format, name: copied.name }, signal);
         return { ...description, ...exported, citations: 'static-text', sourceDocumentId: session.grant.documentId };
       } catch (error) { error.details = { ...error.details, copyDocumentId: copied.documentId, copySessionId: copy.id, sourceDocumentId: session.grant.documentId }; throw error; }
     }

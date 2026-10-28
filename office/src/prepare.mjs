@@ -66,6 +66,8 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
     'ssl.enable': 'false', 'ssl.termination': 'true', 'experimental_features': 'true',
     'storage.wopi[@allow]': 'true',
     'admin_console.enable': 'false', 'zotero.enable': 'false',
+    'fetch_update_check': '0', 'allow_update_popup': 'false',
+    'remote_config.remote_url': '', 'remote_font_config.url': '',
     'logging.level': 'warning', 'logging.level_startup': 'warning', 'logging.protocol': 'false',
     'browser_logging': 'false', 'stop_on_config_change': 'true',
   };

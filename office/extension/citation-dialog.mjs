@@ -14,9 +14,9 @@ try {
   const invoke = request => window.cool.callRemote(nativeOperation, request);
   const renderDocument = (state, { signal } = {}) => api.project(context.projectId).request('citations/render', { method: 'POST', body: state, signal });
   status.hidden = true;
-  const cluster = await chooseCitation({ api, projectId: context.projectId, initial: invocation.initial, style: invocation.style, preview: async (cluster, { signal } = {}) => {
-    const { operation, id, target, documentType } = invocation;
-    const result = await runCitationCommand({ invoke, renderDocument, documentType, projectId: context.projectId, request: { operation, id, target, cluster }, signal, preview: true });
+  const cluster = await chooseCitation({ api, projectId: context.projectId, initial: invocation.initial, style: invocation.style, embeddedItems: invocation.embeddedItems, preview: async (cluster, { signal } = {}) => {
+    const { operation, id, target, documentType, metadataSource } = invocation;
+    const result = await runCitationCommand({ invoke, renderDocument, documentType, projectId: context.projectId, request: { operation, id, target, cluster, metadataSource }, signal, preview: true });
     const citation = result.state.citations.find(c => c.id === result.occurrenceId);
     return { html: citation?.html || '', text: citation?.text || '', sortedItems: citation?.sortedItems || citation?.items, sortable: result.rendered.style.sortable };
   } });

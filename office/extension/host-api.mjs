@@ -27,20 +27,23 @@ export async function connectReferencesHost({ signal, timeoutMs = 15000 } = {}) 
   signal?.addEventListener('abort', dispose, { once: true });
   window.top.postMessage({ MessageId: 'BashKitten_ReferencesReady', nonce }, '*');
   let context; try { context = await ready; } catch (error) { dispose(); throw error; }
-  function request(path, { method = 'GET', body, signal } = {}) {
+  function send(message, { signal } = {}) {
     if (disposed) return Promise.reject(new Error('References context closed'));
-    if (!path.startsWith('/')) path = '/api/references/' + path;
-    const prefix = '/api/references/projects/' + encodeURIComponent(context.projectId);
-    if (!(path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix + '?'))) return Promise.reject(new Error('The References request is outside this document’s project'));
-    if (!['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) return Promise.reject(new Error('Invalid References method'));
     const requestId = String(++sequence);
     return new Promise((resolve, reject) => {
       const abort = () => { pending.delete(requestId); cleanup(); window.top.postMessage({ MessageId: 'BashKitten_ReferencesCancel', nonce, requestId }, origin); reject(new DOMException('Cancelled', 'AbortError')); };
       const cleanup = () => signal?.removeEventListener('abort', abort);
       if (signal?.aborted) { abort(); return; }
       pending.set(requestId, { requestId, resolve, reject, cleanup }); signal?.addEventListener('abort', abort, { once: true });
-      window.top.postMessage({ MessageId: 'BashKitten_ReferencesRequest', nonce, requestId, method, path, body }, origin);
+      window.top.postMessage({ ...message, nonce, requestId }, origin);
     });
   }
-  return { context, dispose, api: { request, project(projectId) { if (projectId !== context.projectId) throw new Error('References project mismatch'); return { request: (path, options) => request('/api/references/projects/' + encodeURIComponent(projectId) + '/' + path.replace(/^\//, ''), options) }; } } };
+  function request(path, { method = 'GET', body, signal } = {}) {
+    if (!path.startsWith('/')) path = '/api/references/' + path;
+    const prefix = '/api/references/projects/' + encodeURIComponent(context.projectId);
+    if (!(path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix + '?'))) return Promise.reject(new Error('The References request is outside this document’s project'));
+    if (!['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) return Promise.reject(new Error('Invalid References method'));
+    return send({ MessageId: 'BashKitten_ReferencesRequest', method, path, body }, { signal });
+  }
+  return { context, dispose, officeCopy: ({ name, format }, options) => send({ MessageId: 'BashKitten_OfficeCopy', name, format }, options), api: { request, project(projectId) { if (projectId !== context.projectId) throw new Error('References project mismatch'); return { request: (path, options) => request('/api/references/projects/' + encodeURIComponent(projectId) + '/' + path.replace(/^\//, ''), options) }; } } };
 }

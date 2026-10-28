@@ -393,8 +393,10 @@ export function nativeOperation(request) {
           const oldNote = citation.anchor.note ? anchor.getText() : null, oldRange = oldNote ? oldNote.getAnchor() : anchor;
           range = oldRange.getText().createTextCursorByRange(oldRange.getStart());
           if (!oldNote) range.gotoRange(oldRange.getEnd(), true);
+          const oldContent = oldNote && oldNote.createTextCursorByRange(anchor.getStart());
+          if (oldContent) oldContent.gotoRange(anchor.getEnd(), true);
           nativeMark(citation).dispose(); fieldCache = null;
-          if (oldNote) oldRange.getText().removeTextContent(oldNote);
+          if (oldNote) { oldContent.setString(''); if (!oldNote.getString().trim()) oldRange.getText().removeTextContent(oldNote); }
         } else if (intersectsManaged(range)) fail('The insertion target overlaps a managed citation');
         range.setString(''); controller.select(range);
         if (citation.note) fields.push(property('Wrapper', citation.note === 'endnote' ? 'Endnote' : 'Footnote'));
@@ -436,8 +438,10 @@ export function nativeOperation(request) {
     if (documentType === 'text') {
       const mark = nativeMark(citation);
       const note = citation.anchor.note && !unlink ? anchor.getText() : null;
-      if (!unlink && !note) anchor.setString(''); mark.dispose(); fieldCache = null;
-      if (note) note.getAnchor().getText().removeTextContent(note);
+      const range = anchor.getText().createTextCursorByRange(anchor.getStart()); range.gotoRange(anchor.getEnd(), true);
+      mark.dispose(); fieldCache = null;
+      if (!unlink) range.setString('');
+      if (note && !note.getString().trim()) note.getAnchor().getText().removeTextContent(note);
     } else if (documentType === 'spreadsheet') {
       if (!unlink) anchor.setString(''); writeObjectPayload(anchor, null);
       const names = model.getPropertyValue('NamedRanges'); if (citation.anchor.name && names.hasByName(citation.anchor.name)) names.removeByName(citation.anchor.name);
@@ -449,7 +453,7 @@ export function nativeOperation(request) {
     } else { writeObjectPayload(anchor, null); anchor.setName('Text_' + citation.id); }
   }
   const operation = request.operation;
-  if (operation === 'capabilities') return { documentType, adapterVersion: 1, preferredModel: false, nativeUno: true, citations: true, boundedInspection: true };
+  if (operation === 'capabilities') return { documentType, format: /\.(docx|odt|xlsx|ods|pptx|odp)$/i.exec(model.getURL())?.[1].toLowerCase() || ({ text: 'odt', spreadsheet: 'ods', presentation: 'odp' })[documentType], adapterVersion: 1, preferredModel: false, nativeUno: true, citations: true, boundedInspection: true };
   if (operation === 'selection') return { documentType, target: selectionTarget() };
   if (operation === 'codes.region') {
     if (documentType === 'text') {
@@ -475,6 +479,7 @@ export function nativeOperation(request) {
     const current = metadata(); checkRevision(current);
     const desired = request.state;
     if (desired.nativeSnapshot !== undefined && desired.nativeSnapshot !== snapshot(current)) fail('Native citation positions or text changed; inspect before preparing this operation');
+    const removedNotes = documentType === 'text' ? current.citations.filter(old => old.anchor?.note && !desired.citations.some(citation => citation.id === old.id)).map(old => anchorFor(old)).filter(anchor => anchor && anchor.getString().trim() === anchor.getText().getString().trim()).map(anchor => anchor.getText()) : [];
     for (const citation of desired.citations) {
       const old = current.citations.find(c => c.id === citation.id);
       if (old) { citation.anchor = old.anchor; if (!anchorFor(old)) fail('A citation anchor was deleted; reconcile it before refresh'); }
@@ -489,7 +494,9 @@ export function nativeOperation(request) {
         const location = citation.anchor ? anchorFor(citation) : writerRange(citation.target);
         const at = orderPosition(citation), notes = desired.noteType === 'endnote' ? model.getEndnotes() : model.getFootnotes(); let preceding = 0;
         for (let n = 0; n < notes.getCount(); n++) {
-          const pos = writerLocation(notes.getByIndex(n).getAnchor());
+          const nativeAnchor = notes.getByIndex(n).getAnchor();
+          if (removedNotes.some(note => nativeAnchor.getText().compareRegionStarts(nativeAnchor, note.getAnchor()) === 0)) continue;
+          const pos = writerLocation(nativeAnchor);
           for (let i = 0; i < Math.max(pos.order.length, at.length); i++) {
             if ((pos.order[i] || 0) < (at[i] || 0)) { preceding++; break; }
             if ((pos.order[i] || 0) > (at[i] || 0)) break;
@@ -530,21 +537,21 @@ export function nativeOperation(request) {
     }
     return result;
   }
+  if (operation === 'native.uno') {
+    if (typeof request.command !== 'string' || !/^\.uno:[A-Za-z0-9_]+$/.test(request.command)) fail('A native .uno command is required');
+    const types = { string: uno.type.string, boolean: uno.type.boolean, short: uno.type.short, long: uno.type.long, float: uno.type.float, double: uno.type.double };
+    const args = (request.arguments || []).map(argument => {
+      if (!types[argument.type]) fail('Unsupported UNO value type; use native.script for structured native values');
+      return new css.beans.PropertyValue({ Name: text(argument.name, 100), Handle: 0, Value: new uno.Any(types[argument.type], argument.value), State: css.beans.PropertyState.DIRECT_VALUE });
+    });
+    const result = css.frame.DispatchHelper.create(uno.componentContext).executeDispatch(model.getCurrentController().getFrame(), request.command, '', 0, args);
+    return { dispatched: request.command, result };
+  }
   const undo = model.getUndoManager(), undoTitle = 'References / Pi: ' + operation + ' ' + Date.now();
   const previousMetadata = has(propertyName) ? properties.getPropertyValue(propertyName) : null;
   let failed = false;
   undo.enterUndoContext(undoTitle);
   try {
-    if (operation === 'native.uno') {
-      if (typeof request.command !== 'string' || !/^\.uno:[A-Za-z0-9_]+$/.test(request.command)) fail('A native .uno command is required');
-      const types = { string: uno.type.string, boolean: uno.type.boolean, short: uno.type.short, long: uno.type.long, float: uno.type.float, double: uno.type.double };
-      const args = (request.arguments || []).map(argument => {
-        if (!types[argument.type]) fail('Unsupported UNO value type; use native.script for structured native values');
-        return new css.beans.PropertyValue({ Name: text(argument.name, 100), Handle: 0, Value: new uno.Any(types[argument.type], argument.value), State: css.beans.PropertyState.DIRECT_VALUE });
-      });
-      const result = css.frame.DispatchHelper.create(uno.componentContext).executeDispatch(model.getCurrentController().getFrame(), request.command, '', 0, args);
-      return { dispatched: request.command, result };
-    }
     if (operation === 'text.edit') {
       requireType('text'); const range = writerRange(request.target);
       if (intersectsManaged(range)) fail('Prose edit overlaps a managed citation; use citation operations to edit it');

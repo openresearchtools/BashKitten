@@ -6,7 +6,7 @@ browser integration. The pinned implementation is `cp-26.04.5-2`, commit
 `42745e44dd8530fac7acd5f46cb7571ceea63c6a`; its untouched source and notices are
 under `upstream/online/source`.
 
-`createOfficeService()` accepts the existing backend's `authorizeOpen`,
+`createOfficeService()` accepts the existing backend's `resolveOpen`, `authorizeOpen`,
 `authorizeSession`, `authorizeRenew`, `authorizeSnapshot` and References adapters.
 It opens an independently authenticated native participant for Pi using normal
 `coolclient`, `load`, `executescript`, UNO, save and export messages. The trusted
@@ -18,6 +18,9 @@ writable host grant made read-only by a native lock failure. Token renewal uses
 the existing host authority and native `resetaccesstoken`, preserving the view;
 it can run while a native save awaits renewal. Only an explicit native
 `docunloading` load response retries with the released client's bounded backoff.
+The registry resolves authority and document/project identity before allocating
+native credentials. Repeated and concurrent opens share the existing participant
+and revalidate its captured grant instead of creating unused browser launches.
 
 Private routes are `POST /sessions`, `POST /sessions/:id/commands`,
 `DELETE /sessions/:id` and `POST /snapshots/diff`. Runtime adapters wrap results
@@ -39,6 +42,11 @@ keep the returned session open until the download finishes. Unknown export
 options are rejected. History restore uses a separately authorized temporary
 view and the native `versionrestore prerestore` broker acknowledgement after
 save/close; a browser assertion cannot authorize a restore.
+The panel's explicit text-copy action uses its existing frame nonce and captured
+browser grant to call this same operation. Its temporary native views are scoped
+to the individual action; the ordinary browser URL opens the saved copy. Native
+export URLs are registered with the existing file owner before being returned
+through the service, so ordinary browser opening retains the authorized route.
 
 ## Replaceable References extension
 
@@ -116,11 +124,22 @@ source retained its citation. Namespace-aware snapshot comparison identified
 changed semantic parts for all six formats. Native restore acknowledgement and
 Writer inline/footnote/endnote transitions have focused proofs.
 
+The 28 October native gateway run used artifact manifest SHA256
+`6742ea3282e39d416eb0d94e45229eca7ceee447633fab2e4aa2935140dd16db`
+and packaged extension ZIP SHA256
+`c57cd3fa1e3e18cdaada5d285faa3516bd59051a22003d66f83891bf6ca08eea`.
+The loaded native adapter source SHA256 was
+`2e6c3f099d04e63ab9b7085902bf58496a9cae85dfd762aaf34120aff51a2e28`.
+On a fresh DOCX, native Undo/Redo restored both field command metadata and
+document-property revisions for insertion and locator edits, including the same
+occurrence ID and rendered text. Full backend shutdown/reopen preserved managed
+citations in DOCX/XLSX/PPTX. The generic attribute seam independently preserved
+exact 43,709-byte native attribute payloads through native clipboard and all six
+format roundtrips.
+
 These component proofs are not installed product acceptance. Current work still
-includes the generic OOXML carrier patch's runtime proof, comprehensive
-cross-document copy behavior and project reconciliation, native undo/redo with
-the updated artifact, full desktop/phone chooser behavior and installed
-Linux/Termux/browser flows. The stock Writer native field commands lose command
-metadata on redo and retain the updated command during undo; the generic field
-command patch addresses that measured gap and has compiled, but runtime proof
-remains a gate. No six-format roundtrip result establishes those missing checks.
+includes comprehensive cross-document copy/move identity behavior, full
+desktop/phone chooser behavior and installed Linux/Termux/browser flows.
+In particular, an unrefreshed copied cell has a distinct provisional occurrence
+identity until its native payload is persisted by a citation operation. No
+six-format roundtrip result establishes the missing installed UI checks.
