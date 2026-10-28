@@ -110,9 +110,14 @@ def curate(root, target):
     if target == 'linux':
         shutil.rmtree(root / 'skills/termux-display')
         shutil.rmtree(root / 'skills/phoneuse', ignore_errors=True)
-    package['pi']['skills'] = ['./skills/browser', './skills/websearch', './skills/subagents', './skills/chats', './skills/ask-user', './desktop-guides/termux-use', './desktop-guides/computer-use']
-    if target == 'android':
-        package['pi']['skills'].extend(['./skills/termux-display', './skills/phoneuse'])
+    omitted = {'./skills/browser-' + ('android' if target == 'linux' else 'linux')}
+    if target == 'linux':
+        omitted.update({'./skills/termux-display', './skills/phoneuse'})
+    renamed = {'./skills/browser-' + target: './skills/browser',
+               './skills/web-search': './skills/websearch'}
+    package['pi']['skills'] = [renamed.get(value, value) for value in package['pi']['skills']
+                               if value not in omitted]
+    package['pi']['skills'].extend(['./desktop-guides/termux-use', './desktop-guides/computer-use'])
     package['bashkitten'] = {'browserGuides': guides}
     package_file.write_text(json.dumps(package, indent=2) + '\n')
 

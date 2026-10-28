@@ -47,9 +47,13 @@ async function register() {
   const manifest = JSON.parse(await fs.readFile(path.join(integrationRoot, 'package.json'), 'utf8'));
   const role = process.env.BASHKITTEN_EXECUTION_ROLE;
   const roleGuide = role === 'termux' ? 'termux-use' : role === 'container' ? 'computer-use' : null;
-  const commonSkills = manifest.bashkitten?.browserGuides
-    ? manifest.pi.skills.filter(directory => !directory.startsWith('./desktop-guides/') && (directory !== './skills/phoneuse' || role === 'termux')).map(directory => directory.replace(/^\.\//, '') + '/SKILL.md')
-    : [...previousAllSkills, 'skills/chats/SKILL.md', 'skills/ask-user/SKILL.md', ...(role === 'termux' ? ['skills/phoneuse/SKILL.md'] : [])];
+  const commonSkills = manifest.pi.skills.filter(directory =>
+    !directory.startsWith('./desktop-guides/') &&
+    (directory !== './skills/phoneuse' || role === 'termux') &&
+    (directory !== './skills/browser-android' || platform === 'termux') &&
+    (directory !== './skills/browser-linux' || platform !== 'termux') &&
+    (directory !== './skills/termux-display' || platform === 'termux')
+  ).map(directory => directory.replace(/^\.\//, '') + '/SKILL.md');
   const skills = [...commonSkills];
   if (roleGuide) {
     const guide = `desktop-guides/${roleGuide}/SKILL.md`;

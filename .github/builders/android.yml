@@ -23,6 +23,9 @@ run-name: BashKitten ${{ inputs.source_sha }} / ${{ inputs.request_id }}
       environments_run:
         required: true
         type: string
+      office_run:
+        required: true
+        type: string
 permissions:
   contents: read
   actions: read
@@ -188,7 +191,6 @@ jobs:
       run: |
         "$SCCACHE_PATH" --show-stats --stats-format=json > artifacts/sccache-gecko.json
         "$SCCACHE_PATH" --show-stats >> "$GITHUB_STEP_SUMMARY"
-      if: (success()) && steps.component.outputs.hit != 'true'
     - name: Obtain the actual companion component licenses
       env:
         GH_TOKEN: ${{ github.token }}
@@ -196,8 +198,9 @@ jobs:
         SEARCH_RUN: ${{ inputs.search_run || github.run_id }}
         NODE_RUN: ${{ inputs.node_run || github.run_id }}
         ENVIRONMENTS_RUN: ${{ inputs.environments_run || github.run_id }}
+        OFFICE_RUN: ${{ inputs.office_run || github.run_id }}
       run: |
-        for item in "auth:$AUTH_RUN:auth-termux-$TERMUX_ARCH" "search:$SEARCH_RUN:search-runtime-termux-$TERMUX_ARCH" "node:$NODE_RUN:node-runtime-termux-$TERMUX_ARCH" "display:$ENVIRONMENTS_RUN:display-loader-termux" "os:$ENVIRONMENTS_RUN:os-termux-$TERMUX_ARCH"; do
+        for item in "auth:$AUTH_RUN:auth-termux-$TERMUX_ARCH" "search:$SEARCH_RUN:search-runtime-termux-$TERMUX_ARCH" "node:$NODE_RUN:node-runtime-termux-$TERMUX_ARCH" "display:$ENVIRONMENTS_RUN:display-loader-termux" "os:$ENVIRONMENTS_RUN:os-termux-$TERMUX_ARCH" "office:$OFFICE_RUN:office-termux-$TERMUX_ARCH"; do
           IFS=: read -r target run artifact <<< "$item"
           ready=false
           for attempt in $(seq 1 60); do
@@ -213,6 +216,7 @@ jobs:
           --auth-archive "$RUNNER_TEMP/companion/auth/auth-termux-$TERMUX_ARCH.tar.gz" \
           --search-archive "$RUNNER_TEMP/companion/search/search-runtime-termux-$TERMUX_ARCH.tar.zst" \
           --node-archive "$RUNNER_TEMP/companion/node/node-runtime-termux-$TERMUX_ARCH.tar.gz" \
+          --office-archive "$RUNNER_TEMP/companion/office/office-termux-$TERMUX_ARCH.tar.xz" \
           --termux-display-dir "$RUNNER_TEMP/companion/display" \
           --os-package "$(find "$RUNNER_TEMP/companion/os" -maxdepth 1 -name '*.deb')" \
           --output "$BASHKITTEN_COMPANION_LICENSES"

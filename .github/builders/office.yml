@@ -1,0 +1,132 @@
+name: Pinned native Office components
+run-name: Office ${{ inputs.source_sha }} / ${{ inputs.request_id }}
+'on':
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact BashKitten source commit
+        required: true
+        type: string
+      request_id:
+        description: Collection request from the normal package build
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: office-${{ inputs.source_sha }}
+  cancel-in-progress: false
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux
+            architecture: amd64
+            runner: ubuntu-24.04
+          - target: linux
+            architecture: arm64
+            runner: ubuntu-24.04-arm
+          - target: termux
+            architecture: aarch64
+            runner: ubuntu-24.04
+          - target: termux
+            architecture: x86_64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    env:
+      CCACHE_DIR: ${{ runner.temp }}/office-ccache
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPILERCHECK: content
+      GOTELEMETRY: 'off'
+      DO_NOT_TRACK: '1'
+    steps:
+      - name: Require an immutable source commit
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: '[[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: openresearchtools/bashkitten
+          ref: ${{ inputs.source_sha }}
+          path: source
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /office/
+            /files/patches/collabora/
+            /agent/packaging/office/
+            /agent/packaging/node/
+            /agent/vendor/node/libcxx/
+            /agent/vendor/node/sources.json
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.13.0'
+      - name: Prepare native build prerequisites
+        run: bash source/agent/packaging/office/prepare-runner.sh
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: office-ccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ hashFiles('source/office/upstream/online/source.json', 'source/office/upstream/dependencies/sources.json', 'source/agent/packaging/office/**', 'source/office/patches/**', 'source/files/patches/collabora/**') }}-${{ github.run_id }}
+          restore-keys: |
+            office-ccache-${{ matrix.target }}-${{ matrix.architecture }}-
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: matrix.target == 'termux'
+        with:
+          path: ${{ runner.temp }}/office-ndk-archive
+          key: office-ndk-${{ hashFiles('source/agent/packaging/node/lock.json') }}
+      - name: Prepare the existing pinned native Termux toolchain
+        if: matrix.target == 'termux'
+        run: |
+          python3 - <<'PYTHON'
+          import importlib.util, os, pathlib, subprocess
+          root = pathlib.Path('source').resolve()
+          spec = importlib.util.spec_from_file_location('node_build', root / 'agent/packaging/node/build.py')
+          native = importlib.util.module_from_spec(spec); spec.loader.exec_module(native)
+          cache = pathlib.Path(os.environ['RUNNER_TEMP']) / 'office-ndk-archive'; cache.mkdir(exist_ok=True)
+          archive = native.fetch(native.LOCK['termux']['dependency_sources']['libc++'], cache)
+          destination = pathlib.Path(os.environ['RUNNER_TEMP']) / 'office-ndk'; destination.mkdir(exist_ok=True)
+          subprocess.run(['unzip', '-q', str(archive), '-d', str(destination)], check=True)
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('OFFICE_NDK=' + str(destination / 'android-ndk-r30') + '\n')
+              env.write('OFFICE_NDK_ARCHIVE=' + str(archive) + '\n')
+          PYTHON
+      - name: Build native engine and server from retained sources
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/office-output"
+          recipe=build.py
+          native_args=()
+          if [[ "$TARGET" = termux ]]; then
+            recipe=termux.py
+            native_args=(--architecture "$ARCHITECTURE" --ndk "$OFFICE_NDK" --ndk-archive "$OFFICE_NDK_ARCHIVE")
+          fi
+          python3 -B "source/agent/packaging/office/$recipe" "${native_args[@]}" \
+            --work "$RUNNER_TEMP/office-work" --cache "$RUNNER_TEMP/office-tarballs" \
+            --output "$RUNNER_TEMP/office-output" --jobs 2 \
+            2>&1 | tee "$RUNNER_TEMP/office-build.log"
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: office-${{ matrix.target }}-${{ matrix.architecture }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/office-output/
+          if-no-files-found: error
+          compression-level: 0
+      - name: Collect build diagnostics
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/office-diagnostics"
+          cp "$RUNNER_TEMP/office-build.log" "$RUNNER_TEMP/office-diagnostics/" 2>/dev/null || true
+          df -h > "$RUNNER_TEMP/office-diagnostics/disk.txt"
+          ccache -s > "$RUNNER_TEMP/office-diagnostics/ccache.txt"
+          dpkg-query -W -f='${Package}\t${Version}\n' > "$RUNNER_TEMP/office-diagnostics/builder-packages.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: office-build-diagnostics-${{ matrix.target }}-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/office-diagnostics/

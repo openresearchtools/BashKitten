@@ -138,6 +138,8 @@ def install(args, app, revision, cache, checked_archive, extract):
             if (metadata.get('schema') != 1 or metadata.get('target') != args.target
                     or metadata.get('architecture') != args.architecture or metadata.get('sourceCommit') != revision):
                 raise ValueError('Native ' + component + ' artifact target/source mismatch')
+            if metadata.get('development') and not getattr(args, 'integration_iteration', False):
+                raise ValueError('Uncommitted native ' + component + ' build inputs cannot enter a release package')
             if not isinstance(metadata.get('depends'), list) or not (root / 'licenses.json').is_file():
                 raise ValueError('Native ' + component + ' artifact lacks dependency/legal metadata')
             if not metadata.get('files'):
@@ -147,24 +149,28 @@ def install(args, app, revision, cache, checked_archive, extract):
             shutil.copytree(root, destination, dirs_exist_ok=True, symlinks=True)
         result[component] = {'available': True, 'archive': archive.name, 'sha256': digest, 'metadata': metadata}
     if result['office']['available']:
-        archive = app / 'office/runtime/share/bashkitten/org.bashkitten.references.zip'
-        archive.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix='references-office-extension-', dir=app.parent) as temporary:
-            destination = Path(temporary)
-            subprocess.run(['node', str(ROOT / 'office/package-extension.mjs'), str(destination)], check=True)
-            legal = destination / 'legal'; legal.mkdir(exist_ok=True)
-            for source, name in [(ROOT / 'agent/LICENSE', 'BashKitten-LICENSE'),
-                                 (ROOT / 'references/THIRD_PARTY_NOTICES.md', 'References-NOTICE'),
-                                 (ROOT / 'references/vendor/classic-dialog/source/COPYING', 'Classic-dialog-LICENSE')]:
-                shutil.copy2(source, legal / name)
-            with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as output:
-                for path in sorted(destination.rglob('*')):
-                    if not path.is_file():
-                        continue
-                    entry = zipfile.ZipInfo(str(path.relative_to(destination)), (1980, 1, 1, 0, 0, 0))
-                    entry.compress_type = zipfile.ZIP_DEFLATED
-                    entry.external_attr = 0o100644 << 16
-                    output.writestr(entry, path.read_bytes())
-        result['office']['extension'] = {'file': str(archive.relative_to(app / 'office/runtime')),
-                                         'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()}
+        result['office']['extension'] = office_extension(app / 'office/runtime')
     return result
+
+
+def office_extension(runtime):
+    archive = runtime / 'share/bashkitten/org.bashkitten.references.zip'
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='references-office-extension-', dir=runtime.parent) as temporary:
+        destination = Path(temporary)
+        subprocess.run(['node', str(ROOT / 'office/package-extension.mjs'), str(destination)], check=True)
+        legal = destination / 'legal'; legal.mkdir(exist_ok=True)
+        for source, name in [(ROOT / 'agent/LICENSE', 'BashKitten-LICENSE'),
+                             (ROOT / 'references/THIRD_PARTY_NOTICES.md', 'References-NOTICE'),
+                             (ROOT / 'references/vendor/classic-dialog/source/COPYING', 'Classic-dialog-LICENSE')]:
+            shutil.copy2(source, legal / name)
+        with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as output:
+            for path in sorted(destination.rglob('*')):
+                if not path.is_file():
+                    continue
+                entry = zipfile.ZipInfo(str(path.relative_to(destination)), (1980, 1, 1, 0, 0, 0))
+                entry.compress_type = zipfile.ZIP_DEFLATED
+                entry.external_attr = 0o100644 << 16
+                output.writestr(entry, path.read_bytes())
+    return {'file': str(archive.relative_to(runtime)),
+            'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()}

@@ -1,0 +1,28 @@
+From: BashKitten contributors
+Subject: [PATCH] Accept the pinned revision for source-archive build metadata
+
+The engine source archive has no nested Git repository. Allow the packaging
+owner to supply its verified immutable revision rather than inheriting an
+unrelated enclosing checkout or recording an empty build id. The native
+version/setup config owner and ordinary Git-checkout default stay unchanged.
+
+--- a/engine/instsetoo_native/CustomTarget_setup.mk
++++ b/engine/instsetoo_native/CustomTarget_setup.mk
+@@ -84,7 +84,7 @@
+ 	$(call gb_Trace_StartRange,$(subst $(WORKDIR)/,,$@),ECH)
+ 	( \
+ 		echo '[Bootstrap]' \
+-		&& echo 'buildid=$(shell cd $(SRCDIR) && git log -1 --format=%H)' \
++		&& echo 'buildid=$(if $(SOURCE_REVISION),$(SOURCE_REVISION),$(shell cd $(SRCDIR) && git log -1 --format=%H))' \
+ 	) > $@
+ 	$(call gb_Trace_EndRange,$(subst $(WORKDIR)/,,$@),ECH)
+ 
+@@ -141,7 +141,7 @@
+ define instsetoo_native_genversionini
+ [Version]
+ AllLanguages=$(if $(gb_WITH_LANG),$(gb_WITH_LANG),en-US)
+-buildid=$(shell cd $(SRCDIR) && git log -1 --format=%H)
++buildid=$(if $(SOURCE_REVISION),$(SOURCE_REVISION),$(shell cd $(SRCDIR) && git log -1 --format=%H))
+ ReferenceOOoMajorMinor=4.1
+ Vendor=$(OOO_VENDOR)
+ endef
