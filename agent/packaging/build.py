@@ -43,6 +43,11 @@ def license_files(root):
         (path.suffix.lower() in {'', '.txt', '.md', '.rst', '.lib', '.lesser'} or
          re.fullmatch(r'\.\d+', path.suffix)) and (
         re.match(r'^(?:licen[cs]e|copying|copyright|notice|third[_-]party)(?:$|[-._])', path.name, re.I)
+        # Native packages preserve donor basenames after a component prefix.
+        # Require their conventional uppercase legal marker, not an incidental
+        # lowercase "license" word in a source/documentation filename.
+        or re.match(r'^[A-Za-z0-9][A-Za-z0-9+_.-]*[-_](?:LICEN[CS]E|COPYING|COPYRIGHT|NOTICE|THIRD[_-]PARTY)(?:$|[-._])', path.name)
+        or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9+_.-]*[-_](?:A?GPL|LGPL)[-_]?v?\d+(?:\.\d+)*(?:-(?:only|or-later))?(?:\.(?:txt|md|rst|lib|lesser))?', path.name)
         or any(part.lower() in {'licenses', 'licences', 'legal'}
                for part in path.relative_to(root).parts[:-1])))
 
