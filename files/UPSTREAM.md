@@ -44,6 +44,23 @@ Updates must apply with zero fuzz; do not edit pristine source to make a patch f
 Remove our provider hook if a later selected upstream release offers the same
 replaceable boundary natively.
 
+Files branding uses the selected release's native `frontend.name`, description,
+favicon/login icon, external links, background colors and `customCSS` facilities.
+The artwork is the existing BashKitten image; the neutral light/dark palette and
+typography match the browser's current settings/Agent owners. Seasonal decoration
+and upstream release links are disabled through native configuration. The native
+external link opens a small offline About Files page within the existing scoped
+gateway, with the complete unchanged Apache license and packaged notice inventory.
+Upstream names appear there as source attribution, not as this modified product's
+name. Apache-2.0 sections 4 and 6 retain copyright/license/change notices and do
+not grant upstream product marks. No separate trademark policy was present in the
+pinned source; this is not a claim that any broader mark permission was granted.
+The small metadata patch covers only two gaps in native configuration: the fixed
+Apple installation title and three hardcoded upstream canonical URLs. It reuses
+the configured name and removes the irrelevant canonical tags. Retire it when
+upstream's branding owner supplies those behaviors. The original source/license,
+source manifests and all other notices remain unchanged.
+
 `vendor/dependencies/sources.json` binds the exact Quantum Go/npm lockfiles to
 92 Go modules and 460 npm package archives, including target-specific optional
 packages. Go module sums and npm SRI values are preserved, as are archive hashes

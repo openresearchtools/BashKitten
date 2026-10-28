@@ -1,0 +1,24 @@
+--- a/frontend/public/index.html
++++ b/frontend/public/index.html
+@@ -22,7 +22,8 @@
+   <!-- Add to home screen for Safari on iOS/iPadOS -->
+   <meta name="apple-mobile-web-app-capable" content="yes">
+   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+-  <meta name="apple-mobile-web-app-title" content="assets">
++  <!-- BashKitten change: use the native configured product name. -->
++  <meta name="apple-mobile-web-app-title" content="{{ .htmlVars.title }}">
+   <link rel="apple-touch-icon" sizes="180x180" href="{{ .htmlVars.appIcon }}">
+ 
+   <!-- Add to home screen for Windows -->
+@@ -45,9 +46,8 @@
+   <meta name="twitter:description" content="{{ .htmlVars.description }}">
+   <meta name="twitter:image" content="{{ .htmlVars.image }}">
+ 
+-  <link rel="canonical" href="https://github.com/gtsteffaniak/filebrowser">
+-  <link rel="canonical" href="https://github.com/quantumx-apps">
+-  <link rel="canonical" href="https://filebrowserquantum.com">
++  <!-- BashKitten change: authenticated folder views are not canonical pages of
++       the upstream project. Source attribution is retained in About Files. -->
+ 
+   <!-- Injected variables come from backend server (JSON block is not subject to script-src CSP) -->
+   <script id="app-config" type="application/json">{{ .globalVars }}</script>

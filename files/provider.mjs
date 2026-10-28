@@ -31,7 +31,7 @@ export async function prepareFiles({ dataRoot, scope, endpoint, privatePaths = [
     const rulesFor = folder => [{ folderPath: '/', ignoreSymlinks: true }, { fileStartsWith: '.bashkitten-save-' }, { fileStartsWith: '.bashkitten-restore-' }, ...privatePaths.filter(p => p === folder || p.startsWith(folder + path.sep)).flatMap(p => { const relative = p.slice(folder.length) || '/'; return [{ folderPath: relative, viewable: false }, { filePath: relative, viewable: false }]; })];
     const source = { name: sourceName(scope), path: root, config: { createUserDir: false, defaultEnabled: false, defaultUserScope: '/', private: true, defaultPermissions: { view: false, download: false, modify: false, delete: false, create: false, configured: true }, rules: rulesFor(root) } };
     const sources = (previous?.server?.sources || []).filter(entry => entry.path !== root).map(entry => ({ ...entry, config: { ...entry.config, rules: rulesFor(entry.path) } })); sources.push(source);
-    const config = { server: { disableUpdateCheck: true, database: { path: path.join(directory, 'quantum.sqlite') }, cacheDir: path.join(directory, 'cache'), sources }, http: { requestTimeoutMs: 120000, proxyTransferTimeouts: true, socket: socketPath, baseURL: '/', disableWebDAV: true, trustProxyHeaders: true }, auth: { adminUsername: bootstrap, adminPassword: previous?.auth?.adminPassword || randomBytes(48).toString('base64url'), key: previous?.auth?.key || randomBytes(48).toString('base64url'), methods: { noauth: false, password: { enabled: false }, proxy: { enabled: true, header: 'X-BashKitten-Quantum-User' } } }, frontend: { name: 'BashKitten Files', favicon: path.join(moduleRoot, 'web', 'bashkitten.png'), loginIcon: path.join(moduleRoot, 'web', 'bashkitten.png'), description: 'Files', disableDefaultLinks: true, disablePWAInstall: true, styling: { disableEventThemes: true, customCSS: path.join(moduleRoot, 'web', 'quantum.css'), darkBackground: '#20201f', lightBackground: '#faf9f7' } }, userDefaults: { ui: { darkMode: true }, account: { disableSettings: true, permissions: { admin: false, api: false, share: false, realtime: true } }, preview: { office: false } }, integrations: { media: { ffmpegPath: path.join(moduleRoot, 'bin') } } };
+    const config = { server: { disableUpdateCheck: true, database: { path: path.join(directory, 'quantum.sqlite') }, cacheDir: path.join(directory, 'cache'), sources }, http: { requestTimeoutMs: 120000, proxyTransferTimeouts: true, socket: socketPath, baseURL: '/', disableWebDAV: true, trustProxyHeaders: true }, auth: { adminUsername: bootstrap, adminPassword: previous?.auth?.adminPassword || randomBytes(48).toString('base64url'), key: previous?.auth?.key || randomBytes(48).toString('base64url'), methods: { noauth: false, password: { enabled: false }, proxy: { enabled: true, header: 'X-BashKitten-Quantum-User' } } }, frontend: { name: 'Files', favicon: path.join(moduleRoot, 'web', 'bashkitten.png'), loginIcon: path.join(moduleRoot, 'web', 'bashkitten.png'), description: 'Files · BashKitten', disableDefaultLinks: true, externalLinks: [{ text: 'About Files', title: 'BashKitten · source and licenses', url: '?bashkitten=about' }], disablePWAInstall: true, styling: { disableEventThemes: true, customCSS: path.join(moduleRoot, 'web', 'quantum.css'), darkBackground: '#1e1e1e', lightBackground: '#f3f3f3' } }, userDefaults: { ui: { darkMode: true }, account: { disableSettings: true, permissions: { admin: false, api: false, share: false, realtime: true } }, preview: { office: false } }, integrations: { media: { ffmpegPath: path.join(moduleRoot, 'bin') } } };
     await fs.mkdir(config.server.cacheDir, { recursive: true, mode: 0o700 });
     const content = JSON.stringify(config); const changed = !previous || JSON.stringify(previous) !== content; if (changed) await atomic(filename, config);
     const binary = path.join(moduleRoot, 'bin', 'filebrowser');
@@ -94,6 +94,25 @@ export async function handleFiles(req, res, { dataRoot, scope, basePath, signal,
   const route = nativeRoute('/' + url.pathname.slice(basePath.length));
   const relative = route.decoded;
   for (const key of ['auth', 'jwt', 'access_token']) url.searchParams.delete(key);
+  // Native externalLinks accepts a query-only URL, which stays inside this
+  // authenticated launch even while browsing nested folders. This is our legal
+  // document, not a second Files UI or a replacement for native branding.
+  if (url.searchParams.has('bashkitten')) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') throw failure(405, 'Files information is read-only');
+    const page = url.searchParams.get('bashkitten');
+    let content, type;
+    if (page === 'about') {
+      const license = await fs.readFile(path.join(moduleRoot, 'legal', 'Quantum-LICENSE'), 'utf8');
+      const escape = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+      content = (await fs.readFile(path.join(moduleRoot, 'web', 'about.html'), 'utf8')).replace('{{QUANTUM_LICENSE}}', escape(license));
+      type = 'text/html; charset=utf-8';
+    } else if (page === 'licenses') {
+      content = await fs.readFile(path.join(moduleRoot, 'licenses.json'), 'utf8');
+      type = 'application/json; charset=utf-8';
+    } else throw failure(404, 'Unknown Files information page');
+    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'", 'X-Content-Type-Options': 'nosniff' });
+    res.end(req.method === 'HEAD' ? undefined : content); return;
+  }
   if (relative === '/api/document-provider/open') {
     if (req.method !== 'GET' || typeof openOffice !== 'function') throw failure(503, 'Office is unavailable');
     if (url.searchParams.get('source') !== sourceName(scope)) throw failure(403, 'Wrong Files source');
