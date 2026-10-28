@@ -102,24 +102,29 @@
     {
       "ecosystem": "native",
       "name": "dav1d",
-      "version": "1.5.1",
-      "url": "https://code.videolan.org/videolan/dav1d/-/archive/1.5.1/dav1d-1.5.1.tar.gz",
+      "version": "1.5.4",
+      "url": "https://downloads.videolan.org/pub/videolan/dav1d/1.5.4/dav1d-1.5.4.tar.xz",
       "role": "runtime-source",
-      "filename": "dav1d-1.5.1.tar.gz",
+      "filename": "dav1d-1.5.4.tar.xz",
       "archive": {
-        "sha256": "fa635e2bdb25147b1384007c83e15de44c589582bb3b9a53fc1579cb9d74b695",
-        "size": 1710628,
+        "sha256": "686616b7c69eb88d44459391ab25cac13b6647a3b288835c5784e71c1514a5c5",
+        "size": 1038852,
         "parts": [
           {
-            "file": "archives/native/dav1d-1.5.1.tar.gz",
-            "sha256": "fa635e2bdb25147b1384007c83e15de44c589582bb3b9a53fc1579cb9d74b695",
-            "size": 1710628
+            "file": "archives/native/dav1d-1.5.4.tar.xz",
+            "sha256": "686616b7c69eb88d44459391ab25cac13b6647a3b288835c5784e71c1514a5c5",
+            "size": 1038852
           }
         ]
       },
       "notices": [
-        "dav1d-1.5.1/COPYING"
-      ]
+        "dav1d-1.5.4/COPYING"
+      ],
+      "supersedes": {
+        "version": "1.5.1",
+        "archiveSha256": "fa635e2bdb25147b1384007c83e15de44c589582bb3b9a53fc1579cb9d74b695"
+      },
+      "checksumSource": "https://downloads.videolan.org/pub/videolan/dav1d/1.5.4/dav1d-1.5.4.tar.xz.sha256"
     },
     {
       "ecosystem": "native",
