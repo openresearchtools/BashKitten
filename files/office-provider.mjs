@@ -18,7 +18,7 @@ function call(socketPath, token, target, value, signal) {
 }
 export function createOfficeProvider({ dataRoot, environmentId, authorizeOperation, authorizePath, ensureRunning, collaboraInternalURL, wopiURL, extension, coordinateNativeRestore, referenceContext, referenceRequest, officeCopy, addonBinary = path.join(root, 'bin', 'files-office-addon'), socketRoot = path.join(dataRoot, 'run') }) {
   const owner = createDocumentOwner({ dataRoot, environmentId, authorizeOperation, authorizePath });
-  const launches = new Map(), issued = new Map(); let starting; let callback; let callbackToken; let config;
+  const launches = new Map(), issued = new Map(), downloads = new Map(); let starting; let callback; let callbackToken; let config;
   function configure(value) {
     const changed = value.collaboraInternalURL !== collaboraInternalURL || value.wopiURL !== wopiURL || JSON.stringify(value.extension) !== JSON.stringify(extension);
     if (changed && (starting || issued.size)) throw fail(409, 'A running Office owner cannot be retargeted');
@@ -111,7 +111,50 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     const browser = { ...input, ...input.browserView };
     const browserUrl = new URL(browser.basePath + 'office/' + id, browser.origin).href + (browser.bootstrapQuery || '');
     launches.set(id, { session, claims, input, browser, browserGrantId: browser.grantId, browserUrl, expires: session.accessTokenTtl });
+    issued.get(session.accessToken).launchId = id;
     return { ...session, editorInternalURL: collaboraInternalURL, browserUrl };
+  }
+  function pruneDownloads() {
+    for (const [id, value] of downloads) if (value.artifact.expires <= Date.now() || value.artifact.consumed) downloads.delete(id);
+    if (downloads.size >= 1024) throw fail(429, 'Too many pending native exports');
+  }
+  function downloadURL(launch, id) {
+    const url = new URL(launch.browserUrl); url.pathname += '/download/' + id; return url.href;
+  }
+  async function registerExport({ grantId, documentId, participantId, downloadUrl, filename }, { signal } = {}) {
+    signal?.throwIfAborted(); pruneDownloads();
+    const entry = [...issued.values()].reverse().find(value => value.grantId === grantId && value.session.documentId === documentId && value.session.participantId === participantId && value.session.accessTokenTtl > Date.now() && value.launchId);
+    const launch = entry && launches.get(entry.launchId);
+    if (!launch) throw fail(403, 'The native export has no issuing document launch');
+    const claims = { env: environmentId, grant: grantId, fid: documentId, participant: participantId, generation: entry.session.generation, snapshot: entry.input.snapshot };
+    if (!(await owner.metadata(claims)).permissions.export) throw fail(403, 'Document export is disabled');
+    const native = new URL(downloadUrl), base = new URL(entry.session.editorBaseUrl);
+    const prefix = base.pathname.replace(/\/$/, '') + '/cool/' + encodeURIComponent(entry.session.wopiSrc) + '/download/';
+    if (native.origin !== base.origin || native.username || native.password || native.hash || !native.pathname.startsWith(prefix) || !/^[A-Za-z0-9_-]+$/.test(native.pathname.slice(prefix.length)) || native.searchParams.get('WOPISrc') !== entry.session.wopiSrc || [...native.searchParams.keys()].some(key => key !== 'WOPISrc') || native.searchParams.getAll('WOPISrc').length !== 1 || typeof filename !== 'string' || !filename || /[\x00-\x1f/\\]/.test(filename)) throw fail(502, 'Invalid native export descriptor');
+    const id = randomUUID();
+    // This is only a routing receipt for Collabora's native single-use export.
+    // The native broker owns its bytes and lifetime; no download copy is stored.
+    downloads.set(id, { launchId: entry.launchId, artifact: { documentId, generation: entry.session.generation, snapshot: entry.input.snapshot || '', nativePath: native.pathname + native.search, wopiSrc: entry.session.wopiSrc, expires: entry.session.accessTokenTtl, consumed: false, busy: false } });
+    return { downloadUrl: downloadURL(launch, id) };
+  }
+  async function serveDownload(req, res, { id, downloadId, launch, grantId, origin, signal }) {
+    const receipt = downloads.get(downloadId), artifact = receipt?.artifact;
+    if (req.method !== 'GET' || receipt?.launchId !== id || !artifact || artifact.expires <= Date.now() || artifact.consumed) throw fail(404, 'Native export is unavailable; export the document again');
+    if (artifact.busy) throw fail(409, 'This native export is already being transferred');
+    artifact.busy = true;
+    try {
+      // A new browser grant gets its own native identity. Never substitute the
+      // exporting agent's token when opening a local or forwarded browser tab.
+      const session = await createSession({ ...launch.browser, grantId, documentId: artifact.documentId, create: undefined, relativePath: undefined, snapshot: artifact.snapshot, participantId: 'download:' + grantId + ':' + downloadId, participantName: 'You', participantKind: 'human', origin, editorBaseUrl: new URL('/apps/office', origin).href });
+      const metadata = await owner.metadata({ env: environmentId, grant: grantId, fid: artifact.documentId, participant: session.participantId, generation: artifact.generation, snapshot: artifact.snapshot });
+      if (!metadata.permissions.export || session.wopiSrc !== artifact.wopiSrc) throw fail(403, 'This native export is outside the current document permission');
+      signal?.throwIfAborted();
+      const previousURL = req.url, previousSession = req.officeIssuedSession;
+      req.url = artifact.nativePath; req.officeIssuedSession = issued.get(session.accessToken);
+      artifact.consumed = true;
+      try { await handleEditor(req, res, { origin, signal, grant: { id: grantId } }); }
+      finally { req.url = previousURL; req.officeIssuedSession = previousSession; }
+    } finally { artifact.busy = false; }
   }
   async function status({ grantId, documentId, participantId }) { return owner.metadata({ env: environmentId, grant: grantId, fid: documentId, participant: participantId }); }
   async function snapshot({ grantId, documentId, participantId, versionId }, options) { return owner.snapshot({ env: environmentId, grant: grantId, fid: documentId, participant: participantId }, versionId, options); }
@@ -119,8 +162,10 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     let mapped;
     try { mapped = new URL(origin); } catch { throw fail(403, 'An authenticated Office origin is required'); }
     if (mapped.protocol !== 'https:' || mapped.origin !== origin) throw fail(403, 'Invalid authenticated Office origin');
-    const url = new URL(req.url, 'http://office'); const suffix = url.pathname.slice((basePath + 'office/').length); const [id, action] = suffix.split('/'); const launch = launches.get(id);
+    const url = new URL(req.url, 'http://office'); const suffix = url.pathname.slice((basePath + 'office/').length); const [id, action, downloadId, extra] = suffix.split('/'); const launch = launches.get(id);
     if (!launch || launch.browserGrantId !== grantId || launch.expires <= Date.now()) throw fail(401, 'Office launch expired; open the document again');
+    if (action === 'download' && downloadId && !extra) return serveDownload(req, res, { id, downloadId, launch, grantId, origin, signal });
+    if (downloadId !== undefined) throw fail(404, 'Unknown Office route');
     if (launch.input.participantKind === 'agent') {
       if (!launch.humanReady) launch.humanReady = (async () => {
         const human = { ...launch.browser, origin, editorBaseUrl: new URL('/apps/office', origin).href, create: undefined, relativePath: launch.input.relativePath || launch.input.create?.name, participantId: launch.browser.browserParticipantId || `human:${environmentId}:${grantId}`, participantName: launch.browser.browserParticipantName || 'You', participantKind: 'human' };
@@ -241,12 +286,22 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     });
   }
   async function reopenBrowser(url, input) {
-    const parsed = new URL(url); const match = /\/office\/([a-f0-9-]{36})$/.exec(parsed.pathname); const old = match && launches.get(match[1]);
+    const parsed = new URL(url); const match = /\/office\/([a-f0-9-]{36})(?:\/download\/([a-f0-9-]{36}))?$/.exec(parsed.pathname); const old = match && launches.get(match[1]);
     if (!old) throw fail(404, 'Office document launch is unavailable; open it from Files again');
+    if (match[2]) {
+      pruneDownloads(); const receipt = downloads.get(match[2]), artifact = receipt?.artifact;
+      if (receipt?.launchId !== match[1] || !artifact || artifact.busy) throw fail(404, 'Native export is unavailable; export the document again');
+      const opened = await open({ ...input, editorBaseUrl: new URL('/apps/office', input.origin).href, documentId: artifact.documentId, snapshot: artifact.snapshot, create: undefined, relativePath: undefined, participantKind: 'human' });
+      const id = issued.get(opened.accessToken).launchId, launch = launches.get(id), downloadId = randomUUID();
+      const metadata = await owner.metadata({ ...launch.claims, generation: artifact.generation });
+      if (!metadata.permissions.export) throw fail(403, 'Document export is disabled');
+      downloads.set(downloadId, { launchId: id, artifact });
+      return { browserUrl: downloadURL(launch, downloadId) };
+    }
     // Resolve only our known document identity. New authority/root, participant
     // and mapped HTTPS origin come from the caller's existing gateway session.
     return open({ ...input, editorBaseUrl: input.editorBaseUrl || new URL('/apps/office', input.origin).href, documentId: old.session.documentId, create: undefined, relativePath: undefined, participantKind: 'human' });
   }
-  async function close() { launches.clear(); issued.clear(); if (callback) await new Promise(resolve => { const timer = setTimeout(() => { callback.closeAllConnections(); resolve(); }, 2000); timer.unref(); callback.close(() => { clearTimeout(timer); resolve(); }); }); if (config) await fs.unlink(config.callbackSocket).catch(() => {}); }
-  return { configure, prepare, open, renew, status, snapshot, handle, owner, resolveEditorGrant, handleEditor, upgradeEditor, reopenBrowser, close };
+  async function close() { launches.clear(); issued.clear(); downloads.clear(); if (callback) await new Promise(resolve => { const timer = setTimeout(() => { callback.closeAllConnections(); resolve(); }, 2000); timer.unref(); callback.close(() => { clearTimeout(timer); resolve(); }); }); if (config) await fs.unlink(config.callbackSocket).catch(() => {}); }
+  return { configure, prepare, open, renew, registerExport, status, snapshot, handle, owner, resolveEditorGrant, handleEditor, upgradeEditor, reopenBrowser, close };
 }

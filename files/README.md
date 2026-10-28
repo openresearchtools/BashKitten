@@ -58,6 +58,12 @@ an issued native token/WOPISrc and the exact captured live gateway grant. Cookie
 only select among registered sessions; document operations need their native
 identity. Remote human reopening creates a new authorization and participant,
 never adopts a local Pi view. Pi uses the separately returned private native URL.
+Native exports are registered by the trusted Office service through
+`registerExport(...)`. Its exact issued WOPISrc/download identifier becomes a
+scoped ordinary browser URL that the existing resolver can map to a fresh human
+grant. The host rechecks download permission and streams Collabora's native
+single-use export; it stores neither a second export file nor an agent token in
+the browser URL. Alias URLs share the same consumption state.
 
 WOPI files/locks/writes require the scoped expiring JWT **and** native RSA proof.
 A proof-verified native broker may release its exact matching lock after grant
@@ -89,6 +95,10 @@ Collabora; private filesystem descriptors never belong in browser/Pi responses.
 References dialog requests use a typed postMessage bridge bound to the exact
 native extension frame, origin and nonce. Credentials remain host-side. Requests
 are project-bound, bounded and cancellable on cancel/replacement/page closure.
+The explicit export-with-text-citations action uses that same frame/nonce and
+request cancellation owner. The host captures the document and browser view,
+then calls the existing native Save As/citation-unlink operation. The frame can
+choose only a plain output filename and one of the six supported Office formats.
 
 ## Build and package
 

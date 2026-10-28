@@ -46,6 +46,7 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
     const id = randomUUID(); const filename = path.join(directory(m.id), 'versions', id + path.extname(m.path));
     await fs.copyFile(source, filename, constants.COPYFILE_EXCL); await fs.chmod(filename, 0o400);
     const fd = await fs.open(filename, 'r'); try { await fd.sync(); } finally { await fd.close(); }
+    await syncDir(path.dirname(filename));
     m.versions.push({ id, name: path.basename(filename), savedAt: new Date(now).toISOString(), sourceVersion: m.version, sha256: digest, reason }); m.lastSnapshot = now;
     const removed = m.versions.splice(0, Math.max(0, m.versions.length - Math.max(1, maxVersions)));
     await saveManifest(m); // Make retained set durable before removing pruned files.

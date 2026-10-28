@@ -48,8 +48,7 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
   private Unix health endpoint. Owned children exited afterward. Evidence:
   `BashkittenBuild/verification/files-termux-20261028/native-termux-evidence.json`.
   Reopening the same native database exposed a duplicate denyAll API failure;
-  native GET-before-create reconciliation corrected it and the restart passed. Linux is being rebuilt with retained Go 1.27.2 and the
-  current official dav1d 1.5.4 source before final artifact sealing.
+  native GET-before-create reconciliation corrected it and the restart passed.
 - Actual revoked-view close released only its proof-verified matching native lock;
   a fresh grant reacquired the lock and opened editable with saved content intact.
   The runtime owner's real archive/unarchive/reopen integration also passed.
@@ -63,7 +62,23 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
   source includes MuPDF, FFmpeg, dav1d, NASM, esbuild and Rollup. The controlled Ubuntu 24.04
   build compiled native MuPDF, dav1d, zlib, FFmpeg, Quantum frontend/Go and the
   add-on. Actual ELF/dpkg analysis reports only `libc6 (>= 2.38)` and maximum
-  `GLIBC_2.38`; packaging awaits the committed-source gate.
+  `GLIBC_2.38`. Linux amd64 and both Termux architectures were sealed successfully
+  with retained Go 1.27.2 and dav1d 1.5.4, clean source revision
+  `12923eaccbfc299c70892166aae0b9aa2cff4bd6`, and 599 checked files per artifact.
+  Exact artifact hashes/paths are recorded outside the repository in
+  `BashkittenBuild/components/files/artifacts/sealed-receipts-20261028.json`.
+- The runtime owner's actual Caddy/native test changed the validated forwarded
+  Host to another HTTPS port. The wrapper form used that exact origin; native
+  editor POST, public WebSocket, history, References bridge and token renewal
+  passed. The human view remained distinct from Pi. This tests the gateway
+  mapping contract, not installed Chisel/browser certificate acceptance.
+- The actual native export pipeline returned a scoped Files URL, resolved it to
+  a fresh human grant, transferred valid PDF bytes through mapped HTTPS, and
+  rejected its second use with 404. The explicit browser copy action returned
+  the mapped saved-copy URL; native inspection found zero managed citations in
+  the copy and one in the unchanged master. Evidence:
+  `BashkittenBuild/verification/apps-native-gateway-20261028/office-copy-export-evidence.json`.
+  A restricted remote-account export test was unavailable in that fixture.
 
 ## Remaining coverage
 
@@ -71,7 +86,7 @@ Real native history restore with simultaneous human/Pi views; snapshot-native vi
 full References ZIP/dialogs in all editors; paired live user/agent editing and
 revocation under ongoing work; final native artifact/traffic review; long healthy
 Tor transfers and stalls; normal-tab remote mapping and TLS trust; runtime light
-settings on desktop/phone; native Termux build and installed Linux/Android flows.
+settings on desktop/phone; ARM64 device execution and installed Linux/Android flows.
 
 A one-frame synthetic video revealed an upstream thumbnail seek past its only
 frame; the normal 20-frame sample passed. That edge case remains a tracked native
