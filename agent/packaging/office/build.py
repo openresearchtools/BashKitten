@@ -30,6 +30,8 @@ PATCHES = [
     'office/patches/0007-native-ooxml-user-attributes.patch',
     'office/patches/0008-native-bounded-config-cache-keys.patch',
     'office/patches/0009-native-uno-undo-view.patch',
+    'office/patches/0010-native-uno-shape-undo.patch',
+    'office/patches/0011-native-online-openssl-headers.patch',
 ]
 ENGINE_OPTIONS = ['--with-distro=CPLinux-LOKit', '--disable-epm',
                   '--without-package-format', '--disable-symbols',
@@ -110,13 +112,35 @@ def inventory(root):
     return records
 
 
-def package(source, work, output, architecture, env):
-    run(['make', 'Package_instsetoo_native_setup'], cwd=source / 'engine', env=env)
-    run(['make', 'LIBO_TEST_INSTALL=TRUE', 'CustomTarget_instsetoo_native/sbom'], cwd=source / 'engine', env=env)
-    stage = work / 'stage'
+def prepare_stage(source, work, stage_dir=None):
+    stage = stage_dir.resolve() if stage_dir else work / 'stage'
+    source = source.resolve()
+    if (stage.is_relative_to(ROOT) or ROOT.is_relative_to(stage)
+            or stage.is_relative_to(source) or source.is_relative_to(stage)):
+        raise ValueError('Package stage must be outside the source checkout and prepared source')
+    marker = stage / '.bashkitten-office-stage.json'
+    owner = {'schema': 1, 'owner': 'bashkitten-office-build',
+             'work': str(work.resolve()), 'source': str(source)}
+    if stage.exists() and not stage.is_dir():
+        raise ValueError('Package stage is not a directory')
+    if stage_dir and stage.exists() and any(stage.iterdir()):
+        try:
+            recorded = json.loads(marker.read_text())
+        except (OSError, ValueError) as error:
+            raise ValueError('Refusing to replace a nonempty, unowned package stage') from error
+        if recorded != owner:
+            raise ValueError('Package stage belongs to a different native build')
     if stage.exists():
         shutil.rmtree(stage)
-    stage.mkdir()
+    stage.mkdir(parents=True)
+    write_json(marker, owner)
+    return stage
+
+
+def package(source, work, output, architecture, env, stage_dir=None):
+    run(['make', 'Package_instsetoo_native_setup'], cwd=source / 'engine', env=env)
+    run(['make', 'LIBO_TEST_INSTALL=TRUE', 'CustomTarget_instsetoo_native/sbom'], cwd=source / 'engine', env=env)
+    stage = prepare_stage(source, work, stage_dir)
     run(['make', 'DESTDIR=' + str(stage), 'install'], cwd=source, env=env)
     runtime = stage / PREFIX.removeprefix('/')
     shutil.copytree(source / 'engine/instdir', runtime / 'engine', symlinks=True)
@@ -182,6 +206,7 @@ def main():
     parser.add_argument('--work', required=True, type=Path)
     parser.add_argument('--cache', required=True, type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--stage-dir', type=Path, help='External package stage; defaults to WORK/stage')
     parser.add_argument('--jobs', type=int, default=min(os.cpu_count() or 1, 8))
     parser.add_argument('--phase', choices=['prepare', 'engine', 'online', 'package', 'all'], default='all')
     args = parser.parse_args()
@@ -205,7 +230,7 @@ def main():
     if args.phase in ['package', 'all']:
         if not args.output:
             parser.error('--output is required for packaging')
-        package(source, work, args.output.resolve(), architecture, env)
+        package(source, work, args.output.resolve(), architecture, env, args.stage_dir)
 
 
 if __name__ == '__main__':

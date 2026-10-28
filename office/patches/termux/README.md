@@ -84,6 +84,14 @@ original MPL-2.0/Apache-2.0 notices. These rebased source changes are MPL-2.0.
   document hooks, JNI include and logcat sink to its existing `MOBILEAPP` target.
   The native Bionic server keeps normal server logging and document ownership;
   genuine Android platform conditionals remain unchanged.
+- `0014-native-sbom-build-python.patch`: lets the native SBOM target use its
+  existing configured build-interpreter owner while cross compiling. Its Linux
+  shortcut otherwise assumes an installed host `python.bin` that the cross
+  build does not produce. SBOM content and validation remain unchanged.
+- `0015-native-online-configured-flags.patch`: forwards Online's complete
+  configured preprocessor flags to its existing recursive gbuild calls. This
+  retains the native libcap header path without overriding the COKit, Poco and
+  OpenSSL include paths needed by Online's remaining autotools compilation.
 
 The semaphore source, licenses and Python patch are materialized directly from
 the already retained immutable framework archive before applying the named
@@ -177,3 +185,11 @@ inputs to retain the detected library paths. The native x86_64 server and both
 kit launchers then compiled and linked, and the upstream Online SBOM check
 passed. Full native kit/document operation and ARM64 completion remain separate
 open gates; the shared shape-undo patch is still being refined independently.
+
+The current complete native Bionic engine and Online server builds now pass for
+both aarch64 and x86_64, including corrected shared shape-undo patch 0010. Both
+upstream Online SBOM checks pass. The native cross-build SBOM and complete
+configured-flag fixes above were exercised during packaging and the fresh ARM64
+server build. This establishes compilation and source/package checks; actual
+native server/kit document operation and installed product acceptance remain
+open gates.

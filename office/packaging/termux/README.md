@@ -29,6 +29,9 @@ The optional archive argument validates the original toolchain archive against
 the existing pin; without it, the receipt records that archive verification
 was not performed and records the actual compiler digest. Release collection
 must require the verified archive receipt.
+`--stage-dir` selects an external package stage, using the same option as the
+Linux builder; it defaults to `WORK/stage` and must not overlap either source
+tree. This allows packaging on a separate disk without moving compiler outputs.
 
 The shared host setup includes Meson. When available, ccache wraps the pinned
 NDK compiler commands; provenance still hashes the compiler itself. Ordinary CI

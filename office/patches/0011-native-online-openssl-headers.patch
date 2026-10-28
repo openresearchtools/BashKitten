@@ -1,0 +1,90 @@
+--- a/gbuild/Executable_clientnb.mk
++++ b/gbuild/Executable_clientnb.mk
+@@ -46,6 +46,7 @@
+     expat \
+     libpng \
+     openssl \
++    openssl_headers \
+     zlib \
+     zstd \
+ ))
+--- a/gbuild/Executable_coconvert.mk
++++ b/gbuild/Executable_coconvert.mk
+@@ -38,6 +38,7 @@
+ $(eval $(call gb_Executable_use_externals,coconvert, \
+     expat \
+     openssl \
++    openssl_headers \
+     zlib \
+ ))
+ 
+--- a/gbuild/Executable_connect.mk
++++ b/gbuild/Executable_connect.mk
+@@ -45,6 +45,7 @@
+     expat \
+     libpng \
+     openssl \
++    openssl_headers \
+     zlib \
+     zstd \
+ ))
+--- a/gbuild/Executable_coolbench.mk
++++ b/gbuild/Executable_coolbench.mk
+@@ -46,6 +46,7 @@
+     expat \
+     libpng \
+     openssl \
++    openssl_headers \
+     zlib \
+     zstd \
+ ))
+--- a/gbuild/Executable_coolconvert.mk
++++ b/gbuild/Executable_coolconvert.mk
+@@ -37,6 +37,7 @@
+ $(eval $(call gb_Executable_use_externals,coolconvert, \
+     expat \
+     openssl \
++    openssl_headers \
+     zlib \
+ ))
+ 
+--- a/gbuild/Executable_coolforkit-caps.mk
++++ b/gbuild/Executable_coolforkit-caps.mk
+@@ -38,6 +38,7 @@
+     expat \
+     libpng \
+     openssl \
++    openssl_headers \
+     zlib \
+     zstd \
+ ))
+--- a/gbuild/Executable_coolforkit-ns.mk
++++ b/gbuild/Executable_coolforkit-ns.mk
+@@ -38,6 +38,7 @@
+     expat \
+     libpng \
+     openssl \
++    openssl_headers \
+     zlib \
+     zstd \
+ ))
+--- a/gbuild/Executable_coolmap.mk
++++ b/gbuild/Executable_coolmap.mk
+@@ -37,6 +37,7 @@
+ $(eval $(call gb_Executable_use_externals,coolmap, \
+     expat \
+     openssl \
++    openssl_headers \
+     zlib \
+ ))
+ 
+--- a/gbuild/Executable_lokitclient.mk
++++ b/gbuild/Executable_lokitclient.mk
+@@ -45,6 +45,7 @@
+     expat \
+     libpng \
+     openssl \
++    openssl_headers \
+     zlib \
+     zstd \
+ ))

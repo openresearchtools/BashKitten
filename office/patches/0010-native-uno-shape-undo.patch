@@ -1,0 +1,151 @@
+--- a/engine/svx/source/unodraw/unoshtxt.cxx
++++ b/engine/svx/source/unodraw/unoshtxt.cxx
+@@ -31,6 +31,7 @@
+ #include <svl/hint.hxx>
+ #include <svl/style.hxx>
+ #include <svx/svdmodel.hxx>
++#include <svx/svdundo.hxx>
+ #include <svx/svdoutl.hxx>
+ #include <svx/svdobj.hxx>
+ #include <svx/svdview.hxx>
+@@ -44,6 +45,7 @@
+ 
+ #include <editeng/unotext.hxx>
+ #include <com/sun/star/linguistic2/LinguServiceManager.hpp>
++#include <cpo/uno/RuntimeException.hpp>
+ #include <comphelper/processfactory.hxx>
+ #include <svx/svdotable.hxx>
+ #include <cell.hxx>
+@@ -790,6 +792,29 @@
+             SdrTextObj* pTextObj = DynCastSdrTextObj( mpObject );
+             if( pTextObj )
+             {
++                // A background UNO source has no view. An active native text
++                // editor owns this object's live outliner; writing the committed
++                // model here would be overwritten when that edit ends.
++                if (pTextObj->IsTextEditActive())
++                {
++                    mbDataValid = false;
++                    throw cpo::uno::RuntimeException(
++                        u"Shape text is being edited in a native view"_ustr);
++                }
++                auto& model = pTextObj->getSdrModelFromSdrObject();
++                std::unique_ptr<SdrUndoObjSetText> undo;
++                if (model.IsUndoEnabled() && !model.isInImportExport())
++                {
++                    sal_Int32 index = 0;
++                    while (index < pTextObj->getTextCount() && pTextObj->getText(index) != mpText)
++                        ++index;
++                    if (index < pTextObj->getTextCount())
++                        undo.reset(dynamic_cast<SdrUndoObjSetText*>(model.GetSdrUndoFactory()
++                            .CreateUndoObjectSetText(*pTextObj, index).release()));
++                    if (undo)
++                        undo->SetOldSize(Size(pTextObj->GetLogicRect().getOpenWidth(),
++                                              pTextObj->GetLogicRect().getOpenHeight()));
++                }
+                 if (bEmptyText)
+                 {
+                     pTextObj->NbcSetOutlinerParaObjectForText( std::nullopt, mpText );
+@@ -798,6 +823,12 @@
+                 {
+                     pTextObj->NbcSetOutlinerParaObjectForText( mpOutliner->CreateParaObject(), mpText );
+                 }
++                if (undo)
++                {
++                    undo->AfterSetText();
++                    if (undo->IsDifferent())
++                        model.AddUndo(std::move(undo));
++                }
+             }
+ 
+             if( mpObject->IsEmptyPresObj() )
+--- a/engine/svx/source/unodraw/unoshape.cxx
++++ b/engine/svx/source/unodraw/unoshape.cxx
+@@ -45,6 +45,8 @@
+ #include <svx/xlnedit.hxx>
+ #include <svx/xlnclit.hxx>
+ #include <svx/svdmodel.hxx>
++#include <svx/svdundo.hxx>
++#include <editeng/xmlcnitm.hxx>
+ #include <svx/svdobjkind.hxx>
+ #include <svx/unopage.hxx>
+ #include <svx/unoshape.hxx>
+@@ -1460,6 +1462,24 @@
+     }
+ }
+ 
++namespace
++{
++// UNO user-defined attributes are persistent native object data. Reuse the
++// model's attribute undo action; import/export and undo replay stay unchanged.
++void SetItemsWithUserAttributeUndo(SdrObject& object, const SfxItemSet& items)
++{
++    auto& model = object.getSdrModelFromSdrObject();
++    std::unique_ptr<SdrUndoAction> undo;
++    if (model.IsUndoEnabled() && !model.isInImportExport()
++        && items.GetItemState(SDRATTR_XMLATTRIBUTES, false) == SfxItemState::SET
++        && object.GetMergedItem(SDRATTR_XMLATTRIBUTES) != items.Get(SDRATTR_XMLATTRIBUTES))
++        undo = model.GetSdrUndoFactory().CreateUndoAttrObject(object);
++    object.SetMergedItemSetAndBroadcast(items);
++    if (undo)
++        model.AddUndo(std::move(undo));
++}
++}
++
+ void SvxShape::_setPropertyValue( const OUString& rPropertyName, const cpo::uno::Any& rVal )
+ {
+     ::SolarMutexGuard aGuard;
+@@ -1596,7 +1616,7 @@
+         // if we have a XMultiProperty call then the item set
+         // will be set in setPropertyValues later
+         if( !mbIsMultiPropertyCall )
+-            GetSdrObject()->SetMergedItemSetAndBroadcast( *pSet );
++            SetItemsWithUserAttributeUndo(*GetSdrObject(), *pSet);
+     }
+ }
+ 
+@@ -1732,7 +1752,7 @@
+     }
+ 
+     if( mpImpl->moItemSet && HasSdrObject() )
+-        GetSdrObject()->SetMergedItemSetAndBroadcast( *mpImpl->moItemSet );
++        SetItemsWithUserAttributeUndo(*GetSdrObject(), *mpImpl->moItemSet);
+ }
+ 
+ 
+--- a/engine/svx/source/unodraw/unopage.cxx
++++ b/engine/svx/source/unodraw/unopage.cxx
+@@ -182,6 +182,7 @@
+         bNeededToClone = true;
+     }
+ 
++    const bool bNewInsertion = !pObj || !pObj->IsInserted();
+     if(!pObj)
+     {
+         pObj = CreateSdrObject( xShape );
+@@ -213,6 +214,8 @@
+         mpPage->InsertObject( pObj.get() );
+     }
+ 
++    if (bNewInsertion && mpModel->IsUndoEnabled() && !mpModel->isInImportExport())
++        mpModel->AddUndo(mpModel->GetSdrUndoFactory().CreateUndoNewObject(*pObj));
+     mpModel->SetChanged();
+ }
+ 
+@@ -238,6 +241,7 @@
+ 
+     rtl::Reference<SdrObject> pObj = pShape->GetSdrObject();
+ 
++    const bool bNewInsertion = !pObj || !pObj->IsInserted();
+     if(!pObj)
+     {
+         pObj = CreateSdrObject( xShape, true );
+@@ -256,6 +260,8 @@
+         mpPage->InsertObject( pObj.get(), 0 );
+     }
+ 
++    if (bNewInsertion && mpModel->IsUndoEnabled() && !mpModel->isInImportExport())
++        mpModel->AddUndo(mpModel->GetSdrUndoFactory().CreateUndoNewObject(*pObj));
+     mpModel->SetChanged();
+ }
+ 

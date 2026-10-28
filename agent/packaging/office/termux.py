@@ -18,7 +18,7 @@ import sys
 import tarfile
 
 import source_graph
-from build import ENGINE_OPTIONS, PATCHES as COMMON_PATCHES, inventory, run, write_json
+from build import ENGINE_OPTIONS, PATCHES as COMMON_PATCHES, inventory, prepare_stage, run, write_json
 import runtime_metadata
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -160,11 +160,8 @@ def configure_engine(source, args, env):
     return options
 
 
-def online_make_inputs(libcap, env):
-    # Online's native gbuild reloads config_host.mk from the earlier engine
-    # configure. Its existing make inputs preserve these extra library paths.
-    return ['CPPFLAGS=' + env['CPPFLAGS'] + ' -I' + str(libcap / 'libcap/include'),
-            'CAP_LIBS=-L' + str(libcap / 'libcap') + ' -lcap']
+def online_make_inputs(libcap):
+    return ['CAP_LIBS=-L' + str(libcap / 'libcap') + ' -lcap']
 
 
 def build_online(source, args, env):
@@ -183,11 +180,10 @@ def build_online(source, args, env):
                      '#define HAVE_LIBCAP 1', '#define BASHKITTEN_TERMUX_PREFIX "' + PREFIX + '"']:
         if required not in config:
             raise ValueError('Native server/isolation configuration missing: ' + required)
-    # Online delegates its native binaries to the configured engine's gbuild.
-    # Its config_host.mk otherwise restores the earlier engine CPPFLAGS, hiding
-    # libcap behind the NDK's limited sys/capability.h. Use the existing make
-    # CPPFLAGS and CAP_LIBS inputs; CAP_LIBS is already forwarded by Online.
-    run(['make', '-j' + str(args.jobs), *online_make_inputs(libcap, env)], cwd=source, env=native)
+    # Online forwards its complete configured CPPFLAGS to native gbuild. Keep
+    # configure's COKit/Poco/OpenSSL additions for the remaining autotools units;
+    # overriding top-level CPPFLAGS would remove those required include paths.
+    run(['make', '-j' + str(args.jobs), *online_make_inputs(libcap)], cwd=source, env=native)
     run(['make', 'sbom-check'], cwd=source, env=native)
 
 
@@ -195,10 +191,8 @@ def package(source, args, env, toolchain):
     libcap = build_libcap(args, env)
     run(['make', 'Package_instsetoo_native_setup'], cwd=source / 'engine', env=env)
     run(['make', 'LIBO_TEST_INSTALL=TRUE', 'CustomTarget_instsetoo_native/sbom'], cwd=source / 'engine', env=env)
-    stage = args.work / 'stage'
-    if stage.exists():
-        shutil.rmtree(stage)
-    run(['make', *online_make_inputs(libcap, env), 'DESTDIR=' + str(stage), 'install'], cwd=source, env=env)
+    stage = prepare_stage(source, args.work, getattr(args, 'stage_dir', None))
+    run(['make', *online_make_inputs(libcap), 'DESTDIR=' + str(stage), 'install'], cwd=source, env=env)
     runtime = stage / RUNTIME.lstrip('/')
     shutil.copytree(source / 'engine/instdir', runtime / 'engine', symlinks=True)
     if 'buildid=' + env['SOURCE_REVISION'] not in (runtime / 'engine/program/versionrc').read_text():
@@ -310,12 +304,13 @@ def main():
     parser.add_argument('--ndk', type=Path, required=True)
     parser.add_argument('--ndk-archive', type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--stage-dir', type=Path, help='External package stage; defaults to WORK/stage')
     parser.add_argument('--jobs', type=int, default=2)
     parser.add_argument('--phase', choices=['prepare', 'configure', 'engine', 'online', 'package', 'all'], default='all')
     args = parser.parse_args()
     if platform.system() != 'Linux' or platform.machine() != 'x86_64':
         parser.error('Use the existing Linux x86_64 NDK build environment')
-    for key in ['work', 'cache', 'ndk', 'output']:
+    for key in ['work', 'cache', 'ndk', 'output', 'stage_dir']:
         value = getattr(args, key)
         if value is not None:
             value = value.resolve(); setattr(args, key, value)
