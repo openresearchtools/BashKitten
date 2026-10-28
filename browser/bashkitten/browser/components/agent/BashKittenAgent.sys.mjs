@@ -253,13 +253,6 @@ class AgentView {
     this.chatsToggle = xul(doc, "toolbarbutton", { id: "bashkitten-chats-toggle", image: "chrome://branding/content/icon32.png", class: "toolbarbutton-1", tooltiptext: "Chats", "aria-label": "Chats", "aria-controls": "bashkitten-native-sidecar", "aria-expanded": String(this.sidecar.isOpen()) });
     this.chatsToggle.addEventListener("command", () => { if (this.layout !== "full" || this.connectionsPanel) { this.show(); this.sidecar.open(); } else this.sidecar.toggle(); });
     doc.getElementById("tabbrowser-tabs").before(this.chatsToggle);
-    this.paneToggle = xul(doc, "toolbarbutton", { id: "bashkitten-agent-pane-toggle", label: "Hide Agent", class: "toolbarbutton-1", overflows: "false", tooltiptext: "Show or hide the Agent pane" });
-    this.paneToggle.addEventListener("command", () => {
-      this.browseWithAgent = !this.browseWithAgent;
-      Services.prefs.setBoolPref("bashkitten.agent.splitBrowsing", this.browseWithAgent);
-      this.browse();
-    });
-    doc.getElementById("urlbar-container").before(this.paneToggle);
     const appMenu = this.win.PanelUI.mainView.querySelector("#appMenu-settings-button");
     const nativeMenu = xul(doc, "toolbarbutton", { id: "appMenu-bashkitten-about", label: "About BashKitten", class: "subviewbutton" });
     nativeMenu.addEventListener("command", () => { this.win.PanelUI.hide(); this.win.openAboutDialog(); });
@@ -468,6 +461,11 @@ class AgentView {
     this.updateDisplayChrome();
     this.activeBrowser?.focus();
   }
+  hide() {
+    this.browseWithAgent = false;
+    Services.prefs.setBoolPref("bashkitten.agent.splitBrowsing", false);
+    this.browse();
+  }
   browse() {
     this.layoutEpoch = (this.layoutEpoch || 0) + 1;
     const split = this.browseWithAgent;
@@ -475,7 +473,6 @@ class AgentView {
     this.pane.hidden = !split;
     this.doc.documentElement.setAttribute("bashkitten-agent-visible", split);
     this.doc.documentElement.setAttribute("bashkitten-agent-layout", this.layout);
-    this.paneToggle.setAttribute("label", split ? "Hide Agent" : "Show Agent");
     this.updateDisplayChrome();
   }
 

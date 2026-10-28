@@ -5,6 +5,19 @@ No application code, package, installed runtime or working user flow is delivere
 by this document. Research used BashKitten `a39f8b1d1ab8ab0ee202a5bb174f905578e83333`
 and the pinned sources below; integration and acceptance remain future work.
 
+## User amendment — 28 October 2026: Hide Agent inside the sidebar
+
+Keep the BashKitten logo's original position, sidebar action, labels and other
+responsibilities/gestures unchanged. Remove the extra sidebar-looking toolbar
+button and desktop toolbar Hide Agent control. Put an explicit **Hide Agent**
+button at the top of the projects/chats sidebar itself, invoking the existing
+whole-Agent visibility owner. The existing logo reopens Agent when hidden and
+retains its original sidebar behavior while Agent is open. Reuse native controls
+and preserve the selected backend, chat and working folder. This supersedes the
+earlier toolbar Hide Agent placement; the frozen original plan/tag remains
+unchanged. Source implementation and installed desktop/Android acceptance are
+separate evidence.
+
 ## User amendment — 28 October 2026: Files, Office and References
 
 The [Files, Office and References plan](files-office-bibliography-plan.md)

@@ -53,7 +53,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         super(activity); this.activity = activity; this.browser = browser;
         this.visibilityChanged = visibilityChanged;
         app = BrowserApp.get(activity); runtime = app.agent;
-        sidecar = new AgentSidecar(activity, runtime);
+        sidecar = new AgentSidecar(activity, runtime, this::hideAgent);
         runtime.activity = new java.lang.ref.WeakReference<>(activity);
         setOrientation(HORIZONTAL);
         // Weighted panes must keep a bounded height: baseline alignment first
@@ -69,7 +69,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         TypedArray buttonTheme = activity.obtainStyledAttributes(new int[]{android.R.attr.selectableItemBackgroundBorderless});
         try { toggle.setBackground(buttonTheme.getDrawable(0)); } finally { buttonTheme.recycle(); }
         toggle.setOnClickListener(v -> sidecar.toggle()); bar.addView(toggle, new LayoutParams(dp(48), -1));
-        bar.addView(barIcon("Hide Agent", R.drawable.ic_agent_sidebar, this::hideAgent), new LayoutParams(dp(48), -1));
         bar.addView(new View(activity), new LayoutParams(0, 1, 1));
         displayButton = barIcon("Display", R.drawable.ic_agent_display, () -> com.bashkitten.display.DisplayTabs.toggle(activity, "local"));
         displayButton.setBackgroundResource(R.drawable.bashkitten_display_toggle);
@@ -186,7 +185,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         agent.setVisibility(agentVisible ? VISIBLE : GONE);
         visibilityChanged.accept(agentVisible);
         if (!agentVisible) sidecar.close();
-        // Keep all six 48dp header controls reachable at the smallest split width.
+        // Keep all five 48dp header controls reachable at the smallest split width.
         int agentWidth = Math.max(dp(288) + agent.getPaddingLeft() + agent.getPaddingRight(), Math.round(availableWidth * .46f));
         agent.setLayoutParams(new LayoutParams(sideBySide ? agentWidth : -1, -1));
         browser.setVisibility(browserUi || sideBySide || !shown ? VISIBLE : GONE);

@@ -11,6 +11,7 @@ export class NativeSidecar {
     this.sharing = new Map(); this.sharingPending = new Set(); this.sharingEpoch = new Map();
     host.win.addEventListener("unload", () => { this.closed = true; this.renderEpoch++; clearTimeout(this.catalogueTimer); this.resize.disconnect(); }, { once: true });
     this.root = this.node("aside", { id: "bashkitten-native-sidecar", "aria-label": "Environments, projects and chats" });
+    this.root.append(this.button("Hide Agent", "Hide Agent", () => host.hide()));
     this.notice = this.node("p", { role: "status" }); this.root.append(this.notice);
     this.groups = new Map();
     for (const kind of ["local", "machine", "remote"]) {
