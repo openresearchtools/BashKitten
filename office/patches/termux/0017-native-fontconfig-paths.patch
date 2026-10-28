@@ -1,0 +1,21 @@
+diff --git a/engine/external/fontconfig/ExternalProject_fontconfig.mk b/engine/external/fontconfig/ExternalProject_fontconfig.mk
+--- a/engine/external/fontconfig/ExternalProject_fontconfig.mk
++++ b/engine/external/fontconfig/ExternalProject_fontconfig.mk
+@@ -59,8 +59,15 @@
+ 				$(if $(filter LINUX,$(OS)), \
+ 					--disable-static \
+ 					--prefix=/ \
+-					--with-add-fonts=$(fontconfig_add_fonts) \
+-					--with-cache-dir=/usr/lib/fontconfig/cache \
++					$(if $(COM_IS_BIONIC), \
++						--with-default-fonts=/system/fonts \
++						--with-add-fonts=@TERMUX_PREFIX@/share/fonts \
++						--with-baseconfigdir=@TERMUX_PREFIX@/lib/bashkitten/office/runtime/engine/share/fontconfig \
++						--with-cache-dir=@TERMUX_PREFIX@/var/cache/fontconfig \
++					, \
++						--with-add-fonts=$(fontconfig_add_fonts) \
++						--with-cache-dir=/usr/lib/fontconfig/cache \
++					) \
+ 				) \
+ 			) \
+ 			$(if $(filter MACOSX,$(OS)),--prefix=/@.__________________________________________________OOO) \

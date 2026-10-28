@@ -14,3 +14,5 @@
 0014-native-sbom-build-python.patch
 0015-native-online-configured-flags.patch
 0016-native-libetonyek-builtins.patch
+0017-native-fontconfig-paths.patch
+0018-native-iconv-library.patch

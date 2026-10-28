@@ -11,7 +11,28 @@
       "size": 201040,
       "licenseFile": "libcap-License",
       "licenseSha256": "68467e731f4744bd6e0bb69e8df9c3a994e09cd6b203d0c41327ac6d079c581d",
-      "frameworkRecipe": "packages/libcap/build.sh"
+      "frameworkRecipe": "packages/libcap/build.sh",
+      "license": "BSD-3-Clause OR GPL-2.0-only"
+    },
+    {
+      "name": "libiconv",
+      "version": "1.19",
+      "url": "https://mirrors.kernel.org/gnu/libiconv/libiconv-1.19.tar.gz",
+      "sha256": "88dd96a8c0464eca144fc791ae60cd31cd8ee78321e67397e25fc095c4a19aa6",
+      "file": "libiconv-1.19.tar.gz",
+      "size": 5921103,
+      "license": "LGPL-2.1-or-later",
+      "licenseFile": "libiconv-COPYING.LIB",
+      "licenseSha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "sourceLicenseFiles": [
+        {
+          "file": "libiconv-COPYING",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+          "license": "GPL-3.0-or-later",
+          "scope": "Upstream command-line programs, retained in the full source archive; native Office uses the library."
+        }
+      ],
+      "frameworkRecipe": "packages/libiconv/build.sh"
     }
   ]
 }

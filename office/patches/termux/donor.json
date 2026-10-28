@@ -105,6 +105,10 @@
     {
       "file": "x11-packages/libreoffice/build.sh",
       "sha256": "d68538ac8deb131b69173ffacc87c045efa63a63ceafed987904160f18dfb9cb"
+    },
+    {
+      "file": "packages/libiconv/build.sh",
+      "sha256": "5542ba656ce53cf6c13659afe25c6fe69e254d2b9e05b0d8105f4f4b3dc9cb15"
     }
   ],
   "targetRelease": "cp-26.04.5-2",
@@ -173,6 +177,10 @@
     {
       "file": "packages/libetonyek/build.sh",
       "sha256": "65e4bc23a116bb01572d14d374327704cddc50b34329aae47c66e22ccfa32a39"
+    },
+    {
+      "file": "packages/fontconfig/build.sh",
+      "sha256": "d32ee41eca9641f8164e87ce3c1bb932f3e6ef83cdc2359f0ce9869510e0e50d"
     }
   ],
   "archiveRoot": "termux-packages-f3b242999b604dab33639c8211c3b461aad79dc9",

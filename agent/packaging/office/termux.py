@@ -20,6 +20,7 @@ import tarfile
 import source_graph
 from build import ENGINE_OPTIONS, PATCHES as COMMON_PATCHES, inventory, prepare_stage, run, write_json
 import runtime_metadata
+import branding
 
 ROOT = Path(__file__).resolve().parents[3]
 PREFIX = '/data/data/com.termux/files/usr'
@@ -111,13 +112,31 @@ def native_dependencies():
     result = json.loads(manifest.read_text())
     for row in result['components']:
         native_dependency_archive(row)
-        for name, checksum in [('licenseFile', 'licenseSha256')]:
-            path = NATIVE_DEPENDENCIES / row[name]
+        if not row.get('license'):
+            raise ValueError('Native dependency has no license: ' + row['name'])
+        for record in native_dependency_licenses(row):
+            path = NATIVE_DEPENDENCIES / record['file']
             if not path.resolve().is_relative_to(NATIVE_DEPENDENCIES.resolve()):
                 raise ValueError('Native dependency input leaves its retained directory')
-            if source_graph.digest(path) != row[checksum]:
+            if not record.get('license') or source_graph.digest(path) != record['sha256']:
                 raise ValueError('Native dependency input changed: ' + str(path))
     return {**result, 'manifestSha256': source_graph.digest(manifest)}
+
+
+def native_dependency_licenses(component):
+    return [{'file': component['licenseFile'], 'sha256': component['licenseSha256'],
+             'license': component['license']}, *component.get('sourceLicenseFiles', [])]
+
+
+def native_dependency_notices(component):
+    notices = []
+    for index, record in enumerate(native_dependency_licenses(component)):
+        notices.append({'name': component['name'] + (' source archive terms' if index else ''),
+                        'version': component['version'], 'license': record['license'],
+                        'source': component['url'],
+                        'text': (NATIVE_DEPENDENCIES / record['file']).read_text(),
+                        **({'scope': record['scope']} if record.get('scope') else {})})
+    return notices
 
 
 def build_libcap(args, env):
@@ -151,8 +170,37 @@ def build_libcap(args, env):
     return source
 
 
+def build_libiconv(args, env):
+    """Use the pinned Termux recipe's native GNU libiconv and extra encodings."""
+    component = next(row for row in native_dependencies()['components'] if row['name'] == 'libiconv')
+    work = args.work / 'native-termux'
+    source = work / ('libiconv-' + component['version'])
+    options = ['--build=x86_64-pc-linux-gnu', '--host=' + args.architecture + '-linux-android',
+               '--prefix=' + PREFIX, '--enable-extra-encodings', '--enable-shared', '--disable-static']
+    expected = {'source': component, 'architecture': args.architecture, 'configuration': options,
+                'flags': {key: env[key] for key in ['CC', 'CFLAGS', 'CPPFLAGS', 'LDFLAGS']}}
+    stamp = work / 'libiconv-inputs.json'
+    if source.exists():
+        if not stamp.is_file() or json.loads(stamp.read_text()) != expected:
+            raise ValueError('Native libiconv build inputs changed; use a fresh native-termux dependency directory')
+    else:
+        work.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(native_dependency_archive(component)) as archive:
+            archive.extractall(work, filter='data')
+        write_json(stamp, expected)
+    if not (source / 'config.status').is_file():
+        run(['./configure', *options], cwd=source, env=env)
+    # The matching released Termux package builds GNU libiconv without source
+    # patches. Office uses its library only; do not build/install the GPL CLI.
+    run(['make', '-j' + str(args.jobs), 'lib/localcharset.h'], cwd=source, env=env)
+    run(['make', '-C', str(source / 'lib'), '-j' + str(args.jobs), 'all'], cwd=source, env=env)
+    if not (source / 'lib/.libs/libiconv.so').is_file() or not (source / 'include/iconv.h').is_file():
+        raise ValueError('Native GNU libiconv shared library/header was not produced')
+    return source
+
+
 def configure_engine(source, args, env):
-    options = [*ENGINE_OPTIONS, '--build=x86_64-pc-linux-gnu',
+    options = [*ENGINE_OPTIONS, *branding.engine_options(), '--build=x86_64-pc-linux-gnu',
                '--host=' + args.architecture + '-linux', '--prefix=' + RUNTIME,
                '--with-parallelism=' + str(args.jobs), '--with-external-tar=' + str(args.cache),
                '--with-external-dict-dir=' + PREFIX + '/share/hunspell',
@@ -166,24 +214,31 @@ def configure_engine(source, args, env):
         for row in source_graph.engine_inputs(config):
             if retained.get(row['name']) != row['sha256']:
                 raise ValueError('Unmaterialized Bionic build dependency: ' + row['name'])
+    branding.verify_engine(source)
     return options
 
 
-def online_make_inputs(libcap):
-    return ['CAP_LIBS=-L' + str(libcap / 'libcap') + ' -lcap']
+def online_make_inputs(libcap, libiconv):
+    return ['CAP_LIBS=-L' + str(libcap / 'libcap') + ' -lcap',
+            'ICONV_LIBS=-L' + str(libiconv / 'lib/.libs') + ' -liconv']
 
 
 def build_online(source, args, env):
     libcap = build_libcap(args, env)
-    native = {**env, 'CPPFLAGS': env['CPPFLAGS'] + ' -I' + str(libcap / 'libcap/include'),
-              'LDFLAGS': env['LDFLAGS'] + ' -L' + str(libcap / 'libcap')}
+    libiconv = build_libiconv(args, env)
+    native = {**env, 'CPPFLAGS': env['CPPFLAGS'] + ' -I' + str(libcap / 'libcap/include')
+              + ' -I' + str(libiconv / 'include'),
+              'LDFLAGS': env['LDFLAGS'] + ' -L' + str(libcap / 'libcap')
+              + ' -L' + str(libiconv / 'lib/.libs'), 'LIBS': '-liconv'}
     run(['bash', './autogen.sh'], cwd=source, env=native)
     run(['./configure', '--build=x86_64-pc-linux-gnu', '--host=' + args.architecture + '-linux-android',
          '--prefix=' + RUNTIME, '--sysconfdir=' + RUNTIME + '/etc', '--localstatedir=' + RUNTIME + '/var',
          '--disable-tests', '--disable-pam', '--enable-landlock', '--enable-seccomp',
+         *branding.online_options(),
          '--with-lo-builddir=' + str(source / 'engine'),
          '--with-lokit-path=' + str(source / 'engine/include'), '--with-lo-path=' + RUNTIME + '/engine'],
         cwd=source, env=native)
+    branding.verify_online(source)
     config = (source / 'config.h').read_text()
     for required in ['#define MOBILEAPP 0', '#define DISABLE_SECCOMP 0', '#define DISABLE_LANDLOCK 0',
                      '#define HAVE_LIBCAP 1', '#define BASHKITTEN_TERMUX_PREFIX "' + PREFIX + '"']:
@@ -192,16 +247,26 @@ def build_online(source, args, env):
     # Online forwards its complete configured CPPFLAGS to native gbuild. Keep
     # configure's COKit/Poco/OpenSSL additions for the remaining autotools units;
     # overriding top-level CPPFLAGS would remove those required include paths.
-    run(['make', '-j' + str(args.jobs), *online_make_inputs(libcap)], cwd=source, env=native)
+    run(['make', '-j' + str(args.jobs), *online_make_inputs(libcap, libiconv)], cwd=source, env=native)
     run(['make', 'sbom-check'], cwd=source, env=native)
+    readelf = args.ndk / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf'
+    server = source / 'coolwsd'
+    dynamic = subprocess.check_output([readelf, '-d', server], text=True)
+    symbols = subprocess.check_output([readelf, '--dyn-syms', server], text=True)
+    if not re.search(r'\(NEEDED\).*\[libiconv\.so\]', dynamic) or 'libiconv_open' not in symbols:
+        raise ValueError('Native WOPI server is not linked to the required GNU UTF-7 converter')
 
 
 def package(source, args, env, toolchain):
+    branding.verify_engine(source)
+    branding.verify_online(source)
     libcap = build_libcap(args, env)
+    libiconv = build_libiconv(args, env)
+    run(['./config.status', 'instsetoo_native/util/openoffice.lst'], cwd=source / 'engine', env=env)
     run(['make', 'Package_instsetoo_native_setup'], cwd=source / 'engine', env=env)
     run(['make', 'LIBO_TEST_INSTALL=TRUE', 'CustomTarget_instsetoo_native/sbom'], cwd=source / 'engine', env=env)
     stage = prepare_stage(source, args.work, getattr(args, 'stage_dir', None))
-    run(['make', *online_make_inputs(libcap), 'DESTDIR=' + str(stage), 'install'], cwd=source, env=env)
+    run(['make', *online_make_inputs(libcap, libiconv), 'DESTDIR=' + str(stage), 'install'], cwd=source, env=env)
     runtime = stage / RUNTIME.lstrip('/')
     shutil.copytree(source / 'engine/instdir', runtime / 'engine', symlinks=True)
     if 'buildid=' + env['SOURCE_REVISION'] not in (runtime / 'engine/program/versionrc').read_text():
@@ -212,9 +277,12 @@ def package(source, args, env, toolchain):
     shutil.copy2(libcxx, runtime / 'engine/program/libc++_shared.so')
     for library in (libcap / 'libcap').glob('libcap.so*'):
         shutil.copy2(library, runtime / 'engine/program' / library.name, follow_symlinks=False)
+    for library in (libiconv / 'lib/.libs').glob('libiconv.so*'):
+        shutil.copy2(library, runtime / 'engine/program' / library.name, follow_symlinks=False)
     required = ['bin/coolwsd', 'bin/coolforkit-ns', 'bin/coolforkit-caps',
                 'bin/coolwsd-systemplate-setup', 'etc/coolwsd/coolwsd.xml',
-                'engine/program/libmergedlo.so', 'share/coolwsd/browser/dist/cool.html',
+                'engine/program/libmergedlo.so', 'engine/program/libiconv.so',
+                'share/coolwsd/browser/dist/cool.html',
                 'share/coolwsd/collabora-online-sbom.spdx.json']
     for name in required:
         if not (runtime / name).is_file():
@@ -228,6 +296,7 @@ def package(source, args, env, toolchain):
             shutil.copy2(source / name, legal / name)
     shutil.copy2(source / 'engine/readlicense_oo/license/license.xml', legal / 'engine-license.xml')
     runtime_metadata.notices(source, runtime)
+    branding.verify_runtime(runtime)
     notices_path = runtime / 'licenses.json'
     notices = json.loads(notices_path.read_text())
     notices.append({'name': 'Android NDK libc++ shared runtime',
@@ -247,9 +316,9 @@ def package(source, args, env, toolchain):
                     'source': json.loads((PATCH_ROOT / 'donor.json').read_text())['donor']['url'],
                     'text': (source / 'engine/external/python3/termux/FRAMEWORK-LICENSE').read_text()})
     for component in native_dependencies()['components']:
-        notices.append({'name': component['name'], 'version': component['version'],
-                        'license': 'BSD-3-Clause OR GPL-2.0-only', 'source': component['url'],
-                        'text': (NATIVE_DEPENDENCIES / component['licenseFile']).read_text()})
+        notices.extend(native_dependency_notices(component))
+        for record in native_dependency_licenses(component):
+            shutil.copy2(NATIVE_DEPENDENCIES / record['file'], legal / record['file'])
     write_json(notices_path, notices)
     # Resolve the actual ELF dependency closure against bundled libraries and
     # Android's public platform libraries, never the build host's ldconfig.
@@ -280,7 +349,7 @@ def package(source, args, env, toolchain):
                 'compiledPrefix': RUNTIME, 'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                 'development': toolchain['development'] or bool(subprocess.check_output(['git', 'status', '--porcelain', '--',
                     *native_toolchain.SOURCE_INPUTS, 'agent/packaging/source_cache.py',
-                    'agent/packaging/office', 'office/upstream', 'office/patches',
+                    'agent/packaging/office', 'office/upstream', 'office/patches', 'office/branding',
                     'files/patches/collabora'], cwd=ROOT, text=True).strip()),
                 'upstream': pin, 'toolchain': toolchain,
                 'toolchainRecipeSha256': toolchain['recipeSha256'],
@@ -294,6 +363,8 @@ def package(source, args, env, toolchain):
                 'systemPackages': SYSTEM_PACKAGES,
                 'depends': SYSTEM_PACKAGES,
                 'recipeSha256': source_graph.digest(Path(__file__)),
+                'engineOptions': [*ENGINE_OPTIONS, *branding.engine_options()],
+                'branding': branding.metadata(),
                 'isolation': {'landlockMinimumABI': 3, 'seccomp': True, 'failClosed': True},
                 'patches': [path.stem.split('-', 1)[1] for path in patch_inputs()],
                 'patchInputs': [{'file': str(path.relative_to(ROOT)), 'sha256': source_graph.digest(path)} for path in patch_inputs()],

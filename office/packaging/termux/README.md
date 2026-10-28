@@ -46,11 +46,27 @@ configuration. Its original full license and source receipt enter the runtime
 inventory. Online's normal capability detection remains required; no missing
 header is treated as permission to remove capability checks.
 
+GNU libiconv 1.19 uses the same pinned Termux framework's unpatched source and
+`--enable-extra-encodings` recipe. Online's released WOPI filename converter
+requires UTF-7 for Rename/SaveAs; Bionic's own iconv does not provide it. The
+native builder supplies the GNU header and library to Online's existing gbuild
+entry point, verifies its actual dynamic dependency and converter symbol, and
+bundles `libiconv.so` in the existing private library directory. It builds only
+the LGPL library; the original corresponding-source archive also retains the
+GPL command-line sources. Both complete license texts and per-component license
+identities are checksum-verified and included in the runtime/source notices.
+
 Libetonyek uses the pinned Termux package's explicit compiler-builtins link
 flags. Its bundled libtool otherwise omits those Android runtime helpers from
 the shared library, allowing the build to finish but failing when the native kit
 loads it. The compiler chooses its own builtins archive; the existing NDK source
 owner retains the matching compiler-rt source and full license.
+
+The bundled fontconfig uses its own matching configuration files, already
+installed by the native `fontconfig_data` target. Its Bionic configure flags
+select Android's `/system/fonts` and Termux's shared fonts and cache paths.
+This avoids loading a newer installed Termux fontconfig's incompatible rules
+into the pinned engine library; Office still registers its bundled fonts.
 
 The output root is `runtime/`, with native files, upstream SBOMs, full notices,
 resolved ELF dependencies and `manifest.json`. The existing environment owner
