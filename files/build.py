@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline, separately packaged Files native build. Never edits pristine imports."""
 import argparse, hashlib, io, json, os, pathlib, platform, re, shutil, subprocess, tarfile, zipfile
+import notices
 ROOT = pathlib.Path(__file__).resolve().parent
 DEPS = ROOT / 'vendor/dependencies'
 def sha(data): return hashlib.sha256(data).hexdigest()
@@ -61,7 +62,7 @@ def main():
     if work == ROOT or ROOT in work.parents: raise ValueError('Build work must stay outside the source module')
     if args.target == 'linux' and args.architecture != {'x86_64':'amd64','aarch64':'arm64'}.get(platform.machine()): raise ValueError('Linux builds require the native runner architecture')
     if args.target == 'termux' and (args.architecture not in ['aarch64','x86_64'] or not args.ndk): raise ValueError('Termux requires --architecture aarch64|x86_64 and the pinned --ndk')
-    inputs = ['files','auth/dependencies/go-toolchain']
+    inputs = ['files','auth/dependencies/go-toolchain',*notices.source_inputs()]
     if args.target == 'termux': inputs += ['agent/packaging/termux/native_toolchain.py','agent/packaging/node/lock.json','agent/vendor/node/libcxx','agent/vendor/node/ed546336bdfa680956bb4f3039e4bc186a91896c4b2f2fd7a8c9cdbec4b3a6d2-f3b242999b604dab33639c8211c3b461aad79dc9']
     source_tree, source_dirty = input_state(inputs)
     if not args.prepare_only:
@@ -100,6 +101,9 @@ def main():
     write_json(work/'prepared.json', {'schema':1,'sourceDirectories':{k:str(v) for k,v in source_dirs.items()},'components':len(all_components)})
     if args.prepare_only: return
     if not args.output: raise ValueError('--output is required for a native build')
+    # Fail before native compilation, rather than leave final package assembly
+    # to discover a dependency whose complete original notices are absent.
+    legal_records = notices.collect(all_components)
     host_env = dict(os.environ); env = dict(host_env); toolchain = None
     if args.target == 'termux':
         import termux
@@ -144,17 +148,7 @@ def main():
     clean_env = dict(env); clean_env.pop('CGO_CFLAGS');clean_env.pop('CGO_LDFLAGS')
     run([args.go,'build','-mod=vendor','-trimpath','-ldflags=-s -w','-o',payload/'bin/files-office-addon','.'],addon,clean_env)
     for name in ['ffmpeg','ffprobe']: shutil.copy2(ffmpeg/name,payload/'bin'/name)
-    licenses = []
-    for entry in all_components:
-        target = payload/'legal'/safe_component(entry['name']+'@'+entry['version']); target.mkdir(parents=True,exist_ok=True)
-        data = pathlib.Path(entry['localArchive']).read_bytes()
-        if entry['ecosystem']=='go':
-            with zipfile.ZipFile(io.BytesIO(data)) as archive:
-                for index,name in enumerate(entry['notices']): (target/(str(index)+'-'+pathlib.PurePosixPath(name).name)).write_bytes(archive.read(name))
-        else:
-            with tarfile.open(fileobj=io.BytesIO(data),mode='r:*') as archive:
-                for index,name in enumerate(entry['notices']): (target/(str(index)+'-'+pathlib.PurePosixPath(name).name)).write_bytes(archive.extractfile(name).read())
-        licenses.append({'name':entry['name'],'version':entry['version'],'source':entry['url'],'text':'\n\n'.join(p.read_text(errors='replace') for p in sorted(target.iterdir()))})
+    licenses = notices.write(payload, legal_records)
     shutil.copy2(ROOT/'vendor/quantum/source/LICENSE',payload/'legal/Quantum-LICENSE')
     for name in ['COPYING','LICENSE','NOTICE']: shutil.copy2(ROOT/'addon'/name,payload/'legal'/('addon-'+name))
     licenses.extend([{'name':'File Browser Quantum','version':'2.0.2-stable','license':'Apache-2.0','text':(payload/'legal/Quantum-LICENSE').read_text()}, {'name':'BashKitten Files Office add-on','license':'AGPL-3.0-only AND Apache-2.0 AND MIT','text':'\n\n'.join((ROOT/'addon'/name).read_text() for name in ['NOTICE','COPYING','LICENSE'])}])
@@ -164,7 +158,8 @@ def main():
     licenses.append({'name':'Go runtime and standard library','version':go_pin['version'],'source':go_pin['url'],'license':'BSD-3-Clause and included notices','text':go_text})
     if toolchain: licenses.extend(termux.notices(args,toolchain))
     write_json(payload/'licenses.json',licenses)
-    (payload/'sources').mkdir(); shutil.copy2(DEPS/'sources.json',payload/'sources/dependencies.json');shutil.copy2(DEPS/'native-sources.json',payload/'sources/native-dependencies.json')
+    (payload/'sources').mkdir(exist_ok=True); shutil.copy2(DEPS/'sources.json',payload/'sources/dependencies.json');shutil.copy2(DEPS/'native-sources.json',payload/'sources/native-dependencies.json')
+    shutil.copy2(DEPS/'notice-sources.json',payload/'sources/notice-sources.json')
     shutil.copy2(go_source/'sources.json',payload/'sources/go-toolchain.json')
     revision = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     depends, abi = linux_metadata(payload, work, args.architecture) if args.target == 'linux' else termux.metadata(payload,args,toolchain)

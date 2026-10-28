@@ -81,6 +81,7 @@ jobs:
             /agent/packaging/office/
             /agent/packaging/node/
             /agent/packaging/termux/native_toolchain.py
+            /agent/licenses/upstream/saxes/
             /agent/vendor/node/libcxx/
             /agent/vendor/node/sources.json
             /agent/vendor/node/ed546336bdfa680956bb4f3039e4bc186a91896c4b2f2fd7a8c9cdbec4b3a6d2-f3b242999b604dab33639c8211c3b461aad79dc9

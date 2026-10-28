@@ -143,6 +143,13 @@ No registry-image publishing or cache service is used.
 The native artifact root contains `bin/`, `legal/`, `sources/`, `licenses.json`
 and `manifest.json`. Full notices use the shared runtime license-record format. `depends` contains
 actual OS package dependencies; `sourceDependencies` holds preserved source pins.
+`notices.py` checks complete notice text before native compilation. Named
+supplements bind original README/header notices and exact upstream legal files
+to checksums. Where published metadata explicitly declares an SPDX identifier,
+the inventory separately labels the retained declaration and matching pinned
+canonical text; it does not invent copyright attribution or an upstream license
+file. A dependency with neither usable original terms nor an explicit declaration
+blocks artifact sealing. The shared main-package collector retains its own check.
 Linux packaging requires Ubuntu 24.04 and inspects the actual ELF dependency/ABI
 closure. `SHA256SUMS` accompanies the artifact. Every payload file has a checksum; the manifest binds target,
 architecture, upstream pins, patch hashes and the committed BashKitten revision.

@@ -1,0 +1,919 @@
+{
+  "schema": 1,
+  "components": {
+    "npm:@esbuild/aix-ppc64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/android-arm@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/android-arm64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/android-x64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/darwin-arm64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/darwin-x64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/freebsd-arm64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/freebsd-x64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/linux-arm@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/linux-arm64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/linux-ia32@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/linux-loong64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/linux-mips64el@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/linux-ppc64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/linux-riscv64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/linux-s390x@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/linux-x64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/netbsd-arm64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/netbsd-x64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/openbsd-arm64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/openbsd-x64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/openharmony-arm64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/sunos-x64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/win32-arm64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/win32-ia32@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@esbuild/win32-x64@0.25.12": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same esbuild repository/version; use its retained parent package license.",
+      "sources": [
+        {
+          "component": "npm:esbuild@0.25.12",
+          "member": "package/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-android-arm-eabi@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-android-arm64@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-darwin-arm64@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-darwin-x64@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-freebsd-arm64@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-freebsd-x64@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-arm-gnueabihf@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-arm-musleabihf@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-arm64-gnu@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-arm64-musl@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-loong64-gnu@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-loong64-musl@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-ppc64-gnu@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-ppc64-musl@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-riscv64-gnu@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-riscv64-musl@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-s390x-gnu@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-x64-gnu@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-linux-x64-musl@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-openbsd-x64@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-openharmony-arm64@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-win32-arm64-msvc@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-win32-ia32-msvc@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-win32-x64-gnu@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:@rollup/rollup-win32-x64-msvc@4.63.5": {
+      "license": "MIT",
+      "reason": "Published platform package declares MIT and names the same Rollup repository/version; use its retained parent package license and included dependency notices.",
+      "sources": [
+        {
+          "component": "npm:rollup@4.63.5",
+          "member": "package/LICENSE.md",
+          "sha256": "fa1bd040c5bdeefe65b3821cebf474f2733ce65df13089bd151dda1778e62fe8"
+        }
+      ]
+    },
+    "npm:agent-base@6.0.2": {
+      "license": "MIT",
+      "reason": "The exact published README includes the full copyright/license text.",
+      "sources": [
+        {
+          "component": "npm:agent-base@6.0.2",
+          "member": "package/README.md",
+          "sha256": "f1425c3b72330fe4fb2aa5a2fb152e939bdf534692a32b5f0b38f74147b98556"
+        }
+      ]
+    },
+    "npm:https-proxy-agent@5.0.1": {
+      "license": "MIT",
+      "reason": "The exact published README includes the full copyright/license text.",
+      "sources": [
+        {
+          "component": "npm:https-proxy-agent@5.0.1",
+          "member": "package/README.md",
+          "sha256": "32f0856d2c43df7d05cca960fdee84e1e38ab545bd7b2186433dfa41aa90a712"
+        }
+      ]
+    },
+    "npm:imurmurhash@0.1.4": {
+      "license": "MIT",
+      "reason": "The exact published README includes the full copyright/license text.",
+      "sources": [
+        {
+          "component": "npm:imurmurhash@0.1.4",
+          "member": "package/README.md",
+          "sha256": "4491517f7deb68d0b2a3bb590e785e276a60f12448447a9650d0bd50161a101c"
+        }
+      ]
+    },
+    "npm:isarray@1.0.0": {
+      "license": "MIT",
+      "reason": "The exact published README includes the full copyright/license text.",
+      "sources": [
+        {
+          "component": "npm:isarray@1.0.0",
+          "member": "package/README.md",
+          "sha256": "ff138e683771b187f3629c383db72ee7d632009010a36d08e18e8d2a34222ec7"
+        }
+      ]
+    },
+    "npm:esrecurse@4.3.0": {
+      "license": "BSD-2-Clause",
+      "reason": "The exact published README includes the full copyright/license text.",
+      "sources": [
+        {
+          "component": "npm:esrecurse@4.3.0",
+          "member": "package/README.md",
+          "sha256": "a7007c78c9d9da690ef6cdb0e7a3427d05832edb00abd1f5a9882700d73be4ad"
+        }
+      ]
+    },
+    "npm:saxes@6.0.0": {
+      "license": "ISC",
+      "reason": "Reuse the existing legal owner for the same exact saxes6.0.0 commit211fa0ebec9b628affc09219199639887174bfc3.",
+      "sources": [
+        {
+          "file": "agent/licenses/upstream/saxes/LICENSE",
+          "sha256": "0fac2374380621b22e6b50451057721a9c52935b02d16d106a9f04897f061d0e"
+        }
+      ],
+      "provenanceFiles": [
+        "agent/licenses/upstream/saxes/source.json"
+      ]
+    },
+    "npm:@pkgr/core@0.3.6": {
+      "license": "MIT",
+      "reason": "Original upstream license at the exact gitHead recorded by the published npm version metadata.",
+      "sources": [
+        {
+          "file": "files/vendor/dependencies/notices/@pkgr__core@0.3.6/LICENSE",
+          "sha256": "82a222189ab9764f8ec1c052b9661f2c9f12db52387312acbf73b2be5b8b6c32"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/@pkgr__core@0.3.6/source.json",
+        "files/vendor/dependencies/notices/@pkgr__core@0.3.6/npm-metadata.json"
+      ]
+    },
+    "npm:@vue/compiler-vue2@2.7.16": {
+      "license": "MIT",
+      "reason": "Original upstream license at the exact gitHead recorded by the published npm version metadata.",
+      "sources": [
+        {
+          "file": "files/vendor/dependencies/notices/@vue__compiler-vue2@2.7.16/LICENSE",
+          "sha256": "17fb24bc303763f3fe1911ee24e5225c7ad59f0e3a5d8123e9b730c100a306a6"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/@vue__compiler-vue2@2.7.16/source.json",
+        "files/vendor/dependencies/notices/@vue__compiler-vue2@2.7.16/npm-metadata.json"
+      ]
+    },
+    "npm:@vue/devtools-api@6.6.4": {
+      "license": "MIT",
+      "reason": "Original upstream license at the exact gitHead recorded by the published npm version metadata.",
+      "sources": [
+        {
+          "file": "files/vendor/dependencies/notices/@vue__devtools-api@6.6.4/LICENSE",
+          "sha256": "050bbca6960784db52ff387271bf2ecc5cbed7cf8581b415d528a6ecb6585015"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/@vue__devtools-api@6.6.4/source.json",
+        "files/vendor/dependencies/notices/@vue__devtools-api@6.6.4/npm-metadata.json"
+      ]
+    },
+    "npm:@humanfs/types@0.15.0": {
+      "license": "Apache-2.0",
+      "reason": "Published types package explicitly declares Apache-2.0; this is the original complete Apache-2.0 text in its sibling core package at the exact same monorepo release commit. No inferred copyright notice.",
+      "sources": [
+        {
+          "file": "files/vendor/dependencies/notices/@humanfs__types@0.15.0/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/@humanfs__types@0.15.0/npm-metadata.json",
+        "files/vendor/dependencies/notices/@humanfs__types@0.15.0/source.json"
+      ]
+    },
+    "npm:boolbase@1.0.0": {
+      "license": "ISC",
+      "reason": "Upstream license-text addition merged after npm 1.0.0; runtime index.js at the license commit is byte-identical to retained npm 1.0.0 and initial release source. The release tarball declares ISC but omits the full license file.",
+      "sources": [
+        {
+          "file": "files/vendor/dependencies/notices/boolbase/LICENSE",
+          "sha256": "cdf4d87ae0a6c160227263bf4e39a0a10e30e89ae7256e0f7ac7bde0836552c6"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/boolbase/source.json"
+      ]
+    },
+    "npm:@types/localforage@0.0.34": {
+      "license": "MIT",
+      "reason": "Original DefinitelyTyped MIT terms and exact transition metadata generating the 0.0.34 stub published on 2017-03-21. The npm tarball contains only README.md and package.json, declares MIT, and includes no executable code or type definitions.",
+      "sources": [
+        {
+          "file": "files/vendor/dependencies/notices/types-localforage/LICENSE",
+          "sha256": "0a48f63d7d32a49d196dce4b2e0cbc236c2cc8fef42cb20e005e4d5f813cc8f6"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/types-localforage/source.json",
+        "files/vendor/dependencies/notices/types-localforage/notNeededPackages.json"
+      ]
+    },
+    "npm:@napi-rs/lzma-linux-x64-gnu@1.5.1": {
+      "license": "MIT",
+      "reason": "Use the exact published SPDX declaration with separately pinned canonical MIT text; retain all actual upstream notices independently.",
+      "declaredLicense": {
+        "identifier": "MIT",
+        "member": "package/package.json"
+      },
+      "sources": [
+        {
+          "component": "npm:@napi-rs/lzma-linux-x64-gnu@1.5.1",
+          "member": "package/package.json",
+          "sha256": "578e2a50ae69cd627c2953f8fa677efbf89f3087efeafff2db65aa31b81dc136"
+        },
+        {
+          "file": "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/text/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/@napi-rs__lzma-linux-x64-gnu@1.5.1/npm-metadata.json",
+        "files/vendor/dependencies/notices/@napi-rs__lzma-linux-x64-gnu@1.5.1/source.json",
+        "files/vendor/dependencies/notices/@napi-rs__lzma-linux-x64-gnu@1.5.1/git-tree.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/source.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/json/details/MIT.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/tag.json"
+      ]
+    },
+    "npm:de-indent@1.0.2": {
+      "license": "MIT",
+      "reason": "Use the exact published SPDX declaration with separately pinned canonical MIT text; retain all actual upstream notices independently.",
+      "declaredLicense": {
+        "identifier": "MIT",
+        "member": "package/package.json"
+      },
+      "sources": [
+        {
+          "component": "npm:de-indent@1.0.2",
+          "member": "package/package.json",
+          "sha256": "e490e1a063542f059140b60012beabf7f7b66c2404fae59f8d8c58f1bcf1208f"
+        },
+        {
+          "file": "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/text/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/de-indent@1.0.2/npm-metadata.json",
+        "files/vendor/dependencies/notices/de-indent@1.0.2/source.json",
+        "files/vendor/dependencies/notices/de-indent@1.0.2/git-tree.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/source.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/json/details/MIT.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/tag.json"
+      ]
+    },
+    "npm:eastasianwidth@0.2.0": {
+      "license": "MIT",
+      "reason": "Use the exact published SPDX declaration with separately pinned canonical MIT text; retain all actual upstream notices independently.",
+      "declaredLicense": {
+        "identifier": "MIT",
+        "member": "package/package.json"
+      },
+      "sources": [
+        {
+          "component": "npm:eastasianwidth@0.2.0",
+          "member": "package/package.json",
+          "sha256": "51db62f97656d02d4bc9670393cae42930dbd1ed89f5837056851807e602867a"
+        },
+        {
+          "file": "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/text/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/eastasianwidth@0.2.0/npm-metadata.json",
+        "files/vendor/dependencies/notices/eastasianwidth@0.2.0/source.json",
+        "files/vendor/dependencies/notices/eastasianwidth@0.2.0/git-tree.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/source.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/json/details/MIT.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/tag.json"
+      ]
+    },
+    "npm:marks-pane@1.0.9": {
+      "license": "MIT",
+      "reason": "Use the exact published SPDX declaration with separately pinned canonical MIT text; retain all actual upstream notices independently.",
+      "declaredLicense": {
+        "identifier": "MIT",
+        "member": "package/package.json"
+      },
+      "sources": [
+        {
+          "component": "npm:marks-pane@1.0.9",
+          "member": "package/package.json",
+          "sha256": "09ad68a28c8d7ec8f115d0d79a1f66f6626d089d7831b983eee23d8d59ed0898"
+        },
+        {
+          "file": "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/text/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/marks-pane@1.0.9/npm-metadata.json",
+        "files/vendor/dependencies/notices/marks-pane@1.0.9/source.json",
+        "files/vendor/dependencies/notices/marks-pane@1.0.9/git-tree.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/source.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/json/details/MIT.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/tag.json"
+      ]
+    },
+    "npm:natural-compare@1.4.0": {
+      "license": "MIT",
+      "reason": "Use the exact published SPDX declaration with separately pinned canonical MIT text; retain all actual upstream notices independently.",
+      "declaredLicense": {
+        "identifier": "MIT",
+        "member": "package/package.json"
+      },
+      "sources": [
+        {
+          "component": "npm:natural-compare@1.4.0",
+          "member": "package/package.json",
+          "sha256": "3d99911ccfa0ca34ae0c68bfd32c038b952542e55db7c649c37b11dd1573f6af"
+        },
+        {
+          "component": "npm:natural-compare@1.4.0",
+          "member": "package/README.md",
+          "sha256": "ced6cb1fe6ee15a32c63ea8c7e0425454e80456a890c6df3909429530566d40a"
+        },
+        {
+          "file": "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/text/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/natural-compare@1.4.0/npm-metadata.json",
+        "files/vendor/dependencies/notices/natural-compare@1.4.0/source.json",
+        "files/vendor/dependencies/notices/natural-compare@1.4.0/git-tree.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/source.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/json/details/MIT.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/tag.json"
+      ]
+    },
+    "npm:path-webpack@0.0.3": {
+      "license": "MIT",
+      "reason": "Use the exact published SPDX declaration with separately pinned canonical MIT text; retain all actual upstream notices independently.",
+      "declaredLicense": {
+        "identifier": "MIT",
+        "member": "package/package.json"
+      },
+      "sources": [
+        {
+          "component": "npm:path-webpack@0.0.3",
+          "member": "package/package.json",
+          "sha256": "80ced94cd0276b29e3499ec7c07f1c65f66a6a957d1e01b1a47a45bdd04cfd22"
+        },
+        {
+          "file": "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/text/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/path-webpack@0.0.3/npm-metadata.json",
+        "files/vendor/dependencies/notices/path-webpack@0.0.3/source.json",
+        "files/vendor/dependencies/notices/path-webpack@0.0.3/git-tree.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/source.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/json/details/MIT.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/tag.json"
+      ]
+    },
+    "npm:stackback@0.0.2": {
+      "license": "MIT",
+      "reason": "Use the exact published SPDX declaration with separately pinned canonical MIT text; retain all actual upstream notices independently.",
+      "declaredLicense": {
+        "identifier": "MIT",
+        "member": "package/package.json"
+      },
+      "sources": [
+        {
+          "component": "npm:stackback@0.0.2",
+          "member": "package/package.json",
+          "sha256": "4d984909b27d37d2f1a379b9cda7292a6e3a133c076df166d740a17514ac6e60"
+        },
+        {
+          "component": "npm:stackback@0.0.2",
+          "member": "package/formatstack.js",
+          "sha256": "3c1191bd7094a36098418e7d1606e2a49e7ee25b5ddee54b0b2514ea1a43b8a7"
+        },
+        {
+          "file": "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/text/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+        }
+      ],
+      "provenanceFiles": [
+        "files/vendor/dependencies/notices/stackback/formatstack.js",
+        "files/vendor/dependencies/notices/stackback/README.md",
+        "files/vendor/dependencies/notices/stackback/source.json",
+        "files/vendor/dependencies/notices/stackback/package.json",
+        "files/vendor/dependencies/notices/stackback/npm-package.json",
+        "files/vendor/dependencies/notices/stackback/index.js",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/source.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/json/details/MIT.json",
+        "files/vendor/dependencies/notices/spdx-license-list-data-3.29.0/tag.json"
+      ]
+    }
+  }
+}

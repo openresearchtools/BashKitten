@@ -79,6 +79,18 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
   the copy and one in the unchanged master. Evidence:
   `BashkittenBuild/verification/apps-native-gateway-20261028/office-copy-export-evidence.json`.
   A restricted remote-account export test was unavailable in that fixture.
+- Normal package assembly rejected the sealed Files artifacts because 73
+  dependency records had no full notice text. Successful native compilation and
+  clean manifests did not establish that legal-content requirement. The producer
+  now checks all notice records before compilation and fails with the exact
+  unresolved names; retained README notices, same-version parent notices and
+  original pinned supplementary licenses are being reconciled. Those earlier
+  artifacts remain diagnostic build outputs and cannot enter normal packages.
+  The 70 npm gaps now resolve to checksum-bound original text or explicitly
+  labelled exact-package SPDX declarations plus pinned canonical text. The audit
+  still rejects the three pinned `gtsteffaniak/go-cache`, `go-logger` and
+  `go-ffmpeg` modules: those pins contain no usable license declaration/text.
+  Native replacement/source review is separate; no license is inferred for them.
 
 ## Remaining coverage
 
