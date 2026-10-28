@@ -30,12 +30,14 @@ globalThis.References = new function () {
   this.rpc = (destination, method, data, options={}) => transport({operation: 'request',
     backendId: destination.backendId, projectId: destination.projectId, method, data,
     headers: options.headers || {}, queryString: options.queryString || '', bodyEncoding: options.bodyEncoding || 'json'});
-  this.select = async (tab, mode='capture') => {
+  this.select = async (tab, mode='capture', sessionID=null) => {
     if (!tab || tab.id < 0) throw new Error('References requires an ordinary source tab');
+    const binding = mode === 'retarget' ? this.bind(sessionID, tab) : null;
+    if (binding && binding.sourceTab !== tab.id) throw new Error('Capture session belongs to another source tab');
     const id = crypto.randomUUID();
     let finish;
     const result = new Promise(resolve => { finish = resolve; });
-    choices.set(id, {source: tab, finish, mode, destination: destinations.get(tab.id)});
+    choices.set(id, {source: tab, finish, mode, destination: binding || destinations.get(tab.id)});
     const choiceTab = (await this.openTabSurface(browser.runtime.getURL('references/destination.html') + '#' + id, {}, tab)).tabs[0];
     const close = tabId => {
       if (tabId !== choiceTab.id && tabId !== tab.id) return;
@@ -48,7 +50,17 @@ globalThis.References = new function () {
     try {
       const destination = await result;
       if (!destination) return false;
-      if (mode === 'open' || destination.openManager) return transport({operation:'open',backendId:destination.backendId,projectId:destination.projectId});
+      if (mode === 'open' || destination.openManager) {
+        await transport({operation:'open',backendId:destination.backendId,projectId:destination.projectId});
+        return false; // Opening the manager never becomes a capture session.
+      }
+      if (binding) {
+        if (destination.backendId !== binding.backendId || destination.projectId !== binding.projectId) throw new Error('A capture cannot move to another backend or project');
+        this.bind(sessionID, tab);
+        const selected = await this.rpc(binding, 'getSelectedCollection', {target: destination.target});
+        await browser.tabs.update(tab.id, {active:true});
+        return {id:selected.id, name:selected.name, filesEditable:selected.filesEditable, kind:selected.kind || (destination.target ? 'collection' : 'library')};
+      }
       // Validate once more immediately before any capture operation; grants remain backend-owned.
       const readiness = await this.rpc(destination, 'ping', {});
       destination.prefs = Object.freeze({...readiness.prefs});
@@ -57,10 +69,10 @@ globalThis.References = new function () {
       const current = await browser.tabs.get(tab.id);
       if (current.url !== tab.url) throw new Error('Source tab changed while choosing a destination');
       destinations.set(tab.id, Object.freeze({...destination}));
-      const sessionID = crypto.randomUUID();
-      sessions.set(sessionID, Object.freeze({...destination, sourceTab:tab.id}));
+      const captureID = crypto.randomUUID();
+      sessions.set(captureID, Object.freeze({...destination, sourceTab:tab.id}));
       await browser.tabs.update(tab.id, {active: true});
-      return sessionID;
+      return captureID;
     } catch (error) {
       await browser.browserAction.setTitle({tabId:tab.id,title:'References: '+error.message}).catch(() => {});
       throw error;
@@ -70,7 +82,7 @@ globalThis.References = new function () {
     }
   };
   const resolverJobs = new Map();
-  this.resolveRequest = async (binding) => {
+  this.resolveRequest = async (binding, sourceTab) => {
     await Zotero.initDeferred.promise;
     const pending = await this.rpc(binding, 'getResolverRequest', {requestId:binding.requestId});
     if (pending.status === 'complete') return {status:'complete',requestId:binding.requestId,receipt:pending.receipt};
@@ -80,7 +92,7 @@ globalThis.References = new function () {
     }
     const url = new URL(pending.attachment.url);
     if (!['http:','https:'].includes(url.protocol) || url.username || url.password) throw new Error('Invalid resolver URL');
-    const source = (await browser.tabs.query({active:true,lastFocusedWindow:true}))[0];
+    const source = sourceTab || (await browser.tabs.query({active:true,lastFocusedWindow:true}))[0];
     if (!source) throw new Error('Open an ordinary browser tab for this resolver request');
     const attachment = {...pending.attachment,mimeType:pending.attachment.contentType || 'application/pdf',parentItem:pending.attachment.parentItemID};
     let bytes;
@@ -136,6 +148,7 @@ globalThis.References = new function () {
     if (sessionID && sessions.get(sessionID)?.sourceTab !== tab?.id && tab) {
       throw new Error('Capture session belongs to another source tab');
     }
+    if (options.method === 'chooseTarget') return this.select(tab, 'retarget', sessionID);
     if (data && typeof data === 'object' && !(data instanceof ArrayBuffer)
         && ['saveItems', 'saveSnapshot', 'getSelectedCollection'].includes(options.method)) {
       data = {...data, target: destination.target};
@@ -149,9 +162,28 @@ globalThis.References = new function () {
         binary ? new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength) : new TextEncoder().encode(serialized),
         {...requestOptions, bodyEncoding: binary ? 'binary' : 'json'});
     }
-    const result = await this.rpc(destination, options.method, data, requestOptions);
+    let result;
+    try { result = await this.rpc(destination, options.method, data, requestOptions); }
+    catch (error) {
+      if (options.method !== 'saveAttachmentFromResolver' || error.status !== 409 || error.value?.code !== 'BROWSER_REQUIRED') throw error;
+      const requestId = error.value.details?.requestId;
+      if (typeof requestId !== 'string' || !/^[A-Za-z0-9_.:-]{1,256}$/.test(requestId)) throw error;
+      const resolved = await this.resolveRequest(Object.freeze({backendId:destination.backendId,projectId:destination.projectId,requestId}), tab);
+      const title = resolved.receipt?.data?.title;
+      if (resolved.status !== 'complete' || typeof title !== 'string' || !title) throw new Error('References did not confirm a saved attachment');
+      return title;
+    }
     if (options.method === 'updateSession' && sessionID && data.target !== undefined) {
       sessions.set(sessionID, Object.freeze({...destination,target:data.target}));
+    }
+    if (options.method === 'hasAttachmentResolvers' && typeof result !== 'boolean') throw new Error('Incompatible References resolver response');
+    if (options.method === 'saveAttachmentFromResolver' && (typeof result !== 'string' || !result)) throw new Error('References did not confirm a saved attachment');
+    if (options.method === 'getSelectedCollection') {
+      // The donor progress tree expects the entire hierarchy. Keep its current
+      // target presentation, but use the bounded chooser for exploration.
+      const root = {id:'L'+destination.projectId,name:result.libraryName,kind:'library',level:0,filesEditable:result.filesEditable};
+      const selected = {id:result.id,name:result.name,kind:result.kind || (result.id === root.id ? 'library' : 'collection'),level:1,filesEditable:result.filesEditable};
+      result = {...result,kind:selected.kind,targets: selected.id === root.id ? [root] : [root,selected]};
     }
     return result;
   };
@@ -200,7 +232,14 @@ globalThis.References = new function () {
     }
     const pending = choices.get(message.id);
     if (!pending) throw new Error('References destination choice expired');
-    if (message.action === 'context') return {...await this.context(), previous:pending.destination, mode:pending.mode};
+    if (message.action === 'context') {
+      const context = await this.context();
+      if (pending.mode !== 'retarget') return {...context, previous:pending.destination, mode:pending.mode};
+      const binding = pending.destination;
+      if (context.backendId !== binding.backendId) throw new Error('The capture backend is no longer selected');
+      return {...context, projects:context.projects.filter(project => project.id === binding.projectId), selectedProjectId:binding.projectId, previous:binding, mode:pending.mode};
+    }
+    if (pending.mode === 'retarget' && ['collections','confirm'].includes(message.action) && (message.destination?.backendId !== pending.destination.backendId || message.destination?.projectId !== pending.destination.projectId || message.openManager)) throw new Error('A capture cannot move to another backend or project');
     if (message.action === 'collections') return this.rpc(message.destination, 'getSelectedCollection', {
       target:message.destination.target, parent:message.parent || null, q:String(message.q || '').slice(0,200), start:Math.max(0,Number(message.start)||0), limit:100});
     if (message.action === 'confirm') { pending.finish({...message.destination,openManager:message.openManager === true}); return true; }

@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parent
 REPO=ROOT.parents[1]
 WORK=ROOT/'.build/source'
 OUT=ROOT/'dist/references'
-VERSION='1.0.0'
+VERSION='1.0.1'
 
 def run(*args):subprocess.run(args,cwd=WORK,check=True,env={**os.environ,'NPM_CONFIG_OFFLINE':'true'})
 # Keep npm's content cache; reconstruct source from the named patch every time.

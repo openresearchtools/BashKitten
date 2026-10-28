@@ -1,0 +1,163 @@
+--- a/src/common/ui/ProgressWindow.jsx
++++ b/src/common/ui/ProgressWindow.jsx
+@@ -29,8 +29,8 @@
+ 
+ Zotero.UI.style.imageBase = Zotero.getExtensionURL("images/");
+ 
+-function getTargetType(id) {
+-	return id.startsWith('L') ? 'library': 'collection';
++function getTargetType(id, kind) {
++	return kind || (id.startsWith('L') ? 'library' : 'collection');
+ }
+ 
+ function getParent(rows, id) {
+@@ -128,6 +128,11 @@
+ 		this.addMessageListener('progressWindowIframe.shown', this.handleShown.bind(this));
+ 		this.addMessageListener('progressWindowIframe.hidden', this.handleHidden.bind(this));
+ 		this.addMessageListener('progressWindowIframe.reset', () => this.setState(this.getInitialState()));
++		this.addMessageListener('progressWindowIframe.targetChosen', target => {
++			const targets = this.state.targets.filter(row => row.kind === 'library');
++			if (target.kind !== 'library') targets.push({...target,level:1});
++			this.setState({targets}, () => this.onTargetChange(target.id));
++		});
+ 		this.addMessageListener('progressWindowIframe.willHide', this.handleHiding.bind(this));
+ 		
+ 		document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
+@@ -137,7 +142,7 @@
+ 		
+ 		this.sendMessage('registered');
+ 		
+-		document.querySelector("#progress-window").setAttribute("aria-label", Zotero.getString('general_saveTo', 'Zotero'));
++		document.querySelector("#progress-window").setAttribute("aria-label", Zotero.getString('general_saveTo', 'References'));
+ 		Zotero.Connector.getPref('canUserAddNote').then(res => {
+ 			this.canUserAddNote = res;
+ 		});
+@@ -190,6 +195,8 @@
+ 	// State update
+ 	//
+ 	changeHeadline(text, target, targets, tags) {
++		this.target = target;
++		this.currentLibraryID = targets?.find(row => row.kind === 'library')?.id;
+ 		// Target selector mode
+ 		if (targets) {
+ 			// On initialization or if collapsed, focus the recents drop-down
+@@ -199,7 +206,7 @@
+ 			
+ 			// Auto-expand libraries
+ 			targets.forEach((t) => {
+-				if (getTargetType(t.id) == 'library') {
++				if (getTargetType(t.id, t.kind) == 'library') {
+ 					t.expanded = true;
+ 				}
+ 			});
+@@ -223,7 +230,7 @@
+ 		if (!targets) {
+ 			state.targetSelectorShown = false;
+ 		}
+-		let targetName = target?.name || "zotero.org";
++		let targetName = target?.name || "References";
+ 		// Alert that the item is being saved or has already been saved
+ 		let alert = this.done ? Zotero.getString("progressWindow_alreadySaved") : `${text} ${targetName}`;
+ 		document.getElementById("messageAlert").textContent = alert; 
+@@ -479,6 +486,14 @@
+ 		});
+ 	}
+ 	
++	async chooseTarget() {
++		if (this.referencesChoosingTarget) return;
++		this.referencesChoosingTarget = true;
++		try {
++			await this.sendMessage('chooseTarget', {});
++		} finally { this.referencesChoosingTarget = false; }
++	}
++
+ 	handleDisclosureKeyPress(event) {
+ 		if (event.key == 'Enter') {
+ 			event.stopPropagation();
+@@ -726,7 +741,7 @@
+ 	 */
+ 	renderHeadlineTarget() {
+ 		return <React.Fragment>
+-			<TargetIcon type={getTargetType(this.state.target.id)}/>
++			<TargetIcon type={getTargetType(this.state.target.id, this.state.target.kind)}/>
+ 			{" " + this.state.target.name + "…"}
+ 		</React.Fragment>;
+ 	}
+@@ -834,29 +849,7 @@
+ 
+ 	renderTargetSelector() {
+ 		if (!this.state.targetSelectorShown) return "";
+-		const filterElement = (
+-			<div className="ProgressWindow-filterWrapper">
+-				<input
+-					className="ProgressWindow-filterInput"
+-					onInput={this.setFilter}
+-					placeholder={this.text.filterPlaceholder}>
+-				</input>
+-				<button className="ProgressWindow-cross hidden"
+-						onClick={this.clearFilter}
+-						tabindex={-1}/>
+-			</div>
+-		)
+-		const targetSelectorElement = (
+-			<div className="ProgressWindow-targetSelector">
+-				<TargetTree
+-					rows={this.state.targets.filter(target => target.passesFilter || target.passingParent)}
+-					focused={this.state.targets.find(row => row.id == this.state.target.id)}
+-					onExpandRows={this.handleExpandRows}
+-					onCollapseRows={this.handleCollapseRows}
+-					onRowToggle={this.handleRowToggle}
+-					onRowFocus={this.onTargetChange}/>
+-			</div>
+-		)
++		const targetSelectorElement = <button onClick={() => this.chooseTarget()}>Change collection…</button>;
+ 		let noteEditorElement = null;
+ 		if (this.canUserAddNote) {
+ 			noteEditorElement = (
+@@ -886,7 +879,6 @@
+ 		)
+ 		return (
+ 			<div>
+-				{filterElement}
+ 				{targetSelectorElement}
+ 				{noteEditorElement}
+ 				{tagsInputElement}
+--- a/src/common/inject/progressWindow_inject.js
++++ b/src/common/inject/progressWindow_inject.js
+@@ -143,6 +143,7 @@
+ 		var target = {
+ 			id,
+ 			name: response.name,
++			kind: response.kind,
+ 			filesEditable: response.filesEditable
+ 		};
+ 		
+@@ -243,7 +244,7 @@
+ 		zoteroFrame = new Zotero.Frame({
+ 			id: frameID,
+ 			src: frameSrc,
+-			title: Zotero.getString('general_saveTo', 'Zotero'),
++			title: Zotero.getString('general_saveTo', 'References'),
+ 			'data-single-file-hidden-frame': ''
+ 		}, {
+ 			position: 'fixed',
+@@ -355,6 +356,19 @@
+ 		
+ 		// Sent by the progress window when changes are made in the target selector
+ 		addMessageListener('progressWindowIframe.updated', handleUpdated);
++
++		// The native tree expects every collection. Reuse the bounded destination
++		// chooser while preserving this session's donor tags, note and save flow.
++		addMessageListener('progressWindowIframe.chooseTarget', async data => {
++			const sessionID = currentSessionID;
++			stopCloseTimer(); closeTimerDisabled = true;
++			try {
++				const target = await Zotero.Connector.callMethod('chooseTarget', {sessionID});
++				if (!target || currentSessionID !== sessionID) return;
++				addEvent('targetChosen', target);
++			} catch (error) { Zotero.logError(error); await addError('unexpectedError'); }
++			finally { closeTimerDisabled = false; startCloseTimer(); }
++		});
+ 		
+ 		// Keep track of when the mouse is over the popup, for various purposes
+ 		addMessageListener('progressWindowIframe.mouseenter', handleMouseEnter);

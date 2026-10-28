@@ -8,7 +8,7 @@ page scripts cannot call the host. Desktop packaging adds the tiny native
 native-messaging delegate `bashkitten_references`. No tokens, filesystem handles
 or arbitrary native URL fetch are exposed to the capture extension.
 
-The independently built capture extension, preinstalled separately from the fixed host, reuses Connector 5.0.217's
+The independently built capture extension (currently 1.0.1), preinstalled separately from the fixed host, reuses Connector 5.0.217's
 translation, ItemSaver, background attachment, SingleFile, item selector, progress,
 content-type interception, cookies and challenge-monitor modules. Its source
 import is immutable under `upstream/`; a named patch changes only documented seams.
@@ -41,12 +41,16 @@ for translator detection; metadata/code comes from the package.
 
 Every save begins with an explicit backend/project/collection choice and a fresh
 capture session generated in the background before translation starts. The
-session is permanently bound to that destination and source tab. Collection
+session is permanently bound to that backend, project and source tab.
 The action menu and destination chooser also offer **Open manager**, using the
 same backend/project and the native shared application-launch owner. It passes
-no URL or credential into page scripts. Collection choice traverses collection hierarchy using bounded pages (at most 100 targets); stale search responses are discarded. Closing
+no URL or credential into page scripts, and returns no capture session. Collection choice traverses collection hierarchy using bounded pages (at most 100 collections); stale search responses are discarded. Previous follows the actual server page boundaries. Closing
 or cancelling the chooser makes no item or attachment. Upstream progress updates
 retain the same bound session; the server is the final authorization owner.
+The donor progress disclosure retains its native tags and note controls. Its
+collection action opens this same paged chooser, locked to the existing capture's
+backend and project, then uses the donor's normal `updateSession` operation.
+This replaces only the donor tree's requirement to fetch every collection.
 
 Requests are `{apiVersion:1,operation:'request',backendId,projectId,method,data,
 headers,queryString,bodyEncoding}` and return `{apiVersion:1,status,headers,body}`.
@@ -55,6 +59,10 @@ that backend. The service routes to `/projects/:projectId/connector/:method`.
 Headers are limited to `Content-Type` and `X-Metadata`; the query allows one each
 of `sessionID`, `session`, `target`. Normal message data is at most 512 KiB.
 Native/back-end errors remain errors; there is no cloud account or sync fallback.
+API 3 resolver capability is a boolean, and resolver save success is an attachment
+title. A `BROWSER_REQUIRED` response uses the existing ordinary-tab resolver helper
+and returns that title only after a verified completed attachment receipt; pending,
+unavailable or cancelled retrieval never reports a successful PDF save.
 
 API 3 capture methods are `ping`, `getTranslators`, `getTranslatorCode`,
 `getSelectedCollection`, `saveItems`, `saveSnapshot`, `saveSingleFile`,
