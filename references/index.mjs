@@ -148,6 +148,7 @@ export async function createReferencesService({
     library: { id: p.id, backendId },
     meta: {
       attachmentCount: item.data.attachmentCount || 0,
+      ...(item.truncatedFields ? { truncatedFields: item.truncatedFields } : {}),
       creatorSummary: (item.data.creators || [])
         .map((c) => c.name || c.lastName || c.firstName)
         .join("; "),
@@ -2650,8 +2651,10 @@ export async function createReferencesService({
         .split("/")
         .filter(Boolean)
         .map(decodeURIComponent);
-      if (segments[0] === "projects" && segments.length === 1)
+      if (segments[0] === "projects" && segments.length === 1) {
+        if (method !== "GET") fail("Method not allowed", 405);
         return { status: 200, body: (await listProjects?.(authority)) || [] };
+      }
       if (segments[0] !== "projects" || !segments[1])
         fail("An explicit project library is required");
       if (
@@ -3533,6 +3536,13 @@ export async function createReferencesService({
                   !compatibility &&
                   query.get("format") !== "csljson" &&
                   query.get("includeData") !== "true",
+                fields: query.has("fields")
+                  ? query
+                      .get("fields")
+                      .split(",")
+                      .map((field) => field.trim())
+                      .filter(Boolean)
+                  : undefined,
                 start: Number(query.get("start")) || 0,
                 cursor: query.get("cursor"),
                 deleted: query.get("deleted") === "1",

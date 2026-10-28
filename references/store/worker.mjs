@@ -14,6 +14,26 @@ const itemSchema = JSON.parse(
 const itemTypes = new Map(
   itemSchema.itemTypes.map((type) => [type.itemType, type]),
 );
+const summaryFields = new Set([
+  "itemType",
+  "title",
+  "creators",
+  "date",
+  "collections",
+  "tags",
+  "deleted",
+  "attachmentCount",
+]);
+const projectedFields = new Set([
+  ...itemSchema.itemTypes.flatMap((type) =>
+    type.fields.flatMap(({ field, baseField }) =>
+      baseField ? [field, baseField] : [field],
+    ),
+  ),
+  ...summaryFields,
+  "dateAdded",
+  "dateModified",
+]);
 const connections = new Map();
 const key = () => randomBytes(8).toString("hex").toUpperCase();
 const fail = (message, status = 400) => {
@@ -212,6 +232,36 @@ function putItem(db, value, expected, patch = false) {
   return { key: itemKey, version: v, data };
 }
 function list(db, args = {}) {
+  if (
+    args.fields !== undefined &&
+    (!Array.isArray(args.fields) ||
+      args.fields.some((field) => !projectedFields.has(field)))
+  )
+    fail("Choose native metadata fields for the item page");
+  const fields = args.summary
+    ? [...new Set(args.fields || [])].filter((field) => !summaryFields.has(field))
+    : [];
+  // Table cells are excerpts; full records remain available through item GET.
+  // Bound additional text per row even when every schema field is selected.
+  const fieldCharacters = Math.min(
+    2048,
+    Math.floor(16384 / (fields.length || 1)),
+  );
+  const projectionBindings = [];
+  const projection = fields.flatMap((field, index) => {
+    const jsonPath = "$." + field;
+    projectionBindings.push(
+      jsonPath,
+      jsonPath,
+      fieldCharacters,
+      jsonPath,
+      fieldCharacters,
+    );
+    return [
+      `CASE WHEN json_type(data,?)='text' THEN substr(json_extract(data,?),1,?) END AS projected_${index}`,
+      `length(json_extract(data,?))>? AS truncated_${index}`,
+    ];
+  });
   const allowed = {
     title: "title",
     creator: "creator",
@@ -291,14 +341,23 @@ function list(db, args = {}) {
     : "*";
   const rows = db
     .prepare(
-      `SELECT ${columns} FROM items WHERE ${where.join(" AND ")} ORDER BY ${sort} ${direction},key ${direction} LIMIT ? OFFSET ?`,
+      `SELECT ${columns}${projection.length ? "," + projection.join(",") : ""} FROM items WHERE ${where.join(" AND ")} ORDER BY ${sort} ${direction},key ${direction} LIMIT ? OFFSET ?`,
     )
-    .all(...bindings, limit + 1, cursor ? 0 : offset);
+    .all(...projectionBindings, ...bindings, limit + 1, cursor ? 0 : offset);
   const more = rows.length > limit;
   if (more) rows.pop();
   const last = rows.at(-1);
   const result = {
-    items: rows.map(decode),
+    items: rows.map((row) => {
+      const item = decode(row),
+        truncatedFields = [];
+      fields.forEach((field, index) => {
+        item.data[field] = row["projected_" + index];
+        if (row["truncated_" + index]) truncatedFields.push(field);
+      });
+      if (truncatedFields.length) item.truncatedFields = truncatedFields;
+      return item;
+    }),
     version: current,
     next: more
       ? Buffer.from(

@@ -28,11 +28,21 @@ to `/api/references` and returns `{status,headers,body}`, or an authorized
 `/projects/:projectId`. The persistent reference identity is
 `bkref:<backendId>/<projectId>/<itemKey>`. Native browser backend aliases are
 transport context and are never compared with the persistent backend UUID.
+Library discovery uses the existing authorized registered-project catalogue
+(`GET /projects`); it does not enumerate SQLite files or load library records.
+The Office document's selected library is one explicit project UUID, separate
+from its file location. Every item query still addresses only that library.
 
 - `items`, `items/:key`, `items/:key/children`, `items/:key/file`,
   `items/:key/fulltext`: metadata, notes, tags, relationships and attachments.
   Item pages accept `q`, `sort`, `direction`, `cursor`, `limit`, `collection`,
   `itemType`, `top`, `deleted`, `includeData` and `format=csljson`.
+  Optional comma-separated `fields` adds selected native schema fields to the
+  summary for configurable columns. Extra text cells are excerpts (at most
+  2,048 characters each and 16,384 extra characters per row); names in
+  `meta.truncatedFields` identify excerpts. Full item records remain unchanged.
+  Unknown field names return 400; indexed search, sort and cursor rules stay
+  unchanged. This projection never reads another library or adds an index.
 - `collections` and `searches`: versioned collection and saved-search CRUD.
   Collection removal updates indexed membership and stored item JSON together;
   child collections must first be moved or removed.
