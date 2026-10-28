@@ -182,6 +182,44 @@ previous acceptance profiles. The dedicated Xorg VM has the new package. A
 separate Android instance uses a fresh primary-user image with the prior image
 preserved. These are setup results, not completed user-flow checks.
 
+### Source, export and native-build follow-up
+
+The earlier Files archive check covered payload inventory and source identity;
+the subsequent full package license collector found incomplete dependency
+notices. Final package assembly remains stopped. Exact upstream notices and
+published SPDX declarations are being retained with their provenance, separately
+from canonical license text. The three pinned Go dependencies without established
+license coverage remain unresolved; licensed native replacements are under
+review. No missing grant is inferred, and existing sealed artifacts are not
+edited or relabelled. Evidence is in `verification/go-module-legal-20261028/`
+and `verification/module-iteration-fa2-legal-check.json` under BashkittenBuild.
+
+The earlier citation Undo result used the native `XUndoManager` API, not the
+collaborative toolbar command. A subsequent `.uno:Undo` diagnostic found that
+upstream UNO undo contexts had no document-view identity. The focused generic
+patch assigns the current native document view while retaining collaboration's
+ownership checks. It has compiled; same-view Undo and rejection from another
+participant are being verified before claiming that command path works.
+
+The native x86_64 Termux Office engine has compiled, including the shared Undo
+patch. Online server dependencies/configuration and complete Android document
+execution remain open. The ARM engine is still compiling. Dependency execution,
+engine compilation and installed product acceptance remain separate results.
+
+References exports now use bounded SQLite pages, a private input spool and one
+native translator with its native file writer. Explicit selected, search,
+collection, library and deleted-item scopes replace the earlier selection and
+child-record ceilings. Focused native checks covered stale-version rejection,
+cancellation, receipt recovery, 201 child notes and an 18.9 MB private download.
+Formats that natively buffer a complete array/graph/document report that memory
+behavior; no 100,000-record benchmark or mass provider retrieval was run.
+
+Current native module/resource updates reuse the successfully compiled browser
+boundary. The resource-only package refresh preserves its actual native binary
+hashes and uses the normal source-revision checks; it is not a new full Gecko
+build or a completed release package. Installed browser HTTPS, capture/update,
+human/agent UI and full platform acceptance are still pending.
+
 ## Decision and planning work
 
 The user selected Collabora Online after the temporary stock-server comparison. The active plan, AGENTS instructions and current native
