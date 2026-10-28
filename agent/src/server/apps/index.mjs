@@ -9,7 +9,7 @@ import { dataDir, readJson, json, body as readBody } from '../common.mjs';
 import { paths } from '../access/paths.mjs';
 import { controlRequest } from '../control.mjs';
 import { dispatchReferenceResolver } from '../access/browser-channel.mjs';
-import { projects, createProject, renameProject, removeProject } from '../projects.mjs';
+import { projects, createProject, renameProject, removeProject, archiveProject, relinkProject, withProjectOperation, withProjectTransition } from '../projects.mjs';
 import { fileDirectory, sendFile } from '../files/files.mjs';
 import { authorizeApplicationPath, privateManagerPaths, managerAllowed, runManagerOperation } from '../files/access.mjs';
 import { ApplicationGateway } from './gateway.mjs';
@@ -59,18 +59,19 @@ export class ApplicationModules {
       return () => { stopRequest?.(); stopAuth(); };
     } });
   }
-  async project(record, id) {
+  async project(record, id, { includeArchived = false } = {}) {
     if (!await this.auth.valid(record) || !await managerAllowed(record)) throw Object.assign(Error('This project is not authorized'), { status: 403 });
-    const project = (await projects()).projects.find(project => project.id === id);
+    const project = (await projects({ includeArchived })).projects.find(project => project.id === id);
     if (!project) throw Object.assign(Error('Project not found'), { status: 404 });
     const cwd = (await fileDirectory(project.cwd)).path;
     await authorizeApplicationPath(cwd);
-    return { ...project, cwd, runAuthorized: work => this.authorize(record, async operation => {
-      const current = (await projects()).projects.find(item => item.id === id);
+    return { ...project, cwd, runAuthorized: work => withProjectOperation(id, projectSignal => this.authorize(record, async operation => {
+      const current = (await projects({ includeArchived })).projects.find(item => item.id === id);
       if (!current || current.cwd !== project.cwd) throw Object.assign(Error('The project changed during this operation'), { status: 409 });
-      operation.signal.throwIfAborted();
-      return work(operation.signal);
-    }) };
+      if (current.archived) throw Object.assign(Error('Unarchive this library before changing it'), { status: 409 });
+      const signal = AbortSignal.any([projectSignal, operation.signal]); signal.throwIfAborted();
+      return work(signal);
+    })) };
   }
   async ensureRunning(service, start = true, restart = false) {
     if (this.closed) throw unavailable('Applications', 'the backend is stopping');
@@ -85,7 +86,8 @@ export class ApplicationModules {
         const endpoint = await this.gateway.endpoint();
         await this.ensureRunning({ id: 'references', name: 'References', kind: 'web', scheme: 'https',
           target: { network: 'unix', address: endpoint.socketPath }, openPath: '/', enabled: false, startup: false, command: null }, false);
-        return module.createReferencesService({ dataDir, backendId: await this.identity(), authorizeProject: (authority, id) => this.project(authority, id),
+        return module.createReferencesService({ dataDir, backendId: await this.identity(), authorizeProject: (authority, id) => this.project(authority, id, { includeArchived: true }),
+          authorizeLibraryLifecycle: (authority, id, options) => this.libraryAuthority(authority, id, options),
           listProjects: async authority => { if (!await this.auth.valid(authority) || !await managerAllowed(authority)) throw Object.assign(Error('Project access is not authorized'), { status: 403 }); return (await projects()).projects.map(({ id, name }) => ({ id, name })); } });
       })().catch(error => { this.instances.delete('references'); throw error; });
       this.instances.set('references', pending);
@@ -102,6 +104,48 @@ export class ApplicationModules {
       if (this.instances.get('references') === pending) this.instances.delete('references');
     }
     return { running: false };
+  }
+  async libraryAuthority(record, id, options = {}) {
+    if (!await this.auth.valid(record) || !await managerAllowed(record)) throw Object.assign(Error('This library is not authorized'), { status: 403 });
+    const project = (await projects({ includeArchived: true })).projects.find(item => item.id === id);
+    if (!project) throw Object.assign(Error('Project not found'), { status: 404 });
+    await authorizeApplicationPath(project.cwd);
+    if (options.operation === 'relink') {
+      if (options.previousRoot !== project.cwd) throw Object.assign(Error('The project folder changed'), { status: 409 });
+      await authorizeApplicationPath((await fileDirectory(options.newRoot)).path);
+    }
+    return { ...project, runAuthorized: work => this.authorize(record, async operation => {
+      const current = (await projects({ includeArchived: true })).projects.find(item => item.id === id);
+      if (!current || current.cwd !== project.cwd) throw Object.assign(Error('The project changed during this operation'), { status: 409 });
+      operation.signal.throwIfAborted(); return work(operation.signal);
+    }) };
+  }
+  async projectLifecycle(id, action, method, input, record, { signal, response } = {}) {
+    const project = await this.libraryAuthority(record, id);
+    if ((action === 'library' && method !== 'DELETE') || (action !== 'library' && method !== 'POST')) throw Object.assign(Error('Method not allowed'), { status: 405 });
+    const allowed = { archive: ['archived'], relink: ['cwd', 'expectedCwd'], library: ['confirmProjectId', 'attachments'] }[action];
+    if (Object.keys(input).some(key => !allowed.includes(key))) throw Object.assign(Error('Invalid library lifecycle request'), { status: 400 });
+    return withProjectTransition(id, async () => {
+      signal?.throwIfAborted();
+      if (action === 'archive') {
+        if (typeof input.archived !== 'boolean') throw Error('Choose whether to archive this project');
+        await this.revokeProject(id, { response });
+        return { status: 200, body: { project: await archiveProject(id, input.archived) } };
+      }
+      const references = await this.references();
+      if (action === 'relink') {
+        if (input.expectedCwd !== project.cwd) throw Object.assign(Error('The project folder changed; refresh before relinking'), { status: 409 });
+        const cwd = (await fileDirectory(input.cwd)).path; await authorizeApplicationPath(cwd);
+        await this.revokeProject(id, { response });
+        const reconciliation = await references.validateLibraryRelink({ projectId: id, previousRoot: project.cwd, newRoot: cwd, authority: record, signal });
+        if (!reconciliation.canRelink) return { status: 409, body: { error: 'The new folder does not contain the matching library attachments', reconciliation } };
+        signal?.throwIfAborted();
+        return { status: 200, body: { project: await relinkProject(id, cwd, { expectedCwd: project.cwd }), reconciliation } };
+      }
+      if (input.confirmProjectId !== id || !['keep', 'delete'].includes(input.attachments)) throw Object.assign(Error('Confirm this exact library and choose whether to keep its attachments'), { status: 400 });
+      await this.revokeProject(id, { response });
+      return { status: 200, body: await references.deleteLibrary({ projectId: id, ...input, authority: record, signal }) };
+    });
   }
   async office() {
     if (!this.instances.has('office')) {
@@ -148,11 +192,12 @@ export class ApplicationModules {
             await this.project(grant.record, grant.scope.projectId);
             return { projectId: grant.scope.projectId };
           }),
-          referenceRequest: ({ grantId, method, path: requestPath, body }) => this.gateway.authorizeOperation(grantId, 'references-request', async ({ grant, signal }) => {
+          referenceRequest: ({ grantId, method, path: requestPath, body, signal: callerSignal }) => this.gateway.authorizeOperation(grantId, 'references-request', async ({ grant, signal }) => {
             await this.validateGrant(grant);
             const projectId = /^\/api\/references\/projects\/([^/]+)(?:\/|$)/.exec(requestPath)?.[1];
             if (!projectId || projectId !== grant.scope.projectId) throw Object.assign(Error('References request leaves the document project'), { status: 403 });
-            return this.request({ component: 'references', method, path: requestPath.slice('/api/references'.length), body }, grant.record, { signal });
+            return this.request({ component: 'references', method, path: requestPath.slice('/api/references'.length), body }, grant.record,
+              { signal: callerSignal ? AbortSignal.any([callerSignal, signal]) : signal });
           }) });
         this.officeProvider = provider;
         const referenceOperation = name => (value, { identity, projectId, signal } = {}) => this.gateway.authorizeOperation(identity?.grantId, 'references-' + name, async context => {
@@ -180,7 +225,7 @@ export class ApplicationModules {
   }
   async validateGrant(grant) {
     if (grant.scope.projectId) {
-      const current = await this.project(grant.record, grant.scope.projectId);
+      const current = await this.project(grant.record, grant.scope.projectId, { includeArchived: grant.component === 'references' });
       if (grant.scope.projectRoot && current.cwd !== grant.scope.projectRoot) throw Object.assign(Error('The document project folder changed'), { status: 409 });
     }
     await authorizeApplicationPath(grant.scope.root);
@@ -205,7 +250,7 @@ export class ApplicationModules {
   }
   async open(component, input, record) {
     return this.authorize(record, async () => {
-      const project = input.projectId ? await this.project(record, input.projectId) : null;
+      const project = input.projectId ? await this.project(record, input.projectId, { includeArchived: component === 'references' }) : null;
       const root = input.cwd ? (await fileDirectory(input.cwd)).path : project?.cwd || (await fileDirectory()).path;
       await authorizeApplicationPath(root);
       const scope = { id: randomUUID(), projectId: project?.id || null, projectRoot: project?.cwd, root, identity: 'bk_' + randomUUID().replaceAll('-', ''),
@@ -230,7 +275,7 @@ export class ApplicationModules {
   async resolve(input, record) {
     return this.authorize(record, async () => {
       const { grant, path: openPath } = this.gateway.resolve(input.url);
-      const project = grant.scope.projectId ? await this.project(record, grant.scope.projectId) : null;
+      const project = grant.scope.projectId ? await this.project(record, grant.scope.projectId, { includeArchived: grant.component === 'references' }) : null;
       if (project && grant.scope.projectRoot && project.cwd !== grant.scope.projectRoot) throw Object.assign(Error('The application project folder changed'), { status: 409 });
       const root = (await fileDirectory(grant.scope.root)).path;
       if (root !== grant.scope.root) throw Object.assign(Error('The application project folder changed'), { status: 409 });
@@ -253,7 +298,7 @@ export class ApplicationModules {
       return this.gateway.open(grant.component, record, scope);
     });
   }
-  async request(input, record, { signal, workerId } = {}) {
+  async request(input, record, { signal, workerId, response } = {}) {
     if (!input || !['files', 'references', 'office'].includes(input.component) || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(input.method || 'GET') ||
         typeof input.path !== 'string' || !input.path.startsWith('/') || input.path.startsWith('//') || /[\x00-\x20\x7f\\#]/.test(input.path)) throw Error('Invalid application request');
     return this.authorize(record, async operation => {
@@ -262,25 +307,27 @@ export class ApplicationModules {
       const url = new URL(input.path, 'http://application.invalid');
       if (['files', 'references'].includes(input.component) && url.pathname === '/open' && input.method === 'POST') return { status: 200, body: await this.open(input.component, input.body || {}, record) };
       if (input.component === 'references') {
+        const lifecycle = /^\/projects\/([a-f0-9-]{36})\/(archive|relink|library)$/.exec(url.pathname);
+        if (lifecycle && ['POST', 'DELETE'].includes(input.method)) return this.projectLifecycle(lifecycle[1], lifecycle[2], input.method, input.body || {}, record, { signal: activeSignal, response });
         const projectRoute = /^\/projects(?:\/([a-f0-9-]{36}))?$/.exec(url.pathname);
         if (projectRoute) {
           const id = projectRoute[1], method = input.method || 'GET';
-          if (!id && method === 'GET') return { status: 200, body: (await projects()).projects.map(({ id, name, cwd }) => ({ id, name, cwd })) };
+          if (!id && method === 'GET') return { status: 200, body: (await projects({ includeArchived: url.searchParams.get('includeArchived') === 'true' })).projects.map(({ id, name, cwd, archived }) => ({ id, name, cwd, archived: Boolean(archived) })) };
           if (!id && method === 'POST') {
             const folder = (await fileDirectory(input.body?.cwd)).path;
             await authorizeApplicationPath(folder);
             return { status: 201, body: await createProject({ ...input.body, cwd: folder }) };
           }
           if (id) {
-            const project = await this.project(record, id);
+            const project = await this.project(record, id, { includeArchived: true });
             if (method === 'GET') return { status: 200, body: { id, name: project.name, cwd: project.cwd } };
             if (method === 'PATCH') return { status: 200, body: await renameProject(id, input.body?.name) };
-            if (method === 'DELETE') { const result = await removeProject(id); await this.revokeProject(id); return { status: 200, body: result }; }
+            if (method === 'DELETE') return withProjectTransition(id, async () => { await this.revokeProject(id, { response }); return { status: 200, body: await removeProject(id) }; });
           }
           throw Object.assign(Error('Method not allowed'), { status: 405 });
         }
         const projectId = /^\/projects\/([^/]+)/.exec(url.pathname)?.[1];
-        if (projectId) await this.project(record, projectId);
+        if (projectId) await this.project(record, projectId, { includeArchived: true });
         return (await this.references()).handle({ method: input.method || 'GET', path: url.pathname, query: url.searchParams,
           body: input.body, headers: {}, signal: activeSignal, authority: record });
       }
@@ -357,8 +404,25 @@ export class ApplicationModules {
       return json(res, await dispatchReferenceResolver(context.grant.record, input, { signal: context.signal }));
     }
     if (route.startsWith('api/')) {
-      const result = await this.request({ component: 'references', method: req.method, path: '/' + route.slice(4) + context.url.search,
-        body: ['GET', 'HEAD'].includes(req.method) ? undefined : await applicationBody(req) }, context.grant.record, { signal: context.signal });
+      let result;
+      try {
+        result = await this.request({ component: 'references', method: req.method, path: '/' + route.slice(4) + context.url.search,
+          body: ['GET', 'HEAD'].includes(req.method) ? undefined : await applicationBody(req) }, context.grant.record, { signal: context.signal, response: res });
+      } catch (error) {
+        if (!context.grant.revoked) throw error;
+        result = { status: error.status || 400, body: { error: error.message, code: error.code } };
+      }
+      if (context.grant.revoked && /^api\/projects\/[a-f0-9-]{36}\/(?:archive|relink|library)$/.test(route)) {
+        // The old captured root is revoked, but the explicit lifecycle result
+        // must remain readable. Renew the manager under the same authority;
+        // the web UI keeps its current exact HTTPS forwarding origin.
+        try {
+          const descriptor = route.endsWith('/library') && result.status < 300
+            ? await this.gateway.open('references', context.grant.record, { ...context.grant.scope, id: randomUUID(), identity: 'bk_' + randomUUID().replaceAll('-', ''), projectId: null, projectRoot: undefined, workerId: undefined, openPath: '/' })
+            : await this.open('references', { projectId: context.grant.scope.projectId }, context.grant.record);
+          result.body = { ...result.body, reopen: { component: descriptor.component, serviceId: descriptor.serviceId, openPath: descriptor.openPath } };
+        } catch (error) { result.body = { ...result.body, reopenError: error.message }; }
+      }
       return this.sendResult(req, res, result);
     }
     if (!['GET', 'HEAD'].includes(req.method)) throw Object.assign(Error('Method not allowed'), { status: 405 });
@@ -389,11 +453,11 @@ export class ApplicationModules {
     for (const grant of this.gateway.grants.values()) if (!grant.record.local) this.officeService?.revoke({ grantId: grant.id });
     await this.gateway.revokeRemote();
   }
-  async revokeProject(projectId) {
-    this.gateway.revokeWhere(grant => {
+  async revokeProject(projectId, options) {
+    await this.gateway.revokeWhere(grant => {
       if (grant.scope.projectId !== projectId) return false;
       this.officeService?.revoke({ grantId: grant.id }); return true;
-    });
+    }, options);
   }
   async close() {
     this.closed = true;

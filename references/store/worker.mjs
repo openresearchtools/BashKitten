@@ -49,6 +49,7 @@ function connection(file) {
     CREATE TABLE IF NOT EXISTS identifiers (kind TEXT NOT NULL, value TEXT NOT NULL, item TEXT REFERENCES items(key) ON DELETE CASCADE, PRIMARY KEY(kind,value,item));
     CREATE TABLE IF NOT EXISTS fulltext (item TEXT PRIMARY KEY REFERENCES items(key) ON DELETE CASCADE, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS receipts (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS receipts_jobs_created ON receipts(json_extract(data,'$.createdAt') DESC,id) WHERE substr(id,1,4)='job:';
     CREATE TABLE IF NOT EXISTS searches (key TEXT PRIMARY KEY,version INTEGER NOT NULL,name TEXT NOT NULL,data TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS searches_name ON searches(name,key);
     CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -92,8 +93,10 @@ function checked(db, table, itemKey, expected) {
 function putItem(db, value, expected, patch = false) {
   const itemKey = value.createKey || value.key || key();
   let data = value.data || value;
+  let previous;
   if (value.key) {
     const old = checked(db, "items", itemKey, expected);
+    previous = JSON.parse(old.data);
     if (patch) data = { ...JSON.parse(old.data), ...data };
   }
   data = { ...data };
@@ -116,6 +119,13 @@ function putItem(db, value, expected, patch = false) {
   if (JSON.stringify(data).length > 8 * 1024 * 1024)
     fail("Item metadata exceeds 8 MiB");
   if (data.parentItem === itemKey) fail("An item cannot be its own parent");
+  if (
+    previous &&
+    ["path", "sha256", "contentType"].some(
+      (field) => previous[field] !== data[field],
+    )
+  )
+    db.prepare("DELETE FROM fulltext WHERE item=?").run(itemKey);
   if (data.parentItem) {
     const parent = db
       .prepare("SELECT parent FROM items WHERE key=?")
@@ -163,9 +173,10 @@ function putItem(db, value, expected, patch = false) {
     db.prepare("INSERT INTO memberships VALUES(?,?)").run(itemKey, collection);
   db.prepare("DELETE FROM identifiers WHERE item=?").run(itemKey);
   for (const [kind, val] of Object.entries({
-    DOI: data.DOI,
-    PMID: data.PMID,
-    PMCID: data.PMCID,
+    ...data.provenance?.identifiers,
+    ...(data.DOI ? { DOI: data.DOI } : {}),
+    ...(data.PMID ? { PMID: data.PMID } : {}),
+    ...(data.PMCID ? { PMCID: data.PMCID } : {}),
     OpenAlex: data.provenance?.openalex?.id,
     ...Object.fromEntries(
       (data.extra || "")
@@ -295,6 +306,54 @@ function list(db, args = {}) {
   return result;
 }
 const operations = {
+  importCollections: (db, { collections, receipt }) =>
+    transaction(db, () => {
+      if (collections.length > 200) fail("Collection batch exceeds 200");
+      if (db.prepare("SELECT id FROM receipts WHERE id=?").get(receipt)) return;
+      for (const c of collections) {
+        if (typeof c.name !== "string" || !c.name.trim())
+          fail("Imported collection needs a name");
+        const data = {
+          name: c.name,
+          parentCollection: c.parentCollection || null,
+        };
+        db.prepare("INSERT INTO collections VALUES(?,?,?,?,?)").run(
+          c.key,
+          nextVersion(db),
+          c.name,
+          c.parentCollection || null,
+          JSON.stringify(data),
+        );
+      }
+      db.prepare("INSERT INTO receipts VALUES(?,?)").run(
+        receipt,
+        JSON.stringify({ complete: true }),
+      );
+    }),
+  jobs: (db, { start = 0, limit = 80 }) => {
+    limit = Math.min(200, Math.max(1, limit));
+    start = Math.min(100000, Math.max(0, start));
+    const rows = db
+      .prepare(
+        `SELECT json_object('id',json_extract(data,'$.id'),'kind',json_extract(data,'$.kind'),
+      'status',json_extract(data,'$.status'),'completed',json_extract(data,'$.completed'),'total',json_extract(data,'$.total'),
+      'createdAt',json_extract(data,'$.createdAt'),'finishedAt',json_extract(data,'$.finishedAt'),'error',json_extract(data,'$.error')) AS summary
+      FROM receipts WHERE substr(id,1,4)='job:' ORDER BY json_extract(data,'$.createdAt') DESC,id LIMIT ? OFFSET ?`,
+      )
+      .all(limit + 1, start);
+    const more = rows.length > limit;
+    if (more) rows.pop();
+    return {
+      items: rows.map((row) => JSON.parse(row.summary)),
+      nextStart: more ? start + limit : null,
+    };
+  },
+  attachmentPaths: (db, { after = "", limit = 100 }) =>
+    db
+      .prepare(
+        "SELECT key,json_extract(data,'$.path') AS path,json_extract(data,'$.sha256') AS sha256,json_extract(data,'$.byteLength') AS byteLength FROM items WHERE type='attachment' AND key>? AND json_extract(data,'$.path') IS NOT NULL ORDER BY key LIMIT ?",
+      )
+      .all(after, Math.min(100, limit)),
   fileAttachmentCount: (db, { key }) =>
     db
       .prepare(
@@ -465,6 +524,12 @@ const operations = {
 };
 parentPort.on("message", ({ id, file, operation, args }) => {
   try {
+    if (operation === "closeLibrary") {
+      connections.get(file)?.close();
+      connections.delete(file);
+      parentPort.postMessage({ id, result: { closed: true } });
+      return;
+    }
     if (!operations[operation]) fail("Unknown storage operation");
     parentPort.postMessage({
       id,

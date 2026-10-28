@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 const require = createRequire(import.meta.url);
+const { FORMATS, CONTENT_TYPES } = require("./runtime/formats.js");
 let loaded;
 export async function translationRuntime() {
   if (!loaded)
@@ -21,7 +23,10 @@ export async function translateIdentifier(
 ) {
   signal?.throwIfAborted();
   const Z = await translationRuntime();
-  Z.Prefs.set("translators.CrossrefREST.email", settings.crossrefEmail || "");
+  Z.Prefs.set(
+    "translators.CrossrefREST.email",
+    encodeURIComponent(settings.crossrefEmail || ""),
+  );
   const t = new Z.Translate.Search();
   t.setIdentifier(identifier);
   const candidates = await t.getTranslators();
@@ -33,6 +38,12 @@ export async function translateIdentifier(
   return items.flatMap((item) => Z.Utilities.Item.itemToAPIJSON(item));
 }
 export async function translateImport(text, { signal } = {}) {
+  return (await translateImportBundle(text, { signal })).items;
+}
+export async function translateImportBundle(
+  text,
+  { signal, target, operationId = "native-import" } = {},
+) {
   signal?.throwIfAborted();
   if (typeof text !== "string" || text.length > 32 * 1024 * 1024)
     throw Error("Import text must be at most 32 MiB");
@@ -45,13 +56,51 @@ export async function translateImport(text, { signal } = {}) {
   t.setTranslator(candidates[0]);
   const items = await t.translate({ libraryID: false });
   signal?.throwIfAborted();
-  return items.flatMap((item) => Z.Utilities.Item.itemToAPIJSON(item));
+  const captured = await captureItems(items, { importLinks: true });
+  const collections = [];
+  const IDMap = Object.fromEntries(
+    items.map((item, index) => [
+      item.itemID || item.id || item.key,
+      captured.records[captured.parentIndexes[index]].key,
+    ]),
+  );
+  class Collection {
+    async save() {
+      signal?.throwIfAborted();
+      this.id = createHash("sha256")
+        .update(operationId + ":collection:" + collections.length)
+        .digest("hex")
+        .slice(0, 16)
+        .toUpperCase();
+      collections.push({
+        key: this.id,
+        name: this.name,
+        parentCollection: this.parentID || null,
+        members: [],
+      });
+    }
+    async addItems(keys) {
+      collections
+        .find((collection) => collection.key === this.id)
+        .members.push(...keys);
+    }
+  }
+  const saveCollections = require("./runtime/import-collections-native.js")({
+    ...Z,
+    Collection,
+    DB: { executeTransaction: (work) => work() },
+  });
+  await saveCollections.call(
+    { _collections: target ? [target] : [], _IDMap: IDMap },
+    t.newCollections || [],
+  );
+  return { items: captured.records, collections };
 }
 export async function toCSL(item, id) {
   const Z = await translationRuntime();
   return { ...Z.Utilities.Item.itemToCSLJSON(item), id };
 }
-export async function captureItems(items) {
+export async function captureItems(items, { importLinks = false } = {}) {
   const Z = await translationRuntime();
   const records = [],
     parentIndexes = [];
@@ -69,7 +118,7 @@ export async function captureItems(items) {
     records.push(...converted);
     for (const attachment of item.attachments || []) {
       if (
-        attachment.snapshot !== false ||
+        (!importLinks && attachment.snapshot !== false) ||
         !/^https?:\/\//i.test(attachment.url || "")
       )
         continue;
@@ -85,6 +134,78 @@ export async function captureItems(items) {
     }
   }
   return { records, parentIndexes };
+}
+export async function exportTranslators() {
+  const Z = await translationRuntime();
+  return (await Z.Translators.getAllForType("export")).map((translator) => ({
+    id: translator.translatorID,
+    label: translator.label,
+    target: translator.target,
+    displayOptions:
+      translator.displayOptions || translator.metadata?.displayOptions || {},
+  }));
+}
+// Adapted from the pinned translation-server ExportEndpoint; native ItemGetter owns field conversion.
+export async function translateExport(
+  { items, translatorID, options = {} },
+  { signal } = {},
+) {
+  signal?.throwIfAborted();
+  if (options.exportFileData)
+    throw Object.assign(
+      Error(
+        "Metadata export does not copy attachment files; export their Bibliography folder through Files",
+      ),
+      { status: 422 },
+    );
+  const Z = await translationRuntime();
+  const translator = Z.Translators.get(translatorID);
+  if (!translator || !(translator.translatorType & 2))
+    throw Object.assign(Error("Export translator is unavailable"), {
+      status: 400,
+    });
+  if (
+    !Array.isArray(items) ||
+    items.length > 1000 ||
+    JSON.stringify(items).length > 32 * 1024 * 1024
+  )
+    throw Object.assign(
+      Error(
+        "Export accepts at most 1000 selected items and 32 MiB of metadata per operation",
+      ),
+      { status: 413 },
+    );
+  const legacy = Z.Utilities.semverCompare("4.0.27", translator.minVersion) > 0;
+  items = structuredClone(items);
+  for (const item of items) {
+    item.creators ||= [];
+    item.tags ||= [];
+    item.relations ||= {};
+    item.uri ||= item.key;
+    delete item.key;
+    if (legacy)
+      for (const field of ["dateAdded", "dateModified", "accessDate"])
+        if (item[field]) item[field] = Z.Date.isoToSQL(item[field]);
+  }
+  const translate = new Z.Translate.Export();
+  translate.setTranslator(translatorID);
+  translate.setDisplayOptions({ ...options, exportFileData: false });
+  translate.setItems(items);
+  await translate.translate({ libraryID: false });
+  signal?.throwIfAborted();
+  if (translate.string.length > 32 * 1024 * 1024)
+    throw Object.assign(Error("Export exceeds 32 MiB"), { status: 413 });
+  const format = Object.keys(FORMATS).find(
+    (name) => FORMATS[name] === translatorID,
+  );
+  return {
+    text: translate.string,
+    contentType: (CONTENT_TYPES[format] || "text/plain") + "; charset=utf-8",
+    extension: /^[a-z0-9]+$/i.test(translator.target)
+      ? translator.target
+      : "txt",
+    translatorID,
+  };
 }
 export async function translatorMetadata(url) {
   const Z = await translationRuntime();

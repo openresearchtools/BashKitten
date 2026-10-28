@@ -10,6 +10,22 @@ const require = createRequire(import.meta.url),
   CSL = require("citeproc");
 const { JSDOM } = require("jsdom"),
   purify = require("dompurify")(new JSDOM("").window);
+purify.addHook("afterSanitizeAttributes", (node) => {
+  if (!node.hasAttribute?.("style")) return;
+  const allowed = new Set([
+    "font-style",
+    "font-weight",
+    "font-variant",
+    "text-decoration",
+    "vertical-align",
+  ]);
+  const style = Array.from(node.style)
+    .filter((name) => allowed.has(name))
+    .map((name) => `${name}:${node.style.getPropertyValue(name)}`)
+    .join(";");
+  if (style) node.setAttribute("style", style);
+  else node.removeAttribute("style");
+});
 const safeRich = (html) =>
   purify.sanitize(String(html), {
     ALLOWED_TAGS: ["i", "b", "em", "strong", "sup", "sub", "span", "a", "br"],
@@ -32,8 +48,20 @@ const safeName = (value, kind) => {
     /^https?:\/\/www\.zotero\.org\/styles\//,
     "",
   );
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(name))
-    throw Error("Invalid " + kind);
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(name)) {
+    if (kind === "style" && name.length <= 8192) {
+      try {
+        const uri = new URL(name);
+        if (
+          ["https:", "http:", "urn:"].includes(uri.protocol) &&
+          !uri.username &&
+          !uri.password
+        )
+          return "custom-" + createHash("sha256").update(name).digest("hex");
+      } catch {}
+    }
+    throw Object.assign(Error("Invalid " + kind), { status: 400 });
+  }
   return name;
 };
 const plain = (html) =>
@@ -57,20 +85,28 @@ async function getStyle(id, seen = new Set(), customDirectory) {
           .catch(() => fs.readFile(path.join(styleRoot, name + ".csl"), "utf8"))
       : await fs.readFile(path.join(styleRoot, name + ".csl"), "utf8");
   } catch {
-    xml = await fs.readFile(
-      path.join(styleRoot, "dependent", name + ".csl"),
-      "utf8",
-    );
+    xml = await fs
+      .readFile(path.join(styleRoot, "dependent", name + ".csl"), "utf8")
+      .catch(() => {
+        throw Object.assign(Error("Citation style is not installed: " + name), {
+          status: 404,
+        });
+      });
   }
   if (/<!ENTITY|<!DOCTYPE/i.test(xml))
     throw Error("External CSL entities are not allowed");
   const parent =
     xml.match(/<link[^>]+href="([^"]+)"[^>]+rel="independent-parent"/) ||
     xml.match(/<link[^>]+rel="independent-parent"[^>]+href="([^"]+)"/);
+  const resolvedParent = parent
+    ? await getStyle(parent[1], seen, customDirectory)
+    : null;
   return {
     id: name,
-    xml: parent ? (await getStyle(parent[1], seen, customDirectory)).xml : xml,
-    version: createHash("sha256").update(xml).digest("hex"),
+    xml: resolvedParent?.xml || xml,
+    version: createHash("sha256")
+      .update(xml + (resolvedParent?.version || ""))
+      .digest("hex"),
   };
 }
 export async function listStyles({

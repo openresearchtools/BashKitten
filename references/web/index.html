@@ -25,6 +25,12 @@
       <div class="library-layout">
         <aside class="libraries" aria-label="Project libraries">
           <h2>Project library</h2>
+          <div class="toolbar">
+            <button id="libraryMenu" type="button">Library…</button
+            ><label class="field"
+              ><input id="showArchived" type="checkbox" />Show archived</label
+            >
+          </div>
           <div
             id="projects"
             class="project-list"
@@ -42,6 +48,7 @@
           <div class="toolbar" aria-label="Library actions">
             <button id="newItem" type="button">New item</button
             ><button id="identifiers" type="button">Add by Identifier</button
+            ><button id="importReferences" type="button">Import…</button
             ><button id="attachment" type="button">Attachment</button
             ><button id="note" type="button">Note</button
             ><button id="openalex" type="button">OpenAlex Search</button
@@ -65,6 +72,7 @@
               <option value="remove-collection">Remove from collection</option>
               <option value="delete">Move to deleted items</option>
               <option value="restore">Restore deleted items</option>
+              <option value="export">Export selected items…</option>
             </select>
           </div>
           <div class="table-header" role="row">

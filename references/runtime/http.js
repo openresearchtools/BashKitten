@@ -139,6 +139,10 @@ Zotero.HTTP = new function() {
 		
 		// Parse URL to escape it (e.g., Unicode characters)
 		var parsedURL = new url.URL(requestURL);
+        const crossrefKey = context.current()?.settings?.crossrefKey;
+        if (parsedURL.origin === 'https://api.crossref.org' && crossrefKey) {
+            options.headers['Crossref-Plus-API-Token'] = 'Bearer ' + crossrefKey;
+        }
 		
 		options.signal ||= context.current()?.signal;
 		let {response, body} = await retryRequest(() => customRequest(method, parsedURL, options), requestURL, options);
@@ -375,6 +379,10 @@ function customRequest(method, requestURL, options) {
 			body: options.body,
 			gzip: true,
 			followAllRedirects: true,
+            followRedirect: response => {
+                if (!options.headers['Crossref-Plus-API-Token']) return true;
+                return new URL(response.headers.location, requestURL).origin === 'https://api.crossref.org';
+            },
 			jar: options.cookieSandbox,
 			encoding: null // Get body in a buffer
 		})
@@ -398,11 +406,6 @@ function customRequest(method, requestURL, options) {
 				if (returned) return;
 				response = res;
 				
-				if (!response.headers['content-type']) {
-					returned = true;
-					return reject(new Zotero.HTTP.UnsupportedFormatError(requestURL, 'Missing Content-Type header'));
-				}
-				
 				// Check if the status code is allowed
 				// Array of success codes given
 				if (options.successCodes) {
@@ -424,6 +427,11 @@ function customRequest(method, requestURL, options) {
 					return reject(error);
 				}
 				
+                if (!response.headers['content-type']) {
+                    returned = true;
+                    req.abort();
+                    return reject(new Zotero.HTTP.UnsupportedFormatError(requestURL, 'Missing Content-Type header'));
+                }
 				// Check Content-Type before starting the download
 				let supported = true;
 				let mimeType = new MIMEType(response.headers['content-type']);

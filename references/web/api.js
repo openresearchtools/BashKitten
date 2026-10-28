@@ -48,6 +48,7 @@ export function createApi({
     if (!response.ok)
       throw Object.assign(Error(data.error || "References request failed"), {
         status: response.status,
+        details: data,
       });
     return data;
   }

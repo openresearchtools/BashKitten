@@ -32,7 +32,7 @@ import { transcribe } from '../localai/dictation.mjs';
 import { subagentSettings, readSubagentSettings, saveSubagentSettings } from '../rpc/subagents.mjs';
 import { SubagentChats } from '../rpc/subagent-chats.mjs';
 import { stopSavedQuestions } from '../rpc/questions.mjs';
-import { projects, createProject, renameProject, removeProject, moveChat, forgetChat, projectDirectory } from '../projects.mjs';
+import { projects, createProject, renameProject, removeProject, moveChat, forgetChat, projectDirectory, withProjectTransition } from '../projects.mjs';
 import { ApplicationModules } from '../apps/index.mjs';
 
 process.umask(0o077);
@@ -493,9 +493,10 @@ async function handler(req, res) {
       const input = await jsonBody(req);
       if (req.method === 'PATCH') return json(res, { project: await renameProject(projectMatch[1], input.name) });
       if (input.confirm !== true) throw Error('Confirm removing the project grouping; its chats are kept');
-      const removed = await removeProject(projectMatch[1]);
-      await apps.revokeProject(projectMatch[1]);
-      return json(res, removed);
+      return withProjectTransition(projectMatch[1], async () => {
+        await apps.revokeProject(projectMatch[1]);
+        return json(res, await removeProject(projectMatch[1]));
+      });
     }
     if (route === '/api/session-groups') {
       requireMethod(req, ['GET', 'POST', 'DELETE']);

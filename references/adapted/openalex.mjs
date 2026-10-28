@@ -121,7 +121,7 @@ export async function harvestOpenAlex({
     const rows = Math.min(pageSize, limit - records.length);
     url.searchParams.set('per_page', String(rows));
     url.searchParams.set('cursor', cursor);
-    const headers = { Accept: 'application/json', 'User-Agent': 'Systematic-Reviewer-V3 (OpenAlex metadata)' };
+    const headers = { Accept: 'application/json', 'User-Agent': 'BashKitten References/0.1' };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     const text = await requestText(url, { method: 'GET', headers }, { fetch: fetcher, signal, timeoutMs });
     let body;

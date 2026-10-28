@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Project-qualified module: existing backend authentication/lifetime owns the only entry point.
 import fs from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { Store } from "./store/index.mjs";
@@ -34,6 +36,7 @@ export async function createReferencesService({
   dataDir,
   backendId,
   authorizeProject,
+  authorizeLibraryLifecycle,
   listProjects,
   translator,
   resolver,
@@ -54,6 +57,8 @@ export async function createReferencesService({
     jobStates = new Map(),
     operations = new Map(),
     resolutionFlights = new Map(),
+    deletedLibraries = new Set(),
+    deletingLibraries = new Set(),
     uploads = new Map();
   const settingsFile = path.join(root, "settings.json");
   let settings = await fs
@@ -67,9 +72,25 @@ export async function createReferencesService({
     const p = await authorizeProject(authority, id);
     if (!p || p.id !== id || !path.isAbsolute(p.cwd || ""))
       fail("Project is not authorized", 403);
-    return { ...p, file: path.join(root, digest(p.id), "library.sqlite") };
+    const file = path.join(root, digest(p.id), "library.sqlite");
+    if (
+      await fs.access(path.join(path.dirname(file), "deleted.json")).then(
+        () => true,
+        () => false,
+      )
+    )
+      deletedLibraries.add(id);
+    if (deletedLibraries.has(id))
+      fail(
+        "This library was deliberately deleted; create a new project library to obtain a new identity",
+        410,
+      );
+    if (deletingLibraries.has(id)) fail("Library deletion is in progress", 409);
+    return { ...p, file };
   };
-  const call = (p, op, args, signal) => {
+  const call = async (p, op, args, signal) => {
+    if (deletedLibraries.has(p.id) || deletingLibraries.has(p.id))
+      fail("Library is no longer available", 410);
     const mutation =
       [
         "put",
@@ -79,12 +100,15 @@ export async function createReferencesService({
         "deleteCollection",
         "putSearch",
         "deleteSearch",
+        "importCollections",
       ].includes(op) ||
       (["record", "fulltext"].includes(op) && args.data !== undefined);
     if (!mutation) return store.call(p.file, op, args, signal);
     const commit = async (ownerSignal) => {
       signal?.throwIfAborted();
       ownerSignal?.throwIfAborted();
+      if (deletedLibraries.has(p.id) || deletingLibraries.has(p.id))
+        fail("Library is no longer available", 410);
       return store.call(p.file, op, args);
     };
     return p.runAuthorized ? p.runAuthorized(commit) : commit(signal);
@@ -101,24 +125,57 @@ export async function createReferencesService({
         .join("; "),
     },
   });
-  const nativeValues = (metadata) => {
-    const mapping = new Map(
-      metadata
-        .filter((x) => x.key)
-        .map((x) => [
-          x.key,
-          randomUUID().replaceAll("-", "").slice(0, 16).toUpperCase(),
-        ]),
+  const nativeValues = (metadata, operationId) => {
+    const keys = metadata.map((item, index) =>
+      operationId
+        ? digest(operationId + ":" + index)
+            .slice(0, 16)
+            .toUpperCase()
+        : randomUUID().replaceAll("-", "").slice(0, 16).toUpperCase(),
     );
-    return metadata.map((original) => {
+    const mapping = new Map(
+      metadata.map((x, index) => [x.key, keys[index]]).filter(([key]) => key),
+    );
+    return metadata.map((original, index) => {
       const data = { ...original };
       delete data.key;
       delete data.version;
       if (data.parentItem)
         data.parentItem = mapping.get(data.parentItem) || data.parentItem;
-      return { createKey: mapping.get(original.key), data };
+      return { createKey: keys[index], data };
     });
   };
+  async function writePages(
+    p,
+    values,
+    receipt,
+    signal,
+    summary = false,
+    onProgress,
+  ) {
+    const output = [];
+    for (let start = 0; start < values.length; start += 200) {
+      signal?.throwIfAborted();
+      const page = await call(
+        p,
+        "batch",
+        {
+          items: values.slice(start, start + 200),
+          receipt: receipt + ":" + start,
+        },
+        signal,
+      );
+      if (!summary) output.push(...page);
+      onProgress?.({
+        key: "import",
+        status: "writing",
+        completed: Math.min(values.length, start + 200),
+        total: values.length,
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    return output;
+  }
   const itemKey = (p, id) => {
     const prefix = `bkref:${backendId}/${p.id}/`;
     if (!id?.startsWith(prefix) || !/^[A-Z0-9]+$/.test(id.slice(prefix.length)))
@@ -380,21 +437,62 @@ export async function createReferencesService({
     const resolution = await resolveIdentifiers({
       identifiers: [input],
       signal,
-      mailto: settings.crossrefEmail,
+      mailto: settings.crossrefEmail || undefined,
     });
     const resolved = resolution.items[0];
     if (!resolved.zoteroIdentifier)
       return { input, status: "unresolved", resolution: resolved };
+    const lookupIdentifiers = Object.fromEntries(
+      Object.entries({
+        ...resolved.identifiers,
+        [normalized.type]: normalized.value,
+      }).filter(([, value]) => value),
+    );
+    const checkIdentifiers = (data) => {
+      const actual = {
+        DOI: data.DOI,
+        PMID:
+          data.PMID || String(data.extra || "").match(/^PMID:\s*(\d+)/m)?.[1],
+        PMCID:
+          data.PMCID || String(data.extra || "").match(/^PMCID:\s*(\S+)/m)?.[1],
+      };
+      const comparable = (kind, value) =>
+        kind === "PMCID"
+          ? String(value)
+              .trim()
+              .toLowerCase()
+              .replace(/\.\d+$/, "")
+          : String(value).trim().toLowerCase();
+      for (const [kind, value] of Object.entries(actual))
+        if (
+          value &&
+          lookupIdentifiers[kind] &&
+          comparable(kind, value) !== comparable(kind, lookupIdentifiers[kind])
+        )
+          fail(
+            "Conflicting " +
+              kind +
+              " in resolved metadata; reconcile the identity before importing",
+            409,
+          );
+    };
     const matches = await call(
       p,
       "find",
-      { identifiers: { [normalized.type]: normalized.value } },
+      { identifiers: lookupIdentifiers },
       signal,
     );
     if (matches.length > 1)
       fail("Several records match this identifier; reconcile duplicates");
-    if (matches.length === 1)
-      return { input, status: "skipped", item: decorate(p, matches[0]) };
+    if (matches.length === 1) {
+      checkIdentifiers(matches[0].data);
+      return {
+        input,
+        status: "skipped",
+        item: decorate(p, matches[0]),
+        resolution: resolved,
+      };
+    }
     const metadata = translator
       ? await translator.resolve(resolved.zoteroIdentifier, {
           signal,
@@ -405,6 +503,12 @@ export async function createReferencesService({
           [resolved.zoteroIdentifier, { settings }],
           signal,
         );
+    const regular = metadata.filter(
+      (data) => !["attachment", "note", "annotation"].includes(data.itemType),
+    );
+    if (!regular.length)
+      fail("No reference metadata was returned for this identifier", 502);
+    for (const item of regular) checkIdentifiers(item);
     const items = await call(
       p,
       "batch",
@@ -416,6 +520,11 @@ export async function createReferencesService({
               source: "pinned-translator",
               input,
               resolution: resolved,
+              identifiers: ["attachment", "note", "annotation"].includes(
+                data.itemType,
+              )
+                ? {}
+                : lookupIdentifiers,
               retrievedAt: new Date().toISOString(),
             },
           })),
@@ -568,6 +677,10 @@ export async function createReferencesService({
     else await fs.writeFile(temp, body, { flag: "wx", mode: 0o600 });
     await fs.rename(temp, destination);
     try {
+      const hash = createHash("sha256");
+      await pipeline(createReadStream(destination), hash);
+      const sha256 = hash.digest("hex");
+      const byteLength = (await fs.stat(destination)).size;
       const result = await call(p, "put", {
         value: {
           data: {
@@ -578,6 +691,8 @@ export async function createReferencesService({
             linkMode: "imported_url",
             url: meta.url || "",
             filename,
+            sha256,
+            byteLength,
             path: path.relative(canonical, destination),
             collections: parent ? [] : session.target ? [session.target] : [],
           },
@@ -602,6 +717,176 @@ export async function createReferencesService({
     )
       fail("Attachment is outside its project");
     return file;
+  }
+  async function lifecycleProject(authority, projectId, operation) {
+    const p = authorizeLibraryLifecycle
+      ? await authorizeLibraryLifecycle(authority, projectId, operation)
+      : await authorizeProject(authority, projectId);
+    if (!p || p.id !== projectId || !path.isAbsolute(p.cwd || ""))
+      fail("Project lifecycle is not authorized", 403);
+    return { ...p, file: path.join(root, digest(projectId), "library.sqlite") };
+  }
+  async function validateLibraryRelink({
+    projectId,
+    previousRoot,
+    newRoot,
+    authority,
+    signal,
+  }) {
+    if (!path.isAbsolute(newRoot || "") || !path.isAbsolute(previousRoot || ""))
+      fail("Relink needs explicit absolute roots");
+    const p = await lifecycleProject(authority, projectId, {
+      operation: "relink",
+      previousRoot,
+      newRoot,
+    });
+    if (p.cwd !== previousRoot)
+      fail("Project root changed; reload before relinking", 409);
+    const candidate = await fs.realpath(newRoot);
+    const namespace = path.join(
+      candidate,
+      "Bibliography",
+      digest(projectId).slice(0, 24),
+    );
+    const report = {
+      projectId,
+      previousRoot,
+      newRoot: candidate,
+      canRelink: true,
+      attachmentCount: 0,
+      verified: 0,
+      missing: 0,
+      mismatched: 0,
+      issues: [],
+    };
+    if (
+      !(await fs.access(p.file).then(
+        () => true,
+        () => false,
+      ))
+    )
+      return report;
+    let after;
+    for (;;) {
+      signal?.throwIfAborted();
+      const rows = await store.call(
+        p.file,
+        "attachmentPaths",
+        { after, limit: 100 },
+        signal,
+      );
+      for (const item of rows) {
+        signal?.throwIfAborted();
+        report.attachmentCount++;
+        try {
+          const target = await fs.realpath(path.resolve(candidate, item.path));
+          if (!target.startsWith(namespace + path.sep))
+            throw Error("Attachment path leaves its library directory");
+          const stat = await fs.stat(target);
+          if (
+            !stat.isFile() ||
+            (item.byteLength != null && item.byteLength !== stat.size)
+          )
+            throw Error("Attachment size does not match");
+          if (item.sha256) {
+            const hash = createHash("sha256");
+            await pipeline(createReadStream(target), hash, { signal });
+            if (hash.digest("hex") !== item.sha256)
+              throw Error("Attachment content does not match");
+          }
+          report.verified++;
+        } catch (error) {
+          if (signal?.aborted) throw error;
+          if (error.code === "ENOENT") report.missing++;
+          else report.mismatched++;
+          if (report.issues.length < 100)
+            report.issues.push({
+              key: item.key,
+              path: item.path,
+              error:
+                error.code === "ENOENT"
+                  ? "Attachment is missing from the new root"
+                  : error.message,
+            });
+        }
+      }
+      if (rows.length < 100) break;
+      after = rows.at(-1).key;
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    report.canRelink = report.missing === 0 && report.mismatched === 0;
+    return report;
+  }
+  async function deleteLibrary({
+    projectId,
+    confirmProjectId,
+    attachments = "keep",
+    authority,
+    signal,
+  }) {
+    if (
+      projectId !== confirmProjectId ||
+      !["keep", "delete"].includes(attachments)
+    )
+      fail(
+        "Deliberate library deletion requires the project identity and attachment choice",
+      );
+    const p = await lifecycleProject(authority, projectId, {
+      operation: "delete",
+    });
+    const commit = async (ownerSignal) => {
+      signal?.throwIfAborted();
+      ownerSignal?.throwIfAborted();
+      if (deletingLibraries.has(projectId))
+        fail("Library deletion is already in progress", 409);
+      deletingLibraries.add(projectId);
+      try {
+        let attachmentDirectory;
+        if (attachments === "delete") {
+          const cwd = await fs.realpath(p.cwd);
+          const expected = path.join(
+            cwd,
+            "Bibliography",
+            digest(projectId).slice(0, 24),
+          );
+          attachmentDirectory = await fs.realpath(expected).catch((error) => {
+            if (error.code === "ENOENT") return null;
+            throw error;
+          });
+          if (attachmentDirectory && attachmentDirectory !== expected)
+            fail("Library attachment directory is a symlink", 409);
+        }
+        for (const [key, controller] of jobs)
+          if (key.startsWith(projectId + ":"))
+            controller.abort(new DOMException("Library deleted", "AbortError"));
+        for (const upload of uploads.values())
+          if (upload.pid === projectId) {
+            await upload.file.close().catch(() => {});
+            await fs.rm(upload.tempPath, { force: true });
+            uploads.delete(upload.id);
+          }
+        await fs.mkdir(path.dirname(p.file), { recursive: true, mode: 0o700 });
+        await privateWrite(path.join(path.dirname(p.file), "deleted.json"), {
+          projectId,
+          deletedAt: new Date().toISOString(),
+          attachments,
+        });
+        deletedLibraries.add(projectId);
+        await store.call(p.file, "closeLibrary", {});
+        for (const suffix of ["", "-wal", "-shm"])
+          await fs.rm(p.file + suffix, { force: true });
+        if (attachmentDirectory)
+          await fs.rm(attachmentDirectory, { recursive: true, force: true });
+        return {
+          deleted: projectId,
+          attachments,
+          attachmentDirectoryRemoved: !!attachmentDirectory,
+        };
+      } finally {
+        deletingLibraries.delete(projectId);
+      }
+    };
+    return p.runAuthorized ? p.runAuthorized(commit) : commit(signal);
   }
   async function recognizePDF(p, authority, attachment, sessionID, signal) {
     let result;
@@ -867,9 +1152,13 @@ export async function createReferencesService({
     let metadata = {};
     const encodedMetadata = headers["X-Metadata"] || headers["x-metadata"];
     if (encodedMetadata) {
-      if (typeof encodedMetadata !== "string" || encodedMetadata.length > 65536) fail("Attachment metadata exceeds its limit");
-      try { metadata = JSON.parse(decodeRFC2047(encodedMetadata)); }
-      catch { fail("Invalid attachment metadata"); }
+      if (typeof encodedMetadata !== "string" || encodedMetadata.length > 65536)
+        fail("Attachment metadata exceeds its limit");
+      try {
+        metadata = JSON.parse(decodeRFC2047(encodedMetadata));
+      } catch {
+        fail("Invalid attachment metadata");
+      }
     }
     const writes = [
       "upload-begin",
@@ -918,7 +1207,10 @@ export async function createReferencesService({
     )
       body = { ...body, target: null };
     const sessionID =
-      body?.sessionID || metadata.sessionID || query.get("sessionID") || query.get("session");
+      body?.sessionID ||
+      metadata.sessionID ||
+      query.get("sessionID") ||
+      query.get("session");
     if (method === "ping")
       return {
         prefs: {
@@ -1038,7 +1330,7 @@ export async function createReferencesService({
         !Number.isSafeInteger(body.byteLength) ||
         body.byteLength < 0 ||
         body.byteLength > 2 ** 31 ||
-        body.bodyEncoding === "json" && body.byteLength > 32 * 1024 * 1024
+        (body.bodyEncoding === "json" && body.byteLength > 32 * 1024 * 1024)
       )
         fail("Invalid upload");
       for (const upload of uploads.values()) {
@@ -1103,7 +1395,12 @@ export async function createReferencesService({
         return { cancelled: true };
       }
       if (method === "upload-chunk") {
-        if (typeof body.data !== "string" || body.data.length > 349528 || !/^[A-Za-z0-9+/]*={0,2}$/.test(body.data)) fail("Invalid upload chunk");
+        if (
+          typeof body.data !== "string" ||
+          body.data.length > 349528 ||
+          !/^[A-Za-z0-9+/]*={0,2}$/.test(body.data)
+        )
+          fail("Invalid upload chunk");
         const bytes = Buffer.from(body.data || "", "base64");
         if (
           bytes.length > 262144 ||
@@ -1162,11 +1459,12 @@ export async function createReferencesService({
           ...data,
           collections: data.parentItem ? [] : body.target ? [body.target] : [],
         })),
+        "capture:" + sessionID,
       );
-      const saved = await call(
+      const saved = await writePages(
         p,
-        "batch",
-        { items: values, receipt: "capture-write:" + sessionID },
+        values,
+        "capture-write:" + sessionID,
         signal,
       );
       session = {
@@ -1283,27 +1581,65 @@ export async function createReferencesService({
     if (method === "import") {
       if (!sessionID) fail("Capture sessionID required");
       const text = typeof body === "string" ? body : body.data;
-      const parsed = await native.call("translateImport", [text], signal);
-      return (
+      const operationId = "import:" + sessionID;
+      const inputHash = digest(
+        JSON.stringify({ text, target: query.get("target") }),
+      );
+      const previous = await call(p, "record", { id: operationId }, signal);
+      if (previous && previous.inputHash !== inputHash)
+        fail("Import request ID was reused with different input", 409);
+      await call(p, "record", { id: operationId, data: { inputHash } }, signal);
+      const bundle = await native.call(
+        "translateImportBundle",
+        [text, { target: query.get("target"), operationId }],
+        signal,
+      );
+      const values = nativeValues(
+        bundle.items.map((data) => ({
+          ...data,
+          collections: data.parentItem
+            ? []
+            : query.get("target")
+              ? [query.get("target")]
+              : [],
+        })),
+        operationId,
+      );
+      const byNativeKey = new Map(
+        bundle.items.map((item, index) => [item.key, values[index]]),
+      );
+      for (const collection of bundle.collections)
+        for (const key of collection.members) {
+          const value = byNativeKey.get(key);
+          if (value) value.data.collections.push(collection.key);
+        }
+      for (let start = 0; start < bundle.collections.length; start += 200)
         await call(
           p,
-          "batch",
+          "importCollections",
           {
-            items: nativeValues(
-              parsed.map((data) => ({
-                ...data,
-                collections: data.parentItem
-                  ? []
-                  : query.get("target")
-                    ? [query.get("target")]
-                    : [],
-              })),
-            ),
-            receipt: "import:" + sessionID,
+            collections: bundle.collections.slice(start, start + 200),
+            receipt: operationId + ":collections:" + start,
           },
           signal,
-        )
-      ).map((x) => decorate(p, x));
+        );
+      const summary = query.get("summary") === "true";
+      const written = await writePages(
+        p,
+        values,
+        operationId + ":items",
+        signal,
+        summary,
+        body?.onProgress,
+      );
+      return summary
+        ? {
+            status: "imported",
+            count: values.length,
+            collections: bundle.collections.length,
+            requestId: sessionID,
+          }
+        : written.map((item) => decorate(p, item));
     }
     if (method === "updateSession") {
       const s = await call(p, "record", { id: "capture:" + sessionID });
@@ -1387,6 +1723,22 @@ export async function createReferencesService({
         return { status: 200, body: (await listProjects?.(authority)) || [] };
       if (segments[0] !== "projects" || !segments[1])
         fail("An explicit project library is required");
+      if (
+        segments[2] === "library" &&
+        segments.length === 3 &&
+        method === "DELETE"
+      )
+        return {
+          status: 200,
+          headers: { "Cache-Control": "no-store" },
+          body: await deleteLibrary({
+            projectId: segments[1],
+            confirmProjectId: body.confirmProjectId,
+            attachments: body.attachments,
+            authority,
+            signal,
+          }),
+        };
       const p = await project(authority, segments[1]);
       segments = segments.slice(2);
       let compatibility = false;
@@ -1407,6 +1759,50 @@ export async function createReferencesService({
       const op = segments[0],
         key = segments[1],
         action = segments[2];
+      if (
+        [
+          "identifiers/import",
+          "crossref/search",
+          "openalex/search",
+          "openalex/import",
+          "citations/render",
+          "citations/parse",
+          "items/enrich",
+          "items/resolve-pdfs",
+          "items/manage",
+          "items/export",
+        ].includes(op + "/" + key) &&
+        method !== "POST"
+      )
+        fail("Method not allowed", 405);
+      if (
+        ["schema", "styles", "citation-options", "translators"].includes(op) &&
+        method !== "GET"
+      )
+        fail("Method not allowed", 405);
+      if (
+        op === "connector" &&
+        method !== "POST" &&
+        !(
+          method === "GET" &&
+          [
+            "ping",
+            "getTranslators",
+            "getTranslatorCode",
+            "getSelectedCollection",
+            "getRecognizedItem",
+            "hasAttachmentResolvers",
+            "getResolverRequest",
+          ].includes(key)
+        )
+      )
+        fail("Method not allowed", 405);
+      if (
+        op === "jobs" &&
+        !["GET", "DELETE"].includes(method) &&
+        !(method === "POST" && action === "resume")
+      )
+        fail("Method not allowed", 405);
       const expected = Number(
         headers["if-unmodified-since-version"] ||
           headers["If-Unmodified-Since-Version"] ||
@@ -1428,44 +1824,169 @@ export async function createReferencesService({
           [Object.fromEntries(query)],
           signal,
         );
-      else if (op === "schema")
+      else if (op === "translators" && key === "export")
+        result = { items: await native.call("exportTranslators", [], signal) };
+      else if (op === "import") {
+        if (method !== "POST") fail("Method not allowed", 405);
+        const params = new URLSearchParams({
+          sessionID: body.requestId || randomUUID(),
+        });
+        if (body.target) params.set("target", body.target);
+        if (body.summary) {
+          params.set("summary", "true");
+          result = await job(
+            p,
+            authority,
+            "file-import",
+            [body.text],
+            (text, activeSignal, receipt, context) =>
+              connector(
+                p,
+                authority,
+                "import",
+                { data: text, onProgress: context.onProgress },
+                params,
+                {},
+                activeSignal,
+              ),
+            body.requestId,
+            { resume: body.resume },
+          );
+          status = 202;
+        } else {
+          result = await connector(
+            p,
+            authority,
+            "import",
+            body.text,
+            params,
+            {},
+            signal,
+          );
+          status = 201;
+        }
+      } else if (op === "items" && key === "export") {
+        if (method !== "POST") fail("Method not allowed", 405);
+        const items = [];
+        for (const k of bounded(body.keys, 1000)) {
+          const item = await call(p, "get", { key: k }, signal);
+          const children = await call(
+            p,
+            "list",
+            { parent: k, top: false, limit: 200 },
+            signal,
+          );
+          if (children.next)
+            fail(
+              "This item has more than 200 child records; export children in explicit selections",
+              413,
+            );
+          items.push({
+            ...item.data,
+            key: item.key,
+            uri: identity(p, k),
+            notes: children.items
+              .filter((child) => child.data.itemType === "note")
+              .map((child) => child.data),
+            attachments: children.items
+              .filter((child) => child.data.itemType === "attachment")
+              .map((child) => ({
+                ...child.data,
+                key: child.key,
+                uri: identity(p, child.key),
+              })),
+          });
+        }
+        result = await native.call(
+          "translateExport",
+          [{ items, translatorID: body.translatorID, options: body.options }],
+          signal,
+        );
+      } else if (op === "schema")
         result = await native.call("schema", [], signal);
       else if (op === "settings") {
         if (method === "PATCH") {
           const allowed = [
             "openalexKey",
             "crossrefEmail",
+            "crossrefKey",
             "unpaywallEmail",
             "resolvers",
             "automaticPDFs",
           ];
           for (const name of Object.keys(body))
             if (!allowed.includes(name)) fail("Unknown setting");
+          for (const name of ["openalexKey", "crossrefKey"])
+            if (
+              body[name] != null &&
+              (typeof body[name] !== "string" ||
+                body[name].length > 4096 ||
+                /[\r\n\u0000]/.test(body[name]))
+            )
+              fail("Invalid service key");
           if (body.resolvers !== undefined)
             await native.call("validateResolvers", [body.resolvers], signal);
           for (const name of ["crossrefEmail", "unpaywallEmail"])
             if (body[name] && !/^[^@\s<>]+@[^@\s<>]+$/.test(body[name]))
               fail("Invalid contact email");
-          const updated = { ...settings, ...body };
-          if (p.runAuthorized)
-            await p.runAuthorized(async (ownerSignal) => {
-              ownerSignal?.throwIfAborted();
-              await privateWrite(settingsFile, updated);
-              settings = updated;
+          const prior = operations.get("settings") || Promise.resolve();
+          const work = prior
+            .catch(() => {})
+            .then(async () => {
+              const updated = { ...settings, ...body };
+              for (const name of ["openalexKey", "crossrefKey"])
+                if (!updated[name]) delete updated[name];
+              if (
+                body.resolvers !== undefined &&
+                typeof body.resolvers !== "string"
+              )
+                updated.resolvers = JSON.stringify(body.resolvers);
+              if (p.runAuthorized)
+                await p.runAuthorized(async (ownerSignal) => {
+                  ownerSignal?.throwIfAborted();
+                  await privateWrite(settingsFile, updated);
+                  settings = updated;
+                });
+              else {
+                await privateWrite(settingsFile, updated);
+                settings = updated;
+              }
             });
-          else {
-            await privateWrite(settingsFile, updated);
-            settings = updated;
+          operations.set("settings", work);
+          try {
+            await work;
+          } finally {
+            if (operations.get("settings") === work)
+              operations.delete("settings");
           }
         } else if (method !== "GET") fail("Method not allowed", 405);
         result = {
           openalexKeyConfigured: !!settings.openalexKey,
+          crossrefKeyConfigured: !!settings.crossrefKey,
           crossrefEmail: settings.crossrefEmail || "",
           unpaywallEmail: settings.unpaywallEmail || "",
           resolvers: settings.resolvers || "[]",
           automaticPDFs: !!settings.automaticPDFs,
         };
       } else if (op === "jobs") {
+        if (!key && method === "GET") {
+          const page = await call(
+            p,
+            "jobs",
+            {
+              start: Number(query.get("start")) || 0,
+              limit: Number(query.get("limit")) || 80,
+            },
+            signal,
+          );
+          for (const item of page.items)
+            if (
+              !jobs.has(p.id + ":" + item.id) &&
+              ["queued", "running"].includes(item.status)
+            )
+              item.status = "interrupted";
+          return { status: 200, headers: responseHeaders, body: page };
+        }
         if (method === "POST" && action === "resume") {
           const original = await call(
             p,
@@ -1560,6 +2081,12 @@ export async function createReferencesService({
               headers: {
                 Accept: "application/json",
                 "User-Agent": "BashKitten References/0.1",
+                ...(settings.crossrefKey
+                  ? {
+                      "Crossref-Plus-API-Token":
+                        "Bearer " + settings.crossrefKey,
+                    }
+                  : {}),
               },
             },
             { signal },
@@ -2124,6 +2651,8 @@ export async function createReferencesService({
   }
   return {
     handle,
+    validateLibraryRelink,
+    deleteLibrary,
     parseDocument: async (
       text,
       { authority, identity: identityAuthority, projectId, signal } = {},

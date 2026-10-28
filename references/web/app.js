@@ -17,15 +17,20 @@ import {
 import { VirtualList } from "./virtual-list.js";
 import { Collections } from "./collections.js";
 import { chooseCitation } from "./shared-citation-dialog.js";
+import { exportReferences, importReferences } from "./transfer-dialogs.js";
+import { manageLibrary } from "./library-dialog.js";
 const $ = (selector) => document.querySelector(selector),
   api = createApi(),
   selection = new Map(),
-  jobs = new Map();
+  jobs = new Map(),
+  jobListeners = new Map();
 let projectId,
   scope,
   schema,
   context,
   projectList,
+  projectRecords = [],
+  projectReady = false,
   items,
   collections,
   collection = null,
@@ -40,10 +45,13 @@ let projectId,
   anchor = 0,
   jobTimer,
   jobsPolling = false,
+  appRetired = false,
   activeSearch = "",
   deleted = false;
-const notify = (message) =>
-  ($("#status").textContent = message?.message || message || "");
+const notify = (message) => {
+  const target = $("#status");
+  if (target) target.textContent = message?.message || message || "";
+};
 const pane = (name) => ($("#app").dataset.pane = name);
 for (const button of document.querySelectorAll("[data-pane]"))
   button.addEventListener("click", () => pane(button.dataset.pane));
@@ -79,9 +87,25 @@ function selectedIdentity(item) {
 }
 async function boot() {
   context = await api.request("context");
-  const list = Array.isArray(context.projects)
-    ? context.projects
-    : context.projects?.projects || [];
+  projectRecords = await api.request("projects?includeArchived=true");
+  const list = projectRecords;
+  if (list.find((project) => project.id === context.projectId)?.archived)
+    $("#showArchived").checked = true;
+  renderProjectList();
+  if (!list.length) {
+    notify("Create a project in BashKitten to start its library.");
+    return;
+  }
+  if (list.some((project) => project.id === context.projectId))
+    await selectProject(context.projectId);
+  else notify("Select a project library.");
+}
+function renderProjectList() {
+  const list = projectRecords.filter(
+    (project) => !project.archived || $("#showArchived").checked,
+  );
+  projectList?.destroy();
+  $("#projects").replaceChildren();
   const nameCounts = new Map();
   $("#projects").style.flexBasis =
     Math.max(52, Math.min(156, list.length * 52)) + "px";
@@ -106,6 +130,7 @@ async function boot() {
           "small",
           {},
           project.backendName || context.backendName || context.backendId,
+          project.archived ? " · Archived" : "",
           nameCounts.get(project.name) > 1 && project.cwd
             ? " · " + project.cwd
             : "",
@@ -113,16 +138,73 @@ async function boot() {
       ),
     onSelect: (project) => selectProject(project.id),
   });
-  if (!list.length) {
-    notify("Create a project in BashKitten to start its library.");
-    return;
-  }
-  await selectProject(
-    list.some((project) => project.id === context.projectId)
-      ? context.projectId
-      : list[0].id,
-  );
+  if (projectId) projectList.setSelection([projectId]);
 }
+$("#showArchived").onchange = renderProjectList;
+function currentProject() {
+  return projectRecords.find((project) => project.id === projectId);
+}
+function updateProjectActions() {
+  const available = !!scope && projectReady;
+  const editable = available && !currentProject()?.archived;
+  for (const id of [
+    "newCollection",
+    "collectionMenu",
+    "newItem",
+    "identifiers",
+    "importReferences",
+    "attachment",
+    "note",
+    "openalex",
+  ]) {
+    $("#" + id).disabled = !editable;
+  }
+  for (const id of ["savedSearches", "settings", "cite", "jobHistory"]) {
+    $("#" + id).disabled = !available;
+  }
+  $("#libraryMenu").disabled = !currentProject();
+  for (const option of $("#actions").options)
+    option.disabled = !!option.value && option.value !== "export" && !editable;
+  $("#actions").disabled = !available;
+}
+$("#libraryMenu").onclick = () => {
+  const project = currentProject();
+  if (!project) return;
+  if (detailDirty && !confirm("Discard unsaved item changes?")) return;
+  manageLibrary({
+    api,
+    project,
+    onRetired: () => {
+      appRetired = true;
+      detailDirty = false;
+      ++view;
+      detailController?.abort();
+      rangeController?.abort();
+      jobListController?.abort();
+      clearTimeout(jobTimer);
+      items?.destroy();
+      collections?.destroy();
+      projectList?.destroy();
+      scope = null;
+      $("#app").replaceChildren(
+        node(
+          "p",
+          { class: "empty-details" },
+          "This library needs to be reopened. Use the dialog, or open References again from BashKitten.",
+        ),
+      );
+    },
+  });
+};
+$("#importReferences").onclick = () => {
+  if (!scope) return;
+  const id = projectId;
+  importReferences({
+    scope,
+    target: collection,
+    onJob: (job) => trackJob(id, job),
+  });
+};
 async function selectProject(id) {
   if (detailDirty && !confirm("Discard unsaved item changes?")) {
     projectList.setSelection([projectId]);
@@ -142,8 +224,10 @@ async function selectProject(id) {
   detail = null;
   detailDirty = false;
   projectId = id;
+  projectReady = false;
   projectList.setSelection([id]);
   scope = api.project(id);
+  updateProjectActions();
   notify("Loading library…");
   $("#details").replaceChildren(
     node(
@@ -190,6 +274,8 @@ async function selectProject(id) {
       },
     });
     notify("Library ready.");
+    projectReady = true;
+    updateProjectActions();
     void restoreJobs(id, generation);
     pollJobs();
   } catch (error) {
@@ -318,6 +404,20 @@ function renderDetail(item, targetScope) {
     heading = node("h2", { class: "detail-title" }, title(item)),
     notice = node("p", { class: "notice", role: "status" });
   root.append(heading, form, notice);
+  const archived = !!currentProject()?.archived;
+  function readOnlyControls(container) {
+    if (!archived) return;
+    for (const control of container.querySelectorAll(
+      "input,select,textarea,button",
+    )) {
+      if (control.hasAttribute("data-read-action")) continue;
+      if (control.matches('textarea,input:not([type="checkbox"])'))
+        control.readOnly = true;
+      else control.disabled = true;
+    }
+  }
+  if (archived)
+    notice.textContent = "Archived library · unarchive it to edit metadata.";
   const type = node("select");
   for (const info of schema.itemTypes)
     type.add(new Option(label("itemTypes", info.itemType), info.itemType));
@@ -448,7 +548,7 @@ function renderDetail(item, targetScope) {
           creatorStart = Math.max(0, creatorStart - 20);
           renderCreators();
         },
-        { disabled: creatorStart === 0 },
+        { disabled: creatorStart === 0, "data-read-action": "" },
       ),
       button(
         "Next",
@@ -456,9 +556,14 @@ function renderDetail(item, targetScope) {
           creatorStart += 20;
           renderCreators();
         },
-        { disabled: creatorStart + 20 >= edited.creators.length },
+        {
+          disabled: creatorStart + 20 >= edited.creators.length,
+          "data-read-action": "",
+        },
       ),
     );
+    readOnlyControls(creatorRows);
+    readOnlyControls(creatorActions);
   }
   function renderFields() {
     fields.replaceChildren();
@@ -538,7 +643,7 @@ function renderDetail(item, targetScope) {
             --relatedPage;
             renderRelated();
           },
-          { disabled: relatedPage === 0 },
+          { disabled: relatedPage === 0, "data-read-action": "" },
         ),
         button(
           "Next",
@@ -546,10 +651,14 @@ function renderDetail(item, targetScope) {
             ++relatedPage;
             renderRelated();
           },
-          { disabled: (relatedPage + 1) * 10 >= values.length },
+          {
+            disabled: (relatedPage + 1) * 10 >= values.length,
+            "data-read-action": "",
+          },
         ),
       ),
     );
+    readOnlyControls(relatedRows);
   }
   related.addEventListener("toggle", async () => {
     if (!related.open) return;
@@ -605,10 +714,14 @@ function renderDetail(item, targetScope) {
       "div",
       { class: "toolbar" },
       save,
-      button("Reload item", () => {
-        if (!detailDirty || confirm("Discard unsaved item changes?"))
-          void openDetail(item.key, true);
-      }),
+      button(
+        "Reload item",
+        () => {
+          if (!detailDirty || confirm("Discard unsaved item changes?"))
+            void openDetail(item.key, true);
+        },
+        { "data-read-action": "" },
+      ),
     ),
   );
   form.onsubmit = async (event) => {
@@ -648,9 +761,12 @@ function renderDetail(item, targetScope) {
   attachments.append(
     node("summary", {}, "Attachments and notes"),
     children,
-    button("Add attachment", () => uploadDialog(item.key, targetScope)),
+    button("Add attachment", () => uploadDialog(item.key, targetScope), {
+      disabled: archived,
+    }),
   );
   root.append(attachments);
+  readOnlyControls(form);
   void loadChildren(item, targetScope, children);
 }
 async function loadChildren(item, targetScope, target, cursor, history = []) {
@@ -941,6 +1057,13 @@ $("#actions").onchange = async () => {
     selected = [...selection.values()];
   let collectionKey = collection?.key;
   try {
+    if (action === "export") {
+      await exportReferences({
+        scope: targetScope,
+        keys: selected.map((item) => item.key),
+      });
+      return;
+    }
     if (["enrich", "resolve-pdfs"].includes(action)) {
       trackJob(
         id,
@@ -984,8 +1107,20 @@ $("#actions").onchange = async () => {
   }
 };
 function trackJob(id, job) {
-  jobs.set(id + ":" + job.id, { projectId: id, ...job });
+  storeJob(id, job);
   pollJobs();
+}
+function storeJob(id, job) {
+  const key = id + ":" + job.id,
+    value = { ...job, projectId: id };
+  jobs.set(key, value);
+  for (const callback of jobListeners.get(key) || []) callback(value);
+}
+function jobProgress(job) {
+  const progress = job.progress?.import;
+  return progress
+    ? `${progress.completed}/${progress.total} records`
+    : `${job.completed}/${job.total}`;
 }
 async function restoreJobs(id, generation) {
   const controller = (jobListController = new AbortController());
@@ -996,7 +1131,7 @@ async function restoreJobs(id, generation) {
     if (generation !== view || controller.signal.aborted) return;
     for (const job of result.items) {
       const key = id + ":" + job.id;
-      if (!jobs.has(key)) jobs.set(key, { ...job, projectId: id });
+      if (!jobs.has(key)) storeJob(id, job);
     }
     pollJobs();
   } catch (error) {
@@ -1053,7 +1188,7 @@ $("#jobHistory").onclick = () => {
 };
 async function pollJobs() {
   clearTimeout(jobTimer);
-  if (document.hidden || jobsPolling) return;
+  if (appRetired || document.hidden || jobsPolling) return;
   jobsPolling = true;
   for (const [key, job] of jobs) {
     if (["queued", "running"].includes(job.status)) {
@@ -1061,29 +1196,29 @@ async function pollJobs() {
         const latest = await api
           .project(job.projectId)
           .request("jobs/" + job.id);
-        jobs.set(key, { ...latest, projectId: job.projectId });
+        storeJob(job.projectId, latest);
         if (
           !["queued", "running"].includes(latest.status) &&
           job.projectId === projectId
-        )
+        ) {
           items?.reset({ preservePosition: true });
+          if (job.kind === "file-import") collections?.refresh();
+        }
       } catch (error) {
         job.error = error.message;
       }
     }
+  }
+  if (appRetired) {
+    jobsPolling = false;
+    return;
   }
   $("#jobs").replaceChildren();
   for (const job of [...jobs.values()]
     .filter((job) => job.projectId === projectId)
     .slice(-8)) {
     const label =
-      human(job.kind) +
-      " · " +
-      human(job.status) +
-      " · " +
-      job.completed +
-      "/" +
-      job.total;
+      human(job.kind) + " · " + human(job.status) + " · " + jobProgress(job);
     $("#jobs").append(button(label, () => showJob(job)));
   }
   if ([...jobs.values()].some((j) => ["queued", "running"].includes(j.status)))
@@ -1105,16 +1240,15 @@ async function showJob(job) {
       projectId: job.projectId,
     };
     if (controller.signal.aborted) return;
-    jobs.set(job.projectId + ":" + job.id, job);
+    storeJob(job.projectId, job);
     d.notice.textContent = "";
   } catch (error) {
     if (!controller.signal.aborted) d.notice.textContent = error.message;
     return;
   }
-  d.body.append(
-    node("p", {}, job.status + " · " + job.completed + "/" + job.total),
-  );
-  if (job.error) d.body.append(node("p", { class: "notice" }, job.error));
+  const summary = node("p", {}, human(job.status) + " · " + jobProgress(job)),
+    errorNotice = node("p", { class: "notice" }, job.error || "");
+  d.body.append(summary, errorNotice);
   const results = node("div", { class: "search-results" });
   d.body.append(results);
   const list = new VirtualList({
@@ -1139,43 +1273,62 @@ async function showJob(job) {
     onSelect: (result) => showJobResult(job, result),
   });
   d.el.addEventListener("close", () => list.destroy(), { once: true });
-  if (["interrupted", "failed", "partial"].includes(job.status))
-    d.actions.append(
-      button("Resume", async () => {
-        try {
-          trackJob(
-            job.projectId,
-            await api
-              .project(job.projectId)
-              .request("jobs/" + job.id + "/resume", { method: "POST" }),
-          );
-          d.el.close();
-        } catch (error) {
-          d.notice.textContent = error.message;
-        }
-      }),
+  const resume = button("Resume", async () => {
+    resume.disabled = true;
+    try {
+      trackJob(
+        job.projectId,
+        await api
+          .project(job.projectId)
+          .request("jobs/" + job.id + "/resume", { method: "POST" }),
+      );
+      d.el.close();
+    } catch (error) {
+      d.notice.textContent = error.message;
+      resume.disabled = false;
+    }
+  });
+  const cancel = button("Cancel work", async () => {
+    cancel.disabled = true;
+    try {
+      await api
+        .project(job.projectId)
+        .request("jobs/" + job.id, { method: "DELETE" });
+      storeJob(
+        job.projectId,
+        await api.project(job.projectId).request("jobs/" + job.id),
+      );
+      d.el.close();
+      pollJobs();
+    } catch (error) {
+      d.notice.textContent = error.message;
+      cancel.disabled = false;
+    }
+  });
+  d.actions.append(resume, cancel);
+  const key = job.projectId + ":" + job.id,
+    listeners = jobListeners.get(key) || new Set();
+  const updated = (latest) => {
+    job = latest;
+    summary.textContent = human(job.status) + " · " + jobProgress(job);
+    errorNotice.textContent = job.error || "";
+    list.reset({ preservePosition: true });
+    resume.hidden = !["interrupted", "failed", "partial"].includes(job.status);
+    cancel.hidden = !["queued", "running", "waiting-for-browser"].includes(
+      job.status,
     );
-  if (["queued", "running", "waiting-for-browser"].includes(job.status))
-    d.actions.append(
-      button("Cancel work", async () => {
-        try {
-          await api
-            .project(job.projectId)
-            .request("jobs/" + job.id, { method: "DELETE" });
-          const latest = await api
-            .project(job.projectId)
-            .request("jobs/" + job.id);
-          jobs.set(job.projectId + ":" + job.id, {
-            ...latest,
-            projectId: job.projectId,
-          });
-          d.el.close();
-          pollJobs();
-        } catch (e) {
-          d.notice.textContent = e.message;
-        }
-      }),
-    );
+  };
+  listeners.add(updated);
+  jobListeners.set(key, listeners);
+  updated(job);
+  d.el.addEventListener(
+    "close",
+    () => {
+      listeners.delete(updated);
+      if (!listeners.size) jobListeners.delete(key);
+    },
+    { once: true },
+  );
 }
 function showJobResult(job, result) {
   const d = dialog("Operation result"),
@@ -1192,6 +1345,14 @@ function showJobResult(job, result) {
         if (child && typeof child === "object") stack.push(child);
   }
   d.body.append(node("p", {}, result.error || human(result.status)));
+  if (result.result?.status === "imported")
+    d.body.append(
+      node(
+        "p",
+        {},
+        `${result.result.count} reference${result.result.count === 1 ? "" : "s"} imported; ${result.result.collections || 0} collection${result.result.collections === 1 ? "" : "s"} imported.`,
+      ),
+    );
   if (pending.length)
     d.body.append(
       node(
@@ -1200,7 +1361,10 @@ function showJobResult(job, result) {
         "The source requires a visible browser step to retrieve the file.",
       ),
     );
-  const rows = node("div", { class: "search-results" });
+  const rows = node("div", {
+    class: "search-results",
+    hidden: !pending.length,
+  });
   d.body.append(rows);
   const list = new VirtualList({
     element: rows,
@@ -1224,10 +1388,7 @@ function showJobResult(job, result) {
           const latest = await api
             .project(job.projectId)
             .request("jobs/" + job.id, { signal: controller.signal });
-          jobs.set(job.projectId + ":" + job.id, {
-            ...latest,
-            projectId: job.projectId,
-          });
+          storeJob(job.projectId, latest);
           pollJobs();
           if (projectId === job.projectId)
             items?.reset({ preservePosition: true });
@@ -2306,4 +2467,5 @@ window.addEventListener("beforeunload", (event) => {
     event.returnValue = "";
   }
 });
+updateProjectActions();
 void boot().catch(notify);

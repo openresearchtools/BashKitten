@@ -39,7 +39,9 @@ export class ApplicationGateway {
     return this.starting;
   }
   async listen() {
-    if ([applicationSocket, httpSocket].some(value => Buffer.byteLength(value) > 103)) throw unavailable('The owning backend runtime directory is too long for a native application socket');
+    // Both supported platforms use Linux sockaddr_un.sun_path[108], including
+    // the terminating NUL. Reject truncation before touching an existing socket.
+    if ([applicationSocket, httpSocket].some(value => Buffer.byteLength(value) > 107)) throw unavailable('The owning backend runtime directory is too long for a native application socket');
     await privateDir(path.dirname(applicationSocket));
     // The backend's existing kernel instance lock is held before construction.
     await fs.rm(httpSocket, { force: true }); await fs.rm(applicationSocket, { force: true });
@@ -158,12 +160,13 @@ export class ApplicationGateway {
         await this.configuring.get(component);
         operation.signal.throwIfAborted();
         const stop = () => { req.destroy(); res.destroy(); };
+        stop.response = res;
         const active = { component, stop, socket: component === 'files' && context.url.pathname.slice(context.basePath.length) === 'api/events' };
         active.done = new Promise(resolve => { active.finish = resolve; }); this.active.add(active);
         grant.active.add(stop);
         try { await this.handle(component, req, res, { ...context, signal: operation.signal }); }
         finally { grant.active.delete(stop); this.active.delete(active); active.finish(); }
-      }, { cancel: () => { req.destroy(); res.destroy(); }, watch: abort => { res.once('close', abort); return () => res.off('close', abort); } });
+      }, { response: res, cancel: () => { req.destroy(); res.destroy(); }, watch: abort => { res.once('close', abort); return () => res.off('close', abort); } });
     } catch (error) {
       if (res.headersSent) res.destroy(); else json(res, { error: error.message, code: error.code }, error.status || 400);
     }
@@ -201,22 +204,33 @@ export class ApplicationGateway {
   async authorizeOperation(id, operation, work, options) {
     const grant = this.grants.get(id);
     if (!grant || grant.revoked) throw Object.assign(Error('The application grant expired'), { status: 403 });
-    return this.authorize(grant.record, async context => {
+    grant.operations ||= new Set();
+    const active = { response: options?.response };
+    grant.operations.add(active);
+    active.done = this.authorize(grant.record, async context => {
       if (grant.revoked || this.closing) throw Object.assign(Error('The application grant was revoked'), { status: 403 });
       const controller = new AbortController(), stop = () => controller.abort(Error('The application grant was revoked'));
+      stop.response = options?.response;
       grant.active.add(stop);
       try {
         await this.validateGrant?.(grant);
         const signal = AbortSignal.any([context.signal, controller.signal]); signal.throwIfAborted();
         return await work({ ...context, signal, grant, operation });
       } finally { grant.active.delete(stop); }
-    }, options);
+    }, options).finally(() => grant.operations.delete(active));
+    return active.done;
   }
-  revokeWhere(predicate) {
-    for (const grant of this.grants.values()) if (predicate(grant)) { grant.revoked = true; for (const stop of grant.active) stop(); }
+  revokeWhere(predicate, { response } = {}) {
+    const pending = [];
+    for (const grant of this.grants.values()) if (predicate(grant)) {
+      grant.revoked = true;
+      for (const stop of grant.active) if (!response || stop.response !== response) stop();
+      for (const operation of grant.operations || []) if (!response || operation.response !== response) pending.push(operation.done);
+    }
+    return Promise.allSettled(pending);
   }
   async revokeRemote() {
-    this.revokeWhere(grant => !grant.record.local);
+    await this.revokeWhere(grant => !grant.record.local);
   }
   async close() {
     this.closing = true;

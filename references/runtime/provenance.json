@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "modifiedAt": "2026-10-28",
+  "patches": [
+    {
+      "name": "native-pdf-resolver-queue",
+      "source": "vendor/zotero/source/chrome/content/zotero/xpcom/attachments.js",
+      "sourceSha256": "975900e8fa4ff84d666c10f181dce5e9f05a158e9624c7ace2567904fef0dc6a",
+      "files": [
+        "runtime/resolver-native.js",
+        "resolvers.mjs"
+      ],
+      "nativeMethods": [
+        "getFileResolvers",
+        "canFindFileForItem",
+        "addAvailableFiles",
+        "addFileFromURLs",
+        "downloadFirstAvailableFile"
+      ],
+      "adaptation": "Host XPCOM/file/browser interfaces injected; per-item cancellation and automatic preference; native not-before times shared between project jobs and renewed on a resumed slot."
+    },
+    {
+      "name": "native-metadata-http-retry",
+      "source": "vendor/zotero/source/chrome/content/zotero/xpcom/http.js",
+      "sourceSha256": "68e613544c1194dffc8fc385e794fc7267f0f1c8bb1458ac5c27c50b752a3845",
+      "files": [
+        "runtime/http-retry-native.js",
+        "runtime/http.js",
+        "runtime/request-context.js"
+      ],
+      "nativeMethods": [
+        "_getRetryAfter",
+        "_checkRetry",
+        "_retryOnServerError"
+      ],
+      "adaptation": "Exact retry branches, native delay generator; Node request transport and cancellation replace XHR/security UI interfaces."
+    },
+    {
+      "name": "native-document-file-detection",
+      "source": "vendor/zotero/source/chrome/content/zotero/xpcom/utilities_internal.js",
+      "sourceSha256": "a567e71b7ad83feb3cb3f70d8f7b2c090d4cb35e2ed6cf7892316b9ab20aafe4",
+      "files": [
+        "runtime/file-from-document.js"
+      ],
+      "nativeMethods": [
+        "getFileFromDocument"
+      ],
+      "adaptation": "Host native translation API injected."
+    },
+    {
+      "name": "native-header-decoding",
+      "source": "vendor/zotero/source/chrome/content/zotero/xpcom/server/server.js",
+      "sourceSha256": "eab45c2fa78fcd7fbddbd3353c57052ff45ab43bfb907da6d3771b93606113d5",
+      "files": [
+        "headers.mjs"
+      ],
+      "nativeMethods": [
+        "decodeRFC2047"
+      ],
+      "adaptation": "ES module export, inactive debug logger; unchanged encoding parser."
+    },
+    {
+      "name": "native-translation-without-reporting",
+      "source": "vendor/translate/source/src/translation/translate.js",
+      "sourceSha256": "11af1d5f4e78bcba3393f0e5b661bae24a9711b6a2046ad8d7d86e571df0573b",
+      "files": [
+        "runtime/translation/translate-engine.js"
+      ],
+      "nativeMethods": [
+        "Zotero.Translate.Web.complete"
+      ],
+      "adaptation": "Automatic translator failure reporting removed physically; base translation completion retained."
+    },
+    {
+      "name": "reviewer-v3-identifier-enrichment",
+      "source": "legal/Systematic-Reviewer-source.json",
+      "sourceSha256": "d933d7122b4633987d342ee16c6b608587580886d8109e7bd3394dc3d5f87997",
+      "files": [
+        "adapted/identifiers.mjs",
+        "adapted/metadata-http.mjs",
+        "adapted/openalex.mjs"
+      ],
+      "nativeMethods": [],
+      "adaptation": "Frozen V3 source copied with application identity, References item IDs and safe provider errors; exact abstract rules retained."
+    },
+    {
+      "name": "native-import-collection-mapping",
+      "source": "vendor/zotero/source/chrome/content/zotero/xpcom/translation/translate_item.js",
+      "sourceSha256": "abe26d3cdaea27f72d5d00837784c78a6ef63476fea5b233c2d591e1874eeca5",
+      "files": [
+        "runtime/import-collections-native.js",
+        "translation.mjs"
+      ],
+      "nativeMethods": [
+        "saveCollections"
+      ],
+      "adaptation": "Original native collection hierarchy and item mapping algorithm; injected collection objects produce a scoped persistence plan committed by the existing SQLite adapter in bounded pages."
+    },
+    {
+      "name": "native-metadata-export",
+      "source": "vendor/translation-server/source/src/exportEndpoint.js",
+      "files": [
+        "translation.mjs",
+        "runtime/formats.js",
+        "runtime/translation/translate_item.js"
+      ],
+      "nativeMethods": [
+        "ExportEndpoint.handle",
+        "ItemGetter.nextItem"
+      ],
+      "adaptation": "Native export endpoint preparation and ItemGetter retained; Koa response replaced by project-authorized bounded metadata response. Native format MIME mapping is copied unchanged. Explicit file-copy requests are rejected by metadata export, with project Bibliography available through existing Files.",
+      "sourceSha256": "879f6b7dd342ade7c8eaf747d94917465b699fd364128f9cc35781adf02aba1c"
+    }
+  ]
+}

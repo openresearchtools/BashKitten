@@ -23,7 +23,8 @@
     "vendor/styles/source/dependent/*.csl",
     "vendor/locales/source/locales-*.xml",
     "vendor/zotero/source/chrome/content/zotero/xpcom/cite.js",
-    "vendor/wicked-good-xpath/wicked-good-xpath-1.3.1-z002.tgz"
+    "vendor/wicked-good-xpath/wicked-good-xpath-1.3.1-z002.tgz",
+    "README.md"
   ],
   "stripTranslatorTests": true,
   "legal": [
@@ -32,54 +33,42 @@
       "version": "536244c2771f590abab9c09a3c27e615e0b318ff",
       "license": "AGPL-3.0-or-later",
       "source": "vendor/zotero/source.json",
-      "files": [
-        "vendor/zotero/source/COPYING"
-      ]
+      "files": ["vendor/zotero/source/COPYING"]
     },
     {
       "name": "translation-server",
       "version": "672d4f3b6254c3afd4d62cdeef5aed7602d84078",
       "license": "AGPL-3.0-or-later",
       "source": "vendor/translation-server/source.json",
-      "files": [
-        "vendor/translation-server/source/COPYING"
-      ]
+      "files": ["vendor/translation-server/source/COPYING"]
     },
     {
       "name": "translate",
       "version": "d08300c2c01a4d6ef325f05cbefc6c138a99f811",
       "license": "AGPL-3.0-or-later",
       "source": "vendor/translate/source.json",
-      "files": [
-        "vendor/translate/source/COPYING"
-      ]
+      "files": ["vendor/translate/source/COPYING"]
     },
     {
       "name": "utilities",
       "version": "1dd38e27edf81e9d9c4161c957b7efb7f5681ac3",
       "license": "AGPL-3.0-or-later; embedded notices retained",
       "source": "vendor/utilities/source.json",
-      "files": [
-        "vendor/utilities/source/COPYING"
-      ]
+      "files": ["vendor/utilities/source/COPYING"]
     },
     {
       "name": "translators",
       "version": "c83003773b65359e41466e1d419b2d1df5512af7",
       "license": "Per-file license and copyright notices; common AGPL-3.0-or-later license included where applicable",
       "source": "vendor/translators/source.json",
-      "files": [
-        "vendor/zotero/source/COPYING"
-      ]
+      "files": ["vendor/zotero/source/COPYING"]
     },
     {
       "name": "schema",
       "version": "70c3aa98627413d6a30dca955886eafbde085ce9",
       "license": "Upstream schema as distributed with Zotero",
       "source": "vendor/schema/source.json",
-      "files": [
-        "vendor/schema/source/README.md"
-      ]
+      "files": ["vendor/schema/source/README.md"]
     },
     {
       "name": "styles",
@@ -108,9 +97,7 @@
       "version": "7.0.32",
       "license": "AGPL-3.0-or-later",
       "source": "vendor/classic-dialog/source.json",
-      "files": [
-        "vendor/classic-dialog/source/COPYING"
-      ]
+      "files": ["vendor/classic-dialog/source/COPYING"]
     },
     {
       "name": "wicked-good-xpath",
@@ -127,9 +114,7 @@
       "version": "frozen local delta recorded in agent/systematic-reviewer/vendor/v3",
       "license": "AGPL-3.0-or-later",
       "source": "legal/Systematic-Reviewer-source.json",
-      "files": [
-        "legal/Systematic-Reviewer-LICENSE"
-      ]
+      "files": ["legal/Systematic-Reviewer-LICENSE"]
     }
   ]
 }

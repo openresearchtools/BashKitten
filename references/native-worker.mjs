@@ -55,7 +55,9 @@ parentPort.on("message", async ({ id, method, args, cancel }) => {
                           [
                             "translateIdentifier",
                             "translateImport",
+                            "translateImportBundle",
                             "translateOpenAlex",
+                            "translateExport",
                           ].includes(method)
                             ? translation[method](args[0], {
                                 ...args[1],
