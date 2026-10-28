@@ -95,9 +95,9 @@ class WebExtensionPromptFeature(
 
                 when (promptRequest) {
                     is WebExtensionPromptRequest.InstallationRequested -> {
-                        // Reuse Fenix's user-invoked HTTPS XPI flow. The package
-                        // identity is checked after Gecko's signature validation,
-                        // before permissions or activation; a URL is not an ID.
+                        // Keep native Fenix installation requests on HTTPS. Android
+                        // document-picker updates enter AddonManager directly; both
+                        // paths check the verified ID before permissions or activation.
                         if (android.net.Uri.parse(promptRequest.url).scheme == "https") {
                             handleInstallationStartedRequest(promptRequest)
                         } else {

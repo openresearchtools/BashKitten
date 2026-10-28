@@ -64,6 +64,7 @@ import mozilla.components.browser.state.state.WebExtensionState
 import mozilla.components.concept.engine.EngineSession
 import mozilla.components.concept.engine.EngineView
 import mozilla.components.concept.storage.HistoryMetadataKey
+import mozilla.components.feature.addons.ui.AddonFilePicker
 import mozilla.components.feature.contextmenu.DefaultSelectionActionDelegate
 import mozilla.components.feature.customtabs.isCustomTabIntent
 import mozilla.components.feature.media.ext.findActiveMediaTab
@@ -201,6 +202,16 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     private var bashKittenMenuFromAgent = false
     private var bashKittenBrowserUiBack = false
     fun showBashKittenAgent() { bashKittenAgentPanel?.showAgent() }
+
+    private val referencesFilePicker by lazy {
+        AddonFilePicker(applicationContext, components.addonManager)
+    }
+
+    fun updateReferencesFromFile() {
+        if (!referencesFilePicker.launch()) {
+            android.widget.Toast.makeText(this, "No file picker is available.", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
 
     private fun openBashKittenBrowserMenu() {
         bashKittenMenuFromAgent = true
@@ -469,6 +480,12 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
             setupTheme()
 
             super.onCreate(savedInstanceState)
+        }
+
+        // Register before STARTED so Android can restore a pending picker result.
+        // Gecko's existing permission prompt checks the verified References ID.
+        referencesFilePicker.registerForResults(this, lifecycleScope) {
+            android.widget.Toast.makeText(this, "Unable to read the selected References update.", android.widget.Toast.LENGTH_LONG).show()
         }
 
         // Checks if Activity is currently in PiP mode if launched from external intents, then exits it

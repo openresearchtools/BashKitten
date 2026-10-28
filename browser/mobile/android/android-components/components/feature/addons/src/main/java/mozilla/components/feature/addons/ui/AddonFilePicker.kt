@@ -11,6 +11,12 @@ import android.net.Uri
 import androidx.activity.result.ActivityResultCaller
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import mozilla.components.concept.engine.webextension.InstallationMethod
 import mozilla.components.feature.addons.Addon
 import mozilla.components.feature.addons.AddonManager
@@ -18,6 +24,7 @@ import mozilla.components.support.base.log.logger.Logger
 import mozilla.components.support.ktx.android.net.getFileName
 import mozilla.components.support.ktx.android.net.toFileUri
 import java.io.File
+import java.util.UUID
 
 private const val XPI_DIR = "XPIs"
 
@@ -49,30 +56,67 @@ class AddonFilePicker(
     /**
      * Registers a listener for file picker results.
      * @param resultCaller The [ActivityResultCaller] on which results will be observed.
+     * @param scope Optional caller-owned scope for copying provider files off the UI thread.
+     * @param onFileReadError Called if preparing the selected file fails before native installation.
      */
-    fun registerForResults(resultCaller: ActivityResultCaller) {
+    fun registerForResults(
+        resultCaller: ActivityResultCaller,
+        scope: CoroutineScope? = null,
+        onFileReadError: (Throwable) -> Unit = {},
+    ) {
         activityLauncher =
-            resultCaller.registerForActivityResult(AddonOpenDocument(), ::handleUriSelected)
+            resultCaller.registerForActivityResult(AddonOpenDocument()) { uri ->
+                if (scope == null) {
+                    handleUriSelected(uri)
+                } else if (uri != null) {
+                    scope.launch(Dispatchers.Main) {
+                        val directory = File(context.cacheDir, "$XPI_DIR/${UUID.randomUUID()}")
+                        var handedToInstaller = false
+                        try {
+                            val prepared = withContext(Dispatchers.IO) {
+                                check(directory.mkdirs()) { "Cannot prepare the selected add-on file" }
+                                uri.toFileUri(context, directory.relativeTo(context.cacheDir).path).toString()
+                            }
+                            installFileUri(prepared) {
+                                scope.launch(NonCancellable + Dispatchers.IO) {
+                                    directory.deleteRecursively()
+                                }
+                            }
+                            handedToInstaller = true
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            logger.error("Unable to prepare the selected add-on file", error)
+                            onFileReadError(error)
+                        } finally {
+                            if (!handedToInstaller) {
+                                withContext(NonCancellable + Dispatchers.IO) {
+                                    directory.deleteRecursively()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
     }
 
     internal fun handleUriSelected(uri: Uri?) {
         uri?.let { safeUri ->
             val fileUri = convertToFileUri(safeUri)
-            val onSuccess: ((Addon) -> Unit) = {
-                logger.info("Add-on from $fileUri installed successfully")
-                removeTemporaryFile(safeUri)
-            }
-            val onError: ((Throwable) -> Unit) = { throwable ->
-                logger.error("Unable to install add-on from $fileUri", throwable)
-                removeTemporaryFile(safeUri)
-            }
-            addonManager.installAddon(
-                fileUri,
-                InstallationMethod.FROM_FILE,
-                onSuccess,
-                onError,
-            )
+            installFileUri(fileUri) { removeTemporaryFile(safeUri) }
         }
+    }
+
+    private fun installFileUri(fileUri: String, cleanup: () -> Unit) {
+        val onSuccess: ((Addon) -> Unit) = {
+            logger.info("Add-on from $fileUri installed successfully")
+            cleanup()
+        }
+        val onError: ((Throwable) -> Unit) = { throwable ->
+            logger.error("Unable to install add-on from $fileUri", throwable)
+            cleanup()
+        }
+        addonManager.installAddon(fileUri, InstallationMethod.FROM_FILE, onSuccess, onError)
     }
 
     internal fun removeTemporaryFile(fileUri: Uri) {

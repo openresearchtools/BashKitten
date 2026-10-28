@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.bashkitten.AgentSettingsActivity
 import com.bashkitten.BrowserApp
+import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.components.menu.compose.MenuDialogBottomSheet
 import org.mozilla.fenix.components.menu.compose.MenuFrame
 import org.mozilla.fenix.components.menu.compose.MenuGroup
@@ -53,6 +54,7 @@ class BashKittenMenuDialog : BottomSheetDialogFragment() {
                                     Triple("performance", "Performance", agentR.drawable.ic_agent_performance),
                                     Triple("providers", "Providers", iconsR.drawable.mozac_ic_extension_24),
                                     Triple("updates", "Updates", iconsR.drawable.mozac_ic_download_24),
+                                    Triple("references-update", "Update References from file", iconsR.drawable.mozac_ic_extension_24),
                                     Triple("general", "General", iconsR.drawable.mozac_ic_settings_24),
                                 )
                                 for ((section, title, icon) in rows) {
@@ -63,7 +65,13 @@ class BashKittenMenuDialog : BottomSheetDialogFragment() {
                                         val host = requireActivity()
                                         dismiss()
                                         host.window.decorView.post {
-                                            if (!host.isFinishing && !host.isDestroyed) AgentSettingsActivity.open(host, section)
+                                            if (!host.isFinishing && !host.isDestroyed) {
+                                                if (section == "references-update") {
+                                                    (host as? HomeActivity)?.updateReferencesFromFile()
+                                                } else {
+                                                    AgentSettingsActivity.open(host, section)
+                                                }
+                                            }
                                         }
                                     })
                                 }

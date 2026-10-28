@@ -8,7 +8,7 @@ page scripts cannot call the host. Desktop packaging adds the tiny native
 native-messaging delegate `bashkitten_references`. No tokens, filesystem handles
 or arbitrary native URL fetch are exposed to the capture extension.
 
-The independently built capture extension (currently 1.0.1), preinstalled separately from the fixed host, reuses Connector 5.0.217's
+The independently built capture extension (currently 1.0.2), preinstalled separately from the fixed host, reuses Connector 5.0.217's
 translation, ItemSaver, background attachment, SingleFile, item selector, progress,
 content-type interception, cookies and challenge-monitor modules. Its source
 import is immutable under `upstream/`; a named patch changes only documented seams.
@@ -30,6 +30,14 @@ archives under vendor/npm, and actual upstream Firefox build, then produces
 `dist/component.json`. The XPI is **unsigned** until the normal release signing
 process signs it. These artifact/syntax checks are not installed product tests.
 No new BashKitten scripted product tests are part of this component.
+
+The manifest uses Gecko's native required-data declaration for `browsingActivity`
+and `websiteContent`: selected page URLs/referrers, reference metadata, notes/tags
+and requested snapshots/PDFs go to the explicitly selected local or remote backend.
+About References describes that flow and reads its version from the native
+extension manifest. There is no analytics permission or new consent/updater UI.
+Desktop 140 and Android 142 are the minimum versions supporting this native
+data-permission prompt; the current BashKitten source is newer on both targets.
 
 ## Native API contract
 
@@ -120,8 +128,12 @@ version checks and manual rollback; no custom update catalogue is needed.
 [Manual update and rollback](UPDATE.md) records the exact source-verified paths,
 versioned artifact/signing procedure and remaining gates. The generated XPI is
 unsigned; no signing credentials or successful signed installation are claimed.
-Android uses the narrowly restored Fenix HTTPS install prompt, with verified
-References-ID restriction before activation, as documented there. Installed
+Android has the native signed installer and verified References-ID permission
+gate. The **BashKitten settings gear → Update References from file** entry uses
+the existing native `AddonFilePicker` and `AddonManager`, with file preparation
+off the UI thread. Download the signed package first; Android does not register
+the desktop XPI hyperlink content handler. This entry is source-wired for the
+next browser package, not earlier sealed candidates. Installed
 upgrade/restart/rollback acceptance remains pending on both targets.
 
 ## Evidence and remaining acceptance

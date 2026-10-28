@@ -55,10 +55,15 @@ signed update with the APK version. APK-only built-in installation is not a
 downloaded-code installer. The fixed privileged shim remains browser-owned.
 A signed capture package and its installed Android update/rollback flows remain
 acceptance requirements; source staging and an unsigned build do not prove them.
-Android uses the retained Fenix HTTPS XPI link/download/permission flow. After
-Gecko validates the package, the required-permission handler accepts only the
-capture ID above; unrelated add-ons and the privileged host cannot be installed
-through that flow. There is no custom updater or signature-policy change.
+Android's BashKitten settings gear includes **Update References from file**.
+It opens the retained native `AddonFilePicker`; select a downloaded signed XPI
+to install an update or a retained earlier version. The activity owns the picker
+result and asynchronous private-cache copy, then `AddonManager` performs normal
+native installation. After Gecko validates the package and signature, the
+required-permission handler accepts only the capture ID above; unrelated add-ons
+and the privileged host cannot be installed through this entry. Ordinary HTTPS
+XPI links do not initiate this Android flow. There is no custom updater or
+signature-policy change. This is source wiring; installed acceptance is pending.
 
 Desktop uses the capture manifest's native navbar browser action. Android adds
 one toolbar button backed by Fenix's selected-tab WebExtension action state,

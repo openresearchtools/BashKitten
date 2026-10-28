@@ -16,8 +16,8 @@ capture package; replacing a package does not download executable translators.
 ## Prepare a versioned package
 
 1. Change `VERSION` in `build.py` for each distributable version. Keep the fixed
-   capture ID, host ID and API contract. Update the version displayed in
-   `src/references/about.html`. Record the source revision and pinned translator
+   capture ID, host ID and API contract. About References reads the installed
+   version through `browser.runtime.getManifest()`. Record the source revision and pinned translator
    revision with the existing release's source notices.
 2. Run `python3 references/connector/build.py`. Keep its unsigned
    `dist/references.xpi`, `dist/component.json` and `dist/runtime-sha256.json` as
@@ -30,7 +30,7 @@ capture package; replacing a package does not download executable translators.
    workflow. See Mozilla's [signing overview](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/)
    and [submission instructions](https://extensionworkshop.com/documentation/publish/submitting-an-add-on/).
 4. After signing succeeds, retain the returned signed XPI unchanged under a
-   versioned filename, for example `references-1.0.1-signed.xpi`. Compute its
+   versioned filename, for example `references-1.0.2-signed.xpi`. Compute its
    SHA-256 separately: signing changes the package bytes. Keep the signed and
    unsigned digests distinct. Record the actual ID/version, host API, source
    revision, signer result and signed digest alongside the existing BashKitten
@@ -41,9 +41,48 @@ capture package; replacing a package does not download executable translators.
    expected version and digest. Signing account credentials stay outside sources,
    build inputs and logs.
 
+The review source bundle must preserve the repository-relative paths for
+`references/connector/` (excluding generated `.build/` and `dist/`),
+`references/vendor/translators/`, and the branding `LICENSE` plus
+`default16.png`, `default32.png`, `default64.png` and `default128.png` under
+`browser/bashkitten/browser/branding/`. These are the build's complete source and
+asset inputs; a whole Mozilla checkout is not needed. Run the command above from
+that bundle's root with Python, Git, Bash, Node.js and npm available. The 1.0.2
+offline build used Python 3.14.4, Node.js 22.22.1 and npm 9.2.0. Preserve the exact
+source revision with the bundle and compare the rebuilt unsigned XPI digest
+before submission.
+
 No signed References XPI or control of its Mozilla add-on record has been
 established by this work. The generated artifact remains unsigned. Signing and
 review rejection are release gates; do not bypass them or change signature prefs.
+
+### Signing prerequisites and data declaration
+
+Mozilla requires new add-ons submitted since 3 November 2025, including unlisted
+ones, to declare their data transmission in the manifest. The package declares
+`browsingActivity` for captured page URLs/referrers and `websiteContent` for
+reference metadata, notes/tags and requested snapshots/PDFs. This is the capture
+function's transfer to the user's selected backend, which may be remote; it is
+not a claim of analytics collection. Publisher requests use the existing browser
+website session. The About page explains this flow. No `technicalAndInteraction`
+permission or `has_previous_consent` assertion is added.
+
+The required categories use Gecko's existing installation prompt. The manifest
+requires desktop 140 and Android 142, which support this prompt; it does not add
+a custom consent implementation or weaken the existing remote route. See
+Mozilla's [native data consent documentation](https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/).
+
+The remaining release inputs are an authorized Mozilla developer account with
+control of the exact capture ID, an accepted source/build submission and its
+returned signed XPI, plus a versioned downloadable artifact and its digest. Account
+control and signing acceptance must be established by the release owner; they
+are not supplied by this repository. For a rollback acceptance run, retain two
+accepted compatible signed versions. The existing unsigned 1.0.0/1.0.1 build
+artifacts are not signed rollback packages and must not be relabelled as such.
+Keep the returned signed bytes and digests separate from the deterministic
+unsigned build inventory. Desktop and Android have the native manual entry
+points described below; both targets' installed upgrade/restart/downgrade proof
+remains open.
 
 ## Desktop manual installation and rollback
 
@@ -76,38 +115,44 @@ Native source evidence:
 
 ## Android manual installation and rollback
 
-Open the exact signed XPI's **HTTPS link** from the existing BashKitten release
-artifacts in an ordinary browser tab. Fenix's native download/install prompt
-hands it to `AddonManager.installAddon` → `GeckoEngine.installWebExtension` →
-`WebExtensionController.install` → `GeckoViewWebExtension.installWebExtension` →
-native AddonManager. Confirm the normal permission prompt. Read the installed
-capture version through References Add → Source and licenses → About References,
-then verify persistence and a capture after restarting the app.
+Download the accepted signed XPI through the existing release/manual artifact
+path, then open the **BashKitten settings gear → Update References from file**.
+Choose the downloaded package in Android's document picker and confirm the
+native permission prompt. This menu entry is source-wired for the next browser
+package; it is not present in earlier sealed candidates. The capture logic can
+then be replaced through this entry without rebuilding that browser package.
 
-The narrowly restored Fenix `InstallationRequested` handler accepts HTTPS; it
-checks the verified extension ID in the required-permission prompt and rejects
-anything except `references@bashkitten.org` before activation. Gecko performs
-manifest/signature verification before that prompt. The package's URL/name is
-not its identity. No global add-on-signing check is changed. Source evidence
-supports this path; a successful signed install has not yet been demonstrated.
+Check the installed version through **References Add → Source and licenses →
+About References**, exercise capture, restart, and check the version again. For
+rollback, choose the retained compatible earlier signed XPI through the same
+entry, without uninstalling first. A normal HTTPS XPI hyperlink is only a
+download on Android: it does not invoke the desktop XPI content handler.
 
-For rollback, open the retained previous signed XPI's HTTPS link and follow the
-same prompt, without uninstalling. A versioned package can be retained as a
-normal existing release artifact; no custom updater or catalogue is required.
-The same native downgrade mechanism applies as on desktop. `ReferencesHost.install`
-skips built-in reinstall when a non-built-in capture with the same ID is present,
-preserving the replacement across startup. The fixed host continues to use only
-APK-resource `ensureBuiltIn`.
+The downstream native install path exists: `AddonManager.installAddon` →
+`GeckoEngine.installWebExtension` → `WebExtensionController.install` →
+`GeckoViewWebExtension.installWebExtension` → native AddonManager. Its required
+permission handler checks the verified extension ID and rejects anything except
+`references@bashkitten.org` before activation. Gecko checks the manifest and
+signature before that prompt. No signature setting is changed.
 
-The pinned `AddonFilePicker` also supplies a document-picker installation API,
-but Fenix does not currently wire that utility into a screen. **Do not instruct
-users to find an Android “Install extension from file” menu that is absent.** The
-implemented manual flow uses the existing HTTPS install prompt. At the initial
-review that prompt had been suppressed; the native owner restored only this
-References-scoped path. Candidate build/installed verification remains required.
+`BashKittenMenuDialog` invokes the existing `AddonFilePicker`, registered by
+`HomeActivity` before its lifecycle reaches STARTED. The picker copies the chosen
+document into a unique private cache directory on the IO dispatcher, then calls
+the existing `AddonManager` with `InstallationMethod.FROM_FILE`. Native install
+success/failure, or cancellation before handoff, cleans that temporary directory.
+This is a small caller/lifecycle adaptation, not a separate installer or updater.
+
+Native AddonManager supports the same manual downgrade mechanism as desktop.
+`ReferencesHost.install` preserves an existing non-built-in capture instead of
+reinstalling the APK version; the fixed host remains on APK-resource
+`ensureBuiltIn`. These are source-supported mechanisms, not an installed Android
+update/rollback result. Mozilla's [self-distribution documentation](https://extensionworkshop.com/documentation/publish/self-distribution/)
+also distinguishes Android file installation from desktop web-download installs.
 
 Relevant source: `browser/mobile/android/android-components/components/feature/addons/src/main/java/mozilla/components/feature/addons/ui/AddonFilePicker.kt`,
 `AddonManager.kt`, `browser/engine-gecko/.../GeckoEngine.kt`,
+`browser/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/bashkitten/BashKittenMenu.kt`,
+`browser/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/HomeActivity.kt`,
 `browser/mobile/android/geckoview/src/main/java/org/mozilla/geckoview/WebExtensionController.java`,
 `browser/mobile/shared/modules/geckoview/GeckoViewWebExtension.sys.mjs`,
 `browser/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/extension/WebExtensionPromptFeature.kt`,

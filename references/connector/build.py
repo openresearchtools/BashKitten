@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parent
 REPO=ROOT.parents[1]
 WORK=ROOT/'.build/source'
 OUT=ROOT/'dist/references'
-VERSION='1.0.1'
+VERSION='1.0.2'
 
 def run(*args):subprocess.run(args,cwd=WORK,check=True,env={**os.environ,'NPM_CONFIG_OFFLINE':'true'})
 # Keep npm's content cache; reconstruct source from the named patch every time.
@@ -66,7 +66,13 @@ manifest['browser_action']['default_title']='References Add'
 manifest['browser_action']['default_area']='navbar'
 manifest['browser_action']['default_icon']={'16':'Icon-16.png','32':'Icon-32.png','48':'Icon-64.png'}
 manifest.pop('applications',None)
-manifest['browser_specific_settings']={'gecko':{'id':'references@bashkitten.org','strict_min_version':'140.0'}}
+# Capture sends page URLs/content to the selected local or remote backend.
+# Use Gecko's existing required-data prompt, available on desktop 140 / Android 142.
+manifest['browser_specific_settings']={
+ 'gecko':{'id':'references@bashkitten.org','strict_min_version':'140.0',
+          'data_collection_permissions':{'required':['browsingActivity','websiteContent']}},
+ 'gecko_android':{'strict_min_version':'142.0'},
+}
 manifest['content_scripts']=[script for script in manifest['content_scripts'] if script['matches']==['http://*/*','https://*/*']]
 manifest['permissions']=[p for p in manifest['permissions'] if p not in ['http://127.0.0.1/*','https://repo.zotero.org/*','https://api.zotero.org/*','declarativeNetRequest']]
 manifest['options_ui']={'page':'references/about.html','open_in_tab':True}
