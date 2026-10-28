@@ -83,8 +83,9 @@ globalThis.References = new function () {
   };
   const resolverJobs = new Map();
   this.waitForResolverTab = async (binding, pending, source) => {
-    // The donor monitor's response detector works on ordinary tabs. Its popup
-    // and monitor-page redirects are deliberately not used for automatic jobs.
+    // The donor's blocking rule hardcodes a private monitor-page redirect.
+    // Ordinary resolver tabs instead cancel only a detected PDF response after
+    // handing its URL to the same cookie-aware downloader; HTML stays visible.
     const properties = {url:'about:blank', active:false, windowId:source.windowId};
     if (source.cookieStoreId) properties.cookieStoreId = source.cookieStoreId;
     const tab = await browser.tabs.create(properties);
@@ -104,7 +105,14 @@ globalThis.References = new function () {
       const detected = new Promise((resolve, reject) => {
         removed = id => { if (id === tab.id) reject(new Error('Resolver tab was closed')); };
         browser.tabs.onRemoved.addListener(removed);
-        monitor._addAttachmentDetectionListener(ruleId, tab.id, resolve);
+        const captured = details => {
+          if (!monitor._isAttachmentResponse(details)) return {};
+          resolve(details.url);
+          return {cancel:true};
+        };
+        browser.webRequest.onHeadersReceived.addListener(captured,
+          {urls:['<all_urls>'],tabId:tab.id,types:['main_frame','sub_frame']}, ['blocking','responseHeaders']);
+        monitor._addWebRequestListener(ruleId, captured);
         timer = setTimeout(() => reject(new Error('Resolver tab is waiting for a file; open the background tab to continue')),
           Math.max(1, Math.min(600000, pending.expiresAt - Date.now())));
         browser.tabs.update(tab.id, {url:pending.attachment.url}).catch(reject);
