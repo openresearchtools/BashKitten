@@ -1,0 +1,23 @@
+{
+  "repository": "https://github.com/zotero/zotero",
+  "revision": "188c54c186fbbaa6889145986d43ba64160a44fa",
+  "release": "7.0.32",
+  "pristine": true,
+  "files": [
+    {
+      "path": "chrome/content/zotero/integration/addCitationDialog.js",
+      "url": "https://raw.githubusercontent.com/zotero/zotero/188c54c186fbbaa6889145986d43ba64160a44fa/chrome/content/zotero/integration/addCitationDialog.js",
+      "sha256": "8b19831b6159b8b5918a7e9b6d5141acb50a72f311cd73aaf636f8096b088271"
+    },
+    {
+      "path": "chrome/content/zotero/integration/addCitationDialog.xhtml",
+      "url": "https://raw.githubusercontent.com/zotero/zotero/188c54c186fbbaa6889145986d43ba64160a44fa/chrome/content/zotero/integration/addCitationDialog.xhtml",
+      "sha256": "9e7de3b223f5b4443d24be9123b30e0ee64716f914339fe0e6b1a8f7cca8b061"
+    },
+    {
+      "path": "COPYING",
+      "url": "https://raw.githubusercontent.com/zotero/zotero/188c54c186fbbaa6889145986d43ba64160a44fa/COPYING",
+      "sha256": "5b7dc919393650eef5f37b25cc399717159a7df5cdec98fa26c846346389bce6"
+    }
+  ]
+}

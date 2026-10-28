@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/zotero/translators",
+  "revision": "c83003773b65359e41466e1d419b2d1df5512af7",
+  "archiveURL": "https://codeload.github.com/zotero/translators/tar.gz/c83003773b65359e41466e1d419b2d1df5512af7",
+  "sha256": "9d35502f2dcc1c4d69cf9dba1d59d4afa5b503e9a5c0902eed1c3e3e09e4d4cc",
+  "pristine": true,
+  "usage": "Source import; runtime packaging selects relevant components, not desktop application"
+}

@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0" demote-non-dropping-particle="never" initialize-with-hyphen="false" page-range-format="expanded" default-locale="en-US">
+  <info>
+    <title>Anticancer Research</title>
+    <title-short>AR</title-short>
+    <id>http://www.zotero.org/styles/anticancer-research</id>
+    <link href="http://www.zotero.org/styles/anticancer-research" rel="self"/>
+    <link href="https://iiar-anticancer.org/instructions-for-authors-2/" rel="documentation"/>
+    <author>
+      <name>International Institute of Anticancer Research</name>
+      <email>journals@iiar-anticancer.org</email>
+    </author>
+    <category citation-format="numeric"/>
+    <category field="medicine"/>
+    <category field="biology"/>
+    <issn>0250-7005</issn>
+    <eissn>1791-7530</eissn>
+    <summary>Reference style of the journals published by the International Institute of Anticancer Research (Anticancer Research, In Vivo, Cancer Genomics &amp; Proteomics, Cancer Diagnosis &amp; Prognosis). Numbered, cited in the text by number in parentheses, e.g., (1, 2) or (3-5). All authors are listed.</summary>
+    <updated>2026-10-22T00:00:00+00:00</updated>
+    <rights license="http://creativecommons.org/licenses/by-sa/3.0/">This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 License</rights>
+  </info>
+  <locale xml:lang="en">
+    <terms>
+      <term name="page-range-delimiter">-</term>
+      <term name="accessed">last accessed on</term>
+    </terms>
+  </locale>
+  <macro name="author">
+    <names variable="author">
+      <name delimiter=", " delimiter-precedes-last="always" initialize-with="" name-as-sort-order="all" sort-separator=" "/>
+      <label form="short" prefix=" (" suffix=")"/>
+      <substitute>
+        <names variable="editor"/>
+        <names variable="director"/>
+      </substitute>
+    </names>
+  </macro>
+  <macro name="editor">
+    <names variable="editor">
+      <name delimiter=", " delimiter-precedes-last="always" initialize-with="" name-as-sort-order="all" sort-separator=" "/>
+      <label form="short" prefix=" (" suffix=")"/>
+    </names>
+  </macro>
+  <macro name="title">
+    <text variable="title"/>
+  </macro>
+  <macro name="edition">
+    <choose>
+      <if is-numeric="edition">
+        <group delimiter=" ">
+          <number variable="edition" form="ordinal"/>
+          <label variable="edition" form="short"/>
+        </group>
+      </if>
+      <else>
+        <text variable="edition"/>
+      </else>
+    </choose>
+  </macro>
+  <macro name="publisher">
+    <group delimiter=", ">
+      <text variable="publisher-place"/>
+      <choose>
+        <if variable="publisher">
+          <text variable="publisher"/>
+        </if>
+        <else-if type="webpage post post-weblog" match="any">
+          <text variable="container-title"/>
+        </else-if>
+      </choose>
+    </group>
+  </macro>
+  <macro name="year">
+    <date variable="issued">
+      <date-part name="year"/>
+    </date>
+  </macro>
+  <macro name="access">
+    <choose>
+      <if variable="DOI">
+        <text variable="DOI" prefix="DOI: "/>
+      </if>
+      <else-if type="webpage post post-weblog document report dataset software standard" match="any">
+        <group delimiter=" ">
+          <group delimiter=": ">
+            <text term="available at" text-case="capitalize-first"/>
+            <text variable="URL"/>
+          </group>
+          <group delimiter=" " prefix="[" suffix="]">
+            <text term="accessed" text-case="capitalize-first"/>
+            <date variable="accessed">
+              <date-part name="month" suffix=" "/>
+              <date-part name="day" suffix=", "/>
+              <date-part name="year"/>
+            </date>
+          </group>
+        </group>
+      </else-if>
+    </choose>
+  </macro>
+  <macro name="pages-book">
+    <group delimiter=" ">
+      <label variable="page" form="short" strip-periods="true"/>
+      <text variable="page"/>
+    </group>
+  </macro>
+  <macro name="journal-article">
+    <group delimiter=". ">
+      <group delimiter=", ">
+        <group delimiter=": ">
+          <group delimiter=" ">
+            <text variable="container-title" form="short" strip-periods="true"/>
+            <group>
+              <text variable="volume"/>
+              <text variable="issue" prefix="(" suffix=")"/>
+            </group>
+          </group>
+          <text variable="page"/>
+        </group>
+        <text macro="year"/>
+      </group>
+    </group>
+  </macro>
+  <macro name="chapter">
+    <group delimiter=". ">
+      <group delimiter=": ">
+        <text term="in" text-case="capitalize-first"/>
+        <text variable="container-title"/>
+      </group>
+      <text macro="edition"/>
+      <text macro="editor"/>
+      <group delimiter=", ">
+        <text macro="publisher"/>
+        <text macro="pages-book"/>
+        <text macro="year"/>
+      </group>
+    </group>
+  </macro>
+  <macro name="book">
+    <group delimiter=". ">
+      <text macro="edition"/>
+      <group delimiter=", ">
+        <text macro="publisher"/>
+        <text macro="year"/>
+      </group>
+    </group>
+  </macro>
+  <macro name="thesis">
+    <group delimiter=". ">
+      <text variable="genre"/>
+      <group delimiter=", ">
+        <text macro="publisher"/>
+        <text macro="year"/>
+      </group>
+    </group>
+  </macro>
+  <citation collapse="citation-number">
+    <sort>
+      <key variable="citation-number"/>
+    </sort>
+    <layout prefix="(" suffix=")" delimiter=", ">
+      <text variable="citation-number"/>
+    </layout>
+  </citation>
+  <bibliography second-field-align="flush" entry-spacing="0">
+    <layout>
+      <text variable="citation-number"/>
+      <group delimiter=". " suffix=".">
+        <group delimiter=": ">
+          <text macro="author"/>
+          <text macro="title"/>
+        </group>
+        <choose>
+          <if type="article-journal article-magazine article-newspaper article periodical" match="any">
+            <text macro="journal-article"/>
+          </if>
+          <else-if type="chapter paper-conference entry-encyclopedia entry-dictionary" match="any">
+            <text macro="chapter"/>
+          </else-if>
+          <else-if type="thesis">
+            <text macro="thesis"/>
+          </else-if>
+          <else>
+            <text macro="book"/>
+          </else>
+        </choose>
+      </group>
+      <text macro="access" prefix=" "/>
+    </layout>
+  </bibliography>
+</style>

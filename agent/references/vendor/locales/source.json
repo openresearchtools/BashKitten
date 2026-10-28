@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/citation-style-language/locales",
+  "revision": "8bef426f89f38c0789223c50e53ec2197bc50bb3",
+  "archiveURL": "https://codeload.github.com/citation-style-language/locales/tar.gz/8bef426f89f38c0789223c50e53ec2197bc50bb3",
+  "sha256": "8064ce8372d6deb7cde1f512c9a670e51d74be81248eef8fa7cf4c18c9e39dbe",
+  "pristine": true,
+  "usage": "Source import; runtime packaging selects relevant components, not desktop application"
+}

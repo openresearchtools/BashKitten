@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/zotero/zotero",
+  "revision": "536244c2771f590abab9c09a3c27e615e0b318ff",
+  "archiveURL": "https://codeload.github.com/zotero/zotero/tar.gz/536244c2771f590abab9c09a3c27e615e0b318ff",
+  "sha256": "590537ff426bca68de87cf4b97c77f2b2638cb21e53fefb2e5d3e367a748e0fb",
+  "pristine": true,
+  "usage": "Source import; runtime packaging selects relevant components, not desktop application"
+}
