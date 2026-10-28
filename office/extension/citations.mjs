@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Shared UI/Pi command preparation. Only the native participant mutates a document.
-import { citationRuns } from './rich-text.mjs';
+import { citationRuns, bibliographyRuns } from './rich-text.mjs';
 export async function runCitationCommand({ invoke, renderDocument, importSnapshots, documentType, projectId, request, signal, preview = false }) {
   const current = await invoke({ operation: 'citations.inspect' }, { signal });
   if (request.expectedRevision !== undefined && request.expectedRevision !== current.revision) throw new Error('Citation state changed; inspect it again');
@@ -71,7 +71,7 @@ export async function runCitationCommand({ invoke, renderDocument, importSnapsho
     });
     if (state.bibliography) {
       if (!rendered.bibliography) throw new Error('The selected CSL style does not define a bibliography');
-      state.bibliography = { ...state.bibliography, ...citationRuns(rendered.bibliography.html), html: rendered.bibliography.html, entries: rendered.bibliography.entries, parameters: rendered.bibliography.parameters };
+      state.bibliography = { ...state.bibliography, ...bibliographyRuns(rendered.bibliography.entries), html: rendered.bibliography.html, entries: rendered.bibliography.entries, entryIds: rendered.bibliography.entryIds, parameters: rendered.bibliography.parameters, format: rendered.bibliography.format, layoutStyle: JSON.stringify([rendered.style.id, rendered.style.version, rendered.bibliography.format]) };
     }
     if (preview) return { state, rendered, occurrenceId };
     const result = await invoke({ operation: 'citations.apply', expectedRevision: current.revision, state }, { signal, mutation: true });

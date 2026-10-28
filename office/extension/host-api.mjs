@@ -42,6 +42,7 @@ export async function connectReferencesHost({ signal, timeoutMs = 15000 } = {}) 
     if (!path.startsWith('/')) path = '/api/references/' + path;
     const prefix = '/api/references/projects/' + encodeURIComponent(context.projectId);
     if (!(path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix + '?'))) return Promise.reject(new Error('The References request is outside this document’s project'));
+    if (path.split('?')[0] === prefix + '/settings' && method !== 'GET' && (method !== 'PATCH' || !body || Object.keys(body).length !== 1 || ![-1, 0, 1].includes(body.citationAutoRegenerate))) return Promise.reject(new Error('Office may only change the citation regeneration preference'));
     if (!['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) return Promise.reject(new Error('Invalid References method'));
     return send({ MessageId: 'BashKitten_ReferencesRequest', method, path, body }, { signal });
   }

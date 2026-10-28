@@ -53,12 +53,20 @@ through the service, so ordinary browser opening retains the authorized route.
 `extension/kit.mjs` is the same native operation adapter used by Pi and the
 Office extension. Writer uses Collabora's native UNHANDLED fieldmark facility
 (also used by its Zotero integration), with normal rendered text and embedded
-CSL identities/data. Calc uses whole-cell user-defined attributes and named
-anchors; Impress uses attributes on native text shapes. These native carriers
+CSL identities/data. Calc citations use whole-cell user-defined attributes and
+named anchors; Impress uses attributes on native text shapes. Calc bibliographies
+use native cell-anchored text shapes because its cell text writer deliberately
+removes paragraph attributes. These native carriers
 travel with copied objects. The generic OOXML attribute patch preserves the
 same attributes in XLSX/PPTX; ODS/ODP already preserve them natively. A native
 document property stores ordered citation/style state. Calc and Impress retain
 clickable rich-text links through their native URL text fields.
+Bibliography indentation, line/entry spacing and tab stops come from the actual
+Zotero `Cite.getBibliographyFormatParameters` output. The adapter converts twips
+to native UNO units and honors the native relative-tab convention. Same-style
+refresh preserves native paragraph adjustments, matching entries by their CSL
+identities. Numeric labels use native tabs; rich titles and links remain native
+text formatting. Native copied bibliographies are refreshed and unlinked together.
 Legacy `com.sun.star` use is isolated here because the pinned runtime's preferred
 `cool.getActiveDocument()` model binding threw a native overload/type error in
 the actual runtime proof. It is an upgrade check, not permission to omit edits.
@@ -90,7 +98,9 @@ released native client API even in a preset extension.
 
 The named native patches cover only observed missing facilities: small-screen
 extension access, a runtime proof-key path, generic document-property undo,
-Writer field-command undo/redo, and generic OOXML user-defined attributes.
+Writer field-command undo/redo, generic OOXML user-defined attributes, and native
+view ownership for UNO undo contexts/actions. The latter retains the existing
+collaborative ownership checks; it does not allow one participant to undo another.
 The light-canvas and Termux changes belong to their respective native owners.
 No citation algorithm is added to Office core. Recheck and retire seams when
 upstream provides the equivalent facility. `prepareOffice()` fails with 503 for
@@ -130,12 +140,42 @@ and packaged extension ZIP SHA256
 `c57cd3fa1e3e18cdaada5d285faa3516bd59051a22003d66f83891bf6ca08eea`.
 The loaded native adapter source SHA256 was
 `2e6c3f099d04e63ab9b7085902bf58496a9cae85dfd762aaf34120aff51a2e28`.
-On a fresh DOCX, native Undo/Redo restored both field command metadata and
+On a fresh DOCX, the native `XUndoManager` API restored both field command metadata and
 document-property revisions for insertion and locator edits, including the same
-occurrence ID and rendered text. Full backend shutdown/reopen preserved managed
+occurrence ID and rendered text. This API proof did not establish collaborative
+UI Undo: a later `.uno:Undo` check exposed upstream UNO contexts' unknown view
+identity. The rebuilt 0009 artifact (manifest SHA256
+`117843e54fc2615aba0f836812ca2dbc89761a02fb05440c57bc0cfa582b9937`,
+packaged plugin `04a026bff54d0236530ad9952cf6f607442f1a16c915c56fbf9a73a5cce65fea`)
+and the adapter's actual active-frame controller passed Writer `.uno:Undo`/Redo
+with separate authenticated views. The other view's Undo was rejected in all
+three editors. Calc/Impress shape text did not yet roll back with the group;
+patch 0010 addresses that native UNO gap and needs its own runtime proof.
+An active same-shape human typing probe also exposed a native background UNO
+write being overwritten when the human finished. The same patch uses the native
+text-edit ownership state to reject that conflict before changing model text;
+its active-editor and multi-step rollback checks remain pending.
+Full backend shutdown/reopen preserved managed
 citations in DOCX/XLSX/PPTX. The generic attribute seam independently preserved
 exact 43,709-byte native attribute payloads through native clipboard and all six
 format roundtrips.
+
+The subsequent native gateway check copied citations before their originals in
+DOCX/XLSX/PPTX. Original field/name/NamedRange identities stayed attached to the
+originals, inspection left embedded state byte-identical, and refreshing then
+editing a copy left the original locator unchanged. APA and numeric bibliography
+layout, same-style custom indentation, and copied bibliography refresh/unlink
+passed native checks in all three editors. A full backend shutdown/reopen retained
+the bibliography carriers, text, indentation, spacing and native tab coordinates,
+including the Calc text shape in XLSX. A subsequent copy-before-original then
+native deletion of the original retained the surviving copy's identity in all
+three editors. Read/inspect remained nonmutating; explicit refresh removed the
+missing occurrence and its dangling owned range. Native `apa-with-abstract`
+blocks, `acm-siggraph` small caps, and nested roman text within italic text also
+passed native text/character-property inspection in all three editors. These
+latest adapter diagnostics used source scripts against the 0009 runtime; they
+are not receipts for the older packaged ZIP. These are native component diagnostics;
+rendered desktop/phone UI and visual layout acceptance remain separate.
 
 These component proofs are not installed product acceptance. Current work still
 includes comprehensive cross-document copy/move identity behavior, full
