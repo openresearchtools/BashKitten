@@ -61,7 +61,9 @@ async function reconcileAccount(dataRoot, scope, signal) {
   const ruleKey = socketPath + ':' + source.name, revision = digest(JSON.stringify(source.config.rules));
   if (reconciledRules.get(ruleKey) !== revision) {
     for (const rule of source.config.rules) if (rule.folderPath && !rule.ignoreSymlinks) {
-      await jsonRequest(socketPath, 'POST', '/api/access?' + new URLSearchParams({ source: source.name, path: rule.folderPath }), config.auth.adminUsername, { allow: false, ruleCategory: 'all' }, signal);
+      const target = '/api/access?' + new URLSearchParams({ source: source.name, path: rule.folderPath });
+      const existing = await jsonRequest(socketPath, 'GET', target, config.auth.adminUsername, undefined, signal);
+      if (existing?.denyAll !== true) await jsonRequest(socketPath, 'POST', target, config.auth.adminUsername, { allow: false, ruleCategory: 'all' }, signal);
     }
     reconciledRules.set(ruleKey, revision);
   }

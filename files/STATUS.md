@@ -34,6 +34,28 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
   private immutable snapshot reads, download denial, interrupted save preserving
   original bytes, and generation invalidation. The isolated storage restore
   coordinator was synthetic; this is **not** native broker restore acceptance.
+- Real native DOCX history restore received the exact broker
+  `versionrestore: prerestore_ack`, restored generation 2, rejected the old
+  generation, and reopened with the retained baseline text. This used a fresh
+  authenticated native coordinator participant, not a synthetic acknowledgement.
+- New native document placeholders retain no empty version; the first actual
+  signed native save immediately retains one full valid version (observed).
+- ARM64 full Files cross-compilation and Android ELF/library-closure checks
+  succeeded using pinned NDK r30 and the retained Termux framework. Both ARM64 and x86_64
+  full native builds passed. Actual x86_64 Termux app execution (UID 10123,
+  `untrusted_app_27`, RunCommandService) passed FFmpeg/ffprobe, native Files
+  page/list, private denial, PDF and video JPEG previews, SQLite, and the add-on
+  private Unix health endpoint. Owned children exited afterward. Evidence:
+  `BashkittenBuild/verification/files-termux-20261028/native-termux-evidence.json`.
+  Reopening the same native database exposed a duplicate denyAll API failure;
+  native GET-before-create reconciliation corrected it and the restart passed. Linux is being rebuilt with retained Go 1.27.2 and the
+  current official dav1d 1.5.4 source before final artifact sealing.
+- Actual revoked-view close released only its proof-verified matching native lock;
+  a fresh grant reacquired the lock and opened editable with saved content intact.
+  The runtime owner's real archive/unarchive/reopen integration also passed.
+- Actual native token reset preserved the same view ID; its next signed PutFile
+  used the new token and produced a durable save. Expiry scheduling and recovery
+  after prolonged disconnect still need product exercises.
 - The native light patch passed released TypeScript compilation after correcting
   its global type access. The older global.js linter rejected optional chaining;
   changed to its supported guard syntax. Full native build/UI evidence is pending.
@@ -45,11 +67,17 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
 
 ## Remaining coverage
 
-Real native history restore with all human/Pi views; snapshot-native viewing;
+Real native history restore with simultaneous human/Pi views; snapshot-native viewing;
 full References ZIP/dialogs in all editors; paired live user/agent editing and
 revocation under ongoing work; final native artifact/traffic review; long healthy
 Tor transfers and stalls; normal-tab remote mapping and TLS trust; runtime light
 settings on desktop/phone; native Termux build and installed Linux/Android flows.
+
+A one-frame synthetic video revealed an upstream thumbnail seek past its only
+frame; the normal 20-frame sample passed. That edge case remains a tracked native
+media follow-up, not a general video-preview pass for every input. ADB fixture
+copy permissions and a fixture syntax error were corrected before the successful
+real-app run; neither required an application privilege workaround.
 
 The build's selected FFmpeg native codec profile must be checked against actual
 Quantum thumbnail/metadata/streaming operations. Optional external hardware and

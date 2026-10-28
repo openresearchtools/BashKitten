@@ -60,6 +60,11 @@ identity. Remote human reopening creates a new authorization and participant,
 never adopts a local Pi view. Pi uses the separately returned private native URL.
 
 WOPI files/locks/writes require the scoped expiring JWT **and** native RSA proof.
+A proof-verified native broker may release its exact matching lock after grant
+revocation; this cleanup cannot read/write content or finalize revoked snapshots.
+Active views renew their scoped tokens through native `Reset_Access_Token` /
+`resetaccesstoken`, preserving the broker and participant. Renewal rechecks the
+live owner and original document generation.
 The native preset downloader does not sign requests in this pinned release:
 only read-only browser-settings/extension GETs omit proof, while retaining JWT,
 current grant and generation checks. That exception cannot read a project file.
@@ -90,15 +95,25 @@ are project-bound, bounded and cancellable on cancel/replacement/page closure.
 `python3 files/build.py --work-dir /absolute/external/build --prepare-only`
 verifies and materializes the locked sources, applies the named Quantum patches
 with **zero fuzz**, and never writes into pristine imports or downloads anything.
-A native build adds `--target linux|termux --architecture amd64|arm64 --go <Go1.27>
---output <artifact.tar.gz>`. Node/npm, Python, a native C/C++ toolchain, Make,
-Meson/Ninja and pkg-config are build tools. On x86 NASM is built from its exact
-preserved source. Native Termux must run in its owning Termux environment; this
-is not yet the hosted glibc-to-Bionic cross-build path. The required hosted
-Termux producer is tracked as unfinished work, separately from Linux packaging.
+Linux builds use `--target linux --architecture amd64|arm64 --go <Go1.27.2>
+--output <artifact.tar.gz>` on matching Ubuntu 24.04 runners. Hosted Termux builds
+use `--target termux --architecture aarch64|x86_64 --ndk <NDK-r30>
+--ndk-archive <verified-archive> --go <Go1.27.2> --output <artifact.tar.gz>`.
+The existing `agent/packaging/termux/native_toolchain.py` owns NDK validation and
+Bionic compiler/sysroot isolation. The retained framework supplies only its
+required MuPDF signal/temp-path and FFmpeg temp-path adaptations. Native Quantum's
+`cgosql` option selects its existing SQLite implementation for Android. Target
+ELF machine, Android linker and complete native library closure are checked;
+this cross-build does not execute target binaries or establish device acceptance.
+
+Node/npm, Python, Make, Meson/Ninja and pkg-config are host build tools. On x86,
+NASM is built for the host from its preserved source. Target libraries never use
+host pkg-config paths. Go must match the existing retained 1.27.2 compiler/source
+pin; full standard-library notices accompany its linked runtime. Use separate
+external work directories for each target and architecture.
 
 The selected native media recipe builds MuPDF 1.28.2 and its included third-party
-source, FFmpeg 9.0.2 with native codecs plus libdav1d and zlib, and native static
+source, FFmpeg 9.0.2 with native codecs plus dav1d 1.5.4 and zlib, and native static
 libraries. It does not consume go-fitz's bundled prebuilt MuPDF archives or a
 container image. FFmpeg optional external hardware/codec/filter libraries are not
 automatically detected from the build host; the selected capability set and
@@ -118,7 +133,7 @@ actual OS package dependencies; `sourceDependencies` holds preserved source pins
 Linux packaging requires Ubuntu 24.04 and inspects the actual ELF dependency/ABI
 closure. `SHA256SUMS` accompanies the artifact. Every payload file has a checksum; the manifest binds target,
 architecture, upstream pins, patch hashes and the committed BashKitten revision.
-Dirty module source prevents accepted artifact packaging. Runtime JS/web files are
+Accepted packaging requires committed module source unchanged throughout the build. Runtime JS/web files are
 collected separately and cannot be overwritten by the native artifact. Pristine
 upstream tests and imported archives are source material, never product fixtures.
 

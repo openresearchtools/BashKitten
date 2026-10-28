@@ -10,13 +10,13 @@ const send = (res, status, value) => { res.writeHead(status, { 'Content-Type': '
 async function body(req, max = 1024 * 1024) { const values = []; let bytes = 0; for await (const part of req) { bytes += part.length; if (bytes > max) throw fail(413, 'Request exceeds its bound'); values.push(part); } return bytes ? JSON.parse(Buffer.concat(values).toString('utf8')) : undefined; }
 const escapeHTML = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const jsonHTML = value => JSON.stringify(value).replace(/</g, '\\u003c');
-function call(socketPath, token, target, value) {
+function call(socketPath, token, target, value, signal) {
   return new Promise((resolve, reject) => {
-    const req = http.request({ socketPath, method: 'POST', path: target, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } }, async res => { try { const answer = await body(res, 2 << 20); if (res.statusCode !== 200) throw fail(res.statusCode, answer?.error || 'Office operation unavailable'); resolve(answer); } catch (e) { reject(e); } });
+    const req = http.request({ socketPath, method: 'POST', path: target, signal, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } }, async res => { try { const answer = await body(res, 2 << 20); if (res.statusCode !== 200) throw fail(res.statusCode, answer?.error || 'Office operation unavailable'); resolve(answer); } catch (e) { reject(e); } });
     req.once('error', reject); req.setTimeout(120000, () => req.destroy(fail(504, 'Office did not respond'))); req.end(JSON.stringify(value));
   });
 }
-export function createOfficeProvider({ dataRoot, environmentId, authorizeOperation, authorizePath, ensureRunning, collaboraInternalURL, wopiURL, extension, coordinateNativeRestore, referenceContext, referenceRequest, addonBinary = path.join(root, 'bin', 'files-office-addon'), socketRoot = path.join(dataRoot, 'run') }) {
+export function createOfficeProvider({ dataRoot, environmentId, authorizeOperation, authorizePath, ensureRunning, collaboraInternalURL, wopiURL, extension, coordinateNativeRestore, referenceContext, referenceRequest, officeCopy, addonBinary = path.join(root, 'bin', 'files-office-addon'), socketRoot = path.join(dataRoot, 'run') }) {
   const owner = createDocumentOwner({ dataRoot, environmentId, authorizeOperation, authorizePath });
   const launches = new Map(), issued = new Map(); let starting; let callback; let callbackToken; let config;
   function configure(value) {
@@ -40,7 +40,7 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     const action = new URL(parent.session.actionUrl); action.searchParams.set('WOPISrc', expectedSource);
     const session = { ...parent.session, ...metadata, accessToken: value.accessToken, accessTokenTtl: value.accessTokenTtl, actionUrl: action.href, editorUrl: action.href, wopiSrc: expectedSource };
     const ws = new URL(session.editorBaseUrl); ws.protocol = 'wss:'; ws.pathname = ws.pathname.replace(/\/$/, '') + '/cool/' + encodeURIComponent(expectedSource) + '/ws'; ws.search = new URLSearchParams({ WOPISrc: expectedSource, access_token: value.accessToken }).toString(); session.websocketUrl = ws.href;
-    issued.set(value.accessToken, { ...parent, session, issuedAt: Date.now() });
+    issued.set(value.accessToken, { ...parent, session, input: { ...parent.input, documentId: value.documentId, snapshot: '' }, issuedAt: Date.now() });
     for (const launch of launches.values()) if (launch.session.accessToken === value.parentToken && launch.input.participantKind !== 'agent') {
       launch.session = session; launch.expires = value.accessTokenTtl; launch.claims = { ...launch.claims, fid: value.documentId, generation: value.generation };
       launch.input = { ...launch.input, documentId: value.documentId, create: undefined, relativePath: undefined };
@@ -89,8 +89,21 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     await ensureRunning('office'); const definition = await prepare(); await ensureRunning('office-addon', definition);
     const registered = await owner.register(input);
     const session = await call(config.socket, callbackToken, '/v1/session', { ...registered, origin: input.origin, editorBaseUrl: input.editorBaseUrl, locale: input.locale || 'en-GB', snapshot: input.snapshot || '' });
-    issued.set(session.accessToken, { session, grantId: input.grantId, origin: input.origin, issuedAt: Date.now() });
+    issued.set(session.accessToken, { session, input: { ...registered, origin: input.origin, editorBaseUrl: input.editorBaseUrl, locale: input.locale || 'en-GB', snapshot: input.snapshot || '' }, grantId: input.grantId, origin: input.origin, issuedAt: Date.now() });
     return session;
+  }
+  async function renew({ grantId, documentId, participantId, accessToken }, { signal } = {}) {
+    signal?.throwIfAborted();
+    for (const [token, entry] of issued) if (entry.session.accessTokenTtl <= Date.now()) issued.delete(token);
+    const matches = entry => entry.grantId === grantId && entry.session.documentId === documentId && entry.session.participantId === participantId && entry.session.accessTokenTtl > Date.now();
+    const previous = accessToken ? issued.get(accessToken) : [...issued.values()].reverse().find(matches);
+    if (!previous || !matches(previous)) throw fail(401, 'The existing Office participant has expired');
+    await owner.metadata({ env: environmentId, grant: grantId, fid: documentId, participant: participantId, generation: previous.session.generation, snapshot: previous.input.snapshot });
+    const session = await call(config.socket, callbackToken, '/v1/session', previous.input, signal);
+    if (session.wopiSrc !== previous.session.wopiSrc || session.generation !== previous.session.generation) throw fail(409, 'The native document changed while renewing its participant');
+    issued.set(session.accessToken, { ...previous, session, issuedAt: Date.now() });
+    for (const launch of launches.values()) if (launch.session.accessToken === previous.session.accessToken) { launch.session = session; launch.expires = session.accessTokenTtl; }
+    return { accessToken: session.accessToken, accessTokenTtl: session.accessTokenTtl };
   }
   async function open(input) {
     const session = await createSession(input);
@@ -102,18 +115,43 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
   }
   async function status({ grantId, documentId, participantId }) { return owner.metadata({ env: environmentId, grant: grantId, fid: documentId, participant: participantId }); }
   async function snapshot({ grantId, documentId, participantId, versionId }, options) { return owner.snapshot({ env: environmentId, grant: grantId, fid: documentId, participant: participantId }, versionId, options); }
-  async function handle(req, res, { grantId, basePath, signal }) {
+  async function handle(req, res, { grantId, basePath, origin, signal }) {
+    let mapped;
+    try { mapped = new URL(origin); } catch { throw fail(403, 'An authenticated Office origin is required'); }
+    if (mapped.protocol !== 'https:' || mapped.origin !== origin) throw fail(403, 'Invalid authenticated Office origin');
     const url = new URL(req.url, 'http://office'); const suffix = url.pathname.slice((basePath + 'office/').length); const [id, action] = suffix.split('/'); const launch = launches.get(id);
     if (!launch || launch.browserGrantId !== grantId || launch.expires <= Date.now()) throw fail(401, 'Office launch expired; open the document again');
-    if (launch.input.participantKind === 'agent' && !launch.humanReady) {
-      launch.humanReady = (async () => {
-        const human = { ...launch.browser, create: undefined, relativePath: launch.input.relativePath || launch.input.create?.name, participantId: launch.browser.browserParticipantId || `human:${environmentId}:${grantId}`, participantName: launch.browser.browserParticipantName || 'You', participantKind: 'human' };
+    if (launch.input.participantKind === 'agent') {
+      if (!launch.humanReady) launch.humanReady = (async () => {
+        const human = { ...launch.browser, origin, editorBaseUrl: new URL('/apps/office', origin).href, create: undefined, relativePath: launch.input.relativePath || launch.input.create?.name, participantId: launch.browser.browserParticipantId || `human:${environmentId}:${grantId}`, participantName: launch.browser.browserParticipantName || 'You', participantKind: 'human' };
         launch.session = await createSession(human); launch.claims = { env: environmentId, fid: launch.session.documentId, grant: grantId, generation: launch.session.generation, participant: human.participantId, snapshot: human.snapshot || '' }; launch.input = human;
       })().catch(error => { launch.humanReady = undefined; throw error; });
       await launch.humanReady;
     }
     // Each request, including wrapper/assets/history, rechecks the original grant.
     await owner.metadata(launch.claims);
+    // The existing gateway validates this HTTPS Host, including the exact local
+    // Chisel/container mapping. It is never taken from request JSON or a header
+    // supplied directly to the provider. Bind the native form/postMessage origin
+    // when the human wrapper first arrives through that mapping.
+    if (new URL(launch.session.actionUrl).origin !== origin) {
+      launch.input = { ...launch.input, create: undefined, relativePath: undefined, documentId: launch.session.documentId, origin, editorBaseUrl: new URL('/apps/office', origin).href };
+      launch.session = await createSession(launch.input); launch.expires = launch.session.accessTokenTtl;
+      launch.browserUrl = new URL(new URL(launch.browserUrl).pathname, origin).href;
+    }
+    if (action === 'renew' && req.method === 'POST') return send(res, 200, await renew({ grantId, documentId: launch.session.documentId, participantId: launch.claims.participant, accessToken: launch.session.accessToken }, { signal }));
+    if (action === 'copy' && req.method === 'POST') {
+      if (typeof officeCopy !== 'function') throw fail(503, 'Native document copy is unavailable');
+      const value = await body(req, 4096);
+      if (!['docx', 'odt', 'xlsx', 'ods', 'pptx', 'odp'].includes(value?.format) || typeof value.name !== 'string' || !value.name || value.name.length > 240 || /[\x00-\x1f/\\]/.test(value.name) || !value.name.toLowerCase().endsWith('.' + value.format)) throw fail(400, 'A matching plain Office filename is required');
+      const abort = new AbortController(); const cancel = () => abort.abort();
+      signal?.addEventListener('abort', cancel, { once: true }); res.once('close', cancel);
+      try {
+        if (signal?.aborted) cancel();
+        const result = await officeCopy({ grantId, documentId: launch.session.documentId, viewId: id, name: value.name, format: value.format, signal: abort.signal, origin });
+        return send(res, 200, result);
+      } finally { signal?.removeEventListener('abort', cancel); res.off('close', cancel); }
+    }
     if (action === 'references' && req.method === 'POST') {
       if (typeof referenceRequest !== 'function') throw fail(503, 'References is unavailable');
       const request = await body(req, 1 << 20);
@@ -133,10 +171,10 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     if (action === 'host.js' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }); res.end(await fs.readFile(path.join(root, 'web', 'office-host.js'))); return; }
     if (action || req.method !== 'GET') throw fail(404, 'Unknown Office route');
     const references = referenceContext ? await referenceContext({ grantId, documentId: launch.session.documentId, participantId: launch.claims.participant }) : undefined;
-    const s = launch.session; const origin = new URL(s.actionUrl).origin;
+    const s = launch.session; const editorOrigin = new URL(s.actionUrl).origin;
     const fields = { access_token: s.accessToken, access_token_ttl: s.accessTokenTtl, ...s.launchParameters };
-    const host = { origin, documentId: s.documentId, writable: s.mode === 'edit', referenceContext: references ? { projectId: references.projectId, documentId: launch.session.documentId } : null };
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': `default-src 'self'; frame-src ${origin}; form-action ${origin}; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'` });
+    const host = { origin: editorOrigin, documentId: s.documentId, accessTokenTtl: s.accessTokenTtl, writable: s.mode === 'edit', referenceContext: references ? { projectId: references.projectId, documentId: launch.session.documentId } : null };
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': `default-src 'self'; frame-src ${editorOrigin}; form-action ${editorOrigin}; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'` });
     res.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Office</title><style>html,body{height:100%;margin:0;background:#fff;color:#222;font:16px system-ui}iframe{width:100%;height:100%;border:0}form{display:none}dialog{max-width:min(90vw,38rem);max-height:80vh}li{display:flex;gap:1rem;margin:1rem 0;align-items:center}button{font:inherit}#error{position:fixed;inset:auto 1rem 1rem;background:white}</style></head><body><iframe id="editor" name="editor" title="Office document" allow="clipboard-read; clipboard-write; fullscreen"></iframe><form id="launch" method="post" target="editor" action="${escapeHTML(s.actionUrl)}">${Object.entries(fields).map(([name,value]) => `<input type="hidden" name="${escapeHTML(name)}" value="${escapeHTML(value)}">`).join('')}</form><dialog id="history"><h2>Version history</h2><ol></ol><button id="close-history">Close</button></dialog><p id="error" role="alert" hidden></p><script id="host-context" type="application/json">${jsonHTML(host)}</script><script src="${escapeHTML(new URL(launch.browserUrl).pathname + '/host.js')}"></script></body></html>`);
   }
   async function resolveEditorGrant(req, { candidateGrantIds = [] } = {}) {
@@ -210,5 +248,5 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     return open({ ...input, editorBaseUrl: input.editorBaseUrl || new URL('/apps/office', input.origin).href, documentId: old.session.documentId, create: undefined, relativePath: undefined, participantKind: 'human' });
   }
   async function close() { launches.clear(); issued.clear(); if (callback) await new Promise(resolve => { const timer = setTimeout(() => { callback.closeAllConnections(); resolve(); }, 2000); timer.unref(); callback.close(() => { clearTimeout(timer); resolve(); }); }); if (config) await fs.unlink(config.callbackSocket).catch(() => {}); }
-  return { configure, prepare, open, status, snapshot, handle, owner, resolveEditorGrant, handleEditor, upgradeEditor, reopenBrowser, close };
+  return { configure, prepare, open, renew, status, snapshot, handle, owner, resolveEditorGrant, handleEditor, upgradeEditor, reopenBrowser, close };
 }

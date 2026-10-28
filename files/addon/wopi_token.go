@@ -3,6 +3,7 @@ package main
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -72,9 +73,14 @@ func mintWopiToken(c wopiClaims, now time.Time) (string, time.Time, error) {
 	if err != nil {
 		return "", time.Time{}, err
 	}
+	nonce := make([]byte, 24)
+	if _, err = rand.Read(nonce); err != nil {
+		return "", time.Time{}, err
+	}
 	expires := now.Add(wopiTokenTTL())
 	c.RegisteredClaims = jwt.RegisteredClaims{
 		Audience:  jwt.ClaimStrings{wopiTokenAudience},
+		ID:        hex.EncodeToString(nonce),
 		IssuedAt:  jwt.NewNumericDate(now),
 		ExpiresAt: jwt.NewNumericDate(expires),
 	}

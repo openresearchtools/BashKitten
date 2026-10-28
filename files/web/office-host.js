@@ -4,9 +4,27 @@ const context = JSON.parse(document.getElementById('host-context').textContent);
 const editor = document.getElementById('editor');
 const history = document.getElementById('history');
 const errorBox = document.getElementById('error');
+const lifetime = new AbortController();
+let renewalTimer;
 function post(MessageId, Values = {}) { editor.contentWindow.postMessage(JSON.stringify({ MessageId, Values, SendTime: Date.now() }), context.origin); }
 function report(error) { errorBox.textContent = error.message || String(error); errorBox.hidden = false; }
 async function api(action, body, signal) { const response = await fetch(location.pathname + '/' + action, { method: body ? 'POST' : 'GET', credentials: 'same-origin', signal, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); const value = await response.json(); if (!response.ok) throw Error(value.error || 'Office operation failed'); return value; }
+function scheduleRenewal(expires, retry = false) {
+  clearTimeout(renewalTimer);
+  if (lifetime.signal.aborted) return;
+  renewalTimer = setTimeout(async () => {
+    try {
+      const renewed = await api('renew', {}, lifetime.signal);
+      post('Reset_Access_Token', { token: renewed.accessToken, ttl: renewed.accessTokenTtl });
+      context.accessTokenTtl = renewed.accessTokenTtl;
+      scheduleRenewal(renewed.accessTokenTtl);
+    } catch (error) {
+      if (lifetime.signal.aborted) return;
+      report(error);
+      if (Date.now() < expires - 60000) scheduleRenewal(expires, true);
+    }
+  }, retry ? 60000 : Math.max(1000, expires - Date.now() - 300000));
+}
 async function showHistory() {
   const result = await api('history'); const list = history.querySelector('ol'); list.replaceChildren();
   for (const version of result.versions) {
@@ -20,7 +38,7 @@ async function showHistory() {
 document.getElementById('close-history').onclick = () => history.close();
 const extensionFrames = new Map();
 function abortFrame(frame) { const entry = extensionFrames.get(frame); if (entry) for (const request of entry.requests.values()) request.abort(); }
-window.addEventListener('pagehide', () => { for (const frame of extensionFrames.keys()) abortFrame(frame); extensionFrames.clear(); });
+window.addEventListener('pagehide', () => { lifetime.abort(); clearTimeout(renewalTimer); for (const frame of extensionFrames.keys()) abortFrame(frame); extensionFrames.clear(); });
 window.addEventListener('message', event => {
   if (event.origin !== context.origin) return;
   let message = event.data; if (typeof message === 'string') { try { message = JSON.parse(message); } catch { return; } }
@@ -31,14 +49,15 @@ window.addEventListener('message', event => {
     extensionFrames.set(event.source, { nonce: message.nonce, requests: new Map() });
     event.source.postMessage({ MessageId: 'BashKitten_ReferencesContext', nonce: message.nonce, ...context.referenceContext }, context.origin); return;
   }
-  if (['BashKitten_ReferencesRequest', 'BashKitten_ReferencesCancel'].includes(message?.MessageId)) {
+  if (['BashKitten_ReferencesRequest', 'BashKitten_ReferencesCancel', 'BashKitten_OfficeCopy'].includes(message?.MessageId)) {
     const frame = extensionFrames.get(event.source);
     if (frame?.nonce !== message.nonce || typeof message.requestId !== 'string' || message.requestId.length > 128) return;
     frame.requests.get(message.requestId)?.abort();
     if (message.MessageId === 'BashKitten_ReferencesCancel') { frame.requests.delete(message.requestId); return; }
     if (frame.requests.size >= 32) return;
     const target = event.source, request = new AbortController(); frame.requests.set(message.requestId, request);
-    api('references', { method: message.method, path: message.path, body: message.body }, request.signal).then(
+    const copying = message.MessageId === 'BashKitten_OfficeCopy';
+    api(copying ? 'copy' : 'references', copying ? { name: message.name, format: message.format } : { method: message.method, path: message.path, body: message.body }, request.signal).then(
       result => { if (!request.signal.aborted) target.postMessage({ MessageId: 'BashKitten_ReferencesResult', nonce: message.nonce, requestId: message.requestId, result }, context.origin); },
       error => { if (!request.signal.aborted) target.postMessage({ MessageId: 'BashKitten_ReferencesResult', nonce: message.nonce, requestId: message.requestId, error: error.message }, context.origin); }
     ).finally(() => { if (frame.requests.get(message.requestId) === request) frame.requests.delete(message.requestId); });
@@ -49,7 +68,12 @@ window.addEventListener('message', event => {
     case 'App_LoadingStatus':
       if (['Frame_Ready', 'Document_Loaded'].includes(message.Values?.Status)) {
         post('Host_PostmessageReady'); post('Hide_Button', { id: 'toggledarktheme' }); post('Hide_Button', { id: 'invertbackground' }); post('Hide_Menu_Item', { id: 'toggledarktheme' }); post('Hide_Menu_Item', { id: 'invertbackground' });
-      } break;
+      }
+      if (message.Values?.Status === 'Document_Loaded') scheduleRenewal(context.accessTokenTtl);
+      break;
+    case 'Action_Save_Resp':
+      if (message.Values?.success && message.Values?.fileName) api('context').then(value => { if (value.documentId !== context.documentId) location.reload(); }).catch(report);
+      break;
     case 'UI_FileVersions': showHistory().catch(report); break;
     case 'UI_Close': window.close(); break;
   }

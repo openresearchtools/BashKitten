@@ -73,7 +73,12 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
       else {
         const id = randomUUID(); const stat = await fs.stat(filename, { bigint: true });
         m = { id, environmentId, path: filename, generation: 1, version: '1', fingerprint: fingerprint(stat), lastWrite: null, versions: [], grants: {} };
-        await fs.mkdir(path.join(directory(id), 'versions'), { recursive: true, mode: 0o700 }); await saveManifest(m); await retain(m, filename, 'initial', { force: true }); registry.paths[filename] = id; await writeJSON(registryFile, registry);
+        await fs.mkdir(path.join(directory(id), 'versions'), { recursive: true, mode: 0o700 }); await saveManifest(m);
+        // Native Collabora initializes new files from an exclusive empty
+        // placeholder. Its first complete PutFile is the first valid version;
+        // do not retain an unopenable placeholder or start the interval early.
+        if (!create || stat.size > 0n) await retain(m, filename, 'initial', { force: true });
+        registry.paths[filename] = id; await writeJSON(registryFile, registry);
       }
       // Use the same document transaction as native saves; adding another
       // project grant must not replace a newer save manifest.

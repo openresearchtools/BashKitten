@@ -59,12 +59,39 @@ func serveAuthorized(w http.ResponseWriter, r *http.Request, fn wopiHandlerFunc,
 	}
 	var metadata fileMetadata
 	if err = ownerJSON(r.Context(), "metadata", c, nil, &metadata); err != nil {
+		if r.Pattern == "POST /wopi/files/{id}" && r.Header.Get("X-WOPI-Override") == "UNLOCK" {
+			return releaseNativeLock(w, r, c)
+		}
 		return errorStatus(err)
 	}
 	if c.Generation != metadata.Generation {
+		if r.Pattern == "POST /wopi/files/{id}" && r.Header.Get("X-WOPI-Override") == "UNLOCK" {
+			return releaseNativeLock(w, r, c)
+		}
 		return 409
 	}
 	return fn(w, r, &wopiRequest{c, metadata, c.Write && metadata.Permissions.Write && c.Snapshot == ""})
+}
+
+// A revoked participant cannot read, save, refresh a lock or finalize snapshots.
+// The native broker may still release its exact lock when its last view closes.
+// JWT scope/expiry and native RSA proof were already checked above; matching the
+// current opaque lock prevents this cleanup from clearing another broker's lock.
+func releaseNativeLock(w http.ResponseWriter, r *http.Request, c *wopiClaims) int {
+	if !c.Write || c.Snapshot != "" {
+		return 401
+	}
+	lockID := r.Header.Get("X-WOPI-Lock")
+	if lockID == "" || len(lockID) > 1024 {
+		return 400
+	}
+	unlock := documentLock(c.FileID)
+	defer unlock()
+	if ok, current := wopiLocks.unlock(c.FileID, lockID); !ok {
+		w.Header().Set("X-WOPI-Lock", current)
+		return 409
+	}
+	return 200
 }
 func wopiCheckFileInfoHandler(w http.ResponseWriter, r *http.Request, req *wopiRequest) int {
 	m := req.metadata
@@ -108,7 +135,7 @@ func wopiFilesPostHandler(w http.ResponseWriter, r *http.Request, req *wopiReque
 		w.Header().Set("X-WOPI-Lock", wopiLocks.get(fileID))
 		return 200
 	case "LOCK", "REFRESH_LOCK", "UNLOCK":
-		if !req.canWrite {
+		if !req.canWrite && !(override == "UNLOCK" && req.claims.Write && req.claims.Snapshot == "") {
 			return 401
 		}
 		if lockID == "" || len(lockID) > 1024 {
@@ -183,11 +210,15 @@ func wopiFilesPostHandler(w http.ResponseWriter, r *http.Request, req *wopiReque
 		c.FileID = result.DocumentID
 		c.Generation = result.Generation
 		c.Snapshot = ""
-		token, _, err := mintWopiToken(c, time.Now())
+		token, expires, err := mintWopiToken(c, time.Now())
 		if err != nil {
 			return 500
 		}
-		uri := strings.TrimSuffix(config.WopiURL, "/") + "/wopi/files/" + url.PathEscape(c.FileID) + "?access_token=" + url.QueryEscape(token)
+		src := strings.TrimSuffix(config.WopiURL, "/") + "/wopi/files/" + url.PathEscape(c.FileID)
+		if err = ownerJSON(r.Context(), "issued", req.claims, map[string]any{"parentToken": r.URL.Query().Get("access_token"), "accessToken": token, "accessTokenTtl": expires.UnixMilli(), "documentId": c.FileID, "generation": c.Generation, "wopiSrc": src}, nil); err != nil {
+			return errorStatus(err)
+		}
+		uri := src + "?access_token=" + url.QueryEscape(token) + "&access_token_ttl=" + strconv.FormatInt(expires.UnixMilli(), 10)
 		jsonResponse(w, 200, map[string]string{"Name": result.Name, "Url": uri})
 		return 0
 	default:

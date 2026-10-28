@@ -34,12 +34,18 @@ replaceable boundary natively.
 92 Go modules and 460 npm package archives, including target-specific optional
 packages. Go module sums and npm SRI values are preserved, as are archive hashes
 and original notice filenames. `native-sources.json` records separately selected
-MuPDF/FFmpeg/dav1d source, native build tools and the upstream FFmpeg recipe.
+MuPDF 1.28.2/FFmpeg 9.0.2/dav1d 1.5.4 source, native build tools and the upstream FFmpeg recipe.
 Archives over 32 MiB are split byte-for-byte: concatenate the ordered `parts`,
 verify each part and the joined hash before extraction. Sources/notices are
 preserved intact, including native binary packages used only by frontend build
 tools; product MuPDF/FFmpeg are compiled from source. Full native build-tool
 source archives for esbuild and Rollup accompany their npm packages.
+
+Native Termux reuses the already retained framework/NDK inputs under
+`agent/vendor/node` and its shared packaging toolchain owner. Only relevant
+upstream native patches are applied with zero fuzz; exact patch/archive/compiler
+hashes are recorded in target metadata. Go runtime provenance and full notices
+reuse `auth/dependencies/go-toolchain`'s exact 1.27.2 source pin.
 
 Before an upstream update is accepted, repeat these focused external contracts:
 
