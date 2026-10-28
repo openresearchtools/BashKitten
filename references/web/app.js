@@ -43,7 +43,7 @@ let projectId,
   detailController,
   rangeController,
   jobListController,
-  anchor = 0,
+  anchor = null,
   jobTimer,
   jobsPolling = false,
   appRetired = false,
@@ -309,9 +309,13 @@ async function selectItem(item, event) {
     return;
   if (detailDirty && detail?.key !== item.key) detailDirty = false;
   rangeController?.abort();
-  if (event.range) {
-    const from = Math.min(anchor, event.index),
-      to = Math.max(anchor, event.index),
+  if (
+    event.range &&
+    anchor?.view === view &&
+    anchor.generation === items.generation
+  ) {
+    const from = Math.min(anchor.index, event.index),
+      to = Math.max(anchor.index, event.index),
       generation = view,
       controller = (rangeController = new AbortController());
     selection.clear();
@@ -334,7 +338,7 @@ async function selectItem(item, event) {
       return;
     }
   } else {
-    anchor = event.index;
+    anchor = { index: event.index, view, generation: items.generation };
     if (!event.toggle) selection.clear();
     if (event.toggle && selection.has(item.key)) selection.delete(item.key);
     else selection.set(item.key, selectedIdentity(item));

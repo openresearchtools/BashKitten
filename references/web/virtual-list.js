@@ -33,6 +33,7 @@ export class VirtualList {
       rowAttributes,
     });
     this.pages = new Map();
+    this.renderedRows = new Map();
     this.pending = new Map();
     this.cursors = new Map([[0, null]]);
     this.length = 0;
@@ -70,6 +71,7 @@ export class VirtualList {
     this.controller = new AbortController();
     ++this.generation;
     this.pages.clear();
+    this.renderedRows.clear();
     this.pending.clear();
     this.failures.clear();
     this.cursors = new Map([[0, null]]);
@@ -86,6 +88,7 @@ export class VirtualList {
   destroy() {
     this.destroyed = true;
     this.controller.abort();
+    this.renderedRows.clear();
     this.observer.disconnect();
     this.root.remove();
   }
@@ -212,30 +215,52 @@ export class VirtualList {
           (this.root.scrollTop + this.root.clientHeight) / this.rowHeight,
         ) + 5,
       ),
-      fragment = document.createDocumentFragment(),
+      visible = new Set(),
+      ordered = [],
       pages = new Set();
     let active = null;
     for (let i = start; i < end; i++) {
       const item = this.item(i);
+      visible.add(i);
       pages.add(Math.floor(i / this.pageSize));
-      const row = node("div", {
-        class: "virtual-row",
-        role: this.rowRole,
-        "aria-posinset": i + 1,
-        id: "row-" + this.id + "-" + i,
-      });
+      let entry = this.renderedRows.get(i);
+      if (!entry || entry.item !== item) {
+        const row = node("div", {
+          class: "virtual-row",
+          role: this.rowRole,
+          "aria-posinset": i + 1,
+          id: "row-" + this.id + "-" + i,
+        });
+        entry = { row, item, attributes: [] };
+        this.renderedRows.set(i, entry);
+        if (item) {
+          row.append(this.renderRow(item, i));
+          const interactive = (event) =>
+            event.target.closest?.(
+              "button,a,input,select,textarea,[contenteditable=true]",
+            );
+          row.addEventListener("click", (event) => {
+            if (!interactive(event)) this.select(i, event);
+          });
+          row.addEventListener("dblclick", (event) => {
+            if (!interactive(event)) this.onActivate(item);
+          });
+        }
+      }
+      const row = entry.row;
       row.style.top = i * this.rowHeight + "px";
       row.style.height = this.rowHeight + "px";
       if (item) {
-        for (const [name, value] of Object.entries(this.rowAttributes(item)))
+        const attributes = this.rowAttributes(item);
+        for (const name of entry.attributes)
+          if (!(name in attributes)) row.removeAttribute(name);
+        entry.attributes = Object.keys(attributes);
+        for (const [name, value] of Object.entries(attributes))
           row.setAttribute(name, String(value));
         row.setAttribute(
           "aria-selected",
           String(this.selected.has(this.key(item))),
         );
-        row.append(this.renderRow(item, i));
-        row.addEventListener("click", (event) => this.select(i, event));
-        row.addEventListener("dblclick", () => this.onActivate(item));
         if (i === this.focusIndex) active = row.id;
       } else {
         row.classList.add("placeholder");
@@ -243,9 +268,23 @@ export class VirtualList {
           ? "Refresh to retry"
           : "Loading…";
       }
-      fragment.append(row);
+      ordered.push(row);
     }
-    this.spacer.replaceChildren(fragment);
+    for (const index of this.renderedRows.keys())
+      if (!visible.has(index)) this.renderedRows.delete(index);
+    const retained = new Set(ordered);
+    let removedFocus = false;
+    for (const row of [...this.spacer.children]) {
+      if (retained.has(row)) continue;
+      removedFocus ||= row.contains(document.activeElement);
+      row.remove();
+    }
+    let next = this.spacer.firstChild;
+    for (const row of ordered) {
+      if (row !== next) this.spacer.insertBefore(row, next);
+      next = row.nextSibling;
+    }
+    if (removedFocus) this.root.focus({ preventScroll: true });
     if (active) this.root.setAttribute("aria-activedescendant", active);
     else this.root.removeAttribute("aria-activedescendant");
     for (const page of pages) void this.fetch(page);
@@ -277,6 +316,7 @@ export class VirtualList {
     this.draw();
   }
   keydown(event) {
+    if (event.target !== this.root) return;
     let index = this.focusIndex;
     const page = Math.max(
       1,

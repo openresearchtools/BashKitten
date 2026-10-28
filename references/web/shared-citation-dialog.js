@@ -52,6 +52,7 @@ export async function chooseCitation({
     previewGeneration = 0,
     previewController = null,
     previewResult = null,
+    queuedConfirm = null,
     accepted = false,
     loadingInitial = true;
   let searchTerm = "";
@@ -136,7 +137,7 @@ export async function chooseCitation({
   d.body.append(previewBox, previewNotice);
   const customEnabled = node("input", {
     type: "checkbox",
-    checked: !!(cluster.customHTML || cluster.customText),
+    checked: hasCustomPreview(),
   });
   const editor = node("div", {
     class: "citation-preview custom-preview",
@@ -173,8 +174,7 @@ export async function chooseCitation({
   d.body.append(customControls, editor);
   customEnabled.addEventListener("change", () => {
     editor.hidden = !customEnabled.checked;
-    for (const control of customControls.querySelectorAll("button"))
-      control.disabled = !customEnabled.checked;
+    updateControls();
     if (customEnabled.checked) {
       renderedHTML(editor, previewResult?.html || "");
       if (!previewResult?.html) editor.textContent = previewResult?.text || "";
@@ -228,6 +228,8 @@ export async function chooseCitation({
         ),
       ),
     onSelect: (entry) => {
+      rangeController?.abort();
+      rangeController = null;
       active = sources.findIndex((x) => x.uid === entry.uid);
       librarySelection.clear();
       library.setSelection([]);
@@ -235,6 +237,7 @@ export async function chooseCitation({
     },
     onStatus: () => {},
   });
+  selectedList.root.setAttribute("aria-multiselectable", "false");
   const library = new VirtualList({
     element: libraryRows,
     label: "Search results",
@@ -317,7 +320,13 @@ export async function chooseCitation({
     },
     onActivate: () => {
       if (multiple) addSelected();
-      else if (!confirm.disabled) finish();
+      else if (!loadingInitial && sources.length) {
+        if (!confirm.disabled) finish();
+        else {
+          queuedConfirm = previewGeneration;
+          schedulePreview();
+        }
+      }
     },
     onStatus: (text, error) => {
       if (error) d.notice.textContent = text;
@@ -365,6 +374,7 @@ export async function chooseCitation({
     };
   }
   function updateControls() {
+    library.root.setAttribute("aria-multiselectable", String(multiple));
     selectedPane.hidden = !multiple;
     mode.textContent = multiple ? "Single source" : "Multiple sources";
     mode.disabled = multiple && sources.length > 1;
@@ -392,6 +402,12 @@ export async function chooseCitation({
       !sources.length ||
       sources.some((s) => !s.item) ||
       !previewResult;
+    customEnabled.disabled = loadingInitial || !sources.length;
+    editor.contentEditable = String(
+      customEnabled.checked && !customEnabled.disabled,
+    );
+    for (const control of customControls.querySelectorAll("button"))
+      control.disabled = !customEnabled.checked || customEnabled.disabled;
   }
   function redrawSources() {
     const scroll = selectedList.root.scrollTop;
@@ -410,25 +426,25 @@ export async function chooseCitation({
     updateControls();
   }
   function invalidatePreview() {
+    queuedConfirm = null;
     ++previewGeneration;
     previewController?.abort();
     previewResult = null;
     confirm.disabled = true;
     schedulePreview();
   }
+  function hasCustomPreview() {
+    return cluster.customHTML !== undefined || cluster.customText !== undefined;
+  }
   function regenerateCustom() {
     if (
-      (cluster.customHTML || cluster.customText) &&
+      hasCustomPreview() &&
       window.confirm(
         "Regenerate your edited preview using the changed citation?",
       )
     ) {
       delete cluster.customHTML;
       delete cluster.customText;
-      customEnabled.checked = false;
-      for (const control of customControls.querySelectorAll("button"))
-        control.disabled = true;
-      editor.hidden = true;
     }
   }
   function changed() {
@@ -468,16 +484,22 @@ export async function chooseCitation({
     sort.checked = false;
     changed();
   }
-  for (const [key, input] of Object.entries(inputs))
+  for (const [key, input] of Object.entries(inputs)) {
     input.addEventListener("input", () => {
       if (!sources[active]) return;
       sources[active].citation[key] =
         input.type === "checkbox" ? input.checked : input.value;
       if (key === "suppressAuthor")
         delete sources[active].citation["suppress-author"];
+      invalidatePreview();
+    });
+    // The classic dialog asks on change/focus, not for every typed character.
+    input.addEventListener("change", () => {
+      if (!sources[active] || !hasCustomPreview()) return;
       regenerateCustom();
       invalidatePreview();
     });
+  }
   sort.addEventListener("change", () => {
     regenerateCustom();
     invalidatePreview();
@@ -556,6 +578,10 @@ export async function chooseCitation({
       previewResult = result;
       renderedHTML(previewBox, result.html || "");
       if (!result.html) previewBox.textContent = result.text || "";
+      if (customEnabled.checked && !hasCustomPreview()) {
+        renderedHTML(editor, result.html || "");
+        if (!result.html) editor.textContent = result.text || "";
+      }
       if (typeof result.sortable === "boolean") {
         sortLabel.hidden = !result.sortable;
         if (!result.sortable) sort.checked = false;
@@ -563,21 +589,42 @@ export async function chooseCitation({
       applySorted(result.sortedItems);
       previewNotice.textContent = "";
       updateControls();
+      if (queuedConfirm === generation && !confirm.disabled) {
+        queuedConfirm = null;
+        finish();
+      }
     } catch (error) {
       if (!previewSignal.aborted && generation === previewGeneration) {
         previewNotice.textContent = error.message;
         previewResult = null;
+        queuedConfirm = null;
         updateControls();
       }
     }
   });
   async function finish() {
     if (confirm.disabled) return;
+    if (
+      hasCustomPreview() &&
+      !previewBox.textContent.trim() &&
+      !window.confirm("Insert an empty custom citation?")
+    )
+      return;
     confirm.disabled = true;
     accepted = true;
     d.el.close();
   }
   const abort = () => d.el.close();
+  // An activation may wait for its current preview. Any subsequent user
+  // interaction cancels that intent before another action changes the draft.
+  for (const name of ["pointerdown", "keydown", "input"])
+    d.el.addEventListener(
+      name,
+      () => {
+        queuedConfirm = null;
+      },
+      { capture: true },
+    );
   signal?.addEventListener("abort", abort, { once: true });
   const completion = new Promise((resolve) =>
     d.el.addEventListener(
