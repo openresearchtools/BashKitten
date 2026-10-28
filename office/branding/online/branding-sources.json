@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "product": "Office",
+  "upstream": "Collabora Online with LibreOffice technology",
+  "revision": "42745e44dd8530fac7acd5f46cb7571ceea63c6a",
+  "release": "cp-26.04.5-2",
+  "artwork": {
+    "path": "browser/bashkitten/browser/branding/content/about-logo@2x.png",
+    "sha256": "879382cd751bc6bcd784605179149dac8bc078211f67342718ab988893368694"
+  },
+  "wordmark": {
+    "path": "browser/bashkitten/browser/branding/content/bashkitten-wordmark.svg",
+    "sha256": "60b1f9f88040864d3e6e18f0fdd55f177ca3f76556e0a03796c3b2965f130c90",
+    "adaptation": "Fix existing light ink for the native light Office UI"
+  },
+  "rasterFonts": {
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf": "b4c632e3cdf9acc7f28758fb5a323c8524d7fc6660d46904d9b6cbe2809c419c",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf": "e1d733afbbfce842a1b43dced0c9885a76a4e67290dc7e690c4e9b76ebfc7d23"
+  },
+  "legal": {
+    "branding-attribution.txt": {
+      "source": "office/branding/ATTRIBUTION.txt",
+      "sha256": "95198e70c88361db84d47c8e9ee4a02793ccd12a54b8b88c2df658c35dcab25c"
+    },
+    "branding-bashkitten-LICENSE.txt": {
+      "source": "LICENSE",
+      "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+    },
+    "branding-artwork-LICENSE.txt": {
+      "source": "browser/bashkitten/browser/branding/LICENSE",
+      "sha256": "97c01d663782faf22125d54c0c1c153e58302bb846dca9394abca90b4c75a751"
+    },
+    "branding-online-COPYING.txt": {
+      "source": "office/upstream/online/source/COPYING",
+      "sha256": "2bfdca60adf803108d4c7f009000bea76ad00e621e163197881b0eaae91b530e"
+    },
+    "branding-engine-COPYING.txt": {
+      "source": "office/upstream/online/source/engine/COPYING",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    "branding-engine-COPYING.MPL.txt": {
+      "source": "office/upstream/online/source/engine/COPYING.MPL",
+      "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5"
+    },
+    "branding-engine-COPYING.LGPL.txt": {
+      "source": "office/upstream/online/source/engine/COPYING.LGPL",
+      "sha256": "a853c2ffec17057872340eee242ae4d96cbf2b520ae27d903e1b2fef1a5f9d1c"
+    },
+    "branding-engine-NOTICE.txt": {
+      "source": "office/upstream/online/source/engine/readlicense_oo/license/NOTICE",
+      "sha256": "68421bcdfed13d444be60c23baea19c6fbd7dc5a45bd8522c924e17eff3e1903"
+    },
+    "branding-engine-license.html": {
+      "source": "office/upstream/online/source/engine/readlicense_oo/license/license.xml",
+      "sha256": "0c11c0b4ec0cb25e0a4f24e0575e9e8f33ea90ba7684aa3df9ecdaaa6dbcd890"
+    }
+  }
+}

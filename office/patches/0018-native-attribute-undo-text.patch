@@ -1,0 +1,13 @@
+--- a/engine/svx/source/unodraw/unoshape.cxx
++++ b/engine/svx/source/unodraw/unoshape.cxx
+@@ -1473,7 +1473,9 @@ void SetItemsWithUserAttributeUndo(SdrObject& object, const SfxItemSet& items)
+     if (model.IsUndoEnabled() && !model.isInImportExport()
+         && items.GetItemState(SDRATTR_XMLATTRIBUTES, false) == SfxItemState::SET
+         && object.GetMergedItem(SDRATTR_XMLATTRIBUTES) != items.Get(SDRATTR_XMLATTRIBUTES))
+-        undo = model.GetSdrUndoFactory().CreateUndoAttrObject(object);
++        // Attribute undo clears merged items before restoring them. Preserve
++        // the existing native rich text and paragraph attributes as well.
++        undo = model.GetSdrUndoFactory().CreateUndoAttrObject(object, false, true);
+     object.SetMergedItemSetAndBroadcast(items);
+     if (undo)
+         model.AddUndo(std::move(undo));

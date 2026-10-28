@@ -11,12 +11,15 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import tarfile
+import tempfile
 
 import source_graph
 import runtime_metadata
+import branding
 
 ROOT = Path(__file__).resolve().parents[3]
 PREFIX = '/usr/lib/bashkitten/office/runtime'
@@ -33,6 +36,9 @@ PATCHES = [
     'office/patches/0010-native-uno-shape-undo.patch',
     'office/patches/0011-native-online-openssl-headers.patch',
     'office/patches/0016-native-text-edit-state.patch',
+    'office/patches/0018-native-attribute-undo-text.patch',
+    'office/patches/0019-native-product-branding.patch',
+    'office/patches/0020-native-branding-installer-identity.patch',
 ]
 ENGINE_OPTIONS = ['--with-distro=CPLinux-LOKit', '--disable-epm',
                   '--without-package-format', '--disable-symbols',
@@ -50,12 +56,47 @@ def write_json(path, value):
 
 
 def patch_source(source):
+    # A later named patch can deliberately change an earlier patch's context;
+    # reverse-applicability no longer tells us whether that earlier patch was
+    # applied. Reconstruct the ordered native patch inputs, accepting only
+    # pristine or known intermediate bytes in the reusable build tree.
+    paths = set()
     for name in PATCHES:
-        patch = ROOT / name
-        applied = subprocess.run(['patch', '--force', '--fuzz=0', '--dry-run', '--reverse', '-p1', '-i', str(patch)],
-                                 cwd=source, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if applied.returncode:
-            run(['patch', '--batch', '--fuzz=0', '--forward', '-p1', '-i', patch], cwd=source)
+        for relative in re.findall(r'^(?:---|\+\+\+) [ab]/([^\t\n]+)', (ROOT / name).read_text(), re.M):
+            if Path(relative).is_absolute() or '..' in Path(relative).parts:
+                raise ValueError('Named Office patch leaves its source tree')
+            paths.add(relative)
+
+    def signature(path):
+        if path.is_symlink():
+            raise ValueError('Named Office patch input must be an ordinary file: ' + str(path))
+        return source_graph.digest(path) if path.is_file() else None
+
+    with tempfile.TemporaryDirectory(prefix='.office-patches-', dir=source.parent) as directory:
+        expected = Path(directory)
+        for relative in sorted(paths):
+            pristine = source_graph.SOURCE / relative
+            if pristine.is_file():
+                destination = expected / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(pristine, destination)
+        allowed = {relative: {signature(expected / relative)} for relative in paths}
+        for name in PATCHES:
+            run(['patch', '--batch', '--fuzz=0', '--forward', '-p1', '-i', ROOT / name], cwd=expected)
+            for relative in sorted(paths):
+                allowed[relative].add(signature(expected / relative))
+        actual = {relative: signature(source / relative) for relative in sorted(paths)}
+        for relative in sorted(paths):
+            if actual[relative] not in allowed[relative]:
+                raise ValueError('Prepared Office source has an unknown edit: ' + relative)
+        for relative in sorted(paths):
+            destination = source / relative
+            if actual[relative] != signature(expected / relative):
+                if not (expected / relative).is_file():
+                    destination.unlink()
+                else:
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(expected / relative, destination)
 
 
 def prepare(work, cache):
@@ -80,21 +121,24 @@ def prepare(work, cache):
 
 
 def configure_engine(source, cache, jobs, env):
-    run(['sh', './autogen.sh', *ENGINE_OPTIONS, '--with-parallelism=' + str(jobs),
+    run(['sh', './autogen.sh', *ENGINE_OPTIONS, *branding.engine_options(), '--with-parallelism=' + str(jobs),
          '--with-external-tar=' + str(cache)], cwd=source / 'engine', env=env)
     selected = source_graph.engine_inputs(source / 'engine/config_host.mk')
     retained = {row['name']: row['sha256'] for row in source_graph.verify_dependencies()['components']}
     if any(retained.get(row['name']) != row['sha256'] for row in selected):
         raise ValueError('Configured native dependency graph contains an unmaterialized source')
+    branding.verify_engine(source)
 
 
 def build_online(source, jobs, env):
     run(['./autogen.sh'], cwd=source, env=env)
     run(['./configure', '--prefix=' + PREFIX, '--sysconfdir=' + PREFIX + '/etc',
          '--localstatedir=' + PREFIX + '/var', '--disable-tests',
+         *branding.online_options(),
          '--with-lo-builddir=' + str(source / 'engine'),
          '--with-lokit-path=' + str(source / 'engine/include'),
          '--with-lo-path=' + PREFIX + '/engine'], cwd=source, env=env)
+    branding.verify_online(source)
     run(['make', '-j' + str(jobs)], cwd=source, env=env)
     run(['make', 'sbom-check'], cwd=source, env=env)
 
@@ -139,6 +183,11 @@ def prepare_stage(source, work, stage_dir=None):
 
 
 def package(source, work, output, architecture, env, stage_dir=None):
+    branding.verify_engine(source)
+    branding.verify_online(source)
+    # Package-only iterations can pick up a named native installer-template
+    # correction after configure. Regenerate it with its saved native settings.
+    run(['./config.status', 'instsetoo_native/util/openoffice.lst'], cwd=source / 'engine', env=env)
     run(['make', 'Package_instsetoo_native_setup'], cwd=source / 'engine', env=env)
     run(['make', 'LIBO_TEST_INSTALL=TRUE', 'CustomTarget_instsetoo_native/sbom'], cwd=source / 'engine', env=env)
     stage = prepare_stage(source, work, stage_dir)
@@ -163,6 +212,7 @@ def package(source, work, output, architecture, env, stage_dir=None):
             shutil.copy2(source / name, legal / name)
     shutil.copy2(source / 'engine/readlicense_oo/license/license.xml', legal / 'engine-license.xml')
     runtime_metadata.notices(source, runtime)
+    branding.verify_runtime(runtime)
     depends = runtime_metadata.linux_dependencies(runtime, work)
     pin = json.loads((source_graph.UPSTREAM / 'online/source.json').read_text())
     manifest = {
@@ -170,7 +220,7 @@ def package(source, work, output, architecture, env, stage_dir=None):
         'component': 'collabora-online', 'target': 'linux', 'architecture': architecture,
         'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         'development': bool(subprocess.check_output(['git', 'status', '--porcelain', '--',
-            'agent/packaging/office', 'agent/packaging/source_cache.py', 'office/upstream', 'office/patches',
+            'agent/packaging/office', 'agent/packaging/source_cache.py', 'office/upstream', 'office/patches', 'office/branding',
             'files/patches/collabora', 'agent/packaging/termux/native_toolchain.py',
             'agent/packaging/node/lock.json', 'agent/vendor/node/libcxx'], cwd=ROOT, text=True).strip()),
         'upstream': pin, 'compiledPrefix': PREFIX,
@@ -181,7 +231,8 @@ def package(source, work, output, architecture, env, stage_dir=None):
         'configuration': {'proofKey': 'proof_key.path', 'systemplate': 'sys_template_path',
                           'jails': 'child_root_path', 'engine': '--lo-template-path',
                           'browserRoot': 'file_server_root_path'},
-        'engineOptions': ENGINE_OPTIONS,
+        'engineOptions': [*ENGINE_OPTIONS, *branding.engine_options()],
+        'branding': branding.metadata(),
         'depends': depends,
         'dependencyManifestSha256': source_graph.digest(source_graph.DEPENDENCIES / 'sources.json'),
         'patches': [Path(name).stem.split('-', 1)[1] for name in PATCHES],

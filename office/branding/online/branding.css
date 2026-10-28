@@ -1,0 +1,56 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* Native Online branding. Do not change document/cell/slide content colors. */
+:root {
+	--bashkitten-office-ink: #10243c;
+	--bashkitten-office-muted: #5f5f65;
+}
+
+#product-logo {
+	background-image: url('images/office.svg');
+	background-size: 96px;
+	background-position: center;
+	min-width: 112px;
+	min-height: 112px;
+}
+
+#integrator-logo {
+	background: url('images/bashkitten-wordmark.svg') no-repeat center / contain;
+	width: 150px;
+	min-width: 110px;
+	margin-inline-end: 16px;
+}
+
+#about-dialog-info .bashkitten-office-attribution,
+#about-dialog-info .bashkitten-office-legal {
+	display: block;
+	max-width: 38em;
+	margin: 0 0 10px;
+	line-height: 1.5;
+}
+
+#about-dialog-info .bashkitten-office-legal a {
+	display: inline;
+}
+
+/* Preserve the native logo action, sizing and responsive visibility policy. */
+.document-logo {
+	background-image: url('images/office.svg');
+	background-size: contain;
+}
+
+.leaflet-progress-spinner::before {
+	--spinner-logo: url('images/office.svg');
+}
+
+@media (max-width: 600px) {
+	#integrator-logo {
+		width: 108px;
+		min-width: 80px;
+		margin-inline-end: 8px;
+	}
+	#product-logo {
+		min-width: 64px;
+		min-height: 80px;
+		background-size: 64px;
+	}
+}

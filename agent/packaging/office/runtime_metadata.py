@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import tarfile
+import branding
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -22,6 +23,16 @@ def notices(source, runtime):
     _, packages = upstream.read_npm_runtime(str(source / 'browser'), str(source / 'browser'),
                                             str(source / 'browser/sbom-shipped-js.txt'))
     records = []
+    attribution = branding.BRANDING / 'ATTRIBUTION.txt'
+    # Keep donor legal payloads byte-for-byte; integration attribution is an
+    # additional record and a separate installed plain-text notice.
+    branding.inputs()
+    shutil.copy2(attribution, runtime / 'legal/BashKitten-Office-ATTRIBUTION.txt')
+    integration_license = branding.BRANDING / 'online/branding-bashkitten-LICENSE.txt'
+    shutil.copy2(integration_license, runtime / 'legal/BashKitten-Office-LICENSE.txt')
+    records.append({'name': 'BashKitten integrated Office',
+                    'license': 'AGPL-3.0-only (BashKitten integration); upstream components retain their own terms',
+                    'text': attribution.read_text() + '\n\n' + integration_license.read_text()})
     def read(paths):
         return '\n\n'.join(path.name + '\n' + path.read_text(errors='replace') for path in paths)
     records.append({'name': 'Collabora Online', 'license': 'MPL-2.0 and component-specific terms',

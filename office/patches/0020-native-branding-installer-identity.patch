@@ -1,0 +1,46 @@
+--- a/engine/instsetoo_native/util/openoffice.lst.in
++++ b/engine/instsetoo_native/util/openoffice.lst.in
+@@ -7,7 +7,7 @@
+             LIBO_VERSION_MAJOR @LIBO_VERSION_MAJOR@
+             UREPACKAGEVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@.@LIBO_VERSION_MICRO@
+             REFERENCEOOOMAJORMINOR 4.1
+-            WINDOWSBASISROOTNAME Collabora Office
++            WINDOWSBASISROOTNAME @PRODUCTNAME@
+             UNIXBASISROOTNAME collaboraoffice
+             HIDELICENSEDIALOG 0
+             PACKAGEPREFIX
+@@ -22,18 +22,18 @@
+             PROGRESSTEXTBASELINE 230
+             PROGRESSTEXTCOLOR 255,255,255
+             NATIVEPROGRESS false
+-            OOOVENDOR Collabora Productivity Ltd.
++            OOOVENDOR @OOO_VENDOR@
+         }
+     }
+ }
+ 
+-CollaboraOffice
++@PRODUCTNAME_WITHOUT_SPACES@
+ {
+     Settings
+     {
+         variables
+         {
+-            PRODUCTNAME Collabora Office
++            PRODUCTNAME @PRODUCTNAME@
+             PRODUCTVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
+             PRODUCTEXTENSION .@LIBO_VERSION_MICRO@.@LIBO_VERSION_PATCH@
+             POSTVERSIONEXTENSION
+@@ -52,9 +52,9 @@
+         active          1
+         compression     5
+         script          setup_osl
+-        downloadname    CollaboraOffice_{productversion}_{os}_install_{languages}
+-        langpackdownloadname    CollaboraOffice_{productversion}_languagepack_{os}_install_{languages}
+-        helppackdownloadname    CollaboraOffice_{productversion}_helppack_{os}_install_{languages}
++        downloadname    @PRODUCTNAME_WITHOUT_SPACES@_{productversion}_{os}_install_{languages}
++        langpackdownloadname    @PRODUCTNAME_WITHOUT_SPACES@_{productversion}_languagepack_{os}_install_{languages}
++        helppackdownloadname    @PRODUCTNAME_WITHOUT_SPACES@_{productversion}_helppack_{os}_install_{languages}
+         include         {installscriptdir},{customtargetpath}/setup_native,{filelistpath}/PackageSet,{filelistpath}/GeneratedPackage,{filelistpath}/Package,{filelistpath}/ExtensionPackage,{filelistpath}/CustomTarget/helpcontent2/help3xsl/filelists,{extensionsdir},{licensepath},{customtargetpath}/readlicense_oo/license,{packinfopath}
+     }
+ }
