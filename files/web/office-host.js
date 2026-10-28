@@ -26,15 +26,25 @@ function scheduleRenewal(expires, retry = false) {
   }, retry ? 60000 : Math.max(1000, expires - Date.now() - 300000));
 }
 async function showHistory() {
-  const result = await api('history'); const list = history.querySelector('ol'); list.replaceChildren();
+  const result = await api('history');
+  document.getElementById('max-versions').value = result.maxVersions;
+  document.getElementById('history-limit').hidden = !context.writable;
+  document.getElementById('save-history-limit').hidden = !context.writable;
+  const list = history.querySelector('ol'); list.replaceChildren();
   for (const version of result.versions) {
     const row = document.createElement('li'); const label = document.createElement('span'); label.textContent = new Date(version.savedAt).toLocaleString(); row.append(label);
     const open = document.createElement('button'); open.textContent = 'Open'; open.onclick = () => api('version', { versionId: version.id }).then(value => location.assign(value.url)).catch(report); row.append(open);
     if (context.writable) { const restore = document.createElement('button'); restore.textContent = 'Restore'; restore.onclick = async () => { try { restore.disabled = true; const value = await api('restore', { versionId: version.id }); location.assign(value.reopen); } catch (error) { restore.disabled = false; report(error); } }; row.append(restore); }
     list.append(row);
   }
-  history.showModal();
+  if (!history.open) history.showModal();
 }
+document.getElementById('save-history-limit').onclick = async event => {
+  const button = event.currentTarget, input = document.getElementById('max-versions');
+  if (!input.reportValidity()) return;
+  try { button.disabled = true; await api('history', { maxVersions: input.valueAsNumber }, lifetime.signal); await showHistory(); }
+  catch (error) { report(error); } finally { button.disabled = false; }
+};
 document.getElementById('close-history').onclick = () => history.close();
 const extensionFrames = new Map();
 function abortFrame(frame) { const entry = extensionFrames.get(frame); if (entry) for (const request of entry.requests.values()) request.abort(); }

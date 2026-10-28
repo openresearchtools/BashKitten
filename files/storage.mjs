@@ -48,7 +48,7 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
     const fd = await fs.open(filename, 'r'); try { await fd.sync(); } finally { await fd.close(); }
     await syncDir(path.dirname(filename));
     m.versions.push({ id, name: path.basename(filename), savedAt: new Date(now).toISOString(), sourceVersion: m.version, sha256: digest, reason }); m.lastSnapshot = now;
-    const removed = m.versions.splice(0, Math.max(0, m.versions.length - Math.max(1, maxVersions)));
+    const removed = m.versions.splice(0, Math.max(0, m.versions.length - (m.maxVersions ?? maxVersions)));
     await saveManifest(m); // Make retained set durable before removing pruned files.
     for (const entry of removed) await fs.unlink(path.join(directory(m.id), 'versions', entry.name)).catch(() => {});
   }
@@ -207,7 +207,18 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
     }));
   }
   async function finalize(claims) { return serialized(claims.fid, () => authorize(claims, 'view', async m => { if (!claims.snapshot) await retain(m, m.path, 'final', { force: true }); return { finalized: true }; })); }
-  async function list(claims) { return authorize(claims, 'view', m => ({ documentId: m.id, generation: m.generation, versions: [...m.versions].reverse() })); }
+  async function list(claims) { return authorize(claims, 'view', m => ({ documentId: m.id, generation: m.generation, maxVersions: m.maxVersions ?? maxVersions, versions: [...m.versions].reverse() })); }
+  async function configureHistory(claims, count) {
+    if (claims.snapshot) throw failure(403, 'A snapshot view is immutable');
+    if (!Number.isSafeInteger(count) || count < 1 || count > 10000) throw failure(400, 'Retained version count must be an integer from 1 to 10000');
+    return serialized(claims.fid, () => authorize(claims, 'modify', async (m, _scope, signal) => {
+      signal?.throwIfAborted(); m.maxVersions = count;
+      const removed = m.versions.splice(0, Math.max(0, m.versions.length - count));
+      await saveManifest(m); // Same durable retained-set publication as a native save.
+      for (const entry of removed) await fs.unlink(path.join(directory(m.id), 'versions', entry.name)).catch(() => {});
+      return { documentId: m.id, generation: m.generation, maxVersions: count, versions: [...m.versions].reverse() };
+    }));
+  }
   // Caller must first obtain the real native Pre_Restore_Ack and close all views,
   // including Pi. There is no boolean/browser assertion that bypasses this step.
   async function restore(claims, versionId, coordinateNativeRestore) {
@@ -243,5 +254,5 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
     const key = createHash('sha256').update(claims.participant).digest('hex'); const dir = path.join(root, 'settings'); await fs.mkdir(dir, { recursive: true, mode: 0o700 });
     return serialized('settings:' + key, async () => { const filename = path.join(dir, key + '.json'); const current = await json(filename, {}); const next = lightSettings({ ...current, ...update }); if (update) { signal?.throwIfAborted(); await writeJSON(filename, next); } return next; });
   }); }
-  return { register, metadata, read, write, rename, relative, finalize, list, restore, snapshot, settings, isRestoring: documentId => restoring.has(documentId) };
+  return { register, metadata, read, write, rename, relative, finalize, list, configureHistory, restore, snapshot, settings, isRestoring: documentId => restoring.has(documentId) };
 }

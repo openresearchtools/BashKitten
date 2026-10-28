@@ -112,7 +112,7 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     const browserUrl = new URL(browser.basePath + 'office/' + id, browser.origin).href + (browser.bootstrapQuery || '');
     launches.set(id, { session, claims, input, browser, browserGrantId: browser.grantId, browserUrl, expires: session.accessTokenTtl });
     issued.get(session.accessToken).launchId = id;
-    return { ...session, editorInternalURL: collaboraInternalURL, browserUrl };
+    return { ...session, snapshot: input.snapshot || '', editorInternalURL: collaboraInternalURL, browserUrl };
   }
   function pruneDownloads() {
     for (const [id, value] of downloads) if (value.artifact.expires <= Date.now() || value.artifact.consumed) downloads.delete(id);
@@ -158,6 +158,22 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
   }
   async function status({ grantId, documentId, participantId }) { return owner.metadata({ env: environmentId, grant: grantId, fid: documentId, participant: participantId }); }
   async function snapshot({ grantId, documentId, participantId, versionId }, options) { return owner.snapshot({ env: environmentId, grant: grantId, fid: documentId, participant: participantId }, versionId, options); }
+  async function restoreVersion(input, claims, versionId, signal) {
+    return owner.restore(claims, versionId, typeof coordinateNativeRestore === 'function' ? async documentId => {
+      const grant = { ...await createSession({ ...input, snapshot: '', create: undefined, documentId, relativePath: undefined,
+        participantId: 'restore:' + randomUUID(), participantName: 'Office history', restoreCoordinator: true }), editorInternalURL: collaboraInternalURL };
+      return coordinateNativeRestore(documentId, { grant, signal });
+    } : undefined);
+  }
+  async function history(input, { operation, versionId, maxVersions }, { signal } = {}) {
+    signal?.throwIfAborted();
+    const registered = await owner.register(input);
+    const claims = { env: environmentId, grant: input.grantId, fid: registered.documentId, participant: input.participantId };
+    if (operation === 'list') return owner.list(claims);
+    if (operation === 'configure') return owner.configureHistory(claims, maxVersions);
+    if (operation === 'restore') return restoreVersion(input, claims, versionId, signal);
+    throw fail(400, 'Unknown history operation');
+  }
   async function handle(req, res, { grantId, basePath, origin, signal }) {
     let mapped;
     try { mapped = new URL(origin); } catch { throw fail(403, 'An authenticated Office origin is required'); }
@@ -229,7 +245,8 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     }
     if (action === 'context' && req.method === 'GET') return send(res, 200, { documentId: launch.session.documentId });
     if (action === 'history' && req.method === 'GET') return send(res, 200, await owner.list(launch.claims));
-    if (action === 'restore' && req.method === 'POST') { const value = await body(req, 4096); const result = await owner.restore(launch.claims, value.versionId, typeof coordinateNativeRestore === 'function' ? async documentId => { const grant = { ...await createSession({ ...launch.input, create: undefined, documentId, relativePath: undefined, participantId: 'restore:' + randomUUID(), participantName: 'Office history', restoreCoordinator: true }), editorInternalURL: collaboraInternalURL }; return coordinateNativeRestore(documentId, { grant, signal }); } : undefined); return send(res, 200, { ...result, reopen: (await open(launch.input)).browserUrl }); }
+    if (action === 'restore' && req.method === 'POST') { const value = await body(req, 4096); const result = await restoreVersion(launch.input, launch.claims, value.versionId, signal); return send(res, 200, { ...result, reopen: (await open(launch.input)).browserUrl }); }
+    if (action === 'history' && req.method === 'POST') { const value = await body(req, 4096); if (!value || Object.keys(value).some(key => key !== 'maxVersions')) throw fail(400, 'Choose only the retained version count'); return send(res, 200, await owner.configureHistory(launch.claims, value.maxVersions)); }
     if (action === 'version' && req.method === 'POST') { const value = await body(req, 4096); const result = await open({ ...launch.input, snapshot: value.versionId }); return send(res, 200, { url: result.browserUrl }); }
     if (action === 'host.js' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }); res.end(await fs.readFile(path.join(root, 'web', 'office-host.js'))); return; }
     if (action || req.method !== 'GET') throw fail(404, 'Unknown Office route');
@@ -238,7 +255,7 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     const fields = { access_token: s.accessToken, access_token_ttl: s.accessTokenTtl, ...s.launchParameters };
     const host = { origin: editorOrigin, documentId: s.documentId, accessTokenTtl: s.accessTokenTtl, writable: s.mode === 'edit', referenceContext: references ? { projectId: references.projectId, documentId: launch.session.documentId } : null };
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': `default-src 'self'; frame-src ${editorOrigin}; form-action ${editorOrigin}; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'` });
-    res.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Office</title><style>html,body{height:100%;margin:0;background:#fff;color:#222;font:16px system-ui}iframe{width:100%;height:100%;border:0}form{display:none}dialog{max-width:min(90vw,38rem);max-height:80vh}li{display:flex;gap:1rem;margin:1rem 0;align-items:center}button{font:inherit}#error{position:fixed;inset:auto 1rem 1rem;background:white}</style></head><body><iframe id="editor" name="editor" title="Office document" allow="clipboard-read; clipboard-write; fullscreen"></iframe><form id="launch" method="post" target="editor" action="${escapeHTML(s.actionUrl)}">${Object.entries(fields).map(([name,value]) => `<input type="hidden" name="${escapeHTML(name)}" value="${escapeHTML(value)}">`).join('')}</form><dialog id="history"><h2>Version history</h2><ol></ol><button id="close-history">Close</button></dialog><p id="error" role="alert" hidden></p><script id="host-context" type="application/json">${jsonHTML(host)}</script><script src="${escapeHTML(new URL(launch.browserUrl).pathname + '/host.js')}"></script></body></html>`);
+    res.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Office</title><style>html,body{height:100%;margin:0;background:#fff;color:#222;font:16px system-ui}iframe{width:100%;height:100%;border:0}form{display:none}dialog{max-width:min(90vw,38rem);max-height:80vh}li{display:flex;gap:1rem;margin:1rem 0;align-items:center}button{font:inherit}#error{position:fixed;inset:auto 1rem 1rem;background:white}</style></head><body><iframe id="editor" name="editor" title="Office document" allow="clipboard-read; clipboard-write; fullscreen"></iframe><form id="launch" method="post" target="editor" action="${escapeHTML(s.actionUrl)}">${Object.entries(fields).map(([name,value]) => `<input type="hidden" name="${escapeHTML(name)}" value="${escapeHTML(value)}">`).join('')}</form><dialog id="history"><h2>Version history</h2><label id="history-limit">Keep versions <input id="max-versions" type="number" min="1" max="10000" step="1"></label><button id="save-history-limit">Save count</button><ol></ol><button id="close-history">Close</button></dialog><p id="error" role="alert" hidden></p><script id="host-context" type="application/json">${jsonHTML(host)}</script><script src="${escapeHTML(new URL(launch.browserUrl).pathname + '/host.js')}"></script></body></html>`);
   }
   async function resolveEditorGrant(req, { candidateGrantIds = [] } = {}) {
     const candidates = new Set(candidateGrantIds); const uri = new URL(req.url, 'https://office.invalid');
@@ -318,8 +335,8 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     }
     // Resolve only our known document identity. New authority/root, participant
     // and mapped HTTPS origin come from the caller's existing gateway session.
-    return open({ ...input, editorBaseUrl: input.editorBaseUrl || new URL('/apps/office', input.origin).href, documentId: old.session.documentId, create: undefined, relativePath: undefined, participantKind: 'human' });
+    return open({ ...input, editorBaseUrl: input.editorBaseUrl || new URL('/apps/office', input.origin).href, documentId: old.session.documentId, snapshot: old.input.snapshot || '', create: undefined, relativePath: undefined, participantKind: 'human' });
   }
   async function close() { launches.clear(); issued.clear(); downloads.clear(); if (callback) await new Promise(resolve => { const timer = setTimeout(() => { callback.closeAllConnections(); resolve(); }, 2000); timer.unref(); callback.close(() => { clearTimeout(timer); resolve(); }); }); if (config) await fs.unlink(config.callbackSocket).catch(() => {}); }
-  return { configure, prepare, open, renew, registerExport, status, snapshot, handle, owner, resolveEditorGrant, handleEditor, upgradeEditor, reopenBrowser, close };
+  return { configure, prepare, open, renew, registerExport, status, snapshot, history, handle, owner, resolveEditorGrant, handleEditor, upgradeEditor, reopenBrowser, close };
 }

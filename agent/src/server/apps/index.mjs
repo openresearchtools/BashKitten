@@ -236,6 +236,15 @@ export class ApplicationModules {
             await this.validateGrant(context.grant);
             return provider.registerExport(exported, { signal: signal ? AbortSignal.any([signal, context.signal]) : context.signal });
           }),
+          history: (body, identity, { signal } = {}) => this.gateway.authorizeOperation(identity.grantId, 'office-history', async context => {
+            await this.validateGrant(context.grant);
+            if (body.projectId !== context.grant.scope.projectId) throw Object.assign(Error('History belongs to another project'), { status: 403 });
+            const endpoint = body.operation === 'restore' ? await this.gateway.endpoint() : null;
+            return provider.history({ grantId: identity.grantId, documentId: body.documentId,
+              participantId: 'agent:' + identity.backendId + ':' + identity.workerId, participantName: 'Pi',
+              ...(endpoint ? { origin: endpoint.origin, editorBaseUrl: endpoint.origin + '/apps/office' } : {}) }, body,
+              { signal: signal ? AbortSignal.any([signal, context.signal]) : context.signal });
+          }),
           authorizeSnapshot: async ({ documentId, versionId }, identity, { signal } = {}) => {
             const participantId = 'agent:' + identity.backendId + ':' + identity.workerId;
             await provider.owner.register({ grantId: identity.grantId, documentId, participantId, participantName: 'Pi' });
@@ -259,22 +268,23 @@ export class ApplicationModules {
   async resolveOfficeDocument(body, identity, { signal } = {}) {
     return this.gateway.authorizeOperation(identity.grantId, 'office-document', async ({ grant }) => {
       await this.validateGrant(grant); signal?.throwIfAborted();
-      if (!body || Object.keys(body).some(key => !['projectId', 'documentId', 'relativePath', 'create', 'locale'].includes(key)) ||
-          [body.documentId, body.relativePath, body.create].filter(Boolean).length !== 1 || (body.projectId ?? null) !== (grant.scope.projectId ?? null)) throw Object.assign(Error('Choose one document in the authorized project'), { status: 400 });
+      if (!body || Object.keys(body).some(key => !['projectId', 'documentId', 'relativePath', 'create', 'locale', 'snapshot'].includes(key)) ||
+          [body.documentId, body.relativePath, body.create].filter(Boolean).length !== 1 || (body.snapshot !== undefined && (!body.documentId || !/^[a-f0-9-]{36}$/.test(body.snapshot))) || (body.projectId ?? null) !== (grant.scope.projectId ?? null)) throw Object.assign(Error('Choose one document in the authorized project'), { status: 400 });
       // Resolve through the existing storage authority before the native-view
       // cache. Repeated opens need no unused tokens or browser bootstrap grants.
       await this.prepareOfficeRuntime(); signal?.throwIfAborted();
       const document = await this.officeProvider.owner.register({ grantId: grant.id, documentId: body.documentId, relativePath: body.relativePath, create: body.create,
         participantId: identity.kind === 'browser' ? 'browser-control:' + identity.backendId + ':' + identity.viewId + ':' + identity.operationId : 'agent:' + identity.backendId + ':' + identity.workerId,
         participantName: identity.kind === 'browser' ? 'Office export' : 'Pi' });
-      return { documentId: document.documentId, projectId: grant.scope.projectId, ...(body.locale ? { locale: body.locale } : {}) };
+      if (body.snapshot) await this.officeProvider.owner.metadata({ env: await this.identity(), grant: grant.id, fid: document.documentId, participant: identity.kind === 'browser' ? 'browser-control:' + identity.backendId + ':' + identity.viewId + ':' + identity.operationId : 'agent:' + identity.backendId + ':' + identity.workerId, snapshot: body.snapshot });
+      return { documentId: document.documentId, projectId: grant.scope.projectId, ...(body.snapshot ? { snapshot: body.snapshot } : {}), ...(body.locale ? { locale: body.locale } : {}) };
     });
   }
   async openOffice(body, identity, { signal } = {}) {
     return this.gateway.authorizeOperation(identity.grantId, 'office-open', async ({ grant }) => {
       await this.validateGrant(grant); signal?.throwIfAborted();
-      if (!body || Object.keys(body).some(key => !['projectId', 'documentId', 'relativePath', 'create', 'locale'].includes(key)) ||
-          [body.documentId, body.relativePath, body.create].filter(Boolean).length !== 1 || (body.projectId ?? null) !== (grant.scope.projectId ?? null)) throw Object.assign(Error('Choose one document in the authorized project'), { status: 400 });
+      if (!body || Object.keys(body).some(key => !['projectId', 'documentId', 'relativePath', 'create', 'locale', 'snapshot'].includes(key)) ||
+          [body.documentId, body.relativePath, body.create].filter(Boolean).length !== 1 || (body.snapshot !== undefined && (!body.documentId || !/^[a-f0-9-]{36}$/.test(body.snapshot))) || (body.projectId ?? null) !== (grant.scope.projectId ?? null)) throw Object.assign(Error('Choose one document in the authorized project'), { status: 400 });
       // Verify installed native artifacts before creating a new project file.
       await this.prepareOfficeRuntime(); signal?.throwIfAborted();
       const endpoint = await this.gateway.endpoint();
@@ -390,7 +400,7 @@ export class ApplicationModules {
       if (input.component === 'office') {
         if (!workerId) throw Object.assign(Error('Office operations require an owned Pi session'), { status: 403 });
         await this.resolveSession(workerId);
-        const projectRequest = ['/sessions', '/snapshots/diff'].includes(url.pathname);
+        const projectRequest = ['/sessions', '/snapshots', '/snapshots/diff'].includes(url.pathname);
         const projectId = projectRequest ? input.body?.projectId : null;
         const project = projectId ? await this.project(record, projectId) : null;
         if (projectRequest && !project) throw Object.assign(Error('Choose the document project'), { status: 400 });

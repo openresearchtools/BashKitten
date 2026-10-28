@@ -23,7 +23,7 @@ native credentials. Repeated and concurrent opens share the existing participant
 and revalidate its captured grant instead of creating unused browser launches.
 
 Private routes are `POST /sessions`, `POST /sessions/:id/commands`,
-`DELETE /sessions/:id` and `POST /snapshots/diff`. Runtime adapters wrap results
+`DELETE /sessions/:id`, `POST /snapshots` (list/open/restore/configure) and `POST /snapshots/diff`. Runtime adapters wrap results
 in their ordinary `{status,body}` envelope. Commands include bounded inspection,
 paragraph/table, cell/formula/sheet, slide/shape and formatting edits; citation
 insert/edit/remove/style/refresh/bibliography/code promotion; native save/export;
@@ -120,7 +120,9 @@ and diff sources are retained under `vendor/npm`, with lockfile integrity.
 Comparison reads ZIP entries and namespace-aware XML, including text/tables,
 fields/notes, cells/formulas/styles/merges/names, slides/shapes/themes and
 relationships. Uninterpreted/binary parts retain checksums and size differences;
-normalized-equal XML still reports raw changed parts. It never extracts files,
+normalized-equal XML still reports raw changed parts. Office text containers and
+inherited `xml:space` preserve significant whitespace; adjacent SAX text chunks
+are coalesced so parser input boundaries do not create differences. It never extracts files,
 executes macros or resolves external XML/relationships. Worker time, memory,
 expanded sizes and output are bounded, and cancellation terminates the worker.
 It does not claim visual or full semantic equivalence, and has no UI/Git hook.
@@ -160,8 +162,17 @@ frames regain their original size and empty text. Native active same-shape
 writes now reject; edits elsewhere and human typing continue, and retry works
 after the human finishes. Calc's rollback after an earlier cell write moved an
 anchored shape by 0.05 mm, so the adapter also preflights all shape targets via
-the generic 0016 native read-only property before any citation write. That final
-preflight needs its own rebuilt-runtime check.
+the generic 0016 native read-only property before any citation write. The 0016 runtime (manifest SHA256
+`d38de9569e428818cc2561761da0ed158ca4ab9fe213a5bc6fccc2b2cdab3492`,
+plugin `3b5be62d9c8db13c3e1f16240faa7c41eb6e9e17f0b14b179becef3bf36074ce`,
+adapter source SHA256
+`b538e69bec586f94f2fb034625ae14e40f15e3c8e32b8dc3caaf66d65bb56c11`)
+then passed exact text/metadata/geometry preservation on active-target rejection
+in Calc and Impress, including an untagged shape targeted for code promotion.
+The property changed false/true/false around native text editing, rejected writes,
+reported read-only/transient flags, and did not change the undo stack. Edits in
+another shape, continued human typing, and explicit retry after editing all
+passed through the same shared native owner.
 Full backend shutdown/reopen preserved managed
 citations in DOCX/XLSX/PPTX. The generic attribute seam independently preserved
 exact 43,709-byte native attribute payloads through native clipboard and all six

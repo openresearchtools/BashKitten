@@ -80,7 +80,7 @@ come from native discovery and the native generated persistent private key.
 Complete saves are streamed into private recovery storage, length/digest checked,
 re-authorized and published by a same-directory atomic rename. Retry reconciliation
 uses both digest and current file fingerprint. Initial/native-save/final-unlock
-checkpoints retain full snapshots approximately every five minutes, maximum 50,
+checkpoints retain full snapshots approximately every five minutes, default 50,
 under `office-sessions/` outside projects. No background snapshot timer exists.
 Save As uses exclusive publication and cannot overwrite another open document.
 Rename and Save As retain private receipts for interrupted publication. Uncertain
@@ -91,6 +91,12 @@ provider before its first native session. Endpoints/artifacts cannot be retarget
 while prepared or in use. `snapshot(...)` only resolves a registered retained
 version under current view/download authorization and works without starting
 Collabora; private filesystem descriptors never belong in browser/Pi responses.
+The native history dialog and Pi `POST /snapshots` share list/open/restore and
+per-document retained-count configuration (1–10000, default 50), stored in the
+existing manifest. Lowering the count prunes oldest versions immediately.
+Snapshot opens use separate read-only native sessions and preserve the selected
+version through ordinary browser mapping; restoration uses the real native
+Pre_Restore_Ack before replacing the live file and reopening a fresh participant.
 
 References dialog requests use a typed postMessage bridge bound to the exact
 native extension frame, origin and nonce. Credentials remain host-side. Requests

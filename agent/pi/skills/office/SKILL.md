@@ -61,7 +61,15 @@ blindly import another copy or overwrite changed citation positions.
 Await native save/export before reporting delivery. `review_export_docx` is a
 shortcut for a native save then DOCX export of this session. Explicit static
 citation-unlinked copies must use a supported export-only operation; never unlink
-the live source. Native history/snapshot operations use the same owner. The optional
+the live source. Native history uses `{action:'history',projectId,documentId,command:{operation}}`:
+`list` returns retained `versions` and `maxVersions`; `open` adds a returned
+`versionId` and opens that immutable version in a separate read-only native view;
+`restore` adds `versionId`, asks the native broker to save and close all live views,
+then returns a fresh master session and browser URL. Prior live session IDs are
+stale after restore. Optional `show:true` opens the returned ordinary browser view.
+`configure` adds `maxVersions` (integer 1–10000, default 50); it persists per document
+and prunes older retained versions immediately. List/configure need no running
+renderer. Never turn an immutable view into an editable master implicitly. The optional
 `office-diff` CLI compares saved Office snapshots only; inspect its help if installed.
 It has no Git/Changes/UI integration. Keep the agent view connected until single-use exported downloads are consumed.
 Close the agent view when finished; this does

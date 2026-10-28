@@ -8,7 +8,7 @@ import { promoteCitationCodes } from '../extension/code-promotion.mjs';
 import { compareSnapshots } from './snapshot-diff.mjs';
 
 const reads = new Set(['inspect', 'codes.region', 'selection', 'capabilities', 'citations.inspect', 'citations.prepare']);
-const nativeOperations = new Set([...reads, 'text.edit', 'text.append', 'table.insert', 'table.set', 'sheet.set', 'sheet.insert', 'sheet.rows', 'sheet.columns', 'slide.insert', 'slide.remove', 'shape.insert', 'shape.edit', 'format', 'native.uno']);
+const nativeOperations = new Set([...reads, 'text.edit', 'text.append', 'table.insert', 'table.set', 'sheet.set', 'sheet.insert', 'sheet.rows', 'sheet.columns', 'slide.insert', 'slide.remove', 'shape.insert', 'shape.edit', 'format', 'view.finish-edit', 'native.uno']);
 const ownerKey = identity => {
   if (identity?.kind === 'browser' && identity.backendId && identity.viewId && identity.grantId && identity.operationId) return identity.backendId + ':browser:' + identity.viewId + ':' + identity.operationId;
   if (!identity?.backendId || !identity?.workerId) throw new OfficeError('unauthorized', 'An active backend worker identity is required');
@@ -17,7 +17,7 @@ const ownerKey = identity => {
 
 // AuthorizeOpen belongs to the existing backend + WOPI file owner. Caller-supplied
 // tokens, origins and paths cannot become a session grant through this module.
-export function createOfficeService({ resolveOpen, authorizeOpen, authorizeSession, authorizeRenew, authorizeSnapshot, registerExport, references, sessionOptions = {}, Session = NativeOfficeSession } = {}) {
+export function createOfficeService({ resolveOpen, authorizeOpen, authorizeSession, authorizeRenew, authorizeSnapshot, history, registerExport, references, sessionOptions = {}, Session = NativeOfficeSession } = {}) {
   if (typeof authorizeOpen !== 'function') throw new Error('Office requires the backend authorized-open owner');
   const sessions = new Map(), opening = new Map();
   async function connectNative(grant, signal) {
@@ -45,12 +45,13 @@ export function createOfficeService({ resolveOpen, authorizeOpen, authorizeSessi
     const documentId = resolved?.documentId || grant?.documentId;
     const projectId = resolved ? resolved.projectId : grant?.projectId || identity.projectId || body.projectId;
     if (!documentId) throw new OfficeError('invalid_grant', 'The Office host did not resolve an authorized document');
-    const key = owner + ':' + (projectId || '') + ':' + documentId;
+    const snapshot = resolved?.snapshot || grant?.snapshot || '';
+    const key = owner + ':' + (projectId || '') + ':' + documentId + ':' + snapshot;
     for (const session of sessions.values()) if (session.key === key && !session.native.closed) { await authorizeSession?.(session.identity, { signal }); return describe(session); }
     if (opening.has(key)) return opening.get(key);
     const task = (async () => {
       grant ||= await authorizeOpen(resolved, identity, { signal });
-      if (grant?.documentId !== documentId || !grant?.participantId || (resolved && (grant.projectId || '') !== (projectId || ''))) throw new OfficeError('invalid_grant', 'The Office host did not issue the resolved document participant grant');
+      if (grant?.documentId !== documentId || !grant?.participantId || (resolved && ((grant.projectId || '') !== (projectId || '') || (grant.snapshot || '') !== snapshot))) throw new OfficeError('invalid_grant', 'The Office host did not issue the resolved document participant grant');
       const native = await connectNative(grant, signal);
       try {
         if (authorizeRenew) native.startTokenRenewal((current, options) => authorizeRenew(current, identity, options));
@@ -65,7 +66,7 @@ export function createOfficeService({ resolveOpen, authorizeOpen, authorizeSessi
     try { return await task; } finally { opening.delete(key); }
   }
   function describe(session) {
-    return { sessionId: session.id, documentId: session.grant.documentId, projectId: session.projectId, participantId: session.grant.participantId, browserUrl: session.grant.browserUrl, documentType: session.native.status?.type, viewId: session.native.status?.viewid, capabilities: session.capabilities };
+    return { sessionId: session.id, documentId: session.grant.documentId, snapshot: session.grant.snapshot || null, projectId: session.projectId, participantId: session.grant.participantId, browserUrl: session.grant.browserUrl, documentType: session.native.status?.type, viewId: session.native.status?.viewid, capabilities: session.capabilities };
   }
   function owned(id, identity) {
     const session = sessions.get(id);
@@ -139,6 +140,24 @@ export function createOfficeService({ resolveOpen, authorizeOpen, authorizeSessi
   return {
     open, execute,
     async dispatch({ method, path, body = {}, identity, signal }) {
+      if (method === 'POST' && path === '/snapshots') {
+        ownerKey(identity);
+        const operations = { list: [], open: ['versionId'], restore: ['versionId'], configure: ['maxVersions'] };
+        const fields = Object.hasOwn(operations, body.operation) ? operations[body.operation] : null;
+        if (!fields || !body.projectId || !/^[a-f0-9-]{36}$/.test(body.documentId || '') ||
+            Object.keys(body).some(key => !['projectId', 'documentId', 'operation', ...fields].includes(key)) ||
+            (fields.includes('versionId') && !/^[a-f0-9-]{36}$/.test(body.versionId || '')) ||
+            (fields.includes('maxVersions') && (!Number.isSafeInteger(body.maxVersions) || body.maxVersions < 1 || body.maxVersions > 10000)))
+          throw new OfficeError('invalid_history', 'Choose a document and a valid list, open, restore or configure history operation');
+        if (body.operation === 'open') return open({ documentId: body.documentId, projectId: body.projectId, snapshot: body.versionId }, identity, signal);
+        if (typeof history !== 'function') throw new OfficeError('snapshots_unavailable', 'The authorized Office history owner is unavailable');
+        const result = await history(body, identity, { signal });
+        if (body.operation !== 'restore') return result;
+        // Native Pre_Restore_Ack has closed the old broker. Retire local handles
+        // before resolving a fresh master view; no stale session can be reused.
+        for (const session of sessions.values()) if (session.grant.documentId === body.documentId && !session.grant.snapshot) session.native.close();
+        return { ...result, ...await open({ documentId: body.documentId, projectId: body.projectId }, identity, signal) };
+      }
       if (method === 'POST' && path === '/snapshots/diff') {
         ownerKey(identity);
         if (typeof authorizeSnapshot !== 'function') throw new OfficeError('snapshots_unavailable', 'The authorized Office snapshot owner is unavailable');
