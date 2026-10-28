@@ -220,6 +220,45 @@ hashes and uses the normal source-revision checks; it is not a new full Gecko
 build or a completed release package. Installed browser HTTPS, capture/update,
 human/agent UI and full platform acceptance are still pending.
 
+### Focused web UI and native server checks
+
+The permitted in-app browser exercised the real standalone References service
+with three local records. Whole-library and author-search RIS exports downloaded
+three and one records respectively; their bytes and identities were checked.
+The classic citation dialog displayed full creator names/year, multiple sources,
+locators and manual source ordering. Native keyboard edits opened the regeneration
+choice; keeping custom text, regenerating the APA citation and confirming with
+Return passed. Evidence and screenshots are in
+`verification/references-ui-20261028/`. This is independent web UI evidence,
+not installed BashKitten TLS, capture or phone acceptance.
+
+The export checkpoint `ee7cd40449` also fixes concurrent job reservation, saves
+the versioned retry request before dispatch and preserves completed receipts on
+late cancellation. Focused native diagnostics covered identical concurrent
+requests, conflicting inputs, disconnect recovery, cancellation and archived
+library exports. The normal archived-library write restriction remained active.
+
+Shared native Undo patch `2ba8af2181` passed actual Writer commands from two
+authenticated views: the owning view could Undo/Redo, while the other view was
+rejected. Calc/Impress shape text and attributes exposed further native UNO Undo
+gaps. A real active-shape check also reproduced an agent write being overwritten
+when the human finished editing that shape. The focused native correction reuses
+the existing undo factory and active-shape lock; its rebuilt runtime checks are
+still pending. Full simultaneous editing is not yet accepted.
+
+The native x86_64 Termux server and both kit launchers now compile/link, with
+the normal capability, Landlock and seccomp configuration and upstream SBOM
+check passing (`7c68da794b`). Earlier dependency probes used emulator serial
+6520 under Termux UID 10123. New server/kit runtime checks target the separate
+6522 instance, whose Termux UID is 10122. Keep those installations and evidence
+distinct. Full document execution and ARM64 completion remain open.
+
+Licensed native cache/logging/media dependency sources are retained in
+`fa0c52d4b1`; their narrow adapters and complete Files build are being checked.
+The obsolete unlicensed module archives are removed from current build/source
+inputs while the original import remains recoverable in Git history. Final
+package assembly still waits for the selected graph and artifact checks.
+
 ## Decision and planning work
 
 The user selected Collabora Online after the temporary stock-server comparison. The active plan, AGENTS instructions and current native
