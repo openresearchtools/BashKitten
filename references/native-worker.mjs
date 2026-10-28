@@ -10,7 +10,7 @@ import * as citations from "./citations.mjs";
 import { citationParser } from "./host-paths.mjs";
 import requestContext from "./runtime/request-context.js";
 const controllers = new Map();
-parentPort.on("message", async ({ id, method, args, cancel }) => {
+parentPort.on("message", async ({ id, method, args, cancel, cancelBuffer }) => {
   if (cancel) {
     controllers.get(id)?.abort(new DOMException("Cancelled", "AbortError"));
     return;
@@ -78,6 +78,9 @@ parentPort.on("message", async ({ id, method, args, cancel }) => {
                               ? translation[method](args[0], {
                                   ...args[1],
                                   signal: controller.signal,
+                                  cancelBuffer,
+                                  onProgress: (progress) =>
+                                    parentPort.postMessage({ id, progress }),
                                 })
                               : translation[method](...args),
                         );

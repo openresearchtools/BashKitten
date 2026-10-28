@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { createRequire } from "node:module";
-import { readFile, stat, writeFile, rm } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 const require = createRequire(import.meta.url);
-const { FORMATS, CONTENT_TYPES } = require("./runtime/formats.js");
+import { runNativeExport, exportMemoryNotice } from "./native-export.mjs";
 let loaded;
 export async function translationRuntime() {
   if (!loaded)
@@ -160,94 +160,13 @@ export async function exportTranslators() {
     target: translator.target,
     displayOptions:
       translator.displayOptions || translator.metadata?.displayOptions || {},
+    memoryNotice: exportMemoryNotice(translator),
   }));
 }
-// Adapted from the pinned translation-server ExportEndpoint; native ItemGetter owns field conversion.
-export async function translateExport(
-  { items, translatorID, options = {} },
-  { signal, outputFile, delivery } = {},
-) {
-  signal?.throwIfAborted();
-  if (options.exportFileData)
-    throw Object.assign(
-      Error(
-        "Metadata export does not copy attachment files; export their Bibliography folder through Files",
-      ),
-      { status: 422 },
-    );
-  const Z = await translationRuntime();
-  const translator = Z.Translators.get(translatorID);
-  if (!translator || !(translator.translatorType & 2))
-    throw Object.assign(Error("Export translator is unavailable"), {
-      status: 400,
-    });
-  if (
-    !Array.isArray(items) ||
-    items.length > 1000 ||
-    Buffer.byteLength(JSON.stringify(items)) > 32 * 1024 * 1024
-  )
-    throw Object.assign(
-      Error(
-        "Export accepts at most 1000 selected items and 32 MiB of metadata per operation",
-      ),
-      { status: 413 },
-    );
-  const legacy = Z.Utilities.semverCompare("4.0.27", translator.minVersion) > 0;
-  items = structuredClone(items);
-  for (const item of items) {
-    item.creators ||= [];
-    item.tags ||= [];
-    item.relations ||= {};
-    item.uri ||= item.key;
-    delete item.key;
-    if (legacy)
-      for (const field of ["dateAdded", "dateModified", "accessDate"])
-        if (item[field]) item[field] = Z.Date.isoToSQL(item[field]);
-  }
-  const translate = new Z.Translate.Export();
-  translate.setTranslator(translatorID);
-  translate.setDisplayOptions({ ...options, exportFileData: false });
-  translate.setItems(items);
-  await translate.translate({ libraryID: false });
-  signal?.throwIfAborted();
-  if (Buffer.byteLength(translate.string) > 32 * 1024 * 1024)
-    throw Object.assign(Error("Export exceeds 32 MiB"), { status: 413 });
-  const format = Object.keys(FORMATS).find(
-    (name) => FORMATS[name] === translatorID,
-  );
-  const metadata = {
-    contentType: (CONTENT_TYPES[format] || "text/plain") + "; charset=utf-8",
-    extension: /^[a-z0-9]+$/i.test(translator.target)
-      ? translator.target
-      : "txt",
-    translatorID,
-  };
-  // Native Node translation uses IO.String. Native IO.Write depends on XPCOM;
-  // materialize its unchanged output in this worker, never over the UI/agent JSON channel.
-  if (
-    outputFile &&
-    (delivery === "file" ||
-      Buffer.byteLength(JSON.stringify(translate.string)) > 1024 * 1024)
-  ) {
-    try {
-      await writeFile(outputFile, translate.string, {
-        flag: "wx",
-        mode: 0o600,
-        signal,
-      });
-      signal?.throwIfAborted();
-    } catch (error) {
-      await rm(outputFile, { force: true });
-      throw error;
-    }
-    return {
-      ...metadata,
-      byteLength: Buffer.byteLength(translate.string),
-      sha256: createHash("sha256").update(translate.string).digest("hex"),
-      file: true,
-    };
-  }
-  return { ...metadata, text: translate.string };
+// One native Translate.Export invocation, with its native ItemGetter and IO.Write.
+export async function translateExport(args, options = {}) {
+  options.signal?.throwIfAborted();
+  return runNativeExport(await translationRuntime(), args, options);
 }
 export async function translatorMetadata(url) {
   const Z = await translationRuntime();

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The pinned native translators own format conversion and option defaults.
 // This ordinary web dialog adapts their exportOptions controls to an explicit
-// project and selected item set; it does not implement a citation file format.
+// project and captured selection/filter; it does not implement a file format.
 import { node, button, field, human, dialog } from "./common.js";
 import { uploadFile } from "./uploads.js";
 
@@ -142,15 +142,33 @@ export function importReferences({ scope, target = null, onJob }) {
   d.open();
 }
 
-export async function exportReferences({ scope, keys }) {
-  const d = dialog("Export selected references"),
+export function exportDownloadLink(scope, result) {
+  return node(
+    "a",
+    {
+      href: scope.url(result.downloadPath).href,
+      download:
+        "references." +
+        (/^[a-z0-9]+$/i.test(result.extension) ? result.extension : "txt"),
+    },
+    "Download export",
+  );
+}
+
+export async function exportReferences({ scope, selections, onJob }) {
+  const d = dialog("Export references"),
     controller = new AbortController(),
+    selection = node("select", { "aria-label": "Export scope" }),
     format = node("select", { "aria-label": "Export format" }),
     options = node("div", { class: "field-grid" }),
+    memoryNotice = node("p", { class: "notice", hidden: true }),
     download = node("a", { hidden: true }, "Download file");
   let translators = [],
     fields = new Map(),
-    objectURL;
+    objectURL,
+    attempt;
+  for (const [index, choice] of selections.entries())
+    selection.add(new Option(choice.label, String(index)));
   const clearDownload = () => {
     if (objectURL) URL.revokeObjectURL(objectURL);
     objectURL = null;
@@ -162,6 +180,8 @@ export async function exportReferences({ scope, keys }) {
     fields.clear();
     options.replaceChildren();
     const translator = translators.find((item) => item.id === format.value);
+    memoryNotice.textContent = translator?.memoryNotice || "";
+    memoryNotice.hidden = !memoryNotice.textContent;
     for (const [name, value] of Object.entries(
       translator?.displayOptions || {},
     )) {
@@ -176,16 +196,18 @@ export async function exportReferences({ scope, keys }) {
     }
   };
   format.addEventListener("change", updateOptions);
+  selection.addEventListener("change", clearDownload);
   options.addEventListener("change", clearDownload);
   d.body.append(
     node(
       "p",
       {},
-      keys.length +
-        " selected references. Metadata and notes use the selected format; attachment files remain available through their download links.",
+      "Choose exactly which references to export. Metadata and notes use the native format; attachment files remain available through their download links. Large exports run in Jobs with progress and cancellation.",
     ),
+    field("References to export", selection),
     field("Format", format),
     options,
+    memoryNotice,
     download,
   );
   const submit = button(
@@ -193,23 +215,34 @@ export async function exportReferences({ scope, keys }) {
     async () => {
       submit.disabled = true;
       format.disabled = true;
+      selection.disabled = true;
+      for (const input of fields.values()) input.disabled = true;
       d.notice.textContent = "Exporting…";
       clearDownload();
       try {
         const translator = translators.find((item) => item.id === format.value);
         const values = { ...translator.displayOptions, exportFileData: false };
         for (const [name, input] of fields) values[name] = input.checked;
-        const result = await scope.request("items/export", {
-          method: "POST",
-          body: {
-            keys,
+        const body = {
+            selection: selections[Number(selection.value)].selection,
             translatorID: translator.id,
             options: values,
             delivery: "file",
           },
+          fingerprint = JSON.stringify(body);
+        if (attempt?.fingerprint !== fingerprint)
+          attempt = { fingerprint, requestId: crypto.randomUUID() };
+        const result = await scope.request("items/export", {
+          method: "POST",
+          body: { ...body, requestId: attempt.requestId },
           signal: controller.signal,
         });
         controller.signal.throwIfAborted();
+        if (result.kind === "metadata-export" && result.id) {
+          onJob(result);
+          d.el.close();
+          return;
+        }
         if (typeof result.downloadPath === "string") {
           download.href = scope.url(result.downloadPath).href;
         } else if (typeof result.text === "string") {
@@ -231,6 +264,8 @@ export async function exportReferences({ scope, keys }) {
       } finally {
         submit.disabled = false;
         format.disabled = false;
+        selection.disabled = false;
+        for (const input of fields.values()) input.disabled = false;
       }
     },
     { class: "primary", disabled: true },
@@ -248,9 +283,8 @@ export async function exportReferences({ scope, keys }) {
     { once: true },
   );
   d.open();
-  if (!keys.length || keys.length > 1000) {
-    d.notice.textContent =
-      "Select between 1 and 1,000 references for one export.";
+  if (!selections.length) {
+    d.notice.textContent = "Choose references to export.";
     return;
   }
   try {

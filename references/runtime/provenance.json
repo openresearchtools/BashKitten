@@ -108,7 +108,7 @@
         "ExportEndpoint.handle",
         "ItemGetter.nextItem"
       ],
-      "adaptation": "Native export endpoint preparation and ItemGetter retained; Koa response replaced by project-authorized bounded metadata response. Native format MIME mapping is copied unchanged. Explicit file-copy requests are rejected by metadata export, with project Bibliography available through existing Files. Node native exporter supports IO.String; its XPCOM-only IO.Write cannot run here. Exact format output can be spooled asynchronously in the existing native worker to a private, expiring project-scoped export receipt, delivered through the shared file-response owner without project edits or large JSON transfer.",
+      "adaptation": "Native ExportEndpoint preparation and unchanged Node ItemGetter field conversion retained. A private versioned JSONL spool supplies its synchronous length/shift input contract. Exact native format output goes to a private expiring receipt through the native IO.Write host, then the shared authorized file sender. Explicit file-copy requests remain unsupported by metadata export; project Bibliography remains available through Files.",
       "sourceSha256": "879f6b7dd342ade7c8eaf747d94917465b699fd364128f9cc35781adf02aba1c"
     },
     {
@@ -124,6 +124,23 @@
         "SaveSession._updateItems automatic tag preservation"
       ],
       "adaptation": "Exact native note-update method; injected version-guarded project item/save/erase host. Stable session note keys recover a lost save acknowledgement."
+    },
+    {
+      "name": "native-export-file-streams",
+      "source": "vendor/zotero/source/chrome/content/zotero/xpcom/translation/translate_firefox.js",
+      "sourceSha256": "158a86f2234a9565925f7f7c31b55cd01e6ce87424f5a178aef291875b61fe22",
+      "files": [
+        "runtime/export-io-native.js",
+        "native-export.mjs",
+        "export-spool.mjs",
+        "translation.mjs"
+      ],
+      "nativeMethods": [
+        "Zotero.Translate.IO.Write",
+        "Zotero.Translate.Export.setItems",
+        "Zotero.Translate.ItemGetter.nextItem"
+      ],
+      "adaptation": "Pinned IO.Write block and BOM constants retained unchanged inside an injected module. Worker-local Node file/converter streams replace XPCOM streams with the existing iconv-lite dependency. JSONL input feeds unchanged ItemGetter one record at a time; one native translator invocation, shared-flag cancellation and explicit native whole-array/graph/DOM memory notices. Native close errors are surfaced after completion and partial private files are removed."
     }
   ]
 }

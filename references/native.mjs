@@ -43,7 +43,7 @@ export class NativeComponents {
     args = [],
     signal,
     onProgress,
-    { waitForCancellation = false } = {},
+    { waitForCancellation = false, syncCancellation = false } = {},
   ) {
     signal?.throwIfAborted();
     if (this.failure) throw this.failure;
@@ -52,6 +52,9 @@ export class NativeComponents {
         status: 429,
       });
     return new Promise((resolve, reject) => {
+      const cancelBuffer = syncCancellation
+        ? new SharedArrayBuffer(4)
+        : undefined;
       const id = ++this.next,
         p = {
           resolve,
@@ -62,6 +65,7 @@ export class NativeComponents {
         };
       const abort = () => {
         p.cancelled = true;
+        if (cancelBuffer) Atomics.store(new Int32Array(cancelBuffer), 0, 1);
         p.abortReason = signal.reason;
         try {
           this.worker.postMessage({ id, cancel: true });
@@ -74,7 +78,7 @@ export class NativeComponents {
       signal?.addEventListener("abort", abort, { once: true });
       this.pending.set(id, p);
       try {
-        this.worker.postMessage({ id, method, args });
+        this.worker.postMessage({ id, method, args, cancelBuffer });
       } catch (error) {
         this.pending.delete(id);
         p.cleanup();

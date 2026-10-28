@@ -17,7 +17,11 @@ import {
 import { VirtualList } from "./virtual-list.js";
 import { Collections } from "./collections.js";
 import { chooseCitation } from "./shared-citation-dialog.js";
-import { exportReferences, importReferences } from "./transfer-dialogs.js";
+import {
+  exportReferences,
+  importReferences,
+  exportDownloadLink,
+} from "./transfer-dialogs.js";
 import { manageLibrary } from "./library-dialog.js";
 import { uploadFile } from "./uploads.js";
 const $ = (selector) => document.querySelector(selector),
@@ -160,7 +164,13 @@ function updateProjectActions() {
   ]) {
     $("#" + id).disabled = !editable;
   }
-  for (const id of ["savedSearches", "settings", "cite", "jobHistory"]) {
+  for (const id of [
+    "savedSearches",
+    "settings",
+    "cite",
+    "jobHistory",
+    "exportReferences",
+  ]) {
     $("#" + id).disabled = !available;
   }
   $("#libraryMenu").disabled = !currentProject();
@@ -203,6 +213,51 @@ $("#importReferences").onclick = () => {
   importReferences({
     scope,
     target: collection,
+    onJob: (job) => trackJob(id, job),
+  });
+};
+$("#exportReferences").onclick = () => {
+  if (!scope || !projectReady) return;
+  const id = projectId,
+    version = items.version ?? undefined,
+    order = { sort, direction, version },
+    selections = [],
+    projectName = currentProject()?.name || "this library";
+  if (selection.size)
+    selections.push({
+      label: selection.size + " selected references",
+      selection: { scope: "selected", keys: [...selection.keys()], version },
+    });
+  if (activeSearch || collection || deleted)
+    selections.push({
+      label:
+        (deleted
+          ? "Deleted items"
+          : activeSearch
+            ? "Search results"
+            : "Collection") +
+        (collection ? " · " + collection.data.name : "") +
+        (activeSearch ? " · “" + activeSearch + "”" : ""),
+      selection: {
+        scope: "search",
+        q: activeSearch,
+        collection: collection?.key,
+        deleted: deleted ? 1 : 0,
+        ...order,
+      },
+    });
+  if (collection && activeSearch && !deleted)
+    selections.push({
+      label: "Entire collection · " + collection.data.name,
+      selection: { scope: "collection", collection: collection.key, ...order },
+    });
+  selections.push({
+    label: "Entire library · " + projectName + " (excluding deleted items)",
+    selection: { scope: "library", deleted: 0, ...order },
+  });
+  void exportReferences({
+    scope,
+    selections,
     onJob: (job) => trackJob(id, job),
   });
 };
@@ -1075,7 +1130,17 @@ $("#actions").onchange = async () => {
     if (action === "export") {
       await exportReferences({
         scope: targetScope,
-        keys: selected.map((item) => item.key),
+        selections: [
+          {
+            label: selected.length + " selected references",
+            selection: {
+              scope: "selected",
+              keys: selected.map((item) => item.key),
+              version: items.version ?? undefined,
+            },
+          },
+        ],
+        onJob: (job) => trackJob(id, job),
       });
       return;
     }
@@ -1132,6 +1197,9 @@ function storeJob(id, job) {
   for (const callback of jobListeners.get(key) || []) callback(value);
 }
 function jobProgress(job) {
+  const exported = job.progress?.export;
+  if (exported)
+    return `${human(exported.phase)} · ${exported.completed}${exported.total === undefined ? "" : "/" + exported.total} records`;
   const progress = job.progress?.import || job.progress?.["openalex-import"];
   return progress
     ? `${progress.completed}/${progress.total} records`
@@ -1214,7 +1282,8 @@ async function pollJobs() {
         storeJob(job.projectId, latest);
         if (
           !["queued", "running"].includes(latest.status) &&
-          job.projectId === projectId
+          job.projectId === projectId &&
+          job.kind !== "metadata-export"
         ) {
           items?.reset({ preservePosition: true });
           if (job.kind === "file-import") collections?.refresh();
@@ -1422,7 +1491,7 @@ function showJobResult(job, result) {
     controller = new AbortController(),
     pending = resolverSteps(result);
   d.body.append(node("p", {}, result.error || human(result.status)));
-  if (Number.isSafeInteger(result.result?.count))
+  if (job.kind === "file-import" && Number.isSafeInteger(result.result?.count))
     d.body.append(
       node(
         "p",
@@ -1430,6 +1499,29 @@ function showJobResult(job, result) {
         `${result.result.count} reference${result.result.count === 1 ? "" : "s"} imported; ${result.result.collections || 0} collection${result.result.collections === 1 ? "" : "s"} imported.`,
       ),
     );
+  if (result.result?.downloadPath) {
+    if (Number.isSafeInteger(result.result.count))
+      d.body.append(
+        node(
+          "p",
+          {},
+          `${result.result.count} reference${result.result.count === 1 ? "" : "s"} exported.`,
+        ),
+      );
+    d.body.append(
+      exportDownloadLink(api.project(job.projectId), result.result),
+    );
+    if (result.result.expiresAt)
+      d.body.append(
+        node(
+          "p",
+          { class: "notice" },
+          "Download available until " +
+            new Date(result.result.expiresAt).toLocaleString() +
+            ".",
+        ),
+      );
+  }
   if (Number.isSafeInteger(result.result?.processed)) {
     const outcome = result.result;
     d.body.append(

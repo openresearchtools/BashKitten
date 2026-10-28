@@ -322,6 +322,7 @@ function list(db, args = {}) {
   return result;
 }
 const operations = {
+  libraryVersion: (db) => version(db),
   importCollections: (db, { collections, receipt }) =>
     transaction(db, () => {
       if (collections.length > 200) fail("Collection batch exceeds 200");

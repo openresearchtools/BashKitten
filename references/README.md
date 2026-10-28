@@ -137,10 +137,24 @@ acceptance, native Office citation anchoring, authenticated publisher access or
 same-network PDF retrieval parity. Those require the separate product and donor
 comparison checks recorded by the coordinating implementation status owner.
 
-Native metadata export can return a private download with `delivery:"file"`.
-Outputs above 1 MiB automatically use this path so the shared agent channel stays
-bounded. Export receipts expire after 24 hours; the next export prunes at most 100
-expired receipts/files through the existing private store. No project file or
-library item is created. The native translator still owns every format; its Node
-IO.String output is written in the native worker because upstream IO.Write uses
-XPCOM. The shared file-response owner streams only an opened, validated receipt.
+Native metadata export supports explicit selected, library, collection and indexed
+search selections through the existing `metadata-export` job owner. The SQLite
+owner freezes a library version and reads bounded 100-record pages, including all
+child notes/attachments. A private JSONL input feeds the unchanged native Node
+ItemGetter through its `length`/`shift` interface. One native Translate.Export
+invocation writes through the pinned IO.Write with Node file/character-set hosts.
+No per-page format concatenation or whole-library metadata array is introduced.
+
+Export receipts expire after 24 hours; the next export prunes at most 100 expired
+receipts/files through the existing private store. No project file or library item
+is created. The shared file-response owner streams only an opened, validated
+receipt. A captured stale library version returns 409; retrying an acknowledged
+request returns its original receipt. Cancellation reaches synchronous native
+record reads/writes through a flag in the existing worker owner.
+
+Native CSL JSON, RDF and TEI exporters inherently build an array, graph or XML
+document in memory. `translators/export` returns their `memoryNotice`; streaming
+input/output does not remove those native resource requirements. One record and
+its children also remain the native export unit. There is no 1,000-record total
+or 200-child export ceiling. Legacy small selected-key requests can still return
+inline text; file delivery and large outputs use private download descriptors.

@@ -8,6 +8,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { Store } from "./store/index.mjs";
 import { extractPDF } from "./extract.mjs";
 import { NativeComponents } from "./native.mjs";
+import { exportSelection, writeExportInput } from "./export-spool.mjs";
 import { decodeRFC2047 } from "./headers.mjs";
 import { updateCaptureSession } from "./capture-session.mjs";
 import {
@@ -309,6 +310,23 @@ export async function createReferencesService({
     requestId,
     options = {},
   ) {
+    // Reservation alone is serialized, including the existing global admission
+    // bound. Long provider/export work starts after this owner releases the gate.
+    const reservation = await withOperation("job-reservations", () =>
+      reserveJob(p, authority, kind, values, execute, requestId, options),
+    );
+    reservation.start?.();
+    return reservation.status;
+  }
+  async function reserveJob(
+    p,
+    authority,
+    kind,
+    values,
+    execute,
+    requestId,
+    options = {},
+  ) {
     const id = requestId || randomUUID();
     const previous = await call(p, "record", { id: "job:" + id });
     const inputDigest = digest(JSON.stringify({ kind, values }));
@@ -323,7 +341,7 @@ export async function createReferencesService({
         jobs.has(p.id + ":" + id) ||
         ["complete", "waiting-for-browser"].includes(previous.status)
       )
-        return previous;
+        return { status: previous };
     }
     if (jobs.size >= 32) fail("Too many queued jobs", 429);
     const controller = new AbortController();
@@ -363,70 +381,79 @@ export async function createReferencesService({
         progressTimer.unref();
       }
     };
+    // Capture the canonical request before dispatch. A lost HTTP response must
+    // not lose the versioned selection needed to recover an acknowledged job.
+    if (options.request)
+      await call(p, "record", {
+        id: "job-request:" + id,
+        data: options.request,
+      });
     await call(p, "record", { id: "job:" + id, data: status });
     jobs.set(p.id + ":" + id, controller);
     jobStates.set(p.id + ":" + id, status);
-    void (async () => {
-      try {
-        status.status = "running";
-        if (options.batch) {
-          const results = await execute(values, controller.signal, id, {
-            jobId: id,
-            onProgress: progress,
-          });
-          status.results = results.map((result, index) => ({
-            index,
-            status: "complete",
-            result: [result],
-          }));
-          status.completed = values.length;
-        } else
-          for (let i = 0; i < values.length; i++) {
-            controller.signal.throwIfAborted();
-            await project(authority, p.id);
-            if (
-              status.results[i]?.status === "complete" &&
-              status.results[i]?.result?.status !== "partial"
-            )
-              continue;
-            try {
-              status.results[i] = {
-                index: i,
-                status: "complete",
-                result: await execute(
-                  values[i],
-                  controller.signal,
-                  id + ":" + i,
-                  { jobId: id, jobIndex: i, onProgress: progress },
-                ),
-              };
-            } catch (e) {
-              if (controller.signal.aborted) throw e;
-              status.results[i] = {
-                index: i,
-                status: "error",
-                error: e.message,
-              };
+    const start = () =>
+      void (async () => {
+        try {
+          status.status = "running";
+          if (options.batch) {
+            const results = await execute(values, controller.signal, id, {
+              jobId: id,
+              onProgress: progress,
+            });
+            status.results = results.map((result, index) => ({
+              index,
+              status: "complete",
+              result: [result],
+            }));
+            status.completed = values.length;
+          } else
+            for (let i = 0; i < values.length; i++) {
+              controller.signal.throwIfAborted();
+              await project(authority, p.id);
+              if (
+                status.results[i]?.status === "complete" &&
+                status.results[i]?.result?.status !== "partial"
+              )
+                continue;
+              try {
+                status.results[i] = {
+                  index: i,
+                  status: "complete",
+                  result: await execute(
+                    values[i],
+                    controller.signal,
+                    id + ":" + i,
+                    { jobId: id, jobIndex: i, onProgress: progress },
+                  ),
+                };
+              } catch (e) {
+                if (controller.signal.aborted) throw e;
+                status.results[i] = {
+                  index: i,
+                  status: "error",
+                  error: e.message,
+                  ...(e.status ? { httpStatus: e.status } : {}),
+                };
+              }
+              status.completed = i + 1;
+              await call(p, "record", { id: "job:" + id, data: status });
+              await new Promise((resolve) => setImmediate(resolve));
             }
-            status.completed = i + 1;
-            await call(p, "record", { id: "job:" + id, data: status });
-            await new Promise((resolve) => setImmediate(resolve));
-          }
-        finishJobStatus(status);
-      } catch (e) {
-        status.status = controller.signal.aborted ? "cancelled" : "failed";
-        status.error = e.message;
-      } finally {
-        clearTimeout(progressTimer);
-        status.finishedAt = new Date().toISOString();
-        await call(p, "record", { id: "job:" + id, data: status }).catch(
-          () => {},
-        );
-        jobs.delete(p.id + ":" + id);
-        jobStates.delete(p.id + ":" + id);
-      }
-    })();
-    return status;
+          finishJobStatus(status);
+        } catch (e) {
+          status.status = controller.signal.aborted ? "cancelled" : "failed";
+          status.error = e.message;
+        } finally {
+          clearTimeout(progressTimer);
+          status.finishedAt = new Date().toISOString();
+          await call(p, "record", { id: "job:" + id, data: status }).catch(
+            () => {},
+          );
+          jobs.delete(p.id + ":" + id);
+          jobStates.delete(p.id + ":" + id);
+        }
+      })();
+    return { status, start };
   }
   async function importJob(p, authority, body, signal) {
     let source;
@@ -1158,6 +1185,122 @@ export async function createReferencesService({
       { resume: body.resume },
     );
   }
+  const readOnlyProject = (p) =>
+    p.runAuthorized
+      ? {
+          ...p,
+          runAuthorized: (work) => p.runAuthorized(work, { write: false }),
+        }
+      : p;
+  async function runExport(p, specification, signal, onProgress) {
+    if (
+      specification.delivery !== undefined &&
+      !["file", "inline"].includes(specification.delivery)
+    )
+      fail("Unknown export delivery");
+    const create = async (ownerSignal) => {
+      const activeSignal =
+        ownerSignal && signal
+          ? AbortSignal.any([ownerSignal, signal])
+          : ownerSignal || signal;
+      activeSignal?.throwIfAborted();
+      const guarded = { ...p, runAuthorized: undefined };
+      await pruneExports(guarded, activeSignal);
+      const exportId = Date.now() + "-" + randomUUID();
+      const outputFile = exportFile(p, exportId),
+        inputFile = outputFile + ".input";
+      await fs.mkdir(path.dirname(outputFile), {
+        recursive: true,
+        mode: 0o700,
+      });
+      const expected = path.join(
+        await fs.realpath(root),
+        digest(p.id),
+        "exports",
+      );
+      if ((await fs.realpath(path.dirname(outputFile))) !== expected)
+        fail("Export spool is outside its library", 403);
+      const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+      await call(
+        guarded,
+        "record",
+        {
+          id: "export:" + exportId,
+          data: { exportId, expiresAt, complete: false },
+        },
+        activeSignal,
+      );
+      try {
+        const input = await writeExportInput({
+          p: guarded,
+          call,
+          file: inputFile,
+          selection: specification.selection,
+          backendId,
+          signal: activeSignal,
+          onProgress,
+        });
+        const output = await native.call(
+          "translateExport",
+          [
+            {
+              input,
+              translatorID: specification.translatorID,
+              options: specification.options,
+            },
+            { outputFile, delivery: "file" },
+          ],
+          activeSignal,
+          onProgress,
+          { waitForCancellation: true, syncCancellation: true },
+        );
+        activeSignal?.throwIfAborted();
+        if (
+          specification.delivery !== "file" &&
+          !onProgress &&
+          output.byteLength <= 1024 * 1024 &&
+          /charset=utf-8$/i.test(output.contentType)
+        ) {
+          const text = await fs.readFile(outputFile, "utf8");
+          await fs.rm(outputFile, { force: true });
+          await call(
+            guarded,
+            "deleteReceipt",
+            { id: "export:" + exportId },
+            activeSignal,
+          );
+          const { file, ...metadata } = output;
+          return { ...metadata, text };
+        }
+        const { file, ...metadata } = output;
+        const receipt = {
+          ...metadata,
+          exportId,
+          downloadPath: "exports/" + exportId + "/file",
+          expiresAt,
+          complete: true,
+          count: input.count,
+          libraryVersion: input.version,
+        };
+        await call(
+          guarded,
+          "record",
+          { id: "export:" + exportId, data: receipt },
+          activeSignal,
+        );
+        return receipt;
+      } catch (error) {
+        await fs.rm(outputFile, { force: true });
+        await call(guarded, "deleteReceipt", { id: "export:" + exportId });
+        throw error;
+      } finally {
+        await fs.rm(inputFile, { force: true });
+      }
+    };
+    return p.runAuthorized
+      ? p.runAuthorized(create, { write: false })
+      : create(signal);
+  }
   const exportFile = (p, id) => {
     if (!/^\d{13}-[0-9a-f-]{36}$/.test(id || ""))
       fail("Export is unavailable", 404);
@@ -1175,7 +1318,7 @@ export async function createReferencesService({
     const receipt = await exportReceipt(p, exportId, signal);
     const handle = await fs.open(
       receipt.filePath,
-      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
     );
     try {
       signal?.throwIfAborted();
@@ -1213,6 +1356,7 @@ export async function createReferencesService({
     for (const receipt of page.items) {
       if (receipt.expiresAt >= Date.now()) break;
       await fs.rm(exportFile(p, receipt.exportId), { force: true });
+      await fs.rm(exportFile(p, receipt.exportId) + ".input", { force: true });
       await call(
         p,
         "deleteReceipt",
@@ -2494,6 +2638,7 @@ export async function createReferencesService({
     try {
       const { method = "GET", authority, signal } = request;
       const body = request.body || {};
+      let durableBody = body;
       const query =
         request.query instanceof URLSearchParams
           ? request.query
@@ -2639,123 +2784,63 @@ export async function createReferencesService({
           status = 201;
         }
       } else if (op === "items" && key === "export") {
-        if (method !== "POST") fail("Method not allowed", 405);
-        const items = [];
-        for (const k of bounded(body.keys, 1000)) {
-          const item = await call(p, "get", { key: k }, signal);
-          const children = await call(
-            p,
-            "list",
-            { parent: k, top: false, limit: 200 },
-            signal,
-          );
-          if (children.next)
-            fail(
-              "This item has more than 200 child records; export children in explicit selections",
-              413,
-            );
-          items.push({
-            ...item.data,
-            key: item.key,
-            uri: identity(p, k),
-            notes: children.items
-              .filter((child) => child.data.itemType === "note")
-              .map((child) => child.data),
-            attachments: children.items
-              .filter((child) => child.data.itemType === "attachment")
-              .map((child) => ({
-                ...child.data,
-                key: child.key,
-                uri: identity(p, child.key),
-              })),
-          });
-        }
-        if (
-          body.delivery !== undefined &&
-          !["file", "inline"].includes(body.delivery)
-        )
-          fail("Unknown export delivery");
-        const create = async (ownerSignal) => {
-          const activeSignal =
-            ownerSignal && signal
-              ? AbortSignal.any([ownerSignal, signal])
-              : ownerSignal || signal;
-          activeSignal?.throwIfAborted();
-          await pruneExports({ ...p, runAuthorized: undefined }, activeSignal);
-          const exportId = Date.now() + "-" + randomUUID();
-          const outputFile = exportFile(p, exportId);
-          await fs.mkdir(path.dirname(outputFile), {
-            recursive: true,
-            mode: 0o700,
-          });
-          const expected = path.join(
-            await fs.realpath(root),
-            digest(p.id),
-            "exports",
-          );
-          if ((await fs.realpath(path.dirname(outputFile))) !== expected)
-            fail("Export spool is outside its library", 403);
-          const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
-          await call(
-            { ...p, runAuthorized: undefined },
-            "record",
-            {
-              id: "export:" + exportId,
-              data: { exportId, expiresAt, complete: false },
-            },
-            activeSignal,
-          );
-          try {
-            const output = await native.call(
-              "translateExport",
-              [
-                {
-                  items,
-                  translatorID: body.translatorID,
-                  options: body.options,
-                },
-                { outputFile, delivery: body.delivery },
-              ],
-              activeSignal,
-              undefined,
-              { waitForCancellation: true },
-            );
-            activeSignal?.throwIfAborted();
-            if (!output.file) {
-              await call(
-                { ...p, runAuthorized: undefined },
-                "deleteReceipt",
-                { id: "export:" + exportId },
-                activeSignal,
-              );
-              return output;
-            }
-            const { file, ...metadata } = output;
-            const receipt = {
-              ...metadata,
-              exportId,
-              downloadPath: "exports/" + exportId + "/file",
-              expiresAt,
-              complete: true,
-            };
-            await call(
-              { ...p, runAuthorized: undefined },
+        const selection = exportSelection(body);
+        const previousRequest = body.requestId
+          ? await call(
+              p,
               "record",
-              { id: "export:" + exportId, data: receipt },
-              activeSignal,
-            );
-            return receipt;
-          } catch (error) {
-            await fs.rm(outputFile, { force: true });
-            await call({ ...p, runAuthorized: undefined }, "deleteReceipt", {
-              id: "export:" + exportId,
-            });
-            throw error;
-          }
+              { id: "job-request:" + body.requestId },
+              signal,
+            )
+          : null;
+        const previousJob = body.requestId
+          ? await call(p, "record", { id: "job:" + body.requestId }, signal)
+          : null;
+        if (
+          previousRequest?.path === url.pathname &&
+          selection.version === undefined
+        )
+          selection.version = exportSelection(previousRequest.body).version;
+        if (
+          selection.version === undefined &&
+          previousJob?.kind === "metadata-export"
+        )
+          selection.version = previousJob.results?.[0]?.result?.libraryVersion;
+        const current = await call(p, "libraryVersion", {}, signal);
+        if (
+          selection.version !== undefined &&
+          selection.version !== current &&
+          (!previousJob ||
+            (body.resume &&
+              !["complete", "waiting-for-browser"].includes(
+                previousJob.status,
+              )))
+        )
+          fail("Library changed; reload the export selection", 409);
+        selection.version ??= current;
+        durableBody = { ...body, selection };
+        const specification = {
+          selection,
+          translatorID: body.translatorID,
+          options: body.options || {},
+          delivery: body.delivery,
         };
-        result = p.runAuthorized
-          ? await p.runAuthorized(create, { write: false })
-          : await create(signal);
+        if (body.selection || selection.keys.length > 1000) {
+          result = await job(
+            readOnlyProject(p),
+            authority,
+            "metadata-export",
+            [specification],
+            (value, activeSignal, _id, context) =>
+              runExport(p, value, activeSignal, context.onProgress),
+            body.requestId,
+            {
+              resume: body.resume,
+              request: { path: url.pathname, body: durableBody },
+            },
+          );
+          status = 202;
+        } else result = await runExport(p, specification, signal);
       } else if (
         op === "exports" &&
         key &&
@@ -2925,13 +3010,18 @@ export async function createReferencesService({
                 signal,
               );
           }
-          if (!jobs.has(p.id + ":" + key)) {
+          if (!jobs.has(p.id + ":" + key) && result.status !== "complete") {
             result = {
               ...result,
               status: "cancelled",
               finishedAt: new Date().toISOString(),
             };
-            await call(p, "record", { id: "job:" + key, data: result }, signal);
+            await call(
+              result.kind === "metadata-export" ? readOnlyProject(p) : p,
+              "record",
+              { id: "job:" + key, data: result },
+              signal,
+            );
           }
         }
         if (
@@ -3617,13 +3707,13 @@ export async function createReferencesService({
           result = await call(p, "deleteCollection", { key, expected }, signal);
         else fail("Method not allowed", 405);
       } else fail("References endpoint not found", 404);
-      if (status === 202 && result?.id)
+      if (status === 202 && result?.id && result.kind !== "metadata-export")
         await call(
-          p,
+          result.kind === "metadata-export" ? readOnlyProject(p) : p,
           "record",
           {
             id: "job-request:" + result.id,
-            data: { path: url.pathname, body },
+            data: { path: url.pathname, body: durableBody },
           },
           signal,
         );
