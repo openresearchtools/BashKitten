@@ -100,6 +100,7 @@ class AgentRemoteStore {
   writes = Promise.resolve();
   contexts = new Map();
   clients = new Map();
+  applicationContexts = new Map();
   starting = new Map();
   importToPi = null;
 
@@ -529,15 +530,39 @@ class AgentRemoteStore {
     return this.services(id);
   }
 
-  async openService(id, serviceId, win) {
+  trustApplicationContext(context, identity) {
+    if (!TorRouting.isServiceContext(context) || !/^[a-f0-9-]{36}$/.test(identity?.instanceId || "") || !/^[a-f0-9]{64}$/.test(identity?.caSha256 || "")) throw new Error("Invalid application service identity.");
+    const { cert } = certificate(identity.caPem, identity.caSha256);
+    this.trust.setAgentCA("127.0.0.1", { userContextId: context }, cert);
+  }
+  applicationContext(id, port, identity) {
+    let context = this.applicationContexts.get(id);
+    if (!context) { context = TorRouting.allocateServiceContext(); this.applicationContexts.set(id, context); }
+    this.trustApplicationContext(context, identity);
+    TorRouting.setServiceRoute(context, port);
+    return context;
+  }
+
+  async openService(id, serviceId, win, openPath, current = () => true, identity) {
+    const route = await this.applicationServiceRoute(id, serviceId, openPath, current, identity);
+    const tab = win.gBrowser.addTrustedTab(route.url, { userContextId: route.userContextId });
+    win.gBrowser.selectedTab = tab;
+    win.BashKittenAgent?.closeConnections();
+    win.BashKittenAgent?.browse();
+  }
+  async applicationServiceRoute(id, serviceId, openPath, current = () => true, identity) {
     const { entry, owner } = this.serviceOwner(id);
     const info = (await this.serviceInfo(entry, owner)).services.find(service => service.id === serviceId);
     this.current(entry, owner);
     if (!info?.mapping || !info.choice?.enabled || serviceId === "agent") throw new Error("Enable this service's local access first.");
-    const tab = win.gBrowser.addTrustedTab(info.url, { userContextId: info.choice.context });
-    win.gBrowser.selectedTab = tab;
-    win.BashKittenAgent?.closeConnections();
-    win.BashKittenAgent?.browse();
+    if (!current()) throw new Error("The selected backend changed.");
+    if (openPath !== undefined && (typeof openPath !== "string" || !openPath.startsWith("/") || openPath.startsWith("//") || /[\x00-\x20\x7f\\#]/.test(openPath))) throw new Error("Invalid service launch path.");
+    const url = openPath === undefined ? info.url : `${info.scheme}://127.0.0.1:${info.mapping.port}${openPath}`;
+    if (identity) {
+      if (info.scheme !== "https") throw new Error("Application services require HTTPS.");
+      this.trustApplicationContext(info.choice.context, identity);
+    }
+    return { url, userContextId: info.choice.context };
   }
   onLogin(id, callback) {
     const owner = this.clients.get(id);
@@ -588,10 +613,18 @@ class AgentRemoteStore {
     callback?.(null, this.info(entry));
   }
   block(entry) {
+    const application = this.applicationContexts.get(entry.id);
+    if (application) {
+      TorRouting.setServiceRoute(application, null);
+      this.trust.clearAgentCA("127.0.0.1", { userContextId: application });
+    }
     // Local and machine connections never own onion mTLS credentials or Tor
     // routes. The native client-certificate API intentionally rejects loopback.
     if (nativeEntry(entry)) return;
-    for (const choice of Object.values(entry.mappings || {})) TorRouting.setServiceRoute(choice.context, null);
+    for (const choice of Object.values(entry.mappings || {})) {
+      TorRouting.setServiceRoute(choice.context, null);
+      this.trust.clearAgentCA("127.0.0.1", { userContextId: choice.context });
+    }
     TorRouting.setAgentTunnel(entry.userContextId, null);
     this.trust.clearAgentClientCertificate(new URL(entry.url).hostname, { userContextId: entry.userContextId });
   }
@@ -641,6 +674,10 @@ class AgentRemoteStore {
   async deactivate(closeClients = true) {
     ++this.selection;
     const previous = this.activeId; this.activeId = null;
+    if (closeClients) for (const context of this.applicationContexts.values()) {
+      TorRouting.setServiceRoute(context, null);
+      this.trust.clearAgentCA("127.0.0.1", { userContextId: context });
+    }
     if (previous) Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", previous);
     await Promise.all([...this.clients].filter(([, owner]) => closeClients || owner.state !== "ready" && !owner.allowed)
       .map(([id]) => this.disconnect(id)));

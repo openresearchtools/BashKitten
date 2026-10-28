@@ -181,6 +181,8 @@ export class NativeSidecar {
       const heading = this.node("div", { class: "native-backend-heading" });
       const open = this.button(backend.name, backend.name, async () => { await this.select(backend.id); await this.refreshChats(); }); open.className = "native-title";
       heading.append(open);
+      const files = this.button("", `Open ${backend.name} Files`, async () => { await this.select(backend.id); await this.host.openFiles({}); });
+      files.append(this.icon("folder")); heading.append(files);
       const on = backend.kind === "remote" ? backend.state === "ready" : backend.kind === "machine" ? backend.state === "running" : this.host.localOn;
       const power = this.button("", `${backend.name}: ${on ? "Turn off" : "Turn on"}`, async () => {
         if (backend.kind === "machine") {
@@ -246,7 +248,9 @@ export class NativeSidecar {
         const newProjectChat = this.button("+", "New chat in " + project.name, async () => { await this.select(backend.id); await this.navigation("new", { projectId: project.id }); await this.refreshChats(); this.chatSelected(); });
         const projectActions = this.button("⋯", "Project actions", async anchor => { const rect = anchor.getBoundingClientRect(); await this.select(backend.id); this.projectActions(project, rect); });
         for (const button of [newProjectChat, projectActions]) button.addEventListener("click", event => event.stopPropagation());
-        summary.append(newProjectChat, projectActions);
+        const projectFiles = this.button("", "Open " + project.name + " Files", async () => { await this.select(backend.id); await this.host.openFiles({ projectId: project.id }); });
+        projectFiles.append(this.icon("folder")); projectFiles.addEventListener("click", event => event.stopPropagation());
+        summary.append(projectFiles, newProjectChat, projectActions);
         for (const chat of roots.filter(chat => chat.projectId === project.id)) appendChat(chat, group, 1);
         section.append(group);
       }

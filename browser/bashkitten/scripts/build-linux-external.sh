@@ -121,11 +121,12 @@ fi
 # read-only from the developer repository. This avoids copying and recompressing
 # Firefox's multi-gigabyte history; all generated files still stay external.
 git clone --shared --no-checkout -- "${source_repo}" "${checkout_repo}"
-git -C "${checkout_repo}" sparse-checkout set browser
+browser_inputs=(browser references/connector references/vendor/translators agent/packaging)
+git -C "${checkout_repo}" sparse-checkout set "${browser_inputs[@]}"
 git -C "${checkout_repo}" checkout --detach "${commit}"
 
 if [[ "${include_working_tree}" == true ]]; then
-  git -C "${source_repo}" diff --binary "${commit}" -- browser \
+  git -C "${source_repo}" diff --binary "${commit}" -- "${browser_inputs[@]}" \
     >"${run_root}/working-tree.patch"
   if [[ -s "${run_root}/working-tree.patch" ]]; then
     git -C "${checkout_repo}" apply --binary "${run_root}/working-tree.patch"
@@ -135,7 +136,7 @@ if [[ "${include_working_tree}" == true ]]; then
     cp -a -- "${source_repo}/${path}" "${checkout_repo}/${path}"
   done < <(
     git -C "${source_repo}" ls-files \
-      --others --exclude-standard -z -- browser
+      --others --exclude-standard -z -- "${browser_inputs[@]}"
   )
 fi
 
@@ -196,6 +197,7 @@ run_step() {
 }
 
 run_step branding python3 -I -B bashkitten/scripts/render-branding.py
+run_step references-capture python3 -B ../agent/packaging/references-component.py
 run_step release-version python3 -I -B bashkitten/scripts/firefox_release.py check --versions-only
 
 if [[ "${run_bootstrap}" == true || ! -x "${state_dir}/cbindgen/cbindgen" ]]; then

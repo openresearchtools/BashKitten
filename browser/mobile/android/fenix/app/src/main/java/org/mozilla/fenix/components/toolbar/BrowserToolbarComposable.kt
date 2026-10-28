@@ -349,6 +349,9 @@ class BrowserToolbarComposable(
         androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             if (activity is org.mozilla.fenix.HomeActivity) {
                 org.mozilla.fenix.bashkitten.AgentEntryButton(activity)
+                if (customTabSession == null) {
+                    org.mozilla.fenix.bashkitten.ReferencesButton(browserStore)
+                }
             }
             androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
                 NativeBrowserToolbar(store, cfr, useMinimalBottomToolbarWhenEnteringText)

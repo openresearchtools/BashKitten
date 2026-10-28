@@ -59,7 +59,7 @@ final class AgentController extends ContextWrapper {
         String method = request.getString("method");
         JSONObject params = request.optJSONObject("params"); if (params == null) params = new JSONObject();
         if (method.equals("capabilities")) {
-            JSONArray methods = new JSONArray(Arrays.asList("tabs.list", "tabs.create", "tabs.close", "navigate", "back", "forward", "reload", "stop", "snapshot", "act", "read", "evaluate", "wait", "console", "clearConsole", "viewport", "screenshot", "tabs.setDesktopMode", "tabs.setAdblocking", "tabs.show", "diagnostics", "downloads.list", "downloads.accept", "downloads.get"));
+            JSONArray methods = new JSONArray(Arrays.asList("tabs.list", "tabs.create", "tabs.close", "navigate", "back", "forward", "reload", "stop", "snapshot", "act", "read", "evaluate", "wait", "console", "clearConsole", "viewport", "screenshot", "tabs.setDesktopMode", "tabs.setAdblocking", "tabs.show", "diagnostics", "downloads.list", "downloads.accept", "downloads.get", "references.resolve"));
             send.accept(new JSONObject().put("result", new JSONObject().put("protocol", 2).put("engine", "gecko").put("platform", "android")
                 .put("authorization", uid < 0 ? "remote-user-grant" : app.grants.samePublisher(uid) ? "publisher-signature" : "user-grant")
                 .put("androidAccessibilityService", false).put("debuggable", (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0)
@@ -74,9 +74,24 @@ final class AgentController extends ContextWrapper {
             for (BrowserApp.Tab tab : app.tabs.values()) list.put(tab.json());
             send.accept(new JSONObject().put("result", list)); return;
         }
+        if (method.equals("references.resolve")) {
+            app.agent.resolveReference(params, () -> {
+                try { access.check.run(); return true; } catch (Exception error) { return false; }
+            }, result -> {
+                try { send.accept(new JSONObject().put("result", result)); } catch (Exception error) { fail.accept("Invalid resolver result"); }
+            }, fail); return;
+        }
         if (method.equals("tabs.create")) {
             String url = params.optString("url", "about:blank");
             if (!url.equals("about:blank")) url = BrowserApp.webUrl(url);
+            if (params.optBoolean("application")) {
+                if (params.optBoolean("tor")) throw new SecurityException("Applications require their owning ordinary service context");
+                app.agent.createApplication(new JSONObject().put("url", url), owner, () -> {
+                    try { access.check.run(); return true; } catch (Exception error) { return false; }
+                }, tab -> {
+                    try { send.accept(new JSONObject().put("result", tab.json())); } catch (Exception error) { fail.accept("Could not return tab"); }
+                }, fail); return;
+            }
             app.create(owner, params.optBoolean("tor"), url, tab -> {
                 try { send.accept(new JSONObject().put("result", tab.json())); } catch (Exception error) { fail.accept("Could not return tab"); }
             }, fail); return;

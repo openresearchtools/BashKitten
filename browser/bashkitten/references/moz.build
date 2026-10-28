@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Gecko's normal builtin-addons manifest discovers this fixed host automatically.
+DIST_SUBDIR = "browser"
+for name in ["manifest.json", "background.js"]:
+    GENERATED_FILES += [name]
+    GENERATED_FILES[name].script = "stage_host.py"
+    GENERATED_FILES[name].flags = [name]
+    GENERATED_FILES[name].force = True
+JAR_MANIFESTS += ["jar.mn"]

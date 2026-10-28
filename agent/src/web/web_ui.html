@@ -3508,7 +3508,12 @@
       refreshChanges(); updateBackdrop();
     }
     function requestFilesLaunch(value) {
-      return api('/api/apps/files/open', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({
+      return requestApplicationLaunch({...value,component:'files'});
+    }
+    function requestApplicationLaunch(value) {
+      const endpoint=value.component==='files'?'/api/apps/files/open':value.component==='references'?'/api/apps/references/open':null;
+      if (!endpoint) throw Error('Unknown application.');
+      return api(endpoint, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({
         ...(value.projectId ? {projectId:value.projectId} : {}), ...(value.cwd ? {cwd:value.cwd} : {})
       })});
     }
@@ -3852,6 +3857,8 @@
           return true;
         }
         if (action === 'files-open') return requestFilesLaunch(value);
+        if (action === 'application-open') return requestApplicationLaunch(value);
+        if (action === 'application-resolve') return api('/api/apps/resolve', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({url:value.url})});
         if (action === 'folders') {
           if (typeof value.requestId !== 'string' || !value.requestId) throw Error('Missing folder request identity');
           nativeFolderRequests.get(value.requestId)?.abort();

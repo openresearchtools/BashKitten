@@ -293,6 +293,7 @@ public final class AgentSidecar {
     private void backend(String id, String name, boolean remote) {
         LinearLayout heading = row(); Button title = button(name, () -> select(id, this::refresh)); title.setTypeface(null, Typeface.BOLD);
         heading.addView(title, new LinearLayout.LayoutParams(0, dp(41), 1));
+        heading.addView(icon("Open " + name + " Files", R.drawable.ic_agent_folder, () -> select(id, () -> runtime.openFiles(value(), this::close, this::error))));
         SwitchCompat power = powerSwitch(name + " power");
         final boolean on = remote ? runtime.remoteConnected(id) : runtime.localIsRunning();
         JSONObject localWeb = runtime.status.optJSONObject("web");
@@ -335,6 +336,7 @@ public final class AgentSidecar {
             projectTitle.setTextSize(13); projectTitle.setTextColor(muted); group.addView(projectTitle, new LinearLayout.LayoutParams(0, dp(34), 1));
             Button newChat = button("+", () -> navigate(id, "new", value("projectId", projectId), true));
             newChat.setContentDescription("New chat in " + project.optString("name")); newChat.setTooltipText(newChat.getContentDescription()); newChat.setTextSize(20); newChat.setGravity(Gravity.CENTER);
+            group.addView(icon("Open " + project.optString("name") + " Files", R.drawable.ic_agent_folder, () -> select(id, () -> runtime.openFiles(value("projectId", projectId), this::close, this::error))));
             group.addView(newChat, new LinearLayout.LayoutParams(dp(34), dp(34)));
             group.addView(icon("Project actions", R.drawable.ic_agent_more, () -> select(id, () -> projectActions(id, project)))); body.addView(group);
             if (!collapsed.contains(expansionKey)) for (int j = 0; j < chats.length(); j++) { JSONObject chat = chats.optJSONObject(j); if (projectId.equals(chat.optString("projectId")) && !ids.contains(chat.optString("subagentParent"))) chat(id, chat, chats, projects, 1, new HashSet<>()); }

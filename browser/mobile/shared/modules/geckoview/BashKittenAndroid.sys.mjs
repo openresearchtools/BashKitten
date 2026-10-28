@@ -69,6 +69,17 @@ export const BashKittenAndroid = {
     for (const host of previous?.identities ?? []) {
       if (!nextIdentities.includes(host)) certificates.setAuthenticatedOnion(context, host, false);
     }
+    if (serviceRoute?.identity) {
+      const identity = serviceRoute.identity;
+      if (typeof identity.caPem !== "string" || identity.caPem.length > 32768 ||
+          !/^[a-f0-9]{64}$/.test(identity.caSha256 || "") || !/^[a-f0-9-]{36}$/.test(identity.instanceId || "")) throw new Error("Missing application service certificate identity");
+      const cert = Cc["@mozilla.org/security/x509certdb;1"].getService(Ci.nsIX509CertDB)
+        .constructX509FromBase64(identity.caPem.replace(/-----[^-]+-----|\s/g, ""));
+      if (cert.sha256Fingerprint.replace(/:/g, "").toLowerCase() !== identity.caSha256) throw new Error("Application service certificate identity mismatch");
+      certificates.setAgentCA("127.0.0.1", { geckoViewSessionContextId: context }, cert);
+    } else if (previous?.serviceRoute?.identity) {
+      certificates.clearAgentCA("127.0.0.1", { geckoViewSessionContextId: context });
+    }
     const next = { tor, port, proxySecret, identities: nextIdentities, serviceRoute, agentHost: agentHost || previous?.agentHost || "" };
     routes.set(context, next);
     for (const host of nextIdentities) {
@@ -85,6 +96,7 @@ export const BashKittenAndroid = {
     if (members?.size) return;
     contexts.delete(context);
     const previous = routes.get(context);
+    if (previous?.serviceRoute?.identity) certificates.clearAgentCA("127.0.0.1", { geckoViewSessionContextId: context });
     for (const host of previous?.identities ?? []) certificates.setAuthenticatedOnion(context, host, false);
     // Keep a dead route for residual workers/requests until process termination.
     if (serviceContext(context)) routes.set(context, { tor: false, serviceRoute: null });

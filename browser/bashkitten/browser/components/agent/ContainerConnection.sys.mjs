@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
+import { TorRouting } from "resource:///modules/TorRouting.sys.mjs";
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
@@ -46,7 +47,7 @@ export async function disconnectMachine(id, expectedGeneration) {
   if (item.context) routes.set(item.context, null);
   Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", "machine:" + id);
   Services.obs.notifyObservers(null, "net:prune-all-connections");
-  await closeProcess(item.process);
+  await Promise.all([closeProcess(item.process), closeFiles(item)]);
 }
 
 export async function connectMachine(id, control, onClose, isSelected = () => true) {
@@ -69,7 +70,7 @@ export async function connectMachine(id, control, onClose, isSelected = () => tr
   process.wait().then(async () => {
     if (connections.get(id) !== item) return;
     if (item.context) routes.set(item.context, null);
-    connections.delete(id); Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", "machine:" + id);
+    connections.delete(id); void closeFiles(item).catch(console.error); Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", "machine:" + id);
     Services.obs.notifyObservers(null, "net:prune-all-connections");
     await errors.catch(() => {});
     let message = "The private container connection stopped.";
@@ -97,4 +98,50 @@ export async function connectMachine(id, control, onClose, isSelected = () => tr
     const connection = await AgentRemotes.activate(trusted.id); current();
     return { ...connection, machineId: id, generation: endpoint.generation, transportGeneration: generation };
   } catch (error) { await disconnectMachine(id, generation); throw error; }
+}
+
+// The same machine transport owner forwards only the named Files Unix socket.
+// It has its own ordinary service context, never the protected Agent cookies.
+async function closeFiles(item) {
+  TorRouting.setServiceRoute(item.filesContext, null);
+  if (item.filesContext) AgentRemotes.trust.clearAgentCA("127.0.0.1", { userContextId: item.filesContext });
+  if (item.filesProcess) await closeProcess(item.filesProcess);
+}
+export async function machineFilesRoute(id) {
+  const item = connections.get(id);
+  if (!item) throw new Error("Connect to this container first.");
+  if (item.files) return item.files;
+  const current = () => { if (connections.get(id) !== item) throw new Error("The container connection changed."); };
+  item.files = (async () => {
+    const process = await Subprocess.call({ command: "/usr/bin/bashkittenctl", arguments: ["machine-transport", id, "files"], stderr: "pipe" });
+    item.filesProcess = process;
+    // Drain diagnostics without exposing a launch grant or native auth details.
+    const errors = (async () => { while (await process.stderr.readString()) {} })();
+    process.wait().then(() => {
+      if (item.filesProcess !== process) return;
+      TorRouting.setServiceRoute(item.filesContext, null);
+      if (item.filesContext) AgentRemotes.trust.clearAgentCA("127.0.0.1", { userContextId: item.filesContext });
+      item.files = null; item.filesProcess = null;
+    }).catch(console.error);
+    try {
+      current();
+      let line = "";
+      while (!line.includes("\n")) {
+        const part = await process.stdout.readString();
+        if (!part) throw new Error("The container Files connection stopped.");
+        line += part;
+      }
+      current();
+      if (item.filesProcess !== process) throw new Error("The container Files connection stopped.");
+      const endpoint = JSON.parse(line.trim());
+      if (endpoint.machineId !== id || endpoint.component !== "files" || !Number.isInteger(endpoint.port) ||
+          endpoint.port < 1 || endpoint.port > 65535 || endpoint.url !== `https://127.0.0.1:${endpoint.port}`) throw new Error("Invalid container Files route.");
+      item.filesContext ??= TorRouting.allocateServiceContext();
+      TorRouting.setServiceRoute(item.filesContext, endpoint.port);
+      return { url: endpoint.url, userContextId: item.filesContext };
+    } catch (error) {
+      await closeFiles(item); await errors.catch(() => {}); throw error;
+    }
+  })().catch(error => { item.files = null; throw error; });
+  return item.files;
 }

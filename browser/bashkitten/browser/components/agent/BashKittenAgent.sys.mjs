@@ -10,7 +10,7 @@ import { LinuxPerformanceMonitor } from "resource:///modules/Performance.sys.mjs
 import { remoteSettingsCall } from "resource:///modules/RemoteSettings.sys.mjs";
 import { openProviderLogin } from "resource:///modules/ProviderLogin.sys.mjs";
 import { NativeSidecar } from "resource:///modules/NativeSidecar.sys.mjs";
-import { connectMachine, disconnectMachine } from "resource:///modules/ContainerConnection.sys.mjs";
+import { connectMachine, disconnectMachine, machineFilesRoute } from "resource:///modules/ContainerConnection.sys.mjs";
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
@@ -21,8 +21,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
   PanelMultiView: "moz-src:///browser/components/customizableui/PanelMultiView.sys.mjs",
   BashKittenDisplay: "resource:///modules/BashKittenDisplay.sys.mjs",
   BrowserControlChannel: "resource:///modules/BrowserControlChannel.sys.mjs",
-  Downloads: "resource://gre/modules/Downloads.sys.mjs",
-  ContextualIdentityService: "resource://gre/modules/ContextualIdentityService.sys.mjs",
   SessionStore: "resource:///modules/sessionstore/SessionStore.sys.mjs",
 });
 const contexts = new Map();
@@ -32,9 +30,6 @@ let actorRegistered = false;
 let browserOwner;
 let closingLocal = false;
 const localProcesses = new Set();
-const documentCleanups = new Set();
-AsyncShutdown.profileBeforeChange.addBlocker("BashKitten: remove temporary documents", () =>
-  Promise.allSettled([...documentCleanups].map(cleanup => cleanup())));
 
 let shuttingDown;
 function shutdown() {
@@ -222,8 +217,8 @@ class AgentView {
     this.win = win;
     this.doc = win.document;
     this.views = new Map();
-    this.documentTransfers = new Set();
     this.providerLogins = new Set();
+    this.referencesPending = new Map();
     this.drafts = new Map();
     this.settingsVisited = new Set();
     this.machineStartupReady = new Promise((resolve, reject) => { this.machineStartupResult = { resolve, reject }; });
@@ -240,7 +235,6 @@ class AgentView {
   }
 
   async init() {
-    this.win.addEventListener("unload", () => this.cancelDocumentTransfers(), { once: true });
     AgentRemotes.importToPi = value => control("remote-pi-import", value);
     const doc = this.doc;
     this.win.windowUtils.loadSheetUsingURIString("chrome://browser/content/bashkitten/agent/agent.css", Ci.nsIStyleSheetService.AUTHOR_SHEET);
@@ -523,7 +517,7 @@ class AgentView {
     if (!entry || this.off || this.activeBrowser !== browser) return false;
     const target = new URL(url);
     if (target.origin !== new URL(entry.connection.url).origin || target.username || target.password || target.hash ||
-        !/^\/api\/(?:files\/(?:content|archive|jobs\/[a-f0-9-]{36}\/download)|sessions\/[^/]+\/attachments\/[^/]+\/[^/]+)$/.test(target.pathname)) return false;
+        !/^\/api\/(?:files\/content|sessions\/[^/]+\/attachments\/[^/]+\/[^/]+)$/.test(target.pathname)) return false;
     const principal = browser.browsingContext.currentWindowGlobal.documentPrincipal;
     if (principal.originNoSuffix !== target.origin || principal.originAttributes.userContextId !== entry.connection.userContextId) {
       throw new Error("The file's protected Agent context is no longer available.");
@@ -558,11 +552,32 @@ class AgentView {
     return file;
   }
 
-  cancelDocumentTransfers() {
-    return Promise.allSettled([...this.documentTransfers].map(transfer => transfer.cancel()));
-  }
-
   cancelProviderLogins() { for (const owner of [...this.providerLogins]) owner.cancel(); }
+  cancelReferences() { for (const pending of [...this.referencesPending.values()]) pending.finish(new Error("The selected backend changed.")); }
+
+  resolveReference(value, signal) {
+    const browser = this.activeBrowser, entry = ownedViews.get(browser), global = browser?.browsingContext.currentWindowGlobal;
+    const backendId = entry?.connection.id;
+    const current = () => entry && !this.off && this.activeBrowser === browser && ownedViews.get(browser) === entry &&
+      browser?.browsingContext.currentWindowGlobal === global && !this.win.closed && !DesktopLifetime.quitting && !signal?.aborted;
+    if (!current() || (value.backendId && value.backendId !== backendId) ||
+        !/^[a-f0-9-]{36}$/.test(value.projectId || "") || !/^[a-f0-9-]{36}$/.test(value.requestId || "")) throw new Error("Select the resolver job's owning backend and project.");
+    if (this.referencesPending.has(value.requestId) || this.referencesPending.size >= 32) throw new Error("A resolver request is already pending.");
+    if (!Services.obs.enumerateObservers("bashkitten-references-resolve").hasMoreElements()) throw new Error("References capture is not ready.");
+    return new Promise((resolve, reject) => {
+      let timer;
+      const abort = () => pending.finish(new Error("Resolver request cancelled."));
+      const pending = { backendId, projectId: value.projectId, current, finish: (error, result) => {
+        if (this.referencesPending.get(value.requestId) !== pending) return;
+        this.referencesPending.delete(value.requestId); clearTimeout(timer); signal?.removeEventListener("abort", abort);
+        if (error) reject(error); else resolve(result);
+      } };
+      this.referencesPending.set(value.requestId, pending);
+      timer = setTimeout(() => pending.finish(new Error("Resolver browser response timed out; check the job status.")), 600000);
+      signal?.addEventListener("abort", abort, { once: true });
+      Services.obs.notifyObservers(null, "bashkitten-references-resolve", JSON.stringify({ backendId, projectId: value.projectId, requestId: value.requestId }));
+    });
+  }
 
   openProviderLogin(actor, entry, value) {
     if (typeof value?.attemptId !== "string" || typeof value?.url !== "string") throw new Error("Invalid provider login.");
@@ -573,81 +588,94 @@ class AgentView {
     return openProviderLogin({ host: this, current, request: (name, args) => this.machineLocalControl(connection.machineId, name, args), attemptId: value.attemptId, url: value.url });
   }
 
-  async viewFile(browser, value) {
-    const entry = ownedViews.get(browser), global = browser.browsingContext.currentWindowGlobal;
-    const principal = global?.documentPrincipal, target = new URL(value, entry?.connection.url);
-    let revoked = false;
-    const current = () => !revoked && !this.off && this.activeBrowser === browser && ownedViews.get(browser) === entry &&
-      browser.browsingContext.currentWindowGlobal === global;
-    const query = target.searchParams, filePath = query.get("path");
-    const selected = query.size === 2 && query.getAll("path").length === 1 && filePath &&
-      (query.getAll("root").length === 1 && query.get("root").startsWith("/") && !filePath.startsWith("/") ||
-       query.getAll("session").length === 1 && /^[a-f0-9-]{36}$/.test(query.get("session")));
-    if (!entry || !current() || !principal?.isContentPrincipal ||
-        principal.originNoSuffix !== target.origin || target.origin !== new URL(entry.connection.url).origin ||
-        principal.originAttributes.userContextId !== entry.connection.userContextId ||
-        target.username || target.password || target.hash || target.pathname !== "/api/files/previews/content" ||
-        !selected) throw new Error("The prepared document is not in the selected Agent.");
-    const directory = Services.dirsvc.get("TmpD", Ci.nsIFile);
-    directory.append("bashkitten-preview"); directory.createUnique(Ci.nsIFile.DIRECTORY_TYPE, 0o700);
-    let identity, tab, download, responseChannel, cleaned = false, unsupportedPreview = false;
-    const cleanup = async () => {
-      if (cleaned) return; cleaned = true; revoked = true; documentCleanups.delete(cleanup);
-      if (download && !download.stopped) await download.cancel();
-      try { if (identity) lazy.ContextualIdentityService.remove(identity.userContextId); }
-      finally { await IOUtils.remove(directory.path, { recursive: true, ignoreAbsent: true }); }
-    };
-    const transfer = { cancel: () => { revoked = true; return download ? download.cancel() : Promise.resolve(); } };
-    this.documentTransfers.add(transfer);
-    documentCleanups.add(cleanup);
-    const revoke = (_subject, _topic, id) => { if (id === entry.connection.id) { revoked = true; download?.cancel().catch(console.error); } };
-    Services.obs.addObserver(revoke, "bashkitten-agent-control-revoke");
-    try {
-      const pending = PathUtils.join(directory.path, "document");
-      download = await lazy.Downloads.createDownload({
-        source: { url: target.href, loadingPrincipal: principal, cookieJarSettings: global.cookieJarSettings,
-          userContextId: entry.connection.userContextId,
-          adjustChannel(channel) {
-            if (!current()) throw new Error("The selected Agent changed.");
-            channel.QueryInterface(Ci.nsIHttpChannel).redirectionLimit = 0;
-            channel.setRequestHeader("Origin", target.origin, false);
-            channel.setRequestHeader("Accept-Encoding", "identity", false);
-            responseChannel = channel;
-          }, allowHttpStatus: (_download, status) => { unsupportedPreview = status === 415; return current() && status === 200; } },
-        target: pending,
-      });
-      // This is a temporary preview transfer, not a user download. Firefox's
-      // DownloadCopySaver checks this flag before adding a history entry;
-      // retain that narrow upgrade seam without changing the channel's context.
-      download.saver.alreadyAddedToHistory = true;
-      if (!current()) throw new Error("The document request was cancelled.");
-      download.onchange = () => { if (!current() && !download.stopped) download.cancel().catch(console.error); };
-      await download.start();
-      if (!current() || cleaned) throw new Error("The selected Agent changed.");
-      const mime = responseChannel.getResponseHeader("Content-Type").split(";", 1)[0].trim().toLowerCase();
-      if (!["application/pdf", "text/html"].includes(mime)) throw new Error("The server did not return a prepared PDF or document.");
-      const length = responseChannel.getResponseHeader("Content-Length");
-      if (!/^\d+$/.test(length) || !Number.isSafeInteger(Number(length)) ||
-          (await IOUtils.stat(pending)).size !== Number(length)) throw new Error("The prepared document has no complete file length.");
-      const file = PathUtils.join(directory.path, mime === "application/pdf" ? "document.pdf" : "document.html");
-      await IOUtils.move(pending, file);
-      if (!current() || cleaned) throw new Error("The selected Agent changed.");
-      identity = lazy.ContextualIdentityService.create("Document preview", "briefcase", "gray");
-      tab = this.win.gBrowser.addTab(PathUtils.toFileURI(file), {
-        userContextId: identity.userContextId, triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
-        skipAnimation: true, relatedToCurrent: false,
-      });
-      tab.addEventListener("TabClose", () => cleanup().catch(console.error), { once: true });
-      this.win.addEventListener("unload", () => cleanup().catch(console.error), { once: true });
-      this.win.gBrowser.selectedTab = tab; this.browse();
-      return { ok: true };
-    } catch (error) {
-      try { if (tab && !tab.closing) this.win.gBrowser.removeTab(tab, { animate: false }); }
-      finally { await cleanup(); }
-      if (unsupportedPreview) throw new Error("No preview is available for this file. Download the original instead.");
-      throw error;
+  async referencesRequest(envelope) {
+    const browser = this.activeBrowser, entry = ownedViews.get(browser);
+    const global = browser?.browsingContext.currentWindowGlobal;
+    const backendId = entry?.connection.id;
+    const current = () => !this.off && this.activeBrowser === browser && ownedViews.get(browser) === entry &&
+      browser?.browsingContext.currentWindowGlobal === global && !this.win.closed && !DesktopLifetime.quitting;
+    if (!entry || !global || !current()) throw new Error("Open the owning backend first.");
+    if (envelope?.apiVersion !== 1) throw new Error("Unsupported References host API.");
+    if (envelope.operation === "resolver-result") {
+      const pending = this.referencesPending.get(envelope.requestId);
+      if (!pending || !pending.current() || envelope.backendId !== pending.backendId || envelope.projectId !== pending.projectId ||
+          JSON.stringify(envelope).length > 8192) throw new Error("Resolver request is no longer active.");
+      pending.finish(envelope.error ? new Error(String(envelope.error).slice(0, 500)) : null, envelope.result);
+      return { apiVersion: 1, body: { ok: true } };
     }
-    finally { this.documentTransfers.delete(transfer); Services.obs.removeObserver(revoke, "bashkitten-agent-control-revoke"); }
+    if (envelope.operation === "context") {
+      const snapshot = await this.sidecar.navigation("snapshot");
+      if (!current()) throw new Error("The selected backend changed.");
+      const projects = (snapshot.projects || []).map(({ id, name }) => ({ id, name }));
+      const selectedProjectId = snapshot.sessions?.find(session => session.id === snapshot.selected)?.projectId || null;
+      return { apiVersion: 1, body: { backendId, projects, selectedProjectId } };
+    }
+    if (!["request", "open"].includes(envelope.operation) || envelope.backendId !== backendId ||
+        typeof envelope.projectId !== "string" || !/^[a-f0-9-]{36}$/.test(envelope.projectId)) {
+      throw new Error("Select the capture's owning backend and project.");
+    }
+    if (envelope.operation === "open") {
+      await this.openApplication({ component: "references", projectId: envelope.projectId });
+      return { apiVersion: 1, body: { ok: true } };
+    }
+    // All methods and bounded upload chunks use one fixed project-authorized
+    // gateway. Backend validation owns the Connector protocol and job storage.
+    const bootstrap = await AgentRemotes.request(entry.connection, "/api/bootstrap");
+    if (!current()) throw new Error("The selected backend changed.");
+    if (bootstrap.status !== 200 || !bootstrap.data?.authenticated || !bootstrap.data.csrf) throw new Error("Sign in to the owning backend first.");
+    const response = await AgentRemotes.request(entry.connection, "/api/references/connector", {
+      method: "POST", body: envelope, csrf: bootstrap.data.csrf,
+    });
+    if (!current()) throw new Error("The selected backend changed.");
+    if (response.status !== 200) throw new Error(response.data?.error || `References is unavailable (HTTP ${response.status}).`);
+    return { ...response.data, apiVersion: 1 };
+  }
+
+  async openFiles(value = {}) {
+    return this.openApplication({ ...value, component: "files" });
+  }
+
+  async openApplication(value = {}) {
+    const route = await this.prepareApplication(value);
+    this.win.gBrowser.selectedTab = this.win.gBrowser.addTrustedTab(route.url, { userContextId: route.userContextId });
+    this.browse();
+    return { ok: true };
+  }
+
+  async prepareApplication(value = {}) {
+    const resolving = typeof value.url === "string";
+    if (!resolving && !["files", "references"].includes(value.component)) throw new Error("Unsupported application.");
+    const browser = this.activeBrowser, entry = ownedViews.get(browser);
+    const global = browser?.browsingContext.currentWindowGlobal;
+    const current = () => !this.off && this.activeBrowser === browser && ownedViews.get(browser) === entry &&
+      browser?.browsingContext.currentWindowGlobal === global && !this.win.closed && !DesktopLifetime.quitting;
+    if (!entry || !global || !current()) throw new Error("Connect to this backend first.");
+    const launch = await this.sidecar.navigation(resolving ? "application-resolve" : "application-open", resolving ? { url: value.url } :
+      { component: value.component, projectId: value.projectId, cwd: value.cwd });
+    if (!current()) throw new Error("The selected backend changed.");
+    if ((!resolving && launch?.component !== value.component) || launch?.serviceId !== "files" || !launch.identity || typeof launch.openPath !== "string" ||
+        !launch.openPath.startsWith("/") || launch.openPath.startsWith("//") || /[\x00-\x20\x7f\\#]/.test(launch.openPath)) {
+      throw new Error("Application did not return a valid launch address.");
+    }
+    if (entry.connection.machineId) {
+      const route = await machineFilesRoute(entry.connection.machineId);
+      if (!current()) throw new Error("The selected backend changed.");
+      AgentRemotes.trustApplicationContext(route.userContextId, launch.identity);
+      return { url: route.url + launch.openPath, userContextId: route.userContextId };
+    } else if (!entry.local) {
+      await AgentRemotes.services(entry.connection.id);
+      if (!current()) throw new Error("The selected backend changed.");
+      return AgentRemotes.applicationServiceRoute(entry.connection.id, "files", launch.openPath, current, launch.identity);
+    } else {
+      const url = new URL(launch.url);
+      if (url.protocol !== "https:" || url.hostname !== "127.0.0.1" ||
+          url.username || url.password || url.hash || url.pathname + url.search !== launch.openPath) {
+        throw new Error("Application did not return a local service address.");
+      }
+      // The service exchanges its own one-use launch grant. Never copy the
+      // protected Agent cookie context into an ordinary Files/Office/PDF tab.
+      return { url: url.href, userContextId: AgentRemotes.applicationContext(entry.connection.id, Number(url.port) || 443, launch.identity) };
+    }
   }
 
   async chooseFolder(browser, { title, path } = {}) {
@@ -678,8 +706,8 @@ class AgentView {
     const epoch = this.selectionEpoch = (this.selectionEpoch || 0) + 1;
     await this.saveCurrentDraft();
     if (epoch !== this.selectionEpoch || this.win.closed) return;
-    this.cancelDocumentTransfers();
     this.cancelProviderLogins();
+    this.cancelReferences();
     this.closeConnections();
     this.selection = id;
     clearTimeout(this.timer);
@@ -832,8 +860,8 @@ class AgentView {
   async disconnectSelected() {
     this.selectionEpoch = (this.selectionEpoch || 0) + 1;
     this.off = true;
-    this.cancelDocumentTransfers();
     this.cancelProviderLogins();
+    this.cancelReferences();
     lazy.BrowserControlChannel.close("Selected backend disconnected");
     if (this.activeBrowser) this.activeBrowser.hidden = true;
     this.message("Backend disconnected", "Reconnect from its heading. Its saved chats remain available.");
@@ -846,8 +874,8 @@ class AgentView {
     if (selectedLocal) await this.saveCurrentDraft();
     clearTimeout(this.timer);
     if (selectedLocal && epoch === this.selectionEpoch) {
-      this.cancelDocumentTransfers();
       this.cancelProviderLogins();
+      this.cancelReferences();
       this.closeConnections();
       this.off = true;
       await lazy.BrowserControlChannel.close("Local Agent turned off");
@@ -1580,6 +1608,7 @@ class AgentView {
     this.selectionEpoch = (this.selectionEpoch || 0) + 1;
     this.closeConnections();
     this.cancelProviderLogins();
+    this.cancelReferences();
     clearTimeout(this.timer);
     lazy.BrowserControlChannel.close("browser closed");
     this.win.removeEventListener("keydown", this.tabKey, true);

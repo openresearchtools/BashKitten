@@ -24,6 +24,7 @@ android {
     }
     buildFeatures { aidl true; buildConfig true }
     sourceSets.main.assets.srcDirs += "$buildDir/generated/notices"
+    sourceSets.main.assets.srcDirs += "$buildDir/generated/references"
     androidResources { noCompress 'ja' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     sourceSets.main.jniLibs.srcDirs += "$buildDir/generated/tor"
@@ -81,3 +82,14 @@ tasks.register('stageTor', Exec) {
     outputs.file("$buildDir/generated/tor/$bashKittenAbi/libtor.so")
 }
 tasks.named('preBuild').configure { dependsOn 'stageTor' }
+
+// The privileged host is fixed APK code; capture logic is an ordinary signed add-on.
+tasks.register('stageReferencesHost', Exec) {
+    commandLine 'python3', "${rootProject.projectDir}/bashkitten/references/stage_host.py", "$buildDir/generated/references"
+    inputs.files(fileTree("${rootProject.projectDir}/../references/connector/host"))
+    inputs.files(fileTree("${rootProject.projectDir}/../references/connector/dist/references"))
+    inputs.file("${rootProject.projectDir}/../references/connector/dist/runtime-sha256.json")
+    inputs.file("${rootProject.projectDir}/bashkitten/references/stage_host.py")
+    outputs.dir "$buildDir/generated/references"
+}
+tasks.named('preBuild').configure { dependsOn 'stageReferencesHost' }

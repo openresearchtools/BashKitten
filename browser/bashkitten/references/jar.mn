@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+browser.jar:
+    builtin-addons/references-host/manifest.json (!manifest.json)
+    builtin-addons/references-host/background.js (!background.js)
+    builtin-addons/references-host/api.js (api.js)
+    builtin-addons/references-host/schema.json (schema.json)
+    builtin-addons/references/ (../../../references/connector/dist/references/**)

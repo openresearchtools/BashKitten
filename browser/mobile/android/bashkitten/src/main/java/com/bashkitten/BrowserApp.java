@@ -43,7 +43,6 @@ public final class BrowserApp extends ContextWrapper {
     final CommandGateway commands;
     final AppCommandGateway appCommands;
     final FileTransfers transfers;
-    final DocumentPreviews previews;
     final TorManager tor;
     final SharedPreferences policies;
     public final Host host;
@@ -89,11 +88,10 @@ public final class BrowserApp extends ContextWrapper {
         appCommands = new AppCommandGateway(this);
         agent = new AgentRuntime(this);
         display = new DisplayBroker(this);
-        previews = new DocumentPreviews(this);
         remoteControl = new RemoteBrowserControl(this);
+        main.post(() -> ReferencesHost.install(this));
     }
     public boolean isAgentVisible() { return agent.visible; }
-    public void previewTabsChanged(Set<String> ids) { previews.tabsChanged(ids); }
     public void showPendingApproval(android.app.Activity activity) {
         String ticket = grants.pendingTicket();
         if (ticket != null) activity.startActivity(new Intent(activity, GrantActivity.class)
@@ -248,7 +246,11 @@ public final class BrowserApp extends ContextWrapper {
             String context = choice.getString("context"); updated.add(context); serviceHosts.put(context, hostId);
             JSONObject mapping = service.optJSONObject("mapping");
             if (mapping == null) serviceRoutes.remove(context);
-            else serviceRoutes.put(context, new JSONObject().put("mappedPort", mapping.getInt("port")));
+            else {
+                JSONObject route = serviceRoutes.get(context);
+                if (route == null) route = new JSONObject();
+                serviceRoutes.put(context, route.put("mappedPort", mapping.getInt("port")));
+            }
         }
         for (String context : serviceHosts.keySet()) if (serviceHosts.get(context).equals(hostId) && !updated.contains(context)) serviceRoutes.remove(context);
         refreshServiceTabs(hostId);
@@ -263,10 +265,32 @@ public final class BrowserApp extends ContextWrapper {
             if (tab.session.isOpen()) configure(tab, Collections.emptyList(), ignored -> {}, this::message);
         }
     }
+    String localApplicationContext(String url, JSONObject identity) throws Exception {
+        URI address = URI.create(url);
+        if (!"https".equals(address.getScheme()) || !"127.0.0.1".equals(address.getHost())) throw new SecurityException("Invalid application service URL.");
+        String context = "bashkitten-service-local-apps-" + identity.getString("instanceId");
+        serviceHosts.put(context, "local");
+        serviceRoutes.put(context, new JSONObject().put("mappedPort", address.getPort() == -1 ? 443 : address.getPort()).put("identity", identity));
+        return context;
+    }
+    void serviceIdentity(String context, JSONObject identity) throws Exception {
+        JSONObject route = serviceRoutes.get(context);
+        if (route == null) throw new IllegalStateException("Enable this service’s local access first.");
+        route.put("identity", identity);
+    }
     void createService(String context, String url, Runnable done, Consumer<String> fail) {
+        createService(context, url, () -> true, done, fail);
+    }
+    void createService(String context, String url, java.util.function.BooleanSupplier current, Runnable done, Consumer<String> fail) {
+        createServiceTab(USER, context, url, current, tab -> { show(tab); done.run(); }, fail);
+    }
+    void createServiceTab(String owner, String context, String url, java.util.function.BooleanSupplier current, Consumer<Tab> done, Consumer<String> fail) {
         if (!serviceRoutes.containsKey(context)) { fail.accept("Enable this service’s local access first."); return; }
-        Tab tab = host.create(USER, context); tabs.put(tab.id, tab);
-        configure(tab, Collections.emptyList(), ignored -> { tab.session.loadUri(url); show(tab); done.run(); }, error -> { close(tab); fail.accept(error); });
+        Tab tab = host.create(owner, context); tabs.put(tab.id, tab);
+        configure(tab, Collections.emptyList(), ignored -> {
+            if (!current.getAsBoolean()) { close(tab); fail.accept("The selected backend changed."); return; }
+            tab.session.loadUri(url); done.accept(tab);
+        }, error -> { close(tab); fail.accept(error); });
     }
     void configure(Tab tab, List<String> identities, Consumer<JSONObject> done, Consumer<String> fail) {
         try {

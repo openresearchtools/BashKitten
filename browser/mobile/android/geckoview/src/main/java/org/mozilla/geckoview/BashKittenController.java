@@ -69,7 +69,7 @@ public final class BashKittenController {
             String args = message.getString("args", "{}");
             if (!active || current == null || HOSTS.get(current) != this || args.length() > 200000 ||
                     !("notify-turn".equals(command) ||
-                      "import-remote".equals(command) || "sign-in".equals(command) || "open-hosted".equals(command) || "view-file".equals(command) || "cancel-file-view".equals(command))) {
+                      "import-remote".equals(command) || "sign-in".equals(command) || "sign-out".equals(command) || "open-hosted".equals(command) || "open-files".equals(command) || "open-application".equals(command))) {
                 callback.sendSuccess("{\"error\":\"Unsupported Agent host request\"}");
                 return;
             }

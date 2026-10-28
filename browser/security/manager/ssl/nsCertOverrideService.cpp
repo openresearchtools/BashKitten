@@ -803,8 +803,16 @@ static bool IsV3OnionIdentity(const nsACString& host) {
 }
 
 static bool IsAgentScope(const nsACString& host, const OriginAttributes& attrs) {
-  return IsProtectedAgentContext(attrs) &&
-      (host.EqualsLiteral("127.0.0.1") || IsV3OnionIdentity(host));
+  // Ordinary application tabs have separate storage and no Agent credentials.
+  // Reuse the same full certificate verification for their native-owned
+  // loopback service route, never ordinary web or arbitrary container contexts.
+  const bool service = (attrs.mUserContextId >= 0xB4510000 &&
+                        attrs.mUserContextId <= 0xB451FFFF) ||
+      StringBeginsWith(attrs.mGeckoViewSessionContextId,
+                       u"gvctx626173686b697474656e2d736572766963652d"_ns);
+  return (IsProtectedAgentContext(attrs) &&
+          (host.EqualsLiteral("127.0.0.1") || IsV3OnionIdentity(host))) ||
+         (service && host.EqualsLiteral("127.0.0.1"));
 }
 
 static void InvalidateAgentTLSSessions() {

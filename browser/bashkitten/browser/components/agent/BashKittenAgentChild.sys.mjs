@@ -28,7 +28,7 @@ export class BashKittenAgentChild extends JSWindowActorChild {
       if (!link || link.ownerDocument !== this.document) return;
       const url = new URL(link.href);
       if (url.origin !== entry.origin || url.username || url.password || url.hash ||
-          !/^\/api\/(?:files\/(?:content|archive|jobs\/[a-f0-9-]{36}\/download)|sessions\/[^/]+\/attachments\/[^/]+\/[^/]+)$/.test(url.pathname)) return;
+          !/^\/api\/(?:files\/content|sessions\/[^/]+\/attachments\/[^/]+\/[^/]+)$/.test(url.pathname)) return;
       // An explicit download must use Gecko's forced-save path. Letting a PDF
       // navigate first can create a viewer popup carrying the Agent's context.
       event.preventDefault();
@@ -70,21 +70,12 @@ export class BashKittenAgentChild extends JSWindowActorChild {
   }
 
   async call(command, data, entry) {
-    if (command === "cancel-file-view") return this.sendQuery("CancelFileView");
     if (!this.document.hasValidTransientUserGestureActivation) throw new Error("Use this action from the Agent view.");
+    if (command === "open-files") return this.sendQuery("OpenFiles", { projectId: data.projectId, cwd: data.cwd });
+    if (command === "open-application") return this.sendQuery("OpenApplication", { component: data.component, projectId: data.projectId, cwd: data.cwd });
     if (command === "sign-in") return this.sendQuery("SignIn");
     if (command === "sign-out") return this.sendQuery("SignOut", { csrf: data.csrf });
     if (command === "provider-login-open" && entry.providerLogin === true && typeof data.attemptId === "string" && typeof data.url === "string") return this.sendQuery("ProviderLogin", { attemptId: data.attemptId, url: data.url });
-    if (command === "view-file" && typeof data.url === "string") {
-      const url = new URL(data.url, this.document.location.href);
-      const query = url.searchParams, path = query.get("path");
-      const selected = query.size === 2 && query.getAll("path").length === 1 && path &&
-        (query.getAll("root").length === 1 && query.get("root").startsWith("/") && !path.startsWith("/") ||
-         query.getAll("session").length === 1 && /^[a-f0-9-]{36}$/.test(query.get("session")));
-      if (url.origin !== entry.origin || url.username || url.password || url.hash ||
-          url.pathname !== "/api/files/previews/content" || !selected) throw new Error("Invalid prepared document.");
-      return this.sendQuery("ViewFile", { url: url.href });
-    }
     if (!entry.local) throw new Error("Files on a remote Agent use browser downloads.");
     if (command === "choose-folder") return this.sendQuery("ChooseFolder", { title: data.title, path: data.path });
     if (command === "open-folder" || command === "open-file" && typeof data.folder === "string") {

@@ -45,7 +45,6 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
         CoroutineScope(Dispatchers.Main).launch {
             components.core.store.flow().map { state -> state.tabs.map { it.id }.toSet() }
                 .distinctUntilChanged().collect {
-                    BrowserApp.get(application).previewTabsChanged(it)
                     (activity.get() as? HomeActivity)?.bashKittenAgentPanel?.displayChanged()
                 }
         }
@@ -78,7 +77,7 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
     }
 
     override fun create(owner: String, contextId: String): BrowserApp.Tab {
-        val privateTab = contextId.startsWith("bashkitten-tor-") || contextId.startsWith("bashkitten-preview-")
+        val privateTab = contextId.startsWith("bashkitten-tor-")
         val engine = components.core.engine.createSession(private = privateTab, contextId = contextId) as GeckoEngineSession
         val id = components.useCases.tabsUseCases.addTab(
             url = "about:blank", selectTab = false, startLoading = false,

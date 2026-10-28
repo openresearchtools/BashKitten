@@ -33,7 +33,7 @@ export class BashKittenHostChild extends JSWindowActorChild {
           if (typeof command !== "string" || !args || typeof args !== "object" || Array.isArray(args)) {
             throw new Error("Invalid Agent host request");
           }
-          if (["view-file", "sign-out"].includes(command) && !this.document.hasValidTransientUserGestureActivation) throw new Error("Use this action from the Agent view");
+          if (["sign-out", "open-files", "open-application"].includes(command) && !this.document.hasValidTransientUserGestureActivation) throw new Error("Use this action from the Agent view");
           json = JSON.stringify(args);
           if (json.length > 200000) throw new Error("Agent host request too large");
         } catch (error) {

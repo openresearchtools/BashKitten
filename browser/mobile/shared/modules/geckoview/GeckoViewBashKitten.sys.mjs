@@ -344,7 +344,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       throw new Error("Selected authenticated Agent origin required");
     }
     const bootstrap = path === "/api/bootstrap";
-    if (!bootstrap && path !== "/api/logout" && !/^\/api\/browser-channel\/(open|poll|result|close|bind)$/.test(path)) throw new Error("Unsupported Agent channel endpoint");
+    if (!bootstrap && path !== "/api/logout" && path !== "/api/references/connector" && !/^\/api\/browser-channel\/(open|poll|result|close|bind)$/.test(path)) throw new Error("Unsupported Agent channel endpoint");
     if (!bootstrap && (typeof csrf !== "string" || !csrf || /[\r\n]/.test(csrf))) throw new Error("Missing Agent CSRF token");
     const payload = bootstrap ? null : JSON.stringify(body ?? {});
     return this.agentFetch(origin, path, principal, current.cookieJarSettings, payload, csrf, true);

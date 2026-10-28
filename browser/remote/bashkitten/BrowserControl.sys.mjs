@@ -2142,9 +2142,14 @@ class BrowserControlService {
     if (typeof args.page === "string" && /^[1-9]\d*$/.test(args.page)) args.page = Number(args.page);
     if (method === "capabilities") {
       return { platform: "linux", transport: "unix", explicitTabIds: true,
-        methods: [...CONTROL_TOOLS, "tabs.list", "tabs.create", "tabs.open", "tabs.show", "tabs.close"],
+        methods: [...CONTROL_TOOLS, "tabs.list", "tabs.create", "tabs.open", "tabs.show", "tabs.close", "references.resolve"],
         tabs: ["list", "new", "activate", "close"],
         protectedAgent: true };
+    }
+    if (method === "references.resolve") {
+      const owner = lazy.BrowserWindowTracker.getTopWindow()?.BashKittenAgent;
+      if (!owner) throw new Error("Open the owning backend first");
+      return owner.resolveReference(args, signal);
     }
     if (method.startsWith("tabs.")) {
       args.action = ({ show: "activate", open: "new", create: "new" })[method.slice(5)] ?? method.slice(5);
@@ -2298,7 +2303,7 @@ class BrowserControlService {
     }
     if (action === "new") {
       const requestedUrl = args.url ?? "about:blank";
-      const uri =
+      let uri =
         requestedUrl === "about:blank"
           ? Services.io.newURI("about:blank")
           : controlNavigationURI(requestedUrl);
@@ -2306,6 +2311,13 @@ class BrowserControlService {
       const privateRequested = Boolean(args.private) && !torRequested;
       const window = lazy.BrowserWindowTracker.getTopWindow();
       if (!window?.gBrowser) throw new Error("No browser window is ready");
+      let application;
+      if (args.application === true) {
+        if (torRequested || privateRequested || !window.BashKittenAgent) throw new Error("Applications require their owning ordinary service context");
+        application = await window.BashKittenAgent.prepareApplication({ url: requestedUrl });
+        throwIfAborted(signal);
+        uri = controlNavigationURI(application.url);
+      }
       let tab = torRequested
         ? await lazy.TorRouting.createTab(window, {
             uri,
@@ -2314,6 +2326,7 @@ class BrowserControlService {
           })
         : window.gBrowser.addTrustedTab("about:blank", {
             ...(privateRequested ? { userContextId: lazy.PrivateTab.userContextId } : {}),
+            ...(application ? { userContextId: application.userContextId } : {}),
             inBackground: args.background ?? true,
             skipAnimation: true,
           });

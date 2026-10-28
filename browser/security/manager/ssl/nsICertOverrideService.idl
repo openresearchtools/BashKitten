@@ -52,7 +52,9 @@ interface nsICertOverride : nsISupports {
 
 [scriptable, builtinclass, uuid(be019e47-22fc-4355-9f16-9ab047d6742d)]
 interface nsICertOverrideService : nsISupports {
-  /** Privileged Agent CA enrollment, scoped to one host and protected context.
+  /** Privileged CA enrollment, scoped to one host and owned context.
+   * Protected Agent contexts accept loopback/onion hosts; ordinary owned
+   * service contexts accept loopback only and receive no client credentials.
    * Ordinary chain, hostname, validity and key checks remain enabled. */
   [implicit_jscontext]
   void setAgentCA(in ACString host, in jsval originAttributes, in nsIX509Cert ca);

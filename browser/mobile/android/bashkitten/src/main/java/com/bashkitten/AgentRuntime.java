@@ -113,7 +113,7 @@ public final class AgentRuntime {
                 (!selected.equals(id) || desired && state.equals("on"))
             : remote != null && remoteConnections.get(id) == remote && remote.ready && !remote.isClosed());
     }
-    void changed() { for (Listener listener : new ArrayList<>(listeners)) listener.changed(); }
+    void changed() { ReferencesHost.reconcile(app); for (Listener listener : new ArrayList<>(listeners)) listener.changed(); }
     public void refresh() {
         if (!desired || busy || !selected.equals("local")) return;
         if (!termux.installationId().equals(app.policies.getString("agent.termuxInstallation", ""))) { turnOn(); return; }
@@ -479,6 +479,7 @@ public final class AgentRuntime {
         if (!termuxInstalled) recordLocalControl(false);
         boolean setupWithoutService = state.equals("setup") && (!termuxInstalled || !localControlRequested);
         desired = false; busy = true; operation++; state = "stopping"; error = "";
+        app.closeServiceRoutes("local");
         if (session != null) suspendSession(session);
         app.remoteControl.disconnect();
         changed();
@@ -1073,6 +1074,9 @@ public final class AgentRuntime {
         }, failure);
     }
     public void openRemoteService(String id, String serviceId, Runnable done, Consumer<String> failure) {
+        openRemoteService(id, serviceId, null, null, () -> true, done, failure);
+    }
+    private void openRemoteService(String id, String serviceId, String openPath, JSONObject identity, java.util.function.BooleanSupplier current, Runnable done, Consumer<String> failure) {
         try {
             if (!remoteConnected(id)) throw new IllegalStateException("Connect first.");
             if (serviceId.equals("agent")) { select(id); app.startActivity(app.host.launchIntent().putExtra("bashkitten.openAgent", true)); done.run(); return; }
@@ -1083,7 +1087,14 @@ public final class AgentRuntime {
                 JSONObject service = services.getJSONObject(i);
                 if (!service.getString("id").equals(serviceId)) continue;
                 if (!service.has("mapping")) throw new IllegalStateException("Enable local access first.");
-                app.createService(service.getJSONObject("choice").getString("context"), service.getString("url"), done, failure);
+                if (openPath != null && (!openPath.startsWith("/") || openPath.startsWith("//") || openPath.matches(".*[\\x00-\\x20\\x7f\\\\#].*"))) throw new IllegalArgumentException("Invalid service launch path.");
+                String address = openPath == null ? service.getString("url") : service.getString("scheme") + "://127.0.0.1:" + service.getJSONObject("mapping").getInt("port") + openPath;
+                String context = service.getJSONObject("choice").getString("context");
+                if (identity != null) {
+                    if (!"https".equals(service.getString("scheme"))) throw new SecurityException("Application services require HTTPS.");
+                    app.serviceIdentity(context, identity);
+                }
+                app.createService(context, address, current, done, failure);
                 return;
             }
             throw new IllegalStateException("Refresh services first.");
@@ -1270,17 +1281,134 @@ public final class AgentRuntime {
             poll();
         }, visible ? 30000 : 15000);
     }
+    void referencesRequest(JSONObject envelope, Consumer<JSONObject> done, Consumer<String> failure) {
+        final GeckoSession source = session;
+        final String backend = selected, address = url;
+        final int generation = operation;
+        final BooleanSupplier current = () -> source != null && source == session && generation == operation &&
+            backend.equals(selected) && address.equals(url) && desired && state.equals("on");
+        try {
+            if (!current.getAsBoolean()) throw new IllegalStateException("Open the owning backend first.");
+            if (envelope.optInt("apiVersion") != 1 || envelope.toString().length() > 600000) throw new IllegalArgumentException("Invalid References host message; use bounded upload chunks.");
+            if ("resolver-result".equals(envelope.optString("operation"))) {
+                ReferencesHost.complete(app, envelope);
+                done.accept(new JSONObject().put("apiVersion", 1).put("body", new JSONObject().put("ok", true)));
+                return;
+            }
+            if ("context".equals(envelope.optString("operation"))) {
+                navigation("snapshot", new JSONObject(), snapshot -> {
+                    try {
+                        if (!current.getAsBoolean()) throw new IllegalStateException("The selected backend changed.");
+                        JSONArray projects = new JSONArray(), sourceProjects = snapshot.optJSONArray("projects");
+                        if (sourceProjects != null) for (int i = 0; i < sourceProjects.length(); i++) {
+                            JSONObject project = sourceProjects.getJSONObject(i);
+                            projects.put(new JSONObject().put("id", project.getString("id")).put("name", project.getString("name")));
+                        }
+                        Object projectId = JSONObject.NULL;
+                        JSONArray sessions = snapshot.optJSONArray("sessions");
+                        if (sessions != null) for (int i = 0; i < sessions.length(); i++) {
+                            JSONObject chat = sessions.getJSONObject(i);
+                            if (chat.optString("id").equals(snapshot.optString("selected"))) projectId = chat.opt("projectId");
+                        }
+                        done.accept(new JSONObject().put("apiVersion", 1).put("body", new JSONObject().put("backendId", backend).put("projects", projects).put("selectedProjectId", projectId)));
+                    } catch (Exception error) { failure.accept(error.getMessage()); }
+                }, failure);
+                return;
+            }
+            if (!("request".equals(envelope.optString("operation")) || "open".equals(envelope.optString("operation"))) || !backend.equals(envelope.optString("backendId")) ||
+                !envelope.optString("projectId").matches(UUID_PATTERN)) throw new SecurityException("Select the capture's owning backend and project.");
+            if ("open".equals(envelope.optString("operation"))) {
+                openApplication(new JSONObject().put("component", "references").put("projectId", envelope.getString("projectId")), () -> {
+                    try { done.accept(new JSONObject().put("apiVersion", 1).put("body", new JSONObject().put("ok", true))); }
+                    catch (Exception error) { failure.accept(error.getMessage()); }
+                }, failure);
+                return;
+            }
+            String origin = URI.create(address).getScheme() + "://" + URI.create(address).getRawAuthority();
+            ReferencesHost.request(source, origin, "/api/bootstrap", null, null, bootstrap -> {
+                try {
+                    if (!current.getAsBoolean()) throw new IllegalStateException("The selected backend changed.");
+                    if (!bootstrap.optBoolean("authenticated")) throw new SecurityException("Sign in to the owning backend first.");
+                    ReferencesHost.request(source, origin, "/api/references/connector", bootstrap.getString("csrf"), envelope, response -> {
+                        try {
+                            if (!current.getAsBoolean()) throw new IllegalStateException("The selected backend changed.");
+                            done.accept(response.put("apiVersion", 1));
+                        } catch (Exception error) { failure.accept(error.getMessage()); }
+                    }, failure);
+                } catch (Exception error) { failure.accept(error.getMessage()); }
+            }, failure);
+        } catch (Exception error) { failure.accept(error.getMessage()); }
+    }
+
+    public void openFiles(JSONObject value, Runnable done, Consumer<String> failure) {
+        try { openApplication(new JSONObject(value.toString()).put("component", "files"), done, failure); }
+        catch (Exception error) { failure.accept(error.getMessage()); }
+    }
+    void resolveReference(JSONObject value, BooleanSupplier access, Consumer<JSONObject> done, Consumer<String> failure) {
+        final GeckoSession source = session; final String backend = selected; final int generation = operation;
+        final BooleanSupplier current = () -> source != null && source == session && backend.equals(selected) && generation == operation && desired && state.equals("on") && access.getAsBoolean();
+        try {
+            if (!current.getAsBoolean() || (value.has("backendId") && !backend.equals(value.getString("backendId"))) ||
+                !value.optString("projectId").matches(UUID_PATTERN) || !value.optString("requestId").matches(UUID_PATTERN)) throw new SecurityException("Select the resolver job's owning backend and project.");
+            ReferencesHost.dispatch(app, new JSONObject().put("backendId", backend).put("projectId", value.getString("projectId")).put("requestId", value.getString("requestId")), current, done, failure);
+        } catch (Exception error) { failure.accept(error.getMessage()); }
+    }
+    public void openApplication(JSONObject value, Runnable done, Consumer<String> failure) {
+        createApplication(value, BrowserApp.USER, () -> true, tab -> { app.show(tab); done.run(); }, failure);
+    }
+    void createApplication(JSONObject value, String owner, BooleanSupplier access, Consumer<BrowserApp.Tab> done, Consumer<String> failure) {
+        final String component = value.optString("component");
+        final boolean resolving = value.has("url");
+        if (!resolving && !component.equals("files") && !component.equals("references")) { failure.accept("Unsupported application."); return; }
+        final GeckoSession source = session;
+        final String backend = selected;
+        final int generation = operation;
+        final BooleanSupplier current = () -> source == session && generation == operation &&
+            backend.equals(selected) && desired && state.equals("on") && access.getAsBoolean();
+        navigation(resolving ? "application-resolve" : "application-open", value, launch -> {
+            try {
+                if (!current.getAsBoolean()) throw new IllegalStateException("The selected backend changed.");
+                String path = launch.getString("openPath");
+                JSONObject identity = launch.getJSONObject("identity");
+                if ((!resolving && !component.equals(launch.optString("component"))) || !"files".equals(launch.optString("serviceId")) ||
+                    !path.startsWith("/") || path.startsWith("//") || path.matches(".*[\\x00-\\x20\\x7f\\\\#].*")) throw new IllegalArgumentException("Application did not return a valid launch address.");
+                if (!backend.equals("local")) {
+                    remoteServices(backend, ignored -> {
+                        try {
+                            if (!current.getAsBoolean()) throw new IllegalStateException("The selected backend changed.");
+                            JSONArray services = serviceSnapshots.get(backend).getJSONArray("services");
+                            for (int i = 0; i < services.length(); i++) {
+                                JSONObject service = services.getJSONObject(i);
+                                if (!service.getString("id").equals("files")) continue;
+                                if (!"https".equals(service.getString("scheme"))) throw new SecurityException("Application services require HTTPS.");
+                                String context = service.getJSONObject("choice").getString("context");
+                                String address = "https://127.0.0.1:" + service.getJSONObject("mapping").getInt("port") + path;
+                                app.serviceIdentity(context, identity);
+                                app.createServiceTab(owner, context, address, current, done, failure);
+                                return;
+                            }
+                            throw new IllegalStateException("Enable application service local access first.");
+                        } catch (Exception error) { failure.accept(error.getMessage()); }
+                    }, failure);
+                } else {
+                    String address = launch.getString("url");
+                    URI uri = URI.create(address);
+                    String openPath = uri.getRawPath() + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery());
+                    if (uri.getRawUserInfo() != null || uri.getRawFragment() != null || !path.equals(openPath)) throw new SecurityException("Invalid application launch address.");
+                    app.createServiceTab(owner, app.localApplicationContext(address, identity), address, current, done, failure);
+                }
+            } catch (Exception error) { failure.accept(error.getMessage()); }
+        }, failure);
+    }
     private void hostCall(GeckoSession source, String command, String json, Consumer<String> reply) {
         if (source != session || !desired || !state.equals("on")) { reply.accept("{\"error\":\"Agent connection is not active.\"}"); return; }
         try {
             JSONObject args = new JSONObject(json);
-            if (command.equals("cancel-file-view")) { app.previews.cancelPending(); reply.accept("{\"result\":{\"ok\":true}}"); return; }
-            if (command.equals("view-file")) {
-                final int generation = operation;
-                final String address = url, choice = selected;
-                app.previews.open(source, args.getString("url"), () -> operation == generation && source == session &&
-                    desired && state.equals("on") && address.equals(url) && choice.equals(selected), reply);
-                return;
+            if (command.equals("open-files") || command.equals("open-application")) {
+                if (command.equals("open-files")) args.put("component", "files");
+                openApplication(args, () -> reply.accept("{\"result\":{\"ok\":true}}"), message -> {
+                    try { reply.accept(new JSONObject().put("error", message).toString()); } catch (JSONException ignored) {}
+                }); return;
             }
             if (command.equals("notify-turn")) { reply.accept(new JSONObject().put("result", notifyTurn(args)).toString()); return; }
             if (command.equals("sign-in")) { signIn(); reply.accept("{\"result\":true}"); return; }

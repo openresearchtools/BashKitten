@@ -1,0 +1,14 @@
+[
+  {
+    "namespace": "bashkittenReferences",
+    "events": [{ "name": "onResolverRequest", "type": "function", "parameters": [{ "name": "request", "type": "object", "additionalProperties": { "type": "any" } }] }],
+    "functions": [
+      {
+        "name": "request",
+        "type": "function",
+        "async": true,
+        "parameters": [{"name": "envelope", "type": "object", "additionalProperties": {"type": "any"}}]
+      }
+    ]
+  }
+]

@@ -23,8 +23,10 @@ export class BashKittenAgentParent extends JSWindowActorParent {
       if (!entry.local || !entry.connection.machineId || this.manager !== this.browsingContext.currentWindowGlobal) throw new Error("This provider login belongs to a managed container.");
       return entry.host.openProviderLogin(this, entry, data);
     }
-    if (name === "CancelFileView") { await entry.host.cancelDocumentTransfers(); return { ok: true }; }
-    if (name === "ViewFile") return entry.host.viewFile(this.browsingContext.embedderElement, data.url);
+    if (name === "OpenFiles" || name === "OpenApplication") {
+      if (this.manager !== this.browsingContext.currentWindowGlobal) throw new Error("The Agent document changed.");
+      return name === "OpenFiles" ? entry.host.openFiles(data) : entry.host.openApplication(data);
+    }
     if (name === "DownloadFile") {
       if (this.manager !== this.browsingContext.currentWindowGlobal || typeof data.url !== "string" ||
           !entry.host.saveFileFrom(this.browsingContext.embedderElement, data.url, null))
