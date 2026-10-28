@@ -1331,8 +1331,9 @@ async function showJob(job) {
     return;
   }
   const summary = node("p", {}, human(job.status) + " · " + jobProgress(job)),
-    errorNotice = node("p", { class: "notice" }, job.error || "");
-  d.body.append(summary, errorNotice);
+    errorNotice = node("p", { class: "notice" }, job.error || ""),
+    browserNotice = node("div", { class: "notice", role: "status" });
+  d.body.append(summary, errorNotice, browserNotice);
   const results = node("div", { class: "search-results" });
   d.body.append(results);
   const list = new VirtualList({
@@ -1400,6 +1401,13 @@ async function showJob(job) {
     job = latest;
     summary.textContent = human(job.status) + " · " + jobProgress(job);
     errorNotice.textContent = job.error || "";
+    browserNotice.replaceChildren();
+    const browserSteps = Object.values(job.progress || {}).filter((step) =>
+      step.browser?.status === "waiting");
+    for (const step of browserSteps.slice(0, 8))
+      browserNotice.append(resolverBrowserStatus(step.browser));
+    if (browserSteps.length > 8)
+      browserNotice.append(node("p", {}, `${browserSteps.length - 8} more browser steps in the operation results.`));
     list.reset({ preservePosition: true });
     resume.hidden = !["interrupted", "failed", "partial"].includes(job.status);
     cancel.hidden = !["queued", "running", "waiting-for-browser"].includes(
@@ -1485,6 +1493,15 @@ function resolverSteps(result) {
         if (child && typeof child === "object") stack.push(child);
   }
   return pending;
+}
+function resolverBrowserStatus(browser) {
+  const row = node("p", {}, `Waiting in background browser tab ${browser.tabId}. `);
+  try {
+    const url = new URL(browser.url);
+    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) return row;
+    row.append(node("a", { href: url.href, target: "_blank", rel: "noopener noreferrer" }, url.hostname));
+  } catch {}
+  return row;
 }
 function showJobResult(job, result) {
   const d = dialog("Operation result"),
@@ -1600,6 +1617,7 @@ function showJobResult(job, result) {
         "div",
         { class: "attachment-row" },
         node("span", {}, item.attachment?.title || "Full text"),
+        item.browser ? resolverBrowserStatus(item.browser) : null,
         action,
       );
     },

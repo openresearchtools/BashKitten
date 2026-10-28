@@ -51,6 +51,7 @@ export async function createReferencesService({
   listProjects,
   translator,
   resolver,
+  resolveInBrowser,
 } = {}) {
   if (
     !path.isAbsolute(dataDir || "") ||
@@ -68,6 +69,7 @@ export async function createReferencesService({
     jobStates = new Map(),
     operations = new Map(),
     resolutionFlights = new Map(),
+    browserResolutions = new Map(),
     deletedLibraries = new Set(),
     deletingLibraries = new Set(),
     uploads = new Map();
@@ -1881,6 +1883,7 @@ export async function createReferencesService({
           context.onProgress,
         );
     const outputs = [];
+    try {
     for (const result of results) {
       if (!result.file) {
         if (result.status === "challenge-required") {
@@ -1918,7 +1921,45 @@ export async function createReferencesService({
               resultReceipt: context.resultReceipt,
             },
           });
-          outputs.push({ id: identity(p, item.key), ...recipe });
+          const output = { id: identity(p, item.key), ...recipe };
+          if (resolveInBrowser) {
+            const flightKey = p.id + ":" + requestId;
+            let flight = browserResolutions.get(flightKey);
+            if (!flight) {
+              flight = Promise.resolve().then(() =>
+                resolveInBrowser({ authority, projectId: p.id, requestId, signal }),
+              );
+              browserResolutions.set(flightKey, flight);
+            }
+            try {
+              await flight;
+              signal?.throwIfAborted();
+              // The browser's upload owner is the authority for completion,
+              // never a successful command response on its own.
+              const completed = await call(p, "record", {
+                id: "resolver:" + requestId,
+              });
+              if (completed?.status === "complete") {
+                output.status = "complete";
+                output.attachment = completed.receipt;
+              }
+            } catch (error) {
+              signal?.throwIfAborted();
+              // A missing/disconnected browser remains an explicit resumable
+              // request; metadata import and the native queue still settle.
+              output.browserError = String(error.message || error).slice(0, 1024);
+              const pending = await call(p, "record", { id: "resolver:" + requestId });
+              if (pending?.status === "complete") {
+                output.status = "complete";
+                output.attachment = pending.receipt;
+                delete output.browserError;
+              } else if (pending?.browser) output.browser = pending.browser;
+            } finally {
+              if (browserResolutions.get(flightKey) === flight)
+                browserResolutions.delete(flightKey);
+            }
+          }
+          outputs.push(output);
           continue;
         }
         outputs.push(result);
@@ -1949,6 +1990,12 @@ export async function createReferencesService({
       }
     }
     return outputs;
+    } finally {
+      // Native queue work can finish later files before an earlier browser
+      // challenge settles. Cancellation still drains every temporary download.
+      await Promise.all(results.filter((result) => result.file?.directory)
+        .map((result) => fs.rm(result.file.directory, { recursive: true, force: true })));
+    }
   }
   async function connector(
     p,
@@ -1986,7 +2033,8 @@ export async function createReferencesService({
       "updateSession",
       "installStyle",
     ];
-    if (!serialized && writes.includes(method)) {
+    if (!serialized && (writes.includes(method)
+      || (method === "getResolverRequest" && body?.browser !== undefined))) {
       const lock = p.id + ":capture";
       const prior = operations.get(lock) || Promise.resolve();
       const work = prior
@@ -2067,6 +2115,28 @@ export async function createReferencesService({
         signal,
       );
       if (parent.data.deleted) fail("Resolver parent is in the trash", 409);
+      if (body.browser !== undefined) {
+        const browser = body.browser;
+        if (!browser || Object.keys(browser).some((key) => !["tabId", "windowId", "url", "status"].includes(key))
+          || !Number.isSafeInteger(browser.tabId) || browser.tabId < 0
+          || !Number.isSafeInteger(browser.windowId) || browser.windowId < 0
+          || browser.url !== request.attachment.url || !["waiting", "file-found"].includes(browser.status))
+          fail("Invalid resolver browser progress");
+        request.browser = { ...browser, updatedAt: new Date().toISOString() };
+        await call(p, "record", { id: "resolver:" + request.requestId, data: request }, signal);
+        for (const jobId of new Set([request.jobId, ...(request.jobIds || [])].filter(Boolean))) {
+          const jobKey = p.id + ":" + jobId;
+          const job = jobStates.get(jobKey) || await call(p, "record", { id: "job:" + jobId }, signal);
+          if (!job) continue;
+          const key = identity(p, parent.key);
+          job.progress ||= {};
+          job.progress[key] = { ...job.progress[key], key, status: "challenge-required",
+            requestId: request.requestId, browser: request.browser, url: request.attachment.url };
+          for (const pending of pendingResolvers(job.results))
+            if (pending.requestId === request.requestId) pending.browser = request.browser;
+          await call(p, "record", { id: "job:" + jobId, data: job }, signal);
+        }
+      }
       const { jobId, jobIndex, jobIds, resultReceipt, ...recipe } = request;
       return recipe;
     }

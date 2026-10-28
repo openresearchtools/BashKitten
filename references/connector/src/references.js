@@ -82,6 +82,45 @@ globalThis.References = new function () {
     }
   };
   const resolverJobs = new Map();
+  this.waitForResolverTab = async (binding, pending, source) => {
+    // The donor monitor's response detector works on ordinary tabs. Its popup
+    // and monitor-page redirects are deliberately not used for automatic jobs.
+    const properties = {url:'about:blank', active:false, windowId:source.windowId};
+    if (source.cookieStoreId) properties.cookieStoreId = source.cookieStoreId;
+    const tab = await browser.tabs.create(properties);
+    const state = status => this.rpc(binding, 'getResolverRequest', {requestId:binding.requestId,
+      browser:{tabId:tab.id,windowId:tab.windowId,url:pending.attachment.url,status}});
+    try { await state('waiting'); }
+    catch (error) {
+      // Authorization can expire between creation and the durable tab locator.
+      // Only this unused blank tab is removed; source/challenge tabs stay open.
+      const current = await browser.tabs.get(tab.id).catch(() => null);
+      if (current?.url === 'about:blank') await browser.tabs.remove(tab.id).catch(() => {});
+      throw error;
+    }
+    const monitor = Zotero.BrowserAttachmentMonitor, ruleId = monitor._nextRuleId++;
+    let timer, removed;
+    try {
+      const detected = new Promise((resolve, reject) => {
+        removed = id => { if (id === tab.id) reject(new Error('Resolver tab was closed')); };
+        browser.tabs.onRemoved.addListener(removed);
+        monitor._addAttachmentDetectionListener(ruleId, tab.id, resolve);
+        timer = setTimeout(() => reject(new Error('Resolver tab is waiting for a file; open the background tab to continue')),
+          Math.max(1, Math.min(600000, pending.expiresAt - Date.now())));
+        browser.tabs.update(tab.id, {url:pending.attachment.url}).catch(reject);
+      });
+      const url = await detected;
+      await state('file-found');
+      return {url, tab};
+    } catch (error) {
+      await state('waiting').catch(() => {});
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      if (removed) browser.tabs.onRemoved.removeListener(removed);
+      await monitor._cleanup(ruleId);
+    }
+  };
   this.resolveRequest = async (binding, sourceTab) => {
     await Zotero.initDeferred.promise;
     const pending = await this.rpc(binding, 'getResolverRequest', {requestId:binding.requestId});
@@ -99,10 +138,9 @@ globalThis.References = new function () {
     try {
       bytes = await Zotero.ItemSaver._fetchAttachment(attachment, source, false);
     } catch (_) {
-      // The native donor's monitor waits for a human in an ordinary tab. Never run
-      // its Amazon CAPTCHA solver or its hidden-iframe challenge path.
-      attachment.url = await Zotero.BotBypass.passJSDetectionViaWindowPrompt(attachment.url, source);
-      bytes = await Zotero.ItemSaver._fetchAttachment(attachment, source, false);
+      const resolved = await this.waitForResolverTab(binding, pending, source);
+      attachment.url = resolved.url;
+      bytes = await Zotero.ItemSaver._fetchAttachment(attachment, resolved.tab, false);
     }
     // Validate the same pending job again after interactive browsing, before any write.
     const current = await this.rpc(binding, 'getResolverRequest', {requestId:binding.requestId});

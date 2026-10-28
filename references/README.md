@@ -126,6 +126,15 @@ job. No cookie export, hidden polling or independent credential owner is used.
 Repeated upload commits return the original receipt. RFC 2047 metadata headers
 use the actual native decoder.
 
+The existing owner supplies `resolveInBrowser({authority,projectId,requestId,signal})`
+for automatic continuation after a durable browser-required recipe is stored.
+The native resolver queue finishes before that asynchronous browser wait. Actual
+attachment receipts decide success even when the command response is lost;
+missing/disconnected browsers retain an explicit resumable request. Browser tab
+progress uses the same serialized capture owner as attachment commits, so a late
+progress update cannot restore a completed request. Cancellation also drains
+later files already downloaded by the shared queue.
+
 The full citeproc engine and complete pinned styles/locales render user and
 agent citations consistently. Note styles require real native note indices.
 The shared chooser is in `web/`, and capture/browser adaptations are in

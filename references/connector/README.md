@@ -102,7 +102,7 @@ fetch still returns its native ArrayBuffer; chunking prevents whole-attachment
 JSON copies across Gecko/native messaging. Large SingleFile payload creation is
 upstream behavior and still needs installed responsiveness evidence.
 
-## Explicit browser-assisted resolver handoff
+## Browser-assisted resolver handoff
 
 The existing authenticated browser-control operation `references.resolve` carries
 only `{backendId,projectId,requestId}`. The fixed host receives that immutable event
@@ -118,6 +118,16 @@ The fixed host returns the bounded receipt through native
 There is no polling, arbitrary page-to-host listener, cookie export or supplied
 native fetch URL. Challenges use visible ordinary tabs for human completion;
 automated Amazon and hidden-iframe bypass paths are removed from runtime.
+
+Normal resolver jobs invoke that same handoff automatically through their owning
+backend. A failed cookie-aware fetch opens a new background tab in the existing
+source window/container and reuses the donor's attachment-response detector.
+It leaves the source URL, active tab and window focus unchanged. No popup window
+or monitor-page redirect is used. The durable job reports the tab identity and
+source URL; users and agents can visit it through the existing browser controls.
+Challenge/PDF tabs remain open, and only an unused blank tab is removed if
+authorization fails before navigation. Missing browser access stays an explicit
+resumable job rather than a successful attachment save.
 Tab creation preserves the source window and cookie store through native tab
 properties. Private/partitioned behavior still requires installed verification.
 
