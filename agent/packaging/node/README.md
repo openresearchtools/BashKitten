@@ -61,6 +61,13 @@ The 19 October release refresh replaces those pins with the verified current
 primary-pool packages. The builder uses only each committed URL and still fails
 on download or hash errors.
 
+On 28 October 2026 the primary pool had removed Node 24.18.0-1 and c-ares
+1.34.8 for both native Termux architectures. Their four fixed URLs now use that
+same Termux-listed NYIST mirror. Downloaded SHA256 hashes, byte counts and Debian
+package/version/architecture identities matched the original cached inputs.
+Versions, signed-index checksums, source archives, recipes and license inputs
+remain unchanged. This is a pinned URL repair, with no automatic mirror fallback.
+
 The Android adaptation only selects Node's recursive ELF dependency closure
 and sets each object's relative RUNPATH with 16 KiB alignment. The Node ELF
 uses `$ORIGIN/../lib`; private libraries use `$ORIGIN`. Android's libc, libm,
