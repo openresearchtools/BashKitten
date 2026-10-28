@@ -24,6 +24,8 @@ import runtime_metadata
 ROOT = Path(__file__).resolve().parents[3]
 PREFIX = '/data/data/com.termux/files/usr'
 RUNTIME = PREFIX + '/lib/bashkitten/office/runtime'
+sys.path.insert(0, str(ROOT / 'agent/packaging'))
+from source_cache import fetch
 sys.path.insert(0, str(ROOT / 'agent/packaging/termux'))
 import native_toolchain
 
@@ -46,9 +48,8 @@ def native_inputs():
 
 def materialize_native_inputs(source):
     retained = native_inputs()
-    archive = ROOT / retained['archive']
-    if source_graph.digest(archive) != retained['sha256']:
-        raise ValueError('Retained native Termux framework archive changed')
+    donor = json.loads((PATCH_ROOT / 'donor.json').read_text())
+    archive = fetch(donor['donor'], local=ROOT / retained['archive'])
     with tarfile.open(archive) as bundle:
         for row in retained['files']:
             payload = bundle.extractfile(retained['archiveRoot'] + '/' + row['file']).read()
@@ -98,11 +99,19 @@ def build_environment(args):
     return env, provenance
 
 
+def native_dependency_archive(component):
+    path = NATIVE_DEPENDENCIES / component['file']
+    if not path.resolve().is_relative_to(NATIVE_DEPENDENCIES.resolve()):
+        raise ValueError('Native dependency input leaves its retained directory')
+    return fetch(component, local=path)
+
+
 def native_dependencies():
     manifest = NATIVE_DEPENDENCIES / 'sources.json'
     result = json.loads(manifest.read_text())
     for row in result['components']:
-        for name, checksum in [('file', 'sha256'), ('licenseFile', 'licenseSha256')]:
+        native_dependency_archive(row)
+        for name, checksum in [('licenseFile', 'licenseSha256')]:
             path = NATIVE_DEPENDENCIES / row[name]
             if not path.resolve().is_relative_to(NATIVE_DEPENDENCIES.resolve()):
                 raise ValueError('Native dependency input leaves its retained directory')
@@ -130,7 +139,7 @@ def build_libcap(args, env):
             raise ValueError('Native libcap build inputs changed; use a fresh native-termux dependency directory')
     else:
         work.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(NATIVE_DEPENDENCIES / component['file']) as archive:
+        with tarfile.open(native_dependency_archive(component)) as archive:
             archive.extractall(work, filter='data')
         write_json(stamp, expected)
     # BUILD_CC is supported by this release, so the donor's old hardcoded-gcc
@@ -270,7 +279,8 @@ def package(source, args, env, toolchain):
                 'component': 'collabora-online', 'target': 'termux', 'architecture': args.architecture,
                 'compiledPrefix': RUNTIME, 'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                 'development': toolchain['development'] or bool(subprocess.check_output(['git', 'status', '--porcelain', '--',
-                    *native_toolchain.SOURCE_INPUTS, 'agent/packaging/office', 'office/upstream', 'office/patches',
+                    *native_toolchain.SOURCE_INPUTS, 'agent/packaging/source_cache.py',
+                    'agent/packaging/office', 'office/upstream', 'office/patches',
                     'files/patches/collabora'], cwd=ROOT, text=True).strip()),
                 'upstream': pin, 'toolchain': toolchain,
                 'toolchainRecipeSha256': toolchain['recipeSha256'],

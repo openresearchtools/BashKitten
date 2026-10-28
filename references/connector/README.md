@@ -24,12 +24,22 @@ python3 references/connector/build.py
 ```
 
 This applies the patch to an ignored temporary source copy, uses the release's
-locked npm dependencies entirely offline from the 546 integrity-verified source
-archives under vendor/npm, and actual upstream Firefox build, then produces
+546 locked npm source pins from `vendor/npm/SOURCES.json`, and the actual upstream
+Firefox build, then produces
 `dist/references.xpi`, unpacked `dist/references/`, a runtime hash inventory and
 `dist/component.json`. The XPI is **unsigned** until the normal release signing
 process signs it. These artifact/syntax checks are not installed product tests.
 No new BashKitten scripted product tests are part of this component.
+
+`agent/packaging/source_cache.py` fetches the exact pinned HTTPS archive bytes into
+`BASHKITTEN_SOURCE_CACHE` (or the shared default user cache), verifies SHA-256 and
+size, and can use an existing whole repository archive as an optional seed. The
+build passes verified external paths to npm's native content cache, retaining
+the original lock integrity checks and offline `npm ci`; repository tarballs are
+not required. Set `BASHKITTEN_OFFLINE_SOURCES=1` to forbid source downloads and
+require an already populated cache. Include the shared helper alongside the
+Connector source, pinned translators and branding inputs when preparing a
+standalone source-review/build bundle.
 
 The manifest uses Gecko's native required-data declaration for `browsingActivity`
 and `websiteContent`: selected page URLs/referrers, reference metadata, notes/tags

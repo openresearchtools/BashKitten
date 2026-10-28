@@ -1,8 +1,17 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Files-specific cross flags; compiler validation stays with the Termux owner."""
-import hashlib, importlib.util, json, pathlib, re, shlex, subprocess, tarfile
+import hashlib, importlib.util, json, pathlib, re, shlex, subprocess, sys, tarfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PREFIX = '/data/data/com.termux/files/usr'
+sys.path.insert(0, str(ROOT/'agent/packaging'))
+import source_cache
+
+def recipe_archive(args):
+    pin = json.loads((ROOT/'agent/packaging/node/lock.json').read_text())['termux']
+    previous = ROOT/'agent/vendor/node'/(pin['recipes']['sha256']+'-'+pin['recipe_commit'])
+    return source_cache.fetch(pin['recipes'], getattr(args, 'source_cache', None),
+                              local=previous if previous.is_file() else None,
+                              offline=getattr(args, 'offline_sources', False))
 
 def environment(args, work, sources):
     spec = importlib.util.spec_from_file_location('bashkitten_native_toolchain', ROOT/'agent/packaging/termux/native_toolchain.py')
@@ -10,8 +19,7 @@ def environment(args, work, sources):
     args.work = work
     env, provenance = owner.build_environment(args)
     pin = json.loads((ROOT/'agent/packaging/node/lock.json').read_text())['termux']
-    archive = ROOT/'agent/vendor/node'/(pin['recipes']['sha256']+'-'+pin['recipe_commit'])
-    if owner.digest(archive) != pin['recipes']['sha256']: raise ValueError('Retained Termux recipes changed')
+    archive = recipe_archive(args)
     # Reuse the selected native Termux recipes' missing platform adaptations.
     # Shared-library/Python packaging patches are irrelevant to our static libs.
     selected = {'mupdf':['no-sigsetjmp.patch','tmpdir.patch'], 'ffmpeg':['libavutil-file_open.c.patch']}
@@ -58,7 +66,7 @@ def metadata(payload, args, provenance):
 
 def notices(args, provenance):
     result = [{'name':'Android NDK runtime','version':'r30','source':provenance['pin']['url'],'license':provenance['pin']['license'],'text':'\n\n'.join((args.ndk/name).read_text() for name in ['NOTICE','NOTICE.toolchain'])}]
-    archive = ROOT/'agent/vendor/node'/(provenance['recipes']['sha256']+'-'+provenance['recipes']['commit'])
+    archive = recipe_archive(args)
     with tarfile.open(archive) as upstream: text = upstream.extractfile(provenance['frameworkLicense']).read().decode()
     result.append({'name':'Termux native media adaptations','version':provenance['recipes']['commit'],'source':provenance['recipes']['url'],'text':text})
     return result

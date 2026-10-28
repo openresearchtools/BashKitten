@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""Offline, separately packaged Files native build. Never edits pristine imports."""
-import argparse, hashlib, io, json, os, pathlib, platform, re, shutil, subprocess, tarfile, zipfile
+"""Pinned-source preparation and offline Files build. Never edits pristine imports."""
+import argparse, hashlib, io, json, os, pathlib, platform, re, shutil, subprocess, sys, tarfile, zipfile
 import notices
 import go_runtime
 ROOT = pathlib.Path(__file__).resolve().parent
 DEPS = ROOT / 'vendor/dependencies'
+sys.path.insert(0, str(ROOT.parent / 'agent/packaging'))
+import source_cache
 def sha(data): return hashlib.sha256(data).hexdigest()
 def run(argv, cwd, env=None):
     print('+', ' '.join(map(str, argv)), flush=True)
     subprocess.run(list(map(str, argv)), cwd=cwd, env=env, check=True)
-def contents(entry):
-    data = bytearray()
-    for part in entry['parts']:
-        value = (DEPS / part['file']).read_bytes()
-        if len(value) != part['size'] or sha(value) != part['sha256']: raise ValueError('Corrupt source part: ' + part['file'])
-        data.extend(value)
-    if len(data) != entry['size'] or sha(data) != entry['sha256']: raise ValueError('Corrupt joined source archive')
-    return bytes(data)
+def source_archive(record, url, args, local=None):
+    # Historical part names remain provenance only. Fetch the exact complete
+    # upstream object; never rebuild or substitute a different release archive.
+    if local is None or not local.is_file():
+        parts = record.get('parts', [])
+        if len(parts) == 1 and parts[0]['sha256'] == record['sha256']:
+            local = DEPS / parts[0]['file']
+    return source_cache.fetch({'url':url, 'sha256':record['sha256'], **({'size':record['size']} if 'size' in record else {})},
+                              args.source_cache, local=local if local and local.is_file() else None, offline=args.offline_sources)
 def tar_extract(data, destination):
     destination.mkdir(parents=True, exist_ok=True)
     with tarfile.open(fileobj=io.BytesIO(data), mode='r:*') as archive:
@@ -59,12 +62,16 @@ def main():
     parser.add_argument('--go', default='go')
     parser.add_argument('--jobs', type=int, default=4)
     parser.add_argument('--prepare-only', action='store_true')
+    parser.add_argument('--source-cache', type=pathlib.Path, help='External verified original-source cache (or BASHKITTEN_SOURCE_CACHE)')
+    parser.add_argument('--offline-sources', action='store_true', help='Require every pinned source in the cache or an existing verified local archive')
     args = parser.parse_args(); work = args.work_dir.resolve(); work.mkdir(parents=True, exist_ok=True)
     if work == ROOT or ROOT in work.parents: raise ValueError('Build work must stay outside the source module')
+    args.source_cache = (args.source_cache or source_cache.default_cache()).expanduser().resolve()
+    if args.source_cache == ROOT.parent or ROOT.parent in args.source_cache.parents: raise ValueError('Source cache must stay outside the repository')
     if args.target == 'linux' and args.architecture != {'x86_64':'amd64','aarch64':'arm64'}.get(platform.machine()): raise ValueError('Linux builds require the native runner architecture')
     if args.target == 'termux' and (args.architecture not in ['aarch64','x86_64'] or not args.ndk): raise ValueError('Termux requires --architecture aarch64|x86_64 and the pinned --ndk')
-    inputs = ['files','auth/dependencies/go-toolchain',*notices.source_inputs()]
-    if args.target == 'termux': inputs += ['agent/packaging/termux/native_toolchain.py','agent/packaging/node/lock.json','agent/vendor/node/libcxx','agent/vendor/node/ed546336bdfa680956bb4f3039e4bc186a91896c4b2f2fd7a8c9cdbec4b3a6d2-f3b242999b604dab33639c8211c3b461aad79dc9']
+    inputs = ['files','auth/dependencies/go-toolchain','agent/packaging/source_cache.py',*notices.source_inputs()]
+    if args.target == 'termux': inputs += ['agent/packaging/termux/native_toolchain.py','agent/packaging/node/lock.json','agent/vendor/node/libcxx']
     source_tree, source_dirty = input_state(inputs)
     if not args.prepare_only:
         identity = {'target':args.target,'architecture':args.architecture}
@@ -77,13 +84,20 @@ def main():
     archives = work/'archives'; archives.mkdir(exist_ok=True); proxy = work/'goproxy'; proxy.mkdir(exist_ok=True)
     npm_archives = []; all_components = graph['components'] + native['components']
     for entry in all_components:
-        data = contents(entry['archive'])
-        destination = archives / (entry.get('filename') or (safe_component(entry['name'])+'@'+entry['version']+('.zip' if entry['ecosystem']=='go' else '.tgz')))
-        destination.write_bytes(data); entry['localArchive'] = str(destination)
+        previous = archives / (entry.get('filename') or (safe_component(entry['name'])+'@'+entry['version']+('.zip' if entry['ecosystem']=='go' else '.tgz')))
+        destination = source_archive(entry['archive'], entry['url'], args, previous if previous.is_file() else None)
+        entry['localArchive'] = str(destination)
         if entry['ecosystem'] == 'go':
-            relative = entry['url'].split('https://proxy.golang.org/',1)[1]; target = proxy/relative; target.parent.mkdir(parents=True,exist_ok=True); target.write_bytes(data)
-            for key, extension in [('info','.info'),('goMod','.mod')]: target.with_suffix(extension).write_bytes(contents(entry[key]))
+            relative = entry['url'].split('https://proxy.golang.org/',1)[1]; target = proxy/relative; target.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(destination, target)
+            for key, extension in [('info','.info'),('goMod','.mod')]:
+                metadata = source_archive(entry[key], entry['url'].removesuffix('.zip') + extension, args, target.with_suffix(extension))
+                shutil.copyfile(metadata, target.with_suffix(extension))
         elif entry['ecosystem'] == 'npm': npm_archives.append(destination)
+    go_source = ROOT.parent/'auth/dependencies/go-toolchain'; go_pin = json.loads((go_source/'sources.json').read_text())
+    go_archive = source_cache.fetch(go_pin, args.source_cache, local=go_source/go_pin['file'], offline=args.offline_sources)
+    if args.target == 'termux':
+        import termux
+        termux.recipe_archive(args)
     source = work/'quantum'
     if source.exists(): shutil.rmtree(source)
     shutil.copytree(ROOT/'vendor/quantum/source', source)
@@ -111,8 +125,6 @@ def main():
         import termux
         env, toolchain = termux.environment(args, work, source_dirs)
     env.update({'GOPROXY':proxy.as_uri(),'GOSUMDB':'off','GOTOOLCHAIN':'local','GOMODCACHE':str(work/'gomodcache'),'CGO_ENABLED':'1','GOTELEMETRY':'off','GOMAXPROCS':str(max(1,args.jobs))})
-    go_source = ROOT.parent/'auth/dependencies/go-toolchain'; go_pin = json.loads((go_source/'sources.json').read_text())
-    if sha((go_source/go_pin['file']).read_bytes()) != go_pin['sha256']: raise ValueError('Retained Go release source changed')
     version = subprocess.check_output([args.go,'version'],env=env,text=True)
     if version.split()[2] != 'go'+go_pin['version']: raise ValueError('Go compiler must match retained release '+go_pin['version'])
     prefix = work/'prefix'; prefix.mkdir(exist_ok=True)
@@ -157,7 +169,7 @@ def main():
     shutil.copy2(ROOT/'vendor/quantum/source/LICENSE',payload/'legal/Quantum-LICENSE')
     for name in ['COPYING','LICENSE','NOTICE']: shutil.copy2(ROOT/'addon'/name,payload/'legal'/('addon-'+name))
     licenses.extend([{'name':'File Browser Quantum','version':'2.0.2-stable','license':'Apache-2.0','text':(payload/'legal/Quantum-LICENSE').read_text()}, {'name':'BashKitten Files adapters and Office add-on','license':'AGPL-3.0-only AND Apache-2.0 AND MIT','text':'\n\n'.join((ROOT/'addon'/name).read_text() for name in ['NOTICE','COPYING','LICENSE'])}])
-    with tarfile.open(go_source/go_pin['file']) as archive:
+    with tarfile.open(go_archive) as archive:
         go_text = '\n\n'.join(archive.extractfile(name).read().decode(errors='replace') for name in go_pin['licenses'])
     (payload/'legal/Go-NOTICES').write_text(go_text)
     licenses.append({'name':'Go runtime and standard library','version':go_pin['version'],'source':go_pin['url'],'license':'BSD-3-Clause and included notices','text':go_text})

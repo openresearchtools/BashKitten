@@ -24,7 +24,9 @@ full CSL engine is citeproc-js by Frank G. Bennett and contributors; its exact
 npm license and source package are included in the dependency inventory.
 
 The wicked-good-xpath fork is the exact pinned Zotero translation-server
-dependency. Its MIT license and source copyright notices are retained.
+dependency. npm installs its original commit archive, verified by the recorded
+SHA-256 and lockfile integrity; the runtime files match the earlier local npm
+package of the same source. Its MIT license and source copyright notices remain.
 Systematic Reviewer V3 supplies identifier normalization and resolution,
 OpenAlex provenance and abstract-validation rules. Its frozen source and local
 delta are preserved in the repository's Systematic Reviewer vendor directory;
@@ -38,7 +40,8 @@ translator reporting is removed. These are BashKitten modifications, not
 changes attributed to the upstream projects.
 
 The own-module `package-lock.json` pins every runtime npm dependency.
-`vendor/npm/sources.json` records offline source archives, integrity values and
-SHA-256 checksums; package legal notices are collected by the existing build
-inventory. No source archive, test suite, development example or unused desktop
-resource is required in the application runtime.
+`vendor/npm/sources.json` records exact source URLs, integrity values and
+SHA-256 checksums for the shared external source cache; package legal notices
+are collected by the existing build inventory. No source archive, test suite,
+development example or unused desktop resource is required in the application
+runtime.

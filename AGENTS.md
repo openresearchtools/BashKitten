@@ -1,5 +1,18 @@
 # BashKitten · native Pi / Linux and Termux
 
+## 28 October downloaded dependency archive amendment
+
+Downloaded dependency archives and their split parts belong in the external
+`BASHKITTEN_SOURCE_CACHE`, selected by exact HTTPS URLs and checksums. Keep
+pristine source code, full licenses, manifests, pins and named patches in Git.
+The user authorizes removing only the reviewed archive-path inventory from
+history starting with its first 11 October addition, preserving later code and
+commit metadata and the frozen original plan/tag. This is not permission for
+general history cleanup. Use `BASHKITTEN_OFFLINE_SOURCES=1` with a verified warm
+cache; normal source artifacts must include the original corresponding-source
+archives and notices, not just download links. Use ordinary Actions caches and
+artifacts, never GHCR. See the [dated amendment](docs/files-office-bibliography-plan.md#19-downloaded-dependency-archive-amendment--28-october-2026).
+
 ## 28 October Files, Office and References replacement plan
 
 The user's new specification is recorded in

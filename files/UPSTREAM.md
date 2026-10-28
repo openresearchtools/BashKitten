@@ -49,19 +49,25 @@ replaceable boundary natively.
 packages. Go module sums and npm SRI values are preserved, as are archive hashes
 and original notice filenames. `native-sources.json` records separately selected
 MuPDF 1.28.2/FFmpeg 9.0.2/dav1d 1.5.4 source, native build tools and the upstream FFmpeg recipe.
-Archives over 32 MiB are split byte-for-byte: concatenate the ordered `parts`,
-verify each part and the joined hash before extraction. Sources/notices are
-preserved intact, including native binary packages used only by frontend build
-tools; product MuPDF/FFmpeg are compiled from source. Full native build-tool
-source archives for esbuild and Rollup accompany their npm packages.
+Downloaded archives live in the external `BASHKITTEN_SOURCE_CACHE`, selected by
+their original HTTPS URLs and exact checksums; they are not committed to Git.
+Historical split-part manifests remain provenance for reconstructing and
+verifying existing cache seeds. `BASHKITTEN_OFFLINE_SOURCES=1` requires a warm
+verified cache. Normal corresponding-source artifacts include the complete
+selected original archives and notices, including native frontend build-tool
+sources for esbuild and Rollup; download links alone are insufficient. Product
+MuPDF/FFmpeg are compiled from source. Pristine imports, full licenses, pins and
+named patches remain tracked. Ordinary Actions caches/artifacts supply build
+storage, with no GHCR publishing.
 
 The original Quantum dependency graph includes three module versions without
 usable licensing terms. `runtime-go.json` selects the separately imported,
 licensed native replacements from `licensed-go-sources.json`; it never assigns
 new terms to the original archives. Their obsolete ZIP/mod/info inputs are
-removed from the current source tree and source bundles; the pristine originals
-and original manifest remain recoverable in Git history. The preserved baseline
-manifest identifies those inactive hashes, while the active selection only reads
+removed from the current source tree and source bundles. The preserved baseline
+manifest identifies those inactive hashes; downloaded ZIP wrappers fall within
+the user's separately inventoried history cleanup. Pristine Quantum source and
+the original manifest remain preserved, while the active selection only reads
 the replacement archives. The named dependency patch routes the
 existing cache/logger calls through narrow typed/configuration facades to
 patrickmn/go-cache 2.1.0 and Logrus 1.10.2. Native TTL, sweeping, synchronization,
@@ -82,8 +88,10 @@ retains the pinned canonical template without inventing copyright attribution.
 Missing declarations cannot use that route. Legal provenance is included offline
 and reused from existing shared owners where the exact source/version matches.
 
-Native Termux reuses the already retained framework/NDK inputs under
-`agent/vendor/node` and its shared packaging toolchain owner. Only relevant
+Native Termux reuses the exact framework/NDK pins in
+`agent/packaging/node/lock.json`, the external verified cache and the shared
+packaging toolchain owner. Retained LLVM corresponding source and its inventory
+remain under `agent/vendor/node/libcxx`. Only relevant
 upstream native patches are applied with zero fuzz; exact patch/archive/compiler
 hashes are recorded in target metadata. Go runtime provenance and full notices
 reuse `auth/dependencies/go-toolchain`'s exact 1.27.2 source pin.

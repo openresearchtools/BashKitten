@@ -19,11 +19,23 @@ def retained_path(record):
     return path
 
 
-def collect(read, archive, *, source_manifest=None, apk=None):
+def download_pin(record):
+    url = record.get('url') or record.get('sourceUrl')
+    if not url:
+        repository, commit = record.get('repository', ''), record.get('commit', '')
+        if not re.fullmatch(r'https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository) or not re.fullmatch(r'[a-f0-9]{40}', commit):
+            raise ValueError('Missing immutable native source URL')
+        url = 'https://codeload.github.com/' + repository.removeprefix('https://github.com/') + '/tar.gz/' + commit
+    return {'url': url, 'sha256': record['sha256'],
+            **({'size': record['size']} if 'size' in record else {})}
+
+
+def collect(read, archive, *, source_manifest=None, apk=None, fetch_source=None):
     """Use one inventory for committed release source and the actual APK output.
 
     ``read`` reads either a committed revision or the build checkout. No source
-    download or dependency resolution is permitted during release collection.
+    dependency resolution is permitted. Optional preparation fetches only the
+    exact original archives selected by this revision's checksum pins.
     """
     records = [r for r in json.loads(read(INVENTORY)) if r.get('nativeSource')]
     if not records:
@@ -37,7 +49,8 @@ def collect(read, archive, *, source_manifest=None, apk=None):
 
     def add(record):
         path = retained_path(record)
-        payload = read(path)
+        downloadable = record.get('url') or record.get('sourceUrl') or record.get('repository')
+        payload = fetch_source(record, path).read_bytes() if fetch_source and downloadable else read(path)
         if hashlib.sha256(payload).hexdigest() != record['sha256']:
             raise ValueError('Android native source checksum mismatch: ' + path)
         if path not in written:

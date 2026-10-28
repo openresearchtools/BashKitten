@@ -14,14 +14,17 @@ under `upstream/online/source`.
 | Office engine, including Writer, Calc and Impress | [upstream/online/source/engine](upstream/online/source/engine) |
 | Original licenses and third-party notices | [COPYING](upstream/online/source/COPYING), [THIRDPARTYLICENSES](upstream/online/source/THIRDPARTYLICENSES), [engine licenses](upstream/online/source/engine/readlicense_oo) |
 | Exact release, commit and complete-tree hashes | [upstream/online/source.json](upstream/online/source.json) |
-| Retained dependency archives and checksums | [upstream/dependencies](upstream/dependencies) |
+| Exact dependency download URLs and checksums | [upstream/dependencies](upstream/dependencies) |
 | Our changes, applied to an external build copy | [patches](patches) |
 
 The Collabora import contains the complete recorded upstream Git tree, including
-the engine; it is not a selected-file extraction. Large dependency archives use
-ordered `.partNNN` files to fit GitHub's file-size limit. The build concatenates
-all parts and verifies the complete original archive checksum before extraction.
-The source tree and dependency archive inventory are verified by the normal build.
+the engine. Build preparation fetches the exact dependency archives selected by
+the committed URLs and checksums into `BASHKITTEN_SOURCE_CACHE` (default
+`~/.cache/bashkitten-sources`). Downloaded archives and split copies are not
+stored in Git. A prepared cache supports `BASHKITTEN_OFFLINE_SOURCES=1`; the
+normal build verifies the source tree and original archive checksums. Matching
+original dependency sources are delivered with the normal corresponding-source
+artifacts, including instructions for using that cache offline.
 
 ## Runtime integration
 

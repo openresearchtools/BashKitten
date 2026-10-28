@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
 """Stage pristine primp and its locked crates from the retained source archives."""
-import argparse, hashlib, json, pathlib, tarfile, tomllib
+import argparse, hashlib, json, pathlib, sys, tarfile, tomllib
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+shared = ROOT.parent / 'packaging/source_cache.py'
+if not shared.is_file(): shared = pathlib.Path(__file__).resolve().with_name('source_cache.py')
+sys.path.insert(0, str(shared.parent))
+from source_cache import fetch
 def sha(path):
     with path.open('rb') as stream: return hashlib.file_digest(stream, 'sha256').hexdigest()
 def main():
@@ -11,8 +15,11 @@ def main():
     if sha(lock)!=inventory['lockSha256']:raise ValueError('Search source lock changed')
     records={item['filename']:item for item in inventory['components']}
     def unpack(name,destination,expected):
-        item=records[name];source=base/item['file']
-        if item['sha256']!=expected or sha(source)!=expected:raise ValueError('Retained source checksum mismatch: '+name)
+        item=records[name]
+        if item['sha256']!=expected:raise ValueError('Retained source checksum mismatch: '+name)
+        local=base/item['file']
+        if not local.is_file():local=ROOT/'archives'/name
+        source=fetch(item,local=local)
         destination.mkdir(parents=True,exist_ok=True)
         with tarfile.open(source) as archive:
             prefix=archive.getmembers()[0].name.split('/')[0]+'/'

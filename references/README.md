@@ -133,11 +133,15 @@ The shared chooser is in `web/`, and capture/browser adaptations are in
 
 ## Packaging and verification boundary
 
-`runtime-payload.json` is the runtime allowlist and legal inventory. Full pinned
-donor archives, source manifests and offline npm source packages remain in the
-source distribution; the whole desktop application and upstream test/example
-trees are excluded from runtime. See `THIRD_PARTY_NOTICES.md` and the existing
-BashKitten bundled-component legal surface.
+`runtime-payload.json` is the runtime allowlist and legal inventory. Pristine
+donor trees, source manifests and licenses remain in Git. The shared source-cache
+owner fetches original archives from the exact URLs and checksums in those
+manifests into `BASHKITTEN_SOURCE_CACHE` (or the existing default external cache).
+The complete corresponding-source distribution includes these verified archives;
+the whole desktop application and upstream test/example trees are excluded from
+runtime. See `THIRD_PARTY_NOTICES.md` and the existing bundled-component legal
+surface. The XPath npm dependency uses its already pinned Zotero commit archive;
+it does not require a separately generated npm-pack archive in the checkout.
 
 Focused synthetic diagnostics cover real SQLite/CSL/capture APIs, concurrent
 version rejection, native HTTP retries/cancellation, native queue pacing,

@@ -17,10 +17,13 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / 'agent/packaging'))
+from source_cache import fetch
 VENDOR = ROOT / 'agent/machines/vendor'
 COMPONENTS = ('podman', 'crun', 'conmon', 'netavark', 'aardvark-dns',
               'passt', 'libfuse', 'fuse-overlayfs', 'catatonit')
@@ -64,6 +67,9 @@ def verify_source(directory):
         path = directory / relative
         require(not Path(relative).is_absolute() and '..' not in Path(relative).parts,
                 'Invalid source inventory path')
+        if record.get('vendor', {}).get('file') == relative:
+            require(expected == record['vendor']['sha256'], 'Vendor inventory checksum mismatch')
+            path = fetch(record['vendor'], local=path)
         actual = (hashlib.sha256(path.readlink().as_posix().encode()).hexdigest()
                   if path.is_symlink() else sha(path))
         require(actual == expected, 'Source checksum mismatch: ' + str(path))
@@ -169,8 +175,7 @@ def build(args):
                 raise
         vendor = None
         if 'vendor' in record:
-            archive = VENDOR / name / record['vendor']['file']
-            require(sha(archive) == record['vendor']['sha256'], 'Vendor archive mismatch')
+            archive = fetch(record['vendor'], local=VENDOR / name / record['vendor']['file'])
             if not (source / 'vendor').exists():
                 with tarfile.open(archive) as archive_contents:
                     archive_contents.extractall(source, filter='data')

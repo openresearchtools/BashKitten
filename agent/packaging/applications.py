@@ -37,7 +37,7 @@ def copy_patterns(root, destination, patterns):
                 copy_file(source, root, destination)
 
 
-def references(destination, cache, target, architecture):
+def references(destination, cache, target, architecture, *, source_cache=None, offline=False):
     source = ROOT / 'references'
     payload = json.loads((source / 'runtime-payload.json').read_text())
     if payload['schema'] != 1:
@@ -71,24 +71,75 @@ def references(destination, cache, target, architecture):
                         'source': metadata.get('repository') or metadata.get('archiveURL'),
                         'text': '\n\n'.join(texts)})
     (destination / 'source-licenses.json').write_text(json.dumps(records, indent=2) + '\n')
-    install_npm(source, destination, cache, target, architecture)
+    install_npm(source, destination, cache, target, architecture,
+                source_cache=source_cache, offline=offline)
 
 
-def install_npm(source, destination, cache, target, architecture):
+def install_npm(source, destination, cache, target, architecture, *, source_cache=None, offline=False):
+    cache = Path(cache).resolve()
     source_api = runpy.run_path(str(ROOT / 'agent/packaging/npm-sources.py'))
-    archives = source_api['locked_archives'](root=source)
+    # Original downloads live in the shared checksum cache, not the runtime or
+    # necessarily the checkout. Keep that separate from npm's offline install cache.
+    archives = source_api['locked_archives'](root=source, cache=source_cache, offline=offline)
     subprocess.run(['npm', 'cache', 'add', '--cache', str(cache), '--ignore-scripts', '--no-audit', '--no-fund',
                     *map(str, archives)], check=True)
     subprocess.run(['npm', 'ci', '--prefix', str(destination), '--cache', str(cache), '--offline',
                     '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund',
                     '--os=' + ('android' if target == 'termux' else 'linux'),
                     '--cpu=' + ('x64' if architecture in ['amd64', 'x86_64'] else 'arm64')], check=True)
+    packages = json.loads((source / 'package-lock.json').read_text())['packages']
+    retain_native_package_files(destination, cache, packages)
     # Local tarball inputs remain in the complete corresponding-source bundle.
     # Installed runtime code and full legal texts live in node_modules.
-    for package in json.loads((source / 'package-lock.json').read_text())['packages'].values():
+    for package in packages.values():
         resolved = package.get('resolved', '')
         if resolved.startswith('file:'):
             (destination / resolved.removeprefix('file:')).unlink(missing_ok=True)
+
+
+def retain_native_package_files(destination, cache, packages):
+    # A pinned original Git archive is complete source, unlike an npm registry
+    # tarball. Reuse npm's own declared-files selection for the installed payload;
+    # never trim the pristine source tree or verified original archive.
+    for location, package in packages.items():
+        if not package.get('resolved', '').startswith('https://codeload.github.com/'):
+            continue
+        relative = Path(location)
+        if not relative.parts or relative.is_absolute() or '..' in relative.parts or relative.parts[0] != 'node_modules':
+            raise ValueError('Invalid installed npm package path')
+        folder = destination / relative
+        if not folder.is_dir():  # An omitted optional/platform package.
+            continue
+        if folder.is_symlink() or not folder.resolve().is_relative_to(destination.resolve()):
+            raise ValueError('Installed npm package leaves its runtime')
+        metadata = json.loads((folder / 'package.json').read_text())
+        if not isinstance(metadata.get('files'), list):
+            continue
+        records = json.loads(subprocess.check_output([
+            'npm', 'pack', '--dry-run', '--json', '--ignore-scripts', '--offline',
+            '--cache', str(cache)], cwd=folder, text=True))
+        if len(records) != 1 or records[0]['name'] != metadata['name'] or records[0]['version'] != package['version']:
+            raise ValueError('Native npm package selection identity mismatch')
+        selected = set()
+        for item in records[0]['files']:
+            path = Path(item['path'])
+            if path.is_absolute() or '..' in path.parts:
+                raise ValueError('Invalid native npm package selection path')
+            selected.add(path.as_posix())
+        if 'package.json' not in selected:
+            raise ValueError('Native npm package selection omits runtime metadata')
+        paths = list(folder.rglob('*'))
+        for path in paths:
+            relative = path.relative_to(folder)
+            # npm selects this package's files; nested installed dependencies
+            # remain under their own lock/installation owner.
+            if relative.parts[0] == 'node_modules':
+                continue
+            if (path.is_file() or path.is_symlink()) and relative.as_posix() not in selected:
+                path.unlink()
+        for path in sorted(paths, key=lambda value: len(value.parts), reverse=True):
+            if path.is_dir() and not path.is_symlink() and not any(path.iterdir()):
+                path.rmdir()
 
 
 def verify_files(root, records):

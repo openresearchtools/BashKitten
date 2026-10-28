@@ -49,6 +49,7 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.office-ccache
       CCACHE_MAXSIZE: 1G
       CCACHE_COMPILERCHECK: content
+      BASHKITTEN_SOURCE_CACHE: ${{ github.workspace }}/.source-cache
       GOTELEMETRY: 'off'
       DO_NOT_TRACK: '1'
     steps:
@@ -68,12 +69,12 @@ jobs:
             /auth/dependencies/go-toolchain/
             /files/patches/collabora/
             /agent/packaging/office/
+            /agent/packaging/source_cache.py
             /agent/packaging/node/
             /agent/packaging/termux/native_toolchain.py
             /agent/licenses/upstream/saxes/
             /agent/vendor/node/libcxx/
             /agent/vendor/node/sources.json
-            /agent/vendor/node/ed546336bdfa680956bb4f3039e4bc186a91896c4b2f2fd7a8c9cdbec4b3a6d2-f3b242999b604dab33639c8211c3b461aad79dc9
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24.13.0'
@@ -92,7 +93,7 @@ jobs:
         id: native-cache
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: native-ccache-${{ matrix.component }}-${{ matrix.platform.target }}-${{ matrix.platform.architecture }}-${{ hashFiles('source/office/upstream/online/source.json', 'source/office/upstream/dependencies/sources.json', 'source/agent/packaging/office/**', 'source/agent/packaging/termux/native_toolchain.py', 'source/agent/packaging/node/lock.json', 'source/office/patches/**', 'source/files/patches/**', 'source/files/build.py', 'source/files/termux.py', 'source/files/vendor/dependencies/*sources.json') }}-${{ github.run_id }}
+          key: native-ccache-${{ matrix.component }}-${{ matrix.platform.target }}-${{ matrix.platform.architecture }}-${{ hashFiles('source/office/upstream/online/source.json', 'source/office/upstream/dependencies/sources.json', 'source/agent/packaging/office/**', 'source/agent/packaging/source_cache.py', 'source/agent/packaging/termux/native_toolchain.py', 'source/agent/packaging/node/lock.json', 'source/office/patches/**', 'source/files/patches/**', 'source/files/build.py', 'source/files/termux.py', 'source/files/vendor/dependencies/*sources.json') }}-${{ github.run_id }}
           restore-keys: |
             native-ccache-${{ matrix.component }}-${{ matrix.platform.target }}-${{ matrix.platform.architecture }}-
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -116,6 +117,11 @@ jobs:
               env.write('OFFICE_NDK=' + str(destination / 'android-ndk-r30') + '\n')
               env.write('OFFICE_NDK_ARCHIVE=' + str(archive) + '\n')
           PYTHON
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: source-cache
+        with:
+          path: ${{ env.BASHKITTEN_SOURCE_CACHE }}
+          key: source-archives-${{ matrix.component }}-${{ hashFiles('source/**/sources.json', 'source/**/native-sources.json', 'source/**/licensed-go-sources.json', 'source/agent/packaging/source_cache.py') }}
       - name: Build native engine and server from retained sources
         shell: bash
         run: |
@@ -151,6 +157,12 @@ jobs:
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
+      - name: Preserve verified source downloads
+        if: always() && steps.source-cache.outcome == 'success' && steps.source-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.BASHKITTEN_SOURCE_CACHE }}
+          key: ${{ steps.source-cache.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ matrix.component }}-${{ matrix.platform.target }}-${{ matrix.platform.architecture }}-${{ inputs.source_sha }}

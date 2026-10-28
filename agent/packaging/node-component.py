@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = 'openresearchtools/bashkitten'
 WORKFLOW = '.github/workflows/node-native.yml'
 TREES = ('agent/packaging/node', 'agent/vendor/node')
+SHARED_RECIPE = 'agent/packaging/source_cache.py'
 ASSEMBLE = 'Assemble pinned private runtime and corresponding source'
 RESTORE = 'Restore a matching completed Node component'
 VERIFY = 'Verify Node runtime, corresponding source and provenance'
@@ -63,6 +64,8 @@ def inputs(revision):
                            stderr=subprocess.DEVNULL).returncode == 0
     if local:
         trees = {path: git('rev-parse', revision + ':' + path).decode().strip() for path in TREES}
+        shared_entry = git('ls-tree', revision, '--', SHARED_RECIPE).decode().split()
+        shared = shared_entry[2] if shared_entry else None
         workflow = git('show', revision + ':' + WORKFLOW).decode()
     else:
         trees = {}
@@ -70,9 +73,13 @@ def inputs(revision):
             parent, name = path.rsplit('/', 1)
             entries = api(f'repos/{REPOSITORY}/contents/{parent}?ref={revision}')
             trees[path] = next(item['sha'] for item in entries if item['name'] == name and item['type'] == 'dir')
+        parent, name = SHARED_RECIPE.rsplit('/', 1)
+        entries = api(f'repos/{REPOSITORY}/contents/{parent}?ref={revision}')
+        shared = next((item['sha'] for item in entries if item['name'] == name and item['type'] == 'file'), None)
         entry = api(f'repos/{REPOSITORY}/contents/{WORKFLOW}?ref={revision}')
         workflow = base64.b64decode(entry['content']).decode()
-    return {'trees': trees, 'assembly': assembly_recipe(workflow)}
+    return {'trees': trees, 'sharedRecipe': {SHARED_RECIPE: shared},
+            'assembly': assembly_recipe(workflow)}
 
 
 def files(directory):
@@ -125,6 +132,8 @@ def verify(directory, target):
         assembly.validate_elf(runtime / 'bin/node', architecture)
         if files(source / 'recipe') != files(ROOT / TREES[0]):
             raise ValueError('Node corresponding source has a different assembly recipe')
+        if sha(source / 'source_cache.py') != sha(ROOT / SHARED_RECIPE):
+            raise ValueError('Node corresponding source has a different source-cache helper')
         if json.loads((source / 'sources.json').read_text()) != sources:
             raise ValueError('Incomplete Node corresponding-source inventory')
         archives = {}

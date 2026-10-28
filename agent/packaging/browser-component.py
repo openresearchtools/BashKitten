@@ -25,7 +25,8 @@ def fingerprint(target, legacy_verifier=None, legacy_android_module=None):
     # Cache policy is not compiler input. Preserve the old calculation only to
     # prove equivalence of already-published artifacts; no producer is relabelled.
     paths = ['browser', 'references/connector', 'references/vendor/translators',
-             'agent/packaging/references-component.py'] + ([VERIFIER] if legacy_verifier else [])
+             'agent/packaging/references-component.py',
+             'agent/packaging/source_cache.py'] + ([VERIFIER] if legacy_verifier else [])
     if target.startswith('android'):
         paths += ['.github/builders/android.yml', 'auth', 'agent/native/remote', 'agent/native/phone-control',
                   'agent/packaging/android-notices.py', 'agent/packaging/build.py',

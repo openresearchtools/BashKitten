@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Verify the committed build inputs before allowing an offline resolver."""
+"""Prepare checksum-pinned source inputs before allowing an offline resolver."""
 import argparse
 import hashlib
 import json
 from pathlib import Path
-import subprocess
+import shutil
+import sys
+import tempfile
 import tarfile
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'agent/packaging'))
+from source_cache import fetch, default_cache
 
 def sha(path):
     with path.open('rb') as stream:
@@ -19,9 +23,31 @@ def checked(directory, record):
     if relative.is_absolute() or '..' in relative.parts:
         raise ValueError('Invalid retained source path')
     path = directory / relative
+    if record.get('url'):
+        return fetch(record, local=path)
+    if relative.parts[0] == 'proxy' and relative.suffix == '.zip':
+        return fetch({**record, 'url': 'https://proxy.golang.org/' + relative.relative_to('proxy').as_posix()}, local=path)
     if sha(path) != record['sha256']:
         raise ValueError('Retained source checksum mismatch: ' + str(path))
     return path
+
+def stage_file(source, destination, expected):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        if sha(destination) != expected:
+            raise ValueError('Prepared source checksum mismatch: ' + str(destination))
+        return
+    with tempfile.NamedTemporaryFile(dir=destination.parent, prefix='.source-', delete=False) as output:
+        temporary = Path(output.name)
+        try:
+            with source.open('rb') as stream:
+                shutil.copyfileobj(stream, output)
+            output.flush()
+            temporary.chmod(0o644)
+            temporary.replace(destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -51,12 +77,13 @@ def main():
         for name, digest in manifest['locks'].items():
             if sha(ROOT / name) != digest:
                 raise ValueError('Go source inventory is stale: ' + name)
-        for module in manifest['modules']:
-            for record in module['files'].values():
-                checked(directory, record)
-        for record in manifest['moduleMetadata']:
-            checked(directory, record)
-        print((directory / 'proxy').as_uri())
+        proxy = default_cache() / 'auth-go-proxy' / sha(directory / 'sources.json')
+        records = [record for module in manifest['modules'] for record in module['files'].values()] + manifest['moduleMetadata']
+        for record in records:
+            source = checked(directory, record)
+            relative = Path(record['file']).relative_to('proxy')
+            stage_file(source, proxy / relative, record['sha256'])
+        print(proxy.resolve().as_uri())
     else:
         if sha(directory / manifest['lock']) != manifest['lockSha256']:
             raise ValueError('Frontend source inventory does not match pnpm lock')
@@ -73,7 +100,7 @@ def main():
                 pin = pins[name]
                 if package['resolution'].get('integrity') != pin['integrity']:
                     raise ValueError('Frontend package integrity changed: ' + name)
-                package['resolution']['tarball'] = 'file:' + str((directory / pin['file']).resolve())
+                package['resolution']['tarball'] = 'file:' + str(checked(directory, pin).resolve())
             args.lock.write_text(yaml.safe_dump(lock, sort_keys=False, allow_unicode=True))
         print('Verified', len(archives), 'frontend source archives')
 

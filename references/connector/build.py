@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the ordinary References WebExtension from the pristine released Connector."""
 from pathlib import Path
-import hashlib,json,re,shutil,subprocess,zipfile,os
+import hashlib,json,re,shutil,subprocess,zipfile,os,runpy
 ROOT=Path(__file__).resolve().parent
 REPO=ROOT.parents[1]
 WORK=ROOT/'.build/source'
@@ -15,10 +15,17 @@ shutil.copytree(ROOT/'upstream/source',WORK)
 for patch in sorted((ROOT/'patches').glob('*.patch')):run('git','apply','--no-index','--unsafe-paths',str(patch))
 shutil.copy(ROOT/'src/references.js',WORK/'src/common/references.js')
 npm_sources=ROOT/'vendor/npm'
+fetch_source=runpy.run_path(str(REPO/'agent/packaging/source_cache.py'))['fetch']
+archives=[]
 for entry in json.loads((npm_sources/'SOURCES.json').read_text())['archives']:
- if hashlib.sha256((npm_sources/entry['archive']).read_bytes()).hexdigest()!=entry['sha256']:raise SystemExit('Npm source checksum mismatch: '+entry['archive'])
+ relative=Path(entry['archive'])
+ if relative.is_absolute() or '..' in relative.parts:raise SystemExit('Invalid npm source seed path')
+ archive=fetch_source(entry,local=npm_sources/relative)
+ archives.append({**entry,'path':str(archive.resolve())})
+cache_inputs=ROOT/'.build/npm-archives.json'
+cache_inputs.write_text(json.dumps({'archives':archives,'lockfile':str(WORK/'package-lock.json')})+'\n')
 npm_cache=ROOT/'.build/npm-cache'
-run('node',str(ROOT/'seed-cache.cjs'),str(Path(shutil.which('npm')).resolve()),str(npm_cache),str(npm_sources))
+run('node',str(ROOT/'seed-cache.cjs'),str(Path(shutil.which('npm')).resolve()),str(npm_cache),str(cache_inputs))
 run('npm','ci','--offline','--cache',str(npm_cache),'--ignore-scripts','--no-audit','--no-fund')
 run('bash','build.sh','-v',VERSION)
 if OUT.exists():shutil.rmtree(OUT)

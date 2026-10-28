@@ -8,20 +8,22 @@ import zipfile
 ROOT = pathlib.Path(__file__).resolve().parent
 
 
-def configuration():
-    value = json.loads((ROOT / 'runtime-go.json').read_text())
+def configuration(read=None):
+    read = read or (lambda relative: (ROOT / relative).read_bytes())
+    value = json.loads(read('runtime-go.json'))
     if value.get('schema') != 1:
         raise ValueError('Unsupported native Go dependency selection')
     return value
 
 
-def select(graph):
-    config = configuration()
+def select(graph, read=None):
+    read = read or (lambda relative: (ROOT / relative).read_bytes())
+    config = configuration(read)
     removed = set(config['removeUpstreamModules'])
     found = {entry['name'] for entry in graph['components'] if entry['ecosystem'] == 'go' and entry['name'] in removed}
     if found != removed:
         raise ValueError('Quantum dependency baseline changed; review the native adapter selection')
-    additions = json.loads((ROOT / config['additionalSources']).read_text())
+    additions = json.loads(read(config['additionalSources']))
     if additions.get('schema') != 1:
         raise ValueError('Unsupported licensed native Go source graph')
     selected = [entry for entry in graph['components'] if not (entry['ecosystem'] == 'go' and entry['name'] in removed)]

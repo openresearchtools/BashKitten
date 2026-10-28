@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import runpy
 import subprocess
 import sys
 import tarfile
@@ -50,6 +51,23 @@ if not licenses:
 source_file = artifacts / f'auth-{target}-source.tar.gz'
 with tarfile.open(source_file, 'w:gz') as archive:
     archive.add(root / 'auth', arcname='auth')
+    # Rebuild bundles keep the original pinned bytes even when repository
+    # history retains only their manifests and notices.
+    checked = runpy.run_path(str(root / 'auth/build/retained-sources.py'))['checked']
+    for kind in ('go', 'frontend', 'termux', 'go-toolchain'):
+        directory = root / 'auth/dependencies' / kind
+        manifest = json.loads((directory / 'sources.json').read_text())
+        if kind == 'go':
+            records = [record for module in manifest['modules'] for record in module['files'].values()] + manifest['moduleMetadata']
+        elif kind == 'go-toolchain':
+            records = [manifest]
+        else:
+            records = manifest['components']
+        for record in records:
+            source = checked(directory, record)
+            if not (directory / record['file']).is_file():
+                archive.add(source, arcname=str((directory / record['file']).relative_to(root)))
+    archive.add(root / 'agent/packaging/source_cache.py', arcname='agent/packaging/source_cache.py')
     archive.add(root / 'agent/src/server/access/runtime-guard.c', arcname='agent/src/server/access/runtime-guard.c')
     archive.add(root / 'agent/native/remote', arcname='agent/native/remote')
     archive.add(root / 'LICENSE', arcname='LICENSE')

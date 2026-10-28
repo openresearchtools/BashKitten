@@ -7,6 +7,15 @@ selected external archives and the released browser shrinkpack integrity.
 Named patches are applied only to an external build directory. Existing objects
 and compiler caches remain reusable. Builds do not use a downloaded CODE image.
 
+External dependencies keep their exact upstream URLs, SHA256 and sizes in
+`office/upstream/dependencies/sources.json`. Original archives are verified in
+`BASHKITTEN_SOURCE_CACHE` (default `~/.cache/bashkitten-sources`), rather than
+stored as Git blobs or chunks. Set `BASHKITTEN_OFFLINE_SOURCES=1` to require a
+populated cache. The normal corresponding-source artifact supplies those exact
+original bytes and offline cache instructions alongside the complete product
+source. Embedded pristine browser shrinkpack files remain part of the pinned
+upstream tree.
+
 Run the Linux recipe on the target architecture in Ubuntu 24.04, after installing
 the prerequisites in `prepare-runner.sh` and Node 24.13.0:
 
@@ -47,7 +56,8 @@ The normal BashKitten package and corresponding-source flows retain ownership
 of product delivery. Native compile and package success remain separate from
 installed editing, collaboration and citation acceptance.
 
-The initial shared cache allowance is one GiB per component/target, plus one
-shared NDK archive cache. Each job records actual compiler-cache statistics and
+The initial compiler-cache allowance is one GiB per component/target, plus one
+shared NDK archive cache and source-download caches shared by each component's
+targets. Each job records actual compiler-cache statistics and
 workspace size. Those measurements determine whether useful target caches need
 a further repository split; a declared budget alone is not a cache-fit result.

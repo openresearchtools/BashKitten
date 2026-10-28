@@ -30,3 +30,38 @@ __pycache__/
 /agent/dist/
 
 /agent/work/
+
+# Downloaded dependency wrappers use BASHKITTEN_SOURCE_CACHE (28 October 2026).
+# Keep source trees, manifests, licenses, fixtures and Maven source JARs visible.
+/agent/machines/vendor/*/*-vendor.tar.gz
+/agent/references/connector/vendor/npm/*.tgz
+/agent/references/vendor/*/upstream.tar.gz
+/agent/search/vendor/sources/archives/*.crate
+/agent/search/vendor/sources/archives/*.tar.*
+/agent/vendor/native/*.tar.gz
+/agent/vendor/native/*.zip
+/agent/vendor/native/android-native/*.crate
+/agent/vendor/native/android-native/*.tar.gz
+/agent/vendor/native/clipboard-crates/*.crate
+/agent/vendor/node/*.tar.*
+/agent/vendor/node/*.tgz
+/agent/vendor/node/*.zip
+/agent/vendor/node/ed546336bdfa680956bb4f3039e4bc186a91896c4b2f2fd7a8c9cdbec4b3a6d2-f3b242999b604dab33639c8211c3b461aad79dc9
+/agent/vendor/npm/*.tgz
+/agent/vendor/pi/pi-*.tar.gz
+/auth/dependencies/frontend/archives/*.tgz
+/auth/dependencies/go/proxy/**/@v/*.zip
+/auth/dependencies/go-toolchain/*.src.tar.gz
+/auth/dependencies/termux/termux-packages-*.tar.gz
+/files/vendor/dependencies/archives/go/*.zip
+/files/vendor/dependencies/archives/go/*.zip.part[0-9][0-9][0-9]
+/files/vendor/dependencies/archives/native/*.tar.*
+/files/vendor/dependencies/archives/npm/*.tgz
+/office/upstream/dependencies/archives/*.tar.*
+/office/upstream/dependencies/archives/*.tgz
+/office/upstream/dependencies/archives/*.zip
+/office/upstream/dependencies/archives/*.zip.part[0-9][0-9][0-9]
+/office/upstream/dependencies/native-termux/*.tar.*
+/references/connector/vendor/npm/*.tgz
+/references/vendor/npm/*.tgz
+/references/vendor/*/upstream.tar.gz

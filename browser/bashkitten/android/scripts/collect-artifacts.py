@@ -218,10 +218,14 @@ with tarfile.open(OUT / f'bashkitten-android-library-source_{abi}.tar.gz', 'w:gz
     spec = importlib.util.spec_from_file_location('android_native_sources', ROOT.parent / 'agent/packaging/android_native_sources.py')
     native_sources = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(native_sources)
+    sys.path.insert(0, str(ROOT.parent / 'agent/packaging'))
+    import source_cache
     with zipfile.ZipFile(destination) as apk:
         manifest['native_source_components'] = native_sources.collect(
             lambda name: (ROOT.parent / name).read_bytes(), archive,
-            source_manifest=source_manifest, apk=apk)
+            source_manifest=source_manifest, apk=apk,
+            fetch_source=lambda record, name: source_cache.fetch(
+                native_sources.download_pin(record), local=ROOT.parent / name))
 (OUT / 'build-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
 (OUT / 'signature.txt').write_text(signature)
 (OUT / 'manifest.txt').write_text(badging)

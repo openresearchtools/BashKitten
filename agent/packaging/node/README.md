@@ -23,6 +23,15 @@ original library, complete upstream NOTICE, LLVM notice and exact extraction
 provenance are retained. Unrelated NDK host executables are not redistributed;
 this input does not claim to contain LLVM's entire source repository.
 
+Downloaded archives live in the external `BASHKITTEN_SOURCE_CACHE` (default:
+`$XDG_CACHE_HOME/bashkitten-sources` or `~/.cache/bashkitten-sources`), with the
+existing `BASHKITTEN_NODE_CACHE` override retained for this builder. Repository
+archives are optional cache seeds during migration. Every cached or downloaded
+input must match its pinned SHA256 and any recorded size. Set
+`BASHKITTEN_OFFLINE_SOURCES=1` to require already cached inputs. The source artifact
+includes the shared cache helper, and its exact identity participates in producer
+receipt verification alongside the native locks, sources and licenses.
+
 ## Pins and provenance
 
 Reviewed 19 October 2026. Linux uses Node 24.22.0 / npm 11.19.1 from nodejs.org

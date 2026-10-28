@@ -2032,3 +2032,35 @@ Verify this amendment with focused actual dialog and native document checks,
 including formatted unlink/cancel, project isolation, save/reopen, sticky add
 controls and phone keyboard/scroll behavior. This is a requirement amendment,
 not a claim that these flows have passed acceptance.
+
+## 19. Downloaded dependency archive amendment — 28 October 2026
+
+The user authorizes removing the reviewed inventory of downloaded dependency
+archive wrappers and split parts from Git history, including their historical
+path aliases, starting with the first addition on 11 October. Limit the rewrite
+to those inventoried paths. Preserve later code changes and commit metadata;
+keep the frozen original plan and its protected tag unchanged. This amendment
+does not authorize removing pristine source code, fixtures, full license texts,
+source manifests, exact pins or named patches, or expanding the purge to other
+files merely because they have an archive extension.
+
+Builders fetch the exact original HTTPS URLs recorded in the existing manifests
+into the external `BASHKITTEN_SOURCE_CACHE`, verifying the pinned checksums and
+recorded sizes before use. Reuse the existing source-cache and native build
+owners. Seed the cache from verified existing downloads before removing their
+repository copies; never substitute a moving version or accept mismatched bytes.
+`BASHKITTEN_OFFLINE_SOURCES=1` requires a warm verified cache and fails when an
+input is missing. Native source-identity and artifact-provenance checks remain
+required.
+
+Normal corresponding-source artifacts must bundle the complete selected original
+source archives from that cache together with the retained source, recipes,
+patches, manifests and full notices. Download links alone do not satisfy source
+delivery. Ordinary GitHub Actions caches and uploaded artifacts remain the build
+storage mechanism; do not introduce GHCR or external artifact hosting. Narrow
+ignore rules cover the owned download locations without hiding retained source,
+upstream fixtures, held `node_shrinkpack` inputs or Maven source JARs.
+
+This changes dependency storage and delivery, not the required product feature
+scope or installed acceptance. Cache, source and build checks do not establish
+that the full product has passed testing.

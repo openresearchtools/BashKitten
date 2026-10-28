@@ -14,7 +14,7 @@
     "iconv-lite": "0.4.24",
     "w3c-xmlserializer": "5.0.0",
     "whatwg-encoding": "3.1.1",
-    "wicked-good-xpath": "file:vendor/wicked-good-xpath/wicked-good-xpath-1.3.1-z002.tgz",
+    "wicked-good-xpath": "https://codeload.github.com/zotero/wicked-good-xpath/tar.gz/1b88459724800c19d82020bb0eb951a3dc177989",
     "request": "2.88.2",
     "dompurify": "3.4.17"
   }

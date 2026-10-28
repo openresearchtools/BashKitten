@@ -13,10 +13,16 @@ import shutil
 import subprocess
 import tarfile
 import tomllib
-import urllib.request
+import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+SHARED_CACHE = ROOT.parent / 'packaging/source_cache.py'
+if not SHARED_CACHE.is_file():
+    SHARED_CACHE = Path(__file__).resolve().with_name('source_cache.py')
+sys.path.insert(0, str(SHARED_CACHE.parent))
+from source_cache import fetch as fetch_source
+
 LOCK = ROOT / "runtime-lock.json"
 LICENSE = re.compile(r"^(licen[cs]es?|copying|copyright|notices?|authors|ofl)(?:[._-].*)?$", re.I)
 LICENSE_REFERENCE = re.compile(rb"(?:\.{1,2}/)+\S+")
@@ -30,35 +36,23 @@ def digest(path: Path) -> str:
 def fetch(record: dict, cache: Path) -> Path:
     path = cache / record["filename"]
     inventory = ROOT / 'vendor/sources/sources.json'
+    local = path if path.is_file() else ROOT / 'archives' / record['filename']
     if inventory.exists():
         retained = json.loads(inventory.read_text())
         if digest(LOCK) != retained['lockSha256']:
             raise RuntimeError('Retained search sources do not match runtime lock')
-        sources = {item['filename']: item for item in retained['components']}
-        pin = sources.get(record['filename'])
+        pin = next((item for item in retained['components'] if item['filename'] == record['filename']), None)
         if pin:
-            source = inventory.parent / pin['file']
-            if pin['sha256'] != record['sha256'] or digest(source) != record['sha256']:
+            if pin['sha256'] != record['sha256']:
                 raise RuntimeError('Retained search source mismatch: ' + record['filename'])
-            shutil.copy2(source, path)
-            return path
+            if (inventory.parent / pin['file']).is_file():
+                local = inventory.parent / pin['file']
+    source = fetch_source(record, local=local)
+    if path.is_file():
+        if digest(path) != record['sha256']:
+            raise RuntimeError('Prepared search source mismatch: ' + record['filename'])
     else:
-        # Published matching source bundles retain the same original archives.
-        source = ROOT / 'archives' / record['filename']
-        if source.is_file() and digest(source) == record['sha256']:
-            shutil.copy2(source, path)
-            return path
-    if not record['filename'].endswith('.whl'):
-        raise RuntimeError('Missing retained search source: ' + record['filename'])
-    if path.exists() and digest(path) == record["sha256"]:
-        return path
-    partial = path.with_suffix(path.suffix + ".part")
-    request = urllib.request.Request(record["url"], headers={"User-Agent": "BashKitten-build/1"})
-    with urllib.request.urlopen(request, timeout=180) as source, partial.open("wb") as out:
-        shutil.copyfileobj(source, out)
-    if digest(partial) != record["sha256"]:
-        raise RuntimeError(f"source hash mismatch: {record['filename']}")
-    partial.replace(path)
+        shutil.copy2(source, path)
     return path
 
 
@@ -135,6 +129,11 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
     source_archives.mkdir()
     shutil.copy(LOCK, source / LOCK.name)
     shutil.copytree(ROOT / "build", source / "build")
+    shutil.copy2(SHARED_CACHE, source / "build/source_cache.py")
+    inventory = ROOT / "vendor/sources/sources.json"
+    if inventory.is_file():
+        (source / "vendor/sources").mkdir(parents=True)
+        shutil.copy2(inventory, source / "vendor/sources/sources.json")
     for name in ("src", "third_party"):
         shutil.copytree(ROOT / name, source / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "README.md", "pyproject.toml", "bashkitten-search"):

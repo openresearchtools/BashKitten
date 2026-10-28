@@ -14,6 +14,8 @@ import re
 import shutil
 from build import checked_archive
 from source_archive import archive_revision
+import downloaded_sources
+import source_cache
 from android_native_sources import collect as collect_android_native
 import subprocess
 import tarfile
@@ -30,9 +32,28 @@ args = parser.parse_args()
 revision = subprocess.check_output(['git', 'rev-parse', args.revision], cwd=ROOT, text=True).strip()
 def tracked(name): return subprocess.check_output(['git', 'show', revision + ':' + name], cwd=ROOT)
 lock = json.loads(tracked('agent/package-lock.json'))
-cache_root = args.cache or (args.output.resolve().parent / 'bashkitten-source-cache')
+cache_root = args.cache or source_cache.default_cache()
 cache = cache_root / 'npm'; cache.mkdir(parents=True, exist_ok=True)
 args.output.mkdir(parents=True, exist_ok=True)
+source_pins = downloaded_sources.records(tracked)
+source_paths = {}
+for pin in source_pins:
+    for name in pin['paths']:
+        if name in source_paths and source_paths[name]['sha256'] != pin['sha256']:
+            raise ValueError('Conflicting corresponding-source pins: ' + name)
+        source_paths[name] = pin
+
+def source_file(pin):
+    # Working-tree archives are optional migration seeds only. The selected
+    # revision's digest remains authoritative even when --revision is older.
+    local = next((ROOT / name for name in pin['paths']
+                  if (ROOT / name).is_file() and source_cache.digest(ROOT / name) == pin['sha256']), None)
+    return source_cache.fetch(pin, cache_root, local=local)
+
+def source_read(name):
+    pin = source_paths.get(name)
+    return source_file(pin).read_bytes() if pin else tracked(name)
+
 records = {}
 for location, value in lock['packages'].items():
     if not location or value.get('dev') or not value.get('resolved'): continue
@@ -49,7 +70,7 @@ def collect(item):
     else:
         source = npm_sources[url]
         assert source['integrity'] == value['integrity']
-        payload = tracked('agent/vendor/npm/' + source['file'])
+        payload = source_read('agent/vendor/npm/' + source['file'])
         assert hashlib.sha256(payload).hexdigest() == source['sha256']
     file.write_bytes(payload)
     algorithm, encoded = value['integrity'].split()[0].split('-', 1)
@@ -71,19 +92,19 @@ pi_commit = re.search(rb'Commit: `([a-f0-9]{40})`', tracked('agent/PI_UPSTREAM.m
 pi_source = cache / ('pi-' + pi_commit + '.tar.gz')
 pi_record = json.loads(tracked('agent/vendor/pi/source.json'))
 assert pi_record['commit'] == pi_commit
-pi_payload = tracked('agent/vendor/pi/' + pi_record['file'])
+pi_payload = source_read('agent/vendor/pi/' + pi_record['file'])
 assert hashlib.sha256(pi_payload).hexdigest() == pi_record['sha256']
 pi_source.write_bytes(pi_payload)
 with pi_source.open('rb') as stream: pi_sha = hashlib.file_digest(stream, 'sha256').hexdigest()
 manifest = {'sourceCommit': revision, 'pi': {'commit': pi_commit, 'file': pi_source.name, 'sha256': pi_sha}, 'components': components}
 manifest_path = args.output / 'components.json'; manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
-# These retained inputs are included by the complete Git-blob archive. Verify the exact committed
+# Retained metadata and externally cached originals use the exact committed
 # revision before producing a release source bundle; a checkout cache is not
 # authority for either dependency identity or lock freshness.
 def check_file(base, record):
     relative = Path(record['file'])
     assert not relative.is_absolute() and '..' not in relative.parts
-    assert hashlib.sha256(tracked(base + '/' + str(relative))).hexdigest() == record['sha256'], 'Retained source mismatch: ' + str(relative)
+    assert hashlib.sha256(source_read(base + '/' + str(relative))).hexdigest() == record['sha256'], 'Retained source mismatch: ' + str(relative)
 
 go_base = 'auth/dependencies/go'
 go = json.loads(tracked(go_base + '/sources.json'))
@@ -106,6 +127,36 @@ for record in json.loads(tracked(base + '/sources.json'))['components']:
 base = 'auth/dependencies/go-toolchain'
 check_file(base, json.loads(tracked(base + '/sources.json')))
 
+# Deliver original downloaded bytes in the same normal corresponding-source
+# artifact. This is an offline cache, not a list of upstream links or a second
+# release. Only active source pins are selected by the existing build owners.
+originals = {}
+for pin in source_pins:
+    file = source_file(pin)
+    originals.setdefault(file.name, {'file': file, 'sha256': pin['sha256'], 'url': pin['url'], 'owners': []})['owners'].append(
+        {'manifest': pin['manifest'], 'paths': pin['paths']})
+cache_manifest = {'schema': 1, 'sourceCommit': revision, 'sources': [
+    {**record, 'file': name, 'size': record['file'].stat().st_size}
+    for name, record in sorted(originals.items())]}
+cache_receipt = args.output / 'downloaded-source-components.json'
+cache_receipt.write_text(json.dumps(cache_manifest, indent=2) + '\n')
+cache_instructions = args.output / 'DOWNLOADED-SOURCES.md'
+cache_instructions.write_text(
+    '# Pinned corresponding source cache\n\n'
+    'Extract the product source archive and this matching source-cache archive. '
+    'The cache contains original upstream source bytes, with URL, SHA256, size and exact-revision manifest provenance in downloaded-source-components.json. '
+    'No dependency versions are resolved during reconstruction.\n\n'
+    'Before running the supplied native build recipes, set:\n\n'
+    '```sh\nexport BASHKITTEN_SOURCE_CACHE=/absolute/path/to/source-cache\n'
+    'export BASHKITTEN_OFFLINE_SOURCES=1\n```\n\n'
+    'The existing build recipes verify each original archive again and stage npm, Go and native inputs through their usual offline build facilities. '
+    'Build tools and operating-system prerequisites remain those documented by each recipe.\n')
+with tarfile.open(args.output / ('bashkitten-download-cache-source-' + revision[:12] + '.tar'), 'w') as archive:
+    archive.add(cache_receipt, arcname='downloaded-source-components.json')
+    archive.add(cache_instructions, arcname='DOWNLOADED-SOURCES.md')
+    for name, record in sorted(originals.items()):
+        archive.add(record['file'], arcname='source-cache/' + name)
+
 source = args.output / ('bashkitten-source-' + revision[:12] + '.tar.gz')
 archive_revision(ROOT, revision, source)
 with tarfile.open(args.output / ('bashkitten-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
@@ -119,7 +170,7 @@ with tarfile.open(args.output / ('bashkitten-native-dependency-source-' + revisi
     for value in json.loads(tracked('agent/licenses/source-archives.json')):
         file = extra_cache / value['file']
         file.parent.mkdir(parents=True, exist_ok=True)
-        file.write_bytes(tracked('agent/vendor/native/' + value['file']))
+        file.write_bytes(source_read('agent/vendor/native/' + value['file']))
         with file.open('rb') as stream: actual = hashlib.file_digest(stream, 'sha256').hexdigest()
         assert actual == value['sha256'], 'Native source checksum mismatch: ' + value['file']
         archive.add(file, arcname='native-dependencies/' + value['file'])
@@ -139,7 +190,7 @@ for record in android_records:
         archive = extra_cache / name
         pin = android_pins[name]
         assert pin['repository'] == repository and pin['commit'] == commit
-        payload = tracked('agent/vendor/native/' + name)
+        payload = source_read('agent/vendor/native/' + name)
         assert hashlib.sha256(payload).hexdigest() == pin['sha256']
         archive.write_bytes(payload)
         android_archives[key] = archive
@@ -155,7 +206,7 @@ for record in android_records:
     assert hashlib.sha256(license_bytes).hexdigest() == record['sha256'], 'Android license source mismatch: ' + record['name']
 android_manifest = []
 with tarfile.open(args.output / ('bashkitten-android-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
-    collect_android_native(tracked, archive)
+    collect_android_native(source_read, archive)
     for (repository, commit), file in sorted(android_archives.items()):
         archive.add(file, arcname='android-dependencies/' + file.name)
         with file.open('rb') as stream:

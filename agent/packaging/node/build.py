@@ -14,12 +14,15 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import tarfile
 import tempfile
-import urllib.request
 import zipfile
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+from source_cache import default_cache, fetch as fetch_source
+
 LOCK = json.loads((HERE / 'lock.json').read_text())
 ANDROID_SYSTEM = {'libc.so', 'libm.so', 'libdl.so', 'liblog.so', 'libandroid.so'}
 
@@ -29,33 +32,12 @@ def sha256(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def fetch(record, cache):
+def fetch(record, cache=None):
     name = record['url'].rsplit('/', 1)[-1]
     tracked = HERE.parents[1] / 'vendor/node' / (record['sha256'] + '-' + name)
-    if tracked.is_file():
-        if sha256(tracked) != record['sha256']:
-            raise RuntimeError('Committed Node source checksum mismatch: ' + name)
-        return tracked
-    source_index = json.loads((HERE.parents[1] / 'vendor/node/sources.json').read_text())['components']
-    if any(item['url'] == record['url'] for item in source_index):
-        raise RuntimeError('Required committed Node source is missing: ' + name)
-    result = cache / (record['sha256'] + '-' + name)
-    if result.exists() and sha256(result) == record['sha256']:
-        return result
-    print('Downloading ' + record['url'], flush=True)
-    with tempfile.NamedTemporaryFile(dir=cache, delete=False) as temporary:
-        incoming = Path(temporary.name)
-        try:
-            request = urllib.request.Request(record['url'], headers={'User-Agent': 'BashKitten-Node-Builder/1'})
-            with urllib.request.urlopen(request, timeout=120) as response:
-                shutil.copyfileobj(response, temporary)
-            temporary.flush()
-            if sha256(incoming) != record['sha256']:
-                raise RuntimeError('SHA256 mismatch: ' + record['url'])
-            incoming.replace(result)
-        finally:
-            incoming.unlink(missing_ok=True)
-    return result
+    # Old checkouts may seed the cache, but a committed download is not a
+    # prerequisite. The original URL/hash still selects every input exactly.
+    return fetch_source(record, cache, local=tracked)
 
 
 def extract(archive, destination):
@@ -233,7 +215,8 @@ def main():
     choices = record['archives'] if args.platform == 'linux' else record['architectures']
     if args.architecture not in choices:
         parser.error('architecture must be one of ' + ', '.join(choices))
-    cache = Path(os.environ.get('BASHKITTEN_NODE_CACHE', '~/.cache/bashkitten-node')).expanduser()
+    cache = (Path(os.environ['BASHKITTEN_NODE_CACHE']).expanduser()
+             if os.environ.get('BASHKITTEN_NODE_CACHE') else default_cache())
     cache.mkdir(parents=True, exist_ok=True)
     args.output.mkdir(parents=True, exist_ok=True)
     identity = f'{args.platform}-{args.architecture}'
@@ -254,6 +237,7 @@ def main():
         source = temporary / 'node-source'
         source.mkdir()
         shutil.copytree(HERE, source / 'recipe', ignore=shutil.ignore_patterns('__pycache__'))
+        shutil.copy2(HERE.parent / 'source_cache.py', source / 'source_cache.py')
         sources = [record['source']]
         notices = []
         packages = []
@@ -356,7 +340,8 @@ def main():
                 shutil.copytree(retained, source / 'libcxx-corresponding-source')
                 continue
             # Content-addressed filenames avoid collisions and preserve upstream compressed inputs.
-            shutil.copy2(downloaded, source / 'archives' / downloaded.name)
+            source_name = item['sha256'] + '-' + item['url'].rsplit('/', 1)[-1]
+            shutil.copy2(downloaded, source / 'archives' / source_name)
         (source / 'sources.json').write_text(json.dumps(sources, indent=2) + '\n')
         (source / 'component.json').write_text(json.dumps(metadata, indent=2) + '\n')
         source_output = args.output / f'node-source-{identity}.tar.gz'

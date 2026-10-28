@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Verify Collabora's pristine source and materialized native build inputs.
+"""Verify Collabora source and cache the native graph's pinned original archives.
 
-The upstream GNU make download graph selects inputs. This tool preserves its
-original archives, including chunked storage for files above GitHub's blob limit.
-It does not resolve versions or substitute libraries at build time.
+Download preparation never resolves versions or substitutes build libraries.
 """
 import argparse
 import base64
@@ -16,8 +14,11 @@ import re
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
-import urllib.request
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+import source_cache
 
 ROOT = Path(__file__).resolve().parents[3]
 UPSTREAM = ROOT / 'office/upstream'
@@ -118,64 +119,60 @@ def retained_files(record):
     return [{'file': record['file'], 'sha256': record['sha256']}]
 
 
-def verify_dependencies():
+def dependency_manifest():
     manifest = json.loads((DEPENDENCIES / 'sources.json').read_text())
     if manifest['downloadListSha256'] != digest(SOURCE / 'engine/download.lst'):
         raise ValueError('Native dependency manifest has a stale download.lst')
     if manifest['fetchRecipeSha256'] != digest(SOURCE / 'engine/Makefile.fetch'):
         raise ValueError('Native dependency manifest has a stale fetch recipe')
-    for record in manifest['components']:
-        combined = hashlib.sha256()
-        for part in retained_files(record):
-            relative = Path(part['file'])
-            if relative.is_absolute() or '..' in relative.parts:
-                raise ValueError('Source archive leaves the retained directory')
-            path = DEPENDENCIES / relative
+    return manifest
+
+
+def dependency_file(record, cache=None, *, offline=False, local=None):
+    """Resolve the original archive; old tracked parts are optional cache seeds."""
+    try:
+        return source_cache.fetch(record, cache, offline=True)
+    except FileNotFoundError:
+        pass
+    if local is not None and Path(local).is_file():
+        return source_cache.fetch(record, cache, local=local, offline=offline)
+    parts = retained_files(record) if 'parts' in record or 'file' in record else []
+    paths = []
+    for part in parts:
+        relative = Path(part['file'])
+        if relative.is_absolute() or '..' in relative.parts:
+            raise ValueError('Source archive leaves the retained directory')
+        paths.append(DEPENDENCIES / relative)
+    if paths and all(path.is_file() for path in paths):
+        for part, path in zip(parts, paths):
             if digest(path) != part['sha256']:
-                raise ValueError('Retained dependency checksum mismatch: ' + str(relative))
-            with path.open('rb') as stream:
-                while payload := stream.read(1024 * 1024):
-                    combined.update(payload)
-        if combined.hexdigest() != record['sha256']:
-            raise ValueError('Reassembled source checksum mismatch: ' + record['name'])
+                raise ValueError('Original source part checksum mismatch: ' + str(path))
+        if len(paths) == 1:
+            return source_cache.fetch(record, cache, local=paths[0], offline=offline)
+        directory = Path(cache) if cache is not None else source_cache.default_cache()
+        directory.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='.office-source-', dir=directory) as temporary:
+            joined = Path(temporary) / record['name']
+            with joined.open('wb') as output:
+                for path in paths:
+                    with path.open('rb') as source:
+                        shutil.copyfileobj(source, output)
+            return source_cache.fetch(record, cache, local=joined, offline=offline)
+    return source_cache.fetch(record, cache, offline=offline)
+
+
+def verify_dependencies(cache=None, *, offline=False):
+    manifest = dependency_manifest()
+    for record in manifest['components']:
+        dependency_file(record, cache, offline=offline)
     return manifest
 
 
 def import_dependencies(config, cache):
-    cache.mkdir(parents=True, exist_ok=True)
-    DEPENDENCIES.mkdir(parents=True, exist_ok=True)
     records = engine_inputs(config)
     def collect(record):
-        path = cache / record['name']
-        if not path.exists() or digest(path) != record['sha256']:
-            temporary = path.with_suffix(path.suffix + '.incoming')
-            try:
-                with urllib.request.urlopen(record['url'], timeout=120) as response, temporary.open('wb') as output:
-                    shutil.copyfileobj(response, output)
-                if digest(temporary) != record['sha256']:
-                    raise ValueError('Upstream archive checksum mismatch: ' + record['name'])
-                temporary.replace(path)
-            finally:
-                temporary.unlink(missing_ok=True)
-        if path.stat().st_size <= PART_SIZE:
-            record['file'] = 'archives/' + record['name']
-            target = DEPENDENCIES / record['file']
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(path, target)
-        else:
-            record['parts'] = []
-            with path.open('rb') as stream:
-                index = 0
-                while payload := stream.read(PART_SIZE):
-                    name = 'archives/' + record['name'] + f'.part{index:03d}'
-                    target = DEPENDENCIES / name
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(payload)
-                    record['parts'].append({'file': name, 'sha256': hashlib.sha256(payload).hexdigest()})
-                    index += 1
-        record['size'] = path.stat().st_size
-        print('Retained ' + record['name'], flush=True)
-        return record
+        path = source_cache.fetch(record, cache)
+        return {**record, 'size': path.stat().st_size}
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         materialized = list(pool.map(collect, records))
     manifest = {'schema': 1, 'downloadListSha256': digest(SOURCE / 'engine/download.lst'),
@@ -183,20 +180,30 @@ def import_dependencies(config, cache):
                 'configuration': config.name if config else 'all released source archive inputs',
                 'components': materialized}
     (DEPENDENCIES / 'sources.json').write_text(json.dumps(manifest, indent=2) + '\n')
-    return verify_dependencies()
+    return verify_dependencies(cache)
 
 
 def prepare_cache(destination):
-    manifest = verify_dependencies()
+    manifest = dependency_manifest()
     destination.mkdir(parents=True, exist_ok=True)
     for record in manifest['components']:
         target = destination / record['name']
-        if target.exists() and digest(target) == record['sha256']:
+        original = dependency_file(record, local=target)
+        if target.exists():
+            if digest(target) != record['sha256']:
+                raise ValueError('Native source cache checksum mismatch: ' + str(target))
             continue
-        with target.open('wb') as output:
-            for part in retained_files(record):
-                with (DEPENDENCIES / part['file']).open('rb') as source:
+        with tempfile.NamedTemporaryFile(dir=destination, delete=False) as output:
+            temporary = Path(output.name)
+            try:
+                with original.open('rb') as source:
                     shutil.copyfileobj(source, output)
+                output.flush()
+                if digest(temporary) != record['sha256']:
+                    raise ValueError('Native source cache copy changed: ' + record['name'])
+                temporary.replace(target)
+            finally:
+                temporary.unlink(missing_ok=True)
     return len(manifest['components'])
 
 

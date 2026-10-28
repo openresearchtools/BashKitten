@@ -43,14 +43,16 @@ capture package; replacing a package does not download executable translators.
 
 The review source bundle must preserve the repository-relative paths for
 `references/connector/` (excluding generated `.build/` and `dist/`),
-`references/vendor/translators/`, and the branding `LICENSE` plus
+`references/vendor/translators/`, `agent/packaging/source_cache.py`, and the branding `LICENSE` plus
 `default16.png`, `default32.png`, `default64.png` and `default128.png` under
 `browser/bashkitten/browser/branding/`. These are the build's complete source and
 asset inputs; a whole Mozilla checkout is not needed. Run the command above from
 that bundle's root with Python, Git, Bash, Node.js and npm available. The 1.0.2
 offline build used Python 3.14.4, Node.js 22.22.1 and npm 9.2.0. Preserve the exact
 source revision with the bundle and compare the rebuilt unsigned XPI digest
-before submission.
+before submission. Include the matching verified download-cache inputs from
+`vendor/npm/SOURCES.json`; set `BASHKITTEN_SOURCE_CACHE` to that extracted cache
+and `BASHKITTEN_OFFLINE_SOURCES=1` for an offline rebuild.
 
 No signed References XPI or control of its Mozilla add-on record has been
 established by this work. The generated artifact remains unsigned. Signing and

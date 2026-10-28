@@ -170,7 +170,7 @@ def package(source, work, output, architecture, env, stage_dir=None):
         'component': 'collabora-online', 'target': 'linux', 'architecture': architecture,
         'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         'development': bool(subprocess.check_output(['git', 'status', '--porcelain', '--',
-            'agent/packaging/office', 'office/upstream', 'office/patches',
+            'agent/packaging/office', 'agent/packaging/source_cache.py', 'office/upstream', 'office/patches',
             'files/patches/collabora', 'agent/packaging/termux/native_toolchain.py',
             'agent/packaging/node/lock.json', 'agent/vendor/node/libcxx'], cwd=ROOT, text=True).strip()),
         'upstream': pin, 'compiledPrefix': PREFIX,

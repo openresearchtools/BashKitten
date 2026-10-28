@@ -10,6 +10,9 @@ import sys
 import tarfile
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'agent/packaging'))
+from source_cache import fetch
+
 source, output, component = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 command = {'authelia': ['./cmd/authelia'], 'caddy': ['./cmd/caddy'], 'chisel': ['.'],
            'remote': ['./cmd/bashkitten-remote'],
@@ -59,13 +62,11 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-go-source-') as temporary:
         inventory.append({'name': name, 'version': module.get('Version', 'checked-in'), 'licenses': [f'{destination}/{p.name}' for p in license_files]})
     retained = Path(__file__).resolve().parents[1] / 'dependencies/go-toolchain'
     pin = json.loads((retained / 'sources.json').read_text())
-    toolchain = retained / pin['file']
-    if hashlib.sha256(toolchain.read_bytes()).hexdigest() != pin['sha256']:
-        raise SystemExit('Retained Go toolchain source checksum mismatch')
+    toolchain = fetch(pin, local=retained / pin['file'])
     version = subprocess.check_output(['go', 'env', 'GOVERSION'], text=True).strip()
     if version != 'go' + pin['version']:
         raise SystemExit('Go compiler does not match retained release source')
-    shutil.copy2(toolchain, bundle / toolchain.name)
+    shutil.copy2(toolchain, bundle / Path(pin['file']).name)
     goroot = Path(subprocess.check_output(['go', 'env', 'GOROOT'], text=True).strip())
     shutil.copy2(goroot / 'LICENSE', notices / 'Go-LICENSE')
     # The exact compiler's standard library is part of the linked payload.
