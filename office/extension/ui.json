@@ -8,6 +8,6 @@
   ],
   "extensionsMenu": [{"command":"citation"},{"command":"bibliography"},{"command":"refresh"},{"command":"style"},{"command":"codes"}],
   "menus": {"insert":["citation","bibliography"],"tools":["refresh","style","codes"]},
-  "notebookbar": [{"tab":"References","insertAfter":"Insert","groups":[{"id":"citations","label":"References","items":[{"type":"button","command":"citation","size":"large"},{"type":"button","command":"bibliography"},{"type":"button","command":"refresh"},{"type":"button","command":"style"}]}]}],
+  "notebookbar": [{"tab":"Citations","insertAfter":"Insert","groups":[{"id":"citations","label":"References","items":[{"type":"button","command":"citation","size":"large"},{"type":"button","command":"bibliography"},{"type":"button","command":"refresh"},{"type":"button","command":"style"}]}]}],
   "keybindings": [{"command":"citation","key":"c","modifier":["ctrl","alt"]}]
 }

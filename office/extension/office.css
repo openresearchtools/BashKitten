@@ -5,3 +5,12 @@
 /* Native cool.js fits its iframe to body.offsetHeight. Top-layer HTML dialogs
    do not contribute to body layout; retain the matching native host dimensions. */
 body.office-dialog-page{min-height:500px}body.office-settings-page{min-height:520px}
+
+/* Keep settings actions inside the native frame when the library-switch
+   acknowledgement adds content or the phone keyboard reduces the viewport. */
+body.office-settings-page .reference-dialog[open]{display:flex;flex-direction:column;overflow:hidden;border-radius:8px}
+body.office-settings-page .reference-dialog>h2,
+body.office-settings-page .reference-dialog>.notice,
+body.office-settings-page .reference-dialog>.dialog-actions{flex-shrink:0}
+body.office-settings-page .reference-dialog>.dialog-content{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
+body.office-settings-page .reference-dialog>.notice:empty{display:none}
