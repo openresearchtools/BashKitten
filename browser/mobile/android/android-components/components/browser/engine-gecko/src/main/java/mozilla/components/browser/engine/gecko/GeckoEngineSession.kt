@@ -97,7 +97,7 @@ import org.mozilla.geckoview.TranslationsController.SessionTranslation as GeckoV
 @Suppress("TooManyFunctions", "LargeClass")
 class GeckoEngineSession(
     private val runtime: GeckoRuntime,
-    private val privateMode: Boolean = false,
+    private var privateMode: Boolean = false,
     private val defaultSettings: Settings? = null,
     contextId: String? = null,
     private val geckoSessionProvider: () -> GeckoSession = {
@@ -122,6 +122,24 @@ class GeckoEngineSession(
 
     /** Browser-owned Android control integration; does not install a remote debugger. */
     fun bashKittenSession(): GeckoSession = geckoSession
+
+    /** Apply the tab owner's storage/privacy choices before a new session is opened or observed. */
+    fun initializeSessionContext(private: Boolean, contextId: String?) {
+        check(!geckoSession.isOpen && !isObserved() && initialLoad) {
+            "Only an unopened, unobserved session can receive its initial tab context"
+        }
+        val current = geckoSession.settings
+        privateMode = private
+        if (current.usePrivateMode == private && current.contextId == contextId) return
+
+        val sessionSettings = GeckoSessionSettings.Builder(current)
+            .usePrivateMode(private)
+            .contextId(contextId)
+            .build()
+        // The original session has never owned a Gecko window. Use the normal initializer
+        // for the replacement so the existing settings and delegates are retained once.
+        createGeckoSession(shouldOpen = false, sessionSettings = sessionSettings)
+    }
     internal var currentUrl: String? = null
     internal var currentTitle: String? = null
     internal var lastLoadRequestUri: String? = null
@@ -1686,8 +1704,8 @@ class GeckoEngineSession(
       })
     }
 
-    private fun createGeckoSession(shouldOpen: Boolean = true) {
-        this.geckoSession = geckoSessionProvider()
+    private fun createGeckoSession(shouldOpen: Boolean = true, sessionSettings: GeckoSessionSettings? = null) {
+        this.geckoSession = sessionSettings?.let { GeckoSession(it) } ?: geckoSessionProvider()
 
         defaultSettings?.trackingProtectionPolicy?.let { updateTrackingProtection(it) }
         defaultSettings?.requestInterceptor?.let { settings.requestInterceptor = it }

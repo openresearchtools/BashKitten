@@ -119,11 +119,13 @@ fun createTab(
     trackingProtection: TrackingProtectionState = TrackingProtectionState(),
     securityInfo: SecurityInfo = SecurityInfo.Unknown,
 ): TabSessionState {
+    // A supplied native engine already owns its context, including a null default.
+    val tabContextId = contextId ?: if (engineSession == null) parent?.contextId ?: "bashkitten-user" else null
     return TabSessionState(
         id = id,
         content = ContentState(
             url,
-            private || (contextId ?: parent?.contextId)?.startsWith("bashkitten-tor-") == true,
+            private || tabContextId?.startsWith("bashkitten-tor-") == true,
             title = title,
             securityInfo = securityInfo,
             webAppManifest = webAppManifest,
@@ -135,7 +137,7 @@ fun createTab(
         parentId = parentId ?: parent?.id,
         extensionState = extensions,
         readerState = readerState,
-        contextId = contextId ?: parent?.contextId ?: "bashkitten-user",
+        contextId = tabContextId,
         lastAccess = lastAccess,
         lastVisibleAt = lastVisibleAt,
         createdAt = createdAt,

@@ -264,6 +264,8 @@ class GeckoWebExtension(
                     runtime = runtime,
                     defaultSettings = defaultSettings,
                     openGeckoSession = false,
+                    // ext-tabs has already validated and decoded the public cookieStoreId.
+                    contextId = tabDetails.cookieStoreId,
                 )
 
                 tabHandler.onNewTab(

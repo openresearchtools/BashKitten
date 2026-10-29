@@ -39,6 +39,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mozilla.appservices.autofill.AutofillApiException
 import mozilla.components.ExperimentalAndroidComponentsApi
+import mozilla.components.browser.engine.gecko.GeckoEngineSession
 import mozilla.components.browser.state.action.SearchAction.SearchConfigurationAvailabilityChanged
 import mozilla.components.browser.state.action.SystemAction
 import mozilla.components.browser.state.selector.selectedTab
@@ -760,15 +761,26 @@ open class FenixApplication : Application(), Provider, ThemeProvider, com.bashki
                 components.core.engine,
                 components.core.store,
                 onNewTabOverride = { _, engineSession, url, selected ->
+                    val geckoEngineSession = engineSession as GeckoEngineSession
                     val shouldCreatePrivateSession =
                         components.core.store.state.selectedTab?.content?.private
                             ?: components.settings.openLinksInAPrivateTab
 
+                    if (!geckoEngineSession.bashKittenSession().isOpen) {
+                        // Ordinary WebExtension tabs use the same normal store as the + button.
+                        // Never inherit a selected application's, agent's or Tor tab's context.
+                        geckoEngineSession.initializeSessionContext(
+                            private = shouldCreatePrivateSession,
+                            contextId = geckoEngineSession.bashKittenSession().settings.contextId ?: "bashkitten-user",
+                        )
+                    }
+                    val nativeSettings = geckoEngineSession.bashKittenSession().settings
                     components.useCases.tabsUseCases.addTab(
                         url = url,
                         selectTab = selected,
                         engineSession = engineSession,
-                        private = shouldCreatePrivateSession,
+                        private = nativeSettings.usePrivateMode,
+                        contextId = nativeSettings.contextId,
                     )
                 },
                 onCloseTabOverride = { _, sessionId ->
