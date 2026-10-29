@@ -470,11 +470,13 @@
     #sidebarToggle { display:none; }
     #app.files-open { grid-template-columns:260px minmax(0,1fr) 300px; }
     #filePanel { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border-left:1px solid var(--line-soft); background:var(--sidebar); padding:8px; }
-    .file-heading { display:flex; flex-shrink:0; align-items:center; gap:5px; min-height:42px; }
-    .file-heading strong { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .file-tabs, .file-toolbar { display:flex; flex-shrink:0; flex-wrap:wrap; gap:6px; align-items:center; }
-    .file-tabs { margin-bottom:8px; border-bottom:1px solid var(--line-soft); }
-    .file-tabs button { margin:3px 0; padding:8px 10px; border:0; background:transparent; color:var(--muted); }
+    .file-heading { display:flex; flex-shrink:0; align-items:center; gap:2px; min-height:36px; margin-bottom:8px; border-bottom:1px solid var(--line-soft); }
+    .file-tabs, .file-toolbar { display:flex; flex-shrink:0; gap:2px; align-items:center; }
+    .file-toolbar { flex-wrap:wrap; gap:6px; }
+    .file-tabs button, .file-heading > button { height:32px; padding:6px; border:0; border-radius:var(--radius-pill); background:transparent; color:var(--muted); font:inherit; font-size:12px; white-space:nowrap; }
+    .file-heading > .icon-button { width:28px; flex-shrink:0; padding:0; font-size:18px; }
+    #browseFullFiles { margin-left:auto; }
+    .file-heading > button:hover { background:var(--surface-2); color:var(--text); }
     .file-tabs button:hover, .file-tabs button[aria-selected="true"] { background:var(--surface-2); color:var(--text); }
     .file-toolbar button, .file-toolbar a, .file-path button { padding:7px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-pill); color:var(--text); font-size:12px; text-decoration:none; }
     .file-toolbar [aria-pressed="true"] { background:var(--surface-2); border-color:var(--text); }
@@ -716,8 +718,7 @@
       </section>
     </main>
     <aside id="filePanel" class="hidden" aria-label="Project files and changes">
-      <div class="file-heading"><strong id="fileRootLabel">Files</strong><button id="browseFullFiles" type="button" class="file-browse" title="Open the full Files app">Browse Files ↗</button><button id="closeFiles" type="button" class="icon-button" aria-label="Close project panel">×</button></div>
-      <nav class="file-tabs" role="tablist" aria-label="Project view"><button id="filesTab" type="button" role="tab" aria-selected="true" aria-controls="filesView">Files</button><button id="changesTab" type="button" role="tab" aria-selected="false" aria-controls="changesView" tabindex="-1">Changes</button></nav>
+      <div class="file-heading"><nav class="file-tabs" role="tablist" aria-label="Project view"><button id="filesTab" type="button" role="tab" aria-selected="true" aria-controls="filesView">Files</button><button id="changesTab" type="button" role="tab" aria-selected="false" aria-controls="changesView" tabindex="-1">Changes</button></nav><button id="browseFullFiles" type="button" title="Open the full Files app">Browse Files ↗</button><button id="closeFiles" type="button" class="icon-button" aria-label="Close project panel">×</button></div>
       <section id="filesView" class="file-pane" role="tabpanel" aria-labelledby="filesTab">
         <form id="filePathForm" class="file-path"><button id="fileUp" type="button" aria-label="Parent folder" title="Parent folder"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button><input id="filePath" aria-label="File browser path; press Enter to open" autocomplete="off" spellcheck="false"><button id="refreshFiles" type="button" aria-label="Refresh files" title="Refresh files"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.8-2L20 8M4 16l2.1 3A7 7 0 0 0 17.9 17"/></svg></button></form>
         <div id="fileActions" class="file-toolbar"><button id="selectFiles" type="button" aria-pressed="false" title="Select files and folders"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 12 3 3 5-6M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg><span>Select</span></button><button id="uploadRepo" type="button" title="Upload files to this folder"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg><span>Upload</span></button><button id="downloadFiles" type="button" title="Download this folder as ZIP"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg><span>Download</span></button><button id="copySelected" type="button" class="file-icon-action hidden" title="Copy selected items to another folder" aria-label="Copy selected items to another folder"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 8h12v13H8ZM16 8V3H3v13h5"/></svg></button><button id="deleteSelected" type="button" class="file-icon-action danger hidden" title="Delete selected items" aria-label="Delete selected items"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button><input id="repoUpload" type="file" multiple class="hidden"></div>
@@ -2518,6 +2519,7 @@
             current.cwd = updated.cwd;
             $('#folderLabel').textContent = displayFolder(current.cwd);
             $('#folderBtn').title = `Saved working folder: ${displayFolder(current.cwd)}. Start a new chat to choose another.`;
+            syncSelectedFilePanel();
           }
         }
         showAgentChoice();
@@ -2710,6 +2712,7 @@
         $('#folderLabel').textContent = displayFolder(session.cwd) || 'Working folder';
         $('#folderBtn').disabled = true;
         $('#folderBtn').title = `Saved working folder: ${displayFolder(session.cwd)}. Start a new chat to choose another.`;
+        syncSelectedFilePanel();
         setRunButton(Boolean(session.running));
         fillSelect($('#model'), models, session.model);
         $('#thinking').value = session.thinking || '';
@@ -2733,7 +2736,6 @@
         } else { await loadModels(); await connectSession(session.id, renderEvent, view); }
         if (sessionView !== view) return;
         setSidebar(false);
-        if (!$('#filePanel').classList.contains('hidden')) openFilePanel(current.cwd);
         document.querySelectorAll('.session').forEach(element => element.classList.toggle('active', element.dataset.id === session.id));
         if (scrollRevision === chatScrollRevision) $('#chat').scrollTop = savedScroll === undefined ? $('#chat').scrollHeight : Number(savedScroll) || 0;
       } catch (error) {
@@ -2775,6 +2777,7 @@
       renderQueueState();
       pendingCwd = projectId ? projectCache.find(project => project.id === projectId)?.cwd : config?.default_cwd || '';
       if (projectId && !pendingCwd) throw Error('Project is unavailable');
+      syncSelectedFilePanel();
       $('#title').textContent = 'New chat';
       $('#composerHint').textContent = '';
       $('#folderLabel').textContent = displayFolder(pendingCwd) || 'Set folder';
@@ -2792,7 +2795,6 @@
       if (sessionView !== view) return;
       document.querySelectorAll('.session').forEach(element => element.classList.remove('active'));
       showWelcome();
-      if (!$('#filePanel').classList.contains('hidden')) openFilePanel(pendingCwd);
       setSidebar(false);
       $('#prompt').focus();
     }
@@ -3052,6 +3054,7 @@
     $('#folderDialog').addEventListener('close', () => { ++folderGeneration; folderSelection = null; });
     $('#folderBtn').onclick = () => !current && !pendingProjectId && openFolderPicker('Working folder', pendingCwd, path => {
       pendingCwd = path;
+      syncSelectedFilePanel();
       draftChanged();
       $('#folderLabel').textContent = displayFolder(path) || 'Set folder';
     });
@@ -3478,6 +3481,7 @@
       await loadModels().catch(error => { refreshError = error; });
       if (!current && !pendingProjectId && pendingCwd === previousCwd) {
         pendingCwd = config.default_cwd;
+        syncSelectedFilePanel();
         chatAgents = { ...config.default_subagents }; showAgentChoice();
         newModelSelectionEdited = false;
         $('#model').value = modelDefaults.model;
@@ -3511,7 +3515,7 @@
           current.cwd = data.cwd;
           $('#folderLabel').textContent = displayFolder(data.cwd);
           $('#folderBtn').title = `Saved working folder: ${displayFolder(data.cwd)}. Start a new chat to choose another.`;
-          if (!$('#filePanel').classList.contains('hidden')) openFilePanel(data.cwd);
+          syncSelectedFilePanel();
           loadSessions().catch(() => {});
         }
       }
@@ -3556,7 +3560,7 @@
     $('#closeFiles').onclick=closeFiles;
     window.addEventListener('resize', updateBackdrop);
     let fileRoot='', fileFolder='', fileParent=null, fileScope='', fileSource='', fileGeneration=0, fileTab='files', fileAbort=null, fileTransfer=null, fileDirty=true, filePermissions={};
-    let selectingFiles=false, selectedFiles=new Set(), pendingFileAction=null;
+    let selectingFiles=false, selectedFiles=new Set(), pendingFileAction=null, pendingRepoUpload=null;
     let projectRoot='', changesGeneration=0, changesRoot='', changesLoading=false, changesLoadedAt=0, changesDirty=true, diffPath=null, diffRequest=0, diffAbort=null, diffChatScroll=0;
     const fileNativePath = relative => '/' + String(relative || '').replace(/^\/+/, '');
     function fileNativeUrl(route, values={}, root=fileRoot) {
@@ -3565,11 +3569,33 @@
       return '/api/apps/files/native/' + route + '?' + query;
     }
     const absoluteFilePath=(relative,root=fileRoot)=>root.replace(/\/$/,'')+(relative?'/'+relative:'');
+    function termuxFileLocation() {
+      if(serverPlatform!=='termux')return null;
+      const home=folderLocations.find(location=>location.display==='~');
+      const roots=[home?.path,...(home?.aliases||[])].filter(path=>/^\/data\/(?:data|user\/0)\/com\.termux\/files\/home\/?$/.test(path)).map(path=>path.replace(/\/files\/home\/?$/,''));
+      // Derive the private-app boundary from this backend's own home metadata.
+      return roots.length?{root:roots[0],aliases:[...new Set([...roots,'/data/data/com.termux','/data/user/0/com.termux'])]}:null;
+    }
+    const containsFilePath=(root,path)=>path===root||path.startsWith(root.replace(/\/$/,'')+'/');
+    function displayFilePath(path) {
+      const location=termuxFileLocation();
+      for(const root of location?.aliases||[])if(containsFilePath(root,path))return path.slice(root.length)||'/';
+      return path;
+    }
+    function resolveFilePath(path) {
+      const location=termuxFileLocation();if(!location)return path;
+      for(const root of location.aliases)if(containsFilePath(root,path))return location.root+path.slice(root.length);
+      return path.startsWith('/')?location.root+(path==='/'?'':path):path;
+    }
+    function fileParentWithinScope(parent) {
+      const location=termuxFileLocation();
+      return parent&&(!location||location.aliases.some(root=>containsFilePath(root,parent)))?parent:null;
+    }
     function selectFileFolder(relative) {
       fileFolder=relative;
       $('#fileDestination').textContent=relative?'Upload to: '+relative:'';
       $('#fileDestination').classList.toggle('hidden',!relative||selectingFiles);
-      $('#uploadRepo').title='Upload files to '+absoluteFilePath(relative);
+      $('#uploadRepo').title='Upload files to '+displayFilePath(absoluteFilePath(relative));
     }
     function updateFileSelection() {
       $('#fileTree').classList.toggle('selecting',selectingFiles);
@@ -3615,29 +3641,39 @@
       prompt.dispatchEvent(new Event('input',{bubbles:true}));prompt.focus();
       if(matchMedia('(max-width:700px)').matches)closeFiles();
     }
-    async function renderFileBranch(target, relative, generation, root=fileRoot, signal=fileAbort?.signal) {
+    async function renderFileBranch(target, relative, generation, root=fileRoot, signal=fileAbort?.signal, expanded=new Set(), preserveFolder=false) {
       const result=await api('/api/apps/files/tree?'+new URLSearchParams({root,path:relative}),{signal});
       if(generation!==fileGeneration||signal?.aborted||!fileManagerAllowed)return;
       if(!relative) {
-        fileRoot=result.root;fileParent=result.parent;fileScope=result.scopeRoot||result.root;fileSource=result.source;
+        fileRoot=result.root;fileParent=fileParentWithinScope(result.parent);fileScope=result.scopeRoot||result.root;fileSource=result.source;
         filePermissions=result.permissions||{};
-        $('#filePath').value=result.currentPath||fileRoot;$('#filePath').title='Browse within '+fileScope;
-        $('#fileUp').disabled=!fileParent;selectFileFolder('');
+        if(!preserveFolder)$('#filePath').value=displayFilePath(result.currentPath||fileRoot);
+        $('#filePath').title='Browse within '+displayFilePath(fileScope);
+        $('#fileUp').disabled=!fileParent;if(!preserveFolder)selectFileFolder('');
       }
+      if(preserveFolder)expanded=new Set([...$('#fileTree').querySelectorAll('details[open]')].map(node=>node.dataset.filePath));
       target.replaceChildren();
+      target.dataset.fileFolder=relative;target.dataset.loaded='true';
       const canonicalRoot=fileRoot;
+      const available=new Set((result.entries||[]).filter(entry=>!entry.blocked).map(entry=>entry.path));
+      for(const path of selectedFiles) {
+        if(relative&&!path.startsWith(relative+'/'))continue;
+        const child=(relative?relative+'/':'')+path.slice(relative?relative.length+1:0).split('/')[0];
+        if(!available.has(child))selectedFiles.delete(path);
+      }
       for(const [index,entry] of (result.entries||[]).entries()) {
         if(generation!==fileGeneration||signal?.aborted)return;
         if(entry.blocked) {
           const row=document.createElement('div');row.className='file-row meta';row.textContent=entry.name+' (unavailable)';target.append(row);
         } else if(entry.directory) {
           const details=document.createElement('details'),summary=document.createElement('summary'),children=document.createElement('div');
+          details.dataset.filePath=entry.path;children.dataset.fileFolder=entry.path;
           const label=document.createElement('span');label.textContent=entry.name;summary.append(fileIcon('chevron'),fileCheckbox(entry),fileIcon('folder'),label);details.append(summary,children);
-          let loaded=false;
           summary.onclick=()=>selectFileFolder(entry.path);
           details.ontoggle=async()=>{
-            if(details.open&&!loaded){loaded=true;children.textContent='Loading…';try{await renderFileBranch(children,entry.path,generation,canonicalRoot,signal);}catch(error){if(!signal?.aborted&&generation===fileGeneration){children.textContent=error.message;loaded=false;}}}
+            if(details.open&&!children.dataset.loaded){children.dataset.loaded='pending';children.textContent='Loading…';try{await renderFileBranch(children,entry.path,generation,canonicalRoot,signal,expanded);}catch(error){if(!signal?.aborted&&generation===fileGeneration){children.textContent=error.message;delete children.dataset.loaded;}}}
           };
+          details.open=expanded.has(entry.path);
           target.append(details);
         } else {
           const row=document.createElement('div');row.className='file-row';
@@ -3656,12 +3692,19 @@
       if(!result.entries?.length){const empty=document.createElement('p');empty.className='file-empty';empty.textContent='Empty folder';target.append(empty);}
       updateFileSelection();
     }
+    async function refreshFileFolder(root,relative,view) {
+      if(view!==sessionView||root!==fileRoot||!fileManagerAllowed)return;
+      const tree=$('#fileTree'),target=[tree,...tree.querySelectorAll('[data-file-folder]')].find(node=>node.dataset.fileFolder===relative);
+      // A folder not expanded yet will be fetched by its normal lazy opener.
+      if(!target)return;
+      await renderFileBranch(target,relative,fileGeneration,root,fileAbort?.signal,new Set(),true);
+    }
     async function loadFileTree(root=fileRoot) {
       if(!root||!fileManagerAllowed)return;
       fileAbort?.abort();fileAbort=new AbortController();
       fileRoot=root;fileFolder='';selectedFiles.clear();filePermissions={};updateFileSelection();
       const generation=++fileGeneration;fileDirty=false;
-      $('#fileNotice').textContent='';$('#fileTree').textContent='Loading…';$('#filePath').value=root;$('#fileUp').disabled=true;
+      $('#fileNotice').textContent='';$('#fileTree').textContent='Loading…';$('#filePath').value=displayFilePath(root);$('#fileUp').disabled=true;
       try{await renderFileBranch($('#fileTree'),'',generation,root,fileAbort.signal);}
       catch(error){if(generation===fileGeneration&&!fileAbort.signal.aborted){fileDirty=true;$('#fileNotice').textContent=error.message;$('#fileTree').replaceChildren();}}
     }
@@ -3679,9 +3722,13 @@
       if(!root||!fileManagerAllowed)return;
       const changed=projectRoot!==root;projectRoot=root;
       $('#filePanel').classList.remove('hidden');$('#app').classList.add('files-open');$('#filesToggle').setAttribute('aria-expanded','true');
-      $('#fileRootLabel').textContent=folderDisplayName(root);$('#fileRootLabel').title=displayFolder(root);
       if(changed){fileRoot=root;fileFolder='';fileDirty=true;selectedFiles.clear();$('#fileTree').replaceChildren();fileAbort?.abort();++fileGeneration;++changesGeneration;changesLoading=false;changesLoadedAt=0;changesDirty=true;closeFileDiff();$('#changesList').replaceChildren();$('#changesCounts').replaceChildren();}
       setFileTab(fileTab);updateBackdrop();
+    }
+    function syncSelectedFilePanel() {
+      if($('#filePanel').classList.contains('hidden'))return;
+      const root=current?.cwd||pendingCwd;
+      if(root)openFilePanel(root);else closeFiles();
     }
     function openChanges(root) {fileTab='changes';openFilePanel(root);}
     function requestFilesLaunch(value) {
@@ -3728,30 +3775,39 @@
       if(event.altKey||event.ctrlKey||event.metaKey||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
       event.preventDefault();setFileTab(event.key==='End'?'changes':event.key==='Home'?'files':fileTab==='files'?'changes':'files');$('#'+fileTab+'Tab').focus();
     };
-    $('#filePathForm').onsubmit=event=>{event.preventDefault();const path=$('#filePath').value.trim();if(path)loadFileTree(path);};
+    $('#filePathForm').onsubmit=event=>{event.preventDefault();const path=$('#filePath').value.trim();if(path)loadFileTree(resolveFilePath(path));};
     $('#fileUp').onclick=()=>{if(fileParent)loadFileTree(fileParent);};
     $('#refreshFiles').onclick=()=>loadFileTree();
     $('#selectFiles').onclick=()=>{selectingFiles=!selectingFiles;if(!selectingFiles)selectedFiles.clear();updateFileSelection();};
     $('#allFiles').onchange=()=>{selectedFiles.clear();if($('#allFiles').checked)for(const input of $('#fileTree').querySelectorAll('input[data-file-path]'))if(!input.dataset.filePath.includes('/'))selectedFiles.add(input.dataset.filePath);updateFileSelection();};
-    $('#uploadRepo').onclick=()=>$('#repoUpload').click();
+    $('#uploadRepo').onclick=()=>{pendingRepoUpload={root:fileRoot,relative:fileFolder,view:sessionView};$('#repoUpload').click();};
+    $('#repoUpload').oncancel=()=>{pendingRepoUpload=null;};
     $('#cancelFileTransfer').onclick=()=>fileTransfer?.abort();
     $('#repoUpload').onchange=async event=>{
-      const files=[...event.target.files];event.target.value='';if(!files.length||fileTransfer||!fileManagerAllowed)return;
-      const root=fileRoot,relative=fileFolder,controller=new AbortController();let completed=0;
+      const files=[...event.target.files],destination=pendingRepoUpload;pendingRepoUpload=null;event.target.value='';
+      if(!files.length||fileTransfer||!fileManagerAllowed||!destination||destination.view!==sessionView||destination.root!==fileRoot||destination.relative!==fileFolder)return;
+      const {root,relative,view}=destination,controller=new AbortController();let completed=0,completedBytes=0,notice='';
+      const totalBytes=files.reduce((sum,file)=>sum+file.size,0),visible=()=>view===sessionView&&root===fileRoot;
+      const bytes=value=>value<1024?value+' B':value<1048576?(value/1024).toFixed(1)+' KiB':(value/1048576).toFixed(1)+' MiB';
       fileTransfer=controller;updateFileSelection();$('#cancelFileTransfer').classList.remove('hidden');
       try {
         for(const file of files) {
           controller.signal.throwIfAborted();
-          if(root===fileRoot)$('#fileNotice').textContent='Uploading '+file.name+' · '+(completed+1)+' of '+files.length;
+          if(visible())$('#fileNotice').textContent='Uploading '+file.name+' · '+(completed+1)+' of '+files.length+' · '+bytes(completedBytes)+' of '+bytes(totalBytes)+' completed';
           const target=[relative,file.name].filter(Boolean).join('/');
           await api(fileNativeUrl('resources',{path:fileNativePath(target),override:false},root),{method:'POST',headers:{'content-type':file.type||'application/octet-stream'},body:file,signal:controller.signal});
-          completed++;
+          completed++;completedBytes+=file.size;
         }
-        if(root===fileRoot){await loadFileTree(root);$('#fileNotice').textContent=completed+' '+(completed===1?'file uploaded.':'files uploaded.');}
-        refreshProjectPanel();
+        notice=completed+' '+(completed===1?'file uploaded':'files uploaded')+' · '+bytes(completedBytes)+'.';
       } catch(error) {
-        if(root===fileRoot){await loadFileTree(root);$('#fileNotice').textContent=controller.signal.aborted?'Upload cancelled after '+completed+' '+(completed===1?'file.':'files.'):error.message;}
-      } finally {if(fileTransfer===controller)fileTransfer=null;$('#cancelFileTransfer').classList.add('hidden');updateFileSelection();}
+        notice=controller.signal.aborted?'Upload cancelled after '+completed+' '+(completed===1?'file.':'files.'):'Upload failed: '+error.message;
+      } finally {
+        if(visible()) {
+          try{await refreshFileFolder(root,relative,view);}catch(error){notice+=' Could not refresh folder: '+error.message;}
+          if(visible()){$('#fileNotice').textContent=notice;refreshProjectPanel();}
+        }
+        if(fileTransfer===controller)fileTransfer=null;$('#cancelFileTransfer').classList.add('hidden');updateFileSelection();
+      }
     };
     $('#downloadFiles').onclick=()=>{
       if(!fileManagerAllowed||filePermissions.download===false)return;
@@ -3764,10 +3820,10 @@
       pendingFileAction={operation,root:fileRoot,source:fileSource,paths:[...selectedFiles]};
       const deleting=operation==='delete',count=pendingFileAction.paths.length;
       $('#fileActionTitle').textContent=deleting?'Delete selected items?':'Copy selected items';
-      $('#fileActionDescription').textContent=deleting?`Permanently delete these ${count} selected ${count===1?'item':'items'} and all contents of selected folders. This cannot be undone.`:`Copy ${count} selected ${count===1?'item':'items'} into an existing folder inside ${fileRoot}. Existing files will not be overwritten.`;
+      $('#fileActionDescription').textContent=deleting?`Permanently delete these ${count} selected ${count===1?'item':'items'} and all contents of selected folders. This cannot be undone.`:`Copy ${count} selected ${count===1?'item':'items'} into an existing folder inside ${displayFilePath(fileRoot)}. Existing files will not be overwritten.`;
       const paths=$('#fileActionPaths');paths.replaceChildren();
-      for(const path of pendingFileAction.paths){const li=document.createElement('li');li.textContent=absoluteFilePath(path);paths.append(li);}
-      $('#copyDestinationLabel').classList.toggle('hidden',deleting);$('#copyDestination').required=!deleting;$('#copyDestination').value=fileRoot;
+      for(const path of pendingFileAction.paths){const li=document.createElement('li');li.textContent=displayFilePath(absoluteFilePath(path));paths.append(li);}
+      $('#copyDestinationLabel').classList.toggle('hidden',deleting);$('#copyDestination').required=!deleting;$('#copyDestination').value=displayFilePath(fileRoot);
       $('#fileActionError').textContent='';$('#confirmFileAction').textContent=deleting?'Delete':'Copy';$('#confirmFileAction').classList.toggle('delete-confirm',deleting);
       $('#fileActionDialog').showModal();$('#fileActionDialog [data-close]').focus();
     }
@@ -3782,7 +3838,7 @@
         if(value.operation==='delete') {
           result=await api(fileNativeUrl('resources/bulk',{},value.root),{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify(value.paths.map(path=>({source:value.source,path:fileNativePath(path)}))),signal:controller.signal});
         } else {
-          const destination=$('#copyDestination').value.trim().replace(/\/+$/,'')||'/';
+          const destination=resolveFilePath($('#copyDestination').value.trim().replace(/\/+$/,'')||'/');
           const prefix=value.root.replace(/\/$/,'');
           if((destination!==value.root&&!destination.startsWith(prefix+'/'))||destination.split('/').some(part=>part==='..'||part==='.')||destination.includes('\0'))throw Error('Choose an existing destination folder inside '+value.root+'.');
           const relative=destination.slice(prefix.length).replace(/^\/+/,'');
@@ -3825,7 +3881,7 @@
       try{
         const result=await api('/api/git/changes?root='+encodeURIComponent(root));if(generation!==changesGeneration)return;
         changesLoadedAt=Date.now();refreshed=true;changesRoot=result.root||root;
-        $('#changesRoot').textContent=displayFolder(changesRoot);$('#changesCounts').replaceChildren();
+        $('#changesRoot').textContent=displayFilePath(changesRoot);$('#changesCounts').replaceChildren();
         const list=$('#changesList');list.replaceChildren();
         if(!result.repository){closeFileDiff();$('#changesNotice').textContent='Git is not initialized in this folder.';return;}
         const files=result.files||[];
@@ -4061,6 +4117,7 @@
           if (Array.isArray(value.selection)) $('#prompt').setSelectionRange(...value.selection.slice(0,2));
           $('#chat').scrollTop = Number(value.scroll) || 0;
           $('#folderLabel').textContent = displayFolder(current?.cwd || pendingCwd) || 'Set folder';
+          syncSelectedFilePanel();
         } finally { draftRestoring = false; }
       }
     };

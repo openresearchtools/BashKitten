@@ -2232,3 +2232,33 @@ identity. Grouping must not create a shared cookie jar or change private/onion
 isolation. Desktop and widescreen tab strips retain their existing flat order
 and appearance, without special Files sorting. This is a user-authorized
 addition to the earlier launch-only browser boundary, not a new embedded editor.
+
+## 26. Files appearance, paths and selected-folder corrections — 29 October 2026
+
+Use one compact pane header containing Files, Changes, Browse Files with an
+external-link arrow, and Close. Remove the duplicate folder-title row; retain
+the existing path navigation below it.
+
+For the owning Termux backend, display its private application directory as `/`
+(for example, `/data/data/com.termux/files/home` appears as `/files/home`). Use
+the existing canonical/original home metadata to recognize aliases. This is a
+display/input translation, not a change to filesystem paths, authorization,
+other backends or the native paths inserted by Reference in chat.
+
+Files and Changes take the selected chat or project's saved working directory
+immediately from existing read-only metadata. They must not wait for Pi startup,
+chat resume or successful model configuration. Changes compares only that
+selected subtree using native Git; uploads or edits in sibling folders must not
+appear merely because they share a parent repository.
+
+Keep uploads on the existing native Files API. Show clear uploading, completion
+and error status; refresh the affected folder automatically while preserving
+expanded hierarchy and valid selection. Capture its destination before opening
+the picker, and never retarget a pending selection or upload after the user
+switches folder, chat or backend.
+
+Files follows the browser's appearance, including changes while its tab is open.
+Use native configuration for collapsible navigation and readable source labels;
+retain native file actions. The pinned release's missing automatic theme mode
+may use a small named patch to its existing theme state. Office remains explicitly
+light. These requirements do not claim successful builds or installed acceptance.
