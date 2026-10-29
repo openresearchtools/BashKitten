@@ -11,8 +11,10 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tarfile
 import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = 'openresearchtools/bashkitten'
@@ -25,7 +27,17 @@ VERIFY = 'Verify Node runtime, corresponding source and provenance'
 
 
 def api(endpoint):
-    return json.loads(subprocess.check_output(['gh', 'api', endpoint], text=True))
+    for attempt in range(3):
+        try:
+            return json.loads(subprocess.check_output(
+                ['gh', 'api', endpoint], text=True, stderr=subprocess.PIPE))
+        except subprocess.CalledProcessError as error:
+            # These are idempotent metadata reads. Keep authentication,
+            # provenance and JSON failures fatal; only retry server failures.
+            if attempt == 2 or not re.search(r'\bHTTP 5\d\d\b', error.stderr or ''):
+                sys.stderr.write(error.stderr or '')
+                raise
+            time.sleep(2 ** attempt)
 
 
 def git(*args):
