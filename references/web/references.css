@@ -331,6 +331,54 @@ h3 {
   flex-direction: column;
   gap: 10px;
 }
+.detail-form .metadata-field {
+  display: grid;
+  grid-template-columns: minmax(72px, 30%) minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+.detail-form .metadata-field > span {
+  padding-top: 7px;
+  overflow-wrap: anywhere;
+}
+.detail-form .metadata-field input,
+.detail-form .metadata-field select,
+.detail-form .metadata-field textarea {
+  padding: 6px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+.detail-form textarea[name="title"] {
+  min-height: 3.8em;
+}
+.detail-form .detail-actions {
+  position: sticky;
+  top: -12px;
+  z-index: 2;
+  background: var(--bg);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.detail-form .detail-actions button {
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.detail-form .work-identifiers .metadata-field {
+  margin-top: 7px;
+}
+.detail-form .creator-identifiers {
+  grid-column: 1/-1;
+  border: 0;
+  padding-top: 0;
+}
+.detail-form .creator-identifiers summary {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.detail-form .creator-identifiers .field {
+  margin-top: 5px;
+}
 .detail-title {
   font-size: 14px;
   overflow-wrap: anywhere;
@@ -375,6 +423,11 @@ h3 {
   display: flex;
   gap: 5px;
   align-items: center;
+}
+.attachment-row .attachment-delete {
+  max-width: 12ch;
+  padding: 5px 7px;
+  font-size: 11px;
 }
 .attachment-row a,
 .attachment-row span {

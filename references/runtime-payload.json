@@ -34,7 +34,7 @@
       "version": "536244c2771f590abab9c09a3c27e615e0b318ff",
       "license": "AGPL-3.0-or-later",
       "source": "vendor/zotero/source.json",
-      "files": ["vendor/zotero/source/COPYING"]
+      "files": ["vendor/zotero/source/COPYING", "legal/COMPONENT-ATTRIBUTION.md"]
     },
     {
       "name": "citeproc-js (Zotero bundled processor)",
@@ -142,7 +142,7 @@
       "version": "frozen local delta recorded in agent/systematic-reviewer/vendor/v3",
       "license": "AGPL-3.0-or-later",
       "source": "legal/Systematic-Reviewer-source.json",
-      "files": ["legal/Systematic-Reviewer-LICENSE"]
+      "files": ["legal/Systematic-Reviewer-LICENSE", "legal/OpenAlex-metadata-adaptation.json", "legal/Work-identity-adaptation.json"]
     }
   ]
 }

@@ -32,11 +32,59 @@ Native item responses retain complete `data`, versions and canonical
 `bkref:BACKEND/PROJECT/KEY` identities. A bare key or compatibility `users/0` is not
 a citation identity. Map legacy identities explicitly before using them.
 
+Read `GET /projects/PROJECT/schema` for the pinned native item types, their
+applicable fields and creator roles, then `GET /projects/PROJECT/items/KEY` for
+complete metadata. The tool's `body.data` accepts every applicable schema field;
+it is not limited to title/abstract or a CSL snapshot. Update native fields such
+as `publicationTitle`, `volume`, `issue`, `pages`, `date`, `publisher`, `url`,
+`language`, `extra` and `abstractNote` through the same versioned item API as
+the right-hand editor. Work identifiers are editable top-level `DOI`, `PMID`,
+`PMCID`, `OpenAlex` (canonical `W123…`) and `arXiv` fields. An explicit empty
+string clears an identifier; changing/clearing a primary ID replaces all active
+values of that kind. Verified alternatives are editable arrays in
+`data.provenance.identifierAliases`, e.g. `{PMID:["456"]}`. The backend normalizes
+all inputs and updates its identity evidence. Keep original raw resolver/provider
+provenance.
+
+For example, after reading an item's canonical key and version:
+
+```json
+{"method":"PATCH","path":"/projects/PROJECT/items/KEY","body":{"version":7,"data":{"title":"Corrected title","publicationTitle":"Journal name","abstractNote":"Verified abstract text","DOI":"10.1234/example","PMID":"12345","PMCID":"PMC67890","OpenAlex":"W123456","arXiv":"2301.12345","creators":[{"creatorType":"author","firstName":"Ada","lastName":"Lovelace"},{"creatorType":"author","name":"Research Consortium"}]}}}
+```
+
+Use actual returned IDs/version and verified metadata, never the example values.
+Preserve the full ordered creator array, including each creator's role and
+`ORCID`/`OpenAlex` author identities when present. Single-field organization or
+unstructured names use `name`; person names use `firstName`/`lastName`.
+Human/agent edits become manual field provenance, which later automatic
+enrichment preserves. Automatic imports/enrichment merge only when normalized
+work identifiers overlap exactly; any one exact ID suffices, even when another
+identifier kind differs. Titles, authors, journal ISSNs and similar text do not
+establish work identity. Newly supplied missing identifiers/metadata are unioned
+on a match; differing same-kind IDs survive in `provenance.identifierAliases`
+and returned `identityConflicts` identify that condition. After a merge, use the returned canonical key/version
+for further edits. Reading an old citation key returns survivor metadata and
+`requestedKey`; preserve the original citation identity in existing documents.
+
+Local attachments use the tool's `file` parameter with
+`POST /projects/PROJECT/connector/saveAttachment` and
+`body:{parentKey:"RETURNED_KEY",requestId:"STABLE_ID"}`. PDF, DOCX, XML and other
+formats share this upload owner and retain their extensions. Every distinct
+upload is kept, including matching bytes/names; filename collisions receive
+`-2`, `-3`, etc. before the extension. Reusing the same request ID is an idempotent
+retry of that upload. Read a parent's bounded `/children` page, PATCH a child
+attachment's title/URL/parent using its own version, or DELETE its own key to
+move it to deleted items. Set `parentItem:null` to leave it standalone.
+Enrich metadata with `POST /projects/PROJECT/items/enrich`
+`{keys:["RETURNED_KEY"],requestId:"STABLE_ID"}`, then read its job and reload the
+item. Direct OpenAlex imports and this tool use the same normalization/merge
+owner; do not implement a second deduplicator or metadata writer.
+
 | Operation | API |
 | --- | --- |
 | Bounded library search | `GET /items?q=TEXT&limit=50&sort=title`; keep returned `next` cursor and library version. Use `cursor=...` for the next page; reload on concurrent-change conflict. `format=csljson` adds derived CSL, preserving native metadata. |
 | Item and cached full text | `GET /items/KEY`, `/items/KEY/children?limit=50`, `/items/ATTACHMENT/fulltext` and `/items/ATTACHMENT/file`. Read returned coverage counts and missing-text status. |
-| Create/update/delete | `POST /items` with `{data:{itemType,...}}`; `PATCH /items/KEY` with `{version:PREVIOUS,data:{...}}`; `DELETE /items/KEY` with `{version:PREVIOUS}`. Preserve full creator records, metadata, tags, notes and relations. |
+| Create/update/delete | `POST /items` with `{data:{itemType,...}}`; `PATCH /items/KEY` with `{version:PREVIOUS,data:{...changedFields}}`; explicit replacement uses `PUT /items/KEY` with `{version:PREVIOUS,data:COMPLETE_DATA}`; `DELETE /items/KEY` with `{version:PREVIOUS}` moves it to deleted items. Preserve full creator records, metadata, tags, notes and relations. |
 | Identifier import | `POST /identifiers/import` with `{identifiers:[...],resolvePDFs:false,requestId:STABLE_ID}`; at most 1,000 selected identifiers. Verified identifiers revealed by native translation are checked again before writing. |
 | OpenAlex | `POST /openalex/search` with `{query,filter?,sort?,page:1,pageSize:80,queryMode:'boolean',field:'all'}`; follow `nextCursor` or `nextPage`. `POST /openalex/import` accepts selected `records:[raw,...]` (at most 1,000) or `search:{query,filter?,sort?,queryMode?,field?,exact?}` plus an explicit positive `limit`. Both accept `resolvePDFs` and stable `requestId`; search imports page inside the backend. |
 | Shared enrichment/PDF queue | `POST /items/enrich` or `/items/resolve-pdfs` with `{keys:[...],requestId:STABLE_ID}`. Enrichment never creates records. |

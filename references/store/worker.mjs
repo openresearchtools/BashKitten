@@ -5,6 +5,11 @@ import { DatabaseSync } from "node:sqlite";
 import { randomBytes } from "node:crypto";
 import { readFileSync, mkdirSync, chmodSync } from "node:fs";
 import path from "node:path";
+import {
+  workIdentifierFields, workIdentifiers, workIdentifierEntries, normalizeWorkMetadata,
+  canonicalWorkIdentifier, workIdentifierKind,
+} from "../adapted/work-identity.mjs";
+import { selectAbstract } from "../adapted/openalex.mjs";
 const itemSchema = JSON.parse(
   readFileSync(
     new URL("../vendor/schema/source/schema.json", import.meta.url),
@@ -33,6 +38,7 @@ const projectedFields = new Set([
   ...summaryFields,
   "dateAdded",
   "dateModified",
+  ...workIdentifierFields,
 ]);
 const connections = new Map();
 const key = () => randomBytes(8).toString("hex").toUpperCase();
@@ -48,11 +54,23 @@ function connection(file) {
   }
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(file);
+  db.exec('PRAGMA busy_timeout=5000');
+  const priorSchemaVersion = db.prepare("PRAGMA user_version").get().user_version;
   const hasCollectionSearch = db
     .prepare("SELECT name FROM sqlite_master WHERE name='collection_search'")
     .get();
   chmodSync(file, 0o600);
-  db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
+  // SQLite cannot always wait when two fresh connections switch journal mode.
+  // Retry this one setup transition in the storage worker; writes themselves use
+  // SQLite's native busy timeout and BEGIN IMMEDIATE serialization.
+  for (let attempt = 0; ; attempt++) {
+    try { db.exec('PRAGMA journal_mode=WAL'); break; }
+    catch (error) {
+      if (attempt >= 19 || error.message !== 'database is locked') { db.close(); throw error; }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+  db.exec(`PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL);
     INSERT OR IGNORE INTO state VALUES(1,0);
     CREATE TABLE IF NOT EXISTS items (key TEXT PRIMARY KEY, version INTEGER NOT NULL, type TEXT NOT NULL,
@@ -78,6 +96,9 @@ function connection(file) {
     CREATE TABLE IF NOT EXISTS memberships (item TEXT REFERENCES items(key) ON DELETE CASCADE, collection TEXT REFERENCES collections(key) ON DELETE CASCADE, PRIMARY KEY(collection,item));
     CREATE INDEX IF NOT EXISTS memberships_item ON memberships(item,collection);
     CREATE TABLE IF NOT EXISTS identifiers (kind TEXT NOT NULL, value TEXT NOT NULL, item TEXT REFERENCES items(key) ON DELETE CASCADE, PRIMARY KEY(kind,value,item));
+    CREATE INDEX IF NOT EXISTS identifiers_item ON identifiers(item,kind,value);
+    CREATE TABLE IF NOT EXISTS item_aliases (alias TEXT PRIMARY KEY, item TEXT NOT NULL REFERENCES items(key), created TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS item_aliases_item ON item_aliases(item,alias);
     CREATE TABLE IF NOT EXISTS fulltext (item TEXT PRIMARY KEY REFERENCES items(key) ON DELETE CASCADE, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS receipts (id TEXT PRIMARY KEY, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS receipt_versions (prefix TEXT PRIMARY KEY, version INTEGER NOT NULL);
@@ -85,7 +106,8 @@ function connection(file) {
     CREATE TABLE IF NOT EXISTS searches (key TEXT PRIMARY KEY,version INTEGER NOT NULL,name TEXT NOT NULL,data TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS searches_name ON searches(name,key);
     CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY, data TEXT NOT NULL);
-    PRAGMA user_version=1;`);
+    `);
+  if (priorSchemaVersion < 2) migrateWorkIdentifiers(db);
   connections.set(file, db);
   if (!hasCollectionSearch)
     db.exec(
@@ -119,6 +141,229 @@ const decode = (row) =>
   row
     ? { key: row.key, version: row.version, data: JSON.parse(row.data) }
     : null;
+const regularItem = data => !data.parentItem && !['attachment', 'note', 'annotation'].includes(data.itemType);
+function canonicalKey(db, itemKey) {
+  return db.prepare('SELECT item FROM item_aliases WHERE alias=?').get(itemKey)?.item || itemKey;
+}
+function getItem(db, itemKey) {
+  const canonical = canonicalKey(db, itemKey);
+  const item = decode(db.prepare('SELECT * FROM items WHERE key=?').get(canonical));
+  if (!item) fail('Item not found', 404);
+  if (regularItem(item.data)) {
+    try { Object.assign(item.data, workIdentifiers(item.data, { strict: false })); }
+    catch { /* A contradictory legacy record remains readable for correction. */ }
+  }
+  return canonical === itemKey ? item : { ...item, requestedKey: itemKey };
+}
+function indexIdentifiers(db, itemKey, data, legacy = false) {
+  db.prepare('DELETE FROM identifiers WHERE item=?').run(itemKey);
+  if (!regularItem(data)) return;
+  let identities;
+  try { identities = workIdentifierEntries(data, { strict: !legacy }); }
+  catch (error) {
+    if (!legacy) throw error;
+    // Index each valid piece of contradictory old evidence. A future matching
+    // import then reports the conflict instead of silently creating a third item.
+    const fields = { ...data.provenance?.identifiers, ...data };
+    identities = [];
+    const add = (kind, value) => {
+      if (!value) return;
+      try { const id = canonicalWorkIdentifier(kind, value); if (id) identities.push([id.type, id.value]); } catch {}
+    };
+    for (const [kind, value] of Object.entries(data.provenance?.identifiers || {})) add(kind, value);
+    for (const [kind, value] of Object.entries(fields)) add(kind, value);
+    add('OpenAlex', data.provenance?.openalex?.id);
+    for (const line of String(data.extra || '').split(/\r?\n/)) {
+      const match = line.match(/^\s*([^:]+):\s*(.+)$/);
+      if (match) add(match[1], match[2]);
+    }
+  }
+  const insert = db.prepare('INSERT OR IGNORE INTO identifiers VALUES(?,?,?)');
+  for (const [kind, value] of identities) insert.run(kind, value, itemKey);
+}
+function migrateWorkIdentifiers(db) {
+  transaction(db, () => {
+    // Keyset pages bound migration memory; the only synchronous work stays in
+    // the existing SQLite worker. Never re-scan a completed migration on open.
+    db.exec('DELETE FROM identifiers');
+    let cursor = '';
+    const page = db.prepare('SELECT key,data FROM items WHERE key>? ORDER BY key LIMIT 200');
+    while (true) {
+      const rows = page.all(cursor);
+      if (!rows.length) break;
+      for (const row of rows) indexIdentifiers(db, row.key, JSON.parse(row.data), true);
+      cursor = rows.at(-1).key;
+    }
+    db.exec('PRAGMA user_version=2');
+  });
+}
+function identityMatches(db, identifiers) {
+  const found = new Map();
+  const query = db.prepare(`SELECT i.* FROM identifiers d JOIN items i ON i.key=d.item
+    WHERE d.kind=? AND d.value=? AND i.deleted=0 AND i.parent IS NULL
+    AND i.type NOT IN ('attachment','note','annotation') LIMIT 201`);
+  for (const [kind, value] of (Array.isArray(identifiers) ? identifiers : Object.entries(identifiers))) {
+    for (const row of query.all(kind, value)) found.set(row.key, row);
+    if (found.size > 200) fail('More than 200 records share this identity; reconcile them in bounded groups', 409);
+  }
+  return [...found.values()];
+}
+const empty = value => value == null || value === '' || (Array.isArray(value) && !value.length);
+function mergeTags(first = [], second = []) {
+  const tags = new Map();
+  for (const value of [...first, ...second]) {
+    const name = typeof value === 'string' ? value : value.tag;
+    const current = tags.get(name);
+    if (!current || (typeof current !== 'string' && current.type === 1)) tags.set(name, value);
+  }
+  return [...tags.values()];
+}
+function mergeObject(first = {}, second = {}) {
+  const result = { ...first };
+  for (const [field, value] of Object.entries(second)) {
+    if (empty(result[field])) result[field] = value;
+    else if (value && typeof value === 'object' && !Array.isArray(value)
+      && typeof result[field] === 'object' && !Array.isArray(result[field]))
+      result[field] = mergeObject(result[field], value);
+  }
+  return result;
+}
+function enrichMetadata(first, second) {
+  const result = { ...first };
+  const manual = new Set(first.provenance?.manualFields || []);
+  const incomingManual = new Set(second.provenance?.manualFields || []);
+  for (const [field, value] of Object.entries(second)) {
+    if (['key','version','createKey','parentItem','deleted','dateAdded','dateModified','provenance','relations','extra','tags','collections'].includes(field)) continue;
+    if (!manual.has(field) && (empty(result[field]) || incomingManual.has(field))) result[field] = value;
+  }
+  const incomingAbstract = typeof second.abstractNote === 'string' ? second.abstractNote.trim() : '';
+  if (!manual.has('abstractNote') && !incomingManual.has('abstractNote') && incomingAbstract && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(incomingAbstract)) {
+    const existing = typeof first.abstractNote === 'string' ? first.abstractNote : '';
+    // Retain V3's protection for a good pre-existing/manual abstract. Imported
+    // abstracts with recorded source provenance may grow when better metadata
+    // arrives; malformed reconstructed OpenAlex abstracts never reach this path.
+    result.abstractNote = first.provenance?.source && incomingAbstract.length > existing.trim().length
+      ? incomingAbstract : selectAbstract(incomingAbstract, existing).text;
+  }
+  result.tags = mergeTags(first.tags, second.tags);
+  result.collections = [...new Set([...(first.collections || []), ...(second.collections || [])])];
+  result.extra = [...new Set([...String(first.extra || '').split('\n'), ...String(second.extra || '').split('\n')].filter(Boolean))].join('\n');
+  result.relations = { ...first.relations };
+  for (const [predicate, values] of Object.entries(second.relations || {}))
+    result.relations[predicate] = [...new Set([].concat(result.relations[predicate] || [], values))];
+  result.provenance = mergeObject(first.provenance, second.provenance);
+  const primary = {};
+  const aliases = {};
+  for (const [kind, value] of [...workIdentifierEntries(first), ...workIdentifierEntries(second)]) {
+    primary[kind] ||= result[kind] || value;
+    aliases[kind] ||= new Set();
+    if (value !== primary[kind]) aliases[kind].add(value);
+  }
+  result.provenance.identifiers = { ...result.provenance.identifiers, ...primary };
+  result.provenance.identifierAliases = Object.fromEntries(Object.entries(aliases).filter(([, values]) => values.size).map(([kind, values]) => [kind, [...values]]));
+  result.extra = result.extra.split('\n').filter(line => {
+    const match = line.match(/^\s*([^:]+):\s*(.+)$/);
+    const kind = match && workIdentifierKind(match[1]);
+    return !kind || !primary[kind] || canonicalWorkIdentifier(kind, match[2])?.value === primary[kind];
+  }).join('\n');
+  // Historical source objects are retained in the transaction receipt below;
+  // the visible source details describe the newly selected abstract accurately.
+  if (second.provenance?.openalex) result.provenance.openalex = second.provenance.openalex;
+  if (result.provenance.openalex && primary.OpenAlex)
+    result.provenance.openalex = { ...result.provenance.openalex, id: primary.OpenAlex };
+  if (second.provenance?.abstract) result.provenance.abstract = { ...result.provenance.abstract, ...second.provenance.abstract };
+  result.provenance.manualFields = [...new Set([...(first.provenance?.manualFields || []), ...(second.provenance?.manualFields || [])])];
+  if (result.provenance.abstract) {
+    const selectedIncoming = result.abstractNote === second.abstractNote && result.abstractNote !== first.abstractNote;
+    result.provenance.abstract = { ...result.provenance.abstract,
+      chosenSource: result.provenance.manualFields.includes('abstractNote') ? 'manual'
+        : selectedIncoming ? second.provenance?.abstract?.chosenSource || second.provenance?.source || 'imported metadata'
+          : first.provenance?.abstract?.chosenSource || first.provenance?.source || (result.abstractNote ? 'existing metadata' : null) };
+  }
+  if (second.dateAdded && (!first.dateAdded || second.dateAdded < first.dateAdded)) result.dateAdded = second.dateAdded;
+  return normalizeWorkMetadata(result);
+}
+function setAlias(db, alias, target) {
+  if (alias === target) return;
+  // Flatten earlier replacement chains, as native Zotero moves replaced-item
+  // relations to the survivor. Citation lookup remains one indexed read.
+  db.prepare('UPDATE item_aliases SET item=? WHERE item=?').run(target, alias);
+  db.prepare('INSERT INTO item_aliases VALUES(?,?,?) ON CONFLICT(alias) DO UPDATE SET item=excluded.item')
+    .run(alias, target, new Date().toISOString());
+}
+function putIdentity(db, value, expected, patch = false, { manual = false, enrich = false } = {}) {
+  const requestedKey = value.key;
+  if (requestedKey && canonicalKey(db, requestedKey) !== requestedKey)
+    fail('This item was merged; reload its canonical record before editing', 412);
+  const previous = requestedKey ? checked(db, 'items', requestedKey, expected) : null;
+  const oldData = previous && JSON.parse(previous.data);
+  let data = value.data || value;
+  const supplied = { ...data };
+  if (patch && oldData) data = { ...oldData, ...data };
+  if (!regularItem(data) || data.deleted) return writeItem(db, value, expected, patch);
+  data = normalizeWorkMetadata(data, enrich ? {} : { previous: oldData });
+  if (manual) {
+    const fields = Object.keys(supplied).filter(field => !['key','version','itemType','provenance','dateAdded','dateModified'].includes(field)
+      && (!oldData || JSON.stringify(oldData[field]) !== JSON.stringify(supplied[field])));
+    data.provenance = { ...data.provenance, manualFields: [...new Set([...(oldData?.provenance?.manualFields || []), ...fields])] };
+  }
+  if (enrich && oldData) data = enrichMetadata(oldData, data);
+  const matches = new Map();
+  const checkedIDs = new Set();
+  let identifiers = new Map(workIdentifierEntries(data).map(([kind, id]) => [kind + ':' + id, [kind, id]]));
+  while (true) {
+    const pending = [...identifiers.values()].filter(([kind, id]) => !checkedIDs.has(kind + ':' + id));
+    if (!pending.length) break;
+    for (const [kind, id] of pending) checkedIDs.add(kind + ':' + id);
+    for (const row of identityMatches(db, pending)) {
+      if (row.key === requestedKey || matches.has(row.key)) continue;
+      matches.set(row.key, row);
+      if (matches.size > 200) fail('More than 200 records share this identity; reconcile them in bounded groups', 409);
+      for (const [kind, id] of workIdentifierEntries(JSON.parse(row.data))) identifiers.set(kind + ':' + id, [kind, id]);
+    }
+  }
+  const candidates = [...matches.values()].sort((a, b) => {
+    const first = JSON.parse(a.data).dateAdded || a.modified;
+    const second = JSON.parse(b.data).dateAdded || b.modified;
+    return first.localeCompare(second) || a.key.localeCompare(b.key);
+  });
+  const survivor = previous || candidates.shift();
+  if (!survivor) return writeItem(db, { ...value, data }, expected);
+  const survivorData = JSON.parse(survivor.data);
+  let merged = previous ? data : enrichMetadata(survivorData, data);
+  for (const row of candidates) merged = enrichMetadata(merged, JSON.parse(row.data));
+  // Native mergeItems preserves all attachments/notes, tags, relations and the
+  // oldest date. Our adapter changes only parent metadata: file paths, hashes,
+  // full-text, attachment IDs and annotated PDF bytes remain exactly intact.
+  const mergedFrom = candidates.map(row => row.key);
+  const identityCorrection = manual && previous && (workIdentifierFields.some(field => supplied[field] !== undefined && supplied[field] !== oldData[field])
+    || JSON.stringify(supplied.provenance?.identifierAliases || {}) !== JSON.stringify(oldData.provenance?.identifierAliases || {}));
+  if (mergedFrom.length || !previous || enrich || identityCorrection) {
+    const prefix = `identity:${survivor.key}:`;
+    db.prepare('INSERT INTO receipts VALUES(?,?)').run(prefix + key(), JSON.stringify({
+      survivor: survivor.key, mergedFrom, incoming: data, previous: survivorData, createdAt: new Date().toISOString(),
+    }));
+    merged.provenance = { ...merged.provenance, identityHistoryPrefix: prefix };
+  }
+  let result = writeItem(db, { key: survivor.key, data: merged }, survivor.version);
+  for (const row of candidates) {
+    const childRows = db.prepare('SELECT * FROM items WHERE parent=? ORDER BY key');
+    // Iterate the indexed child set: avoid loading a large attachment collection.
+    for (const child of childRows.iterate(row.key)) {
+      const childData = JSON.parse(child.data);
+      writeItem(db, { key: child.key, data: { ...childData, parentItem: survivor.key } }, child.version, false, true, true);
+    }
+    const loserData = JSON.parse(row.data);
+    writeItem(db, { key: row.key, data: { ...loserData, deleted: 1,
+      provenance: { ...loserData.provenance, mergedInto: survivor.key } } }, row.version);
+    setAlias(db, row.key, survivor.key);
+  }
+  if (value.createKey && value.createKey !== survivor.key) setAlias(db, value.createKey, survivor.key);
+  const identityConflicts = Object.fromEntries(Object.entries(result.data.provenance?.identifierAliases || {}).filter(([, values]) => values.length)
+    .map(([kind, values]) => [kind, [result.data[kind], ...values]]));
+  return { ...result, reused: !previous, ...(mergedFrom.length ? { mergedFrom } : {}),
+    ...(Object.keys(identityConflicts).length ? { identityConflicts } : {}) };
+}
 function checked(db, table, itemKey, expected) {
   const row = db.prepare(`SELECT * FROM ${table} WHERE key=?`).get(itemKey);
   if (!row) fail("Record not found", 404);
@@ -126,7 +371,7 @@ function checked(db, table, itemKey, expected) {
     fail("Record changed; reload before editing", 412);
   return row;
 }
-function putItem(
+function writeItem(
   db,
   value,
   expected,
@@ -161,6 +406,7 @@ function putItem(
       fail(field + " must be an array");
   if (JSON.stringify(data).length > 8 * 1024 * 1024)
     fail("Item metadata exceeds 8 MiB");
+  if (data.parentItem) data.parentItem = canonicalKey(db, data.parentItem);
   if (data.parentItem === itemKey) fail("An item cannot be its own parent");
   if (
     previous && !preserveFulltext &&
@@ -194,7 +440,7 @@ function putItem(
         ...new Set([...existing, ...(previous.collections || [])]),
       ];
       if (collections.length !== existing.length)
-        putItem(
+        writeItem(
           db,
           { key: data.parentItem, data: { ...parentData, collections } },
           parent.version,
@@ -243,31 +489,12 @@ function putItem(
   db.prepare("DELETE FROM memberships WHERE item=?").run(itemKey);
   for (const collection of data.collections || [])
     db.prepare("INSERT INTO memberships VALUES(?,?)").run(itemKey, collection);
-  db.prepare("DELETE FROM identifiers WHERE item=?").run(itemKey);
-  for (const [kind, val] of Object.entries({
-    ...data.provenance?.identifiers,
-    ...(data.DOI ? { DOI: data.DOI } : {}),
-    ...(data.PMID ? { PMID: data.PMID } : {}),
-    ...(data.PMCID ? { PMCID: data.PMCID } : {}),
-    OpenAlex: data.provenance?.openalex?.id,
-    ...Object.fromEntries(
-      (data.extra || "")
-        .split("\n")
-        .map((l) => l.match(/^(PMID|PMCID):\s*(\S+)/))
-        .filter(Boolean)
-        .map((m) => [m[1], m[2]]),
-    ),
-  })) {
-    if (val)
-      db.prepare("INSERT OR IGNORE INTO identifiers VALUES(?,?,?)").run(
-        kind,
-        String(val).trim().toLowerCase(),
-        itemKey,
-      );
-  }
+  indexIdentifiers(db, itemKey, data);
+
   return { key: itemKey, version: v, data };
 }
 function list(db, args = {}) {
+  if (args.parent) args = { ...args, parent: canonicalKey(db, args.parent) };
   if (
     args.fields !== undefined &&
     (!Array.isArray(args.fields) ||
@@ -456,7 +683,7 @@ const operations = {
       const data = JSON.parse(original.data);
       if (data.path !== entry.oldPath || (data.pathBase || null) !== (entry.oldPathBase || null)) fail('Attachment path changed during the move', 409);
       const unchangedBytes = data.sha256 === entry.sha256 && data.byteLength === entry.byteLength;
-      putItem(db, { key: entry.key, data: { ...data, path: entry.newPath, pathBase: 'bibliography', filename: entry.filename, sha256: entry.sha256, byteLength: entry.byteLength } }, original.version, false, unchangedBytes, unchangedBytes);
+      writeItem(db, { key: entry.key, data: { ...data, path: entry.newPath, pathBase: 'bibliography', filename: entry.filename, sha256: entry.sha256, byteLength: entry.byteLength } }, original.version, false, unchangedBytes, unchangedBytes);
       completed++;
     }
     if (completed !== total || count !== total) fail('The attachment list changed during the move', 409);
@@ -574,12 +801,10 @@ const operations = {
       return { version: nextVersion(db) };
     }),
   list,
-  get: (db, { key: k }) =>
-    decode(db.prepare("SELECT * FROM items WHERE key=?").get(k)) ||
-    fail("Item not found", 404),
+  get: (db, { key: k }) => getItem(db, k),
   put: (db, args) =>
-    transaction(db, () => putItem(db, args.value, args.expected, args.patch)),
-  batch: (db, { items, receipt }) =>
+    transaction(db, () => putIdentity(db, args.value, args.expected, args.patch, args)),
+  batch: (db, { items, receipt, manual = false }) =>
     transaction(db, () => {
       if (!Array.isArray(items) || items.length > 200)
         fail("A write batch must contain at most 200 items");
@@ -589,7 +814,13 @@ const operations = {
           .get(receipt);
         if (old) return JSON.parse(old.data);
       }
-      const result = items.map((value) => putItem(db, value, value.version));
+      const result = items.map((value) => putIdentity(db, value, value.version, false, { manual }));
+      // A later entry can join identities returned earlier in this same batch.
+      // Resolve the final canonical keys after every write has committed locally.
+      for (let i = 0; i < result.length; i++) {
+        const current = getItem(db, result[i].key);
+        result[i] = { ...result[i], ...current };
+      }
       if (receipt)
         db.prepare("INSERT INTO receipts VALUES(?,?)").run(
           receipt,
@@ -600,23 +831,20 @@ const operations = {
   remove: (db, { key: k, expected }) =>
     transaction(db, () => {
       const row = checked(db, "items", k, expected);
-      return putItem(
+      return writeItem(
         db,
         { key: k, data: { ...JSON.parse(row.data), deleted: 1 } },
         expected,
       );
     }),
   find: (db, { identifiers }) => {
-    const found = new Map();
-    for (const [kind, value] of Object.entries(identifiers)) {
-      for (const row of db
-        .prepare(
-          "SELECT i.* FROM items i JOIN identifiers d ON d.item=i.key WHERE d.kind=? AND d.value=? AND i.deleted=0 LIMIT 3",
-        )
-        .all(kind, String(value).toLowerCase()))
-        found.set(row.key, decode(row));
+    const canonical = {};
+    for (const [kind, value] of Object.entries(identifiers || {})) {
+      if (!value) continue;
+      const id = canonicalWorkIdentifier(kind, value);
+      if (id) canonical[id.type] = id.value;
     }
-    return [...found.values()];
+    return identityMatches(db, canonical).map(decode);
   },
   eraseSessionNote: (db, { key, expected, sessionID }) =>
     transaction(db, () => {

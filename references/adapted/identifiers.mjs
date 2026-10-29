@@ -7,6 +7,10 @@ export function normalizeIdentifier(input) {
   if (typeof input !== 'string' || input.length > 2048 || /[\u0000-\u001f\u007f]/u.test(input)) throw fail('Identifier must be a single line of at most 2048 characters.');
   let value = input.trim();
   let type;
+  const prefix = value.match(/^(doi|pmid|pmcid|openalex(?:workid)?|arxiv|isbn(?:-1[03])?)(?:\s*:\s*|\s+)/i);
+  const declaredType = prefix && { doi: 'DOI', pmid: 'PMID', pmcid: 'PMCID', openalex: 'OpenAlex', openalexworkid: 'OpenAlex', arxiv: 'arXiv', isbn: 'ISBN' }[prefix[1].toLowerCase().replace(/-1[03]$/, '')];
+  if (prefix) { type = declaredType; value = value.slice(prefix[0].length); }
+  if (/^(?:dx\.)?doi\.org\//i.test(value)) value = 'https://' + value;
   if (/^https?:\/\//i.test(value)) {
     let url;
     try { url = new URL(value); } catch { throw fail('Invalid identifier URL.'); }
@@ -17,16 +21,12 @@ export function normalizeIdentifier(input) {
     else if (host === 'pubmed.ncbi.nlm.nih.gov') { type = 'PMID'; value = value.replace(/^\//, '').replace(/\/$/, ''); }
     else if (host === 'pmc.ncbi.nlm.nih.gov' && /^\/articles\//i.test(value)) { type = 'PMCID'; value = value.replace(/^\/articles\//i, '').replace(/\/$/, ''); }
     else if (host === 'www.ncbi.nlm.nih.gov' && /^\/pmc\/articles\//i.test(value)) { type = 'PMCID'; value = value.replace(/^\/pmc\/articles\//i, '').replace(/\/$/, ''); }
+    else if (['openalex.org', 'api.openalex.org'].includes(host) && /^\/(?:works\/)?W[1-9]\d*\/?$/i.test(value)) { type = 'OpenAlex'; value = value.replace(/^\/(?:works\/)?/i, '').replace(/\/$/, ''); }
     else if (['arxiv.org', 'www.arxiv.org'].includes(host) && /^\/(abs|pdf)\//i.test(value)) { type = 'arXiv'; value = value.replace(/^\/(abs|pdf)\//i, '').replace(/\.pdf$/i, ''); }
-    else throw fail('Unsupported identifier URL; use a DOI, PMID, PMCID, arXiv ID, or ISBN.');
-  } else {
-    const prefix = value.match(/^(doi|pmid|pmcid|arxiv|isbn(?:-1[03])?)(?:\s*:\s*|\s+)/i);
-    if (prefix) {
-      type = { doi: 'DOI', pmid: 'PMID', pmcid: 'PMCID', arxiv: 'arXiv', isbn: 'ISBN' }[prefix[1].toLowerCase().replace(/-1[03]$/, '')];
-      value = value.slice(prefix[0].length);
-    }
+    else throw fail('Unsupported identifier URL; use a DOI, PMID, PMCID, OpenAlex work ID, arXiv ID, or ISBN.');
+    if (declaredType && type !== declaredType) throw fail('Identifier prefix and URL disagree.');
   }
-  type ??= /^10\.\d{4,9}\//i.test(value) ? 'DOI' : /^PMC/i.test(value) ? 'PMCID' :
+  type ??= /^W[1-9]\d*$/i.test(value) ? 'OpenAlex' : /^10\.\d{4,9}\//i.test(value) ? 'DOI' : /^PMC/i.test(value) ? 'PMCID' :
     /^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/i.test(value) ? 'arXiv' :
       /^[1-9]\d{0,8}$/.test(value) ? 'PMID' : 'ISBN';
   if (type === 'DOI') {
@@ -38,9 +38,12 @@ export function normalizeIdentifier(input) {
     value = value.replace(/^PMC/i, '');
     if (!/^[1-9]\d*(?:\.[1-9]\d*)?$/.test(value)) throw fail('Invalid PMCID.');
     value = `PMC${value}`;
+  } else if (type === 'OpenAlex') {
+    if (!/^W[1-9]\d*$/i.test(value)) throw fail('Invalid OpenAlex work ID.');
+    value = value.toUpperCase();
   } else if (type === 'arXiv') {
     if (!/^(?:\d{2}(?:0[1-9]|1[0-2])\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v[1-9]\d*)?$/i.test(value)) throw fail('Invalid arXiv ID.');
-    value = value.replace(/V(?=\d+$)/, 'v');
+    value = value.toLowerCase();
   } else {
     value = value.replace(/[-\s]/g, '').toUpperCase();
     const valid10 = /^\d{9}[\dX]$/.test(value) && [...value].reduce((n, c, i) => n + (c === 'X' ? 10 : Number(c)) * (10 - i), 0) % 11 === 0;
@@ -78,6 +81,7 @@ export async function resolveIdentifiers({ identifiers, signal, timeoutMs, mailt
     retrievedAt = new Date().toISOString();
   }
   return { version: 1, items: inputs.map(input => {
+    if (input.type === 'OpenAlex') return { input, status: 'openalex', zoteroIdentifier: null };
     if (input.type !== 'PMCID') return { input, status: 'native', zoteroIdentifier: { [input.type]: input.value } };
     const record = mappings.get(input.value.replace(/\.\d+$/, ''));
     const versioned = /\.\d+$/.test(input.value);

@@ -228,21 +228,35 @@ export async function renderDocument(state, { signal, resolveItem } = {}) {
   if (!locales[locale]) throw Error("CSL locale is unavailable");
   const citations = state.citations.map(validateCluster),
     ids = new Set(),
-    items = {};
+    items = {},
+    embeddedItems = {},
+    processorIds = new Map();
   for (const c of citations) {
     if (!c.id || ids.has(c.id))
       throw Error("Citation occurrences need unique IDs");
     ids.add(c.id);
     for (const item of c.items) {
-      if (items[item.id]) continue;
+      if (embeddedItems[item.id]) continue;
       signal?.throwIfAborted();
       const data = resolveItem
         ? await resolveItem(item.id)
         : state.embeddedItems?.[item.id];
       if (!data) throw Error("Missing item " + item.id);
-      items[item.id] = data.itemType
-        ? await toCSL(data, item.id)
-        : { ...data, id: item.id };
+      // Store merges resolve to one native CSL item. Document source identities
+      // and snapshots keep their original keys; snapshot mode reuses only the
+      // identity already embedded with that metadata, without a library lookup.
+      const processorId =
+        typeof data.id === "string" &&
+        /^bkref:[^/]+\/[^/]+\/[A-Z0-9]+$/.test(data.id) &&
+        data.id.slice(0, data.id.lastIndexOf("/")) ===
+          item.id.slice(0, item.id.lastIndexOf("/"))
+          ? data.id
+          : item.id;
+      embeddedItems[item.id] = data.itemType
+        ? await toCSL(data, processorId)
+        : { ...data, id: processorId };
+      processorIds.set(item.id, processorId);
+      items[processorId] ||= embeddedItems[item.id];
     }
   }
   const Cite = await nativeCite();
@@ -289,7 +303,13 @@ export async function renderDocument(state, { signal, resolveItem } = {}) {
       const [status, updates] = processor.processCitationCluster(
         {
           citationID: c.id,
-          citationItems: structuredClone(c.items),
+          citationItems: c.items.map((item) => ({
+            ...item,
+            id: processorIds.get(item.id),
+            // Native citeproc preserves extra citation-item properties when
+            // sorting. Keep this transient identity out of document metadata.
+            _bashkittenSourceId: item.id,
+          })),
           properties: { noteIndex, unsorted: !!c.unsorted },
         },
         previous,
@@ -331,7 +351,7 @@ export async function renderDocument(state, { signal, resolveItem } = {}) {
       class: html.opt.xclass,
       sortable: html.citation_sort.tokens.length > 0,
     },
-    embeddedItems: items,
+    embeddedItems,
     citations: rendered.map((c) => ({
       ...c,
       sortedItems: (
@@ -340,7 +360,10 @@ export async function renderDocument(state, { signal, resolveItem } = {}) {
         Object.fromEntries(
           ["id", "locator", "label", "prefix", "suffix", "suppress-author"]
             .filter((k) => item[k] !== undefined)
-            .map((k) => [k, item[k]]),
+            .map((k) => [
+              k,
+              k === "id" ? item._bashkittenSourceId || item.id : item[k],
+            ]),
         ),
       ),
     })),

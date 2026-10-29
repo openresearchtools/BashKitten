@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { MetadataError, requestText } from './metadata-http.mjs';
 import { normalizeIdentifier } from './identifiers.mjs';
+import { workIdentifierKind, assertCompatibleWorkIdentifiers } from './work-identity.mjs';
 const normalizeId = value => { if (!/^bkref:[^/]+\/[^/]+\/[A-Z0-9]+$/.test(value)) throw new Error('Invalid References identity'); return value; };
 
 const ENDPOINT = 'https://api.openalex.org/works';
@@ -34,8 +35,12 @@ export function reconstructAbstract(index) {
 }
 
 export function extractAbstract(record) {
-  if (typeof record.abstract === 'string' && record.abstract.trim()) return record.abstract.trim();
-  return reconstructAbstract(record.abstract_inverted_index ?? (typeof record.abstract === 'object' ? record.abstract : null));
+  const text = typeof record.abstract === 'string' && record.abstract.trim()
+    ? record.abstract.trim()
+    : reconstructAbstract(record.abstract_inverted_index ?? (typeof record.abstract === 'object' ? record.abstract : null));
+  if (text.length > 1024 * 1024 || !text.isWellFormed() || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text))
+    throw fail('OpenAlex abstract contains invalid text or exceeds 1 MiB.');
+  return text;
 }
 
 /** Native-plugin metadata precedence, not a scientific completeness judgement. */
@@ -47,17 +52,25 @@ export function selectAbstract(openalexAbstract = '', zoteroAbstract = '') {
     : { text: zotero, source: zotero ? 'Zotero' : null };
 }
 
-function identifier(value, type) {
-  if (value === undefined || value === null || value === '') return null;
-  const result = normalizeIdentifier(value);
-  if (result.type !== type) throw fail('OpenAlex returned a mismatched external identifier.');
-  return result.value;
-}
-
 export function openAlexRecord(raw) {
-  if (!raw || typeof raw !== 'object' || !/^https:\/\/openalex\.org\/W[1-9]\d*$/.test(raw.id)) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw fail('OpenAlex returned a work without a valid OpenAlex identity.');
   }
+  // Main reviewer harvest.extractIdentifiers accepts root and ids aliases.
+  // Reuse that source selection, with the shared strict owner checking every
+  // supplied alias instead of silently accepting the first conflicting value.
+  const sources = [{ OpenAlex: raw.id }, { OpenAlex: raw.openalex_id }];
+  for (const object of [raw, raw.ids]) {
+    if (!object || typeof object !== 'object') continue;
+    for (const [name, value] of Object.entries(object)) {
+      const kind = workIdentifierKind(name === 'arxiv_id' ? 'arXiv' : name);
+      if (kind) for (const identifier of Array.isArray(value) ? value : [value])
+        sources.push({ itemType: raw.type === 'book' ? 'book' : undefined, [kind]: identifier });
+    }
+  }
+  const identifiers = assertCompatibleWorkIdentifiers(...sources);
+  if (!identifiers.OpenAlex) throw fail('OpenAlex returned a work without a valid OpenAlex identity.');
+  const id = `https://openalex.org/${identifiers.OpenAlex}`;
   let abstract = '', abstractIssue;
   try { abstract = extractAbstract(raw); }
   catch (error) {
@@ -65,13 +78,16 @@ export function openAlexRecord(raw) {
     abstractIssue = { source: 'OpenAlex', status: 'unavailable', reason: error.message };
   }
   return {
-    id: raw.id,
-    doi: identifier(raw.doi ?? raw.ids?.doi, 'DOI'),
-    pmid: identifier(raw.pmid ?? raw.ids?.pmid, 'PMID'),
+    id,
+    identifiers,
+    doi: identifiers.DOI ?? null,
+    pmid: identifiers.PMID ?? null,
+    pmcid: identifiers.PMCID ?? null,
+    arxiv: identifiers.arXiv ?? null,
     abstract,
     abstractSource: abstract ? 'OpenAlex' : null,
     ...(abstractIssue ? { abstractIssue } : {}),
-    sourceUrl: `${ENDPOINT}/${raw.id.split('/').at(-1)}`,
+    sourceUrl: `${ENDPOINT}/${identifiers.OpenAlex}`,
     raw,
   };
 }

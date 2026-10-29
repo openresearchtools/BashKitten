@@ -2,6 +2,7 @@
 // Pinned Zotero naming/template methods own creator/year/title formatting.
 // This adapter supplies the Item interfaces missing across our JSON boundary.
 import { createRequire } from 'node:module';
+import path from 'node:path';
 const require = createRequire(import.meta.url);
 const nativeNaming = require('./runtime/attachment-filename-native.js');
 const templates = require('./runtime/filename-templates.js');
@@ -13,6 +14,28 @@ const names = new WeakMap();
 const fileMethods = nativeNaming({ Utilities: { Internal: { byteLength: value => Buffer.byteLength(String(value), 'utf8') } } }, templates);
 export const truncateFilename = (value, maxBytes) => fileMethods.truncateFileName(value, maxBytes);
 export const validFilename = value => fileMethods.getValidFileName(String(value));
+
+// The native filename template formats the stem; retain the local upload's
+// actual extension across the JSON boundary where no nsIMIMEService exists.
+export function attachmentExtension({ filename, contentType } = {}) {
+  if (typeof filename === 'string') {
+    const name = validFilename(filename.replaceAll('\\', '/').split('/').at(-1));
+    const extension = path.extname(name);
+    if (extension && extension !== '.') return extension;
+  }
+  return {
+    'application/pdf': '.pdf',
+    'text/html': '.html',
+    'application/epub+zip': '.epub',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+    'application/msword': '.doc',
+    'application/xml': '.xml',
+    'text/xml': '.xml',
+    'text/plain': '.txt',
+    'application/rtf': '.rtf',
+    'application/vnd.oasis.opendocument.text': '.odt',
+  }[String(contentType || '').split(';', 1)[0].trim().toLowerCase()] || '';
+}
 
 export function createNativeAttachmentNamer(base) {
   if (names.has(base)) return names.get(base);

@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "name": "project-work-identity-merge",
+  "modifiedAt": "2026-10-29",
+  "files": [
+    "store/worker.mjs",
+    "adapted/work-identity.mjs",
+    "adapted/identifiers.mjs",
+    "index.mjs"
+  ],
+  "reviewedMainSources": [
+    {
+      "source": "../../agent/systematic-reviewer/vendor/main/src/core/harvest.js",
+      "commit": "859824b115731cb9932cdd45b130b8f4d222daac",
+      "sha256": "621d4a4a18351a19e9c1014f9acc95fa52678ce12c1de66145e8d761cdcd6e30",
+      "methods": [
+        "findMergeDuplicate",
+        "buildImportTarget",
+        "mergeIdentifierKey",
+        "openMergeScratchDB"
+      ]
+    },
+    {
+      "source": "../../agent/systematic-reviewer/vendor/main/src/core/item-identity.js",
+      "commit": "859824b115731cb9932cdd45b130b8f4d222daac",
+      "sha256": "56f8964483194c408db3803429049d396657fa2679da582962994bc5c0474e5c",
+      "methods": [
+        "_normalizeDOI",
+        "_normalizeOpenAlexID",
+        "_normalizePMID",
+        "_normalizeArXiv",
+        "_resolveProjectItemKey"
+      ]
+    }
+  ],
+  "nativeMergeSource": {
+    "source": "vendor/zotero/source/chrome/content/zotero/mergeItems.mjs",
+    "commit": "536244c2771f590abab9c09a3c27e615e0b318ff",
+    "sha256": "2f8681ea22aa48db1091a47231f55d36449fef24cbceee84a0f47550c8bb6586",
+    "methods": [
+      "mergeItems",
+      "moveRelations",
+      "mergeOtherAttachments"
+    ]
+  },
+  "adaptation": [
+    "Reuse Systematic Reviewer MAIN exact normalized identifier alias lookup and durable old-item-key chain compression in the existing References project SQLite worker and identifier index; no scratch database, collection workflow, title matching or separate identity service is imported.",
+    "Keep V3 strict identifier parsing and abstract reconstruction. Add explicit DOI URL wrappers and OpenAlex work identifiers. A normalized DOI/PMID/PMCID/OpenAlex/arXiv match is sufficient; conflicting secondary values remain normalized aliases and visible provenance, never fabricated corrections. Book ISBN identity stays book-scoped; journal/ISSN identifiers are not work identities.",
+    "Adapt native same-library transaction, child-parent rebind, tags/relations union, earliest-date and source-trash/replacement semantics to the existing References records and registered attachment owner. The user explicitly requires all distinct attachment records/files to remain, including identical bytes; do not port native attachment deduplication.",
+    "All SQLite mutation paths atomically match, preserve manual fields, enrich missing metadata/longer valid automatic abstracts, retain prior/incoming raw provenance receipts, and flatten old citation keys. Canonical-field corrections replace active aliases of that kind while preserving history. Imports and user/Pi edits share this one store path.",
+    "One-time versioned index migration uses 200-row keyset pages off the HTTP loop. Runtime matching uses indexed kind/value lookups and bounded duplicate groups, never a full-library title scan. The worker uses native BEGIN IMMEDIATE and SQLite busy timeout; only competing fresh WAL setup receives a bounded retry."
+  ]
+}

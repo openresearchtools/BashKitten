@@ -72,12 +72,18 @@ export async function importReferenceFile(
                 id: requestId,
                 parentItemID: options.parentKey,
                 title: options.title || basename(filePath),
+                filename: basename(filePath),
                 url: options.url || "",
                 contentType:
                   options.contentType ||
                   {
                     ".pdf": "application/pdf",
                     ".epub": "application/epub+zip",
+                    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ".doc": "application/msword",
+                    ".xml": "application/xml",
+                    ".odt": "application/vnd.oasis.opendocument.text",
+                    ".rtf": "application/rtf",
                     ".html": "text/html",
                     ".txt": "text/plain",
                   }[extname(filePath).toLowerCase()] ||

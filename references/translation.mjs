@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 const require = createRequire(import.meta.url);
 import { runNativeExport, exportMemoryNotice } from "./native-export.mjs";
 import { createNativeAttachmentNamer } from "./attachment-names.mjs";
+import { openAlexRecord } from "./adapted/openalex.mjs";
+import { normalizeWorkMetadata } from "./adapted/work-identity.mjs";
 let loaded;
 const extraConverters = new WeakMap();
 function translatedAPIItems(Z, item) {
@@ -219,22 +221,88 @@ export const schema = () =>
     "utf8",
   ).then(JSON.parse);
 
-/** Released OpenAlex JSON translator owns full metadata mapping, including records without DOI/PMID. */
+/** Keep the native translator's mapping; fill only its missing input/identity seams. */
 export async function translateOpenAlex(raw, { signal } = {}) {
   signal?.throwIfAborted();
+  const record = openAlexRecord(raw);
   const Z = await translationRuntime();
   const t = new Z.Translate.Import();
+  const text = (value) => typeof value === "string"
+    ? Z.Utilities.trimInternal(Z.Utilities.unescapeHTML(value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")))
+    : typeof value === "number" && Number.isFinite(value) ? String(value) : "";
+  const source = raw.primary_location?.source;
+  const title = text(raw.title) || text(raw.display_name);
+  if (!title) throw Object.assign(Error("OpenAlex returned a work without a title"), { status: 400 });
+  const displayName = ({ author, raw_author_name }) => text(author?.display_name)
+    || text(raw_author_name) || text(author?.name) || [
+      text(author?.firstName || author?.first_name || author?.given || author?.given_name),
+      text(author?.lastName || author?.last_name || author?.family || author?.family_name),
+    ].filter(Boolean).join(" ");
+  const authorships = (Array.isArray(raw.authorships) ? raw.authorships : []).filter(
+    (authorship) => authorship?.author && displayName(authorship),
+  );
   const data = {
     ...raw,
-    ids: { openalex: raw.id, ...raw.ids },
-    primary_location: raw.primary_location || {},
-    biblio: raw.biblio || {},
-    authorships: raw.authorships || [],
-    keywords: raw.keywords || [],
+    title,
+    doi: record.doi || undefined,
+    publication_date: text(raw.publication_date) || text(raw.publication_year),
+    language: text(raw.language),
+    ids: { ...raw.ids, openalex: record.id },
+    primary_location: {
+      ...raw.primary_location,
+      source: source && typeof source === "object" ? {
+        ...source,
+        display_name: text(source.display_name),
+        host_organization_name: text(source.host_organization_name),
+        issn: Array.isArray(source.issn) ? source.issn.map(text).filter(Boolean) : text(source.issn || source.issn_l),
+      } : null,
+    },
+    biblio: Object.fromEntries(["issue", "volume", "first_page", "last_page"].map(
+      (field) => [field, text(raw.biblio?.[field])],
+    )),
+    authorships: authorships.map((authorship) => ({
+      ...authorship,
+      author: { ...authorship.author, display_name: displayName(authorship) },
+    })),
+    keywords: (Array.isArray(raw.keywords) ? raw.keywords : []).map(
+      (keyword) => ({ display_name: text(keyword?.display_name || keyword?.keyword || keyword) }),
+    ).filter((keyword) => keyword.display_name),
   };
   t.setString(JSON.stringify(data));
   t.setTranslator("faa53754-fb55-4658-9094-ae8a7e0409a2");
   const items = await t.translate({ libraryID: false });
   signal?.throwIfAborted();
-  return items.flatMap((item) => translatedAPIItems(Z, item));
+  return items.flatMap((item) => {
+    // Retain native cleanAuthor for ordinary OpenAlex display names. The main
+    // reviewer's structured/single-field input behavior only overrides that
+    // parser when the source explicitly supplies a name boundary or mode.
+    item.creators = authorships.map((authorship) => {
+      const { author } = authorship;
+      const firstName = text(author.firstName || author.first_name || author.given || author.given_name);
+      const lastName = text(author.lastName || author.last_name || author.family || author.family_name);
+      const name = text(author.name) || displayName(authorship);
+      const creatorType = text(author.creatorType || author.creator_type) || "author";
+      if (String(author.fieldMode) === "1" || author.type === "organization"
+          || (text(author.name) && !firstName && !lastName))
+        return { lastName: name, fieldMode: 1, creatorType };
+      if (firstName || lastName) return { firstName, lastName, creatorType };
+      return Z.Utilities.cleanAuthor(name, creatorType, false);
+    });
+    return translatedAPIItems(Z, item).map((converted) => {
+      // Native API JSON has no creator-identity slots. Keep these editable
+      // alongside its native name/type fields, and retain the complete raw work
+      // in import provenance for affiliations and other provider-only metadata.
+      converted.creators = (converted.creators || []).map((creator, index) => {
+        const author = authorships[index]?.author;
+        return { ...creator,
+          ...(text(author?.id) ? { OpenAlex: text(author.id) } : {}),
+          ...(text(author?.orcid) ? { ORCID: text(author.orcid) } : {}),
+        };
+      });
+      const landingPage = text(raw.primary_location?.landing_page_url || raw.best_oa_location?.landing_page_url);
+      if (!converted.url && landingPage) converted.url = landingPage;
+      if (!converted.rights && text(raw.primary_location?.license)) converted.rights = text(raw.primary_location.license);
+      return normalizeWorkMetadata({ ...converted, ...record.identifiers });
+    });
+  });
 }

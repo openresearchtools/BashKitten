@@ -241,6 +241,68 @@
         "generateHTMLFromTemplate"
       ],
       "adaptation": "Exact pinned author/year/title default template and naming methods; JSON item/date/schema and CommonJS exports replace unavailable desktop Item/XPCOM module interfaces. UTF-8 and path byte limits use native truncation."
+    },
+    {
+      "name": "openalex-native-metadata-fidelity",
+      "source": "legal/OpenAlex-metadata-adaptation.json",
+      "sourceSha256": "7dacb967cbf8fc1c541508cc099fbf97852c3d4f6af9e2c51e050dd542d2ade2",
+      "sources": [
+        {
+          "source": "vendor/translators/source/OpenAlex JSON.js",
+          "sourceSha256": "4aa04afbe71630558c9e5e33c433c6d08d4240f5311f2826343d6ee4552714c7",
+          "nativeMethods": [
+            "parseIndividual",
+            "mappingTypes"
+          ]
+        },
+        {
+          "source": "vendor/utilities/source/utilities.js",
+          "sourceSha256": "a761a8af45a5ef40a6592c9793e3bf185a8efa7313fa1b59eacbbb99cba1a00f",
+          "nativeMethods": [
+            "trimInternal",
+            "unescapeHTML",
+            "cleanAuthor"
+          ]
+        },
+        {
+          "source": "vendor/utilities/source/utilities_item.js",
+          "sourceSha256": "fb2e3c3b7ae5fd3b90f21e4e954f057a7e45ef81989cd703614966715475f8b5",
+          "nativeMethods": [
+            "itemToAPIJSON"
+          ]
+        }
+      ],
+      "files": [
+        "adapted/openalex.mjs",
+        "translation.mjs",
+        "index.mjs"
+      ],
+      "nativeMethods": [
+        "OpenAlex JSON.parseIndividual",
+        "Utilities.trimInternal",
+        "Utilities.unescapeHTML",
+        "Utilities.Item.itemToAPIJSON",
+        "Utilities.cleanAuthor"
+      ],
+      "adaptation": "The pinned native OpenAlex translator owns bibliographic mapping. A narrow provider input adapter retains every canonical editable work identifier, native creator parsing, explicit structured/single-field names and creator identities. Direct imports and enrichment share existing project-scoped SQLite identity matching. Main reviewer normalization behavior was inspected at exact commit 859824b115731cb9932cdd45b130b8f4d222daac, with source pointers and hashes in the adaptation manifest; no whole donor module was replaced. V3 abstract/provenance validation remains with additive invalid-text bounds."
+    },
+    {
+      "name": "project-work-identity-merge",
+      "source": "legal/Work-identity-adaptation.json",
+      "sourceSha256": "c6025d5c670a16b9b16d6c55fe6384ddbc48cb8d614bc0ecf2107191de96e6a3",
+      "files": [
+        "store/worker.mjs",
+        "adapted/work-identity.mjs",
+        "adapted/identifiers.mjs",
+        "index.mjs"
+      ],
+      "nativeMethods": [
+        "Systematic Reviewer findMergeDuplicate",
+        "Systematic Reviewer _resolveProjectItemKey",
+        "Zotero mergeItems",
+        "Zotero moveRelations"
+      ],
+      "adaptation": "Reuse exact normalized identifier index lookup and old-key alias compression inside the existing project SQLite transaction owner. Adapt native same-library child reparent/preservation and metadata union without attachment deduplication. Retain primary fields, alternate identifier evidence, manual edits, complete source history and every attachment record; no fuzzy/title matching or separate identity service."
     }
   ]
 }

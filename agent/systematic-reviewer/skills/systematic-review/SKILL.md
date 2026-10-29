@@ -44,6 +44,14 @@ For References metadata, snapshots, citation markers and live Office work, read
 Discover the bundled `references` and `office` tools and their concise skills.
 References owns shared identifier/OpenAlex lookup, imports, abstract enrichment,
 PDF resolution and CSL. A project is explicit and stays fixed throughout a job.
+The same `references` tool reads/edits complete native schema metadata, ordered
+creators and abstracts, plus top-level DOI/PMID/PMCID/OpenAlex/arXiv identifiers;
+it also adds/manages local PDF, DOCX, XML and other attachments. Read the item and
+schema, PATCH its returned canonical key/version, and preserve creator identities
+and provenance. Use the shared metadata-enrichment job and exact-identifier merge
+owner for both direct OpenAlex and Pi work; similar titles/authors are not matches.
+Projects are independent named databases with Default initially; there is no
+collection layer. See the References skill for concrete metadata/upload examples.
 Live Office citations also use one durable document-bound library and style;
 establish these through the existing Office plugin before citing. Never switch
 a document's library with managed content without explicit authorization to

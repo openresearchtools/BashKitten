@@ -82,6 +82,15 @@ const itemLabel = (item) =>
         : "",
     ),
   );
+// The pinned native schema supplies every type-specific field. These work
+// identities are the narrow References additions stored by the shared backend.
+const workIdentifierLabels = {
+  DOI: "DOI",
+  PMID: "PMID",
+  PMCID: "PMCID",
+  OpenAlex: "OpenAlex work ID",
+  arXiv: "arXiv ID",
+};
 const label = (kind, value) =>
   schema?.locales?.["en-US"]?.[kind]?.[value] || human(value);
 function selectedIdentity(item) {
@@ -483,7 +492,7 @@ function renderDetail(item, targetScope) {
     form = node("form", { class: "detail-form" }),
     heading = node("h2", { class: "detail-title" }, title(item)),
     notice = node("p", { class: "notice", role: "status" });
-  root.append(heading, form, notice);
+  root.append(heading, notice, form);
   const archived = !!currentProject()?.archived;
   function readOnlyControls(container) {
     if (!archived) return;
@@ -498,6 +507,8 @@ function renderDetail(item, targetScope) {
   }
   if (archived)
     notice.textContent = "Archived library · unarchive it to edit metadata.";
+  else if (Object.values(edited.provenance?.identifierAliases || {}).some(values => values?.length))
+    notice.textContent = "This item has alternative identifiers. Review or edit them in Identifiers.";
   if (item.data.itemType === "attachment" && item.data.linkMode !== "embedded_image") {
     const parentSection = node("details", { open: true }),
       parentStatus = node("p", { class: "notice", role: "status" });
@@ -574,14 +585,17 @@ function renderDetail(item, targetScope) {
   for (const info of schema.itemTypes)
     type.add(new Option(label("itemTypes", info.itemType), info.itemType));
   type.value = edited.itemType;
-  form.append(field("Item type", type));
-  const fields = node("div", { class: "metadata-fields" }),
+  const typeField = field("Item type", type);
+  typeField.classList.add("metadata-field");
+  form.append(typeField);
+  const titleFields = node("div", { class: "metadata-fields" }),
+    fields = node("div", { class: "metadata-fields" }),
     creatorSection = node("details", { open: true }),
     creatorRows = node("div"),
     creatorActions = node("div", { class: "toolbar" }),
     creatorTitle = node("summary", {}, "Creators");
   creatorSection.append(creatorTitle, creatorRows, creatorActions);
-  form.append(creatorSection, fields);
+  form.append(titleFields, creatorSection, fields);
   let creatorStart = 0;
   edited.creators ||= [];
   function renderCreators() {
@@ -608,21 +622,22 @@ function renderDetail(item, targetScope) {
         creator.creatorType = role.value;
         detailDirty = true;
       };
+      const singleField = Object.hasOwn(creator, "name");
       const single = node("input", {
           type: "checkbox",
-          checked: !!creator.name,
+          checked: singleField,
           "aria-label": "Single-field name",
         }),
         first = node("input", {
-          value: creator.name || creator.firstName || "",
-          placeholder: creator.name ? "Name" : "First name",
-          "aria-label": creator.name ? "Name" : "First name",
+          value: singleField ? creator.name : creator.firstName || "",
+          placeholder: singleField ? "Name" : "First name",
+          "aria-label": singleField ? "Name" : "First name",
         }),
         last = node("input", {
           value: creator.lastName || "",
           placeholder: "Last name",
           "aria-label": "Last name",
-          disabled: !!creator.name,
+          disabled: singleField,
         });
       first.oninput = () => {
         if (single.checked) creator.name = first.value;
@@ -682,6 +697,14 @@ function renderDetail(item, targetScope) {
           ),
         ),
       );
+      const identifiers = node("details", { class: "creator-identifiers" });
+      identifiers.append(node("summary", {}, "Creator identifiers"));
+      for (const [name, caption] of [["ORCID", "ORCID"], ["OpenAlex", "OpenAlex author ID"]]) {
+        const input = node("input", { value: creator[name] || "", "aria-label": caption });
+        input.oninput = () => { creator[name] = input.value; detailDirty = true; };
+        identifiers.append(field(caption, input));
+      }
+      creatorRows.lastElementChild.append(identifiers);
     }
     creatorActions.replaceChildren(
       button("Add creator", () => {
@@ -718,20 +741,59 @@ function renderDetail(item, targetScope) {
     readOnlyControls(creatorActions);
   }
   function renderFields() {
+    titleFields.replaceChildren();
     fields.replaceChildren();
     const definitions =
       schema.itemTypes.find((x) => x.itemType === edited.itemType)?.fields ||
       [];
     for (const { field: name } of definitions) {
-      if (name === "abstractNote") continue;
-      const input = node(name === "extra" ? "textarea" : "input", {
-        value: edited[name] || "",
+      if (name === "abstractNote" || name in workIdentifierLabels) continue;
+      const input = node(["extra", "title"].includes(name) ? "textarea" : "input", {
+        value: edited[name] ?? "",
+        name,
+        ...(name === "title" ? { rows: 2 } : {}),
       });
       input.oninput = () => {
         edited[name] = input.value;
         detailDirty = true;
       };
-      fields.append(field(label("fields", name), input));
+      const row = field(label("fields", name), input);
+      row.classList.add("metadata-field");
+      (name === "title" ? titleFields : fields).append(row);
+    }
+    if (!["attachment", "note", "annotation"].includes(edited.itemType)) {
+      const identifiers = node("details", { open: true, class: "work-identifiers" }, node("summary", {}, "Identifiers"));
+      const aliases = node("details", { class: "identifier-aliases" }, node("summary", {}, "Alternative identifier values"));
+      if (Object.values(edited.provenance?.identifierAliases || {}).some(values => values?.length)) aliases.open = true;
+      const aliasInputs = new Map();
+      for (const [name, caption] of Object.entries(workIdentifierLabels)) {
+        const input = node("input", { name, value: edited[name] || "", spellcheck: false, autocomplete: "off", ...(name === "OpenAlex" ? { placeholder: "W…" } : {}) });
+        input.oninput = () => {
+          edited[name] = input.value;
+          if (edited.provenance?.identifierAliases) delete edited.provenance.identifierAliases[name];
+          if (aliasInputs.has(name)) {
+            aliasInputs.get(name).value = "";
+            aliasInputs.get(name).disabled = true;
+          }
+          detailDirty = true;
+        };
+        const row = field(caption, input);
+        row.classList.add("metadata-field");
+        identifiers.append(row);
+        const alternate = node("textarea", { name: "identifierAliases." + name, rows: 2, value: (edited.provenance?.identifierAliases?.[name] || []).join("\n"), spellcheck: false });
+        aliasInputs.set(name, alternate);
+        alternate.oninput = () => {
+          edited.provenance ||= {};
+          edited.provenance.identifierAliases ||= {};
+          edited.provenance.identifierAliases[name] = alternate.value.split("\n").map(value => value.trim()).filter(Boolean);
+          detailDirty = true;
+        };
+        const alternateRow = field(caption + " · one per line", alternate);
+        alternateRow.classList.add("metadata-field");
+        aliases.append(alternateRow);
+      }
+      identifiers.append(node("p", { class: "notice" }, "Changing or clearing a primary identifier replaces all active values of that kind. Save it before adding verified alternatives."), aliases);
+      fields.append(identifiers);
     }
     renderCreators();
   }
@@ -755,7 +817,7 @@ function renderDetail(item, targetScope) {
     ["Abstract", abstract],
     ["Tags · one per line", tags],
   ])
-    form.append(node("details", {}, node("summary", {}, heading), input));
+    form.append(node("details", heading === "Abstract" ? { open: true } : {}, node("summary", {}, heading), input));
   abstract.oninput = () => {
     edited.abstractNote = abstract.value;
     detailDirty = true;
@@ -861,10 +923,10 @@ function renderDetail(item, targetScope) {
     { type: "submit", class: "primary" },
     "Save changes",
   );
-  form.append(
+  const itemActions =
     node(
       "div",
-      { class: "toolbar" },
+      { class: "toolbar detail-actions" },
       save,
       button(
         "Reload item",
@@ -874,11 +936,32 @@ function renderDetail(item, targetScope) {
         },
         { "data-read-action": "" },
       ),
-    ),
-  );
+    );
+  if (!["attachment", "note", "annotation"].includes(item.data.itemType))
+    itemActions.append(button("Enrich metadata", async (event) => {
+      if (detailDirty) {
+        notice.textContent = "Save or reload your edits before enriching metadata.";
+        return;
+      }
+      const enrich = event.currentTarget;
+      const targetProject = projectId, controller = detailController;
+      enrich.disabled = true;
+      try {
+        const job = await targetScope.request("items/enrich", {
+          method: "POST",
+          body: { keys: [item.key], requestId: crypto.randomUUID() },
+          signal: controller.signal,
+        });
+        trackJob(targetProject, job);
+        notice.textContent = "Metadata enrichment queued. Progress and cancellation are available in Jobs.";
+      } catch (error) { if (error.name !== "AbortError") notice.textContent = error.message; }
+      finally { enrich.disabled = archived; }
+    }));
+  form.prepend(itemActions);
   form.onsubmit = async (event) => {
     event.preventDefault();
-    save.disabled = true;
+    const controls = [...form.querySelectorAll("input,select,textarea,button")].map(control => [control, control.disabled]);
+    for (const [control] of controls) control.disabled = true;
     try {
       edited.tags = tags.value
         .split("\n")
@@ -891,13 +974,20 @@ function renderDetail(item, targetScope) {
       const result = await targetScope.request("items/" + item.key, {
         method: "PUT",
         body: { version: item.version, data: edited },
+        signal: detailController.signal,
       });
       if (scope === targetScope && root.contains(form) && detail === item) {
         detailDirty = false;
         detail = result;
+        if (selection.delete(item.key)) {
+          selection.set(result.key, selectedIdentity(result));
+          items.setSelection(selection.keys());
+        }
         renderDetail(result, targetScope);
         items.reset({ preservePosition: true });
-        notify("Item saved.");
+        notify(Object.keys(result.identityConflicts || {}).length
+          ? "Item saved. Differing identifiers were retained as alternatives."
+          : "Item saved.");
       }
     } catch (error) {
       notice.textContent =
@@ -905,7 +995,7 @@ function renderDetail(item, targetScope) {
           ? "This item changed elsewhere. Your edits are kept here; reload before saving a revised version."
           : error.message;
     } finally {
-      save.disabled = false;
+      for (const [control, disabled] of controls) control.disabled = disabled;
     }
   };
   const attachments = node("details", { open: true }),
@@ -950,6 +1040,25 @@ async function loadChildren(item, targetScope, target, cursor, history = []) {
           );
       } else row.append(button(title(child), () => openDetail(child.key)));
       row.append(button("Edit", () => openDetail(child.key)));
+      row.append(button("Move to deleted items", async () => {
+        if (detailDirty) {
+          notify("Save or reload metadata changes before deleting an attachment or note.");
+          return;
+        }
+        if (!confirm("Move “" + title(child) + "” to deleted items?")) return;
+        try {
+          await targetScope.request("items/" + encodeURIComponent(child.key), {
+            method: "DELETE", body: { version: child.version }, signal: detailController.signal,
+          });
+          if (detail?.key !== item.key || scope !== targetScope) return;
+          selection.delete(child.key);
+          items.setSelection(selection.keys());
+          items.reset({ preservePosition: true });
+          if (child.key === item.key) { detail = null; $("#details").replaceChildren(); }
+          else await loadChildren(item, targetScope, target, cursor, history);
+          notify("Moved to deleted items.");
+        } catch (error) { if (error.name !== "AbortError") notify(error); }
+      }, { disabled: !!currentProject()?.archived, class: "attachment-delete" }));
       target.append(row);
     }
     if (!rows.length)

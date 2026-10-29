@@ -28,6 +28,19 @@ returned continuation cursors. `GET .../items/KEY/children`, `.../fulltext` and
 `.../openalex/import` use shared jobs, receipts and native cancellation. Preserve
 partial, unresolved and interrupted outcomes; uncertain writes need reconciliation.
 Independent References projects, item data/tags/notes/relations, schema and styles use the same API.
+Read the pinned native `GET .../schema` and complete `GET .../items/KEY` data
+before editing any applicable field. `PATCH .../items/KEY` accepts
+`{version:RETURNED_VERSION,data:{...changedFields}}`, including full ordered
+creator records, `abstractNote`, and top-level `DOI`, `PMID`, `PMCID`, `OpenAlex`
+(Wdigits) and `arXiv`. Preserve unspecified fields and creator identities;
+explicit empty strings clear work IDs. Automatic enrichment preserves manual
+edits. Work merges require exact normalized identifier overlap, never title or
+author similarity. Use returned canonical keys/versions for later edits while
+retaining requested citation identities in existing documents. PDF, DOCX, XML
+and other local attachment uploads preserve extensions and distinct files;
+collisions receive `-2`, `-3` before the extension. Edit/delete the attachment's
+own key/version, not its parent. Project Settings/relink moves every registered
+attachment through the existing storage owner and updates paths transactionally.
 The bundled References skill documents project create/archive/relink, deliberate
 library deletion, recent-job recovery, selected native exports, saved searches,
 copied-snapshot reconciliation and POST `/resolve` for browser-assisted PDFs.

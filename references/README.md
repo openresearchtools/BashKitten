@@ -1,5 +1,12 @@
 # References module
 
+References is BashKitten's selective integration of reference-management
+components, rather than the whole Zotero desktop application. The
+[component source map](legal/COMPONENT-ATTRIBUTION.md) links the exact upstream
+sources to our adapters, explains the modifications and retained licenses, and
+is included in the existing offline About/license package. See also the
+[full module notices](THIRD_PARTY_NOTICES.md).
+
 The existing environment backend owns authentication, project authorization,
 service lifetime and HTTP transport. `createReferencesService` opens one module
 per environment; it does not listen on another socket. The factory requires
@@ -147,6 +154,30 @@ missing/disconnected browsers retain an explicit resumable request. Browser tab
 progress uses the same serialized capture owner as attachment commits, so a late
 progress update cannot restore a completed request. Cancellation also drains
 later files already downloaded by the shared queue.
+
+Direct OpenAlex imports use the pinned OpenAlex JSON translator for every work,
+including records with DOI/PMID and works without them. Canonical DOI, PMID,
+PMCID, OpenAlex work ID and arXiv values are editable item fields. The shared
+SQLite owner merges exact work identities only within the selected database,
+fills missing native metadata and retains source provenance and attachments.
+Reimport reports `updated` when an existing reference is reused. User and Pi
+`items/enrich` requests use the same native mapping and preserve deliberate edits.
+Ordinary OpenAlex creator display names retain native Zotero personal-name
+parsing. Explicit given/family names retain their boundaries; explicit
+single-field/company names and native one-part names retain that native mode.
+Creator OpenAlex/ORCID identities and the complete original work remain
+available for correction.
+
+One exact normalized work identifier is sufficient to reuse/merge a record;
+titles, author similarity and journal IDs never trigger a merge. Competing
+same-kind values stay in `provenance.identifierAliases` and are indexed alongside
+the primary editable field. Explicitly correcting/clearing a primary field
+replaces its active aliases; prior data remains in provenance history receipts.
+The native worker transaction preserves manual edits, all attachment records and
+bytes, and old citation keys through flattened replacement aliases. File naming
+and Bibliography relocation remain with the existing attachment storage owner.
+The focused offline fixture is `node --test references/test/work-identity.test.mjs`;
+it does not perform a real identifier/PDF harvest or replace installed acceptance.
 
 The full citeproc engine and complete pinned styles/locales render user and
 agent citations consistently. Note styles require real native note indices.

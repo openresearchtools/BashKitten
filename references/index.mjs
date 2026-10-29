@@ -12,14 +12,15 @@ import { exportSelection, writeExportInput } from "./export-spool.mjs";
 import { decodeRFC2047 } from "./headers.mjs";
 import { updateCaptureSession } from "./capture-session.mjs";
 import { createAttachmentStorage } from "./attachment-storage.mjs";
+import { attachmentExtension } from "./attachment-names.mjs";
 import {
   normalizeIdentifier,
   resolveIdentifiers,
 } from "./adapted/identifiers.mjs";
 import { requestText } from "./adapted/metadata-http.mjs";
+import { workIdentifiers, sharesWorkIdentifier } from "./adapted/work-identity.mjs";
 import {
   harvestOpenAlex,
-  selectAbstract,
   openAlexRecord,
 } from "./adapted/openalex.mjs";
 const fail = (message, status = 400) => {
@@ -570,19 +571,18 @@ export async function createReferencesService({
   }
   async function enrich(p, item, signal, raw) {
     const data = item.data;
+    if (["attachment", "note", "annotation"].includes(data.itemType)) return item;
+    const actual = workIdentifiers(data);
     let record;
     if (raw) record = openAlexRecord(raw);
     else {
-      const identifiers = {
-        DOI: data.DOI,
-        PMID:
-          data.PMID || String(data.extra || "").match(/^PMID:\s*(\d+)/m)?.[1],
-      };
-      const query = identifiers.DOI
-        ? "doi:" + identifiers.DOI
-        : identifiers.PMID
-          ? "pmid:" + identifiers.PMID
-          : null;
+      const query = actual.OpenAlex
+        ? "ids.openalex:" + actual.OpenAlex
+        : actual.DOI
+          ? "doi:" + actual.DOI
+          : actual.PMID
+            ? "pmid:" + actual.PMID
+            : null;
       if (!query) return item;
       const result = await harvestOpenAlex({
         filter: query,
@@ -594,44 +594,42 @@ export async function createReferencesService({
       if (result.records.length !== 1) return item;
       record = result.records[0];
     }
-    const actual = {
-      DOI: data.DOI?.toLowerCase(),
-      PMID: data.PMID || String(data.extra || "").match(/^PMID:\s*(\d+)/m)?.[1],
-    };
-    const supplied = { DOI: record.doi, PMID: record.pmid };
-    let match = false;
-    for (const kind of ["DOI", "PMID"]) {
-      if (actual[kind] && supplied[kind]) {
-        if (actual[kind] !== supplied[kind])
-          fail("Conflicting OpenAlex identifier");
-        match = true;
-      }
-    }
-    if (!match) return item;
-    const chosen = selectAbstract(record.abstract, data.abstractNote || "");
+    if (!sharesWorkIdentifier(data, record.identifiers)) return item;
+    const metadata = await native.call("translateOpenAlex", [record.raw], signal);
+    if (metadata.length !== 1) fail("OpenAlex translation must return one reference");
+    const { key: translatedKey, version: translatedVersion, ...mapped } = metadata[0];
     const provenance = {
       ...(data.provenance || {}),
+      ...(metadata[0].provenance || {}),
+      source: data.provenance?.source || "OpenAlex",
+      openalex: {
+        id: record.id,
+        raw: record.raw,
+        sourceUrl: record.sourceUrl,
+        retrievedAt: new Date().toISOString(),
+      },
       abstract: {
         existing: data.abstractNote || "",
         openalex: record.abstract,
-        chosenSource: chosen.source === "Zotero" ? "library" : chosen.source,
         openalexId: record.id,
         sourceUrl: record.sourceUrl,
-        raw: record.raw,
         warnings: record.abstractIssue || null,
         retrievedAt: new Date().toISOString(),
         priorVersion: item.version,
       },
     };
+    // The same atomic exact-identity merge owns metadata/longer valid abstract
+    // enrichment for direct imports, user requests and Pi requests.
     return call(
       p,
       "put",
       {
         value: {
           key: item.key,
-          data: { ...data, abstractNote: chosen.text, provenance },
+          data: { ...mapped, abstractNote: record.abstract, provenance },
         },
         expected: item.version,
+        enrich: true,
       },
       signal,
     );
@@ -647,221 +645,75 @@ export async function createReferencesService({
     target,
   ) {
     const normalized = normalizeIdentifier(input);
+    if (normalized.type === "OpenAlex") {
+      const headers = { Accept: "application/json", "User-Agent": "BashKitten References/0.1" };
+      if (settings.openalexKey) headers.Authorization = "Bearer " + settings.openalexKey;
+      let raw;
+      try {
+        raw = JSON.parse(await requestText("https://api.openalex.org/works/" + normalized.value,
+          { headers }, { signal }));
+      } catch (error) {
+        if (error instanceof SyntaxError) fail("OpenAlex did not return valid JSON", 502);
+        throw error;
+      }
+      if (normalizeIdentifier(raw.id).value !== normalized.value)
+        fail("OpenAlex returned a different work identity", 409);
+      return importOpenAlexRecord(p, authority, raw, signal, receipt, resolverContext,
+        { resolvePDFs: resolveFiles, target });
+    }
     const resolution = await resolveIdentifiers({
-      identifiers: [input],
-      signal,
-      mailto: settings.crossrefEmail || undefined,
+      identifiers: [input], signal, mailto: settings.crossrefEmail || undefined,
     });
     const resolved = resolution.items[0];
     if (!resolved.zoteroIdentifier)
       return { input, status: "unresolved", resolution: resolved };
-    const lookupIdentifiers = Object.fromEntries(
-      Object.entries({
-        ...resolved.identifiers,
-        [normalized.type]: normalized.value,
-      }).filter(([, value]) => value),
-    );
-    const metadataIdentifiers = (data) => ({
-      DOI: data.DOI || data.provenance?.identifiers?.DOI,
-      PMID:
-        data.PMID ||
-        String(data.extra || "").match(/^PMID:\s*(\d+)/m)?.[1] ||
-        data.provenance?.identifiers?.PMID,
-      PMCID:
-        data.PMCID ||
-        String(data.extra || "").match(/^PMCID:\s*(\S+)/m)?.[1] ||
-        data.provenance?.identifiers?.PMCID,
-    });
-    const checkIdentifiers = (data) => {
-      const actual = metadataIdentifiers(data);
-      const comparable = (kind, value) =>
-        kind === "PMCID"
-          ? String(value)
-              .trim()
-              .toLowerCase()
-              .replace(/\.\d+$/, "")
-          : String(value).trim().toLowerCase();
-      for (const [kind, value] of Object.entries(actual))
-        if (
-          value &&
-          lookupIdentifiers[kind] &&
-          comparable(kind, value) !== comparable(kind, lookupIdentifiers[kind])
-        )
-          fail(
-            "Conflicting " +
-              kind +
-              " in resolved metadata; reconcile the identity before importing",
-            409,
-          );
-    };
-    const rememberIdentifiers = async (item) => {
-      checkIdentifiers(item.data);
-      const prior = item.data.provenance?.identifiers || {};
-      const changed = Object.entries(lookupIdentifiers).some(
-        ([kind, value]) => prior[kind] !== value,
-      );
-      if (changed)
-        item = await call(
-          p,
-          "put",
-          {
-            value: {
-              key: item.key,
-              data: {
-                ...item.data,
-                provenance: {
-                  ...item.data.provenance,
-                  identifiers: { ...prior, ...lookupIdentifiers },
-                  identityResolution: resolved,
-                },
-              },
-            },
-            expected: item.version,
-          },
-          signal,
-        );
-      return addToImportTarget(p, item, target, signal);
-    };
-    const skipped = async (item) => ({
-      input,
-      status: "skipped",
-      item: decorate(p, item),
-      resolution: resolved,
-      ...(resolveFiles
-        ? {
-            pdfs: await resolvePDFs(
-              p,
-              authority,
-              [item],
-              signal,
-              true,
-              resolverContext,
-            ),
-          }
-        : {}),
-    });
-    const matches = await call(
-      p,
-      "find",
-      { identifiers: lookupIdentifiers },
-      signal,
-    );
-    if (matches.length > 1)
-      fail("Several records match this identifier; reconcile duplicates");
-    if (matches.length === 1)
-      return skipped(await rememberIdentifiers(matches[0]));
+    const lookupIdentifiers = Object.fromEntries(Object.entries({
+      ...resolved.identifiers, [normalized.type]: normalized.value,
+    }).filter(([, value]) => value));
     const metadata = translator
-      ? await translator.resolve(resolved.zoteroIdentifier, {
-          signal,
-          settings,
-        })
-      : await native.call(
-          "translateIdentifier",
-          [resolved.zoteroIdentifier, { settings }],
-          signal,
-        );
-    const regular = metadata.filter(
-      (data) => !["attachment", "note", "annotation"].includes(data.itemType),
-    );
-    if (!regular.length)
-      fail("No reference metadata was returned for this identifier", 502);
+      ? await translator.resolve(resolved.zoteroIdentifier, { signal, settings })
+      : await native.call("translateIdentifier", [resolved.zoteroIdentifier, { settings }], signal);
+    const regular = metadata.filter(data => !["attachment", "note", "annotation"].includes(data.itemType));
+    if (!regular.length) fail("No reference metadata was returned for this identifier", 502);
     if (regular.length !== 1)
-      fail(
-        "Identifier translation returned several references; choose one before import",
-        422,
-      );
-    for (const item of regular) checkIdentifiers(item);
-    for (const [kind, value] of Object.entries(
-      metadataIdentifiers(regular[0]),
-    )) {
-      if (!value) continue;
-      const identifier = normalizeIdentifier(
-        kind === "DOI" ? value : kind + ":" + value,
-      );
-      if (identifier.type === kind) lookupIdentifiers[kind] = identifier.value;
-    }
-    // PMID/PMCID translations can reveal a DOI absent from the initial input.
-    // Recheck all verified identities in the existing per-project commit owner.
-    const committed = await withOperation(
-      "identifier-commit:" + p.id,
-      async () => {
-        const found = await call(
-          p,
-          "find",
-          { identifiers: lookupIdentifiers },
-          signal,
-        );
-        if (found.length > 1)
-          fail(
-            "Several records match the translated identifiers; reconcile duplicates",
-            409,
-          );
-        if (found.length === 1)
-          return { reused: await rememberIdentifiers(found[0]) };
-        return {
-          items: await call(
-            p,
-            "batch",
-            {
-              items: nativeValues(
-                metadata.map((data) => ({
-                  ...data,
-                  collections: [],
-                  provenance: {
-                    source: "pinned-translator",
-                    input,
-                    resolution: resolved,
-                    identifiers: ["attachment", "note", "annotation"].includes(
-                      data.itemType,
-                    )
-                      ? {}
-                      : lookupIdentifiers,
-                    retrievedAt: new Date().toISOString(),
-                  },
-                })),
-              ),
-              receipt,
-            },
-            signal,
-          ),
-        };
-      },
-      signal,
-    );
-    if (committed.reused) return skipped(committed.reused);
-    const items = committed.items;
+      fail("Identifier translation returned several references; choose one before import", 422);
+    // The worker validates independent input/translator identities together and
+    // commits match, conservative enrichment, child moves and replacement aliases
+    // under its native SQLite transaction. No find/insert race or process-only lock.
+    const items = await call(p, "batch", {
+      items: nativeValues(metadata.map(data => ({
+        ...data,
+        collections: [],
+        provenance: {
+          ...data.provenance,
+          source: data.provenance?.source || "pinned-translator",
+          input,
+          resolution: resolved,
+          identifiers: ["attachment", "note", "annotation"].includes(data.itemType)
+            ? {} : { ...data.provenance?.identifiers, ...lookupIdentifiers },
+          retrievedAt: new Date().toISOString(),
+        },
+      }))),
+      receipt,
+    }, signal);
     const enriched = [];
     for (const item of items) {
       if (["attachment", "note", "annotation"].includes(item.data.itemType)) {
         enriched.push(item);
         continue;
       }
-      try {
-        enriched.push(await enrich(p, item, signal));
-      } catch (error) {
-        enriched.push({
-          ...item,
-          enrichment: { status: "error", error: error.message },
-        });
-      }
+      try { enriched.push(await enrich(p, item, signal)); }
+      catch (error) { enriched.push({ ...item, enrichment: { status: "error", error: error.message } }); }
     }
     const pdfs = resolveFiles
-      ? await resolvePDFs(
-          p,
-          authority,
-          enriched.filter(
-            (x) =>
-              !["attachment", "note", "annotation"].includes(x.data.itemType),
-          ),
-          signal,
-          true,
-          resolverContext,
-        )
+      ? await resolvePDFs(p, authority,
+          enriched.filter(x => !["attachment", "note", "annotation"].includes(x.data.itemType)),
+          signal, true, resolverContext)
       : undefined;
     return {
       input,
-      status: "imported",
-      items: enriched.map((x) => decorate(p, x)),
+      status: items.some(item => item.reused) ? "updated" : "imported",
+      items: enriched.map(x => decorate(p, x)),
       ...(pdfs ? { pdfs } : {}),
     };
   }
@@ -884,80 +736,23 @@ export async function createReferencesService({
     context,
     options = {},
   ) {
-    const record = openAlexRecord(raw),
-      identifier = record.doi
-        ? "DOI:" + record.doi
-        : record.pmid
-          ? "PMID:" + record.pmid
-          : null;
-    if (identifier) {
-      const imported = await importIdentifier(
-        p,
-        identifier,
-        activeSignal,
-        receipt,
-        authority,
-        context,
-        options.resolvePDFs ?? settings.automaticPDFs,
-        options.target,
-      );
-      const candidates =
-        imported.items || (imported.item ? [imported.item] : []);
-      for (const item of candidates.filter(
-        (x) => !["attachment", "note", "annotation"].includes(x.data.itemType),
-      )) {
-        const updated = decorate(p, await enrich(p, item, activeSignal, raw));
-        if (imported.item?.key === item.key) imported.item = updated;
-        if (imported.items)
-          imported.items = imported.items.map((value) =>
-            value.key === item.key ? updated : value,
-          );
-      }
-      return imported;
-    }
-    const previous = await call(
-      p,
-      "find",
-      { identifiers: { OpenAlex: record.id } },
-      activeSignal,
-    );
-    if (previous.length > 1) fail("Several items share this OpenAlex identity");
-    if (previous.length === 1) {
-      const item = await addToImportTarget(
-        p,
-        previous[0],
-        options.target,
-        activeSignal,
-      );
-      return {
-        status: "skipped",
-        item: decorate(p, item),
-        ...((options.resolvePDFs ?? settings.automaticPDFs)
-          ? {
-              pdfs: await resolvePDFs(
-                p,
-                authority,
-                [item],
-                activeSignal,
-                true,
-                context,
-              ),
-            }
-          : {}),
-      };
-    }
-    const metadata = await native.call(
-      "translateOpenAlex",
-      [raw],
-      activeSignal,
-    );
+    const record = openAlexRecord(raw);
+    projectTarget(p, options.target);
+    // Direct OpenAlex import must not depend on another provider's translator
+    // availability. The pinned native OpenAlex translator maps every work;
+    // SQLite reconciles exact work identities against the selected database.
+    const metadata = await native.call("translateOpenAlex", [raw], activeSignal);
+    if (metadata.length !== 1) fail("OpenAlex translation must return one reference");
     const values = nativeValues(
       metadata.map((data) => ({
         ...data,
+        ...record.identifiers,
         collections: [],
-        abstractNote: selectAbstract(record.abstract, data.abstractNote || "")
-          .text,
+        abstractNote: record.abstract,
         provenance: {
+          ...(data.provenance || {}),
+          source: "OpenAlex",
+          identifiers: record.identifiers,
           openalex: {
             id: record.id,
             raw,
@@ -972,29 +767,13 @@ export async function createReferencesService({
         },
       })),
     );
-    const imported = await call(
-      p,
-      "batch",
-      { items: values, receipt },
-      activeSignal,
-    );
-    const pdfs =
-      (options.resolvePDFs ?? settings.automaticPDFs)
-        ? await resolvePDFs(
-            p,
-            authority,
-            imported.filter(
-              (x) =>
-                !["attachment", "note", "annotation"].includes(x.data.itemType),
-            ),
-            activeSignal,
-            true,
-            context,
-          )
-        : undefined;
+    const imported = await call(p, "batch", { items: values, receipt }, activeSignal);
+    const pdfs = (options.resolvePDFs ?? settings.automaticPDFs)
+      ? await resolvePDFs(p, authority, imported, activeSignal, true, context)
+      : undefined;
     return {
-      status: "imported",
-      items: imported.map((x) => decorate(p, x)),
+      status: imported.every((item) => item.reused) ? "updated" : "imported",
+      items: imported.map((item) => decorate(p, item)),
       ...(pdfs ? { pdfs } : {}),
     };
   }
@@ -1040,6 +819,7 @@ export async function createReferencesService({
           status: "imported",
           processed: 0,
           imported: 0,
+          updated: 0,
           skipped: 0,
           failed: 0,
           pendingBrowserRequests: 0,
@@ -1141,6 +921,7 @@ export async function createReferencesService({
             summary.pendingBrowserRequests += pendingResolvers(outcome).length;
             summary.processed++;
             if (outcome.status === "imported") summary.imported++;
+            else if (outcome.status === "updated") summary.updated++;
             else if (outcome.status === "skipped") summary.skipped++;
             else summary.failed++;
             context.onProgress({
@@ -1149,6 +930,7 @@ export async function createReferencesService({
               completed: summary.processed,
               total: Math.min(input.limit, summary.totalResultsReported),
               imported: summary.imported,
+              updated: summary.updated,
               skipped: summary.skipped,
               failed: summary.failed,
             });
@@ -1426,14 +1208,7 @@ export async function createReferencesService({
         : previous;
     const key = randomUUID().replaceAll("-", "").slice(0, 16).toUpperCase();
     const mime = meta.contentType || "application/octet-stream",
-      ext =
-        mime === "application/pdf"
-          ? ".pdf"
-          : mime === "text/html"
-            ? ".html"
-            : mime === "application/epub+zip"
-              ? ".epub"
-              : "";
+      ext = attachmentExtension({ ...meta, contentType: mime });
     const parentData = parent ? (await call(p, "get", { key: parent })).data : { itemType: "document", title: meta.title || "attachment" };
     const baseName = await native.call("attachmentFileBaseName", [parentData, { attachmentTitle: meta.title }], signal);
     await project(authority, p.id);
@@ -3308,11 +3083,13 @@ export async function createReferencesService({
             )
               fail("Invalid embedded CSL snapshot");
             if (!state.embeddedItems[source.id]) {
+              if (body.metadataSource === "snapshot")
+                fail("Missing embedded CSL snapshot: " + source.id, 422);
               const k = itemKey(p, source.id);
               const i = await call(p, "get", { key: k }, signal);
               state.embeddedItems[source.id] = await native.call(
                 "toCSL",
-                [i.data, source.id],
+                [i.data, identity(p, i.key)],
                 signal,
               );
             } else if (!source.id.startsWith(`bkref:${backendId}/${p.id}/`))
@@ -3456,6 +3233,7 @@ export async function createReferencesService({
                 {
                   items: bounded(Array.isArray(body) ? body : [body]),
                   receipt: headers["idempotency-key"],
+                  manual: true,
                 },
                 signal,
               )
@@ -3533,6 +3311,7 @@ export async function createReferencesService({
                 value: { key, data: body.data || body },
                 expected,
                 patch: method === "PATCH",
+                manual: true,
               },
               signal,
             ),
