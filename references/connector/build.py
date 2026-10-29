@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parent
 REPO=ROOT.parents[1]
 WORK=ROOT/'.build/source'
 OUT=ROOT/'dist/references'
-VERSION='1.0.4'
+VERSION='1.0.5'
 
 def run(*args):subprocess.run(args,cwd=WORK,check=True,env={**os.environ,'NPM_CONFIG_OFFLINE':'true'})
 # Keep npm's content cache; reconstruct source from the named patch every time.
@@ -37,11 +37,12 @@ for directory in ['preferences','integration','tools','test','offscreen']:
  shutil.rmtree(OUT/directory,ignore_errors=True)
 for filename in ['api.js','oauthsimple.js','updaterFix.js','manifest-v3.json']:
  (OUT/filename).unlink(missing_ok=True)
-# Runtime package uses existing product icons; donor legal attribution stays in legal/.
-branding=REPO/'browser/bashkitten/browser/branding'
-for size in [16,32,64,128]:shutil.copy(branding/f'default{size}.png',OUT/f'Icon-{size}.png')
+# Use the References artwork for native action and per-tab status icons.
+# Donor legal attribution stays in legal/; main BashKitten branding is separate.
+icons=ROOT/'src/icons'
+for size in [16,32,64,128]:shutil.copy(icons/f'Icon-{size}.png',OUT/f'Icon-{size}.png')
 for path in (OUT/'images').rglob('*zotero*'):
- if path.suffix=='.png':shutil.copy(branding/('default16.png' if '-16px' in path.name else 'default32.png'),path)
+ if path.suffix=='.png':shutil.copy(icons/('Icon-16.png' if '-16px' in path.name else 'Icon-32.png'),path)
 # Retired cloud/reporting/editor surfaces must not advertise donor services.
 retired_messages=('integration_', 'reports_', 'preferences_onlineLibrary_',
  'preferences_googleDocs', 'preferences_translators_reportErrors', 'firstRun_',

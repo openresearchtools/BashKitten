@@ -8,7 +8,7 @@ page scripts cannot call the host. Desktop packaging adds the tiny native
 native-messaging delegate `bashkitten_references`. No tokens, filesystem handles
 or arbitrary native URL fetch are exposed to the capture extension.
 
-The independently built capture extension (currently 1.0.4), preinstalled separately from the fixed host, reuses Connector 5.0.217's
+The independently built capture extension (currently 1.0.5), preinstalled separately from the fixed host, reuses Connector 5.0.217's
 translation, ItemSaver, background attachment, SingleFile, item selector, progress,
 content-type interception, cookies and challenge-monitor modules. Its source
 import is immutable under `upstream/`; a named patch changes only documented seams.

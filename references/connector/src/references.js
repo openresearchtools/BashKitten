@@ -38,16 +38,17 @@ globalThis.References = new function () {
     let finish;
     const result = new Promise(resolve => { finish = resolve; });
     choices.set(id, {source: tab, finish, mode, destination: binding || destinations.get(tab.id)});
-    const choiceTab = (await this.openTabSurface(browser.runtime.getURL('references/destination.html') + '#' + id, {}, tab)).tabs[0];
+    let choiceTab;
     const close = tabId => {
-      if (tabId !== choiceTab.id && tabId !== tab.id) return;
+      if (tabId !== choiceTab?.id && tabId !== tab.id) return;
       browser.tabs.onRemoved.removeListener(close);
       const pending = choices.get(id);
       choices.delete(id);
       if (pending) pending.finish(null);
     };
-    browser.tabs.onRemoved.addListener(close);
     try {
+      choiceTab = (await this.openTabSurface(browser.runtime.getURL('references/destination.html') + '#' + id, {}, tab)).tabs[0];
+      browser.tabs.onRemoved.addListener(close);
       const destination = await result;
       if (!destination) return false;
       if (mode === 'open' || destination.openManager) {
@@ -78,7 +79,7 @@ globalThis.References = new function () {
       throw error;
     } finally {
       choices.delete(id); browser.tabs.onRemoved.removeListener(close);
-      await browser.tabs.remove(choiceTab.id).catch(() => {});
+      if (choiceTab) await browser.tabs.remove(choiceTab.id).catch(() => {});
     }
   };
   const resolverJobs = new Map();
