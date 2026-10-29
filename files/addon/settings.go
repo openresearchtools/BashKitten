@@ -81,6 +81,7 @@ func settingsManifestHandler(w http.ResponseWriter, r *http.Request, req *wopiRe
 		return errorStatus(err)
 	}
 	manifest := map[string]any{
+		"kind":           "user",
 		"browsersetting": []map[string]string{{"uri": settingURI(r, req, "browser"), "stamp": contentStamp(browserBytes)}},
 		"xcu":            []map[string]string{{"uri": settingURI(r, req, "documentView.xcu"), "stamp": xcu.Stamp}},
 		"viewsetting":    []map[string]string{{"uri": settingURI(r, req, "viewsetting.json"), "stamp": view.Stamp}},
