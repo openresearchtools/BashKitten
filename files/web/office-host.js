@@ -89,6 +89,13 @@ window.addEventListener('message', event => {
   }
   if (event.source !== editor.contentWindow) return;
   switch (message?.MessageId) {
+    case 'Doc_Title': {
+      // Native WOPI supplies the plain filename on load and after a rename.
+      // Keep the outer tab in sync without copying a product title or URL.
+      const name = message.Values?.DocName;
+      if (typeof name === 'string' && name && !/[\x00-\x1f\x7f/\\]/.test(name)) document.title = editor.title = name;
+      break;
+    }
     case 'App_LoadingStatus':
       if (['Frame_Ready', 'Document_Loaded'].includes(message.Values?.Status)) {
         post('Host_PostmessageReady'); post('Hide_Button', { id: 'toggledarktheme' }); post('Hide_Button', { id: 'invertbackground' }); post('Hide_Menu_Item', { id: 'toggledarktheme' }); post('Hide_Menu_Item', { id: 'invertbackground' });
