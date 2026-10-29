@@ -1,0 +1,97 @@
+--- a/backend/pkg/settings/structs.go
++++ b/backend/pkg/settings/structs.go
+@@ -308,6 +308,7 @@
+ }
+ 
+ type StylingConfig struct {
++	FollowBrowserTheme      bool                   `json:"followBrowserTheme"` // follow the browser color scheme without changing saved user preferences
+ 	DisableEventBasedThemes bool                   `json:"disableEventThemes"` // disable the event based themes,
+ 	CustomCSS               string                 `json:"customCSS"`          // if a valid path to a css file is provided, it will be applied for all users. (eg. "reduce-rounded-corners.css")
+ 	CustomCSSRaw            string                 `json:"-"`                  // The css raw content to use for the custom css.
+--- a/backend/internal/web/static.go
++++ b/backend/internal/web/static.go
+@@ -236,6 +236,7 @@
+ 		"customCSS":          template.CSS(settings.Config.Frontend.Styling.CustomCSSRaw),
+ 		"userSelectedTheme":  template.CSS(userSelectedTheme),
+ 		"defaultDarkMode":    settings.DefaultDarkMode(),
++		"followBrowserTheme": settings.Config.Frontend.Styling.FollowBrowserTheme,
+ 		"lightBackground":    settings.Config.Frontend.Styling.LightBackground,
+ 		"darkBackground":     settings.Config.Frontend.Styling.DarkBackground,
+ 		"staticURL":          staticURL,
+@@ -262,6 +263,7 @@
+ 		"requestTimeoutMs":       settings.Config.Http.RequestTimeoutMs,
+ 		"disableExternal":        settings.Config.Frontend.DisableDefaultLinks,
+ 		"darkMode":               settings.Config.UserDefaults.UI.DarkMode,
++		"followBrowserTheme":     settings.Config.Frontend.Styling.FollowBrowserTheme,
+ 		"baseURL":                baseURL,
+ 		"documentProvider":       documentProvider,
+ 		"version":                versionString,
+--- a/frontend/public/index.html
++++ b/frontend/public/index.html
+@@ -52,6 +52,12 @@
+   <!-- Injected variables come from backend server (JSON block is not subject to script-src CSP) -->
+   <script id="app-config" type="application/json">{{ .globalVars }}</script>
+   <script nonce="{{ .cspNonce }}">
++    {{ if .htmlVars.followBrowserTheme }}
++    // Use the native browser preference before the first application paint.
++    const browserDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
++    document.documentElement.classList.toggle('dark-mode', browserDark);
++    document.documentElement.style.colorScheme = browserDark ? 'dark' : 'light';
++    {{ end }}
+     window.__pwaDeferredPrompt = null;
+     window.addEventListener("beforeinstallprompt", function (event) {
+       event.preventDefault();
+--- a/frontend/src/utils/theme.js
++++ b/frontend/src/utils/theme.js
+@@ -6,8 +6,14 @@
+   return `url("${normalized}public/static/img/${filename}")`;
+ }
+ 
++export function browserThemeEnabled() {
++  return globalVars.followBrowserTheme === true;
++}
++
+ export function defaultDarkMode() {
+-  return globalVars.darkMode === true;
++  return browserThemeEnabled()
++    ? window.matchMedia('(prefers-color-scheme: dark)').matches
++    : globalVars.darkMode === true;
+ }
+ 
+ export function syncDocumentTheme(dark) {
+--- a/frontend/src/main.ts
++++ b/frontend/src/main.ts
+@@ -1,4 +1,4 @@
+-import { createApp } from "vue";
++import { createApp, watch } from "vue";
+ import i18n from "@/i18n";
+ import { state } from "@/store"; // Adjust the path as per your setup
+ import App from "./App.vue"; // Adjust the path as per your setup
+@@ -7,12 +7,25 @@
+ import "./css/styles.css";
+ import "./css/dark.css";
+ import { initPwaInstall } from "@/utils/pwaInstall";
+-import { defaultDarkMode, syncDocumentTheme } from "@/utils/theme";
++import { browserThemeEnabled, defaultDarkMode, syncDocumentTheme } from "@/utils/theme";
+ import { initViewportLayoutListener } from "@/utils/viewport.js";
+ 
+ initPwaInstall();
+ initViewportLayoutListener();
+-syncDocumentTheme(defaultDarkMode());
++if (browserThemeEnabled()) {
++  const preference = window.matchMedia('(prefers-color-scheme: dark)');
++  const syncBrowserTheme = () => {
++    // Reuse the native reactive field consumed by all Files views, including
++    // user replacement at login. This is display state, not a profile update.
++    if (state.user) state.user.darkMode = preference.matches;
++    syncDocumentTheme(preference.matches);
++  };
++  watch(() => state.user, syncBrowserTheme, { immediate: true, flush: 'sync' });
++  preference.addEventListener('change', syncBrowserTheme);
++  window.addEventListener('pageshow', syncBrowserTheme);
++} else {
++  syncDocumentTheme(defaultDarkMode());
++}
+ 
+ const app = createApp(App);
+ 
