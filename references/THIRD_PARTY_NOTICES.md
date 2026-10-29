@@ -20,8 +20,11 @@ Citation styles and locales are provided by the Citation Style Language (CSL)
 project, https://citationstyles.org/, under Creative Commons
 Attribution-ShareAlike 3.0 Unported, https://creativecommons.org/licenses/by-sa/3.0/.
 All style author/contributor and locale translator metadata is retained. The
-full CSL engine is citeproc-js by Frank G. Bennett and contributors; its exact
-npm license and source package are included in the dependency inventory.
+full CSL engine is the pinned Zotero distribution of citeproc-js by Frank G.
+Bennett and contributors, including Zotero's changes. Its original dual-license
+notice is retained with the runtime source and legal inventory; BashKitten selects
+the AGPL-3.0-or-later option and includes the full license. Native Zotero Style
+and Cite configuration supplies citation-engine settings and bibliography layout.
 
 The wicked-good-xpath fork is the exact pinned Zotero translation-server
 dependency. npm installs its original commit archive, verified by the recorded

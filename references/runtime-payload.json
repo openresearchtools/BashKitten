@@ -23,6 +23,8 @@
     "vendor/styles/source/dependent/*.csl",
     "vendor/locales/source/locales-*.xml",
     "vendor/zotero/source/chrome/content/zotero/xpcom/cite.js",
+    "vendor/zotero/source/chrome/content/zotero/xpcom/citeproc.js",
+    "vendor/zotero/source/chrome/content/zotero/xpcom/style.js",
     "README.md"
   ],
   "stripTranslatorTests": true,
@@ -33,6 +35,14 @@
       "license": "AGPL-3.0-or-later",
       "source": "vendor/zotero/source.json",
       "files": ["vendor/zotero/source/COPYING"]
+    },
+    {
+      "name": "citeproc-js (Zotero bundled processor)",
+      "version": "1.4.61 with pinned Zotero 10.0.6 changes",
+      "license": "AGPL-3.0-or-later (selected from the upstream dual license)",
+      "source": "vendor/zotero/source.json",
+      "files": ["vendor/zotero/source/COPYING"],
+      "sourceNotices": ["vendor/zotero/source/chrome/content/zotero/xpcom/citeproc.js"]
     },
     {
       "name": "translation-server",

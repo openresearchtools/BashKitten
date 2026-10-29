@@ -162,13 +162,6 @@
       "sha256": "4d7eb172144890213264deda324bd94a7654302265d18e66bfaa63a351fdae98"
     },
     {
-      "url": "https://registry.npmjs.org/citeproc/-/citeproc-2.4.63.tgz",
-      "file": "413a53a19135ae66287d.tgz",
-      "version": "2.4.63",
-      "integrity": "sha512-68F95Bp4UbgZU/DBUGQn0qV3HDZLCdI9+Bb2ByrTaNJDL5VEm9LqaiNaxljsvoaExSLEXe1/r6n2Z06SCzW3/Q==",
-      "sha256": "7f2b7714bfd1f4480aad9c34972eb5d48dc1b85876ba21b5aa9aee74156e2ccf"
-    },
-    {
       "url": "https://registry.npmjs.org/combined-stream/-/combined-stream-1.0.8.tgz",
       "file": "c68058020a0a65eabda4.tgz",
       "version": "1.0.8",

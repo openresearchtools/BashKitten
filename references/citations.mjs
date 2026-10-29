@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { toCSL, translationRuntime } from "./translation.mjs";
 const require = createRequire(import.meta.url),
-  CSL = require("citeproc");
+  { CSL, createProcessor } = require("./runtime/citeproc-native.js");
 async function nativeCite() {
   const Z = await translationRuntime();
   return (Z.Cite ||= require("./vendor/zotero/source/chrome/content/zotero/xpcom/cite.js"));
@@ -99,11 +99,12 @@ async function getStyle(id, seen = new Set(), customDirectory) {
   }
   if (/<!ENTITY|<!DOCTYPE/i.test(xml))
     throw Error("External CSL entities are not allowed");
-  const parent =
-    xml.match(/<link[^>]+href="([^"]+)"[^>]+rel="independent-parent"/) ||
-    xml.match(/<link[^>]+rel="independent-parent"[^>]+href="([^"]+)"/);
+  const doc = new JSDOM(xml, { contentType: "text/xml" }).window.document,
+    parent = doc
+      .querySelector('link[rel="independent-parent"]')
+      ?.getAttribute("href");
   const resolvedParent = parent
-    ? await getStyle(parent[1], seen, customDirectory)
+    ? await getStyle(parent, seen, customDirectory)
     : null;
   return {
     id: name,
@@ -111,6 +112,13 @@ async function getStyle(id, seen = new Set(), customDirectory) {
     version: createHash("sha256")
       .update(xml + (resolvedParent?.version || ""))
       .digest("hex"),
+    native: {
+      styleID: doc.querySelector("info > id")?.textContent || name,
+      _version: doc.documentElement.getAttribute("version") || "0.8",
+      locale: doc.documentElement.getAttribute("default-locale") || null,
+      source: parent || null,
+    },
+    parent: resolvedParent,
   };
 }
 export async function listStyles({
@@ -237,21 +245,18 @@ export async function renderDocument(state, { signal, resolveItem } = {}) {
         : { ...data, id: item.id };
     }
   }
+  const Cite = await nativeCite();
   function engine(format) {
-    const p = new CSL.Engine(
-      {
-        retrieveLocale: (lang) =>
-          locales[lang] ||
-          locales[lang === "en" ? "en-US" : lang.split("-")[0]] ||
-          locales["en-US"],
-        retrieveItem: (id) => structuredClone(items[id]),
-      },
-      style.xml,
+    return createProcessor(Cite, {
+      style,
       locale,
-      true,
-    );
-    p.setOutputFormat(format);
-    return p;
+      format,
+      retrieveLocale: (lang) =>
+        locales[lang] ||
+        locales[lang === "en" ? "en-US" : lang.split("-")[0]] ||
+        locales["en-US"],
+      retrieveItem: (id) => structuredClone(items[id]),
+    });
   }
   const html = engine("html"),
     text = engine("text"),
@@ -322,7 +327,7 @@ export async function renderDocument(state, { signal, resolveItem } = {}) {
     style: {
       id: style.id,
       version: style.version,
-      locale,
+      locale: html.opt.lang,
       class: html.opt.xclass,
       sortable: html.citation_sort.tokens.length > 0,
     },

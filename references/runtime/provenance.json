@@ -1,7 +1,36 @@
 {
   "schema": 1,
-  "modifiedAt": "2026-10-28",
+  "modifiedAt": "2026-10-29",
   "patches": [
+    {
+      "name": "native-citation-processor-and-style-settings",
+      "sources": [
+        {
+          "source": "vendor/zotero/source/chrome/content/zotero/xpcom/citeproc.js",
+          "sourceSha256": "4e717cb27c1d66024bbaa578604203c178af04e789c6244a722df44d70631466"
+        },
+        {
+          "source": "vendor/zotero/source/chrome/content/zotero/xpcom/style.js",
+          "sourceSha256": "ff8508ceef0b9b0f3ec34b63fd9c886ed19c3444728d559971d72a473565d26e"
+        },
+        {
+          "source": "vendor/zotero/source/chrome/content/zotero/xpcom/cite.js",
+          "sourceSha256": "a7891bf1da2aafadab1f4d52987aebf2f8d8415e6ee3c4dddfeb18410aad7157"
+        }
+      ],
+      "files": [
+        "runtime/citeproc-native.js",
+        "citations.mjs"
+      ],
+      "nativeMethods": [
+        "CSL.Engine",
+        "Style.getCiteProc",
+        "Style._eventToEventTitle",
+        "Cite.System",
+        "Cite.getBibliographyFormatParameters"
+      ],
+      "adaptation": "Load the unchanged pinned Zotero processor and native Style methods, retaining native subtitle/name/link configuration, parent-style settings and locale policy. Only in-memory style lookup and the current document's item/locale retrieval replace desktop hosts. The existing References worker and ordered document state remain the shared owner."
+    },
     {
       "name": "native-pdf-resolver-queue",
       "source": "vendor/zotero/source/chrome/content/zotero/xpcom/attachments.js",
