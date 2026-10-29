@@ -45,6 +45,7 @@ PATCHES = [
     'office/patches/0024-native-extension-short-dialog-frame.patch',
     'office/patches/0025-native-extension-overflow-group-id.patch',
     'office/patches/0026-native-script-modifying-activity.patch',
+    'office/patches/0027-native-user-settings-bundle.patch',
 ]
 ENGINE_OPTIONS = ['--with-distro=CPLinux-LOKit', '--disable-epm',
                   '--without-package-format', '--disable-symbols',

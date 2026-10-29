@@ -314,3 +314,15 @@ desktop/phone chooser behavior and installed Linux/Termux/browser flows.
 In particular, an unrefreshed copied cell has a distinct provisional occurrence
 identity until its native payload is persisted by a citation operation. No
 six-format roundtrip result establishes the missing installed UI checks.
+
+
+Native user Options shares `admin-bundle.js` with Collabora's admin pages.
+The pinned release incorrectly blocks that immutable bundle when
+`admin_console.enable=false`, leaving the user settings iframe empty.
+`0027-native-user-settings-bundle.patch` removes only that static bundle guard.
+The separate native admin HTML authentication and admin WebSocket enable checks
+remain unchanged, and BashKitten continues to configure the admin console Off.
+The runtime manifest requires this named patch. Native controls, translations,
+stylesheet assets and application logic remain upstream; no substitute UI or
+static asset server is introduced. This MPL-2.0 modification is applied only in
+an external build copy, with the pristine source and full notices retained.

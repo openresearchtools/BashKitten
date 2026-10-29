@@ -1,0 +1,13 @@
+--- a/wsd/FileServer.cpp
++++ b/wsd/FileServer.cpp
+@@ -684,8 +684,8 @@
+             {
+                 noCache = true;
+ 
+-                if (!COOLWSD::AdminEnabled)
+-                    throw Poco::FileAccessDeniedException("Admin console disabled");
++                // Native user Options shares this immutable JavaScript bundle.
++                // Admin pages and sockets keep their own enable/auth checks.
+ 
+                 // Ask UAs to block if they detect any XSS attempt
+                 response.add("X-XSS-Protection", "1; mode=block");
