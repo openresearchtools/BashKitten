@@ -36,6 +36,20 @@ live file with direct ZIP/XML edits or run a standalone conversion process.
 | `citations.import-snapshots` | Explicitly import copied references into the document's bound project library with stable `requestId`, optional `collection`; the adapter verifies revision/positions before relinking fields. |
 | `save`, `export` | Await actual save acknowledgement; export supplies supported `format` and optional `name`, returning its real result/view URL. |
 
+For Calc, put `sheet`, `range` and `values` or `formulas` directly in `command`.
+`sheet` is a zero-based index or the native sheet name. `range` is a native range
+string such as `A1:B2`, `$A$1:$B$2` or a named range. Matrix rows and columns match
+the selected range. Inspect that range first; copy its returned `formulas` into
+`expectedFormulas` when guarding an edit against concurrent changes.
+
+```json
+{"action":"execute","sessionId":"RETURNED_SESSION_ID","command":{"operation":"sheet.set","sheet":0,"range":"A1:B2","values":[["Item","Amount"],["Example",2]]}}
+```
+
+```json
+{"action":"execute","sessionId":"RETURNED_SESSION_ID","command":{"operation":"sheet.set","sheet":"Sheet1","range":"C2","formulas":[["=B2*2"]]}}
+```
+
 Inspect native capabilities and the specific API result before assuming a command
 works on an editor. Use shipped UNO-backed operations when preferred script
 interfaces lack an operation. A deprecation warning does not authorize silently

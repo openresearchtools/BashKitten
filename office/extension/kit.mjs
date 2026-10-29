@@ -15,7 +15,7 @@ export function nativeOperation(request) {
   const short = value => new uno.Any(uno.type.short, value);
   const fail = message => { throw new Error(message); };
   const integer = (value, min, max, name) => Number.isInteger(value) && value >= min && value <= max ? value : fail('Invalid ' + name);
-  const text = (value, max = 262144) => typeof value === 'string' && value.length <= max ? value : fail('Invalid or oversized text');
+  const text = (value, max = 262144, field = 'text') => typeof value === 'string' && value.length <= max ? value : fail('Invalid or oversized ' + field);
   const has = name => properties.getPropertySetInfo().hasPropertyByName(name);
   const portablePrefix = 'ADDIN BASHKITTEN_CITATION ';
   const portableNamespace = 'urn:bashkitten:references:1';
@@ -782,7 +782,7 @@ export function nativeOperation(request) {
       for (const change of changes) change.cell.setString(change.value); return { edited: changes.length };
     }
     if (operation === 'sheet.set') {
-      const range = sheet(request.sheet).getCellRangeByName(text(request.range, 80));
+      const range = sheet(request.sheet).getCellRangeByName(text(request.range, 80, 'sheet.set command.range: use a string such as "A1:B2" or a native named range; sheet and values/formulas belong directly in command'));
       const a = range.getRangeAddress(), count = (a.EndColumn - a.StartColumn + 1) * (a.EndRow - a.StartRow + 1);
       if (count > 10000 || intersectsManaged(range)) fail('Range is too large or overlaps managed citations');
       if (request.expectedFormulas && JSON.stringify(range.getFormulaArray()) !== JSON.stringify(request.expectedFormulas)) fail('Cells changed; inspect before editing');
