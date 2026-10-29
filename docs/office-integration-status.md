@@ -6,25 +6,56 @@ and installed-product acceptance. It does not claim completed integration.
 
 ## Live integration checkpoint — 29 October 2026
 
-The current full Actions run is
+The latest completed full Actions attempt is
 [40815191205](https://github.com/openresearchtools/BashKitten/actions/runs/40815191205),
 version **153.5.4**, from `16f0a0330ac7f800fba6c97b8aaf778d32922843`.
 It includes guided/background model setup, the replacement citation commands and
 the source/license corrections, plus the remote application URL and phone
 viewport fixes. All seven related repository queues were checked clear after
 cancelling the five older active runs. Normal preparation `40815045392` passed
-without modifying the frozen source. Dispatch is not a build
-or installed acceptance pass.
+without modifying the frozen source. The attempt ended with the source and APK
+failures below; it is not complete installed-product acceptance.
 
 That run subsequently passed all four Node jobs, both Termux Search jobs and all
-four Files jobs. Source collection failed because it checked an original archive
+eight native Office/Files jobs in daughter
+[40815382518](https://github.com/openresearchtools/office-builds/actions/runs/40815382518):
+each component passed Linux amd64/arm64 and Termux aarch64/x86_64. Both complete
+Linux DEBs and both Termux packages also built. Both Android Gecko compilations
+passed, but neither APK was produced: the ARM64 and x86_64 Gradle builds failed
+at `stageBashKittenAbout` with `KeyError: 'licenses'`. The new native Go runtime
+record supplies full `text` and `licenseFiles`; that About loop expected module
+license filenames. `f09b7d27bb` updates the existing loop to accept both forms,
+preserving declared terms and rejecting incomplete text. Its focused offline
+receipt used the actual 16f0 remote Go metadata: 18 filename records plus the
+Go 1.27.2 runtime record, retaining its 73,503-character text and all 38 original
+member hashes. The existing attribution record also remained. This is generator
+verification, not a rebuilt APK pass.
+
+Source collection failed because it checked an original archive
 against the checksum of a license member inside it. `550d52b0a2` corrects the
 existing collectors to verify the archive and extracted notice independently;
 no dependency pins or license texts changed. Independent retained originals
 confirmed all 57 affected notice associations across 16 archives. The corrected
 source/APK callbacks packaged all 624 native source records offline and rejected
-damaged archives, members and retained notices. The current Actions run still
-uses `16f0a0330a`; the correction requires the next source collection.
+damaged archives, members and retained notices. Those artifacts retain
+`16f0a0330a`; the correction still requires a new successful normal source
+publication. Build outcomes are recorded in
+`verification/ci-monitor-40811847474-to-16f0-20261029.json`; the focused source and
+Android About receipts are under `Bashkitten-Acceptance/` in
+`android-notice-archive-16f0-20261029/owner-regression.json` and
+`android-about-go-16f0-20261029/verification.json`.
+
+The actual 16f0 Linux amd64 DEB passed the final packaged legal/About audit.
+The unchanged collector reproduced all 3,056 full-text records, and the packaged
+offline About contained that exact array. Native component inventories, all 30
+compiled Gecko/capture notice records and installed Office branding matched.
+Both structured Go runtime records retained their full text and 38 original
+hashes; Office's 66 original Python legal files reached About. This package has
+SHA256 `23da7e91d9980a716f1f9cf67ae78998afd43f97217fdea83d62429bd8b1250e`.
+The receipt is `Bashkitten-Acceptance/final-deb-legal-16f0-20261029/verification.json`.
+It establishes packaged notice coverage, not source publication or installed
+feature acceptance. Fresh coherent Linux/Termux packages, full APKs and matching
+published sources containing the later corrections remain outstanding.
 
 The preceding `40811847474` attempt used `aa79161e6956` and exposed a stale Termux
 Search inventory checksum after the Rust runtime source-lock update. The inventory
@@ -41,7 +72,8 @@ blocked final package collection. Old artifacts retain their original identity.
 Strict checks on the actual `aa79161e6956` Linux ARM64 and Termux x86_64 Office
 artifacts passed: all 66 original Python legal files are present, all 14
 Windows-only launchers are absent, and native source inventories, fonts and
-notices match. Matching published sources and final packaged About remain pending.
+notices match. Matching published sources and final packaged About for that
+attempt remain unverified; the later 16f0 DEB check is recorded separately above.
 
 The previous full Actions run was `40787710453`, from
 `eb56a3a10ebc5bbba76c364dac1273ed0458e418`. Both Linux and both Android browser
@@ -63,8 +95,9 @@ native input tests; earlier unfocused clicks are not successful UI evidence.
 
 - Native Office first-use project/style binding and two-source insertion ran in
   Writer, Calc and Impress. Writer citation editing, bibliography and style
-  changes were saved through the actual UI. Complete mobile, history and
-  concurrent-edit UI coverage remains outstanding.
+  changes were saved through the actual UI. The later command/history replays
+  below are bounded checks; complete mobile and concurrent-edit UI coverage
+  remains outstanding.
 - A moved Office runtime exposed a stale native systemplate alias: the cache
   compared only the source revision, so kit font paths retained the previous
   installation prefix. `0ec5251785` includes the engine path in that existing
@@ -94,10 +127,10 @@ citation content and failed; it is not counted as a pass. The real Pi then saved
 and exported the same document through native Office operations. The coordinator
 downloaded that exact export through the existing trusted HTTPS authorization
 flow; its 21,378-byte PDF retained both edits, the superscript citation and the
-formatted bibliography in text and rendered inspection. The replacement compact
-Citations menu remains in progress. `01f1d0b192` adds
-native selection lookup and guards; six-format native module checks passed,
-separate from the still-pending new desktop/phone menu checks.
+formatted bibliography in text and rendered inspection. `01f1d0b192` adds native
+selection lookup and guards; six-format native module checks passed separately
+from the later compact Citations menu replays below. The current bundled-Pi
+Calc/Impress reruns remain in progress; human UI checks do not complete them.
 
 The replacement plugin removes the visible Office References panel and exposes
 labelled native Citations commands. One nonvisual native extension lifecycle
@@ -107,16 +140,40 @@ Library and shows catalogue style titles and friendly language names. Native
 selection supplies the exact existing citation for Edit/Remove. Review caught
 and corrected lifecycle cleanup and changes arriving during a busy operation.
 The pinned frontend emit/strict/bundle checks and focused command/settings/
-lifecycle checks pass. These checks do not replace the pending installed menu,
-selection and phone-keyboard replay.
+lifecycle checks pass. Installed diagnostic replays now cover the native commands
+in all three desktop editors, using the recorded `3ed71534b2` plugin plus
+`16f0a0330a` frontend overlay on the older signed browser:
+
+- Writer Settings retained a style outside the initial catalogue page and friendly
+  locale names; cancelling a library change preserved its binding. The chooser
+  wrapped Title/Authors, showed Year, resized columns, kept Add fixed during
+  horizontal scrolling and rendered 13 bounded visible rows. Native secondary
+  click exposed Edit/Remove and reopened the exact selected two-source cluster.
+  Real keyboard entry of a complete citation marker promoted it automatically,
+  without clicking Convert, adding a second live native field.
+- Calc's native Name Box focus selected A1 before Add/Edit preloaded its two
+  sources. Remove cleared the cluster and bibliography entries; adding the two
+  sources restored the managed cell citation and two bibliography entries.
+  Impress shape and partial text selection both preloaded the exact cluster;
+  confirming locator 21 preserved its native shape anchor and bibliography.
+- Writer's native File → See history listed four versions. Retention changed
+  50 → 51 → 50 through the UI. Open showed a native read-only snapshot in the
+  same tab; Restore on the disposable UI document reopened an editable connection
+  and retained both live anchors. This did not restore or alter the Pi documents.
+
+The three receipts are in
+`verification/office-native-ui-20261029/command-ui/` as
+`writer-current-native-ui-evidence.json`, `calc-current-native-ui-evidence.json`
+and `impress-current-native-ui-evidence.json`. They retain the diagnostic overlay
+identity and do not establish fresh full-package or phone-format acceptance.
 
 Actual phone replay found that the outer Office iframe retained the 783px layout
 height while the keyboard reduced the visible viewport to 486px. `16f0a0330a`
 fits that existing iframe to the visual viewport and corrects the native inner
 flex direction. After revalidating the served stylesheet, the editor measured
 486px and Settings actions occupied y=407–451px, fully above the keyboard.
-Typing in style search and tapping Cancel passed. Save, complete citation flows
-and the extreme landscape keyboard case remain separate pending checks.
+Typing in style search and tapping Cancel and Save passed with the portrait
+keyboard open. Complete mobile-format coverage remains outstanding.
 
 Later actual phone editing preserved a multi-source cluster when opening Edit
 from a partial text selection, including the locator, prefix and suppress-author
@@ -124,8 +181,20 @@ settings. Native bibliography insertion produced two entries. These same anchors
 settings and rendered content survived a Cuttlefish restart. That restart recovered
 the emulator's WebRTC process after its rotation sensor control crashed; it is
 not an Office failure or a seamless-reconnect pass. Controlled Android landscape
-then exposed a 45px visual viewport with clipped Settings actions; its scrolling
-correction and replay remain outstanding.
+then exposed a 45px visual viewport with clipped Settings actions.
+`b263e805bd` applies a narrow named patch to the existing native extension frame
+and shared Settings layout. Actual touch scrolling with the landscape keyboard
+open then exposed Cancel and Save: Cancel closed a draft, and a separate Save
+committed IEEE. Native read-only inspection under the same Termux UID 10122
+confirmed revision 6, IEEE/en-US, the same two-source occurrence with locator,
+prefix and suppress-author settings, and two bibliography entries with live
+anchors. This was a short-frame overlay on the older APK; the controller update
+required native Force Stop/reopen and does not prove seamless reconnect.
+Phone evidence is `verification/office-command-phone-ui-20261029/evidence.json`;
+the native state receipt is
+`BashKittenOfficeBuild/20261028/diagnostics-6522/native-server/command-ui-20261029/writer-inspect-ieee-landscape-20261029.json`.
+Landscape citation Confirm, phone selected Remove, typed-code/history/export and
+Calc/Impress GUI coverage remain pending.
 
 Desktop capture now passes the installed single/multiple-item, cancellation,
 website snapshot, recognized/raw PDF, manual attachment, collection preservation
@@ -155,8 +224,9 @@ Evidence is in `verification/real-remote-apps-20261029/`, including
 The installed snapshot CLI passed six-format JSON and DOCX text output without
 changing any of the nine input snapshots. OOXML used distinct retained versions;
 the ODF fixtures had one retained version each, so those calls checked equal-version
-handling alongside the earlier changed-version semantic checks. Native desktop/
-phone history list, immutable Open and Restore UI acceptance remains pending.
+handling alongside the earlier changed-version semantic checks. The bounded
+desktop Writer history/Open/Restore UI replay is recorded above; phone history
+and remaining format coverage remain pending.
 Evidence is in `verification/office-snapshot-diff-20261029/` and the ordinary
 remote transfer follow-up is `real-remote-apps-20261029/ordinary-files-transfer-replay.json`.
 
