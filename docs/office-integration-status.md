@@ -4,9 +4,54 @@ Requirements are in [the integration plan](files-office-bibliography-plan.md).
 This record separates research/temporary comparison evidence from implementation
 and installed-product acceptance. It does not claim completed integration.
 
-## Live integration checkpoint — 29 October 2026
+## Current integration checkpoint — 29 October 2026
 
-The latest coherent build is version **153.5.4** at
+The coherent `87c68c876808a61f174fdc36cc02b509f0c4b051` build passed all
+62 jobs in [40878527390](https://github.com/openresearchtools/BashKitten/actions/runs/40878527390),
+including six primary binaries, eight Office/Files jobs and the normal matching
+source/legal/complete-candidate gate. Its complete artifact is `12903898838`.
+Publication remains held: later source fixes and the Android capture failure
+make this successful build an intermediate candidate, not the final delivery.
+
+Focused installed Wayland and Xorg checks exercised independent References
+projects, moved Bibliography attachments, Files/Changes and Files-to-Office
+launching. Wayland also checked native upload/download and an unsent Reference
+in chat with the exact owning path. The sent-message Markdown-link and stored
+attachment-card click paths were not exercised without a configured model;
+source checks are not substituted for those installed results. Evidence is in
+`Bashkitten-Acceptance/candidates/153.5.4-87c68c876808/wayland-limited/`
+and `Bashkitten-Acceptance/native-xorg-changed-87c68-20261029/`.
+
+The matching installed Android APK/backend/OS passed native Files tab-group,
+child-tab inheritance, restart persistence and the ordinary flat widescreen
+strip checks. References capture still returned an opaque error before showing
+destinations; no successful capture is claimed. Restored service tabs also
+needed their native route rebound after browser restart. The existing authority
+and service owners are being retained while these specific gaps are corrected.
+Evidence is in `Bashkitten-Acceptance/android-native-87c68-20261029/`.
+
+The exact committed `1a1d88490c974d1a5c7475f81ef341ead234770a` diagnostic
+is building through native-only parent
+[40906939972](https://github.com/openresearchtools/BashKitten/actions/runs/40906939972)
+and signed Android x86 daughter
+[40906956016](https://github.com/openresearchtools/bashkitten-build-android-x86_64/actions/runs/40906956016).
+It contains the Files appearance/scope/pane corrections and bounded native
+References error reporting. The normal complete-release gate is intentionally
+skipped for this diagnostic; it cannot be published as the complete candidate.
+
+The shared citation processor now uses the exact pinned Zotero processor and
+Style settings. Five independent native-oracle cases, packaged payload/legal
+checks and the real References worker passed. A narrow Office adapter change
+also passed ten native Writer checks and three occurrence/copy checks, including
+Vancouver numbering, real save/reopen, unchanged-citation formatting and native
+idle autosave. Those module diagnostics do not claim a rebuilt installed
+candidate. Evidence is under `BashkittenBuild/verification/citation-formatting-20261029/`
+and `office-citation-basics-20261029/`; the remaining bibliography paragraph-style
+parity correction and new metadata/identity work remain separate active changes.
+
+## Earlier integration checkpoint — 29 October 2026
+
+The earlier coherent build is version **153.5.4** at
 `45390d6a25518f69eb36fb1de436f915a572a83d`, main
 [40837599063](https://github.com/openresearchtools/BashKitten/actions/runs/40837599063),
 which finished **successfully**. All six primary binary targets, eight native
