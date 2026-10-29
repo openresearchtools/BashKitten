@@ -2,7 +2,7 @@
   "repository": "https://github.com/openresearchtools/systematic-reviewer",
   "commit": "859824b115731cb9932cdd45b130b8f4d222daac",
   "license": "AGPL-3.0-or-later",
-  "purpose": "UI search/filter presentation reference only; V3 identifier and abstract rules take precedence.",
+  "purpose": "Pristine UI/search, exact-identifier deduplication, old-item alias and native creator/OpenAlex metadata behavior references; V3 identifier/provenance/abstract validation takes precedence. Only narrow documented adaptations are used by References.",
   "files": [
     {
       "path": "src/ui/harvest.js",
@@ -28,6 +28,21 @@
       "path": "LICENSE",
       "size": 34500,
       "sha256": "60c66d170d6d9ef655c1f072f5cd681c9d8f5cecbca1257bd145f95c97409565"
+    },
+    {
+      "path": "src/core/commands.js",
+      "size": 282499,
+      "sha256": "c19491562deec428dc950bae191286941536385364e1906b462e0ddc936f2187"
+    },
+    {
+      "path": "src/core/harvest.js",
+      "size": 142278,
+      "sha256": "621d4a4a18351a19e9c1014f9acc95fa52678ce12c1de66145e8d761cdcd6e30"
+    },
+    {
+      "path": "src/core/item-identity.js",
+      "size": 35191,
+      "sha256": "56f8964483194c408db3803429049d396657fa2679da582962994bc5c0474e5c"
     }
   ]
 }
