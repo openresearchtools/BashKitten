@@ -7,7 +7,76 @@ the current plan also records the user's subsequent presentation, lifecycle and
 
 ## Current build and lifecycle checkpoint — 29 October 2026
 
-The 153.5.4 binary batch at `cf62bf9be5cd068921f5941916099531cd3ce1a7`, parent
+The coherent 153.5.4 build at `45390d6a25518f69eb36fb1de436f915a572a83d`, main
+[40837599063](https://github.com/openresearchtools/BashKitten/actions/runs/40837599063),
+finished successfully: six primary binaries, eight native Office/Files jobs,
+normal source collection and the existing complete-candidate gate all passed.
+The source job uploaded 15 files/8,617,195,586 bytes in 18m 53s; the complete gate
+verified binaries plus matching sources and uploaded 47 files/21,195,582,964 bytes.
+Publication remains held for installed review. The large artifacts were not
+downloaded or independently unpacked locally; these source results are the
+normal CI owners' checks, not a new local archive audit.
+
+The actual staged 45390 DEB/APK notice/About checks passed all 3,056/2,918 complete
+records and the matching companion, Go, Gecko/capture and Office branding
+inventories. Receipts are under
+`Bashkitten-Acceptance/final-packages-legal-45390-20261029/`; normal source and
+complete-gate metadata/logs are under
+`Bashkitten-Acceptance/candidates/153.5.4-45390d6a2551/`.
+
+Unmodified 45390 real-Xorg testing passed the rebuilt clear-query/export scope,
+native secondary-click menus, registration and one controlled native-menu
+References capture/HTML attachment,
+and a DOCX GUI open/type/Save/PDF-view/reopen round trip. Normal Local Off/Quit
+preserved the custom INI and profiles. Clean Wayland testing separately passed
+right-click, Office edit/Save and References opening from an ordinary web tab.
+Receipts are `native-xorg-153.5.4-45390-20261029/installed-acceptance-summary.json`
+and `native-wayland-153.5.4-45390-20261029/verification.json` under
+`Bashkitten-Acceptance/`. These are bounded installed checks, not the full matrix.
+Default Pin to Toolbar was checked but the capture button was missing from both
+navigation bar and overflow; default placement remains a native-review failure.
+After manual native unpin/re-pin, the coherent Xorg capture follow-up passed
+selector Cancel without writes, website snapshot, exact PDF capture and
+interleaved destinations in two distinct databases/Bibliography roots. Native
+manager confirmation and normal Off/Quit passed; default placement remains failed.
+Receipt: `native-xorg-153.5.4-45390-20261029/capture-followup/installed-capture-summary.json`
+under `Bashkitten-Acceptance/`.
+
+References opening from a Files/Office application tab still fails with an
+invalid `firefox-container-3025207296` cookie-store ID. The proposed custom native
+`create-source-tab` bridge was withdrawn uncommitted. The user's required repair
+is plugin-only ordinary native tabs in the same normal user session, with no new
+browser tab/cookie bridge. The standard-tab source fix removes two copied
+`cookieStoreId` assignments; capture remains blocked pending the fix/new package.
+Exact 45390 Android pairing and active
+capture/host registration passed, but the visible enabled Add action did nothing
+on actual tap. API-created and native + tabs both retain BashKitten context IDs
+as strings; the suspected shared decoder gap has no runtime-confirmed fix yet.
+Phone invocation/capture remains open. Distinct References book-icon assets and
+chooser cleanup are committed as `ec89cd16b8`, with installed icon acceptance
+pending. Filename-title fix `50fdb0ede0` passed a two-file Wayland overlay through
+native Collabora `Doc_Title` for initial/load, native rename/escaped ampersand,
+reload and disk rename. Original 45390 `omni.ja` was restored; this is not a
+coherent rebuilt pass. Receipt:
+`Bashkitten-Acceptance/office-filename-title-20261029/verification.json`.
+Detailed identities
+and the earlier overlay evidence are retained in
+[the Office status record](office-integration-status.md).
+
+Coherent 45390 phone portrait/landscape toolbar checks passed main-logo Agent/
+sidebar opening, inside Hide Agent return and absence of the obsolete separate
+sidebar button. The receipt is
+`android-153.5.4-45390d6a2551-20261029/toolbar-portrait-landscape-result.json`
+under `Bashkitten-Acceptance/`. Native
+`Settings → Customize → Tab bar display → Show tab bar on wide windows` already
+passed actual UI Off/persisted-navigation/On replay; original choice and rotation
+were restored. No duplicate setting was added. See `native-tabbar-off-on-result.json`
+in the same Android directory. Fresh 45390 Files → Office Writer → Library-first
+Settings → compact chooser/search/Cancel also passed there in
+`files-office-bounded-smoke.json`; no citation insertion is claimed with the
+empty library, and the software IME did not open in that run.
+
+The earlier 153.5.4 binary batch at `cf62bf9be5cd068921f5941916099531cd3ce1a7`, parent
 [40823770402](https://github.com/openresearchtools/BashKitten/actions/runs/40823770402),
 passed all eight native Office/Files jobs, both Linux packages, both Termux
 packages and both Android APKs. The staged x86_64 APK's production certificate
@@ -27,7 +96,8 @@ Later workflow correction `1eab4ec1df` bulk-fetches missing pinned Git blobs
 through native Git before the existing source collector. The exact workflow
 step and exporter fixtures passed with identical archive bytes, reducing 40
 fetch processes to one. This changes preparation only, not source serialization
-or content; complete normal source publication is still unverified. Receipts are
+or content; the later 45390 normal source collection passed as recorded above.
+Receipts are
 in `Bashkitten-Acceptance/source-archive-backfill-20261029/`.
 `9e64389692` adds disk/object-usage observability around that native backfill,
 without changing source content or claiming successful publication.
@@ -37,8 +107,9 @@ phone Writer history/conversion/removal/PDF and saves in all three editors, with
 explicit older-browser/module overlay identities. Actual bundled Pi also
 completed nine Calc/Impress native calls and both saves; normal Stop ended the
 bounded test after the acknowledgements, without a completed final model reply.
-Landscape chooser Confirm and the initial unreproduced Impress repaint
-observation remain open. Detailed receipts and limits are in the Office record;
+The later old-6522 landscape chooser Confirm replay passed with its original
+APK/module identities; the initial unreproduced Impress repaint observation
+remains recorded. Detailed receipts and limits are in the Office record;
 these checks do not establish fresh-candidate Office acceptance.
 
 The unmodified cf62 real-Xorg Files checkpoint passed bounded CRUD, native
@@ -81,12 +152,13 @@ The combined `result.json` and sibling
 `build-0026/committed-source-link.json` retain the exact diagnostic build and
 reviewed committed-input identity.
 
-`6b01947a60` separately
-changes native browser field-clearing semantics; rebuilt installed-actor
-and actual References query/export-scope acceptance remain pending. Its bounded
+`6b01947a60` separately changes native browser field-clearing semantics. Its
+rebuilt 45390 Xorg query-clear/Entire-library scope and Wayland stable-field
+clear checks passed above, alongside `73f0b90e85` native secondary clicking.
+This does not close every actor/control case. Its earlier bounded
 source/native-event receipt is
 `Bashkitten-Acceptance/browser-fill-clear-20261029/verification.json`.
-These source changes postdate the cf62 binaries.
+These source changes postdate the cf62 binaries and are included in 45390.
 
 ## Guided local models — 29 October 2026
 
@@ -199,7 +271,8 @@ were restored, the draft cleared and the fixture removed. See
 Optional large model weights were not downloaded or claimed tested. Actual Q8
 KV execution, physical GPU and broader installed flows remain separate gates.
 The failed 16f0 Android build remains historical; it is not relabelled as cf62.
-The parent source-collection state also prevents final published-source acceptance.
+The earlier parent source-job cancellation remains historical; 45390 normal
+source collection passed above, while release publication remains held.
 External receipts and screenshots are under
 `/home/user/Bashkitten-Acceptance/localai-153.5.4-16f0-20261029/`, including
 `first-launch-settings-closed.json`, `ready-status.json`,
