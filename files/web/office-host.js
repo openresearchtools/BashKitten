@@ -5,6 +5,15 @@ const editor = document.getElementById('editor');
 const history = document.getElementById('history');
 const errorBox = document.getElementById('error');
 const lifetime = new AbortController();
+// Embedded windows do not inherit the top visual viewport's keyboard resize.
+// Fit the existing editor; its native resize handlers own the inner layout.
+const viewport = window.visualViewport;
+function fitEditorViewport() {
+  if (viewport) editor.style.height = Math.min(innerHeight, viewport.height * viewport.scale) + 'px';
+}
+viewport?.addEventListener('resize', fitEditorViewport, { signal: lifetime.signal });
+window.addEventListener('resize', fitEditorViewport, { signal: lifetime.signal });
+fitEditorViewport();
 let renewalTimer;
 function post(MessageId, Values = {}) { editor.contentWindow.postMessage(JSON.stringify({ MessageId, Values, SendTime: Date.now() }), context.origin); }
 function report(error) { errorBox.textContent = error.message || String(error); errorBox.hidden = false; }
