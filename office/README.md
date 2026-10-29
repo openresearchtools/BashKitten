@@ -108,6 +108,9 @@ chooser/settings already provide the title and actions. This avoids a duplicate
 header and preserves native CSS centering when a phone keyboard changes the
 viewport. Native Escape and explicit Cancel/Close remain available, including
 while the authorized host context is loading.
+Very short keyboard viewports retain normal control sizes and scroll the whole
+Settings dialog. Headerless native frames reduce their outer gutter as space
+falls; this does not make an entire form fit a single control row.
 The host proxy binds
 each frame/origin/nonce and exposes project-scoped References requests without
 another browser bearer token. The native experimental feature and actual write,

@@ -1,0 +1,13 @@
+--- a/browser/src/control/Control.Extension.ts
++++ b/browser/src/control/Control.Extension.ts
+@@ -1459,7 +1459,9 @@
+ 			iframeDialog._iframe.style.height = msg.height + 'px';
+ 		}
+ 		iframeDialog._container.style.maxWidth = 'calc(100vw - 16px)';
+-		iframeDialog._container.style.maxHeight = 'calc(100dvh - 16px)';
++		iframeDialog._container.style.maxHeight = msg.titlebar === false
++			? 'calc(100dvh - min(16px, 5dvh))'
++			: 'calc(100dvh - 16px)';
+ 		iframeDialog._container.style.overflow = 'hidden';
+ 		const origRemove = iframeDialog.remove.bind(iframeDialog);
+ 		// Titlebar X and in-iframe Esc both call remove() directly.  Turn

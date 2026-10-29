@@ -10,3 +10,13 @@
 .document-settings-dialog>.dialog-actions{flex-shrink:0}
 .document-settings-dialog>.dialog-content{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
 .document-settings-dialog>.notice:empty{display:none}
+
+/* A landscape keyboard can leave less than one control row. Keep normal touch
+   sizes and scroll the whole dialog so its fields and actions remain reachable. */
+@media(max-height:320px){
+  .document-settings-dialog[open]{display:block;overflow:auto;padding:6px}
+  .document-settings-dialog>.dialog-content{overflow:visible;min-height:auto}
+}
+@media(max-height:180px){
+  .office-command-page .reference-dialog{max-height:100dvh;padding:2px}
+}

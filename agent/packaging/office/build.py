@@ -42,6 +42,7 @@ PATCHES = [
     'office/patches/0021-native-user-preset-extensions.patch',
     'office/patches/0022-native-python-platform-launchers.patch',
     'office/patches/0023-native-extension-dialog-commands.patch',
+    'office/patches/0024-native-extension-short-dialog-frame.patch',
 ]
 ENGINE_OPTIONS = ['--with-distro=CPLinux-LOKit', '--disable-epm',
                   '--without-package-format', '--disable-symbols',
