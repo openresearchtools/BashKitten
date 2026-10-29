@@ -293,6 +293,21 @@ repairs were reproduced and replayed through the actual UI. The retained profile
 needed native unpin/re-pin to display the capture toolbar button; fresh-candidate
 default placement and Android capture still require installed checks.
 
+Fresh cf62 Android verification found the capture assets present but its add-on
+absent from the native registry; only the privileged host was active. The APK
+omitted every `_locales` directory despite the capture manifest's `default_locale`
+requirement, which native Gecko rejects. The library now uses the same native
+asset filter already used by Fenix. The actual cached Android SDK asset merger
+reproduced zero locales with its default filter and all 37 with the correction.
+The existing staging helper also carries the component's full runtime inventory
+for self-contained final-APK verification; checks reject missing locales/assets,
+changed bytes and malformed inventories, including in a sparse collector checkout.
+No runtime registration or privilege workaround was added. Evidence is
+`verification/references-capture-android-cf62-20261029/native-addon-state.json`.
+Adjacent `native-asset-filter-result.json` and `apk-inventory-check-result.json`
+record the packaging checks, not installation of a rebuilt signed APK.
+Fresh rebuilt capture installation and GUI saving remain pending.
+
 Remote References and Files passed through the enrolled Tor/Chisel route with
 trusted loopback HTTPS and separate local/remote libraries. Actual Office
 edit/save, ordinary PDF rendering, native 4 MiB download with exact checksum,
@@ -363,6 +378,13 @@ bounded helper/native-event checks are recorded in
 `Bashkitten-Acceptance/browser-fill-clear-20261029/verification.json`.
 Acceptance through a rebuilt installed actor and actual References query/export
 scope remains pending.
+
+`73f0b90e85` separately corrects secondary clicks to use the existing native
+WebDriver `mousedown`, `contextmenu`, `mouseup` sequence. Ten component checks
+preserve ordinary-tab/frame authorization and button cleanup. The actual Files
+test had reproduced the missing API menu while physical right-click worked;
+the rebuilt-actor replay remains pending. Its receipt is
+`Bashkitten-Acceptance/browser-right-click-component-20261029.json`.
 
 Evidence lives outside Git under `BashkittenBuild/verification/`, including
 `restored-native-seat-20261029`, `office-native-ui-20261029`,

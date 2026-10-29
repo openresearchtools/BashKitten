@@ -25,7 +25,12 @@ android {
     buildFeatures { aidl true; buildConfig true }
     sourceSets.main.assets.srcDirs += "$buildDir/generated/notices"
     sourceSets.main.assets.srcDirs += "$buildDir/generated/references"
-    androidResources { noCompress 'ja' }
+    androidResources {
+        noCompress 'ja'
+        // Match the app's asset policy: AAPT's default filter drops the
+        // References connector's required _locales directories in this AAR.
+        ignoreAssetsPattern = "manifest.template.json"
+    }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     sourceSets.main.jniLibs.srcDirs += "$buildDir/generated/tor"
     buildTypes {

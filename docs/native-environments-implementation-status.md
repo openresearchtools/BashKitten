@@ -180,11 +180,21 @@ the existing synthesis API after 44.205s; this is not speech-fidelity, GUI previ
 or call/playback acceptance. Actual GUI Parakeet dictation of the public JFK
 sample was inaccurate and partial. A direct native comparison of the same 11s
 PCM returned the complete expected text in 18.237s. The GUI sample window had
-73 Android HAL silence insertions and 28 read errors; audio delivery remains
-unresolved, with no model defect or physical-microphone quality conclusion.
+73 Android HAL silence insertions and 28 read errors; this failed attempt remains
+recorded separately from the subsequent replay.
 Receipts are `native-tts-audio-validation.json`, `native-direct-asr-result.json`
-and `gui-audio-hal-diagnostic.json` in the same evidence directory. End-to-end
-GUI dictation/fidelity remains open.
+and `gui-audio-hal-diagnostic.json` in the same evidence directory.
+
+The subsequent actual GUI replay returned the complete expected JFK sentence.
+Only instance 4's WebRTC process was moved to the test environment's already
+documented CPU affinity, and the recording window was shortened; no app or model
+change was made. The sample window had zero ALSA read errors and 17 short-buffer
+warnings. This establishes the bounded public-sample GUI path, not error-free
+HAL behavior, isolated causality, physical-microphone quality or general speech
+reliability. The fixture enters stock Cuttlefish WebRTC and traverses Android
+AudioRecord and the actual app encoder/transcription path. Defaults and auto-send
+were restored, the draft cleared and the fixture removed. See
+`gui-dictation-replay-summary.json` and `gui-replay-visible-text.json`.
 
 Optional large model weights were not downloaded or claimed tested. Actual Q8
 KV execution, physical GPU and broader installed flows remain separate gates.

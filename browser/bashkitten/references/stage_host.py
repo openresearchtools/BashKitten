@@ -61,3 +61,6 @@ if __name__ == "__main__":
         destination = capture / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
+    # Keep final APK verification independent of generated component files in
+    # the collector's checkout. This is the component's existing full inventory.
+    shutil.copyfile(DIST / "runtime-sha256.json", assets / "references-runtime-sha256.json")

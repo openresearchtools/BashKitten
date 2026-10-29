@@ -107,6 +107,34 @@ def verify_android_resources(apk):
     # EXTRA_JS_MODULES is copied into the current omnijar, never into Gecko ELF
     # libraries. Native reuse must not accidentally preserve the donor's module.
     with zipfile.ZipFile(apk) as archive:
+        names = archive.namelist()
+        for directory, extension_id in [('references', 'references@bashkitten.org'),
+                                         ('references-host', 'references-host@bashkitten.org')]:
+            prefix = 'assets/' + directory + '/'
+            manifest_path = prefix + 'manifest.json'
+            if names.count(manifest_path) != 1:
+                raise ValueError('APK References manifest is missing or duplicated: ' + directory)
+            manifest = json.loads(archive.read(manifest_path))
+            if manifest.get('browser_specific_settings', {}).get('gecko', {}).get('id') != extension_id:
+                raise ValueError('APK References extension identity differs: ' + directory)
+            locale = manifest.get('default_locale')
+            if 'default_locale' in manifest and (not isinstance(locale, str) or not re.fullmatch(r'[A-Za-z0-9_-]+', locale)
+                                                or names.count(prefix + '_locales/' + locale + '/messages.json') != 1):
+                raise ValueError('APK References default locale is missing: ' + directory)
+        inventory_path = 'assets/references-runtime-sha256.json'
+        if names.count(inventory_path) != 1:
+            raise ValueError('APK References runtime inventory is missing or duplicated')
+        inventory = json.loads(archive.read(inventory_path))
+        prefix = 'assets/references/'
+        payload = [name[len(prefix):] for name in names if name.startswith(prefix) and not name.endswith('/')]
+        if (not isinstance(inventory, dict) or not inventory or len(payload) != len(set(payload))
+                or set(payload) != inventory.keys()):
+            raise ValueError('APK References capture inventory differs')
+        for name, expected in inventory.items():
+            if (not name or '\\' in name or any(part in {'', '.', '..'} for part in name.split('/'))
+                    or not isinstance(expected, str) or not re.fullmatch('[0-9a-f]{64}', expected)
+                    or hashlib.sha256(archive.read(prefix + name)).hexdigest() != expected):
+                raise ValueError('APK References capture checksum mismatch: ' + name)
         with zipfile.ZipFile(io.BytesIO(archive.read('assets/omni.ja'))) as omni:
             if omni.read('modules/BashKittenAndroid.sys.mjs') != (ROOT / ANDROID_ONLY_MODULE).read_bytes():
                 raise ValueError('Android omnijar module does not match the current source')
