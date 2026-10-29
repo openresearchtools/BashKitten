@@ -7,20 +7,31 @@ and installed-product acceptance. It does not claim completed integration.
 ## Live integration checkpoint — 29 October 2026
 
 The current full Actions run is
-[40811847474](https://github.com/openresearchtools/BashKitten/actions/runs/40811847474),
-version **153.5.4**, from `aa79161e6956f1ae1f30c6b6a9f4705882dd42f6`.
+[40815191205](https://github.com/openresearchtools/BashKitten/actions/runs/40815191205),
+version **153.5.4**, from `16f0a0330ac7f800fba6c97b8aaf778d32922843`.
 It includes guided/background model setup, the replacement citation commands and
-the source/license corrections. All seven related repository queues were checked
-clear after cancelling the three older active runs. Normal preparation
-`40811642313` passed without modifying the frozen source. Dispatch is not a build
+the source/license corrections, plus the remote application URL and phone
+viewport fixes. All seven related repository queues were checked clear after
+cancelling the five older active runs. Normal preparation `40815045392` passed
+without modifying the frozen source. Dispatch is not a build
 or installed acceptance pass.
 
-This attempt exposed a stale Termux Search inventory checksum after the Rust
-runtime source-lock update. The inventory now matches that lock; the unchanged
+The preceding `40811847474` attempt used `aa79161e6956` and exposed a stale Termux
+Search inventory checksum after the Rust runtime source-lock update. The inventory
+now matches that lock (`a5296491b5`); the unchanged
 pinned Termux archive was verified and extracted successfully from the offline
 cache. Both Linux Node restore jobs also hit GitHub HTTP 502 while reading prior
-producer job lists, before compilation. The active candidate retains its original
-source identity; these failures and any retries remain separate from acceptance.
+producer job lists, before compilation; `c3b0cef2e6` adds bounded retries for those
+idempotent metadata reads, retaining fatal authentication and integrity failures.
+Files Termux ARM64 failed while Git tried to fetch the omitted root `.gitignore`;
+`a1a1a8b336` includes it in the native sparse checkout. All four Office native
+artifacts passed at that old source, separately from the failed Files job and
+blocked final package collection. Old artifacts retain their original identity.
+
+Strict checks on the actual `aa79161e6956` Linux ARM64 and Termux x86_64 Office
+artifacts passed: all 66 original Python legal files are present, all 14
+Windows-only launchers are absent, and native source inventories, fonts and
+notices match. Matching published sources and final packaged About remain pending.
 
 The previous full Actions run was `40787710453`, from
 `eb56a3a10ebc5bbba76c364dac1273ed0458e418`. Both Linux and both Android browser
@@ -89,6 +100,14 @@ The pinned frontend emit/strict/bundle checks and focused command/settings/
 lifecycle checks pass. These checks do not replace the pending installed menu,
 selection and phone-keyboard replay.
 
+Actual phone replay found that the outer Office iframe retained the 783px layout
+height while the keyboard reduced the visible viewport to 486px. `16f0a0330a`
+fits that existing iframe to the visual viewport and corrects the native inner
+flex direction. After revalidating the served stylesheet, the editor measured
+486px and Settings actions occupied y=407–451px, fully above the keyboard.
+Typing in style search and tapping Cancel passed. Save, complete citation flows
+and the extreme landscape keyboard case remain separate pending checks.
+
 Desktop capture now passes the installed single/multiple-item, cancellation,
 website snapshot, recognized/raw PDF, manual attachment, collection preservation
 and overlapping two-project capture flows. `7c460a72f9` preserves collection
@@ -97,10 +116,19 @@ repairs were reproduced and replayed through the actual UI. The retained profile
 needed native unpin/re-pin to display the capture toolbar button; fresh-candidate
 default placement and Android capture still require installed checks.
 
-Remote References passed through the enrolled Tor/Chisel route with trusted
-loopback HTTPS and separate local/remote libraries. Remote Files, Office,
-download and revocation/reconnect coverage remains pending. Evidence is in
-`verification/real-remote-apps-20261029/real-https-references.json`.
+Remote References and Files passed through the enrolled Tor/Chisel route with
+trusted loopback HTTPS and separate local/remote libraries. Actual Office
+edit/save, ordinary PDF rendering, native 4 MiB download with exact checksum,
+live revocation and saved reconnect also passed. A normal download click exposed
+the isolated fixture's read-only default Downloads directory; a writable native
+destination and ordinary-click replay remain pending. `860ac0c38a` fixes reopening
+already mapped application URLs through the owning route, with 27 focused cases
+and the full Android Java compile passing; installed API replay remains pending.
+The two same-UID diagnostic owners required a serialized handoff of Quantum,
+Office and its storage service; all previous states were restored. Long transfers,
+cancel and sustained Office connection stability are not claimed accepted.
+Evidence is in `verification/real-remote-apps-20261029/`, including
+`real-https-references.json` and `real-https-files-office.json`.
 
 Evidence lives outside Git under `BashkittenBuild/verification/`, including
 `restored-native-seat-20261029`, `office-native-ui-20261029`,
