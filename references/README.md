@@ -104,6 +104,12 @@ transport/sandbox adapters; it does not bring its AWS/serverless service graph.
 Core HTTP retry and delay functions wrap that transport. Request cancellation
 uses a per-operation asynchronous context, rather than a global selected target.
 
+The object-only metadata converter preserves native `Item.fromJSON` handling of
+unknown string fields and fields invalid for the selected item type in Extra.
+Its pinned base-field/RDF deduplication and Extra formatter are reused with the
+existing schema hosts. Existing valid API fields keep their native conversion;
+no DOI-specific mapping or bibliographic identity check is added.
+
 The resolver queue is shared across libraries. Selected batches enter the native
 queue together, allowing another domain to proceed while one is delayed.
 Native one-second pacing, Retry-After, backoff and failure bounds are retained;

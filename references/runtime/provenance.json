@@ -141,6 +141,38 @@
         "Zotero.Translate.ItemGetter.nextItem"
       ],
       "adaptation": "Pinned IO.Write block and BOM constants retained unchanged inside an injected module. Worker-local Node file/converter streams replace XPCOM streams with the existing iconv-lite dependency. JSONL input feeds unchanged ItemGetter one record at a time; one native translator invocation, shared-flag cancellation and explicit native whole-array/graph/DOM memory notices. Native close errors are surfaced after completion and partial private files are removed."
+    },
+    {
+      "name": "native-item-extra-preservation",
+      "source": "vendor/zotero/source/chrome/content/zotero/xpcom/data/item.js",
+      "sourceSha256": "dd1901baabf70fd50f9e6239d3576787d2c10456cb8ff48cdef8712a8155cd2e",
+      "additionalSources": [
+        {
+          "source": "vendor/zotero/source/chrome/content/zotero/xpcom/translation/translate_item.js",
+          "sourceSha256": "abe26d3cdaea27f72d5d00837784c78a6ef63476fea5b233c2d591e1874eeca5"
+        },
+        {
+          "source": "vendor/zotero/source/chrome/content/zotero/xpcom/utilities_internal.js",
+          "sourceSha256": "a567e71b7ad83feb3cb3f70d8f7b2c090d4cb35e2ed6cf7892316b9ab20aafe4"
+        },
+        {
+          "source": "vendor/zotero/source/chrome/content/zotero/xpcom/data/itemFields.js",
+          "sourceSha256": "e296ea9bcac72798cac9badeea774ddc6a2868baae64416020e0e41a3c44a0b3"
+        }
+      ],
+      "files": [
+        "runtime/item-extra-native.js",
+        "translation.mjs"
+      ],
+      "nativeMethods": [
+        "Item.fromJSON field/default and base-field/RDF deduplication branches",
+        "ItemSaver._copyJSONItemForImport",
+        "Utilities.Internal.combineExtraFields",
+        "Utilities.Internal._normalizeExtraKey",
+        "Utilities.Internal.camelToTitleCase",
+        "ItemFields base-field cache/accessor behavior"
+      ],
+      "adaptation": "Preserve only fields discarded by object-only itemToAPIJSON. Native Extra branches and formatter copied; valid-field conversion remains unchanged. Missing core accessors derive base-field IDs/type mappings from the already loaded pinned cachedTypes schema; no additional schema or DOI-specific mappings."
     }
   ]
 }

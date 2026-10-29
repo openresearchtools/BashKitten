@@ -5,6 +5,17 @@ import { createHash } from "node:crypto";
 const require = createRequire(import.meta.url);
 import { runNativeExport, exportMemoryNotice } from "./native-export.mjs";
 let loaded;
+const extraConverters = new WeakMap();
+function translatedAPIItems(Z, item) {
+  const converted = Z.Utilities.Item.itemToAPIJSON(item);
+  let preserveExtra = extraConverters.get(Z);
+  if (!preserveExtra) {
+    preserveExtra = require("./runtime/item-extra-native.js")(Z);
+    extraConverters.set(Z, preserveExtra);
+  }
+  if (converted[0]) preserveExtra(item, converted[0]);
+  return converted;
+}
 export async function translationRuntime() {
   if (!loaded)
     loaded = (async () => {
@@ -35,7 +46,7 @@ export async function translateIdentifier(
   t.setTranslator(candidates);
   const items = await t.translate({ libraryID: false });
   signal?.throwIfAborted();
-  return items.flatMap((item) => Z.Utilities.Item.itemToAPIJSON(item));
+  return items.flatMap((item) => translatedAPIItems(Z, item));
 }
 export async function translateImport(text, { signal } = {}) {
   return (await translateImportBundle(text, { signal })).items;
@@ -131,7 +142,7 @@ export async function captureItems(items, { importLinks = false } = {}) {
           : creator,
       ),
     };
-    const converted = Z.Utilities.Item.itemToAPIJSON(normalized);
+    const converted = translatedAPIItems(Z, normalized);
     records.push(...converted);
     for (const attachment of item.attachments || []) {
       if (
@@ -221,5 +232,5 @@ export async function translateOpenAlex(raw, { signal } = {}) {
   t.setTranslator("faa53754-fb55-4658-9094-ae8a7e0409a2");
   const items = await t.translate({ libraryID: false });
   signal?.throwIfAborted();
-  return items.flatMap((item) => Z.Utilities.Item.itemToAPIJSON(item));
+  return items.flatMap((item) => translatedAPIItems(Z, item));
 }
