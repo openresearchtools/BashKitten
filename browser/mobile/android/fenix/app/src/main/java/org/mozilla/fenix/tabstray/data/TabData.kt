@@ -6,6 +6,7 @@ package org.mozilla.fenix.tabstray.data
 
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.TabSessionState
+import mozilla.components.browser.state.state.filesTabIds
 
 /**
  * Data entity emitted from the tab data store.
@@ -16,9 +17,11 @@ import mozilla.components.browser.state.state.TabSessionState
 data class TabData(
     val selectedTabId: String? = null,
     val tabs: List<TabSessionState> = emptyList(),
+    val filesTabIds: Set<String> = emptySet(),
 ) {
     constructor(browserState: BrowserState) : this(
         selectedTabId = browserState.selectedTabId,
         tabs = browserState.tabs,
+        filesTabIds = browserState.filesTabIds(),
     )
 }

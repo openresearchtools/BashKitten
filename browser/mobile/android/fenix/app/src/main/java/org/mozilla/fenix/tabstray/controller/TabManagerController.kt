@@ -316,7 +316,7 @@ class DefaultTabManagerController(
             when (page) {
                 Page.NormalTabs -> TabsTray.normalModeTapped.record(NoExtras())
                 Page.PrivateTabs -> TabsTray.privateModeTapped.record(NoExtras())
-                Page.TorTabs -> Unit
+                Page.TorTabs, Page.FilesTabs -> Unit
                 Page.TabGroups -> TabsTray.tabGroupModeTapped.record(NoExtras())
                 Page.SyncedTabs -> TabsTray.syncedModeTapped.record(NoExtras())
             }
@@ -415,6 +415,8 @@ class DefaultTabManagerController(
     ): Boolean {
         val activeTabs = if (isPrivate) {
             tabsTrayStore.state.privateBrowsing.tabs
+        } else if (tabsTrayStore.state.selectedPage == Page.FilesTabs) {
+            tabsTrayStore.state.filesTabsState.items.toTabList()
         } else {
             tabsTrayStore.state.normalTabsState.items.toTabList()
         }

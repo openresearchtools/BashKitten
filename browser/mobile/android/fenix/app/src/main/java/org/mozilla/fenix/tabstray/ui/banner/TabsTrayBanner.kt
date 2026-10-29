@@ -126,6 +126,7 @@ fun TabsTrayBanner(
     onExitSelectModeClick: () -> Unit,
     onAddToTabGroup: () -> Unit,
     torTabCount: Int = 0,
+    filesTabCount: Int = 0,
     onOpenAgentClick: () -> Unit = {},
 ) {
     val isInMultiSelectMode by remember(selectionMode) {
@@ -171,6 +172,7 @@ fun TabsTrayBanner(
                 normalTabCount = normalTabCount,
                 privateTabCount = privateTabCount,
                 torTabCount = torTabCount,
+                filesTabCount = filesTabCount,
                 shouldShowTabGroupsPage = shouldShowTabGroupsPage,
                 tabGroupCount = tabGroupCount,
                 syncedTabCount = syncedTabCount,
@@ -244,6 +246,7 @@ private fun TabPageBanner(
     normalTabCount: Int,
     privateTabCount: Int,
     torTabCount: Int,
+    filesTabCount: Int,
     shouldShowTabGroupsPage: Boolean,
     tabGroupCount: Int,
     syncedTabCount: Int,
@@ -251,7 +254,7 @@ private fun TabPageBanner(
     onTabPageIndicatorClicked: (Page) -> Unit,
     onOpenAgentClick: () -> Unit,
 ) {
-    // Agent is a navigation action before the three ordinary tab pages.
+    // Agent is a navigation action before the ordinary tab pages.
     val selectedTabIndex = Page.pageToPosition(
         page = selectedPage,
         shouldShowTabGroupsPage = shouldShowTabGroupsPage,
@@ -286,6 +289,7 @@ private fun TabPageBanner(
                 normalTabCount = normalTabCount,
                 privateTabCount = privateTabCount,
                 torTabCount = torTabCount,
+                filesTabCount = filesTabCount,
                 shouldShowTabGroupsPage = shouldShowTabGroupsPage,
                 tabGroupCount = tabGroupCount,
                 syncedTabCount = syncedTabCount,
@@ -304,6 +308,7 @@ private fun TabPageBannerTabs(
     normalTabCount: Int,
     privateTabCount: Int,
     torTabCount: Int,
+    filesTabCount: Int,
     shouldShowTabGroupsPage: Boolean,
     tabGroupCount: Int,
     syncedTabCount: Int,
@@ -357,9 +362,14 @@ private fun TabPageBannerTabs(
     ) {
         Icon(painterResource(R.drawable.ic_bashkitten_tor), null)
     }
-
-
-
+    BannerTab(
+        selected = selectedPage == Page.FilesTabs,
+        testTag = "files_tabs_page_button",
+        contentDescription = "Files tabs: $filesTabCount",
+        onClick = { onTabPageIndicatorClicked(Page.FilesTabs) },
+    ) {
+        Icon(painterResource(iconsR.drawable.mozac_ic_folder_24), null)
+    }
 }
 
 @Composable

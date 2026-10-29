@@ -22,6 +22,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import mozilla.components.browser.engine.gecko.GeckoEngineSession
 import mozilla.components.browser.state.action.EngineAction
+import mozilla.components.browser.state.action.TabGroupAction
+import mozilla.components.browser.state.state.BASHKITTEN_FILES_PARTITION
+import mozilla.components.browser.state.state.BASHKITTEN_FILES_GROUP
 import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.lib.state.ext.flow
@@ -84,6 +87,14 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
             contextId = contextId, engineSession = engine, private = privateTab,
         )
         return BrowserApp.Tab(id, owner, engine.bashKittenSession())
+    }
+
+    override fun groupFiles(tabId: String) {
+        components.core.store.dispatch(TabGroupAction.AddTabAction(
+            partition = BASHKITTEN_FILES_PARTITION,
+            group = BASHKITTEN_FILES_GROUP,
+            tabId = tabId,
+        ))
     }
 
     override fun selected(): BrowserApp.Tab? = components.core.store.state.selectedTab?.takeUnless { it.contextId == DisplayTabs.CONTEXT }?.let(::nativeTab)?.let {

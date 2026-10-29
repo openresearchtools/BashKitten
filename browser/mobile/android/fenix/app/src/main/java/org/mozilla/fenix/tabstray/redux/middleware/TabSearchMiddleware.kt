@@ -42,6 +42,7 @@ class TabSearchMiddleware(
                             state.normalTabsState.items + state.inactiveTabs.tabs
                         }
                         Page.TorTabs -> state.torTabsState.items
+                        Page.FilesTabs -> state.filesTabsState.items
                         Page.PrivateTabs -> {
                             state.privateBrowsing.tabs
                         }

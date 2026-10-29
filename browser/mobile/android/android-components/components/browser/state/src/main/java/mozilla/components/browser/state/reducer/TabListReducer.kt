@@ -5,11 +5,15 @@
 package mozilla.components.browser.state.reducer
 
 import mozilla.components.browser.state.action.TabListAction
+import mozilla.components.browser.state.action.TabGroupAction
 import mozilla.components.browser.state.selector.findTab
 import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.state.state.BrowserState
+import mozilla.components.browser.state.state.BASHKITTEN_FILES_PARTITION
+import mozilla.components.browser.state.state.BASHKITTEN_FILES_GROUP
 import mozilla.components.browser.state.state.TabPartition
 import mozilla.components.browser.state.state.TabSessionState
+import mozilla.components.browser.state.state.filesTabIds
 import mozilla.components.browser.state.state.recover.toTabSessionStates
 import kotlin.math.max
 
@@ -37,7 +41,7 @@ internal object TabListReducer {
                     state.tabs + action.tab
                 }
 
-                state.copy(
+                val updatedState = state.copy(
                     tabs = updatedTabList,
                     selectedTabId = if (action.select || state.selectedTabId == null) {
                         action.tab.id
@@ -45,6 +49,14 @@ internal object TabListReducer {
                         state.selectedTabId
                     },
                 )
+                // Reuse native group assignment and the actual opener, never the selected tray page.
+                if (action.tab.parentId in state.filesTabIds()) {
+                    TabGroupReducer.reduce(updatedState, TabGroupAction.AddTabAction(
+                        partition = BASHKITTEN_FILES_PARTITION,
+                        group = BASHKITTEN_FILES_GROUP,
+                        tabId = action.tab.id,
+                    ))
+                } else updatedState
             }
 
             is TabListAction.AddMultipleTabsAction -> {

@@ -48,6 +48,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import mozilla.appservices.places.BookmarkRoot
 import mozilla.components.browser.state.selector.privateTabs
+import mozilla.components.browser.state.state.filesTabIds
 import mozilla.components.compose.base.modifier.thenConditional
 import mozilla.components.compose.base.snackbar.displaySnackbar
 import mozilla.components.concept.base.crash.Breadcrumb
@@ -397,7 +398,11 @@ class TabManagementFragment : Fragment() {
                                                 tabsTrayStore.state.inactiveTabs.tabs.map { it.id }
                                             requireComponents.useCases.tabsUseCases.removeTabs(ids)
                                             showUndoSnackbarForTab(false)
-                                        } else {
+                                        } else if (tabsTrayStore.state.selectedPage == Page.FilesTabs) {
+                                            val ids = tabsTrayStore.state.filesTabsState.items.map { it.id }
+                                            requireComponents.useCases.tabsUseCases.removeTabs(ids)
+                                            showUndoSnackbarForTab(false)
+                                        } else if (tabsTrayStore.state.selectedPage == Page.PrivateTabs) {
                                             tabManagerController.onCloseAllTabsClicked(private = true)
                                         }
                                     },
@@ -601,10 +606,14 @@ class TabManagementFragment : Fragment() {
         val requestedPage = args.page.takeIf { it in Page.visiblePages(false) } ?: Page.NormalTabs
 
         return TabsTrayState(
-            selectedPage = if (requestedPage == Page.NormalTabs &&
+            selectedPage = when {
+                requestedPage != Page.NormalTabs -> requestedPage
                 coreState.tabs.any { it.id == coreState.selectedTabId && !it.content.private &&
-                    it.contextId?.startsWith("bashkitten-tor-") == true }
-            ) Page.TorTabs else requestedPage,
+                    it.contextId?.startsWith("bashkitten-tor-") == true } -> Page.TorTabs
+                coreState.tabs.any { it.id == coreState.selectedTabId && !it.content.private &&
+                    it.id in coreState.filesTabIds() } -> Page.FilesTabs
+                else -> requestedPage
+            },
             mode = if (args.enterMultiselect) TabsTrayState.Mode.Select(emptySet()) else TabsTrayState.Mode.Normal,
             inactiveTabs = TabsTrayState.InactiveTabsState(
                 isExpanded = appState.inactiveTabsExpanded,
@@ -1006,6 +1015,7 @@ class TabManagementFragment : Fragment() {
         return when (selectedPage) {
             Page.NormalTabs -> tabsTrayStore.state.normalTabsState.items.any { it.id == tabState?.id }
             Page.TorTabs -> tabsTrayStore.state.torTabsState.items.any { it.id == tabState?.id }
+            Page.FilesTabs -> tabsTrayStore.state.filesTabsState.items.any { it.id == tabState?.id }
             Page.PrivateTabs -> tabState?.private == true
             else -> false
         }

@@ -1078,7 +1078,7 @@ public final class AgentRuntime {
                     if (!"https".equals(service.getString("scheme"))) throw new SecurityException("Application services require HTTPS.");
                     app.serviceIdentity(context, identity);
                 }
-                app.createService(context, address, current, done, failure);
+                app.createService(context, address, current, "files".equals(serviceId), done, failure);
                 return;
             }
             throw new IllegalStateException("Refresh services first.");
@@ -1354,7 +1354,7 @@ public final class AgentRuntime {
                                 String context = service.getJSONObject("choice").getString("context");
                                 String address = "https://127.0.0.1:" + service.getJSONObject("mapping").getInt("port") + path;
                                 app.serviceIdentity(context, identity);
-                                app.createServiceTab(owner, context, address, current, done, failure);
+                                app.createServiceTab(owner, context, address, current, "files".equals(launch.optString("component")), done, failure);
                                 return;
                             }
                             throw new IllegalStateException("Enable application service local access first.");
@@ -1365,7 +1365,7 @@ public final class AgentRuntime {
                     URI uri = URI.create(address);
                     String openPath = uri.getRawPath() + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery());
                     if (uri.getRawUserInfo() != null || uri.getRawFragment() != null || !path.equals(openPath)) throw new SecurityException("Invalid application launch address.");
-                    app.createServiceTab(owner, app.localApplicationContext(address, identity), address, current, done, failure);
+                    app.createServiceTab(owner, app.localApplicationContext(address, identity), address, current, "files".equals(launch.optString("component")), done, failure);
                 }
             } catch (Exception error) { failure.accept(error.getMessage()); }
         }, failure);

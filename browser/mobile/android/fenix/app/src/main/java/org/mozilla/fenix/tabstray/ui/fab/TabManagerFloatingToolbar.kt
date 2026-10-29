@@ -162,6 +162,7 @@ private fun FloatingToolbarActions(
         selectedPage = state.selectedPage,
         normalTabCount = state.normalTabsState.items.size,
         privateTabCount = state.privateBrowsing.tabs.size,
+        filesTabCount = state.filesTabsState.tabCount,
         onAccountSettingsClick = onAccountSettingsClick,
         onTabSettingsClick = onTabSettingsClick,
         onRecentlyClosedClick = onRecentlyClosedClick,
@@ -265,7 +266,7 @@ internal fun FloatingToolbarFAB(
             onClick = onOpenNewPrivateTabClicked
         }
 
-        Page.TabGroups, Page.TorTabs -> return
+        Page.TabGroups, Page.TorTabs, Page.FilesTabs -> return
 
         Page.SyncedTabs -> {
             icon = iconsR.drawable.mozac_ic_sync_24
@@ -346,6 +347,7 @@ private fun generateMenuItems(
     selectedPage: Page,
     normalTabCount: Int,
     privateTabCount: Int,
+    filesTabCount: Int,
     onTabSettingsClick: () -> Unit,
     onRecentlyClosedClick: () -> Unit,
     onEnterMultiselectModeClick: () -> Unit,
@@ -392,12 +394,13 @@ private fun generateMenuItems(
     )
     return when {
         (selectedPage == Page.NormalTabs && normalTabCount == 0) ||
-            (selectedPage == Page.PrivateTabs && privateTabCount == 0) -> listOf(
+            (selectedPage == Page.PrivateTabs && privateTabCount == 0) ||
+            (selectedPage == Page.FilesTabs && filesTabCount == 0) -> listOf(
             recentlyClosedTabsItem,
             tabSettingsItem,
         )
 
-        selectedPage == Page.NormalTabs -> listOf(
+        selectedPage == Page.NormalTabs || selectedPage == Page.FilesTabs -> listOf(
             enterSelectModeItem,
             selectAllTabsItem,
             recentlyClosedTabsItem,

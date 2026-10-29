@@ -28,4 +28,6 @@ data class TabStorageUpdate(
     val tabGroups: List<TabsTrayItem.TabGroup>,
     val torTabs: List<TabsTrayItem> = emptyList(),
     val selectedTorItemIndex: Int = 0,
+    val filesTabs: List<TabsTrayItem> = emptyList(),
+    val selectedFilesItemIndex: Int = 0,
 )

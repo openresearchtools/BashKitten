@@ -21,6 +21,7 @@ public final class BrowserApp extends ContextWrapper {
         void openDisplay(String environmentId);
         void closeDisplay();
         Tab create(String owner, String contextId);
+        void groupFiles(String tabId);
         Tab selected();
         List<Tab> list();
         boolean refresh(Tab tab);
@@ -282,11 +283,18 @@ public final class BrowserApp extends ContextWrapper {
         createService(context, url, () -> true, done, fail);
     }
     void createService(String context, String url, java.util.function.BooleanSupplier current, Runnable done, Consumer<String> fail) {
-        createServiceTab(USER, context, url, current, tab -> { show(tab); done.run(); }, fail);
+        createService(context, url, current, false, done, fail);
+    }
+    void createService(String context, String url, java.util.function.BooleanSupplier current, boolean files, Runnable done, Consumer<String> fail) {
+        createServiceTab(USER, context, url, current, files, tab -> { show(tab); done.run(); }, fail);
     }
     void createServiceTab(String owner, String context, String url, java.util.function.BooleanSupplier current, Consumer<Tab> done, Consumer<String> fail) {
+        createServiceTab(owner, context, url, current, false, done, fail);
+    }
+    void createServiceTab(String owner, String context, String url, java.util.function.BooleanSupplier current, boolean files, Consumer<Tab> done, Consumer<String> fail) {
         if (!serviceRoutes.containsKey(context)) { fail.accept("Enable this service’s local access first."); return; }
         Tab tab = host.create(owner, context); tabs.put(tab.id, tab);
+        if (files) host.groupFiles(tab.id);
         configure(tab, Collections.emptyList(), ignored -> {
             if (!current.getAsBoolean()) { close(tab); fail.accept("The selected backend changed."); return; }
             tab.session.loadUri(url); done.accept(tab);

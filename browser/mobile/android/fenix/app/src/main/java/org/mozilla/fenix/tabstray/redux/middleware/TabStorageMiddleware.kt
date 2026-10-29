@@ -54,6 +54,9 @@ private value class CombinedTabData(
     val selectedTabId: String?
         get() = combinedData.first.selectedTabId
 
+    val filesTabIds: Set<String>
+        get() = combinedData.first.filesTabIds
+
     val tabGroups: List<TabGroup>
         get() = combinedData.second.tabGroups
 
@@ -137,6 +140,7 @@ class TabStorageMiddleware(
                                     selectedTabId = data.selectedTabId,
                                     tabGroups = data.tabGroups,
                                     tabGroupAssignments = data.tabGroupAssignments,
+                                    filesTabIds = data.filesTabIds,
                                 )
 
                                 mainScope.launch {
@@ -482,12 +486,15 @@ class TabStorageMiddleware(
         selectedTabId: String?,
         tabGroups: List<TabGroup>,
         tabGroupAssignments: Map<TabItemId, String>, // tab ID -> tab group ID
+        filesTabIds: Set<String>,
     ): TabStorageUpdate {
         val normalItems: MutableList<TabsTrayItem> = mutableListOf()
         val inactiveTabs: MutableList<TabsTrayItem.Tab> = mutableListOf()
         val privateTabs: MutableList<TabsTrayItem> = mutableListOf()
         val torTabs: MutableList<TabsTrayItem> = mutableListOf()
+        val filesTabs: MutableList<TabsTrayItem> = mutableListOf()
         var selectedTorTabIndex = 0
+        var selectedFilesTabIndex = 0
         val transformedTabGroups = constructTabGroupMaps(tabGroups = tabGroups)
         val groupsIncludedInNormalTabs = hashSetOf<TabItemId>()
         var normalTabCount = 0
@@ -507,6 +514,10 @@ class TabStorageMiddleware(
                 !displayTab.private && tab.contextId?.startsWith("bashkitten-tor-") == true -> {
                     torTabs.add(displayTab)
                     if (displayTab.isFocused) selectedTorTabIndex = torTabs.lastIndex
+                }
+                !displayTab.private && tab.id in filesTabIds -> {
+                    filesTabs.add(displayTab)
+                    if (displayTab.isFocused) selectedFilesTabIndex = filesTabs.lastIndex
                 }
                 assignedGroup != null -> {
                     if (!assignedGroup.closed) {
@@ -551,6 +562,8 @@ class TabStorageMiddleware(
             inactiveTabs = inactiveTabs,
             torTabs = torTabs,
             selectedTorItemIndex = selectedTorTabIndex,
+            filesTabs = filesTabs,
+            selectedFilesItemIndex = selectedFilesTabIndex,
             privateTabs = privateTabs,
             selectedPrivateItemIndex = selectedPrivateTabIndex,
             tabGroups = transformedTabGroups.values.toList().sortedByDescending { it.lastModified },

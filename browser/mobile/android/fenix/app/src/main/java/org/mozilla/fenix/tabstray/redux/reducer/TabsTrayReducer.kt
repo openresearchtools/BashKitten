@@ -11,6 +11,7 @@ import org.mozilla.fenix.tabstray.redux.action.TabSearchAction
 import org.mozilla.fenix.tabstray.redux.action.TabsTrayAction
 import org.mozilla.fenix.tabstray.redux.state.TabSearchState
 import org.mozilla.fenix.tabstray.redux.state.TabsTrayState
+import org.mozilla.fenix.tabstray.redux.state.Page
 import org.mozilla.fenix.tabstray.redux.store.TabsTrayStore
 
 /**
@@ -130,7 +131,8 @@ internal object TabsTrayReducer {
                 val selectedTabGroups = HashSet<TabsTrayItem.TabGroup>()
                 val selectedTabs = HashSet<TabsTrayItem.Tab>()
 
-                state.normalTabsState.items.forEach { item ->
+                val items = if (state.selectedPage == Page.FilesTabs) state.filesTabsState.items else state.normalTabsState.items
+                items.forEach { item ->
                     when (item) {
                         is TabsTrayItem.Tab -> selectedTabs.add(item)
                         is TabsTrayItem.TabGroup -> {
@@ -245,6 +247,11 @@ internal object TabsTrayReducer {
                     items = action.tabStorageUpdate.torTabs,
                     selectedItemIndex = action.tabStorageUpdate.selectedTorItemIndex,
                     tabCount = action.tabStorageUpdate.torTabs.size,
+                ),
+                filesTabsState = state.filesTabsState.copy(
+                    items = action.tabStorageUpdate.filesTabs,
+                    selectedItemIndex = action.tabStorageUpdate.selectedFilesItemIndex,
+                    tabCount = action.tabStorageUpdate.filesTabs.size,
                 ),
                 inactiveTabs = state.inactiveTabs.copy(tabs = action.tabStorageUpdate.inactiveTabs),
                 privateBrowsing = state.privateBrowsing.copy(

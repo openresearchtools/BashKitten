@@ -27,6 +27,9 @@ enum class Page {
     /** Tabs with a browser-owned Tor route. */
     TorTabs,
 
+    /** Files and tabs opened by Files, with their original native service contexts. */
+    FilesTabs,
+
     /**
      * The page that displays Synced Tabs.
      */
@@ -41,7 +44,7 @@ enum class Page {
          */
         @Suppress("UNUSED_PARAMETER")
         fun visiblePages(shouldShowTabGroupsPage: Boolean): List<Page> =
-            listOf(NormalTabs, PrivateTabs, TorTabs)
+            listOf(NormalTabs, PrivateTabs, TorTabs, FilesTabs)
 
         /**
          * Returns the [Page] that corresponds to the [position].
