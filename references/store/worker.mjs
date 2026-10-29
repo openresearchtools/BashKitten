@@ -126,7 +126,13 @@ function checked(db, table, itemKey, expected) {
     fail("Record changed; reload before editing", 412);
   return row;
 }
-function putItem(db, value, expected, patch = false) {
+function putItem(
+  db,
+  value,
+  expected,
+  patch = false,
+  skipDateModifiedUpdate = false,
+) {
   const itemKey = value.createKey || value.key || key();
   let data = value.data || value;
   let previous;
@@ -164,7 +170,7 @@ function putItem(db, value, expected, patch = false) {
     db.prepare("DELETE FROM fulltext WHERE item=?").run(itemKey);
   if (data.parentItem) {
     const parent = db
-      .prepare("SELECT parent,type,deleted FROM items WHERE key=?")
+      .prepare("SELECT parent,type,deleted,version,data FROM items WHERE key=?")
       .get(data.parentItem);
     if (!parent || parent.parent) fail("Parent must be a top-level item");
     // Native Item.isRegularItem() excludes notes, attachments and annotations.
@@ -177,6 +183,25 @@ function putItem(db, value, expected, patch = false) {
       (parent.deleted || ["attachment", "note", "annotation"].includes(parent.type))
     )
       fail("Choose a regular reference item that is not deleted");
+    // Native Item.save replaces an independent item's stored collection
+    // memberships with its parent, inside this same transaction. Callers may
+    // already have cleared the submitted child collections before this save.
+    if (previous && !previous.parentItem) {
+      const parentData = JSON.parse(parent.data);
+      const existing = parentData.collections || [];
+      const collections = [
+        ...new Set([...existing, ...(previous.collections || [])]),
+      ];
+      if (collections.length !== existing.length)
+        putItem(
+          db,
+          { key: data.parentItem, data: { ...parentData, collections } },
+          parent.version,
+          false,
+          true,
+        );
+      data.collections = [];
+    }
   }
   const creators = (data.creators || [])
     .map((c) => c.name || [c.firstName, c.lastName].filter(Boolean).join(" "))
@@ -185,7 +210,7 @@ function putItem(db, value, expected, patch = false) {
     .map((c) => c.name || c.lastName || c.firstName || "")
     .join(" ");
   const now = new Date().toISOString();
-  data.dateModified = now;
+  data.dateModified = skipDateModifiedUpdate ? previous.dateModified : now;
   data.dateAdded ??= now;
   const v = nextVersion(db);
   db.prepare(
@@ -197,7 +222,7 @@ function putItem(db, value, expected, patch = false) {
     (data.title || "").toLocaleLowerCase(),
     creator.toLocaleLowerCase(),
     String(data.date || "").match(/\d{4}/)?.[0] || "",
-    now,
+    data.dateModified,
     data.parentItem || null,
     data.deleted ? 1 : 0,
     JSON.stringify(data),
