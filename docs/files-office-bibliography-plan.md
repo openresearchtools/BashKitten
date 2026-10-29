@@ -2304,3 +2304,23 @@ font/size store to every citation. Avoid rewriting an unchanged citation, and
 check genuine rich-text and bibliography rewrites against the native donor
 behavior. Verify these changes with small relevant fixtures and live documents,
 not another unrelated whole-application or large-library acceptance campaign.
+
+## 28. Privacy boundary and native offline English proofing — 29 October 2026
+
+The user prohibits silent automatic external telemetry, log/error reporting and
+exfiltration of user files, environment data or secrets from bundled apps and
+dependencies. Local logs are allowed and must retain their working behavior.
+Intentional user/agent uploads, exports, metadata/PDF lookups and browsing remain
+allowed, including remote images and styles specified by a document. This
+clarification does not request stricter document-asset CSP or a new security
+architecture. Review actual configured/reachable paths and selected artifacts;
+source matches or one traffic observation do not establish a universal guarantee.
+
+Reuse native Hunspell UK/US English dictionaries, Lightproof and their existing
+spelling/grammar controls for offline proofing. Make the available local options
+reachable and persistent through native Office settings and the existing WOPI
+owner, adding only a missing settings bridge where required. Apply sensible
+available local defaults while preserving deliberate saved choices. External
+grammar services remain disabled unless explicitly configured and authorized.
+These are requirements; implementation, installed Linux checks and Termux
+asset-only evidence remain separately recorded in the status document.

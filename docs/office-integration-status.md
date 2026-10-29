@@ -127,6 +127,58 @@ Office also enables native `hide_legacy_script_warning`, suppressing only the
 legacy UNO banner while preserving API support, operation errors and developer
 compatibility information. Its effective native configuration check passed.
 
+## Privacy and offline English proofing checkpoint — 29 October 2026
+
+The user's clarified privacy boundary prohibits silent automatic external
+telemetry, log/error reporting and uploads of user files, environment data or
+secrets. Local logs remain allowed and unchanged. Intentional user/agent
+uploads, exports, lookups and browsing, including document-specified remote
+images and styles, remain supported. These document assets are not an app
+telemetry finding; no CSP restriction or logging change is requested.
+
+Focused source, effective-configuration and selected-artifact audits found no
+enabled automatic external reporter in the paths reviewed. Files' native
+analytics publisher is excluded and update checks are disabled. Office's
+optional external reporting, remote configuration and AI/grammar services are
+disabled or unconfigured; References' error/debug uploads and translation-failure
+transport are removed, with translator updates reading bundled resources. Pi's
+native offline/telemetry flags suppress its install reporter. Evidence, including
+exact payload identities and limits, is:
+
+- `/run/media/user/Data/BashkittenBuild/verification/files-privacy-audit-20261029/audit.json`
+  covers Linux `53c81` and the selected Termux `1f8341` Files artifact.
+- `/run/media/user/Data/BashkittenBuild/verification/office-egress-audit-20261029/result.json`
+  records native Office source and effective installed Linux `53c81` settings.
+- `/run/media/user/Data/BashkittenBuild/verification/references-privacy-20261029/result.json`
+  covers installed `53c81` capture 1.0.6 and built `e6d71` capture 1.0.7, with
+  eleven isolated reporting/update checks. It does not establish installed 1.0.7
+  capture acceptance.
+
+The existing Xorg owner's bounded fresh-fixture Linux `53c81` observer captured
+only loopback connection destinations during its Files phase and combined
+Office/empty-References startup/idle phase. Native Markdown displayed an explicit
+remote image and a local sibling image, as allowed. The separate browser-startup
+baseline has source/DNS-supported filter/security address matches and two
+unclassified Fastly addresses; neither is labelled safe or telemetry. The
+observer excludes payloads, headers, environment and DNS names, and cannot
+establish all traffic on pre-existing sockets or unconnected UDP destinations.
+These results and source audits do not establish universal absence of reporting.
+Receipt: `/home/user/Bashkitten-Acceptance/privacy-files-53c81-20261029/bounded-runtime-summary.json`.
+
+Installed Linux `53c81` passed native UK/US Hunspell spelling, suggestions,
+local Lightproof spacing/punctuation checks and Save, with the normal editor's
+spelling suggestions and language choices observed. Disabled LanguageTool
+advertised no locales. Receipts are `native-english-functional.json` and
+`linux-linguistic-packaging.json` in the Office audit directory above. Termux
+`1f8341` has verified installed linguistic assets/registrations only; no matching
+functional or GUI proofing result is claimed.
+
+The Spelling dialog's native Options button is already reachable. Individual
+Lightproof options through native File → Options still need the assigned WOPI
+XCU settings bridge and persistence check. Upstream currently defaults only
+word-spacing and multiplication-sign rules on; the requested useful local
+defaults and saved-choice preservation remain work in progress.
+
 ## Earlier integration checkpoint — 29 October 2026
 
 The earlier coherent build is version **153.5.4** at
