@@ -141,7 +141,9 @@ jobs:
         sparse-checkout: |
           /agent/packaging/
           /auth/dependencies/**/sources.json
+          /auth/dependencies/go/proxy/
           /files/go_runtime.py
+          /files/vendor/dependencies/
           /browser/bashkitten/scripts/blocker_asset_provenance.py
           /browser/bashkitten/BLOCKER-ASSET-SOURCE-NOTICE
           /browser/browser/components/blocker/assets/
