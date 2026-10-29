@@ -17,3 +17,11 @@ MIT license, retained in vendor/github.com/golang-jwt/jwt/v4/LICENSE.
 BashKitten additions are under the repository's GNU Affero General Public License
 version 3 (COPYING). Original Apache-2.0 and MIT source retains its original
 notices and permissions; LICENSE preserves the upstream Apache-2.0 text.
+
+Modified by the BashKitten contributors, 29 October 2026: bounded native WOPI
+user-settings manifest/upload storage bridge for Collabora Online cp-26.04.5-2
+(commit 42745e44dd8530fac7acd5f46cb7571ceea63c6a). Native settings UI, XML generation,
+preset application and proofing engines remain the pinned upstream components;
+the host fills only the missing persistence/defaults boundary. Corresponding
+pristine MPL-2.0 source and full notices remain in office/upstream/online;
+see ../UPSTREAM.md for the exact protocol and subset owners.

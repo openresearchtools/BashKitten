@@ -23,6 +23,37 @@ locked-save enforcement and native settings/extension delivery. Upstream token
 issuance does not replace BashKitten authorization. OnlyOffice handlers remain
 unaltered in the pristine native Files build.
 
+
+The 29 October native Options bridge uses the pinned Collabora
+`Map.Settings.ts`, `AdminIntegratorSettings.ts`, `Xcu.ts`,
+`FileServer::fetchWopiSettingConfigs/uploadFileToIntegrator` and
+`DocumentBroker` preset protocol, without changing those pristine sources.
+The authenticated launch supplies `wopi_setting_base_url`; the existing private
+owner stores browser JSON, the fixed native `documentView.xcu` and native
+`viewsetting.json`. The three native Settings POST routes accept only an already
+issued document bearer token belonging to the existing cookie grant. Their
+bounded multipart data must name that owner's exact settings base/document/file
+and the same token; only that validated token reaches Collabora. Other routes
+retain the existing Authorization stripping. Kit `registrymodifications.xcu` uploads merge into the same
+XCU. Native Options owns all controls and native LibreOffice applies the values.
+The adapter accepts only the native apply/upload subset of XCU property paths,
+including its ancestor containers, and rejects unsupported container operations,
+XML directives/external entities, unknown uploads and oversized files. It does not
+execute XML or fetch URLs from preference contents.
+
+Native Options sends its complete UI subset while kit shutdown can send partial
+registry modifications. A bounded property merge preserves omitted native
+settings; the seven selected English Lightproof flags are seeded only when
+absent. Native presentation modes retain their 100-document timestamped bound.
+Compare-and-save retries preserve unrelated concurrent properties, while edits
+to the same option retain native last-writer behavior. Content hashes invalidate
+native preset caches. External Office AI stays disabled. User preferences use
+the existing verified local or exact remote-username principal, namespaced and
+hashed with the environment ID; cookie/grant rotation does not reset them.
+Every access still rechecks the document grant through the existing owner.
+Only the currently authorized participant's old browser settings may migrate
+when the stable owner has none; unattributable legacy files remain untouched.
+
 `patches/quantum/series` contains the scoped launch/provider seam, configurable
 request budget, native locally packaged Ace assets and licensed dependency imports.
 The native mutation receipt patch reports actual scoped destinations after

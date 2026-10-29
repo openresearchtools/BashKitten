@@ -92,7 +92,7 @@ func ownerJSON(ctx context.Context, op string, claims *wopiClaims, body any, res
 		_, err = io.Copy(io.Discard, res.Body)
 		return err
 	}
-	return json.NewDecoder(io.LimitReader(res.Body, 2<<20)).Decode(result)
+	return json.NewDecoder(io.LimitReader(res.Body, 8<<20)).Decode(result)
 }
 
 type hostError struct{ status int }
@@ -275,7 +275,7 @@ func sessionHandler(w http.ResponseWriter, r *http.Request) {
 	if c.Write {
 		mode = "edit"
 	}
-	jsonResponse(w, 200, map[string]any{"apiVersion": 1, "documentId": input.DocumentID, "wopiSrc": src, "accessToken": token, "accessTokenTtl": expires.UnixMilli(), "actionUrl": actionURL.String(), "editorUrl": actionURL.String(), "editorBaseUrl": base.String(), "websocketUrl": ws.String(), "mode": mode, "participantId": metadata.ParticipantID, "permissions": metadata.Permissions, "version": metadata.Version, "generation": metadata.Generation, "lastWrite": metadata.LastWrite, "launchParameters": map[string]string{"ui_defaults": "UITheme=light;SavedUIState=false;LockedUITheme=light"}})
+	jsonResponse(w, 200, map[string]any{"apiVersion": 1, "documentId": input.DocumentID, "wopiSrc": src, "accessToken": token, "accessTokenTtl": expires.UnixMilli(), "actionUrl": actionURL.String(), "editorUrl": actionURL.String(), "editorBaseUrl": base.String(), "websocketUrl": ws.String(), "mode": mode, "participantId": metadata.ParticipantID, "permissions": metadata.Permissions, "version": metadata.Version, "generation": metadata.Generation, "lastWrite": metadata.LastWrite, "launchParameters": map[string]string{"ui_defaults": "UITheme=light;SavedUIState=false;LockedUITheme=light", "wopi_setting_base_url": settingsBase()}})
 }
 func main() {
 	filename := flag.String("config", "", "private addon config")
@@ -321,6 +321,8 @@ func main() {
 		jsonResponse(w, 200, map[string]any{"apiVersion": 1, "service": "files-office"})
 	})
 	mux.HandleFunc("POST /v1/session", sessionHandler)
+	mux.HandleFunc("GET /wopi/settings", settingsBaseHandler)
+	mux.HandleFunc("GET /wopi/settings/{id}/{name}", withSettingsToken(settingsPresetHandler))
 	mux.HandleFunc("GET /wopi/settings/{id}/manifest", withSettingsToken(settingsManifestHandler))
 	mux.HandleFunc("GET /wopi/settings/{id}/browser", withSettingsToken(settingsBrowserHandler))
 	mux.HandleFunc("GET /wopi/settings/{id}/org.bashkitten.references.zip", withSettingsToken(settingsExtensionHandler))

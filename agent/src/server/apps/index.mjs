@@ -221,7 +221,12 @@ export class ApplicationModules {
           },
           authorizeOperation: (grantId, operation, work) => this.gateway.authorizeOperation(grantId, operation, async context => {
             await this.validateGrant(context.grant);
-            return work(context.grant.scope, context.signal);
+            // The gateway just revalidated this authority with the native local
+            // owner or Authelia. Cookies/grants rotate; a user preference does
+            // not. Keep local and remote usernames in separate namespaces.
+            const record = context.grant.record;
+            const officeSettingsIdentity = JSON.stringify(record.local === true ? ['local'] : ['remote', record.username]);
+            return work({ ...context.grant.scope, officeSettingsIdentity }, context.signal);
           }),
           hasNativeViews: documentId => service?.hasDocumentViews(documentId) === true,
           coordinateNativeRestore: (documentId, options) => {

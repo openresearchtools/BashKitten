@@ -176,11 +176,20 @@ advertised no locales. Receipts are `native-english-functional.json` and
 `1f8341` has verified installed linguistic assets/registrations only; no matching
 functional or GUI proofing result is claimed.
 
-The Spelling dialog's native Options button is already reachable. Individual
-Lightproof options through native File → Options still need the assigned WOPI
-XCU settings bridge and persistence check. Upstream currently defaults only
-word-spacing and multiplication-sign rules on; the requested useful local
-defaults and saved-choice preservation remain work in progress.
+The Spelling dialog's native Options button is already reachable. The new WOPI
+settings bridge enables native File → Options and persists its browser settings,
+XCU and view settings through the existing authenticated owner. Missing English
+grammar, capitalization, repeated-word, paired-punctuation and spacing choices
+default on; explicit saved choices remain intact. Preferences use the verified
+local/remote principal within the backend, surviving cookie/grant rotation.
+No Office engine or browser-core changes are required.
+
+Five Go race tests, the owner identity/storage test and the native settings-proxy
+test passed, including actual pinned Options-generated XML, scoped upload/read
+requests and snapshot views. Independent review passed. Evidence is under
+`BashkittenBuild/verification/office-native-settings-20261029/`. The focused native
+dialog save/reopen check and matching rebuilt-package acceptance remain pending;
+these module checks are not a claim of installed completion.
 
 ## Earlier integration checkpoint — 29 October 2026
 

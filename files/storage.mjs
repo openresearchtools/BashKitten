@@ -542,9 +542,43 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
       return lock(0);
     }));
   }
-  async function settings(claims, update) { return authorize(claims, 'view', async (_m, _scope, signal) => {
-    const key = createHash('sha256').update(claims.participant).digest('hex'); const dir = path.join(root, 'settings'); await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-    return serialized('settings:' + key, async () => { const filename = path.join(dir, key + '.json'); const current = await json(filename, {}); const next = lightSettings({ ...current, ...update }); if (update) { signal?.throwIfAborted(); await writeJSON(filename, next); } return next; });
+  async function withSettings(claims, action) { return authorize(claims, 'view', async (_m, scope, signal) => {
+    if (typeof scope.officeSettingsIdentity !== 'string' || !scope.officeSettingsIdentity || scope.officeSettingsIdentity.length > 4096)
+      throw failure(503, 'The authenticated Office settings owner is unavailable');
+    const key = createHash('sha256').update(environmentId + '\0' + scope.officeSettingsIdentity).digest('hex');
+    const dir = path.join(root, 'settings'); await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+    return serialized('settings:' + key, () => action({ key, dir, signal }));
   }); }
-  return { register, metadata, read, write, rename, relative, finalize, list, configureHistory, restore, snapshot, settings, withNativeMove, withAttachmentMove, relinkRoot, isRestoring: documentId => restoring.has(documentId) };
+  async function settings(claims, update) { return withSettings(claims, async ({ key, dir, signal }) => {
+    if (update !== undefined && (!update || typeof update !== 'object' || Array.isArray(update) || Buffer.byteLength(JSON.stringify(update)) > 1 << 20))
+      throw failure(400, 'Invalid native browser settings');
+    const filename = path.join(dir, key + '.json');
+    let current = await json(filename, null);
+    // Only the currently authorized participant's legacy file is attributable.
+    // Older cookie/grant hashes must never be guessed into another user's data.
+    const legacy = path.join(dir, createHash('sha256').update(claims.participant).digest('hex') + '.json');
+    const migrated = current === null ? await json(legacy, null) : null;
+    current ||= migrated || {};
+    const next = lightSettings({ ...current, ...update });
+    if (update !== undefined || migrated) { signal?.throwIfAborted(); await writeJSON(filename, next); }
+    return next;
+  }); }
+  async function settingsPreset(claims, { name, content, expectedStamp } = {}) { return withSettings(claims, async ({ key, dir, signal }) => {
+    if (!['documentView.xcu', 'viewsetting.json'].includes(name)) throw failure(400, 'Unsupported native settings file');
+    const filename = path.join(dir, key + '.presets.json');
+    const stored = await json(filename, {});
+    const current = stored[name] || '';
+    const stamp = value => value ? createHash('sha256').update(value).digest('hex') : '';
+    if (content !== undefined) {
+      if (typeof content !== 'string' || Buffer.byteLength(content) > 1 << 20 || content.includes('\0')) throw failure(413, 'Native settings exceed their bound');
+      if (expectedStamp !== stamp(current)) throw failure(409, 'Office settings changed; reload before saving');
+      // XML validation, native-node merging and missing-only defaults belong to
+      // the small Go protocol adapter. This private owner never executes XML.
+      signal?.throwIfAborted();
+      await writeJSON(filename, { ...stored, [name]: content });
+      return { content, stamp: stamp(content) };
+    }
+    return { content: current, stamp: stamp(current) };
+  }); }
+  return { register, metadata, read, write, rename, relative, finalize, list, configureHistory, restore, snapshot, settings, settingsPreset, withNativeMove, withAttachmentMove, relinkRoot, isRestoring: documentId => restoring.has(documentId) };
 }

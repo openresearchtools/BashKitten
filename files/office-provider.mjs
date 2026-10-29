@@ -10,6 +10,8 @@ const send = (res, status, value) => { res.writeHead(status, { 'Content-Type': '
 async function body(req, max = 1024 * 1024) { const values = []; let bytes = 0; for await (const part of req) { bytes += part.length; if (bytes > max) throw fail(413, 'Request exceeds its bound'); values.push(part); } return bytes ? JSON.parse(Buffer.concat(values).toString('utf8')) : undefined; }
 const escapeHTML = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const jsonHTML = value => JSON.stringify(value).replace(/</g, '\\u003c');
+const nativeSettingsPosts = new Set(['fetch-settings-config', 'fetch-settings-file', 'upload-settings'].map(name => '/apps/office/browser/dist/' + name));
+const isNativeSettingsPost = req => req.method === 'POST' && nativeSettingsPosts.has(String(req.url).split('?')[0]);
 function call(socketPath, token, target, value, signal) {
   return new Promise((resolve, reject) => {
     const req = http.request({ socketPath, method: 'POST', path: target, signal, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } }, async res => { try { const answer = await body(res, 2 << 20); if (res.statusCode !== 200) throw fail(res.statusCode, answer?.error || 'Office operation unavailable'); resolve(answer); } catch (e) { reject(e); } });
@@ -69,6 +71,7 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
             case '/v1/owner/write': { const saved = await owner.write(claims, req); res.setHeader('X-WOPI-ItemVersion', saved.version); send(res, 200, { LastModifiedTime: saved.LastModifiedTime }); break; }
             case '/v1/owner/finalize': send(res, 200, await owner.finalize(claims)); break;
             case '/v1/owner/settings': send(res, 200, await owner.settings(claims, await body(req))); break;
+            case '/v1/owner/settings-preset': send(res, 200, await owner.settingsPreset(claims, await body(req, 8 << 20))); break;
             case '/v1/owner/relative': send(res, 200, await owner.relative(claims, req)); break;
             case '/v1/owner/rename': send(res, 200, await owner.rename(claims, req)); break;
             default: throw fail(501, 'This native operation is not yet available');
@@ -277,11 +280,53 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'same-origin', 'Content-Security-Policy': `default-src 'self'; frame-src ${editorOrigin}; form-action ${editorOrigin}; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'` });
     res.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHTML(metadata.name)}</title><style>html,body{height:100%;margin:0;background:#fff;color:#222;font:16px system-ui}iframe{width:100%;height:100%;border:0}form{display:none}dialog{max-width:min(90vw,38rem);max-height:80vh}li{display:flex;gap:1rem;margin:1rem 0;align-items:center}button{font:inherit}#error{position:fixed;inset:auto 1rem 1rem;background:white}</style></head><body><iframe id="editor" name="editor" title="${escapeHTML(metadata.name)}" allow="clipboard-read; clipboard-write; fullscreen"></iframe><form id="launch" method="post" target="editor" action="${escapeHTML(s.actionUrl)}">${Object.entries(fields).map(([name,value]) => `<input type="hidden" name="${escapeHTML(name)}" value="${escapeHTML(value)}">`).join('')}</form><dialog id="history"><h2>Version history</h2><label id="history-limit">Keep versions <input id="max-versions" type="number" min="1" max="10000" step="1"></label><button id="save-history-limit">Save count</button><ol></ol><button id="close-history">Close</button></dialog><p id="error" role="alert" hidden></p><script id="host-context" type="application/json">${jsonHTML(host)}</script><script src="${escapeHTML(new URL(launch.browserUrl).pathname + '/host.js')}"></script></body></html>`);
   }
+  async function validateSettingsRequest(req, entry, token) {
+    const contentType = String(req.headers['content-type'] || '');
+    if (!/^multipart\/form-data;\s*boundary=/i.test(contentType)) throw fail(400, 'Native settings form required');
+    const parts = []; let bytes = 0;
+    for await (const part of req) { bytes += part.length; if (bytes > (1 << 20) + 65536) throw fail(413, 'Native settings form exceeds its bound'); parts.push(part); }
+    const raw = Buffer.concat(parts); let form;
+    try { form = await new Request('http://native-settings.invalid', { method: 'POST', headers: { 'content-type': contentType }, body: raw }).formData(); }
+    catch { throw fail(400, 'Invalid native settings form'); }
+    const route = String(req.url).split('?')[0].split('/').at(-1);
+    const fields = route === 'fetch-settings-config' ? ['sharedConfigUrl', 'accessToken', 'type'] : route === 'fetch-settings-file' ? ['fileUrl', 'accessToken'] : ['file', 'filePath', 'wopiSettingBaseUrl', 'currentFileUrl'];
+    for (const key of form.keys()) if (!fields.includes(key) || form.getAll(key).length !== 1) throw fail(400, 'Unexpected native settings field');
+    const text = name => { const value = form.get(name); if (typeof value !== 'string' || value.length > 16384) throw fail(400, 'Invalid native settings field'); return value; };
+    const base = wopiURL.replace(/\/$/, '') + '/wopi/settings';
+    // The issued WOPI identity includes the native ~snapshot suffix for history views.
+    const settingsFileId = new URL(entry.session.wopiSrc).pathname.split('/').at(-1);
+    const ownedBase = value => { try { return new URL(value).href === new URL(base).href; } catch { return false; } };
+    const ownedFile = (value, selectedName) => {
+      let uri; try { uri = new URL(value); } catch { return false; }
+      if (uri.hash || uri.username || uri.password || uri.searchParams.get('access_token') !== token || [...uri.searchParams.keys()].length !== 1) return false;
+      uri.search = '';
+      return (selectedName ? [selectedName] : ['browser', 'documentView.xcu', 'viewsetting.json', 'org.bashkitten.references.zip']).some(name => uri.href === new URL(base + '/' + settingsFileId + '/' + name).href);
+    };
+    if (route === 'fetch-settings-config') {
+      if (text('accessToken') !== token || text('type') !== 'userconfig' || !ownedBase(text('sharedConfigUrl'))) throw fail(403, 'Settings manifest is outside this document owner');
+    } else if (route === 'fetch-settings-file') {
+      if (text('accessToken') !== token || !ownedFile(text('fileUrl'))) throw fail(403, 'Settings file is outside this document owner');
+    } else {
+      if (!ownedBase(text('wopiSettingBaseUrl'))) throw fail(403, 'Settings upload is outside this document owner');
+      const file = form.get('file'), filePath = text('filePath');
+      const names = { '/settings/userconfig/browsersetting': 'browsersetting.json', '/settings/userconfig/xcu': 'documentView.xcu', '/settings/userconfig/viewsetting': 'viewsetting.json' };
+      if (!file || typeof file === 'string' || file.name !== names[filePath.replace(/\/$/, '')]) throw fail(400, 'Unsupported native settings file');
+      if (file.size > 1 << 20) throw fail(413, 'Native settings exceed their bound');
+      if (form.has('currentFileUrl') && !ownedFile(text('currentFileUrl'), file.name === 'browsersetting.json' ? 'browser' : file.name)) throw fail(403, 'Stored settings are outside this document owner');
+    }
+    req.officeLaunchBody = raw;
+    req.officeSettingsBearer = token;
+  }
   async function resolveEditorGrant(req, { candidateGrantIds = [] } = {}) {
     const candidates = new Set(candidateGrantIds); const uri = new URL(req.url, 'https://office.invalid');
     if (!uri.pathname.startsWith('/apps/office/')) throw fail(404, 'Unknown Office route');
     for (const [token, entry] of issued) if (entry.session.accessTokenTtl <= Date.now()) issued.delete(token);
     let token = uri.searchParams.get('access_token');
+    if (isNativeSettingsPost(req)) {
+      const bearer = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization || ''))?.[1];
+      if (!bearer || (token && token !== bearer)) throw fail(403, 'Native settings need their issued document token');
+      token = bearer;
+    }
     if (!token && uri.pathname.endsWith('/ws')) {
       const encoded = uri.pathname.slice('/apps/office/cool/'.length, -'/ws'.length);
       try { token = new URL(decodeURIComponent(encoded)).searchParams.get('access_token'); } catch { throw fail(400, 'Invalid native document session'); }
@@ -305,6 +350,7 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     // Document operations need their native WOPI identity; only immutable web
     // assets may use another live session belonging to the same captured grant.
     if (uri.pathname.startsWith('/apps/office/cool/') && !token && !uri.searchParams.has('WOPISrc')) throw fail(403, 'Native document identity is required');
+    if (isNativeSettingsPost(req)) await validateSettingsRequest(req, found, token);
     req.officeIssuedSession = found;
     return found.grantId;
   }
@@ -314,6 +360,7 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     if (!['http:', 'https:'].includes(internal.protocol)) throw fail(503, 'Invalid internal Office endpoint');
     const headers = { ...req.headers };
     for (const key of Object.keys(headers)) if (key.startsWith('x-bashkitten-') || ['authorization', 'cookie', 'forwarded', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip'].includes(key)) delete headers[key];
+    if (isNativeSettingsPost(req) && req.officeSettingsBearer === req.officeIssuedSession?.session.accessToken) headers.authorization = 'Bearer ' + req.officeSettingsBearer;
     headers.host = external.host; headers['x-forwarded-host'] = external.host; headers['x-forwarded-proto'] = 'https';
     const publicPath = req.url.slice('/apps/office'.length); const targetPath = internal.pathname.replace(/\/$/, '') + publicPath;
     return { internal, options: { protocol: internal.protocol, hostname: internal.hostname, port: internal.port, method: req.method, path: targetPath, headers, signal } };
