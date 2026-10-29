@@ -72,6 +72,38 @@ exports whenever useful. Expose both native editing/export operations and normal
 browser-view URLs. Test the independently runnable modules in parallel with the
 early browser batch; neither sequence reduces the required feature scope.
 
+### User clarification — 29 October 2026: citation commands without a side panel
+
+Office must not open a References side panel. Use its native citation menu and
+plugin command facilities on desktop and phones. Each action needs a readable
+text label; a row of identical, unlabelled icons is insufficient. Keep
+Add/Edit Citation, Add Bibliography, Convert and Settings in the citation menu,
+with the relevant Edit/Remove and Refresh actions. Bibliography and conversion
+are commands, not document settings. The separately opened References library
+web application retains its own library-management interface.
+
+There is one document Settings surface. Its first control is the project
+Library dropdown, followed by citation Style, Language and applicable document
+preferences. Show human-readable style and language names in dropdowns, including
+the current style when it lies outside the first search page. Raw locale codes
+or style identifiers are not substitutes for those controls. On the first
+citation-related action in an unconfigured document, open Settings first to
+choose its library and style; an agent may also configure that same binding.
+
+Selecting or placing the caret anywhere within an existing managed citation
+must let Edit and Remove act on that citation. The native secondary-click menu
+must offer the corresponding actions. Edit reopens the same compact citation
+chooser with the existing sources, order and citation options filled in; do not
+require selecting a citation ID from a separate panel. Retain the equivalent
+cell/shape behavior in Calc and Impress through their native selection APIs.
+
+An inserted bibliography remains managed and updates when citation commands
+add, edit or remove citations or change the document style, as in the native
+reference-manager workflow. Reuse the existing rendering and native document
+operations; do not add a separate polling or bibliography engine. Preserve the
+existing formatted-text conversion/export capability and the explicit warning
+when changing a bound library would unlink existing citations and bibliography.
+
 ### User clarification — 28 October 2026: HTTPS and existing browser trust
 
 Files, Collabora and References browser-facing URLs must use HTTPS with
