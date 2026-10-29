@@ -1,0 +1,15 @@
+--- a/wsd/ClientSession.cpp
++++ b/wsd/ClientSession.cpp
+@@ -2030,6 +2030,12 @@
+             LOG_WRN("Dropping executescript from a session where extensions are off");
+             return true;
+         }
++        // Like UNO commands, scripts can modify content without an input event.
++        // Record that possibility before forwarding, so final autosave does not
++        // mistake their ModifiedStatus for a delayed notification from a save.
++        // The native save still uses dontSaveIfUnmodified for inspection scripts.
++        if (isEditable())
++            docBroker->updateLastModifyingActivityTime();
+         return forwardToChild(std::string(buffer, length), docBroker);
+     }
+     else if (tokens.equals(0, "proxyreturn"))

@@ -169,6 +169,7 @@ released native client API even in a preset extension.
 The named native patches cover only observed missing facilities: small-screen
 extension access, the optional background command/listener lifetime,
 viewport-bounded native frames and distinct per-dialog reply identities,
+native modifying-activity accounting for editable scripts during final autosave,
 a runtime proof-key path, generic document-property undo,
 Writer field-command undo/redo, generic OOXML user-defined attributes, and native
 view ownership for UNO undo contexts/actions, background shape undo, a
