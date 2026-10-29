@@ -6,6 +6,16 @@ and installed-product acceptance. It does not claim completed integration.
 
 ## Current integration checkpoint — 29 October 2026
 
+The subsequent `479ab3a2513d73cc558d8f0d074a9e87d1e232e9` full batch
+[40958050104](https://github.com/openresearchtools/BashKitten/actions/runs/40958050104)
+hit one Termux ARM64 desktop-package failure: GNU make selected its built-in
+C-to-executable rule for libdbusmenu's source XML during installation. The fix
+uses native `make -r` only for that dependency's existing build/install calls.
+The actual donor failure was reproduced; the corrected build/install and a
+fresh GTK build passed with source XML unchanged. Independent review passed.
+The corrected ARM64 CI package and full release gate remain pending. Healthy
+producers continue for normal validated reuse; this failed batch is not releasable.
+
 The full `53c81a4c27561888d5f6ff9d5d145929f925b09b` batch passed all
 62 jobs in [40917628193](https://github.com/openresearchtools/BashKitten/actions/runs/40917628193),
 including all six primary packages, eight Office/Files components and the normal

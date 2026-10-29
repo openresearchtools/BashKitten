@@ -69,8 +69,8 @@ def build_dbusmenu(args,prefix,stage):
               '--enable-gtk','--with-gtk=3']
         if args.autotools_host:argv+=['--host='+args.autotools_host]
         run(argv,cwd=build,env=env)
-    run(['make','-j',args.jobs],cwd=build,env=env)
-    run(['make','install','DESTDIR='+str(stage)],cwd=build,env=env)
+    run(['make','-r','-j',args.jobs],cwd=build,env=env)
+    run(['make','-r','install','DESTDIR='+str(stage)],cwd=build,env=env)
     # Compile-time pkgconfig paths point into staging, runtime rpath stays final.
     pkg=work/'pkgconfig';pkg.mkdir(exist_ok=True)
     for source in (stage/private.lstrip('/')/'lib/pkgconfig').glob('*.pc'):
