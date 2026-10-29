@@ -65,6 +65,7 @@ jobs:
           persist-credentials: false
           sparse-checkout-cone-mode: false
           sparse-checkout: |
+            /.gitignore
             /${{ matrix.component }}/
             /LICENSE
             /browser/bashkitten/browser/branding/
