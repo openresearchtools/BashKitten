@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parent
 REPO=ROOT.parents[1]
 WORK=ROOT/'.build/source'
 OUT=ROOT/'dist/references'
-VERSION='1.0.3'
+VERSION='1.0.4'
 
 def run(*args):subprocess.run(args,cwd=WORK,check=True,env={**os.environ,'NPM_CONFIG_OFFLINE':'true'})
 # Keep npm's content cache; reconstruct source from the named patch every time.
@@ -72,6 +72,8 @@ manifest.update(name='References',description='Capture references into the selec
 manifest['browser_action']['default_title']='References Add'
 manifest['browser_action']['default_area']='navbar'
 manifest['browser_action']['default_icon']={'16':'Icon-16.png','32':'Icon-32.png','48':'Icon-64.png'}
+# Keep Gecko's configurable action command without the donor's screenshot shortcut.
+manifest['commands']['_execute_browser_action'].pop('suggested_key',None)
 manifest.pop('applications',None)
 # Capture sends page URLs/content to the selected local or remote backend.
 # Use Gecko's existing required-data prompt, available on desktop 140 / Android 142.
