@@ -53,6 +53,13 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
         }
         CoroutineScope(Dispatchers.Main).launch {
             components.core.store.flow().map { state ->
+                state.selectedTab?.let { Triple(it.id, it.contextId, it.engineState.engineSession) }
+            }.distinctUntilChanged().collect {
+                (activity.get() as? HomeActivity)?.restoreSelectedBashKittenServiceTab(retry = true)
+            }
+        }
+        CoroutineScope(Dispatchers.Main).launch {
+            components.core.store.flow().map { state ->
                 state.downloads.values.map { it.id to it.sessionId } +
                     state.tabs.mapNotNull { tab -> tab.content.download?.let { it.id to tab.id } }
             }.distinctUntilChanged().collect { downloads ->
@@ -61,7 +68,12 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
             }
         }
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-            override fun onActivityResumed(value: Activity) { if (value is HomeActivity) activity = WeakReference(value) }
+            override fun onActivityResumed(value: Activity) {
+                if (value is HomeActivity) {
+                    activity = WeakReference(value)
+                    value.restoreSelectedBashKittenServiceTab()
+                }
+            }
             override fun onActivityDestroyed(value: Activity) { if (activity.get() === value) activity.clear() }
             override fun onActivityCreated(value: Activity, state: Bundle?) = Unit
             override fun onActivityStarted(value: Activity) = Unit

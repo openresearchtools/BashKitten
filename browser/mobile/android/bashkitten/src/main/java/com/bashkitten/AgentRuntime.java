@@ -1326,6 +1326,17 @@ public final class AgentRuntime {
         createApplication(value, BrowserApp.USER, () -> true, tab -> { app.show(tab); done.run(); }, failure);
     }
     void createApplication(JSONObject value, String owner, BooleanSupplier access, Consumer<BrowserApp.Tab> done, Consumer<String> failure) {
+        launchApplication(value, access, null, (context, address, files, current) ->
+            app.createServiceTab(owner, context, address, current, files, done, failure), failure);
+    }
+    interface ApplicationLaunch {
+        void ready(String context, String address, boolean files, BooleanSupplier current) throws Exception;
+    }
+    void restoreApplication(String context, String address, BooleanSupplier access, ApplicationLaunch ready, Consumer<String> failure) {
+        try { launchApplication(new JSONObject().put("url", address), access, context, ready, failure); }
+        catch (Exception error) { failure.accept(error.getMessage()); }
+    }
+    private void launchApplication(JSONObject value, BooleanSupplier access, String restoringContext, ApplicationLaunch ready, Consumer<String> failure) {
         final String component = value.optString("component");
         final boolean resolving = value.has("url");
         if (!resolving && !component.equals("files") && !component.equals("references")) { failure.accept("Unsupported application."); return; }
@@ -1352,9 +1363,10 @@ public final class AgentRuntime {
                                 if (!service.has("mapping") || !service.getJSONObject("choice").getBoolean("enabled")) throw new IllegalStateException("Enable application service local access first.");
                                 if (!"https".equals(service.getString("scheme"))) throw new SecurityException("Application services require HTTPS.");
                                 String context = service.getJSONObject("choice").getString("context");
+                                if (restoringContext != null && !restoringContext.equals(context)) throw new SecurityException("Open this tab's owning backend first.");
                                 String address = "https://127.0.0.1:" + service.getJSONObject("mapping").getInt("port") + path;
                                 app.serviceIdentity(context, identity);
-                                app.createServiceTab(owner, context, address, current, "files".equals(launch.optString("component")), done, failure);
+                                ready.ready(context, address, "files".equals(launch.optString("component")), current);
                                 return;
                             }
                             throw new IllegalStateException("Enable application service local access first.");
@@ -1365,7 +1377,8 @@ public final class AgentRuntime {
                     URI uri = URI.create(address);
                     String openPath = uri.getRawPath() + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery());
                     if (uri.getRawUserInfo() != null || uri.getRawFragment() != null || !path.equals(openPath)) throw new SecurityException("Invalid application launch address.");
-                    app.createServiceTab(owner, app.localApplicationContext(address, identity), address, current, "files".equals(launch.optString("component")), done, failure);
+                    if (restoringContext != null && !restoringContext.equals("bashkitten-service-local-apps-" + identity.getString("instanceId"))) throw new SecurityException("The application backend identity changed. Open Files again.");
+                    ready.ready(app.localApplicationContext(address, identity), address, "files".equals(launch.optString("component")), current);
                 }
             } catch (Exception error) { failure.accept(error.getMessage()); }
         }, failure);
@@ -1373,6 +1386,18 @@ public final class AgentRuntime {
             final URI address = resolving ? URI.create(value.getString("url")) : null;
             if (resolving && (!"https".equals(address.getScheme()) || !"127.0.0.1".equals(address.getHost()) ||
                     address.getRawUserInfo() != null || address.getRawFragment() != null)) throw new SecurityException("Invalid application URL.");
+            if (restoringContext != null) {
+                if (!current.getAsBoolean()) throw new IllegalStateException("Open this tab's owning backend first.");
+                if (!address.getRawPath().matches("^/apps/(files|references)/[a-f0-9-]{36}/.*")) throw new SecurityException("Invalid application URL.");
+                if (backend.equals("local")) {
+                    if (localSession == null || !restoringContext.equals("bashkitten-service-local-apps-" + localSession.getJSONObject("identity").getString("instanceId"))) throw new SecurityException("Open this tab's owning backend first.");
+                    JSONObject request = new JSONObject(value.toString());
+                    // The enrolled owner must validate the original live grant.
+                    // Its reply supplies today's origin, never the saved port.
+                    request.put("url", address.getRawPath() + (address.getRawQuery() == null ? "" : "?" + address.getRawQuery()));
+                    open.accept(request); return;
+                }
+            }
             if (resolving && !backend.equals("local")) {
                 remoteServices(backend, snapshot -> {
                     try {
@@ -1383,8 +1408,9 @@ public final class AgentRuntime {
                             if (!service.getString("id").equals("files")) continue;
                             if (!service.has("mapping") || !service.getJSONObject("choice").getBoolean("enabled")) throw new IllegalStateException("Enable application service local access first.");
                             if (!"https".equals(service.getString("scheme"))) throw new SecurityException("Application services require HTTPS.");
+                            if (restoringContext != null && !restoringContext.equals(service.getJSONObject("choice").getString("context"))) throw new SecurityException("Open this tab's owning backend first.");
                             JSONObject request = new JSONObject(value.toString());
-                            if ((address.getPort() == -1 ? 443 : address.getPort()) == service.getJSONObject("mapping").getInt("port")) {
+                            if (restoringContext != null || (address.getPort() == -1 ? 443 : address.getPort()) == service.getJSONObject("mapping").getInt("port")) {
                                 if (!address.getRawPath().matches("^/apps/(files|references)/[a-f0-9-]{36}/.*")) throw new SecurityException("Invalid application URL.");
                                 // Translate only this connected owner's exact Files mapping.
                                 request.put("url", address.getRawPath() + (address.getRawQuery() == null ? "" : "?" + address.getRawQuery()));

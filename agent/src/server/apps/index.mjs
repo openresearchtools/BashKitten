@@ -536,6 +536,7 @@ export class ApplicationModules {
         target.searchParams.set('launch', next.nonce);
         return { ...descriptor, url: target.href, openPath: target.pathname + target.search };
       }
+      await this.resumeFilesScope(scope);
       return this.gateway.open(grant.component, record, scope);
     });
   }

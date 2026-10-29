@@ -202,6 +202,12 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     private var bashKittenMenuFromAgent = false
     private var bashKittenBrowserUiBack = false
     fun showBashKittenAgent() { bashKittenAgentPanel?.showAgent() }
+    fun restoreSelectedBashKittenServiceTab(retry: Boolean = false) {
+        val destination = navHost.navController.currentDestination?.id
+        if (!bashKittenAgentVisible.value && (destination == R.id.browserFragment || destination == R.id.homeFragment)) {
+            com.bashkitten.BrowserApp.get(this).visitSelectedServiceTab(retry)
+        }
+    }
 
     private val referencesFilePicker by lazy {
         AddonFilePicker(applicationContext, components.addonManager)
@@ -580,7 +586,11 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
                 this, binding.root, components.core.geckoRuntime, R.drawable.bashkitten_logo, agentTabs,
                 ::openBashKittenBrowserMenu,
                 { org.mozilla.fenix.bashkitten.BashKittenMenuDialog().show(supportFragmentManager, "bashkitten-settings-menu") },
-                { visible -> bashKittenAgentVisible.value = visible },
+                { visible ->
+                    val returningToBrowser = bashKittenAgentVisible.value && !visible
+                    bashKittenAgentVisible.value = visible
+                    if (!visible) restoreSelectedBashKittenServiceTab(returningToBrowser)
+                },
             )
             // Theme and tablet-layout recreation retain the selected pane. New
             // launches keep AgentPanel's full-Agent default; ACTION_MAIN also

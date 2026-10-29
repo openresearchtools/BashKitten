@@ -136,6 +136,10 @@ public final class BrowserApp extends ContextWrapper {
         if (tab.ready && (!onion(url) || tab.tor)) return false;
         tab.pendingUrl = url;
         if (tab.preparing) return true;
+        if (applicationTab(tab, url)) {
+            restoreServiceTab(tab, url);
+            return true;
+        }
         if (onion(url)) tab.tor = true;
         tab.preparing = true;
         if (tab.tor && tab.port == 0) useTor(tab, url);
@@ -143,6 +147,43 @@ public final class BrowserApp extends ContextWrapper {
             tab.preparing = false; tab.session.loadUri(tab.pendingUrl);
         }, error -> { tab.preparing = false; message(error); });
         return true;
+    }
+    private boolean applicationTab(Tab tab, String url) {
+        return tab.session != null && String.valueOf(tab.session.getSettings().getContextId()).startsWith("bashkitten-service-") &&
+            url.matches("https://127\\.0\\.0\\.1:[0-9]+/apps/(files|references)/[a-f0-9-]{36}/.*");
+    }
+    /** Called by the native selected-tab/visibility owner, never for background restoration. */
+    public void visitSelectedServiceTab(boolean retry) {
+        Tab selected = host.selected();
+        if (selected == null || selected.session == null || !selected.session.isOpen()) return;
+        Tab tab = track(selected, selected.parentId);
+        if (tab.ready || tab.preparing || !retry && !tab.error.isEmpty()) return;
+        if (!applicationTab(tab, tab.url)) return;
+        tab.error = "";
+        prepareNavigation(tab, tab.url);
+    }
+    private void restoreServiceTab(Tab tab, String url) {
+        final GeckoSession source = tab.session;
+        final String context = source.getSettings().getContextId();
+        tab.preparing = true;
+        java.util.function.BooleanSupplier current = () -> tabs.get(tab.id) == tab && tab.session == source &&
+            source.isOpen() && Objects.equals(tab.pendingUrl, url);
+        Consumer<String> failed = error -> {
+            tab.preparing = false; tab.ready = false;
+            if (tabs.get(tab.id) != tab || tab.session != source || !source.isOpen()) return;
+            if (!Objects.equals(tab.pendingUrl, url)) { prepareNavigation(tab, tab.pendingUrl); return; }
+            tab.error = error == null ? "Open Files again through its owning backend." : error;
+            message(tab.error);
+        };
+        agent.restoreApplication(context, url, current, (restoredContext, address, files, authorized) -> {
+            if (!current.getAsBoolean() || !authorized.getAsBoolean()) throw new SecurityException("The application tab changed.");
+            if (!context.equals(restoredContext)) throw new SecurityException("The application backend identity changed. Open Files again.");
+            configure(tab, Collections.emptyList(), ignored -> {
+                if (!current.getAsBoolean() || !authorized.getAsBoolean()) { failed.accept("The application tab changed."); return; }
+                tab.preparing = false; tab.error = "";
+                source.loadUri(address);
+            }, failed);
+        }, failed);
     }
     public Tab forSession(GeckoSession session) {
         for (Tab tab : tabs.values()) if (tab.session == session) return tab;
@@ -163,6 +204,11 @@ public final class BrowserApp extends ContextWrapper {
         host.ensure(tab, () -> {
             if (tab.ready) { done.run(); return; }
             String restoreUrl = tab.url;
+            if (applicationTab(tab, restoreUrl)) {
+                prepareNavigation(tab, restoreUrl);
+                awaitPreparation(tab, SystemClock.elapsedRealtime() + 185000, done, fail);
+                return;
+            }
             Consumer<Integer> configured = port -> {
                 tab.port = port;
                 configure(tab, tor.identities(), ignored -> {
@@ -177,7 +223,7 @@ public final class BrowserApp extends ContextWrapper {
     private void awaitPreparation(Tab tab, long deadline, Runnable done, Consumer<String> fail) {
         if (!tabs.containsKey(tab.id)) { fail.accept("Tab was closed"); return; }
         if (!tab.preparing) {
-            if (tab.ready) done.run(); else fail.accept("Tab connection is unavailable; retry navigation");
+            if (tab.ready) done.run(); else fail.accept(tab.error.isEmpty() ? "Tab connection is unavailable; retry navigation" : tab.error);
             return;
         }
         if (SystemClock.elapsedRealtime() >= deadline) { fail.accept("Tab connection timed out"); return; }
@@ -311,7 +357,8 @@ public final class BrowserApp extends ContextWrapper {
                     .put("identities", new JSONArray());
             }
             save(tab);
-            page(tab, "configure", params, value -> { tab.ready = !tab.tor || tab.port != 0; done.accept(value); }, fail);
+            page(tab, "configure", params, value -> { tab.ready = (!tab.tor || tab.port != 0) &&
+                (context == null || !context.startsWith("bashkitten-service-") || serviceRoutes.containsKey(context)); done.accept(value); }, fail);
         } catch (Exception error) { fail.accept("Could not configure tab"); }
     }
     public void setAdblock(Tab tab, boolean enabled, Consumer<JSONObject> done, Consumer<String> fail) {
