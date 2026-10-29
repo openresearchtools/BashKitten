@@ -34,7 +34,7 @@ export class BashKittenBrowserControlParent extends JSWindowActorParent {
     const { x, y, events, nativeClick } = data;
     if (!win || !browser.isConnected || !Number.isFinite(x) || !Number.isFinite(y) ||
         !Array.isArray(events) || !events.length || events.some(event =>
-          !["mousemove", "mousedown", "mouseup"].includes(event.type))) {
+          !["mousemove", "mousedown", "contextmenu", "mouseup"].includes(event.type))) {
       throw new Error("Invalid ordinary-tab pointer event");
     }
     const point = { x: x / win.devicePixelRatio, y: y / win.devicePixelRatio };

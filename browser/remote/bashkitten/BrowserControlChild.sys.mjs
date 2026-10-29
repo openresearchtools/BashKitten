@@ -1823,6 +1823,17 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
           } else {
             await this.#mouseEvents(point, [
               { type: "mousedown", button, clickCount: args.clickCount ?? 1 },
+              // Native WebDriver dispatches the secondary context menu after
+              // pointer-down; a mouse down/up pair alone does not produce it.
+              ...(lazy.event.MouseButton.isSecondary(button)
+                ? [
+                    {
+                      type: "contextmenu",
+                      button,
+                      clickCount: args.clickCount ?? 1,
+                    },
+                  ]
+                : []),
               { type: "mouseup", button, clickCount: args.clickCount ?? 1 },
             ]);
           }
