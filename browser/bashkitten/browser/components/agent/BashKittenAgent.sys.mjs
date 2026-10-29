@@ -25,7 +25,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
 });
 const contexts = new Map();
 const ownedViews = new WeakMap();
-const shownLocalAISetups = new Set();
 let actorRegistered = false;
 let browserOwner;
 let closingLocal = false;
@@ -220,7 +219,6 @@ class AgentView {
     this.providerLogins = new Set();
     this.referencesPending = new Map();
     this.drafts = new Map();
-    this.settingsVisited = new Set();
     this.machineStartupReady = new Promise((resolve, reject) => { this.machineStartupResult = { resolve, reject }; });
     this.machineStartupReady.catch(() => {});
     this.off = false;
@@ -767,9 +765,6 @@ class AgentView {
     }, () => epoch === this.selectionEpoch && this.selection === id && !this.off && !this.win.closed);
     if (epoch !== this.selectionEpoch || this.selection !== id || this.off) { await disconnectMachine(id, connection.transportGeneration); return; }
     await this.connect(connection, true, { reload: true });
-    void this.machineLocalControl(id, "status").then(status => {
-      if (epoch === this.selectionEpoch) this.showLocalAISetup(status, id);
-    }).catch(console.error);
   }
 
   machineLocalControl(id, command, value = {}) {
@@ -1014,19 +1009,6 @@ class AgentView {
       reload = true;
     }
     await this.connect(connection, true, { reload });
-    if (current()) this.showLocalAISetup(status);
-  }
-
-  showLocalAISetup(status, backendId = "local") {
-    if (this.off || (this.selection || "local") !== backendId || this.win.closed || DesktopLifetime.quitting ||
-        !["pending", "running", "interrupted"].includes(status.localAISetup?.status) || !status.web?.identity?.instanceId) return;
-    const key = `${backendId}:${status.web.identity.instanceId}`;
-    if (shownLocalAISetups.has(key)) return;
-    shownLocalAISetups.add(key);
-    // Show the existing nonblocking setup page once. Closing it or choosing
-    // another settings page must not make status polling reopen it.
-    if (!this.connectionsPanel && !this.settingsVisited.has(backendId) && this.layout === "full")
-      void this.openSettings("localai", { backendId }).catch(console.error);
   }
 
   async connect(connection, local, { reload = false, navigateTo = null } = {}) {
@@ -1217,7 +1199,6 @@ class AgentView {
   }
 
   async openSettings(section, options = {}) {
-    this.settingsVisited.add(options.backendId || this.selection || "local");
     this.show();
     if (["general", "providers"].includes(section)) {
       await this.sidecar.select(this.selection || "local");

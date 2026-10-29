@@ -5,6 +5,44 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Guided local models — 29 October 2026
+
+`7054f1a59b` replaces detailed model-builder menus with guided model/device/context
+controls and an explicit custom router INI mode. It reuses the existing native
+router, downloads, setup jobs and Pi provider import. The requested Qwen quant
+matrix is pinned with matching projectors and full model notices; existing exact
+defaults remain. Different quants share the model folder/projector, and reused
+verified bytes count toward progress without another download or routine full
+checksum pass. Prior guided INI entries remain routable for existing Pi chats.
+
+Focused source checks passed configuration preservation, custom ownership races,
+paired assets, download reuse/repair and readable progress. Browser component
+checks passed compact 360px presentation, a keyboard-sized viewport, stable
+download-control focus and preservation of edits during asynchronous responses.
+These component fixtures are not installed product acceptance.
+
+An installed diagnostic native-controller check changed only the existing model's
+context from 32,768 to 65,536. Native llama.cpp and bundled Pi both reported the
+new context and text/image input, with the matching projector, CPU selection and
+current Pi model/thinking preserved. The controller stayed running. A read-only
+native slots request during real Pi generation confirmed that the selected
+release exposes actual processing state without another launcher flag.
+
+Default downloads already queue through fresh desktop Local autostart and after
+normal Termux setup completes. The automatic Settings-opening hooks are removed
+on both platforms; an explicitly opened settings page observes that existing job.
+Seven focused source fixtures passed fresh desktop/Termux startup with Settings
+unopened, saved Local autostart Off, custom configuration/import opt-out, saved
+Pi choices, cancellation/retry and concurrent configuration edits. They use the
+real setup/job/download owners with tiny synthetic streams and stubbed runtime
+installation/process boundaries, so they are not installed first-launch proof.
+Genuinely fresh installed setup, the new guided/custom UI,
+actual Q8 KV/GPU execution and coherent Android/Linux candidate replay remain
+required. Optional large model weights were not downloaded or claimed tested.
+External evidence is under `Bashkitten-Acceptance/audio-guided-20261029` and
+`audio-ui-20261029`; current installed checks still identify the old diagnostic
+candidate and explicit overlays separately.
+
 ## Operation ownership corrections — 20 October 2026
 
 This checkpoint supersedes the earlier in-progress runtime/build statements below.

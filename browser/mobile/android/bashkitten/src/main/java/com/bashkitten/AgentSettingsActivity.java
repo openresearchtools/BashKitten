@@ -53,7 +53,6 @@ public final class AgentSettingsActivity extends ProductActivity {
     private CompletableFuture<JSONObject> recordRead;
 
     public static void open(Activity activity, String section) {
-        BrowserApp.get(activity).agent.settingsOpened();
         if (section.equals("providers") || section.equals("general")) {
             BrowserApp.get(activity).agent.navigation(section.equals("providers") ? "providers" : "settings", new JSONObject(),
                 ignored -> {}, error -> android.widget.Toast.makeText(activity, error, android.widget.Toast.LENGTH_LONG).show());

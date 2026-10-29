@@ -4101,7 +4101,9 @@ Normal Termux/Local setup automatically prepares the default runtime packages,
 Qwen model and matching image projector, speech recognition, voice assets and
 call VAD in the background through the existing setup/job owner. On a fresh
 desktop first launch this starts automatically, without opening a settings tab;
-opening Local AI merely shows current progress. No additional user-initiated AI
+opening Local AI merely shows current progress. Do not automatically open that
+settings tab/activity to present the background job. Preserve an existing saved
+Local autostart Off choice. No additional user-initiated AI
 setup step is required. Keep the existing exact defaults and
 saved choices; do not overwrite custom configuration or silently restart a
 cancelled setup. Show actual pending, ready and failed states.

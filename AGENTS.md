@@ -6,6 +6,9 @@ The latest [native-plan amendment](docs/native-environments-display-plan.md#guid
 replaces the detailed model-builder UI with supported model dropdowns, actual
 CPU/GPU devices and context controls. Normal Termux/Local setup automatically
 prepares defaults through existing owners; alternatives download on selection.
+Fresh desktop launch also starts these downloads in the background without
+opening Settings. Opening Settings observes progress/retry; it does not initiate
+required default setup. Preserve deliberate Local autostart Off and cancellation.
 Keep exact defaults and saved choices. Show combined model/projector sizes and
 readable progress, reuse one projector across quants in the model's folder, and
 surface real load failures without fallback. Advanced is custom router INI mode
