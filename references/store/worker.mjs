@@ -164,9 +164,19 @@ function putItem(db, value, expected, patch = false) {
     db.prepare("DELETE FROM fulltext WHERE item=?").run(itemKey);
   if (data.parentItem) {
     const parent = db
-      .prepare("SELECT parent FROM items WHERE key=?")
+      .prepare("SELECT parent,type,deleted FROM items WHERE key=?")
       .get(data.parentItem);
     if (!parent || parent.parent) fail("Parent must be a top-level item");
+    // Native Item.isRegularItem() excludes notes, attachments and annotations.
+    // Check a new ordinary attachment/note binding without changing existing
+    // trash relationships or the native embedded-image/annotation exceptions.
+    if (
+      data.parentItem !== previous?.parentItem &&
+      (data.itemType === "note" ||
+        (data.itemType === "attachment" && data.linkMode !== "embedded_image")) &&
+      (parent.deleted || ["attachment", "note", "annotation"].includes(parent.type))
+    )
+      fail("Choose a regular reference item that is not deleted");
   }
   const creators = (data.creators || [])
     .map((c) => c.name || [c.firstName, c.lastName].filter(Boolean).join(" "))

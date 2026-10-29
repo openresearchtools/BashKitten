@@ -477,6 +477,78 @@ function renderDetail(item, targetScope) {
   }
   if (archived)
     notice.textContent = "Archived library · unarchive it to edit metadata.";
+  if (item.data.itemType === "attachment" && item.data.linkMode !== "embedded_image") {
+    const parentSection = node("details", { open: true }),
+      parentStatus = node("p", { class: "notice", role: "status" });
+    const controller = detailController;
+    parentSection.append(node("summary", {}, "Parent item"), parentStatus);
+    parentStatus.textContent = item.data.parentItem
+      ? "Parent item · " + item.data.parentItem
+      : "Standalone attachment";
+    if (item.data.parentItem)
+      void targetScope.request("items/" + encodeURIComponent(item.data.parentItem), {
+        signal: controller.signal,
+      }).then(parent => {
+        if (detail === item && root.contains(parentSection))
+          parentStatus.textContent = "Parent item · " + title(parent);
+      }).catch(error => {
+        if (!controller.signal.aborted && detail === item && root.contains(parentSection))
+          parentStatus.textContent = error.message;
+      });
+    const updateParent = async (parent) => {
+      if (scope !== targetScope || detail !== item || controller.signal.aborted) return;
+      if (detailDirty) {
+        notice.textContent = "Save or reload metadata changes before changing the parent.";
+        return;
+      }
+      const controls = [...form.querySelectorAll("input,select,textarea,button")]
+        .map(control => [control, control.disabled]);
+      for (const [control] of controls) control.disabled = true;
+      try {
+        const result = await targetScope.request("items/" + encodeURIComponent(item.key), {
+          method: "PATCH",
+          body: { version: item.version,
+            data: { parentItem: parent?.key || null, ...(parent ? { collections: [] } : {}) } },
+          signal: controller.signal,
+        });
+        if (scope !== targetScope || detail !== item || !root.contains(form)) return;
+        if (selection.has(result.key)) selection.set(result.key, selectedIdentity(result));
+        detail = result;
+        renderDetail(result, targetScope);
+        items.reset({ preservePosition: true });
+        notify(parent ? "Attachment parent updated." : "Attachment is now standalone.");
+      } catch (error) {
+        if (!controller.signal.aborted && detail === item && root.contains(form))
+          notice.textContent = error.status === 412
+            ? "This attachment changed elsewhere. Reload it before changing the parent."
+            : error.message;
+      } finally {
+        for (const [control, disabled] of controls) control.disabled = disabled;
+      }
+    };
+    parentSection.append(node("div", { class: "toolbar" },
+      button(item.data.parentItem ? "Change parent" : "Attach to item", async () => {
+        if (detailDirty) {
+          notice.textContent = "Save or reload metadata changes before changing the parent.";
+          return;
+        }
+        try {
+          const parent = await chooseLibraryItem(targetScope, {
+            heading: "Choose parent item",
+            isSelectable: candidate => candidate.key !== item.key &&
+              !["attachment", "note", "annotation"].includes(candidate.data.itemType),
+            signal: controller.signal,
+          });
+          if (parent) await updateParent(parent);
+        } catch (error) {
+          if (!controller.signal.aborted && detail === item && root.contains(form))
+            notice.textContent = error.message;
+        }
+      }),
+      button("Leave standalone", () => updateParent(null), { disabled: !item.data.parentItem }),
+    ));
+    form.append(parentSection);
+  }
   const type = node("select");
   for (const info of schema.itemTypes)
     type.add(new Option(label("itemTypes", info.itemType), info.itemType));
@@ -2359,14 +2431,26 @@ async function chooseCollection(targetScope) {
   return result;
 }
 
-async function chooseLibraryItem(targetScope) {
-  const d = dialog("Choose related item"),
+async function chooseLibraryItem(targetScope, {
+  heading = "Choose related item", isSelectable = () => true, signal,
+} = {}) {
+  signal?.throwIfAborted();
+  const d = dialog(heading),
     search = node("input", { type: "search", "aria-label": "Search library" }),
     rows = node("div", { class: "search-results" });
   let selected = null,
     accepted = false,
     term = "";
   d.body.append(search, rows);
+  const choose = button("Choose", () => {
+    if (selected) { accepted = true; d.el.close(); }
+  }, { class: "primary", disabled: true });
+  const select = item => {
+    selected = isSelectable(item) ? item : null;
+    choose.disabled = !selected;
+    list.setSelection(selected ? [item.key] : []);
+    d.notice.textContent = selected ? "" : "Choose a regular top-level reference.";
+  };
   const list = new VirtualList({
     element: rows,
     label: "Library references",
@@ -2389,44 +2473,36 @@ async function chooseLibraryItem(targetScope) {
         node("strong", {}, title(item)),
         node("small", {}, creators(item)),
       ),
-    onSelect: (item) => {
-      selected = item;
-      list.setSelection([item.key]);
-    },
+    rowAttributes: item => ({ "aria-disabled": !isSelectable(item) }),
+    onSelect: select,
     onActivate: (item) => {
-      selected = item;
-      accepted = true;
-      d.el.close();
+      select(item);
+      if (selected) { accepted = true; d.el.close(); }
     },
   });
   const change = debounce(() => {
     term = search.value;
+    selected = null;
+    choose.disabled = true;
     list.reset({ preserveSelection: false });
   });
   search.oninput = () => {
+    selected = null;
+    choose.disabled = true;
     list.controller.abort();
     change();
   };
-  d.actions.append(
-    button("Cancel", () => d.el.close()),
-    button(
-      "Choose",
-      () => {
-        if (selected) {
-          accepted = true;
-          d.el.close();
-        }
-      },
-      { class: "primary" },
-    ),
-  );
+  const abort = () => d.el.close();
+  signal?.addEventListener("abort", abort, { once: true });
+  d.actions.append(button("Cancel", () => d.el.close()), choose);
   const result = new Promise((resolve) =>
     d.el.addEventListener(
       "close",
       () => {
         list.destroy();
         change.cancel();
-        resolve(accepted ? selected : null);
+        signal?.removeEventListener("abort", abort);
+        resolve(accepted && !signal?.aborted ? selected : null);
       },
       { once: true },
     ),
