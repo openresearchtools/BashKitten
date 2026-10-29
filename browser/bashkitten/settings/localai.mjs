@@ -14,7 +14,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
   let state, liveState, busy = false, progressNode, outputNode, refreshGuided, refreshAdvanced, refreshDownloads, feedbackJob, setupView, formEdited = false, lastSetupStatus;
   for (const event of ['input', 'change']) parent.addEventListener(event, () => { formEdited = true; }, { signal });
   const jobMessage = job => job ? [({ complete: 'Complete', failed: 'Failed', interrupted: 'Interrupted', cancelled: 'Cancelled' })[job.status] || job.phase,
-    job.progress ? downloadProgress(job.progress) : '', job.error].filter(Boolean).join(' · ') : '';
+    job.progress && (Number(job.progress.total) > 0 || !['complete', 'failed', 'interrupted', 'cancelled'].includes(job.status)) ? downloadProgress(job.progress) : '', job.error].filter(Boolean).join(' · ') : '';
   const operationOutput = value => [value.job?.log, ...[['llama', 'llama.cpp'], ['whisper', 'Whisper']].map(([engine, label]) => {
     const service = value[engine]?.service;
     return service?.output ? `${label} · ${service.state}\n${service.output}` : '';
@@ -304,9 +304,11 @@ export async function renderSection({ root: parent, call: control, info, signal 
         card.append(view.title, view.bar, view.progress, view.status, view.actions); list.append(card); rows.set(id, view);
       }
       view.title.textContent = title; view.bar.setAttribute('aria-label', `${title} download`);
+      const terminalWithoutBytes = id.startsWith('runtime:') && ['complete', 'failed', 'interrupted', 'cancelled'].includes(status) && !(Number(progress.total) > 0);
+      view.bar.hidden = view.progress.hidden = terminalWithoutBytes;
       if (Number(progress.total) > 0) { view.bar.max = progress.total; view.bar.value = Math.min(progress.downloaded || 0, progress.total); }
       else view.bar.removeAttribute('value');
-      view.progress.textContent = downloadProgress(progress); view.status.textContent = [status, error].filter(Boolean).join(' · ');
+      view.progress.textContent = terminalWithoutBytes ? '' : downloadProgress(progress); view.status.textContent = [status, error].filter(Boolean).join(' · ');
       // Polling changes text/progress, not the focused download control.
       for (const [action, handler] of actions) {
         let control = view.buttons.get(action);
