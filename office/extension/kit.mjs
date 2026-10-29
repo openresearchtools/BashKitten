@@ -518,11 +518,30 @@ export function nativeOperation(request) {
   function bibliographyLayout(citation, anchor, previous, saved) {
     if (!citation.format || !anchor) return;
     // Zotero's native Cite.getBibliographyFormatParameters supplies twips. UNO
-    // paragraph margins/tab stops use 1/100 mm and proportional line spacing
-    // uses percent. Preserve each existing entry's native customizations until
-    // a style/format change, as Zotero's bibliographyStyleHasBeenSet does.
+    // paragraph margins/tab stops use 1/100 mm. Writer follows the donor's
+    // native Bibliography 1 style; the other editors retain their shape layout.
     const mm = twips => Math.round(twips * 2540 / 1440), format = citation.format;
     const relativeTabs = documentType !== 'text' || model.createInstance('com.sun.star.document.Settings').getPropertyValue('TabsRelativeToIndent');
+    if (documentType === 'text') {
+      const styles = model.getStyleFamilies().getByName('ParagraphStyles'), name = 'Bibliography 1';
+      const created = !styles.hasByName(name);
+      if (created) {
+        const style = model.createInstance('com.sun.star.style.ParagraphStyle'); styles.insertByName(name, style);
+        style.setParentStyle(styles.hasByName('Standard') ? 'Standard' : 'Default');
+      }
+      // Match Zotero's bibliographyStyleHasBeenSet behavior using the existing
+      // layout identity. Same-style refresh keeps native style customizations;
+      // a new CSL style/format resets only the properties controlled by CSL.
+      if (created || previous?.layoutStyle !== citation.layoutStyle) {
+        const style = styles.getByName(name), nativeMm = twips => Math.trunc(twips * 2540 / 1440);
+        for (const [key, value] of [['ParaFirstLineIndent', format.firstLineIndent], ['ParaLeftMargin', format.indent], ['ParaBottomMargin', format.entrySpacing]]) style.setPropertyValue(key, new uno.Any(uno.type.long, nativeMm(value)));
+        style.setPropertyValue('ParaLineSpacing', new css.style.LineSpacing({ Mode: css.style.LineSpacingMode.MINIMUM, Height: nativeMm(format.lineSpacing) }));
+        const tabs = format.tabStops.map(value => new css.style.TabStop({ Position: nativeMm(value) - (relativeTabs ? nativeMm(format.indent) : 0), Alignment: css.style.TabAlign.LEFT, DecimalChar: '.', FillChar: ' ' }));
+        style.setPropertyValue('ParaTabStops', new uno.Any(uno.type.sequence(uno.type.struct(css.style.TabStop)), tabs));
+      }
+      for (const cursor of bibliographyParagraphs(anchor)) cursor.setPropertyValue('ParaStyleName', name);
+      return;
+    }
     const base = { left: mm(format.indent), first: mm(format.firstLineIndent), top: 0, bottom: mm(format.entrySpacing), line: { Mode: css.style.LineSpacingMode.PROP, Height: Math.round(format.lineSpacing * 100 / 240) }, tabs: format.tabStops.map(value => ({ Position: mm(value) - (relativeTabs ? mm(format.indent) : 0), Alignment: css.style.TabAlign.LEFT, DecimalChar: '.', FillChar: ' ' })) };
     const oldIds = previous?.entryIds?.map(ids => JSON.stringify(ids)) || [];
     bibliographyParagraphs(anchor).forEach((cursor, index) => {
@@ -544,7 +563,7 @@ export function nativeOperation(request) {
       const address = anchor.getRangeAddress(); target = { sheet: address.Sheet, range: anchor.getPropertyValue('AbsoluteName').split('.').at(-1) };
       removeAnchor(citation, false); anchor = null; citation.anchor = undefined;
     }
-    const savedLayout = isBibliography && anchor && previous?.layoutStyle === citation.layoutStyle ? bibliographyParagraphs(anchor).map(paragraphLayout) : null;
+    const savedLayout = documentType !== 'text' && isBibliography && anchor && previous?.layoutStyle === citation.layoutStyle ? bibliographyParagraphs(anchor).map(paragraphLayout) : null;
     if (documentType === 'text') {
       const controller = view, frame = controller.getFrame();
       const property = (Name, Value) => new css.beans.PropertyValue({ Name, Value, Handle: 0, State: css.beans.PropertyState.DIRECT_VALUE });

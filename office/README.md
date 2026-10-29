@@ -85,9 +85,13 @@ document property stores ordered citation/style state. Calc and Impress retain
 clickable rich-text links through their native URL text fields.
 Bibliography indentation, line/entry spacing and tab stops come from the actual
 Zotero `Cite.getBibliographyFormatParameters` output. The adapter converts twips
-to native UNO units and honors the native relative-tab convention. Same-style
-refresh preserves native paragraph adjustments, matching entries by their CSL
-identities. Numeric labels use native tabs; rich titles and links remain native
+to native UNO units and honors the native relative-tab convention. Writer uses
+the native `Bibliography 1` paragraph style, retaining its customizations during
+same-style refresh and resetting CSL-owned layout properties when the citation
+style changes. Direct formatting may reset during native rich-text regeneration,
+as in Zotero's LibreOffice integration. Calc and Impress retain native shape
+paragraph adjustments, matching entries by their CSL identities. Numeric labels
+use native tabs; rich titles and links remain native
 text formatting. Native copied bibliographies are refreshed and unlinked together.
 Legacy `com.sun.star` use is isolated here because the pinned runtime's preferred
 `cool.getActiveDocument()` model binding threw a native overload/type error in
