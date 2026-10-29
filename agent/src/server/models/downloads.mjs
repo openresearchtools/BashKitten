@@ -499,10 +499,16 @@ export async function controlDownload(id, action) {
       }
       job.status = 'interrupted';
     }
-    if (terminal.has(job.status)) return publicJob(job);
+    // Cancellation stays terminal during startup/polling. An explicit Retry
+    // reuses this job after cancel removed its partial files; it only
+    // downloads bytes and cannot revive a cancelled guided selection.
+    if (terminal.has(job.status) && !(job.status === 'cancelled' && action === 'resume')) return publicJob(job);
     if (action === 'resume') {
       if (closing) throw modelError('Agent is stopping');
-      if (!running.has(id) && job.status !== 'queued') { job.status = 'queued'; job.error = null; await persist(job); pump(); }
+      // A completed-file repair can arrive while the previous completion
+      // callback is finishing. Queue it now; pump waits for that worker's
+      // finally block, so active transfers are never duplicated.
+      if (!['queued', 'downloading'].includes(job.status)) { job.status = 'queued'; job.error = null; await persist(job); pump(); }
     } else {
       job.status = action === 'pause' ? 'paused' : 'cancelled'; job.error = null;
       const active = running.get(id); active?.controller.abort(); await active?.promise;
