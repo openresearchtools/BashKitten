@@ -1,8 +1,8 @@
 {
   "repository": "https://github.com/earendil-works/pi",
-  "release": "v1.3.0",
-  "commit": "71023aec1546d6d677a65669c5665c0927ce0dd0",
-  "url": "https://codeload.github.com/earendil-works/pi/tar.gz/71023aec1546d6d677a65669c5665c0927ce0dd0",
-  "file": "pi-71023aec1546d6d677a65669c5665c0927ce0dd0.tar.gz",
-  "sha256": "986b809d6899c6b859cca6419f98f4cb599e58fb3b3503a5660fcbf7f9a61c47"
+  "release": "v1.4.0",
+  "commit": "4a080252f06caf63a525d7873c5d94d3c23887e0",
+  "url": "https://codeload.github.com/earendil-works/pi/tar.gz/4a080252f06caf63a525d7873c5d94d3c23887e0",
+  "file": "pi-4a080252f06caf63a525d7873c5d94d3c23887e0.tar.gz",
+  "sha256": "677a2912de35585d17193d7facc5f1b4e106f6b2d22a13d101b237aa324726e8"
 }

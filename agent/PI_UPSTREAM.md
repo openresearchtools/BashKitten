@@ -3,9 +3,9 @@
 This branch runs unmodified Pi rather than porting its behavior:
 
 - Repository: https://github.com/earendil-works/pi
-- Release: `v1.3.0`
-- Commit: `71023aec1546d6d677a65669c5665c0927ce0dd0`
-- Packages: `@earendil-works/pi-coding-agent@1.3.0`, `@earendil-works/pi-ai@1.3.0`
+- Release: `v1.4.0`
+- Commit: `4a080252f06caf63a525d7873c5d94d3c23887e0`
+- Packages: `@earendil-works/pi-coding-agent@1.4.0`, `@earendil-works/pi-ai@1.4.0`
 - Full transitive dependency resolution and tarball integrity: `package-lock.json`
 - License: MIT (see `reference/PI-LICENSE`)
 
@@ -38,7 +38,7 @@ authentication. `/pillama-resume off` disables it; the default is off. Settings
 live in BashKitten's private Pi profile, not the standalone Pi directory.
 
 
-The 19 October 2026 update uses the official v1.3.0 release commit and registry
+The 29 October 2026 update uses the official v1.4.0 release commit and registry
 integrities. `vendor/pi/source.json` records the complete pristine release archive;
 `vendor/npm/sources.json` retains every locked distribution, including transitive
 dependencies. Pi's exact provider SDK versions are unchanged from its release.
@@ -47,6 +47,14 @@ The adapter continues to use stock `get_state`, `get_entries`,
 Pi's own extension loader aliases SDK imports to the selected runtime; `chats`
 therefore reads that runtime's history parser without a second model runtime.
 This does not opt into experimental Pi Durable or migrate native JSONL sessions.
+
+Pi 1.4.0 uses the selected model's output limit for compaction summaries;
+`compaction.reserveTokens` still controls the input threshold. The bundled
+`full-read` extension retains that effective reserve plus its 20,000-token
+headroom, and `compact_context` continues through Pi's native compaction and
+handoff. The existing RPC and public extension/provider APIs need no adapter
+changes for this update. Source and isolated compatibility checks do not replace
+installed Android/Linux candidate acceptance.
 
 The deferred `ask_user` extension returns a pending operational question at once.
 Its live worker owns the absolute two-minute deadline, atomic resolution and

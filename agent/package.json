@@ -16,8 +16,8 @@
     "start": "node src/server/http/server.mjs"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "1.3.0",
-    "@earendil-works/pi-coding-agent": "1.3.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-coding-agent": "1.4.0",
     "busboy": "1.6.0",
     "mdast-util-from-markdown": "2.1.0",
     "mdast-util-gfm-table": "2.0.0",
