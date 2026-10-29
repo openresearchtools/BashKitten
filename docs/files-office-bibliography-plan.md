@@ -2262,3 +2262,45 @@ Use native configuration for collapsible navigation and readable source labels;
 retain native file actions. The pinned release's missing automatic theme mode
 may use a small named patch to its existing theme state. Office remains explicitly
 light. These requirements do not claim successful builds or installed acceptance.
+
+## 27. Editable metadata, exact identifiers and attachment retention — 29 October 2026
+
+The References manager retains the requested editable metadata pane beside the
+item list, using BashKitten's appearance and responsive layout. Users and Pi
+agents can read and edit applicable item fields, creators, abstracts and
+identifiers, add local attachments and request enrichment through the same
+existing backend. Expose DOI, PMID, PMCID, OpenAlex work ID and arXiv identifiers
+as editable fields rather than requiring users to hide them in Extra. Keep
+creator identifiers separate from identifiers of the work.
+
+Direct OpenAlex import from the UI or an agent must map the available metadata,
+creators and identifiers accurately through the reused native translation
+facilities. Preserve source provenance and existing abstract-quality rules.
+Use the Systematic Reviewer main branch's relevant normalization and merge
+behavior where applicable; do not overwrite adapted components wholesale.
+
+Deduplicate within the selected References project only when normalized work
+identifiers match exactly. A shared DOI, PMID, PMCID, OpenAlex work ID or arXiv
+identifier establishes the match; titles, author names and other fuzzy text
+similarity never do. Normalize identifier wrappers such as DOI URLs to the
+identifier itself. Matching records complement one another: retain supplied
+identifiers and fill missing metadata, including a better valid abstract, while
+preserving deliberate edits and source provenance. Existing citations and old
+item identities must continue to resolve after a merge. Use the existing
+transactional database owner for concurrent user and agent imports.
+
+Every distinct attachment survives a merge, including multiple PDFs, DOCX, XML
+and other full-text or supplemental files. Do not discard attachments because
+their names or contents match. Use the existing storage owner to suffix filename
+collisions with `-2`, `-3` and so on immediately before the extension. Preserve
+the file extension and bounded filenames suitable for Linux and Termux.
+Changing a project's Bibliography path in Settings moves all its registered
+attachments, including merged items' attachments, and updates their database
+paths without losing attachment identities.
+
+Citation and bibliography output should follow the pinned Zotero/LibreOffice
+style behavior. Native document formatting remains native; do not add a separate
+font/size store to every citation. Avoid rewriting an unchanged citation, and
+check genuine rich-text and bibliography rewrites against the native donor
+behavior. Verify these changes with small relevant fixtures and live documents,
+not another unrelated whole-application or large-library acceptance campaign.
