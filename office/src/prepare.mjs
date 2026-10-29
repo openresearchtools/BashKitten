@@ -66,6 +66,7 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
     'cache_files.path': cache, 'net.proto': 'IPv4', 'net.listen': 'loopback',
     'net.service_root': serviceRoot, 'net.content_security_policy': origins.length ? 'frame-ancestors ' + origins.join(' ') + ';' : '',
     'ssl.enable': 'false', 'ssl.termination': 'true', 'experimental_features': 'true',
+    'hide_legacy_script_warning': 'true',
     'storage.wopi[@allow]': 'true',
     'admin_console.enable': 'false', 'zotero.enable': 'false',
     'user_interface.brandProductName': 'Office',
