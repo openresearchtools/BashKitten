@@ -28,6 +28,8 @@ with one fetch process instead of 40. Source serialization and content are
 unchanged. This is a focused source-fixture pass, not successful publication.
 Receipts are under `Bashkitten-Acceptance/source-archive-backfill-20261029/` in
 `workflow-step-verification.json` and `verified-run/verification.json`.
+`9e64389692` adds disk/object-usage reporting around that native backfill;
+it does not change source serialization or establish a publication pass.
 
 The actual cf62 Linux amd64 DEB also passed the existing final-package audit:
 all 3,056 full-text records matched the normal collector and offline About,
@@ -272,6 +274,17 @@ Confirm, zoom and fresh full-candidate Office acceptance remain open. These
 results and native receipt links are in the same phone `evidence.json`; the final
 state was portrait, unmodified, with no command drafts.
 
+The unmodified cf62 Linux amd64 DEB also passed bounded Files GUI checks in the
+real-Xorg VM: native folder launch, new folder/rename/copy/move/delete, GTK
+TXT/PDF upload, text/native PDF previews and byte-exact TXT/ZIP downloads. Two
+projects shared one Quantum process; closing one tab preserved that process and
+the remaining Files tab reloaded. The retained project picker and actual Changes
+untracked-file view passed. Normal Local Off/Quit preserved the custom main INI.
+The receipt is
+`Bashkitten-Acceptance/files-xorg-153.5.4-cf62-20261029/installed-acceptance-summary.json`.
+Shared-chat attachment upload, capture toolbar and native Save-As naming were
+not proven by this Files checkpoint.
+
 Desktop capture now passes the installed single/multiple-item, cancellation,
 website snapshot, recognized/raw PDF, manual attachment, collection preservation
 and overlapping two-project capture flows. `7c460a72f9` preserves collection
@@ -316,15 +329,35 @@ stop/start with the same add-on process. Native append/Save/inspect returned 200
 before and after restart, both disk markers remained, and no forced termination
 or unlock failure occurred. The receipt is
 `verification/office-shutdown-20261029/saved-office-only-result.json`.
-The subsequent dirty Local Off replay **failed**: native inspection reported
+The subsequent c348-only dirty Local Off replay **failed**: native inspection reported
 modified content before Off, but the new marker was absent on disk before Off
 and remained absent after the native process exited. The file hash and size
 were unchanged despite no forced termination or unlock failure. Source
-`c348ac5092` is therefore insufficient for dirty final-save acceptance; native
-diagnosis remains in progress. Exact disk/stop receipts are
+`c348ac5092` alone was insufficient for dirty final-save acceptance. Exact disk/stop receipts are
 `dirty-before-local-off-disk.json`, `after-local-off-disk.json` and
 `dirty-local-off-existing-evidence.json` in the same shutdown directory.
 This later source change is not part of the cf62 binaries.
+
+Native named patch `0026`, committed as `fe4951b1d7`, records the missing
+modifying activity for `executescript` through the existing native owner.
+The diagnostic server was built from `305911e75a` plus the recorded patch inputs
+(server SHA256 prefix `9df5fb0a`), with engine, frontend and plugin unchanged.
+Its actual three-format dirty Local Off replay passed: all documents were
+modified and their new markers absent on disk immediately before Off; normal
+Off completed in 2.716s, preserving the DOCX text, XLSX cells/SUM and PPTX shape.
+The original failed DOCX remained unchanged. Read-only inspection followed by
+Office-only stop preserved all three files' hashes/sizes/mtimes/inodes,
+immutable snapshots and storage manifests. A final normal restart reopened all
+three editable, with the same add-on process, and DOCX edit/native Save passed.
+Receipts are `dirty-local-off-result.json`, `readonly-office-only-result.json`
+and `saved-office-only-result.json` under
+`verification/office-shutdown-20261029/proof-0026/`.
+The combined `result.json` and adjacent
+`build-0026/committed-source-link.json` link those actual build inputs to
+`fe4951b1d7` without relabelling the diagnostic build as that clean commit.
+These are diagnostic native-overlay passes; fresh coherent build/platform
+acceptance still needs the patch and does not relabel the cf62 binaries.
+
 Likewise, `6b01947a60` uses native input semantics when clearing browser fields;
 bounded helper/native-event checks are recorded in
 `Bashkitten-Acceptance/browser-fill-clear-20261029/verification.json`.

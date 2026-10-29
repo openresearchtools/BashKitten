@@ -29,6 +29,8 @@ step and exporter fixtures passed with identical archive bytes, reducing 40
 fetch processes to one. This changes preparation only, not source serialization
 or content; complete normal source publication is still unverified. Receipts are
 in `Bashkitten-Acceptance/source-archive-backfill-20261029/`.
+`9e64389692` adds disk/object-usage observability around that native backfill,
+without changing source content or claiming successful publication.
 
 Native Office command checks now include the desktop collapsed Citations menu,
 phone Writer history/conversion/removal/PDF and saves in all three editors, with
@@ -39,6 +41,14 @@ Landscape chooser Confirm and the initial unreproduced Impress repaint
 observation remain open. Detailed receipts and limits are in the Office record;
 these checks do not establish fresh-candidate Office acceptance.
 
+The unmodified cf62 real-Xorg Files checkpoint passed bounded CRUD, native
+TXT/PDF upload/previews, byte-exact TXT/ZIP downloads, the project picker and
+actual Changes view. Two project tabs shared one Quantum owner, and closing one
+left the remaining Files view healthy. Normal Local Off/Quit preserved the
+custom main INI; attachment upload/capture and Save-As naming remain unproven.
+Its receipt is
+`Bashkitten-Acceptance/files-xorg-153.5.4-cf62-20261029/installed-acceptance-summary.json`.
+
 `c348ac5092` updates the existing shutdown owners to drain native Office saves
 before callback services stop. Source fixtures passed signal/exit ordering,
 callback drain and reload-failure cleanup in
@@ -48,18 +58,35 @@ browser with the reviewed controller overlay: immediate editable reopen, the
 same add-on process, native write/Save/inspect 200 and both disk markers retained,
 without forced termination or unlock failure. Its receipt is
 `verification/office-shutdown-20261029/saved-office-only-result.json`.
-The later dirty Local Off replay **failed**: native content was modified before
+The later c348-only dirty Local Off replay **failed**: native content was modified before
 Off, yet the new marker remained absent on disk after native exit, with the same
 file hash/size. No forced termination or unlock failure was observed. The exact
 receipts are `dirty-before-local-off-disk.json`, `after-local-off-disk.json` and
 `dirty-local-off-existing-evidence.json` in the shutdown directory. Native
-diagnosis remains in progress; c348 is not sufficient final-save acceptance.
+That earlier failed DOCX is retained unchanged; c348 alone was insufficient.
+
+Native patch `0026` (`fe4951b1d7`) corrects missing modifying-activity tracking
+for `executescript`. A recorded diagnostic native build from `305911e75a` plus
+those patch inputs, server hash prefix `9df5fb0a`, passed dirty Local Off for
+DOCX, XLSX and PPTX: modified flags were true and new markers absent immediately
+before Off; 2.716s later the native exit left the text, cells/SUM and shape saved.
+Read-only stop preserved file metadata, snapshots and manifests exactly; the
+final saved Office-only restart reopened all three editable and accepted a
+native DOCX edit/Save. Receipts are under
+`verification/office-shutdown-20261029/proof-0026/` in
+`dirty-local-off-result.json`, `readonly-office-only-result.json` and
+`saved-office-only-result.json`. These are explicit older-browser/native-overlay
+checks, not fresh cf62 or all-platform shutdown acceptance.
+The combined `result.json` and sibling
+`build-0026/committed-source-link.json` retain the exact diagnostic build and
+reviewed committed-input identity.
+
 `6b01947a60` separately
 changes native browser field-clearing semantics; rebuilt installed-actor
 and actual References query/export-scope acceptance remain pending. Its bounded
 source/native-event receipt is
 `Bashkitten-Acceptance/browser-fill-clear-20261029/verification.json`.
-Both source changes postdate the cf62 binaries.
+These source changes postdate the cf62 binaries.
 
 ## Guided local models — 29 October 2026
 
@@ -142,10 +169,22 @@ An actual unmodified cf62 Android GUI Retry/resume of a cancelled download was a
 no-op. Existing-owner fix `12ee699af3` passed a later GUI retry under a recorded
 one-file diagnostic overlay: the 264.48 MB transfer completed while the original
 cancelled guided job and newer selected speech model stayed unchanged. This is
-overlay proof, not an unmodified cf62 retry pass. Explicit dropdown application
-and restoration of the Parakeet selection remain in progress. Receipts are
+overlay proof, not an unmodified cf62 retry pass. Explicit GUI dropdown
+application then completed, and the Parakeet selection was restored. Receipts are
 `retry-overlay-receipt.json`, `overlay-gui-retry-started.json` and
-`overlay-gui-retry-complete.json` under the Android cf62 evidence directory.
+`overlay-gui-retry-complete.json`, plus `overlay-explicit-selection-complete.json`
+and `restored-parakeet-before-dictation.json`, under the Android cf62 evidence directory.
+
+The default Pocket CPU runtime produced a valid 1.2s mono 24 kHz PCM WAV through
+the existing synthesis API after 44.205s; this is not speech-fidelity, GUI preview
+or call/playback acceptance. Actual GUI Parakeet dictation of the public JFK
+sample was inaccurate and partial. A direct native comparison of the same 11s
+PCM returned the complete expected text in 18.237s. The GUI sample window had
+73 Android HAL silence insertions and 28 read errors; audio delivery remains
+unresolved, with no model defect or physical-microphone quality conclusion.
+Receipts are `native-tts-audio-validation.json`, `native-direct-asr-result.json`
+and `gui-audio-hal-diagnostic.json` in the same evidence directory. End-to-end
+GUI dictation/fidelity remains open.
 
 Optional large model weights were not downloaded or claimed tested. Actual Q8
 KV execution, physical GPU and broader installed flows remain separate gates.
@@ -159,7 +198,8 @@ External receipts and screenshots are under
 saved-Off replays. The Android cf62 receipts are under
 `android-localai-153.5.4-cf62-20261029/`, including
 `settings-closed-initial.json`, `settings-closed-models.json`,
-`settings-observer.json` and `native-model-catalog.json`.
+`settings-observer.json`, `native-model-catalog.json` and the final
+`installed-acceptance-summary.json`.
 Earlier diagnostic/overlay and source-fixture evidence
 remains separately identified under `audio-guided-20261029` and `audio-ui-20261029`.
 
