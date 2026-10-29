@@ -14,6 +14,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "chrome://remote/content/shared/listeners/ConsoleAPIListener.sys.mjs",
   ConsoleListener:
     "chrome://remote/content/shared/listeners/ConsoleListener.sys.mjs",
+  dom: "chrome://remote/content/shared/DOM.sys.mjs",
   evaluate: "chrome://remote/content/marionette/evaluate.sys.mjs",
   event: "chrome://remote/content/shared/webdriver/Event.sys.mjs",
   interaction: "chrome://remote/content/marionette/interaction.sys.mjs",
@@ -1338,6 +1339,8 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
         return this.#showOverlay(message.data);
       case "frameBounds":
         return this.#frameBounds(message.data);
+      case "pointerFrame":
+        return this.#pointerFrame(message.data);
       case "scrollFrameIntoView":
         return this.#scrollFrameIntoView(message.data);
       case "clearOverlay":
@@ -1649,6 +1652,59 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
     };
   }
 
+  async #mouseEvents(point, events, nativeClick = false) {
+    const win = this.contentWindow;
+    if (!this.browsingContext.parent) {
+      for (const event of events) {
+        await lazy.event.synthesizeMouseAtPoint(
+          point.x, point.y, { allowToHandleDragDrop: true, ...event }, win
+        );
+      }
+      return;
+    }
+    // Gecko's native conversion includes ancestor CSS transforms, zoom and
+    // out-of-process frames. Child-window mouse synthesis only adds layout
+    // offsets, which misses translated iframe dialog wrappers.
+    const widget = win.windowUtils.toTopLevelWidgetRect(point.x, point.y, 0, 0);
+    await this.sendQuery("BashKitten:NativePointer", {
+      x: widget.x, y: widget.y, events, nativeClick,
+    });
+  }
+
+  async #clickElement(target) {
+    if (!this.browsingContext.parent) {
+      await lazy.interaction.clickElement(target, false, true);
+      return;
+    }
+    if (target.localName === "input" && target.type === "file") {
+      throw new Error("Cannot click <input type=file> elements");
+    }
+    const container = lazy.dom.getContainer(target);
+    if (!lazy.dom.isInView(container)) lazy.dom.scrollIntoView(container);
+    if (!lazy.dom.isInView(container)) {
+      throw new Error("The element could not be scrolled into view");
+    }
+    if (lazy.dom.isObscured(container)) {
+      throw new Error("The element is covered by another element");
+    }
+    if (!(await lazy.interaction.isElementEnabled(target))) {
+      throw new Error("The element is disabled");
+    }
+    if (target.localName === "option") {
+      lazy.interaction.selectOption(target);
+      return;
+    }
+    const point = lazy.dom.getInViewCentrePoint(
+      lazy.dom.getFirstNonZeroRect(container.getClientRects()),
+      target.documentGlobal
+    );
+    const settled = lazy.interaction.flushEventLoop(container);
+    await this.#mouseEvents(point, [
+      { type: "mousemove" }, { type: "mousedown" }, { type: "mouseup" },
+    ], true);
+    await settled;
+  }
+
   // eslint-disable-next-line complexity
   async #act(args) {
     const win = this.contentWindow;
@@ -1709,29 +1765,17 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
             button === 0 &&
             (args.clickCount ?? 1) === 1
           ) {
-            await lazy.interaction.clickElement(target, false, true);
+            await this.#clickElement(target);
           } else {
-            await mouseAt(
-              win,
-              point.x,
-              point.y,
-              "mousedown",
-              button,
-              args.clickCount ?? 1
-            );
-            await mouseAt(
-              win,
-              point.x,
-              point.y,
-              "mouseup",
-              button,
-              args.clickCount ?? 1
-            );
+            await this.#mouseEvents(point, [
+              { type: "mousedown", button, clickCount: args.clickCount ?? 1 },
+              { type: "mouseup", button, clickCount: args.clickCount ?? 1 },
+            ]);
           }
           break;
         case "hover":
         case "hover_at":
-          await mouseAt(win, point.x, point.y, "mousemove");
+          await this.#mouseEvents(point, [{ type: "mousemove" }]);
           break;
         case "focus":
           target.focus();
@@ -1749,8 +1793,9 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
               behavior: "instant",
             });
             const fieldPoint = centerOf(fieldTarget);
-            await mouseAt(win, fieldPoint.x, fieldPoint.y, "mousedown");
-            await mouseAt(win, fieldPoint.x, fieldPoint.y, "mouseup");
+            await this.#mouseEvents(fieldPoint, [
+              { type: "mousedown" }, { type: "mouseup" },
+            ]);
             if (args.clear) {
               clearFocusedField(win, fieldTarget);
             }
@@ -1764,8 +1809,9 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
         case "type":
         case "type_at":
           if (args.kind === "type_at") {
-            await mouseAt(win, point.x, point.y, "mousedown");
-            await mouseAt(win, point.x, point.y, "mouseup");
+            await this.#mouseEvents(point, [
+              { type: "mousedown" }, { type: "mouseup" },
+            ]);
           }
           {
             const active = win.document.activeElement;
@@ -1821,7 +1867,7 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
                 inline: "center",
                 behavior: "instant",
               });
-              await lazy.interaction.clickElement(clickTarget, false, true);
+              await this.#clickElement(clickTarget);
             }
             const updated =
               "checked" in target
@@ -2112,6 +2158,30 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
     throw new Error(
       `Could not resolve the embedder for browsing context ${childBrowsingContextId}`
     );
+  }
+
+  #pointerFrame({ childBrowsingContextId, x, y }) {
+    const win = this.contentWindow;
+    const frame = [...win.document.querySelectorAll("iframe, frame")].find(
+      element => element.browsingContext?.id === childBrowsingContextId
+    );
+    if (!frame || !boundsFor(frame)) {
+      throw new Error("The target frame is no longer visible");
+    }
+    const utils = win.windowUtils;
+    const origin = utils.toTopLevelWidgetRect(0, 0, 0, 0);
+    const horizontal = utils.toTopLevelWidgetRect(1, 0, 0, 0);
+    const vertical = utils.toTopLevelWidgetRect(0, 1, 0, 0);
+    const transform = new win.DOMMatrix([
+      horizontal.x - origin.x, horizontal.y - origin.y,
+      vertical.x - origin.x, vertical.y - origin.y, origin.x, origin.y,
+    ]);
+    const point = transform.inverse().transformPoint({ x, y });
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y) ||
+        win.document.elementFromPoint(point.x, point.y) !== frame) {
+      throw new Error("The target frame is covered by another element");
+    }
+    return { hit: true };
   }
 
   #scrollFrameIntoView({ childBrowsingContextId }) {
