@@ -52,7 +52,16 @@ final class ReferencesHost {
                         return result;
                     }
                     app.agent.referencesRequest((JSONObject) message, result::complete,
-                        error -> result.completeExceptionally(new IllegalStateException(error)));
+                        error -> {
+                            try {
+                                // Native-message exceptions lose their text at Gecko's
+                                // extension boundary. Keep validated operation failures
+                                // in the existing v1 response instead.
+                                String text = error == null || error.isBlank() ? "References request failed." : error;
+                                result.complete(new JSONObject().put("apiVersion", 1).put("status", 400)
+                                    .put("body", new JSONObject().put("error", text.substring(0, Math.min(500, text.length())))));
+                            } catch (Exception failure) { result.completeExceptionally(failure); }
+                        });
                     return result;
                 }
             }, "bashkitten_references"), error -> app.message("References host is unavailable: " + error.getMessage()));

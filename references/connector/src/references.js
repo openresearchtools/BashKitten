@@ -7,7 +7,9 @@ globalThis.References = new function () {
     const response = await browser.runtime.sendMessage(HOST, {apiVersion: 1, ...message});
     if (!response || response.apiVersion !== 1) throw new Error('References host unavailable or incompatible');
     if (response.status >= 400) {
-      const error = new Zotero.Connector.CommunicationError('References request failed', response.status, response.body);
+      const message = typeof response.body?.error === 'string' && response.body.error
+        ? response.body.error.slice(0, 500) : 'References request failed';
+      const error = new Zotero.Connector.CommunicationError(message, response.status, response.body);
       if (Zotero.Connector) Zotero.Connector.isOnline = false;
       throw error;
     }
