@@ -15,10 +15,13 @@ async function run(argv) {
   });
 }
 const stamp = config.systemplate + '/.bashkitten-source-revision';
+// Upstream setup creates an alias from this engine path to /lo in each jail.
+// Reusing the same artifact at a new path still requires that alias to change.
+const systemplateRevision = JSON.stringify({ revision: config.revision, engine: config.engine });
 let previous; try { previous = await fs.readFile(stamp, 'utf8'); } catch {}
-if (previous !== config.revision) {
+if (previous !== systemplateRevision) {
   await run([config.systemplateSetup, config.systemplate, config.engine]);
   if (stopping) throw Error('Office startup cancelled');
-  await fs.writeFile(stamp, config.revision, { mode: 0o600 });
+  await fs.writeFile(stamp, systemplateRevision, { mode: 0o600 });
 }
 await run(config.argv);
