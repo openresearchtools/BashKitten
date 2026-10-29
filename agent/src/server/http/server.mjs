@@ -348,6 +348,18 @@ async function handler(req, res) {
       requireMethod(req, ['POST']);
       return json(res, await apps.open(appOpen[1], await applicationBody(req), record));
     }
+    if (route === '/api/apps/files/tree') {
+      requireMethod(req, ['GET']);
+      if (url.searchParams.getAll('root').length !== 1 || url.searchParams.getAll('path').length > 1) throw Object.assign(Error('Choose one owning Files folder and path'), { status: 400 });
+      const controller = new AbortController(), cancel = () => controller.abort(); res.once('close', cancel);
+      try { return json(res, await apps.filesTree({ root: url.searchParams.get('root'), path: url.searchParams.get('path') }, record, { signal: controller.signal })); }
+      finally { res.off('close', cancel); }
+    }
+    const nativeFiles = /^\/api\/apps\/files\/native\/(resources(?:\/(?:download|bulk))?)$/.exec(route);
+    if (nativeFiles) {
+      if (url.searchParams.getAll('root').length !== 1) throw Object.assign(Error('Choose one owning Files folder'), { status: 400 });
+      return apps.filesNative(req, res, nativeFiles[1], { root: url.searchParams.get('root') }, record);
+    }
     if (route === '/api/references/connector') {
       requireMethod(req, ['POST']);
       const controller = new AbortController(), cancel = () => controller.abort(Error('References caller disconnected'));

@@ -2210,3 +2210,25 @@ launch owner, resolving paths on the chat's owning backend. Preserve remote
 Chisel mappings and authorization; a saved attachment grants access only to that
 authorized attachment, never to its surrounding private application data.
 This adds no new viewer, editor or Office-specific Mozilla integration.
+
+## 25. Files quick access and mobile tab group — 29 October 2026
+
+The user requests the Files/Changes sidecar design from the latest shipped
+153.5.2 version. Restore that presentation and its path navigation/sanitization,
+using Quantum's existing listing and file-operation APIs behind the existing
+authenticated application owner rather than restoring the superseded filesystem
+manager or viewers. Keep Git Changes with its existing owner. Add Browse Files
+at the top to open the complete Files web UI in an ordinary tab. Individual
+files open directly in their normal Files viewer or connected Office editor.
+Offer Reference in chat through the existing composer, with the correct owning
+backend and without automatically sending a message or copying a file merely
+to reference it. Reuse native Quantum upload/download behavior.
+
+On mobile add a folder-icon Files group beside the existing Agent, normal,
+private and onion tab groups. Launching Files or a file from BashKitten selects
+that group; child tabs opened from Files tabs inherit it through the native tab
+owner. Preserve each backend's existing service session, authorization and TLS
+identity. Grouping must not create a shared cookie jar or change private/onion
+isolation. Desktop and widescreen tab strips retain their existing flat order
+and appearance, without special Files sorting. This is a user-authorized
+addition to the earlier launch-only browser boundary, not a new embedded editor.

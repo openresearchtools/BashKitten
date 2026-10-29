@@ -468,16 +468,58 @@
     .question-card input:disabled { opacity:.52; }
     .question-card :is(button,input):focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     #sidebarToggle { display:none; }
-    #app.changes-open { grid-template-columns:260px minmax(0,1fr) 300px; }
-    #changesPanel { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border-left:1px solid var(--line-soft); background:var(--sidebar); padding:8px; }
-    .changes-heading { display:flex; flex-shrink:0; align-items:center; gap:5px; min-height:42px; }
-    .changes-heading strong { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .changes-toolbar { display:flex; flex-shrink:0; flex-wrap:wrap; gap:6px; align-items:center; }
-    .changes-toolbar button { padding:7px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-pill); color:var(--text); font-size:12px; }
+    #app.files-open { grid-template-columns:260px minmax(0,1fr) 300px; }
+    #filePanel { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border-left:1px solid var(--line-soft); background:var(--sidebar); padding:8px; }
+    .file-heading { display:flex; flex-shrink:0; align-items:center; gap:5px; min-height:42px; }
+    .file-heading strong { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .file-tabs, .file-toolbar { display:flex; flex-shrink:0; flex-wrap:wrap; gap:6px; align-items:center; }
+    .file-tabs { margin-bottom:8px; border-bottom:1px solid var(--line-soft); }
+    .file-tabs button { margin:3px 0; padding:8px 10px; border:0; background:transparent; color:var(--muted); }
+    .file-tabs button:hover, .file-tabs button[aria-selected="true"] { background:var(--surface-2); color:var(--text); }
+    .file-toolbar button, .file-toolbar a, .file-path button { padding:7px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-pill); color:var(--text); font-size:12px; text-decoration:none; }
+    .file-toolbar [aria-pressed="true"] { background:var(--surface-2); border-color:var(--text); }
+    .file-toolbar button.danger { color:var(--danger); }
     .file-icon { display:block; width:16px; height:16px; flex:0 0 16px; }
-    #changesView { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; gap:8px; }
-    #changesNotice, #changesRoot { overflow-wrap:anywhere; margin:0; padding:3px 2px; }
-    #changesList { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; }
+    #fileActions { flex-wrap:nowrap; gap:2px; }
+    #fileActions button, .file-path button, .file-toolbar .file-icon-action { display:inline-flex; align-items:center; justify-content:center; gap:5px; height:32px; padding:6px; border-color:transparent; background:transparent; white-space:nowrap; }
+    #fileActions button:hover, .file-path button:hover, .file-toolbar .file-icon-action:hover { background:var(--surface-2); }
+    #fileActions button[aria-pressed="true"] { background:var(--surface-2); color:var(--text); box-shadow:inset 0 0 0 1px var(--line); }
+    #fileActions .file-icon-action, .file-path button, .file-toolbar .file-icon-action { width:32px; flex-shrink:0; border-radius:50%; }
+    #fileActions button:focus-visible, .file-path button:focus-visible { outline:1px solid var(--text); outline-offset:-1px; }
+    #fileSelection { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:28px; padding:0 5px; color:var(--muted); }
+    #fileSelection label { display:inline-flex; align-items:center; gap:7px; font-size:12px; cursor:pointer; }
+    #fileSelection input { margin:0; accent-color:var(--ok); }
+    #fileNotice:empty { display:none; }
+    .file-pane { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; gap:8px; }
+    .file-path { display:flex; gap:4px; }
+    .file-path input { flex:1; width:0; min-width:0; padding:7px; border:1px solid var(--line); background:var(--bg); font-size:12px; }
+    #fileDestination, #fileNotice, #changesNotice, #changesRoot { overflow-wrap:anywhere; margin:0; padding:3px 2px; }
+    #fileTree, #changesList { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; }
+    #fileTree details { margin-left:10px; }
+    #fileTree > details { margin-left:0; }
+    #fileTree summary { display:flex; align-items:center; gap:7px; cursor:pointer; padding:8px 4px; list-style:none; overflow-wrap:anywhere; font-size:12px; }
+    #fileTree summary::-webkit-details-marker { display:none; }
+    #fileTree .file-disclosure { width:11px; height:11px; flex-basis:11px; }
+    #fileTree details[open] > summary .file-disclosure { transform:rotate(90deg); }
+    #fileTree .file-icon { color:var(--muted); }
+    #fileTree summary, .file-row { border-radius:var(--radius-control); }
+    #fileTree summary:hover, .file-row:hover { background:var(--surface-2); }
+    #fileTree input[type="checkbox"] { margin:0; vertical-align:middle; accent-color:var(--ok); }
+    #fileTree:not(.selecting) input[type="checkbox"] { display:none; }
+    .file-row { display:flex; gap:7px; padding:8px 4px 8px 22px; align-items:center; font-size:12px; }
+    .file-row { flex-wrap:wrap; }
+    .file-row .file-name { flex:1; min-width:80px; overflow-wrap:anywhere; }
+    .file-row .file-item-actions { display:flex; flex-wrap:wrap; gap:5px; margin-left:auto; }
+    .file-item-actions button, .file-item-actions a { padding:5px 7px; border:1px solid var(--line); border-radius:var(--radius-pill); background:var(--surface); color:var(--text); font-size:11px; white-space:nowrap; }
+    .file-item-actions .file-reference-button { display:inline-flex; align-items:center; justify-content:center; min-width:28px; padding:5px; }
+    .file-row .file-name { padding:0; border:0; border-radius:0; background:transparent; color:var(--text); text-align:left; font:inherit; cursor:pointer; }
+    .file-row .file-name:hover { text-decoration:underline; }
+    .file-row a { color:var(--text); text-decoration:none; }
+    .file-row a:hover { text-decoration:underline; }
+    .file-empty { padding:16px 4px; color:var(--muted); font-size:12px; }
+    .file-browse { border:0; padding:6px 8px; background:transparent; color:var(--muted); font:inherit; font-size:12px; white-space:nowrap; }
+    .file-browse:hover { background:var(--surface-2); color:var(--text); }
+    #fileActionPaths { max-height:28dvh; overflow:auto; overflow-wrap:anywhere; padding-left:20px; font-size:12px; }
     .change-row { display:flex; width:100%; align-items:center; gap:7px; padding:9px 4px; border:0; border-bottom:1px solid var(--line-soft); background:transparent; text-align:left; }
     .change-row:hover, .change-row[aria-pressed="true"] { background:var(--surface-2); }
     .change-path { flex:1; min-width:0; overflow-wrap:anywhere; font-size:12px; }
@@ -529,15 +571,15 @@
     #serviceLogin input, #serviceLogin select, #piDialogInput input, #piDialogInput textarea, #piDialogInput select { width:100%; padding:9px; border:1px solid var(--line); background:var(--bg); }
     @media (max-width:1100px) and (min-width:701px) {
       #app { grid-template-columns:220px minmax(0,1fr); }
-      #app.changes-open { grid-template-columns:220px minmax(0,1fr); }
-      #changesPanel { position:absolute; z-index:30; right:0; top:58px; bottom:0; width:320px; border-start-start-radius:var(--radius-card); box-shadow:-10px 0 30px var(--shadow); }
+      #app.files-open { grid-template-columns:220px minmax(0,1fr); }
+      #filePanel { position:absolute; z-index:30; right:0; top:58px; bottom:0; width:320px; border-start-start-radius:var(--radius-card); box-shadow:-10px 0 30px var(--shadow); }
     }
     @media (max-width:700px) {
-      #app, #app.changes-open { grid-template-columns:minmax(0,1fr); }
+      #app, #app.files-open { grid-template-columns:minmax(0,1fr); }
       #sidebarToggle { display:inline-grid; flex-shrink:0; }
       #sidebar { display:none; position:absolute; z-index:40; inset:0 auto 0 0; width:min(86vw,300px); border-radius:0 var(--radius-card) var(--radius-card) 0; box-shadow:10px 0 30px var(--shadow); }
       #app.sidebar-open #sidebar { display:flex; }
-      #changesPanel { position:absolute; z-index:40; inset:0 0 0 auto; width:min(90vw,340px); border-radius:var(--radius-card) 0 0 var(--radius-card); }
+      #filePanel { position:absolute; z-index:40; inset:0 0 0 auto; width:min(90vw,340px); border-radius:var(--radius-card) 0 0 var(--radius-card); }
       #drawerBackdrop:not(.hidden) { display:block; position:absolute; inset:0; z-index:35; border:0; border-radius:0; background:#0006; }
       .topbar { flex-wrap:nowrap; gap:4px; padding:5px 8px; }
       #folderBtn { max-width:100%; padding:0; }
@@ -559,8 +601,8 @@
       .settings-page { padding-top: 8px; }
     }
     #app.native-navigation { grid-template-columns: minmax(0, 1fr); }
-    #app.native-navigation.changes-open { grid-template-columns: minmax(0, 1fr) 300px; }
-    @media (max-width: 1000px) { #app.native-navigation.changes-open { grid-template-columns: minmax(0, 1fr); } }
+    #app.native-navigation.files-open { grid-template-columns: minmax(0, 1fr) 300px; }
+    @media (max-width: 1000px) { #app.native-navigation.files-open { grid-template-columns: minmax(0, 1fr); } }
     #app.native-navigation #sidebar, #app.native-navigation #sidebarToggle { display:none; }
   </style>
 </head>
@@ -592,8 +634,7 @@
           <button id="folderBtn" type="button" title="Set working folder" aria-label="Working folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v2M3 7h7l2 3h8a1 1 0 0 1 1 1l-2 9H3L1 9a2 2 0 0 1 2-2Z"/></svg><span id="folderLabel">Set folder</span></button>
           <span id="usage"><span id="usageSummary"></span><span id="pillamaStatus" class="hidden" tabindex="0" aria-label="llama.cpp performance"></span><span id="chatgptUsage" class="hidden" tabindex="0" aria-label="ChatGPT subscription usage"></span></span>
         </div>
-        <button id="filesToggle" class="icon-button" type="button" aria-label="Open working folder in Files" title="Files"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/></svg></button>
-        <button id="changesToggle" class="icon-button" type="button" aria-label="Git Changes" title="Changes" aria-expanded="false" aria-controls="changesPanel"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H5v18h14V8l-5-5Zm0 0v5h5M8 12h5m-2.5-2.5v5M8 18h5"/></svg></button>
+        <button id="filesToggle" class="icon-button" type="button" aria-label="Browse project files and changes" title="Files and changes" aria-expanded="false" aria-controls="filePanel"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/></svg></button>
       </header>
       </div>
       <div id="chat"><div class="chat-inner"><div id="chatInner"></div><div id="questionCards" aria-live="polite"></div><div id="pendingAgentMessages" aria-live="polite"></div></div></div>
@@ -674,15 +715,24 @@
         <div id="imageViewport"><div id="imageStage"><img id="viewerImage" alt=""><span id="viewerError" class="hidden" role="status"></span></div></div>
       </section>
     </main>
-    <aside id="changesPanel" class="hidden" aria-label="Git Changes">
-      <div class="changes-heading"><strong id="changesRootLabel">Changes</strong><button id="closeChanges" type="button" class="icon-button" aria-label="Close Changes">×</button></div>
-      <section id="changesView" aria-label="Changed files">
-        <div class="changes-toolbar"><button id="refreshChanges" type="button">Refresh</button><button id="openProjectFolder" type="button" class="hidden">Open folder ↗</button><span id="changesCounts" class="change-count"></span></div>
+    <aside id="filePanel" class="hidden" aria-label="Project files and changes">
+      <div class="file-heading"><strong id="fileRootLabel">Files</strong><button id="browseFullFiles" type="button" class="file-browse" title="Open the full Files app">Browse Files ↗</button><button id="closeFiles" type="button" class="icon-button" aria-label="Close project panel">×</button></div>
+      <nav class="file-tabs" role="tablist" aria-label="Project view"><button id="filesTab" type="button" role="tab" aria-selected="true" aria-controls="filesView">Files</button><button id="changesTab" type="button" role="tab" aria-selected="false" aria-controls="changesView" tabindex="-1">Changes</button></nav>
+      <section id="filesView" class="file-pane" role="tabpanel" aria-labelledby="filesTab">
+        <form id="filePathForm" class="file-path"><button id="fileUp" type="button" aria-label="Parent folder" title="Parent folder"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button><input id="filePath" aria-label="File browser path; press Enter to open" autocomplete="off" spellcheck="false"><button id="refreshFiles" type="button" aria-label="Refresh files" title="Refresh files"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.8-2L20 8M4 16l2.1 3A7 7 0 0 0 17.9 17"/></svg></button></form>
+        <div id="fileActions" class="file-toolbar"><button id="selectFiles" type="button" aria-pressed="false" title="Select files and folders"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 12 3 3 5-6M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg><span>Select</span></button><button id="uploadRepo" type="button" title="Upload files to this folder"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg><span>Upload</span></button><button id="downloadFiles" type="button" title="Download this folder as ZIP"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg><span>Download</span></button><button id="copySelected" type="button" class="file-icon-action hidden" title="Copy selected items to another folder" aria-label="Copy selected items to another folder"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 8h12v13H8ZM16 8V3H3v13h5"/></svg></button><button id="deleteSelected" type="button" class="file-icon-action danger hidden" title="Delete selected items" aria-label="Delete selected items"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button><input id="repoUpload" type="file" multiple class="hidden"></div>
+        <div id="fileSelection" class="hidden"><label title="Select all files and folders. Selected folders include their contents."><input id="allFiles" type="checkbox">All items</label><span id="fileSelectionCount" class="meta" role="status" title="Selected folders include their contents"></span></div>
+        <div id="fileDestination" class="meta hidden"></div><p id="fileNotice" class="meta" role="status"></p><button id="cancelFileTransfer" type="button" class="file-browse hidden">Cancel transfer</button><div id="fileTree"></div>
+      </section>
+      <section id="changesView" class="file-pane hidden" role="tabpanel" aria-labelledby="changesTab">
+        <div class="file-toolbar"><button id="refreshChanges" type="button">Refresh</button><button id="openProjectFolder" type="button" class="hidden">Open folder ↗</button><span id="changesCounts" class="change-count"></span></div>
         <p id="changesRoot" class="meta"></p><p id="changesNotice" class="meta" role="status"></p><div id="changesList"></div>
+
       </section>
     </aside>
     <button id="drawerBackdrop" class="hidden" type="button" aria-label="Close panel"></button>
   </section>
+  <dialog id="fileActionDialog" aria-labelledby="fileActionTitle"><form id="fileActionForm" class="dialog-body"><h2 id="fileActionTitle"></h2><p id="fileActionDescription"></p><ul id="fileActionPaths"></ul><label id="copyDestinationLabel">Destination folder<input id="copyDestination" autocomplete="off" spellcheck="false" placeholder="Absolute folder path"></label><p id="fileActionError" class="meta" role="alert"></p><div class="dialog-actions"><button type="button" data-close autofocus>Cancel</button><button id="confirmFileAction" class="primary">Continue</button></div></form></dialog>
   <dialog id="forkDialog" aria-labelledby="forkHeading"><div class="dialog-body"><h2 id="forkHeading">Fork chat</h2><p>Choose a message to return to. Pi opens the fork before that message.</p><div id="forkMessages"></div><p id="forkError" class="meta" role="status"></p><div class="dialog-actions"><button type="button" data-close>Cancel</button></div></div></dialog>
   <dialog id="subagentDialog" aria-labelledby="subagentHeading"><form id="subagentForm" class="dialog-body">
     <h2 id="subagentHeading">Subagents for this chat</h2>
@@ -858,7 +908,6 @@
       nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
       $('#app').classList.toggle('native-navigation', Boolean(nativeHost?.navigation));
       $('#filesToggle').classList.toggle('hidden', !fileManagerAllowed);
-      $('#changesToggle').classList.toggle('hidden', !fileManagerAllowed);
       $('#openProjectFolder').classList.toggle('hidden', !nativeLinux);
       showAgentChoice();
     }
@@ -898,13 +947,14 @@
       $('#authLogin').classList.remove('hidden');
       if (!initialized && !local) location.replace(loginUrl());
     }
-    async function responseValue(response) {
+    async function responseValue(response, nativeFiles = false) {
       const json = (response.headers.get('content-type') || '').includes('application/json');
       const login = response.redirected && new URL(response.url).pathname.startsWith('/login');
       if (response.status === 401 || login) {
         requireLogin();
         throw Error(location.hostname === '127.0.0.1' ? 'Reconnect Agent to continue.' : 'Sign in again to reconnect.');
       }
+      if (!json && nativeFiles) return response.ok ? {} : {error:(await response.text()) || response.statusText};
       if (!json) throw Error('The server did not return an API response.');
       return response.json();
     }
@@ -913,7 +963,8 @@
       const mutation = options.method && options.method !== 'GET';
       if (mutation) options.headers['x-bashkitten-csrf'] = csrf;
       let response = await fetch(url, options);
-      let value = await responseValue(response);
+      const nativeFiles = String(url).startsWith('/api/apps/files/native/');
+      let value = await responseValue(response, nativeFiles);
       // Another tab can refresh this login's CSRF token. Retry only the explicit
       // CSRF rejection: the server rejected it before performing any action.
       if (mutation && response.status === 403 && value.error === 'Invalid CSRF token') {
@@ -923,7 +974,7 @@
           csrf = login.csrf;
           options.headers['x-bashkitten-csrf'] = csrf;
           response = await fetch(url, options);
-          value = await responseValue(response);
+          value = await responseValue(response, nativeFiles);
         }
       }
       if (value.code === 'FILE_MANAGER_DENIED') applyFilePermission(false);
@@ -970,15 +1021,16 @@
     function inlineMarkdown(value) {
       // Tokenize before escaping so code stays literal and labels/URLs cannot inject HTML.
       // Destinations support angle brackets for spaces and parentheses in filenames.
-      const tokens = /`([^`]+)`|(!?)\[([^\]\n]*)\]\(\s*(<[^>\n]+>|(?:\\.|[^\\\s()]|\((?:\\.|[^\\\s()])*\))+)(?:\s+"[^"\n]*")?\s*\)|\*\*([^*]+)\*\*/g;
+      const tokens = /`([^`]+)`|(!?)\[((?:\\.|[^\]\\\n])*)\]\(\s*(<[^>\n]+>|(?:\\.|[^\\\s()]|\((?:\\.|[^\\\s()])*\))+)(?:\s+"[^"\n]*")?\s*\)|\*\*([^*]+)\*\*/g;
       const text = String(value ?? '');
       let html = '', end = 0;
       for (const match of text.matchAll(tokens)) {
         html += escapeHtml(text.slice(end, match.index));
         end = match.index + match[0].length;
-        const [, code, image, label, destination, bold] = match;
+        const [, code, image, rawLabel, destination, bold] = match;
         if (code !== undefined) { html += `<code>${escapeHtml(code)}</code>`; continue; }
         if (bold !== undefined) { html += `<strong>${escapeHtml(bold)}</strong>`; continue; }
+        const label = rawLabel.replace(/\\([\\\[\]])/g, '$1');
         const target = destination.replace(/^<|>$/g, '').replace(/\\([\\()])/g, '$1');
         if (image) {
           let reference = target;
@@ -2325,7 +2377,7 @@
         const label = document.createElement('span');
         label.textContent = folderDisplayName(folder);
         heading.append(label);
-        const browse = document.createElement('button'); browse.type='button'; browse.className='icon-button'; browse.append($('#filesToggle svg').cloneNode(true)); browse.title='Files'; browse.setAttribute('aria-label','Open '+displayFolder(folder)+' in Files'); browse.classList.add('file-manager-action');browse.classList.toggle('hidden',!fileManagerAllowed); browse.onclick=event=>{event.stopPropagation();openFiles(folder);setSidebar(false);}; heading.append(browse);
+        const browse = document.createElement('button'); browse.type='button'; browse.className='icon-button'; browse.append($('#filesToggle svg').cloneNode(true)); browse.title='Files'; browse.setAttribute('aria-label','Open '+displayFolder(folder)+' in Files'); browse.classList.add('file-manager-action');browse.classList.toggle('hidden',!fileManagerAllowed); browse.onclick=event=>{event.stopPropagation();openFilePanel(folder);setSidebar(false);}; heading.append(browse);
 
         if(folder)bindSessionContextMenu(heading,{cwd:folder,project:true});
         group.append(heading);
@@ -2542,7 +2594,7 @@
     function showSettingsView(section = 'app') {
       closeImageViewer();
       setSidebar(false);
-      closeChanges();
+      closeFiles();
       closeFileDiff();
       activeSettingsSection = section;
       const heading = section === 'services' ? 'Providers' : 'General settings';
@@ -2681,7 +2733,7 @@
         } else { await loadModels(); await connectSession(session.id, renderEvent, view); }
         if (sessionView !== view) return;
         setSidebar(false);
-        if (!$('#changesPanel').classList.contains('hidden')) openChanges(current.cwd);
+        if (!$('#filePanel').classList.contains('hidden')) openFilePanel(current.cwd);
         document.querySelectorAll('.session').forEach(element => element.classList.toggle('active', element.dataset.id === session.id));
         if (scrollRevision === chatScrollRevision) $('#chat').scrollTop = savedScroll === undefined ? $('#chat').scrollHeight : Number(savedScroll) || 0;
       } catch (error) {
@@ -2740,7 +2792,7 @@
       if (sessionView !== view) return;
       document.querySelectorAll('.session').forEach(element => element.classList.remove('active'));
       showWelcome();
-      if (!$('#changesPanel').classList.contains('hidden')) openChanges(pendingCwd);
+      if (!$('#filePanel').classList.contains('hidden')) openFilePanel(pendingCwd);
       setSidebar(false);
       $('#prompt').focus();
     }
@@ -3459,7 +3511,7 @@
           current.cwd = data.cwd;
           $('#folderLabel').textContent = displayFolder(data.cwd);
           $('#folderBtn').title = `Saved working folder: ${displayFolder(data.cwd)}. Start a new chat to choose another.`;
-          if (!$('#changesPanel').classList.contains('hidden')) openChanges(data.cwd);
+          if (!$('#filePanel').classList.contains('hidden')) openFilePanel(data.cwd);
           loadSessions().catch(() => {});
         }
       }
@@ -3473,45 +3525,165 @@
       updateBackdrop();
     }
     function updateBackdrop() {
-      $('#drawerBackdrop').classList.toggle('hidden', !matchMedia('(max-width:700px)').matches || (!$('#app').classList.contains('sidebar-open') && !$('#app').classList.contains('changes-open')));
+      $('#drawerBackdrop').classList.toggle('hidden', !matchMedia('(max-width:700px)').matches || (!$('#app').classList.contains('sidebar-open') && !$('#app').classList.contains('files-open')));
     }
     function applyFilePermission(allowed) {
       fileManagerAllowed = allowed;
-      for (const id of ['filesToggle', 'changesToggle']) $('#'+id).classList.toggle('hidden', !allowed);
+      $('#filesToggle').classList.toggle('hidden', !allowed);
       for (const button of document.querySelectorAll('.file-manager-action')) button.classList.toggle('hidden', !allowed);
       for (const link of document.querySelectorAll('.file-reference,.sent-file')) link.setAttribute('aria-disabled', String(!allowed));
       $('#folderBtn').disabled = !allowed || Boolean(current || pendingProjectId);
       $('#defaultCwdBrowse').disabled = !allowed;
       if (allowed) return;
-      closeChanges(); closeFileDiff();
+      closeFiles(); closeFileDiff();
       if (fileManagerImage) closeImageViewer();
       ++changesGeneration; ++folderGeneration;
+      fileAbort?.abort(); fileTransfer?.abort();
       changesLoading=false; changesDirty=true;
-      for (const id of ['changesList', 'changesCounts']) $('#'+id).replaceChildren();
+      for (const id of ['fileTree','changesList','changesCounts']) $('#'+id).replaceChildren();
       if ($('#folderDialog').open) $('#folderDialog').close();
-      projectRoot = changesRoot = '';
+      if ($('#fileActionDialog').open) $('#fileActionDialog').close();
+      fileRoot=fileFolder=projectRoot=changesRoot=''; selectedFiles.clear();
     }
-    function projectPanelVisible() { return !document.hidden && !$('#changesPanel').classList.contains('hidden') && !$('#app').classList.contains('hidden'); }
-    function closeChanges() {
-      $('#changesPanel').classList.add('hidden'); $('#app').classList.remove('changes-open');
-      $('#changesToggle').setAttribute('aria-expanded','false'); updateBackdrop();
+    function projectPanelVisible() { return !document.hidden && !$('#filePanel').classList.contains('hidden') && !$('#app').classList.contains('hidden'); }
+    function closeFiles() {
+      $('#filePanel').classList.add('hidden'); $('#app').classList.remove('files-open');
+      $('#filesToggle').setAttribute('aria-expanded','false');
+      fileAbort?.abort(); ++fileGeneration; fileDirty=true; updateBackdrop();
     }
     $('#sidebarToggle').onclick=()=>setSidebar(!$('#app').classList.contains('sidebar-open'));
-    $('#drawerBackdrop').onclick=()=>{setSidebar(false);closeChanges();};
-    $('#closeChanges').onclick=closeChanges;
+    $('#drawerBackdrop').onclick=()=>{setSidebar(false);closeFiles();};
+    $('#closeFiles').onclick=closeFiles;
     window.addEventListener('resize', updateBackdrop);
+    let fileRoot='', fileFolder='', fileParent=null, fileScope='', fileSource='', fileGeneration=0, fileTab='files', fileAbort=null, fileTransfer=null, fileDirty=true, filePermissions={};
+    let selectingFiles=false, selectedFiles=new Set(), pendingFileAction=null;
     let projectRoot='', changesGeneration=0, changesRoot='', changesLoading=false, changesLoadedAt=0, changesDirty=true, diffPath=null, diffRequest=0, diffAbort=null, diffChatScroll=0;
-    function openChanges(root) {
-      if (!root || !fileManagerAllowed) return;
-      const changed=projectRoot!==root; projectRoot=root;
-      $('#changesPanel').classList.remove('hidden'); $('#app').classList.add('changes-open'); $('#changesToggle').setAttribute('aria-expanded','true');
-      $('#changesRootLabel').textContent='Changes · '+folderDisplayName(root); $('#changesRootLabel').title=displayFolder(root);
-      if (changed) {
-        ++changesGeneration; changesLoading=false; changesLoadedAt=0; changesDirty=true;
-        closeFileDiff(); $('#changesList').replaceChildren(); $('#changesCounts').replaceChildren();
-      }
-      refreshChanges(); updateBackdrop();
+    const fileNativePath = relative => '/' + String(relative || '').replace(/^\/+/, '');
+    function fileNativeUrl(route, values={}, root=fileRoot) {
+      const query=new URLSearchParams({root});
+      for (const [key,value] of Object.entries(values)) for (const item of Array.isArray(value)?value:[value]) query.append(key,String(item));
+      return '/api/apps/files/native/' + route + '?' + query;
     }
+    const absoluteFilePath=(relative,root=fileRoot)=>root.replace(/\/$/,'')+(relative?'/'+relative:'');
+    function selectFileFolder(relative) {
+      fileFolder=relative;
+      $('#fileDestination').textContent=relative?'Upload to: '+relative:'';
+      $('#fileDestination').classList.toggle('hidden',!relative||selectingFiles);
+      $('#uploadRepo').title='Upload files to '+absoluteFilePath(relative);
+    }
+    function updateFileSelection() {
+      $('#fileTree').classList.toggle('selecting',selectingFiles);
+      $('#fileSelection').classList.toggle('hidden',!selectingFiles);
+      $('#selectFiles').setAttribute('aria-pressed',String(selectingFiles));
+      $('#uploadRepo').classList.toggle('hidden',selectingFiles);
+      $('#uploadRepo').disabled=Boolean(fileTransfer)||filePermissions.create===false;
+      $('#fileDestination').classList.toggle('hidden',!fileFolder||selectingFiles);
+      for(const id of ['copySelected','deleteSelected'])$('#'+id).classList.toggle('hidden',!selectingFiles);
+      $('#fileSelectionCount').textContent=selectedFiles.size+' selected';
+      for(const input of $('#fileTree').querySelectorAll('input[data-file-path]')) {
+        const inherited=[...selectedFiles].some(parent=>input.dataset.filePath.startsWith(parent+'/'));
+        input.checked=inherited||selectedFiles.has(input.dataset.filePath);input.disabled=inherited;input.title=inherited?'Included with its selected folder':'';
+      }
+      const roots=[...$('#fileTree').querySelectorAll('input[data-file-path]')].filter(input=>!input.dataset.filePath.includes('/'));
+      $('#allFiles').checked=Boolean(roots.length)&&roots.every(input=>selectedFiles.has(input.dataset.filePath));
+      $('#allFiles').indeterminate=Boolean(selectedFiles.size)&&!$('#allFiles').checked;$('#allFiles').disabled=!roots.length;
+      $('#copySelected').disabled=!selectedFiles.size||Boolean(fileTransfer)||filePermissions.create===false;
+      $('#deleteSelected').disabled=!selectedFiles.size||Boolean(fileTransfer)||filePermissions.delete===false;
+      $('#downloadFiles').disabled=(selectingFiles&&!selectedFiles.size)||filePermissions.download===false;
+      $('#downloadFiles').title=selectingFiles?'Download selected items as ZIP':'Download this folder as ZIP';
+    }
+    function fileIcon(kind) {
+      const paths={"folder":"M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z","file":"M14 3H5v18h14V8l-5-5Zm0 0v5h5","chevron":"m9 5 7 7-7 7","reference":"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10ZM9 10h6m-3-3v6"};
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),line=document.createElementNS(svg.namespaceURI,'path');
+      svg.setAttribute('class','file-icon'+(kind==='chevron'?' file-disclosure':''));svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.7');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');line.setAttribute('d',paths[kind]);svg.append(line);return svg;
+    }
+    function fileCheckbox(entry) {
+      const input=document.createElement('input'); input.type='checkbox'; input.dataset.filePath=entry.path;
+      input.setAttribute('aria-label','Select '+entry.path); input.checked=selectedFiles.has(entry.path);
+      input.onclick=event=>event.stopPropagation();
+      input.onchange=()=>{
+        if(input.checked){for(const path of selectedFiles)if(path.startsWith(entry.path+'/'))selectedFiles.delete(path);selectedFiles.add(entry.path);}
+        else selectedFiles.delete(entry.path);updateFileSelection();
+      };
+      return input;
+    }
+    function referenceFile(entry, root, generation) {
+      if(!fileManagerAllowed||generation!==fileGeneration||root!==fileRoot)return;
+      const prompt=$('#prompt'),path=absoluteFilePath(entry.path,root);
+      const link='['+entry.name.replace(/[\\\[\]]/g,'\\$&')+'](<'+path.replaceAll('%','%25').replaceAll('<','%3C').replaceAll('>','%3E').replaceAll('\n','%0A').replaceAll('\r','%0D')+'>)';
+      prompt.setRangeText(link+' ',prompt.selectionStart,prompt.selectionEnd,'end');
+      prompt.dispatchEvent(new Event('input',{bubbles:true}));prompt.focus();
+      if(matchMedia('(max-width:700px)').matches)closeFiles();
+    }
+    async function renderFileBranch(target, relative, generation, root=fileRoot, signal=fileAbort?.signal) {
+      const result=await api('/api/apps/files/tree?'+new URLSearchParams({root,path:relative}),{signal});
+      if(generation!==fileGeneration||signal?.aborted||!fileManagerAllowed)return;
+      if(!relative) {
+        fileRoot=result.root;fileParent=result.parent;fileScope=result.scopeRoot||result.root;fileSource=result.source;
+        filePermissions=result.permissions||{};
+        $('#filePath').value=result.currentPath||fileRoot;$('#filePath').title='Browse within '+fileScope;
+        $('#fileUp').disabled=!fileParent;selectFileFolder('');
+      }
+      target.replaceChildren();
+      const canonicalRoot=fileRoot;
+      for(const [index,entry] of (result.entries||[]).entries()) {
+        if(generation!==fileGeneration||signal?.aborted)return;
+        if(entry.blocked) {
+          const row=document.createElement('div');row.className='file-row meta';row.textContent=entry.name+' (unavailable)';target.append(row);
+        } else if(entry.directory) {
+          const details=document.createElement('details'),summary=document.createElement('summary'),children=document.createElement('div');
+          const label=document.createElement('span');label.textContent=entry.name;summary.append(fileIcon('chevron'),fileCheckbox(entry),fileIcon('folder'),label);details.append(summary,children);
+          let loaded=false;
+          summary.onclick=()=>selectFileFolder(entry.path);
+          details.ontoggle=async()=>{
+            if(details.open&&!loaded){loaded=true;children.textContent='Loading…';try{await renderFileBranch(children,entry.path,generation,canonicalRoot,signal);}catch(error){if(!signal?.aborted&&generation===fileGeneration){children.textContent=error.message;loaded=false;}}}
+          };
+          target.append(details);
+        } else {
+          const row=document.createElement('div');row.className='file-row';
+          const open=document.createElement('button');open.type='button';open.className='file-name';open.textContent=entry.name;open.title='Open '+entry.name+' in Files';
+          open.onclick=()=>{if(generation===fileGeneration)openFiles(null,null,{root:canonicalRoot,path:entry.path});};
+          row.append(fileCheckbox(entry),fileIcon('file'),open);
+          const actions=document.createElement('span');actions.className='file-item-actions';
+          const download=document.createElement('a');download.href=fileNativeUrl('resources/download',{file:fileNativePath(entry.path)},canonicalRoot);download.download=entry.name;download.textContent='Download';download.title='Download '+entry.name;
+          if(filePermissions.download!==false)actions.append(download);
+          const reference=document.createElement('button');reference.type='button';reference.className='file-reference-button';reference.title='Reference in chat';reference.setAttribute('aria-label','Reference '+entry.name+' in chat');reference.append(fileIcon('reference'));
+          reference.onclick=()=>referenceFile(entry,canonicalRoot,generation);
+          actions.append(reference);row.append(actions);target.append(row);
+        }
+        if(index&&index%100===0)await new Promise(resolve=>requestAnimationFrame(resolve));
+      }
+      if(!result.entries?.length){const empty=document.createElement('p');empty.className='file-empty';empty.textContent='Empty folder';target.append(empty);}
+      updateFileSelection();
+    }
+    async function loadFileTree(root=fileRoot) {
+      if(!root||!fileManagerAllowed)return;
+      fileAbort?.abort();fileAbort=new AbortController();
+      fileRoot=root;fileFolder='';selectedFiles.clear();filePermissions={};updateFileSelection();
+      const generation=++fileGeneration;fileDirty=false;
+      $('#fileNotice').textContent='';$('#fileTree').textContent='Loading…';$('#filePath').value=root;$('#fileUp').disabled=true;
+      try{await renderFileBranch($('#fileTree'),'',generation,root,fileAbort.signal);}
+      catch(error){if(generation===fileGeneration&&!fileAbort.signal.aborted){fileDirty=true;$('#fileNotice').textContent=error.message;$('#fileTree').replaceChildren();}}
+    }
+    function setFileTab(tab) {
+      fileTab=tab;
+      for(const name of ['files','changes']) {
+        const selected=name===fileTab,button=$('#'+name+'Tab');
+        button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;
+        $('#'+name+'View').classList.toggle('hidden',!selected);
+      }
+      if(fileTab==='changes')refreshChanges();
+      else if(fileDirty||!$('#fileTree').childNodes.length)loadFileTree();
+    }
+    function openFilePanel(root) {
+      if(!root||!fileManagerAllowed)return;
+      const changed=projectRoot!==root;projectRoot=root;
+      $('#filePanel').classList.remove('hidden');$('#app').classList.add('files-open');$('#filesToggle').setAttribute('aria-expanded','true');
+      $('#fileRootLabel').textContent=folderDisplayName(root);$('#fileRootLabel').title=displayFolder(root);
+      if(changed){fileRoot=root;fileFolder='';fileDirty=true;selectedFiles.clear();$('#fileTree').replaceChildren();fileAbort?.abort();++fileGeneration;++changesGeneration;changesLoading=false;changesLoadedAt=0;changesDirty=true;closeFileDiff();$('#changesList').replaceChildren();$('#changesCounts').replaceChildren();}
+      setFileTab(fileTab);updateBackdrop();
+    }
+    function openChanges(root) {fileTab='changes';openFilePanel(root);}
     function requestFilesLaunch(value) {
       return requestApplicationLaunch({...value,component:'files'});
     }
@@ -3549,12 +3721,88 @@
         if (sessionView===view) $('#composerHint').textContent=error.message;
       }
     }
-    $('#filesToggle').onclick=()=>openFiles(current?.cwd||pendingCwd, current ? null : pendingProjectId);
+    $('#filesToggle').onclick=()=>$('#filePanel').classList.contains('hidden')?openFilePanel(current?.cwd||pendingCwd):closeFiles();
+    $('#browseFullFiles').onclick=()=>openFiles(fileRoot?absoluteFilePath(fileFolder):projectRoot, fileRoot?null:pendingProjectId);
+    $('#filesTab').onclick=()=>setFileTab('files');$('#changesTab').onclick=()=>setFileTab('changes');
+    $('.file-tabs').onkeydown=event=>{
+      if(event.altKey||event.ctrlKey||event.metaKey||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+      event.preventDefault();setFileTab(event.key==='End'?'changes':event.key==='Home'?'files':fileTab==='files'?'changes':'files');$('#'+fileTab+'Tab').focus();
+    };
+    $('#filePathForm').onsubmit=event=>{event.preventDefault();const path=$('#filePath').value.trim();if(path)loadFileTree(path);};
+    $('#fileUp').onclick=()=>{if(fileParent)loadFileTree(fileParent);};
+    $('#refreshFiles').onclick=()=>loadFileTree();
+    $('#selectFiles').onclick=()=>{selectingFiles=!selectingFiles;if(!selectingFiles)selectedFiles.clear();updateFileSelection();};
+    $('#allFiles').onchange=()=>{selectedFiles.clear();if($('#allFiles').checked)for(const input of $('#fileTree').querySelectorAll('input[data-file-path]'))if(!input.dataset.filePath.includes('/'))selectedFiles.add(input.dataset.filePath);updateFileSelection();};
+    $('#uploadRepo').onclick=()=>$('#repoUpload').click();
+    $('#cancelFileTransfer').onclick=()=>fileTransfer?.abort();
+    $('#repoUpload').onchange=async event=>{
+      const files=[...event.target.files];event.target.value='';if(!files.length||fileTransfer||!fileManagerAllowed)return;
+      const root=fileRoot,relative=fileFolder,controller=new AbortController();let completed=0;
+      fileTransfer=controller;updateFileSelection();$('#cancelFileTransfer').classList.remove('hidden');
+      try {
+        for(const file of files) {
+          controller.signal.throwIfAborted();
+          if(root===fileRoot)$('#fileNotice').textContent='Uploading '+file.name+' · '+(completed+1)+' of '+files.length;
+          const target=[relative,file.name].filter(Boolean).join('/');
+          await api(fileNativeUrl('resources',{path:fileNativePath(target),override:false},root),{method:'POST',headers:{'content-type':file.type||'application/octet-stream'},body:file,signal:controller.signal});
+          completed++;
+        }
+        if(root===fileRoot){await loadFileTree(root);$('#fileNotice').textContent=completed+' '+(completed===1?'file uploaded.':'files uploaded.');}
+        refreshProjectPanel();
+      } catch(error) {
+        if(root===fileRoot){await loadFileTree(root);$('#fileNotice').textContent=controller.signal.aborted?'Upload cancelled after '+completed+' '+(completed===1?'file.':'files.'):error.message;}
+      } finally {if(fileTransfer===controller)fileTransfer=null;$('#cancelFileTransfer').classList.add('hidden');updateFileSelection();}
+    };
+    $('#downloadFiles').onclick=()=>{
+      if(!fileManagerAllowed||filePermissions.download===false)return;
+      const paths=selectingFiles?[...selectedFiles]:[''];if(!paths.length)return;
+      const download=document.createElement('a');download.href=fileNativeUrl('resources/download',{file:paths.map(fileNativePath),algo:'zip'});download.download='';
+      document.body.append(download);download.click();download.remove();
+    };
+    function showFileAction(operation) {
+      if(!selectedFiles.size||fileTransfer||!fileManagerAllowed)return;
+      pendingFileAction={operation,root:fileRoot,source:fileSource,paths:[...selectedFiles]};
+      const deleting=operation==='delete',count=pendingFileAction.paths.length;
+      $('#fileActionTitle').textContent=deleting?'Delete selected items?':'Copy selected items';
+      $('#fileActionDescription').textContent=deleting?`Permanently delete these ${count} selected ${count===1?'item':'items'} and all contents of selected folders. This cannot be undone.`:`Copy ${count} selected ${count===1?'item':'items'} into an existing folder inside ${fileRoot}. Existing files will not be overwritten.`;
+      const paths=$('#fileActionPaths');paths.replaceChildren();
+      for(const path of pendingFileAction.paths){const li=document.createElement('li');li.textContent=absoluteFilePath(path);paths.append(li);}
+      $('#copyDestinationLabel').classList.toggle('hidden',deleting);$('#copyDestination').required=!deleting;$('#copyDestination').value=fileRoot;
+      $('#fileActionError').textContent='';$('#confirmFileAction').textContent=deleting?'Delete':'Copy';$('#confirmFileAction').classList.toggle('delete-confirm',deleting);
+      $('#fileActionDialog').showModal();$('#fileActionDialog [data-close]').focus();
+    }
+    $('#copySelected').onclick=()=>showFileAction('copy');$('#deleteSelected').onclick=()=>showFileAction('delete');
+    $('#fileActionDialog').addEventListener('close',()=>{if(pendingFileAction)fileTransfer?.abort();pendingFileAction=null;});
+    $('#fileActionForm').onsubmit=async event=>{
+      event.preventDefault();if(!pendingFileAction||fileTransfer||!fileManagerAllowed)return;
+      const value=pendingFileAction,controller=new AbortController();
+      $('#confirmFileAction').disabled=true;fileTransfer=controller;updateFileSelection();
+      try {
+        let result;
+        if(value.operation==='delete') {
+          result=await api(fileNativeUrl('resources/bulk',{},value.root),{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify(value.paths.map(path=>({source:value.source,path:fileNativePath(path)}))),signal:controller.signal});
+        } else {
+          const destination=$('#copyDestination').value.trim().replace(/\/+$/,'')||'/';
+          const prefix=value.root.replace(/\/$/,'');
+          if((destination!==value.root&&!destination.startsWith(prefix+'/'))||destination.split('/').some(part=>part==='..'||part==='.')||destination.includes('\0'))throw Error('Choose an existing destination folder inside '+value.root+'.');
+          const relative=destination.slice(prefix.length).replace(/^\/+/,'');
+          const items=value.paths.map(path=>({fromSource:value.source,fromPath:fileNativePath(path),toSource:value.source,toPath:fileNativePath([relative,path.split('/').at(-1)].filter(Boolean).join('/'))}));
+          result=await api(fileNativeUrl('resources',{},value.root),{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({action:'copy',items,overwrite:false,rename:false}),signal:controller.signal});
+        }
+        if(fileRoot===value.root)await loadFileTree(value.root);
+        refreshProjectPanel();
+        if(result.failed?.length)throw Error('Some items could not be '+(value.operation==='delete'?'deleted':'copied')+': '+result.failed.map(item=>item.error||item.message||item.path||'Unknown error').join('; '));
+        $('#fileActionDialog').close();
+      } catch(error) {
+        if(controller.signal.aborted){if(fileRoot===value.root)$('#fileNotice').textContent='File request cancelled.';}
+        else $('#fileActionError').textContent=error.message;
+      }
+      finally {if(fileTransfer===controller)fileTransfer=null;$('#confirmFileAction').disabled=false;updateFileSelection();}
+    };
     function refreshProjectPanel() {
       changesDirty=true;
-      if (projectPanelVisible()) refreshChanges();
+      if(projectPanelVisible()&&fileTab==='changes')refreshChanges();
     }
-    $('#changesToggle').onclick=()=>$('#changesPanel').classList.contains('hidden')?openChanges(current?.cwd||pendingCwd):closeChanges();
     function changeCount(added,deleted) {
       const span=document.createElement('span');span.className='change-count';
       for(const [value,sign,kind] of [[added,'+','added'],[deleted,'−','deleted']]){const count=document.createElement('span');count.className='diff-'+kind;count.textContent=sign+value+' ';span.append(count);}
@@ -3570,7 +3818,7 @@
       }
     }
     async function refreshChanges(force=false) {
-      if(!projectPanelVisible()||!projectRoot||changesLoading)return;
+      if(!projectPanelVisible()||fileTab!=='changes'||!projectRoot||changesLoading)return;
       if(!force&&!changesDirty&&Date.now()-changesLoadedAt<1500)return;
       const generation=++changesGeneration,root=projectRoot;let refreshed=false;changesLoading=true;changesDirty=false;
       $('#refreshChanges').disabled=true;$('#changesNotice').textContent='Checking changes…';
@@ -3639,7 +3887,7 @@
       $('#diffTitle').textContent=path;$('#diffNotice').textContent='Loading changes…';$('#fileDiff').replaceChildren();
       for(const button of $('#changesList').querySelectorAll('.change-row'))button.setAttribute('aria-pressed',String(button.dataset.diffPath===path));
       const mobile=matchMedia('(max-width:700px)').matches;$('#closeDiff span').textContent=mobile?'Back to changes':'Close diff';
-      if(mobile)closeChanges();
+      if(mobile)closeFiles();
       try{
         const result=await api('/api/git/diff?root='+encodeURIComponent(root)+'&path='+encodeURIComponent(path),{signal:diffAbort.signal});
         if(diffPath!==path||generation!==changesGeneration||request!==diffRequest)return;
@@ -3654,11 +3902,11 @@
     }
     $('#closeDiff').onclick=()=>{const mobile=matchMedia('(max-width:700px)').matches;closeFileDiff();if(mobile)openChanges(projectRoot);};
     $('#refreshChanges').onclick=()=>refreshChanges(true);
-    matchMedia('(max-width:700px)').addEventListener('change',event=>{if(!diffPath)return;$('#closeDiff span').textContent=event.matches?'Back to changes':'Close diff';if(event.matches)closeChanges();else openChanges(projectRoot);});
+    matchMedia('(max-width:700px)').addEventListener('change',event=>{if(!diffPath)return;$('#closeDiff span').textContent=event.matches?'Back to changes':'Close diff';if(event.matches)closeFiles();else openChanges(projectRoot);});
     $('#openProjectFolder').onclick=()=>nativeHost?.call('open-folder',{path:projectRoot}).catch(error=>$('#changesNotice').textContent=error.message);
     function refreshVisibleProject() {
       if(!csrf||!projectPanelVisible())return;
-      refreshChanges();
+      if(fileTab==='changes')refreshChanges();
     }
     window.addEventListener('focus',refreshVisibleProject);
     document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshVisibleProject();});

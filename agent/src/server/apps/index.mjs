@@ -12,7 +12,7 @@ import { dispatchReferenceResolver } from '../access/browser-channel.mjs';
 import { publishNewFile } from '../localai/files.mjs';
 import { projects, withProjectOperation, withProjectTransition } from '../projects.mjs';
 import { referenceProjects, referenceProject, createReferenceProject, renameReferenceProject, archiveReferenceProject, deleteReferenceProject } from './reference-projects.mjs';
-import { fileDirectory, referencedFile, referencedPath, storedAttachment, sendFile, sendFileHandle } from '../files/files.mjs';
+import { containsPath, fileDirectory, filePath, relativePath, referencedFile, referencedPath, storedAttachment, sendFile, sendFileHandle } from '../files/files.mjs';
 import { authorizeApplicationPath, canonicalManagerPath, privateManagerPaths, managerAllowed, runManagerOperation } from '../files/access.mjs';
 import { ApplicationGateway } from './gateway.mjs';
 import { applicationModules as modules, referencesWebRoot } from './locations.mjs';
@@ -365,6 +365,90 @@ export class ApplicationModules {
       } catch (error) { this.gateway.grants.delete(human.id); throw error; }
     });
   }
+  async prepareFilesScope(scope) {
+    const module = await this.module('files');
+    if (typeof module.prepareFiles !== 'function' || typeof module.handleFiles !== 'function') throw unavailable('Files', 'incompatible native provider API');
+    await this.gateway.configure('files', async () => {
+      const prepared = await module.prepareFiles({ dataRoot: dataDir, scope, privatePaths: await privateManagerPaths(),
+        endpoint: await this.gateway.endpoint(), authorizePath: authorizeApplicationPath });
+      if (prepared?.service?.id !== 'quantum') throw unavailable('Files', 'invalid shared Quantum service definition');
+      scope.endpoint = await this.ensureRunning(prepared.service, true, prepared.needsRestart === true);
+      scope.source = prepared.source;
+      scope.openPath = '/' + (prepared.openPath || '/').replace(/^\//, '');
+    });
+    return module;
+  }
+  async resumeFilesScope(scope) {
+    const catalogue = await controlRequest('service-status', {});
+    const current = catalogue.services?.find(service => service.id === 'quantum' && service.application === 'quantum');
+    if (!current) throw unavailable('Files', 'the owning native service is unavailable');
+    // Use the owner's current definition, which may include another source's
+    // configuration revision. Never restore a stale per-view launch command.
+    scope.endpoint = await this.ensureRunning(current);
+  }
+  async filesSidecar(root, record) {
+    if (typeof root !== 'string' || !path.isAbsolute(root) || root.includes('\0')) throw Object.assign(Error('Choose an owning Files folder'), { status: 400 });
+    const directory = await fileDirectory(root);
+    await authorizeApplicationPath(directory.path);
+    const grant = this.gateway.grant(record, { id: randomUUID(), purpose: 'files-sidecar', projectId: null,
+      root: directory.path, identity: 'bk_' + randomUUID().replaceAll('-', ''),
+      permissions: { view: true, download: true, modify: true, create: true, delete: true }, backendId: await this.identity() });
+    grant.component = 'files'; grant.basePath = `/apps/files/${grant.id}/`;
+    const cached = Boolean(grant.filesPreparing);
+    if (!grant.filesPreparing) grant.filesPreparing = this.prepareFilesScope(grant.scope).catch(error => {
+      delete grant.filesPreparing; throw error;
+    });
+    await grant.filesPreparing;
+    if (cached) {
+      if (!grant.filesResuming) grant.filesResuming = this.resumeFilesScope(grant.scope).finally(() => { delete grant.filesResuming; });
+      await grant.filesResuming;
+    }
+    return { grant, directory };
+  }
+  async filesTree(input, record, { signal } = {}) {
+    return this.authorize(record, async () => {
+      const relative = relativePath(input.path || ''), { grant, directory } = await this.filesSidecar(input.root, record);
+      return this.gateway.authorizeOperation(grant.id, 'files-list', context => this.gateway.componentOperation('files', async () => {
+        const activeSignal = signal ? AbortSignal.any([signal, context.signal]) : context.signal;
+        const module = await this.module('files');
+        if (typeof module.listFiles !== 'function') throw unavailable('Files', 'the native list adapter is unavailable');
+        const info = await module.listFiles({ dataRoot: dataDir, scope: grant.scope, relative, signal: activeSignal,
+          authorizePath: (filename, options) => this.authorizeScopedPath(grant.scope, filename, options) });
+        const currentPath = path.join(directory.path, relative), entries = [
+          ...(info.folders || []).map(name => ({ name, type: 'directory' })),
+          ...(info.files || []).map(name => ({ name, type: 'file' }))].map(entry => {
+          const name = String(entry.name || ''), blocked = !name || name === '.' || name === '..' || /[\\/\x00-\x1f\x7f]/.test(name);
+          return { name, path: relative ? relative.split(path.sep).join('/') + '/' + name : name,
+            directory: entry.type === 'directory', blocked, size: entry.size, type: entry.type };
+        });
+        return { root: directory.path, currentPath, parent: relative ? path.dirname(currentPath) : directory.parent,
+          scopeRoot: directory.scopeRoot, source: grant.scope.source, entries, permissions: grant.scope.permissions };
+      }));
+    });
+  }
+  async filesNative(req, res, tail, input, record) {
+    const allowed = tail === 'resources' ? ['POST', 'PATCH', 'DELETE']
+      : tail === 'resources/download' ? ['GET', 'HEAD'] : tail === 'resources/bulk' ? ['DELETE'] : [];
+    if (!allowed.includes(req.method)) throw Object.assign(Error('Unsupported native Files action'), { status: 405 });
+    return this.authorize(record, async () => {
+      const { grant } = await this.filesSidecar(input.root, record);
+      return this.gateway.authorizeOperation(grant.id, 'files-native', context => this.gateway.componentOperation('files', async () => {
+        const original = req.url, target = new URL(original, 'https://files.invalid');
+        target.searchParams.delete('root');
+        if (target.searchParams.has('source') && target.searchParams.get('source') !== grant.scope.source) throw Object.assign(Error('Files source is outside this folder'), { status: 403 });
+        target.searchParams.set('source', grant.scope.source);
+        req.url = grant.basePath + 'api/' + tail + target.search;
+        try { return await this.webRequest('files', req, res, { grant, basePath: grant.basePath,
+          url: new URL(req.url, 'https://files.invalid'), origin: this.gateway.origin, signal: context.signal }); }
+        finally { req.url = original; }
+      }, () => { req.destroy(); res.destroy(); }), { response: res,
+        cancel: () => { req.destroy(); res.destroy(); },
+        watch: abort => {
+          const closed = () => { if (!res.writableFinished) abort(); };
+          res.once('close', closed); return () => res.off('close', closed);
+        } });
+    });
+  }
   async open(component, input, record) {
     return this.authorize(record, async () => {
       if (component === 'references') {
@@ -377,39 +461,40 @@ export class ApplicationModules {
       let selected;
       if (input.file !== undefined) {
         const file = input.file;
-        if (component !== 'files' || input.cwd || input.projectId || !file || Object.keys(file).some(key => !['sessionId', 'path'].includes(key))
-            || !/^[a-f0-9-]{36}$/.test(file.sessionId || '') || typeof file.path !== 'string') {
+        if (component !== 'files' || input.cwd || input.projectId || !file || Object.keys(file).some(key => !['sessionId', 'root', 'path'].includes(key))
+            || Boolean(file.sessionId) === Boolean(file.root) || (file.sessionId && !/^[a-f0-9-]{36}$/.test(file.sessionId)) || typeof file.path !== 'string') {
           throw Object.assign(Error('Choose one file from this chat'), { status: 400 });
         }
-        const session = await this.resolveSession(file.sessionId);
-        // Stored cards carry literal paths, including names such as %20.docx;
-        // Markdown/file URLs retain the existing URI decoding rules.
-        const literal = (session.attachments || []).find(item => typeof item?.path === 'string'
-          && canonicalManagerPath(item.path) === canonicalManagerPath(file.path));
-        const absolute = literal?.path || referencedPath(session.cwd, file.path);
-        const attachment = (session.attachments || []).some(item => typeof item?.path === 'string'
-          && canonicalManagerPath(item.path) === canonicalManagerPath(absolute))
-          ? await storedAttachment(session.attachments, absolute) : null;
-        selected = attachment ? { ...attachment, attachment: { ...attachment, sessionId: file.sessionId } }
-          : await referencedFile(session.cwd, file.path);
+        if (file.root) {
+          const root = (await fileDirectory(file.root)).path, filename = await filePath(root, relativePath(file.path, false));
+          if (!containsPath(root, filename) || !(await fs.stat(filename)).isFile()) throw Object.assign(Error('Choose a file in this folder'), { status: 403 });
+          selected = { root, path: path.relative(root, filename) };
+        } else {
+          const session = await this.resolveSession(file.sessionId);
+          // Stored cards carry literal paths, including names such as %20.docx;
+          // Markdown/file URLs retain the existing URI decoding rules.
+          const literal = (session.attachments || []).find(item => typeof item?.path === 'string'
+            && canonicalManagerPath(item.path) === canonicalManagerPath(file.path));
+          const absolute = literal?.path || referencedPath(session.cwd, file.path);
+          const attachment = (session.attachments || []).some(item => typeof item?.path === 'string'
+            && canonicalManagerPath(item.path) === canonicalManagerPath(absolute))
+            ? await storedAttachment(session.attachments, absolute) : null;
+          selected = attachment ? { ...attachment, attachment: { ...attachment, sessionId: file.sessionId } }
+            : await referencedFile(session.cwd, file.path);
+        }
       }
       const project = input.projectId ? await this.project(record, input.projectId) : null;
       const root = selected?.root || (input.cwd ? (await fileDirectory(input.cwd)).path : project?.cwd || (await fileDirectory()).path);
-      if (!selected?.attachment) await authorizeApplicationPath(root);
+      if (!selected?.attachment) {
+        await authorizeApplicationPath(root);
+        if (selected) await authorizeApplicationPath(path.join(root, selected.path));
+      }
       const scope = { id: randomUUID(), projectId: project?.id || null, projectRoot: project?.cwd, root, identity: 'bk_' + randomUUID().replaceAll('-', ''),
         ...(selected?.attachment ? { attachment: selected.attachment } : {}),
         permissions: { view: true, download: true, modify: true, create: !selected?.attachment, delete: !selected?.attachment }, backendId: await this.identity() };
       if (component === 'files') {
-        const module = await this.module('files');
-        if (typeof module.prepareFiles !== 'function' || typeof module.handleFiles !== 'function') throw unavailable('Files', 'incompatible native provider API');
-        await this.gateway.configure('files', async () => {
-          const prepared = await module.prepareFiles({ dataRoot: dataDir, scope, privatePaths: await privateManagerPaths(),
-            endpoint: await this.gateway.endpoint(), authorizePath: authorizeApplicationPath });
-          if (prepared?.service?.id !== 'quantum') throw unavailable('Files', 'invalid shared Quantum service definition');
-          scope.endpoint = await this.ensureRunning(prepared.service, true, prepared.needsRestart === true);
-          scope.openPath = '/' + (prepared.openPath || '/').replace(/^\//, '');
-          if (selected && !selected.attachment) scope.openPath += selected.path.split(path.sep).map(encodeURIComponent).join('/');
-        });
+        await this.prepareFilesScope(scope);
+        if (selected && !selected.attachment) scope.openPath += selected.path.split(path.sep).map(encodeURIComponent).join('/');
       } else throw Error('Unknown web application');
       return this.gateway.open(component, record, scope);
     });

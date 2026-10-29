@@ -26,8 +26,8 @@ export class ApplicationGateway {
     this.configuring = new Map(); this.active = new Set();
   }
   grant(record, scope) {
-    if (scope.workerId) {
-      const previous = [...this.grants.values()].find(grant => !grant.revoked && grant.record.key === record.key && grant.scope.workerId === scope.workerId && grant.scope.projectId === scope.projectId && grant.scope.root === scope.root);
+    if (scope.workerId || scope.purpose === 'files-sidecar') {
+      const previous = [...this.grants.values()].find(grant => !grant.revoked && grant.record.key === record.key && grant.scope.workerId === scope.workerId && grant.scope.purpose === scope.purpose && grant.scope.projectId === scope.projectId && grant.scope.root === scope.root);
       if (previous) return previous;
     }
     const grant = { id: randomUUID(), record, scope, active: new Set(), created: Date.now() };
@@ -200,6 +200,14 @@ export class ApplicationGateway {
     this.configuring.set(component, pending);
     try { return await pending; }
     finally { if (this.configuring.get(component) === pending) this.configuring.delete(component); }
+  }
+  async componentOperation(component, work, stop = () => {}) {
+    await this.configuring.get(component);
+    if (this.closing) throw unavailable('The application gateway is stopping');
+    const active = { component, stop, socket: false };
+    active.done = new Promise(resolve => { active.finish = resolve; }); this.active.add(active);
+    try { return await work(); }
+    finally { this.active.delete(active); active.finish(); }
   }
   async authorizeOperation(id, operation, work, options) {
     const grant = this.grants.get(id);

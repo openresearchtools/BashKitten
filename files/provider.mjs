@@ -18,6 +18,16 @@ function permissions(scope) { const p = scope.permissions || {}; return { view: 
 const userName = scope => 'bk_' + digest(String(scope.identity) + '\0' + scope.id + '\0' + scope.root).slice(0, 40);
 const sourceName = scope => 'source_' + digest(scope.root).slice(0, 24);
 const sourcePerm = scope => ({ name: sourceName(scope), scope: scope.attachment ? '/' + scope.attachment.path : '/', permissions: permissions(scope) });
+function scopedFile(scope, value) {
+  if (typeof value !== 'string' || /[\\\x00-\x1f\x7f]/.test(value)) throw failure(400, 'Native file path must be unambiguous text');
+  if (scope.attachment) {
+    if (value.replace(/^\/+/, '') !== '') throw failure(403, 'Only this chat attachment is available');
+    return path.join(scope.root, scope.attachment.path);
+  }
+  const filename = path.resolve(scope.root, value.replace(/^\/+/, ''));
+  if (filename !== scope.root && !filename.startsWith(scope.root + path.sep)) throw failure(403, 'File path leaves this source');
+  return filename;
+}
 export async function prepareFiles({ dataRoot, scope, endpoint, privatePaths = [], socketRoot = path.join(dataRoot, 'run') }) {
   if (!scope?.id || !scope.identity || !path.isAbsolute(scope.root) || !path.isAbsolute(dataRoot)) throw failure(400, 'An authenticated owning folder is required');
   return serial(dataRoot, async () => {
@@ -47,9 +57,9 @@ function request(socketPath, method, requestPath, { headers = {}, body, signal }
     if (body?.pipe) body.pipe(req); else req.end(body);
   });
 }
-async function jsonRequest(socketPath, method, target, username, body, signal) {
+async function jsonRequest(socketPath, method, target, username, body, signal, byteLimit = 2 << 20) {
   const response = await request(socketPath, method, target, { headers: { 'X-BashKitten-Quantum-User': username, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal });
-  let size = 0; const chunks = []; for await (const chunk of response) { size += chunk.length; if (size > 2 << 20) throw failure(502, 'Native API response exceeds its bound'); chunks.push(chunk); }
+  let size = 0; const chunks = []; for await (const chunk of response) { size += chunk.length; if (byteLimit && size > byteLimit) throw failure(502, 'Native API response exceeds its bound'); chunks.push(chunk); }
   const text = Buffer.concat(chunks).toString(); if (response.statusCode >= 400) throw failure(response.statusCode, 'Native Files account reconciliation failed');
   return text ? JSON.parse(text) : null;
 }
@@ -73,6 +83,17 @@ async function reconcileAccount(dataRoot, scope, signal) {
   await jsonRequest(socketPath, 'GET', '/api/users?username=self', username, undefined, signal);
   await jsonRequest(socketPath, 'PATCH', '/api/users?username=' + encodeURIComponent(username), config.auth.adminUsername, { which: ['permissions', 'disableSettings', 'scopes'], data }, signal);
   return { socketPath, username };
+}
+export async function listFiles({ dataRoot, scope, relative = '', signal, authorizePath }) {
+  scope = { ...scope, root: await fs.realpath(scope.root) };
+  const filename = scopedFile(scope, relative);
+  if (authorizePath) await authorizePath(filename);
+  const native = await serial('account:' + scope.id, () => reconcileAccount(dataRoot, scope, signal));
+  const query = new URLSearchParams({ source: sourceName(scope), path: '/' + relative.replace(/^\/+/, '') });
+  // Quantum's native names-only directory endpoint applies its own access/index
+  // rules. The small account-reconciliation reply cap is not a folder-size quota.
+  try { return await jsonRequest(native.socketPath, 'GET', '/api/resources/items?' + query, native.username, undefined, signal, 0); }
+  catch (error) { error.message = 'Files could not list this folder: ' + error.message; throw error; }
 }
 const deniedPaths = /^\/(?:api\/(?:settings|users|auth|tokens|sharing|office|access)|public\/share)(?:\/|$|\?)/;
 const quickToggleFields = new Set(['singleClick', 'darkMode', 'stickySidebar']);
@@ -106,16 +127,6 @@ export async function handleFiles(req, res, { dataRoot, scope, basePath, signal,
   if (!url.pathname.startsWith(basePath)) throw failure(403, 'Wrong Files launch scope');
   const route = nativeRoute('/' + url.pathname.slice(basePath.length));
   const relative = route.decoded;
-  const scopedFile = value => {
-    if (typeof value !== 'string' || /[\\\x00-\x1f\x7f]/.test(value)) throw failure(400, 'Native file path must be unambiguous text');
-    if (scope.attachment) {
-      if (value.replace(/^\/+/, '') !== '') throw failure(403, 'Only this chat attachment is available');
-      return path.join(scope.root, scope.attachment.path);
-    }
-    const filename = path.resolve(scope.root, value.replace(/^\/+/, ''));
-    if (filename !== scope.root && !filename.startsWith(scope.root + path.sep)) throw failure(403, 'File path leaves this source');
-    return filename;
-  };
   for (const key of ['auth', 'jwt', 'access_token']) url.searchParams.delete(key);
   // Native externalLinks accepts a query-only URL, which stays inside this
   // authenticated launch even while browsing nested folders. This is our legal
@@ -139,7 +150,7 @@ export async function handleFiles(req, res, { dataRoot, scope, basePath, signal,
   if (relative === '/api/document-provider/open') {
     if (req.method !== 'GET' || typeof openOffice !== 'function') throw failure(503, 'Office is unavailable');
     if (url.searchParams.get('source') !== sourceName(scope)) throw failure(403, 'Wrong Files source');
-    const filename = scopedFile(url.searchParams.get('path') || '');
+    const filename = scopedFile(scope, url.searchParams.get('path') || '');
     if (authorizePath) await authorizePath(filename);
     const launched = await openOffice({ relativePath: path.relative(scope.root, filename) });
     res.writeHead(303, { Location: launched.browserUrl, 'Cache-Control': 'no-store' }); res.end(); return;
@@ -153,7 +164,7 @@ export async function handleFiles(req, res, { dataRoot, scope, basePath, signal,
   // every explicit source path, including private state and symlink targets.
   for (const key of ['source', 'destinationSource', 'destSource', 'fromSource', 'toSource']) if (url.searchParams.has(key) && url.searchParams.get(key) !== sourceName(scope)) throw failure(403, 'Files source is outside the launch grant');
   const tree = relative === '/api/raw' || relative === '/api/resources/download' || relative === '/api/resources/archive' || relative === '/api/resources/unarchive' || (relative.startsWith('/api/resources') && ['DELETE', 'PATCH'].includes(req.method));
-  const checkPath = async value => { const filename = scopedFile(value); if (authorizePath) await authorizePath(filename, { tree }); return scope.attachment ? '/' : '/' + path.relative(scope.root, filename).split(path.sep).join('/'); };
+  const checkPath = async value => { const filename = scopedFile(scope, value); if (authorizePath) await authorizePath(filename, { tree }); return scope.attachment ? '/' : '/' + path.relative(scope.root, filename).split(path.sep).join('/'); };
   for (const key of ['path', 'file', 'destination', 'destinationPath', 'destPath', 'fromPath', 'toPath']) for (const value of url.searchParams.getAll(key)) await checkPath(value);
   let forwardedBody = userPreferencePatch ? await quickToggleBody(req, url, native.username) : req, nativeMove;
   if ((req.method === 'PATCH' && relative === '/api/resources') || (req.method === 'DELETE' && relative === '/api/resources/bulk') || (req.method === 'POST' && ['/api/resources/archive', '/api/resources/unarchive', '/api/resources/view-token'].includes(relative))) {
