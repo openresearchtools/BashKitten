@@ -87,6 +87,12 @@ Keep existing folder pickers, Git Changes and shared chat attachments; cleanly
 delete the superseded internal manager, spreadsheet viewer and conversion paths
 during implementation. The screenshot specifies layout/functions, not colors.
 
+Latest user clarification — 29 October 2026: the References plugin must open
+ordinary native tabs in the user's existing normal browsing session so existing
+cookies work; add no custom native tab/cookie bridge. Preserve native private
+session isolation and existing authorization requirements. This concerns the
+References tab/cookie boundary; see [the dated clarification in section 9](docs/files-office-bibliography-plan.md#user-clarification--29-october-2026-ordinary-session-tabs).
+
 Latest clarification: Files is only a one-click sidecar folder button opening
 the ordinary local service URL or the exact Chisel-forwarded loopback mapping.
 Quantum opens Office through its own web UI; add no Office-specific Mozilla

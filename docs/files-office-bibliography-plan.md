@@ -1058,6 +1058,21 @@ wording and settings. Do not install a second product called Zotero Connector.
 Legal attribution remains factual and complete; product branding remains ours.
 [Upstream trademark distinction](https://www.zotero.org/support/terms/trademark).
 
+### User clarification — 29 October 2026: ordinary session tabs
+
+The References plugin must use ordinary native browser tabs in the user's
+existing normal browsing session so the user's existing cookies work through
+the browser's native session handling. Do not add a custom native tab/cookie
+bridge. Use the plugin's ordinary native tab APIs for its manager, selector,
+capture and resolver surfaces, preserving the background-tab/focus requirements
+for resolver pages.
+
+Keep native private-session isolation, authorization and authenticated project
+routing intact; this does not authorize copying cookies across isolated sessions.
+The existing backend architecture and the limited authenticated capture host in
+section 9.2 remain unchanged. This clarification governs References' tab/cookie
+boundary and does not prohibit unrelated necessary browser fixes.
+
 ### 9.1 Reuse the save logic, not a rough imitation
 
 Retain/adapt the actual `background.js`, injection/page-saving chain, ItemSaver,

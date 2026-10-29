@@ -33,14 +33,20 @@ right-click, Office edit/Save and References opening from an ordinary web tab.
 Receipts are `native-xorg-153.5.4-45390-20261029/installed-acceptance-summary.json`
 and `native-wayland-153.5.4-45390-20261029/verification.json` under
 `Bashkitten-Acceptance/`. These are bounded installed checks, not the full matrix.
-Default Pin to Toolbar was checked but the capture button was missing from both
-navigation bar and overflow; default placement remains a native-review failure.
+Default Pin to Toolbar was checked, but the button was not visible in the navbar
+or `»` menu. The initial default-placement failure label was corrected after
+native source review: `browser_action.default_area` is `navbar`, and native
+WebExtension overflow uses the separate Extensions panel. Its actual References
+row opened the chooser and saved Alpha before re-pinning. The default action
+worked; direct navbar visibility/overflow state at that viewport remains
+unresolved, with no product fix justified by the current evidence.
 After manual native unpin/re-pin, the coherent Xorg capture follow-up passed
 selector Cancel without writes, website snapshot, exact PDF capture and
 interleaved destinations in two distinct databases/Bibliography roots. Native
-manager confirmation and normal Off/Quit passed; default placement remains failed.
+manager confirmation and normal Off/Quit passed. The annotated summaries retain
+the original raw observations and the successful pre-repin Extensions-row action.
 Receipt: `native-xorg-153.5.4-45390-20261029/capture-followup/installed-capture-summary.json`
-under `Bashkitten-Acceptance/`.
+under `Bashkitten-Acceptance/`, with adjacent `source-placement-review.json`.
 
 References opening from a Files/Office application tab still fails with an
 invalid `firefox-container-3025207296` cookie-store ID. The proposed custom native

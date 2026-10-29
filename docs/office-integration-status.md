@@ -33,9 +33,14 @@ The source and complete-gate receipts are in
 Clean installed 45390 real-Xorg testing passed rebuilt empty-query clearing and
 Entire-library export scope, native secondary-click menus, References
 registration and one controlled native-menu COinS capture with an HTML attachment.
-Default Pin to Toolbar was checked, but the actual button was absent from both
-the navigation bar and overflow. Default toolbar placement remains a failure
-under native review; menu capture does not establish that placement.
+Default Pin to Toolbar was checked, while the button was not visible in the
+navigation bar or the `»` menu. The initial report classified this as a default
+placement failure. Native source review corrected that interpretation:
+`browser_action.default_area` is `navbar`, and WebExtension overflow uses the
+separate Extensions panel. Before re-pinning, its actual References row opened
+the chooser and saved Alpha. The default action was functional; direct navbar
+visibility/overflow state at that viewport remains unresolved, with no product
+fix justified by this evidence.
 Files opened the uploaded DOCX in native light Office; actual GUI type/Save
 persisted its marker, PDF export opened an ordinary native PDF tab, and normal
 reopen retained the edit. This was one DOCX/PDF round trip, not six-format or
@@ -47,10 +52,13 @@ preserved profiles, models and custom INI. The receipt is
 The coherent Xorg capture follow-up passed selector Cancel with exact unchanged
 item/attachment manifests, website snapshot, byte-exact ordinary PDF capture and
 overlapping explicit destinations in two separate databases/Bibliography roots.
-Those toolbar workflows followed manual native unpin/re-pin; they do not repair
-or accept failed default placement. Native manager confirmation and normal
-Local Off/Quit passed. The receipt is
+Those toolbar workflows followed manual native unpin/re-pin. The successful
+pre-repin Extensions-row capture remains separate evidence; the earlier navbar
+observation does not establish an unavailable action. Native manager confirmation
+and normal Local Off/Quit passed. The annotated receipt retains references to
+the unchanged raw evidence:
 `Bashkitten-Acceptance/native-xorg-153.5.4-45390-20261029/capture-followup/installed-capture-summary.json`.
+The adjacent `source-placement-review.json` records the corrected interpretation.
 
 The clean 45390 Wayland package separately passed native right-click, Office
 edit/Save and References opening from an ordinary web tab. Invoking References
