@@ -59,9 +59,14 @@ window.addEventListener('message', event => {
     extensionFrames.set(event.source, { nonce: message.nonce, requests: new Map() });
     event.source.postMessage({ MessageId: 'BashKitten_ReferencesContext', nonce: message.nonce, ...context.referenceContext }, context.origin); return;
   }
+  if (message?.MessageId === 'BashKitten_ReferencesClosed') {
+    const frame = extensionFrames.get(event.source);
+    if (!frame || frame.nonce !== message.nonce) return;
+    abortFrame(event.source); extensionFrames.delete(event.source); return;
+  }
   if (['BashKitten_ReferencesRequest', 'BashKitten_ReferencesCancel', 'BashKitten_OfficeCopy'].includes(message?.MessageId)) {
     const frame = extensionFrames.get(event.source);
-    if (frame?.nonce !== message.nonce || typeof message.requestId !== 'string' || message.requestId.length > 128) return;
+    if (!frame || frame.nonce !== message.nonce || typeof message.requestId !== 'string' || message.requestId.length > 128) return;
     frame.requests.get(message.requestId)?.abort();
     if (message.MessageId === 'BashKitten_ReferencesCancel') { frame.requests.delete(message.requestId); return; }
     if (frame.requests.size >= 32) return;

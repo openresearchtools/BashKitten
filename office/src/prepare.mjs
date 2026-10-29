@@ -8,7 +8,7 @@ const keyPair = promisify(generateKeyPair);
 const defaultRoot = fileURLToPath(new URL('../runtime/', import.meta.url));
 const unavailable = message => Object.assign(new Error('Office unavailable: ' + message), { status: 503, code: 'office_runtime_unavailable' });
 const exact = '42745e44dd8530fac7acd5f46cb7571ceea63c6a';
-const requiredPatches = ['native-locked-light-theme', 'native-extensions-small-screen-dialog', 'native-proof-key-path', 'native-document-property-undo', 'native-field-command-undo', 'native-ooxml-user-attributes', 'source-archive-build-id', 'native-bounded-config-cache-keys', 'native-uno-undo-view', 'native-uno-shape-undo', 'native-text-edit-state', 'native-attribute-undo-text', 'native-product-branding'];
+const requiredPatches = ['native-locked-light-theme', 'native-extensions-small-screen-dialog', 'native-extension-dialog-commands', 'native-proof-key-path', 'native-document-property-undo', 'native-field-command-undo', 'native-ooxml-user-attributes', 'source-archive-build-id', 'native-bounded-config-cache-keys', 'native-uno-undo-view', 'native-uno-shape-undo', 'native-text-edit-state', 'native-attribute-undo-text', 'native-product-branding'];
 function relative(root, value) {
   if (typeof value !== 'string' || !value || path.isAbsolute(value) || value.split(/[\\/]/).some(part => part === '..') || value.includes('\0')) throw unavailable('invalid native artifact path');
   return path.join(root, value);

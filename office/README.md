@@ -64,7 +64,7 @@ keep the returned session open until the download finishes. Unknown export
 options are rejected. History restore uses a separately authorized temporary
 view and the native `versionrestore prerestore` broker acknowledgement after
 save/close; a browser assertion cannot authorize a restore.
-The panel's explicit text-copy action uses its existing frame nonce and captured
+The explicit text-copy command uses its existing frame nonce and captured
 browser grant to call this same operation. Its temporary native views are scoped
 to the individual action; the ordinary browser URL opens the saved copy. Native
 export URLs are registered with the existing file owner before being returned
@@ -94,15 +94,42 @@ Legacy `com.sun.star` use is isolated here because the pinned runtime's preferre
 the actual runtime proof. It is an upgrade check, not permission to omit edits.
 
 The classic chooser is packaged directly from `../references/web`, not a second
-picker. Desktop uses native `cool.dialog`; the small-screen patch reuses that
-same native dialog host where upstream has no sidebar. The host proxy binds
+picker. The commands-only manifest has no sidebar entry. Labelled native
+Citations menu/notebookbar actions open short-lived HTML command dialogs through
+the existing native `cool.dialog.open` host, on desktop and phones. One optional
+nonvisual `background` entry receives the existing native command callbacks and
+owns `cool.document.onModified` for automatic typed-code conversion through the
+existing bounded parser/promotion owner. This is the missing extension lifecycle
+facility; it does not create a sidebar, polling loop or separate service. Native
+menus, secondary-click contributions and keyboard dispatch remain upstream.
+An already open command dialog keeps its draft when another command is invoked.
+The dialog forwards the native `titlebar:false` option because its shared
+chooser/settings already provide the title and actions. This avoids a duplicate
+header and preserves native CSS centering when a phone keyboard changes the
+viewport. Native Escape and explicit Cancel/Close remain available, including
+while the authorized host context is loading.
+The host proxy binds
 each frame/origin/nonce and exposes project-scoped References requests without
 another browser bearer token. The native experimental feature and actual write,
 copy, print and export gates remain enforced.
 
+Add/Edit Citation uses `citations.selection` to identify the managed citation
+under the native caret or partial selection (or the selected Calc cell/Impress
+text shape). Secondary-click Edit and Remove use that same native selection.
+Editing preloads the complete cluster into the shared chooser, and both preview
+and confirmation carry revision/native-snapshot guards. Complete chooser edits
+use `replaceCluster:true`, including deliberate removal of custom preview text;
+Pi's existing partial-edit contract remains unchanged. Adding, editing or
+removing citations and changing styles refresh the managed bibliography in the
+same operation.
+
 Each document explicitly binds one project library and citation style in its
 native document property. First citation use opens Document settings, using the
-existing authorized project catalogue and bounded style search. The file's
+existing authorized project catalogue and bounded style search. Library is the
+first dropdown. Styles use catalogue titles, including a saved style outside the
+first result page, and languages use native `Intl.DisplayNames` labels while
+retaining the CSL locale values. Bibliography and conversion remain separate
+commands. The file's
 project remains its file authority; References requests are separately authorized
 for the single bound library. The chooser never searches across databases.
 `citations.inspect.binding` is `{projectId,style}` or `null`. Pi uses
@@ -137,7 +164,9 @@ presets own download/cache/atomic replacement. `../cool.js` resolves to the
 released native client API even in a preset extension.
 
 The named native patches cover only observed missing facilities: small-screen
-extension access, a runtime proof-key path, generic document-property undo,
+extension access, the optional background command/listener lifetime,
+viewport-bounded native frames and distinct per-dialog reply identities,
+a runtime proof-key path, generic document-property undo,
 Writer field-command undo/redo, generic OOXML user-defined attributes, and native
 view ownership for UNO undo contexts/actions, background shape undo, a
 read-only native text-edit state property, and rich-text snapshots in the native

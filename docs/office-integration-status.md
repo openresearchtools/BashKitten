@@ -9,10 +9,14 @@ and installed-product acceptance. It does not claim completed integration.
 The current full Actions run is `40787710453`, from
 `eb56a3a10ebc5bbba76c364dac1273ed0458e418`. Both Linux and both Android browser
 compiles passed. Android packaging exhausted its old 30-minute companion wait
-while all four native Office builds were still running. The bounded shared wait
+while native Office builds were still running. The bounded shared wait
 correction is committed in `a3c456e8a8` and deployed to the four builder repos;
-it does not change those already-running workflows. Final packages and a coherent
-candidate containing subsequent fixes remain unverified.
+it does not change those already-running workflows. Office Linux ARM64 and both
+Termux targets subsequently passed. The Linux ARM64 complete candidate also passed;
+Office Linux amd64 remains building. The main amd64 collector lost its hosted
+runner connection while its daughter build continued waiting for Office. These
+are outcomes for the original source revision, not subsequent fixes. A coherent
+candidate containing the later changes remains unverified.
 
 Installed testing still uses the isolated `4be2563e5e` browser with explicitly
 recorded component overlays. It is not acceptance of a newer complete package.
@@ -43,6 +47,43 @@ native input tests; earlier unfocused clicks are not successful UI evidence.
   Search's exact Rust runtime sources/notices are recorded in `fe14e6d016`, and
   component-prefixed native notices reach offline About through `c78d90fe39`.
   These are corrections for the next complete source/package collection.
+
+Later installed diagnostic checks passed native human/Pi co-editing: actual
+keyboard input changed an ordinary Writer paragraph while the real bundled Pi
+edited and refreshed an existing managed citation. Native inspection retained
+both changes and the same citation field. The first attempt targeted protected
+citation content and failed; it is not counted as a pass. The real Pi then saved
+and exported the same document through native Office operations. The coordinator
+downloaded that exact export through the existing trusted HTTPS authorization
+flow; its 21,378-byte PDF retained both edits, the superscript citation and the
+formatted bibliography in text and rendered inspection. The replacement compact
+Citations menu remains in progress. `01f1d0b192` adds
+native selection lookup and guards; six-format native module checks passed,
+separate from the still-pending new desktop/phone menu checks.
+
+The replacement plugin removes the visible Office References panel and exposes
+labelled native Citations commands. One nonvisual native extension lifecycle
+frame owns command dispatch and the existing modification listener; compact
+dialogs reuse the shared chooser and document settings. Settings starts with
+Library and shows catalogue style titles and friendly language names. Native
+selection supplies the exact existing citation for Edit/Remove. Review caught
+and corrected lifecycle cleanup and changes arriving during a busy operation.
+The pinned frontend emit/strict/bundle checks and focused command/settings/
+lifecycle checks pass. These checks do not replace the pending installed menu,
+selection and phone-keyboard replay.
+
+Desktop capture now passes the installed single/multiple-item, cancellation,
+website snapshot, recognized/raw PDF, manual attachment, collection preservation
+and overlapping two-project capture flows. `7c460a72f9` preserves collection
+membership when parenting; `b0896a3fb6` preserves it on Leave standalone. Both
+repairs were reproduced and replayed through the actual UI. The retained profile
+needed native unpin/re-pin to display the capture toolbar button; fresh-candidate
+default placement and Android capture still require installed checks.
+
+Remote References passed through the enrolled Tor/Chisel route with trusted
+loopback HTTPS and separate local/remote libraries. Remote Files, Office,
+download and revocation/reconnect coverage remains pending. Evidence is in
+`verification/real-remote-apps-20261029/real-https-references.json`.
 
 Evidence lives outside Git under `BashkittenBuild/verification/`, including
 `restored-native-seat-20261029`, `office-native-ui-20261029`,

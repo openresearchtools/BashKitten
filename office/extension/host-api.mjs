@@ -22,7 +22,7 @@ export async function connectReferencesHost({ signal, timeoutMs = 15000 } = {}) 
     }
   }
   window.addEventListener('message', receive);
-  const dispose = () => { if (disposed) return; disposed = true; clearTimeout(timer); rejectReady(new Error('References context closed')); window.removeEventListener('message', receive); signal?.removeEventListener('abort', dispose); for (const waiter of pending.values()) { window.top.postMessage({ MessageId: 'BashKitten_ReferencesCancel', nonce, requestId: waiter.requestId }, origin); waiter.cleanup(); waiter.reject(new Error('References context closed')); } pending.clear(); };
+  const dispose = () => { if (disposed) return; disposed = true; clearTimeout(timer); rejectReady(new Error('References context closed')); window.removeEventListener('message', receive); signal?.removeEventListener('abort', dispose); for (const waiter of pending.values()) { window.top.postMessage({ MessageId: 'BashKitten_ReferencesCancel', nonce, requestId: waiter.requestId }, origin); waiter.cleanup(); waiter.reject(new Error('References context closed')); } pending.clear(); if (origin) window.top.postMessage({ MessageId: 'BashKitten_ReferencesClosed', nonce }, origin); };
   window.addEventListener('pagehide', dispose, { once: true });
   signal?.addEventListener('abort', dispose, { once: true });
   window.top.postMessage({ MessageId: 'BashKitten_ReferencesReady', nonce }, '*');

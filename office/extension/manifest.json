@@ -1,7 +1,7 @@
 {
   "manifestVersion": "0.1",
   "name": "References",
-  "entry": "index.html",
+  "background": "background.html",
   "icon": "references.svg",
   "supports": ["text", "spreadsheet", "presentation"],
   "contributes": "ui.json"

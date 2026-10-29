@@ -1,0 +1,220 @@
+--- a/browser/src/control/Control.Extension.ts
++++ b/browser/src/control/Control.Extension.ts
+@@ -126,6 +126,8 @@
+ 	// id to it as an Extension_Command postMessage; cool.js hands it to
+ 	// cool.onCommand. For extensions whose logic lives in the panel.
+ 	panel?: boolean;
++	// Deliver the same command callback to the optional lifecycle frame.
++	background?: boolean;
+ 	gasFunctionName?: string;
+ }
+ 
+@@ -259,6 +261,8 @@
+ 	name: string;
+ 	// Absent for a commands-only extension that contributes no sidebar panel.
+ 	entry?: string;
++	// Optional nonvisual lifecycle entry; uses the normal native frame API.
++	background?: string;
+ 	icon?: string;
+ 	supports?: string[];
+ 	isGasExtension?: boolean;
+@@ -345,6 +349,7 @@
+ 	msgId: 'Extension_ShowDialog';
+ 	dialogId: string;
+ 	url: string;
++	titlebar?: boolean;
+ 	title?: string;
+ 	width?: number;
+ 	height?: number;
+@@ -480,11 +485,45 @@
+ 		this._setToolitemHighlight(false);
+ 		this._pendingCommandCalls = {};
+ 		this._pendingGasRuns = {};
+-		window.addEventListener('message', this._onPostMessage.bind(this));
++		this._removing = false;
++		this._messageHandler = this._onPostMessage.bind(this);
++		window.addEventListener('message', this._messageHandler);
+ 		map.on('executescriptresult', this._onScriptResult, this);
+ 		map.on('proxycall', this._onProxyCall, this);
+ 		map.on('consolemsg', this._onConsoleMsg, this);
+ 		map.on('comment', this._onComment, this);
++		this._openBackground();
++	},
++
++	onRemove: function () {
++		this._removing = true;
++		this._removePanel();
++	},
++
++	// Reuse the existing HTML/RPC/listener lifetime without constructing a sidebar.
++	_openBackground: function (): void {
++		const manifest: ExtensionManifest = this.options.manifest;
++		if (!manifest.background || manifest.isGasExtension || this._iframe) return;
++		const base = new URL(this.options.baseUrl, document.baseURI);
++		const url = new URL(manifest.background, base);
++		if (!url.href.startsWith(base.href)) return;
++		const iframe = document.createElement('iframe');
++		iframe.hidden = true;
++		iframe.setAttribute('sandbox', nativeFrameSandbox);
++		iframe.src = withUiLanguage(url.href);
++		iframe.addEventListener('load', () => { iframe.dataset.loaded = 'true'; }, { once: true });
++		this._iframe = iframe;
++		this.map.getContainer().appendChild(iframe);
++	},
++
++	_invokeBackgroundCommand: function (commandId: string): void {
++		const iframe = this._iframe;
++		if (!this.options.manifest.background || !iframe) return;
++		const deliver = () => {
++			if (this._iframe === iframe) this._postToIframe({ msgId: 'Extension_Command', commandId });
++		};
++		if (iframe.dataset.loaded === 'true') deliver();
++		else iframe.addEventListener('load', deliver, { once: true });
+ 	},
+ 
+ 	_onConsoleMsg: function (e: { level: string; message: string }) {
+@@ -611,6 +650,10 @@
+ 			: undefined;
+ 		const command =
+ 			commands && commands.find((c: ExtensionCommand) => c.id === commandId);
++		if (command && command.background) {
++			this._invokeBackgroundCommand(commandId);
++			return;
++		}
+ 		if (command && command.panel) {
+ 			this.invokePanelCommand(commandId);
+ 			return;
+@@ -1087,7 +1130,6 @@
+ 	},
+ 
+ 	_removePanel: function () {
+-		if (!this._panel) return;
+ 		// If a teardown is already in flight, leave it to finish:
+ 		if (this._teardownTimer !== null) return;
+ 		// If the iframe isn't ready, skip the handshake (nothing to detach):
+@@ -1118,6 +1160,17 @@
+ 			this._panel = null;
+ 			this._iframe = null;
+ 		}
++		if (this.options.manifest.background && this._iframe) {
++			this._iframe.remove();
++			this._iframe = null;
++		}
++		if (this._removing) {
++			window.removeEventListener('message', this._messageHandler);
++			this.map.off('executescriptresult', this._onScriptResult, this);
++			this.map.off('proxycall', this._onProxyCall, this);
++			this.map.off('consolemsg', this._onConsoleMsg, this);
++			this.map.off('comment', this._onComment, this);
++		}
+ 	},
+ 
+ 	_onPostMessage: function (e: MessageEvent) {
+@@ -1130,6 +1183,8 @@
+ 			this._dialog &&
+ 			e.source === this._dialog.iframeDialog._iframe.contentWindow;
+ 		if (!fromSidebar && !fromDialog) return;
++		const origin = this._targetOrigin();
++		if (origin !== '*' && e.origin !== origin) return;
+ 		let msg: ExtensionMessage | null;
+ 		try {
+ 			msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+@@ -1371,6 +1426,7 @@
+ 		url: string,
+ 		msg: {
+ 			dialogId: string | null;
++			titlebar?: boolean;
+ 			title?: string;
+ 			width?: number;
+ 			height?: number;
+@@ -1380,7 +1436,7 @@
+ 			// Own prefix rather than iframe-dialog so extension-specific CSS
+ 			// can stand on its own without disturbing the Feedback dialog.
+ 			prefix: 'iframe-extension',
+-			titlebar: true,
++			titlebar: msg.titlebar !== false,
+ 			directSrc: true,
+ 		};
+ 		if ((this.options.manifest as ExtensionManifest).isGasExtension) {
+@@ -1404,7 +1460,7 @@
+ 		}
+ 		iframeDialog._container.style.maxWidth = 'calc(100vw - 16px)';
+ 		iframeDialog._container.style.maxHeight = 'calc(100dvh - 16px)';
+-		iframeDialog._container.style.overflow = 'auto';
++		iframeDialog._container.style.overflow = 'hidden';
+ 		const origRemove = iframeDialog.remove.bind(iframeDialog);
+ 		// Titlebar X and in-iframe Esc both call remove() directly.  Turn
+ 		// either of those user gestures into a cancel result on the sidebar
+@@ -2413,8 +2469,8 @@
+ 				if (manifest.contributes && manifest.contributes.commands) {
+ 					await Promise.all(
+ 						manifest.contributes.commands.map(async (command) => {
+-							// Panel commands have no kit-side script to fetch.
+-							if (command.panel) return;
++							// HTML commands have no kit-side script to fetch.
++							if (command.panel || command.background) return;
+ 							if (!command.script) {
+ 								console.warn(
+ 									'extension ' +
+--- a/browser/css/iframedialog.css
++++ b/browser/css/iframedialog.css
+@@ -32,6 +32,8 @@
+    is inline from the width/height options passed to the L.IFrameDialog constructor; the
+    titlebar/title/close-X rules replace what jQuery UI provides under .ui-dialog. */
+ .iframe-extension-wrap {
++	display: flex;
++	flex-direction: column;
+ 	position: absolute;
+ 	z-index: 1106;
+ 	left: 50%;
+@@ -79,3 +81,18 @@
+ 	border: 0;
+ 	width: 100%;
+ }
++
++/* Keep the native titlebar while the extension iframe shrinks to the available
++   viewport, including a phone software keyboard. */
++.iframe-extension-wrap > .ui-dialog-titlebar {
++	flex-shrink: 0;
++}
++.iframe-extension-wrap > .iframe-extension-content {
++	display: flex;
++	flex: 1 1 auto;
++	min-height: 0;
++}
++.iframe-extension-wrap .iframe-extension-modal {
++	flex: 1 1 auto;
++	min-height: 0;
++}
+--- a/browser/extensions/cool.js
++++ b/browser/extensions/cool.js
+@@ -127,8 +127,11 @@
+ 	// The host opens a dialog page with coolRole=dialog in its query, and the call, proxy, save
+ 	// and dialog ids made in a dialog carry this prefix so that the host can send each reply to
+ 	// the frame that is waiting for it:
++	// A closed frame's late result must never match a newly opened dialog's call.
++	const frameCallId = globalThis.crypto?.randomUUID?.() ||
++		Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+ 	window.cool.idPrefix =
+-		new URLSearchParams(location.search).get('coolRole') === 'dialog' ? 'dlg-' : '';
++		new URLSearchParams(location.search).get('coolRole') === 'dialog' ? 'dlg-' + frameCallId + '-' : '';
+ 
+ 	let nextCallId = 0;
+ 	const pending = Object.create(null);
+@@ -370,7 +373,7 @@
+ 	// The dialog iframe loads its own copy of this cool.js and uses cool.dialog.close/
+ 	// cool.dialog.cancel to dismiss itself.  It can also use cool.callRemote etc.
+ 	//
+-	// opts: { url, title, width, height }.  url is relative to the extension's base URL.
++	// opts: { url, title, width, height, titlebar? }.  url is relative to the extension's base URL.
+ 	window.cool.dialog = {
+ 		open: function (opts) {
+ 			const dialogId = window.cool.idPrefix + 'd' + (nextDialogId++);
+@@ -384,6 +387,7 @@
+ 				title: opts.title,
+ 				width: opts.width,
+ 				height: opts.height,
++				titlebar: opts.titlebar,
+ 			}), '*');
+ 			return promise;
+ 		},

@@ -1,13 +1,161 @@
 {
   "commands": [
-    {"id":"citation","title":"Add/Edit Citation","panel":true,"icon":"references.svg"},
-    {"id":"bibliography","title":"Bibliography","panel":true,"icon":"references.svg"},
-    {"id":"refresh","title":"Refresh Citations","panel":true,"icon":"references.svg"},
-    {"id":"style","title":"Document Settings","panel":true,"icon":"references.svg"},
-    {"id":"codes","title":"Process Citation Codes","panel":true,"icon":"references.svg"}
+    {
+      "id": "citation",
+      "title": "Add/Edit Citation",
+      "background": true
+    },
+    {
+      "id": "edit",
+      "title": "Edit Citation",
+      "background": true
+    },
+    {
+      "id": "remove",
+      "title": "Remove Citation",
+      "background": true
+    },
+    {
+      "id": "bibliography",
+      "title": "Add Bibliography",
+      "background": true
+    },
+    {
+      "id": "refresh",
+      "title": "Refresh Citations",
+      "background": true
+    },
+    {
+      "id": "settings",
+      "title": "Settings",
+      "background": true
+    },
+    {
+      "id": "codes",
+      "title": "Convert citation codes",
+      "background": true
+    },
+    {
+      "id": "text-copy",
+      "title": "Save copy with text citations",
+      "background": true
+    },
+    {
+      "id": "import-snapshots",
+      "title": "Import copied references",
+      "background": true
+    }
   ],
-  "extensionsMenu": [{"command":"citation"},{"command":"bibliography"},{"command":"refresh"},{"command":"style"},{"command":"codes"}],
-  "menus": {"insert":["citation","bibliography"],"tools":["refresh","style","codes"]},
-  "notebookbar": [{"tab":"Citations","insertAfter":"Insert","groups":[{"id":"citations","label":"References","items":[{"type":"button","command":"citation","size":"large"},{"type":"button","command":"bibliography"},{"type":"button","command":"refresh"},{"type":"button","command":"style"}]}]}],
-  "keybindings": [{"command":"citation","key":"c","modifier":["ctrl","alt"]}]
+  "extensionsMenu": [
+    {
+      "command": "citation"
+    },
+    {
+      "command": "remove"
+    },
+    {
+      "command": "bibliography"
+    },
+    {
+      "command": "codes"
+    },
+    {
+      "command": "text-copy"
+    },
+    {
+      "command": "import-snapshots"
+    },
+    {
+      "command": "refresh"
+    },
+    {
+      "command": "settings"
+    }
+  ],
+  "menus": {
+    "insert": [
+      "citation",
+      "bibliography"
+    ],
+    "tools": [
+      "refresh",
+      "settings",
+      "codes"
+    ],
+    "file": [
+      "text-copy"
+    ]
+  },
+  "notebookbar": [
+    {
+      "tab": "Citations",
+      "insertAfter": "Insert",
+      "groups": [
+        {
+          "id": "citations",
+          "label": "References",
+          "items": [
+            {
+              "type": "button",
+              "command": "citation",
+              "size": "large"
+            },
+            {
+              "type": "button",
+              "command": "remove",
+              "size": "large"
+            },
+            {
+              "type": "button",
+              "command": "bibliography",
+              "size": "large"
+            },
+            {
+              "type": "menu",
+              "title": "Convert",
+              "items": [
+                {
+                  "command": "codes"
+                },
+                {
+                  "command": "text-copy"
+                },
+                {
+                  "command": "import-snapshots"
+                }
+              ]
+            },
+            {
+              "type": "button",
+              "command": "refresh",
+              "size": "large"
+            },
+            {
+              "type": "button",
+              "command": "settings",
+              "size": "large"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "contextMenu": [
+    {
+      "command": "edit"
+    },
+    {
+      "command": "remove"
+    }
+  ],
+  "keybindings": [
+    {
+      "command": "citation",
+      "key": "c",
+      "modifier": [
+        "ctrl",
+        "alt"
+      ]
+    }
+  ]
 }
