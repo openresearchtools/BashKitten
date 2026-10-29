@@ -84,8 +84,32 @@ async function applicationInventory(root) {
     .map(value => record(value, 'Office / npm')));
   for (const [component, directory] of [['Files', 'files'], ['Office', 'office/runtime']]) {
     const location = path.join(root, directory, 'licenses.json');
-    try { records.push(...await arrayInventory(location, component)); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    try {
+      const inventory = await arrayInventory(location, component);
+      const manifest = await json(path.join(root, directory, 'manifest.json'));
+      const changes = `https://github.com/openresearchtools/BashKitten/tree/${manifest.sourceCommit}/${component.toLowerCase()}`;
+      for (const entry of inventory) {
+        if (component === 'Files' && entry.name === 'File Browser Quantum') {
+          entry.source ||= `https://github.com/gtsteffaniak/filebrowser/tree/${manifest.upstream.quantum}`;
+          entry.modifications = changes + '/patches';
+        } else if (component === 'Files' && entry.name === 'BashKitten Files adapters and Office add-on') {
+          entry.source ||= `https://github.com/gtsteffaniak/filebrowser/tree/${manifest.upstream.wopi}`;
+          entry.modifications = changes + '/addon';
+          entry.attribution = changes + '/UPSTREAM.md';
+        } else if (component === 'Office' && entry.name === 'BashKitten integrated Office') {
+          entry.source ||= changes;
+          entry.modifications = changes + '/patches';
+          entry.attribution = changes + '/branding/ATTRIBUTION.txt';
+        } else if (component === 'Office' && ['Collabora Online', 'Collabora Office engine and bundled dependencies'].includes(entry.name)) {
+          entry.source ||= `${manifest.upstream.repository}/tree/${manifest.upstream.commit}`
+            + (entry.name === 'Collabora Online' ? '' : '/engine');
+          entry.modifications = changes + '/patches';
+        }
+      }
+      records.push(...inventory);
+    }
+    // Only an absent optional inventory may be skipped; missing metadata must fail.
+    catch (error) { if (error.code !== 'ENOENT' || error.path !== location) throw error; }
   }
   return records;
 }

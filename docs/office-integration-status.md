@@ -187,9 +187,36 @@ No Office engine or browser-core changes are required.
 Five Go race tests, the owner identity/storage test and the native settings-proxy
 test passed, including actual pinned Options-generated XML, scoped upload/read
 requests and snapshot views. Independent review passed. Evidence is under
-`BashkittenBuild/verification/office-native-settings-20261029/`. The focused native
-dialog save/reopen check and matching rebuilt-package acceptance remain pending;
-these module checks are not a claim of installed completion.
+`BashkittenBuild/verification/office-native-settings-20261029/`.
+
+The native Xorg module check then passed visible defaults, one saved false
+choice, actual document-kit exit, reopening with that choice retained, and a
+normal modified-document Save. It exposed and fixed two integration gaps: the
+native manifest needs `kind: user`, and upstream blocks the shared settings
+JavaScript when its admin console is disabled. Named patch `0027` removes only
+that shared-asset restriction; the admin page still returned 403. The server-only
+cached rebuild took 9.6 seconds without rebuilding the engine or browser.
+
+Receipt: `Bashkitten-Acceptance/office-native-settings-module-20261029/native-settings-module-summary.json`.
+This was a reversible diagnostic overlay with an explicitly recorded local
+server lineage, not a coherent rebuilt package. All seven original installed
+files and modes were restored, and normal Quit drained the test processes.
+The saved choice remains only in the isolated test profile. Matching rebuilt
+packages and the focused Android checks remain pending.
+
+The main About license inventory already contains the checked References/Zotero,
+Files/Quantum and Office/Collabora notices alongside their dependencies. The
+collector and existing desktop/offline renderers now expose source, revision,
+modification and attribution metadata as well as the full text. Safe HTTP(S)
+links use ordinary browser navigation; local paths remain text, and long entries
+wrap. Component-specific legal pages remain available too. A replay with the
+actual `53c81` inventory retained all 3,057 notice texts byte-for-byte and passed
+five focused rendering/escaping checks. Desktop Help → About also links to this
+same bundled inventory, alongside Mozilla's existing Licensing link; six native
+event-order cases passed. Missing source metadata cannot silently drop valid
+notices, with three focused regression cases passing. Evidence is under
+`BashkittenBuild/verification/main-about-licenses-20261029/`. The updated main
+About view still needs the focused installed check on the new candidate.
 
 ## Earlier integration checkpoint — 29 October 2026
 

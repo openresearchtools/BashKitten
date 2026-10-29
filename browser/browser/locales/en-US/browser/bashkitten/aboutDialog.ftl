@@ -13,6 +13,7 @@ aboutdialog-community = { -brand-short-name } is an open-source browser for peop
 
 aboutdialog-get-involved-link = Get involved
 aboutdialog-license-link = Licensing
+aboutdialog-bundled-licenses-link = Bundled component licenses
 
 aboutdialog-support-link = Support and report an issue
 aboutdialog-source-link = Source code

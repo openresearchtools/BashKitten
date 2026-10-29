@@ -30,13 +30,36 @@ pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:30rem; overflow:a
 <script>const data = ''' + json.dumps(data, ensure_ascii=True).replace('<', '\\u003c') + ''';
 document.querySelector('#version').textContent = 'BashKitten ' + data.version;
 document.querySelector('#notice').textContent = data.notice;
+function appendText(parent, value) {
+  const text = String(value), links = /https?:\\/\\/[^\\s<>"']+/g;
+  let offset = 0;
+  for (const match of text.matchAll(links)) {
+    const source = match[0].replace(/[),.;\\]]+$/, '');
+    let url;
+    try { url = new URL(source); } catch { continue; }
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) continue;
+    parent.append(document.createTextNode(text.slice(offset, match.index)));
+    const link = document.createElement('a'); link.href = url.href;
+    link.rel = 'noreferrer noopener'; link.textContent = source; parent.append(link);
+    offset = match.index + source.length;
+  }
+  parent.append(document.createTextNode(text.slice(offset)));
+}
 for (const entry of data.licenses) {
   const detail = document.createElement('details'), summary = document.createElement('summary');
   summary.textContent = [entry.name, entry.version, entry.license].filter(Boolean).join(' · ');
   detail.append(summary);
   detail.ontoggle = () => {
     if (detail.open && detail.childElementCount === 1) {
-      const text = document.createElement('pre'); text.textContent = entry.text; detail.append(text);
+      const fields = [['source', 'Source'], ['sourceCommit', 'Source revision'], ['commit', 'Revision'],
+        ['sourceProvenance', 'Source provenance'], ['modifications', 'Modifications'], ['attribution', 'Attribution']];
+      for (const [key, label] of fields) {
+        if (entry[key] == null) continue;
+        const metadata = document.createElement('pre');
+        appendText(metadata, label + ': ' + (typeof entry[key] === 'string' ? entry[key] : JSON.stringify(entry[key], null, 2)));
+        detail.append(metadata);
+      }
+      const text = document.createElement('pre'); appendText(text, entry.text); detail.append(text);
     }
   };
   document.querySelector('#licenses').append(detail);

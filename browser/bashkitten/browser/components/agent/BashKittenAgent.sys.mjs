@@ -1604,13 +1604,38 @@ class AgentView {
     try {
       const records = await IOUtils.readJSON("/usr/lib/bashkitten/licenses.json");
       content.append(html(this.doc, "h3", {}, "Bundled components"));
-      content.append(html(this.doc, "p", {}, "Full notices for the bundled browser, Agent, private Node/npm, Pi, search and authentication components. Python and Linux system libraries retain their separately installed package licenses."));
+      content.append(html(this.doc, "p", {}, "Full notices and source information for the bundled browser, Agent, References, Files, Office, private Node/npm, Pi, search and authentication components. Python and Linux system libraries retain their separately installed package licenses."));
+      const appendText = (parent, value) => {
+        const text = String(value), links = /https?:\/\/[^\s<>"']+/g;
+        let offset = 0;
+        for (const match of text.matchAll(links)) {
+          const source = match[0].replace(/[),.;\]]+$/, "");
+          let url;
+          try { url = new URL(source); } catch { continue; }
+          if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) continue;
+          parent.append(this.doc.createTextNode(text.slice(offset, match.index)));
+          const link = html(this.doc, "a", { href: url.href, rel: "noreferrer noopener" }, source);
+          link.addEventListener("click", event => { event.preventDefault(); this.win.openTrustedLinkIn(url.href, "tab"); });
+          parent.append(link);
+          offset = match.index + source.length;
+        }
+        parent.append(this.doc.createTextNode(text.slice(offset)));
+      };
       for (const record of records) {
         const detail = html(this.doc, "details");
         detail.append(html(this.doc, "summary", {}, [record.name, record.version, record.license].filter(Boolean).join(" · ")));
         detail.addEventListener("toggle", () => {
           if (detail.open && detail.childElementCount === 1) {
-            detail.append(html(this.doc, "pre", { style: "max-height:24rem;overflow:auto" }, record.text));
+            const fields = [["source", "Source"], ["sourceCommit", "Source revision"], ["commit", "Revision"],
+              ["sourceProvenance", "Source provenance"], ["modifications", "Modifications"], ["attribution", "Attribution"]];
+            for (const [key, label] of fields) {
+              if (record[key] == null) continue;
+              const value = typeof record[key] === "string" ? record[key] : JSON.stringify(record[key], null, 2);
+              const metadata = html(this.doc, "pre", { style: "white-space:pre-wrap;overflow-wrap:anywhere" });
+              appendText(metadata, label + ": " + value); detail.append(metadata);
+            }
+            const text = html(this.doc, "pre", { style: "max-height:24rem;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere" });
+            appendText(text, record.text); detail.append(text);
           }
         });
         content.append(detail);

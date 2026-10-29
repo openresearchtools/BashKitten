@@ -22,6 +22,17 @@ if (AppConstants.MOZ_UPDATER) {
 
 function init() {
   LightweightThemeConsumer.init(window);
+  // MozTextLink opens during target capture. Intercept only our link earlier.
+  document.addEventListener("click", event => {
+    const link = document.getElementById("bashkittenBundledLicensesLink");
+    if (!link?.contains(event.target) || link.disabled || event.defaultPrevented || ![0, 1].includes(event.button)) return;
+    const browser = Services.wm.getMostRecentWindow("navigator:browser");
+    if (!browser?.BashKittenAgent) return; // The existing link opens About settings if no browser owns the dialog.
+    event.preventDefault();
+    browser.focus();
+    browser.BashKittenAgent.licenses();
+    window.close();
+  }, true);
 
   let defaults = Services.prefs.getDefaultBranch(null);
   let distroId = defaults.getCharPref("distribution.id", "");
