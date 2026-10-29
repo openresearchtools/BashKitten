@@ -15,6 +15,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   ConsoleListener:
     "chrome://remote/content/shared/listeners/ConsoleListener.sys.mjs",
   dom: "chrome://remote/content/shared/DOM.sys.mjs",
+  error: "chrome://remote/content/shared/webdriver/Errors.sys.mjs",
   evaluate: "chrome://remote/content/marionette/evaluate.sys.mjs",
   event: "chrome://remote/content/shared/webdriver/Event.sys.mjs",
   interaction: "chrome://remote/content/marionette/interaction.sys.mjs",
@@ -845,6 +846,59 @@ async function typeText(target, text, delayMs = 0) {
 }
 
 function clearFocusedField(win, target) {
+  const isTextControl = () =>
+    target.localName === "textarea" ||
+    (target.localName === "input" &&
+      ["email", "number", "password", "search", "tel", "text", "url"].includes(
+        target.type
+      ));
+  if (isTextControl() || lazy.dom.isEditingHost(target)) {
+    // Keep the native clear command's state and visibility checks, but use
+    // Gecko editing for input/beforeinput instead of its value/innerHTML reset.
+    const assertClearable = () => {
+      if (
+        lazy.dom.isDisabled(target) ||
+        lazy.dom.isReadOnly(target) ||
+        !lazy.dom.isEditable(target)
+      ) {
+        throw new lazy.error.InvalidElementStateError(
+          "The target cannot be edited"
+        );
+      }
+      if (!lazy.dom.isInView(target)) lazy.dom.scrollIntoView(target);
+      if (!lazy.dom.isInView(target)) {
+        throw new lazy.error.ElementNotInteractableError(
+          "The target could not be scrolled into view"
+        );
+      }
+    };
+    assertClearable();
+    if (
+      isTextControl()
+        ? target.value === "" && target.validity.valid
+        : target.innerHTML === ""
+    ) {
+      return;
+    }
+    target.focus();
+    // Focus handlers can disable, hide or change the editable target.
+    assertClearable();
+    if (isTextControl()) {
+      target.setUserInput("");
+    } else if (lazy.dom.isEditingHost(target)) {
+      win.getSelection().selectAllChildren(target);
+      sendKey(win, "Backspace");
+    } else {
+      lazy.interaction.clearElement(target);
+    }
+    return;
+  }
+  // Special form controls keep Marionette's native value/file handling and
+  // validation errors. Non-form web terminals retain their key-based clearing.
+  if (["input", "textarea"].includes(target.localName)) {
+    lazy.interaction.clearElement(target);
+    return;
+  }
   try {
     lazy.interaction.clearElement(target);
   } catch {
