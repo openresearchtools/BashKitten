@@ -75,6 +75,19 @@ async function reconcileAccount(dataRoot, scope, signal) {
   return { socketPath, username };
 }
 const deniedPaths = /^\/(?:api\/(?:settings|users|auth|tokens|sharing|office|access)|public\/share)(?:\/|$|\?)/;
+const quickToggleFields = new Set(['singleClick', 'darkMode', 'stickySidebar']);
+async function quickToggleBody(req, url, username) {
+  if ([...url.searchParams.keys()].length !== 1 || url.searchParams.get('username') !== username) throw failure(403, 'Files preferences belong to the current scoped account');
+  let size = 0; const parts = [];
+  for await (const part of req) { size += part.length; if (size > 1024) throw failure(413, 'Files preference update is too large'); parts.push(part); }
+  let value;
+  try { value = JSON.parse(Buffer.concat(parts).toString('utf8')); }
+  catch { throw failure(400, 'Invalid Files preference update'); }
+  if (!value || Array.isArray(value) || Object.keys(value).length !== 2 || !Array.isArray(value.which) || !value.which.length || value.which.length > quickToggleFields.size || !value.data || typeof value.data !== 'object' || Array.isArray(value.data)) throw failure(400, 'Choose native Files quick-toggle preferences');
+  if (new Set(value.which).size !== value.which.length || value.which.some(field => !quickToggleFields.has(field)) || Object.keys(value.data).some(field => !value.which.includes(field))) throw failure(403, 'Only native Files quick-toggle preferences can be changed');
+  if (value.which.some(field => !Object.hasOwn(value.data, field) || typeof value.data[field] !== 'boolean')) throw failure(400, 'Files quick-toggle preferences must be boolean values');
+  return Buffer.from(JSON.stringify({ which: value.which, data: Object.fromEntries(value.which.map(field => [field, value.data[field]])) }));
+}
 function nativeRoute(encoded) {
   // Go's ServeMux unescapes each path segment before matching. Make the same
   // decision here, then forward one canonical encoding, so encoded route names
@@ -122,14 +135,15 @@ export async function handleFiles(req, res, { dataRoot, scope, basePath, signal,
   // These native read endpoints are needed by the ordinary frontend. All other
   // administration, shares and credential endpoints remain inaccessible.
   if (deniedPaths.test(relative + url.search) && !['/api/users', '/api/settings/sources', '/api/settings/user-defaults', '/api/settings/source', '/api/auth/login'].includes(relative)) throw failure(403, 'This Files account cannot administer the service');
-  if ((relative.startsWith('/api/users') && !(req.method === 'GET' && url.searchParams.get('username') === 'self')) || (relative.startsWith('/api/settings') && req.method !== 'GET')) throw failure(403, 'Files settings are managed by the owning backend');
+  const userPreferencePatch = relative === '/api/users' && req.method === 'PATCH';
+  if ((relative.startsWith('/api/users') && !(req.method === 'GET' && url.searchParams.get('username') === 'self') && !userPreferencePatch) || (relative.startsWith('/api/settings') && req.method !== 'GET')) throw failure(403, 'Files settings are managed by the owning backend');
   // Native scopes remain the actual file authority. The host additionally checks
   // every explicit source path, including private state and symlink targets.
   for (const key of ['source', 'destinationSource', 'destSource', 'fromSource', 'toSource']) if (url.searchParams.has(key) && url.searchParams.get(key) !== sourceName(scope)) throw failure(403, 'Files source is outside the launch grant');
   const tree = relative === '/api/raw' || relative === '/api/resources/download' || relative === '/api/resources/archive' || relative === '/api/resources/unarchive' || (relative.startsWith('/api/resources') && ['DELETE', 'PATCH'].includes(req.method));
   const checkPath = async value => { if (typeof value !== 'string' || /[\\\x00-\x1f\x7f]/.test(value)) throw failure(400, 'Native file path must be unambiguous text'); const filename = path.resolve(scope.root, value.replace(/^\/+/, '')); if (filename !== scope.root && !filename.startsWith(scope.root + path.sep)) throw failure(403, 'File path leaves this source'); if (authorizePath) await authorizePath(filename, { tree }); return '/' + path.relative(scope.root, filename).split(path.sep).join('/'); };
   for (const key of ['path', 'file', 'destination', 'destinationPath', 'destPath', 'fromPath', 'toPath']) for (const value of url.searchParams.getAll(key)) await checkPath(value);
-  let forwardedBody = req, nativeMove;
+  let forwardedBody = userPreferencePatch ? await quickToggleBody(req, url, native.username) : req, nativeMove;
   if ((req.method === 'PATCH' && relative === '/api/resources') || (req.method === 'DELETE' && relative === '/api/resources/bulk') || (req.method === 'POST' && ['/api/resources/archive', '/api/resources/unarchive', '/api/resources/view-token'].includes(relative))) {
     let size = 0; const parts = []; for await (const part of req) { size += part.length; if (size > 4 << 20) throw failure(413, 'Native operation list is too large'); parts.push(part); }
     forwardedBody = Buffer.concat(parts); const operation = JSON.parse(forwardedBody.toString('utf8'));
@@ -151,6 +165,7 @@ export async function handleFiles(req, res, { dataRoot, scope, basePath, signal,
   const headers = { ...req.headers, 'X-BashKitten-Quantum-User': native.username, 'X-Forwarded-Prefix': basePath, 'X-BashKitten-Document-Provider': basePath + 'api/document-provider/open' };
   for (const key of Object.keys(headers)) if (key.toLowerCase().startsWith('x-bashkitten-') || ['cookie', 'authorization', 'x-bashkitten-quantum-user', 'x-forwarded-prefix', 'x-bashkitten-document-provider', 'forwarded', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip'].includes(key.toLowerCase())) delete headers[key];
   headers['X-BashKitten-Quantum-User'] = native.username; headers['X-Forwarded-Prefix'] = basePath; headers['X-BashKitten-Document-Provider'] = basePath + 'api/document-provider/open'; headers.host = 'files';
+  if (userPreferencePatch) headers['content-type'] = 'application/json';
   if (Buffer.isBuffer(forwardedBody)) { delete headers['transfer-encoding']; headers['content-length'] = String(forwardedBody.length); }
   if (nativeMove) {
     if (typeof withNativeMove !== 'function') throw failure(503, 'The document owner is unavailable for this file operation');
