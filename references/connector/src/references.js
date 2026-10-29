@@ -82,7 +82,7 @@ globalThis.References = new function () {
     }
   };
   const resolverJobs = new Map();
-  this.waitForResolverTab = async (binding, pending, source) => {
+  this.waitForResolverTab = async (binding, pending, source, capture={}) => {
     // Keep the browser's authenticated response and normal tab navigation.
     // Cancelling it and fetching again from the background loses its session.
     const properties = {url:'about:blank', active:false, windowId:source.windowId};
@@ -91,8 +91,9 @@ globalThis.References = new function () {
       await browser.tabs.remove(tab.id);
       throw new Error('References cannot open a private tab in this browser.');
     }
-    const state = status => this.rpc(binding, 'getResolverRequest', {requestId:binding.requestId,
-      browser:{tabId:tab.id,windowId:tab.windowId,url:pending.attachment.url,status}});
+    const state = capture.state ? status => capture.state(status, tab)
+      : status => this.rpc(binding, 'getResolverRequest', {requestId:binding.requestId,
+        browser:{tabId:tab.id,windowId:tab.windowId,url:pending.attachment.url,status}});
     try { await state('waiting'); }
     catch (error) {
       // Authorization can expire between creation and the durable tab locator.
@@ -104,7 +105,7 @@ globalThis.References = new function () {
     const monitor = Zotero.BrowserAttachmentMonitor, ruleId = monitor._nextRuleId++;
     // Match the existing native resolver response limit in references/resolvers.mjs.
     const byteLimit = 32 * 1024 * 1024, streams = new Map();
-    let timer, removed, beforeRequest, selected, settled = false;
+    let timer, removed, beforeRequest, selected, settled = false, challengeSeen = false;
     const release = stream => {
       stream.active = false;
       stream.chunks.length = 0;
@@ -121,7 +122,10 @@ globalThis.References = new function () {
           for (const stream of streams.values()) release(stream);
           if (error) reject(error); else resolve(result);
         };
-        removed = id => { if (id === tab.id) finish(new Error('Resolver tab was closed')); };
+        removed = id => {
+          if (id === tab.id) finish(new Error('Resolver tab was closed'));
+          else if (capture.sourceSessionID && id === source.id) finish(new Error('Capture source tab was closed'));
+        };
         browser.tabs.onRemoved.addListener(removed);
         beforeRequest = details => {
           if (settled) return;
@@ -154,7 +158,7 @@ globalThis.References = new function () {
                 const bytes = new Uint8Array(stream.size);
                 let offset = 0;
                 for (const chunk of stream.chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-                finish(null, {url:stream.response.responseURL, tab,
+                finish(null, {url:stream.response.responseURL, tab, challengeSeen,
                   response:{...stream.response, response:bytes.buffer}});
               }
             } catch (error) { finish(error); }
@@ -174,6 +178,9 @@ globalThis.References = new function () {
           // Redirects and challenge/ordinary HTML continue without retaining data.
           if (details.statusCode < 200 || details.statusCode >= 300
               || !monitor._isAttachmentResponse(details) || selected) {
+            if ((details.statusCode < 300 || details.statusCode >= 400)
+                && details.responseHeaders?.some(header => header.name.toLowerCase() === 'content-type'
+                  && /^(?:text\/html|application\/xhtml\+xml)(?:;|$)/i.test(header.value || ''))) challengeSeen = true;
             release(stream);
             return;
           }
@@ -222,6 +229,24 @@ globalThis.References = new function () {
       for (const stream of streams.values()) release(stream);
       await monitor._cleanup(ruleId);
     }
+  };
+  this.fetchSourceAttachment = async (attachment, sessionID, source) => {
+    const binding = this.bind(sessionID, source), sourceURL = source.url;
+    const state = async () => {
+      const current = await browser.tabs.get(source.id);
+      if (current.url !== sourceURL) throw new Error('Capture source tab changed');
+      await this.call('getSelectedCollection', {sessionID}, source);
+    };
+    await state();
+    const resolved = await this.waitForResolverTab(binding,
+      {attachment,expiresAt:Date.now() + 600000}, source, {state,sourceSessionID:sessionID});
+    const validationError = Zotero.ItemSaver._validateResponse(attachment, resolved.response);
+    if (validationError) throw new Error('Attachment download failed: ' + validationError);
+    attachment.url = resolved.url;
+    // Routine direct-PDF capture already has its source viewer. Human challenge
+    // tabs stay visible; all uploads still use the donor's existing session path.
+    if (!resolved.challengeSeen) await browser.tabs.remove(resolved.tab.id).catch(() => {});
+    return resolved.response.response;
   };
   this.resolveRequest = async (binding, sourceTab) => {
     await Zotero.initDeferred.promise;

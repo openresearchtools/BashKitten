@@ -1,0 +1,59 @@
+--- a/src/common/itemSaver.js
++++ b/src/common/itemSaver.js
+@@ -412,21 +412,22 @@
+ };
+ 
+ /**
+- * Fetches an attachment in Safari content script.
++ * Fetches an attachment in its existing source content script.
+  * 
+- * Background page xhr on Safari doesn't send user's cookies, so we try to
+- * fetch the attachment in the content script.
++ * Safari and Android Firefox background requests do not share the source
++ * tab's native cookie context. Reuse this donor path rather than copy cookies.
+  * @param {Object} attachment
+  */
+ ItemSaver.fetchAttachmentSafari = async function(attachment) {
+-	if (!Zotero.isSafari) return;
++	const sourceContext = Zotero.isFirefox && (await browser.runtime.getPlatformInfo()).os === 'android';
++	if (!Zotero.isSafari && !sourceContext) return;
+ 	let options = { responseType: "arraybuffer", timeout: 60000, forceInject: true };
+ 	let xhr;
+ 	try {
+ 		xhr = await Zotero.HTTP.request("GET", attachment.url, options);
+ 	}
+ 	catch (e) {
+-		Zotero.debug(`Failed to fetch attachment in safari content script: ${attachment.url}`);
++		Zotero.debug(`Failed to fetch attachment in source content script: ${attachment.url}`);
+ 		return;
+ 	}
+ 	let { contentType } = Zotero.Utilities.Connector.getContentTypeFromXHR(xhr);
+--- a/src/common/http.js
++++ b/src/common/http.js
+@@ -144,7 +144,10 @@
+ 		// referrer, otherwise route via background
+ 		let shouldRouteViaInject = Zotero.isInject && (options.forceInject
+ 			|| Zotero.HTTP.isSameOrigin(url) && !options.headers['User-Agent']);
+-		let shouldUseContentXHR = shouldRouteViaInject && Zotero.isFirefox;
++		// The page XHR preserves its Referer for same-origin loads. Cross-origin
++		// forced requests use the MV2 sandbox XHR with the source origin attributes
++		// and native host permissions, instead of a page request subject to CORS.
++		let shouldUseContentXHR = shouldRouteViaInject && Zotero.isFirefox && Zotero.HTTP.isSameOrigin(url);
+ 		if (shouldUseContentXHR) {
+ 			// The privileged XHR that Firefox makes available to content scripts so that they
+ 			// can make cross-domain requests doesn't include the Referer header in requests [1],
+--- a/src/common/itemSaver_background.js
++++ b/src/common/itemSaver_background.js
+@@ -114,7 +114,11 @@
+ 		delete attachment.data;
+ 	}
+ 	if (!arrayBuffer) {
+-		arrayBuffer = await this._fetchAttachment(attachment, tab);
++		if (attachment.pdf && Zotero.isFirefox && (await browser.runtime.getPlatformInfo()).os === 'android') {
++			arrayBuffer = await References.fetchSourceAttachment(attachment, sessionID, tab);
++		} else {
++			arrayBuffer = await this._fetchAttachment(attachment, tab);
++		}
+ 	}
+ 
+ 	let metadata = JSON.stringify({

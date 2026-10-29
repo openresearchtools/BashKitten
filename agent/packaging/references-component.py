@@ -17,6 +17,7 @@ def fingerprint():
              and not {'.build', 'dist', 'node_modules', '__pycache__'}.intersection(path.relative_to(base).parts)]
     paths += [ROOT / f'browser/bashkitten/browser/branding/default{size}.png' for size in [16, 32, 64, 128]]
     paths.append(ROOT / 'agent/packaging/source_cache.py')
+    paths.append(ROOT / 'references/web/theme.css')
     for path in sorted(paths):
         result.update(str(path.relative_to(ROOT)).encode() + b'\0')
         result.update(hashlib.sha256(path.read_bytes()).digest())

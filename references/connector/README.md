@@ -142,7 +142,8 @@ cancel the PDF, redirect to a monitor page, extract cookies or fetch the PDF aga
 from the background. The selected attachment's `Content-Disposition: attachment`
 becomes `inline`, preserving its filename: Gecko otherwise retargets this existing
 tab navigation into a new foreground tab (`DocumentLoadListener::GetWhereToOpen`).
-The native viewer therefore stays in the created background tab. The existing resolver response limit is 32 MiB; partial or
+The native viewer therefore stays in the created background tab. The existing
+resolver response limit is 32 MiB; partial or
 empty responses and donor MIME validation failures cannot become saved files.
 Ordinary HTML, redirects and unrelated failed frames remain native page behavior.
 
@@ -152,10 +153,20 @@ paths release stream capture; authorization is checked again before upload.
 Only an unused blank tab is removed if authorization fails before navigation or
 the native API returns a public tab for a private source. Unsupported private
 creation reports an error rather than navigating that public tab. Desktop and
-Android session/private/partitioned behavior require installed verification;
-Android's existing extension-tab engine-context mismatch is not repaired here.
-Direct donor capture attachment retrieval remains unchanged outside this
-browser-required resolver path.
+Android session/private/partitioned behavior require installed verification.
+
+On Android Firefox, ordinary capture reuses the donor's existing source-content
+attachment helper: same-origin requests use the page's native XHR, while forced
+cross-origin requests use its MV2 extension sandbox XHR and existing host
+permissions. Both retain the source tab's native origin attributes and cookie
+handling. The native runtime platform API selects this branch; desktop behavior
+and the donor's explicit cookie-header filter remain unchanged.
+An uninjectable Android PDF reuses the same response-stream helper under its
+existing capture session, with source/backend checks before and after retrieval.
+The donor still validates and uploads through its normal session path. Closing
+the source cancels capture. A routine successful helper tab closes after MIME
+validation; challenge and failed tabs remain visible. No cookie export, cookie
+store mutation, new request owner or native host operation is added.
 
 ## Independent install, update and rollback
 
