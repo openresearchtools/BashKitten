@@ -143,7 +143,13 @@ const convertCookie = ({ cookie, isPrivate }) => {
     result.expirationDate = cookie.expiry / 1000;
   }
 
-  if (cookie.originAttributes.userContextId) {
+  if (AppConstants.platform === "android") {
+    result.storeId = getCookieStoreIdForOriginAttributes({
+      ...cookie.originAttributes,
+      privateBrowsingId:
+        cookie.originAttributes.privateBrowsingId || (isPrivate ? 1 : 0),
+    });
+  } else if (cookie.originAttributes.userContextId) {
     result.storeId = getCookieStoreIdForContainer(
       cookie.originAttributes.userContextId
     );
@@ -292,7 +298,24 @@ const oaFromDetails = (details, context, allowPattern) => {
 
   let isPrivate = context.incognito;
   let storeId = isPrivate ? PRIVATE_STORE : DEFAULT_STORE;
-  if (details.storeId) {
+  if (AppConstants.platform === "android") {
+    storeId = details.storeId || storeId;
+    if (!isValidCookieStoreId(storeId)) {
+      throw new ExtensionError(`Invalid cookie store id: "${storeId}"`);
+    }
+    Object.assign(
+      originAttributes,
+      getOriginAttributesPatternForCookieStoreId(storeId)
+    );
+    isPrivate = !!originAttributes.privateBrowsingId;
+    if (
+      originAttributes.geckoViewSessionContextId.startsWith(
+        "gvctx626173686b697474656e2d6167656e742d75692d"
+      )
+    ) {
+      throw new ExtensionError("Browser-owned Agent cookies are protected");
+    }
+  } else if (details.storeId) {
     storeId = details.storeId;
     if (isDefaultCookieStoreId(storeId)) {
       isPrivate = false;
@@ -802,7 +825,7 @@ this.cookies = class extends ExtensionAPIPersistent {
             result.push({
               id: key,
               tabIds: data[key],
-              incognito: key == PRIVATE_STORE,
+              incognito: isPrivateCookieStoreId(key),
             });
           }
           return Promise.resolve(result);
