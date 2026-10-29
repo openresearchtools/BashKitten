@@ -15,7 +15,7 @@
   */
  ItemSaver.fetchAttachmentSafari = async function(attachment) {
 -	if (!Zotero.isSafari) return;
-+	const sourceContext = Zotero.isFirefox && (await browser.runtime.getPlatformInfo()).os === 'android';
++	const sourceContext = Zotero.isFirefox && await Zotero.ItemSaver.isSourceContextRequired();
 +	if (!Zotero.isSafari && !sourceContext) return;
  	let options = { responseType: "arraybuffer", timeout: 60000, forceInject: true };
  	let xhr;
@@ -44,12 +44,23 @@
  			// can make cross-domain requests doesn't include the Referer header in requests [1],
 --- a/src/common/itemSaver_background.js
 +++ b/src/common/itemSaver_background.js
-@@ -114,7 +114,11 @@
+@@ -72,3 +72,9 @@
+ };
+-
++
++// Native platform metadata belongs to the background. Injected ItemSaver calls
++// this boolean through the donor's existing messaging namespace.
++Zotero.ItemSaver.isSourceContextRequired = async function() {
++	return Zotero.isFirefox && (await browser.runtime.getPlatformInfo()).os === 'android';
++};
++
+ /**
+@@ -114,7 +120,11 @@
  		delete attachment.data;
  	}
  	if (!arrayBuffer) {
 -		arrayBuffer = await this._fetchAttachment(attachment, tab);
-+		if (attachment.pdf && Zotero.isFirefox && (await browser.runtime.getPlatformInfo()).os === 'android') {
++		if (attachment.pdf && await this.isSourceContextRequired()) {
 +			arrayBuffer = await References.fetchSourceAttachment(attachment, sessionID, tab);
 +		} else {
 +			arrayBuffer = await this._fetchAttachment(attachment, tab);

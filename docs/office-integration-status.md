@@ -35,6 +35,27 @@ by the host reply until the corrected APK is installed; no Android capture pass
 or release is claimed.
 Evidence is in `Bashkitten-Acceptance/android-final-53c81-20261029/`.
 
+The subsequent exact `1f8341ccb402edb478e3192fc68d30ba7aa95162` diagnostic
+passed native-only parent [40931329451](https://github.com/openresearchtools/BashKitten/actions/runs/40931329451)
+and signed x86 Android daughter [40931342528](https://github.com/openresearchtools/bashkitten-build-android-x86_64/actions/runs/40931342528).
+Its actual APK bytecode contains both native bundle conversions. Installed on
+the phone with its matching backend/OS packages, the native reply now completes:
+the project chooser loads and the References manager opens. The actual phone
+metadata pane passed five editable identifier fields, wrapping/scrolling,
+reachable sticky actions and one native UI save verified through the API.
+No soft-keyboard layout result is claimed for that check. Settings and cached
+models were preserved. Evidence is in `Bashkitten-Acceptance/android-capture-1f8341-20261029/`.
+
+The first controlled PDF capture saved metadata but failed before any request
+reached the fixture server. Its injected connector script called Firefox's
+background-only `runtime.getPlatformInfo` API. Capture 1.0.7 now obtains that
+boolean through the existing donor ItemSaver messaging namespace. Sixteen
+focused source/packaged cases and one offline connector build passed; installed
+PDF capture still awaits the updated signed APK. The ordinary manual connector
+update facility requires a signed XPI; the locally built unsigned XPI does not
+establish Android acceptance. No signature bypass is used. Diagnostic builds
+remain ineligible for publication without the normal full release gate.
+
 The coherent `87c68c876808a61f174fdc36cc02b509f0c4b051` build passed all
 62 jobs in [40878527390](https://github.com/openresearchtools/BashKitten/actions/runs/40878527390),
 including six primary binaries, eight Office/Files jobs and the normal matching

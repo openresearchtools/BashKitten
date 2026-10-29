@@ -1258,8 +1258,9 @@
  	},
  	HostPermissions: {
  		onPageLoad: true,
-@@ -200,31 +201,6 @@
+@@ -200,31 +201,7 @@
  	ItemSaver: {
++		isSourceContextRequired: true,
  		saveAttachmentToZotero: true,
  		saveStandaloneAttachmentToZotero: true,
 -		saveAttachmentToServer: {
