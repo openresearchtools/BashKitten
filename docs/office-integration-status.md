@@ -16,6 +16,16 @@ cancelling the five older active runs. Normal preparation `40815045392` passed
 without modifying the frozen source. Dispatch is not a build
 or installed acceptance pass.
 
+That run subsequently passed all four Node jobs, both Termux Search jobs and all
+four Files jobs. Source collection failed because it checked an original archive
+against the checksum of a license member inside it. `550d52b0a2` corrects the
+existing collectors to verify the archive and extracted notice independently;
+no dependency pins or license texts changed. Independent retained originals
+confirmed all 57 affected notice associations across 16 archives. The corrected
+source/APK callbacks packaged all 624 native source records offline and rejected
+damaged archives, members and retained notices. The current Actions run still
+uses `16f0a0330a`; the correction requires the next source collection.
+
 The preceding `40811847474` attempt used `aa79161e6956` and exposed a stale Termux
 Search inventory checksum after the Rust runtime source-lock update. The inventory
 now matches that lock (`a5296491b5`); the unchanged
@@ -108,6 +118,15 @@ flex direction. After revalidating the served stylesheet, the editor measured
 Typing in style search and tapping Cancel passed. Save, complete citation flows
 and the extreme landscape keyboard case remain separate pending checks.
 
+Later actual phone editing preserved a multi-source cluster when opening Edit
+from a partial text selection, including the locator, prefix and suppress-author
+settings. Native bibliography insertion produced two entries. These same anchors,
+settings and rendered content survived a Cuttlefish restart. That restart recovered
+the emulator's WebRTC process after its rotation sensor control crashed; it is
+not an Office failure or a seamless-reconnect pass. Controlled Android landscape
+then exposed a 45px visual viewport with clipped Settings actions; its scrolling
+correction and replay remain outstanding.
+
 Desktop capture now passes the installed single/multiple-item, cancellation,
 website snapshot, recognized/raw PDF, manual attachment, collection preservation
 and overlapping two-project capture flows. `7c460a72f9` preserves collection
@@ -120,15 +139,26 @@ Remote References and Files passed through the enrolled Tor/Chisel route with
 trusted loopback HTTPS and separate local/remote libraries. Actual Office
 edit/save, ordinary PDF rendering, native 4 MiB download with exact checksum,
 live revocation and saved reconnect also passed. A normal download click exposed
-the isolated fixture's read-only default Downloads directory; a writable native
-destination and ordinary-click replay remain pending. `860ac0c38a` fixes reopening
+the isolated fixture's read-only default Downloads directory. After selecting a
+writable destination through native Preferences, an ordinary 32 MiB Files
+download completed with an exact source checksum, and native cancellation removed
+the partial repeat. This bounded transfer does not establish arbitrary-duration,
+stall or auth-expiry coverage. `860ac0c38a` fixes reopening
 already mapped application URLs through the owning route, with 27 focused cases
 and the full Android Java compile passing; installed API replay remains pending.
 The two same-UID diagnostic owners required a serialized handoff of Quantum,
-Office and its storage service; all previous states were restored. Long transfers,
-cancel and sustained Office connection stability are not claimed accepted.
+Office and its storage service; all previous states were restored. Extended stalls,
+auth expiry and sustained Office connection stability remain unaccepted.
 Evidence is in `verification/real-remote-apps-20261029/`, including
 `real-https-references.json` and `real-https-files-office.json`.
+
+The installed snapshot CLI passed six-format JSON and DOCX text output without
+changing any of the nine input snapshots. OOXML used distinct retained versions;
+the ODF fixtures had one retained version each, so those calls checked equal-version
+handling alongside the earlier changed-version semantic checks. Native desktop/
+phone history list, immutable Open and Restore UI acceptance remains pending.
+Evidence is in `verification/office-snapshot-diff-20261029/` and the ordinary
+remote transfer follow-up is `real-remote-apps-20261029/ordinary-files-transfer-replay.json`.
 
 Evidence lives outside Git under `BashkittenBuild/verification/`, including
 `restored-native-seat-20261029`, `office-native-ui-20261029`,
