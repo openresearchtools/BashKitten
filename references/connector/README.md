@@ -61,18 +61,22 @@ The optional `backends` array carries the same authorized descriptors for each
 backend if the native owner supports backend choice. No service starts merely
 for translator detection; metadata/code comes from the package.
 
-Every save begins with an explicit backend/project/collection choice and a fresh
-capture session generated in the background before translation starts. The
-session is permanently bound to that backend, project and source tab.
-The action menu and destination chooser also offer **Open manager**, using the
-same backend/project and the native shared application-launch owner. It passes
-no URL or credential into page scripts, and returns no capture session. Collection choice traverses collection hierarchy using bounded pages (at most 100 collections); stale search responses are discarded. Previous follows the actual server page boundaries. Closing
-or cancelling the chooser makes no item or attachment. Upstream progress updates
-retain the same bound session; the server is the final authorization owner.
-The donor progress disclosure retains its native tags and note controls. Its
-collection action opens this same paged chooser, locked to the existing capture's
-backend and project, then uses the donor's normal `updateSession` operation.
-This replaces only the donor tree's requirement to fetch every collection.
+Every save begins with an explicit backend and References project choice and a
+fresh capture session generated in the background before translation starts.
+The session stays bound to that backend, project and source tab. The capture
+form has no collection, search, hierarchy or paging controls.
+The action menu's **Open References** opens the manager directly through the
+native shared application-launch owner. The capture chooser's **Open manager**
+uses its selected project. Both pass no URL or credential into page scripts and
+return no capture session. Closing or cancelling the chooser makes no item or
+attachment. The donor progress disclosure retains its native tags and note
+controls; its collection tree and retarget action are removed. The legacy
+`getSelectedCollection` method name remains a root-only compatibility seam.
+
+Capture, selector, progress and manager styling reuse `web/theme.css`, with the
+existing BashKitten sidecar palette and the browser's native
+`prefers-color-scheme`. There is no separate References theme setting or store.
+The shared Office chooser keeps its explicit light theme.
 
 Requests are `{apiVersion:1,operation:'request',backendId,projectId,method,data,
 headers,queryString,bodyEncoding}` and return `{apiVersion:1,status,headers,body}`.
@@ -112,10 +116,10 @@ The existing authenticated browser-control operation `references.resolve` carrie
 only `{backendId,projectId,requestId}`. The fixed host receives that immutable event
 through its desktop Experiment event or Android native-message port and forwards
 it to the capture background. The capture verifies `getResolverRequest` against
-the same project before and after interaction, reuses native cookie-aware
-attachment retrieval and the donor attachment-response monitor, and uploads the
-PDF with `X-Metadata.resolverRequestId`. The backend validates the session,
-attachment and parent, then completes the originating receipt/job.
+the same project before and after interaction, uses the donor attachment-response
+classification and validation, and uploads the PDF with
+`X-Metadata.resolverRequestId`. The backend validates the session, attachment and
+parent, then completes the originating receipt/job.
 
 The fixed host returns the bounded receipt through native
 `operation:'resolver-result'`; backend changes, Off and stale requests fail.
@@ -124,16 +128,30 @@ native fetch URL. Challenges use visible ordinary tabs for human completion;
 automated Amazon and hidden-iframe bypass paths are removed from runtime.
 
 Normal resolver jobs invoke that same handoff automatically through their owning
-backend. A failed cookie-aware fetch opens a new background tab in the existing
-source window/container and reuses the donor's attachment-response detector.
-It leaves the source URL, active tab and window focus unchanged. No popup window
-or monitor-page redirect is used. The durable job reports the tab identity and
-source URL; users and agents can visit it through the existing browser controls.
-Challenge/PDF tabs remain open, and only an unused blank tab is removed if
-authorization fails before navigation. Missing browser access stays an explicit
-resumable job rather than a successful attachment save.
-Tab creation preserves the source window and cookie store through native tab
-properties. Private/partitioned behavior still requires installed verification.
+backend. A browser-required job opens an ordinary background tab through native
+`tabs.create`, without copying an application service's cookie-store ID. The
+source window is requested where the platform supports it; the source URL and
+selected tab are left unchanged. The plugin attaches native
+`webRequest.filterResponseData` before the request and passes response bytes
+through unchanged, retaining only the selected attachment response. It does not
+cancel the PDF, redirect to a monitor page, extract cookies or fetch the PDF again
+from the background. The selected attachment's `Content-Disposition: attachment`
+becomes `inline`, preserving its filename: Gecko otherwise retargets this existing
+tab navigation into a new foreground tab (`DocumentLoadListener::GetWhereToOpen`).
+The native viewer therefore stays in the created background tab. The existing resolver response limit is 32 MiB; partial or
+empty responses and donor MIME validation failures cannot become saved files.
+Ordinary HTML, redirects and unrelated failed frames remain native page behavior.
+
+The durable job reports its tab identity and source URL for existing user/agent
+browser controls. Challenge/PDF tabs remain open. The existing expiry and tab-close
+paths release stream capture; authorization is checked again before upload.
+Only an unused blank tab is removed if authorization fails before navigation or
+the native API returns a public tab for a private source. Unsupported private
+creation reports an error rather than navigating that public tab. Desktop and
+Android session/private/partitioned behavior require installed verification;
+Android's existing extension-tab engine-context mismatch is not repaired here.
+Direct donor capture attachment retrieval remains unchanged outside this
+browser-required resolver path.
 
 ## Independent install, update and rollback
 
@@ -168,7 +186,7 @@ source archive hashes and package file hashes are available. No real identifier
 batch/PDF harvest was performed and no browser-native installed pass is claimed.
 
 Still required: installed desktop and Fenix action availability, detection and
-single/multiple/PDF/snapshot saving, collection/tag/note updates, selector close,
+single/multiple/PDF/snapshot saving, project binding and tag/note updates, selector close,
 concurrent destinations, private/partitioned cookies and redirects, challenge
 tab completion, partial uploads/ambiguous receipts, traffic inspection, backend
 resolver parity and signed update/rollback. Source-adapter work is not completion

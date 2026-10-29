@@ -183,7 +183,7 @@
  	
  	async function _handleContextMenuClick(info, tab) {
  		const id = info.menuItemId;
-+		if (id === 'references-open-manager') return References.select(tab, 'open');
++		if (id === 'references-open-manager') return References.openManager(tab);
  		if (id.startsWith("zotero-context-menu-copy-unproxied")) {
  			// Request permissions before other async actions otherwise
  			// it's not treated like we do it within a gesture

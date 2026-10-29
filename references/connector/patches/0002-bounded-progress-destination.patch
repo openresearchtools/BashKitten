@@ -11,19 +11,7 @@
  }
  
  function getParent(rows, id) {
-@@ -128,6 +128,11 @@
- 		this.addMessageListener('progressWindowIframe.shown', this.handleShown.bind(this));
- 		this.addMessageListener('progressWindowIframe.hidden', this.handleHidden.bind(this));
- 		this.addMessageListener('progressWindowIframe.reset', () => this.setState(this.getInitialState()));
-+		this.addMessageListener('progressWindowIframe.targetChosen', target => {
-+			const targets = this.state.targets.filter(row => row.kind === 'library');
-+			if (target.kind !== 'library') targets.push({...target,level:1});
-+			this.setState({targets}, () => this.onTargetChange(target.id));
-+		});
- 		this.addMessageListener('progressWindowIframe.willHide', this.handleHiding.bind(this));
- 		
- 		document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
-@@ -137,7 +142,7 @@
+@@ -137,7 +137,7 @@
  		
  		this.sendMessage('registered');
  		
@@ -32,7 +20,7 @@
  		Zotero.Connector.getPref('canUserAddNote').then(res => {
  			this.canUserAddNote = res;
  		});
-@@ -190,6 +195,8 @@
+@@ -190,6 +190,8 @@
  	// State update
  	//
  	changeHeadline(text, target, targets, tags) {
@@ -41,7 +29,7 @@
  		// Target selector mode
  		if (targets) {
  			// On initialization or if collapsed, focus the recents drop-down
-@@ -199,7 +206,7 @@
+@@ -199,7 +201,7 @@
  			
  			// Auto-expand libraries
  			targets.forEach((t) => {
@@ -50,7 +38,7 @@
  					t.expanded = true;
  				}
  			});
-@@ -223,7 +230,7 @@
+@@ -223,7 +225,7 @@
  		if (!targets) {
  			state.targetSelectorShown = false;
  		}
@@ -59,22 +47,7 @@
  		// Alert that the item is being saved or has already been saved
  		let alert = this.done ? Zotero.getString("progressWindow_alreadySaved") : `${text} ${targetName}`;
  		document.getElementById("messageAlert").textContent = alert; 
-@@ -479,6 +486,14 @@
- 		});
- 	}
- 	
-+	async chooseTarget() {
-+		if (this.referencesChoosingTarget) return;
-+		this.referencesChoosingTarget = true;
-+		try {
-+			await this.sendMessage('chooseTarget', {});
-+		} finally { this.referencesChoosingTarget = false; }
-+	}
-+
- 	handleDisclosureKeyPress(event) {
- 		if (event.key == 'Enter') {
- 			event.stopPropagation();
-@@ -726,7 +741,7 @@
+@@ -726,7 +728,7 @@
  	 */
  	renderHeadlineTarget() {
  		return <React.Fragment>
@@ -83,7 +56,7 @@
  			{" " + this.state.target.name + "…"}
  		</React.Fragment>;
  	}
-@@ -834,29 +849,7 @@
+@@ -834,29 +836,7 @@
  
  	renderTargetSelector() {
  		if (!this.state.targetSelectorShown) return "";
@@ -110,11 +83,11 @@
 -					onRowFocus={this.onTargetChange}/>
 -			</div>
 -		)
-+		const targetSelectorElement = <button onClick={() => this.chooseTarget()}>Change collection…</button>;
++		const targetSelectorElement = null;
  		let noteEditorElement = null;
  		if (this.canUserAddNote) {
  			noteEditorElement = (
-@@ -886,7 +879,6 @@
+@@ -886,7 +866,6 @@
  		)
  		return (
  			<div>
@@ -141,23 +114,3 @@
  			'data-single-file-hidden-frame': ''
  		}, {
  			position: 'fixed',
-@@ -355,6 +356,19 @@
- 		
- 		// Sent by the progress window when changes are made in the target selector
- 		addMessageListener('progressWindowIframe.updated', handleUpdated);
-+
-+		// The native tree expects every collection. Reuse the bounded destination
-+		// chooser while preserving this session's donor tags, note and save flow.
-+		addMessageListener('progressWindowIframe.chooseTarget', async data => {
-+			const sessionID = currentSessionID;
-+			stopCloseTimer(); closeTimerDisabled = true;
-+			try {
-+				const target = await Zotero.Connector.callMethod('chooseTarget', {sessionID});
-+				if (!target || currentSessionID !== sessionID) return;
-+				addEvent('targetChosen', target);
-+			} catch (error) { Zotero.logError(error); await addError('unexpectedError'); }
-+			finally { closeTimerDisabled = false; startCloseTimer(); }
-+		});
- 		
- 		// Keep track of when the mouse is over the popup, for various purposes
- 		addMessageListener('progressWindowIframe.mouseenter', handleMouseEnter);

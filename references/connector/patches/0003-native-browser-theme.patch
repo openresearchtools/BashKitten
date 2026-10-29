@@ -1,0 +1,27 @@
+--- a/src/common/itemSelector/itemSelector.html
++++ b/src/common/itemSelector/itemSelector.html
+@@ -20,9 +20,10 @@
+ 		<meta charset="UTF-8">
+ 		<meta name="google" content="notranslate">
+ 		<link rel="stylesheet" type="text/css" media="screen" href="itemSelector.css" />
++		<link rel="stylesheet" href="../references/capture.css" />
+ 		<title data-l10n-id="itemSelector_windowTitle" data-l10n-client-name>Zotero Item Selector</title>
+ 	</head>
+-	<body>
++	<body class="references-selector">
+ 		<div id="label" data-l10n-id="itemSelector_title">Select which items you'd like to add to your library:</div>
+ 		<div id="item-selector"></div>
+ 		<div id="buttons">
+--- a/src/common/progressWindow/progressWindow.html
++++ b/src/common/progressWindow/progressWindow.html
+@@ -30,8 +30,9 @@
+ 		<!--END DEBUG-->
+ 		
+ 		<link rel="stylesheet" href="progressWindow.css" />
++		<link rel="stylesheet" href="../references/capture.css" />
+ 	</head>
+-	<body>
++	<body class="references-progress">
+ 		<div id="progress-window" role="dialog"></div>
+ 	</body>
+ </html>

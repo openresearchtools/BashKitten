@@ -31,6 +31,7 @@ run('bash','build.sh','-v',VERSION)
 if OUT.exists():shutil.rmtree(OUT)
 shutil.copytree(WORK/'build/firefox',OUT)
 shutil.copytree(ROOT/'src/references',OUT/'references')
+shutil.copy(ROOT.parent/'web/theme.css',OUT/'references/theme.css')
 shutil.copytree(ROOT/'legal',OUT/'legal')
 shutil.copy(ROOT/'upstream/SOURCE.json',OUT/'legal/connector-source.json')
 for directory in ['preferences','integration','tools','test','offscreen']:
