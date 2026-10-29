@@ -197,6 +197,7 @@ jobs:
         "$SCCACHE_PATH" --show-stats --stats-format=json > artifacts/sccache-gecko.json
         "$SCCACHE_PATH" --show-stats >> "$GITHUB_STEP_SUMMARY"
     - name: Obtain the actual companion component licenses
+      timeout-minutes: 300
       env:
         GH_TOKEN: ${{ github.token }}
         AUTH_RUN: ${{ inputs.auth_run || github.run_id }}
@@ -205,16 +206,18 @@ jobs:
         ENVIRONMENTS_RUN: ${{ inputs.environments_run || github.run_id }}
         OFFICE_RUN: ${{ inputs.office_run || github.run_id }}
       run: |
+        deadline=$((SECONDS + 300 * 60))
         for item in "auth:$AUTH_RUN:auth-termux-$TERMUX_ARCH" "search:$SEARCH_RUN:search-runtime-termux-$TERMUX_ARCH" "node:$NODE_RUN:node-runtime-termux-$TERMUX_ARCH" "display:$ENVIRONMENTS_RUN:display-loader-termux" "os:$ENVIRONMENTS_RUN:os-termux-$TERMUX_ARCH" "office:$OFFICE_RUN:office-termux-$TERMUX_ARCH" "files:$OFFICE_RUN:files-termux-$TERMUX_ARCH"; do
           IFS=: read -r target run artifact <<< "$item"
-          ready=false
-          for attempt in $(seq 1 60); do
+          while true; do
             count=$(gh api --paginate "repos/openresearchtools/bashkitten/actions/runs/$run/artifacts" --jq ".artifacts[] | select(.name == \"$artifact\" and .expired == false) | .id" | wc -l)
-            if [ "$count" = 1 ]; then ready=true; break; fi
-            echo "Waiting for $artifact from run $run ($attempt/60)"
+            if [ "$count" = 1 ]; then break; fi
+            status=$(gh api "repos/openresearchtools/bashkitten/actions/runs/$run" --jq '.status')
+            if [ "$status" = completed ]; then echo "Required $artifact is missing from completed run $run" >&2; exit 1; fi
+            if (( SECONDS >= deadline )); then echo "Shared 300-minute companion deadline expired waiting for $artifact from run $run" >&2; exit 1; fi
+            echo "Waiting for $artifact from run $run within the shared companion deadline"
             sleep 30
           done
-          test "$ready" = true
           gh run download "$run" --repo "openresearchtools/bashkitten" --name "$artifact" --dir "$RUNNER_TEMP/companion/$target"
         done
         python3 agent/packaging/android-notices.py --architecture "$TERMUX_ARCH" \

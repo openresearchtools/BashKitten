@@ -114,6 +114,7 @@ jobs:
     - name: Install assembly tools
       run: sudo apt-get update && sudo apt-get install -y zstd python3
     - name: Download native components for this source
+      timeout-minutes: 300
       env:
         AUTH_RUN: ${{ inputs.auth_run }}
         SEARCH_RUN: ${{ inputs.search_run }}
@@ -121,11 +122,13 @@ jobs:
         ENVIRONMENTS_RUN: ${{ inputs.environments_run }}
         OFFICE_RUN: ${{ inputs.office_run }}
       run: |
+        deadline=$((SECONDS + 300 * 60))
         for item in "auth:$AUTH_RUN:auth-$BROWSER_TARGET" "search:$SEARCH_RUN:search-runtime-$BROWSER_TARGET" "node:$NODE_RUN:node-runtime-$BROWSER_TARGET" "machines:$ENVIRONMENTS_RUN:machines-runtime-$BROWSER_TARGET" "display:$ENVIRONMENTS_RUN:display-runtime-$BROWSER_TARGET" "guest:$ENVIRONMENTS_RUN:guest-packages-$BROWSER_TARGET" "office:$OFFICE_RUN:office-$BROWSER_TARGET" "files:$OFFICE_RUN:files-$BROWSER_TARGET"; do
           IFS=: read -r target run artifact <<< "$item"
           while ! gh api "repos/openresearchtools/bashkitten/actions/runs/$run/artifacts?per_page=100" --jq '.artifacts[] | select(.expired == false) | .name' | grep -Fxq "$artifact"; do
             status=$(gh api "repos/openresearchtools/bashkitten/actions/runs/$run" --jq '.status')
             if [ "$status" = completed ]; then echo "Required $artifact is missing from completed run $run" >&2; exit 1; fi
+            if (( SECONDS >= deadline )); then echo "Shared 300-minute companion deadline expired waiting for $artifact from run $run" >&2; exit 1; fi
             sleep 30
           done
           gh run download "$run" --repo openresearchtools/bashkitten --name "$artifact" --dir "$RUNNER_TEMP/companion/$target"
