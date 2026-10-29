@@ -4,6 +4,54 @@ Requirements are in [the integration plan](files-office-bibliography-plan.md).
 This record separates research/temporary comparison evidence from implementation
 and installed-product acceptance. It does not claim completed integration.
 
+## Live integration checkpoint — 29 October 2026
+
+The current full Actions run is `40787710453`, from
+`eb56a3a10ebc5bbba76c364dac1273ed0458e418`. Both Linux and both Android browser
+compiles passed. Android packaging exhausted its old 30-minute companion wait
+while all four native Office builds were still running. The bounded shared wait
+correction is committed in `a3c456e8a8` and deployed to the four builder repos;
+it does not change those already-running workflows. Final packages and a coherent
+candidate containing subsequent fixes remain unverified.
+
+Installed testing still uses the isolated `4be2563e5e` browser with explicitly
+recorded component overlays. It is not acceptance of a newer complete package.
+The existing Weston viewer/input seat was restored before continuing trusted
+native input tests; earlier unfocused clicks are not successful UI evidence.
+
+- Native Office first-use project/style binding and two-source insertion ran in
+  Writer, Calc and Impress. Writer citation editing, bibliography and style
+  changes were saved through the actual UI. Complete mobile, history and
+  concurrent-edit UI coverage remains outstanding.
+- A moved Office runtime exposed a stale native systemplate alias: the cache
+  compared only the source revision, so kit font paths retained the previous
+  installation prefix. `0ec5251785` includes the engine path in that existing
+  cache key. Native setup then repaired the alias; the same saved document
+  exported/downloaded successfully with embedded fonts, citations and bibliography.
+  This uses upstream setup, not a separate rendering or font implementation.
+- Real References capture retained the chosen project while another project
+  became active, including the native multiple-item selector and cancellation.
+  Capture `1.0.4` removes the donor's conflicting screenshot shortcut while
+  retaining native user-configurable commands. Android capture on the older
+  installed APK is absent; current-APK acceptance is still required.
+- The ten-identifier resolver comparison and actual browser continuation are
+  recorded separately. Native metadata-to-Extra preservation is committed in
+  `25d5bd662e`; manual attachment parenting in `cf05cb3e15`. Further installed
+  capture/manager flows, real remote routing and complete stock Pi Office work
+  remain in progress, not accepted from source checks alone.
+- Source collection now retains original Go proxy metadata (`421f46a879`).
+  Search's exact Rust runtime sources/notices are recorded in `fe14e6d016`, and
+  component-prefixed native notices reach offline About through `c78d90fe39`.
+  These are corrections for the next complete source/package collection.
+
+Evidence lives outside Git under `BashkittenBuild/verification/`, including
+`restored-native-seat-20261029`, `office-native-ui-20261029`,
+`references-capture-ui-20261029` and `references-real-parity-20261028`.
+The checkpoints below are historical: their earlier archive-retention statements
+do not describe current Git storage. Dependency archives now use the verified
+external source cache and matching corresponding-source artifacts; the completed
+history cleanup is recorded separately in `docs/history/`.
+
 ## Implementation started — 28 October 2026
 
 The user authorized implementation of the complete plan, parallel module work,
