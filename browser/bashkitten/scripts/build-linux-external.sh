@@ -121,7 +121,7 @@ fi
 # read-only from the developer repository. This avoids copying and recompressing
 # Firefox's multi-gigabyte history; all generated files still stay external.
 git clone --shared --no-checkout -- "${source_repo}" "${checkout_repo}"
-browser_inputs=(browser references/connector references/vendor/translators references/legal agent/packaging)
+browser_inputs=(browser references/connector references/vendor/translators references/legal references/web agent/packaging)
 git -C "${checkout_repo}" sparse-checkout set "${browser_inputs[@]}"
 git -C "${checkout_repo}" checkout --detach "${commit}"
 
