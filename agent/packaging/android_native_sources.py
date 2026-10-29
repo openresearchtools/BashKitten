@@ -20,14 +20,35 @@ def retained_path(record):
 
 
 def download_pin(record):
+    member = record.get('member')
+    archive_sha = record.get('sourceArchiveSha256')
+    if 'member' in record or 'sourceArchiveSha256' in record:
+        if (not isinstance(member, str) or not member or
+                PurePosixPath(member).is_absolute() or '..' in PurePosixPath(member).parts or
+                not isinstance(archive_sha, str) or not re.fullmatch(r'[a-f0-9]{64}', archive_sha)):
+            raise ValueError('Invalid pinned native license archive member')
     url = record.get('url') or record.get('sourceUrl')
     if not url:
         repository, commit = record.get('repository', ''), record.get('commit', '')
         if not re.fullmatch(r'https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository) or not re.fullmatch(r'[a-f0-9]{40}', commit):
             raise ValueError('Missing immutable native source URL')
         url = 'https://codeload.github.com/' + repository.removeprefix('https://github.com/') + '/tar.gz/' + commit
-    return {'url': url, 'sha256': record['sha256'],
-            **({'size': record['size']} if 'size' in record else {})}
+    return {'url': url, 'sha256': archive_sha if member else record['sha256'],
+            **({'size': record['size']} if not member and 'size' in record else {})}
+
+
+def license_member(record, payload):
+    pin = download_pin(record)
+    if not record.get('member') or hashlib.sha256(payload).hexdigest() != pin['sha256']:
+        raise ValueError('Native license source archive checksum mismatch')
+    with tarfile.open(fileobj=io.BytesIO(payload)) as upstream:
+        matches = [entry for entry in upstream if entry.name == record['member']]
+        if len(matches) != 1 or not matches[0].isfile():
+            raise ValueError('Missing or ambiguous native license source member: ' + record['member'])
+        data = upstream.extractfile(matches[0]).read()
+    if not data.strip() or hashlib.sha256(data).hexdigest() != record['sha256']:
+        raise ValueError('Native license source member checksum mismatch: ' + record['member'])
+    return data
 
 
 def collect(read, archive, *, source_manifest=None, apk=None, fetch_source=None):
@@ -50,7 +71,17 @@ def collect(read, archive, *, source_manifest=None, apk=None, fetch_source=None)
     def add(record):
         path = retained_path(record)
         downloadable = record.get('url') or record.get('sourceUrl') or record.get('repository')
-        payload = fetch_source(record, path).read_bytes() if fetch_source and downloadable else read(path)
+        if 'member' in record or 'sourceArchiveSha256' in record:
+            retained = read(path)
+            if hashlib.sha256(retained).hexdigest() != record['sha256']:
+                raise ValueError('Android native source checksum mismatch: ' + path)
+            if fetch_source is None:
+                raise ValueError('Original native license source archive is required: ' + path)
+            payload = license_member(record, fetch_source(record, path).read_bytes())
+            if payload != retained:
+                raise ValueError('Retained native license differs from its original source member: ' + path)
+        else:
+            payload = fetch_source(record, path).read_bytes() if fetch_source and downloadable else read(path)
         if hashlib.sha256(payload).hexdigest() != record['sha256']:
             raise ValueError('Android native source checksum mismatch: ' + path)
         if path not in written:

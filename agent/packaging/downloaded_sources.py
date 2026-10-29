@@ -5,6 +5,7 @@ import json
 import hashlib
 import importlib.util
 from pathlib import Path, PurePosixPath
+from android_native_sources import download_pin
 
 
 def records(read):
@@ -14,6 +15,18 @@ def records(read):
         return json.loads(read(name))
 
     def add(manifest, record, paths, url=None):
+        for path in paths:
+            if PurePosixPath(path).is_absolute() or '..' in PurePosixPath(path).parts:
+                raise ValueError('Invalid source inventory path: ' + path)
+        if 'member' in record or 'sourceArchiveSha256' in record:
+            pin = download_pin(record)
+            for path in paths:
+                if hashlib.sha256(read(path)).hexdigest() != record['sha256']:
+                    raise ValueError('Retained license checksum mismatch: ' + path)
+            # The full notice is ordinary tracked source. The original archive
+            # has its own digest and no removed working-tree archive path.
+            result.append({**pin, 'manifest': manifest, 'paths': []})
+            return
         url = url or record.get('url') or record.get('sourceUrl') or record.get('archiveURL')
         if not url and record.get('repository', '').startswith('https://github.com/'):
             url = 'https://codeload.github.com/' + record['repository'].removeprefix('https://github.com/').removesuffix('.git') + '/tar.gz/' + record['commit']
@@ -29,9 +42,6 @@ def records(read):
         pin = {'url': url, 'sha256': record['sha256']}
         if 'size' in record:
             pin['size'] = record['size']
-        for path in paths:
-            if PurePosixPath(path).is_absolute() or '..' in PurePosixPath(path).parts:
-                raise ValueError('Invalid source inventory path: ' + path)
         result.append({**pin, 'manifest': manifest, 'paths': paths})
 
     for base in ('agent/vendor/npm', 'references/vendor/npm', 'office/vendor/npm',
