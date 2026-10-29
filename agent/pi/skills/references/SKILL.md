@@ -1,23 +1,29 @@
 ---
 name: references
-description: Manage project reference libraries, collections, metadata, identifiers, abstracts, PDFs, full text and citation styles through BashKitten References.
+description: Manage independent project databases, metadata, identifiers, abstracts, PDFs, full text and citation styles through BashKitten References.
 ---
 
 # References
 
 Discover `references` with stock tool search. It uses this Pi worker's authorized
 backend and the same service as the human UI. Start with `GET /projects`; choose
-an explicit project ID. Libraries are separate databases outside repositories;
-attachments belong to that project's `Bibliography` folder. Never read/write the
+an explicit References project ID. Each backend initially provides a ready-to-use `Default`. Explicit later
+rename/archive/delete follows the normal lifecycle; never recreate a deliberately
+deleted database.
+These are independent named databases, not BashKitten chat/workspace projects:
+one workspace may use several. Users and agents create them with `POST /projects
+{name,cwd?}` and select one returned ID for subsequent calls. Databases stay
+outside repositories; attachments use the project's independently chosen
+`bibliographyPath` (a Bibliography folder). There are no collections. Never read/write the
 database, start another resolver, infer a destination from a browser tab, or reuse
 another backend's credentials. Existing shared services start on demand.
 
 The tool accepts `{method,path,body?,file?}`. A local `file` streams through the
 existing upload owner; never encode its bytes into model messages. Import uses
-`POST /projects/PROJECT/import` with optional `target`, `encoding` and stable
+`POST /projects/PROJECT/import` with optional `encoding` and stable
 `requestId` (32 MiB). Attachments use `POST /projects/PROJECT/connector/saveAttachment`
 with `parentKey`, optional `title`, `contentType`, `requestId`; standalone uploads
-use `saveStandaloneAttachment` and optional collection `target` (2 GiB). Preserve
+use `saveStandaloneAttachment` (2 GiB). Preserve
 recovery receipts after cancellation or lost responses; retry the unchanged file
 and same request ID to recover its acknowledged job/attachment.
 
@@ -31,26 +37,31 @@ a citation identity. Map legacy identities explicitly before using them.
 | Bounded library search | `GET /items?q=TEXT&limit=50&sort=title`; keep returned `next` cursor and library version. Use `cursor=...` for the next page; reload on concurrent-change conflict. `format=csljson` adds derived CSL, preserving native metadata. |
 | Item and cached full text | `GET /items/KEY`, `/items/KEY/children?limit=50`, `/items/ATTACHMENT/fulltext` and `/items/ATTACHMENT/file`. Read returned coverage counts and missing-text status. |
 | Create/update/delete | `POST /items` with `{data:{itemType,...}}`; `PATCH /items/KEY` with `{version:PREVIOUS,data:{...}}`; `DELETE /items/KEY` with `{version:PREVIOUS}`. Preserve full creator records, metadata, tags, notes and relations. |
-| Collections | `GET /collections?limit=50`, `GET /collections/KEY`, `POST /collections` with `{data:{name,parentCollection?}}`, versioned `PATCH`/`DELETE /collections/KEY`. |
-| Identifier import | `POST /identifiers/import` with `{identifiers:[...],target:COLLECTION_OR_NULL,resolvePDFs:false,requestId:STABLE_ID}`; at most 1,000 selected identifiers. Verified identifiers revealed by native translation are checked again before writing. |
-| OpenAlex | `POST /openalex/search` with `{query,filter?,sort?,page:1,pageSize:80,queryMode:'boolean',field:'all'}`; follow `nextCursor` or `nextPage`. `POST /openalex/import` accepts selected `records:[raw,...]` (at most 1,000) or `search:{query,filter?,sort?,queryMode?,field?,exact?}` plus an explicit positive `limit`. Both accept `target`, `resolvePDFs` and stable `requestId`; search imports page inside the backend. |
+| Identifier import | `POST /identifiers/import` with `{identifiers:[...],resolvePDFs:false,requestId:STABLE_ID}`; at most 1,000 selected identifiers. Verified identifiers revealed by native translation are checked again before writing. |
+| OpenAlex | `POST /openalex/search` with `{query,filter?,sort?,page:1,pageSize:80,queryMode:'boolean',field:'all'}`; follow `nextCursor` or `nextPage`. `POST /openalex/import` accepts selected `records:[raw,...]` (at most 1,000) or `search:{query,filter?,sort?,queryMode?,field?,exact?}` plus an explicit positive `limit`. Both accept `resolvePDFs` and stable `requestId`; search imports page inside the backend. |
 | Shared enrichment/PDF queue | `POST /items/enrich` or `/items/resolve-pdfs` with `{keys:[...],requestId:STABLE_ID}`. Enrichment never creates records. |
 | Jobs | `GET /jobs?limit=80` recovers recent work; `GET /jobs/ID` reads progress, DELETE cancels, POST `/jobs/ID/resume` resumes partial/interrupted work. Search-import summaries contain only 80 samples; read `/jobs/ID/results?limit=80&cursor=...` (or `start`) for remaining outcomes. Carry returned `version`; reload on 409. |
-| Bulk management | `POST /items/manage` with `{operation:'add-collection'|'remove-collection'|'delete'|'restore',items:[{key,version}],collection?,requestId}`; at most 1,000 selected records. |
+| Bulk management | `POST /items/manage` with `{operation:'delete'|'restore',items:[{key,version}],requestId}`; at most 1,000 selected records. |
 | Saved searches | Versioned GET/POST `/searches` and GET/PATCH/DELETE `/searches/KEY` preserve the shared UI search specification. |
-| Native import/export | Small pasted text: POST `/import` with `{text,target?,requestId,summary:true}`. Actual files: use `file`. GET `/translators/export` lists native formats/options and `memoryNotice`. POST `/items/export` with `{selection:{scope:'selected',keys:[...]},translatorID,options,requestId,delivery:'file'}` starts a cancellable `metadata-export` job. Other explicit scopes are `library`, `collection` with its key, and `search` with frozen `q`, `collection`, `deleted`, `sort`, `direction`; include the last indexed page `version` when available. Stale selections fail with 409; reload rather than silently changing the export. The server pages all parents/children into private input and invokes one native translator. Legacy small `keys` requests remain supported. Use `delivery:'file'` to return an expiring private export descriptor; GET its project-relative `downloadPath` for a local `filePath` and scoped browser `url`. No project files or library items are added. Large inline outputs automatically return the same descriptor. Attachment bytes use normal download routes; `exportFileData` is explicitly unsupported by metadata export. |
+| Native import/export | Small pasted text: POST `/import` with `{text,requestId,summary:true}`. Actual files: use `file`. GET `/translators/export` lists native formats/options and `memoryNotice`. POST `/items/export` with `{selection:{scope:'selected',keys:[...]},translatorID,options,requestId,delivery:'file'}` starts a cancellable `metadata-export` job. Other explicit scopes are `library` and `search` with frozen `q`, `deleted`, `sort`, `direction`; include the last indexed page `version` when available. Stale selections fail with 409; reload rather than silently changing the export. The server pages all parents/children into private input and invokes one native translator. Legacy small `keys` requests remain supported. Use `delivery:'file'` to return an expiring private export descriptor; GET its project-relative `downloadPath` for a local `filePath` and scoped browser `url`. No project files or library items are added. Large inline outputs automatically return the same descriptor. Attachment bytes use normal download routes; `exportFileData` is explicitly unsupported by metadata export. |
 | Schema/styles | `GET /schema`, `GET /styles?query=TEXT&limit=50`; whole-state `POST /citations/render` is shared with Office. |
 | Safe service configuration | `GET /settings`; user `/review-setup` or native References settings owns key entry. Never solicit API keys in model messages. |
-| Copied snapshots | Explicit POST `/citations/import-snapshots` with `{items:{OLD_ID:CSL,...},requestId,target?}` imports up to 100 snapshots/4 MiB through native CSL conversion and returns `mapping`. Existing current-project IDs are reused; foreign IDs never silently retarget. Office's `citations.import-snapshots` also safely relinks managed fields. |
+| Copied snapshots | Explicit POST `/citations/import-snapshots` with `{items:{OLD_ID:CSL,...},requestId}` imports up to 100 snapshots/4 MiB through native CSL conversion and returns `mapping`. Existing current-project IDs are reused; foreign IDs never silently retarget. Office's `citations.import-snapshots` also safely relinks managed fields. |
 
-Backend-relative catalogue routes: GET `/projects?includeArchived=true`, POST
-`/projects {name,cwd}`, PATCH `/projects/ID {name}`, POST `/projects/ID/archive
-{archived}`. Relink uses POST `/projects/ID/relink {cwd,expectedCwd}` after moving
-the actual Bibliography files; the owner verifies paths/hashes and preserves chat
-history. DELETE `/projects/ID` unregisters navigation while retaining archived
-metadata. Separate deliberate deletion, DELETE `/projects/ID/library`, requires
-`{confirmProjectId:ID,attachments:'keep'|'delete'}` and permanently retires that
-library identity. Archive is not permission to delete.
+Backend-relative catalogue routes: GET `/projects?includeArchived=true` returns
+`id,name,bibliographyPath,archived,isDefault,revision`. POST `/projects {name,cwd?}`
+creates an independent database; optional `cwd` is the parent of Bibliography,
+not a workspace authorization. PATCH `/projects/ID {name}` renames it; POST
+`/projects/ID/archive {archived}` archives/unarchives navigation. Move the actual
+attachment folder through POST `/projects/ID/relink
+{bibliographyPath,expectedBibliographyPath,expectedRevision?}`. The existing owner
+copies/verifies files and atomically updates stored paths; inspect returned
+status/errors before reporting success. DELETE `/projects/ID` unregisters its
+navigation without deleting data. DELETE `/projects/ID/library` requires
+`{confirmProjectId:ID,attachments:'keep'|'delete'}` and permanently retires the
+database identity. Archive is not permission to delete. Existing legacy IDs,
+items, citation identities and attachment locations survive migration; legacy
+collection memberships are retained as inert data and cannot be edited.
 
 An attachment or export GET returns its authorized owning-backend `filePath` and
 ordinary browser `url`. To view it, use the existing browser `tabs.create` with
@@ -86,7 +97,7 @@ Office's existing `citations.bind` with one registered `projectId`,
 inspection. Search/read/import for
 that document only within its bound project database; never resolve a bare key
 against another library. The file's owning project or a browser selection does
-not replace this binding. A library switch with managed citations/bibliography
+not replace this binding. A References project switch with managed citations/bibliography
 requires explicit user authorization before `convertExistingToText:true`: it
 unlinks managed anchors while retaining rich rendered content and formatting.
 Cancellation leaves the binding/content untouched. Library metadata edits alone

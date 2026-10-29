@@ -2171,3 +2171,31 @@ must be visible to users and the existing agent browser-control API, with pendin
 status and a way to visit the tab when human input is required. Captcha completion
 remains human work. Reuse the existing authorized dispatch and durable resolver
 request; no separate browser, resolver credential store or transport fallback.
+
+
+## 23. Independent References projects and focused verification — 29 October 2026
+
+The user replaces the previous workspace-to-library relationship with independent
+named References projects. Each project is one self-contained database, created
+and selected by users or agents; every backend initially provides Default.
+After that, explicit rename/archive/delete applies normally, without recreating
+a deliberately deleted database. A BashKitten workspace may use several References projects. Their identities
+must remain distinct from the workspace/file authorization used by Files and
+Office. Preserve existing database IDs, records, citation identities and
+attachments during migration.
+
+Remove collections from capture, manager, Office, agent controls and public API.
+Keep all existing items and attachment files; legacy membership data may remain
+in storage without exposing another organizing layer. The manager opens directly
+with clickable projects in its left sidebar, New project there, and a compact
+Settings gear per project. Settings names the project and displays its exact
+Bibliography folder; applying a changed folder moves/verifies the files through
+the existing storage owner. Capture and Office select only a References project.
+Changing a document's project retains the existing explicit confirmation to
+unlink managed citations while preserving their rendered text and formatting.
+
+The current verification cycle is limited to the planned Files/Office/References
+features, model/audio changes, reported UI fixes and their direct integrations.
+Do not repeat unrelated whole-app campaigns or large identifier benchmarks.
+Historical evidence remains historical; the integrated changed flows still need
+their focused installed checks and the normal matching source/license gate.

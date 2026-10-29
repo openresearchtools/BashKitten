@@ -22,8 +22,8 @@ export async function importReferenceFile(
   }
   const isImport = route[1] === "import";
   const allowed = isImport
-    ? ["target", "requestId", "encoding", "summary"]
-    : ["target", "requestId", "parentKey", "title", "contentType", "url"];
+    ? ["requestId", "encoding", "summary"]
+    : ["requestId", "parentKey", "title", "contentType", "url"];
   if (Object.keys(options).some((key) => !allowed.includes(key)))
     throw Error("Unsupported reference-file transfer option");
   if (
@@ -57,7 +57,6 @@ export async function importReferenceFile(
     const query = new URLSearchParams({
       sessionID: requestId,
       summary: "true",
-      target: options.target || "",
     });
     const begin = await call("upload-begin", {
       method: isImport ? "import" : route[2],
@@ -74,7 +73,6 @@ export async function importReferenceFile(
                 parentItemID: options.parentKey,
                 title: options.title || basename(filePath),
                 url: options.url || "",
-                target: options.target,
                 contentType:
                   options.contentType ||
                   {

@@ -610,14 +610,19 @@ class AgentView {
       return { apiVersion: 1, body: { ok: true } };
     }
     if (envelope.operation === "context") {
-      const snapshot = await this.sidecar.navigation("snapshot");
+      const bootstrap = await AgentRemotes.request(entry.connection, "/api/bootstrap");
       if (!current()) throw new Error("The selected backend changed.");
-      const projects = (snapshot.projects || []).map(({ id, name }) => ({ id, name }));
-      const selectedProjectId = snapshot.sessions?.find(session => session.id === snapshot.selected)?.projectId || null;
-      return { apiVersion: 1, body: { backendId, projects, selectedProjectId } };
+      if (bootstrap.status !== 200 || !bootstrap.data?.authenticated || !bootstrap.data.csrf) throw new Error("Sign in to the owning backend first.");
+      const response = await AgentRemotes.request(entry.connection, "/api/references/connector", {
+        method: "POST", body: { apiVersion: 1, operation: "context" }, csrf: bootstrap.data.csrf,
+      });
+      if (!current()) throw new Error("The selected backend changed.");
+      if (response.status !== 200 || !Array.isArray(response.data?.projects)) throw new Error(response.data?.error || "References projects are unavailable.");
+      return { apiVersion: 1, body: { ...response.data, backendId, selectedProjectId: response.data.referenceProjectId || null } };
     }
     if (!["request", "open"].includes(envelope.operation) || envelope.backendId !== backendId ||
-        typeof envelope.projectId !== "string" || !/^[a-f0-9-]{36}$/.test(envelope.projectId)) {
+        !((envelope.operation === "open" && envelope.projectId == null) ||
+          (typeof envelope.projectId === "string" && /^[a-f0-9-]{36}$/.test(envelope.projectId)))) {
       throw new Error("Select the capture's owning backend and project.");
     }
     if (envelope.operation === "open") {

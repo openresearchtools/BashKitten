@@ -38,7 +38,7 @@ export async function publish(value, flags, signal) {
   } else process.stdout.write(text);
 }
 export async function requestCLI(args, { component = 'references', method, path, project = false, help } = {}, signal) {
-  const flags = options(args, ['--session', '--project', '--method', '--path', '--input', '--file', '--encoding', '--target', '--request-id', '--output', '--overwrite', '--help']);
+  const flags = options(args, ['--session', '--project', '--method', '--path', '--input', '--file', '--encoding', '--request-id', '--output', '--overwrite', '--help']);
   if (flags['--help']) { process.stdout.write(`${help}\n`); return; }
   const projectId = flags['--project'];
   if (project && (!projectId || !/^[A-Za-z0-9._~-]+$/.test(projectId))) throw Error('--project must be an explicit project ID');
@@ -49,14 +49,13 @@ export async function requestCLI(args, { component = 'references', method, path,
     const reply = await importReferenceFile(resolve(flags['--file']), actualPath, {
       ...await inputFile(flags['--input'], signal),
       ...(flags['--encoding'] ? { encoding: flags['--encoding'] } : {}),
-      ...(flags['--target'] ? { target: flags['--target'] } : {}),
       ...(flags['--request-id'] ? { requestId: flags['--request-id'] } : {}),
     }, { signal, request: requestForSession(flags['--session']) });
     await publish(reply, flags, signal);
     return;
   }
-  if (['--encoding', '--target', '--request-id'].some(flag => flags[flag]))
-    throw Error('--encoding, --target and --request-id require --file');
+  if (['--encoding', '--request-id'].some(flag => flags[flag]))
+    throw Error('--encoding and --request-id require --file');
   const reply = await applicationRequest(component, method || flags['--method'] || 'GET', actualPath,
     await inputFile(flags['--input'], signal), { signal, request: requestForSession(flags['--session']) });
   await publish(reply, flags, signal);

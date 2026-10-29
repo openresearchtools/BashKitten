@@ -7,7 +7,7 @@ import { uploadFile } from "./uploads.js";
 
 const pastedByteLimit = 256 * 1024;
 
-export function importReferences({ scope, target = null, onJob }) {
+export function importReferences({ scope, onJob }) {
   const d = dialog("Import references"),
     controller = new AbortController(),
     file = node("input", { type: "file" }),
@@ -43,7 +43,7 @@ export function importReferences({ scope, target = null, onJob }) {
   ])
     encoding.append(node("option", { value }, label));
   d.body.append(
-    node("p", {}, "Destination: " + (target?.data?.name || "All references")),
+    node("p", {}, "Import into this Reference project."),
     node(
       "p",
       { class: "notice" },
@@ -82,7 +82,6 @@ export function importReferences({ scope, target = null, onJob }) {
               queryString: new URLSearchParams({
                 sessionID: requestId,
                 summary: "true",
-                target: target?.key || "",
               }).toString(),
             },
             signal: controller.signal,
@@ -107,7 +106,6 @@ export function importReferences({ scope, target = null, onJob }) {
             method: "POST",
             body: {
               text: content,
-              target: target?.key || null,
               requestId,
               summary: true,
             },

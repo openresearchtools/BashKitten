@@ -61,6 +61,10 @@ The optional `backends` array carries the same authorized descriptors for each
 backend if the native owner supports backend choice. No service starts merely
 for translator detection; metadata/code comes from the package.
 
+The manager action opens directly, including the New project state after all
+projects were deliberately deleted; its `open` request may omit `projectId`.
+Capture requests always require an explicit project ID.
+
 Every save begins with an explicit backend and References project choice and a
 fresh capture session generated in the background before translation starts.
 The session stays bound to that backend, project and source tab. The capture

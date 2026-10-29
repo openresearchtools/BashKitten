@@ -1279,30 +1279,11 @@ public final class AgentRuntime {
                 done.accept(new JSONObject().put("apiVersion", 1).put("body", new JSONObject().put("ok", true)));
                 return;
             }
-            if ("context".equals(envelope.optString("operation"))) {
-                navigation("snapshot", new JSONObject(), snapshot -> {
-                    try {
-                        if (!current.getAsBoolean()) throw new IllegalStateException("The selected backend changed.");
-                        JSONArray projects = new JSONArray(), sourceProjects = snapshot.optJSONArray("projects");
-                        if (sourceProjects != null) for (int i = 0; i < sourceProjects.length(); i++) {
-                            JSONObject project = sourceProjects.getJSONObject(i);
-                            projects.put(new JSONObject().put("id", project.getString("id")).put("name", project.getString("name")));
-                        }
-                        Object projectId = JSONObject.NULL;
-                        JSONArray sessions = snapshot.optJSONArray("sessions");
-                        if (sessions != null) for (int i = 0; i < sessions.length(); i++) {
-                            JSONObject chat = sessions.getJSONObject(i);
-                            if (chat.optString("id").equals(snapshot.optString("selected"))) projectId = chat.opt("projectId");
-                        }
-                        done.accept(new JSONObject().put("apiVersion", 1).put("body", new JSONObject().put("backendId", backend).put("projects", projects).put("selectedProjectId", projectId)));
-                    } catch (Exception error) { failure.accept(error.getMessage()); }
-                }, failure);
-                return;
-            }
-            if (!("request".equals(envelope.optString("operation")) || "open".equals(envelope.optString("operation"))) || !backend.equals(envelope.optString("backendId")) ||
-                !envelope.optString("projectId").matches(UUID_PATTERN)) throw new SecurityException("Select the capture's owning backend and project.");
+            final boolean contextRequest = "context".equals(envelope.optString("operation"));
+            if (!contextRequest && (!("request".equals(envelope.optString("operation")) || "open".equals(envelope.optString("operation"))) || !backend.equals(envelope.optString("backendId")) ||
+                !(("open".equals(envelope.optString("operation")) && envelope.isNull("projectId")) || envelope.optString("projectId").matches(UUID_PATTERN)))) throw new SecurityException("Select the capture's owning backend and project.");
             if ("open".equals(envelope.optString("operation"))) {
-                openApplication(new JSONObject().put("component", "references").put("projectId", envelope.getString("projectId")), () -> {
+                openApplication(new JSONObject().put("component", "references").put("projectId", envelope.opt("projectId")), () -> {
                     try { done.accept(new JSONObject().put("apiVersion", 1).put("body", new JSONObject().put("ok", true))); }
                     catch (Exception error) { failure.accept(error.getMessage()); }
                 }, failure);
@@ -1316,7 +1297,11 @@ public final class AgentRuntime {
                     ReferencesHost.request(source, origin, "/api/references/connector", bootstrap.getString("csrf"), envelope, response -> {
                         try {
                             if (!current.getAsBoolean()) throw new IllegalStateException("The selected backend changed.");
-                            done.accept(response.put("apiVersion", 1));
+                            if (contextRequest) {
+                                if (response.optJSONArray("projects") == null) throw new IllegalStateException("References projects are unavailable.");
+                                response.put("backendId", backend).put("selectedProjectId", response.opt("referenceProjectId"));
+                                done.accept(new JSONObject().put("apiVersion", 1).put("body", response));
+                            } else done.accept(response.put("apiVersion", 1));
                         } catch (Exception error) { failure.accept(error.getMessage()); }
                     }, failure);
                 } catch (Exception error) { failure.accept(error.getMessage()); }

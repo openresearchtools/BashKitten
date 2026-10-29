@@ -14,8 +14,8 @@
     <div class="app" id="app" data-pane="items">
       <header class="app-header">
         <h1>References</h1>
-        <nav class="mobile-tabs" aria-label="Library panes">
-          <button type="button" data-pane="libraries">Libraries</button
+        <nav class="mobile-tabs" aria-label="References panes">
+          <button type="button" data-pane="libraries">Projects</button
           ><button type="button" data-pane="items">Items</button
           ><button type="button" data-pane="details">Details</button>
         </nav>
@@ -23,29 +23,25 @@
         <button id="settings" type="button">Settings</button>
       </header>
       <div class="library-layout">
-        <aside class="libraries" aria-label="Project libraries">
-          <h2>Project library</h2>
-          <div class="toolbar">
-            <button id="libraryMenu" type="button">Library…</button
-            ><label class="field"
+        <aside class="libraries" aria-label="Reference projects">
+          <h2>Projects</h2>
+          <button id="newProject" type="button">New project</button>
+          <div class="toolbar"><label class="field"
               ><input id="showArchived" type="checkbox" />Show archived</label
             >
           </div>
           <div
             id="projects"
             class="project-list"
-            aria-label="Project libraries"
+            aria-label="Projects"
           ></div>
           <div class="toolbar">
-            <button id="newCollection" type="button">New collection</button
-            ><button id="collectionMenu" type="button">Collection…</button>
             <button id="savedSearches" type="button">Saved searches</button>
             <button id="deletedItems" type="button">Deleted items</button>
           </div>
-          <div id="collections" class="collection-container"></div>
         </aside>
         <main class="library-main">
-          <div class="toolbar" aria-label="Library actions">
+          <div class="toolbar" aria-label="Project references">
             <button id="newItem" type="button">New item</button
             ><button id="identifiers" type="button">Add by Identifier</button
             ><button id="importReferences" type="button">Import…</button
@@ -69,8 +65,6 @@
               <option value="">Selected items…</option>
               <option value="enrich">Enrich abstracts</option>
               <option value="resolve-pdfs">Find available PDFs</option>
-              <option value="collection">Add to collection</option>
-              <option value="remove-collection">Remove from collection</option>
               <option value="delete">Move to deleted items</option>
               <option value="restore">Restore deleted items</option>
               <option value="export">Export selected items…</option>

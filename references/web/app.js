@@ -15,7 +15,6 @@ import {
   renderedHTML,
 } from "./common.js";
 import { VirtualList } from "./virtual-list.js";
-import { Collections } from "./collections.js";
 import { chooseCitation } from "./shared-citation-dialog.js";
 import {
   exportReferences,
@@ -37,8 +36,6 @@ let projectId,
   projectRecords = [],
   projectReady = false,
   items,
-  collections,
-  collection = null,
   sort = "title",
   direction = "asc",
   detail = null,
@@ -94,17 +91,39 @@ async function boot() {
   context = await api.request("context");
   projectRecords = await api.request("projects?includeArchived=true");
   const list = projectRecords;
-  if (list.find((project) => project.id === context.projectId)?.archived)
+  const remembered = history.state?.referencesProject;
+  const selected = list.find((project) => remembered?.backendId === context.backendId && project.id === remembered.projectId)
+    || list.find((project) => !project.archived && project.id === (context.referenceProjectId || context.projectId || context.defaultProjectId))
+    || list.find((project) => !project.archived);
+  if (selected?.archived)
     $("#showArchived").checked = true;
   renderProjectList();
-  if (!list.length) {
-    notify("Create a project in BashKitten to start its library.");
+  if (!selected) {
+    notify("Create a References project or show archived projects to continue.");
     return;
   }
-  if (list.some((project) => project.id === context.projectId))
-    await selectProject(context.projectId);
-  else notify("Select a project library.");
+  await selectProject(selected.id);
+  if (context.unmappedDatabases?.length)
+    notify(context.unmappedDatabases.length + " existing References database folder(s) were preserved but need identity reconciliation before they can be listed.");
 }
+async function reloadProjects() {
+  projectRecords = await api.request("projects?includeArchived=true");
+  renderProjectList();
+}
+$("#newProject").onclick = async () => {
+  if (detailDirty && !confirm("Discard unsaved item changes?")) return;
+  const name = node("input", { required: true, maxlength: 200, autocomplete: "off" });
+  const folder = node("input", { placeholder: "Use the managed References folder" });
+  if (!(await promptFields("New References project", [
+    field("Name", name),
+    field("Parent folder for Bibliography (optional absolute path)", folder),
+  ], { submit: "Create project" }))) return;
+  try {
+    const result = await api.request("projects", { method: "POST", body: { name: name.value, ...(folder.value.trim() ? { cwd: folder.value.trim() } : {}) } });
+    await reloadProjects();
+    await selectProject((result.project || result).id);
+  } catch (error) { notify(error); }
+};
 function renderProjectList() {
   const list = projectRecords.filter(
     (project) => !project.archived || $("#showArchived").checked,
@@ -112,13 +131,11 @@ function renderProjectList() {
   projectList?.destroy();
   $("#projects").replaceChildren();
   const nameCounts = new Map();
-  $("#projects").style.flexBasis =
-    Math.max(52, Math.min(156, list.length * 52)) + "px";
   for (const project of list)
     nameCounts.set(project.name, (nameCounts.get(project.name) || 0) + 1);
   projectList = new VirtualList({
     element: $("#projects"),
-    label: "Project libraries",
+    label: "Projects",
     rowHeight: 52,
     total: list.length,
     key: (project) => project.id,
@@ -126,7 +143,7 @@ function renderProjectList() {
       items: list.slice(start, start + limit),
       total: list.length,
     }),
-    render: (project) =>
+    render: (project) => node("div", { class: "project-row" },
       node(
         "span",
         { class: "source-label" },
@@ -135,12 +152,14 @@ function renderProjectList() {
           "small",
           {},
           project.backendName || context.backendName || context.backendId,
+          project.isDefault ? " · Default" : "",
           project.archived ? " · Archived" : "",
           nameCounts.get(project.name) > 1 && project.cwd
             ? " · " + project.cwd
             : "",
         ),
       ),
+      button("⚙", (event) => { event.stopPropagation(); openProjectSettings(project); }, { class: "project-settings", "aria-label": "Settings for " + project.name, title: "Project settings" })),
     onSelect: (project) => selectProject(project.id),
   });
   if (projectId) projectList.setSelection([projectId]);
@@ -153,8 +172,6 @@ function updateProjectActions() {
   const available = !!scope && projectReady;
   const editable = available && !currentProject()?.archived;
   for (const id of [
-    "newCollection",
-    "collectionMenu",
     "newItem",
     "identifiers",
     "importReferences",
@@ -173,18 +190,47 @@ function updateProjectActions() {
   ]) {
     $("#" + id).disabled = !available;
   }
-  $("#libraryMenu").disabled = !currentProject();
   for (const option of $("#actions").options)
     option.disabled = !!option.value && option.value !== "export" && !editable;
   $("#actions").disabled = !available;
 }
-$("#libraryMenu").onclick = () => {
-  const project = currentProject();
+function clearProjectSelection() {
+  ++view;
+  detailController?.abort(); rangeController?.abort(); jobListController?.abort();
+  items?.destroy(); items = null; scope = null; projectId = null; projectReady = false;
+  detailDirty = false; detail = null; selection.clear(); activeSearch = "";
+  $("#search").value = "";
+  $("#items").replaceChildren(); $("#details").replaceChildren(); $("#jobs").replaceChildren();
+  history.replaceState({ ...history.state, referencesProject: null }, "");
+}
+let projectSettingsController;
+async function openProjectSettings(project) {
   if (!project) return;
   if (detailDirty && !confirm("Discard unsaved item changes?")) return;
+  projectSettingsController?.abort();
+  const controller = projectSettingsController = new AbortController();
+  try {
+    project = await api.request("projects/" + encodeURIComponent(project.id), { signal: controller.signal });
+    if (controller.signal.aborted) return;
+  } catch (error) { if (!controller.signal.aborted) notify(error); return; }
   manageLibrary({
     api,
     project,
+    onChanged: async changed => {
+      if (changed?.id === projectId && changed.archived) clearProjectSelection();
+      await reloadProjects();
+      const next = projectRecords.find(item => !item.archived);
+      if (!scope && next) await selectProject(next.id);
+      else { updateProjectActions(); if (!scope) notify("Create a References project or show archived projects to continue."); }
+    },
+    onDeleted: async id => {
+      for (const [key, job] of jobs) if (job.projectId === id) jobs.delete(key);
+      if (projectId === id) clearProjectSelection();
+      await reloadProjects();
+      const next = projectRecords.find(item => !item.archived);
+      if (!scope && next) await selectProject(next.id);
+      else { updateProjectActions(); if (!scope) notify("Create a References project or show archived projects to continue."); }
+    },
     onRetired: () => {
       appRetired = true;
       detailDirty = false;
@@ -194,14 +240,13 @@ $("#libraryMenu").onclick = () => {
       jobListController?.abort();
       clearTimeout(jobTimer);
       items?.destroy();
-      collections?.destroy();
       projectList?.destroy();
       scope = null;
       $("#app").replaceChildren(
         node(
           "p",
           { class: "empty-details" },
-          "This library needs to be reopened. Use the dialog, or open References again from BashKitten.",
+          "This project's references need to be reopened. Use the dialog, or open References again from BashKitten.",
         ),
       );
     },
@@ -212,7 +257,6 @@ $("#importReferences").onclick = () => {
   const id = projectId;
   importReferences({
     scope,
-    target: collection,
     onJob: (job) => trackJob(id, job),
   });
 };
@@ -222,37 +266,28 @@ $("#exportReferences").onclick = () => {
     version = items.version ?? undefined,
     order = { sort, direction, version },
     selections = [],
-    projectName = currentProject()?.name || "this library";
+    projectName = currentProject()?.name || "this project";
   if (selection.size)
     selections.push({
       label: selection.size + " selected references",
       selection: { scope: "selected", keys: [...selection.keys()], version },
     });
-  if (activeSearch || collection || deleted)
+  if (activeSearch || deleted)
     selections.push({
       label:
         (deleted
           ? "Deleted items"
-          : activeSearch
-            ? "Search results"
-            : "Collection") +
-        (collection ? " · " + collection.data.name : "") +
+          : "Search results") +
         (activeSearch ? " · “" + activeSearch + "”" : ""),
       selection: {
         scope: "search",
         q: activeSearch,
-        collection: collection?.key,
         deleted: deleted ? 1 : 0,
         ...order,
       },
     });
-  if (collection && activeSearch && !deleted)
-    selections.push({
-      label: "Entire collection · " + collection.data.name,
-      selection: { scope: "collection", collection: collection.key, ...order },
-    });
   selections.push({
-    label: "Entire library · " + projectName + " (excluding deleted items)",
+    label: "All project references · " + projectName + " (excluding deleted items)",
     selection: { scope: "library", deleted: 0, ...order },
   });
   void exportReferences({
@@ -271,11 +306,8 @@ async function selectProject(id) {
   rangeController?.abort();
   jobListController?.abort();
   items?.destroy();
-  collections?.destroy();
   $("#items").replaceChildren();
-  $("#collections").replaceChildren();
   selection.clear();
-  collection = null;
   deleted = false;
   detail = null;
   detailDirty = false;
@@ -283,8 +315,10 @@ async function selectProject(id) {
   projectReady = false;
   projectList.setSelection([id]);
   scope = api.project(id);
+  activeSearch = "";
+  $("#search").value = "";
   updateProjectActions();
-  notify("Loading library…");
+  notify("Loading project references…");
   $("#details").replaceChildren(
     node(
       "p",
@@ -296,21 +330,9 @@ async function selectProject(id) {
     const loadedSchema = await scope.request("schema");
     if (generation !== view) return;
     schema = loadedSchema;
-    collections = new Collections({
-      element: $("#collections"),
-      api: scope,
-      onSelect: (item) => {
-        collection = item;
-        deleted = false;
-        rangeController?.abort();
-        selection.clear();
-        items.reset({ preserveSelection: false });
-        notify(item ? "Collection: " + item.data.name : "All references");
-      },
-    });
     items = new VirtualList({
       element: $("#items"),
-      label: "Library items",
+      label: "Project references",
       load: (args) => loadPage(args),
       render: itemLabel,
       onSelect: selectItem,
@@ -325,12 +347,13 @@ async function selectProject(id) {
             text ||
               (selection.size
                 ? selection.size + " selected"
-                : "Library ready."),
+                : "Project ready."),
           );
       },
     });
-    notify("Library ready.");
+    notify("Project ready.");
     projectReady = true;
+    history.replaceState({ ...history.state, referencesProject: { backendId: context.backendId, projectId: id } }, "");
     updateProjectActions();
     void restoreJobs(id, generation);
     pollJobs();
@@ -343,7 +366,6 @@ function loadPage({ start, limit, cursor, signal }) {
     "items?" +
       query({
         q: activeSearch,
-        collection: collection?.key,
         sort,
         direction,
         start,
@@ -416,7 +438,6 @@ $("#search").addEventListener("input", () => {
 $("#refresh").onclick = () => {
   rangeController?.abort();
   items?.reset({ preservePosition: true });
-  collections?.refresh();
   if (detail && !detailDirty) void openDetail(detail.key);
 };
 for (const button of document.querySelectorAll("[data-sort]"))
@@ -506,19 +527,6 @@ function renderDetail(item, targetScope) {
       for (const [control] of controls) control.disabled = true;
       try {
         const data = { parentItem: parent?.key || null };
-        if (parent) data.collections = [];
-        else if (item.data.parentItem) {
-          // Native Convert to Standalone keeps the old parent's collections.
-          const previousParent = await targetScope.request(
-            "items/" + encodeURIComponent(item.data.parentItem),
-            { signal: controller.signal },
-          );
-          if (scope !== targetScope || detail !== item || controller.signal.aborted || !root.contains(form)) return;
-          data.collections = [...new Set([
-            ...(item.data.collections || []),
-            ...(previousParent.data.collections || []),
-          ])];
-        }
         const result = await targetScope.request("items/" + encodeURIComponent(item.key), {
           method: "PATCH",
           body: { version: item.version, data },
@@ -971,116 +979,9 @@ async function loadChildren(item, targetScope, target, cursor, history = []) {
     if (error.name !== "AbortError") target.textContent = error.message;
   }
 }
-$("#newCollection").onclick = async () => {
-  if (!scope) return;
-  const targetScope = scope,
-    parent = collections.parent;
-  const input = node("input", {
-      required: true,
-      placeholder: "Collection name",
-    }),
-    form = await promptFields("New collection", [field("Name", input)]);
-  if (!form) return;
-  try {
-    await targetScope.request("collections", {
-      method: "POST",
-      body: { name: input.value, parentCollection: parent },
-    });
-    if (scope === targetScope) collections.refresh();
-  } catch (error) {
-    notify(error);
-  }
-};
-$("#collectionMenu").onclick = async () => {
-  if (!collection) {
-    notify("Select a collection first.");
-    return;
-  }
-  const target = collection,
-    targetScope = scope,
-    name = node("input", { value: target.data.name, required: true }),
-    d = dialog("Collection");
-  let parentKey = target.data.parentCollection || null;
-  const parentLabel = node(
-      "span",
-      {},
-      parentKey ? "Current parent collection" : "Top level",
-    ),
-    parentRows = node("div", { class: "search-results" });
-  const parentPicker = new Collections({
-    element: parentRows,
-    api: targetScope,
-    onSelect: (item) => {
-      parentKey = item?.key || null;
-      parentLabel.textContent = item?.data.name || "Top level";
-    },
-  });
-  d.body.append(
-    field("Name", name),
-    node("h3", {}, "Parent collection"),
-    parentLabel,
-    parentRows,
-  );
-  d.el.addEventListener("close", () => parentPicker.destroy(), { once: true });
-  d.actions.append(
-    button("Cancel", () => d.el.close()),
-    button(
-      "Delete collection",
-      async () => {
-        if (!confirm("Delete this collection? Its items stay in the library."))
-          return;
-        try {
-          await targetScope.request("collections/" + target.key, {
-            method: "DELETE",
-            body: { version: target.version },
-          });
-          d.el.close();
-          if (scope === targetScope) {
-            collection = null;
-            collections.refresh();
-            items.reset();
-          }
-        } catch (e) {
-          d.notice.textContent = e.message;
-        }
-      },
-      { class: "danger" },
-    ),
-    button(
-      "Save",
-      async () => {
-        try {
-          const updated = await targetScope.request(
-            "collections/" + target.key,
-            {
-              method: "PUT",
-              body: {
-                version: target.version,
-                data: {
-                  name: name.value,
-                  parentCollection: parentKey,
-                },
-              },
-            },
-          );
-          d.el.close();
-          if (scope === targetScope) {
-            collection = updated;
-            collections.refresh();
-          }
-        } catch (e) {
-          d.notice.textContent = e.message;
-        }
-      },
-      { class: "primary" },
-    ),
-  );
-  d.open();
-};
 $("#newItem").onclick = async () => {
   if (!schema) return;
-  const targetScope = scope,
-    collectionKey = collection?.key;
+  const targetScope = scope;
   const type = node("select"),
     name = node("input", { required: true });
   for (const info of schema.itemTypes.filter(
@@ -1104,7 +1005,6 @@ $("#newItem").onclick = async () => {
           data: {
             itemType: type.value,
             title: name.value,
-            collections: collectionKey ? [collectionKey] : [],
           },
         },
       ],
@@ -1120,8 +1020,7 @@ $("#newItem").onclick = async () => {
 };
 $("#note").onclick = async () => {
   if (!scope) return;
-  const targetScope = scope,
-    collectionKey = collection?.key;
+  const targetScope = scope;
   const text = node("textarea", { rows: 8, required: true }),
     name = node("input", { placeholder: "Note title" }),
     parent = selection.size === 1 ? [...selection.keys()][0] : null;
@@ -1143,7 +1042,6 @@ $("#note").onclick = async () => {
             title: name.value,
             note: text.value,
             ...(parent ? { parentItem: parent } : {}),
-            collections: collectionKey ? [collectionKey] : [],
           },
         },
       ],
@@ -1161,7 +1059,6 @@ $("#identifiers").onclick = async () => {
   if (!scope) return;
   const targetScope = scope,
     id = projectId,
-    targetCollection = collection,
     input = node("textarea", {
       rows: 7,
       required: true,
@@ -1174,7 +1071,7 @@ $("#identifiers").onclick = async () => {
         node(
           "p",
           {},
-          "Destination: " + (targetCollection?.data.name || "All references"),
+          "Project: " + currentProject().name,
         ),
         field("Identifiers", input),
       ],
@@ -1191,7 +1088,6 @@ $("#identifiers").onclick = async () => {
           .map((x) => x.trim())
           .filter(Boolean),
         requestId: crypto.randomUUID(),
-        target: targetCollection?.key || null,
       },
     });
     trackJob(id, job);
@@ -1210,7 +1106,6 @@ $("#actions").onchange = async () => {
   const id = projectId,
     targetScope = scope,
     selected = [...selection.values()];
-  let collectionKey = collection?.key;
   try {
     if (action === "export") {
       await exportReferences({
@@ -1242,26 +1137,17 @@ $("#actions").onchange = async () => {
       );
       return;
     }
-    if (action === "collection") {
-      const destination = await chooseCollection(targetScope);
-      if (!destination) return;
-      collectionKey = destination.key;
-    }
     if (
       action === "delete" &&
       !confirm("Move " + selected.length + " selected items to deleted items?")
     )
       return;
-    if (["collection", "remove-collection"].includes(action) && !collectionKey)
-      throw Error("Select the destination collection first.");
-    const operation = action === "collection" ? "add-collection" : action;
     trackJob(
       id,
       await targetScope.request("items/manage", {
         method: "POST",
         body: {
-          operation,
-          collection: collectionKey,
+          operation: action,
           items: selected.map(({ key, version }) => ({ key, version })),
           requestId: crypto.randomUUID(),
         },
@@ -1371,7 +1257,6 @@ async function pollJobs() {
           job.kind !== "metadata-export"
         ) {
           items?.reset({ preservePosition: true });
-          if (job.kind === "file-import") collections?.refresh();
         }
       } catch (error) {
         job.error = error.message;
@@ -1432,7 +1317,7 @@ async function showJob(job) {
     render: (x) =>
       node(
         "span",
-        { class: "collection-label" },
+        { class: "result-label" },
         String(x.index + 1) +
           " · " +
           x.status +
@@ -1598,7 +1483,7 @@ function showJobResult(job, result) {
       node(
         "p",
         {},
-        `${result.result.count} reference${result.result.count === 1 ? "" : "s"} imported; ${result.result.collections || 0} collection${result.result.collections === 1 ? "" : "s"} imported.`,
+        `${result.result.count} reference${result.result.count === 1 ? "" : "s"} imported.`,
       ),
     );
   if (result.result?.downloadPath) {
@@ -1935,7 +1820,6 @@ function openAlexDialog(saved) {
   if (!scope) return;
   const targetScope = scope,
     targetProject = projectId,
-    targetCollection = collection,
     d = dialog("OpenAlex Search");
   const text = node("input", { type: "search", placeholder: "Search works" }),
     searchMode = node("select"),
@@ -2042,8 +1926,7 @@ function openAlexDialog(saved) {
     node(
       "p",
       {},
-      "Import destination: " +
-        (targetCollection?.data.name || "All references"),
+      "Project: " + currentProject().name,
     ),
     form,
     summary,
@@ -2308,8 +2191,7 @@ function openAlexDialog(saved) {
             records: [...selection.values()].map((x) => x.raw),
             resolvePDFs: resolve.checked,
             requestId: crypto.randomUUID(),
-            target: targetCollection?.key || null,
-          },
+              },
         });
         trackJob(targetProject, job);
         d.notice.textContent = selection.size + " results queued for import.";
@@ -2331,8 +2213,7 @@ function openAlexDialog(saved) {
         body = {
           search,
           limit: maximum,
-          target: targetCollection?.key || null,
-          resolvePDFs: resolve.checked,
+            resolvePDFs: resolve.checked,
         },
         fingerprint = JSON.stringify(body);
       if (searchImportAttempt?.fingerprint !== fingerprint)
@@ -2404,44 +2285,6 @@ function openAlexDialog(saved) {
   }
   updateMode();
   text.focus();
-}
-
-async function chooseCollection(targetScope) {
-  const d = dialog("Choose collection"),
-    rows = node("div", { class: "search-results" });
-  let selected,
-    accepted = false;
-  d.body.append(rows);
-  const tree = new Collections({
-    element: rows,
-    api: targetScope,
-    onSelect: (item) => (selected = item),
-  });
-  d.actions.append(
-    button("Cancel", () => d.el.close()),
-    button(
-      "Choose",
-      () => {
-        if (selected) {
-          accepted = true;
-          d.el.close();
-        }
-      },
-      { class: "primary" },
-    ),
-  );
-  const result = new Promise((resolve) =>
-    d.el.addEventListener(
-      "close",
-      () => {
-        tree.destroy();
-        resolve(accepted ? selected : null);
-      },
-      { once: true },
-    ),
-  );
-  d.open();
-  return result;
 }
 
 async function chooseLibraryItem(targetScope, {
@@ -2540,7 +2383,6 @@ async function saveSearch(targetScope, configuration, notice) {
 }
 $("#deletedItems").onclick = () => {
   deleted = true;
-  collection = null;
   selection.clear();
   rangeController?.abort();
   items.reset({ preserveSelection: false });
@@ -2592,8 +2434,7 @@ $("#savedSearches").onclick = () => {
         {
           provider: "library",
           query: activeSearch,
-          collection: collection?.key,
-          sort,
+            sort,
           direction,
           deleted,
         },
@@ -2651,9 +2492,7 @@ $("#savedSearches").onclick = () => {
         direction = data.direction || "asc";
         deleted = !!data.deleted;
         try {
-          collection = data.collection
-            ? await targetScope.request("collections/" + data.collection)
-            : null;
+          if (data.collection) throw Error("This saved search used a retired collection filter. Save a new search for this project.");
           if (scope !== targetScope) return;
           selection.clear();
           items.reset({ preserveSelection: false });
@@ -2698,7 +2537,7 @@ async function selectStyle(
         hasMore: result.nextStart !== null && result.nextStart !== undefined,
       };
     },
-    render: (item) => node("span", { class: "collection-label" }, item.title),
+    render: (item) => node("span", { class: "result-label" }, item.title),
     onSelect: (item) => {
       chosen = item.id;
       list.setSelection([chosen]);

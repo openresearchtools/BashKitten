@@ -132,6 +132,7 @@ function putItem(
   expected,
   patch = false,
   skipDateModifiedUpdate = false,
+  preserveFulltext = false,
 ) {
   const itemKey = value.createKey || value.key || key();
   let data = value.data || value;
@@ -162,7 +163,7 @@ function putItem(
     fail("Item metadata exceeds 8 MiB");
   if (data.parentItem === itemKey) fail("An item cannot be its own parent");
   if (
-    previous &&
+    previous && !preserveFulltext &&
     ["path", "sha256", "contentType"].some(
       (field) => previous[field] !== data[field],
     )
@@ -416,6 +417,72 @@ function list(db, args = {}) {
   return result;
 }
 const operations = {
+  bibliographySettings: (db, { initialPath, legacyCwd }) => {
+    let row = db.prepare("SELECT data FROM settings WHERE id='bibliography'").get();
+    if (!row) {
+      if (!path.isAbsolute(initialPath || '') || !path.isAbsolute(legacyCwd || '')) fail('Bibliography needs an explicit initial folder');
+      const value = { path: path.resolve(initialPath), legacyCwd: path.resolve(legacyCwd) };
+      db.prepare("INSERT OR IGNORE INTO settings VALUES('bibliography',?)").run(JSON.stringify(value));
+      row = db.prepare("SELECT data FROM settings WHERE id='bibliography'").get();
+    }
+    return JSON.parse(row.data);
+  },
+  beginBibliographyMove: (db, { id, source, target }) => transaction(db, () => {
+    const row = db.prepare("SELECT data FROM settings WHERE id='bibliography'").get();
+    if (!row) fail('Bibliography folder is not initialized', 409);
+    const value = JSON.parse(row.data);
+    if (value.move) {
+      if (value.move.id !== id || value.move.source !== source || value.move.target !== target) fail('Another Bibliography move needs to finish first', 409);
+      return value;
+    }
+    if (value.path !== source) fail('Bibliography folder changed; reload before moving', 409);
+    value.move = { id, source, target, phase: 'copying', startedAt: new Date().toISOString() };
+    db.prepare("UPDATE settings SET data=? WHERE id='bibliography'").run(JSON.stringify(value));
+    return value;
+  }),
+  commitBibliographyMove: (db, { id, total }) => transaction(db, () => {
+    const value = JSON.parse(db.prepare("SELECT data FROM settings WHERE id='bibliography'").get()?.data || '{}');
+    const move = value.move;
+    if (!move || move.id !== id) fail('Bibliography move is unavailable', 409);
+    if (move.phase === 'cleanup') return value;
+    const prefix = 'bibliography-move:' + id + ':file:';
+    const count = db.prepare("SELECT count(*) AS n FROM items WHERE type='attachment' AND json_extract(data,'$.path') IS NOT NULL").get().n;
+    const plans = db.prepare("SELECT data FROM receipts WHERE id>=? AND id<? ORDER BY id");
+    let completed = 0;
+    for (const row of plans.iterate(prefix, prefix + '\uffff')) {
+      const entry = JSON.parse(row.data);
+      if (entry.status !== 'published') fail('An attachment has not finished copying', 409);
+      const original = checked(db, 'items', entry.key, entry.version);
+      const data = JSON.parse(original.data);
+      if (data.path !== entry.oldPath || (data.pathBase || null) !== (entry.oldPathBase || null)) fail('Attachment path changed during the move', 409);
+      const unchangedBytes = data.sha256 === entry.sha256 && data.byteLength === entry.byteLength;
+      putItem(db, { key: entry.key, data: { ...data, path: entry.newPath, pathBase: 'bibliography', filename: entry.filename, sha256: entry.sha256, byteLength: entry.byteLength } }, original.version, false, unchangedBytes, unchangedBytes);
+      completed++;
+    }
+    if (completed !== total || count !== total) fail('The attachment list changed during the move', 409);
+    value.path = move.target;
+    value.move = { ...move, phase: 'cleanup', total, committedAt: new Date().toISOString() };
+    db.prepare("UPDATE settings SET data=? WHERE id='bibliography'").run(JSON.stringify(value));
+    return value;
+  }),
+  abortBibliographyMove: (db, { id }) => transaction(db, () => {
+    const row = db.prepare("SELECT data FROM settings WHERE id='bibliography'").get();
+    if (!row) return null;
+    const value = JSON.parse(row.data);
+    if (value.move?.id === id && value.move.phase === 'copying') {
+      delete value.move;
+      db.prepare("UPDATE settings SET data=? WHERE id='bibliography'").run(JSON.stringify(value));
+    }
+    return value;
+  }),
+  finishBibliographyMove: (db, { id }) => transaction(db, () => {
+    const value = JSON.parse(db.prepare("SELECT data FROM settings WHERE id='bibliography'").get()?.data || '{}');
+    if (value.move?.id !== id || value.move.phase !== 'cleanup') fail('Bibliography move is not committed', 409);
+    value.lastMove = { ...value.move, phase: 'complete', completedAt: new Date().toISOString() };
+    delete value.move;
+    db.prepare("UPDATE settings SET data=? WHERE id='bibliography'").run(JSON.stringify(value));
+    return value;
+  }),
   libraryVersion: (db) => version(db),
   importCollections: (db, { collections, receipt }) =>
     transaction(db, () => {
@@ -462,7 +529,7 @@ const operations = {
   attachmentPaths: (db, { after = "", limit = 100 }) =>
     db
       .prepare(
-        "SELECT key,json_extract(data,'$.path') AS path,json_extract(data,'$.sha256') AS sha256,json_extract(data,'$.byteLength') AS byteLength FROM items WHERE type='attachment' AND key>? AND json_extract(data,'$.path') IS NOT NULL ORDER BY key LIMIT ?",
+        "SELECT key,version,json_extract(data,'$.path') AS path,json_extract(data,'$.pathBase') AS pathBase,json_extract(data,'$.filename') AS filename,json_extract(data,'$.sha256') AS sha256,json_extract(data,'$.byteLength') AS byteLength FROM items WHERE type='attachment' AND key>? AND json_extract(data,'$.path') IS NOT NULL ORDER BY key LIMIT ?",
       )
       .all(after, Math.min(100, limit)),
   fileAttachmentCount: (db, { key }) =>

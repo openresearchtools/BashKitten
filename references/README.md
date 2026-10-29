@@ -4,7 +4,7 @@ The existing environment backend owns authentication, project authorization,
 service lifetime and HTTP transport. `createReferencesService` opens one module
 per environment; it does not listen on another socket. The factory requires
 `dataDir`, the persistent `backendId`, and `authorizeProject(authority,id)`.
-The authorization result supplies the original project UUID, its current root
+The authorization result supplies the independent References project UUID, its attachment root
 and the existing owner's `runAuthorized(work)` mutation/drain callback.
 
 SQLite work runs in a worker with separate project files under the private
@@ -15,8 +15,13 @@ Lists transfer summary fields by default, with full records loaded explicitly.
 An item edit requires its current version and returns 412 on conflict. A query
 cursor returns 409 after a concurrent library change, rather than skipping data.
 
-Attachments live under
-`<project>/Bibliography/<stable-library-hash>/<item-key>/<attachment-key>-<name>`.
+Each backend initially has Default and independently named References projects,
+created/selected by users and agents. They are separate from BashKitten workspaces;
+one workspace can use several databases. Existing database/citation UUIDs survive
+migration. There are no collections in the product UI or API; legacy memberships
+remain stored without dropping their items.
+
+Attachments live under each project's exact `bibliographyPath` folder.
 Their metadata includes the relative path, size and SHA-256. Databases, jobs,
 credentials, extraction caches and temporary uploads stay outside projects.
 
@@ -28,14 +33,14 @@ to `/api/references` and returns `{status,headers,body}`, or an authorized
 `/projects/:projectId`. The persistent reference identity is
 `bkref:<backendId>/<projectId>/<itemKey>`. Native browser backend aliases are
 transport context and are never compared with the persistent backend UUID.
-Library discovery uses the existing authorized registered-project catalogue
+Library discovery uses the existing backend-owned independent References catalogue
 (`GET /projects`); it does not enumerate SQLite files or load library records.
 The Office document's selected library is one explicit project UUID, separate
 from its file location. Every item query still addresses only that library.
 
 - `items`, `items/:key`, `items/:key/children`, `items/:key/file`,
   `items/:key/fulltext`: metadata, notes, tags, relationships and attachments.
-  Item pages accept `q`, `sort`, `direction`, `cursor`, `limit`, `collection`,
+  Item pages accept `q`, `sort`, `direction`, `cursor`, `limit`,
   `itemType`, `top`, `deleted`, `includeData` and `format=csljson`.
   Optional comma-separated `fields` adds selected native schema fields to the
   summary for configurable columns. Extra text cells are excerpts (at most
@@ -43,12 +48,11 @@ from its file location. Every item query still addresses only that library.
   `meta.truncatedFields` identify excerpts. Full item records remain unchanged.
   Unknown field names return 400; indexed search, sort and cursor rules stay
   unchanged. This projection never reads another library or adds an index.
-- `collections` and `searches`: versioned collection and saved-search CRUD.
-  Collection removal updates indexed membership and stored item JSON together;
-  child collections must first be moved or removed.
+- `searches`: versioned saved-search CRUD. Retired collection filters fail
+  explicitly rather than silently broadening a saved selection.
 - `identifiers/import`, `openalex/import`, `items/enrich`, `items/resolve-pdfs`
   and `items/manage`: explicit bounded jobs returning 202. Management operations
-  are add/remove collection, trash and restore, with selected item versions.
+  are trash and restore, with selected item versions.
 - `openalex/search`: bounded provider pages/estimates, Boolean or semantic
   search, provider field selection, filters, sort and explicit cursor paging.
   The preserved V3 bounded harvest also remains available. `crossref/search`
@@ -56,14 +60,14 @@ from its file location. Every item query still addresses only that library.
 - `jobs` lists bounded summaries; `jobs/:id` returns detail; DELETE cancels;
   POST `jobs/:id/resume` reuses stored input and receipts, skipping successful
   records. A restart does not silently replay an uncertain write.
-- `import` uses native format detection and the native collection hierarchy mapper,
-  with at most 200 records in each commit. `summary:true` returns a small resumable
+- `import` uses native format detection, retaining all imported records in the
+  selected References database, with at most 200 records in each commit. `summary:true` returns a small resumable
   job receipt. `translators/export` lists the pinned native formats, and
   `items/export` exports selected metadata, notes and attachment URLs. File copies
   belong to the ordinary Files/Bibliography workflow; `exportFileData` is rejected
   explicitly by the metadata route.
   Real files use the existing `connector/upload-*` owner with binary `import`,
-  sealed encoding/collection/request ID and 256 KiB chunks. The worker decodes
+  sealed encoding/request ID and 256 KiB chunks. The worker decodes
   at most 32 MiB; no whole-file JSON request crosses the gateway. Success discards
   staging bytes; interrupted/partial jobs retain them for explicit resume.
 - `settings` exposes safe configuration status. Keys are write-only and live
@@ -85,14 +89,17 @@ Markdown parser and returns UTF-16 positions, ignoring code examples.
 
 The optional `authorizeLibraryLifecycle` callback belongs to the existing owner
 and authorizes archived or unavailable-root lifecycle operations separately.
-`validateLibraryRelink({projectId,previousRoot,newRoot,authority,signal})` checks
-stored attachment paths, sizes and available hashes before the project owner
-changes its root. It does not move files or rewrite chat history.
+`moveBibliography({projectId,bibliographyPath,expectedBibliographyPath,authority,signal})`
+uses the existing per-project transition owner to copy/verify attachments and
+atomically update their paths and the authoritative SQLite folder setting.
+Metadata remains available when an attachment folder is unavailable. Native
+BashKitten workspace/file authorization is independent and unchanged.
+
 `deleteLibrary({projectId,confirmProjectId,attachments,authority,signal})` and
 DELETE `projects/:id/library` require the exact project confirmation and an
 explicit keep/delete attachment choice. A private tombstone prevents a deleted
 library identity from silently being assigned to a new database. Navigation
-archive/unregister and project relinking remain native project-owner actions.
+archive/unregister remains within the independent References project owner.
 
 ## Reused native facilities
 
@@ -148,6 +155,15 @@ The shared chooser is in `web/`, and capture/browser adaptations are in
 
 ## Packaging and verification boundary
 
+Each References project's actual Bibliography folder is held in its own SQLite
+settings record. New files use the pinned Zotero creator/year/short-title naming
+methods with UTF-8 filename limits and `-2`, `-3` collision suffixes. Legacy paths
+remain valid until an explicit folder move. That move copies and verifies files
+before one SQLite transaction changes the folder and item paths, then removes
+the old copies. Existing receipts resume interrupted cleanup; item identities,
+citation links and unchanged full text remain intact. Registered Office files
+use the existing Office reservation and exact-path reconciliation owner.
+
 `runtime-payload.json` is the runtime allowlist and legal inventory. Pristine
 donor trees, source manifests and licenses remain in Git. The shared source-cache
 owner fetches original archives from the exact URLs and checksums in those
@@ -166,7 +182,7 @@ acceptance, native Office citation anchoring, authenticated publisher access or
 same-network PDF retrieval parity. Those require the separate product and donor
 comparison checks recorded by the coordinating implementation status owner.
 
-Native metadata export supports explicit selected, library, collection and indexed
+Native metadata export supports explicit selected, library and indexed
 search selections through the existing `metadata-export` job owner. The SQLite
 owner freezes a library version and reads bounded 100-record pages, including all
 child notes/attachments. A private JSONL input feeds the unchanged native Node

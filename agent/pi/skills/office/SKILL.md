@@ -5,7 +5,9 @@ description: Create, read and edit live Collabora documents, spreadsheets and pr
 
 # Office
 
-Discover `office`. `open` requires an explicit owning `projectId` plus a returned
+Discover `office`. The owning file/workspace `projectId` below is distinct from
+the independent References project ID used by `citations.bind`; one workspace
+may use several References databases. `open` requires an explicit owning `projectId` plus a returned
 `documentId`, a project-relative `relativePath`, or `create:{name,format}`.
 The native owner resolves existing files and exclusive creation within that project. Save
 its returned `sessionId`, document type, capabilities and `browserUrl`. The backend
@@ -33,7 +35,7 @@ live file with direct ZIP/XML edits or run a standalone conversion process.
 | `citations.bind` | First inspect, then supply `projectId`, `style:{id,locale}` and required `expectedRevision` and `expectedNativeSnapshot` from the same `citations.inspect` result; optional `noteType`. Changing libraries with managed content additionally requires explicitly authorized `convertExistingToText:true` as described below. |
 | `citations.inspect`, `citations.insert`, `citations.edit`, `citations.remove` | Use returned plugin state and native target/occurrence identity; clusters retain ordered verified References IDs, locators, affixes and suppress-author. |
 | `citations.style`, `citations.refresh`, `citations.bibliography` | Set installed style/locale and render the complete ordered document state through the shared plugin. |
-| `citations.import-snapshots` | Explicitly import copied references into the document's bound project library with stable `requestId`, optional `collection`; the adapter verifies revision/positions before relinking fields. |
+| `citations.import-snapshots` | Explicitly import copied references into the document's bound project library with stable `requestId`; the adapter verifies revision/positions before relinking fields. |
 | `save`, `export` | Await actual save acknowledgement; export supplies supported `format` and optional `name`, returning its real result/view URL. |
 
 For Calc, put `sheet`, `range` and `values` or `formulas` directly in `command`.
@@ -67,7 +69,7 @@ error. Typed `sr-cite:` markers are optional interchange that must be promoted t
 by a supported adapter, not pasted as a substitute for live citations.
 
 Before first citation use, inspect the document's `binding:{projectId,style}`.
-If it is null, choose one registered library from References `GET /projects` and
+If it is null, choose an independent References project from `GET /projects` (including Default) and
 an installed citation style, then call `citations.bind` with both `expectedRevision` and
 `expectedNativeSnapshot` through the same Office
 executor. The binding is durable document metadata; it need not be the project's

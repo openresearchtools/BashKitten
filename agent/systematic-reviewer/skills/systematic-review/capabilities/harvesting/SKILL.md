@@ -1,6 +1,6 @@
 ---
 name: harvesting
-description: Design reproducible evidence searches, retrieve bibliographic records or lawful full text, deduplicate records, and update source collections.
+description: Design reproducible evidence searches, retrieve bibliographic records or lawful full text, deduplicate records, and update reference records.
 license: AGPL-3.0-or-later
 disable-model-invocation: true
 ---
@@ -35,7 +35,9 @@ limits. Another manager's supported API or export is valid input, without
 requiring a References library or claiming an unimplemented package adapter.
 Use the shared References API through `references` or the
 [References CLI](../../../../docs/references-cli.md). Explicitly select the owning
-project library and collection before importing. The backend keeps that destination
+independent References project database before importing. GET `/projects` lists
+Default and named databases; POST `/projects {name,cwd?}` creates one. There are
+no collection destinations. The backend keeps that destination
 atomic while other tabs or users change selection. Use bounded pages and cancellable
 jobs; inspect returned totals, next pages, per-record outcomes and provenance.
 A metadata snapshot is not the full-text attachment itself. Never read or edit the

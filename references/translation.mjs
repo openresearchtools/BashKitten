@@ -4,6 +4,7 @@ import { readFile, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 const require = createRequire(import.meta.url);
 import { runNativeExport, exportMemoryNotice } from "./native-export.mjs";
+import { createNativeAttachmentNamer } from "./attachment-names.mjs";
 let loaded;
 const extraConverters = new WeakMap();
 function translatedAPIItems(Z, item) {
@@ -27,6 +28,9 @@ export async function translationRuntime() {
       throw e;
     });
   return loaded;
+}
+export async function attachmentFileBaseName(data, options = {}) {
+  return createNativeAttachmentNamer(await translationRuntime())(data, options);
 }
 export async function translateIdentifier(
   identifier,

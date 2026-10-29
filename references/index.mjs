@@ -11,6 +11,7 @@ import { NativeComponents } from "./native.mjs";
 import { exportSelection, writeExportInput } from "./export-spool.mjs";
 import { decodeRFC2047 } from "./headers.mjs";
 import { updateCaptureSession } from "./capture-session.mjs";
+import { createAttachmentStorage } from "./attachment-storage.mjs";
 import {
   normalizeIdentifier,
   resolveIdentifiers,
@@ -99,7 +100,7 @@ export async function createReferencesService({
         410,
       );
     if (deletingLibraries.has(id)) fail("Library deletion is in progress", 409);
-    return { ...p, file };
+    return attachmentStorage.currentProject({ ...p, file });
   };
   const call = async (p, op, args, signal) => {
     if (deletedLibraries.has(p.id) || deletingLibraries.has(p.id))
@@ -116,6 +117,10 @@ export async function createReferencesService({
         "importCollections",
         "eraseSessionNote",
         "deleteReceipt",
+        "beginBibliographyMove",
+        "commitBibliographyMove",
+        "abortBibliographyMove",
+        "finishBibliographyMove",
       ].includes(op) ||
       (["record", "fulltext"].includes(op) && args.data !== undefined);
     if (!mutation) return store.call(p.file, op, args, signal);
@@ -128,6 +133,10 @@ export async function createReferencesService({
     };
     return p.runAuthorized ? p.runAuthorized(commit) : commit(signal);
   };
+  const attachmentStorage = createAttachmentStorage({ call, fileBaseName: async (p, item, signal) => {
+    const parent = item.data.parentItem ? await call(p, "get", { key: item.data.parentItem }, signal) : item;
+    return native.call("attachmentFileBaseName", [parent.data, { attachmentTitle: item.data.title }], signal);
+  } });
   const identity = (p, key) => `bkref:${backendId}/${p.id}/${key}`;
   async function withOperation(key, work, signal) {
     const prior = operations.get(key) || Promise.resolve();
@@ -506,10 +515,7 @@ export async function createReferencesService({
       sessionID: requestId,
       summary: "true",
     });
-    if (target) {
-      await call(p, "collection", { key: target }, signal);
-      params.set("target", target);
-    }
+    projectTarget(p, target);
     const values = [
       source
         ? {
@@ -800,13 +806,7 @@ export async function createReferencesService({
               items: nativeValues(
                 metadata.map((data) => ({
                   ...data,
-                  collections:
-                    data.parentItem ||
-                    ["attachment", "note", "annotation"].includes(data.itemType)
-                      ? data.collections || []
-                      : target
-                        ? [target]
-                        : data.collections || [],
+                  collections: [],
                   provenance: {
                     source: "pinned-translator",
                     input,
@@ -865,24 +865,16 @@ export async function createReferencesService({
       ...(pdfs ? { pdfs } : {}),
     };
   }
-  async function addToImportTarget(p, item, target, signal) {
-    if (!target || item.data.collections?.includes(target)) return item;
-    return call(
-      p,
-      "put",
-      {
-        value: {
-          key: item.key,
-          data: {
-            ...item.data,
-            collections: [...(item.data.collections || []), target],
-          },
-        },
-        expected: item.version,
-      },
-      signal,
-    );
+  function projectTarget(p, target) {
+    if (target && target !== "L" + p.id)
+      fail("Collections are no longer supported. Select a References project.", 410);
+    return null;
   }
+  async function addToImportTarget(p, item, target, signal) {
+    projectTarget(p, target);
+    return item;
+  }
+
   async function importOpenAlexRecord(
     p,
     authority,
@@ -962,11 +954,7 @@ export async function createReferencesService({
     const values = nativeValues(
       metadata.map((data) => ({
         ...data,
-        collections: data.parentItem
-          ? []
-          : options.target
-            ? [options.target]
-            : [],
+        collections: [],
         abstractNote: selectAbstract(record.abstract, data.abstractNote || "")
           .text,
         provenance: {
@@ -1368,7 +1356,7 @@ export async function createReferencesService({
       );
     }
   }
-  async function saveAttachment(p, authority, meta, body, sessionID) {
+  async function saveAttachment(p, authority, meta, body, sessionID, signal) {
     if (p.runAuthorized)
       return p.runAuthorized(async (ownerSignal) => {
         ownerSignal?.throwIfAborted();
@@ -1378,8 +1366,10 @@ export async function createReferencesService({
           meta,
           body,
           sessionID,
+          AbortSignal.any([signal, ownerSignal].filter(Boolean)),
         );
       });
+    signal?.throwIfAborted();
     const session = await call(p, "record", { id: "capture:" + sessionID });
     if (!session) fail("Capture session is unavailable", 409);
     let resolverRequest;
@@ -1444,42 +1434,15 @@ export async function createReferencesService({
             : mime === "application/epub+zip"
               ? ".epub"
               : "";
-    const filename =
-      key + "-" + cleanFilename(meta.title || "attachment") + ext;
-    const directory = path.join(
-      p.cwd,
-      "Bibliography",
-      digest(p.id).slice(0, 24),
-      parent || key,
-    );
-    // Resolve each component after creation; an existing symlink cannot redirect a project write.
-    const canonical = await fs.realpath(p.cwd);
-    let current = canonical;
-    for (const part of [
-      "Bibliography",
-      digest(p.id).slice(0, 24),
-      parent || key,
-    ]) {
-      current = path.join(current, part);
-      await fs.mkdir(current, { mode: 0o700 }).catch((e) => {
-        if (e.code !== "EEXIST") throw e;
-      });
-      if (
-        (await fs.lstat(current)).isSymbolicLink() ||
-        !(await fs.stat(current)).isDirectory()
-      )
-        fail("Attachment folder is not a normal project directory");
-    }
+    const parentData = parent ? (await call(p, "get", { key: parent })).data : { itemType: "document", title: meta.title || "attachment" };
+    const baseName = await native.call("attachmentFileBaseName", [parentData, { attachmentTitle: meta.title }], signal);
     await project(authority, p.id);
-    const destination = path.join(current, filename);
-    const temp = destination + ".partial";
-    if (body?.tempPath)
-      await fs.copyFile(body.tempPath, temp, fs.constants.COPYFILE_EXCL);
-    else await fs.writeFile(temp, body, { flag: "wx", mode: 0o600 });
-    await fs.rename(temp, destination);
+    const created = await attachmentStorage.createFile(p, { parentKey: parent, attachmentKey: key, baseName, extension: ext, body, signal });
+    const destination = created.destination, filename = created.filename;
+    let committedAttachment;
     try {
       const hash = createHash("sha256");
-      await pipeline(createReadStream(destination), hash);
+      await pipeline(createReadStream(destination), hash, { signal });
       const sha256 = hash.digest("hex");
       if (resolverRequest) await assertResolverActive(p, resolverRequest);
       const byteLength = (await fs.stat(destination)).size;
@@ -1495,129 +1458,46 @@ export async function createReferencesService({
             filename,
             sha256,
             byteLength,
-            path: path.relative(canonical, destination),
-            collections: parent ? [] : session.target ? [session.target] : [],
+            path: created.path,
+            pathBase: created.pathBase,
+            collections: [],
           },
         },
-      });
-      const receipt = { ...decorate(p, result), captureID: meta.id };
+      }, signal);
+      const receipt = committedAttachment = { ...decorate(p, result), captureID: meta.id };
+      // Finish the acknowledgement once metadata commits, even if the caller
+      // disconnects. Deleting its published file would orphan a durable item.
       await call(p, "record", { id: receiptId, data: receipt });
       return resolverRequest
         ? completeResolver(p, resolverRequest, receipt)
         : receipt;
     } catch (e) {
-      await fs.rm(destination, { force: true });
+      if (!committedAttachment) await attachmentStorage.discardFile(created);
+      else e.details = { ...e.details, attachment: committedAttachment };
       throw e;
     }
   }
-  async function attachmentPath(p, item) {
-    const base = await fs.realpath(path.join(p.cwd, "Bibliography"));
-    const file = await fs.realpath(path.resolve(p.cwd, item.data.path || ""));
-    if (
-      !file.startsWith(base + path.sep) ||
-      item.data.itemType !== "attachment"
-    )
-      fail("Attachment is outside its project");
-    return file;
+  async function attachmentPath(p, item, signal) {
+    return attachmentStorage.attachmentPath(p, item, signal);
   }
+
   async function lifecycleProject(authority, projectId, operation) {
     const p = authorizeLibraryLifecycle
       ? await authorizeLibraryLifecycle(authority, projectId, operation)
       : await authorizeProject(authority, projectId);
     if (!p || p.id !== projectId || !path.isAbsolute(p.cwd || ""))
       fail("Project lifecycle is not authorized", 403);
-    return { ...p, file: path.join(root, digest(projectId), "library.sqlite") };
+    return attachmentStorage.currentProject({ ...p, file: path.join(root, digest(projectId), "library.sqlite") });
   }
-  async function validateLibraryRelink({
-    projectId,
-    previousRoot,
-    newRoot,
-    authority,
-    signal,
-  }) {
-    if (!path.isAbsolute(newRoot || "") || !path.isAbsolute(previousRoot || ""))
-      fail("Relink needs explicit absolute roots");
-    const p = await lifecycleProject(authority, projectId, {
-      operation: "relink",
-      previousRoot,
-      newRoot,
-    });
-    if (p.cwd !== previousRoot)
-      fail("Project root changed; reload before relinking", 409);
-    const candidate = await fs.realpath(newRoot);
-    const namespace = path.join(
-      candidate,
-      "Bibliography",
-      digest(projectId).slice(0, 24),
-    );
-    const report = {
-      projectId,
-      previousRoot,
-      newRoot: candidate,
-      canRelink: true,
-      attachmentCount: 0,
-      verified: 0,
-      missing: 0,
-      mismatched: 0,
-      issues: [],
+  async function moveBibliography({ projectId, bibliographyPath, expectedBibliographyPath, authority, signal, onProgress }) {
+    const p = await lifecycleProject(authority, projectId, { operation: "relink", bibliographyPath });
+    const move = ownerSignal => {
+      const activeSignal = AbortSignal.any([signal, ownerSignal].filter(Boolean));
+      return withOperation("bibliography:" + projectId, () => attachmentStorage.moveBibliography({ ...p, runAuthorized: undefined }, {
+        bibliographyPath, expectedBibliographyPath, signal: activeSignal, onProgress,
+      }), activeSignal);
     };
-    if (
-      !(await fs.access(p.file).then(
-        () => true,
-        () => false,
-      ))
-    )
-      return report;
-    let after;
-    for (;;) {
-      signal?.throwIfAborted();
-      const rows = await store.call(
-        p.file,
-        "attachmentPaths",
-        { after, limit: 100 },
-        signal,
-      );
-      for (const item of rows) {
-        signal?.throwIfAborted();
-        report.attachmentCount++;
-        try {
-          const target = await fs.realpath(path.resolve(candidate, item.path));
-          if (!target.startsWith(namespace + path.sep))
-            throw Error("Attachment path leaves its library directory");
-          const stat = await fs.stat(target);
-          if (
-            !stat.isFile() ||
-            (item.byteLength != null && item.byteLength !== stat.size)
-          )
-            throw Error("Attachment size does not match");
-          if (item.sha256) {
-            const hash = createHash("sha256");
-            await pipeline(createReadStream(target), hash, { signal });
-            if (hash.digest("hex") !== item.sha256)
-              throw Error("Attachment content does not match");
-          }
-          report.verified++;
-        } catch (error) {
-          if (signal?.aborted) throw error;
-          if (error.code === "ENOENT") report.missing++;
-          else report.mismatched++;
-          if (report.issues.length < 100)
-            report.issues.push({
-              key: item.key,
-              path: item.path,
-              error:
-                error.code === "ENOENT"
-                  ? "Attachment is missing from the new root"
-                  : error.message,
-            });
-        }
-      }
-      if (rows.length < 100) break;
-      after = rows.at(-1).key;
-      await new Promise((resolve) => setImmediate(resolve));
-    }
-    report.canRelink = report.missing === 0 && report.mismatched === 0;
-    return report;
+    return p.runAuthorized ? p.runAuthorized(move) : move(signal);
   }
   async function deleteLibrary({
     projectId,
@@ -1645,13 +1525,11 @@ export async function createReferencesService({
       try {
         let attachmentDirectory;
         if (attachments === "delete") {
-          const cwd = await fs.realpath(p.cwd);
-          const expected = path.join(
-            cwd,
-            "Bibliography",
-            digest(projectId).slice(0, 24),
-          );
-          attachmentDirectory = await fs.realpath(expected).catch((error) => {
+          if (p.bibliographyMove) fail("Finish the Bibliography move before deleting attachment files", 409);
+          const base = await fs.realpath(p.bibliographyPath).catch(error => { if (error.code === "ENOENT") return null; throw error; });
+          const expected = base && path.join(base, digest(projectId).slice(0, 24));
+          if (expected) await p.authorizePath?.(expected, { write: true });
+          attachmentDirectory = expected && await fs.realpath(expected).catch((error) => {
             if (error.code === "ENOENT") return null;
             throw error;
           });
@@ -1983,6 +1861,7 @@ export async function createReferencesService({
           },
           { tempPath: result.file.path },
           sessionID,
+          signal,
         );
         outputs.push({ id: result.id, status: "complete", attachment });
       } finally {
@@ -2007,7 +1886,8 @@ export async function createReferencesService({
     signal,
     serialized = false,
   ) {
-    if (query.get("target") === "L" + p.id) query.delete("target");
+    projectTarget(p, query.get("target"));
+    query.delete("target");
     let metadata = {};
     const encodedMetadata = headers["X-Metadata"] || headers["x-metadata"];
     if (encodedMetadata) {
@@ -2018,6 +1898,12 @@ export async function createReferencesService({
       } catch {
         fail("Invalid attachment metadata");
       }
+    }
+    projectTarget(p, metadata.target);
+    metadata.target = null;
+    if (body && typeof body === "object" && !Buffer.isBuffer(body)) {
+      projectTarget(p, body.target);
+      if (body.queryString) projectTarget(p, new URLSearchParams(body.queryString).get("target"));
     }
     const writes = [
       "upload-begin",
@@ -2141,58 +2027,17 @@ export async function createReferencesService({
       return recipe;
     }
     if (method === "getSelectedCollection") {
-      const list = await call(
-        p,
-        "collections",
-        {
-          parent: body?.parent || null,
-          query: body?.q || "",
-          start: Number(body?.start) || 0,
-          limit: Math.min(100, Number(body?.limit) || 80),
-        },
-        signal,
-      );
+      // Native Connector compatibility: the selected database is the sole destination.
       return {
-        libraryID: p.id,
-        libraryName: p.name || p.id,
-        editable: true,
-        libraryEditable: true,
-        filesEditable: true,
-        target: body?.target || "L" + p.id,
-        kind: body?.target ? "collection" : "library",
-        collectionID: body?.target || null,
-        collectionName: body?.target
-          ? (await call(p, "collection", { key: body.target }, signal)).data
-              .name
-          : null,
-        id: body?.target || "L" + p.id,
-        name: body?.target
-          ? (await call(p, "collection", { key: body.target }, signal)).data
-              .name
-          : p.name || p.id,
-        targets: [
-          {
-            id: "L" + p.id,
-            kind: "library",
-            name: p.name || p.id,
-            libraryID: p.id,
-            filesEditable: true,
-            level: 0,
-          },
-          ...list.items.map((c) => ({
-            id: c.key,
-            kind: "collection",
-            name: c.data.name,
-            parent: c.data.parentCollection || null,
-            level: 1,
-            libraryID: p.id,
-            filesEditable: true,
-          })),
-        ],
-        nextStart: list.nextStart,
-        version: list.version,
+        libraryID: p.id, libraryName: p.name || p.id,
+        editable: !p.archived, libraryEditable: !p.archived, filesEditable: !p.archived,
+        target: "L" + p.id, kind: "library", collectionID: null, collectionName: null,
+        id: "L" + p.id, name: p.name || p.id,
+        targets: [{ id: "L" + p.id, kind: "library", name: p.name || p.id, libraryID: p.id, filesEditable: !p.archived, level: 0 }],
+        nextStart: null,
       };
     }
+
     if (method === "upload-begin") {
       const requestHash = digest(JSON.stringify(body));
       if (body.requestId) {
@@ -2252,7 +2097,7 @@ export async function createReferencesService({
         if (params.get("summary") !== "true")
           fail("Reference-file uploads require summary jobs");
         const target = params.get("target");
-        if (target) await call(p, "collection", { key: target }, signal);
+        projectTarget(p, target);
         body = { ...body, encoding: body.encoding || "utf-8" };
       }
       for (const upload of uploads.values()) {
@@ -2484,6 +2329,7 @@ export async function createReferencesService({
         meta,
         body,
         sessionID,
+        signal,
       );
       if (method === "saveStandaloneAttachment") {
         const session = await call(
@@ -2552,6 +2398,7 @@ export async function createReferencesService({
           },
           Buffer.from(body.snapshotContent),
           sessionID,
+          signal,
         );
       return { saveSingleFile: true };
     }
@@ -2596,34 +2443,9 @@ export async function createReferencesService({
         signal,
       );
       const values = nativeValues(
-        bundle.items.map((data) => ({
-          ...data,
-          collections: data.parentItem
-            ? []
-            : query.get("target")
-              ? [query.get("target")]
-              : [],
-        })),
+        bundle.items.map((data) => ({ ...data, collections: [] })),
         operationId,
       );
-      const byNativeKey = new Map(
-        bundle.items.map((item, index) => [item.key, values[index]]),
-      );
-      for (const collection of bundle.collections)
-        for (const key of collection.members) {
-          const value = byNativeKey.get(key);
-          if (value) value.data.collections.push(collection.key);
-        }
-      for (let start = 0; start < bundle.collections.length; start += 200)
-        await call(
-          p,
-          "importCollections",
-          {
-            collections: bundle.collections.slice(start, start + 200),
-            receipt: operationId + ":collections:" + start,
-          },
-          signal,
-        );
       const summary = query.get("summary") === "true";
       const written = await writePages(
         p,
@@ -2637,7 +2459,6 @@ export async function createReferencesService({
         ? {
             status: "imported",
             count: values.length,
-            collections: bundle.collections.length,
             requestId: sessionID,
           }
         : written.map((item) => decorate(p, item));
@@ -2708,7 +2529,7 @@ export async function createReferencesService({
   async function handle(request) {
     try {
       const { method = "GET", authority, signal } = request;
-      const body = request.body || {};
+      let body = request.body || {};
       let durableBody = body;
       const query =
         request.query instanceof URLSearchParams
@@ -2763,6 +2584,24 @@ export async function createReferencesService({
       const op = segments[0],
         key = segments[1],
         action = segments[2];
+      if (op === "collections" || query.has("collection") || body.collection)
+        fail("Collections are no longer supported. Select a References project.", 410);
+      projectTarget(p, body.target);
+      projectTarget(p, query.get("target"));
+      if (body.target) body = { ...body, target: null };
+      durableBody = body;
+      query.delete("target");
+      if (op === "searches" && ["POST", "PUT", "PATCH"].includes(method) && (body.data || body).collection)
+        fail("Collection filters are no longer supported. Save a project search.", 410);
+      if (op === "items" && !["manage", "export", "enrich", "resolve-pdfs"].includes(key) && ["POST", "PUT", "PATCH"].includes(method)) {
+        for (const value of (Array.isArray(body) ? body : [body])) {
+          const data = value.data || value;
+          if (!Object.hasOwn(data, "collections")) continue;
+          const old = key && key !== "top" ? await call(p, "get", { key }, signal) : null;
+          if (JSON.stringify(data.collections || []) !== JSON.stringify(old?.data.collections || []))
+            fail("Collection membership is retained only as legacy data and cannot be changed.", 410);
+        }
+      }
       if (
         [
           "identifiers/import",
@@ -3103,8 +2942,7 @@ export async function createReferencesService({
         )
           result = { ...result, status: "interrupted" };
       } else if (op === "identifiers" && key === "import") {
-        if (body.target)
-          await call(p, "collection", { key: body.target }, signal);
+        projectTarget(p, body.target);
         result = await job(
           p,
           authority,
@@ -3279,8 +3117,7 @@ export async function createReferencesService({
             signal,
           });
       } else if (op === "openalex" && key === "import") {
-        if (body.target)
-          await call(p, "collection", { key: body.target }, signal);
+        projectTarget(p, body.target);
         result = body.search
           ? await importOpenAlexSearch(p, authority, body, signal)
           : await job(
@@ -3330,8 +3167,7 @@ export async function createReferencesService({
           4 * 1024 * 1024
         )
           fail("Snapshot import accepts at most 4 MiB per batch", 413);
-        if (body.target)
-          await call(p, "collection", { key: body.target }, signal);
+        projectTarget(p, body.target);
         result = await withOperation(
           "snapshot-import:" + p.id + ":" + body.requestId,
           async () => {
@@ -3398,11 +3234,7 @@ export async function createReferencesService({
                   const records = nativeValues(
                     bundle.items.map((data) => ({
                       ...data,
-                      collections: data.parentItem
-                        ? []
-                        : body.target
-                          ? [body.target]
-                          : [],
+                      collections: [],
                       provenance: {
                         importedSnapshot: {
                           id: original,
@@ -3492,16 +3324,9 @@ export async function createReferencesService({
       } else if (op === "items" && key === "manage") {
         if (method !== "POST") fail("Method not allowed", 405);
         if (
-          ![
-            "add-collection",
-            "remove-collection",
-            "delete",
-            "restore",
-          ].includes(body.operation)
+          !["delete", "restore"].includes(body.operation)
         )
           fail("Unsupported item operation");
-        if (["add-collection", "remove-collection"].includes(body.operation))
-          await call(p, "collection", { key: body.collection }, signal);
         result = await job(
           p,
           authority,
@@ -3523,22 +3348,7 @@ export async function createReferencesService({
                 { key: item.key, expected: item.version },
                 activeSignal,
               );
-            const data =
-              body.operation === "restore"
-                ? { deleted: 0 }
-                : {
-                    collections:
-                      body.operation === "add-collection"
-                        ? [
-                            ...new Set([
-                              ...(item.data.collections || []),
-                              body.collection,
-                            ]),
-                          ]
-                        : (item.data.collections || []).filter(
-                            (key) => key !== body.collection,
-                          ),
-                  };
+            const data = { deleted: 0 };
             return decorate(
               p,
               await call(
@@ -3598,7 +3408,6 @@ export async function createReferencesService({
               "list",
               {
                 query: query.get("q") || query.get("query") || "",
-                collection: query.get("collection"),
                 sort: query.get("sort") || "title",
                 direction: query.get("direction"),
                 limit: Number(query.get("limit")) || 80,
@@ -3687,15 +3496,7 @@ export async function createReferencesService({
           }
         } else if (action === "file") {
           const item = await call(p, "get", { key }, signal);
-          const file = await fs.realpath(
-            path.resolve(p.cwd, item.data.path || ""),
-          );
-          const base = await fs.realpath(path.join(p.cwd, "Bibliography"));
-          if (
-            !file.startsWith(base + path.sep) ||
-            item.data.itemType !== "attachment"
-          )
-            fail("Attachment file is unavailable", 404);
+          const file = await attachmentPath(p, item, signal);
           return {
             status: 200,
             headers: {
@@ -3762,30 +3563,6 @@ export async function createReferencesService({
         else if (method === "DELETE")
           result = await call(p, "deleteSearch", { key, expected }, signal);
         else fail("Method not allowed", 405);
-      } else if (op === "collections") {
-        if (method === "GET")
-          result = key
-            ? await call(p, "collection", { key }, signal)
-            : await call(
-                p,
-                "collections",
-                {
-                  parent: query.get("parent"),
-                  start: Number(query.get("start")) || 0,
-                  limit: Number(query.get("limit")) || 80,
-                },
-                signal,
-              );
-        else if (method === "POST" || method === "PATCH" || method === "PUT")
-          result = await call(
-            p,
-            "putCollection",
-            { value: { key, data: body.data || body }, expected },
-            signal,
-          );
-        else if (method === "DELETE")
-          result = await call(p, "deleteCollection", { key, expected }, signal);
-        else fail("Method not allowed", 405);
       } else fail("References endpoint not found", 404);
       if (status === 202 && result?.id && result.kind !== "metadata-export")
         await call(
@@ -3813,7 +3590,12 @@ export async function createReferencesService({
   return {
     handle,
     openExport,
-    validateLibraryRelink,
+    moveBibliography,
+    projectInfo: async ({ projectId, authority, signal }) => {
+      const p = await project(authority, projectId);
+      signal?.throwIfAborted();
+      return { bibliographyPath: p.bibliographyPath, ...(p.bibliographyMove ? { bibliographyMove: p.bibliographyMove } : {}) };
+    },
     deleteLibrary,
     importSnapshots: async (body, { authority, projectId, signal } = {}) => {
       const result = await handle({

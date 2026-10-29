@@ -186,6 +186,10 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
       await coordinateNativeRestore(documentId, { grant, signal });
     });
   }
+  async function withAttachmentMove(input, perform) {
+    return owner.withAttachmentMove(input, perform, documentId => hasNativeViews?.(documentId) ||
+      [...issued.values()].some(entry => entry.session.documentId === documentId && !entry.input.snapshot && entry.activity?.sockets > 0));
+  }
   async function handle(req, res, { grantId, basePath, origin, signal }) {
     let mapped;
     try { mapped = new URL(origin); } catch { throw fail(403, 'An authenticated Office origin is required'); }
@@ -325,10 +329,12 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
   }
   async function upgradeEditor(req, socket, head, context) {
     if (!req.officeIssuedSession || req.officeIssuedSession.grantId !== context.grant.id || !req.url.split('?')[0].endsWith('/ws')) throw fail(403, 'Office socket grant mismatch');
+    if (owner.isRestoring(req.officeIssuedSession.session.documentId)) throw fail(409, 'This document is changing; reopen it after the operation');
     const { internal, options } = editorRequest(req, context); const transport = internal.protocol === 'https:' ? await import('node:https') : http;
     await new Promise((resolve, reject) => {
       const request = transport.request(options); request.once('error', reject); request.once('response', response => { response.resume(); reject(fail(502, 'Native Office refused the WebSocket')); });
       request.once('upgrade', (response, upstream, upstreamHead) => {
+        if (owner.isRestoring(req.officeIssuedSession.session.documentId)) { upstream.destroy(); socket.destroy(); reject(fail(409, 'This document is changing; reopen it after the operation')); return; }
         socket.write(`HTTP/1.1 ${response.statusCode} ${response.statusMessage}\r\n` + Object.entries(response.headers).filter(([key]) => key !== 'set-cookie').flatMap(([key, value]) => (Array.isArray(value) ? value : [value]).map(entry => `${key}: ${entry}\r\n`)).join('') + '\r\n');
         if (upstreamHead.length) socket.write(upstreamHead); if (head.length) upstream.write(head);
         upstream.pipe(socket); socket.pipe(upstream);
@@ -355,5 +361,5 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     return open({ ...input, editorBaseUrl: input.editorBaseUrl || new URL('/apps/office', input.origin).href, documentId: old.session.documentId, snapshot: old.input.snapshot || '', create: undefined, relativePath: undefined, participantKind: 'human' });
   }
   async function close() { launches.clear(); issued.clear(); downloads.clear(); if (callback) await new Promise(resolve => { const timer = setTimeout(() => { callback.closeAllConnections(); resolve(); }, 2000); timer.unref(); callback.close(() => { clearTimeout(timer); resolve(); }); }); if (config) await fs.unlink(config.callbackSocket).catch(() => {}); }
-  return { configure, prepare, open, renew, registerExport, status, snapshot, history, withNativeMove, handle, owner, resolveEditorGrant, handleEditor, upgradeEditor, reopenBrowser, close };
+  return { configure, prepare, open, renew, registerExport, status, snapshot, history, withNativeMove, withAttachmentMove, handle, owner, resolveEditorGrant, handleEditor, upgradeEditor, reopenBrowser, close };
 }

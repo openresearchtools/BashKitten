@@ -128,7 +128,7 @@ same operation.
 
 Each document explicitly binds one project library and citation style in its
 native document property. First citation use opens Document settings, using the
-existing authorized project catalogue and bounded style search. Library is the
+existing authorized project catalogue and bounded style search. Project is the
 first dropdown. Styles use catalogue titles, including a saved style outside the
 first result page, and languages use native `Intl.DisplayNames` labels while
 retaining the CSL locale values. Bibliography and conversion remain separate
@@ -150,7 +150,7 @@ settings or rendering; typed-code promotion also captures the bound library.
 
 Refresh/style commands accept `metadataSource: 'library' | 'snapshot'`; embedded
 snapshot rendering preserves original identities without reading other projects.
-`citations.import-snapshots {requestId?,collection?}` explicitly imports copied
+`citations.import-snapshots {requestId?}` explicitly imports copied
 references with the native CSL JSON translator, in bounded receipt-deduplicated
 batches, then checks native revision/positions before relinking the document.
 Bound-library identities are reused. If the document changed after import,

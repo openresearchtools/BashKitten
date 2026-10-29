@@ -17,6 +17,10 @@ Publication remains held for installed review. The large artifacts were not
 downloaded or independently unpacked locally; these source results are the
 normal CI owners' checks, not a new local archive audit.
 
+Current source includes official Pi 1.4.0 (`81a96b5996`), with exact pins,
+164 locked original npm archives/full notices and focused extension/provider/native
+RPC checks passing. Updated installed-runtime acceptance remains separate.
+
 The actual staged 45390 DEB/APK notice/About checks passed all 3,056/2,918 complete
 records and the matching companion, Go, Gecko/capture and Office branding
 inventories. Receipts are under
@@ -48,17 +52,25 @@ the original raw observations and the successful pre-repin Extensions-row action
 Receipt: `native-xorg-153.5.4-45390-20261029/capture-followup/installed-capture-summary.json`
 under `Bashkitten-Acceptance/`, with adjacent `source-placement-review.json`.
 
-References opening from a Files/Office application tab still fails with an
+Unmodified 45390 References opening from a Files/Office application tab failed with an
 invalid `firefox-container-3025207296` cookie-store ID. The proposed custom native
 `create-source-tab` bridge was withdrawn uncommitted. The user's required repair
 is plugin-only ordinary native tabs in the same normal user session, with no new
-browser tab/cookie bridge. The standard-tab source fix removes two copied
-`cookieStoreId` assignments; capture remains blocked pending the fix/new package.
+browser tab/cookie bridge. The plugin-only ordinary-tab/native-response-stream
+correction now saved the actual public ACM PDF: 2,570,670 bytes, SHA-256
+`434376057dbe6fc3e44d0fdb7268b56126e9b47ca9d6aa9e05cf2e738f72e81d`,
+matching the native Zotero comparison. The final inline-disposition focus replay
+passed in the installed browser, preserving the active manager and exact bytes;
+the isolated Files-origin TLS fixture is not publisher-cookie evidence. Receipts are under
+`Bashkitten-Acceptance/references-native-tabs-20261029/`.
 Exact 45390 Android pairing and active
 capture/host registration passed, but the visible enabled Add action did nothing
 on actual tap. API-created and native + tabs both retain BashKitten context IDs
-as strings; the suspected shared decoder gap has no runtime-confirmed fix yet.
-Phone invocation/capture remains open. Distinct References book-icon assets and
+as strings. The separate existing-native-API correction initializes ordinary
+engine context and preserves decoded context/privacy state; its Kotlin checks
+pass, but invocation, background/private behavior and capture require the next
+coherent signed candidate. No custom bridge or cookie copying was added.
+Distinct References book-icon assets and
 chooser cleanup are committed as `ec89cd16b8`, with installed icon acceptance
 pending. Filename-title fix `50fdb0ede0` passed a two-file Wayland overlay through
 native Collabora `Doc_Title` for initial/load, native rename/escaped ampersand,
@@ -68,6 +80,23 @@ coherent rebuilt pass. Receipt:
 Detailed identities
 and the earlier overlay evidence are retained in
 [the Office status record](office-integration-status.md).
+
+The current module batch implements the user's independent named References
+projects, with an automatic Default per backend, direct clickable sidebar,
+New project and per-project Settings. Capture and Office choose a References
+project only; collections are removed from product controls while existing data
+and database/citation identities are preserved. Office's explicit formatted-text
+unlink confirmation remains. Shared native colors and compact capture are
+included. This new model supersedes the earlier 18-check workspace-based result.
+Focused manager DOM (9), packaged Office settings (8) and real SQLite/service (9)
+checks passed. Actual service capture/naming, two-file folder move and restart
+checks (7), plus manager lifecycle/direct-launch checks (13), also passed.
+Combined installed verification remains pending. Receipts are in `references-independent-projects-20261029/` under
+`Bashkitten-Acceptance/`. The separate
+Android existing-native-API correction has compilation/regression evidence,
+with signed-candidate runtime validation still pending. The current verification
+scope is Files/Office/References, model/audio changes and reported UI fixes plus
+their direct integrations; unrelated full-app campaigns are not being repeated.
 
 Coherent 45390 phone portrait/landscape toolbar checks passed main-logo Agent/
 sidebar opening, inside Hide Agent return and absence of the obsolete separate

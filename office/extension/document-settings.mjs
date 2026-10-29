@@ -7,17 +7,17 @@ export async function chooseDocumentSettings({ api, current, projectHint, docume
   const d = dialog('Document settings'), lifetime = new AbortController();
   d.el.classList.add('document-settings-dialog');
   const binding = documentBinding(current), managed = managedContentCount(current);
-  const project = node('select', { required: true, 'aria-label': 'Project library' });
+  const project = node('select', { required: true, 'aria-label': 'Project' });
   const search = node('input', { type: 'search', placeholder: 'Search citation styles' });
   const style = node('select', { required: true, 'aria-label': 'Citation style' });
   const locale = node('select', { required: true, 'aria-label': 'Citation language' });
-  const metadata = node('select', { 'aria-label': 'Reference data' }, new Option('Bound project library', 'library'), new Option('Embedded reference snapshots', 'snapshot'));
+  const metadata = node('select', { 'aria-label': 'Reference data' }, new Option('Project references', 'library'), new Option('Embedded reference snapshots', 'snapshot'));
   metadata.value = current.metadataSource || 'library';
   const note = node('select', {}, new Option('Footnotes', 'footnote'), new Option('Endnotes', 'endnote'));
   note.value = current.noteType || 'footnote';
   const acknowledgement = node('input', { type: 'checkbox' });
-  const warning = node('div', { class: 'binding-warning', hidden: true }, node('p', {}, 'Changing the project library unlinks the existing citations and bibliography. Their current text and formatting will stay exactly as they are. They will no longer update from a library.'), node('label', {}, acknowledgement, ' Keep existing citations and bibliography as formatted text. They will no longer update from References.'));
-  const form = node('form', { class: 'document-settings' }, field('Library', project), field('Find a citation style', search), field('Citation style', style), field('Language', locale));
+  const warning = node('div', { class: 'binding-warning', hidden: true }, node('p', {}, 'Changing the project unlinks the existing citations and bibliography. Their current text and formatting will stay exactly as they are. They will no longer update from the project’s references.'), node('label', {}, acknowledgement, ' Keep existing citations and bibliography as formatted text. They will no longer update from References.'));
+  const form = node('form', { class: 'document-settings' }, field('Project', project), field('Find a citation style', search), field('Citation style', style), field('Language', locale));
   if (documentType === 'text') form.append(field('Note style placement', note));
   form.append(node('details', { class: 'settings-reference-data' }, node('summary', {}, 'Reference data'), field('Use reference data from', metadata)));
   form.append(warning); d.body.append(form);
@@ -83,9 +83,9 @@ export async function chooseDocumentSettings({ api, current, projectHint, docume
     const response = await api.request('/api/references/projects', { signal: lifetime.signal });
     if (lifetime.signal.aborted) return closed;
     const projects = Array.isArray(response) ? response : response.projects;
-    project.append(new Option('Choose a project library', ''));
+    project.append(new Option('Choose a project', ''));
     for (const item of projects) if (!item.archived) project.append(new Option(item.name, item.id));
-    project.value = binding?.projectId || current.libraryId || projectHint || '';
+    project.value = binding?.projectId || current.libraryId || projectHint || projects.find(item => item.isDefault && !item.archived)?.id || '';
     if (project.value) await library(); else { loading = false; availability(); }
     project.focus();
   } catch (e) { error(e); }

@@ -173,6 +173,45 @@
         "ItemFields base-field cache/accessor behavior"
       ],
       "adaptation": "Preserve only fields discarded by object-only itemToAPIJSON. Native Extra branches and formatter copied; valid-field conversion remains unchanged. Missing core accessors derive base-field IDs/type mappings from the already loaded pinned cachedTypes schema; no additional schema or DOI-specific mappings."
+    },
+    {
+      "name": "native-attachment-filenames",
+      "sources": [
+        {
+          "source": "vendor/zotero/source/chrome/content/zotero/xpcom/attachments.js",
+          "sourceSha256": "975900e8fa4ff84d666c10f181dce5e9f05a158e9624c7ace2567904fef0dc6a"
+        },
+        {
+          "source": "vendor/zotero/source/chrome/content/zotero/xpcom/data/items.js",
+          "sourceSha256": "e664cecfd962915e5d50ebd944a58247f84df19f20000dd91eaa13dfa9584b47"
+        },
+        {
+          "source": "vendor/zotero/source/chrome/content/zotero/xpcom/file.js",
+          "sourceSha256": "a7effd4c06a92bfa9645199522b75a15ff24a29ee5be6f812ce58228b4c413fb"
+        },
+        {
+          "source": "vendor/zotero/source/chrome/content/zotero/modules/templates.mjs",
+          "sourceSha256": "467e1852edbbb61d7cd3c89fc41ee869065ca5d1718b51bf105fb5dadc0581a8"
+        },
+        {
+          "source": "vendor/zotero/source/chrome/content/zotero/renameFiles.mjs",
+          "sourceSha256": "56607f8c7b44e69f53ca0cb668dd355bba76169e8739f4a826ab6a2cfb0bb178"
+        }
+      ],
+      "files": [
+        "runtime/attachment-filename-native.js",
+        "runtime/filename-templates.js",
+        "attachment-names.mjs"
+      ],
+      "nativeMethods": [
+        "getFileBaseNameFromItem",
+        "getFirstCreatorFromData",
+        "normalizeRenameTemplate",
+        "getValidFileName",
+        "truncateFileName",
+        "generateHTMLFromTemplate"
+      ],
+      "adaptation": "Exact pinned author/year/title default template and naming methods; JSON item/date/schema and CommonJS exports replace unavailable desktop Item/XPCOM module interfaces. UTF-8 and path byte limits use native truncation."
     }
   ]
 }

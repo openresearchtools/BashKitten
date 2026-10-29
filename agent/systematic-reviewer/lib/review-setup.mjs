@@ -13,7 +13,7 @@ export async function reviewSetup(args, ctx) {
     if (!projectId) {
       const { body } = await applicationRequest('references', 'GET', '/projects', undefined, { signal: ctx.signal });
       const projects = Array.isArray(body) ? body : body?.projects;
-      if (!Array.isArray(projects) || !projects.length) throw Error('Create/select an authorized project in BashKitten before configuring References');
+      if (!Array.isArray(projects) || !projects.length) throw Error('Create a References project in the manager before configuring References');
       if (projects.length === 1) projectId = projects[0].id;
       else {
         const choices = projects.map(project => `${project.name || project.id} (${project.id})`);

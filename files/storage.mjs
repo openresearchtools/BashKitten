@@ -419,6 +419,85 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
       } finally { reservations.delete(reserved); for (const id of affected) restoring.delete(id); }
     }));
   }
+  // References owns its file copies and SQLite path transaction. Reuse this
+  // owner's reservations/queues for registered Office attachments, without
+  // manufacturing a Quantum source grant or native completion receipt.
+  async function withAttachmentMove({ paths, sourceRoots, targetRoot, signal }, perform, busy) {
+    if (!paths?.[Symbol.asyncIterator] || !Array.isArray(sourceRoots) || !sourceRoots.length || !path.isAbsolute(targetRoot || '') || typeof perform !== 'function') throw failure(400, 'Invalid attachment move');
+    const reserved = [...new Set([...sourceRoots, targetRoot].map(filename => {
+      if (!path.isAbsolute(filename || '')) throw failure(400, 'Attachment move needs absolute folders');
+      return path.resolve(filename);
+    }))];
+    for (const filename of reserved) await authorizePath(filename);
+    return serialized('native-files', async () => {
+      const registryFile = path.join(root, 'documents.json'), affected = new Map(), affectedPaths = new Map();
+      await serialized('registry', async () => {
+        const registry = await json(registryFile, { environmentId, paths: {} });
+        if (Object.values(registry.pending || {}).some(entry => entry.paths.some(folder => reserved.some(candidate => inside(folder, candidate) || inside(candidate, folder))))) throw failure(409, 'Finish the pending Files operation before moving attachments', 'NATIVE_FILES_UNCERTAIN');
+        const retired = new Map();
+        for (const [id, filename] of Object.entries(registry.retired || {})) {
+          if (!retired.has(filename)) retired.set(filename, []);
+          retired.get(filename).push(id);
+        }
+        for await (const filename of paths) {
+          signal?.throwIfAborted();
+          if (!reserved.some(folder => inside(folder, filename))) throw failure(403, 'Attachment path leaves its reserved folders');
+          const ids = [...(registry.paths[filename] ? [registry.paths[filename]] : []), ...(retired.get(filename) || [])];
+          for (const id of ids) {
+            if (restoring.has(id)) throw failure(409, 'An attached Office document is changing; retry when it finishes');
+            affected.set(id, filename);
+            if (!affectedPaths.has(filename)) affectedPaths.set(filename, new Set());
+            affectedPaths.get(filename).add(id);
+          }
+        }
+        reservations.add(reserved);
+        for (const id of affected.keys()) restoring.add(id);
+      });
+      const lock = (ids, work, index = 0) => index === ids.length ? work() : serialized(ids[index], () => lock(ids, work, index + 1));
+      try {
+        for (const id of affected.keys()) if (await busy?.(id)) throw failure(409, 'Close the attached Office document before moving its Bibliography folder', 'OFFICE_DOCUMENT_BUSY');
+        return await lock([...affected.keys()].sort(), async () => {
+          for (const id of affected.keys()) {
+            signal?.throwIfAborted();
+            const m = await load(id);
+            if (m.recovery) throw failure(409, 'An attached Office document needs recovery before moving');
+            try { await retain(m, m.path, 'pre-bibliography-move', { force: true }); }
+            catch (error) { if (error.code !== 'ENOENT') throw error; }
+          }
+          return perform({ commit: async ({ moves }) => serialized('registry', async () => {
+            const registry = await json(registryFile, { environmentId, paths: {} });
+            const updates = new Map();
+            for await (const { from, to } of moves) {
+              signal?.throwIfAborted();
+              if (!reserved.some(folder => inside(folder, from)) || !inside(path.resolve(targetRoot), to)) throw failure(403, 'Attachment completion leaves its reserved folders');
+              await authorizePath(to);
+              const original = registry.paths[from], current = registry.paths[to];
+              if (original && current && original !== current) throw failure(409, 'The destination belongs to another Office document');
+              for (const id of new Set([...(affectedPaths.get(from) || []), ...(affectedPaths.get(to) || [])])) {
+                const m = await load(id);
+                if (m.path !== from && m.path !== to) throw failure(409, 'The attached Office document moved during this operation');
+                const targetStat = await fs.lstat(to);
+                if (!targetStat.isFile() || targetStat.nlink !== 1) throw failure(409, 'The moved Office attachment is unavailable');
+                let expected;
+                try { expected = await digestFile(from); } catch (error) { if (error.code !== 'ENOENT') throw error; expected = m.lastDigest || m.versions.at(-1)?.sha256; }
+                if (!expected || await digestFile(to) !== expected) throw failure(409, 'The moved Office attachment differs from its saved content');
+                updates.set(id, { m, from, to });
+              }
+            }
+            for (const { m, from, to } of updates.values()) {
+              // A cleanup retry can arrive after some manifests or the registry
+              // already committed. Keep the same document/history identity.
+              if (m.path !== to) { m.path = to; m.generation++; m.grants = {}; m.fingerprint = fingerprint(await fs.stat(to, { bigint: true })); await saveManifest(m); }
+              if (registry.paths[from] === m.id) { delete registry.paths[from]; registry.paths[to] = m.id; }
+              if (registry.retired?.[m.id] === from) registry.retired[m.id] = to;
+            }
+            if (updates.size) await writeJSON(registryFile, registry);
+            return { movedDocumentIds: [...updates.keys()] };
+          }) });
+        });
+      } finally { reservations.delete(reserved); for (const id of affected.keys()) restoring.delete(id); }
+    });
+  }
   async function relinkRoot({ previousRoot, newRoot, signal }, commit) {
     previousRoot = path.resolve(previousRoot); newRoot = await fs.realpath(newRoot);
     await authorizePath(newRoot);
@@ -465,5 +544,5 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
     const key = createHash('sha256').update(claims.participant).digest('hex'); const dir = path.join(root, 'settings'); await fs.mkdir(dir, { recursive: true, mode: 0o700 });
     return serialized('settings:' + key, async () => { const filename = path.join(dir, key + '.json'); const current = await json(filename, {}); const next = lightSettings({ ...current, ...update }); if (update) { signal?.throwIfAborted(); await writeJSON(filename, next); } return next; });
   }); }
-  return { register, metadata, read, write, rename, relative, finalize, list, configureHistory, restore, snapshot, settings, withNativeMove, relinkRoot, isRestoring: documentId => restoring.has(documentId) };
+  return { register, metadata, read, write, rename, relative, finalize, list, configureHistory, restore, snapshot, settings, withNativeMove, withAttachmentMove, relinkRoot, isRestoring: documentId => restoring.has(documentId) };
 }

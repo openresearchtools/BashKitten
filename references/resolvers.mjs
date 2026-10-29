@@ -9,6 +9,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createWriteStream } from "node:fs";
 import { translationRuntime } from "./translation.mjs";
+import { createNativeAttachmentNamer } from "./attachment-names.mjs";
 const require = createRequire(import.meta.url),
   scope = new AsyncLocalStorage();
 let ready;
@@ -371,10 +372,8 @@ export async function resolverRuntime() {
           path.join(scope.getStore().temporaryRoot, "resolver-"),
         ),
       }),
-      getFileBaseNameFromItem: (_item, { attachmentTitle }) =>
-        String(attachmentTitle || "Full text")
-          .replace(/[\\/\u0000-\u001f]/g, "_")
-          .slice(0, 100),
+      getFileBaseNameFromItem: (item, options) =>
+        createNativeAttachmentNamer(base)(item.data, options),
       createURLAttachmentFromTemporaryStorageDirectory: async (options) => {
         const result = new Item(
           { title: options.title, contentType: options.contentType },

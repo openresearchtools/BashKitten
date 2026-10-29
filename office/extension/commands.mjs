@@ -33,7 +33,7 @@ async function settings() {
   const previousHeight = document.body.style.minHeight;
   document.body.style.minHeight = '520px';
   let draft;
-  try { draft = await chooseDocumentSettings({ api, current, projectHint: context.projectId, documentType, signal: lifetime.signal }); }
+  try { draft = await chooseDocumentSettings({ api, current, projectHint: context.referenceProjectId || context.defaultProjectId, documentType, signal: lifetime.signal }); }
   finally { document.body.style.minHeight = previousHeight; }
   if (!draft) return false;
   await command(draft); await inspect();

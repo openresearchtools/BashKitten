@@ -10,7 +10,8 @@ import { paths } from '../access/paths.mjs';
 import { controlRequest } from '../control.mjs';
 import { dispatchReferenceResolver } from '../access/browser-channel.mjs';
 import { publishNewFile } from '../localai/files.mjs';
-import { projects, createProject, renameProject, removeProject, archiveProject, relinkProject, withProjectOperation, withProjectTransition } from '../projects.mjs';
+import { projects, withProjectOperation, withProjectTransition } from '../projects.mjs';
+import { referenceProjects, referenceProject, createReferenceProject, renameReferenceProject, archiveReferenceProject, deleteReferenceProject } from './reference-projects.mjs';
 import { fileDirectory, sendFile, sendFileHandle } from '../files/files.mjs';
 import { authorizeApplicationPath, privateManagerPaths, managerAllowed, runManagerOperation } from '../files/access.mjs';
 import { ApplicationGateway } from './gateway.mjs';
@@ -74,6 +75,48 @@ export class ApplicationModules {
       return work(signal);
     })) };
   }
+  async referenceProject(record, id, { transition = false } = {}) {
+    if (!await this.auth.valid(record) || !await managerAllowed(record)) throw Object.assign(Error('This References project is not authorized'), { status: 403 });
+    const project = await referenceProject(id);
+    const authorized = (work, { write = true } = {}) => this.authorize(record, async operation => {
+      const current = await referenceProject(id);
+      if (current.archived && write !== false && !transition) throw Object.assign(Error('Unarchive this References project before changing it'), { status: 409 });
+      operation.signal.throwIfAborted();
+      return work(operation.signal);
+    });
+    return { ...project, bibliographyPath: project.initialBibliographyPath,
+      authorizePath: filename => this.authorize(record, () => this.referencePath(filename)),
+      runAuthorized: transition ? authorized : (work, options) => withProjectOperation('references:' + id,
+        projectSignal => authorized(signal => work(AbortSignal.any([projectSignal, signal])), options)) };
+  }
+  async referencePath(filename) {
+    if (typeof filename !== 'string' || !path.isAbsolute(filename) || filename.includes('\0')) throw Object.assign(Error('Choose an absolute Bibliography folder'), { status: 400 });
+    // Creation may name a new folder. Its nearest existing parent must still
+    // belong to the existing owner's available files; no arbitrary-path grant.
+    let parent = filename;
+    for (;;) {
+      const stat = await fs.stat(parent).catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
+      if (stat) { if (!stat.isDirectory()) parent = path.dirname(parent); break; }
+      const next = path.dirname(parent);
+      if (next === parent) throw Object.assign(Error('The Bibliography folder is unavailable'), { status: 400 });
+      parent = next;
+    }
+    const directory = await fileDirectory(parent);
+    await authorizeApplicationPath(filename);
+    return path.resolve(directory.path, path.relative(parent, filename));
+  }
+  async referenceCatalogue(record, { includeArchived = false, selectedProjectId } = {}) {
+    if (!await this.auth.valid(record) || !await managerAllowed(record)) throw Object.assign(Error('References access is not authorized'), { status: 403 });
+    const catalogue = await referenceProjects({ includeArchived });
+    const selected = catalogue.projects.find(project => project.id === selectedProjectId) ||
+      catalogue.projects.find(project => project.id === catalogue.defaultProjectId) || catalogue.projects[0];
+    const entries = catalogue.projects.map(project => {
+      const { initialBibliographyPath, ...item } = project;
+      return item;
+    });
+    return { ...catalogue, projects: entries, projectId: selected?.id || null,
+      referenceProjectId: selected?.id || null };
+  }
   async ensureRunning(service, start = true, restart = false) {
     if (this.closed) throw unavailable('Applications', 'the backend is stopping');
     try { return await controlRequest('application-service', { service, start, restart }); }
@@ -87,15 +130,15 @@ export class ApplicationModules {
         const endpoint = await this.gateway.endpoint();
         await this.ensureRunning({ id: 'references', name: 'References', kind: 'web', scheme: 'https',
           target: { network: 'unix', address: endpoint.socketPath }, openPath: '/', enabled: false, startup: false, command: null }, false);
-        return module.createReferencesService({ dataDir, backendId: await this.identity(), authorizeProject: (authority, id) => this.project(authority, id, { includeArchived: true }),
+        return module.createReferencesService({ dataDir, backendId: await this.identity(), authorizeProject: (authority, id) => this.referenceProject(authority, id),
           authorizeLibraryLifecycle: (authority, id, options) => this.libraryAuthority(authority, id, options),
           resolveInBrowser: ({ authority, projectId, requestId, signal }) => this.authorize(authority, async operation => {
-            await this.project(authority, projectId);
+            await this.referenceProject(authority, projectId);
             const activeSignal = signal ? AbortSignal.any([signal, operation.signal]) : operation.signal;
             activeSignal.throwIfAborted();
             return dispatchReferenceResolver(authority, { projectId, requestId }, { signal: activeSignal });
           }),
-          listProjects: async authority => { if (!await this.auth.valid(authority) || !await managerAllowed(authority)) throw Object.assign(Error('Project access is not authorized'), { status: 403 }); return (await projects()).projects.map(({ id, name }) => ({ id, name })); } });
+          listProjects: async authority => (await this.referenceCatalogue(authority)).projects });
       })().catch(error => { this.instances.delete('references'); throw error; });
       this.instances.set('references', pending);
     }
@@ -113,47 +156,36 @@ export class ApplicationModules {
     return { running: false };
   }
   async libraryAuthority(record, id, options = {}) {
-    if (!await this.auth.valid(record) || !await managerAllowed(record)) throw Object.assign(Error('This library is not authorized'), { status: 403 });
-    const project = (await projects({ includeArchived: true })).projects.find(item => item.id === id);
-    if (!project) throw Object.assign(Error('Project not found'), { status: 404 });
-    await authorizeApplicationPath(project.cwd);
-    if (options.operation === 'relink') {
-      if (options.previousRoot !== project.cwd) throw Object.assign(Error('The project folder changed'), { status: 409 });
-      await authorizeApplicationPath((await fileDirectory(options.newRoot)).path);
-    }
-    return { ...project, runAuthorized: work => this.authorize(record, async operation => {
-      const current = (await projects({ includeArchived: true })).projects.find(item => item.id === id);
-      if (!current || current.cwd !== project.cwd) throw Object.assign(Error('The project changed during this operation'), { status: 409 });
-      operation.signal.throwIfAborted(); return work(operation.signal);
-    }) };
+    const project = await this.referenceProject(record, id, { transition: true });
+    if (options.bibliographyPath) await this.referencePath(options.bibliographyPath);
+    return { ...project, withAttachmentMove: async (input, perform) => {
+      await this.office(); // Construct the existing document owner; no renderer startup.
+      return this.officeProvider.withAttachmentMove(input, perform);
+    } };
   }
   async projectLifecycle(id, action, method, input, record, { signal, response } = {}) {
-    const project = await this.libraryAuthority(record, id);
     if ((action === 'library' && method !== 'DELETE') || (action !== 'library' && method !== 'POST')) throw Object.assign(Error('Method not allowed'), { status: 405 });
-    const allowed = { archive: ['archived'], relink: ['cwd', 'expectedCwd'], library: ['confirmProjectId', 'attachments'] }[action];
-    if (Object.keys(input).some(key => !allowed.includes(key))) throw Object.assign(Error('Invalid library lifecycle request'), { status: 400 });
-    return withProjectTransition(id, async () => {
+    const allowed = { archive: ['archived'], relink: ['bibliographyPath', 'expectedBibliographyPath'], library: ['confirmProjectId', 'attachments'] }[action];
+    if (!allowed || Object.keys(input).some(key => !allowed.includes(key))) throw Object.assign(Error('Invalid References project operation'), { status: 400 });
+    await this.referenceProject(record, id);
+    return withProjectTransition('references:' + id, async () => {
       signal?.throwIfAborted();
+      await this.libraryAuthority(record, id);
       if (action === 'archive') {
         if (typeof input.archived !== 'boolean') throw Error('Choose whether to archive this project');
-        await this.revokeProject(id, { response });
-        return { status: 200, body: { project: await archiveProject(id, input.archived) } };
+        return { status: 200, body: { project: await archiveReferenceProject(id, input.archived) } };
       }
       const references = await this.references();
       if (action === 'relink') {
-        if (input.expectedCwd !== project.cwd) throw Object.assign(Error('The project folder changed; refresh before relinking'), { status: 409 });
-        const cwd = (await fileDirectory(input.cwd)).path; await authorizeApplicationPath(cwd);
-        await this.revokeProject(id, { response });
-        const reconciliation = await references.validateLibraryRelink({ projectId: id, previousRoot: project.cwd, newRoot: cwd, authority: record, signal });
-        if (!reconciliation.canRelink) return { status: 409, body: { error: 'The new folder does not contain the matching library attachments', reconciliation } };
-        signal?.throwIfAborted();
-        await this.office();
-        const moved = await this.officeProvider.owner.relinkRoot({ previousRoot: project.cwd, newRoot: cwd, signal }, () => relinkProject(id, cwd, { expectedCwd: project.cwd }));
-        return { status: 200, body: { ...moved, reconciliation } };
+        const bibliographyPath = await this.referencePath(input.bibliographyPath);
+        if (typeof input.expectedBibliographyPath !== 'string') throw Object.assign(Error('Reload the current Bibliography folder before moving it'), { status: 409 });
+        return { status: 200, body: await references.moveBibliography({ projectId: id, bibliographyPath,
+          expectedBibliographyPath: input.expectedBibliographyPath, authority: record, signal }) };
       }
-      if (input.confirmProjectId !== id || !['keep', 'delete'].includes(input.attachments)) throw Object.assign(Error('Confirm this exact library and choose whether to keep its attachments'), { status: 400 });
-      await this.revokeProject(id, { response });
-      return { status: 200, body: await references.deleteLibrary({ projectId: id, ...input, authority: record, signal }) };
+      if (input.confirmProjectId !== id || !['keep', 'delete'].includes(input.attachments)) throw Object.assign(Error('Confirm this exact project and choose whether to keep its attachments'), { status: 400 });
+      const deleted = await references.deleteLibrary({ projectId: id, ...input, authority: record, signal });
+      await deleteReferenceProject(id);
+      return { status: 200, body: deleted };
     });
   }
   async office() {
@@ -216,7 +248,8 @@ export class ApplicationModules {
             await this.validateGrant(grant);
             // File ownership is independent of the one library stored in the
             // native document. This is only a default-selection hint.
-            return { projectId: grant.scope.projectId || null };
+            const context = await this.referenceCatalogue(grant.record);
+            return { projectId: context.projectId, referenceProjectId: context.referenceProjectId, defaultProjectId: context.defaultProjectId };
           }),
           referenceRequest: ({ grantId, method, path: requestPath, body, signal: callerSignal }) => this.gateway.authorizeOperation(grantId, 'references-request', async ({ grant, signal }) => {
             await this.validateGrant(grant);
@@ -225,7 +258,7 @@ export class ApplicationModules {
             const projectId = /^\/api\/references\/projects\/([^/]+)(?:\/|$)/.exec(uri.pathname)?.[1];
             if (!catalogue) {
               if (!projectId) throw Object.assign(Error('Choose one registered References library'), { status: 403 });
-              await this.project(grant.record, projectId, { includeArchived: true });
+              await this.referenceProject(grant.record, projectId);
             }
             return this.request({ component: 'references', method, path: requestPath.slice('/api/references'.length), body }, grant.record,
               { signal: callerSignal ? AbortSignal.any([callerSignal, signal]) : signal });
@@ -234,7 +267,7 @@ export class ApplicationModules {
         const referenceOperation = name => (value, { identity, projectId, signal } = {}) => this.gateway.authorizeOperation(identity?.grantId, 'references-' + name, async context => {
           await this.validateGrant(context.grant);
           if (typeof projectId !== 'string' || !projectId) throw Object.assign(Error('The native document must choose one References library'), { status: 400 });
-          const selected = await this.project(context.grant.record, projectId, { includeArchived: true });
+          const selected = await this.referenceProject(context.grant.record, projectId);
           const references = await this.references();
           if (typeof references[name] !== 'function') throw unavailable('References', 'the native citation operation is unavailable');
           return references[name](value, { authority: context.grant.record, projectId: selected.id, signal: signal ? AbortSignal.any([signal, context.signal]) : context.signal });
@@ -274,8 +307,14 @@ export class ApplicationModules {
     return this.instances.get('office');
   }
   async validateGrant(grant) {
+    if (grant.component === 'references') {
+      // The tab can select any database authorized by this backend session.
+      // Its initial selection is a navigation hint; each data route authorizes
+      // its explicit reference ID independently.
+      return;
+    }
     if (grant.scope.projectId) {
-      const current = await this.project(grant.record, grant.scope.projectId, { includeArchived: grant.component === 'references' });
+      const current = await this.project(grant.record, grant.scope.projectId);
       if (grant.scope.projectRoot && current.cwd !== grant.scope.projectRoot) throw Object.assign(Error('The document project folder changed'), { status: 409 });
     }
     await authorizeApplicationPath(grant.scope.root);
@@ -317,7 +356,14 @@ export class ApplicationModules {
   }
   async open(component, input, record) {
     return this.authorize(record, async () => {
-      const project = input.projectId ? await this.project(record, input.projectId, { includeArchived: component === 'references' }) : null;
+      if (component === 'references') {
+        const catalogue = await this.referenceCatalogue(record, { includeArchived: Boolean(input.projectId), selectedProjectId: input.projectId });
+        if (input.projectId) await this.referenceProject(record, input.projectId);
+        await this.references();
+        return this.gateway.open(component, record, { id: randomUUID(), referenceProjectId: input.projectId || catalogue.projectId,
+          identity: 'bk_' + randomUUID().replaceAll('-', ''), backendId: await this.identity(), openPath: '/' });
+      }
+      const project = input.projectId ? await this.project(record, input.projectId) : null;
       const root = input.cwd ? (await fileDirectory(input.cwd)).path : project?.cwd || (await fileDirectory()).path;
       await authorizeApplicationPath(root);
       const scope = { id: randomUUID(), projectId: project?.id || null, projectRoot: project?.cwd, root, identity: 'bk_' + randomUUID().replaceAll('-', ''),
@@ -332,9 +378,6 @@ export class ApplicationModules {
           scope.endpoint = await this.ensureRunning(prepared.service, true, prepared.needsRestart === true);
           scope.openPath = '/' + (prepared.openPath || '/').replace(/^\//, '');
         });
-      } else if (component === 'references') {
-        if (!project) throw Error('Choose a project for References');
-        await this.references();
       } else throw Error('Unknown web application');
       return this.gateway.open(component, record, scope);
     });
@@ -352,7 +395,10 @@ export class ApplicationModules {
         address = (await this.gateway.endpoint()).origin + address;
       }
       const { grant, path: openPath } = this.gateway.resolve(address);
-      const project = grant.scope.projectId ? await this.project(record, grant.scope.projectId, { includeArchived: grant.component === 'references' }) : null;
+      if (grant.component === 'references') {
+        return this.gateway.open('references', record, { ...grant.scope, id: randomUUID(), identity: 'bk_' + randomUUID().replaceAll('-', ''), openPath });
+      }
+      const project = grant.scope.projectId ? await this.project(record, grant.scope.projectId) : null;
       if (project && grant.scope.projectRoot && project.cwd !== grant.scope.projectRoot) throw Object.assign(Error('The application project folder changed'), { status: 409 });
       const root = (await fileDirectory(grant.scope.root)).path;
       if (root !== grant.scope.root) throw Object.assign(Error('The application project folder changed'), { status: 409 });
@@ -393,24 +439,39 @@ export class ApplicationModules {
         const projectRoute = /^\/projects(?:\/([a-f0-9-]{36}))?$/.exec(url.pathname);
         if (projectRoute) {
           const id = projectRoute[1], method = input.method || 'GET';
-          if (!id && method === 'GET') return { status: 200, body: (await projects({ includeArchived: url.searchParams.get('includeArchived') === 'true' })).projects.map(({ id, name, cwd, archived }) => ({ id, name, cwd, archived: Boolean(archived) })) };
+          if (!id && method === 'GET') return { status: 200, body: (await this.referenceCatalogue(record,
+            { includeArchived: url.searchParams.get('includeArchived') === 'true' })).projects };
           if (!id && method === 'POST') {
-            const folder = (await fileDirectory(input.body?.cwd)).path;
-            await authorizeApplicationPath(folder);
-            return { status: 201, body: await createProject({ ...input.body, cwd: folder }) };
+            const value = input.body || {};
+            if (Object.keys(value).some(key => !['name', 'cwd', 'bibliographyPath'].includes(key)) || value.cwd && value.bibliographyPath) throw Object.assign(Error('Choose one References project folder'), { status: 400 });
+            const cwd = value.cwd ? (await fileDirectory(value.cwd)).path : undefined;
+            const bibliographyPath = value.bibliographyPath ? await this.referencePath(value.bibliographyPath)
+              : cwd ? await this.referencePath(path.join(cwd, 'Bibliography')) : undefined;
+            const references = await this.references();
+            const project = await createReferenceProject({ name: value.name, cwd, bibliographyPath });
+            const { initialBibliographyPath, ...created } = project;
+            return { status: 201, body: { ...created, ...await references.projectInfo({ projectId: project.id, authority: record, signal: activeSignal }) } };
           }
           if (id) {
-            const project = await this.project(record, id, { includeArchived: true });
-            if (method === 'GET') return { status: 200, body: { id, name: project.name, cwd: project.cwd } };
-            if (method === 'PATCH') return { status: 200, body: await renameProject(id, input.body?.name) };
-            if (method === 'DELETE') return withProjectTransition(id, async () => { await this.revokeProject(id, { response }); return { status: 200, body: await removeProject(id) }; });
+            const project = await this.referenceProject(record, id);
+            if (method === 'GET') {
+              const { initialBibliographyPath, authorizePath, runAuthorized, ...value } = project;
+              return { status: 200, body: { ...value, ...await (await this.references()).projectInfo({ projectId: id, authority: record, signal: activeSignal }) } };
+            }
+            if (method === 'PATCH') {
+              if (!input.body || Object.keys(input.body).some(key => key !== 'name')) throw Object.assign(Error('Only the References project name can be changed here'), { status: 400 });
+              const { initialBibliographyPath, ...updated } = await renameReferenceProject(id, input.body.name);
+              return { status: 200, body: { ...updated, ...await (await this.references()).projectInfo({ projectId: id, authority: record, signal: activeSignal }) } };
+            }
+            if (method === 'DELETE') throw Object.assign(Error('Use the explicit References data deletion action and attachment choice'), { status: 400 });
           }
           throw Object.assign(Error('Method not allowed'), { status: 405 });
         }
         const projectId = /^\/projects\/([^/]+)/.exec(url.pathname)?.[1];
-        if (projectId) await this.project(record, projectId, { includeArchived: true });
+        if (projectId) await this.referenceProject(record, projectId);
         const result = await (await this.references()).handle({ method: input.method || 'GET', path: url.pathname, query: url.searchParams,
           body: input.body, headers: {}, signal: activeSignal, authority: record });
+        if (result.filePath && projectId) result.referenceProjectId = projectId;
         if (result.filePath && workerId && projectId && (input.method || 'GET') === 'GET') {
           // Pi runs on the owning backend and can use the authorized file path.
           // Its optional ordinary browser view uses the same scoped gateway and
@@ -450,7 +511,7 @@ export class ApplicationModules {
   }
   async resolveReferences(input, record, { signal } = {}) {
     if (!input || Object.keys(input).some(key => !['projectId', 'requestId'].includes(key)) || typeof input.requestId !== 'string' || !input.requestId || input.requestId.length > 128) throw Object.assign(Error('Choose a pending resolver request'), { status: 400 });
-    await this.project(record, input.projectId);
+    await this.referenceProject(record, input.projectId);
     const pending = await (await this.references()).handle({ method: 'POST', path: `/projects/${input.projectId}/connector/getResolverRequest`,
       query: new URLSearchParams(), body: { requestId: input.requestId }, headers: {}, authority: record, signal });
     if (pending.status !== 200 || pending.body?.status === 'complete') return pending;
@@ -463,10 +524,10 @@ export class ApplicationModules {
     // remote or machine), not the durable References library identity. The
     // authenticated HTTP session determines the actual owning backend.
     if (input.operation === 'context') {
-      return this.authorize(record, async () => ({ backendId, projects: (await projects()).projects.map(({ id, name }) => ({ id, name })) }));
+      return this.authorize(record, async () => ({ backendId, ...await this.referenceCatalogue(record) }));
     }
     if (input.operation !== 'request' || !connectorMethods.has(input.method)) throw Error('Unsupported References capture method');
-    await this.project(record, input.projectId);
+    await this.referenceProject(record, input.projectId);
     const headers = {};
     for (const [name, value] of Object.entries(input.headers || {})) {
       if (!requestHeaders.has(name.toLowerCase()) || typeof value !== 'string' || /[\r\n]/.test(value)) throw Error('Invalid References capture header');
@@ -499,7 +560,8 @@ export class ApplicationModules {
     const route = context.url.pathname.slice(context.basePath.length);
     if (route === 'api/context') {
       if (req.method !== 'GET') throw Object.assign(Error('Method not allowed'), { status: 405 });
-      return json(res, { backendId: await this.identity(), projectId: context.grant.scope.projectId, projects: (await projects()).projects.map(({ id, name }) => ({ id, name })) });
+      return json(res, { backendId: await this.identity(), ...await this.referenceCatalogue(context.grant.record,
+        { selectedProjectId: context.grant.scope.referenceProjectId }) });
     }
     if (route.startsWith('api/')) {
       let result;
@@ -509,17 +571,6 @@ export class ApplicationModules {
       } catch (error) {
         if (!context.grant.revoked) throw error;
         result = { status: error.status || 400, body: { error: error.message, code: error.code } };
-      }
-      if (context.grant.revoked && /^api\/projects\/[a-f0-9-]{36}\/(?:archive|relink|library)$/.test(route)) {
-        // The old captured root is revoked, but the explicit lifecycle result
-        // must remain readable. Renew the manager under the same authority;
-        // the web UI keeps its current exact HTTPS forwarding origin.
-        try {
-          const descriptor = route.endsWith('/library') && result.status < 300
-            ? await this.gateway.open('references', context.grant.record, { ...context.grant.scope, id: randomUUID(), identity: 'bk_' + randomUUID().replaceAll('-', ''), projectId: null, projectRoot: undefined, workerId: undefined, openPath: '/' })
-            : await this.open('references', { projectId: context.grant.scope.projectId }, context.grant.record);
-          result.body = { ...result.body, reopen: { component: descriptor.component, serviceId: descriptor.serviceId, openPath: descriptor.openPath } };
-        } catch (error) { result.body = { ...result.body, reopenError: error.message }; }
       }
       return this.sendResult(req, res, result, context.grant.record, context.signal, /^api\/projects\/([a-f0-9-]{36})\//.exec(route)?.[1]);
     }
@@ -534,9 +585,10 @@ export class ApplicationModules {
   }
   async sendResult(req, res, result, authority, signal, projectId) {
     if (result.filePath) {
+      projectId ||= result.referenceProjectId;
       if (!authority || !projectId) throw Object.assign(Error('Library file authority is required'), { status: 403 });
       return this.authorize(authority, async operation => {
-        const project = await this.project(authority, projectId, { includeArchived: true });
+        const project = await this.referenceProject(authority, projectId);
         // A manager can select another authorized library. Hold that library's
         // existing drain guard through streaming, independently of its tab root.
         return project.runAuthorized(async projectSignal => {
@@ -569,7 +621,7 @@ export class ApplicationModules {
   }
   async revokeProject(projectId, options) {
     await this.gateway.revokeWhere(grant => {
-      if (grant.scope.projectId !== projectId) return false;
+      if (grant.component === 'references' || grant.scope.projectId !== projectId) return false;
       this.officeService?.revoke({ grantId: grant.id }); return true;
     }, options);
   }

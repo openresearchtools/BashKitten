@@ -33,8 +33,7 @@ globalThis.References = new function () {
     const project = projects.find(project => project.id === context.selectedProjectId)
       || (previous?.backendId === context.backendId && projects.find(project => project.id === previous.projectId))
       || projects[0];
-    if (!project) throw new Error('Create a project in BashKitten before opening References.');
-    return transport({operation:'open',backendId:context.backendId,projectId:project.id});
+    return transport({operation:'open',backendId:context.backendId,...(project ? {projectId:project.id} : {})});
   };
   this.rpc = (destination, method, data, options={}) => transport({operation: 'request',
     backendId: destination.backendId, projectId: destination.projectId, method, data,
@@ -59,7 +58,7 @@ globalThis.References = new function () {
       const destination = await result;
       if (!destination) return false;
       if (destination.openManager) {
-        await transport({operation:'open',backendId:destination.backendId,projectId:destination.projectId});
+        await transport({operation:'open',backendId:destination.backendId,...(destination.projectId ? {projectId:destination.projectId} : {})});
         return false; // Opening the manager never becomes a capture session.
       }
       // Validate once more immediately before any capture operation; grants remain backend-owned.

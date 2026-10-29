@@ -3,13 +3,14 @@
 // archive/relink/deletion work. This module only collects explicit UI choices.
 import { node, button, field, dialog } from "./common.js";
 
-export function manageLibrary({ api, project, onRetired = () => {} }) {
-  const d = dialog("Library · " + project.name),
+export function manageLibrary({ api, project, onRetired = () => {}, onChanged = () => {}, onDeleted = () => {} }) {
+  const d = dialog("Project · " + project.name),
     controller = new AbortController(),
     scope = api.project(project.id),
     actions = node("div", { class: "toolbar" }),
     output = node("div"),
-    folder = node("input", { value: project.cwd, required: true }),
+    name = node("input", { value: project.name, required: true, maxlength: 200 }),
+    folder = node("input", { value: project.bibliographyPath || project.initialBibliographyPath || "", required: true }),
     relink = node("details"),
     deletion = node("details"),
     confirmation = node("input", { autocomplete: "off" }),
@@ -22,7 +23,7 @@ export function manageLibrary({ api, project, onRetired = () => {} }) {
     node(
       "option",
       { value: "delete" },
-      "Delete this library’s attachment files",
+      "Delete this project's reference attachment files",
     ),
   );
   function renewal(result) {
@@ -55,6 +56,8 @@ export function manageLibrary({ api, project, onRetired = () => {} }) {
     );
   }
   function report(result) {
+    if (Number.isInteger(result.moved)) output.append(node("p", {}, `${result.moved} attachment files moved.`));
+    if (result.cleanupPending) output.append(node("p", { class: "notice" }, result.warning || "The new folder is active. Retry to finish removing the old copies."));
     const reconciliation = result.reconciliation;
     if (reconciliation) {
       output.append(
@@ -83,7 +86,7 @@ export function manageLibrary({ api, project, onRetired = () => {} }) {
     if (busy || retired) return;
     busy = true;
     output.replaceChildren();
-    d.notice.textContent = "Updating library…";
+    d.notice.textContent = "Updating project references…";
     try {
       const result = await scope.request(action, {
         method,
@@ -93,13 +96,24 @@ export function manageLibrary({ api, project, onRetired = () => {} }) {
       if (controller.signal.aborted) return;
       d.notice.textContent =
         action === "library"
-          ? "Library deleted."
+          ? "Project reference data deleted."
           : action === "relink"
-            ? "Project folder relinked."
+            ? result.cleanupPending ? "Bibliography moved; old-copy cleanup needs a retry." : "Bibliography folder changed."
             : body.archived
-              ? "Library archived."
-              : "Library unarchived.";
+              ? "Project archived."
+              : "Project unarchived.";
       report(result);
+      if (action === "archive") {
+        project = { ...project, ...result.project };
+        archiveButton.textContent = project.archived ? "Unarchive project" : "Archive project";
+      }
+      if (action === "library") { await onDeleted(project.id); d.el.close(); return; }
+      if (action === "relink" && result.bibliographyPath) {
+        project = { ...project, bibliographyPath: result.bibliographyPath };
+        folder.value = result.bibliographyPath;
+        currentFolder.textContent = result.bibliographyPath;
+      }
+      if (action !== "library") await onChanged(project);
     } catch (error) {
       if (!controller.signal.aborted) {
         d.notice.textContent = error.message;
@@ -109,33 +123,47 @@ export function manageLibrary({ api, project, onRetired = () => {} }) {
       busy = false;
     }
   }
+  const archiveButton = button(project.archived ? "Unarchive project" : "Archive project", () =>
+    run("archive", "POST", { archived: !project.archived }));
   actions.append(
-    button(project.archived ? "Unarchive library" : "Archive library", () =>
-      run("archive", "POST", { archived: !project.archived }),
-    ),
+    button("Rename project", async () => {
+      if (busy || retired || !name.reportValidity()) return;
+      busy = true;
+      try {
+        const result = await api.request("projects/" + encodeURIComponent(project.id), { method: "PATCH", body: { name: name.value }, signal: controller.signal });
+        project = result.project || result;
+        d.el.querySelector("h2").textContent = "Project · " + project.name;
+        confirmation.closest("label").querySelector("span").textContent = "Type “" + project.name + "” to confirm";
+        confirmation.value = "";
+        d.notice.textContent = "Project renamed.";
+        await onChanged(project);
+      } catch (error) { if (!controller.signal.aborted) d.notice.textContent = error.message; }
+      finally { busy = false; }
+    }),
+    archiveButton,
   );
   relink.append(
-    node("summary", {}, "Relink project folder"),
+    node("summary", {}, "Bibliography folder"),
     node(
       "p",
       { class: "notice" },
-      "Choose the new absolute folder after moving or copying its files. Attachment files are checked before the project folder is updated.",
+      "Choose the actual folder for this project's saved attachments. Changing it moves the files and updates their paths. Existing files in the destination are kept.",
     ),
-    field("New project folder", folder),
-    button("Verify attachments and relink", () => {
+    field("Bibliography folder", folder),
+    button("Move attachments and change folder", () => {
       if (!folder.reportValidity()) return;
       void run("relink", "POST", {
-        cwd: folder.value,
-        expectedCwd: project.cwd,
+        bibliographyPath: folder.value,
+        expectedBibliographyPath: project.bibliographyPath,
       });
     }),
   );
   const remove = button(
-    "Delete library",
+    "Delete reference data",
     () => {
       if (confirmation.value !== project.name) {
         d.notice.textContent =
-          "Type the project name exactly to delete its library.";
+          "Type the project name exactly to delete its reference data.";
         return;
       }
       void run("library", "DELETE", {
@@ -146,23 +174,25 @@ export function manageLibrary({ api, project, onRetired = () => {} }) {
     { class: "danger" },
   );
   deletion.append(
-    node("summary", {}, "Delete library…"),
+    node("summary", {}, "Delete project reference data…"),
     node(
       "p",
       { class: "notice" },
-      "Delete this project’s reference database and saved import jobs. This cannot be undone here. Choose whether its attachment files are also deleted. The project and chat history remain.",
+      "Delete this project’s reference database and saved import jobs. This cannot be undone here. Choose whether its attachment files are also deleted. Existing documents and BashKitten workspace history remain.",
     ),
     field("Type “" + project.name + "” to confirm", confirmation),
     field("Attachments", attachments),
     remove,
   );
+  const currentFolder = node("p", { class: "detail-title" }, project.bibliographyPath || project.initialBibliographyPath || "");
   d.body.append(
-    node("p", { class: "detail-title" }, project.cwd),
+    field("Project name", name),
+    currentFolder,
     node(
       "p",
       { class: "notice" },
       project.archived
-        ? "Archived library. Unarchive it before making changes."
+        ? "Archived project. Unarchive it before making changes."
         : "Archiving keeps references and attachments and removes this project from active navigation.",
     ),
     actions,

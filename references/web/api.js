@@ -57,7 +57,7 @@ export function createApi({
     url,
     project(id) {
       if (!id || id === "." || id === "..")
-        throw Error("Select a project library");
+        throw Error("Select a project");
       const prefix = "projects/" + encodeURIComponent(id) + "/";
       const projectRoot = url(prefix);
       const scopedPath = (path) => {

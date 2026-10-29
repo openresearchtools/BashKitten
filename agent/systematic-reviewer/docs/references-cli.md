@@ -7,13 +7,12 @@ UI. `scripts/zotero.mjs` retains only its deprecated filename as a migration ali
 Old local-desktop URL/credential options are not accepted.
 
 Actual files use `--path /projects/PROJECT/import --file sources.ris`, optional
-`--encoding`, `--target COLLECTION`, `--request-id STABLE_ID`. The client sends
+`--encoding`, `--request-id STABLE_ID`. The client sends
 256 KiB chunks through the same upload owner as the UI; decoding/native detection
 run in the worker and return resumable jobs. `--input` alongside a file supplies
 small transfer options only. Attachments use
 `--path /projects/PROJECT/connector/saveAttachment --file paper.pdf --input metadata.json`
-with `parentKey` and optional title/contentType; `saveStandaloneAttachment` accepts
-an optional collection `target`. Recover lost commits with the unchanged file
+with `parentKey` and optional title/contentType; `saveStandaloneAttachment` uploads directly into the chosen References project. Recover lost commits with the unchanged file
 and same request ID, preserving returned recovery receipts.
 
 Inside an owned Pi worker the inherited private worker key binds the current
@@ -28,7 +27,7 @@ returned continuation cursors. `GET .../items/KEY/children`, `.../fulltext` and
 `POST .../identifiers/import`, `.../items/enrich`, `.../items/resolve-pdfs` and
 `.../openalex/import` use shared jobs, receipts and native cancellation. Preserve
 partial, unresolved and interrupted outcomes; uncertain writes need reconciliation.
-Collections, item data/tags/notes/relations, schema and styles use the same API.
+Independent References projects, item data/tags/notes/relations, schema and styles use the same API.
 The bundled References skill documents project create/archive/relink, deliberate
 library deletion, recent-job recovery, selected native exports, saved searches,
 copied-snapshot reconciliation and POST `/resolve` for browser-assisted PDFs.

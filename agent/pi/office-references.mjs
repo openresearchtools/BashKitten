@@ -13,12 +13,12 @@ const segment = value => {
 export default function officeReferences(pi) {
   pi.registerTool({
     name: 'references', label: 'References', exposure: 'deferred',
-    description: 'Manage the current backend’s project libraries through the shared References API. Read the references skill. Explicit project IDs, bounded pages, item versions and import/job identities are required. Supports collections/items/metadata/tags/notes/relations, attachments/full text, identifier/OpenAlex import, abstract enrichment, PDF resolution, citations and styles. Long work returns cancellable jobs; never start another server or resolver.',
+    description: 'Manage independent named References project databases on the current backend through the shared References API. Default is created on first use; list/create/select References projects independently of BashKitten workspaces. Read the references skill. Explicit project IDs, bounded pages, item versions and import/job identities are required. Supports items/metadata/tags/notes/relations, attachments/full text, identifier/OpenAlex import, abstract enrichment, PDF resolution, citations and styles. Long work returns cancellable jobs; never start another server or resolver.',
     parameters: Type.Object({
       method: Type.Union(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(value => Type.Literal(value))),
       path: Type.String({ description: 'Component-relative References API path, including explicit /projects/<id>/ scope and query parameters' }),
       body: Type.Optional(Type.Any()),
-      file: Type.Optional(Type.String({ description: 'Local file to stream. POST /projects/PROJECT/import accepts target, encoding and requestId; connector/saveAttachment accepts parentKey,title,contentType,requestId; connector/saveStandaloneAttachment accepts target,title,contentType,requestId. No bytes enter model context.' })),
+      file: Type.Optional(Type.String({ description: 'Local file to stream. POST /projects/PROJECT/import accepts encoding and requestId; connector/saveAttachment accepts parentKey,title,contentType,requestId; connector/saveStandaloneAttachment accepts title,contentType,requestId. No bytes enter model context.' })),
     }, { additionalProperties: false }),
     async execute(_id, { method, path, body, file }, signal, onUpdate, ctx) {
       try {

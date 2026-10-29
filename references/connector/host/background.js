@@ -12,8 +12,8 @@ function validate(message, sender) {
     throw new Error('References host: unauthorized caller or incompatible API');
   }
   if (message.operation === 'context') return {apiVersion: 1, operation: 'context'};
-  if (message.operation === 'open' && identifier(message.backendId) && identifier(message.projectId)) {
-    return {apiVersion:1,operation:'open',backendId:message.backendId,projectId:message.projectId};
+  if (message.operation === 'open' && identifier(message.backendId) && (message.projectId == null || identifier(message.projectId))) {
+    return {apiVersion:1,operation:'open',backendId:message.backendId,...(message.projectId == null ? {} : {projectId:message.projectId})};
   }
   if (message.operation !== 'request' || !identifier(message.backendId)
       || !identifier(message.projectId) || !METHODS.has(message.method)) {

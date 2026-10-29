@@ -9,6 +9,7 @@ export function managedContentCount(state) {
 }
 function bindingError(code, message, details) { return Object.assign(new Error(message), { code, details }); }
 export async function runCitationCommand({ invoke, renderDocument, importSnapshots, documentType, projectId, request, signal, preview = false }) {
+  if (request.collection) throw Error('Collections are no longer supported. Select a References project.');
   if (request.noteType !== undefined && !['footnote', 'endnote'].includes(request.noteType)) throw Error('Invalid native note placement');
   const current = await invoke({ operation: 'citations.inspect' }, { signal });
   if (request.expectedRevision !== undefined && request.expectedRevision !== current.revision) throw bindingError('citation_state_changed', 'Citation state changed; inspect it again');
@@ -18,10 +19,10 @@ export async function runCitationCommand({ invoke, renderDocument, importSnapsho
     if (!Number.isInteger(request.expectedRevision)) throw bindingError('binding_revision_required', 'Inspect the document and provide its revision before changing document settings');
     if (typeof request.expectedNativeSnapshot !== 'string') throw bindingError('binding_snapshot_required', 'Provide the inspected native snapshot before changing document settings');
     if (request.expectedNativeSnapshot !== current.nativeSnapshot) throw bindingError('citation_state_changed', 'Native citations or bibliography changed; inspect and confirm the document settings again');
-    if (typeof request.projectId !== 'string' || !request.projectId || !request.style?.id) throw bindingError('invalid_binding', 'Choose a project library and citation style');
+    if (typeof request.projectId !== 'string' || !request.projectId || !request.style?.id) throw bindingError('invalid_binding', 'Choose a project and citation style');
     projectId = request.projectId;
     const changingLibrary = current.libraryId !== projectId, managed = managedContentCount(current);
-    if (changingLibrary && managed && request.convertExistingToText !== true) throw bindingError('binding_confirmation_required', 'Changing the project library converts existing citations and bibliography to ordinary formatted content. Confirm this conversion explicitly.', { previousProjectId: current.libraryId || null, projectId, managed, revision: current.revision });
+    if (changingLibrary && managed && request.convertExistingToText !== true) throw bindingError('binding_confirmation_required', 'Changing the project converts existing citations and bibliography to ordinary formatted content. Confirm this conversion explicitly.', { previousProjectId: current.libraryId || null, projectId, managed, revision: current.revision });
     if (changingLibrary || !managed) {
       // Validate only the selected library/style. Existing rendered content is
       // never sent through the new style when changing the bound library.
@@ -30,9 +31,9 @@ export async function runCitationCommand({ invoke, renderDocument, importSnapsho
       return invoke({ operation: 'citations.bind', expectedRevision: current.revision, nativeSnapshot: current.nativeSnapshot, projectId, style: rendered.style, noteType: request.noteType || current.noteType, convertExistingToText: request.convertExistingToText === true }, { signal, mutation: true });
     }
   } else {
-    if (!binding) throw bindingError('binding_required', 'Choose this document’s project library and citation style in Document settings before using citations');
+    if (!binding) throw bindingError('binding_required', 'Choose this document’s project and citation style in Document settings before using citations');
     projectId = binding.projectId;
-    if (request.projectId !== undefined && request.projectId !== projectId) throw bindingError('binding_project_mismatch', 'The citation request must use this document’s bound project library');
+    if (request.projectId !== undefined && request.projectId !== projectId) throw bindingError('binding_project_mismatch', 'The citation request must use this document’s bound project');
   }
   let state = structuredClone(current); delete state.binding;
   state.projectId = projectId; state.libraryId = projectId; state.bindingVersion = 1;
@@ -72,7 +73,7 @@ export async function runCitationCommand({ invoke, renderDocument, importSnapsho
       for (let offset = 0; offset < ids.length; offset += 100) {
         signal?.throwIfAborted();
         const batch = ids.slice(offset, offset + 100);
-        const result = await importSnapshots({ items: Object.fromEntries(batch.map(id => [id, state.embeddedItems[id]])), requestId: imported.requestId + ':' + offset, ...(request.collection ? { target: request.collection } : {}) }, { signal, projectId });
+        const result = await importSnapshots({ items: Object.fromEntries(batch.map(id => [id, state.embeddedItems[id]])), requestId: imported.requestId + ':' + offset }, { signal, projectId });
         for (const id of batch) {
           if (typeof result.mapping?.[id] !== 'string' || !result.mapping[id].startsWith('bkref:')) throw Error('References did not return every imported identity');
           imported.mapping[id] = result.mapping[id];

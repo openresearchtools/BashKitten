@@ -14,9 +14,8 @@ export async function updateCaptureSession(p, sessionID, body, call, signal) {
   );
   if (!session)
     throw Object.assign(Error("Capture session unavailable"), { status: 404 });
-  const hasTarget = Object.hasOwn(body, "target");
-  if (hasTarget && body.target)
-    await call(p, "collection", { key: body.target }, signal);
+  if (body.target && body.target !== "L" + p.id)
+    throw Object.assign(Error("Collections are no longer supported. Select a References project."), { status: 410 });
   const parents = new Map();
   for (const key of Object.values(session.items || {})) {
     let item;
@@ -97,7 +96,6 @@ export async function updateCaptureSession(p, sessionID, body, call, signal) {
   }
   for (let item of parents.values()) {
     const data = { ...item.data };
-    if (hasTarget) data.collections = body.target ? [body.target] : [];
     if (body.tags !== undefined) {
       const tags = (
         Array.isArray(body.tags) ? body.tags : String(body.tags).split(",")
@@ -109,7 +107,7 @@ export async function updateCaptureSession(p, sessionID, body, call, signal) {
         .filter((tag) => tag.type === 1)
         .concat(tags.map((tag) => ({ tag, type: 0 })));
     }
-    if (hasTarget || body.tags !== undefined)
+    if (body.tags !== undefined)
       item = await call(
         p,
         "put",
@@ -154,7 +152,6 @@ export async function updateCaptureSession(p, sessionID, body, call, signal) {
       );
     }
   }
-  if (hasTarget) session.target = body.target || null;
   await call(
     p,
     "record",

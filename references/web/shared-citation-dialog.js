@@ -29,7 +29,7 @@ export async function chooseCitation({
   preview,
   embeddedItems,
 } = {}) {
-  if (!api || !projectId) throw Error("A project library is required");
+  if (!api || !projectId) throw Error("A project is required");
   signal?.throwIfAborted();
   const scoped = api.project(projectId),
     controller = new AbortController(),
@@ -82,7 +82,7 @@ export async function chooseCitation({
     }),
     search = node("input", {
       type: "search",
-      placeholder: "Search this project library",
+      placeholder: "Search this project's references",
       "aria-label": "Search references",
     }),
     addSelection = button("Add selected", () => addSelected(), {
@@ -361,7 +361,7 @@ export async function chooseCitation({
   }
   const library = new VirtualList({
     element: libraryRows,
-    label: "Library references",
+    label: "Project references",
     header: tableHeader,
     role: "grid",
     rowRole: "row",

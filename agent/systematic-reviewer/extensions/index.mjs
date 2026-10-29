@@ -22,7 +22,7 @@ export default function systematicReviewer(pi) {
   pi.registerCommand('review-setup', { description: 'Inspect shared References service configuration or open its private OpenAlex settings', handler: reviewSetup });
   const lookup = name => ({
     name, label: 'Read References', exposure: 'deferred',
-    description: `${name === 'review_zotero' ? 'Compatibility alias for review_references. ' : ''}Read one bounded References page or selected verified identities into a portable CSL snapshot. projectId is explicit; returned bkref identities belong to this backend. Use the references tool for shared imports, enrichment, full text, PDFs and library mutations.`,
+    description: `${name === 'review_zotero' ? 'Compatibility alias for review_references. ' : ''}Read one bounded References page or selected verified identities into a portable CSL snapshot. projectId is an explicit independent References database ID, separate from a BashKitten workspace; Default and user/agent-created projects are listed by GET /projects. Returned bkref identities belong to this backend. Use the references tool for shared imports, enrichment, full text, PDFs and library mutations.`,
     parameters: Type.Object({ operation: Type.Union([Type.Literal('search'), Type.Literal('snapshot')]), projectId: Type.String(),
       ids: Type.Optional(Type.Array(Type.String(), { minItems: 1, maxItems: 100 })), query: Type.Optional(Type.String()),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })), start: Type.Optional(Type.Integer({ minimum: 0 })), cursor: Type.Optional(Type.String({ description: 'Returned keyset cursor; reload when concurrent library edits invalidate it' })),

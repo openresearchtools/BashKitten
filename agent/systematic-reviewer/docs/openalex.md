@@ -3,7 +3,7 @@
 Use `references` or `node scripts/openalex.mjs --help`. The CLI sends a bounded
 JSON request to the same project-qualified References service used by the UI.
 Search supports the backend's query/filter, paging and explicit result limits.
-Import selected raw records with an explicit project/collection and stable request
+Import selected raw records with an explicit References project database and stable request
 identity; retain the resulting job and per-record outcomes. A bounded import of
 all results must preserve its declared search scope and page provenance.
 

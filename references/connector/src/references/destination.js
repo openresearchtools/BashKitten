@@ -3,12 +3,16 @@
 const id = location.hash.slice(1), $ = x => document.getElementById(x);
 const send = (action, data={}) => browser.runtime.sendMessage({references:true,id,action,...data});
 let context;
-const destination = () => ({backendId:$('backend').value,projectId:$('project').value,target:''});
+const destination = (openManager=false) => ({backendId:$('backend').value,
+  ...($('project').value || !openManager ? {projectId:$('project').value} : {}),target:''});
 const option = (value, text) => {const node=document.createElement('option');node.value=value;node.textContent=text;return node;};
 function selection() {
-  $('manager').disabled=!$('project').value;
-  $('add').disabled=!$('project').value;
-  $('status').textContent=$('project').value ? '' : 'Choose a References project to continue.';
+  $('manager').disabled=!$('backend').value;
+  $('add').disabled=!$('backend').value || !$('project').value;
+  $('status').textContent=!$('backend').value ? 'Choose a backend to continue.'
+    : $('project').value ? '' : $('project').options.length
+      ? 'Choose a References project to continue.'
+      : 'No References projects yet. Open manager to create one.';
 }
 function projects() {
   const backend=(context.backends || [context]).find(x=>x.backendId===$('backend').value);
@@ -20,9 +24,11 @@ function projects() {
 $('backend').onchange=projects;
 $('project').onchange=selection;
 $('cancel').onclick=()=>send('cancel');
-$('manager').onclick=async()=>{try{await send('confirm',{destination:destination(),openManager:true});}catch(error){$('status').textContent=error.message;}};
+$('manager').onclick=async()=>{try{await send('confirm',{destination:destination(true),openManager:true});}catch(error){$('status').textContent=error.message;}};
 document.querySelector('form').onsubmit=async event=>{
-  event.preventDefault(); $('add').disabled=true;
+  event.preventDefault();
+  if(!$('backend').value || !$('project').value){selection();return;}
+  $('add').disabled=true;
   try {await send('confirm',{destination:destination()});}
   catch(error){$('status').textContent=error.message;$('add').disabled=false;}
 };

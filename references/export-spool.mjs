@@ -8,14 +8,13 @@ export function exportSelection(body) {
   const input = body.selection || { scope: "selected", keys: body.keys };
   if (
     !input ||
-    !["selected", "library", "collection", "search"].includes(input.scope)
+    !["selected", "library", "search"].includes(input.scope)
   )
     fail("Choose an explicit export selection");
   const allowed = [
     "scope",
     "keys",
     "q",
-    "collection",
     "sort",
     "direction",
     "deleted",
@@ -58,10 +57,6 @@ export function exportSelection(body) {
       fail("Select reference keys to export");
     selection.keys = [...new Set(input.keys)];
   } else {
-    if (selection.scope !== "library" && input.collection)
-      selection.collection = input.collection;
-    if (selection.scope === "collection" && !selection.collection)
-      fail("Choose a collection to export");
     if (selection.scope === "search") {
       if (
         input.q !== undefined &&
@@ -85,8 +80,6 @@ export async function writeExportInput({
   const version = await call(p, "libraryVersion", {}, signal);
   if (selection.version !== undefined && selection.version !== version)
     fail("Library changed; reload the export selection", 409);
-  if (selection.collection)
-    await call(p, "collection", { key: selection.collection }, signal);
   const assertVersion = (current) => {
     if (current !== version)
       fail("Library changed during export; reload before retrying", 409);
@@ -159,7 +152,6 @@ export async function writeExportInput({
           "list",
           {
             query: selection.q,
-            collection: selection.collection,
             deleted: selection.deleted,
             sort: selection.sort,
             direction: selection.direction,

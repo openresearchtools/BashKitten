@@ -17,6 +17,11 @@ the six binaries and matching source inventory and uploaded the 47-file,
 21,195,582,964-byte complete artifact `12884374054`. Release publication remains
 held for installed review; an Actions artifact is not a published prerelease.
 
+The current source updates bundled Pi to official 1.4.0 in `81a96b5996`.
+Exact source/package pins, all 164 locked npm archives and full notices, focused
+extension/provider checks and isolated native RPC checks passed. This is not
+installed Android/Linux acceptance of the updated runtime.
+
 The actual staged 45390 Linux amd64 DEB and production x86_64 APK passed the
 existing native license/About checks: 3,056 and 2,918 complete records
 respectively, including all 2,427 matching Termux companion records in the APK,
@@ -66,18 +71,42 @@ from a Files/Office application tab exposed a real failure:
 `No cookie store exists with ID firefox-container-3025207296`. That is the
 internal isolated service context, not a registered Firefox container. The
 proposed custom native `create-source-tab` bridge was withdrawn before commit.
-The user requires the plugin to open ordinary native tabs in the same normal
-user session, with no new browser tab/cookie bridge. The standard-tab source fix
-removes two copied `cookieStoreId` assignments; actual capture remains blocked
-pending the plugin-only fix/new package, with no runtime pass claimed. The receipt is
+The plugin-only correction uses ordinary native tabs and the browser's actual
+response stream, without cookie export or a new tab/cookie bridge. Its actual
+public ACM replay saved 2,570,670 bytes with SHA-256
+`434376057dbe6fc3e44d0fdb7268b56126e9b47ca9d6aa9e05cf2e738f72e81d`,
+matching the recorded native Zotero PDF. The final inline-disposition correction passed the installed native background
+PDF replay, preserving the active manager and exact PDF bytes. The artificial normal-session request to the isolated
+Files application origin is not publisher-cookie parity evidence. Receipts are
+in `Bashkitten-Acceptance/references-native-tabs-20261029/`; the original failure is in
 `Bashkitten-Acceptance/native-wayland-153.5.4-45390-20261029/verification.json`.
 Android's exact 45390 APK/backend/OS pairing and both active built-in References
 registrations passed, but the visible enabled References Add action did nothing
 when tapped. Both native API-created and + tabs retain BashKitten context IDs as
-strings. A shared cookie-store decoder gap is suspected, not yet confirmed by a
-working runtime fix; phone invocation/capture acceptance remains open.
+strings. A separate correction to the existing native tabs API initializes the
+ordinary engine session and preserves its actual decoded context/privacy state;
+production Kotlin compilation passed. It adds no custom tab/cookie bridge or
+cookie copying. Runtime invocation, background focus and private-session checks
+remain pending a coherent signed candidate.
 Its receipts are `installed-package-identity.json` and `installed-addon-state.json`
 under `Bashkitten-Acceptance/android-153.5.4-45390d6a2551-20261029/`.
+
+The current module batch implements the user's independent named References
+projects, with an automatic Default per backend, direct clickable sidebar,
+New project and per-project Settings. Capture and Office choose a References
+project only; collections are removed from product controls while existing data
+and database/citation identities are preserved. Office's explicit formatted-text
+unlink confirmation remains. Shared native colors and compact capture are
+included. This new model supersedes the earlier 18-check workspace-based result.
+Focused manager DOM (9), packaged Office settings (8) and real SQLite/service (9)
+checks passed. Actual service capture/naming, two-file folder move and restart
+checks (7), plus manager lifecycle/direct-launch checks (13), also passed.
+Combined installed verification remains pending. Receipts are in `references-independent-projects-20261029/` under
+`Bashkitten-Acceptance/`. The separate
+Android existing-native-API correction has compilation/regression evidence,
+with signed-candidate runtime validation still pending. The current verification
+scope is Files/Office/References, model/audio changes and reported UI fixes plus
+their direct integrations; unrelated full-app campaigns are not being repeated.
 
 Coherent 45390 Android portrait and landscape toolbar replay passed: the obsolete
 separate sidebar button was absent, the main logo opened Agent and its sidebar,

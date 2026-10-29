@@ -44,8 +44,9 @@ prose edits. Do not rewrite a live document's ZIP/XML or save a competing file c
 Native overlap/undo/conflict semantics still apply; distinct views are not a promise
 of conflict-free overlapping edits.
 
-Discover the complete shared References API for library, collection, item, metadata,
-abstract, PDF and full-text work. Verify the destination project and returned
+Discover the complete shared References API for independent projects, items, metadata,
+abstract, PDF and full-text work. Choose a References project independently of the file workspace, using Default
+or a user/agent-created database. Verify the destination project and returned
 `bkref:<backend>/<project>/<item>` identities. Follow
 [harvesting](../harvesting/SKILL.md) for provenance and identity conflicts; never
 turn a DOI, PMID or title into an invented item key.
