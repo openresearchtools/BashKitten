@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { startDownload, controlDownload, saveModelNoticeManifest } from '../models/downloads.mjs';
+import { startDownload, controlDownload, saveModelNoticeManifest, downloadsStatus, downloadedFiles } from '../models/downloads.mjs';
 import { hfRequest } from '../models/huggingface.mjs';
 import { modelDataDir } from '../models/settings.mjs';
 import { digest, writePrivate } from '../common.mjs';
@@ -28,6 +28,9 @@ function presetCatalogue() {
         engine: kind === 'llama' ? 'llama' : ['whisper', 'parakeet'].includes(kind) ? 'whisper' : 'tts',
         repository: model.repository, revision: model.revision, files: files.map(item => item.name),
         bytes: files.reduce((total, item) => total + item.bytes, reference?.bytes || 0), license: model.license,
+        modelBytes: file.bytes, projectorBytes: files.slice(1).reduce((total, item) => total + item.bytes, 0),
+        ...(model.contextLength ? { contextLength: model.contextLength } : {}),
+        guided: !model.guidedFiles || model.guidedFiles.includes(file.name),
         noticesDirectory: noticesDirectory(model), ...(reference ? { referenceVoicePath: supportPath(reference), referenceVoice: reference } : {}) });
     }
   }
@@ -45,6 +48,23 @@ export async function curatedModels() {
     if (!verified.get(preset.referenceVoicePath)) delete preset.referenceVoicePath;
   }
   return result;
+}
+export async function presetDownloads() {
+  const catalogue = await curatedModels(), downloads = await downloadsStatus(), checked = new Map();
+  for (const preset of catalogue.presets) {
+    const candidates = downloads.jobs.filter(job => job.repository === preset.repository && job.revision === preset.revision &&
+      preset.files.every(name => job.files.some(file => file.path === name)));
+    preset.downloaded = false;
+    for (const job of candidates.filter(job => job.status === 'complete')) {
+      if (!checked.has(job.id)) checked.set(job.id, await downloadedFiles(job.id));
+      const files = checked.get(job.id);
+      if (!files || preset.referenceVoice && !preset.referenceVoicePath) continue;
+      preset.paths = files; preset.downloaded = true; preset.download = job; break;
+    }
+    preset.download ||= candidates.find(job => job.status !== 'cancelled');
+    preset.status = preset.downloaded ? 'complete' : preset.download?.status === 'complete' ? 'missing' : preset.download?.status || 'missing';
+  }
+  return catalogue;
 }
 export function firstRunModelPresets(platform) {
   const selected = catalogue.defaults[platform];
@@ -164,6 +184,14 @@ export async function downloadPreset(id, { signal } = {}) {
   if (!preset) throw Error('Choose a listed model');
   await prepareModelInformation(preset, signal);
   signal?.throwIfAborted();
+  const existing = (await downloadsStatus()).jobs.find(job => job.repository === preset.repository && job.revision === preset.revision &&
+    job.status !== 'cancelled' && preset.files.every(name => job.files.some(file => file.path === name)));
+  if (existing) {
+    // An explicit model selection may repair/reverify its prior download.
+    // Status polling and reuse of unchanged completion receipts never hash it.
+    const job = existing.status === 'complete' && await downloadedFiles(existing.id) ? existing : await controlDownload(existing.id, 'resume');
+    return { ...job, noticesDirectory: preset.noticesDirectory, ...(preset.referenceVoicePath ? { referenceVoicePath: preset.referenceVoicePath } : {}) };
+  }
   const job = await startDownload({ id: preset.repository, revision: preset.revision, files: preset.files });
   if (signal?.aborted) { await controlDownload(job.id, 'cancel'); signal.throwIfAborted(); }
   return { ...job, noticesDirectory: preset.noticesDirectory, ...(preset.referenceVoicePath ? { referenceVoicePath: preset.referenceVoicePath } : {}) };

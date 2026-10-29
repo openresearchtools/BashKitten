@@ -17,13 +17,16 @@ import { RouterModelTest } from './router-test.mjs';
 const configFile = path.join(localAIDir, 'config.json');
 const ids = { llama: 'localai-llama', whisper: 'localai-whisper' };
 // Stock Pi keeps 20k recent tokens for compaction and reserves 4k for safety.
-const defaultContextSize = 32768;
+const defaultContextSize = 65536;
+const guidedCache = 'cache-type-k = q8_0\ncache-type-v = q8_0';
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const defaults = engine => ({ mode: 'managed', binary: '', backend: platform === 'termux' ? 'cpu' : 'auto', port: 0, argv: [], cwd: os.homedir(), env: {},
   ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : engine === 'tts' ? { model: '', projector: '', voice: '', language: 'en', modelKind: 'pocket', cpuThreads: 0 } : { model: '', modelKind: 'whisper', startup: false, keepRunning: false, autoSend: true }) });
 const cleanText = value => typeof value === 'string' && !value.includes('\0');
+const guidedConfigRevision = config => digest(JSON.stringify({ ...config, guided: undefined }));
+const markGuided = (config, id, ini) => { config.guided = { id, config: guidedConfigRevision(config), ...(ini ? { ini: digest(ini.content), file: ini.file } : {}) }; };
 // Pi import and voice-message sending do not change the inference command.
-const sameRuntimeConfig = (a, b) => JSON.stringify({ ...a, importToPi: undefined, autoSend: undefined, startup: undefined, keepRunning: undefined }) === JSON.stringify({ ...b, importToPi: undefined, autoSend: undefined, startup: undefined, keepRunning: undefined });
+const sameRuntimeConfig = (a, b) => JSON.stringify({ ...a, guided: undefined, importToPi: undefined, autoSend: undefined, startup: undefined, keepRunning: undefined }) === JSON.stringify({ ...b, guided: undefined, importToPi: undefined, autoSend: undefined, startup: undefined, keepRunning: undefined });
 // A GPU archive also contains its CPU backend. Moving to a different GPU
 // archive requires an explicit download, but saving that choice must work first.
 const supportsManagedChoice = (runtime, config) => Boolean(runtime?.binary &&
@@ -132,6 +135,82 @@ export class LocalAI {
     return { fresh, conflict };
   }
   async config() { requireLocalRuntime(); return readConfiguration(); }
+  async guidedSnapshot() {
+    const config = await this.config(), ini = await this.ini({ file: config.llama.preset });
+    return { config, ini, revision: digest(JSON.stringify(config) + '\0' + ini.file + '\0' + ini.revision),
+      owned: Object.fromEntries(['llama', 'whisper', 'tts'].map(engine => [engine, Boolean(config[engine].guided?.id &&
+        config[engine].guided.mode !== 'custom' &&
+        config[engine].guided.config === guidedConfigRevision(config[engine]) && (engine !== 'llama' ||
+          config.llama.guided.ini === ini.revision && config.llama.guided.file === ini.file))])) };
+  }
+  async customRouter({ enabled, file, revision }) { return this.exclusive(async () => {
+    if (enabled !== true) throw Error('Choose a guided model to leave custom router mode.');
+    const snapshot = await this.guidedSnapshot();
+    if (revision !== snapshot.revision) throw Error('Local AI or its router INI changed. Refresh before changing mode.');
+    const config = structuredClone(snapshot.config);
+    if (file !== undefined) {
+      const ini = await this.ini({ file });
+      if (ini.revision === null) throw Error('Create or choose an existing router INI.');
+      validateINI(ini.content); config.llama.preset = ini.file;
+    }
+    config.llama.guided = { ...config.llama.guided, mode: 'custom' };
+    if ((await this.guidedSnapshot()).revision !== revision) throw Error('Local AI changed. Your settings were kept.');
+    await writeJson(configFile, config);
+  }); }
+  async guidedDevices(engine, { fresh = false } = {}) {
+    const runtimeEngine = engine === 'tts' ? 'llama' : engine, runtime = await runtimeInfo(runtimeEngine);
+    this.deviceChecks ||= new Map();
+    const key = runtimeEngine + ':' + JSON.stringify(runtime), previous = this.deviceChecks.get(runtimeEngine);
+    if (!fresh && previous?.key === key && Date.now() - previous.at < 30000) return previous.result;
+    const result = (async () => {
+      if (!runtime?.binary) return { devices: [], error: 'GPU availability is checked after the runtime download.' };
+      try {
+        const environment = managedRuntimeEnvironment(runtime.binary);
+        const devices = runtimeEngine === 'llama' ? await listRuntimeDevices(runtime.binary, environment)
+          : (await validateBinary(runtimeEngine, runtime.binary, platform === 'termux' ? 'vulkan' : 'auto', environment)).devices;
+        return { devices: devices.filter(device => device.backend === runtime.backend), error: devices.length ? '' : 'No supported GPU was reported by this runtime.' };
+      } catch (error) { return { devices: [], error: error.message }; }
+    })();
+    this.deviceChecks.set(runtimeEngine, { key, at: Date.now(), result }); return result;
+  }
+  async applyGuided({ engine, preset, files, device, revision, contextSize = defaultContextSize }) { return this.exclusive(async () => {
+    const snapshot = await this.guidedSnapshot();
+    if (snapshot.revision !== revision) throw Error('Local AI or its router INI changed. Your choices were kept; select the model again.');
+    const saved = structuredClone(snapshot.config), next = { ...saved[engine], mode: 'managed', backend: device?.backend || 'cpu', argv: [], env: {} };
+    let ini;
+    if (engine === 'llama') {
+      if (!Number.isSafeInteger(contextSize) || contextSize < 1 || !preset.contextLength || contextSize > preset.contextLength) throw Error('Choose a context size within the model-supported maximum.');
+      const name = path.basename(files.model).replace(/\.gguf$/i, '');
+      // Keep previous owned entries routable for Pi chats which still select
+      // them. The native router owns their lazy loading and aliases; no shadow
+      // provider or silent Pi model retargeting accompanies this selection.
+      const previous = snapshot.owned.llama ? snapshot.ini.content : `# BashKitten guided models. Editing this file switches to Advanced.\n[*]\nctx-size = ${defaultContextSize}\n`;
+      const existing = parseRouterINI(previous).models.find(model => model.name === name);
+      const content = await updateRouterModel(previous, {
+        name, ...(existing ? { originalName: name } : {}), config: { model: files.model, projector: files.projector, contextSize,
+          device: device?.id || 'none', gpuLayers: device ? 'all' : 0, fit: true, idleMinutes: 5,
+          cacheGpu: Boolean(device), flashAttention: 'auto', extra: guidedCache } });
+      // A custom file remains available at its original path. Returning to
+      // guided setup selects a new ordinary INI through the existing owner.
+      next.preset = snapshot.owned.llama ? snapshot.ini.file : path.join(localAIDir, 'guided-' + randomUUID() + '.ini');
+      ini = { file: next.preset, content };
+    } else {
+      next.model = files.model; next.modelKind = preset.kind;
+      if (engine === 'tts') { next.projector = files.projector; next.voice = files.voice; }
+      else { await this.model(files.model, preset.kind); if (preset.kind === 'parakeet') next.keepRunning = false; }
+    }
+    for (const filename of Object.values(files)) if (typeof filename === 'string' && filename) {
+      if (!(await fs.stat(filename)).isFile()) throw Error('A required model asset is missing');
+    }
+    saved[engine] = configuration(engine, next); markGuided(saved[engine], preset.id, ini);
+    // Check the native device before committing a requested GPU. No automatic
+    // CPU fallback may turn a failed GPU choice into a successful selection.
+    await this.binary(engine === 'tts' ? 'llama' : engine, saved[engine]);
+    if ((await this.guidedSnapshot()).revision !== revision) throw Error('Local AI changed while preparing the model. Your choices were kept.');
+    if (ini) await this.ini({ file: ini.file, content: ini.content, revision: snapshot.owned.llama ? snapshot.ini.revision : null });
+    if (JSON.stringify(await this.config()) !== JSON.stringify(snapshot.config)) throw Error('Local AI changed while saving the model. Your configuration was kept.');
+    await writeJson(configFile, saved);
+  }); }
   async record({ engine, record, offset, revision }) {
     requireLocalRuntime();
     const name = record === 'license' ? 'LICENSES.txt' : record === 'source' ? 'SOURCE.json' : null;
@@ -169,12 +248,13 @@ export class LocalAI {
   }
   async status() {
     const config = await this.config(), host = await this.services.status();
+    const iniChanged = this.runningINI !== undefined && this.runningINI !== (await this.ini({ file: config.llama.preset })).revision;
     const engines = {};
     for (const engine of Object.keys(ids)) {
       const runtime = await runtimeInfo(engine), service = host.services.find(item => item.id === ids[engine]);
       engines[engine] = { config: config[engine], runtime: describeRuntime(runtime), service, url: service ? 'http://' + service.target.address : null,
         startupCapability: { available: engine !== 'whisper' || config.whisper.modelKind !== 'parakeet', detail: engine === 'whisper' && config.whisper.modelKind === 'parakeet' ? 'Parakeet starts for each transcription; this runtime has no persistent server.' : '' },
-        savedForNextStart: Boolean(this.services.running.get(ids[engine])?.child && !sameRuntimeConfig(this.runningConfig.get(engine), config[engine])), error: this.errors.get(engine) || '' };
+        savedForNextStart: Boolean(this.services.running.get(ids[engine])?.child && (!sameRuntimeConfig(this.runningConfig.get(engine), config[engine]) || engine === 'llama' && iniChanged)), error: this.errors.get(engine) || '' };
     }
     return { ...engines, tts: { config: config.tts, runtime: describeRuntime(await runtimeInfo('llama')), synthesis: this.synthesisState || { state: 'idle' }, startupCapability: { available: false, detail: 'Text to speech starts for each request; this runtime has no persistent server.' } }, platform, revision: digest(JSON.stringify(config)), import: this.importState, speechBusy: Boolean(this.speech) };
   }
@@ -264,6 +344,22 @@ export class LocalAI {
       enabled: engine === 'llama' && Boolean(existing?.enabled), startup: config.startup, command } });
   }
   async action(engine, action) { return this.exclusive(() => this.performAction(engine, action)); }
+  async reloadRouterPresets() { return this.exclusive(async () => {
+    const config = (await this.config()).llama;
+    if (!this.services.running.get(ids.llama)?.child) return;
+    const running = this.runningConfig.get('llama');
+    // The managed router itself always discovers its bundled backends; the
+    // model INI owns CPU/GPU. A per-model device change needs no router restart.
+    const comparable = running?.mode === 'managed' && config.mode === 'managed' ? { ...running, backend: config.backend } : running;
+    if (!sameRuntimeConfig(comparable, config)) return this.performAction('llama', 'reload');
+    const info = await this.catalogue();
+    // Released llama.cpp owns preset reconciliation and child unloading. The
+    // caller waits for active work before asking this native route to reload.
+    await jsonRequest(info.url + '/models?reload=1', { key: await this.key(info.config) });
+    this.runningINI = (await this.ini({ file: config.preset })).revision;
+    this.runningConfig.set('llama', structuredClone(config));
+    await this.importProvider();
+  }); }
   async performAction(engine, action) {
     if (!ids[engine] || !['start', 'stop', 'reload'].includes(action)) throw Error('Unknown LocalAI action');
     if (engine === 'whisper' && this.speech) throw Error('Finish or cancel dictation before changing Whisper');
@@ -271,7 +367,10 @@ export class LocalAI {
     if (action === 'reload') await this.services.action({ id: ids[engine], action: 'stop' });
     if (action !== 'stop') await this.configureService(engine, { runtimeRequired: true });
     await this.services.action({ id: ids[engine], action: action === 'reload' ? 'start' : action });
-    if (action !== 'stop') this.runningConfig.set(engine, structuredClone((await this.config())[engine]));
+    if (action !== 'stop') {
+      const config = (await this.config())[engine]; this.runningConfig.set(engine, structuredClone(config));
+      if (engine === 'llama') this.runningINI = (await this.ini({ file: config.preset })).revision;
+    }
     if (engine === 'llama') await this.importProvider();
     return this.status();
   }
@@ -306,12 +405,31 @@ export class LocalAI {
     if (!Array.isArray(result.data) || !result.data.length || result.data.some(model => typeof model.id !== 'string' || !model.id)) throw Error('No router models are available yet');
     return { url, config, models: result.data };
   }
+  async routerBusy() {
+    const info = await this.catalogue();
+    for (const model of info.models) {
+      if (model.status?.value === 'loading') return true;
+      if (model.status?.value !== 'loaded') continue;
+      const slots = await jsonRequest(info.url + '/slots?' + new URLSearchParams({ model: model.id, autoload: 'false' }), { key: await this.key(info.config) });
+      if (!Array.isArray(slots) || slots.some(slot => typeof slot.is_processing !== 'boolean')) throw Error('Could not check whether this router is busy. Stop it before changing its model.');
+      if (slots.some(slot => slot.is_processing)) return true;
+    }
+    return false;
+  }
+  async routerFailure() {
+    if (!this.services.running.get(ids.llama)?.child) return this.errors.get('llama') || this.services.running.get(ids.llama)?.error || '';
+    try {
+      const info = await this.catalogue(), failed = info.models.find(model => model.status?.failed);
+      return failed ? `llama.cpp could not load ${failed.id}${Number.isInteger(failed.status.exit_code) ? ' (exit ' + failed.status.exit_code + ')' : ''}. Your selection was kept. Try a lower context size, a smaller model or quant, or another available device, then retry.` : '';
+    } catch (error) { return error.loading ? '' : error.message; }
+  }
   async importProvider() {
     const config = (await this.config()).llama;
     if (!config.importToPi) { this.importState = { state: 'off' }; return; }
     try {
       const info = await this.catalogue();
       if (!sameRuntimeConfig(config, info.config)) throw Error('Saved changes are pending Reload; the running service and existing Pi provider are unchanged');
+      if (this.runningINI !== undefined && this.runningINI !== (await this.ini({ file: config.preset })).revision) throw Error('The router INI changed. Reload to apply it; the running service and existing Pi provider are unchanged.');
       // Recheck after network/model discovery so opting out cancels pending work.
       if (!(await this.config()).llama.importToPi) return;
       const key = await this.key(info.config);
@@ -330,7 +448,7 @@ export class LocalAI {
       try { info = await this.catalogue(); } catch (error) { if (!error.loading && !['ECONNREFUSED', 'ECONNRESET'].includes(error.cause?.code)) throw error; await pause(250); continue; }
       const entry = info.models.find(item => item.id === model);
       if (!entry) throw Error('The selected model is no longer in the llama.cpp router');
-      if (entry.status?.failed) throw Error('llama.cpp could not load the selected model');
+      if (entry.status?.failed) throw Error('llama.cpp could not load the selected model. Your settings were kept. Try a lower context size, a smaller model or quant, or another available device, then retry.');
       if (!entry.status || ['loaded', 'sleeping'].includes(entry.status.value)) { await this.importProvider(); return { state: 'ready', model, url: info.url }; }
       if (entry.status.value === 'unloaded' && !requested) { requested = true; await jsonRequest(info.url + '/models/load', { key: await this.key(info.config), data: { model } }); }
       await pause(250);
@@ -397,10 +515,11 @@ export class LocalAI {
     for (const file of [files.llama.model, files.llama.projector, files.tts.model, files.tts.projector, files.tts.voice]) await fs.access(file);
     const name = path.basename(files.llama.model).replace(/\.gguf$/i, '');
     const content = await updateRouterModel(ini.content, { name, config: { model: files.llama.model, projector: files.llama.projector,
-      contextSize: defaultContextSize, device: 'none', gpuLayers: 0, fit: true, idleMinutes: 5, cacheGpu: false, flashAttention: 'auto', extra: '' } });
+      contextSize: Math.min(files.llama.contextLength || defaultContextSize, defaultContextSize), device: 'none', gpuLayers: 0, fit: true, idleMinutes: 5, cacheGpu: false, flashAttention: 'auto', extra: guidedCache } });
     config.llama = configuration('llama', { ...config.llama, backend: 'cpu', startup: true, importToPi: true });
     config.whisper = configuration('whisper', { ...config.whisper, backend: 'cpu', model: files.whisper.model, modelKind: files.whisper.kind, startup: false, keepRunning: false });
     config.tts = configuration('tts', { ...config.tts, backend: 'cpu', model: files.tts.model, projector: files.tts.projector, voice: files.tts.voice, modelKind: files.tts.kind });
+    for (const engine of ['llama', 'whisper', 'tts']) if (files[engine].id) markGuided(config[engine], files[engine].id, engine === 'llama' ? { file: ini.file, content } : null);
     return { config, ini: { file: ini.file, content }, model: routerModelId(name) };
   }
   async applyFirstRun(baseline, plan) { return this.exclusive(async () => {
@@ -525,9 +644,9 @@ export class LocalAI {
     try { return await this.quantization; }
     finally { this.quantization = null; this.quantizationJob = null; }
   }
-  async install(job, { engine }) {
+  async install(job, { engine, guided = false, repair = false }) {
     const before = (await this.config())[engine];
-    return installRuntime(job, { engine, config: before }, async (runtime, activate) => {
+    return installRuntime(job, { engine, repair, config: guided ? { ...before, mode: 'managed', backend: 'cpu' } : before }, async (runtime, activate) => {
       await job.phase('Waiting for this runtime to stop before activating the update', 'waiting');
       while (this.services.running.get(ids[engine])?.child || engine === 'whisper' && this.speech || engine === 'llama' && (this.synthesis || this.routerTest.busy)) {
         job.checkCancellation();
@@ -536,7 +655,7 @@ export class LocalAI {
       }
       await this.exclusive(async () => {
         const config = await this.config(); job.checkCancellation();
-        if (JSON.stringify(config[engine]) !== JSON.stringify(before) || config[engine].mode !== 'managed') throw Error('Runtime selection changed; update was not activated');
+        if (JSON.stringify(config[engine]) !== JSON.stringify(before) || !guided && config[engine].mode !== 'managed') throw Error('Runtime selection changed; update was not activated');
         if (this.services.running.get(ids[engine])?.child || engine === 'llama' && (this.synthesis || this.routerTest.busy)) throw Error('The runtime started before update activation; retry after stopping it');
         await job.phase('Activating verified runtime'); await activate();
       });

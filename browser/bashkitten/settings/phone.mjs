@@ -77,6 +77,7 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
       startup.onchange = () => run(async () => { await call('configure', { patch: { startup: startup.checked } }); await refresh(); });
       message('Reconnects enabled Calls and Messages when BashKitten opens.');
       if (!state.supported) message("Calls aren't supported on this device.");
+      button(root, 'Voice settings', () => run(() => call('open-voice-settings')));
       button(root, 'Call setup', setup).disabled = !state.supported;
       button(root, 'Call settings', () => settings(true));
       button(root, 'Contacts and voicemail', contacts);
@@ -111,7 +112,7 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
       else if (!value.accountEnabled) missing.push('Enable BashKitten in calling account settings.');
       if (!value.microphone) missing.push('Allow microphone access to speak during calls.');
       if (state.settings?.telephony && !value.gateway) missing.push(connectionHint(value));
-      status.textContent = missing.length ? missing.join('\n') : 'Calling is set up. Speech models are checked when you call.';
+      status.textContent = missing.length ? missing.join('\n') : 'Calling is set up. Your selected voice and speech recognition models are used automatically.';
     };
     button(root, 'Set up calling account', () => run(() => call('setup-account'))).disabled = !state.settings?.telephony;
     button(root, 'Check setup', () => run(ready));

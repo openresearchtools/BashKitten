@@ -183,7 +183,7 @@ async function serve() {
   setDownloadCompleteHandler(() => localAI?.importProvider());
   stack.remote = remote; remote.stack = stack;
   const jobs = new Jobs({ 'reload-services': reloadServices,
-    ...(localAI ? { 'localai-first-run': job => firstRunAI.run(job), 'localai-runtime': (job, input) => localAI.install(job, input), 'localai-quantize': (job, input) => localAI.quantize(job, input) } : {}),
+    ...(localAI ? { 'localai-first-run': job => firstRunAI.run(job), 'localai-guided-select': (job, input) => firstRunAI.select(job, input), 'localai-runtime': (job, input) => localAI.install(job, input), 'localai-quantize': (job, input) => localAI.quantize(job, input) } : {}),
   });
   await jobs.init();
   await ensureIntegration();
@@ -378,8 +378,10 @@ async function serve() {
       finally { if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake(); }
     }
     if (command.startsWith('localai-')) {
-      if (command === 'localai-status') { const job = await jobs.status(); return { ...await localAI.status(), firstRun: firstRunAI.status(), job: ['localai-first-run', 'localai-runtime', 'localai-quantize'].includes(job?.kind) ? job : null }; }
+      if (command === 'localai-status') { const job = await jobs.status(); return { ...await localAI.status(), firstRun: firstRunAI.status(), guided: await firstRunAI.guidedStatus(job), job: ['localai-first-run', 'localai-guided-select', 'localai-runtime', 'localai-quantize'].includes(job?.kind) ? job : null }; }
       if (command === 'localai-first-run') { if (!stack.ready || stopping) throw Error('Turn on Local before setting up models'); return jobs.start('localai-first-run'); }
+      if (command === 'localai-custom-router') { await localAI.customRouter(value); return { ...await localAI.status(), guided: await firstRunAI.guidedStatus(await jobs.status()), firstRun: firstRunAI.status() }; }
+      if (command === 'localai-guided-select') { if (!stack.ready || stopping) throw Error('Turn on Local before selecting models'); return jobs.start('localai-guided-select', value); }
       if (command === 'localai-model-device') return localAI.modelDevice(value);
       if (command === 'localai-record') return localAI.record(value);
       if (command === 'localai-browse') return localAI.browse(value);
@@ -396,7 +398,7 @@ async function serve() {
       if (command === 'localai-check') return localAI.check(value.engine);
       if (command === 'localai-install') { if (stopping) throw Error('Agent is stopping'); return jobs.start('localai-runtime', { engine: value.engine }); }
       if (command === 'localai-quantize') { if (!stack.ready || stopping) throw Error('Turn on Local before quantizing a model'); return jobs.start('localai-quantize', value); }
-      if (command === 'localai-cancel') { if (!['localai-first-run', 'localai-runtime', 'localai-quantize'].includes((await jobs.status())?.kind)) throw Error('No LocalAI operation is active'); await jobs.cancel(); return jobs.status(); }
+      if (command === 'localai-cancel') { if (!['localai-first-run', 'localai-guided-select', 'localai-runtime', 'localai-quantize'].includes((await jobs.status())?.kind)) throw Error('No LocalAI operation is active'); await jobs.cancel(); return jobs.status(); }
       if (command === 'localai-share') return localAI.share(value.enabled);
       if (command === 'localai-action') {
         if (value.action !== 'stop' && (stopping || browserClosing || shutdownRequested)) throw Error('BashKitten is stopping');

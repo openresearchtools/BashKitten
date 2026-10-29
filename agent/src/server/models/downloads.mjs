@@ -26,6 +26,8 @@ const serialize = action => { const next = mutations.then(action); mutations = n
 const publicJob = job => ({ id: job.id, repository: job.repository, revision: job.revision, directory: job.directory,
   status: job.status, createdAt: job.createdAt, updatedAt: job.updatedAt, error: job.error || null,
   downloaded: job.files.reduce((sum, file) => sum + file.downloaded, 0), total: job.files.reduce((sum, file) => sum + file.size, 0),
+  bytesPerSecond: job.status === 'downloading' && running.get(job.id)?.startedAt
+    ? Math.max(0, job.files.reduce((sum, file) => sum + file.downloaded, 0) - running.get(job.id).initialBytes) / Math.max(1, (Date.now() - running.get(job.id).startedAt) / 1000) : 0,
   files: job.files.map(file => ({ path: file.path, outputPath: file.outputPath, size: file.size, downloaded: file.downloaded, status: file.status })) });
 
 // Atomic private manifests, synced after the partial data they describe. Progress
@@ -96,6 +98,14 @@ async function outputDirectory(job, file, create = true) {
 }
 const statOrNull = file => fs.lstat(file).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
 const sameFile = (stat, identity) => stat?.isFile() && identity && stat.dev === identity.dev && stat.ino === identity.ino;
+const unchangedReceipt = (stat, file, job) => sameFile(stat, file.identity) && stat.size === file.size &&
+  (Number.isFinite(file.identity.mtimeMs) && Number.isFinite(file.identity.ctimeMs)
+    ? stat.mtimeMs === file.identity.mtimeMs && stat.ctimeMs === file.identity.ctimeMs
+    // Older native receipts predate per-file timestamps. Their persisted
+    // completion time is an upper bound on both timestamps, never a filename
+    // or size-only claim that an independently modified file is verified.
+    : stat.mtimeMs < Date.parse(job.updatedAt) + 1 && stat.ctimeMs < Date.parse(job.updatedAt) + 1);
+const receiptIdentity = stat => ({ dev: stat.dev, ino: stat.ino, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs });
 
 async function publish(destination) {
   if (process.platform !== 'android') return fs.link(destination.partial, destination.final);
@@ -145,7 +155,7 @@ async function downloadFile(job, file, signal) {
         } finally { await input.close(); }
         const partial = await statOrNull(destination.partial);
         if (sameFile(partial, identity)) await fs.unlink(destination.partial);
-        file.identity = identity; delete file.partialIdentity;
+        file.identity = receiptIdentity(await fs.lstat(destination.final)); delete file.partialIdentity;
         file.downloaded = file.size; file.status = 'complete'; await persist(job); return;
       }
       throw modelError('A selected destination file already exists; choose another folder or remove that file first');
@@ -212,7 +222,7 @@ async function downloadFile(job, file, signal) {
     const remaining = await statOrNull(destination.partial);
     if (sameFile(remaining, file.partialIdentity)) await fs.unlink(destination.partial);
     await destination.parent.sync();
-    file.identity = file.partialIdentity; delete file.partialIdentity;
+    file.identity = receiptIdentity(await fs.lstat(destination.final)); delete file.partialIdentity;
     file.status = 'complete'; await persist(job);
   } finally {
     request?.close();
@@ -341,7 +351,7 @@ function pump() {
     if (running.size >= 2) break;
     if (job.status !== 'queued' || running.has(job.id)) continue;
     const controller = new AbortController();
-    const state = { controller, promise: null }; running.set(job.id, state);
+    const state = { controller, promise: null, startedAt: Date.now(), initialBytes: job.files.reduce((sum, file) => sum + file.downloaded, 0) }; running.set(job.id, state);
     state.promise = run(job, controller).catch(() => { job.status = 'error'; job.error = 'Could not save download progress; check available disk space'; })
       .finally(() => { running.delete(job.id); pump(); });
   }
@@ -350,11 +360,30 @@ export async function downloadsStatus() {
   await load();
   return { ...await modelSettings(), jobs: [...jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(publicJob) };
 }
+/** Reuse the downloader's verified file identities; never infer readiness from a filename. */
+export async function downloadedFiles(id) {
+  await load(); const job = jobs.get(id);
+  if (!job || job.status !== 'complete') return null;
+  const files = {};
+  for (const file of job.files) {
+    if (file.status !== 'complete') return null;
+    const destination = await outputDirectory(job, file, false).catch(error => {
+      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;
+      throw error;
+    });
+    if (!destination) return null;
+    try {
+      const stat = await statOrNull(destination.final);
+      if (!unchangedReceipt(stat, file, job)) return null;
+      files[file.path] = path.join(job.directory, file.outputPath);
+    } finally { await destination.parent.close(); }
+  }
+  return files;
+}
 function selectedFiles(repository, files, entries) {
   const family = file => file.replace(/\.gguf$/i, '').replace(/-\d{5}-of-\d{5}$/, '');
   const projector = file => /mmproj/i.test(path.basename(file));
   const models = files.filter(file => /\.gguf$/i.test(file) && !projector(file));
-  const families = [...new Set(models.map(family))];
   const folder = key => {
     const label = (repository.replace('/', '--') + '--' + path.basename(key)).replace(/[^a-zA-Z0-9_.-]/g, '-').slice(0, 160);
     return label + '--' + createHash('sha256').update(repository + '/' + key).digest('hex').slice(0, 12);
@@ -372,9 +401,9 @@ function selectedFiles(repository, files, entries) {
   return files.map(file => {
     const entry = entries.get(file);
     if (!entry) throw modelError('A selected file is not part of this repository revision');
-    const outputPath = /\.gguf$/i.test(file)
-      ? folder(projector(file) && families.length === 1 ? families[0] : family(file)) + '/' + path.basename(file)
-      : folder('repository-files') + '/' + file;
+    // One immutable model repository folder holds its quants and matching
+    // projector. Relative repository paths remain intact to avoid collisions.
+    const outputPath = folder('repository-files') + '/' + file;
     return { path: entry.path, outputPath, size: entry.size, hash: entry.hash, downloaded: 0, checkpoint: 0, status: 'pending' };
   // Publish the first shard after its remaining selected parts/projector. Native
   // llama discovers the first shard and must not see an unfinished model family.
@@ -396,9 +425,35 @@ export async function startDownload({ id, revision, files } = {}) {
   if (!Number.isSafeInteger(selected.reduce((sum, file) => sum + file.size, 0))) throw modelError('The selected download is too large');
   return serialize(async () => {
     if (closing) throw modelError('Agent is stopping');
+    const completed = [...jobs.values()].filter(job => job.directory === directory && job.repository === id && job.revision === revision && job.status === 'complete');
+    // Reuse the established folder for a previously downloaded projector,
+    // without moving existing files or making another model storage registry.
+    const oldProjector = completed.flatMap(job => job.files).find(file => /mmproj/i.test(path.basename(file.path)) &&
+      selected.some(item => item.path === file.path && item.hash === file.hash && item.size === file.size));
+    if (oldProjector && oldProjector.outputPath.endsWith(oldProjector.path)) {
+      const prefix = oldProjector.outputPath.slice(0, -oldProjector.path.length);
+      for (const file of selected) file.outputPath = prefix + file.path;
+    }
     for (const job of jobs.values()) {
       if (terminal.has(job.status) || job.directory !== directory) continue;
-      if (job.files.some(file => selected.some(selection => selection.outputPath === file.outputPath))) throw modelError('A download already owns one of these files; resume or cancel it first');
+      if (job.files.some(file => selected.some(selection => selection.outputPath === file.outputPath ||
+        job.repository === id && job.revision === revision && file.path === selection.path))) throw modelError('A download already owns one of these files; resume or cancel it first');
+    }
+    for (const file of selected) {
+      for (const previous of completed) {
+        const saved = previous.files.find(item => item.path === file.path && item.size === file.size && item.hash === file.hash && item.status === 'complete');
+        if (!saved) continue;
+        let destination;
+        try {
+          destination = await outputDirectory(previous, saved, false);
+          const stat = await statOrNull(destination.final);
+          if (!stat) continue;
+          if (!unchangedReceipt(stat, saved, previous)) throw modelError('A shared model asset changed. Select its previously downloaded model to reverify it, then retry this model.');
+          Object.assign(file, { outputPath: saved.outputPath, identity: receiptIdentity(stat), downloaded: file.size, checkpoint: file.size, status: 'complete' });
+          break;
+        } catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error; }
+        finally { await destination?.parent.close(); }
+      }
     }
     const now = new Date().toISOString();
     const job = { id: randomUUID(), repository: id, revision, directory, createdAt: now, updatedAt: now, status: 'queued', error: null, files: selected,
@@ -426,6 +481,24 @@ export async function controlDownload(id, action) {
   return serialize(async () => {
     const job = jobs.get(id);
     if (!job) throw Object.assign(modelError('Download was not found'), { status: 404 });
+    if (job.status === 'complete' && action === 'resume' && !await downloadedFiles(id)) {
+      // Explicit Resume repairs/reverifies only changed or missing assets
+      // through this same job; unchanged verified files are never rehashed.
+      for (const file of job.files) {
+        let destination;
+        try {
+          destination = await outputDirectory(job, file, false);
+          const stat = await statOrNull(destination.final);
+          if (unchangedReceipt(stat, file, job)) continue;
+          file.status = 'pending';
+          if (!stat) file.downloaded = file.checkpoint = 0;
+        } catch (error) {
+          if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error;
+          file.status = 'pending'; file.downloaded = file.checkpoint = 0;
+        } finally { await destination?.parent.close(); }
+      }
+      job.status = 'interrupted';
+    }
     if (terminal.has(job.status)) return publicJob(job);
     if (action === 'resume') {
       if (closing) throw modelError('Agent is stopping');

@@ -60,7 +60,7 @@ export class PhoneSpeech {
   }
   async ready() {
     try {
-      if (!(await this.localAI.speechCapability()).available) throw Error('Set up Whisper or Parakeet in LocalAI');
+      if (!(await this.localAI.speechCapability()).available) throw Error('Speech recognition is not ready. Open Local AI to check preparation or retry.');
       await this.vadFiles(); await this.ttsCommand('Ready', '/proc/self/fd/3');
       return { ready: true };
     } catch (error) { return { ready: false, error: error.message }; }
@@ -70,7 +70,7 @@ export class PhoneSpeech {
     const config = (await this.localAI.config()).tts;
     const runtime = await this.localAI.binary('llama', config);
     for (const file of [config.model, config.projector, config.voice]) {
-      if (!file) throw Error('Set up the TTS model, projector and reference voice in LocalAI');
+      if (!file) throw Error('Voice assets are not ready. Open Local AI to check preparation or retry.');
       await fs.access(file);
     }
     const executable = path.join(path.dirname(runtime.binary), 'llama-tts');

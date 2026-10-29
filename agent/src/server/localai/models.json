@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "verifiedAt": "2026-10-14",
+  "verifiedAt": "2026-10-29",
   "models": [
     {
       "repository": "unsloth/Qwen3.5-0.8B-GGUF",
@@ -54,8 +54,19 @@
           "sha256": "962978aa8e3c564c5aca3f8fc3b9a21b4d42a2a045475df38e8a570285047ea5",
           "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/README.md",
           "title": "Model card"
+        },
+        {
+          "repository": "Qwen/Qwen3.5-0.8B",
+          "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+          "file": "config.json",
+          "bytes": 2907,
+          "sha256": "b90b86f35c8e6925ef74ee04d0e758f0a845c83a42089ad82bbaa948de9b4204",
+          "title": "Original model configuration and supported context limit",
+          "url": "https://huggingface.co/Qwen/Qwen3.5-0.8B/resolve/2fc06364715b967f1860aea9cf38778875588b17/config.json"
         }
-      ]
+      ],
+      "contextLength": 262144,
+      "guidedFiles": []
     },
     {
       "repository": "unsloth/Qwen3.5-2B-GGUF",
@@ -116,7 +127,21 @@
           "sha256": "d6507c9243588d5526ceb08840ebd759b0d05aeb96c8aeb42e59f4727df0143a",
           "url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/README.md",
           "title": "Model card"
+        },
+        {
+          "repository": "Qwen/Qwen3.5-2B",
+          "revision": "15852e8c16360a2fea060d615a32b45270f8a8fc",
+          "file": "config.json",
+          "bytes": 2908,
+          "sha256": "ed1c1723241f23f7f4e23430759cbd7dcfb4103cbdfe052bfe7626b57c2615b4",
+          "title": "Original model configuration and supported context limit",
+          "url": "https://huggingface.co/Qwen/Qwen3.5-2B/resolve/15852e8c16360a2fea060d615a32b45270f8a8fc/config.json"
         }
+      ],
+      "contextLength": 262144,
+      "guidedFiles": [
+        "Qwen3.5-2B-Q4_0.gguf",
+        "Qwen3.5-2B-Q4_K_M.gguf"
       ]
     },
     {
@@ -184,7 +209,176 @@
           "sha256": "28546f5fc4f22ee1b3f17b908957f17fcfa66174032136265bdb27f404bc1e6c",
           "url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/README.md",
           "title": "Model card"
+        },
+        {
+          "repository": "Qwen/Qwen3.5-4B",
+          "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "file": "config.json",
+          "bytes": 3161,
+          "sha256": "ddc63e1c717afa86c865bb5e01313d89d72bb53b97ad4a8a03ba8510c0621670",
+          "title": "Original model configuration and supported context limit",
+          "url": "https://huggingface.co/Qwen/Qwen3.5-4B/resolve/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a/config.json"
         }
+      ],
+      "contextLength": 262144,
+      "guidedFiles": [
+        "Qwen3.5-4B-Q4_0.gguf",
+        "Qwen3.5-4B-Q4_K_M.gguf",
+        "Qwen3.5-4B-UD-Q4_K_XL.gguf"
+      ]
+    },
+    {
+      "repository": "unsloth/Qwen3.5-9B-GGUF",
+      "revision": "3885219b6810b007914f3a7950a8d1b469d598a5",
+      "license": "apache-2.0",
+      "files": [
+        {
+          "name": "Qwen3.5-9B-Q4_0.gguf",
+          "bytes": 5379417312,
+          "sha256": "17670346b4260ddcb0173965145155885024f3c9a4a24389a3370751edbcde24",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q4_0.gguf"
+        },
+        {
+          "name": "Qwen3.5-9B-Q4_K_M.gguf",
+          "bytes": 5680522464,
+          "sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q4_K_M.gguf"
+        },
+        {
+          "name": "mmproj-F16.gguf",
+          "bytes": 918166080,
+          "sha256": "f70dc3509053962b0d0d3ee8a7eacebf5d60aa560cad78254ae8698516ae029f",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/3885219b6810b007914f3a7950a8d1b469d598a5/mmproj-F16.gguf"
+        }
+      ],
+      "projector": "mmproj-F16.gguf",
+      "attribution": "Qwen3.5-9B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with BashKitten.",
+      "notices": [
+        {
+          "repository": "Qwen/Qwen3.5-9B",
+          "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+          "file": "LICENSE",
+          "bytes": 11544,
+          "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+          "url": "https://huggingface.co/Qwen/Qwen3.5-9B/resolve/c202236235762e1c871ad0ccb60c8ee5ba337b9a/LICENSE",
+          "title": "Apache 2.0 license"
+        },
+        {
+          "repository": "Qwen/Qwen3.5-9B",
+          "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+          "file": "README.md",
+          "bytes": 77643,
+          "sha256": "c5f5a8c2dddab69cfbf05279235aa5fddb137939a06539c4c7637aa900fef6d0",
+          "url": "https://huggingface.co/Qwen/Qwen3.5-9B/resolve/c202236235762e1c871ad0ccb60c8ee5ba337b9a/README.md",
+          "title": "Model card"
+        },
+        {
+          "repository": "unsloth/Qwen3.5-9B-GGUF",
+          "revision": "3885219b6810b007914f3a7950a8d1b469d598a5",
+          "file": "README.md",
+          "bytes": 78888,
+          "sha256": "e50f8066e39c38cbc2da5dd94b9a9a2712b64c4921f107a5adb4b3ca5b6bbac0",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/3885219b6810b007914f3a7950a8d1b469d598a5/README.md",
+          "title": "Model card"
+        },
+        {
+          "repository": "Qwen/Qwen3.5-9B",
+          "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+          "file": "config.json",
+          "bytes": 3126,
+          "sha256": "d0883072e01861ed0b2d47be3c16c36a8e81c224c7ffaa310c6558fb3f932b05",
+          "url": "https://huggingface.co/Qwen/Qwen3.5-9B/resolve/c202236235762e1c871ad0ccb60c8ee5ba337b9a/config.json",
+          "title": "Original model configuration and supported context limit"
+        }
+      ],
+      "contextLength": 262144,
+      "guidedFiles": [
+        "Qwen3.5-9B-Q4_0.gguf",
+        "Qwen3.5-9B-Q4_K_M.gguf"
+      ]
+    },
+    {
+      "repository": "unsloth/Qwen3.8-27B-GGUF",
+      "revision": "4ca720788d1e01f1bff70c033e0d0028fd02e502",
+      "license": "apache-2.0",
+      "files": [
+        {
+          "name": "Qwen3.8-27B-Q4_0.gguf",
+          "bytes": 16056478688,
+          "sha256": "ede16c7b36e578ca87a8c70e011e4b4633a32c831c0ce76d0f474582384e671d",
+          "url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/4ca720788d1e01f1bff70c033e0d0028fd02e502/Qwen3.8-27B-Q4_0.gguf"
+        },
+        {
+          "name": "Qwen3.8-27B-UD-Q4_K_M.gguf",
+          "bytes": 16464440224,
+          "sha256": "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482",
+          "url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/4ca720788d1e01f1bff70c033e0d0028fd02e502/Qwen3.8-27B-UD-Q4_K_M.gguf"
+        },
+        {
+          "name": "Qwen3.8-27B-UD-IQ3_S.gguf",
+          "bytes": 12040883104,
+          "sha256": "d847e2c1e4aa276e4b7b8e9ad7628050e61e165d49ab995407bc36677a6f3864",
+          "url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/4ca720788d1e01f1bff70c033e0d0028fd02e502/Qwen3.8-27B-UD-IQ3_S.gguf"
+        },
+        {
+          "name": "Qwen3.8-27B-UD-IQ2_S.gguf",
+          "bytes": 8371970048,
+          "sha256": "7897d2c5a5cee46aef50895141b2c8a0803c1185f3d03c4fda4cd137a7ad77fe",
+          "url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/4ca720788d1e01f1bff70c033e0d0028fd02e502/Qwen3.8-27B-UD-IQ2_S.gguf"
+        },
+        {
+          "name": "mmproj-F16.gguf",
+          "bytes": 927607488,
+          "sha256": "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e",
+          "url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/4ca720788d1e01f1bff70c033e0d0028fd02e502/mmproj-F16.gguf"
+        }
+      ],
+      "projector": "mmproj-F16.gguf",
+      "attribution": "Qwen3.8-27B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with BashKitten.",
+      "notices": [
+        {
+          "repository": "Qwen/Qwen3.8-27B",
+          "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+          "file": "LICENSE",
+          "bytes": 11544,
+          "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+          "url": "https://huggingface.co/Qwen/Qwen3.8-27B/resolve/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/LICENSE",
+          "title": "Apache 2.0 license"
+        },
+        {
+          "repository": "Qwen/Qwen3.8-27B",
+          "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+          "file": "README.md",
+          "bytes": 65012,
+          "sha256": "57e4bdb258ee1a7d2635c5174ebd4e56abe392505cdb5f8bbb356b0dc4293641",
+          "url": "https://huggingface.co/Qwen/Qwen3.8-27B/resolve/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/README.md",
+          "title": "Model card"
+        },
+        {
+          "repository": "unsloth/Qwen3.8-27B-GGUF",
+          "revision": "4ca720788d1e01f1bff70c033e0d0028fd02e502",
+          "file": "README.md",
+          "bytes": 7455,
+          "sha256": "66088b22a4db15353288f45a570279f76d7d8b7f349a64dd28698b867c9bd2bb",
+          "url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/4ca720788d1e01f1bff70c033e0d0028fd02e502/README.md",
+          "title": "Model card"
+        },
+        {
+          "repository": "Qwen/Qwen3.8-27B",
+          "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+          "file": "config.json",
+          "bytes": 4312,
+          "sha256": "191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab",
+          "url": "https://huggingface.co/Qwen/Qwen3.8-27B/resolve/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json",
+          "title": "Original model configuration and supported context limit"
+        }
+      ],
+      "contextLength": 262144,
+      "guidedFiles": [
+        "Qwen3.8-27B-Q4_0.gguf",
+        "Qwen3.8-27B-UD-Q4_K_M.gguf",
+        "Qwen3.8-27B-UD-IQ3_S.gguf",
+        "Qwen3.8-27B-UD-IQ2_S.gguf"
       ]
     },
     {

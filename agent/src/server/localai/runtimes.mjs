@@ -126,7 +126,7 @@ export async function checkRuntime(engine, config) {
   if (!asset) throw Error('The runtime archive is missing');
   const installed = await runtimeInfo(engine);
   return { version: `${manifest.upstreamVersion} · r${manifest.packageRevision}`, upstreamRelease: manifest.upstreamRelease, packageRevision: manifest.packageRevision, sourceCommit: manifest.sourceCommit, release: release.tag_name,
-    backend: engine !== 'llama' && config.backend === 'cpu' ? 'cpu' : backend, packageBackend: backend, artifact: { ...artifact, url: downloadURL(asset.browser_download_url).href },
+    backend: engine !== 'llama' && config.backend === 'cpu' ? 'cpu' : backend, packageBackend: backend, artifact: { ...artifact, bytes: asset.size, url: downloadURL(asset.browser_download_url).href },
     updateAvailable: installed?.release !== release.tag_name || installed?.backend !== backend, installed: describeRuntime(installed) };
 }
 export async function listRuntimeDevices(binary, environment = {}) {
@@ -171,11 +171,11 @@ export async function validateBinary(engine, filename, backend, environment = {}
   for (const entry of await fs.readdir(directory)) if (/^lib(?:ggml|llama|whisper|parakeet|mtmd)[^/]*\.so(?:\.[0-9]+)*$/.test(entry)) libraries.push(await fs.realpath(path.join(directory, entry)));
   return { binary: filename, backend: selectedBackend, devices, libraries: [...new Set(libraries)], env: environment };
 }
-export async function installRuntime(job, { engine, config, selection }, activate) {
+export async function installRuntime(job, { engine, config, selection, repair = false }, activate) {
   requireLocalRuntime(); engineName(engine);
   if (config.mode !== 'managed') throw Error('Custom runtimes are not updated by BashKitten');
   const available = selection || await checkRuntime(engine, config);
-  if (!available.updateAvailable) return;
+  if (!available.updateAvailable && !repair) return;
   const { artifact } = available;
   await privateDir(runtimeDirectory);
   const staging = await fs.mkdtemp(path.join(runtimeDirectory, '.download-'));
@@ -189,17 +189,17 @@ export async function installRuntime(job, { engine, config, selection }, activat
     catch (error) { clearInterval(cancellation); job.checkCancellation(); throw error; }
     if (!response.ok) { clearInterval(cancellation); downloadAbort.abort(); throw Error(`Runtime download returned HTTP ${response.status}`); }
     const archive = path.join(staging, 'runtime.tar.gz'), hash = createHash('sha256');
-    let received = 0, reported = 0;
+    let received = 0, reported = 0; const startedAt = Date.now(), total = Number(response.headers.get('content-length')) || artifact.bytes || null;
     async function* chunks() { for await (const chunk of response.body) {
       job.checkCancellation(); hash.update(chunk); received += chunk.length;
-      if (Date.now() - reported >= 1000) { reported = Date.now(); job.job.progress = { downloaded: received, total: Number(response.headers.get('content-length')) || null }; await job.save(); }
+      if (Date.now() - reported >= 1000) { reported = Date.now(); job.job.progress = { downloaded: received, total, bytesPerSecond: received / Math.max(1, (Date.now() - startedAt) / 1000) }; await job.save(); }
       yield chunk;
     } }
     try { await pipeline(chunks(), createWriteStream(archive, { mode: 0o600, flags: 'wx' })); }
     catch (error) { job.checkCancellation(); throw error; }
     finally { clearInterval(cancellation); downloadAbort.abort(); }
     if (hash.digest('hex') !== artifact.sha256) throw Error('Runtime archive checksum mismatch');
-    await job.log(`Verified ${received} downloaded bytes.\n`);
+    await job.log(`Verified ${(received / (received >= 1e9 ? 1e9 : 1e6)).toFixed(2)} ${received >= 1e9 ? 'GB' : 'MB'} runtime archive.\n`);
     const extracted = path.join(staging, 'runtime'); await fs.mkdir(extracted, { mode: 0o700 });
     await job.phase('Extracting verified runtime');
     // Python's data filter rejects external links/devices and path traversal.

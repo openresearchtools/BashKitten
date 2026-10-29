@@ -119,7 +119,7 @@ export async function discoverManagedModels(baseUrl, apiKey = '', name = 'llama.
     // autoload=false; an unloaded child has no template to inspect yet.
     const props = ['loaded', 'sleeping'].includes(model.status?.value) ? await read('/props?' + new URLSearchParams({ model: model.id, autoload: 'false' })) : {};
     const args = model.status?.args || [], index = args.findIndex(arg => ['--ctx-size', '-c', '-ctx'].includes(arg));
-    const context = [model.meta?.n_ctx, index >= 0 ? Number(args[index + 1]) : null, model.meta?.n_ctx_train].find(value => Number.isSafeInteger(value) && value > 0);
+    const context = [model.meta?.n_ctx, index >= 0 ? Number(args[index + 1]) : null, model.context_length, model.meta?.n_ctx_train].find(value => Number.isSafeInteger(value) && value > 0);
     const reasoning = typeof props.chat_template === 'string' ? props.chat_template.includes('enable_thinking') : undefined;
     return { id: model.id, name: `${model.id} (${name})`, ...(reasoning !== undefined ? { reasoning } : {}), input: model.architecture?.input_modalities?.includes('image') ? ['text', 'image'] : ['text'],
       ...(context ? { contextWindow: context, maxTokens: context } : {}),
