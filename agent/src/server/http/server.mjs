@@ -72,7 +72,8 @@ const scheme = 'https';
 const services = new Services(), starts = new Map();
 const apps = new ApplicationModules({ auth, resolveSession: async id => {
   const meta = await readMeta(id), catalogue = await projects();
-  return { id, cwd: (await savedSession(meta))?.getCwd() || meta.cwd, projectId: catalogue.chats[id] || null };
+  return { id, cwd: (await savedSession(meta))?.getCwd() || meta.cwd, projectId: catalogue.chats[id] || null,
+    attachments: (meta.messages || []).flatMap(message => message.attachments || []) };
 } });
 const subagents = new SubagentChats({ createSession, ensureWorker, running });
 const phoneBackend = new PhoneBackend({ listSessions: sessionList, createSession, ensureWorker, running });

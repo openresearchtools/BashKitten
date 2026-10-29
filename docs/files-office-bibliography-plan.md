@@ -2199,3 +2199,14 @@ features, model/audio changes, reported UI fixes and their direct integrations.
 Do not repeat unrelated whole-app campaigns or large identifier benchmarks.
 Historical evidence remains historical; the integrated changed flows still need
 their focused installed checks and the normal matching source/license gate.
+
+## 24. Chat file links use Files — 29 October 2026
+
+The user requires non-image file references and saved attachments in chat to open
+the selected file through Files in an ordinary new tab, including its connected
+Office editor where applicable. Keep the existing native chat image previews.
+Use Quantum's native file routes and the existing authenticated application
+launch owner, resolving paths on the chat's owning backend. Preserve remote
+Chisel mappings and authorization; a saved attachment grants access only to that
+authorized attachment, never to its surrounding private application data.
+This adds no new viewer, editor or Office-specific Mozilla integration.

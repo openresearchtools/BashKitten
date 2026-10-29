@@ -71,7 +71,7 @@ export class BashKittenAgentChild extends JSWindowActorChild {
 
   async call(command, data, entry) {
     if (!this.document.hasValidTransientUserGestureActivation) throw new Error("Use this action from the Agent view.");
-    if (command === "open-files") return this.sendQuery("OpenFiles", { projectId: data.projectId, cwd: data.cwd });
+    if (command === "open-files") return this.sendQuery("OpenFiles", { projectId: data.projectId, cwd: data.cwd, file: data.file });
     if (command === "open-application") return this.sendQuery("OpenApplication", { component: data.component, projectId: data.projectId, cwd: data.cwd });
     if (command === "sign-in") return this.sendQuery("SignIn");
     if (command === "sign-out") return this.sendQuery("SignOut", { csrf: data.csrf });

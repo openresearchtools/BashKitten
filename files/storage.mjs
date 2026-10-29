@@ -53,8 +53,8 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
     const scopeRoot = await fs.realpath(scope.root);
     const canonical = create ? path.join(await fs.realpath(path.dirname(filename)), path.basename(filename)) : await fs.realpath(filename);
     if (!inside(scopeRoot, canonical)) throw failure(403, 'Document is outside this project');
-    await authorizePath(canonical);
-    if (inside(await fs.realpath(dataRoot), canonical)) throw failure(403, 'Private application state is not a document source');
+    const attachment = await authorizePath(canonical, { scope });
+    if (inside(await fs.realpath(dataRoot), canonical) && attachment !== true) throw failure(403, 'Private application state is not a document source');
     if (!create) { const st = await fs.lstat(canonical); if (!st.isFile() || st.nlink !== 1) throw failure(403, 'Document must be a regular file without hard-link aliases'); }
     return canonical;
   }
@@ -66,8 +66,10 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
     let parent = path.resolve(filename); const missing = [];
     for (;;) { try { parent = await fs.realpath(parent); break; } catch (error) { if (error.code !== 'ENOENT') throw error; const next = path.dirname(parent); if (next === parent) throw error; missing.unshift(path.basename(parent)); parent = next; } }
     const canonical = path.join(parent, ...missing);
-    if (!inside(scopeRoot, canonical) || inside(await fs.realpath(dataRoot), canonical)) throw failure(403, 'Historical document is outside this source');
-    await authorizePath(canonical); return canonical;
+    if (!inside(scopeRoot, canonical)) throw failure(403, 'Historical document is outside this source');
+    const attachment = await authorizePath(canonical, { scope });
+    if (inside(await fs.realpath(dataRoot), canonical) && attachment !== true) throw failure(403, 'Historical document is outside this source');
+    return canonical;
   }
   async function saveManifest(m) { await writeJSON(manifestFile(m.id), m); }
   async function retain(m, source, reason, { force = false, digest } = {}) {
@@ -149,7 +151,7 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
     const stat = await fs.stat(await selectedFile(m, claims), { bigint: true }); const p = scope.permissions || {};
     const name = claims.snapshot ? path.basename(m.path, path.extname(m.path)) + path.extname(m.versions.find(version => version.id === claims.snapshot).name) : path.basename(m.path);
     return { documentId: m.id, name, size: Number(stat.size), version: claims.snapshot || `${m.version}:${fingerprint(stat)}`, lastModified: timestamp(stat), lastWrite: m.lastWrite, generation: claims.snapshot ? 1 : m.generation, participantId: claims.participant, participantName,
-      permissions: { write: !claims.snapshot && p.modify === true, copy: p.download === true, print: p.download === true, export: p.download === true, create: !claims.snapshot && p.create === true, rename: !claims.snapshot && p.modify === true, extensions: !claims.snapshot && p.modify === true && p.download === true } };
+      permissions: { write: !claims.snapshot && p.modify === true, copy: p.download === true, print: p.download === true, export: p.download === true, create: !claims.snapshot && p.create === true, rename: !claims.snapshot && p.modify === true && !scope.attachment, extensions: !claims.snapshot && p.modify === true && p.download === true } };
   }); }
   async function read(claims, response) { return authorize(claims, 'view', async (m, scope, signal) => {
     const filename = await selectedFile(m, claims); const fd = await fs.open(filename, 'r');

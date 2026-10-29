@@ -43,7 +43,7 @@ export async function filePath(root, relative = '') {
 }
 // A transcript destination is a path on the selected Pi backend. Resolve it
 // against Pi's native cwd, then use the same scope and policy as Files.
-export async function referencedFile(cwd, reference) {
+export function referencedPath(cwd, reference) {
   if (typeof reference !== 'string' || !reference || /[\x00-\x1f\x7f]/.test(reference) ||
       reference.startsWith('//') || reference.startsWith('#') ||
       (/^[a-z][a-z0-9+.-]*:/i.test(reference) && !reference.startsWith('file:'))) {
@@ -55,10 +55,31 @@ export async function referencedFile(cwd, reference) {
   if (requested.startsWith('~/')) requested = path.join(os.homedir(), requested.slice(2));
   if (typeof cwd !== 'string' || !path.isAbsolute(cwd)) throw Error('This chat has no working folder');
   if (!requested || /[\x00-\x1f\x7f]/.test(requested)) throw Object.assign(Error('Invalid file path'), { status: 400 });
-  const absolute = path.resolve(cwd, requested);
+  return path.resolve(cwd, requested);
+}
+export async function referencedFile(cwd, reference) {
+  const absolute = referencedPath(cwd, reference);
   const file = await filePath(path.dirname(absolute), path.basename(absolute));
   if (!(await fs.stat(file)).isFile()) throw Error('Choose a regular file');
   return { root: path.dirname(file), path: path.basename(file) };
+}
+// Only the chat's existing attachment records can authorize private attachment
+// bytes. A Files launch never turns its parent or another backend file public.
+export async function storedAttachment(attachments, filename) {
+  const record = (attachments || []).find(item => typeof item?.path === 'string'
+    && canonicalPath(item.path) === canonicalPath(filename));
+  if (!record) throw Object.assign(Error('Attachment is not stored in this chat'), { status: 404 });
+  const storage = canonicalPath(path.resolve(dataDir, 'attachments'));
+  const relative = path.relative(storage, canonicalPath(path.resolve(record.path)));
+  if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+    throw Object.assign(Error('Attachment leaves its storage'), { status: 403 });
+  }
+  const root = canonicalPath(await fs.realpath(storage));
+  const file = canonicalPath(await fs.realpath(record.path)), stat = await fs.lstat(record.path);
+  if (file !== path.join(root, relative) || !containsPath(root, file) || !stat.isFile() || stat.nlink !== 1) {
+    throw Object.assign(Error('Attachment must be a regular file inside this chat’s attachment storage'), { status: 403 });
+  }
+  return { root: path.dirname(file), path: path.basename(file), filename: file, recordPath: record.path };
 }
 export async function sessionImage(meta, reference, view) {
   if (typeof reference !== 'string' || !reference || reference.includes('\0')) throw Object.assign(Error('Choose an image path'), { status: 400 });

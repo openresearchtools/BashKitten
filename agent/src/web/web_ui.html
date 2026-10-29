@@ -867,7 +867,7 @@
     document.addEventListener('click', event => {
         if (!nativeLinux) return;
         const link = event.target.closest('a');
-        if (!link || link.hasAttribute('download') || link.classList.contains('file-reference')) return;
+        if (!link || link.hasAttribute('download') || link.matches('.file-reference,.sent-file')) return;
         const url = new URL(link.href, location.href);
         if (url.origin === location.origin && /^\/api\/(files\/content|sessions\/[^/]+\/attachments\/)/.test(url.pathname)) {
           event.preventDefault();
@@ -992,7 +992,7 @@
         if (/^https?:\/\//i.test(target)) html += `<a href="${escapeHtml(target)}" target="_blank" rel="noreferrer">${escapeHtml(label || target)}</a>`;
         else {
           const urls = !image && fileReferenceUrls(current?.id, target);
-          if (urls) html += `<a class="file-reference" href="${escapeHtml(urls.content + '&download=true')}" download="${escapeHtml(fileReferenceName(target))}" data-file-session="${escapeHtml(current.id)}" data-file-reference="${escapeHtml(target)}" aria-disabled="${!fileManagerAllowed}" title="${isImageReference(target) ? 'View image' : 'Download file'} · ${escapeHtml(target)}">${escapeHtml(label || target)}</a>`;
+          if (urls) html += `<a class="file-reference" href="${escapeHtml(urls.content)}" data-file-session="${escapeHtml(current.id)}" data-file-reference="${escapeHtml(target)}" aria-disabled="${!fileManagerAllowed}" title="${isImageReference(target) ? 'View image' : 'Open in Files'} · ${escapeHtml(target)}">${escapeHtml(label || target)}</a>`;
           else html += escapeHtml(match[0]);
         }
       }
@@ -1069,9 +1069,11 @@
         } else {
           const save = document.createElement('a');
           save.className = 'sent-file';
-          save.href = download;
-          save.download = block.name || 'attachment';
-          save.title = block.path;
+          save.href = source;
+          save.dataset.fileSession = current.id;
+          save.dataset.fileReference = block.path;
+          save.setAttribute('aria-disabled', String(!fileManagerAllowed));
+          save.title = 'Open in Files · ' + (block.name || 'attachment');
           const kind = document.createElement('span');
           kind.className = 'attachment-kind';
           kind.textContent = (String(block.name || '').split('.').pop() || 'FILE').slice(0, 5).toUpperCase();
@@ -1080,7 +1082,7 @@
           name.textContent = block.name || 'attachment';
           const icon = document.createElement('span');
           icon.className = 'sent-file-download';
-          icon.textContent = nativeLinux ? '↗' : '↓';
+          icon.textContent = '↗';
           save.append(kind, name, icon);
           holder.append(save);
         }
@@ -1135,7 +1137,7 @@
     }
 
     $('#chatInner').addEventListener('click', event => {
-      const reference = event.target.closest('a.file-reference');
+      const reference = event.target.closest('a.file-reference,a.sent-file');
       if (reference) {
         if (!fileManagerAllowed) { event.preventDefault(); $('#composerHint').textContent = 'The host has not enabled Files for this connection.'; return; }
         if (reference.dataset.fileSession !== current?.id) { event.preventDefault(); return; }
@@ -1144,6 +1146,9 @@
         if (isImageReference(target)) {
           event.preventDefault();
           openImageViewer(urls.content, fileReferenceName(target), {manager:true, download:urls.content + '&download=true'});
+        } else {
+          event.preventDefault();
+          openFiles(null, null, {sessionId:current.id,path:target});
         }
         return;
       }
@@ -3474,7 +3479,7 @@
       fileManagerAllowed = allowed;
       for (const id of ['filesToggle', 'changesToggle']) $('#'+id).classList.toggle('hidden', !allowed);
       for (const button of document.querySelectorAll('.file-manager-action')) button.classList.toggle('hidden', !allowed);
-      for (const link of document.querySelectorAll('.file-reference')) link.setAttribute('aria-disabled', String(!allowed));
+      for (const link of document.querySelectorAll('.file-reference,.sent-file')) link.setAttribute('aria-disabled', String(!allowed));
       $('#folderBtn').disabled = !allowed || Boolean(current || pendingProjectId);
       $('#defaultCwdBrowse').disabled = !allowed;
       if (allowed) return;
@@ -3514,12 +3519,13 @@
       const endpoint=value.component==='files'?'/api/apps/files/open':value.component==='references'?'/api/apps/references/open':null;
       if (!endpoint) throw Error('Unknown application.');
       return api(endpoint, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({
-        ...(value.projectId ? {projectId:value.projectId} : {}), ...(value.cwd ? {cwd:value.cwd} : {})
+        ...(value.projectId ? {projectId:value.projectId} : {}), ...(value.cwd ? {cwd:value.cwd} : {}),
+        ...(value.component==='files' && value.file ? {file:value.file} : {})
       })});
     }
-    async function openFiles(cwd, projectId = null) {
-      if (!fileManagerAllowed || (!cwd && !projectId)) return;
-      const view=sessionView, destination={...(projectId ? {projectId} : {}), ...(cwd ? {cwd} : {})};
+    async function openFiles(cwd, projectId = null, file = null) {
+      if (!fileManagerAllowed || (!cwd && !projectId && !file)) return;
+      const view=sessionView, destination={...(projectId ? {projectId} : {}), ...(cwd ? {cwd} : {}), ...(file ? {file} : {})};
       let tab;
       try {
         // The native owner retains the selected backend and opens its exact

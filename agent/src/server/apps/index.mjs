@@ -12,8 +12,8 @@ import { dispatchReferenceResolver } from '../access/browser-channel.mjs';
 import { publishNewFile } from '../localai/files.mjs';
 import { projects, withProjectOperation, withProjectTransition } from '../projects.mjs';
 import { referenceProjects, referenceProject, createReferenceProject, renameReferenceProject, archiveReferenceProject, deleteReferenceProject } from './reference-projects.mjs';
-import { fileDirectory, sendFile, sendFileHandle } from '../files/files.mjs';
-import { authorizeApplicationPath, privateManagerPaths, managerAllowed, runManagerOperation } from '../files/access.mjs';
+import { fileDirectory, referencedFile, referencedPath, storedAttachment, sendFile, sendFileHandle } from '../files/files.mjs';
+import { authorizeApplicationPath, canonicalManagerPath, privateManagerPaths, managerAllowed, runManagerOperation } from '../files/access.mjs';
 import { ApplicationGateway } from './gateway.mjs';
 import { applicationModules as modules, referencesWebRoot } from './locations.mjs';
 const unavailable = (name, detail = '') => Object.assign(Error(`${name} is unavailable${detail ? ': ' + detail : '. Install the matching component package.'}`), { status: 503, code: 'APP_UNAVAILABLE' });
@@ -207,7 +207,7 @@ export class ApplicationModules {
         this.prepareOfficeRuntime = prepareNative;
         let service;
         const provider = files.createOfficeProvider({ dataRoot: dataDir, environmentId: await this.identity(),
-          authorizePath: authorizeApplicationPath, publishNewFile,
+          authorizePath: (filename, options) => this.authorizeScopedPath(options?.scope, filename, options), publishNewFile,
           ensureRunning: async (name, definition) => {
             // A saved autostart may have loaded the previous package's config.
             // Reconcile once before this backend has issued any document views.
@@ -317,7 +317,18 @@ export class ApplicationModules {
       const current = await this.project(grant.record, grant.scope.projectId);
       if (grant.scope.projectRoot && current.cwd !== grant.scope.projectRoot) throw Object.assign(Error('The document project folder changed'), { status: 409 });
     }
-    await authorizeApplicationPath(grant.scope.root);
+    if (grant.scope.attachment) await this.authorizeScopedPath(grant.scope, grant.scope.attachment.filename);
+    else await authorizeApplicationPath(grant.scope.root);
+  }
+  async authorizeScopedPath(scope, filename, options = {}) {
+    if (!scope?.attachment) return authorizeApplicationPath(filename, options);
+    const selection = scope.attachment, session = await this.resolveSession(selection.sessionId);
+    const current = await storedAttachment(session.attachments, selection.recordPath);
+    const canonical = canonicalManagerPath(await fs.realpath(filename));
+    if (current.filename !== selection.filename || current.root !== scope.root || canonical !== current.filename) {
+      throw Object.assign(Error('This application can access only its stored chat attachment'), { status: 403 });
+    }
+    return true; // Exact attachment membership; never a general private-path exemption.
   }
   async resolveOfficeDocument(body, identity, { signal } = {}) {
     return this.gateway.authorizeOperation(identity.grantId, 'office-document', async ({ grant }) => {
@@ -363,11 +374,31 @@ export class ApplicationModules {
         return this.gateway.open(component, record, { id: randomUUID(), referenceProjectId: input.projectId || catalogue.projectId,
           identity: 'bk_' + randomUUID().replaceAll('-', ''), backendId: await this.identity(), openPath: '/' });
       }
+      let selected;
+      if (input.file !== undefined) {
+        const file = input.file;
+        if (component !== 'files' || input.cwd || input.projectId || !file || Object.keys(file).some(key => !['sessionId', 'path'].includes(key))
+            || !/^[a-f0-9-]{36}$/.test(file.sessionId || '') || typeof file.path !== 'string') {
+          throw Object.assign(Error('Choose one file from this chat'), { status: 400 });
+        }
+        const session = await this.resolveSession(file.sessionId);
+        // Stored cards carry literal paths, including names such as %20.docx;
+        // Markdown/file URLs retain the existing URI decoding rules.
+        const literal = (session.attachments || []).find(item => typeof item?.path === 'string'
+          && canonicalManagerPath(item.path) === canonicalManagerPath(file.path));
+        const absolute = literal?.path || referencedPath(session.cwd, file.path);
+        const attachment = (session.attachments || []).some(item => typeof item?.path === 'string'
+          && canonicalManagerPath(item.path) === canonicalManagerPath(absolute))
+          ? await storedAttachment(session.attachments, absolute) : null;
+        selected = attachment ? { ...attachment, attachment: { ...attachment, sessionId: file.sessionId } }
+          : await referencedFile(session.cwd, file.path);
+      }
       const project = input.projectId ? await this.project(record, input.projectId) : null;
-      const root = input.cwd ? (await fileDirectory(input.cwd)).path : project?.cwd || (await fileDirectory()).path;
-      await authorizeApplicationPath(root);
+      const root = selected?.root || (input.cwd ? (await fileDirectory(input.cwd)).path : project?.cwd || (await fileDirectory()).path);
+      if (!selected?.attachment) await authorizeApplicationPath(root);
       const scope = { id: randomUUID(), projectId: project?.id || null, projectRoot: project?.cwd, root, identity: 'bk_' + randomUUID().replaceAll('-', ''),
-        permissions: { view: true, download: true, modify: true, create: true, delete: true }, backendId: await this.identity() };
+        ...(selected?.attachment ? { attachment: selected.attachment } : {}),
+        permissions: { view: true, download: true, modify: true, create: !selected?.attachment, delete: !selected?.attachment }, backendId: await this.identity() };
       if (component === 'files') {
         const module = await this.module('files');
         if (typeof module.prepareFiles !== 'function' || typeof module.handleFiles !== 'function') throw unavailable('Files', 'incompatible native provider API');
@@ -377,6 +408,7 @@ export class ApplicationModules {
           if (prepared?.service?.id !== 'quantum') throw unavailable('Files', 'invalid shared Quantum service definition');
           scope.endpoint = await this.ensureRunning(prepared.service, true, prepared.needsRestart === true);
           scope.openPath = '/' + (prepared.openPath || '/').replace(/^\//, '');
+          if (selected && !selected.attachment) scope.openPath += selected.path.split(path.sep).map(encodeURIComponent).join('/');
         });
       } else throw Error('Unknown web application');
       return this.gateway.open(component, record, scope);
@@ -400,9 +432,10 @@ export class ApplicationModules {
       }
       const project = grant.scope.projectId ? await this.project(record, grant.scope.projectId) : null;
       if (project && grant.scope.projectRoot && project.cwd !== grant.scope.projectRoot) throw Object.assign(Error('The application project folder changed'), { status: 409 });
-      const root = (await fileDirectory(grant.scope.root)).path;
+      const root = grant.scope.attachment ? grant.scope.root : (await fileDirectory(grant.scope.root)).path;
       if (root !== grant.scope.root) throw Object.assign(Error('The application project folder changed'), { status: 409 });
-      await authorizeApplicationPath(root);
+      if (grant.scope.attachment) await this.authorizeScopedPath(grant.scope, grant.scope.attachment.filename);
+      else await authorizeApplicationPath(root);
       // A newly opened ordinary context receives a fresh one-use bootstrap.
       // Never reuse a local Pi view's authority for a remote human viewer.
       const scope = { ...grant.scope, id: randomUUID(), identity: 'bk_' + randomUUID().replaceAll('-', ''), openPath };
@@ -550,7 +583,8 @@ export class ApplicationModules {
       return this.officeProvider.handle(req, res, { grantId: context.grant.id, basePath: context.basePath, origin: context.origin, signal: context.signal });
     }
     if (component === 'files') return (await this.module('files')).handleFiles(req, res, { ...context, dataRoot: dataDir,
-      scope: context.grant.scope, endpoint: context.grant.scope.endpoint, authorizePath: authorizeApplicationPath,
+      scope: context.grant.scope, endpoint: context.grant.scope.endpoint,
+      authorizePath: (filename, options) => this.authorizeScopedPath(context.grant.scope, filename, options),
       withNativeMove: async (value, perform) => { await this.office(); return this.officeProvider.withNativeMove({ ...value, grantId: context.grant.id }, perform); },
       openOffice: async value => {
         await this.office();

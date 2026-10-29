@@ -684,7 +684,7 @@ class AgentView {
       }
     }
     const launch = await this.sidecar.navigation(resolving ? "application-resolve" : "application-open", resolving ? { url: address } :
-      { component: value.component, projectId: value.projectId, cwd: value.cwd });
+      { component: value.component, projectId: value.projectId, cwd: value.cwd, ...(value.component === "files" && value.file ? { file: value.file } : {}) });
     if (!current()) throw new Error("The selected backend changed.");
     if ((!resolving && launch?.component !== value.component) || launch?.serviceId !== "files" || !launch.identity || typeof launch.openPath !== "string" ||
         !launch.openPath.startsWith("/") || launch.openPath.startsWith("//") || /[\x00-\x20\x7f\\#]/.test(launch.openPath)) {
