@@ -12,6 +12,7 @@ export async function runCitationCommand({ invoke, renderDocument, importSnapsho
   if (request.noteType !== undefined && !['footnote', 'endnote'].includes(request.noteType)) throw Error('Invalid native note placement');
   const current = await invoke({ operation: 'citations.inspect' }, { signal });
   if (request.expectedRevision !== undefined && request.expectedRevision !== current.revision) throw bindingError('citation_state_changed', 'Citation state changed; inspect it again');
+  if (request.expectedNativeSnapshot !== undefined && request.expectedNativeSnapshot !== current.nativeSnapshot) throw bindingError('citation_state_changed', 'Native citations or bibliography changed; select the citation again');
   const binding = documentBinding(current), configuring = request.operation === 'citations.bind';
   if (configuring) {
     if (!Number.isInteger(request.expectedRevision)) throw bindingError('binding_revision_required', 'Inspect the document and provide its revision before changing document settings');
@@ -47,6 +48,13 @@ export async function runCitationCommand({ invoke, renderDocument, importSnapsho
   } else if (request.operation === 'citations.edit') {
     const index = state.citations.findIndex(c => c.id === request.id);
     if (index < 0) throw new Error('The managed citation no longer exists');
+    // The chooser supplies a complete cluster. In particular, switching back
+    // to generated text deliberately omits both custom-preview properties.
+    // Keep the existing partial-update contract for Pi callers.
+    if (request.replaceCluster === true) {
+      if (!request.cluster?.items?.length) throw new Error('A citation requires references');
+      for (const key of ['items', 'unsorted', 'customHTML', 'customText']) delete state.citations[index][key];
+    }
     state.citations[index] = { ...state.citations[index], ...request.cluster, id: request.id };
   } else if (request.operation === 'citations.remove') {
     if (!state.citations.some(c => c.id === request.id)) throw new Error('The managed citation no longer exists');

@@ -373,6 +373,54 @@ export function nativeOperation(request) {
     state.binding = state.bindingVersion === 1 && state.libraryId && state.style?.id ? { projectId: state.libraryId, style: state.style } : null;
     return state;
   }
+  function selectedCitations() {
+    const state = inspectCitations(), selected = view.getSelection(), ranges = [];
+    // XSelectionSupplier returns Writer text ranges, Calc cells/ranges, or
+    // Impress shapes. During Impress text editing it returns an XTextRange;
+    // that range's XText is the native shape, not a second text object.
+    function collect(selection) {
+      if (!selection) return;
+      if (typeof selection.getRangeAddress === 'function' || typeof selection.getShapeType === 'function' || typeof selection.getText === 'function') { ranges.push(selection); return; }
+      if (typeof selection.getCount === 'function' && typeof selection.getByIndex === 'function') {
+        const count = selection.getCount();
+        if (count > 10000) fail('Native selection exceeds the citation inspection bound');
+        for (let index = 0; index < count; index++) collect(selection.getByIndex(index));
+      }
+    }
+    collect(selected);
+    function textIntersects(range, anchor) {
+      const owner = range.getText();
+      if (!uno.sameUnoObject(owner, anchor.getText())) return false;
+      // Native compareRegionStarts returns +1 when its first range is earlier.
+      // A caret at either field edge belongs to that field, but a nonempty
+      // selection merely touching the edge does not select the citation.
+      const collapsed = owner.compareRegionStarts(range.getStart(), range.getEnd()) === 0;
+      const beforeEnd = owner.compareRegionStarts(range.getStart(), anchor.getEnd());
+      const afterStart = owner.compareRegionStarts(range.getEnd(), anchor.getStart());
+      return collapsed ? beforeEnd >= 0 && afterStart <= 0 : beforeEnd > 0 && afterStart < 0;
+    }
+    function matches(range, citation, anchor) {
+      if (citation.anchor.kind === 'field') {
+        if (typeof range.getText !== 'function') return false;
+        if (textIntersects(range, anchor)) return true;
+        // The superscript note mark is another native part of a note citation.
+        const owner = anchor.getText();
+        return citation.anchor.note && owner.supportsService('com.sun.star.text.Footnote') && textIntersects(range, owner.getAnchor());
+      }
+      if (citation.anchor.kind === 'cell') {
+        if (typeof range.getRangeAddress !== 'function') return false;
+        const a = anchor.getRangeAddress(), b = range.getRangeAddress();
+        return a.Sheet === b.Sheet && a.StartColumn <= b.EndColumn && a.EndColumn >= b.StartColumn && a.StartRow <= b.EndRow && a.EndRow >= b.StartRow;
+      }
+      return uno.sameUnoObject(anchor, range) || typeof range.getText === 'function' && uno.sameUnoObject(anchor, range.getText());
+    }
+    const citations = state.citations.filter(citation => {
+      const anchor = !citation.missing && anchorFor(citation);
+      return anchor && ranges.some(range => matches(range, citation, anchor));
+    });
+    const citation = citations.length === 1 ? citations[0] : null;
+    return { documentType, revision: state.revision, nativeSnapshot: state.nativeSnapshot, ids: citations.map(citation => citation.id), ambiguous: citations.length > 1, citationId: citation?.id || null, citation };
+  }
   function intersectsManaged(range) {
     const state = metadata();
     for (const citation of [...state.citations, ...bibliographies(state)]) {
@@ -616,6 +664,7 @@ export function nativeOperation(request) {
     return { documentType, text: shape.getString(), target: { ...target, existingShape: true } };
   }
   if (operation === 'citations.inspect') return inspectCitations();
+  if (operation === 'citations.selection') return selectedCitations();
   if (operation === 'citations.prepare') {
     const current = metadata(); checkRevision(current);
     const desired = request.state;

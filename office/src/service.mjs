@@ -7,7 +7,7 @@ import { runCitationCommand } from '../extension/citations.mjs';
 import { promoteCitationCodes } from '../extension/code-promotion.mjs';
 import { compareSnapshots } from './snapshot-diff.mjs';
 
-const reads = new Set(['inspect', 'codes.region', 'selection', 'capabilities', 'citations.inspect', 'citations.prepare']);
+const reads = new Set(['inspect', 'codes.region', 'selection', 'capabilities', 'citations.inspect', 'citations.selection', 'citations.prepare']);
 const nativeOperations = new Set([...reads, 'text.edit', 'text.append', 'table.insert', 'table.set', 'sheet.set', 'sheet.insert', 'sheet.rows', 'sheet.columns', 'slide.insert', 'slide.remove', 'shape.insert', 'shape.edit', 'format', 'view.finish-edit', 'native.uno']);
 const ownerKey = identity => {
   if (identity?.kind === 'browser' && identity.backendId && identity.viewId && identity.grantId && identity.operationId) return identity.backendId + ':browser:' + identity.viewId + ':' + identity.operationId;
