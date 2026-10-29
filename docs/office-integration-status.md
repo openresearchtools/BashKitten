@@ -158,9 +158,12 @@ The existing Xorg owner's bounded fresh-fixture Linux `53c81` observer captured
 only loopback connection destinations during its Files phase and combined
 Office/empty-References startup/idle phase. Native Markdown displayed an explicit
 remote image and a local sibling image, as allowed. The separate browser-startup
-baseline has source/DNS-supported filter/security address matches and two
-unclassified Fastly addresses; neither is labelled safe or telemetry. The
-observer excludes payloads, headers, environment and DNS names, and cannot
+baseline has source/DNS-supported filter/security address matches. Its two
+initially unclassified Fastly addresses later matched public DNS for Firefox
+Remote Settings attachments, consistent with enabled signed security-data
+downloads; shared CDN hosting leaves individual requests unproven. The mapping
+is recorded in `startup-fastly-address-mapping.json` in the Files audit directory.
+The observer excludes payloads, headers, environment and DNS names, and cannot
 establish all traffic on pre-existing sockets or unconnected UDP destinations.
 These results and source audits do not establish universal absence of reporting.
 Receipt: `/home/user/Bashkitten-Acceptance/privacy-files-53c81-20261029/bounded-runtime-summary.json`.
