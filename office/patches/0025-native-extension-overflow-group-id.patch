@@ -1,0 +1,13 @@
+--- a/browser/src/control/Control.Notebookbar.js
++++ b/browser/src/control/Control.Notebookbar.js
+@@ -493,7 +493,9 @@
+ 			// ever used in a console warning about one of this group's own items - it
+ 			// isn't required to be unique, so it can't be used verbatim as the DOM/model
+ 			// id here.
+-			'id': 'ext:' + extId + ':group:' + (this._nextContributedId++),
++			// MenuButton treats ':' as a menu-id separator. This shared counter
++			// is unique across all contributed tabs and extensions in this bar.
++			'id': 'extgroup_' + (this._nextContributedId++),
+ 			'type': 'overflowgroup',
+ 			'name': group.label,
+ 			'children': children,
