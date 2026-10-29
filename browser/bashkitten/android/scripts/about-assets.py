@@ -78,11 +78,13 @@ remote_modules = json.loads((remote / 'share/metadata/remote-client-go-modules.j
 if not remote_modules:
     raise SystemExit('The native remote client license inventory is empty')
 for dependency in remote_modules:
-    text = '\n\n'.join((remote_licenses / name).read_text() for name in dependency['licenses'])
-    if not text.strip():
+    text = (dependency['text'] if 'text' in dependency else
+            '\n\n'.join((remote_licenses / name).read_text() for name in dependency['licenses']))
+    if not isinstance(text, str):
         raise SystemExit('Missing remote client license: ' + dependency['name'])
+    validate_text('Native remote client: ' + dependency['name'], text)
     records.append({'name': 'Native remote client: ' + dependency['name'], 'version': dependency['version'],
-                    'license': 'See full license text', 'text': text})
+                    'license': dependency.get('license', 'See full license text'), 'text': text})
 # Include separate NOTICE/PATENTS/provenance files as well as the license text.
 extra_notices = '\n\n'.join(str(path.relative_to(remote_licenses)) + '\n' + path.read_text()
                             for path in sorted(remote_licenses.rglob('*')) if path.is_file())
