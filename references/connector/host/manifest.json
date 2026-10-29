@@ -1,9 +1,9 @@
 {
   "manifest_version": 2,
   "name": "BashKitten References host",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Project-authorized host for the separately installed References capture extension.",
   "browser_specific_settings": {"gecko": {"id": "references-host@bashkitten.org", "strict_min_version": "140.0"}},
-  "permissions": ["nativeMessaging"],
+  "permissions": ["nativeMessaging", "geckoViewAddons"],
   "background": {"scripts": ["background.js"]}
 }

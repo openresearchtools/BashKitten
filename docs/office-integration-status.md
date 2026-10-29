@@ -31,13 +31,23 @@ and service owners are being retained while these specific gaps are corrected.
 Evidence is in `Bashkitten-Acceptance/android-native-87c68-20261029/`.
 
 The exact committed `1a1d88490c974d1a5c7475f81ef341ead234770a` diagnostic
-is building through native-only parent
+built successfully through native-only parent
 [40906939972](https://github.com/openresearchtools/BashKitten/actions/runs/40906939972)
 and signed Android x86 daughter
 [40906956016](https://github.com/openresearchtools/bashkitten-build-android-x86_64/actions/runs/40906956016).
 It contains the Files appearance/scope/pane corrections and bounded native
-References error reporting. The normal complete-release gate is intentionally
+References error reporting. Its signed APK and exact backend/OS pair were
+verified and installed. The normal complete-release gate was intentionally
 skipped for this diagnostic; it cannot be published as the complete candidate.
+
+The coherent installed retry still failed before reaching the Java References
+handler. The built-in host lacked `geckoViewAddons`, so Gecko selected its
+unsupported desktop native-app path on Android. The host manifest now requests
+the native GeckoView permission and has version 1.0.1 so existing profiles update.
+Desktop staging and sender/authorization checks are unchanged. Twelve focused
+staging/native-source checks passed; actual corrected capture remains pending
+the next candidate. The earlier mixed-runtime attempt is recorded separately
+from the coherent retry in `Bashkitten-Acceptance/android-references-diagnostic-1a1d-20261029/`.
 
 The shared citation processor now uses the exact pinned Zotero processor and
 Style settings. Five independent native-oracle cases, packaged payload/legal
@@ -46,8 +56,26 @@ also passed ten native Writer checks and three occurrence/copy checks, including
 Vancouver numbering, real save/reopen, unchanged-citation formatting and native
 idle autosave. Those module diagnostics do not claim a rebuilt installed
 candidate. Evidence is under `BashkittenBuild/verification/citation-formatting-20261029/`
-and `office-citation-basics-20261029/`; the remaining bibliography paragraph-style
-parity correction and new metadata/identity work remain separate active changes.
+and `office-citation-basics-20261029/`. The subsequent Writer bibliography change
+uses the native `Bibliography 1` style and passed twelve focused native checks,
+including style customizations, direct-format reset and real save/reopen.
+
+The integrated metadata/identity changes passed 21 focused tests: exact normalized
+identifier merging, complementary metadata, retained attachments and relocation,
+user/Pi metadata editing and shared citation numbering after an item merge.
+A reversible References-only overlay at `218df4b1c8` on the installed `87c68`
+browser passed desktop UI-to-API/API-to-UI editing, a local XML attachment and
+live light/dark appearance. Original files, settings and four existing databases
+were restored unchanged. This is module verification, not a coherent new build;
+phone-width rendering is deferred to the actual Android candidate. Evidence is
+in `Bashkitten-Acceptance/references-metadata-20261029/`.
+
+The [component attribution map](../references/legal/COMPONENT-ATTRIBUTION.md)
+identifies pinned upstream sources, our adapters, modifications and retained
+license terms, and passed inclusion checks in the existing offline legal payload.
+Office also enables native `hide_legacy_script_warning`, suppressing only the
+legacy UNO banner while preserving API support, operation errors and developer
+compatibility information. Its effective native configuration check passed.
 
 ## Earlier integration checkpoint — 29 October 2026
 
