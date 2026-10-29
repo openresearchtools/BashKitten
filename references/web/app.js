@@ -505,10 +505,23 @@ function renderDetail(item, targetScope) {
         .map(control => [control, control.disabled]);
       for (const [control] of controls) control.disabled = true;
       try {
+        const data = { parentItem: parent?.key || null };
+        if (parent) data.collections = [];
+        else if (item.data.parentItem) {
+          // Native Convert to Standalone keeps the old parent's collections.
+          const previousParent = await targetScope.request(
+            "items/" + encodeURIComponent(item.data.parentItem),
+            { signal: controller.signal },
+          );
+          if (scope !== targetScope || detail !== item || controller.signal.aborted || !root.contains(form)) return;
+          data.collections = [...new Set([
+            ...(item.data.collections || []),
+            ...(previousParent.data.collections || []),
+          ])];
+        }
         const result = await targetScope.request("items/" + encodeURIComponent(item.key), {
           method: "PATCH",
-          body: { version: item.version,
-            data: { parentItem: parent?.key || null, ...(parent ? { collections: [] } : {}) } },
+          body: { version: item.version, data },
           signal: controller.signal,
         });
         if (scope !== targetScope || detail !== item || !root.contains(form)) return;
