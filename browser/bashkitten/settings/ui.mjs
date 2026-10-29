@@ -59,14 +59,14 @@ export function modelSelect(root, title, { choices = [], value = '', onSelect, s
     const measuredHeight = Math.min(limit, list.getBoundingClientRect().height);
     list.style.top = `${upwards ? rect.top - gap - measuredHeight : rect.bottom + gap}px`;
   };
-  const paintCursor = () => {
+  const paintCursor = (reveal = true) => {
     [...list.children].forEach((option, index) => { option.dataset.active = String(index === cursor); });
     const option = list.children[cursor];
     if (option) {
-      trigger.setAttribute('aria-activedescendant', option.id);
+      if (trigger.getAttribute('aria-activedescendant') !== option.id) trigger.setAttribute('aria-activedescendant', option.id);
       const top = option.offsetTop, bottom = top + option.offsetHeight;
-      if (top < list.scrollTop) list.scrollTop = top;
-      else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+      if (reveal && top < list.scrollTop) list.scrollTop = top;
+      else if (reveal && bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
     } else trigger.removeAttribute('aria-activedescendant');
   };
   const open = () => {
@@ -80,7 +80,7 @@ export function modelSelect(root, title, { choices = [], value = '', onSelect, s
     close(); trigger.focus({ preventScroll: true }); void onSelect?.(choice.id);
   };
   const update = ({ choices: next = items, value: nextValue = selected, disabled = trigger.disabled } = {}) => {
-    const wasOpen = !list.hidden, cursorId = items[cursor]?.id;
+    const wasOpen = !list.hidden, cursorId = items[cursor]?.id, scrollTop = list.scrollTop;
     items = next; selected = nextValue; trigger.disabled = disabled;
     const choice = items.find(choice => choice.id === selected), heading = JSON.stringify(choice);
     if (heading !== titleRevision) {
@@ -98,8 +98,11 @@ export function modelSelect(root, title, { choices = [], value = '', onSelect, s
         return option;
       })); choicesRevision = revision;
     }
-    [...list.children].forEach((option, index) => option.setAttribute('aria-selected', String(items[index].id === selected)));
-    if (wasOpen && !disabled) { cursor = Math.max(0, items.findIndex(item => item.id === cursorId)); place(); paintCursor(); }
+    [...list.children].forEach((option, index) => {
+      const value = String(items[index].id === selected);
+      if (option.getAttribute('aria-selected') !== value) option.setAttribute('aria-selected', value);
+    });
+    if (wasOpen && !disabled) { cursor = Math.max(0, items.findIndex(item => item.id === cursorId)); place(); paintCursor(false); list.scrollTop = scrollTop; }
     else close();
   };
   trigger.onclick = () => list.hidden ? open() : close();

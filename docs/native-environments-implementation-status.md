@@ -36,12 +36,47 @@ unopened, saved Local autostart Off, custom configuration/import opt-out, saved
 Pi choices, cancellation/retry and concurrent configuration edits. They use the
 real setup/job/download owners with tiny synthetic streams and stubbed runtime
 installation/process boundaries, so they are not installed first-launch proof.
-Genuinely fresh installed setup, the new guided/custom UI,
-actual Q8 KV/GPU execution and coherent Android/Linux candidate replay remain
-required. Optional large model weights were not downloaded or claimed tested.
-External evidence is under `Bashkitten-Acceptance/audio-guided-20261029` and
-`audio-ui-20261029`; current installed checks still identify the old diagnostic
-candidate and explicit overlays separately.
+Fresh installed Linux acceptance now covers the unmodified amd64 `153.5.4`
+package from source `16f0a0330ac7f800fba6c97b8aaf778d32922843`, daughter run
+`40815438167`, SHA-256
+`23da7e91d9980a716f1f9cf67ae78998afd43f97217fdea83d62429bd8b1250e`.
+The retained real-Xorg VM was upgraded after normal GUI Quit, preserving its old
+profile/data, then launched through the desktop with an empty separate profile.
+With Settings never opened and only the new chat tab visible, the native owner
+automatically downloaded both runtimes, Qwen3.5 4B XL and its F16 projector,
+Parakeet Q4_0 and Pocket assets; setup completed without error. Settings opened
+later showed all three defaults downloaded, CPU, 65,536 / 262,144 tokens and no
+available GPU. Actual asset rows showed fractional completed/total MB or GB,
+percentage and speed. The real router INI contains the matching projector,
+65,536 context and Q8 K/V settings. The authenticated installed `/api/models`
+returned the bundled Pi default as available with context 65,536 and text/image
+input. This confirms provider discovery/configuration, not new image inference
+or physical GPU execution.
+
+The installed dropdown downloaded and applied an alternative Whisper model.
+A separate immediate cancellation through the installed native controller kept
+the previous selection. Normal GUI Quit/relaunch preserved that cancelled job,
+all download records, the nondefault speech choice, and the exact custom INI
+hash/comment saved through the GUI editor. Custom mode visibly disabled only
+llama guidance. Explicit retry through the speech dropdown then completed while
+preserving the custom INI. The installed run exposed two UI defects: terminal
+preparation rows with no byte total displayed pending progress, and status polls
+returned a manually scrolled model list to its keyboard cursor. Their focused
+renderer corrections and component checks are separate from this unchanged
+`16f0` installed receipt.
+
+Saved Local autostart Off replay, actual Q8 KV/GPU execution and coherent Android
+candidate setup remain pending in this installed matrix. The matching `16f0`
+Android APK failed to build; staged Termux packages and an independently prepared
+Cuttlefish target do not establish Android acceptance. Optional large model
+weights were not downloaded or claimed tested. The separate source-collection
+failure/fix also does not make this package final published-source acceptance.
+External receipts and screenshots are under
+`/home/user/Bashkitten-Acceptance/localai-153.5.4-16f0-20261029/`, including
+`first-launch-settings-closed.json`, `ready-status.json`,
+`installed-pi-model-catalog.json`, `after-restart-preservation.json` and
+`after-gui-retry.json`. Earlier diagnostic/overlay and source-fixture evidence
+remains separately identified under `audio-guided-20261029` and `audio-ui-20261029`.
 
 ## Operation ownership corrections — 20 October 2026
 
