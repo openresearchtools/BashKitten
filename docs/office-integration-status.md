@@ -6,14 +6,31 @@ and installed-product acceptance. It does not claim completed integration.
 
 ## Live integration checkpoint — 29 October 2026
 
-The current full Actions run is `40787710453`, from
+The current full Actions run is
+[40811847474](https://github.com/openresearchtools/BashKitten/actions/runs/40811847474),
+version **153.5.4**, from `aa79161e6956f1ae1f30c6b6a9f4705882dd42f6`.
+It includes guided/background model setup, the replacement citation commands and
+the source/license corrections. All seven related repository queues were checked
+clear after cancelling the three older active runs. Normal preparation
+`40811642313` passed without modifying the frozen source. Dispatch is not a build
+or installed acceptance pass.
+
+This attempt exposed a stale Termux Search inventory checksum after the Rust
+runtime source-lock update. The inventory now matches that lock; the unchanged
+pinned Termux archive was verified and extracted successfully from the offline
+cache. Both Linux Node restore jobs also hit GitHub HTTP 502 while reading prior
+producer job lists, before compilation. The active candidate retains its original
+source identity; these failures and any retries remain separate from acceptance.
+
+The previous full Actions run was `40787710453`, from
 `eb56a3a10ebc5bbba76c364dac1273ed0458e418`. Both Linux and both Android browser
 compiles passed. Android packaging exhausted its old 30-minute companion wait
 while native Office builds were still running. The bounded shared wait
 correction is committed in `a3c456e8a8` and deployed to the four builder repos;
 it does not change those already-running workflows. Office Linux ARM64 and both
 Termux targets subsequently passed. The Linux ARM64 complete candidate also passed;
-Office Linux amd64 remains building. The main amd64 collector lost its hosted
+Office Linux amd64 reached packaging before cancellation, with its compiler cache
+saved; no completed artifact is claimed. The main amd64 collector lost its hosted
 runner connection while its daughter build continued waiting for Office. These
 are outcomes for the original source revision, not subsequent fixes. A coherent
 candidate containing the later changes remains unverified.
