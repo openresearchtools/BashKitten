@@ -1,5 +1,18 @@
 # BashKitten · native Pi / Linux and Termux
 
+## 29 October guided local models
+
+The latest [native-plan amendment](docs/native-environments-display-plan.md#guided-local-models-and-custom-router-ownership--29-october-2026)
+replaces the detailed model-builder UI with supported model dropdowns, actual
+CPU/GPU devices and context controls. Normal Termux/Local setup automatically
+prepares defaults through existing owners; alternatives download on selection.
+Keep exact defaults and saved choices. Show combined model/projector sizes and
+readable progress, reuse one projector across quants in the model's folder, and
+surface real load failures without fallback. Advanced is custom router INI mode
+and choose/edit, disabling only guided llama settings. Changes must reach the
+actual router INI and bundled Pi provider; preserve custom edits and import opt-out.
+Do not add another downloader/router or repeatedly checksum completed weights.
+
 ## 28 October Office and Files branding and compact citation amendment
 
 User-facing bundled product names are **Office** and **Files**, within BashKitten.

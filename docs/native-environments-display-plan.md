@@ -4093,3 +4093,48 @@ history and browsing, supported/unsupported file actions and a long encrypted
 download, Android narrow/wide Display/tab behavior, truthful sharing controls,
 desktop action menus, first-use versus saved scaling, APK/package rollback, and
 live inter-agent steering/provenance before marking the respective flows passed.
+
+### Guided local models and custom router ownership — 29 October 2026
+
+The user replaces the detailed model-builder menus with a small guided setup.
+Normal Termux/Local setup automatically prepares the default runtime packages,
+Qwen model and matching image projector, speech recognition, voice assets and
+call VAD in the background through the existing setup/job owner. No additional
+user-initiated AI setup step is required. Keep the existing exact defaults and
+saved choices; do not overwrite custom configuration or silently restart a
+cancelled setup. Show actual pending, ready and failed states.
+
+Offer supported chat, recognition and voice models as compact dropdowns, with
+green `[downloaded]` or grey `[download]` status. Choosing an alternative downloads
+its complete required asset set and applies it when ready. Alongside the existing
+defaults, offer Qwen3.5 2B, 4B and 9B in plain Q4 and Q4 K; Qwen3.8 27B additionally
+offers IQ3 and IQ2. Use exact published Unsloth pins for these available files and
+one matching F16 projector per model across its quants. Keep a single model folder
+containing its downloaded quants and shared projector. Display one combined
+model-plus-projector size; an unchanged, previously verified projector counts as
+complete immediately when downloading another quant. Reuse the existing
+downloader and its completion records. Show fractional MB/GB completed/total,
+percentage and speed. Do not repeatedly hash multi-GB completed files during
+settings polling or normal model use; download integrity remains streamed, with
+explicit handling of changed or interrupted files.
+
+Basic llama controls are the model, CPU or an actual enumerated GPU device, and
+context size with the model-supported maximum. Use a generous 65,536-token guided
+default and native Q8 KV settings; the pinned models support 262,144 tokens.
+Selecting GPU uses all layers and the existing native memory-fitting facilities;
+do not claim fitting changes an explicitly selected context. Download size is
+not a promise of runtime memory requirements. Surface actual load failures,
+preserve the selected configuration and give actionable advice to reduce context
+or choose a smaller model/device, without silent fallback.
+
+Advanced exposes a custom router INI switch and the existing choose/edit-file
+flow. Custom mode disables guided llama model/device/context management while
+leaving independent audio settings available. User/agent INI edits take ownership
+immediately; stale guided jobs cannot overwrite them. Returning to guided mode
+preserves the custom file. Remove the superseded per-flag model-builder menus.
+All controls edit the real owned llama.cpp router configuration and use the
+existing bundled Pi provider import, including actual context and vision
+capabilities. Preserve deliberate provider-import opt-out and current chat model
+choices. Reuse the native backend lifetime, devices, downloader and setup owners;
+no parallel router or model state store. Verify actual installed setup, model
+selection, failure/retry and Pi use; this amendment is not an acceptance claim.
