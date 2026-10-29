@@ -5,6 +5,62 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Current build and lifecycle checkpoint — 29 October 2026
+
+The 153.5.4 binary batch at `cf62bf9be5cd068921f5941916099531cd3ce1a7`, parent
+[40823770402](https://github.com/openresearchtools/BashKitten/actions/runs/40823770402),
+passed all eight native Office/Files jobs, both Linux packages, both Termux
+packages and both Android APKs. The staged x86_64 APK's production certificate
+and exact-source backend/OS pairing passed normal verification. Actual cf62
+amd64 DEB and x86_64 APK legal/About checks also passed, with 3,056 and 2,918
+complete records respectively; the APK preserves all 2,427 matching companion
+records. Receipts are under `Bashkitten-Acceptance/final-packages-legal-cf62-20261029/`.
+The parent source job was cancelled after its collection step ran for 1h 23m 44s;
+binary artifacts remain retained, but no corresponding-source or complete-candidate artifact/pass
+was produced. Binary success is not complete source publication or installed
+acceptance. Its receipt is
+`verification/ci-monitor-cf62bf9be5cd-20261029.json`. The earlier 16f0 APK/source
+failures and later corrections retain their original identities in
+[the Office status record](office-integration-status.md).
+
+Later workflow correction `1eab4ec1df` bulk-fetches missing pinned Git blobs
+through native Git before the existing source collector. The exact workflow
+step and exporter fixtures passed with identical archive bytes, reducing 40
+fetch processes to one. This changes preparation only, not source serialization
+or content; complete normal source publication is still unverified. Receipts are
+in `Bashkitten-Acceptance/source-archive-backfill-20261029/`.
+
+Native Office command checks now include the desktop collapsed Citations menu,
+phone Writer history/conversion/removal/PDF and saves in all three editors, with
+explicit older-browser/module overlay identities. Actual bundled Pi also
+completed nine Calc/Impress native calls and both saves; normal Stop ended the
+bounded test after the acknowledgements, without a completed final model reply.
+Landscape chooser Confirm and the initial unreproduced Impress repaint
+observation remain open. Detailed receipts and limits are in the Office record;
+these checks do not establish fresh-candidate Office acceptance.
+
+`c348ac5092` updates the existing shutdown owners to drain native Office saves
+before callback services stop. Source fixtures passed signal/exit ordering,
+callback drain and reload-failure cleanup in
+`verification/office-shutdown-20261029/{signal-result,caddy-result}.json`.
+The first installed saved-DOCX Office-only restart passed on the isolated older
+browser with the reviewed controller overlay: immediate editable reopen, the
+same add-on process, native write/Save/inspect 200 and both disk markers retained,
+without forced termination or unlock failure. Its receipt is
+`verification/office-shutdown-20261029/saved-office-only-result.json`.
+The later dirty Local Off replay **failed**: native content was modified before
+Off, yet the new marker remained absent on disk after native exit, with the same
+file hash/size. No forced termination or unlock failure was observed. The exact
+receipts are `dirty-before-local-off-disk.json`, `after-local-off-disk.json` and
+`dirty-local-off-existing-evidence.json` in the shutdown directory. Native
+diagnosis remains in progress; c348 is not sufficient final-save acceptance.
+`6b01947a60` separately
+changes native browser field-clearing semantics; rebuilt installed-actor
+and actual References query/export-scope acceptance remain pending. Its bounded
+source/native-event receipt is
+`Bashkitten-Acceptance/browser-fill-clear-20261029/verification.json`.
+Both source changes postdate the cf62 binaries.
+
 ## Guided local models — 29 October 2026
 
 `7054f1a59b` replaces detailed model-builder menus with guided model/device/context
@@ -65,17 +121,46 @@ returned a manually scrolled model list to its keyboard cursor. Their focused
 renderer corrections and component checks are separate from this unchanged
 `16f0` installed receipt.
 
-Saved Local autostart Off replay, actual Q8 KV/GPU execution and coherent Android
-candidate setup remain pending in this installed matrix. The matching `16f0`
-Android APK failed to build; staged Termux packages and an independently prepared
-Cuttlefish target do not establish Android acceptance. Optional large model
-weights were not downloaded or claimed tested. The separate source-collection
-failure/fix also does not make this package final published-source acceptance.
+The same unchanged 16f0 installation also passed saved Local autostart Off with
+empty data: no default download started. Separate replays preserved both Local
+and llama autostart Off, and preserved an independently enabled llama autostart
+while Local stayed Off and downloads remained unchanged. The existing custom
+INI and cancellation/retry receipts retain that desktop source identity.
+
+Android setup now has separate actual cf62 evidence on fresh Cuttlefish instance
+4/6523. The production x86_64 APK and matching backend/OS pair completed normal
+Copy/Open Termux/permission/return setup using a locally staged native APT fixture.
+Default Qwen3.5 2B plus F16 projector, Parakeet and Pocket transfers started while
+Settings was closed. Opening Settings later observed complete first-run setup,
+the voice asset and VAD readiness. The actual router INI contains CPU selection,
+65,536 context, Q8 K/V and the matching F16 projector; the authenticated bundled
+Pi catalogue reports the available text/image model with that context. This is
+installed setup and configuration proof, not model inference, physical GPU,
+speech quality or published-APT network onboarding acceptance.
+
+An actual unmodified cf62 Android GUI Retry/resume of a cancelled download was a
+no-op. Existing-owner fix `12ee699af3` passed a later GUI retry under a recorded
+one-file diagnostic overlay: the 264.48 MB transfer completed while the original
+cancelled guided job and newer selected speech model stayed unchanged. This is
+overlay proof, not an unmodified cf62 retry pass. Explicit dropdown application
+and restoration of the Parakeet selection remain in progress. Receipts are
+`retry-overlay-receipt.json`, `overlay-gui-retry-started.json` and
+`overlay-gui-retry-complete.json` under the Android cf62 evidence directory.
+
+Optional large model weights were not downloaded or claimed tested. Actual Q8
+KV execution, physical GPU and broader installed flows remain separate gates.
+The failed 16f0 Android build remains historical; it is not relabelled as cf62.
+The parent source-collection state also prevents final published-source acceptance.
 External receipts and screenshots are under
 `/home/user/Bashkitten-Acceptance/localai-153.5.4-16f0-20261029/`, including
 `first-launch-settings-closed.json`, `ready-status.json`,
 `installed-pi-model-catalog.json`, `after-restart-preservation.json` and
-`after-gui-retry.json`. Earlier diagnostic/overlay and source-fixture evidence
+`after-gui-retry.json`; `installed-acceptance-summary.json` also links the three
+saved-Off replays. The Android cf62 receipts are under
+`android-localai-153.5.4-cf62-20261029/`, including
+`settings-closed-initial.json`, `settings-closed-models.json`,
+`settings-observer.json` and `native-model-catalog.json`.
+Earlier diagnostic/overlay and source-fixture evidence
 remains separately identified under `audio-guided-20261029` and `audio-ui-20261029`.
 
 ## Operation ownership corrections — 20 October 2026

@@ -6,7 +6,45 @@ and installed-product acceptance. It does not claim completed integration.
 
 ## Live integration checkpoint — 29 October 2026
 
-The latest completed full Actions attempt is
+The latest binary batch is
+[40823770402](https://github.com/openresearchtools/BashKitten/actions/runs/40823770402),
+version **153.5.4**, from `cf62bf9be5cd068921f5941916099531cd3ce1a7`.
+All eight native Office/Files jobs, both Linux packages, both Termux packages and
+both Android APKs passed. This batch includes `550d52b0a2`, `f09b7d27bb` and the
+native short-frame/collapsed-menu changes. The x86_64 APK's production signing
+identity and exact-source backend/OS pairing were verified. The parent source
+job was cancelled after its collection step ran for 1h 23m 44s; binary artifacts
+were retained.
+No corresponding-source or complete-candidate artifact/pass was produced; these
+binary results do not establish source publication, prerelease completion or
+full installed acceptance. The build receipt is
+`verification/ci-monitor-cf62bf9be5cd-20261029.json`; staged identities are under
+`Bashkitten-Acceptance/candidates/153.5.4-cf62bf9be5cd/`.
+
+Later source-preparation correction `1eab4ec1df` adds native Git bulk backfill
+before the existing collector. The exact workflow step passed a pinned shallow
+partial-clone fixture; the existing exporter produced identical archive bytes
+with one fetch process instead of 40. Source serialization and content are
+unchanged. This is a focused source-fixture pass, not successful publication.
+Receipts are under `Bashkitten-Acceptance/source-archive-backfill-20261029/` in
+`workflow-step-verification.json` and `verified-run/verification.json`.
+
+The actual cf62 Linux amd64 DEB also passed the existing final-package audit:
+all 3,056 full-text records matched the normal collector and offline About,
+including both structured Go records, all compiled Gecko/capture notices and
+installed Office branding. The actual production x86_64 APK passed all 2,918
+full-text records against the native validator and exact offline About array,
+preserving all 2,427 matching Termux companion records, four compiled Gecko
+records and 26 capture records. Both Go 1.27.2 texts match their 38 pinned
+original members and retain declared terms. Its SHA256 is
+`7d397ad240ad08dcb6ea6fcbb5900ea25a37187800e2a2978badefc46302e275`.
+The independent current-source receipts are `verification.json` and
+`apk-verification.json` under
+`Bashkitten-Acceptance/final-packages-legal-cf62-20261029/`.
+These are artifact legal/About passes; matching source publication remains
+separate, and the 16f0 evidence below retains its historical identity.
+
+The preceding full Actions attempt was
 [40815191205](https://github.com/openresearchtools/BashKitten/actions/runs/40815191205),
 version **153.5.4**, from `16f0a0330ac7f800fba6c97b8aaf778d32922843`.
 It includes guided/background model setup, the replacement citation commands and
@@ -28,8 +66,8 @@ license filenames. `f09b7d27bb` updates the existing loop to accept both forms,
 preserving declared terms and rejecting incomplete text. Its focused offline
 receipt used the actual 16f0 remote Go metadata: 18 filename records plus the
 Go 1.27.2 runtime record, retaining its 73,503-character text and all 38 original
-member hashes. The existing attribution record also remained. This is generator
-verification, not a rebuilt APK pass.
+member hashes. The existing attribution record also remained. That focused
+receipt is generator verification; the later cf62 APK build passes are separate.
 
 Source collection failed because it checked an original archive
 against the checksum of a license member inside it. `550d52b0a2` corrects the
@@ -54,8 +92,8 @@ hashes; Office's 66 original Python legal files reached About. This package has
 SHA256 `23da7e91d9980a716f1f9cf67ae78998afd43f97217fdea83d62429bd8b1250e`.
 The receipt is `Bashkitten-Acceptance/final-deb-legal-16f0-20261029/verification.json`.
 It establishes packaged notice coverage, not source publication or installed
-feature acceptance. Fresh coherent Linux/Termux packages, full APKs and matching
-published sources containing the later corrections remain outstanding.
+feature acceptance. The later cf62 binary results do not relabel this 16f0 audit;
+matching published sources and full installed acceptance remain outstanding.
 
 The preceding `40811847474` attempt used `aa79161e6956` and exposed a stale Termux
 Search inventory checksum after the Rust runtime source-lock update. The inventory
@@ -85,11 +123,13 @@ Termux targets subsequently passed. The Linux ARM64 complete candidate also pass
 Office Linux amd64 reached packaging before cancellation, with its compiler cache
 saved; no completed artifact is claimed. The main amd64 collector lost its hosted
 runner connection while its daughter build continued waiting for Office. These
-are outcomes for the original source revision, not subsequent fixes. A coherent
-candidate containing the later changes remains unverified.
+are outcomes for the original source revision, not subsequent fixes. Later
+binary batches and their remaining acceptance gates are recorded above.
 
-Installed testing still uses the isolated `4be2563e5e` browser with explicitly
-recorded component overlays. It is not acceptance of a newer complete package.
+The Office UI/Pi replays below use the isolated `4be2563e5e` desktop browser or
+the older 153.5.2 Android APK with explicitly recorded component overlays.
+They are not acceptance of a newer complete package. The separate cf62 Android
+model-setup check is recorded in the native implementation status.
 The existing Weston viewer/input seat was restored before continuing trusted
 native input tests; earlier unfocused clicks are not successful UI evidence.
 
@@ -129,8 +169,17 @@ downloaded that exact export through the existing trusted HTTPS authorization
 flow; its 21,378-byte PDF retained both edits, the superscript citation and the
 formatted bibliography in text and rendered inspection. `01f1d0b192` adds native
 selection lookup and guards; six-format native module checks passed separately
-from the later compact Citations menu replays below. The current bundled-Pi
-Calc/Impress reruns remain in progress; human UI checks do not complete them.
+from the later compact Citations menu replays below.
+
+The subsequent actual bundled Pi 1.3.0/Qwen3.5-4B Calc/Impress run completed all
+nine native calls with HTTP 200 and both `saved:true` acknowledgements. Calc
+wrote/read cells and a formula; Impress opened/inspected the presentation,
+inserted/read a text shape and saved. The normal Pi Stop ended the bounded test
+after both saves, before a final model reply; no extra tool calls followed.
+Earlier malformed model calls remain recorded failures. This is bounded native
+tool proof on the diagnostic installation with overlays, not cf62 installed
+acceptance or unprompted model reliability. The receipt is
+`verification/office-native-ui-20261029/native-pi-calc-impress/calc-impress-native-results.json`.
 
 The replacement plugin removes the visible Office References panel and exposes
 labelled native Citations commands. One nonvisual native extension lifecycle
@@ -167,6 +216,16 @@ The three receipts are in
 and `impress-current-native-ui-evidence.json`. They retain the diagnostic overlay
 identity and do not establish fresh full-package or phone-format acceptance.
 
+Native collapsed-menu patch `0025` (`84cb5faa8e`) also passed actual desktop
+input at a 728px viewport: all six Citations labels appeared without the dummy
+X, and Settings opened from the collapsed menu on a normal disposable document.
+Library/style/language order and Cancel worked. This used a frontend-only
+overlay with the old signed browser, native binary and plugin unchanged.
+The receipt is
+`verification/office-native-ui-20261029/command-ui/overflow-group/desktop-ui-evidence.json`.
+A separate old-document restart exposed a surviving
+WOPI lock; it is not a seamless restart pass.
+
 Actual phone replay found that the outer Office iframe retained the 783px layout
 height while the keyboard reduced the visible viewport to 486px. `16f0a0330a`
 fits that existing iframe to the visual viewport and corrects the native inner
@@ -193,8 +252,25 @@ required native Force Stop/reopen and does not prove seamless reconnect.
 Phone evidence is `verification/office-command-phone-ui-20261029/evidence.json`;
 the native state receipt is
 `BashKittenOfficeBuild/20261028/diagnostics-6522/native-server/command-ui-20261029/writer-inspect-ieee-landscape-20261029.json`.
-Landscape citation Confirm, phone selected Remove, typed-code/history/export and
-Calc/Impress GUI coverage remain pending.
+Later phone replay on that same older APK passed Writer's native history list,
+immutable read-only Open, normal Back and Restore on the disposable proof file.
+The restored snapshot predates the bibliography; no bibliography loss is inferred.
+A typed citation marker automatically became a managed field, and selected
+Remove preserved the original two-source cluster. Native PDF download completed
+at 14,941 bytes. Calc and Impress each passed Settings, chooser, Confirm and Save;
+Calc displayed the cell citation and bibliography. Impress's 12,471-byte PDF and
+normal reopen contained the saved citation. Existing-shape editing, isolated new
+shape insertion and a bounded inspector-lifecycle comparison later repainted
+live; its two-entry bibliography also rendered and saved.
+
+The initial Impress canvas missing-paint observation remains recorded and was
+not reproduced by those bounded cases. The comparison inspector closed 841ms
+before repaint, so a narrower callback race remains unexcluded. Default template
+placeholders also overlap the native default insertion position; no layout
+change was made during that investigation. Landscape chooser touch scrolling/
+Confirm, zoom and fresh full-candidate Office acceptance remain open. These
+results and native receipt links are in the same phone `evidence.json`; the final
+state was portrait, unmodified, with no command drafts.
 
 Desktop capture now passes the installed single/multiple-item, cancellation,
 website snapshot, recognized/raw PDF, manual attachment, collection preservation
@@ -225,10 +301,35 @@ The installed snapshot CLI passed six-format JSON and DOCX text output without
 changing any of the nine input snapshots. OOXML used distinct retained versions;
 the ODF fixtures had one retained version each, so those calls checked equal-version
 handling alongside the earlier changed-version semantic checks. The bounded
-desktop Writer history/Open/Restore UI replay is recorded above; phone history
-and remaining format coverage remain pending.
+desktop and phone Writer history/Open/Restore UI replays are recorded above;
+remaining format and fresh-candidate coverage remain pending.
 Evidence is in `verification/office-snapshot-diff-20261029/` and the ordinary
 remote transfer follow-up is `real-remote-apps-20261029/ordinary-files-transfer-replay.json`.
+
+`c348ac5092` changes the existing shutdown owners to wait for native Office saves
+before stopping callback services. Source fixtures passed native-exit ordering,
+Caddy callback drain and failure cleanup in
+`verification/office-shutdown-20261029/{signal-result,caddy-result}.json`.
+The first installed replay passed on the isolated older browser with the reviewed
+controller overlay: a saved DOCX reopened immediately editable after Office-only
+stop/start with the same add-on process. Native append/Save/inspect returned 200
+before and after restart, both disk markers remained, and no forced termination
+or unlock failure occurred. The receipt is
+`verification/office-shutdown-20261029/saved-office-only-result.json`.
+The subsequent dirty Local Off replay **failed**: native inspection reported
+modified content before Off, but the new marker was absent on disk before Off
+and remained absent after the native process exited. The file hash and size
+were unchanged despite no forced termination or unlock failure. Source
+`c348ac5092` is therefore insufficient for dirty final-save acceptance; native
+diagnosis remains in progress. Exact disk/stop receipts are
+`dirty-before-local-off-disk.json`, `after-local-off-disk.json` and
+`dirty-local-off-existing-evidence.json` in the same shutdown directory.
+This later source change is not part of the cf62 binaries.
+Likewise, `6b01947a60` uses native input semantics when clearing browser fields;
+bounded helper/native-event checks are recorded in
+`Bashkitten-Acceptance/browser-fill-clear-20261029/verification.json`.
+Acceptance through a rebuilt installed actor and actual References query/export
+scope remains pending.
 
 Evidence lives outside Git under `BashkittenBuild/verification/`, including
 `restored-native-seat-20261029`, `office-native-ui-20261029`,
