@@ -6,6 +6,7 @@ import java.util.function.BooleanSupplier;
 import java.util.HashMap;
 import java.util.ArrayList;
 import org.json.JSONObject;
+import org.mozilla.gecko.util.GeckoBundle;
 import org.mozilla.geckoview.BashKittenController;
 import org.mozilla.geckoview.GeckoResult;
 import org.mozilla.geckoview.GeckoSession;
@@ -51,14 +52,14 @@ final class ReferencesHost {
                         result.completeExceptionally(new SecurityException("The References background host is required."));
                         return result;
                     }
-                    app.agent.referencesRequest((JSONObject) message, result::complete,
+                    app.agent.referencesRequest((JSONObject) message, value -> reply(result, value),
                         error -> {
                             try {
                                 // Native-message exceptions lose their text at Gecko's
                                 // extension boundary. Keep validated operation failures
                                 // in the existing v1 response instead.
                                 String text = error == null || error.isBlank() ? "References request failed." : error;
-                                result.complete(new JSONObject().put("apiVersion", 1).put("status", 400)
+                                reply(result, new JSONObject().put("apiVersion", 1).put("status", 400)
                                     .put("body", new JSONObject().put("error", text.substring(0, Math.min(500, text.length())))));
                             } catch (Exception failure) { result.completeExceptionally(failure); }
                         });
@@ -75,6 +76,11 @@ final class ReferencesHost {
             controller.ensureBuiltIn("resource://android/assets/references/", CAPTURE_ID)
                 .accept(extension -> {}, error -> app.message("References capture is unavailable: " + error.getMessage()));
         }, error -> app.message("References capture is unavailable: " + error.getMessage()));
+    }
+
+    private static void reply(GeckoResult<Object> result, JSONObject value) {
+        try { result.complete(GeckoBundle.fromJSONObject(value)); }
+        catch (Exception error) { result.completeExceptionally(error); }
     }
 
     static void dispatch(BrowserApp app, JSONObject request, BooleanSupplier current, Consumer<JSONObject> done, Consumer<String> fail) throws Exception {

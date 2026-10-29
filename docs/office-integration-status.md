@@ -6,6 +6,35 @@ and installed-product acceptance. It does not claim completed integration.
 
 ## Current integration checkpoint — 29 October 2026
 
+The full `53c81a4c27561888d5f6ff9d5d145929f925b09b` batch passed all
+62 jobs in [40917628193](https://github.com/openresearchtools/BashKitten/actions/runs/40917628193),
+including all six primary packages, eight Office/Files components and the normal
+matching source/legal gate. Complete artifact `12922311255` is retained without
+another local download. Publication remains held on the installed Android result.
+
+The exact installed `53c81` package passed the focused Wayland and real-Xorg
+checks. These covered References metadata persistence, native extension entry,
+Files appearance/launching and Office filename/light rendering. Wayland also
+completed a packaged native citation refresh without the legacy UNO banner.
+Normal Quit drained the scoped services and preserved existing settings. Evidence
+is in `Bashkitten-Acceptance/candidates/153.5.4-53c81a4c2756/wayland-final/`
+and `Bashkitten-Acceptance/native-xorg-final-53c81-20261029/`.
+
+The coherent Android installation preserves its configuration and cached models
+and runs the exact `53c81` manager, host 1.0.1 and capture 1.0.6. Its first capture
+request now reaches the backend, but the chooser remains pending. The Java
+References host completes `GeckoResult` with `JSONObject`, which the pinned
+Gecko JNI reply carrier does not support; it requires `GeckoBundle`. The narrow
+host correction uses native `GeckoBundle.fromJSONObject` for success and error
+replies. This does not change authorization or transport. The complete host and
+pinned `GeckoBundle` sources compile, and 16 carrier checks passed, including
+nested values, error replies and sender rejection. This is not an installed JNI
+round trip. Visiting the same Files tab after a browser restart passed on the
+coherent Android candidate. Capture and the phone metadata pane remain blocked
+by the host reply until the corrected APK is installed; no Android capture pass
+or release is claimed.
+Evidence is in `Bashkitten-Acceptance/android-final-53c81-20261029/`.
+
 The coherent `87c68c876808a61f174fdc36cc02b509f0c4b051` build passed all
 62 jobs in [40878527390](https://github.com/openresearchtools/BashKitten/actions/runs/40878527390),
 including six primary binaries, eight Office/Files jobs and the normal matching
