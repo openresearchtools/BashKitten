@@ -30,6 +30,7 @@ jobs:
           sparse-checkout: |
             agent/search
             agent/packaging/termux/search
+            agent/packaging/machines
             auth/build
             auth/dependencies/termux
       - uses: actions/setup-python@v5
@@ -84,6 +85,7 @@ jobs:
           sparse-checkout: |
             agent/search
             agent/packaging/termux/search
+            agent/packaging/machines
             auth/build
             auth/dependencies/termux
       - name: Extract retained Termux framework

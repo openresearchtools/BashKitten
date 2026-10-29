@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "lock": "../../runtime-lock.json",
-  "lockSha256": "b984c65eea2ced4fd718b93112186745035929d44af6cdbe5bbfed2f8d8bdc2d",
+  "lockSha256": "c6daa41bdbc0d1b72e63631eb48946ba832950eb32ba6ae961bf0eda8d351e65",
   "components": [
     {
       "filename": "ddgs-9.16.0.tar.gz",
@@ -6877,6 +6877,28 @@
         "zlib-1.3.2/contrib/dotzlib/LICENSE_1_0.txt",
         "zlib-1.3.2/contrib/minizip/LICENSE.Info-Zip"
       ]
+    },
+    {
+      "filename": "rustc-1.95.0-src.tar.xz",
+      "url": "https://static.rust-lang.org/dist/2026-04-16/rustc-1.95.0-src.tar.xz",
+      "size": 238952004,
+      "sha256": "62b67230754da642a264ca0cb9fc08820c54e2ed7b3baba0289876d4cdb48c08",
+      "name": "Rust standard library and compiler runtime",
+      "version": "1.95.0",
+      "kind": "rust-runtime-source",
+      "license": "Apache-2.0 OR MIT and included notices",
+      "file": "archives/rustc-1.95.0-src.tar.xz"
+    },
+    {
+      "filename": "rustc-1.98.1-src.tar.xz",
+      "url": "https://static.rust-lang.org/dist/2026-09-03/rustc-1.98.1-src.tar.xz",
+      "size": 244440824,
+      "sha256": "be1816e7f6c40abb90245ad6e024bed2a7e88d7dda4561e4d5470207df616b9f",
+      "name": "Rust standard library and compiler runtime",
+      "version": "1.98.1",
+      "kind": "rust-runtime-source",
+      "license": "Apache-2.0 OR MIT and included notices",
+      "file": "archives/rustc-1.98.1-src.tar.xz"
     }
   ]
 }

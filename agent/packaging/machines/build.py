@@ -137,21 +137,28 @@ def license_records(record, source, rust_vendor=None):
     return records
 
 
-def rust_toolchain_notices(destination):
+def rust_toolchain_notices(destination, retained=None, compiler=None):
     """Reuse Rust's released full standard-library notices for native binaries.
 
     Cargo's dependency graph excludes its statically linked standard library and
     compiler builtins. Rust publishes their own complete copyright inventory;
     retain that inventory and the source runtime exceptions without substituting
-    a generic SPDX license. Guest and Display packaging share this owner.
+    a generic SPDX license. Guest and Display packaging share this owner. A
+    prebuilt caller supplies its observed ELF compiler identity and the exact
+    retained release; its build host's installed Rust is unrelated.
     """
-    retained = ROOT / 'agent/machines/rust-toolchain'
+    retained = Path(retained) if retained is not None else ROOT / 'agent/machines/rust-toolchain'
     pin = json.loads((retained / 'sources.json').read_text())
-    compiler = dict(line.split(': ', 1) for line in output(['rustc', '-vV']).splitlines() if ': ' in line)
-    require(compiler.get('release') == pin['version'] and compiler.get('commit-hash') == pin['commit'],
+    prebuilt = compiler is not None
+    if compiler is None:
+        compiler = dict(line.split(': ', 1) for line in output(['rustc', '-vV']).splitlines() if ': ' in line)
+    commit = compiler.get('commit-hash', '')
+    matching_commit = (bool(re.fullmatch('[a-f0-9]{9,40}', commit)) and pin['commit'].startswith(commit)
+                       if prebuilt else commit == pin['commit'])
+    require(compiler.get('release') == pin['version'] and matching_commit,
             'Rust compiler does not match retained standard-library release source')
     fetch(pin, local=retained / pin['file'])
-    docs = Path(output(['rustc', '--print', 'sysroot'])) / 'share/doc/rust'
+    docs = None if prebuilt else Path(output(['rustc', '--print', 'sysroot'])) / 'share/doc/rust'
     destination = Path(destination)
     texts = []
 
@@ -166,7 +173,7 @@ def rust_toolchain_notices(destination):
         require(sha(path) == entry['sha256'], 'Rust notice checksum mismatch: ' + str(relative))
         data = path.read_text(encoding='utf-8')
         require(data.strip(), 'Empty Rust legal text: ' + str(relative))
-        if entry in pin['licenseFiles']:
+        if docs is not None and entry in pin['licenseFiles']:
             require(sha(docs / relative) == entry['sha256'], 'Installed Rust release notices differ: ' + str(relative))
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)

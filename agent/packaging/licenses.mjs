@@ -110,7 +110,7 @@ async function searchInventory(root, expectedTarget) {
     const text = (await Promise.all(component.licenseFiles.map(file => relativeText(runtime, file)))).join('\n\n');
     const distribution = manifest.distributions?.find(value => value.name === component.name && value.version === component.version);
     records.push(record({ name: component.name, version: component.version, license: component.license,
-      source: distribution?.source?.url, text }, 'Search', component.scope === 'primp-build-source' ? 'source' : 'bundled'));
+      source: component.source || distribution?.source?.url, text }, 'Search', component.scope === 'primp-build-source' ? 'source' : 'bundled'));
     included.add(component.name + '@' + component.version);
   }
   if (!Array.isArray(manifest.distributions) || !manifest.distributions.length) throw Error('Search runtime has no installed distribution inventory');

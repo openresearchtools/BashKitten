@@ -9,6 +9,7 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import runpy
 import shutil
 import subprocess
 import tarfile
@@ -227,6 +228,42 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
             src = fetch(extra, cache)
             shutil.copy(src, source_archives / src.name)
             add_licenses(extra["name"], extra["version"], [src])
+    # Cargo excludes its precompiled standard library. Use the existing native
+    # Rust notice owner with the compiler recorded in the actual selected ELF,
+    # including when a Linux wheel was built by a different upstream compiler.
+    native = site / ("primp.abi3.so" if termux else "primp/primp.abi3.so")
+    comment = subprocess.check_output(["readelf", "-p", ".comment", str(native)], text=True)
+    compilers = set(re.findall(r"rustc version (\d+\.\d+\.\d+) \(([a-f0-9]{9,40}) ", comment))
+    if len(compilers) != 1:
+        raise RuntimeError("Native primp lacks one recorded Rust compiler identity")
+    version, commit = compilers.pop()
+    if version != lock["rustRuntimeVersions"][target]:
+        raise RuntimeError("Native primp compiler differs from its retained Rust runtime source")
+    compiler = {"release": version, "commit-hash": commit}
+    retained = ROOT / "vendor/rust-toolchains" / version
+    pin = json.loads((retained / "sources.json").read_text())
+    helper = ROOT.parent / "packaging/machines/build.py"
+    if not helper.is_file():
+        helper = ROOT / "agent/packaging/machines/build.py"
+    shared = runpy.run_path(str(helper))
+    rust = shared["rust_toolchain_notices"](runtime / "licenses/rust-toolchain", retained, compiler)
+    relative = "licenses/rust-toolchain/LICENSE-Rust.txt"
+    entries.append({"name": rust["name"], "version": rust["version"], "scope": "bundled",
+                    "license": rust["license"], "source": rust["source"],
+                    "licenseFiles": [relative]})
+    texts.append(f"\n{'=' * 72}\n{rust['name']} {version} · {relative}\n{'=' * 72}\n".encode()
+                 + (runtime / relative).read_bytes())
+    original = fetch_source(pin, local=retained / pin["file"])
+    shutil.copy2(original, source_archives / pin["file"])
+    shutil.copytree(retained, source / "vendor/rust-toolchains" / version)
+    # Keep this independently rebuildable source artifact using the same native
+    # helper and its existing import, without a second legal collector.
+    for origin, relative in [(helper, "agent/packaging/machines/build.py"),
+                             (helper.parents[3] / "auth/build/go-notices.py", "auth/build/go-notices.py"),
+                             (SHARED_CACHE, "agent/packaging/source_cache.py")]:
+        destination = source / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(origin, destination)
     dependencies = (["python3 (>= 3.12)", "python3 (<< 3.15)", "libc6 (>= 2.28)", "libstdc++6", "git"]
                     if not termux else ["python (>= 3.14)", "python (<< 3.15)", "openssl", "python-lxml (>= 6.1.3)",
                                         "python-pymupdf (>= 1.28.0-1)", "python-mupdf", "mupdf (>= 1.28.2-1)", "git"])
@@ -245,6 +282,8 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
                 "packages": [{"name": item["name"], "version": item["version"]} for item in distributions],
                 "dependencies": {item["name"]: item["version"] for item in distributions},
                 "distributions": distributions, "lockSha256": digest(LOCK), "licenses": "licenses.json",
+                "rustRuntime": {"version": version, "commit": pin["commit"], "observedCompiler": compiler,
+                                "source": {key: pin[key] for key in ("url", "sha256", "file", "size")}},
                 "sourceCommit": source_commit}
     (runtime / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     (runtime / "licenses.json").write_text(json.dumps({"format": 1, "components": entries}, indent=2) + "\n")
