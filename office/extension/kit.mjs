@@ -99,6 +99,7 @@ export function nativeOperation(request) {
     const state = raw === null ? { version: 1, revision: 0, citations: [], bibliography: null } : JSON.parse(raw);
     if (state.version !== 1 || !Array.isArray(state.citations) || state.citations.length > 10000) fail('The embedded citation state is invalid or requires another plugin version');
     const carriers = [...portableFields().map(({ field, payload }) => ({ payload, anchor: { kind: 'field', name: field.getName(), note: payload.citation.note || null }, key: field.getName() })), ...portableObjects().map(item => ({ ...item, key: item.anchor.nativeKey }))];
+    const fieldOwners = new Map(carriers.filter(entry => entry.anchor.kind === 'field').map(entry => [entry.anchor.name, entry.payload.citation.id]));
     const groups = new Map();
     for (const carrier of carriers) { const id = carrier.payload.citation.id; if (!groups.has(id)) groups.set(id, []); groups.get(id).push(carrier); }
     function matchPrevious(group, previous) {
@@ -117,7 +118,11 @@ export function nativeOperation(request) {
       // those copies remain, leave the deleted original missing. DOCX reload
       // may regenerate every field name, so unrelated names still adopt their
       // persisted payload identity rather than becoming new occurrences.
-      if (anchor.name && group.every(entry => entry.anchor.name?.startsWith(anchor.name + (anchor.kind === 'field' ? ' Copy ' : ' ')))) return undefined;
+      // OOXML can regenerate Bookmark/Bookmark Copy N names in document order.
+      // A name now owned by a different embedded occurrence proves that this
+      // is a rename, rather than deletion of the original followed by a paste.
+      const reassigned = anchor.kind === 'field' && fieldOwners.has(anchor.name) && fieldOwners.get(anchor.name) !== previous.id;
+      if (!reassigned && anchor.name && group.every(entry => entry.anchor.name?.startsWith(anchor.name + (anchor.kind === 'field' ? ' Copy ' : ' ')))) return undefined;
       return group.find(entry => entry.anchor.nativeKey === anchor.nativeKey) || group[0];
     }
     for (const [original, group] of groups) {
@@ -151,7 +156,8 @@ export function nativeOperation(request) {
     return portablePrefix + JSON.stringify({ version: 1, citation: occurrence, bibliography: citation.id === 'bibliography', style: state.style, noteType: state.noteType, libraryId: state.libraryId, embeddedItems });
   }
   function nativeMark(citation) {
-    return portableFields().find(item => item.field.getName() === citation.anchor.name)?.field;
+    return portableFields().find(item => item.field.getName() === citation.anchor.name &&
+      (item.payload.citation.id === citation.id || item.payload.citation.id + ':copy:' + item.field.getName() === citation.id))?.field;
   }
   const persist = state => {
     if (state) state.revision += 1;
@@ -555,10 +561,16 @@ export function nativeOperation(request) {
         return out;
       }).join(isBibliography ? '</p><p>' : '<br>'); }).join('');
       const html = isBibliography ? '<p>' + richHTML + '</p>' : citation.html || richHTML;
-      const fields = [property('FieldType', fieldType), property('FieldCommand', portablePayload(citation)), property('FieldResult', html)];
+      const fieldCommand = portablePayload(citation);
+      const fields = [property('FieldType', fieldType), property('FieldCommand', fieldCommand), property('FieldResult', html)];
       const dispatch = css.frame.DispatchHelper.create(uno.componentContext);
       const sameNote = anchor && (citation.anchor.note || null) === (citation.note || null);
       if (sameNote && citation.anchor.kind === 'field') {
+        // Zotero skips unchanged citation text; Refresh still rewrites its
+        // bibliography. Our portable command must also match so copied fields
+        // and refreshed embedded metadata
+        // still use the native undo-aware command update when needed.
+        if (!isBibliography && anchor.getString() === citation.text && nativeMark(citation).getParameters().getByName('vnd.oasis.opendocument.field.code') === fieldCommand) return citation;
         const cursor = anchor.getText().createTextCursorByRange(anchor.getStart()); cursor.goRight(1, false); controller.select(cursor);
         dispatch.executeDispatch(frame, '.uno:UpdateTextFormField', '', 0, [property('FieldType', fieldType), property('FieldCommandPrefix', portablePrefix), property('Field', new uno.Any(sequence, fields))]);
       } else {
