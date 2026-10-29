@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { authorizeManagerPath, managerContext } from './access.mjs';
 
-const DIFF_OPTIONS = ['--no-ext-diff', '--no-textconv', '--no-color', '--find-renames=50%', '--submodule=short'];
+const DIFF_OPTIONS = ['--no-ext-diff', '--no-textconv', '--no-color', '--relative', '--find-renames=50%', '--submodule=short'];
 const inside = (root, file) => { const rel = path.relative(root, file); return rel !== '..' && !rel.startsWith('../') && !path.isAbsolute(rel); };
 
 // Git owns the comparison. It runs outside the HTTP event loop, never refreshes
@@ -48,7 +48,9 @@ async function repository(input, options) {
   // hash-object without -w computes Git's native (SHA-1 or SHA-256) empty tree;
   // it writes neither an object nor an index for a repository without commits.
   const base = head.code === 0 ? head.output.trim() : checked(await git(root, ['hash-object', '-t', 'tree', '--stdin'], options)).trim();
-  return { root, base, unborn: head.code !== 0 };
+  // Git may discover a parent worktree, but Changes belongs to the selected
+  // working folder. Native --relative/pathspecs keep sibling projects out.
+  return { root: requested, prefix: path.relative(root, requested).split(path.sep).join('/'), base, unborn: head.code !== 0 };
 }
 
 function parseChanges(output) {
@@ -121,17 +123,21 @@ async function untrackedCounts(root, row, signal) {
 export async function gitChanges(input, { signal, authorizeRoot } = {}) {
   const context = await repository(input, { signal, authorizeRoot });
   if (!context) return { repository: false };
-  const { root, base, unborn } = context;
+  const { root, prefix, base, unborn } = context;
   await authorizeFiles(root, signal);
   const [tracked, status] = await Promise.all([
-    git(root, ['diff', ...DIFF_OPTIONS, '--raw', '--numstat', '-z', base, '--'], { signal }),
-    git(root, ['status', '--porcelain=v1', '--untracked-files=all', '-z'], { signal }),
+    git(root, ['diff', ...DIFF_OPTIONS, '--raw', '--numstat', '-z', base, '--', '.'], { signal }),
+    git(root, ['status', '--porcelain=v1', '--untracked-files=all', '-z', '--', '.'], { signal }),
   ]);
   const rows = parseChanges(checked(tracked));
   const fields = checked(status).split('\0');
+  // Porcelain v1 paths are always relative to the worktree root, even with a
+  // subtree pathspec; native diff/ls-files already return cwd-relative paths.
+  const scoped = value => prefix ? (value?.startsWith(prefix + '/') ? value.slice(prefix.length + 1) : null) : value;
   for (let i = 0; i < fields.length && fields[i];) {
-    const field = fields[i++], xy = field.slice(0, 2), file = field.slice(3);
-    const oldPath = /[RC]/.test(xy) ? fields[i++] : undefined;
+    const field = fields[i++], xy = field.slice(0, 2), file = scoped(field.slice(3));
+    const oldPath = /[RC]/.test(xy) ? scoped(fields[i++]) : undefined;
+    if (!file) continue;
     const untracked = xy === '??', staged = !untracked && xy[0] !== ' ', unstaged = !untracked && xy[1] !== ' ';
     if (!rows.has(file)) rows.set(file, { path: file, ...(oldPath ? { oldPath } : {}),
       status: untracked ? '?' : xy.trim()[0], added: 0, deleted: 0, ...(!untracked ? { netUnchanged: true } : {}) });
@@ -153,7 +159,7 @@ export async function gitDiff(input, value, { signal, authorizeRoot } = {}) {
   await authorizeFiles(root, signal);
   // Resolve rename pairs from Git's combined HEAD→worktree comparison, not the
   // index alone, so staged and unstaged edits appear in one truthful view.
-  const names = checked(await git(root, ['diff', ...DIFF_OPTIONS, '--name-status', '-z', base, '--'], { signal }));
+  const names = checked(await git(root, ['diff', ...DIFF_OPTIONS, '--name-status', '-z', base, '--', '.'], { signal }));
   const fields = names.split('\0'); let oldPath, tracked = false;
   for (let i = 0; i < fields.length && fields[i];) {
     const status = fields[i++], first = fields[i++], renamed = /^[RC]/.test(status), file = renamed ? fields[i++] : first;
@@ -190,6 +196,6 @@ export async function gitDiff(input, value, { signal, authorizeRoot } = {}) {
 
 async function authorizeFiles(root, signal) {
   if (!managerContext()?.remote) return;
-  const names = checked(await git(root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { signal }));
+  const names = checked(await git(root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', '.'], { signal }));
   for (const name of names.split('\0')) if (name) await authorizeManagerPath(path.join(root, name));
 }
