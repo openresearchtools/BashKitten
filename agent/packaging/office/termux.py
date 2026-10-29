@@ -264,6 +264,7 @@ def package(source, args, env, toolchain):
     libiconv = build_libiconv(args, env)
     run(['./config.status', 'instsetoo_native/util/openoffice.lst'], cwd=source / 'engine', env=env)
     run(['make', 'Package_instsetoo_native_setup'], cwd=source / 'engine', env=env)
+    runtime_metadata.remove_windows_python_launchers(source / 'engine/instdir', 'termux')
     run(['make', 'LIBO_TEST_INSTALL=TRUE', 'CustomTarget_instsetoo_native/sbom'], cwd=source / 'engine', env=env)
     stage = prepare_stage(source, args.work, getattr(args, 'stage_dir', None))
     run(['make', *online_make_inputs(libcap, libiconv), 'DESTDIR=' + str(stage), 'install'], cwd=source, env=env)

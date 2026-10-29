@@ -2,16 +2,140 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Collect native Office legal payloads and actual Linux shared-library needs."""
 import importlib.util
+import email.parser
 import hashlib
+import io
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
 import tarfile
+import zipfile
 import branding
+import source_graph
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def remove_windows_python_launchers(engine, target):
+    """Drop only the native platform filter's obsolete files in an owned cache.
+
+    gbuild's Package clean target uses the current FILES list, so it cannot
+    remove files excluded by a newly applied platform condition. Do this before
+    native SBOM generation; the resulting package inventories stay authoritative.
+    """
+    engine = Path(engine)
+    if target not in ('linux', 'termux') or engine.name != 'instdir' or engine.is_symlink():
+        raise ValueError('Windows launcher cleanup requires an owned native Linux/Termux instdir')
+    groups = {'pip/_vendor/distlib': ('t32.exe', 't64-arm.exe', 't64.exe',
+                                     'w32.exe', 'w64-arm.exe', 'w64.exe'),
+              'setuptools': ('cli-32.exe', 'cli-64.exe', 'cli-arm64.exe', 'cli.exe',
+                             'gui-32.exe', 'gui-64.exe', 'gui-arm64.exe', 'gui.exe')}
+    removed = []
+    for library in (engine / 'program').glob('python-core-*/lib'):
+        for package, names in groups.items():
+            for name in names:
+                path = library / package / name
+                if not path.exists() and not path.is_symlink():
+                    continue
+                if (path.is_symlink() or not path.resolve().is_relative_to(engine.resolve())
+                        or not path.is_file()):
+                    raise ValueError('Cached Windows launcher leaves its owned native output: ' + str(path))
+                with path.open('rb') as stream:
+                    if stream.read(2) != b'MZ':
+                        raise ValueError('Cached Windows launcher is not the expected PE asset: ' + str(path))
+                path.unlink()
+                removed.append(str(path.relative_to(engine)))
+    return removed
+
+
+def python_notices(runtime):
+    """Retain legal files dropped by the native Python package's dist-info filter."""
+    libraries = [path for path in (runtime / 'engine/program').glob('python-core-*/lib')
+                 if any((path / name).is_dir() for name in ('pip', 'setuptools'))]
+    if not libraries:
+        return []
+    if len(libraries) != 1:
+        raise ValueError('Ambiguous installed Office Python library')
+    library = libraries[0]
+    pin = next(row for row in source_graph.dependency_manifest()['components']
+               if row['variable'] == 'PYTHON_TARBALL')
+    if pin['name'].removeprefix('Python-').removesuffix('.tar.xz') != library.parent.name.removeprefix('python-core-'):
+        raise ValueError('Installed Office Python differs from its retained source archive')
+    original = source_graph.dependency_file(pin)
+    # These are the two wheel inputs in upstream UnpackedTarball_python3.mk.
+    inputs = {'pip': '/Lib/ensurepip/_bundled/pip-',
+              'setuptools': '/Lib/test/wheeldata/setuptools-'}
+    records, found = [], set()
+    with tarfile.open(original) as archive:
+        for member in archive:
+            name = next((name for name, marker in inputs.items()
+                         if marker in member.name and member.name.endswith('.whl')), None)
+            if not member.isfile() or name is None or not (library / name).is_dir():
+                continue
+            if name in found:
+                raise ValueError('Ambiguous native Python wheel input: ' + name)
+            found.add(name)
+            raw = archive.extractfile(member).read()
+            with zipfile.ZipFile(io.BytesIO(raw)) as wheel:
+                metadata_paths = [path for path in wheel.namelist()
+                                  if path.count('/') == 1 and path.endswith('.dist-info/METADATA')]
+                if len(metadata_paths) != 1:
+                    raise ValueError('Native Python wheel lacks unique original metadata: ' + name)
+                metadata = email.parser.Parser().parsestr(wheel.read(metadata_paths[0]).decode('utf-8'))
+                if metadata['Name'].lower() != name:
+                    raise ValueError('Native Python wheel identity differs: ' + name)
+                # setuptools' native package drops its version metadata too;
+                # compare unchanged source anchors rather than importing a
+                # target-architecture module or inventing its runtime version.
+                anchors = [name + '/__init__.py']
+                if name == 'setuptools':
+                    anchors.append(name + '/_core_metadata.py')
+                for anchor in anchors:
+                    if (library / anchor).read_bytes() != wheel.read(anchor):
+                        raise ValueError('Installed Python package differs from its original wheel: ' + anchor)
+                dist_info = metadata_paths[0].removesuffix('/METADATA')
+                declared = set()
+                for path in metadata.get_all('License-File', []):
+                    candidates = [dist_info + '/licenses/' + path, dist_info + '/' + path]
+                    selected = next((candidate for candidate in candidates if candidate in wheel.namelist()), None)
+                    if selected is None:
+                        raise ValueError('Original Python wheel lacks declared full legal file: ' + path)
+                    declared.add(selected)
+                files = [path for path in wheel.namelist() if not path.endswith('/')
+                         and (path.startswith(name + '/') or path.startswith(dist_info + '/'))
+                         and (path in declared or re.match(r'^(?:LICEN[CS]E|COPYING|NOTICE|COPYRIGHT|AUTHORS)(?:$|[._-])',
+                                                          PurePosixPath(path).name, re.I))]
+                if not files or not declared:
+                    raise ValueError('Original Python wheel lacks full legal inventory: ' + name)
+                destination = runtime / 'legal/python' / (name + '-' + metadata['Version'])
+                texts, inventory = [], []
+                for path in sorted(files):
+                    relative = PurePosixPath(path)
+                    if relative.is_absolute() or '..' in relative.parts:
+                        raise ValueError('Python legal file leaves its original wheel')
+                    data = wheel.read(path)
+                    if not data.strip():
+                        raise ValueError('Empty original Python legal file: ' + path)
+                    target = destination / path
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(data)
+                    inventory.append({'member': path, 'sha256': hashlib.sha256(data).hexdigest()})
+                    texts.append(path + '\n' + data.decode('utf-8', 'replace'))
+                provenance = {'sourceArchive': {key: pin[key] for key in ('url', 'sha256', 'name')},
+                              'wheelMember': member.name, 'wheelSha256': hashlib.sha256(raw).hexdigest(),
+                              'name': name, 'version': metadata['Version'], 'licenseFiles': inventory,
+                              'nativeSbomScope': 'The native engine SBOM records Python; these original wheel notices include its shipped vendored dependencies.'}
+                (destination / 'source.json').write_text(json.dumps(provenance, indent=2) + '\n')
+                records.append({'name': 'Office Python ' + name + ' and vendored dependencies',
+                                'version': metadata['Version'], 'source': pin['url'],
+                                'license': (metadata.get('License-Expression') or metadata.get('License') or 'See included license text')
+                                           + '; vendored components retain their included terms',
+                                'text': '\n\n'.join(texts), 'sourceProvenance': provenance})
+    if found != {name for name in inputs if (library / name).is_dir()}:
+        raise ValueError('Installed Office Python package lacks its original wheel input')
+    return records
 
 
 def notices(source, runtime):
@@ -40,6 +164,7 @@ def notices(source, runtime):
     records.append({'name': 'Collabora Office engine and bundled dependencies',
                     'license': 'MPL-2.0, LGPL-3.0-or-later and component-specific terms',
                     'text': read([runtime / 'engine/LICENSE', runtime / 'engine/NOTICE'])})
+    records.extend(python_notices(runtime))
     for name, package in sorted(packages.items()):
         resolved = package['resolved']
         if not resolved.startswith('file:node_shrinkpack/'):

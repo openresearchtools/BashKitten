@@ -1,0 +1,77 @@
+--- a/engine/external/python3/ExternalPackage_python3.mk
++++ b/engine/external/python3/ExternalPackage_python3.mk
+@@ -984,13 +984,13 @@
+ 	Lib/pip/_vendor/distlib/compat.py \
+ 	Lib/pip/_vendor/distlib/resources.py \
+ 	Lib/pip/_vendor/distlib/scripts.py \
+-	Lib/pip/_vendor/distlib/t32.exe \
+-	Lib/pip/_vendor/distlib/t64-arm.exe \
+-	Lib/pip/_vendor/distlib/t64.exe \
++	$(if $(filter WNT,$(OS)),Lib/pip/_vendor/distlib/t32.exe) \
++	$(if $(filter WNT,$(OS)),Lib/pip/_vendor/distlib/t64-arm.exe) \
++	$(if $(filter WNT,$(OS)),Lib/pip/_vendor/distlib/t64.exe) \
+ 	Lib/pip/_vendor/distlib/util.py \
+-	Lib/pip/_vendor/distlib/w32.exe \
+-	Lib/pip/_vendor/distlib/w64-arm.exe \
+-	Lib/pip/_vendor/distlib/w64.exe \
++	$(if $(filter WNT,$(OS)),Lib/pip/_vendor/distlib/w32.exe) \
++	$(if $(filter WNT,$(OS)),Lib/pip/_vendor/distlib/w64-arm.exe) \
++	$(if $(filter WNT,$(OS)),Lib/pip/_vendor/distlib/w64.exe) \
+ ))
+ 
+ $(eval $(call gb_ExternalPackage_add_unpacked_files,python3,$(LIBO_BIN_FOLDER)/python-core-$(PYTHON_VERSION)/lib/pip/_vendor/distro,\
+@@ -1361,20 +1361,20 @@
+ 	Lib/setuptools/_static.py \
+ 	Lib/setuptools/archive_util.py \
+ 	Lib/setuptools/build_meta.py \
+-	Lib/setuptools/cli-32.exe \
+-	Lib/setuptools/cli-64.exe \
+-	Lib/setuptools/cli-arm64.exe \
+-	Lib/setuptools/cli.exe \
++	$(if $(filter WNT,$(OS)),Lib/setuptools/cli-32.exe) \
++	$(if $(filter WNT,$(OS)),Lib/setuptools/cli-64.exe) \
++	$(if $(filter WNT,$(OS)),Lib/setuptools/cli-arm64.exe) \
++	$(if $(filter WNT,$(OS)),Lib/setuptools/cli.exe) \
+ 	Lib/setuptools/depends.py \
+ 	Lib/setuptools/discovery.py \
+ 	Lib/setuptools/dist.py \
+ 	Lib/setuptools/errors.py \
+ 	Lib/setuptools/extension.py \
+ 	Lib/setuptools/glob.py \
+-	Lib/setuptools/gui-32.exe \
+-	Lib/setuptools/gui-64.exe \
+-	Lib/setuptools/gui-arm64.exe \
+-	Lib/setuptools/gui.exe \
++	$(if $(filter WNT,$(OS)),Lib/setuptools/gui-32.exe) \
++	$(if $(filter WNT,$(OS)),Lib/setuptools/gui-64.exe) \
++	$(if $(filter WNT,$(OS)),Lib/setuptools/gui-arm64.exe) \
++	$(if $(filter WNT,$(OS)),Lib/setuptools/gui.exe) \
+ 	Lib/setuptools/installer.py \
+ 	Lib/setuptools/launch.py \
+ 	Lib/setuptools/logging.py \
+--- a/engine/external/python3/generateExternalPackage.py
++++ b/engine/external/python3/generateExternalPackage.py
+@@ -7,6 +7,7 @@
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ 
+ from os import path, walk, environ
++import re
+ 
+ if __name__ == '__main__':
+ 
+@@ -40,7 +41,14 @@
+         for fileName in sorted(files):
+             if not fileName.endswith((".py", ".pem", ".exe", ".txt")):
+                 continue
+-            filesList.append(path.join(relPythonDir, fileName))
++            relative = path.join(relPythonDir, fileName)
++            # These launchers are used only by pip/setuptools' Windows writers.
++            # Preserve native WNT packaging without shipping PE files on Unix.
++            windows_launcher = re.fullmatch(
++                r"Lib/(?:pip/_vendor/distlib/(?:t32|t64-arm|t64|w32|w64-arm|w64)|setuptools/(?:cli|gui)(?:-(?:32|64|arm64))?)\.exe",
++                relative.replace(path.sep, "/"))
++            filesList.append("$(if $(filter WNT,$(OS))," + relative + ")"
++                             if windows_launcher else relative)
+         if filesList:
+             subDirDict[relPythonDir] = filesList
+ 

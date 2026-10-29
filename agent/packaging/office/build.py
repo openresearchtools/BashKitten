@@ -40,6 +40,7 @@ PATCHES = [
     'office/patches/0019-native-product-branding.patch',
     'office/patches/0020-native-branding-installer-identity.patch',
     'office/patches/0021-native-user-preset-extensions.patch',
+    'office/patches/0022-native-python-platform-launchers.patch',
 ]
 ENGINE_OPTIONS = ['--with-distro=CPLinux-LOKit', '--disable-epm',
                   '--without-package-format', '--disable-symbols',
@@ -190,6 +191,7 @@ def package(source, work, output, architecture, env, stage_dir=None):
     # correction after configure. Regenerate it with its saved native settings.
     run(['./config.status', 'instsetoo_native/util/openoffice.lst'], cwd=source / 'engine', env=env)
     run(['make', 'Package_instsetoo_native_setup'], cwd=source / 'engine', env=env)
+    runtime_metadata.remove_windows_python_launchers(source / 'engine/instdir', 'linux')
     run(['make', 'LIBO_TEST_INSTALL=TRUE', 'CustomTarget_instsetoo_native/sbom'], cwd=source / 'engine', env=env)
     stage = prepare_stage(source, work, stage_dir)
     run(['make', 'DESTDIR=' + str(stage), 'install'], cwd=source, env=env)
