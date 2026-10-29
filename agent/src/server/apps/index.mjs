@@ -341,7 +341,17 @@ export class ApplicationModules {
   }
   async resolve(input, record) {
     return this.authorize(record, async () => {
-      const { grant, path: openPath } = this.gateway.resolve(input.url);
+      let address = input.url;
+      if (typeof address === 'string' && address.startsWith('/')) {
+        // Native clients remove only their verified Files mapping's origin.
+        // Resolve the scoped path at this owner; the gateway still checks its
+        // exact origin and the original grant/project authority below.
+        if (!/^\/apps\/(files|references)\/[a-f0-9-]{36}\//.test(address) || /[\x00-\x20\x7f\\#]/.test(address)) {
+          throw Object.assign(Error('Invalid application URL'), { status: 400 });
+        }
+        address = (await this.gateway.endpoint()).origin + address;
+      }
+      const { grant, path: openPath } = this.gateway.resolve(address);
       const project = grant.scope.projectId ? await this.project(record, grant.scope.projectId, { includeArchived: grant.component === 'references' }) : null;
       if (project && grant.scope.projectRoot && project.cwd !== grant.scope.projectRoot) throw Object.assign(Error('The application project folder changed'), { status: 409 });
       const root = (await fileDirectory(grant.scope.root)).path;
@@ -355,7 +365,7 @@ export class ApplicationModules {
         if (typeof this.officeProvider.reopenBrowser !== 'function') throw unavailable('Office', 'the native human-view launch adapter is not connected');
         const descriptor = await this.gateway.open(grant.component, record, { ...scope, openPath: '/' });
         const next = this.gateway.resolve(descriptor.url).grant;
-        const view = await this.officeProvider.reopenBrowser(input.url, { grantId: next.id, participantId: 'human:' + record.key + ':' + next.id,
+        const view = await this.officeProvider.reopenBrowser(address, { grantId: next.id, participantId: 'human:' + record.key + ':' + next.id,
           participantName: 'User', basePath: next.basePath, origin: new URL(descriptor.url).origin, editorBaseUrl: new URL(descriptor.url).origin + '/apps/office' });
         const target = new URL(view.browserUrl);
         if (target.origin !== new URL(descriptor.url).origin || !target.pathname.startsWith(next.basePath)) throw unavailable('Office', 'invalid native browser launch');

@@ -656,7 +656,29 @@ class AgentView {
     const current = () => !this.off && this.activeBrowser === browser && ownedViews.get(browser) === entry &&
       browser?.browsingContext.currentWindowGlobal === global && !this.win.closed && !DesktopLifetime.quitting;
     if (!entry || !global || !current()) throw new Error("Connect to this backend first.");
-    const launch = await this.sidecar.navigation(resolving ? "application-resolve" : "application-open", resolving ? { url: value.url } :
+    let address = value.url;
+    if (resolving) {
+      const url = new URL(address);
+      if (url.protocol !== "https:" || url.hostname !== "127.0.0.1" || url.username || url.password || url.hash) {
+        throw new Error("Invalid application URL.");
+      }
+      let route;
+      if (entry.connection.machineId) {
+        route = await machineFilesRoute(entry.connection.machineId);
+      } else if (!entry.local) {
+        await AgentRemotes.services(entry.connection.id);
+        if (!current()) throw new Error("The selected backend changed.");
+        route = await AgentRemotes.applicationServiceRoute(entry.connection.id, "files", undefined, current);
+      }
+      if (!current()) throw new Error("The selected backend changed.");
+      if (route && url.origin === new URL(route.url).origin) {
+        if (!/^\/apps\/(files|references)\/[a-f0-9-]{36}\//.test(url.pathname)) throw new Error("Invalid application URL.");
+        // Only the current owner's exact native mapping may become a path.
+        // Full backend-origin addresses retain the gateway's strict check.
+        address = url.pathname + url.search;
+      }
+    }
+    const launch = await this.sidecar.navigation(resolving ? "application-resolve" : "application-open", resolving ? { url: address } :
       { component: value.component, projectId: value.projectId, cwd: value.cwd });
     if (!current()) throw new Error("The selected backend changed.");
     if ((!resolving && launch?.component !== value.component) || launch?.serviceId !== "files" || !launch.identity || typeof launch.openPath !== "string" ||

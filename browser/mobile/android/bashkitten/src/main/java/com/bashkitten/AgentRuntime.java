@@ -1349,7 +1349,7 @@ public final class AgentRuntime {
         final int generation = operation;
         final BooleanSupplier current = () -> source == session && generation == operation &&
             backend.equals(selected) && desired && state.equals("on") && access.getAsBoolean();
-        navigation(resolving ? "application-resolve" : "application-open", value, launch -> {
+        Consumer<JSONObject> open = request -> navigation(resolving ? "application-resolve" : "application-open", request, launch -> {
             try {
                 if (!current.getAsBoolean()) throw new IllegalStateException("The selected backend changed.");
                 String path = launch.getString("openPath");
@@ -1364,6 +1364,7 @@ public final class AgentRuntime {
                             for (int i = 0; i < services.length(); i++) {
                                 JSONObject service = services.getJSONObject(i);
                                 if (!service.getString("id").equals("files")) continue;
+                                if (!service.has("mapping") || !service.getJSONObject("choice").getBoolean("enabled")) throw new IllegalStateException("Enable application service local access first.");
                                 if (!"https".equals(service.getString("scheme"))) throw new SecurityException("Application services require HTTPS.");
                                 String context = service.getJSONObject("choice").getString("context");
                                 String address = "https://127.0.0.1:" + service.getJSONObject("mapping").getInt("port") + path;
@@ -1383,6 +1384,34 @@ public final class AgentRuntime {
                 }
             } catch (Exception error) { failure.accept(error.getMessage()); }
         }, failure);
+        try {
+            final URI address = resolving ? URI.create(value.getString("url")) : null;
+            if (resolving && (!"https".equals(address.getScheme()) || !"127.0.0.1".equals(address.getHost()) ||
+                    address.getRawUserInfo() != null || address.getRawFragment() != null)) throw new SecurityException("Invalid application URL.");
+            if (resolving && !backend.equals("local")) {
+                remoteServices(backend, snapshot -> {
+                    try {
+                        if (!current.getAsBoolean()) throw new IllegalStateException("The selected backend changed.");
+                        JSONArray services = snapshot.getJSONArray("services");
+                        for (int i = 0; i < services.length(); i++) {
+                            JSONObject service = services.getJSONObject(i);
+                            if (!service.getString("id").equals("files")) continue;
+                            if (!service.has("mapping") || !service.getJSONObject("choice").getBoolean("enabled")) throw new IllegalStateException("Enable application service local access first.");
+                            if (!"https".equals(service.getString("scheme"))) throw new SecurityException("Application services require HTTPS.");
+                            JSONObject request = new JSONObject(value.toString());
+                            if ((address.getPort() == -1 ? 443 : address.getPort()) == service.getJSONObject("mapping").getInt("port")) {
+                                if (!address.getRawPath().matches("^/apps/(files|references)/[a-f0-9-]{36}/.*")) throw new SecurityException("Invalid application URL.");
+                                // Translate only this connected owner's exact Files mapping.
+                                request.put("url", address.getRawPath() + (address.getRawQuery() == null ? "" : "?" + address.getRawQuery()));
+                            }
+                            open.accept(request);
+                            return;
+                        }
+                        throw new IllegalStateException("Enable application service local access first.");
+                    } catch (Exception error) { failure.accept(error.getMessage()); }
+                }, failure);
+            } else open.accept(value);
+        } catch (Exception error) { failure.accept(error.getMessage()); }
     }
     private void hostCall(GeckoSession source, String command, String json, Consumer<String> reply) {
         if (source != session || !desired || !state.equals("on")) { reply.accept("{\"error\":\"Agent connection is not active.\"}"); return; }
