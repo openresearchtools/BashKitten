@@ -150,11 +150,14 @@ jobs:
           /browser/browser/components/blocker/scripts/
     - name: Backfill the pinned source revision with native Git
       run: |
+        df -h "$GITHUB_WORKSPACE" "$RUNNER_TEMP"
         test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
         test "$(git rev-parse --is-shallow-repository)" = true
         test "$(git rev-list --all --count)" = 1
         git --version
         git backfill --no-sparse
+        git count-objects -vH
+        df -h "$GITHUB_WORKSPACE" "$RUNNER_TEMP"
     - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
       with:
         node-version: '24'
