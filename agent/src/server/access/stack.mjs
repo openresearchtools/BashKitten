@@ -27,7 +27,7 @@ export class AccessStack {
   constructor({ fatal } = {}) { this.fatal = fatal; this.children = []; this.info = null; this.stopping = false; this.ready = false; this.services = new HostedServices(this); }
   async start() {
     if (this.ready) return this.info;
-    this.stopping = false;
+    this.stopping = false; this.ingressStopped = false;
     await privateDir(accessDir); await privateDir(runDir); await privateDir(paths.storage);
     await this.cleanPrevious();
     let identity = await readJson(paths.identity, null);
@@ -211,7 +211,7 @@ export class AccessStack {
     throw Error(`${name} did not become ready; see its service log`);
   }
   async writeCaddy() {
-    const remote = this.remoteAuthOrigin ? await this.remote.state() : {};
+    const remote = !this.stopping && this.remoteAuthOrigin ? await this.remote.state() : {};
     const caId = remote.id && remote.phase !== 'replacing' ? 'remote-' + remote.id : null;
     const strip = untrusted.map(name => `request_header -${name}`).join('\n');
     const backend = access => `reverse_proxy ${quote('unix/' + paths.backend)} {\n${proxyHeaders()}\nheader_up X-Bashkitten-Proxy ${this.proxyToken}\nheader_up X-Bashkitten-Access ${access}\nflush_interval -1\n}`;
@@ -230,7 +230,8 @@ name "BashKitten Local CA"
 ${caId ? `ca ${caId} {\nname "BashKitten Remote CA"\n}` : ''}
 }
 }
-${this.origin} {
+`;
+    if (!this.stopping) config += `${this.origin} {
 bind 127.0.0.1
 tls internal
 route {
@@ -248,7 +249,7 @@ flush_interval -1
 }
 }
 `;
-    if (this.applicationOrigin) config += `${this.applicationOrigin} {
+    if (!this.stopping && this.applicationOrigin) config += `${this.applicationOrigin} {
 bind 127.0.0.1
 tls internal
 route {
@@ -261,7 +262,7 @@ flush_interval -1
 }
 }
 `;
-    const addresses = (this.remoteOrigins || []).map(origin => origin + ':' + this.remotePort);
+    const addresses = this.stopping ? [] : (this.remoteOrigins || []).map(origin => origin + ':' + this.remotePort);
     if (addresses.length) config += `${addresses.join(', ')} {
 bind 127.0.0.1
 tls {
@@ -467,8 +468,22 @@ ${backend('remote')}
   async status() { return { identity: this.identity || await readJson(paths.identity, null), auth: { mode: 'native-local', generation: this.localGeneration } }; }
   async stopIngress() {
     this.stopping = true; this.ready = false;
+    if (this.ingressStopped) return;
     const caddy = this.children.find(child => child.name === 'caddy');
-    if (caddy) await terminate(caddy);
+    if (caddy && await sameProcess(caddy)) {
+      if (this.officeWopiOrigin) {
+        // Close public/local app listeners while retaining the existing private
+        // WOPI callback route for native Office's final save and UNLOCK.
+        try {
+          await this.writeCaddy();
+          await command(binary('caddy'), ['reload', '--config', paths.caddyJson, '--address', 'unix/' + paths.admin]);
+        } catch (error) {
+          // A failed reconfiguration must not leave ordinary ingress open.
+          await terminate(caddy); this.ingressStopped = true; throw error;
+        }
+      } else await terminate(caddy);
+    }
+    this.ingressStopped = true;
   }
   async stop() { this.stopping = true; this.ready = false; await this.stopChildren(); this.info = null; }
   async stopChildren() {

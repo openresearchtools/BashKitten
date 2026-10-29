@@ -6,7 +6,10 @@ import { spawn } from 'node:child_process';
 const config = JSON.parse(await fs.readFile(process.argv[2], 'utf8'));
 if (config.schema !== 1 || !Array.isArray(config.argv)) throw Error('Invalid prepared Office launch');
 let child, stopping = false;
-for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => { stopping = true; child?.kill(signal); });
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => {
+  if (stopping) return;
+  stopping = true; child?.kill('SIGTERM');
+});
 async function run(argv) {
   if (stopping) throw Error('Office startup cancelled');
   return new Promise((resolve, reject) => {

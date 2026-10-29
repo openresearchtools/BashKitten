@@ -51,7 +51,7 @@ export async function controlRequest(command, value) {
   }
   const deadline = Date.now() + 120000;
   for (let attempt = 0; ; attempt++) {
-    try { return await socketRequest(controlSocket, '/' + command, value, command === 'whisper-acquire' ? 0 : command === 'start' || command === 'restart' || command === 'autostart-startup' || command === 'application-service' || command.startsWith('share-') ? 180000 : 30000); }
+    try { return await socketRequest(controlSocket, '/' + command, value, command === 'whisper-acquire' ? 0 : ['start', 'stop', 'restart', 'shutdown', 'browser-shutdown', 'autostart-startup', 'application-service', 'service-action', 'remote-service-action'].includes(command) || command.startsWith('share-') ? 180000 : 30000); }
     catch (error) {
       // A fresh launch can reach the old controller after its status reply but
       // before shutdown finishes. Retry rejected starts or failed connections,
@@ -290,16 +290,20 @@ async function serve() {
   async function stopGroup(restart = false) {
     await phoneGateway.close();
     await disconnectPhoneOwner();
-    await stack.stopIngress();
+    const ingressError = await stack.stopIngress().then(() => null, error => error);
+    // Start native service draining promptly, while callbacks still work; do
+    // not spend the guard's grace stopping unrelated workers first.
+    const servicesStopped = stack.services.stopAll().then(() => null, error => error);
     // Complete the rest of group cleanup even if a worker needs the guard's
     // final descendant cleanup.
     const workerError = await stopWorkers(restart).then(() => null, error => error);
     const displayError = display ? await display.stop().then(() => null, error => error) : null;
     const speechError = await localAI?.shutdown().then(() => null, error => error);
-    const serviceError = await stack.services.stopAll().then(() => null, error => error);
+    const serviceError = await servicesStopped;
     await shutdownDownloads();
     await stack.stop();
     if (!customStartup.active) await releaseWake();
+    if (ingressError) throw ingressError;
     if (workerError) throw workerError;
     if (displayError) throw displayError;
     if (speechError) throw speechError;
@@ -309,11 +313,10 @@ async function serve() {
     state.web = false; stopping = true;
     if (error) lastError = error;
     await persist();
-    await stack.stopIngress();
     try {
       // Stop Pi now while an existing package transaction finishes safely.
       // Cancellation lets the current native package step finish.
-      if (jobs.busy) { await jobs.cancel(); await stopWorkers(restart); return; }
+      if (jobs.busy) { await stack.stopIngress(); await jobs.cancel(); await stopWorkers(restart); return; }
       await stopGroup(restart); stopping = false; await persist();
     }
     catch (failure) { lastError = failure.message; await persist(); throw failure; }

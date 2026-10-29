@@ -3,8 +3,7 @@
 import fs from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
-import { spawn, execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { readJson, writeJson, privateDir, digest } from '../common.mjs';
@@ -14,7 +13,7 @@ import { engineEnvironment } from '../localai/environment.mjs';
 
 const stateFile = path.join(accessDir, 'hosting.json');
 const runningDir = path.join(accessDir, 'services');
-const script = fileURLToPath(import.meta.url), exec = promisify(execFile);
+const script = fileURLToPath(import.meta.url);
 const idPattern = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const localAI = id => ['localai-llama', 'localai-whisper'].includes(id);
 const applications = new Set(['files', 'quantum', 'office', 'office-addon', 'office-wopi', 'references']);
@@ -220,19 +219,19 @@ export class HostedServices {
       owner.state = 'stopped'; return;
     }
     if (!owner?.child) return;
-    owner.stopping = true; owner.state = 'stopping';
-    // The guard still owns the scope's descendants, including if systemd or
-    // the controller dies. A scope preserves that parent/child ownership.
-    let failure;
-    if (useUserScope) await exec('systemctl', ['--user', 'stop', unit(id)], { timeout: 15000 }).catch(error => { failure = error; });
-    owner.child?.kill('SIGTERM');
+    if (!owner.stopping) {
+      owner.stopping = true; owner.state = 'stopping';
+      // Signal the guarded launcher once, not every process in its scope:
+      // Collabora treats a second TERM as forced termination, aborting WOPI.
+      // The guard retains its 30-second grace and bounded descendant cleanup.
+      owner.child.kill('SIGTERM');
+    }
     let timer;
     try {
       await Promise.race([owner.done, new Promise((_, reject) => {
-        timer = setTimeout(() => reject(Error('The service has not finished stopping')), 10000);
+        timer = setTimeout(() => reject(Error('The service has not finished stopping')), 35000);
       })]);
     } finally { clearTimeout(timer); }
-    if (failure && owner.child) throw failure;
   }
   async startup() {
     for (const entry of await this.entries()) if (entry.startup && !localAI(entry.id)) {
@@ -248,7 +247,14 @@ export class HostedServices {
     this.stopping = true; this.generation++;
     for (const owner of this.running.values()) if (owner.module) owner.controller?.abort(Error('Backend stopped'));
     await Promise.allSettled([...this.starts.values()]);
-    const results = await Promise.allSettled([...this.running.keys()].map(id => this.stop(id)));
+    const office = this.stop('office');
+    const results = await Promise.allSettled([...this.running.keys()].map(async id => {
+      if (id === 'office') return office;
+      // Keep storage through native Office's bounded final save and UNLOCK,
+      // then complete cleanup even if that drain failed.
+      if (id === 'office-addon' || id === 'office-wopi') await office.catch(() => {});
+      return this.stop(id);
+    }));
     this.stopping = false;
     const failure = results.find(result => result.status === 'rejected');
     if (failure) throw failure.reason;
@@ -312,12 +318,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
     const [id, action] = process.argv.slice(2);
     if (action !== 'serve' || !idPattern.test(id) || process.env.BASHKITTEN_GUARDED !== '1' || Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid) throw Error('Service must start through its private controller');
     const entry = definition(await readJson(path.join(runningDir, id + '.json')));
-    process.on('SIGTERM', () => process.exit(0)); process.on('SIGINT', () => process.exit(0));
+    let child, stopping = false;
+    for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => {
+      if (stopping) return;
+      stopping = true; child?.kill('SIGTERM');
+    });
     const args = entry.command.argv;
     const env = localAI(id) ? engineEnvironment(entry.command.env) : { ...process.env, ...entry.command.env };
     // Both host scopes and direct guest/Termux commands stay below the guard;
     // detached user services would survive a killed controller. Never expand arguments.
-    const child = useUserScope
+    child = useUserScope
       ? spawn('systemd-run', ['--user', '--scope', '--quiet', '--collect', '--no-ask-password', '--expand-environment=no', '--unit=' + unit(id),
         '--description=BashKitten ' + entry.name, '--', ...args], { cwd: entry.command.cwd, env, stdio: 'inherit' })
       : spawn(args[0], args.slice(1), { cwd: entry.command.cwd, env, stdio: 'inherit' });
