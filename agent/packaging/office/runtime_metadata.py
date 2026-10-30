@@ -138,6 +138,24 @@ def python_notices(runtime):
     return records
 
 
+def refreshed_dependency_notices(runtime):
+    """Deliver the full original notices for the named dependency refresh."""
+    records = []
+    for component in source_graph.dependency_refresh()['components']:
+        texts = []
+        for notice in component.get('licenseFiles', []):
+            original = source_graph.DEPENDENCIES / notice['file']
+            destination = runtime / 'legal/dependencies' / notice['file']
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(original, destination)
+            texts.append(notice['member'] + '\n' + original.read_text(errors='replace'))
+        if texts:
+            records.append({'name': 'Office ' + component['product'], 'version': component['version'],
+                            'license': component['license'], 'source': component['url'],
+                            'text': '\n\n'.join(texts), 'sourceProvenance': component})
+    return records
+
+
 def notices(source, runtime):
     # The released SBOM owner defines the shipped JS dependency closure; do not
     # maintain a separate approximate list of browser libraries.
@@ -165,6 +183,7 @@ def notices(source, runtime):
                     'license': 'MPL-2.0, LGPL-3.0-or-later and component-specific terms',
                     'text': read([runtime / 'engine/LICENSE', runtime / 'engine/NOTICE'])})
     records.extend(python_notices(runtime))
+    records.extend(refreshed_dependency_notices(runtime))
     for name, package in sorted(packages.items()):
         resolved = package['resolved']
         if not resolved.startswith('file:node_shrinkpack/'):

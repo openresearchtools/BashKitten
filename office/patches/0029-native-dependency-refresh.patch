@@ -1,0 +1,170 @@
+From: BashKitten maintainers
+Subject: Refresh bundled dependencies within the selected release lines
+
+Retain Collabora Online cp-26.04.5-2 and its paired engine. Select original
+official OpenSSL 3.5 LTS, curl 8, Python 3.14, Poco 1.15, HarfBuzz 14, ICU 78
+and SQLite 3 release archives through the existing native build graph. Update
+the matching native configure version constants. Exact provenance and full
+original notices are retained in office/upstream/dependencies/refresh.json.
+Source-Code-License: MPL-2.0
+
+diff --git a/engine/download.lst b/engine/download.lst
+--- a/engine/download.lst
++++ b/engine/download.lst
+@@ -65,8 +65,8 @@
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+-CURL_SHA256SUM := f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7
+-CURL_TARBALL := curl-8.22.0.tar.xz
++CURL_SHA256SUM := 8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5
++CURL_TARBALL := curl-8.23.0.tar.xz
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+@@ -382,8 +382,8 @@
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+-HARFBUZZ_SHA256SUM := 16070d77cfc4ba1f1e7327e83bf9b3f55898081cabdb94e56a33e04fc8874eae
+-HARFBUZZ_TARBALL := harfbuzz-14.3.0.tar.xz
++HARFBUZZ_SHA256SUM := d07a007327277708a2a73ae437887cdbaf282937f6d03ca5467723e9099af586
++HARFBUZZ_TARBALL := harfbuzz-14.6.0.tar.xz
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+@@ -397,10 +397,10 @@
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+-ICU_SHA256SUM := 3e99687b5c435d4b209630e2d2ebb79906c984685e78635078b672e03c89df35
+-ICU_TARBALL := icu4c-78.2-sources.tgz
+-ICU_DATA_SHA256SUM := 582968cf174c9498b2046b4f4e7f786def5f18222bd8d98432d7a29399c38c70
+-ICU_DATA_TARBALL := icu4c-78.2-data.zip
++ICU_SHA256SUM := 3a2e7a47604ba702f345878308e6fefeca612ee895cf4a5f222e7955fabfe0c0
++ICU_TARBALL := icu4c-78.3-sources.tgz
++ICU_DATA_SHA256SUM := 9d8b3899096aeb83e4e21ef8a40fec9e03b28db18c48452efac882ce25a91e27
++ICU_DATA_TARBALL := icu4c-78.3-data.zip
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+@@ -543,8 +543,8 @@
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+-OPENSSL_SHA256SUM := a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2
+-OPENSSL_TARBALL := openssl-3.5.8.tar.gz
++OPENSSL_SHA256SUM := 603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a
++OPENSSL_TARBALL := openssl-3.5.9.tar.gz
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+@@ -558,8 +558,8 @@
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+-POCO_SHA256SUM := 562a1ba1a6db4665f81091c35e997b73f87e1b45e2ab2854cd720d2349518abc
+-POCO_TARBALL := poco-1.15.3-all.tar.bz2
++POCO_SHA256SUM := d92e9e6711957a6b4415d4ffe0df5470b229bfa123334865c3b6a065030cd3a8
++POCO_TARBALL := poco-1.15.4-all.tar.bz2
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+@@ -593,8 +593,8 @@
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+-PYTHON_SHA256SUM := 3b48dac8fb59f62eaa67ac83c1eb12bda1b7a08406dd286e252c11a66be27f81
+-PYTHON_TARBALL := Python-3.14.7.tar.xz
++PYTHON_SHA256SUM := de414a57119abef52784d8993e341d53aed635fc2b05c2607d9f98a2c5b72032
++PYTHON_TARBALL := Python-3.14.10.tar.xz
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+@@ -649,8 +649,8 @@
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+-SQLITE3_SHA256SUM := 45d0fea15971dd1300e5b509f48ca134621e10d9297713b64618fbca21b325fa
+-SQLITE3_TARBALL := sqlite-amalgamation-3520000.zip
++SQLITE3_SHA256SUM := 0a9c8e34352dad46006aa82836d5383bff9dc6bc9ce5a60553c05aa30e6ad1f9
++SQLITE3_TARBALL := sqlite-amalgamation-3540100.zip
+ # three static lines
+ # so that git cherry-pick
+ # will not run into conflicts
+diff --git a/engine/configure.ac b/engine/configure.ac
+--- a/engine/configure.ac
++++ b/engine/configure.ac
+@@ -10247,7 +10247,7 @@
+     SYSTEM_PYTHON=
+     PYTHON_VERSION_MAJOR=3
+     PYTHON_VERSION_MINOR=14
+-    PYTHON_VERSION=${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}.7
++    PYTHON_VERSION=${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}.10
+     if ! grep -q -i python.*${PYTHON_VERSION} ${SRC_ROOT}/download.lst; then
+         AC_MSG_ERROR([PYTHON_VERSION ${PYTHON_VERSION} but no matching file in download.lst])
+     fi
+@@ -10616,7 +10616,7 @@
+ dnl Check for system icu
+ dnl ===================================================================
+ ICU_MAJOR=78
+-ICU_MINOR=2
++ICU_MINOR=3
+ ICU_CFLAGS_internal="-I${WORKDIR}/UnpackedTarball/icu/source/i18n -I${WORKDIR}/UnpackedTarball/icu/source/common"
+ ICU_LIBS_internal="-L${WORKDIR}/UnpackedTarball/icu/source/lib -licuuc"
+ libo_CHECK_SYSTEM_MODULE([icu],[ICU],[icu-i18n >= 66])
+diff --git a/engine/external/python3/python-3.3.3-elf-rpath.patch.1 b/engine/external/python3/python-3.3.3-elf-rpath.patch.1
+--- a/engine/external/python3/python-3.3.3-elf-rpath.patch.1
++++ b/engine/external/python3/python-3.3.3-elf-rpath.patch.1
+@@ -2,10 +2,12 @@
+ 
+ (currently nothing in LO actually links libpython3.so)
+ 
+-diff -ru python3.orig/Makefile.pre.in python3/Makefile.pre.in
+---- python3.orig/Makefile.pre.in	2015-07-26 20:29:07.126194320 +0200
+-+++ python3/Makefile.pre.in	2015-07-26 20:37:21.814227530 +0200
+-@@ -706,7 +706,7 @@
++Rebased for Python 3.14.10: preserve the same interpreter/libpython rpaths;
++upstream now formats the adjacent macOS link recipe across several lines.
++
++--- python3.orig/Makefile.pre.in
+++++ python3/Makefile.pre.in
++@@ -991,7 +991,7 @@
+  
+  # Build the interpreter
+  $(BUILDPYTHON):	Programs/python.o $(LINK_PYTHON_DEPS)
+@@ -14,7 +16,7 @@
+  
+  platform: $(PYTHON_FOR_BUILD_DEPS) pybuilddir.txt
+  	$(RUNSHARED) $(PYTHON_FOR_BUILD) -c 'import sys ; from sysconfig import get_platform ; print("%s-%d.%d" % (get_platform(), *sys.version_info[:2]))' >platform
+-@@ -628,7 +628,7 @@
++@@ -1032,7 +1032,7 @@
+  	fi
+  
+  libpython3.so:	libpython$(LDVERSION).so
+@@ -22,4 +24,4 @@
+ +	$(BLDSHARED) $(NO_AS_NEEDED) -o $@ -Wl,-h$@ $^ -Wl,-rpath,\$$ORIGIN
+  
+  libpython$(LDVERSION).dylib: $(LIBRARY_OBJS)
+- 	 $(CC) -dynamiclib $(PY_CORE_LDFLAGS) -undefined dynamic_lookup -Wl,-install_name,$(prefix)/lib/libpython$(LDVERSION).dylib -Wl,-compatibility_version,$(VERSION) -Wl,-current_version,$(VERSION) -o $@ $(LIBRARY_OBJS) $(DTRACE_OBJS) $(SHLIBS) $(LIBC) $(LIBM); \
++ 	 $(CC) -dynamiclib $(PY_CORE_LDFLAGS) -undefined dynamic_lookup -Wl,-install_name,$(prefix)/lib/libpython$(LDVERSION).dylib -Wl,-compatibility_version,$(VERSION) -Wl,-current_version,$(VERSION) -o $@ $(LIBRARY_OBJS) $(DTRACE_OBJS) $(MODLIBS) $(SHLIBS) $(LIBC) $(LIBM); \
+diff --git a/engine/external/curl/ExternalProject_curl.mk b/engine/external/curl/ExternalProject_curl.mk
+--- a/engine/external/curl/ExternalProject_curl.mk
++++ b/engine/external/curl/ExternalProject_curl.mk
+@@ -49,7 +49,7 @@
+ 			--disable-ipfs --disable-mqtt --disable-ares \
+ 			--disable-dict --disable-file --disable-gopher --disable-imap \
+ 			--disable-ldap --disable-ldaps --disable-manual --disable-pop3 \
+-			--disable-rtsp --disable-smb --disable-smtp --disable-telnet  \
++			--disable-rtsp --disable-smtp --disable-telnet  \
+ 			--disable-tftp  \
+ 			$(if $(ENABLE_OPENSSL),--with-openssl$(if $(SYSTEM_OPENSSL),,="$(gb_UnpackedTarball_workdir)/openssl")) \
+ 			$(if $(filter iOS MACOSX,$(OS)),--with-apple-sectrust) \
+@@ -102,7 +102,6 @@
+ 			-DCURL_DISABLE_MQTT=ON \
+ 			-DCURL_DISABLE_POP3=ON \
+ 			-DCURL_DISABLE_RTSP=ON \
+-			-DCURL_DISABLE_SMB=ON \
+ 			-DCURL_DISABLE_SMTP=ON \
+ 			-DCURL_DISABLE_TELNET=ON \
+ 			-DCURL_DISABLE_TFTP=ON \

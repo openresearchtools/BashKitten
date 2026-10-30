@@ -47,6 +47,7 @@ PATCHES = [
     'office/patches/0026-native-script-modifying-activity.patch',
     'office/patches/0027-native-user-settings-bundle.patch',
     'office/patches/0028-native-mobile-options.patch',
+    *source_graph.DEPENDENCY_PATCHES,
 ]
 ENGINE_OPTIONS = ['--with-distro=CPLinux-LOKit', '--disable-epm',
                   '--without-package-format', '--disable-symbols',

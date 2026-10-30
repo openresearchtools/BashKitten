@@ -12,7 +12,13 @@
       "licenseFile": "libcap-License",
       "licenseSha256": "68467e731f4744bd6e0bb69e8df9c3a994e09cd6b203d0c41327ac6d079c581d",
       "frameworkRecipe": "packages/libcap/build.sh",
-      "license": "BSD-3-Clause OR GPL-2.0-only"
+      "license": "BSD-3-Clause OR GPL-2.0-only",
+      "officialReleaseCheck": {
+        "date": "2026-10-30",
+        "url": "https://kernel.org/pub/linux/libs/security/linux-privs/libcap2/",
+        "latestRelease": "2.78",
+        "result": "Already at the current official release; existing native build and license inputs retained."
+      }
     },
     {
       "name": "libiconv",
@@ -32,7 +38,13 @@
           "scope": "Upstream command-line programs, retained in the full source archive; native Office uses the library."
         }
       ],
-      "frameworkRecipe": "packages/libiconv/build.sh"
+      "frameworkRecipe": "packages/libiconv/build.sh",
+      "officialReleaseCheck": {
+        "date": "2026-10-30",
+        "url": "https://ftp.gnu.org/pub/gnu/libiconv/",
+        "latestRelease": "1.19",
+        "result": "Already at the current official release; existing native build and license inputs retained."
+      }
     }
   ]
 }

@@ -7,6 +7,7 @@ Download preparation never resolves versions or substitutes build libraries.
 import argparse
 import base64
 import concurrent.futures
+import contextlib
 import hashlib
 import json
 import os
@@ -25,6 +26,52 @@ UPSTREAM = ROOT / 'office/upstream'
 SOURCE = UPSTREAM / 'online/source'
 DEPENDENCIES = UPSTREAM / 'dependencies'
 PART_SIZE = 90 * 1024 * 1024
+DEPENDENCY_PATCHES = ['office/patches/0029-native-dependency-refresh.patch']
+
+
+def dependency_refresh():
+    """Verify the named dependency delta and its original offline notices."""
+    path = DEPENDENCIES / 'refresh.json'
+    refresh = json.loads(path.read_text())
+    expected = [{'file': name, 'sha256': digest(ROOT / name)} for name in DEPENDENCY_PATCHES]
+    if refresh['patchInputs'] != expected:
+        raise ValueError('Native dependency refresh has stale named patch inputs')
+    for component in refresh['components']:
+        for record in component.get('licenseFiles', []):
+            relative = Path(record['file'])
+            if relative.is_absolute() or '..' in relative.parts:
+                raise ValueError('Native dependency notice leaves its retained directory')
+            if digest(DEPENDENCIES / relative) != record['sha256']:
+                raise ValueError('Native dependency notice checksum differs: ' + str(relative))
+    return refresh
+
+
+@contextlib.contextmanager
+def dependency_source():
+    """Apply only the recorded dependency patches to a small external copy."""
+    dependency_refresh()
+    with tempfile.TemporaryDirectory(prefix='bashkitten-office-dependencies-') as directory:
+        root = Path(directory)
+        for name in DEPENDENCY_PATCHES:
+            patch = ROOT / name
+            paths = set(re.findall(r'^(?:---|\+\+\+) [ab]/([^\t\n]+)', patch.read_text(), re.M))
+            for relative in paths:
+                path = Path(relative)
+                if path.is_absolute() or '..' in path.parts or path.parts[0] != 'engine':
+                    raise ValueError('Named dependency patch leaves the native engine')
+                original = SOURCE / path
+                destination = root / path
+                if not destination.exists() and original.is_file():
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(original, destination)
+            subprocess.run(['patch', '--batch', '--fuzz=0', '--forward', '-p1', '-i', str(patch)],
+                           cwd=root, check=True, capture_output=True, text=True)
+        yield root
+
+
+def effective_download_list():
+    with dependency_source() as source:
+        return (source / 'engine/download.lst').read_text()
 
 
 def digest(path):
@@ -90,7 +137,7 @@ def engine_inputs(config=None):
         # A configure run inside the existing builder sees the same source
         # under /workspace. Relocate its literal include paths for this read.
         prefix = 'gb_Side := host\n' + text.replace(original.group(1), str(config.resolve().parent)) + '\n'
-    recipe = prefix + f'''include {SOURCE / 'engine/download.lst'}
+    recipe = prefix + effective_download_list() + f'''
 include {SOURCE / 'engine/Makefile.fetch'}
 .PHONY: manifest
 manifest:
@@ -101,13 +148,20 @@ manifest:
     result = subprocess.run(['make', '--no-builtin-rules', '--no-builtin-variables', '-f', '-', 'manifest'],
                             input=recipe, check=True, text=True, capture_output=True)
     records = []
+    refreshed = {row['variable']: row for row in dependency_refresh()['components']}
     for line in result.stdout.splitlines():
         variable, name, expected, base = line.split('|')
         if len(expected) != 64 or any(c not in '0123456789abcdef' for c in expected):
             raise ValueError('Unpinned upstream archive: ' + variable)
         if Path(name).name != name:
             raise ValueError('Invalid upstream archive name')
-        records.append({'variable': variable, 'name': name, 'url': base + '/' + name, 'sha256': expected})
+        record = {'variable': variable, 'name': name, 'url': base + '/' + name, 'sha256': expected}
+        if variable in refreshed:
+            update = refreshed[variable]
+            if (name, expected) != (update['name'], update['sha256']):
+                raise ValueError('Named dependency patch differs from its original archive pin: ' + variable)
+            record['url'] = update['url']
+        records.append(record)
     if not records:
         raise ValueError('Empty native dependency graph')
     return records
@@ -121,10 +175,21 @@ def retained_files(record):
 
 def dependency_manifest():
     manifest = json.loads((DEPENDENCIES / 'sources.json').read_text())
-    if manifest['downloadListSha256'] != digest(SOURCE / 'engine/download.lst'):
+    if manifest['pristineDownloadListSha256'] != digest(SOURCE / 'engine/download.lst'):
+        raise ValueError('Native dependency manifest has a stale pristine download.lst')
+    if manifest['downloadListSha256'] != hashlib.sha256(effective_download_list().encode()).hexdigest():
         raise ValueError('Native dependency manifest has a stale download.lst')
     if manifest['fetchRecipeSha256'] != digest(SOURCE / 'engine/Makefile.fetch'):
         raise ValueError('Native dependency manifest has a stale fetch recipe')
+    if manifest['refreshManifestSha256'] != digest(DEPENDENCIES / 'refresh.json'):
+        raise ValueError('Native dependency manifest has a stale refresh manifest')
+    if manifest['patchInputs'] != dependency_refresh()['patchInputs']:
+        raise ValueError('Native dependency manifest has stale named patch inputs')
+    available = {row['variable']: row for row in engine_inputs()}
+    for record in manifest['components']:
+        if any(record[key] != available[record['variable']][key]
+               for key in ('name', 'url', 'sha256')):
+            raise ValueError('Native dependency manifest differs from the patched graph: ' + record['variable'])
     return manifest
 
 
@@ -175,8 +240,11 @@ def import_dependencies(config, cache):
         return {**record, 'size': path.stat().st_size}
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         materialized = list(pool.map(collect, records))
-    manifest = {'schema': 1, 'downloadListSha256': digest(SOURCE / 'engine/download.lst'),
+    manifest = {'schema': 1, 'pristineDownloadListSha256': digest(SOURCE / 'engine/download.lst'),
+                'downloadListSha256': hashlib.sha256(effective_download_list().encode()).hexdigest(),
                 'fetchRecipeSha256': digest(SOURCE / 'engine/Makefile.fetch'),
+                'refreshManifestSha256': digest(DEPENDENCIES / 'refresh.json'),
+                'patchInputs': dependency_refresh()['patchInputs'],
                 'configuration': config.name if config else 'all released source archive inputs',
                 'components': materialized}
     (DEPENDENCIES / 'sources.json').write_text(json.dumps(manifest, indent=2) + '\n')

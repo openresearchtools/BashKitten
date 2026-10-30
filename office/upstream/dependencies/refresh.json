@@ -1,0 +1,338 @@
+{
+  "schema": 1,
+  "date": "2026-10-30",
+  "onlineRelease": "cp-26.04.5-2",
+  "onlineCommit": "42745e44dd8530fac7acd5f46cb7571ceea63c6a",
+  "engineVersion": "26.04.5.2",
+  "policy": "Original official release archives within the selected dependency lines; pristine paired Collabora source stays unchanged. Native gbuild remains the only dependency build owner.",
+  "patchInputs": [
+    {
+      "file": "office/patches/0029-native-dependency-refresh.patch",
+      "sha256": "26da086bc81fdf9b61fe81df71960774f49113732aa2eec1fbae0ea260c48f6e"
+    }
+  ],
+  "components": [
+    {
+      "variable": "OPENSSL_TARBALL",
+      "version": "3.5.9",
+      "name": "openssl-3.5.9.tar.gz",
+      "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz",
+      "sha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a",
+      "size": 53279637,
+      "product": "OpenSSL",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/openssl/openssl",
+      "tag": "openssl-3.5.9",
+      "commit": "45e844fa2a14ec92d146bd8f5778ac130b6625fb",
+      "releaseNotes": "https://www.openssl-library.org/news/secadv/20260929.txt",
+      "checksumVerification": "Official release asset SHA-256",
+      "previous": {
+        "name": "openssl-3.5.8.tar.gz",
+        "url": "https://gerrit.collaboraoffice.com/src/openssl-3.5.8.tar.gz",
+        "sha256": "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2"
+      },
+      "licenseFiles": [
+        {
+          "file": "licenses/openssl-3.5.9/LICENSE.txt.txt",
+          "member": "openssl-3.5.9/LICENSE.txt",
+          "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
+        }
+      ],
+      "releaseAuthentication": {
+        "method": "Detached OpenPGP signature verified against the key published on the official OpenSSL source page",
+        "signatureUrl": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz.asc",
+        "signatureSha256": "bdccf2057a7c4ae377b40e832cb8c632ae8b532d4fb64cc7b843066eee748f89",
+        "keyUrl": "https://www.openssl-library.org/source/pubkeys.asc",
+        "keySha256": "56e106cd1c44bdb117aec24795f6dfbecaa9bfa0a2901b85331f0059aad16d53",
+        "primaryFingerprint": "B146647E45A7B33947AB226B2A2C87D161692D40",
+        "signingFingerprint": "C46ED3F2CBEFDA1FDAADA44264ED7B1DCCE71CB2",
+        "verified": "2026-10-30"
+      }
+    },
+    {
+      "variable": "CURL_TARBALL",
+      "version": "8.23.0",
+      "name": "curl-8.23.0.tar.xz",
+      "url": "https://curl.se/download/curl-8.23.0.tar.xz",
+      "sha256": "8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5",
+      "size": 2990916,
+      "product": "curl",
+      "license": "curl",
+      "repository": "https://github.com/curl/curl",
+      "tag": "curl-8_23_0",
+      "commit": "3163ec065643ba20709f190111f42c3e1fe95273",
+      "releaseNotes": "https://curl.se/ch/8.23.0.html",
+      "checksumVerification": "Official release SHA-256",
+      "previous": {
+        "name": "curl-8.22.0.tar.xz",
+        "url": "https://gerrit.collaboraoffice.com/src/curl-8.22.0.tar.xz",
+        "sha256": "f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7"
+      },
+      "licenseFiles": [
+        {
+          "file": "licenses/curl-8.23.0/COPYING.txt",
+          "member": "curl-8.23.0/COPYING",
+          "sha256": "82f2f4427d6545ee5aaac4f0b80428da6cc8ba41c2cf5da3a03680ec327b9681"
+        }
+      ],
+      "releaseAuthentication": {
+        "method": "Detached OpenPGP signature verified against the maintainer key linked by the official curl download page",
+        "signatureUrl": "https://curl.se/download/curl-8.23.0.tar.xz.asc",
+        "signatureSha256": "dba1562fec2bf698a1226054e6757940e4bf2ab87b3b222a5e7b91348f0b82e2",
+        "keyUrl": "https://daniel.haxx.se/mykey.asc",
+        "keySha256": "64619d3c1a2b68da837014b2ab02a049ed2c69aaebfa10a20a4f29dab003ecb8",
+        "primaryFingerprint": "27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2",
+        "signingFingerprint": "27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2",
+        "verified": "2026-10-30"
+      }
+    },
+    {
+      "variable": "PYTHON_TARBALL",
+      "version": "3.14.10",
+      "name": "Python-3.14.10.tar.xz",
+      "url": "https://www.python.org/ftp/python/3.14.10/Python-3.14.10.tar.xz",
+      "sha256": "de414a57119abef52784d8993e341d53aed635fc2b05c2607d9f98a2c5b72032",
+      "size": 24240392,
+      "product": "Python",
+      "license": "PSF-2.0 and component-specific terms",
+      "repository": "https://github.com/python/cpython",
+      "tag": "v3.14.10",
+      "commit": "b703b2c5e704341d61e367b9b940b77ed11dded0",
+      "releaseNotes": "https://www.python.org/downloads/release/python-31410/",
+      "checksumVerification": "Official Python release page SHA-256",
+      "previous": {
+        "name": "Python-3.14.7.tar.xz",
+        "url": "https://gerrit.collaboraoffice.com/src/Python-3.14.7.tar.xz",
+        "sha256": "3b48dac8fb59f62eaa67ac83c1eb12bda1b7a08406dd286e252c11a66be27f81"
+      },
+      "licenseFiles": [
+        {
+          "file": "licenses/python-3.14.10/LICENSE.txt",
+          "member": "Python-3.14.10/LICENSE",
+          "sha256": "b0e25a78cffb43f4d92de8b61ccfa1f1f98ecbc22330b54b5251e7b6ba010231"
+        },
+        {
+          "file": "licenses/python-3.14.10/Doc_license.rst.txt",
+          "member": "Python-3.14.10/Doc/license.rst",
+          "sha256": "8a7329b25131f64b2bea284155f0824876b1af9f4a2f970e6335751d97dfa6dd"
+        },
+        {
+          "file": "licenses/python-3.14.10/Modules_expat_COPYING.txt",
+          "member": "Python-3.14.10/Modules/expat/COPYING",
+          "sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87"
+        }
+      ]
+    },
+    {
+      "variable": "POCO_TARBALL",
+      "version": "1.15.4",
+      "name": "poco-1.15.4-all.tar.bz2",
+      "url": "https://github.com/pocoproject/poco/releases/download/poco-1.15.4-release/poco-1.15.4-all.tar.bz2",
+      "sha256": "d92e9e6711957a6b4415d4ffe0df5470b229bfa123334865c3b6a065030cd3a8",
+      "size": 7443239,
+      "product": "Poco C++ Libraries",
+      "license": "BSL-1.0 and component-specific terms",
+      "repository": "https://github.com/pocoproject/poco",
+      "tag": "poco-1.15.4-release",
+      "commit": "6a5667f432e1c5fe5591025ab03a2f8df37116b4",
+      "releaseNotes": "https://github.com/pocoproject/poco/releases/tag/poco-1.15.4-release",
+      "checksumVerification": "Official release asset SHA-256",
+      "previous": {
+        "name": "poco-1.15.3-all.tar.bz2",
+        "url": "https://gerrit.collaboraoffice.com/src/poco-1.15.3-all.tar.bz2",
+        "sha256": "562a1ba1a6db4665f81091c35e997b73f87e1b45e2ab2854cd720d2349518abc"
+      },
+      "licenseFiles": [
+        {
+          "file": "licenses/poco-1.15.4/LICENSE.txt",
+          "member": "poco-1.15.4-all/LICENSE",
+          "sha256": "c4b1e1e5f36d8331737231fefcc30f5714326aec7c387ad59a8115eb0ba7d6b5"
+        },
+        {
+          "file": "licenses/poco-1.15.4/dependencies_pcre2_src_pcre2_compile.c.txt",
+          "member": "poco-1.15.4-all/dependencies/pcre2/src/pcre2_compile.c",
+          "sha256": "8afb8c5f7d37160deb1c610a9e73899f3d4c97bd0f5482bec64217ceb221ff0c",
+          "offsetBytes": 0,
+          "lengthBytes": 2129
+        },
+        {
+          "file": "licenses/poco-1.15.4/dependencies_pcre2_src_pcre2_jit_compile.c.txt",
+          "member": "poco-1.15.4-all/dependencies/pcre2/src/pcre2_jit_compile.c",
+          "sha256": "717f26a20faf37ac0b61454188ffed3aec1bc2585bac878df2f94e297d2e1a8f",
+          "offsetBytes": 0,
+          "lengthBytes": 2241
+        },
+        {
+          "file": "licenses/poco-1.15.4/dependencies_utf8proc_src_utf8proc.c.txt",
+          "member": "poco-1.15.4-all/dependencies/utf8proc/src/utf8proc.c",
+          "sha256": "71be6ff692cd996d915bbca989dba3cfdb5cc440fbec76cfe48cf0f7910c11d2",
+          "offsetBytes": 0,
+          "lengthBytes": 1736
+        },
+        {
+          "file": "licenses/poco-1.15.4/dependencies_v8_double_conversion_src_double-conversion.h.txt",
+          "member": "poco-1.15.4-all/dependencies/v8_double_conversion/src/double-conversion.h",
+          "sha256": "50e3a58083f6fa4aa476c27ebc77b9ed03f38be59fc4127754999c5689b85152",
+          "offsetBytes": 0,
+          "lengthBytes": 1598
+        },
+        {
+          "file": "licenses/poco-1.15.4/dependencies_tessil_include_Poco_ordered_hash.h.txt",
+          "member": "poco-1.15.4-all/dependencies/tessil/include/Poco/ordered_hash.h",
+          "sha256": "34bbaea469971f0274e5df342ae23d8f15267e279e8a50dc75ea0c5e969b5e2c",
+          "offsetBytes": 0,
+          "lengthBytes": 1169
+        },
+        {
+          "file": "licenses/poco-1.15.4/Foundation_src_Random.cpp.txt",
+          "member": "poco-1.15.4-all/Foundation/src/Random.cpp",
+          "sha256": "5e5cc4b628809de5c98230c90ab8b90df6f2250899208a93ff52e4e21f5831d5",
+          "offsetBytes": 0,
+          "lengthBytes": 1938
+        },
+        {
+          "file": "licenses/poco-1.15.4/Foundation_src_MD4Engine.cpp.txt",
+          "member": "poco-1.15.4-all/Foundation/src/MD4Engine.cpp",
+          "sha256": "2919e67bbb9254d642780c6f60fa4fbdf668edb09098e7c389327d1ffdf4b971",
+          "offsetBytes": 0,
+          "lengthBytes": 1189
+        },
+        {
+          "file": "licenses/poco-1.15.4/Foundation_src_MD5Engine.cpp.txt",
+          "member": "poco-1.15.4-all/Foundation/src/MD5Engine.cpp",
+          "sha256": "89f57dc0735074e9925417d8ef2b789c25476e006d5912448f5b7665c1951337",
+          "offsetBytes": 0,
+          "lengthBytes": 1189
+        },
+        {
+          "file": "licenses/poco-1.15.4/Foundation_src_SHA2Engine.cpp.txt",
+          "member": "poco-1.15.4-all/Foundation/src/SHA2Engine.cpp",
+          "sha256": "91dcce5c9ef4cca2b91a3158b87883f8891342020210a0d381652dc3b267ec20",
+          "offsetBytes": 0,
+          "lengthBytes": 484
+        }
+      ]
+    },
+    {
+      "variable": "HARFBUZZ_TARBALL",
+      "version": "14.6.0",
+      "name": "harfbuzz-14.6.0.tar.xz",
+      "url": "https://github.com/harfbuzz/harfbuzz/releases/download/14.6.0/harfbuzz-14.6.0.tar.xz",
+      "sha256": "d07a007327277708a2a73ae437887cdbaf282937f6d03ca5467723e9099af586",
+      "size": 20295260,
+      "product": "HarfBuzz",
+      "license": "MIT and component-specific terms",
+      "repository": "https://github.com/harfbuzz/harfbuzz",
+      "tag": "14.6.0",
+      "commit": "c7a7457b7385f33178e8cf87615ca077a810bbe7",
+      "releaseNotes": "https://github.com/harfbuzz/harfbuzz/releases/tag/14.6.0",
+      "checksumVerification": "Official release asset SHA-256",
+      "previous": {
+        "name": "harfbuzz-14.3.0.tar.xz",
+        "url": "https://gerrit.collaboraoffice.com/src/harfbuzz-14.3.0.tar.xz",
+        "sha256": "16070d77cfc4ba1f1e7327e83bf9b3f55898081cabdb94e56a33e04fc8874eae"
+      },
+      "licenseFiles": [
+        {
+          "file": "licenses/harfbuzz-14.6.0/COPYING.txt",
+          "member": "harfbuzz-14.6.0/COPYING",
+          "sha256": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64"
+        },
+        {
+          "file": "licenses/harfbuzz-14.6.0/src_ms-use_COPYING.txt",
+          "member": "harfbuzz-14.6.0/src/ms-use/COPYING",
+          "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+        }
+      ],
+      "releaseAuthentication": {
+        "method": "Official GitHub annotated release tag signature reports verified/valid; original archive matches the official release asset SHA-256",
+        "tagObject": "a0e2a3c00ecdfa256535300ca445b0272527b06e",
+        "verified": "2026-10-30"
+      }
+    },
+    {
+      "variable": "ICU_TARBALL",
+      "version": "78.3",
+      "name": "icu4c-78.3-sources.tgz",
+      "url": "https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-sources.tgz",
+      "sha256": "3a2e7a47604ba702f345878308e6fefeca612ee895cf4a5f222e7955fabfe0c0",
+      "size": 27977255,
+      "product": "ICU",
+      "license": "Unicode-3.0 and component-specific terms",
+      "repository": "https://github.com/unicode-org/icu",
+      "tag": "release-78.3",
+      "commit": "21d1eb0f306e1141c10931e914dfc038c06121da",
+      "releaseNotes": "https://github.com/unicode-org/icu/releases/tag/release-78.3",
+      "checksumVerification": "Official release asset SHA-256",
+      "previous": {
+        "name": "icu4c-78.2-sources.tgz",
+        "url": "https://gerrit.collaboraoffice.com/src/icu4c-78.2-sources.tgz",
+        "sha256": "3e99687b5c435d4b209630e2d2ebb79906c984685e78635078b672e03c89df35"
+      },
+      "licenseFiles": [
+        {
+          "file": "licenses/icu-78.3/LICENSE.txt",
+          "member": "icu/LICENSE",
+          "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+        },
+        {
+          "file": "licenses/icu-78.3/license.html.txt",
+          "member": "icu/license.html",
+          "sha256": "c62d7697c03979f5056d28b338fafc7a1152820f7b379adf4a9d88cd37160f96"
+        }
+      ]
+    },
+    {
+      "variable": "ICU_DATA_TARBALL",
+      "version": "78.3",
+      "name": "icu4c-78.3-data.zip",
+      "url": "https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-data.zip",
+      "sha256": "9d8b3899096aeb83e4e21ef8a40fec9e03b28db18c48452efac882ce25a91e27",
+      "size": 20187983,
+      "product": "ICU data",
+      "license": "Unicode-3.0 and component-specific terms",
+      "repository": "https://github.com/unicode-org/icu",
+      "tag": "release-78.3",
+      "commit": "21d1eb0f306e1141c10931e914dfc038c06121da",
+      "releaseNotes": "https://github.com/unicode-org/icu/releases/tag/release-78.3",
+      "checksumVerification": "Official release asset SHA-256",
+      "previous": {
+        "name": "icu4c-78.2-data.zip",
+        "url": "https://gerrit.collaboraoffice.com/src/icu4c-78.2-data.zip",
+        "sha256": "582968cf174c9498b2046b4f4e7f786def5f18222bd8d98432d7a29399c38c70"
+      },
+      "licenseFiles": [],
+      "licenseOwner": "ICU_TARBALL"
+    },
+    {
+      "variable": "SQLITE3_TARBALL",
+      "version": "3.54.1",
+      "name": "sqlite-amalgamation-3540100.zip",
+      "url": "https://sqlite.org/2026/sqlite-amalgamation-3540100.zip",
+      "sha256": "0a9c8e34352dad46006aa82836d5383bff9dc6bc9ce5a60553c05aa30e6ad1f9",
+      "sha3_256": "92281c86e2957f9b9305890f9ac04204caa7b677cc868dc326d942689df28e30",
+      "size": 2990966,
+      "product": "SQLite",
+      "license": "Public Domain",
+      "repository": "https://github.com/sqlite/sqlite",
+      "tag": "version-3.54.1",
+      "commit": "57520227c95396ce39ba6ecaac8d475b78dd3964",
+      "releaseNotes": "https://sqlite.org/releaselog/3_54_1.html",
+      "checksumVerification": "Official download page SHA3-256; SHA-256 computed from the same original bytes",
+      "previous": {
+        "name": "sqlite-amalgamation-3520000.zip",
+        "url": "https://gerrit.collaboraoffice.com/src/sqlite-amalgamation-3520000.zip",
+        "sha256": "45d0fea15971dd1300e5b509f48ca134621e10d9297713b64618fbca21b325fa"
+      },
+      "licenseFiles": [
+        {
+          "file": "licenses/sqlite3-3.54.1/sqlite3.c.txt",
+          "member": "sqlite-amalgamation-3540100/sqlite3.c",
+          "sha256": "39fc4986b224f2f5575dec58ae66c7c9ee2d5d3884ba4971c932f1fd5b40b033",
+          "offsetBytes": 1601,
+          "lengthBytes": 426
+        }
+      ]
+    }
+  ]
+}
