@@ -96,7 +96,7 @@ source manifests and all other notices remain unchanged.
 92 Go modules and 460 npm package archives, including target-specific optional
 packages. Go module sums and npm SRI values are preserved, as are archive hashes
 and original notice filenames. `native-sources.json` records separately selected
-MuPDF 1.28.2/FFmpeg 9.0.2/dav1d 1.5.4 source, native build tools and the upstream FFmpeg recipe.
+MuPDF 1.28.6/FFmpeg 9.0.2/dav1d 1.5.4 source, native build tools and the upstream FFmpeg recipe.
 Downloaded archives live in the external `BASHKITTEN_SOURCE_CACHE`, selected by
 their original HTTPS URLs and exact checksums; they are not committed to Git.
 Historical split-part manifests remain provenance for reconstructing and

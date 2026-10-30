@@ -2,19 +2,19 @@
   "schema": 1,
   "components": [
     {
-      "url": "https://nodejs.org/dist/v24.22.0/node-v24.22.0.tar.xz",
-      "sha256": "41f97cff2c666f1f8293dc5f85c65e8dd605c16b43fd9febd49ede32ee1e0329",
-      "file": "41f97cff2c666f1f8293dc5f85c65e8dd605c16b43fd9febd49ede32ee1e0329-node-v24.22.0.tar.xz"
+      "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.xz",
+      "sha256": "8fe2ec1723bb9f8d0b683907c82708debbeda64af21cb2aa214c4241eed0a061",
+      "file": "8fe2ec1723bb9f8d0b683907c82708debbeda64af21cb2aa214c4241eed0a061-node-v24.22.2.tar.xz"
     },
     {
-      "url": "https://nodejs.org/dist/v24.18.0/node-v24.18.0.tar.xz",
-      "sha256": "e94afde24db08e0c564ee7110a2d5aab51ee0059382c9fd8233c54eec47b28f9",
-      "file": "e94afde24db08e0c564ee7110a2d5aab51ee0059382c9fd8233c54eec47b28f9-node-v24.18.0.tar.xz"
+      "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1.tar.xz",
+      "sha256": "4f5379796280cdaeb0c2f358fd04b6a16cc4fb7dfa83b5a8c91a9d963b435231",
+      "file": "4f5379796280cdaeb0c2f358fd04b6a16cc4fb7dfa83b5a8c91a9d963b435231-node-v24.22.1.tar.xz"
     },
     {
-      "url": "https://codeload.github.com/termux/termux-packages/tar.gz/f3b242999b604dab33639c8211c3b461aad79dc9",
-      "sha256": "ed546336bdfa680956bb4f3039e4bc186a91896c4b2f2fd7a8c9cdbec4b3a6d2",
-      "file": "ed546336bdfa680956bb4f3039e4bc186a91896c4b2f2fd7a8c9cdbec4b3a6d2-f3b242999b604dab33639c8211c3b461aad79dc9"
+      "url": "https://codeload.github.com/termux/termux-packages/tar.gz/0f9045034298621c5c95b53af8d9de9dfa95d2d2",
+      "sha256": "5775b7b5f7503d849c1ca22cec3337040d7be2a48f1dc594927b07c6f0c9a3c0",
+      "file": "5775b7b5f7503d849c1ca22cec3337040d7be2a48f1dc594927b07c6f0c9a3c0-0f9045034298621c5c95b53af8d9de9dfa95d2d2"
     },
     {
       "url": "https://github.com/openssl/openssl/releases/download/openssl-3.6.5/openssl-3.6.5.tar.gz",
@@ -23,10 +23,10 @@
       "file": "a2157c2830efdec3788939b00c9b0638306d3f0bbb76dc4832ee503bb397df98-openssl-3.6.5.tar.gz"
     },
     {
-      "url": "https://github.com/c-ares/c-ares/archive/refs/tags/v1.34.8.tar.gz",
-      "sha256": "ddf8be8b179ef6ff656e7413da93cf0f3038c627aca29ce9aae30f66e5b32bc1",
+      "url": "https://github.com/c-ares/c-ares/archive/refs/tags/v1.34.9.tar.gz",
+      "sha256": "453bab9eb8c2bd4343b527dd97dbd77e1fab6608781dda2dbbfde7e480882c97",
       "license": "MIT",
-      "file": "ddf8be8b179ef6ff656e7413da93cf0f3038c627aca29ce9aae30f66e5b32bc1-v1.34.8.tar.gz"
+      "file": "453bab9eb8c2bd4343b527dd97dbd77e1fab6608781dda2dbbfde7e480882c97-v1.34.9.tar.gz"
     },
     {
       "url": "https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-sources.tgz",

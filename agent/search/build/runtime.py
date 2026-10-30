@@ -278,7 +278,7 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
         source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     manifest = {"format": 1, "target": target, "platform": target, "python": lock["python"][target],
                 "pythonVersions": lock["pythonVersions"][target],
-                "version": "1.0.0", "ddgs": "9.16.0", "depends": dependencies, "aptDependencies": dependencies,
+                "version": "1.0.0", "ddgs": "9.16.1", "depends": dependencies, "aptDependencies": dependencies,
                 "packages": [{"name": item["name"], "version": item["version"]} for item in distributions],
                 "dependencies": {item["name"]: item["version"] for item in distributions},
                 "distributions": distributions, "lockSha256": digest(LOCK), "licenses": "licenses.json",

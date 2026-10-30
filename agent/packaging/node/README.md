@@ -34,7 +34,19 @@ receipt verification alongside the native locks, sources and licenses.
 
 ## Pins and provenance
 
-Reviewed 19 October 2026. Linux uses Node 24.22.0 / npm 11.19.1 from nodejs.org
+30 October 2026 maintenance refresh: Linux now uses the official Node 24.22.2
+LTS distribution and its bundled npm 11.19.1. Termux uses the official native
+Node 24.22.1 packages and c-ares 1.34.9 on both architectures, with source and
+recipes pinned to `0f9045034298621c5c95b53af8d9de9dfa95d2d2`. The current signed
+InRelease and both compressed indexes were verified with the existing automatic
+build key below. npm remains 11.21.1: the new Node package accepts it, and its
+package-level index/InRelease digests retain the separately verified 19 October
+provenance rather than attributing it to the current index's npm 12 release.
+Linux's release tag peels to `f7f273a9bb6445f6f7fb6349105e7532972045fb`;
+its module ABI remains 137. Original archives stay in the external source cache
+and matching source artifacts. The dated records below describe earlier inputs.
+
+Historical review, 19 October 2026. Linux used Node 24.22.0 / npm 11.19.1 from nodejs.org
 with the published `SHASUMS256.txt`. Termux currently publishes Node 24.18.0-1 /
 npm 11.21.1; its native Android patches and dependency builds are retained from
 `termux/termux-packages` commit
@@ -118,3 +130,9 @@ Termux x86_64 Node/npm execute under `run-as com.termux` in stock Android 17
 Cuttlefish, with `process.execPath` pointing at the private native ELF. arm64
 artifacts receive structural checks; physical ARM devices still require native
 acceptance testing.
+
+30 October 2026 retained-npm availability repair: the primary Termux pool removed
+`npm_11.21.1_all.deb`. Its exact URL now uses the same upstream-listed NYIST mirror
+already used for earlier removed packages. The downloaded bytes match the
+original signed-index SHA256 and package version; npm's source and licenses are
+unchanged. This preserves the selected npm 11 line with the newer native Node.

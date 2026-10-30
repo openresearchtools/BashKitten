@@ -148,7 +148,7 @@ host pkg-config paths. Go must match the existing retained 1.27.2 compiler/sourc
 pin; full standard-library notices accompany its linked runtime. Use separate
 external work directories for each target and architecture.
 
-The selected native media recipe builds MuPDF 1.28.2 and its included third-party
+The selected native media recipe builds MuPDF 1.28.6 and its included third-party
 source, FFmpeg 9.0.2 with native codecs plus dav1d 1.5.4 and zlib, and native static
 libraries. It does not consume go-fitz's bundled prebuilt MuPDF archives or a
 container image. FFmpeg optional external hardware/codec/filter libraries are not

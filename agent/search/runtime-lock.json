@@ -41,7 +41,7 @@
   "packages": [
     {
       "name": "ddgs",
-      "version": "9.16.0",
+      "version": "9.16.1",
       "requires": [
         "click>=8.1.8",
         "primp>=1.3.1",
@@ -62,29 +62,29 @@
       ],
       "license": "MIT",
       "source": {
-        "filename": "ddgs-9.16.0.tar.gz",
-        "url": "https://files.pythonhosted.org/packages/68/30/dd2ff7d817573e30836fb99bdc04e167ce03ac5b878072b3e9e892aa810b/ddgs-9.16.0.tar.gz",
-        "size": 38018,
-        "sha256": "161ca8e78ea08d40cd3f83fb12279b49322ffb342d981368bfa39bed9847d874"
+        "filename": "ddgs-9.16.1.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/ec/c4/165b9b1581813063847349421c014a8ccc346222a58b3233ba168bf257c1/ddgs-9.16.1.tar.gz",
+        "size": 38033,
+        "sha256": "0cde5682e5801b838915bcb1d12ade8f2e1ec11763b88d0035a1faa0662b517a"
       },
       "wheels": {
         "linux-amd64": {
-          "filename": "ddgs-9.16.0-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/f9/0c/b43a87e81e45caf2c30fea9a5914dfd17b83a9f3c2c59ae22b6257bcf083/ddgs-9.16.0-py3-none-any.whl",
-          "size": 47580,
-          "sha256": "175d9198c958a263f51a06a54368ba0b41294942c0cd29f4aa71be03dbcd5f4a"
+          "filename": "ddgs-9.16.1-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/60/5f/9388344fe821102459a73d2d49ab5e6769b3bab3f17ecf79fb1f736cf1d6/ddgs-9.16.1-py3-none-any.whl",
+          "size": 47695,
+          "sha256": "9ac0b3c19d865a9bfbf7bc7cc8090bd43d1e7adfb083a017bbece360a22e21b6"
         },
         "linux-arm64": {
-          "filename": "ddgs-9.16.0-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/f9/0c/b43a87e81e45caf2c30fea9a5914dfd17b83a9f3c2c59ae22b6257bcf083/ddgs-9.16.0-py3-none-any.whl",
-          "size": 47580,
-          "sha256": "175d9198c958a263f51a06a54368ba0b41294942c0cd29f4aa71be03dbcd5f4a"
+          "filename": "ddgs-9.16.1-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/60/5f/9388344fe821102459a73d2d49ab5e6769b3bab3f17ecf79fb1f736cf1d6/ddgs-9.16.1-py3-none-any.whl",
+          "size": 47695,
+          "sha256": "9ac0b3c19d865a9bfbf7bc7cc8090bd43d1e7adfb083a017bbece360a22e21b6"
         },
         "termux-aarch64": {
-          "filename": "ddgs-9.16.0-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/f9/0c/b43a87e81e45caf2c30fea9a5914dfd17b83a9f3c2c59ae22b6257bcf083/ddgs-9.16.0-py3-none-any.whl",
-          "size": 47580,
-          "sha256": "175d9198c958a263f51a06a54368ba0b41294942c0cd29f4aa71be03dbcd5f4a"
+          "filename": "ddgs-9.16.1-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/60/5f/9388344fe821102459a73d2d49ab5e6769b3bab3f17ecf79fb1f736cf1d6/ddgs-9.16.1-py3-none-any.whl",
+          "size": 47695,
+          "sha256": "9ac0b3c19d865a9bfbf7bc7cc8090bd43d1e7adfb083a017bbece360a22e21b6"
         }
       }
     },
@@ -430,33 +430,33 @@
     },
     {
       "name": "certifi",
-      "version": "2026.10.18",
+      "version": "2026.10.23",
       "requires": [],
       "license": "MPL-2.0",
       "source": {
-        "filename": "certifi-2026.10.18.tar.gz",
-        "url": "https://files.pythonhosted.org/packages/7e/eb/a2aa1ac3ea30dd3f30ca57f40232138b6b0040719316ecb85daf61167771/certifi-2026.10.18.tar.gz",
-        "size": 135227,
-        "sha256": "b9995d97b64d0431a5af837d8ca8cd6238104d1f319f04bd93ea43124d6c861e"
+        "filename": "certifi-2026.10.23.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/fd/11/b524cbd9bbdaca58608e4cf4053fd463417549e1959fa8d3aa18319f9555/certifi-2026.10.23.tar.gz",
+        "size": 136225,
+        "sha256": "a9895e6e2758b371e0545e321a3a8fd1fcfd9829ada8824a936dfb16aaaf36cd"
       },
       "wheels": {
         "linux-amd64": {
-          "filename": "certifi-2026.10.18-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/08/ba/95dd616042484f7c83a06974388b37b837732740ee70bc5dc715b5fcd55a/certifi-2026.10.18-py3-none-any.whl",
-          "size": 134093,
-          "sha256": "73191c47aaa79da394e8fee2dbc2ec827432cab56311122c9e47abf79e390f62"
+          "filename": "certifi-2026.10.23-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/32/d1/a3652fe2c19134d0d15922177821d863cbd7e842d53a21bbe7e8e3a1b5ac/certifi-2026.10.23-py3-none-any.whl",
+          "size": 135082,
+          "sha256": "e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1"
         },
         "linux-arm64": {
-          "filename": "certifi-2026.10.18-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/08/ba/95dd616042484f7c83a06974388b37b837732740ee70bc5dc715b5fcd55a/certifi-2026.10.18-py3-none-any.whl",
-          "size": 134093,
-          "sha256": "73191c47aaa79da394e8fee2dbc2ec827432cab56311122c9e47abf79e390f62"
+          "filename": "certifi-2026.10.23-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/32/d1/a3652fe2c19134d0d15922177821d863cbd7e842d53a21bbe7e8e3a1b5ac/certifi-2026.10.23-py3-none-any.whl",
+          "size": 135082,
+          "sha256": "e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1"
         },
         "termux-aarch64": {
-          "filename": "certifi-2026.10.18-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/08/ba/95dd616042484f7c83a06974388b37b837732740ee70bc5dc715b5fcd55a/certifi-2026.10.18-py3-none-any.whl",
-          "size": 134093,
-          "sha256": "73191c47aaa79da394e8fee2dbc2ec827432cab56311122c9e47abf79e390f62"
+          "filename": "certifi-2026.10.23-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/32/d1/a3652fe2c19134d0d15922177821d863cbd7e842d53a21bbe7e8e3a1b5ac/certifi-2026.10.23-py3-none-any.whl",
+          "size": 135082,
+          "sha256": "e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1"
         }
       }
     },

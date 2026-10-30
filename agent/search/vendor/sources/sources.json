@@ -1,20 +1,20 @@
 {
   "schema": 1,
   "lock": "../../runtime-lock.json",
-  "lockSha256": "c6daa41bdbc0d1b72e63631eb48946ba832950eb32ba6ae961bf0eda8d351e65",
+  "lockSha256": "a35ea07797fa87432eee031dda69b365187c5cf46f0e315565b60c71b34dfc6e",
   "components": [
     {
-      "filename": "ddgs-9.16.0.tar.gz",
-      "url": "https://files.pythonhosted.org/packages/68/30/dd2ff7d817573e30836fb99bdc04e167ce03ac5b878072b3e9e892aa810b/ddgs-9.16.0.tar.gz",
-      "size": 38018,
-      "sha256": "161ca8e78ea08d40cd3f83fb12279b49322ffb342d981368bfa39bed9847d874",
+      "filename": "ddgs-9.16.1.tar.gz",
+      "url": "https://files.pythonhosted.org/packages/ec/c4/165b9b1581813063847349421c014a8ccc346222a58b3233ba168bf257c1/ddgs-9.16.1.tar.gz",
+      "size": 38033,
+      "sha256": "0cde5682e5801b838915bcb1d12ade8f2e1ec11763b88d0035a1faa0662b517a",
       "name": "ddgs",
-      "version": "9.16.0",
+      "version": "9.16.1",
       "kind": "python-source",
       "license": "MIT",
-      "file": "archives/ddgs-9.16.0.tar.gz",
+      "file": "archives/ddgs-9.16.1.tar.gz",
       "licenses": [
-        "ddgs-9.16.0/LICENSE.md"
+        "ddgs-9.16.1/LICENSE.md"
       ]
     },
     {
@@ -160,17 +160,17 @@
       ]
     },
     {
-      "filename": "certifi-2026.10.18.tar.gz",
-      "url": "https://files.pythonhosted.org/packages/7e/eb/a2aa1ac3ea30dd3f30ca57f40232138b6b0040719316ecb85daf61167771/certifi-2026.10.18.tar.gz",
-      "size": 135227,
-      "sha256": "b9995d97b64d0431a5af837d8ca8cd6238104d1f319f04bd93ea43124d6c861e",
+      "filename": "certifi-2026.10.23.tar.gz",
+      "url": "https://files.pythonhosted.org/packages/fd/11/b524cbd9bbdaca58608e4cf4053fd463417549e1959fa8d3aa18319f9555/certifi-2026.10.23.tar.gz",
+      "size": 136225,
+      "sha256": "a9895e6e2758b371e0545e321a3a8fd1fcfd9829ada8824a936dfb16aaaf36cd",
       "name": "certifi",
-      "version": "2026.10.18",
+      "version": "2026.10.23",
       "kind": "python-source",
       "license": "MPL-2.0",
-      "file": "archives/certifi-2026.10.18.tar.gz",
+      "file": "archives/certifi-2026.10.23.tar.gz",
       "licenses": [
-        "certifi-2026.10.18/LICENSE"
+        "certifi-2026.10.23/LICENSE"
       ]
     },
     {

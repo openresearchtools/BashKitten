@@ -98,3 +98,11 @@ license and included third-party notices. The amd64 native symbols report
 libiconv 0x0112 and zlib 1.3.2. No wheel or runtime executable changes in this
 source-delivery correction; the generated source/notices artifacts must be
 refreshed for the combined candidate.
+
+30 October 2026 maintenance refresh: DDGS 9.16.1 and certifi 2026.10.23 replace
+9.16.0 and 2026.10.18 in the private runtime. The exact unchanged official PyPI
+source archives and universal wheels are checksum-bound in `runtime-lock.json`
+and the matching source inventory; full original MIT/MPL notices are collected
+from those sources and wheels by the existing runtime builder. Other dependency
+versions, frozen donor sources and the native Termux primp adaptation are unchanged.
+This source update does not establish installed candidate acceptance.
