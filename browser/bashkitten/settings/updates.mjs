@@ -4,21 +4,27 @@ import { node, button, check as toggle } from './ui.mjs';
 /** Android-owned APK and Termux updates; ordinary Agent pages have no updater. */
 export async function renderSection({ root, call, signal, subscribe }) {
   const doc = root.ownerDocument, win = doc.defaultView;
-  const browser = node(root, 'section'), packages = node(root, 'section');
+  const browser = node(root, 'section'), termuxApp = node(root, 'section'), packages = node(root, 'section');
   const message = node(root, 'p'); message.setAttribute('role', 'status');
-  root.append(browser, packages, message);
+  root.append(browser, termuxApp, packages, message);
   browser.append(node(browser, 'h2', 'BashKitten'));
   const channel = toggle(browser, 'Include pre-releases (nightly)', false);
   channel.onchange = () => {
     const value = channel.checked ? 'nightly' : 'stable';
     void run(() => call('updates.channel', { channel: value }));
   };
-  browser.append(node(browser, 'p', 'Applies to app checks and package updates here. Turning this off waits for newer stable releases without downgrading the app.'));
+  browser.append(node(browser, 'p', 'Applies to BashKitten app checks and package updates here. Turning this off waits for newer stable releases without downgrading the app.'));
   const browserStatus = node(browser, 'p'); browser.append(browserStatus);
   const actions = node(browser, 'div'); actions.className = 'actions'; browser.append(actions);
   const check = button(actions, 'Check for updates', () => run(() => call('updates.check')));
   const download = button(actions, 'Download app update', () => run(() => call('updates.download')));
   browser.append(node(browser, 'p', 'Android asks you to install the downloaded app. Opening an installed app upgrades or downgrades its BashKitten Termux packages to the exact required versions. Package repair restores that same pair. Your settings, models and chats are retained.'));
+  termuxApp.append(node(termuxApp, 'h2', 'Termux app'));
+  const termuxAppStatus = node(termuxApp, 'p'); termuxAppStatus.setAttribute('role', 'status'); termuxApp.append(termuxAppStatus);
+  termuxApp.append(node(termuxApp, 'p', 'Checks official stable GitHub releases for this device. Download, then open the APK to review the update in Android’s installer. Other signing identities use their original distribution.'));
+  const termuxActions = node(termuxApp, 'div'); termuxActions.className = 'actions'; termuxApp.append(termuxActions);
+  const termuxCheck = button(termuxActions, 'Check Termux app', () => run(() => call('updates.termux-check')));
+  const termuxDownload = button(termuxActions, 'Download Termux update', () => run(() => call('updates.termux-download')));
   packages.append(node(packages, 'h2', 'Termux packages'));
   const matching = node(packages, 'p'); packages.append(matching);
   const packageSummary = node(packages, 'p'); packages.append(packageSummary);
@@ -51,10 +57,18 @@ export async function renderSection({ root, call, signal, subscribe }) {
   function draw() {
     if (!active()) return;
     const app = snapshot?.browser || {}, termux = snapshot?.termux || {}, state = snapshot?.packages || {};
+    const installedTermux = snapshot?.termuxApp || {};
     const job = state.job, busy = ['running', 'waiting'].includes(job?.status) || termux.updating;
     channel.checked = app.channel === 'nightly'; channel.disabled = pending || busy || Boolean(app.checking) || !snapshot;
     browserStatus.textContent = [`Installed ${app.version || ''}`, app.available ? `${app.available.version} is available` : app.checked ? `No newer ${app.channel === 'nightly' ? 'stable or nightly' : 'stable'} app is available` : '', app.error].filter(Boolean).join(' · ');
     check.disabled = pending || Boolean(app.checking); download.hidden = !app.available; download.disabled = pending;
+    termuxAppStatus.textContent = [installedTermux.installed ? `Installed ${installedTermux.version || ''}${installedTermux.distribution ? ` · ${installedTermux.distribution}` : ''}` : 'Termux is not installed',
+      installedTermux.checking ? 'Checking official Termux releases…' : installedTermux.available ? `${installedTermux.available.version} is available` :
+        installedTermux.installed && !installedTermux.compatible ? 'Update through the original distribution; GitHub APKs have a different signature.' :
+          installedTermux.checked ? 'No newer compatible stable Termux app is available.' : '', installedTermux.error].filter(Boolean).join(' · ');
+    termuxCheck.disabled = pending || installedTermux.checking || !snapshot || installedTermux.installed && !installedTermux.compatible;
+    termuxDownload.hidden = !installedTermux.available; termuxDownload.disabled = pending || Boolean(installedTermux.checking);
+    termuxDownload.textContent = installedTermux.installed ? 'Download Termux update' : 'Download Termux';
     matching.textContent = termux.needsSetup ? 'Complete Local setup to manage Termux packages.' :
       termux.error || (termux.matching ? 'BashKitten packages match this app.' : termux.updating ? 'Updating the packages required by this app…' : 'Checking the packages required by this app…');
     const apt = state.sources?.apt?.channel === app.channel ? state.sources.apt : null, pi = state.sources?.pi;

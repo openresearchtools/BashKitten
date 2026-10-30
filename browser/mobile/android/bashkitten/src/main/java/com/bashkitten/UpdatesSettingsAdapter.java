@@ -27,6 +27,8 @@ public final class UpdatesSettingsAdapter implements AutoCloseable {
                 case "updates.check": return updates.check();
                 case "updates.channel": return updates.channel(args.getString("channel"));
                 case "updates.download": return updates.download(activity);
+                case "updates.termux-check": return updates.checkTermux();
+                case "updates.termux-download": return updates.downloadTermux(activity);
                 case "updates.packages": return updates.packages(args.getString("kind"), args.optBoolean("retry"));
                 case "updates.cancel": return updates.cancel();
                 case "updates.inventory": return updates.inventory();

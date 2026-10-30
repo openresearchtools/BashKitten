@@ -2,6 +2,9 @@
 package com.bashkitten;
 
 import android.app.Activity;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import java.io.InputStream;
 import java.math.BigInteger;
 import java.net.HttpURLConnection;
@@ -20,6 +23,10 @@ import org.json.JSONObject;
 
 /** One application-owned updater. Settings views observe it without owning APT. */
 public final class UpdatesController {
+    // Upstream v0.118.3 TermuxConstants: compatibility identities, not proof of
+    // download origin. Termux's GitHub test certificate is publicly available.
+    private static final String TERMUX_GITHUB_SIGNER = "b6da01480eefd5fbf2cd3771b8d1021ec791304bdd6c4bf41d3faabad48ee5e1";
+    private static final String TERMUX_FDROID_SIGNER = "228fb2cfe90831c1499ec3ccaf61e96e8e1ce70766b9474672ce427334d41c42";
     private final BrowserApp app;
     private final AgentRuntime runtime;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -33,6 +40,10 @@ public final class UpdatesController {
     private String installation = "";
     private CompletableFuture<Void> readiness;
     private JSONObject packageStatus = new JSONObject();
+    private JSONObject termuxAvailable;
+    private String termuxAvailableUrl, termuxCheckError = "", checkedTermuxInstallation = "";
+    private boolean termuxChecking, termuxChecked;
+    private CompletableFuture<JSONObject> termuxCheck;
 
     UpdatesController(BrowserApp app, AgentRuntime runtime) {
         this.app = app; this.runtime = runtime;
@@ -179,6 +190,7 @@ public final class UpdatesController {
     private JSONObject view() {
         return object("browser", object("version", version, "versionCode", versionCode, "available", available, "channel", channel,
             "checking", checking, "checked", checked, "error", checkError),
+            "termuxApp", termuxAppView(),
             "termux", object("needsSetup", !runtime.localSetupReady(), "matching", packageStatus.optBoolean("matched"),
                 "updating", matching, "error", matchingError), "packages", packageStatus);
     }
@@ -236,6 +248,7 @@ public final class UpdatesController {
         return 0;
     }
     CompletableFuture<JSONObject> check() {
+        checkTermux();
         if (checking) return CompletableFuture.completedFuture(view());
         checking = true; checkError = ""; changed();
         String requestedChannel = channel;
@@ -281,11 +294,106 @@ public final class UpdatesController {
     }
     CompletableFuture<JSONObject> download(Activity activity) {
         if (availableUrl == null || available == null) return CompletableFuture.failedFuture(new IllegalStateException("Check for an app update first."));
+        return openDownload(activity, availableUrl);
+    }
+    private CompletableFuture<JSONObject> openDownload(Activity activity, String url) {
         CompletableFuture<JSONObject> result = new CompletableFuture<>();
-        app.create(BrowserApp.USER, false, availableUrl, tab -> {
+        app.create(BrowserApp.USER, false, url, tab -> {
             app.show(tab); activity.startActivity(app.host.launchIntent()); result.complete(new JSONObject());
         }, error -> result.completeExceptionally(new IllegalStateException(error)));
         return result;
+    }
+    private JSONObject installedTermux() {
+        try {
+            PackageInfo info = app.getPackageManager().getPackageInfo(TermuxConnection.PACKAGE, PackageManager.GET_SIGNING_CERTIFICATES);
+            Signature[] signers = info.signingInfo == null ? new Signature[0] : info.signingInfo.getApkContentsSigners();
+            String signer = "";
+            if (signers.length == 1) {
+                StringBuilder hex = new StringBuilder();
+                for (byte value : MessageDigest.getInstance("SHA-256").digest(signers[0].toByteArray()))
+                    hex.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
+                signer = hex.toString();
+            }
+            boolean compatible = TERMUX_GITHUB_SIGNER.equals(signer);
+            return object("installed", true, "version", info.versionName, "versionCode", info.getLongVersionCode(),
+                "distribution", compatible ? "GitHub-compatible" : TERMUX_FDROID_SIGNER.equals(signer) ? "F-Droid" : "Other signing identity",
+                "compatible", compatible, "installation", info.applicationInfo.uid + ":" + info.firstInstallTime + ":" + info.lastUpdateTime + ":" + info.getLongVersionCode() + ":" + signer);
+        } catch (PackageManager.NameNotFoundException error) {
+            return object("installed", false, "compatible", true, "installation", "absent");
+        } catch (Exception error) {
+            return object("installed", true, "compatible", false, "error", "The installed Termux signing identity could not be read.");
+        }
+    }
+    private JSONObject termuxAppView() {
+        JSONObject installed = installedTermux();
+        boolean same = checkedTermuxInstallation.equals(installed.optString("installation"));
+        return object("installed", installed.optBoolean("installed"), "version", installed.optString("version"),
+            "versionCode", installed.optLong("versionCode"), "distribution", installed.optString("distribution"),
+            "compatible", installed.optBoolean("compatible"), "available", same ? termuxAvailable : null,
+            "checking", termuxChecking, "checked", same && termuxChecked,
+            "error", installed.optString("error", same ? termuxCheckError : ""));
+    }
+    /** Stable Android-7+ GitHub releases only; apt-android-5 is another package branch. */
+    CompletableFuture<JSONObject> checkTermux() {
+        if (termuxChecking) return termuxCheck;
+        termuxChecking = true; termuxCheckError = "";
+        CompletableFuture<JSONObject> result = termuxCheck = new CompletableFuture<>();
+        changed();
+        io.execute(() -> {
+            JSONObject installed = installedTermux();
+            try {
+                JSONObject found = null; String link = null;
+                if (installed.optBoolean("compatible")) {
+                    JSONObject release = new JSONObject(metadata("https://api.github.com/repos/termux/termux-app/releases/latest"));
+                    if (release.optBoolean("draft") || release.optBoolean("prerelease"))
+                        throw new IllegalStateException("The official stable Termux release is unavailable.");
+                    String published = release.getString("tag_name").replaceFirst("^v", "");
+                    // Validate both versions before comparing. Build metadata does
+                    // not affect precedence; a newer installed beta is retained.
+                    String current = installed.optBoolean("installed") ? installed.getString("version").replaceFirst("^v", "").split("\\+", 2)[0] : "0.0.0";
+                    if (!current.matches("[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:-[0-9A-Za-z.-]+)?"))
+                        throw new IllegalStateException("The installed Termux version cannot be compared with official releases.");
+                    int comparison = compareVersions(published, current.split("-", 2)[0]);
+                    if (comparison > 0 || comparison == 0 && current.contains("-")) {
+                        String prefix = "termux-app_v" + published, abi = TermuxConnection.downloadAbi();
+                        JSONArray assets = release.getJSONArray("assets");
+                        for (int i = 0; i < assets.length(); i++) {
+                            JSONObject asset = assets.getJSONObject(i); String name = asset.getString("name");
+                            if (!name.equals(prefix + "+github-debug_" + abi + ".apk") &&
+                                !name.equals(prefix + "+apt-android-7-github-debug_" + abi + ".apk")) continue;
+                            URL address = new URL(asset.getString("browser_download_url"));
+                            if (!address.getProtocol().equals("https") || !address.getHost().equals("github.com") ||
+                                !address.getPath().startsWith("/termux/termux-app/releases/download/"))
+                                throw new IllegalStateException("The official Termux APK address is invalid.");
+                            found = object("version", published, "abi", abi); link = address.toString(); break;
+                        }
+                        if (found == null) throw new IllegalStateException("The official Termux release has no compatible " + abi + " APK.");
+                    }
+                }
+                JSONObject candidate = found; String download = link;
+                app.main.post(() -> {
+                    termuxChecking = false; termuxChecked = true; termuxAvailable = candidate; termuxAvailableUrl = download;
+                    checkedTermuxInstallation = installed.optString("installation"); changed(); result.complete(view());
+                });
+            } catch (Exception error) {
+                app.main.post(() -> {
+                    termuxChecking = false; termuxChecked = false; termuxAvailable = null; termuxAvailableUrl = null;
+                    checkedTermuxInstallation = installed.optString("installation"); termuxCheckError = message(error);
+                    changed(); result.completeExceptionally(error);
+                });
+            }
+        });
+        return result;
+    }
+    /** Same ordinary browser download and Android installer path used by our APK. */
+    CompletableFuture<JSONObject> downloadTermux(Activity activity) {
+        JSONObject installed = installedTermux();
+        if (!installed.optBoolean("compatible")) return CompletableFuture.failedFuture(new IllegalStateException("Update Termux through its original distribution. GitHub APKs do not match this signing identity."));
+        if (!installed.optBoolean("installed") && (!termuxChecked || !checkedTermuxInstallation.equals("absent")))
+            return checkTermux().thenCompose(value -> downloadTermux(activity));
+        if (!checkedTermuxInstallation.equals(installed.optString("installation")) || termuxAvailable == null || termuxAvailableUrl == null)
+            return CompletableFuture.failedFuture(new IllegalStateException("Check for a Termux app update first."));
+        return openDownload(activity, termuxAvailableUrl);
     }
     private static String metadata(String url) throws Exception {
         URL address = new URL(url);
