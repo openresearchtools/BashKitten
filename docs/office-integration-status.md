@@ -5,6 +5,51 @@ This record separates research/temporary comparison evidence from implementation
 and installed-product acceptance. Historical checkpoints below retain the limits
 and failures of their original candidates; the current result is recorded first.
 
+## 153.5.5 regression work — 30 October 2026
+
+The reported desktop Files permission failure was reproduced in the published
+Linux package: copying a temporary component directory propagated mode `0700`
+to the root-owned installed Files directory. Packaging now gives that public
+component directory mode `0755`; the final package gate checks entrypoint read
+and parent traversal permissions. The Termux X11 launcher is explicitly installed
+executable, and its final package mode is checked too. Private runtime data and
+loader permissions retain their existing restrictions.
+
+Files now starts asynchronously through the existing backend owner. Unchanged
+source configuration no longer restarts Quantum or drains transfers, and Office
+startup no longer holds the Files request drain. Sidecar launch returns its
+normal authenticated tab descriptor before cold preparation completes. Office
+remains on demand. The reported 120-second Office timeout has not been reproduced
+or assigned a proven cause. A reversible five-module check in the installed
+Android app opened a copy of the user's 16 MB thesis within 14 seconds; during
+cold Office loading, a separate normal Files tab navigated home and the folder
+successfully while the same Quantum process remained running. The original
+modules, modes and settings were restored, and the original document was unchanged.
+This is module evidence, not acceptance of a new packaged candidate.
+
+The same batch restores deliberate versus provisional Pi reasoning choices,
+uses native template capabilities and reasoning configuration, exposes actual
+audio runtime devices, shortens audio model names and places advanced model
+configuration inside Chat and images. The emulator's Whisper GPU initialization
+reports an unavailable Vulkan extension; a listed llama GPU does not establish
+Whisper GPU support or successful inference. No model download or inference was
+performed for these changes.
+
+Desktop and wide-screen pane changes, mobile Files tab ordering, native browser
+downloads from the sidecar, GitHub-compatible Termux update tracking and monochrome
+References artwork belong to this batch. The pinned X11 source advances to
+`6dfb8b4a4cc887bc329284d31eb049d596bd1208`; pristine import and later adaptations
+remain separate commits. Both native architectures and the paired Java/AIDL
+sources compiled, with 16 KiB ELF alignment checked. Focused source/build review
+does not replace final signed APK/backend pairing and installed desktop checks.
+
+The full 153.5.5 candidate and its focused installed flows remain pending. The
+153.5.4 publication below does not establish that these new regressions are fixed
+in a published package. Scoped evidence is under `Bashkitten-Acceptance/`, in
+`android-regression-20261030/module-overlay/focused-summary.json`,
+`package-permissions-20261030/`, `audio-device-guidance-20261030/`,
+`local-reasoning-20261030/` and `termux-update-20261030/verification.json`.
+
 ## Published 153.5.4 prerelease — 30 October 2026
 
 [BashKitten 153.5.4](https://github.com/openresearchtools/BashKitten/releases/tag/v153.5.4)

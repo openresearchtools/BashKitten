@@ -16,6 +16,9 @@ minimum sizes; narrow layouts retain overlays. Native Android group order is
 Agent, Files, normal, private, Tor. Keep one Files-launch folder button per
 backend heading before power, preserving cwd pickers and the chat Files/Changes
 panel. Avoid duplicate tabs from repeated clicks while a launch is pending.
+Sidecar downloads use the ordinary browser download manager and Android's native
+download/open/share actions, preserving the existing authenticated response and
+access lifetime. Remove the separate manual saver/completion row.
 The same amendment covers actual audio device choices, concise audio model names,
 Pillama reasoning defaults/choices, model-local Advanced settings, official
 GitHub Termux update checks, the pinned X11 refresh and monochrome References

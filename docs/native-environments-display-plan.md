@@ -45,6 +45,11 @@ not claims that the reported defects have passed verification.
   Keep a single Files-launch folder button per backend heading before power;
   remove redundant project launch buttons while preserving working-directory
   pickers, Files/Changes and Reference in chat.
+- Sidecar Download uses the same ordinary browser download flow as Files,
+  including native Android completion, Open with and sharing actions. Reuse
+  the authenticated response and browser download owner; remove the independent
+  manual Downloads save and custom Dismiss/broken Open row. Preserve native
+  cancellation/access revocation, uploads and the separate app update installer.
 - Add installed Termux app version/update status to the existing Updates flow,
   using official GitHub releases and the existing download/Android installer
   path. Respect installed signing/distribution compatibility. Refresh embedded
