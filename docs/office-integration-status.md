@@ -17,14 +17,29 @@ previous backports remain. Exact source commits and applicability are recorded i
 version/history and regenerated full-license checks pass. Builds and installed
 acceptance of this new source remain pending.
 
-Native Tor 0.4.9.15 and Valkey 9.1.3 sources and build pins are updated. The APK's
-separate retained Guardian JNI integration is being rebuilt against the same Tor
-release; the released expert-bundle daemon is not a compatible JNI replacement.
-Node, Files media and Office dependency maintenance updates are being prepared
-through their existing source/build owners. Authelia, Caddy, Podman and its
-selected helper releases were already current at this review. Original source
+Native Tor 0.4.9.15 and Valkey 9.1.3 sources and build pins are updated. Both APK
+architectures built Tor 0.4.9.15 with the retained Guardian JNI API and passed the
+existing staging, export, static-dependency, 16 KB alignment and binary/provenance
+checks. The released expert-bundle daemon is not a compatible JNI replacement.
+The same batch updates Node to 24.22.2 on Linux and 24.22.1 on Termux, c-ares to
+1.34.9, Files MuPDF to 1.28.6, DDGS to 9.16.1 and certifi to 2026.10.23. All eight
+Node/Search runtime and source assemblies passed. MuPDF's existing notice
+collector now includes the complete FreeType license texts from its source.
+Office retains its paired Collabora release and refreshes OpenSSL 3.5.9, curl
+8.23.0, Python 3.14.10, Poco 1.15.4, HarfBuzz 14.6.0, ICU/data 78.3 and SQLite
+3.54.1. Its 121 original archives, Linux/Termux patch sequences and native Python
+package paths verify; full native Office/Files compilation remains for the
+combined pipeline. Authelia, Caddy, Podman and its selected helper releases were
+already current at this review. Original source
 archives remain outside Git and are included in normal corresponding-source
 artifacts with full notices.
+
+Preflight corrected two stale retained-Termux inventory lock hashes exposed by
+automatic auth CI, without changing its original archives. The shared source
+collector also accepts new native archive pins without obsolete split-part
+paths; it reads all 5,443 current records, including MuPDF and both Tor owners.
+Both Android daughter workflows match the reviewed canonical workflow. These
+source/build-input checks do not establish final APK or installed acceptance.
 
 A fresh Termux:X11 review found the embedded source, browser adapter and loader
 already match the current official `6dfb8b4a4cc887bc329284d31eb049d596bd1208`
