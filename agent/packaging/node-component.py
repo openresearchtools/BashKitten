@@ -26,6 +26,10 @@ RESTORE = 'Restore a matching completed Node component'
 VERIFY = 'Verify Node runtime, corresponding source and provenance'
 
 
+class MetadataUnavailable(RuntimeError):
+    """Optional GitHub cache metadata remained unavailable after retries."""
+
+
 def api(endpoint):
     for attempt in range(3):
         try:
@@ -36,6 +40,8 @@ def api(endpoint):
             # provenance and JSON failures fatal; only retry server failures.
             if attempt == 2 or not re.search(r'\bHTTP 5\d\d\b', error.stderr or ''):
                 sys.stderr.write(error.stderr or '')
+                if re.search(r'\bHTTP 5\d\d\b', error.stderr or ''):
+                    raise MetadataUnavailable('GitHub Node cache metadata is unavailable: ' + endpoint) from error
                 raise
             time.sleep(2 ** attempt)
 
@@ -209,14 +215,20 @@ def completed_producer(run, target):
             run['event'] != 'workflow_dispatch' or run['head_branch'] != 'main' or
             run['path'] not in (WORKFLOW, '.github/workflows/packages.yml')):
         return None
+    run_id, attempt = run.get('id'), run.get('run_attempt')
+    if type(run_id) is not int or run_id < 1 or type(attempt) is not int or attempt < 1:
+        raise ValueError('Invalid Node producer run or attempt identity')
     platform, architecture = target.split('-', 1)
     suffix = f'node ({platform}, {architecture})'
     page = 1
     while True:
-        jobs = api(f'repos/{REPOSITORY}/actions/runs/{run["id"]}/jobs?per_page=100&page={page}')['jobs']
+        jobs = api(f'repos/{REPOSITORY}/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100&page={page}')['jobs']
         for job in jobs:
             if job['conclusion'] != 'success' or job['name'].split(' / ')[-1] != suffix:
                 continue
+            if (type(job.get('run_id')) is not int or type(job.get('run_attempt')) is not int or
+                    job['run_id'] != run_id or job['run_attempt'] != attempt):
+                raise ValueError('Node producer job belongs to another run or attempt')
             steps = {step['name']: step for step in job['steps']}
             built = steps.get(ASSEMBLE, {}).get('conclusion') == 'success'
             restored = (steps.get(ASSEMBLE, {}).get('conclusion') == 'skipped' and
@@ -302,7 +314,13 @@ def main():
     if args.action == 'restore':
         if any(args.directory.iterdir()):
             raise ValueError('Node restore destination must be empty')
-        hit = restore(args.directory, args.target)
+        try:
+            hit = restore(args.directory, args.target)
+        except MetadataUnavailable:
+            if any(args.directory.iterdir()):
+                raise
+            print('Optional Node cache metadata is unavailable; using pinned assembly', flush=True)
+            hit = False
         with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
             output.write(f'hit={str(hit).lower()}\n')
         print('Matching complete Node component found' if hit else 'Assembling changed Node inputs')
