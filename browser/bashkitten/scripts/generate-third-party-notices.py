@@ -136,7 +136,9 @@ def declared_license(package):
 
 
 def html_preformatted(contents):
-    escaped = html.escape(contents, quote=False).splitlines()
+    # Gecko recursively preprocesses this HTML include, including indented
+    # lines. Encode literal hashes so notice examples cannot become directives.
+    escaped = html.escape(contents, quote=False).replace("#", "&#35;").splitlines()
     return "\n".join(
         "            " + re.sub(r"[ \t]+$", lambda match: "".join("&#32;" if char == " " else "&#9;" for char in match[0]), line).replace("\t", "&#9;") if line else ""
         for line in escaped
