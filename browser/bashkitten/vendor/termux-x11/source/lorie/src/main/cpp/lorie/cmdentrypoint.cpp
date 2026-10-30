@@ -27,6 +27,7 @@ extern "C" {
 #undef class
 #undef public
 }
+#include <dlfcn.h>
 #include <linux/in.h>
 #include <arpa/inet.h>
 #include <poll.h>
@@ -389,7 +390,14 @@ void handleLorieEvents(int fd, __unused int ready, __unused void *ignored) {
                     // This must be done only on X server thread (touches XKB state directly).
                     uintptr_t payload = (uintptr_t) closure;
                     if (payload & 1) {
-                        QueueKeyboardEvents(lorieKeyboard, (payload >> 1 & 1) ? KeyPress : KeyRelease, payload >> 2);
+                        uintptr_t keycode = payload >> 2;
+                        if (keycode > 255) {
+                            for (size_t i = 0; i < lorieExtendedKeysCount; i++)
+                                if (lorieExtendedKeys[i].code == keycode - 8)
+                                    lorieKeysymKeyboardEvent(lorieExtendedKeys[i].keysym, payload >> 1 & 1);
+                            return TRUE;
+                        }
+                        QueueKeyboardEvents(lorieKeyboard, (payload >> 1 & 1) ? KeyPress : KeyRelease, keycode);
                         mieqProcessInputEvents();
                     } else {
                         int ks = ucs2keysym((long) (payload >> 1));
@@ -489,6 +497,13 @@ void lorieSendSyncReply(uint32_t serial) {
     }
 }
 
+void lorieSendHeartbeat(void) {
+    if (conn_fd != -1) {
+        lorieEvent e = { .type = EVENT_HEARTBEAT };
+        write(conn_fd, &e, sizeof(e));
+    }
+}
+
 void lorieRequestClipboard(void) {
     if (conn_fd != -1) {
         lorieEvent e = { .type = EVENT_CLIPBOARD_REQUEST };
@@ -496,12 +511,23 @@ void lorieRequestClipboard(void) {
     }
 }
 
-bool lorieConnectionAlive(void) {
-    if (conn_fd == -1)
+// Preloaded by rendererCanRelockWhileLocked(): swaps the executable's main() for the probe.
+extern "C" __attribute__((visibility("default"))) void __libc_init(void *rawArgs, void (*onExit)(void), int (*mainFn)(int, char **, char **), void *structors) {
+    static int (*realMain)(int, char **, char **);
+    realMain = mainFn;
+    ((__typeof__(__libc_init) *) dlsym(RTLD_NEXT, "__libc_init"))(rawArgs, onExit, [](int argc, char **argv, char **envp) {
+        if (argc == 3 && !strcmp(argv[1], "--relock-probe"))
+            return rendererRelockProbeChild(atoi(argv[2]));
+        return realMain(argc, argv, envp);
+    }, structors);
+}
+
+bool lorieConnectionAlive(int fd) {
+    if (fd == -1)
         return false;
 
     // Check if socket is closed or has errors.
-    struct pollfd p = { .fd = conn_fd, .events = POLLIN | POLLHUP | POLLERR | POLLRDHUP };
+    struct pollfd p = { .fd = fd, .events = POLLIN | POLLHUP | POLLERR | POLLRDHUP };
     return !(poll(&p, 1, 0) == 1 && (p.revents & (POLLERR | POLLNVAL | POLLRDHUP | POLLHUP)));
 }
 

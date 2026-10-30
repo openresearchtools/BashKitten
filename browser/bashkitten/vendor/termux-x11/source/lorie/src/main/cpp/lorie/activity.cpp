@@ -39,6 +39,7 @@ static int64_t nowMs() {
 static struct {
     jclass self;
     jmethodID clientConnectedStateChanged, resetIme;
+    jfieldID lastServerHeartbeat;
 } MainActivity = {nullptr};
 
 static struct {
@@ -147,6 +148,7 @@ static jlong nativeInit(JNIEnv *env, jobject thiz) {
 
         MainActivity.self = FindClassOrDie(env,  "com/termux/x11/MainActivity");
         MainActivity.clientConnectedStateChanged = FindMethodOrDie(env, MainActivity.self, "clientConnectedStateChanged", "()V", JNI_FALSE);
+        MainActivity.lastServerHeartbeat = env->GetFieldID(MainActivity.self, "lastServerHeartbeat", "J");
         MainActivity.resetIme = FindMethodOrDie(env, env->GetObjectClass(thiz), "resetIme", "()V", JNI_FALSE);
     }
 
@@ -276,6 +278,11 @@ int LorieViewResources::xcallback(int fd, int events) {
                     env->CallVoidMethod(thiz, MainActivity.resetIme);
                     break;
                 }
+                case EVENT_HEARTBEAT: {
+                    if (activity)
+                        env->SetLongField(activity, MainActivity.lastServerHeartbeat, nowMs());
+                    break;
+                }
                 case EVENT_SYNC_REPLY: {
                     jmethodID id = env->GetMethodID(env->GetObjectClass(thiz), "onSyncReply", "(I)V");
                     env->CallVoidMethod(thiz, id, (jint) e.sync.serial);
@@ -359,9 +366,13 @@ static void sendTextEvent(JNIEnv *env, __unused jobject thiz, jlong ptr, jbyteAr
             if (len == 0)
                 break;
 
-            log(DEBUG, "Sending unicode event: %lc (U+%X)", wc, wc);
-            lorieEvent e = { .unicode = { .t = EVENT_UNICODE, .code = (uint32_t) wc } };
-            write(r->connFd, &e, sizeof(e));
+            if (wc == L'\n') {
+                sendEvent(r, .key = { .t = EVENT_KEY, .key = KEY_ENTER + 8, .state = 1 });
+                sendEvent(r, .key = { .t = EVENT_KEY, .key = KEY_ENTER + 8, .state = 0 });
+            } else if (wc != L'\r') {
+                log(DEBUG, "Sending unicode event: %lc (U+%X)", wc, wc);
+                sendEvent(r, .unicode = { .t = EVENT_UNICODE, .code = (uint32_t) wc });
+            }
             p += len;
             if (p - (char*) str >= length)
                 break;
@@ -525,7 +536,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
                 lastInputTimestampMs = nowMs();
                 auto* r = (LorieViewResources*) ptr;
                 if (r && r->connFd != -1) {
-                    int code = (scan_code) ?: android_to_linux_keycode[key_code];
+                    int code = scan_code ?: (key_code >= 0 && key_code < (jint) (sizeof(android_to_linux_keycode) / sizeof(*android_to_linux_keycode)) ? android_to_linux_keycode[key_code] : 0);
                     sendEvent(r, .key = { .t = EVENT_KEY, .key = (uint16_t) (code + 8), .state = key_down });
                 }
                 return true;

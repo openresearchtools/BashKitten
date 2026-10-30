@@ -1,12 +1,12 @@
 {
   "name": "Termux:X11",
   "upstream": "https://github.com/termux/termux-x11",
-  "version": "nightly-2026-10-06",
+  "version": "nightly-2026-10-27",
   "tag": "nightly",
   "releaseId": 397927753,
   "releaseUrl": "https://github.com/termux/termux-x11/releases/tag/nightly",
-  "commit": "fa3a8b430e2896a19f44c99a9cb056254615ae06",
-  "gitArchiveSha256": "be61a3bd5ea464992c6803c633069d59076d849cfb9e1145eff0f945958709c1",
+  "commit": "6dfb8b4a4cc887bc329284d31eb049d596bd1208",
+  "gitArchiveSha256": "59bf114afe92f86e2b19d154e7bc64b69652a0f466e620d72d19d81f58e215a2",
   "license": "GPL-3.0-only (top-level); individual source notices retained",
   "source": "source",
   "dependencies": [
@@ -114,5 +114,17 @@
       "sha256": "a2ba19f2417de94dd3bdfb6ceece070cdc5f9b492af09cd5900058e860b18c7d",
       "reason": "Public upstream dummy debug-signing fixture deliberately excluded from the retained tree and shipped artifacts. BashKitten does not build the donor lorie-app or shell-loader application; its embedded module uses BashKitten signing identity. No donor signing key is required or used."
     }
-  ]
+  ],
+  "sourceArchive": {
+    "url": "https://codeload.github.com/termux/termux-x11/tar.gz/6dfb8b4a4cc887bc329284d31eb049d596bd1208",
+    "sha256": "8f645a7d14e07e5ea50761f2a9c290e4a0a259bd14482f65430975273cea2e54",
+    "size": 1178881
+  },
+  "previousPristineImport": {
+    "commit": "fa3a8b430e2896a19f44c99a9cb056254615ae06",
+    "bashkittenCommit": "10843938bcf432e17104f64d6b70dda84cba52de",
+    "gitArchiveSha256": "be61a3bd5ea464992c6803c633069d59076d849cfb9e1145eff0f945958709c1"
+  },
+  "releaseTagCommit": "6dfb8b4a4cc887bc329284d31eb049d596bd1208",
+  "releasePublishedAt": "2026-10-27T18:15:55Z"
 }
