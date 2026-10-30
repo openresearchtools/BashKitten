@@ -5,6 +5,58 @@ No application code, package, installed runtime or working user flow is delivere
 by this document. Research used BashKitten `a39f8b1d1ab8ab0ee202a5bb174f905578e83333`
 and the pinned sources below; integration and acceptance remain future work.
 
+## Installed regressions and wide layout — 30 October 2026
+
+The user's installed 153.5.4 feedback adds the following requirements and
+supersedes conflicting earlier launch/layout decisions. The original frozen
+baseline/tag and historical evidence remain unchanged. These are requirements,
+not claims that the reported defects have passed verification.
+
+- Fix desktop Files access denied at `/usr/lib/bashkitten/files/provider.mjs`
+  and the Termux Display launcher installed without executable permission.
+  Correct package assembly, preserve intentional private data permissions and
+  reject inaccessible static modules/non-executable commands in final artifacts.
+- Start the one shared Files server asynchronously when its owning backend
+  starts. Keep Office on demand. Files/Office preparation must not stall the
+  backend or ordinary Files listing, and opening a document must not leave Files
+  unusable when Office fails. Remove unnecessary repeated Files startup or
+  configuration work; opening from the sidecar must not incur the reported
+  12–15-second delay on an already running server. Repeated pending clicks must
+  not queue duplicate tabs. Preserve normal authorization and remote routes.
+- Expose actual supported native audio device choices and truthful runtime
+  discovery failures. Give audio models concise names identifying the engine,
+  variant and language, such as Whisper Tiny.en; retain Qwen display names.
+  Keep the existing Pocket model/projector unless a functional reason requires
+  changing it. Restore the pinned Pillama adapter's verified reasoning defaults
+  and capabilities without treating an uninitialized UI value as explicit Off.
+  Add the supported reasoning selector to guided model settings, preserve user
+  choices/custom INI ownership and put Advanced inside Chat and images settings.
+- On Android, order tab groups Agent, Files, normal, private, Tor. Preserve the
+  flat ordinary widescreen tab strip. On desktop, remove the address-bar
+  Show/Hide Agent and sidebar controls and place Hide Agent inside the sidecar.
+  Clicking the logo restores Agent/sidebar alongside existing web tabs instead
+  of switching to a full-screen Agent that hides them. With no real browser
+  tabs, show Agent without a misleading dummy New Tab entry; preserve explicit
+  user-created tabs and native tab/session ownership.
+- On sufficiently wide desktop, tablet and fold layouts, allow resizing the
+  sidebar, chat and browser with sensible minimum dimensions. Files docks
+  instead of floating when there is enough room and can also be resized.
+  Preserve narrow-screen overlays and existing layout/preferences owners.
+  Keep a single Files-launch folder button per backend heading before power;
+  remove redundant project launch buttons while preserving working-directory
+  pickers, Files/Changes and Reference in chat.
+- Add installed Termux app version/update status to the existing Updates flow,
+  using official GitHub releases and the existing download/Android installer
+  path. Respect installed signing/distribution compatibility. Refresh embedded
+  Termux:X11 from its verified current upstream commit using a separate pristine
+  source import and subsequent adapter changes with complete notices.
+- Make the References browser action monochrome to match the other controls.
+  Preserve its open-book design, source and attribution.
+
+Batch these fixes into the next ordinary GitHub Actions prerelease, using the
+existing caches and matching binary/source/legal checks. Test the changed flows
+in installed BashKitten; no unrelated full acceptance restart is requested.
+
 ## User amendment — 28 October 2026: Hide Agent inside the sidebar
 
 Keep the BashKitten logo's original position, sidebar action, labels and other

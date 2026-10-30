@@ -1,5 +1,26 @@
 # BashKitten · native Pi / Linux and Termux
 
+## 30 October installed-regression and layout amendment
+
+The user's [latest amendment](docs/native-environments-display-plan.md#installed-regressions-and-wide-layout--30-october-2026)
+supersedes conflicting older launch/layout requirements. Files is an essential
+shared service started asynchronously with its owning backend; Office stays
+on demand. Opening Office must not block ordinary Files browsing. Fix installed
+package permissions at assembly and verify final archive modes, including static
+Files module access on Linux and executable `bashkitten-x11` on Termux.
+Desktop now uses Hide Agent inside its sidebar, with no address-bar Show/Hide or
+separate sidebar control. The logo restores Agent alongside existing browser tabs;
+it must not hide those tabs behind a full-screen Agent. Wide desktop/tablet/fold
+layouts have resizable sidebar/chat/browser and docked Files panes with useful
+minimum sizes; narrow layouts retain overlays. Native Android group order is
+Agent, Files, normal, private, Tor. Keep one Files-launch folder button per
+backend heading before power, preserving cwd pickers and the chat Files/Changes
+panel. Avoid duplicate tabs from repeated clicks while a launch is pending.
+The same amendment covers actual audio device choices, concise audio model names,
+Pillama reasoning defaults/choices, model-local Advanced settings, official
+GitHub Termux update checks, the pinned X11 refresh and monochrome References
+toolbar artwork. Test changed installed flows; do not repeat unrelated acceptance.
+
 ## 29 October guided local models
 
 The latest [native-plan amendment](docs/native-environments-display-plan.md#guided-local-models-and-custom-router-ownership--29-october-2026)
