@@ -17,11 +17,25 @@ previous backports remain. Exact source commits and applicability are recorded i
 version/history and regenerated full-license checks pass. The normal prepare run
 [41079252949](https://github.com/openresearchtools/BashKitten/actions/runs/41079252949)
 created candidate `1a8b9b8b99e2104a3e0dd2bca5bd4745b322d67d`, version 153.6.
-Its combined build
+Its initial combined build
 [41079559761](https://github.com/openresearchtools/BashKitten/actions/runs/41079559761)
-has passed all eight native Office/Files jobs, both Termux assemblies and normal
-corresponding-source collection. Browser compilation, the complete-candidate gate
-and installed acceptance remain pending; publication is held.
+passed all eight native Office/Files jobs, both Termux assemblies and normal
+corresponding-source collection. Android x86_64 reached native linking, then
+failed in the native resource packager: a literal `#include` example in the newly
+included FreeType notice was treated as a preprocessing directive. Correction
+`c83b06f033` encodes literal hashes in the existing notice generator. The native
+preprocessor reproduced the original missing-file error; corrected preprocessing
+and the full affected JarMaker manifest pass. Rendered legal text and all 28
+original notice inputs remain unchanged. The receipt is
+`Bashkitten-Acceptance/legal-html-preprocessor-20261030/result.json`.
+
+The normal prepare run
+[41098105938](https://github.com/openresearchtools/BashKitten/actions/runs/41098105938)
+retained unpublished version 153.6 and dispatched corrected combined build
+[41098376401](https://github.com/openresearchtools/BashKitten/actions/runs/41098376401)
+at `c83b06f0335e06e68983fda5d011f5e90306b906`. Obsolete active runs were cancelled;
+completed artifacts and compiler caches are retained. Corrected packages, the
+complete-candidate gate and installed acceptance remain pending; publication is held.
 
 Native Tor 0.4.9.15 and Valkey 9.1.3 sources and build pins are updated. Both APK
 architectures built Tor 0.4.9.15 with the retained Guardian JNI API and passed the
@@ -50,7 +64,7 @@ source/build-input checks do not establish final APK or installed acceptance.
 The Android ARM64 producer's first attempt failed on GitHub HTTP 502 while
 reading prior-job metadata, before compilation. The same-source retry passed
 that step and its new native Tor build and is compiling Gecko. The failed parent
-collector still needs its normal retry after the remaining jobs finish; this is
+collector remained failed when that candidate was superseded; this is
 not recorded as a complete pipeline pass. The verified x86_64 Termux package
 retains readable/traversable Files modules and an executable `bashkitten-x11`.
 Build identities, recovery actions and package receipts are retained under
