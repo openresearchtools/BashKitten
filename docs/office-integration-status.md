@@ -2,7 +2,61 @@
 
 Requirements are in [the integration plan](files-office-bibliography-plan.md).
 This record separates research/temporary comparison evidence from implementation
-and installed-product acceptance. It does not claim completed integration.
+and installed-product acceptance. Historical checkpoints below retain the limits
+and failures of their original candidates; the current result is recorded first.
+
+## Published 153.5.4 prerelease — 30 October 2026
+
+[BashKitten 153.5.4](https://github.com/openresearchtools/BashKitten/releases/tag/v153.5.4)
+was published by the successful normal
+[publication workflow 40991977149](https://github.com/openresearchtools/BashKitten/actions/runs/40991977149).
+The actual tag points to `bde45b30065badac617e5b548b4acfa5454a3f62`;
+GitHub confirms prerelease true, draft false and latest false. All 47 published
+asset names, sizes and server SHA-256 digests match the release manifest and
+checksums: six primary binaries, six auxiliary packages and 24 corresponding-source
+archives represented by 29 source assets, plus metadata/reconstruction files.
+This is a testing prerelease, with the existing testing notice retained.
+
+Exact source `bde45b30065badac617e5b548b4acfa5454a3f62` passed the full
+[candidate run 40982042345](https://github.com/openresearchtools/BashKitten/actions/runs/40982042345),
+attempt 2: all 62 effective jobs, all six primary binaries, eight Office/Files
+components and the matching source/legal gate. The retry retained 57 successful
+executions and ran five failed/dependent jobs. A transient wrong response from
+the pinned zlib URL was rejected by the existing checksum check; the retry used
+the verified source cache. No source URL, pin or checksum was weakened. The
+completed browser archive was reused through the existing producer verification;
+its original build identity remains recorded accurately.
+
+The final signed Android APK and matching Termux backend/OS packages passed a
+preserving update with the live manager at this exact source, host 1.0.1 and
+capture 1.0.8. Two consecutive saves from the same native PDF tab produced the
+correct PDF metadata and identical 12,576-byte files, without reloading or taking
+focus from the source. The retrieval used normal-session cookies and excluded
+private-session cookies. The brief native Office check passed the ordinary
+Files → Quantum → document → File → Options route: the existing dialog and
+Cancel/Save controls fit the 414-pixel phone viewport. No overlays, preference
+changes or repeated full acceptance campaign were used for these final checks.
+
+Main About retains the complete notices, upstream/source links and BashKitten
+modification information for Zotero-derived components, Collabora Online and its
+LibreOffice engine, File Browser Quantum and other bundled dependencies. Component
+legal UIs remain available too. The final package comparison retained all 3,057
+Linux and 2,428 Termux full notice texts with no empty notices; metadata changes
+only advance the corresponding-source links. All 105 backend source files are
+unchanged from the installed `72abe63d` Wayland/Xorg checks, so those results and
+their main About interactions are carried forward explicitly. The final Office
+mobile CSS matches the tested native-menu/dialog module; the packaged JavaScript
+differs only in ordering/wrapping of identical datepicker locale modules.
+
+Build/package receipts are under
+`Bashkitten-Acceptance/candidates/153.5.4-bde45b30065b/`, including
+`complete-candidate-verification.json`, `published-release-verification.json`,
+`verified-pairing.json` and the Linux/
+Termux application and Office asset comparisons. Final installed phone evidence
+is in `Bashkitten-Acceptance/android-final-bde45b-20261030/focused-summary.json`,
+with scoped cleanup recorded and settings, models and profiles preserved. Earlier
+native Options save/kit-exit/reopen evidence remains in the mobile module record below;
+the final brief phone check does not relabel that as a repeated persistence test.
 
 ## Current integration checkpoint — 29 October 2026
 
