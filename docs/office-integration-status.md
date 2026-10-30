@@ -37,6 +37,29 @@ at `c83b06f0335e06e68983fda5d011f5e90306b906`. Obsolete active runs were cancell
 completed artifacts and compiler caches are retained. Corrected packages, the
 complete-candidate gate and installed acceptance remain pending; publication is held.
 
+The corrected candidate's two Node cache lookups hit GitHub HTTP 502 while
+reading an older producer's generic jobs endpoint, before any Node payload was
+downloaded. Its official attempt-specific endpoint returned the same producer
+evidence successfully. CI-only correction `5473cacd4f` uses that endpoint and
+treats exhausted metadata HTTP 5xx as an ordinary cache miss only while the
+destination is empty; authentication, identity, checksum and partial-payload
+failures remain fatal. The existing Node assembly inputs are unchanged.
+Standalone Node run
+[41122771431](https://github.com/openresearchtools/BashKitten/actions/runs/41122771431)
+passed all four targets, and the original `c83b06f033` verifier accepted their
+runtime, source and provenance archives. This supplies the original candidate;
+it does not change its publication source or relabel a producer.
+
+Original candidate run `41098376401` is now on attempt 2 after a parent-only
+cancel and failed-job retry. All eight Office collectors and the completed Linux
+ARM64 and Android x86_64 collectors remain successful. Both missing Node jobs
+have recovered. The original AMD64 browser job finished, and its retry wrapper
+restored the verified browser archive with compilation skipped. The original
+Android ARM64 job also survived and reached APK assembly using its compiled
+Gecko output. Final backend/package assembly, source collection, the complete
+release gate and focused installed checks remain pending. Recovery receipts are
+in `Bashkitten-Acceptance/candidates/153.6-c83b06f0335e/` outside the repository.
+
 Native Tor 0.4.9.15 and Valkey 9.1.3 sources and build pins are updated. Both APK
 architectures built Tor 0.4.9.15 with the retained Guardian JNI API and passed the
 existing staging, export, static-dependency, 16 KB alignment and binary/provenance
