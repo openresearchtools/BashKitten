@@ -79,7 +79,7 @@ def records(read):
                                ('goMod', row['url'].removesuffix('.zip') + '.mod')]:
                 if field in row:
                     item = row[field]
-                    add(source_manifest, item, ['files/vendor/dependencies/' + p['file'] for p in item['parts']], url)
+                    add(source_manifest, item, ['files/vendor/dependencies/' + p['file'] for p in item.get('parts', [])], url)
 
     manifest = 'references/connector/vendor/npm/SOURCES.json'
     for row in document(manifest)['archives']:
