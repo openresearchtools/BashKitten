@@ -229,6 +229,11 @@ def install(args, app, revision, cache, checked_archive, extract):
             verify_files(root, metadata['files'])
             destination = app / component / 'runtime' if component == 'office' else app / component
             shutil.copytree(root, destination, dirs_exist_ok=True, symlinks=True)
+            # copytree also copies root permissions. Files uses the private
+            # TemporaryDirectory itself as its archive root, so copying its
+            # 0700 mode would make installed root-owned modules inaccessible.
+            # This is static package content, not the user's service data.
+            destination.chmod(0o755)
         result[component] = {'available': True, 'archive': archive.name, 'sha256': digest, 'metadata': metadata}
     if result['office']['available']:
         result['office']['extension'] = office_extension(app / 'office/runtime')

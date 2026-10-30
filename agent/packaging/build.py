@@ -246,7 +246,11 @@ def install_termux_display(args, app, revision, bin_dir):
     shutil.copytree(source / 'licenses', display / 'licenses')
     shutil.copy2(source / 'manifest.json', display / 'manifest.json')
     bin_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source / 'bashkitten-x11', bin_dir / 'bashkitten-x11')
+    launcher = bin_dir / 'bashkitten-x11'
+    shutil.copy2(source / 'bashkitten-x11', launcher)
+    # Actions artifact transport does not retain the source executable mode.
+    # The installed launcher is a command; set its mode at the package boundary.
+    launcher.chmod(0o755)
     return {'metadata': metadata, 'developmentOnly': bool(args.development_signing)}
 
 

@@ -183,14 +183,39 @@ def source_instructions(archives, output, tag):
 def package(file):
     fields = dict(line.split(': ', 1) for line in subprocess.check_output(
         ['dpkg-deb', '-f', str(file), 'Package', 'Version', 'Architecture'], text=True).splitlines())
+    termux = fields['Architecture'] in {'aarch64', 'x86_64'}
+    prefix = Path('data/data/com.termux/files/usr' if termux else 'usr')
+    # These are the existing application entrypoints in apps/locations.mjs.
+    # Inspect archive modes: the builder can traverse its own 0700 staging
+    # directories, which become inaccessible to ordinary users after root install.
+    required = {str(prefix / 'lib/bashkitten' / name): (False, 0o444) for name in (
+        'files/provider.mjs', 'files/office-provider.mjs', 'references/index.mjs',
+        'office/src/service.mjs', 'office/src/prepare.mjs')}
+    if termux:
+        required[str(prefix / 'bin/bashkitten-x11')] = (False, 0o555)
+    for name in tuple(required):
+        parent = Path(name).parent
+        while parent.is_relative_to(prefix):
+            required[str(parent)] = (True, 0o111)
+            parent = parent.parent
+    modes = {}
     process = subprocess.Popen(['dpkg-deb', '--fsys-tarfile', str(file)], stdout=subprocess.PIPE)
     stamp = None
     with tarfile.open(fileobj=process.stdout, mode='r|') as archive:
         for item in archive:
+            name = item.name.removeprefix('./').rstrip('/')
+            if name in required:
+                modes[name] = item if name not in modes else None
             if item.name.endswith('/lib/bashkitten/build-platform.json'):
                 stamp = json.load(archive.extractfile(item))
     if process.wait() != 0 or not stamp:
         raise ValueError('Package has no valid build provenance: ' + str(file))
+    for name, (directory, mask) in required.items():
+        item = modes.get(name)
+        if item is None or not (item.isdir() if directory else item.isfile()):
+            raise ValueError('Package runtime path is missing, duplicated or has the wrong type: ' + name)
+        if item.mode & mask != mask:
+            raise ValueError(f'Package runtime path has inaccessible permissions: {name} ({item.mode & 0o777:04o})')
     return fields, stamp
 
 
