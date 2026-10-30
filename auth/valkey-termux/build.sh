@@ -1,5 +1,6 @@
 # Keep Termux's Bionic fixes while installing only our private session server.
 source "$TERMUX_PKG_BUILDER_DIR/upstream-build.sh"
+TERMUX_PKG_VERSION=9.1.3
 TERMUX_PKG_LICENSE_FILE=COPYING
 TERMUX_PKG_NO_STATICSPLIT=true
 TERMUX_PKG_CONFFILES=''

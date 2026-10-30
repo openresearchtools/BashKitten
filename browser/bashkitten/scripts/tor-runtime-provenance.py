@@ -13,7 +13,7 @@ from pathlib import Path
 
 import tomllib
 
-VERSION = "0.4.9.14"
+VERSION = "0.4.9.15"
 MANIFEST = "bashkitten-tor-runtime.json"
 
 

@@ -56,7 +56,7 @@ security levels, or anonymity model.
 
 ## Upstream and build
 
-`third_party/tor` contains the unmodified Tor 0.4.9.14 release commit. The exact
+`third_party/tor` contains the unmodified Tor 0.4.9.15 release commit. The exact
 tag, tag object, commit, tree, archive checksum, and license checksum are pinned
 in `bashkitten/third_party/tor.toml`. Update that pin and the vendored tree from
 an official stable release together; do not substitute a distribution binary.
@@ -73,3 +73,8 @@ The output includes a runtime directory, the exact upstream source archive, and
 a provenance ZIP binding the binary, pin and licenses. Debian assembly accepts
 that runtime directory with `--tor-dir`; AppImage packaging and configured Gecko
 builds validate the same provenance. Arti and its Cargo dependencies are removed.
+
+The APK separately retains Guardian Project's released Tor Android 0.4.9.14 AAR
+and its matching JNI/dependency sources. No 0.4.9.15 Android release was available
+from that existing upstream on 30 October 2026; this source refresh updates the
+Linux and Termux daemon, without relabeling the APK binary.

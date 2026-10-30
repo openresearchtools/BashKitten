@@ -18,8 +18,8 @@ its older imported Termux recipe remains pristine, with the version override
 in our separate recipe. The complete age 1.3.2 source is pinned for the remote
 connection bundle integration; it is not a separate installed CLI.
 
-Tor is pinned to the 0.4.9.14 security release. Go builds use 1.27.2 with its
-complete retained source and notices. `build/termux-go-version.patch` updates
+Tor is pinned to the 0.4.9.15 security release and Valkey to 9.1.3. Go builds use
+1.27.2 with its complete retained source and notices. `build/termux-go-version.patch` updates
 only the compiler version/checksum in the separately retained Termux builder;
 its Android toolchain patches and component recipes remain in place. Upstream
 module/frontend locks remain those of each selected release.
@@ -38,6 +38,12 @@ It does not use `gomobile init`, which would fetch a moving tool version.
 The APK bundles the client library and its actual linked notices; Actions and
 APK candidates include corresponding Go dependency and generated Java sources.
 No upstream Chisel or Go mobile source patch is applied.
+
+The exact original source archives selected by `upstreams.lock.json` live in
+the external `BASHKITTEN_SOURCE_CACHE`. Both native authentication and normal
+product source artifacts include those verified original archives alongside
+the pristine trees and full notices. Warm-cache reconstruction supports
+`BASHKITTEN_OFFLINE_SOURCES=1`; no archive bytes are committed to Git.
 
 The private `valkey-server` stores Authelia's sessions so remembered logins
 survive full service restarts. It listens only on the controller's private Unix

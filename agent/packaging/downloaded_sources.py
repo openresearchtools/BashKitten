@@ -94,6 +94,11 @@ def records(read):
         manifest = base + ('/source.json' if base.endswith('/pi') else '/sources.json')
         row = document(manifest)
         add(manifest, row, [base + '/' + row['file']])
+    manifest = 'auth/upstreams.lock.json'
+    for row in document(manifest).values():
+        if isinstance(row, dict) and row.get('archive'):
+            add(manifest, row, [], row['archive'])
+
     manifest = 'auth/dependencies/go/sources.json'
     go = document(manifest)
     for row in [r for module in go['modules'] for r in module['files'].values()] + go['moduleMetadata']:

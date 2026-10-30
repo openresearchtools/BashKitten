@@ -54,6 +54,12 @@ with tarfile.open(source_file, 'w:gz') as archive:
     # Rebuild bundles keep the original pinned bytes even when repository
     # history retains only their manifests and notices.
     checked = runpy.run_path(str(root / 'auth/build/retained-sources.py'))['checked']
+    upstreams = json.loads((root / 'auth/upstreams.lock.json').read_text())
+    for name, record in upstreams.items():
+        if isinstance(record, dict) and record.get('archive'):
+            relative = f'upstream-archives/{name}-{record["commit"]}.tar.gz'
+            source = checked(root / 'auth', {**record, 'file': relative, 'url': record['archive']})
+            archive.add(source, arcname='auth/' + relative)
     for kind in ('go', 'frontend', 'termux', 'go-toolchain'):
         directory = root / 'auth/dependencies' / kind
         manifest = json.loads((directory / 'sources.json').read_text())

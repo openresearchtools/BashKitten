@@ -1,6 +1,6 @@
 # BashKitten private installation of the upstream Termux Tor recipe and patches.
 source "$TERMUX_PKG_BUILDER_DIR/upstream-build.sh"
-TERMUX_PKG_VERSION=0.4.9.14
+TERMUX_PKG_VERSION=0.4.9.15
 TERMUX_PKG_AUTO_UPDATE=false
 TERMUX_PKG_LICENSE_FILE=LICENSE
 TERMUX_PKG_NO_STATICSPLIT=true
