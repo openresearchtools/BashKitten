@@ -14,8 +14,14 @@ below. The matching released Tor Browser 16.0 lineage contributes six additional
 production commits, including Android download filename validation; all fifteen
 previous backports remain. Exact source commits and applicability are recorded in
 `browser/bashkitten/upstreams.toml` and `UPDATING-FIREFOX.md`. The browser's
-version/history and regenerated full-license checks pass. Builds and installed
-acceptance of this new source remain pending.
+version/history and regenerated full-license checks pass. The normal prepare run
+[41079252949](https://github.com/openresearchtools/BashKitten/actions/runs/41079252949)
+created candidate `1a8b9b8b99e2104a3e0dd2bca5bd4745b322d67d`, version 153.6.
+Its combined build
+[41079559761](https://github.com/openresearchtools/BashKitten/actions/runs/41079559761)
+has passed all eight native Office/Files jobs, both Termux assemblies and normal
+corresponding-source collection. Browser compilation, the complete-candidate gate
+and installed acceptance remain pending; publication is held.
 
 Native Tor 0.4.9.15 and Valkey 9.1.3 sources and build pins are updated. Both APK
 architectures built Tor 0.4.9.15 with the retained Guardian JNI API and passed the
@@ -28,8 +34,8 @@ collector now includes the complete FreeType license texts from its source.
 Office retains its paired Collabora release and refreshes OpenSSL 3.5.9, curl
 8.23.0, Python 3.14.10, Poco 1.15.4, HarfBuzz 14.6.0, ICU/data 78.3 and SQLite
 3.54.1. Its 121 original archives, Linux/Termux patch sequences and native Python
-package paths verify; full native Office/Files compilation remains for the
-combined pipeline. Authelia, Caddy, Podman and its selected helper releases were
+package paths verify; all four native Office and four Files builds passed in
+the combined pipeline. Authelia, Caddy, Podman and its selected helper releases were
 already current at this review. Original source
 archives remain outside Git and are included in normal corresponding-source
 artifacts with full notices.
@@ -40,6 +46,15 @@ collector also accepts new native archive pins without obsolete split-part
 paths; it reads all 5,443 current records, including MuPDF and both Tor owners.
 Both Android daughter workflows match the reviewed canonical workflow. These
 source/build-input checks do not establish final APK or installed acceptance.
+
+The Android ARM64 producer's first attempt failed on GitHub HTTP 502 while
+reading prior-job metadata, before compilation. The same-source retry passed
+that step and its new native Tor build and is compiling Gecko. The failed parent
+collector still needs its normal retry after the remaining jobs finish; this is
+not recorded as a complete pipeline pass. The verified x86_64 Termux package
+retains readable/traversable Files modules and an executable `bashkitten-x11`.
+Build identities, recovery actions and package receipts are retained under
+`Bashkitten-Acceptance/candidates/153.6-1a8b9b8b99e2/` outside the repository.
 
 A fresh Termux:X11 review found the embedded source, browser adapter and loader
 already match the current official `6dfb8b4a4cc887bc329284d31eb049d596bd1208`
