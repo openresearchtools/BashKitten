@@ -24,12 +24,14 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import mozilla.components.browser.state.action.DownloadAction
@@ -47,6 +49,7 @@ import mozilla.components.concept.fetch.Headers.Names.CONTENT_RANGE
 import mozilla.components.concept.fetch.Headers.Names.RANGE
 import mozilla.components.concept.fetch.MutableHeaders
 import mozilla.components.concept.fetch.Request
+import mozilla.components.concept.fetch.Response
 import mozilla.components.feature.downloads.DownloadNotification.NOTIFICATION_DOWNLOAD_GROUP_ID
 import mozilla.components.feature.downloads.ext.addCompletedDownload
 import mozilla.components.feature.downloads.ext.isScheme
@@ -152,7 +155,7 @@ abstract class AbstractFetchDownloadService : Service() {
                 downloadJobState.notifiedStopped = false
             }
             downloadJobState.status = status
-            updateDownloadState(downloadJobState.state.copy(status = status))
+            updateDownloadState(onDownloadStateChanged(downloadJobState.state.copy(status = status)))
         }
     }
 
@@ -172,8 +175,8 @@ abstract class AbstractFetchDownloadService : Service() {
 
                 when (intent.action) {
                     ACTION_PAUSE -> {
-                        setDownloadJobStatus(currentDownloadJobState, PAUSED)
                         currentDownloadJobState.job?.cancel()
+                        setDownloadJobStatus(currentDownloadJobState, PAUSED)
                         emitNotificationPauseFact()
                         logger.debug("ACTION_PAUSE for ${currentDownloadJobState.state.id}")
                     }
@@ -193,10 +196,12 @@ abstract class AbstractFetchDownloadService : Service() {
 
                             updateDownloadNotification()
                         } else {
+                            val previousJob = currentDownloadJobState.job
                             setDownloadJobStatus(currentDownloadJobState, DOWNLOADING)
 
                             currentDownloadJobState.job = CoroutineScope(ioDispatcher).launch {
-                                startDownloadJob(currentDownloadJobState)
+                                previousJob?.join()
+                                startDownloadJob(currentDownloadJobState, coroutineContext[Job])
                             }
                         }
                         emitNotificationResumeFact()
@@ -213,13 +218,15 @@ abstract class AbstractFetchDownloadService : Service() {
                     }
 
                     ACTION_TRY_AGAIN -> {
+                        val previousJob = currentDownloadJobState.job
                         removeNotification(context, currentDownloadJobState)
                         currentDownloadJobState.lastNotificationUpdate = dateTimeProvider.currentTimeMillis()
                         currentDownloadJobState.createdTime = dateTimeProvider.currentTimeMillis()
                         setDownloadJobStatus(currentDownloadJobState, DOWNLOADING)
 
                         currentDownloadJobState.job = CoroutineScope(ioDispatcher).launch {
-                            startDownloadJob(currentDownloadJobState)
+                            previousJob?.join()
+                            startDownloadJob(currentDownloadJobState, coroutineContext[Job])
                         }
 
                         emitNotificationTryAgainFact()
@@ -325,7 +332,7 @@ abstract class AbstractFetchDownloadService : Service() {
 
         if (actualStatus == DOWNLOADING) {
             downloadJobState.job = CoroutineScope(ioDispatcher).launch {
-                startDownloadJob(downloadJobState)
+                startDownloadJob(downloadJobState, coroutineContext[Job])
             }
         }
 
@@ -348,13 +355,13 @@ abstract class AbstractFetchDownloadService : Service() {
         coroutineScope: CoroutineScope = CoroutineScope(ioDispatcher),
     ) {
         currentDownloadJobState.lastNotificationUpdate = dateTimeProvider.currentTimeMillis()
+        currentDownloadJobState.job?.cancel()
         setDownloadJobStatus(
             currentDownloadJobState,
             CANCELLED,
         )
         val resolver = context.contentResolver
 
-        currentDownloadJobState.job?.cancel()
         currentDownloadJobState.job?.invokeOnCompletion {
             currentDownloadJobState.job = coroutineScope.launch {
                 downloadFileUtils.deleteMediaFile(
@@ -499,11 +506,14 @@ abstract class AbstractFetchDownloadService : Service() {
     }
 
     @Suppress("TooGenericExceptionCaught")
-    internal fun startDownloadJob(currentDownloadJobState: DownloadJobState) {
+    internal fun startDownloadJob(currentDownloadJobState: DownloadJobState, job: Job? = null) {
         logger.debug("Starting download for ${currentDownloadJobState.state.id} ")
         try {
-            performDownload(currentDownloadJobState)
+            performDownload(currentDownloadJobState, job = job)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
+            job?.ensureActive()
             logger.error("Unable to complete download for ${currentDownloadJobState.state.id} marked as FAILED", e)
             setDownloadJobStatus(currentDownloadJobState, FAILED)
         }
@@ -666,7 +676,8 @@ abstract class AbstractFetchDownloadService : Service() {
     }
 
     @Suppress("ComplexCondition")
-    internal fun performDownload(currentDownloadJobState: DownloadJobState, useHttpClient: Boolean = false) {
+    internal fun performDownload(currentDownloadJobState: DownloadJobState, useHttpClient: Boolean = false, job: Job? = null) {
+        job?.ensureActive()
         val download = currentDownloadJobState.state
         val isResumingDownload = currentDownloadJobState.currentBytesCopied > 0L
         val headers = MutableHeaders()
@@ -696,9 +707,13 @@ abstract class AbstractFetchDownloadService : Service() {
         // download.response doesn't support adding headers.
         val response = if (isResumingDownload || useHttpClient || download.response == null) {
             isUsingHttpClient = true
-            httpClient.fetch(request)
+            fetchDownload(download, request)
         } else {
             requireNotNull(download.response)
+        }
+        if (job?.isActive == false) {
+            response.close()
+            job.ensureActive()
         }
         logger.debug("Fetching download for ${currentDownloadJobState.state.id} ")
 
@@ -717,6 +732,7 @@ abstract class AbstractFetchDownloadService : Service() {
         }
 
         response.body.useStream { inStream ->
+            job?.ensureActive()
             var copyInChuckStatus: CopyInChuckStatus? = null
             val newDownloadState = download.withResponse(
                 headers = response.headers,
@@ -739,15 +755,23 @@ abstract class AbstractFetchDownloadService : Service() {
                             inStream = inStream,
                             outStream = outStream,
                             downloadWithHttpClient = isUsingHttpClient,
+                            job = job,
                         )
                 },
             )
 
             if (copyInChuckStatus != CopyInChuckStatus.ERROR_IN_STREAM_CLOSED) {
+                job?.ensureActive()
                 verifyDownload(currentDownloadJobState)
             }
         }
     }
+
+    /** Allows the native host to retain per-download response access on retries and resume. */
+    protected open fun fetchDownload(download: DownloadState, request: Request): Response = httpClient.fetch(request)
+
+    /** Lets a native host release protected response bodies while retaining resume authority. */
+    protected open fun onDownloadStateChanged(download: DownloadState): DownloadState = download
 
     /**
      * Updates the status of an ACTIVE download to completed or failed based on bytes copied
@@ -784,6 +808,7 @@ abstract class AbstractFetchDownloadService : Service() {
         inStream: InputStream,
         outStream: OutputStream,
         downloadWithHttpClient: Boolean = false,
+        job: Job? = null,
     ): CopyInChuckStatus {
         val data = ByteArray(CHUNK_SIZE)
         logger.debug(
@@ -802,10 +827,12 @@ abstract class AbstractFetchDownloadService : Service() {
         var isInStreamClosed = false
         // To ensure that we copy all files (even ones that don't have fileSize, we must NOT check < fileSize
         while (getDownloadJobStatus(downloadJobState) == DOWNLOADING) {
+            job?.ensureActive()
             var bytesRead: Int
             try {
                 bytesRead = inStream.read(data)
             } catch (e: IOException) {
+                job?.ensureActive()
                 if (downloadWithHttpClient) {
                     throw e
                 }
@@ -814,6 +841,7 @@ abstract class AbstractFetchDownloadService : Service() {
             }
             // If bytesRead is -1, there's no data left to read from the stream
             if (bytesRead == -1) { break }
+            job?.ensureActive()
             downloadJobState.currentBytesCopied += bytesRead
 
             throttleUpdateDownload(downloadJobState.currentBytesCopied)
@@ -826,7 +854,8 @@ abstract class AbstractFetchDownloadService : Service() {
             // [isResumingDownload] will be false as there will be not enough time
             // for bytes to be copied, but the stream in [download.response] will be closed,
             // we have to fallback to [httpClient]
-            performDownload(downloadJobState, useHttpClient = true)
+            job?.ensureActive()
+            performDownload(downloadJobState, useHttpClient = true, job = job)
             return CopyInChuckStatus.ERROR_IN_STREAM_CLOSED
         }
         logger.debug(

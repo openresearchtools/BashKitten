@@ -9,6 +9,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.graphics.Color;
+import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.*;
@@ -27,14 +28,18 @@ public final class AgentSidecar {
     private final Map<String, JSONObject> snapshots = new LinkedHashMap<>();
     private final Set<String> collapsed = new HashSet<>();
     private final Set<AgentRuntime.Listener> pendingSelections = new HashSet<>();
+    private final Set<String> openingFiles = new HashSet<>();
+    private Runnable selectionCancelled;
     private final ScrollView scroll;
     private final LinearLayout body;
     private final TextView notice;
     private final FrameLayout drawer;
     private final View backdrop;
+    private final PaneDivider divider;
     private FrameLayout content;
     private View chatBody;
     private boolean compact = true;
+    private float preferredWidthDp = 300;
     private final androidx.activity.OnBackPressedCallback back = new androidx.activity.OnBackPressedCallback(false) {
         @Override public void handleOnBackPressed() { close(); }
     };
@@ -59,6 +64,10 @@ public final class AgentSidecar {
         drawer.addView(backdrop, new FrameLayout.LayoutParams(-1, -1));
         scroll.setClickable(true); scroll.setClipToOutline(true);
         drawer.addView(scroll, new FrameLayout.LayoutParams(dp(300), -1, Gravity.START));
+        divider = new PaneDivider(activity, "Resize sidebar and chat", scroll::getWidth, width -> {
+            preferredWidthDp = width / activity.getResources().getDisplayMetrics().density; layout();
+        });
+        drawer.addView(divider, new FrameLayout.LayoutParams(dp(PaneDivider.WIDTH_DP), -1, Gravity.END));
     }
     private int dp(int value) { return Math.round(value * activity.getResources().getDisplayMetrics().density); }
     private LinearLayout column() { LinearLayout result = new LinearLayout(activity); result.setOrientation(LinearLayout.VERTICAL); return result; }
@@ -130,19 +139,35 @@ public final class AgentSidecar {
     public boolean isOpen() { return drawer.getVisibility() == View.VISIBLE; }
     private void layout() {
         if (content == null || content.getWidth() <= 0) return;
-        compact = content.getWidth() < dp(720);
-        int width = compact ? Math.min(dp(300), Math.round(content.getWidth() * .86f)) : dp(300);
-        int overlayWidth = compact ? -1 : width;
+        int available = content.getWidth();
+        // The existing drawer docks only if both its native rows and the chat
+        // remain usable. Narrow panes retain the dismissible overlay.
+        compact = available < dp(220 + 320 + PaneDivider.WIDTH_DP);
+        int width = compact ? Math.min(dp(300), Math.round(available * .86f))
+            : Math.max(dp(220), Math.min(available - dp(320 + PaneDivider.WIDTH_DP), Math.round(preferredWidthDp * activity.getResources().getDisplayMetrics().density)));
+        int overlayWidth = compact ? -1 : width + dp(PaneDivider.WIDTH_DP);
         if (drawer.getLayoutParams().width != overlayWidth) { drawer.getLayoutParams().width = overlayWidth; drawer.requestLayout(); }
         if (scroll.getLayoutParams().width != width) { scroll.getLayoutParams().width = width; scroll.requestLayout(); }
         backdrop.setVisibility(compact ? View.VISIBLE : View.GONE);
+        divider.setVisibility(compact ? View.GONE : View.VISIBLE);
+        divider.setBounds(dp(220), available - dp(320 + PaneDivider.WIDTH_DP));
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) chatBody.getLayoutParams();
-        int inset = isOpen() && !compact ? width : 0;
+        int inset = isOpen() && !compact ? overlayWidth : 0;
         if (params.getMarginStart() != inset) { params.setMarginStart(inset); chatBody.setLayoutParams(params); }
         GradientDrawable surface = shape(background, 0);
         // Keep the sidecar flush with browser content while rounding its outer top corner.
         surface.setCornerRadii(new float[]{dp(16), dp(16), compact ? dp(24) : 0, compact ? dp(24) : 0, compact ? dp(24) : 0, compact ? dp(24) : 0, 0, 0});
         scroll.setBackground(surface);
+    }
+    Bundle saveLayoutState() {
+        Bundle state = new Bundle(); state.putFloat("widthDp", preferredWidthDp); state.putBoolean("open", isOpen()); return state;
+    }
+    void restoreLayoutState(Bundle state, boolean allowOpen) {
+        if (state == null) return;
+        float width = state.getFloat("widthDp", 300);
+        if (Float.isFinite(width) && width > 0) preferredWidthDp = width;
+        if (allowOpen && state.getBoolean("open") && !isOpen()) toggle();
+        else layout();
     }
     public void toggle() {
         if (isOpen()) { close(); return; }
@@ -160,6 +185,8 @@ public final class AgentSidecar {
         generation++; loading = false; app.main.removeCallbacks(poll);
         for (AgentRuntime.Listener listener : pendingSelections) runtime.detach(listener);
         pendingSelections.clear();
+        Runnable cancelled = selectionCancelled; selectionCancelled = null;
+        if (cancelled != null) cancelled.run();
     }
     public void close() {
         cancelSelection(); back.setEnabled(false); back.remove(); drawer.setVisibility(View.GONE); layout();
@@ -219,14 +246,18 @@ public final class AgentSidecar {
             snapshots.put(backend, snapshot); ready.run();
         }, message -> {
             if (epoch != generation || !backend.equals(runtime.selected)) return;
-            if (!runtime.state.equals("on")) { render(); return; }
-            if (android.os.SystemClock.elapsedRealtime() >= until) { error(message); return; }
+            if (!runtime.state.equals("on")) { cancelSelection(); render(); return; }
+            if (android.os.SystemClock.elapsedRealtime() >= until) { cancelSelection(); error(message); return; }
             app.main.postDelayed(() -> awaitReady(backend, ready, epoch, until), 200);
         });
     }
     private void select(String backend, Runnable ready) {
+        select(backend, ready, null);
+    }
+    private void select(String backend, Runnable ready, Runnable cancelled) {
         cancelSelection();
-        Runnable selected = () -> { ready.run(); refresh(); };
+        selectionCancelled = cancelled;
+        Runnable selected = () -> { selectionCancelled = null; ready.run(); refresh(); };
         if (backend.equals(runtime.selected) && runtime.state.equals("on")) { awaitReady(backend, selected, generation, android.os.SystemClock.elapsedRealtime() + 30000); return; }
         if (backend.equals(runtime.selected) && !runtime.isOnRequested()) runtime.turnOn();
         else runtime.select(backend);
@@ -235,10 +266,19 @@ public final class AgentSidecar {
             @Override public void changed() {
                 if (epoch != generation || !backend.equals(runtime.selected)) { runtime.detach(this); pendingSelections.remove(this); return; }
                 if (runtime.state.equals("on")) { runtime.detach(this); pendingSelections.remove(this); awaitReady(backend, selected, epoch, android.os.SystemClock.elapsedRealtime() + 30000); }
-                else if (Arrays.asList("failed", "off", "stop-failed", "setup").contains(runtime.state)) { runtime.detach(this); pendingSelections.remove(this); render(); }
+                else if (Arrays.asList("failed", "off", "stop-failed", "setup").contains(runtime.state)) { runtime.detach(this); pendingSelections.remove(this); cancelSelection(); render(); }
             }
         };
         pendingSelections.add(observer); runtime.observe(observer); observer.changed();
+    }
+    private void openFiles(String backend) {
+        if (!openingFiles.add(backend)) return;
+        select(backend, () -> runtime.openFiles(value(), () -> {
+            openingFiles.remove(backend); close();
+        }, message -> {
+            openingFiles.remove(backend); error(message); render();
+        }), () -> { openingFiles.remove(backend); render(); });
+        render();
     }
     void openMessage(String eventId) {
         cancelSelection();
@@ -295,7 +335,9 @@ public final class AgentSidecar {
     private void backend(String id, String name, boolean remote) {
         LinearLayout heading = row(); Button title = button(name, () -> select(id, this::refresh)); title.setTypeface(null, Typeface.BOLD);
         heading.addView(title, new LinearLayout.LayoutParams(0, dp(41), 1));
-        heading.addView(icon("Open " + name + " Files", R.drawable.ic_agent_folder, () -> select(id, () -> runtime.openFiles(value(), this::close, this::error))));
+        boolean filesPending = openingFiles.contains(id);
+        ImageButton files = icon((filesPending ? "Opening " : "Open ") + name + " Files", R.drawable.ic_agent_folder, () -> openFiles(id));
+        files.setEnabled(!filesPending); heading.addView(files);
         SwitchCompat power = powerSwitch(name + " power");
         final boolean on = remote ? runtime.remoteConnected(id) : runtime.localIsRunning();
         JSONObject localWeb = runtime.status.optJSONObject("web");
@@ -321,6 +363,7 @@ public final class AgentSidecar {
         if (remote) heading.addView(icon(name + " actions", R.drawable.ic_agent_more, () -> remoteActions(id, name)));
         body.addView(heading);
         title.setContentDescription(name + ", " + status); title.setTooltipText(status);
+        if (filesPending) body.addView(text("Opening Files…"));
         if (Arrays.asList("starting", "stopping", "login").contains(status)) body.addView(text(status));
         if (id.equals(runtime.selected) && !runtime.error.isEmpty()) body.addView(text(runtime.error));
         section("Projects", "Create project in " + name, () -> select(id, () -> projectPicker(id)));
@@ -338,7 +381,6 @@ public final class AgentSidecar {
             projectTitle.setTextSize(13); projectTitle.setTextColor(muted); group.addView(projectTitle, new LinearLayout.LayoutParams(0, dp(34), 1));
             Button newChat = button("+", () -> navigate(id, "new", value("projectId", projectId), true));
             newChat.setContentDescription("New chat in " + project.optString("name")); newChat.setTooltipText(newChat.getContentDescription()); newChat.setTextSize(20); newChat.setGravity(Gravity.CENTER);
-            group.addView(icon("Open " + project.optString("name") + " Files", R.drawable.ic_agent_folder, () -> select(id, () -> runtime.openFiles(value("projectId", projectId), this::close, this::error))));
             group.addView(newChat, new LinearLayout.LayoutParams(dp(34), dp(34)));
             group.addView(icon("Project actions", R.drawable.ic_agent_more, () -> select(id, () -> projectActions(id, project)))); body.addView(group);
             if (!collapsed.contains(expansionKey)) for (int j = 0; j < chats.length(); j++) { JSONObject chat = chats.optJSONObject(j); if (projectId.equals(chat.optString("projectId")) && !ids.contains(chat.optString("subagentParent"))) chat(id, chat, chats, projects, 1, new HashSet<>()); }

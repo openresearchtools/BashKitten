@@ -35,6 +35,10 @@ public final class BrowserApp extends ContextWrapper {
         void quickAccess(String url, String title, Consumer<String> done, Consumer<String> fail);
         List<Download> downloads();
         void acceptDownload(String tabId, String downloadId);
+        void download(GeckoSession source, WebResponse response, java.util.function.BooleanSupplier access);
+        boolean downloadAuthorized(String downloadId, String contextId);
+        void retainDownloadResponse(String downloadId, java.io.Closeable response);
+        void downloadStatusChanged(String downloadId, String status);
         Intent launchIntent();
     }
     public static BrowserApp get(Context context) { return ((Provider) context.getApplicationContext()).bashKitten(); }

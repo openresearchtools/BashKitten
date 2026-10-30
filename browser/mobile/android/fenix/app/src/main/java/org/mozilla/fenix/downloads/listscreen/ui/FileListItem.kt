@@ -4,6 +4,7 @@
 
 package org.mozilla.fenix.downloads.listscreen.ui
 
+import android.content.Intent
 import androidx.annotation.FloatRange
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -19,8 +20,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -32,13 +36,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import mozilla.components.compose.base.button.IconButton
 import mozilla.components.compose.base.menu.DropdownMenu
 import mozilla.components.compose.base.menu.MenuItem
 import mozilla.components.compose.base.text.Text
+import mozilla.components.support.utils.DefaultDownloadFileUtils
 import org.mozilla.fenix.R
 import org.mozilla.fenix.compose.list.SelectableListItem
 import org.mozilla.fenix.downloads.listscreen.DownloadsListTestTag
+import org.mozilla.fenix.downloads.getCannotOpenFileErrorMessage
+import org.mozilla.fenix.compose.snackbar.Snackbar
+import org.mozilla.fenix.compose.snackbar.SnackbarState
 import org.mozilla.fenix.downloads.listscreen.store.FileItem
 import org.mozilla.fenix.downloads.listscreen.store.TimeCategory
 import org.mozilla.fenix.theme.FirefoxTheme
@@ -140,6 +151,9 @@ private fun AfterListItemAction(
     onRenameFileClick: (FileItem) -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val view = LocalView.current
+    val scope = rememberCoroutineScope()
 
     when (fileItem.status) {
         FileItem.Status.Completed -> {}
@@ -201,6 +215,26 @@ private fun AfterListItemAction(
         DropdownMenu(
             menuItems = getContextMenuItems(
                 status = fileItem.status,
+                onOpenWithClick = {
+                    scope.launch {
+                        val intent = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val files = DefaultDownloadFileUtils(context)
+                                check(files.fileExists(fileItem.directoryPath, fileItem.fileName))
+                                files.createOpenFileIntent(fileItem.fileName, fileItem.directoryPath, fileItem.contentType)
+                            }.getOrNull()
+                        }
+                        val opened = intent != null && runCatching {
+                            context.startActivity(
+                                Intent.createChooser(intent, context.getString(R.string.bashkitten_download_open_with))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }.isSuccess
+                        if (!opened) {
+                            Snackbar.make(view, SnackbarState(message = getCannotOpenFileErrorMessage(context, fileItem.filePath))).show()
+                        }
+                    }
+                },
                 onDeleteClick = { onDeleteClick(fileItem) },
                 onShareUrlClick = { onShareUrlClick(fileItem) },
                 onShareFileClick = { onShareFileClick(fileItem) },
@@ -249,12 +283,18 @@ private fun Modifier.selectableListItemProgressSemantics(status: FileItem.Status
 
 private fun getContextMenuItems(
     status: FileItem.Status,
+    onOpenWithClick: () -> Unit,
     onDeleteClick: () -> Unit,
     onShareUrlClick: () -> Unit,
     onShareFileClick: () -> Unit,
     onRenameFileClick: () -> Unit,
 ) = when (status) {
     FileItem.Status.Completed -> listOf(
+        MenuItem.TextItem(
+            text = Text.Resource(R.string.bashkitten_download_open_with),
+            onClick = onOpenWithClick,
+            level = MenuItem.FixedItem.Level.Default,
+        ),
         MenuItem.TextItem(
             text = Text.Resource(R.string.download_share_url),
             onClick = onShareUrlClick,

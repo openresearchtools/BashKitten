@@ -54,6 +54,8 @@ class GeckoViewFetchClient(
 
         return try {
             val webResponse = executor.fetch(webRequest, request.fetchFlags).poll(readTimeOutMillis)
+            // The protected host closes its owned streams explicitly on cancellation.
+            if (request.saveAsDownload && request.contextId?.startsWith("bashkitten-agent-ui-") == true) webResponse?.setReadTimeoutMillis(0)
             webResponse?.toResponse() ?: throw IOException("Fetch failed with null response")
         } catch (e: TimeoutException) {
             throw SocketTimeoutException()

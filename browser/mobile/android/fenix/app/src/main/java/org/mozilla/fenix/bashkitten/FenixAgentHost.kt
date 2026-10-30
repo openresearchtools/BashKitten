@@ -33,6 +33,8 @@ import org.mozilla.fenix.FenixApplication
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.WebResponse
 import com.bashkitten.BrowserApp
 import com.bashkitten.display.DisplayTabs
 
@@ -42,6 +44,7 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
     override fun privateBrowsing() = components.appStore.state.mode == BrowsingMode.Private
     private var activity = WeakReference<Activity>(null)
     private val windows = WindowFeature(components.core.store, components.useCases.tabsUseCases)
+    @Volatile private var agentDownloads: AgentDownloads? = null
 
     init {
         windows.start()
@@ -240,6 +243,22 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
         BrowserApp.get(application).rememberDownload(download.id, tabId)
         store.dispatch(ContentAction.ConsumeDownloadAction(tabId, download.id))
         store.dispatch(DownloadAction.AddDownloadAction(download.copy(sessionId = tabId, skipConfirmation = true, openInApp = false)))
+    }
+
+    override fun download(source: GeckoSession, response: WebResponse, access: java.util.function.BooleanSupplier) {
+        val owner = agentDownloads ?: AgentDownloads(application) { activity.get() as? HomeActivity }.also { agentDownloads = it }
+        owner.download(source, response, access)
+    }
+
+    override fun downloadAuthorized(downloadId: String, contextId: String) = agentDownloads?.authorized(downloadId, contextId) == true
+
+    override fun retainDownloadResponse(downloadId: String, response: java.io.Closeable) {
+        val owner = agentDownloads ?: throw SecurityException("The Agent download connection changed")
+        owner.retain(downloadId, response)
+    }
+
+    override fun downloadStatusChanged(downloadId: String, status: String) {
+        agentDownloads?.statusChanged(downloadId, status)
     }
 
     override fun screenshot(id: String, result: Consumer<Bitmap?>) {

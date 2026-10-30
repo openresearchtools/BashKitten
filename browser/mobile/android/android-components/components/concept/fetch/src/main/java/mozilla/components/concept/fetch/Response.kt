@@ -79,6 +79,9 @@ data class Response(
             block(stream)
         }
 
+        /** Returns the existing byte stream for an adapter; the caller must close this body. */
+        fun byteStream(): InputStream = stream
+
         /**
          * Creates a buffered reader from this body.
          *

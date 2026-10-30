@@ -44,7 +44,7 @@ enum class Page {
          */
         @Suppress("UNUSED_PARAMETER")
         fun visiblePages(shouldShowTabGroupsPage: Boolean): List<Page> =
-            listOf(NormalTabs, PrivateTabs, TorTabs, FilesTabs)
+            listOf(FilesTabs, NormalTabs, PrivateTabs, TorTabs)
 
         /**
          * Returns the [Page] that corresponds to the [position].

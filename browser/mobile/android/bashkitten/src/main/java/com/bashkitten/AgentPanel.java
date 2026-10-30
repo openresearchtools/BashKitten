@@ -28,14 +28,12 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final java.util.function.Consumer<Boolean> visibilityChanged;
     private final LinearLayout agent, bar, body;
     private final AgentSidecar sidecar;
+    private final PaneDivider browserDivider;
     private final GeckoView view;
     private final ScrollView setup;
     private final ScrollView logScroll;
     private final TextView message, log, connectionStatus;
     private final LinearLayout actions;
-    private final LinearLayout downloadRows;
-    private final Runnable downloadsChanged = this::renderDownloads;
-    private final Map<FileTransfers.Download, DownloadRow> downloadViews = new LinkedHashMap<>();
     private final ImageButton displayButton;
     private GeckoSession attached;
     private AgentMicrophone microphone;
@@ -43,6 +41,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private String connectionError = "";
     private boolean shown = true;
     private boolean split = true;
+    private float agentFraction = .46f;
     private boolean browserUi;
     private boolean destroyed;
     private GeckoSession.PromptDelegate.FilePrompt filePrompt;
@@ -83,9 +82,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         connectionStatus.setPadding(dp(16), dp(8), dp(16), dp(8));
         connectionStatus.setText("Connecting to Agent…"); connectionStatus.setVisibility(GONE);
         body.addView(connectionStatus, new LayoutParams(-1, -2));
-        downloadRows = new LinearLayout(activity); downloadRows.setOrientation(VERTICAL);
-        body.addView(downloadRows, new LayoutParams(-1, -2));
-        app.transfers.observeDownloads(downloadsChanged);
         view = new GeckoView(activity); body.addView(view, new LayoutParams(-1, 0, 1));
         setup = new ScrollView(activity); setup.setFillViewport(true);
         LinearLayout setupBody = new LinearLayout(activity); setupBody.setPadding(dp(24), dp(28), dp(24), dp(24)); setupBody.setOrientation(VERTICAL); setup.addView(setupBody);
@@ -99,7 +95,11 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         setupBody.addView(logScroll, new LayoutParams(-1, dp(240)));
         body.addView(setup, new LayoutParams(-1, 0, 1));
         sidecar.attach(chatContent, body);
-        addView(agent); addView(browser);
+        browserDivider = new PaneDivider(activity, "Resize chat and browser", agent::getWidth, width -> {
+            int usable = getWidth() - dp(PaneDivider.WIDTH_DP);
+            if (usable > 0) { agentFraction = (float) width / usable; layoutPanels(); }
+        });
+        addView(agent); addView(browserDivider, new LayoutParams(dp(PaneDivider.WIDTH_DP), -1)); addView(browser);
         runtime.attach(engine, this);
         setOnApplyWindowInsetsListener((v, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
@@ -167,29 +167,42 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     // Opening a tab respects an explicit Hide Agent choice, including Display.
     public void showBrowser() { shown = false; browserUi = false; layoutPanels(); }
     public Bundle saveLayoutState() {
-        Bundle state = new Bundle(); state.putBoolean("shown", shown); state.putBoolean("split", split); return state;
+        Bundle state = new Bundle(); state.putBoolean("shown", shown); state.putBoolean("split", split);
+        state.putFloat("agentFraction", agentFraction); state.putBundle("sidecar", sidecar.saveLayoutState()); return state;
     }
     public void restoreLayoutState(Bundle state) {
         if (state == null) return;
-        shown = state.getBoolean("shown", true); split = state.getBoolean("split", true); layoutPanels();
+        shown = state.getBoolean("shown", true); split = state.getBoolean("split", true);
+        float fraction = state.getFloat("agentFraction", .46f);
+        if (Float.isFinite(fraction) && fraction > 0 && fraction < 1) agentFraction = fraction;
+        layoutPanels(); sidecar.restoreLayoutState(state.getBundle("sidecar"), agent.getVisibility() == VISIBLE);
     }
     public void setBrowserUiVisible(boolean visible) { browserUi = visible; layoutPanels(); }
     public boolean isShownAgent() { return shown && !browserUi; }
     private boolean wideLayout() {
-        return (getWidth() > 0 ? getWidth() : dp(getResources().getConfiguration().screenWidthDp)) >= dp(600);
+        return availableWidth() >= minimumAgentWidth() + dp(320 + PaneDivider.WIDTH_DP);
     }
+    private int availableWidth() { return getWidth() > 0 ? getWidth() : dp(getResources().getConfiguration().screenWidthDp); }
+    private int minimumAgentWidth() { return dp(320) + agent.getPaddingLeft() + agent.getPaddingRight(); }
     private void layoutPanels() {
-        int availableWidth = getWidth() > 0 ? getWidth() : dp(getResources().getConfiguration().screenWidthDp);
+        int availableWidth = availableWidth();
         boolean sideBySide = !browserUi && split && !shown && wideLayout();
         boolean agentVisible = !browserUi && (shown || sideBySide);
         agent.setVisibility(agentVisible ? VISIBLE : GONE);
         visibilityChanged.accept(agentVisible);
         if (!agentVisible) sidecar.close();
-        // Keep all five 48dp header controls reachable at the smallest split width.
-        int agentWidth = Math.max(dp(288) + agent.getPaddingLeft() + agent.getPaddingRight(), Math.round(availableWidth * .46f));
-        agent.setLayoutParams(new LayoutParams(sideBySide ? agentWidth : -1, -1));
+        int usable = availableWidth - dp(PaneDivider.WIDTH_DP);
+        // Clamp actual widths without replacing the user's proportion on resize,
+        // rotation, folding or temporary system/keyboard insets.
+        int agentWidth = Math.max(minimumAgentWidth(), Math.min(usable - dp(320), Math.round(usable * agentFraction)));
+        LayoutParams agentParams = (LayoutParams) agent.getLayoutParams();
+        int targetWidth = sideBySide ? agentWidth : -1;
+        if (agentParams == null || agentParams.width != targetWidth) agent.setLayoutParams(new LayoutParams(targetWidth, -1));
+        browserDivider.setVisibility(sideBySide ? VISIBLE : GONE);
+        browserDivider.setBounds(minimumAgentWidth(), usable - dp(320));
         browser.setVisibility(browserUi || sideBySide || !shown ? VISIBLE : GONE);
-        browser.setLayoutParams(new LayoutParams(0, -1, 1));
+        LayoutParams browserParams = (LayoutParams) browser.getLayoutParams();
+        if (browserParams == null || browserParams.width != 0 || browserParams.weight != 1) browser.setLayoutParams(new LayoutParams(0, -1, 1));
         runtime.visible = agentVisible;
         if (microphone != null) microphone.changed();
         if (runtime.session != null) runtime.session.setActive(agentVisible);
@@ -209,7 +222,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         }
         layoutPanels();
     }
-    public void destroy() { destroyed = true; app.transfers.detachDownloads(downloadsChanged); sidecar.close(); if (microphone != null) microphone.close(); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
+    public void destroy() { destroyed = true; sidecar.close(); if (microphone != null) microphone.close(); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
     @Override protected void onConfigurationChanged(android.content.res.Configuration c) { super.onConfigurationChanged(c); layoutPanels(); }
     @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w, h, oldw, oldh); if (w != oldw) layoutPanels(); }
     @Override public void changed() {
@@ -339,7 +352,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             @Override public void onCloseRequest(GeckoSession s) { /* Protected Agent is never a closeable tab. */ }
             @Override public void onCrash(GeckoSession s) { runtime.recoverSession(); }
             @Override public void onKill(GeckoSession s) { runtime.recoverSession(); }
-            @Override public void onExternalResponse(GeckoSession s, WebResponse response) { app.transfers.download(s, response); }
+            @Override public void onExternalResponse(GeckoSession s, WebResponse response) { app.host.download(s, response, runtime.downloadAccess(s)); }
         });
         session.setPromptDelegate(new GeckoSession.PromptDelegate() {
             @Override public GeckoResult<PromptResponse> onChoicePrompt(GeckoSession s, ChoicePrompt prompt) {
@@ -528,16 +541,9 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     private void downloadTermux() {
         message.setText("Finding the official Termux release…");
-        new Thread(() -> {
-            try {
-                String abi = TermuxConnection.downloadAbi();
-                JSONObject release = new JSONObject(releaseMetadata("https://api.github.com/repos/termux/termux-app/releases/latest"));
-                JSONArray assets=release.getJSONArray("assets");String apk=null;
-                for(int i=0;i<assets.length();i++){JSONObject a=assets.getJSONObject(i);if(a.getString("name").endsWith("_"+abi+".apk")){apk=a.getString("browser_download_url");break;}}
-                if(apk==null)throw new IOException("The official Termux release has no " + abi + " APK.");String link=apk;
-                app.main.post(() -> app.create(BrowserApp.USER,false,link,tab->{app.show(tab);showBrowser();},this::error));
-            }catch(Exception e){app.main.post(()->error("Unable to read the official Termux release: " + e.getMessage()));}
-        },"termux-release").start();
+        runtime.updates.downloadTermux(activity).whenComplete((value, failure) -> {
+            if (failure != null) app.main.post(() -> error("Unable to download Termux: " + failure.getMessage()));
+        });
     }
     public void browserControl() {
         if (runtime.selected.equals("local")) {
@@ -553,57 +559,5 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     public void notifications() { AgentSettingsActivity.open(activity, "notifications"); }
     public void checkBrowserUpdate() { AgentSettingsActivity.open(activity, "updates"); }
-    private static String releaseMetadata(String url) throws IOException {
-        java.net.HttpURLConnection connection = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
-        connection.setConnectTimeout(15000); connection.setReadTimeout(15000);
-        connection.setRequestProperty("Accept", "application/vnd.github+json");
-        try (InputStream input = connection.getInputStream()) { return new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8); }
-        finally { connection.disconnect(); }
-    }
     private void error(String text){message.setText(text);Toast.makeText(activity,text,Toast.LENGTH_LONG).show();}
-    private void renderDownloads() {
-        List<FileTransfers.Download> transfers = app.transfers.downloads();
-        for (FileTransfers.Download transfer : new ArrayList<>(downloadViews.keySet())) if (!transfers.contains(transfer)) {
-            downloadRows.removeView(downloadViews.remove(transfer));
-        }
-        for (FileTransfers.Download transfer : transfers) {
-            DownloadRow row = downloadViews.get(transfer);
-            if (row == null) { row = new DownloadRow(transfer); downloadViews.put(transfer, row); downloadRows.addView(row, new LayoutParams(-1, -2)); }
-            row.update();
-        }
-        downloadRows.setVisibility(transfers.isEmpty() ? GONE : VISIBLE);
-    }
-    private final class DownloadRow extends LinearLayout {
-        final FileTransfers.Download transfer;
-        final TextView label;
-        final ProgressBar meter;
-        final Button open, cancel;
-        DownloadRow(FileTransfers.Download transfer) {
-            super(activity); this.transfer = transfer; setGravity(Gravity.CENTER_VERTICAL);
-            setPadding(dp(12), dp(4), dp(8), dp(4));
-            LinearLayout detail = new LinearLayout(activity); detail.setOrientation(VERTICAL);
-            label = text(); label.setTextSize(12); label.setMaxLines(2);
-            detail.addView(label, new LayoutParams(-1, -2));
-            meter = new ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal); meter.setMax(1000);
-            detail.addView(meter, new LayoutParams(-1, dp(4)));
-            addView(detail, new LayoutParams(0, -2, 1));
-            open = button("Open", () -> {
-                try { activity.startActivity(new Intent(Intent.ACTION_VIEW).setDataAndType(transfer.saved, transfer.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)); }
-                catch (Exception error) { app.message("Saved in Downloads. No app can open this file."); }
-            }); addView(open, new LayoutParams(-2, dp(40)));
-            cancel = button("Cancel", () -> {
-                if (transfer.finished) app.transfers.dismissDownload(transfer);
-                else app.transfers.cancelDownload(transfer, "Download cancelled");
-            }); addView(cancel, new LayoutParams(-2, dp(40)));
-        }
-        void update() {
-            String progress = android.text.format.Formatter.formatShortFileSize(activity, transfer.received);
-            if (transfer.expected >= 0) progress += " of " + android.text.format.Formatter.formatShortFileSize(activity, transfer.expected);
-            label.setText(transfer.name + " · " + (transfer.finished || transfer.cancelled != null ? transfer.status : progress));
-            meter.setVisibility(transfer.finished ? GONE : VISIBLE); meter.setIndeterminate(transfer.expected <= 0);
-            if (transfer.expected > 0) meter.setProgress((int)Math.min(1000, transfer.received * 1000.0 / transfer.expected));
-            open.setVisibility(transfer.saved == null ? GONE : VISIBLE);
-            cancel.setText(transfer.finished ? "Dismiss" : "Cancel"); cancel.setEnabled(transfer.finished || transfer.cancelled == null);
-        }
-    }
 }

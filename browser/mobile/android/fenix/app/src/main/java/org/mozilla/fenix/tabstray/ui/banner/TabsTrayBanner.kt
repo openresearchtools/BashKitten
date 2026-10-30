@@ -334,6 +334,15 @@ private fun TabPageBannerTabs(
     }
 
     BannerTab(
+        selected = selectedPage == Page.FilesTabs,
+        testTag = "files_tabs_page_button",
+        contentDescription = "Files tabs: $filesTabCount",
+        onClick = { onTabPageIndicatorClicked(Page.FilesTabs) },
+    ) {
+        Icon(painterResource(iconsR.drawable.mozac_ic_folder_24), null)
+    }
+
+    BannerTab(
         selected = selectedPage == Page.NormalTabs,
         testTag = TabsTrayTestTag.NORMAL_TABS_PAGE_BUTTON,
         contentDescription = normalTabDescription,
@@ -361,14 +370,6 @@ private fun TabPageBannerTabs(
         onClick = { onTabPageIndicatorClicked(Page.TorTabs) },
     ) {
         Icon(painterResource(R.drawable.ic_bashkitten_tor), null)
-    }
-    BannerTab(
-        selected = selectedPage == Page.FilesTabs,
-        testTag = "files_tabs_page_button",
-        contentDescription = "Files tabs: $filesTabCount",
-        onClick = { onTabPageIndicatorClicked(Page.FilesTabs) },
-    ) {
-        Icon(painterResource(iconsR.drawable.mozac_ic_folder_24), null)
     }
 }
 

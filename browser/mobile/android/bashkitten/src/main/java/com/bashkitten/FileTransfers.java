@@ -1,20 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package com.bashkitten;
 
-import android.content.ContentValues;
-import android.net.Uri;
-import android.os.SystemClock;
-import android.provider.MediaStore;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.function.BooleanSupplier;
 import org.json.JSONObject;
-import org.mozilla.geckoview.GeckoSession;
-import org.mozilla.geckoview.WebResponse;
 
 /** Revocable per-file bearer grants. No directory listing or user-supplied filesystem path. */
 final class FileTransfers {
@@ -23,24 +16,6 @@ final class FileTransfers {
     private final ExecutorService workers = Executors.newCachedThreadPool();
     private ServerSocket server;
     private int generation;
-    private final List<Download> downloads = new ArrayList<>();
-    private final Set<Runnable> downloadListeners = new HashSet<>();
-    private boolean watchingDownloads;
-    static final class Download {
-        final String name, mime;
-        final BooleanSupplier current;
-        final InputStream input;
-        final long expected;
-        volatile long received;
-        volatile String cancelled;
-        String status = "Downloading…";
-        Uri saved;
-        boolean finished;
-        Download(String name, String mime, long expected, GeckoSession session, InputStream input, AgentRuntime agent) {
-            this.name = name; this.mime = mime; this.expected = expected;
-            this.current = agent.downloadAccess(session); this.input = input;
-        }
-    }
     private static final class Entry {
         final File file;
         final String token, mime;
@@ -54,106 +29,6 @@ final class FileTransfers {
     FileTransfers(BrowserApp app) { this.app = app; }
     void execute(Runnable work) { workers.execute(work); }
 
-    // Agent downloads keep Gecko's existing authenticated response body. They
-    // never issue a second request through Android's public DownloadManager or
-    // another transport. A slow encrypted stream has no lifetime/speed deadline.
-    void download(GeckoSession source, WebResponse response) {
-        // WebResponse otherwise installs a 30-second per-read timeout, including
-        // external downloads. Tor can legitimately pause longer between bytes;
-        // explicit cancellation, access revocation and stream errors own expiry.
-        response.setReadTimeoutMillis(0);
-        if (!watchingDownloads) {
-            watchingDownloads = true;
-            app.agent.observe(() -> {
-                for (Download transfer : new ArrayList<>(downloads)) if (!transfer.finished && !current(transfer))
-                    cancelDownload(transfer, "The Agent connection changed");
-            });
-        }
-        String name = mozilla.components.support.utils.DownloadUtils.INSTANCE.extractFileNameFromUrl(response.headers.get("Content-Disposition"), response.uri);
-        String mime = Objects.toString(response.headers.get("Content-Type"), "application/octet-stream");
-        long expected = -1;
-        try { expected = Long.parseLong(response.headers.get("Content-Length")); } catch (Exception ignored) {}
-        // Gecko exposes decoded bytes when a server applied content encoding.
-        String encoding = response.headers.get("Content-Encoding");
-        if (encoding != null && !encoding.equalsIgnoreCase("identity")) expected = -1;
-        Download transfer = new Download(name, mime, expected, source, response.body, app.agent);
-        downloads.add(transfer); downloadsChanged();
-        boolean accepted = current(transfer) && (response.statusCode == 200 || response.uri.startsWith("blob:") && response.statusCode == 0);
-        execute(() -> saveDownload(transfer, accepted));
-    }
-    List<Download> downloads() { return new ArrayList<>(downloads); }
-    void observeDownloads(Runnable listener) { downloadListeners.add(listener); listener.run(); }
-    void detachDownloads(Runnable listener) { downloadListeners.remove(listener); }
-    void dismissDownload(Download transfer) { if (transfer.finished) { downloads.remove(transfer); downloadsChanged(); } }
-    void cancelDownload(Download transfer, String reason) {
-        if (transfer.finished || transfer.cancelled != null) return;
-        transfer.cancelled = reason;
-        transfer.status = "Cancelling…"; downloadsChanged();
-        execute(() -> { try { if (transfer.input != null) transfer.input.close(); } catch (IOException ignored) {} });
-    }
-    private boolean current(Download transfer) {
-        return transfer.current.getAsBoolean();
-    }
-    private void downloadsChanged() { for (Runnable listener : new ArrayList<>(downloadListeners)) listener.run(); }
-    private void saveDownload(Download transfer, boolean accepted) {
-        Uri target = null;
-        String failure = null;
-        try (InputStream input = transfer.input) {
-            if (!accepted || input == null) throw new IOException("The download was refused");
-            if (transfer.cancelled != null) throw new IOException(transfer.cancelled);
-            ContentValues values = new ContentValues();
-            values.put(MediaStore.Downloads.DISPLAY_NAME, transfer.name);
-            values.put(MediaStore.Downloads.MIME_TYPE, transfer.mime);
-            values.put(MediaStore.Downloads.IS_PENDING, 1);
-            target = app.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
-            if (target == null) throw new IOException("Cannot create the download");
-            try (OutputStream output = app.getContentResolver().openOutputStream(target)) {
-                if (output == null) throw new IOException("Cannot write the download");
-                byte[] bytes = new byte[65536]; int count; long shown = 0;
-                while ((count = input.read(bytes)) != -1) {
-                    if (transfer.cancelled != null) throw new IOException(transfer.cancelled);
-                    output.write(bytes, 0, count); transfer.received += count;
-                    long now = SystemClock.elapsedRealtime();
-                    if (now - shown >= 250) { shown = now; app.main.post(this::downloadsChanged); }
-                }
-                if (transfer.cancelled != null) throw new IOException(transfer.cancelled);
-                if (transfer.expected >= 0 && transfer.received != transfer.expected) throw new IOException("The download was interrupted before the complete file arrived");
-            }
-            // Recheck access on the UI owner before publishing a completed file.
-            // The worker remains asynchronous; no disk/stream work runs there.
-        } catch (Exception error) { failure = error.getMessage() == null ? "Download failed" : error.getMessage(); }
-        Uri downloaded = target; String error = failure;
-        app.main.post(() -> {
-            String refused = transfer.cancelled != null ? transfer.cancelled : !current(transfer) ? "The Agent connection changed" : error;
-            execute(() -> {
-                String result = refused;
-                if (downloaded != null) try {
-                    if (result == null) {
-                        ContentValues values = new ContentValues(); values.put(MediaStore.Downloads.IS_PENDING, 0);
-                        if (app.getContentResolver().update(downloaded, values, null, null) != 1) throw new IOException("Cannot finish the download");
-                    } else app.getContentResolver().delete(downloaded, null, null);
-                } catch (Exception storageError) {
-                    result = "Cannot finish saving the download";
-                    try { app.getContentResolver().delete(downloaded, null, null); } catch (Exception ignored) {}
-                }
-                String outcome = result;
-                app.main.post(() -> {
-                    String stopped = transfer.cancelled != null ? transfer.cancelled : !current(transfer) ? "The Agent connection changed" : null;
-                    if (outcome == null && stopped != null && downloaded != null) {
-                        execute(() -> {
-                            try { app.getContentResolver().delete(downloaded, null, null); } catch (Exception ignored) {}
-                            app.main.post(() -> finishDownload(transfer, null, stopped));
-                        });
-                    } else finishDownload(transfer, outcome == null ? downloaded : null, outcome);
-                });
-            });
-        });
-    }
-    private void finishDownload(Download transfer, Uri saved, String error) {
-        transfer.finished = true; transfer.saved = saved;
-        transfer.status = error == null ? "Saved in Downloads" : error;
-        downloadsChanged();
-    }
     JSONObject grant(File file, String mime, boolean temporary, AgentController.Access access) throws Exception {
         final int version;
         synchronized (this) { version = generation; }
