@@ -339,6 +339,14 @@ class AgentView {
         this.browse();
       }, 0);
     });
+    this.tabRestored = event => {
+      if (event.target !== this.emptyTab || event.detail?.isRemotenessUpdate) return;
+      // SessionStore can reuse the selected implicit tab without TabOpen or
+      // a URL change. The restored tab belongs to the user even when blank.
+      this.releaseEmptyTab({ preserveTab: true });
+      this.browse();
+    };
+    this.win.gBrowser.tabContainer.addEventListener("SSTabRestored", this.tabRestored);
     this.tabProgress = { onLocationChange: (browser, progress) => {
       if (!progress.isTopLevel || browser !== this.emptyTab?.linkedBrowser || this.isEmptyTab(this.emptyTab)) return;
       this.releaseEmptyTab();
@@ -499,18 +507,19 @@ class AgentView {
   }
   markEmptyTab() {
     const tabs = this.win.gBrowser.tabs.filter(tab => !tab.closing);
-    if (tabs.length !== 1 || !this.isEmptyTab(tabs[0])) return;
+    if (tabs.length !== 1 || !this.isEmptyTab(tabs[0]) || lazy.SessionStore.isTabRestoring(tabs[0])) return;
     // Gecko requires a selected browser even while Agent is the only surface.
     // Keep that native tab, but do not present it as a user-created New Tab.
     this.emptyTab = tabs[0];
     this.emptyTab.setAttribute("bashkitten-empty-tab", "true");
   }
-  releaseEmptyTab() {
+  releaseEmptyTab({ preserveTab = false } = {}) {
     const tab = this.emptyTab;
     if (!tab) return;
     this.emptyTab = null;
     tab.removeAttribute("bashkitten-empty-tab");
-    if (tab.isEmpty && this.isEmptyTab(tab) && this.win.gBrowser.tabs.some(other => other !== tab && !other.closing)) {
+    if (!preserveTab && !lazy.SessionStore.isTabRestoring(tab) && tab.isEmpty && this.isEmptyTab(tab) &&
+        this.win.gBrowser.tabs.some(other => other !== tab && !other.closing)) {
       this.win.gBrowser.removeTab(tab, { animate: false, skipSessionStore: true });
     }
   }
@@ -1701,6 +1710,7 @@ class AgentView {
     lazy.BrowserControlChannel.close("browser closed");
     this.win.removeEventListener("keydown", this.tabKey, true);
     this.win.gBrowser.tabContainer.removeEventListener("TabSelect", this.displayChanged);
+    this.win.gBrowser.tabContainer.removeEventListener("SSTabRestored", this.tabRestored);
     this.win.gBrowser.removeTabsProgressListener(this.tabProgress);
     this.win.removeEventListener("BashKittenDisplayChanged", this.displayChanged);
     Services.obs.removeObserver(this.observer, "bashkitten-agent-remote-changed");
