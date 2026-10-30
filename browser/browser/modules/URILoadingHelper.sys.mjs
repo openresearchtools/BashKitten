@@ -12,6 +12,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   AboutNewTab: "resource:///modules/AboutNewTab.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   PrivateTab: "resource:///modules/PrivateTab.sys.mjs",
+  TorRouting: "resource:///modules/TorRouting.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "ReferrerInfo", () =>
@@ -537,6 +538,19 @@ export const URILoadingHelper = {
             );
         }
         where = "tab";
+      }
+      // URL-bar privacy also covers Tor tabs. Keep their native context rather
+      // than converting them into ordinary Private tabs below. Explicit
+      // container choices and window/private actions keep their own scope.
+      const contextId =
+        params.userContextId ??
+        (params.initiatedByURLBar &&
+        ["current", "tab", "tabshifted"].includes(where)
+          ? (params.targetBrowser || window?.gBrowser?.selectedBrowser)
+              ?.browsingContext?.originAttributes.userContextId
+          : undefined);
+      if (lazy.TorRouting.isTorContext(contextId)) {
+        params = { ...params, private: false, userContextId: contextId };
       }
       if (where == "window" || where == "chromeless") {
         where = "tab";
