@@ -24,6 +24,13 @@
     "sha256": "b01c7c86053241489ced7466124ed8f912d284cf58f33f32b31b0065e70c184b"
   },
   {
+    "repository": "https://gitlab.torproject.org/tpo/core/tor",
+    "commit": "4d8efff53a86670bcda1847b5ab28d2701e6034f",
+    "file": "tor-4d8efff53a86670bcda1847b5ab28d2701e6034f.tar.gz",
+    "sha256": "a8111dd9ad9c7f179e9322faf300a41069d58a4e07595d355ec1d19be5d5207a",
+    "sourceUrl": "https://gitlab.torproject.org/tpo/core/tor/-/archive/4d8efff53a86670bcda1847b5ab28d2701e6034f/tor-4d8efff53a86670bcda1847b5ab28d2701e6034f.tar.gz"
+  },
+  {
     "repository": "https://github.com/libevent/libevent",
     "commit": "79ddfb460847999b807cba76d04e73891f29c6ee",
     "file": "libevent-79ddfb460847999b807cba76d04e73891f29c6ee.tar.gz",

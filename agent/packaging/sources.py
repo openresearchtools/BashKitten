@@ -181,7 +181,8 @@ android_pins = {item['file']: item for item in json.loads(tracked('agent/vendor/
 for record in android_records:
     repository = record['repository']
     commit = record['commit']
-    assert re.fullmatch(r'https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository)
+    assert (re.fullmatch(r'https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository)
+            or repository == 'https://gitlab.torproject.org/tpo/core/tor')
     assert re.fullmatch(r'[a-f0-9]{40}', commit)
     key = (repository, commit)
     if key not in android_archives:

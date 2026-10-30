@@ -1,15 +1,43 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Verify and package native sources missing from Android Maven source JARs."""
 import hashlib
+import importlib.util
 import io
 import json
 from pathlib import PurePosixPath
 import re
 import tarfile
 import tomllib
+import zipfile
 
 BASE = 'agent/vendor/native'
 INVENTORY = BASE + '/android-sources.json'
+
+
+def verify_android_tor(apk, root):
+    """Bind the actual APK JNI library and embedded provenance to current source."""
+    owner = root / 'browser/bashkitten/android/tor/build.py'
+    spec = importlib.util.spec_from_file_location('bashkitten_android_tor', owner)
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    graph, fingerprint = builder.selection()
+    payload = apk.read('assets/tor-android.json')
+    manifest = json.loads(payload)
+    abi = manifest.get('abi')
+    if (manifest.get('schema') != 1 or abi not in builder.ABIS or
+            manifest.get('version') != graph['tor']['version'] or
+            manifest.get('sources') != graph or manifest.get('inputSha256') != fingerprint or
+            manifest.get('binarySha256') != hashlib.sha256(apk.read(f'lib/{abi}/libtor.so')).hexdigest()):
+        raise ValueError('APK Tor JNI differs from its pinned native source/provenance')
+    with zipfile.ZipFile(io.BytesIO(apk.read('assets/tor-provenance.zip'))) as provenance:
+        names = provenance.namelist()
+        if (len(names) != len(set(names)) or set(names) != {'tor-android.json', *graph['inputs']} or
+                provenance.read('tor-android.json') != payload):
+            raise ValueError('APK Tor provenance inventory differs')
+        for name, expected in graph['inputs'].items():
+            if hashlib.sha256(provenance.read(name)).hexdigest() != expected:
+                raise ValueError('APK Tor source provenance differs: ' + name)
+    return manifest
 
 
 def retained_path(record):

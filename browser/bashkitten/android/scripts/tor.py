@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
-import hashlib
-import io
+"""Stage only the source-built Guardian JNI runtime verified for this revision."""
+import importlib.util
+import os
 from pathlib import Path
+import shutil
 import sys
-import urllib.request
-import zipfile
 
-URL = "https://raw.githubusercontent.com/guardianproject/gpmaven/5fdb8dbcfe98d1b7e027e2f99bc086709870b005/info/guardianproject/tor-android/0.4.9.14/tor-android-0.4.9.14.aar"
-SHA256 = "28ff2bb6d4d42eabe57183dedd7a97fce77e8ce4b6f5af6fa03993b3ca054edd"
 
 def main():
-    abi = sys.argv[2]
-    machine = {'arm64-v8a': 183, 'x86_64': 62}[abi]
-    data = urllib.request.urlopen(URL, timeout=120).read()
-    if hashlib.sha256(data).hexdigest() != SHA256:
-        raise SystemExit("Tor archive checksum mismatch")
-    with zipfile.ZipFile(io.BytesIO(data)) as archive:
-        binary = archive.read(f"jni/{abi}/libtor.so")
-    if binary[:6] != b"\x7fELF\x02\x01" or int.from_bytes(binary[18:20], "little") != machine:
-        raise SystemExit(f"Expected a {abi} ELF")
-    target = Path(sys.argv[1]) / f"{abi}/libtor.so"
+    output, abi, metadata = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
+    runtime = os.environ.get('BASHKITTEN_TOR_ANDROID_DIR')
+    if not runtime:
+        raise SystemExit('Build browser/bashkitten/android/tor/build.py for this ABI first and set BASHKITTEN_TOR_ANDROID_DIR')
+    owner = Path(__file__).resolve().parents[1] / 'tor/build.py'
+    spec = importlib.util.spec_from_file_location('android_tor_build', owner)
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    source = builder.validate(Path(runtime), abi)
+    target = output / abi / 'libtor.so'
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(binary)
+    shutil.copy2(source / 'libtor.so', target)
+    metadata.mkdir(parents=True, exist_ok=True)
+    for name in ['tor-android.json', 'tor-provenance.zip']:
+        shutil.copy2(source / name, metadata / name)
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()

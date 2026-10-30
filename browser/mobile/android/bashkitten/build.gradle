@@ -33,6 +33,7 @@ android {
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     sourceSets.main.jniLibs.srcDirs += "$buildDir/generated/tor"
+    sourceSets.main.assets.srcDirs += "$buildDir/generated/tor-provenance"
     buildTypes {
         debug { debuggable true }
         release { minifyEnabled false }
@@ -81,10 +82,16 @@ tasks.register('stageNotices', Exec) {
 tasks.named('preBuild').configure { dependsOn 'stageNotices' }
 
 tasks.register('stageTor', Exec) {
-    commandLine 'python3', "${rootProject.projectDir}/bashkitten/android/scripts/tor.py", "$buildDir/generated/tor", bashKittenAbi
+    commandLine 'python3', "${rootProject.projectDir}/bashkitten/android/scripts/tor.py", "$buildDir/generated/tor", bashKittenAbi, "$buildDir/generated/tor-provenance"
     inputs.property('abi', bashKittenAbi)
     inputs.file("${rootProject.projectDir}/bashkitten/android/scripts/tor.py")
+    inputs.files(fileTree("${rootProject.projectDir}/bashkitten/android/tor"))
+    inputs.file("${rootProject.projectDir}/bashkitten/third_party/tor.toml")
+    inputs.property('runtime', System.getenv('BASHKITTEN_TOR_ANDROID_DIR') ?: '')
     outputs.file("$buildDir/generated/tor/$bashKittenAbi/libtor.so")
+    outputs.dir("$buildDir/generated/tor-provenance")
+    // Always validate the supplied native artifact against the current pins.
+    outputs.upToDateWhen { false }
 }
 tasks.named('preBuild').configure { dependsOn 'stageTor' }
 

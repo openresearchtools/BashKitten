@@ -8,6 +8,15 @@
     "sha256": "ead918e4ca90496c08cae119d90ddd832753139c89d61d0718e8b48bc97d7802"
   },
   {
+    "name": "tor-android-jni",
+    "repository": "https://github.com/bitmold/tor",
+    "commit": "4a522a3ca491c6c04d4a44cb006b92101c42efc1",
+    "licensePath": "LICENSE",
+    "notice": "tor-LICENSE",
+    "sha256": "5dc29ea302cc75db6db4a7c88d7b5d4638b4e0f5f1d2e6d21ce71f707470b766",
+    "role": "Pinned Guardian JNI donor patch; daemon source uses the official Tor release below"
+  },
+  {
     "name": "tor-elf-cleaner",
     "repository": "https://github.com/termux/termux-elf-cleaner",
     "commit": "e4f87f8d13541779756f4907c6957d2a000653da",
@@ -26,8 +35,8 @@
   },
   {
     "name": "tor",
-    "repository": "https://github.com/bitmold/tor",
-    "commit": "4a522a3ca491c6c04d4a44cb006b92101c42efc1",
+    "repository": "https://gitlab.torproject.org/tpo/core/tor",
+    "commit": "4d8efff53a86670bcda1847b5ab28d2701e6034f",
     "licensePath": "LICENSE",
     "notice": "tor-LICENSE",
     "sha256": "5dc29ea302cc75db6db4a7c88d7b5d4638b4e0f5f1d2e6d21ce71f707470b766"
@@ -90,24 +99,24 @@
   },
   {
     "name": "tor-equix",
-    "repository": "https://github.com/bitmold/tor",
-    "commit": "4a522a3ca491c6c04d4a44cb006b92101c42efc1",
+    "repository": "https://gitlab.torproject.org/tpo/core/tor",
+    "commit": "4d8efff53a86670bcda1847b5ab28d2701e6034f",
     "licensePath": "src/ext/equix/LICENSE",
     "notice": "tor-equix-LICENSE",
     "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
   },
   {
     "name": "tor-hashx",
-    "repository": "https://github.com/bitmold/tor",
-    "commit": "4a522a3ca491c6c04d4a44cb006b92101c42efc1",
+    "repository": "https://gitlab.torproject.org/tpo/core/tor",
+    "commit": "4d8efff53a86670bcda1847b5ab28d2701e6034f",
     "licensePath": "src/ext/equix/hashx/LICENSE",
     "notice": "tor-hashx-LICENSE",
     "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
   },
   {
     "name": "tor-mulodi",
-    "repository": "https://github.com/bitmold/tor",
-    "commit": "4a522a3ca491c6c04d4a44cb006b92101c42efc1",
+    "repository": "https://gitlab.torproject.org/tpo/core/tor",
+    "commit": "4d8efff53a86670bcda1847b5ab28d2701e6034f",
     "licensePath": "src/ext/mulodi/LICENSE.TXT",
     "notice": "tor-mulodi-LICENSE",
     "sha256": "415ec2b15961f8b34859a50af386663f552bb62b9fffd69e8eb676c792ea022e"

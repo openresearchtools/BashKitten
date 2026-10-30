@@ -39,6 +39,8 @@ def bundles():
     product += "\n\nInherited desktop source notice (desktop packaging references below do not describe this Android APK):\n" + files([ROOT/'bashkitten/SOURCE-NOTICE'])
     tor = "C Tor, Guardian Project Android integration, control library and linked dependencies\n\n" + dependencies([
         record for record in records if record['name'].startswith('tor') or record['name'] in ('jtorctl', 'libevent', 'openssl', 'zlib', 'zstd')])
+    tor += "\n\nThe native Tor build retains Guardian's --enable-gpl configuration.\n\n" + files([
+        ROOT/'bashkitten/android/notices/tor-GPL-3.0'])
     blocker = "Adblocking, scriptlets and bundled filter data\n\n" + files([
         ROOT/'bashkitten/BLOCKER-ASSET-SOURCE-NOTICE', ROOT/'bashkitten/BLOCKER-ENGINE-SOURCE-NOTICE',
         ROOT/'third_party/rust/adblock/LICENSE', ROOT/'third_party/rust/memchr/COPYING',

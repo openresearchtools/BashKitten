@@ -74,7 +74,10 @@ a provenance ZIP binding the binary, pin and licenses. Debian assembly accepts
 that runtime directory with `--tor-dir`; AppImage packaging and configured Gecko
 builds validate the same provenance. Arti and its Cargo dependencies are removed.
 
-The APK separately retains Guardian Project's released Tor Android 0.4.9.14 AAR
-and its matching JNI/dependency sources. No 0.4.9.15 Android release was available
-from that existing upstream on 30 October 2026; this source refresh updates the
-Linux and Termux daemon, without relabeling the APK binary.
+The APK builds Tor 0.4.9.15 with Guardian Project's retained JNI API and native
+build recipe. `android/tor/` pins its pristine build files, attributed Android
+patch and existing dependency sources. Both required ABIs are built independently
+of Gecko; `stageTor` verifies the current source fingerprint, JNI exports and
+16 KB ELF compatibility, and the APK collector binds the actual library to its
+embedded provenance. See [the native build instructions](android/tor/README.md).
+This preserves the existing private-socket TorService lifecycle and routing.

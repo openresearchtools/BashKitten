@@ -203,6 +203,11 @@ spec = importlib.util.spec_from_file_location('android_native_component', ROOT.p
 native_component = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(native_component)
 manifest['native_gecko'] = native_component.record_build(destination, target)
+spec = importlib.util.spec_from_file_location('tor_native_sources', ROOT.parent / 'agent/packaging/android_native_sources.py')
+tor_sources = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(tor_sources)
+with zipfile.ZipFile(destination) as apk:
+    manifest['tor_android'] = tor_sources.verify_android_tor(apk, ROOT.parent)
 remote = Path(os.environ['BASHKITTEN_REMOTE_CLIENT_DIR'])
 remote_manifest = json.loads((remote / 'build-manifest.json').read_text())
 if remote_manifest['source'] != revision or remote_manifest['architecture'] != abi:

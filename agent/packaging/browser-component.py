@@ -108,6 +108,8 @@ def verify_android_resources(apk):
     # EXTRA_JS_MODULES is copied into the current omnijar, never into Gecko ELF
     # libraries. Native reuse must not accidentally preserve the donor's module.
     with zipfile.ZipFile(apk) as archive:
+        from android_native_sources import verify_android_tor
+        verify_android_tor(archive, ROOT)
         names = archive.namelist()
         for directory, extension_id in [('references', 'references@bashkitten.org'),
                                          ('references-host', 'references-host@bashkitten.org')]:
