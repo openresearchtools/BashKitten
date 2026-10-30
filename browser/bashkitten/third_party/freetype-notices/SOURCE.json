@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "name": "FreeType",
+  "upstream": "https://gitlab.freedesktop.org/freetype/freetype",
+  "commit": "d1f916a65eb13d5cd44b711cfd24cf8d5949b2d2",
+  "mozillaTorBackport": "09c4187c5499fd8ca2c5d10b4ef7d9d6602f0b2f",
+  "sourcePath": "modules/freetype2",
+  "notice": "Full upstream license texts retained unchanged. This software is based in part on the work of the FreeType Team. Existing per-file copyrights and bundled-driver notices remain with the source.",
+  "files": [
+    {
+      "path": "FTL.TXT",
+      "upstreamPath": "docs/FTL.TXT",
+      "url": "https://gitlab.freedesktop.org/freetype/freetype/-/raw/d1f916a65eb13d5cd44b711cfd24cf8d5949b2d2/docs/FTL.TXT",
+      "sha256": "5a5ee54c5001bbad1cdc1a57cc3dd4c42199b2da09d39c7ee41fab002d02967f"
+    },
+    {
+      "path": "GPLv2.TXT",
+      "upstreamPath": "docs/GPLv2.TXT",
+      "url": "https://gitlab.freedesktop.org/freetype/freetype/-/raw/d1f916a65eb13d5cd44b711cfd24cf8d5949b2d2/docs/GPLv2.TXT",
+      "sha256": "c4120c6752c910c299e3bd9cb3a46ff262c268303ca2069b61f92f10a5656c18"
+    }
+  ]
+}

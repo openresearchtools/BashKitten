@@ -210,6 +210,14 @@ features or privacy configuration are imported. Source applicability, retained
 adaptations and provenance checks do not replace the combined native builds and
 installed Android/Linux acceptance.
 
+The FreeType refresh also retains the complete `docs/FTL.TXT` and `docs/GPLv2.TXT`
+from its exact pinned revision under `bashkitten/third_party/freetype-notices/`,
+with source URLs and SHA-256 hashes. Mozilla's vendored `LICENSE.TXT` references
+those files but its source selection omits `docs/`. The existing notice generator
+includes these full texts, the source attribution and the bundled BDF/PCF driver
+notices in `about:license` and the package copyright inventory. No license text
+or upstream copyright is replaced.
+
 Relevant Mozilla advisories include [MFSA 2026-73](https://www.mozilla.org/en-US/security/advisories/mfsa2026-73/),
 [2026-74](https://www.mozilla.org/en-US/security/advisories/mfsa2026-74/),
 [2026-82](https://www.mozilla.org/en-US/security/advisories/mfsa2026-82/) and
