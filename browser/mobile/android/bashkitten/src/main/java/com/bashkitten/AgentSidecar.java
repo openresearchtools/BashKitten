@@ -239,33 +239,38 @@ public final class AgentSidecar {
             render();
         }));
     }
-    private void awaitReady(String backend, Runnable ready, int epoch, long until) {
+    private void awaitReady(String backend, Runnable ready, int epoch, long until, boolean application) {
         if (epoch != generation || !backend.equals(runtime.selected)) return;
-        runtime.navigation("snapshot", value(), snapshot -> {
+        runtime.navigation(application ? "application-ready" : "snapshot", value(), snapshot -> {
             if (epoch != generation || !backend.equals(runtime.selected)) return;
-            snapshots.put(backend, snapshot); ready.run();
+            if (application && !snapshot.optBoolean("authenticated")) { cancelSelection(); error("Sign in to this backend first."); return; }
+            if (!application) snapshots.put(backend, snapshot);
+            ready.run();
         }, message -> {
             if (epoch != generation || !backend.equals(runtime.selected)) return;
             if (!runtime.state.equals("on")) { cancelSelection(); render(); return; }
             if (android.os.SystemClock.elapsedRealtime() >= until) { cancelSelection(); error(message); return; }
-            app.main.postDelayed(() -> awaitReady(backend, ready, epoch, until), 200);
+            app.main.postDelayed(() -> awaitReady(backend, ready, epoch, until, application), 200);
         });
     }
     private void select(String backend, Runnable ready) {
         select(backend, ready, null);
     }
     private void select(String backend, Runnable ready, Runnable cancelled) {
+        select(backend, ready, cancelled, false);
+    }
+    private void select(String backend, Runnable ready, Runnable cancelled, boolean application) {
         cancelSelection();
         selectionCancelled = cancelled;
-        Runnable selected = () -> { selectionCancelled = null; ready.run(); refresh(); };
-        if (backend.equals(runtime.selected) && runtime.state.equals("on")) { awaitReady(backend, selected, generation, android.os.SystemClock.elapsedRealtime() + 30000); return; }
+        Runnable selected = () -> { selectionCancelled = null; ready.run(); if (!application) refresh(); };
+        if (backend.equals(runtime.selected) && runtime.state.equals("on")) { awaitReady(backend, selected, generation, android.os.SystemClock.elapsedRealtime() + 30000, application); return; }
         if (backend.equals(runtime.selected) && !runtime.isOnRequested()) runtime.turnOn();
         else runtime.select(backend);
         final int epoch = generation;
         AgentRuntime.Listener observer = new AgentRuntime.Listener() {
             @Override public void changed() {
                 if (epoch != generation || !backend.equals(runtime.selected)) { runtime.detach(this); pendingSelections.remove(this); return; }
-                if (runtime.state.equals("on")) { runtime.detach(this); pendingSelections.remove(this); awaitReady(backend, selected, epoch, android.os.SystemClock.elapsedRealtime() + 30000); }
+                if (runtime.state.equals("on")) { runtime.detach(this); pendingSelections.remove(this); awaitReady(backend, selected, epoch, android.os.SystemClock.elapsedRealtime() + 30000, application); }
                 else if (Arrays.asList("failed", "off", "stop-failed", "setup").contains(runtime.state)) { runtime.detach(this); pendingSelections.remove(this); cancelSelection(); render(); }
             }
         };
@@ -277,7 +282,7 @@ public final class AgentSidecar {
             openingFiles.remove(backend); close();
         }, message -> {
             openingFiles.remove(backend); error(message); render();
-        }), () -> { openingFiles.remove(backend); render(); });
+        }), () -> { openingFiles.remove(backend); render(); }, true);
         render();
     }
     void openMessage(String eventId) {

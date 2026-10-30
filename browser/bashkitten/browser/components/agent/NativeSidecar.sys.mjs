@@ -2,6 +2,7 @@
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 const NS = "http://www.w3.org/1999/xhtml";
+const selectionCancelled = () => Object.assign(new Error("The selected backend changed."), { name: "AbortError" });
 
 /** Native hierarchy. The protected chat supplies only its own session catalogue. */
 export class NativeSidecar {
@@ -36,7 +37,7 @@ export class NativeSidecar {
   }
   button(text, label, action) {
     const button = this.node("button", { type: "button", title: label, "aria-label": label }, text);
-    button.addEventListener("click", async () => { button.disabled = true; try { this.notice.textContent = ""; await action(button); } catch (error) { this.notice.textContent = error.message; } finally { if (button.isConnected) button.disabled = false; } }); return button;
+    button.addEventListener("click", async () => { button.disabled = true; try { this.notice.textContent = ""; await action(button); } catch (error) { if (error.name !== "AbortError") this.notice.textContent = error.message; } finally { if (button.isConnected) button.disabled = false; } }); return button;
   }
   iconButton(image, label, action) {
     const button = this.button("", label, action);
@@ -73,26 +74,52 @@ export class NativeSidecar {
     const { BashKittenDisplay } = ChromeUtils.importESModule("resource:///modules/BashKittenDisplay.sys.mjs");
     return BashKittenDisplay.capabilities();
   }
-  async select(id) {
-    const epoch = this.selectionEpoch = (this.selectionEpoch || 0) + 1;
-    if (id !== this.selected() || this.host.off || !this.host.activeBrowser) await this.host.choose(id === "local" ? "" : id);
-    const browser = this.host.activeBrowser;
-    if (!browser) throw new Error("The backend did not open a protected chat.");
-    const current = () => !this.closed && epoch === this.selectionEpoch && id === this.selected() && browser === this.host.activeBrowser && !this.host.off;
-    let lastError = new Error("The chat is still connecting.");
+  async backendView(id) {
+    const pending = this.selecting;
+    // On and Files can overlap while the same backend is starting. Share that
+    // native selection rather than superseding its connection before it opens.
+    if (pending?.id === id && pending.hostEpoch === this.host.selectionEpoch) return pending.promise;
+    if (id === this.selected() && !this.host.off && this.host.activeBrowser) {
+      return { browser: this.host.activeBrowser, epoch: this.selectionEpoch, hostEpoch: this.host.selectionEpoch };
+    }
+    const selection = { id, epoch: this.selectionEpoch = (this.selectionEpoch || 0) + 1 };
+    this.selecting = selection;
+    selection.promise = (async () => {
+      const choosing = this.host.choose(id === "local" ? "" : id);
+      selection.hostEpoch = this.host.selectionEpoch;
+      try { await choosing; }
+      catch (error) {
+        if (this.closed || selection.epoch !== this.selectionEpoch || selection.hostEpoch !== this.host.selectionEpoch) throw selectionCancelled();
+        throw error;
+      }
+      if (this.closed || selection.epoch !== this.selectionEpoch || selection.hostEpoch !== this.host.selectionEpoch || id !== this.selected() || this.host.off) throw selectionCancelled();
+      if (!this.host.activeBrowser) throw new Error("The backend did not open its protected view.");
+      return { browser: this.host.activeBrowser, epoch: selection.epoch, hostEpoch: selection.hostEpoch };
+    })();
+    try { return await selection.promise; }
+    finally { if (this.selecting === selection) this.selecting = null; }
+  }
+  async select(id, { application = false } = {}) {
+    const { browser, epoch, hostEpoch } = await this.backendView(id);
+    const current = () => !this.closed && epoch === this.selectionEpoch && hostEpoch === this.host.selectionEpoch && id === this.selected() && browser === this.host.activeBrowser && !this.host.off;
+    let lastError = new Error(application ? "The application connection is still starting." : "The chat is still connecting.");
     // Loading the protected document and authenticating its API are separate
     // from starting its backend. Never replay a mutation while waiting for it.
     for (const until = Date.now() + 30000; Date.now() < until;) {
-      if (!current()) throw new Error("The selected backend changed.");
+      if (!current()) throw selectionCancelled();
       if (!browser.webProgress?.isLoadingDocument) {
         try {
-          const snapshot = await this.navigation("snapshot");
-          if (!current()) throw new Error("The selected backend changed.");
-          this.cache.set(id, snapshot); return;
-        } catch (error) { lastError = error; }
+          const result = await this.navigation(application ? "application-ready" : "snapshot");
+          if (!current()) throw selectionCancelled();
+          if (application) {
+            if (result.authenticated !== true) throw new Error("Sign in to this backend first.");
+          } else this.cache.set(id, result);
+          return;
+        } catch (error) { if (!current()) throw selectionCancelled(); lastError = error; }
       }
       await new Promise(resolve => setTimeout(resolve, 200));
     }
+    if (!current()) throw selectionCancelled();
     throw lastError;
   }
   refresh() {
@@ -183,7 +210,7 @@ export class NativeSidecar {
       const heading = this.node("div", { class: "native-backend-heading" });
       const open = this.button(backend.name, backend.name, async () => { await this.select(backend.id); await this.refreshChats(); }); open.className = "native-title";
       heading.append(open);
-      const files = this.button("", `Open ${backend.name} Files`, async () => { await this.select(backend.id); await this.host.openFiles({}); });
+      const files = this.button("", `Open ${backend.name} Files`, async () => { await this.select(backend.id, { application: true }); await this.host.openFiles({}); });
       files.append(this.icon("folder")); heading.append(files);
       const on = backend.kind === "remote" ? backend.state === "ready" : backend.kind === "machine" ? backend.state === "running" : this.host.localOn;
       const power = this.button("", `${backend.name}: ${on ? "Turn off" : "Turn on"}`, async () => {

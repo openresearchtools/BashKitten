@@ -4172,6 +4172,15 @@
     window.bashkittenNavigation = {
       async call(action, value = {}) {
         if (action === 'folders-cancel') { nativeFolderRequests.get(value.requestId)?.abort(); nativeFolderRequests.delete(value.requestId); return true; }
+        // Native application tabs need this backend's authenticated bootstrap,
+        // independently of model/settings loads, the chat catalogue or a worker.
+        if (['application-ready', 'files-open', 'application-open', 'application-resolve'].includes(action)) {
+          if (!csrf || authRequired) throw Error('The application connection is still starting');
+          if (action === 'application-ready') return {authenticated:true};
+          if (action === 'files-open') return requestFilesLaunch(value);
+          if (action === 'application-open') return requestApplicationLaunch(value);
+          return api('/api/apps/resolve', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({url:value.url})});
+        }
         if (!initialized || !csrf) throw Error('The chat is still connecting');
         if (action === 'snapshot' && !sessionCatalogueReady) {
           // Native readiness must include the first catalogue, not just login.
@@ -4212,9 +4221,6 @@
           showSettingsView(action === 'providers' ? 'services' : 'app');
           return true;
         }
-        if (action === 'files-open') return requestFilesLaunch(value);
-        if (action === 'application-open') return requestApplicationLaunch(value);
-        if (action === 'application-resolve') return api('/api/apps/resolve', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({url:value.url})});
         if (action === 'folders') {
           if (typeof value.requestId !== 'string' || !value.requestId) throw Error('Missing folder request identity');
           nativeFolderRequests.get(value.requestId)?.abort();
