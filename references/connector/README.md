@@ -8,7 +8,7 @@ page scripts cannot call the host. Desktop packaging adds the tiny native
 native-messaging delegate `bashkitten_references`. No tokens, filesystem handles
 or arbitrary native URL fetch are exposed to the capture extension.
 
-The independently built capture extension (currently 1.0.8), preinstalled separately from the fixed host, reuses Connector 5.0.217's
+The independently built capture extension (currently 1.0.10), preinstalled separately from the fixed host, reuses Connector 5.0.217's
 translation, ItemSaver, background attachment, SingleFile, item selector, progress,
 content-type interception, cookies and challenge-monitor modules. Its source
 import is immutable under `upstream/`; a named patch changes only documented seams.
@@ -52,6 +52,12 @@ data-permission prompt; the current BashKitten source is newer on both targets.
 The capture action retains Gecko's native configurable extension command without
 a default shortcut: the donor's Ctrl+Shift+S conflicts with browser screenshots.
 Users can assign a capture shortcut through the browser's extension settings.
+The build maps the pinned Connector's translator, webpage and PDF action icons
+to the retained monochrome References open-book artwork. Its native capture
+logic, tooltips and saving/success/failure indicators remain, as do the donor's
+item-type images inside the chooser and progress UI. The guarded build mappings
+fail if an upstream action path changes; pristine source and legal attribution
+remain under `upstream/` and `legal/`.
 
 ## Native API contract
 

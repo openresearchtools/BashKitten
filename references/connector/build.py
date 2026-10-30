@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parent
 REPO=ROOT.parents[1]
 WORK=ROOT/'.build/source'
 OUT=ROOT/'dist/references'
-VERSION='1.0.9'
+VERSION='1.0.10'
 
 def run(*args):subprocess.run(args,cwd=WORK,check=True,env={**os.environ,'NPM_CONFIG_OFFLINE':'true'})
 # Keep npm's content cache; reconstruct source from the named patch every time.
@@ -44,6 +44,21 @@ icons=ROOT/'src/icons'
 for size in [16,32,64,128]:shutil.copy(icons/f'Icon-{size}.png',OUT/f'Icon-{size}.png')
 for path in (OUT/'images').rglob('*zotero*'):
  if path.suffix=='.png':shutil.copy(icons/('Icon-16.png' if '-16px' in path.name else 'Icon-32.png'),path)
+# Native per-tab detection replaces the manifest icon with item-type artwork.
+# Brand only those action paths; retain the donor's item icons in capture UI
+# and its separate saving/success/failure indicators, titles and enabled state.
+action_icons={'16':'Icon-16.png','32':'Icon-32.png','48':'Icon-64.png'}
+capture_icon_paths={
+ 'translator': 'path:(itemType === "multiple"\n\t\t\t\t? "images/treesource-collection.png"\n\t\t\t\t: Zotero.ItemTypes.getImageSrc(itemType))',
+ 'webpage': 'path: Zotero.ItemTypes.getImageSrc("webpage-gray")',
+ 'pdf': "path: browser.runtime.getURL('images/pdf.png')",
+}
+background=OUT/'background.js'
+text=background.read_text()
+for state,expression in capture_icon_paths.items():
+ if text.count(expression)!=1:raise SystemExit('Pinned Connector action icon changed: '+state)
+ text=text.replace(expression,'path: '+json.dumps(action_icons),1)
+background.write_text(text)
 # Retired cloud/reporting/editor surfaces must not advertise donor services.
 retired_messages=('integration_', 'reports_', 'preferences_onlineLibrary_',
  'preferences_googleDocs', 'preferences_translators_reportErrors', 'firstRun_',
@@ -73,7 +88,7 @@ manifest=json.loads((OUT/'manifest.json').read_text())
 manifest.update(name='References',description='Capture references into the selected BashKitten project.',homepage_url='https://github.com/openresearchtools/BashKitten')
 manifest['browser_action']['default_title']='References Add'
 manifest['browser_action']['default_area']='navbar'
-manifest['browser_action']['default_icon']={'16':'Icon-16.png','32':'Icon-32.png','48':'Icon-64.png'}
+manifest['browser_action']['default_icon']=action_icons
 # Keep Gecko's configurable action command without the donor's screenshot shortcut.
 manifest['commands']['_execute_browser_action'].pop('suggested_key',None)
 manifest.pop('applications',None)
