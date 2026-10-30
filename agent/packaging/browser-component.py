@@ -281,7 +281,14 @@ def completed_producer(repository, run, target):
             run['event'] != 'workflow_dispatch' or run['head_branch'] != 'main' or
             run['path'] != '.github/workflows/build.yml'):
         return None
-    jobs = api(f'repos/{repository}/actions/runs/{run["id"]}/jobs?per_page=100')['jobs']
+    run_id, attempt = run.get('id'), run.get('run_attempt')
+    if type(run_id) is not int or run_id < 1 or type(attempt) is not int or attempt < 1:
+        raise ValueError('Invalid browser producer run or attempt identity')
+    jobs = api(f'repos/{repository}/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100')['jobs']
+    for job in jobs:
+        if (type(job.get('run_id')) is not int or type(job.get('run_attempt')) is not int or
+                job['run_id'] != run_id or job['run_attempt'] != attempt):
+            raise ValueError('Browser producer job belongs to another run or attempt')
     if target.startswith('android'):
         return completed_android_producer(repository, run, jobs)
     verify_name = 'Verify the browser archive and source inputs'
