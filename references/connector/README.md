@@ -8,7 +8,7 @@ page scripts cannot call the host. Desktop packaging adds the tiny native
 native-messaging delegate `bashkitten_references`. No tokens, filesystem handles
 or arbitrary native URL fetch are exposed to the capture extension.
 
-The independently built capture extension (currently 1.0.7), preinstalled separately from the fixed host, reuses Connector 5.0.217's
+The independently built capture extension (currently 1.0.8), preinstalled separately from the fixed host, reuses Connector 5.0.217's
 translation, ItemSaver, background attachment, SingleFile, item selector, progress,
 content-type interception, cookies and challenge-monitor modules. Its source
 import is immutable under `upstream/`; a named patch changes only documented seams.
@@ -163,6 +163,8 @@ handling. The native runtime platform API selects this branch; desktop behavior
 and the donor's explicit cookie-header filter remain unchanged.
 An uninjectable Android PDF reuses the same response-stream helper under its
 existing capture session, with source/backend checks before and after retrieval.
+Repeated saves retain the native `application/pdf` identity after the donor clears
+its saved-button flag, preserving PDF metadata and the same source-stream path.
 The donor still validates and uploads through its normal session path. Closing
 the source cancels capture. A routine successful helper tab closes after MIME
 validation; challenge and failed tabs remain visible. No cookie export, cookie

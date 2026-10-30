@@ -6,6 +6,25 @@ and installed-product acceptance. It does not claim completed integration.
 
 ## Current integration checkpoint — 29 October 2026
 
+The corrected `72abe63d2bd7a973bf1a170ae129387b5adba1bf` full batch passed
+all 62 jobs in [40967838971](https://github.com/openresearchtools/BashKitten/actions/runs/40967838971),
+including all six primary packages and the matching source/legal gate. Its
+installed Wayland and Xorg checks passed the main About notices/source links and
+native Office settings persistence. All 3,057 full Linux notice texts are retained.
+Publication remains held on the Android follow-up described below.
+
+The exact installed Android pair passed normal and redirected PDF capture, a
+first standalone PDF save and native normal/private cookie isolation. Repeating
+the same standalone PDF save exposed a connector classification error: the donor
+clears its PDF button flag after success but retains the native PDF MIME type.
+Capture 1.0.8 derives the existing PDF save flag from that retained MIME too,
+preserving PDF metadata and the existing native source-tab stream. No browser,
+cookie/session or permission changes are involved. The actual old failure and
+corrected first-save/reset/second-save sequence passed focused source and packaged
+checks; non-PDF and desktop transport behavior remained unchanged. The normal
+offline extension build passed. A corrected signed Android installation remains
+required. Evidence is in `Bashkitten-Acceptance/references-repeat-pdf-20261030/`.
+
 The subsequent `479ab3a2513d73cc558d8f0d074a9e87d1e232e9` full batch
 [40958050104](https://github.com/openresearchtools/BashKitten/actions/runs/40958050104)
 hit one Termux ARM64 desktop-package failure: GNU make selected its built-in

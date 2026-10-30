@@ -1,3 +1,16 @@
+--- a/src/browserExt/saveWithoutProgressWindow.js
++++ b/src/browserExt/saveWithoutProgressWindow.js
+@@ -74,5 +74,7 @@
+ Zotero.Utilities.saveWithoutProgressWindow = async function (tab, frameId, referencesSessionID) {
+-	let url = tab.url;
+-	let tabInfo = Zotero.Connector_Browser.getTabInfo(tab.id);
+-	const pdf = tabInfo.isPDF;
++	let url = tab.url;
++	let tabInfo = Zotero.Connector_Browser.getTabInfo(tab.id);
++	// The donor clears its PDF button flag after a successful save. The
++	// native response MIME still identifies the unchanged source document.
++	const pdf = tabInfo.isPDF || tabInfo.contentType === 'application/pdf';
+ 	// Get URL from iframe
 --- a/src/common/itemSaver.js
 +++ b/src/common/itemSaver.js
 @@ -412,21 +412,22 @@
