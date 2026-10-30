@@ -56,16 +56,17 @@ exec /system/bin/app_process / com.bashkitten.display.loader.Loader "$@"
 ''')
     command.chmod(0o755)
     source = HERE.parents[4] / 'bashkitten/vendor/termux-x11'
+    upstream = json.loads((source / 'source.json').read_text())['commit']
     notices = args.output / 'licenses'; notices.mkdir(exist_ok=True)
     shutil.copy2(source / 'source/LICENSE', notices / 'Termux-X11-GPL-3.0.txt')
     shutil.copy2(source / 'source.json', notices / 'source.json')
     (notices / 'NOTICE').write_text('Termux:X11 shell-loader, GPL-3.0-only.\n'
-        'Source: https://github.com/termux/termux-x11 at fa3a8b430e2896a19f44c99a9cb056254615ae06.\n'
+        f'Source: https://github.com/termux/termux-x11 at {upstream}.\n'
         'BashKitten modifications, 11 October 2026: SHA-256 signing pin, exact module protocol, current user, Android-managed extracted native libraries and removal of environment overrides.\n'
         'Matching loader source and build recipe are in browser/mobile/android/bashkitten/display/loader in the BashKitten source archive.\n')
     manifest = {'package': args.package, 'signerSha256': signer, 'protocol': version,
         'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=HERE, text=True).strip(),
-        'upstreamCommit': 'fa3a8b430e2896a19f44c99a9cb056254615ae06',
+        'upstreamCommit': upstream,
         'sha256': {name: hashlib.sha256((args.output / name).read_bytes()).hexdigest()
                    for name in ['bashkitten-x11', 'bashkitten-x11-loader.jar']}}
     (args.output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')

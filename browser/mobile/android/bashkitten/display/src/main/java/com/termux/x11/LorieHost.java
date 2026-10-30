@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Host extraction from Termux:X11 fa3a8b430e28. Android window/input APIs stay in
+// Host extraction from Termux:X11, refreshed at 6dfb8b4a4cc8. Android window/input APIs stay in
 // the child-owned window context; no Activity or browser controller crosses IPC.
 package com.termux.x11;
 
@@ -21,6 +21,8 @@ import com.termux.x11.extrakeys.ExtraKeysView;
 import com.termux.x11.utils.TermuxX11ExtraKeys;
 
 public final class LorieHost extends ContextThemeWrapper {
+    // The upstream native renderer updates this field through JNI.
+    @androidx.annotation.Keep private long lastServerHeartbeat;
     public static Handler handler;
     public static final int PAGER_POSITION_TOP = 0, PAGER_POSITION_LEFT = 1,
         PAGER_POSITION_BOTTOM = 2, PAGER_POSITION_RIGHT = 3;

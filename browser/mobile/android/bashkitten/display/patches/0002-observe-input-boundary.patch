@@ -1,6 +1,14 @@
+From: BashKitten contributors
+Subject: [PATCH] Gate native viewport input and clipboard in Observe mode
+
+Rebased 30 October 2026 onto the pinned 2026-10-27 engine. Preserve the
+upstream IME code-point deletion and sticky-key release behavior.
+Retains upstream GPL-3.0-only notices.
+
 --- a/lorie/src/main/java/com/termux/x11/LorieView.java
 +++ b/lorie/src/main/java/com/termux/x11/LorieView.java
-@@ -64,6 +64,12 @@
+@@ -63,7 +63,13 @@
+     private ClipboardManager clipboard;
 -    private long lastClipboardTimestamp = System.currentTimeMillis();
 +    private long lastClipboardTimestamp = 0;
      private long mNativeContext;
@@ -14,7 +22,7 @@
      private boolean hardwareKbdScancodesWorkaround = false;
      private final InputMethodManager mIMM = (InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
      private final LorieHost activity = LorieHost.find(getContext());
-@@ -556,6 +562,7 @@
+@@ -569,6 +575,7 @@
  
      @Override
      public boolean dispatchKeyEventPreIme(KeyEvent event) {
@@ -22,7 +30,7 @@
          if (imeBuggyKeys.contains(event.getKeyCode())) {
              // IME does not handle/send events for some keys correctly correctly.
              // So we should send key release manually in the case if IME will not send it...
-@@ -573,6 +580,7 @@
+@@ -586,6 +593,7 @@
  
      @Override
      public boolean dispatchKeyEvent(KeyEvent event) {
@@ -30,7 +38,7 @@
          if (imeBuggyKeys.contains(event.getKeyCode())) {
              // remove messages we posted in dispatchKeyEventPreIme
              int action = event.getAction();
-@@ -590,13 +598,14 @@
+@@ -603,13 +611,14 @@
          setFiltering(mNativeContext, "nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR);
          setFollowCursorPan(mNativeContext, p.zoomFollowsCursor.get());
          hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
@@ -46,7 +54,7 @@
          clipboard.setPrimaryClip(ClipData.newPlainText("X11 clipboard", text));
  
          // Android does not send PrimaryClipChanged event to the window which posted event
-@@ -607,7 +616,7 @@
+@@ -620,7 +629,7 @@
  
      /** @noinspection unused*/ // It is used in native code
      void requestClipboard() {
@@ -55,7 +63,7 @@
          boolean isText = desc != null && (desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) || desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML));
          CharSequence clip = isText ? clipboard.getText() : null;
          String text = clip != null ? clip.toString() : "";
-@@ -624,12 +633,12 @@
+@@ -637,12 +646,12 @@
      }
  
      public void checkForClipboardChange() {
@@ -69,7 +77,7 @@
                  (desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) ||
                          desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML))) {
              lastClipboardTimestamp = timestamp;
-@@ -642,7 +652,7 @@
+@@ -655,7 +664,7 @@
      public void onWindowFocusChanged(boolean hasFocus) {
          super.onWindowFocusChanged(hasFocus);
          activity.focus(hasFocus);
@@ -78,7 +86,7 @@
  
          requestFocus();
  
-@@ -657,6 +667,7 @@
+@@ -670,6 +679,7 @@
  
      @Override
      public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
@@ -86,7 +94,7 @@
          if (activity.prefs.enforceCharBasedInput.get())
              outAttrs.inputType = InputType.TYPE_NULL;
          else
-@@ -686,6 +697,31 @@
+@@ -699,6 +709,31 @@
              else
                  mIMM.restartInput(this);
          }, 10);
@@ -118,7 +126,7 @@
      }
  
      @FastNative private native long nativeInit();
-@@ -783,25 +819,45 @@
+@@ -796,25 +831,45 @@
          setRendererZoom(mNativeContext, isInPictureInPictureMode ? 100 : Math.round(rendererZoom));
      }
  

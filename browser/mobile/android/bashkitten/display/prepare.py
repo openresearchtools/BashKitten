@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 HERE = Path(__file__).resolve().parent
 SOURCE = HERE.parents[3] / 'bashkitten/vendor/termux-x11/source'
 DEPENDENCIES = SOURCE.parent.parent / 'display-dependencies'
-PIN = 'fa3a8b430e2896a19f44c99a9cb056254615ae06'
+PIN = '6dfb8b4a4cc887bc329284d31eb049d596bd1208'
 
 
 def dependency_sources():
@@ -78,13 +78,15 @@ def prepare(output):
         staging = output.with_name(output.name + '.new')
         shutil.rmtree(staging, ignore_errors=True)
         shutil.copytree(SOURCE, staging)
+        for excluded in metadata.get('excludedFiles', []):
+            (staging / excluded['path']).unlink(missing_ok=True)
         for target, (source, _) in dependencies.items():
             shutil.rmtree(staging / target)
             # Preserve upstream links as links; libtirpc's INSTALL points to the
             # maintainer's Automake manual and is not a compilation input.
             shutil.copytree(source, staging / target, symlinks=True)
         for patch in patches:
-            subprocess.run(['patch', '--batch', '--forward', '-p1', '-i', str(patch)], cwd=staging, check=True)
+            subprocess.run(['patch', '--batch', '--forward', '--fuzz=0', '-p1', '-i', str(patch)], cwd=staging, check=True)
         java = staging / 'lorie/src/main/java/com/termux/x11'
         # Native engine, input and extra-key machinery are reused; standalone app,
         # preference Activity, accessibility interceptor and broadcasts are not shipped.

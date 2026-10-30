@@ -1,16 +1,20 @@
 # Embedded Android Display
 
-This module adapts the pristine Termux:X11 official nightly at
-`fa3a8b430e2896a19f44c99a9cb056254615ae06`, imported in `10843938bc`.
+This module adapts the pristine Termux:X11 official 27 October nightly at
+`6dfb8b4a4cc887bc329284d31eb049d596bd1208`, imported in `1a6659aef2`.
+The original `fa3a8b430e2896a19f44c99a9cb056254615ae06` import in `10843938bc`
+remains recoverable in Git history.
 `browser/bashkitten/vendor/termux-x11/source.json` records the donor archive
-and all sixteen materialized native dependency pins/checksums. Original full
+and all sixteen unchanged materialized native dependency pins/checksums. The
+original upstream archive is pinned by HTTPS URL/SHA-256 in that manifest and
+collected from `BASHKITTEN_SOURCE_CACHE` into matching source deliverables. Original full
 licenses and per-file notices remain in that pristine source. `prepare.py`
 applies the named patches only in build output, selects the native/input/extra-key
 library and generates its typed preferences; no donor Application, launcher,
 accessibility interceptor or external X11 APK participates in the main manifest.
 The adapted GPL files retain attribution; new BashKitten integration is AGPL.
 
-The 19 October 2026 dependency refresh retains that original import unchanged.
+The 19 October 2026 native dependency selection is retained.
 Separate pristine release sources under `browser/bashkitten/vendor/display-dependencies`
 select libtirpc 1.3.8, libX11 1.8.14 and Xorg server 21.1.25. Their metadata
 records official release URLs, peeled commits, archive hashes, complete source
@@ -27,6 +31,14 @@ The original libX11/Xorg patches still apply to the new sources. The libtirpc
 release's `INSTALL` symlink points at its maintainer's Automake manual; it is
 retained as a symlink, hashed as link text and never used as a build input.
 The main module and paired loader retain their existing identity and private IPC.
+
+The 30 October 2026 nightly refresh incorporates the upstream IME code-point
+deletion, sticky-key release, newline handling, DRI3 buffer lifetime/import,
+root-pixmap locking and GPU damage/Present synchronization fixes. The embedded
+host retains the new native heartbeat field; standalone Activity/overlay code
+remains outside the module. The named host/input patches apply with zero fuzz,
+and the paired protocol identifies this exact engine revision. Source preparation
+also removes the manifest's excluded public dummy signing fixture from build output.
 
 ## Browser host contract
 

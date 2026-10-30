@@ -1,6 +1,13 @@
+From: BashKitten contributors
+Subject: [PATCH] Embed the pinned Termux:X11 engine through its private native host
+
+Rebased 30 October 2026 onto 6dfb8b4a4cc887bc329284d31eb049d596bd1208.
+Keep native upstream input/rendering fixes; remove standalone app discovery,
+content logging and app-only hooks. Retains upstream GPL-3.0-only notices.
+
 --- a/lorie/src/main/cpp/lorie/activity.cpp
 +++ b/lorie/src/main/cpp/lorie/activity.cpp
-@@ -99,41 +99,8 @@
+@@ -100,41 +100,8 @@
  }
  
  // @CriticalNative: no implicit JNIEnv*/jclass, unlike the @FastNative entries below.
@@ -44,16 +51,16 @@
  
  static jlong nativeInit(JNIEnv *env, jobject thiz) {
      if (!Charset.self) {
-@@ -145,7 +112,7 @@
+@@ -146,7 +113,7 @@
          CharBuffer.self = FindClassOrDie(env,  "java/nio/CharBuffer");
          CharBuffer.toString = FindMethodOrDie(env, CharBuffer.self, "toString", "()Ljava/lang/String;", JNI_FALSE);
  
 -        MainActivity.self = FindClassOrDie(env,  "com/termux/x11/MainActivity");
 +        MainActivity.self = FindClassOrDie(env,  "com/termux/x11/LorieHost");
          MainActivity.clientConnectedStateChanged = FindMethodOrDie(env, MainActivity.self, "clientConnectedStateChanged", "()V", JNI_FALSE);
+         MainActivity.lastServerHeartbeat = env->GetFieldID(MainActivity.self, "lastServerHeartbeat", "J");
          MainActivity.resetIme = FindMethodOrDie(env, env->GetObjectClass(thiz), "resetIme", "()V", JNI_FALSE);
-     }
-@@ -163,7 +130,7 @@
+@@ -165,7 +132,7 @@
      vm->AttachCurrentThread(&env, nullptr);
      thiz = env->NewGlobalRef(view);
  
@@ -62,7 +69,7 @@
      jobject a = env->GetObjectField(view, activityField);
      if (a)
          activity = env->NewGlobalRef(a);
-@@ -225,7 +192,6 @@
+@@ -227,7 +194,6 @@
                      }
                      read(connFd, clipboard, e.clipboardSend.count);
                      clipboard[e.clipboardSend.count] = 0;
@@ -70,7 +77,7 @@
                      jmethodID id = env->GetMethodID(env->GetObjectClass(thiz), "setClipboardText","(Ljava/lang/String;)V");
                      jobject bb = env->NewDirectByteBuffer(clipboard, strlen(clipboard));
                      jobject charset = env->CallStaticObjectMethod(Charset.self, Charset.forName, env->NewStringUTF("UTF-8"));
-@@ -345,7 +311,6 @@
+@@ -352,7 +318,6 @@
          if (!length)
              return;
  
@@ -78,15 +85,15 @@
  
          while (*p) {
              wchar_t wc;
-@@ -359,7 +324,6 @@
-             if (len == 0)
-                 break;
- 
--            log(DEBUG, "Sending unicode event: %lc (U+%X)", wc, wc);
-             lorieEvent e = { .unicode = { .t = EVENT_UNICODE, .code = (uint32_t) wc } };
-             write(r->connFd, &e, sizeof(e));
+@@ -370,7 +335,6 @@
+                 sendEvent(r, .key = { .t = EVENT_KEY, .key = KEY_ENTER + 8, .state = 1 });
+                 sendEvent(r, .key = { .t = EVENT_KEY, .key = KEY_ENTER + 8, .state = 0 });
+             } else if (wc != L'\r') {
+-                log(DEBUG, "Sending unicode event: %lc (U+%X)", wc, wc);
+                 sendEvent(r, .unicode = { .t = EVENT_UNICODE, .code = (uint32_t) wc });
+             }
              p += len;
-@@ -543,31 +507,6 @@
+@@ -554,31 +518,6 @@
      jclass cls = env->FindClass("com/termux/x11/LorieView");
      env->RegisterNatives(cls, methods, sizeof(methods)/sizeof(methods[0]));
  
@@ -120,7 +127,7 @@
      return JNI_VERSION_1_6;
 --- a/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
 +++ b/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
-@@ -310,9 +310,6 @@
+@@ -311,9 +311,6 @@
                      __android_log_print(ANDROID_LOG_DEBUG, "LorieNative", "got stylus event but device is not requested\n");
                      break;
                  }
@@ -130,7 +137,7 @@
                  valuator_mask_set_double(&mask, 0, max(min(e.stylus.x, pScreenPtr->width), 0));
                  valuator_mask_set_double(&mask, 1, max(min(e.stylus.y, pScreenPtr->height), 0));
                  if (device != lorieMouse) {
-@@ -330,11 +327,9 @@
+@@ -331,11 +328,9 @@
                  for (int i=0; i<3; i++) {
                      if (released & 0x1) {
                          QueuePointerEvents(device, ButtonRelease, i + 1, POINTER_RELATIVE, nullptr);
@@ -142,7 +149,7 @@
                      }
                      released >>= 1;
                      pressed >>= 1;
-@@ -393,7 +388,6 @@
+@@ -401,7 +396,6 @@
                          mieqProcessInputEvents();
                      } else {
                          int ks = ucs2keysym((long) (payload >> 1));
@@ -150,7 +157,7 @@
                          lorieKeysymKeyboardEvent(ks, TRUE);
                          lorieKeysymKeyboardEvent(ks, FALSE);
                      }
-@@ -602,65 +596,10 @@
+@@ -628,65 +622,10 @@
  
  // Called from OsVendorInit() once the display number and "-tag" argument (if any) are resolved,
  // so the port to knock on and the tag to report back to Java are already known.
@@ -241,7 +248,7 @@
      private Callback mCallback;
      private final Point p = new Point();
      private final Rect contentInsets = new Rect();
-@@ -431,7 +431,7 @@
+@@ -444,7 +444,7 @@
      @SuppressWarnings("unused")
      private void setRendererViewport(int viewportLeft, int viewportTop, int viewportWidth, int viewportHeight,
                                              float sourceLeft, float sourceTop, float sourceWidth, float sourceHeight) {
@@ -250,7 +257,7 @@
              inputViewport.set(viewportLeft, viewportTop, viewportLeft + viewportWidth, viewportTop + viewportHeight);
              inputSourceLeft = sourceLeft;
              inputSourceTop = sourceTop;
-@@ -547,7 +547,7 @@
+@@ -560,7 +560,7 @@
              KeyEvent.KEYCODE_SHIFT_RIGHT
      );
  
@@ -259,7 +266,7 @@
          @Override public void handleMessage(Message msg) {
              if (msg.what != 0)
                  sendKeyEvent(0, msg.what, false);
-@@ -616,7 +616,7 @@
+@@ -629,7 +629,7 @@
          // with an empty string, or the request is left unresolved.
          sendClipboardEvent(mNativeContext, text.getBytes(UTF_8));
          if (!text.isEmpty())
@@ -268,7 +275,7 @@
      }
  
      public void handleClipboardChange() {
-@@ -641,6 +641,8 @@
+@@ -654,6 +654,8 @@
      @Override
      public void onWindowFocusChanged(boolean hasFocus) {
          super.onWindowFocusChanged(hasFocus);
@@ -494,7 +501,7 @@
      public boolean shouldInterceptKeys() {
 --- a/lorie/src/main/java/com/termux/x11/utils/TermuxX11ExtraKeys.java
 +++ b/lorie/src/main/java/com/termux/x11/utils/TermuxX11ExtraKeys.java
-@@ -19,7 +19,7 @@
+@@ -20,7 +20,7 @@
  
  import com.termux.x11.extrakeys.*;
  import com.termux.x11.LoriePreferences;
@@ -503,7 +510,7 @@
  
  import org.json.JSONException;
  
-@@ -27,7 +27,7 @@
+@@ -28,7 +28,7 @@
      @SuppressWarnings("FieldCanBeLocal")
      private static final String LOG_TAG = "TermuxX11ExtraKeys";
      private final View.OnKeyListener mEventListener;
@@ -512,7 +519,7 @@
      private final ExtraKeysView mExtraKeysView;
      private final ClipboardManager mClipboardManager;
      private ExtraKeysInfo mExtraKeysInfo;
-@@ -40,7 +40,7 @@
+@@ -41,7 +41,7 @@
      /** Defines the key for extra keys */
      public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[['ESC','/',{key: '-', popup: '|'},'HOME','UP',{key: 'END', popup: 'ZOOM_IN'},{key: 'PGUP', popup: 'ZOOM_OUT'},{key: 'KEYBOARD', popup: 'ZOOM_RESET'}], ['TAB','CTRL','ALT','LEFT','DOWN','RIGHT','PGDN','PREFERENCES']]"; // Double row
  
@@ -521,7 +528,7 @@
          mEventListener = eventlistener;
          mActivity = activity;
          mExtraKeysView = extrakeysview;
-@@ -140,7 +140,7 @@
+@@ -164,7 +164,7 @@
  
      @Override
      public boolean performExtraKeyButtonHapticFeedback(View view, ExtraKeyButton buttonInfo, Button button) {
@@ -530,7 +537,7 @@
              boolean pressed;
              switch (buttonInfo.key) {
                  case "CTRL":
-@@ -170,7 +170,7 @@
+@@ -194,7 +194,7 @@
          if ("KEYBOARD".equals(key))
              mActivity.toggleKeyboardVisibility();
          else if ("DRAWER".equals(key) || "PREFERENCES".equals(key))

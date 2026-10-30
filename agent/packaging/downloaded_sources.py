@@ -112,4 +112,10 @@ def records(read):
         manifest = base + '/source.json'
         row = document(manifest)['vendor']
         add(manifest, row, [base + '/' + row['file']])
+    manifest = 'browser/bashkitten/vendor/termux-x11/source.json'
+    # The pristine tree is tracked; also deliver its original corresponding-source
+    # archive from the same external checksum cache as all downloaded sources.
+    archive = document(manifest).get('sourceArchive')
+    if archive:
+        add(manifest, archive, [])
     return result
