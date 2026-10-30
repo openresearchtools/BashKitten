@@ -7,6 +7,32 @@ and failures of their original candidates; the current result is recorded first.
 
 ## ESR 153.6 refresh before publication — 30 October 2026
 
+The recovered `c83b06f033` candidate is not the publication target. Its focused
+installed desktop check found that ordinary address-bar navigation converted a
+Tor tab into a plain Private tab, even with the default new-tab preferences.
+Correction `b1351a4a17ba0b019f4a2e25410e5ffa70fa19e9` preserves the existing Tor
+context in the native link loader. A reversible installed module replay retained
+the same Tor tab during navigation; an explicit Private tab remained non-Tor.
+The original archive was restored afterward. Only the existing JavaScript module
+changed; no native-artifact fingerprint exception or routing fallback was added.
+
+At the user's direction, wider installed checks stopped. The corrected normal
+prepare run
+[41131178347](https://github.com/openresearchtools/BashKitten/actions/runs/41131178347)
+uses the pushed fix and retains version 153.6. Publication is authorized as a
+prerelease after its normal package/source/legal gates pass. Existing successful
+components, archives and compiler caches remain available; that does not claim
+that an unchanged browser archive contains the new module.
+
+The earlier focused Android checks passed native Files/Office opening, stable
+Termux update checking, the monochrome References icon, Tor and paired Display.
+Recorded observation bounds were 20.5 seconds for Office and 6.8 seconds for a
+warm Files launch, not the preliminary 14/2-second estimates. Android Files-dock
+dragging remains unverified; the single recorded gesture did not establish a
+source defect. No wider acceptance or model downloads/inference were repeated.
+Evidence is in `Bashkitten-Acceptance/android-153.6-recovery-20261030/` and
+`desktop-153.6.0-focused-20261030/recovery-c83b06/wayland/tor-overlay/`.
+
 The user added a current upstream/security refresh before publishing the next
 candidate. Firefox ESR 153.6.0 is merged through the existing compact source
 history, retaining the product adaptations and the four installed corrections
