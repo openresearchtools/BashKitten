@@ -41,6 +41,10 @@ const FELT_PRIVACY_REFRESH = RPMGetBoolPref(
   false
 );
 const EXPERT_BAD_CERT = getCSSClass() === "expertBadCert";
+const ILLUSTRATION_ENABLED = RPMGetBoolPref(
+  "browser.netError.illustration.enabled",
+  true
+);
 
 export class NetErrorCard extends MozLitElement {
   static properties = {
@@ -1093,9 +1097,11 @@ export class NetErrorCard extends MozLitElement {
         aria-labelledby="error-title"
         aria-describedby="error-intro whatCanYouDo"
       >
-        <div class="img-container">
-          <img src=${src} class=${ifDefined(className)} alt=${alt} />
-        </div>
+        ${ILLUSTRATION_ENABLED
+          ? html`<div class="img-container">
+              <img src=${src} class=${ifDefined(className)} alt=${alt} />
+            </div>`
+          : null}
         <div class="container">
           ${this.showCustomNetErrorCard
             ? html`${this.customNetErrorContainerTemplate()}`

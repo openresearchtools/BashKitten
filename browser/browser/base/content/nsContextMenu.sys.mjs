@@ -842,7 +842,12 @@ export class nsContextMenu {
       this.inTabBrowser &&
       !this.inAboutDevtoolsToolbox &&
       Services.prefs.getBoolPref("devtools.inspector.enabled", true) &&
-      !Services.prefs.getBoolPref("devtools.policy.disabled", false);
+      !Services.prefs.getBoolPref("devtools.policy.disabled", false) &&
+      !(
+        this.browser.contentPrincipal?.isSystemPrincipal &&
+        Services.prefs.prefIsLocked("devtools.chrome.enabled") &&
+        !Services.prefs.getBoolPref("devtools.chrome.enabled", false)
+      );
 
     var showInspectA11Y =
       showInspect &&
@@ -1387,7 +1392,8 @@ export class nsContextMenu {
   }
 
   initPasswordControlItems() {
-    let shouldShow = this.onPassword;
+    let shouldShow =
+      this.onPassword && Services.policies.isAllowed("passwordReveal");
     if (shouldShow) {
       let revealPassword = this.document.getElementById(
         "context-reveal-password"

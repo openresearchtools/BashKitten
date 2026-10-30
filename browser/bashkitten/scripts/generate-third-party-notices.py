@@ -71,6 +71,14 @@ def components(source_root):
         ]), source_component(source_root, "bashkitten-waterfox-notices",
         "Waterfox source and modification notices", [
             "bashkitten/WATERFOX-NOTICE",
+        ]), source_component(source_root, "bashkitten-freetype-notices",
+        "FreeType font engine and bundled driver notices", [
+            "bashkitten/third_party/freetype-notices/SOURCE.json",
+            "bashkitten/third_party/freetype-notices/FTL.TXT",
+            "bashkitten/third_party/freetype-notices/GPLv2.TXT",
+            "modules/freetype2/LICENSE.TXT",
+            "modules/freetype2/src/bdf/README",
+            "modules/freetype2/src/pcf/README",
         ]), source_component(source_root, "bashkitten-browseros-notices",
         "BrowserOS browser tools, modifications and GNU AGPL 3.0", [
             "bashkitten/components/bashkitten-cli/NOTICE", "COPYING",
