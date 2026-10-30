@@ -80,6 +80,18 @@ export class AccessStack {
           this.remote.error = error.message;
           if (!this.ready) throw error;
         }
+        // Files is an essential backend service. Initialize it through the same
+        // module/catalogue owner in the background: its controller callbacks
+        // must run after the current backend-start command releases its queue.
+        // A missing/broken component remains visible without blocking Pi startup.
+        void this.applicationModule('files', 'start').catch(error => {
+          if (this.ready && !this.stopping) {
+            const owner = this.services.running.get('quantum');
+            if (owner) owner.error = error.message;
+            else this.services.running.set('quantum', { state: 'failed', error: error.message });
+            console.error('Files startup: ' + error.message);
+          }
+        });
         return this.info;
       } catch (error) {
         failure = error; await this.stopChildren();
@@ -388,7 +400,7 @@ ${backend('remote')}
     return { port, wopiURL: origin, serviceRoot: '/apps/office' };
   }
   async applicationModule(component, action, signal) {
-    if (!this.ready || this.stopping || component !== 'references' || !['start', 'stop'].includes(action)) throw Error('The owning application backend is unavailable');
+    if (!this.ready || this.stopping || !['files', 'references'].includes(component) || !['start', 'stop'].includes(action) || (component === 'files' && action !== 'start')) throw Error('The owning application backend is unavailable');
     const response = await unixRequest(paths.backend, '/api/instance/apps', { method: 'POST', signal, timeout: 120000, limit: 65536,
       headers: { host: new URL(this.origin).host, authorization: 'Bearer ' + this.instanceToken, 'content-type': 'application/json' },
       body: JSON.stringify({ operation: 'lifecycle', component, action }) });

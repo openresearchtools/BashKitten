@@ -9,6 +9,11 @@ const defaultRoot = fileURLToPath(new URL('../runtime/', import.meta.url));
 const unavailable = message => Object.assign(new Error('Office unavailable: ' + message), { status: 503, code: 'office_runtime_unavailable' });
 const exact = '42745e44dd8530fac7acd5f46cb7571ceea63c6a';
 const requiredPatches = ['native-locked-light-theme', 'native-extensions-small-screen-dialog', 'native-extension-dialog-commands', 'native-extension-short-dialog-frame', 'native-extension-overflow-group-id', 'native-script-modifying-activity', 'native-user-settings-bundle', 'native-mobile-options', 'native-proof-key-path', 'native-document-property-undo', 'native-field-command-undo', 'native-ooxml-user-attributes', 'source-archive-build-id', 'native-bounded-config-cache-keys', 'native-uno-undo-view', 'native-uno-shape-undo', 'native-text-edit-state', 'native-attribute-undo-text', 'native-product-branding'];
+async function writeChanged(filename, value) {
+  try { if (await fs.readFile(filename, 'utf8') === value) return; }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  await fs.writeFile(filename + '.new', value, { mode: 0o600 }); await fs.rename(filename + '.new', filename);
+}
 function relative(root, value) {
   if (typeof value !== 'string' || !value || path.isAbsolute(value) || value.split(/[\\/]/).some(part => part === '..') || value.includes('\0')) throw unavailable('invalid native artifact path');
   return path.join(root, value);
@@ -57,7 +62,9 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
   // alone does not create that node in Poco's layered configuration.
   const configuration = template.replace(/<alias_groups\b[^>]*>[\s\S]*?<\/alias_groups>/, '<alias_groups mode="groups"><group><host allow="true">' + escapeXML(callbackHost) + '</host></group></alias_groups>');
   const config = path.join(directory, 'coolwsd.xml');
-  await fs.writeFile(config + '.new', configuration, { mode: 0o600 }); await fs.rename(config + '.new', config);
+  // Keep native configuration reconciliation idempotent, including saved
+  // autostart with stop_on_config_change enabled.
+  await writeChanged(config, configuration);
   const systemplate = path.join(directory, 'systemplate'), children = path.join(directory, 'jails'), cache = path.join(directory, 'cache');
   await Promise.all([children, cache].map(value => fs.mkdir(value, { recursive: true, mode: 0o700 })));
   const options = {
@@ -93,8 +100,7 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
   const argv = termux ? nativeArgv : ['/usr/bin/setpriv', '--inh-caps=-all', '--ambient-caps=-all', '--', ...nativeArgv];
   const launch = path.join(directory, 'launch.json');
   const artifactRevision = createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
-  await fs.writeFile(launch + '.new', JSON.stringify({ schema: 1, revision: artifactRevision, argv, nativeEnvironment, cwd: directory, systemplateSetup: paths.systemplateSetup, systemplate, engine: paths.engine }), { mode: 0o600 });
-  await fs.rename(launch + '.new', launch);
+  await writeChanged(launch, JSON.stringify({ schema: 1, revision: artifactRevision, argv, nativeEnvironment, cwd: directory, systemplateSetup: paths.systemplateSetup, systemplate, engine: paths.engine }));
   const configRevision = createHash('sha256').update(JSON.stringify({ manifest, configuration, argv, nativeEnvironment })).digest('hex');
   const service = { id: 'office', name: 'Office', enabled: false, startup: false, configRevision, kind: 'web', scheme: 'http', openPath: serviceRoot + '/', target: { network: 'tcp', address: '127.0.0.1:' + port }, command: { argv: [process.execPath, fileURLToPath(new URL('./launch.mjs', import.meta.url)), launch], cwd: directory, env: { BASHKITTEN_OFFICE_CONFIG_REVISION: configRevision } } };
   return { service, collaboraInternalURL: 'http://127.0.0.1:' + port + serviceRoot, editorBasePath: serviceRoot, wopiURL, extension };

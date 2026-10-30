@@ -15,6 +15,20 @@ export const applicationSocket = path.join(dataDir, 'run/apps.sock');
 const httpSocket = path.join(dataDir, 'run/apps-http.sock');
 const endpointFile = path.join(dataDir, 'run/apps.json');
 const safePath = value => typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') && !/[\x00-\x20\x7f\\#]/.test(value);
+function workComponent(component, url, basePath) {
+  if (component !== 'files') return component;
+  const relative = url.pathname.slice(basePath.length);
+  let route;
+  try {
+    const segments = relative.split('/').map(segment => decodeURIComponent(segment));
+    if (segments.some(segment => /[\\/\x00-\x1f\x7f]/.test(segment) || segment === '.' || segment === '..')) return component;
+    route = segments.join('/');
+  }
+  catch { return component; }
+  // The Files grant also hosts the independent Office launch/history wrapper.
+  // Quantum reconfiguration drains only requests which actually use Quantum.
+  return route === 'api/document-provider/open' || relative.startsWith('office/') ? 'office' : component;
+}
 
 export class ApplicationGateway {
   constructor({ authorize, handle, upgrade, register, ensureTLS, validateProxy, resolveEditor, validateGrant }) {
@@ -157,11 +171,15 @@ export class ApplicationGateway {
         }
         if (!context.authenticated) throw Object.assign(Error('Application session required'), { status: 401 });
         if (!['GET', 'HEAD'].includes(req.method) && req.headers.origin !== context.origin) throw Object.assign(Error('Invalid application request origin'), { status: 403 });
-        await this.configuring.get(component);
+        const resource = workComponent(component, url, context.basePath);
+        // Admit only after this view's native source is ready. Waiting before
+        // adding active Quantum work avoids a configure/drain dependency cycle.
+        if (resource === 'files') await grant.scope.filesPreparing;
+        await this.configuring.get(resource);
         operation.signal.throwIfAborted();
         const stop = () => { req.destroy(); res.destroy(); };
         stop.response = res;
-        const active = { component, stop, socket: component === 'files' && context.url.pathname.slice(context.basePath.length) === 'api/events' };
+        const active = { component: resource, stop, socket: resource === 'files' && context.url.pathname.slice(context.basePath.length) === 'api/events' };
         active.done = new Promise(resolve => { active.finish = resolve; }); this.active.add(active);
         grant.active.add(stop);
         try { await this.handle(component, req, res, { ...context, signal: operation.signal }); }
@@ -186,16 +204,19 @@ export class ApplicationGateway {
       } finally { grant.active.delete(stop); this.active.delete(active); active.finish(); }
     }, { cancel: () => socket.destroy(), watch: abort => { socket.once('close', abort); return () => socket.off('close', abort); } });
   }
-  async configure(component, work) {
+  async configure(component, work, { prepare, needsDrain = () => true } = {}) {
     const previous = this.configuring.get(component) || Promise.resolve();
     const pending = previous.catch(() => {}).then(async () => {
-      const active = [...this.active].filter(item => item.component === component);
-      // Native event sockets reconnect after configuration reload. Actual file
-      // transfers and atomic mutations finish before the shared process restarts.
-      for (const item of active) if (item.socket) item.stop();
-      await Promise.all(active.map(item => item.done));
+      const prepared = await prepare?.();
+      if (needsDrain(prepared)) {
+        const active = [...this.active].filter(item => item.component === component);
+        // Native event sockets reconnect after configuration reload. Actual file
+        // transfers and atomic mutations finish before the shared process restarts.
+        for (const item of active) if (item.socket) item.stop();
+        await Promise.all(active.map(item => item.done));
+      }
       if (this.closing) throw unavailable('The application gateway is stopping');
-      return await work();
+      return await work(prepared);
     });
     this.configuring.set(component, pending);
     try { return await pending; }

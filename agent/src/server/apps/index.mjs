@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Backend app boundary. Native components retain their APIs and process owners;
-// this module resolves existing project/session authority and starts them lazily.
+// this module resolves existing project/session authority. Files is prepared at
+// backend startup; Office and References retain their on-demand owners.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { dataDir, readJson, json, body as readBody } from '../common.mjs';
@@ -145,6 +147,18 @@ export class ApplicationModules {
     return this.instances.get('references');
   }
   async lifecycle(component, action) {
+    if (component === 'files' && action === 'start') {
+      if (!this.filesStarting) this.filesStarting = (async () => {
+        const settings = await readJson(path.join(dataDir, 'settings.json'), {});
+        const directory = await fileDirectory(settings.default_cwd || os.homedir());
+        await authorizeApplicationPath(directory.path);
+        // No browser account/grant is issued by startup. Native sources retain
+        // deny-all defaults until an authenticated Files operation supplies scope.
+        await this.prepareFilesScope({ id: 'backend-startup', identity: 'backend-startup', root: directory.path, permissions: {} });
+        return { running: true };
+      })().catch(error => { this.filesStarting = undefined; throw error; });
+      return this.filesStarting;
+    }
     if (component !== 'references' || !['start', 'stop'].includes(action)) throw Object.assign(Error('Unknown application lifecycle operation'), { status: 400 });
     if (action === 'start') { await this.references(); return { running: true }; }
     const pending = this.instances.get('references');
@@ -373,14 +387,17 @@ export class ApplicationModules {
   async prepareFilesScope(scope) {
     const module = await this.module('files');
     if (typeof module.prepareFiles !== 'function' || typeof module.handleFiles !== 'function') throw unavailable('Files', 'incompatible native provider API');
-    await this.gateway.configure('files', async () => {
-      const prepared = await module.prepareFiles({ dataRoot: dataDir, scope, privatePaths: await privateManagerPaths(),
-        endpoint: await this.gateway.endpoint(), authorizePath: authorizeApplicationPath });
+    await this.gateway.configure('files', async prepared => {
       if (prepared?.service?.id !== 'quantum') throw unavailable('Files', 'invalid shared Quantum service definition');
-      scope.endpoint = await this.ensureRunning(prepared.service, true, prepared.needsRestart === true);
+      scope.endpoint = await this.ensureRunning(prepared.service, true, this.filesRevision !== prepared.configRevision);
+      this.filesRevision = prepared.configRevision;
       scope.source = prepared.source;
-      scope.openPath = '/' + (prepared.openPath || '/').replace(/^\//, '');
-    });
+      scope.openPath ||= '/' + (prepared.openPath || '/').replace(/^\//, '');
+    }, { prepare: async () => module.prepareFiles({ dataRoot: dataDir, scope, privatePaths: await privateManagerPaths(),
+      endpoint: await this.gateway.endpoint(), authorizePath: authorizeApplicationPath }),
+      // Compare with the last successful owner reconciliation, not just the
+      // saved file: a failed cold start/reload must remain safely retryable.
+      needsDrain: prepared => this.filesRevision !== prepared?.configRevision });
     return module;
   }
   async resumeFilesScope(scope) {
@@ -498,8 +515,17 @@ export class ApplicationModules {
         ...(selected?.attachment ? { attachment: selected.attachment } : {}),
         permissions: { view: true, download: true, modify: true, create: !selected?.attachment, delete: !selected?.attachment }, backendId: await this.identity() };
       if (component === 'files') {
-        await this.prepareFilesScope(scope);
-        if (selected && !selected.attachment) scope.openPath += selected.path.split(path.sep).map(encodeURIComponent).join('/');
+        const module = await this.module('files');
+        if (typeof module.filesLocation !== 'function') throw unavailable('Files', 'incompatible native launch API');
+        const location = module.filesLocation(scope);
+        scope.source = location.source;
+        const selectedPath = selected && !selected.attachment ? selected.path.split(path.sep).map(encodeURIComponent).join('/') : '';
+        scope.openPath = '/' + location.openPath + selectedPath;
+        // Return the ordinary tab launch without waiting for a cold process or
+        // source reload. Its authenticated requests observe the same preparation
+        // promise; no second process/queue or alternate file handler is created.
+        scope.filesPreparing = this.prepareFilesScope(scope);
+        void scope.filesPreparing.catch(() => {}); // The opened tab reports failure.
       } else throw Error('Unknown web application');
       return this.gateway.open(component, record, scope);
     });

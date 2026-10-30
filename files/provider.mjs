@@ -17,6 +17,7 @@ function serial(key, action) { const previous = queues.get(key) || Promise.resol
 function permissions(scope) { const p = scope.permissions || {}; return { view: p.view === true, download: p.download === true, modify: p.modify === true, create: p.create === true, delete: p.delete === true, configured: true }; }
 const userName = scope => 'bk_' + digest(String(scope.identity) + '\0' + scope.id + '\0' + scope.root).slice(0, 40);
 const sourceName = scope => 'source_' + digest(scope.root).slice(0, 24);
+export const filesLocation = scope => ({ source: sourceName(scope), openPath: `files/${sourceName(scope)}/` });
 const sourcePerm = scope => ({ name: sourceName(scope), scope: scope.attachment ? '/' + scope.attachment.path : '/', permissions: permissions(scope) });
 function scopedFile(scope, value) {
   if (typeof value !== 'string' || /[\\\x00-\x1f\x7f]/.test(value)) throw failure(400, 'Native file path must be unambiguous text');
@@ -40,12 +41,15 @@ export async function prepareFiles({ dataRoot, scope, endpoint, privatePaths = [
     const bootstrap = previous?.auth?.adminUsername || 'owner_' + randomBytes(24).toString('hex');
     const rulesFor = folder => [{ folderPath: '/', ignoreSymlinks: true }, { fileStartsWith: '.bashkitten-save-' }, { fileStartsWith: '.bashkitten-restore-' }, ...privatePaths.filter(p => p === folder || p.startsWith(folder + path.sep)).flatMap(p => { const relative = p.slice(folder.length) || '/'; return [{ folderPath: relative, viewable: false }, { filePath: relative, viewable: false }]; })];
     const source = { name: sourceName(scope), path: root, config: { createUserDir: false, defaultEnabled: false, defaultUserScope: '/', private: true, defaultPermissions: { view: false, download: false, modify: false, delete: false, create: false, configured: true }, rules: rulesFor(root) } };
-    const sources = (previous?.server?.sources || []).filter(entry => entry.path !== root).map(entry => ({ ...entry, config: { ...entry.config, rules: rulesFor(entry.path) } })); sources.push(source);
+    // Preserve native source order. Merely returning to a previously opened
+    // folder must not rewrite the shared configuration and restart Quantum.
+    const sources = (previous?.server?.sources || []).map(entry => entry.path === root ? source : { ...entry, config: { ...entry.config, rules: rulesFor(entry.path) } });
+    if (!sources.some(entry => entry.path === root)) sources.push(source);
     const config = { server: { disableUpdateCheck: true, database: { path: path.join(directory, 'quantum.sqlite') }, cacheDir: path.join(directory, 'cache'), sources }, http: { requestTimeoutMs: 120000, proxyTransferTimeouts: true, socket: socketPath, baseURL: '/', disableWebDAV: true, trustProxyHeaders: true }, auth: { adminUsername: bootstrap, adminPassword: previous?.auth?.adminPassword || randomBytes(48).toString('base64url'), key: previous?.auth?.key || randomBytes(48).toString('base64url'), methods: { noauth: false, password: { enabled: false }, proxy: { enabled: true, header: 'X-BashKitten-Quantum-User' } } }, frontend: { name: 'Files', favicon: path.join(moduleRoot, 'web', 'bashkitten.png'), loginIcon: path.join(moduleRoot, 'web', 'bashkitten.png'), description: 'Files · BashKitten', disableDefaultLinks: true, externalLinks: [{ text: 'About Files', title: 'BashKitten · source and licenses', url: '?bashkitten=about' }], disablePWAInstall: true, styling: { disableEventThemes: true, followBrowserTheme: true, customCSS: path.join(moduleRoot, 'web', 'quantum.css'), darkBackground: '#1e1e1e', lightBackground: '#f3f3f3' } }, userDefaults: { sidebar: { sticky: false, disableQuickToggles: true, showTools: false, hideFileActions: false }, account: { disableSettings: true, permissions: { admin: false, api: false, share: false, realtime: true } }, preview: { office: false } }, integrations: { media: { ffmpegPath: path.join(moduleRoot, 'bin') } } };
     await fs.mkdir(config.server.cacheDir, { recursive: true, mode: 0o700 });
     const content = JSON.stringify(config); const changed = !previous || JSON.stringify(previous) !== content; if (changed) await atomic(filename, config);
     const binary = path.join(moduleRoot, 'bin', 'filebrowser');
-    return { service: { id: 'quantum', name: 'Files', target: { network: 'unix', address: config.http.socket }, scheme: 'http', kind: 'web', openPath: '/', enabled: false, startup: false, command: { argv: [binary, '-c', filename], cwd: directory, env: { BASHKITTEN_FILES_CONFIG_REVISION: digest(content) } } }, openPath: `files/${source.name}/`, source: source.name, username: userName(scope), configRevision: digest(content), needsRestart: !!previous && changed, endpoint };
+    return { service: { id: 'quantum', name: 'Files', target: { network: 'unix', address: config.http.socket }, scheme: 'http', kind: 'web', openPath: '/', enabled: false, startup: false, command: { argv: [binary, '-c', filename], cwd: directory, env: { BASHKITTEN_FILES_CONFIG_REVISION: digest(content) } } }, ...filesLocation(scope), username: userName(scope), configRevision: digest(content), needsRestart: !!previous && changed, endpoint };
   });
 }
 function request(socketPath, method, requestPath, { headers = {}, body, signal } = {}) {
@@ -124,7 +128,6 @@ function nativeRoute(encoded) {
 export async function handleFiles(req, res, { dataRoot, scope, basePath, signal, authorizePath, openOffice, withNativeMove }) {
   if (!/^\/apps\/files\/[A-Za-z0-9_-]+\/$/.test(basePath)) throw failure(400, 'Invalid scoped Files route');
   scope = { ...scope, root: await fs.realpath(scope.root) };
-  const native = await serial('account:' + scope.id, () => reconcileAccount(dataRoot, scope, signal));
   const url = new URL(req.url, 'http://files');
   if (!url.pathname.startsWith(basePath)) throw failure(403, 'Wrong Files launch scope');
   const route = nativeRoute('/' + url.pathname.slice(basePath.length));
@@ -157,6 +160,10 @@ export async function handleFiles(req, res, { dataRoot, scope, basePath, signal,
     const launched = await openOffice({ relativePath: path.relative(scope.root, filename) });
     res.writeHead(303, { Location: launched.browserUrl, 'Cache-Control': 'no-store' }); res.end(); return;
   }
+  // Office launch uses the existing document owner, not Quantum. Do not make
+  // its cold startup depend on a Files account request or hold a native request
+  // open while the independent renderer/storage services become ready.
+  const native = await serial('account:' + scope.id, () => reconcileAccount(dataRoot, scope, signal));
   // These native read endpoints are needed by the ordinary frontend. All other
   // administration, shares and credential endpoints remain inaccessible.
   if (deniedPaths.test(relative + url.search) && !['/api/users', '/api/settings/sources', '/api/settings/user-defaults', '/api/settings/source', '/api/auth/login'].includes(relative)) throw failure(403, 'This Files account cannot administer the service');
