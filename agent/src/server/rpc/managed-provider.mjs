@@ -9,6 +9,14 @@ import { providersChanged } from './services.mjs';
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 let pending = Promise.resolve();
+// Pillama discovers thinking in the live Pi session. Refining these provisional
+// catalogue fields must not restart that session and restore its startup-clamped
+// Off as though it were a deliberate native history choice.
+const runtimeDefinition = provider => provider && { ...provider, models: provider.models?.map(model => {
+  const { reasoning, thinkingLevelMap, compat, ...rest } = model;
+  const { thinkingFormat, ...nativeCompat } = compat || {};
+  return { ...rest, compat: nativeCompat };
+}) };
 
 /** Caller owns opt-in/readiness. Never change Pi credentials, defaults or sessions. */
 export function syncManagedProvider({ id, name, baseUrl, apiKey, apiKeyFile, models }) {
@@ -52,19 +60,20 @@ export function syncManagedProvider({ id, name, baseUrl, apiKey, apiKeyFile, mod
       apiKey: keyPath ? '!cat ' + quote(keyPath) : 'local', models };
     const keyChanged = Boolean(apiKey && await fs.readFile(keyPath, 'utf8').catch(error => { if (error.code !== 'ENOENT') throw error; return null; }) !== apiKey);
     const keyDigest = keyPath ? digest(apiKey) : null;
+    const runtimeChanged = !same(runtimeDefinition(existing), runtimeDefinition(provider)) || keyChanged || previous?.keyDigest !== keyDigest;
     const changed = !same(existing, provider) || !same(previous?.unknownThinking || [], unknownThinking) || keyChanged || previous?.keyDigest !== keyDigest || Boolean(previous?.pending);
     if (changed) {
       if (await fs.readFile(file, 'utf8').catch(error => { if (error.code !== 'ENOENT') throw error; return null; }) !== before) throw Error('Pi model configuration changed; save again');
       await writeJson(ownerFile, { provider: previous?.provider || null, pending: provider, unknownThinking });
       if (apiKey) await writePrivate(keyPath, apiKey);
       value.providers[id] = provider; await writeJson(file, value);
-      await providersChanged();
+      if (runtimeChanged) await providersChanged();
       await writeJson(ownerFile, { provider, keyDigest, unknownThinking });
     }
     let waiting = false;
     await Promise.all((await allMeta()).map(async meta => {
       try {
-        const result = await socketRequest(socketPath(meta.id), changed ? '/context' : '/status', {}, 20000);
+        const result = await socketRequest(socketPath(meta.id), runtimeChanged ? '/context' : '/status', {}, 20000);
         waiting ||= Boolean(result.data?.pendingContext || result.data?.busy || result.data?.compacting);
       } catch (error) { if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error; }
     }));
@@ -81,7 +90,7 @@ export async function managedLocalProvider() {
   const config = await readJson(path.join(getAgentDir(), 'models.json'), {});
   const provider = config.providers?.['bashkitten-llama'], expected = owner?.pending || owner?.provider;
   const owned = Boolean(expected && same(provider, expected));
-  return { owned, revision: digest(JSON.stringify(provider ?? null)), unknownThinking: owned ? owner.unknownThinking || [] : [] };
+  return { owned, revision: digest(JSON.stringify((owned ? runtimeDefinition(provider) : provider) ?? null)), unknownThinking: owned ? owner.unknownThinking || [] : [] };
 }
 
 /** Private discovery state, never an extra field in Pi's model schema. */
@@ -117,10 +126,11 @@ export async function discoverManagedModels(baseUrl, apiKey = '', name = 'llama.
   const models = await Promise.all(catalogue.data.filter(model => !model.status || ['loaded', 'sleeping'].includes(model.status.value) || autoload && model.status.value === 'unloaded' && !model.status.failed && model.source === 'preset').map(async model => {
     // Upstream serves a sleeping child's cached props without waking it when
     // autoload=false; an unloaded child has no template to inspect yet.
-    const props = ['loaded', 'sleeping'].includes(model.status?.value) ? await read('/props?' + new URLSearchParams({ model: model.id, autoload: 'false' })) : {};
+    const hasProps = !model.status || ['loaded', 'sleeping'].includes(model.status.value);
+    const props = hasProps ? await read('/props?' + new URLSearchParams({ model: model.id, autoload: 'false' })) : {};
     const args = model.status?.args || [], index = args.findIndex(arg => ['--ctx-size', '-c', '-ctx'].includes(arg));
     const context = [model.meta?.n_ctx, index >= 0 ? Number(args[index + 1]) : null, model.context_length, model.meta?.n_ctx_train].find(value => Number.isSafeInteger(value) && value > 0);
-    const reasoning = typeof props.chat_template === 'string' ? props.chat_template.includes('enable_thinking') : undefined;
+    const reasoning = hasProps ? typeof props.chat_template === 'string' && props.chat_template.includes('enable_thinking') : undefined;
     return { id: model.id, name: `${model.id} (${name})`, ...(reasoning !== undefined ? { reasoning } : {}), input: model.architecture?.input_modalities?.includes('image') ? ['text', 'image'] : ['text'],
       ...(context ? { contextWindow: context, maxTokens: context } : {}),
       ...(reasoning ? { thinkingLevelMap: { off: 'off', minimal: null, low: null, medium: 'medium', high: null, xhigh: null } } : {}),

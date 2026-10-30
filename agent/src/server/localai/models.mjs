@@ -11,6 +11,17 @@ import { digest, writePrivate } from '../common.mjs';
 const catalogue = JSON.parse(await fs.readFile(new URL('./models.json', import.meta.url), 'utf8'));
 const noticesDirectory = model => path.join(modelDataDir, 'notices', digest(model.repository + '@' + model.revision));
 const supportPath = asset => path.join(modelDataDir, 'supporting-assets', asset.sha256 + path.extname(asset.file));
+function modelTitle(file, kind) {
+  const stem = file.replace(/\.(gguf|bin)$/i, '');
+  if (kind === 'whisper') {
+    const [, model = stem, quant] = /^ggml-(.+?)(?:-(q\d+_[\dA-Za-z_]+))?$/i.exec(stem) || [];
+    const name = model.replace(/^./, letter => letter.toUpperCase()).replaceAll('-', ' ').replace(/\bturbo\b/i, 'Turbo');
+    return `Whisper ${name}${quant ? ' ' + quant.toUpperCase() : ''}`;
+  }
+  if (kind === 'parakeet') return stem.replace(/^ggml-parakeet-tdt-0\.6b-v3-/i, 'Parakeet TDT 0.6B v3 ').replace(/\b(f16|q\d+_[\dA-Za-z_]+)$/i, value => value.toUpperCase());
+  if (kind === 'pocket') return 'Pocket TTS (English)';
+  return stem;
+}
 function presetCatalogue() {
   const presets = [];
   for (const model of catalogue.models) {
@@ -24,7 +35,7 @@ function presetCatalogue() {
         files.push(projector);
       }
       const reference = model.referenceVoice && catalogue.supportingAssets[model.referenceVoice];
-      presets.push({ id: model.repository + '/' + file.name, title: file.name.replace(/\.(gguf|bin)$/i, ''), kind,
+      presets.push({ id: model.repository + '/' + file.name, title: modelTitle(file.name, kind), kind,
         engine: kind === 'llama' ? 'llama' : ['whisper', 'parakeet'].includes(kind) ? 'whisper' : 'tts',
         repository: model.repository, revision: model.revision, files: files.map(item => item.name),
         bytes: files.reduce((total, item) => total + item.bytes, reference?.bytes || 0), license: model.license,

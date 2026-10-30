@@ -131,15 +131,13 @@ export async function renderSection({ root: parent, call: control, info, signal 
     const guided = node('div'); body.append(guided); drawGuided(guided);
     const downloads = node('section'); downloads.className = 'connection-card'; body.append(downloads);
     void drawDownloads(downloads).catch(error => { if (active() && downloads.isConnected) message.textContent = error.message; });
-    const advanced = node('details'); advanced.className = 'connection-card'; advanced.append(node('summary', 'Advanced')); body.append(advanced);
-    drawLlamaAdvanced(advanced);
     const progress = node('p', jobMessage(state.job)); progressNode = progress; body.append(progress);
     body.append(button('Refresh status', async () => draw(await call('localai-status'))));
-    const output = node('details'); output.append(node('summary', 'Local AI runtime output')); const text = node('pre', operationOutput(state)); outputNode = text; text.style.cssText = 'max-height:12rem;overflow:auto;white-space:pre-wrap'; output.append(text); advanced.append(output);
+    const output = node('details'); output.append(node('summary', 'Local AI runtime output')); const text = node('pre', operationOutput(state)); outputNode = text; text.style.cssText = 'max-height:12rem;overflow:auto;white-space:pre-wrap'; output.append(text); body.append(output);
   };
   const drawLlamaAdvanced = section => {
     const custom = check(section, 'Use a custom router INI', liveState.guided?.llama?.mode === 'custom');
-    section.append(node('p', 'Custom mode uses your INI and disables the guided chat model, device and context controls. You or your agent can edit the file. Speech settings remain independent.'));
+    section.append(node('p', 'Custom mode uses your INI and disables the guided chat model, device, context and reasoning controls. You or your agent can edit the file. Speech settings remain independent.'));
     const controls = node('div'), path = node('p'), status = node('p');
     status.setAttribute('role', 'status'); section.append(controls, status); controls.append(path);
     const update = latest => {
@@ -162,7 +160,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
           liveState = await call('localai-custom-router', { enabled: true, revision: liveState.guided.revision });
           refreshGuided?.(liveState); update(liveState);
         } else {
-          followJob(await call('localai-guided-select', { engine: 'llama', id: current.selected, device: current.device || 'cpu', contextSize: current.context?.selected, revision: liveState.guided.revision, replaceCustom: true }));
+          followJob(await call('localai-guided-select', { engine: 'llama', id: current.selected, device: current.device || 'cpu', contextSize: current.context?.selected, thinking: current.reasoning?.selected, revision: liveState.guided.revision, replaceCustom: true }));
           await refresh();
         }
       });
@@ -205,7 +203,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
           const current = liveState.guided?.[engine]; if (!current) throw Error('Refresh Local AI settings before choosing a model.');
           if (current.mode === 'custom') throw Error('Turn off custom router INI in Advanced to use guided models.');
           followJob(await call('localai-guided-select', { engine, id, device: current.device || 'cpu',
-            ...(engine === 'llama' ? { contextSize: current.context?.selected } : {}), revision: liveState.guided.revision }));
+            ...(engine === 'llama' ? { contextSize: current.context?.selected, thinking: id === current.selected ? current.pending?.thinking ?? current.reasoning?.selected : undefined } : {}), revision: liveState.guided.revision }));
           const latest = await call('localai-status'); if (!active()) return; liveState = latest; refreshGuided?.(latest); await refreshDownloads?.();
         });
       } });
@@ -218,11 +216,11 @@ export async function renderSection({ root: parent, call: control, info, signal 
         if (!current || busy || current.mode === 'custom') return;
         void run(async () => {
           followJob(await call('localai-guided-select', { engine, id: current.pending?.id || current.selected, device: target,
-            ...(engine === 'llama' ? { contextSize: current.pending?.contextSize ?? current.context?.selected } : {}), revision: liveState.guided.revision }));
+            ...(engine === 'llama' ? { contextSize: current.pending?.contextSize ?? current.context?.selected, thinking: current.pending?.thinking ?? current.reasoning?.selected } : {}), revision: liveState.guided.revision }));
           const latest = await call('localai-status'); if (!active()) return; liveState = latest; refreshGuided?.(latest); await refreshDownloads?.();
         });
       };
-      let context, contextLimit, applyContext, autoSend, contextDirty = false;
+      let context, contextLimit, applyContext, thinking, thinkingNote, autoSend, contextDirty = false;
       if (engine === 'llama') {
         context = field(section, 'Context size (tokens)'); context.type = 'number'; context.min = '1'; context.step = '1';
         contextLimit = node('p'); section.append(contextLimit);
@@ -232,11 +230,24 @@ export async function renderSection({ root: parent, call: control, info, signal 
           if (!current || current.mode === 'custom') throw Error('Use the custom router below to change its context.');
           if (!context.reportValidity()) return;
           const submitted = context.value, contextSize = Number(submitted); if (!Number.isSafeInteger(contextSize) || contextSize < 1) throw Error('Enter a whole number of context tokens.');
-          followJob(await call('localai-guided-select', { engine, id: current.pending?.id || current.selected, device: current.pending?.device || current.device || 'cpu', contextSize, revision: liveState.guided.revision }));
+          followJob(await call('localai-guided-select', { engine, id: current.pending?.id || current.selected, device: current.pending?.device || current.device || 'cpu', contextSize, thinking: current.pending?.thinking ?? current.reasoning?.selected, revision: liveState.guided.revision }));
           if (context.value === submitted) contextDirty = false;
           const latest = await call('localai-status'); if (!active()) return; liveState = latest; refreshGuided?.(latest); await refreshDownloads?.();
         });
         section.append(applyContext, node('p', 'Download size includes the model and its image projector. Memory use also depends on context and other open apps; a smaller model or shorter context needs less memory.'));
+        thinking = select(section, 'Reasoning', [], 'auto'); thinkingNote = node('p'); section.append(thinkingNote);
+        thinking.onchange = () => {
+          const current = liveState.guided?.llama, target = thinking.value;
+          thinking.value = current?.pending?.thinking ?? current?.reasoning?.selected ?? 'auto';
+          if (!current || busy || current.mode === 'custom') return;
+          void run(async () => {
+            followJob(await call('localai-guided-select', { engine, id: current.pending?.id || current.selected, device: current.pending?.device || current.device || 'cpu',
+              contextSize: current.pending?.contextSize ?? current.context?.selected, thinking: target, revision: liveState.guided.revision }));
+            const latest = await call('localai-status'); if (!active()) return; liveState = latest; refreshGuided?.(latest); await refreshDownloads?.();
+          });
+        };
+        const advanced = node('details'); advanced.append(node('summary', 'Advanced')); section.append(advanced);
+        drawLlamaAdvanced(advanced);
       }
       if (engine === 'tts') section.append(node('p', 'The default Pocket voice speaks English.'));
       if (engine === 'whisper') {
@@ -252,7 +263,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
         };
         section.append(node('p', 'Calls always read your words back and ask you to confirm before sending.'));
       }
-      views.set(engine, { status, device, deviceNote, context, contextLimit, applyContext, autoSend, contextEdited: () => contextDirty });
+      views.set(engine, { status, device, deviceNote, context, contextLimit, applyContext, thinking, thinkingNote, autoSend, contextEdited: () => contextDirty });
     }
     const update = latest => {
       if (!active() || !root.isConnected) return;
@@ -272,13 +283,24 @@ export async function renderSection({ root: parent, call: control, info, signal 
         }
         view.device.value = current.pending?.device || current.device || 'cpu'; view.device.disabled = custom;
         const chosenDevice = current.devices?.find(item => item.id === view.device.value);
-        view.deviceNote.textContent = custom ? 'Devices are controlled by your custom router below.' : chosenDevice?.detail || (deviceChoices.filter(item => item.available !== false).length === 1 ? 'No supported GPU is currently available.' : '');
+        view.deviceNote.textContent = custom ? 'Devices are controlled by your custom router below.' : chosenDevice?.detail || current.deviceError || (deviceChoices.filter(item => item.available !== false).length === 1 ? 'No supported GPU is currently available.' : '');
         if (view.context) {
           const selected = current.pending?.contextSize ?? current.context?.selected;
           if (!view.contextEdited() && doc.activeElement !== view.context && selected !== undefined) view.context.value = selected;
           if (Number.isSafeInteger(current.context?.max) && current.context.max > 0) view.context.max = current.context.max; else view.context.removeAttribute('max');
           view.context.disabled = custom; view.applyContext.disabled = custom;
           view.contextLimit.textContent = current.context?.max ? `${selected?.toLocaleString() || '—'} / ${current.context.max.toLocaleString()} tokens supported by this model` : current.context?.detail || 'Model context limit is not available yet.';
+        }
+        if (view.thinking) {
+          const reasoning = current.reasoning, levels = reasoning?.levels?.length ? reasoning.levels : [{ id: 'auto', label: 'Automatic (template default)' }];
+          const revision = JSON.stringify(levels);
+          if (view.thinking.dataset.choices !== revision) {
+            view.thinking.replaceChildren(...levels.map(item => { const option = node('option', item.label); option.value = item.id; return option; }));
+            view.thinking.dataset.choices = revision;
+          }
+          view.thinking.value = current.pending?.thinking ?? reasoning?.selected ?? 'auto';
+          view.thinking.disabled = custom || busy || reasoning?.available !== true;
+          view.thinkingNote.textContent = custom ? 'Reasoning is controlled by your custom router below.' : reasoning?.detail || 'Reasoning controls are checked from the loaded model’s native template.';
         }
         const pending = current.pending;
         view.status.textContent = [custom ? 'Custom router INI is active. Turn it off in Advanced to use guided models.' : '',

@@ -500,7 +500,15 @@ async function handle(req, res) {
     if (req.url === '/status') return json(res, { data: status() });
     if (req.url === '/view') return json(res, snapshot());
     if (req.url === '/fork-messages') return json(res, await userForkMessages());
-    if (req.url === '/models') return json(res, await serial(async () => { await applyPending(); return rpc.command('get_available_models'); }));
+    if (req.url === '/models') return json(res, await serial(async () => {
+      await applyPending();
+      const [catalogue, state] = await Promise.all([rpc.command('get_available_models'), rpc.command('get_state')]);
+      // Pi extensions can refine its live model after the registry snapshot was
+      // created. Return that native model so refreshing the chooser retains the
+      // verified thinking levels, including Pillama's template-specific efforts.
+      if (state.model) catalogue.models = catalogue.models.map(model => model.provider === state.model.provider && model.id === state.model.id ? state.model : model);
+      return catalogue;
+    }));
     const value = await jsonBody(req), requestGeneration = questionOwner.state.generation;
     if (req.url === '/context') {
       if (stopping) throw Error('Pi instance is stopping');

@@ -49,6 +49,8 @@ export class Services {
     const { pi, ai: { getSupportedThinkingLevels, clampThinkingLevel } } = await loadPi();
     const runtime = await this.runtime();
     const settings = pi.SettingsManager.create(cwd, piAgentDir, { projectTrusted: false });
+    const { managedLocalProvider } = await import('./managed-provider.mjs');
+    const unknownThinking = new Set((await managedLocalProvider()).unknownThinking.map(id => 'bashkitten-llama/' + id));
     models ||= runtime.getAvailableSnapshot();
     const separator = model.indexOf('/');
     const selected = separator > 0 ? runtime.getModel(model.slice(0, separator), model.slice(separator + 1)) : undefined;
@@ -68,10 +70,11 @@ export class Services {
       }
       finally { session.dispose(); }
     }
+    if (!thinking && unknownThinking.has(defaults.model)) defaults.thinking = '';
     return { models: models.map(m => ({ id: m.id, provider: m.provider, name: `${m.name || m.id} · ${m.provider}`,
       contextWindow: m.contextWindow, input: m.input, available: true,
-      default_thinking: clampThinkingLevel(m, settings.getModelThinkingLevel(m.provider, m.id) ?? settings.getDefaultThinkingLevel() ?? 'medium'),
-      thinking_levels: getSupportedThinkingLevels(m) })), defaultModel: defaults.model, defaultThinking: defaults.thinking };
+      default_thinking: unknownThinking.has(`${m.provider}/${m.id}`) ? '' : clampThinkingLevel(m, settings.getModelThinkingLevel(m.provider, m.id) ?? settings.getDefaultThinkingLevel() ?? 'medium'),
+      thinking_levels: unknownThinking.has(`${m.provider}/${m.id}`) ? [] : getSupportedThinkingLevels(m) })), defaultModel: defaults.model, defaultThinking: defaults.thinking };
   }
   state() {
     if (!this.attempt) return null;

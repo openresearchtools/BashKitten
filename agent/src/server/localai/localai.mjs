@@ -10,9 +10,10 @@ import { dataDir, readJson, writeJson, privateDir, digest } from '../common.mjs'
 import { syncManagedProvider, discoverManagedModels } from '../rpc/managed-provider.mjs';
 import { localAIDir, runtimeDirectory, requireLocalRuntime, runtimeInfo, describeRuntime, runtimeRecordAttribution, formatRuntimeLicenses, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment, listRuntimeDevices } from './runtimes.mjs';
 import { platform } from '../platform/index.mjs';
-import { launchInference, ttsCpuArguments } from './launch.mjs';
+import { launchInference, ttsCpuArguments, runtimeDevice } from './launch.mjs';
 import { parseRouterINI, updateRouterModel, isolatedPreset, routerModelId, browseBackend, verifyTestConfiguration } from './router-models.mjs';
 import { RouterModelTest } from './router-test.mjs';
+import { verifiedThinking, thinkingSelection, thinkingParameters } from './thinking.mjs';
 
 const configFile = path.join(localAIDir, 'config.json');
 const ids = { llama: 'localai-llama', whisper: 'localai-whisper' };
@@ -56,6 +57,7 @@ async function readConfiguration() {
 function configuration(engine, value) {
   if (![...Object.keys(ids), 'tts'].includes(engine) || !value || !['managed', 'custom'].includes(value.mode) || !['auto', 'cuda', 'vulkan', 'cpu'].includes(value.backend)) throw Error('Invalid LocalAI configuration');
   const result = { ...defaults(engine), ...value };
+  if (engine !== 'llama' && result.device !== undefined && (!cleanText(result.device) || result.device && !(engine === 'tts' ? /^(?:CUDA|Vulkan)\d+$/ : /^\d+$/).test(result.device))) throw Error('Choose a listed audio device');
   if (platform === 'termux' && !['cpu', 'vulkan'].includes(result.backend)) throw Error('Choose CPU or GPU (native Termux Vulkan)');
   if (!Number.isInteger(result.port) || result.port < 0 || result.port > 65535) throw Error('Use Automatic (0) or a valid loopback port');
   if (!cleanText(result.binary) || !path.isAbsolute(result.cwd || '') || !cleanText(result.cwd)) throw Error('Choose an executable and absolute working directory');
@@ -168,12 +170,47 @@ export class LocalAI {
         const environment = managedRuntimeEnvironment(runtime.binary);
         const devices = runtimeEngine === 'llama' ? await listRuntimeDevices(runtime.binary, environment)
           : (await validateBinary(runtimeEngine, runtime.binary, platform === 'termux' ? 'vulkan' : 'auto', environment)).devices;
-        return { devices: devices.filter(device => device.backend === runtime.backend), error: devices.length ? '' : 'No supported GPU was reported by this runtime.' };
-      } catch (error) { return { devices: [], error: error.message }; }
+        const supported = devices.filter(device => device.backend === runtime.backend);
+        return { devices: supported, error: supported.length ? '' : 'No supported GPU was reported by this runtime.' };
+      } catch (error) {
+        const detail = String(error.stderr || '').trim().split('\n').at(-1);
+        return { devices: [], error: 'GPU initialization failed. ' + (detail || error.message) };
+      }
     })();
     this.deviceChecks.set(runtimeEngine, { key, at: Date.now(), result }); return result;
   }
-  async applyGuided({ engine, preset, files, device, revision, contextSize = defaultContextSize }) { return this.exclusive(async () => {
+  async thinkingCapabilities(model) {
+    if (!model) return null;
+    const info = await this.catalogue(), entry = info.models.find(item => item.id === model.id);
+    // Reading a cold/sleeping child must not wake it merely to open Settings.
+    if (entry?.status?.value !== 'loaded') return null;
+    const key = await this.key(info.config), suffix = '?' + new URLSearchParams({ model: model.id, autoload: 'false' });
+    const props = await jsonRequest(info.url + '/props' + suffix, { key });
+    if (props.is_sleeping || typeof props.chat_template !== 'string') return null;
+    const fingerprint = digest(JSON.stringify([info.url, model.id, entry.status.args, props.chat_template, props.chat_template_caps]));
+    this.thinkingChecks ||= new Map();
+    if (!this.thinkingChecks.has(fingerprint)) {
+      const check = verifiedThinking(props, async kwargs => (await jsonRequest(info.url + '/apply-template' + suffix,
+        { key, data: { model: model.id, messages: [{ role: 'user', content: 'Hello' }], chat_template_kwargs: kwargs } })).prompt);
+      this.thinkingChecks.set(fingerprint, check);
+      if (this.thinkingChecks.size > 32) this.thinkingChecks.delete(this.thinkingChecks.keys().next().value);
+      try { await check; } catch (error) { this.thinkingChecks.delete(fingerprint); throw error; }
+    }
+    return this.thinkingChecks.get(fingerprint);
+  }
+  async guidedThinking(model) {
+    const selected = thinkingSelection(model?.config.extra), automatic = { id: 'auto', label: 'Automatic' };
+    let capabilities = null, detail = 'Use the selected model once to discover its native reasoning controls.';
+    try {
+      capabilities = await this.thinkingCapabilities(model);
+      if (capabilities) detail = capabilities.effort ? 'Only efforts verified by the loaded native chat template are offered.' : 'This template supports thinking On or Off; On uses Pi’s medium label.';
+      else if (model) detail = 'Native reasoning controls are unavailable until the model is loaded and its template can be verified.';
+    } catch (error) { detail = error.message; }
+    const choices = (capabilities?.levels || []).map(id => ({ id, label: id === 'medium' && !capabilities.effort ? 'On' : id === 'off' ? 'Off' : id }));
+    if (selected !== 'auto' && !choices.some(choice => choice.id === selected)) choices.push({ id: selected, label: selected + ' (saved; unavailable)' });
+    return { selected, levels: [automatic, ...choices], available: Boolean(capabilities), detail };
+  }
+  async applyGuided({ engine, preset, files, device, revision, contextSize = defaultContextSize, thinking }) { return this.exclusive(async () => {
     const snapshot = await this.guidedSnapshot();
     if (snapshot.revision !== revision) throw Error('Local AI or its router INI changed. Your choices were kept; select the model again.');
     const saved = structuredClone(snapshot.config), next = { ...saved[engine], mode: 'managed', backend: device?.backend || 'cpu', argv: [], env: {} };
@@ -186,16 +223,19 @@ export class LocalAI {
       // provider or silent Pi model retargeting accompanies this selection.
       const previous = snapshot.owned.llama ? snapshot.ini.content : `# BashKitten guided models. Editing this file switches to Advanced.\n[*]\nctx-size = ${defaultContextSize}\n`;
       const existing = parseRouterINI(previous).models.find(model => model.name === name);
+      const previousExtra = existing?.config.extra || guidedCache;
+      const extra = thinkingParameters(previousExtra, thinking,
+        thinking && thinking !== 'auto' && thinking !== thinkingSelection(previousExtra) ? await this.thinkingCapabilities(existing) : null);
       const content = await updateRouterModel(previous, {
         name, ...(existing ? { originalName: name } : {}), config: { model: files.model, projector: files.projector, contextSize,
           device: device?.id || 'none', gpuLayers: device ? 'all' : 0, fit: true, idleMinutes: 5,
-          cacheGpu: Boolean(device), flashAttention: 'auto', extra: guidedCache } });
+          cacheGpu: Boolean(device), flashAttention: 'auto', extra } });
       // A custom file remains available at its original path. Returning to
       // guided setup selects a new ordinary INI through the existing owner.
       next.preset = snapshot.owned.llama ? snapshot.ini.file : path.join(localAIDir, 'guided-' + randomUUID() + '.ini');
       ini = { file: next.preset, content };
     } else {
-      next.model = files.model; next.modelKind = preset.kind;
+      next.model = files.model; next.modelKind = preset.kind; next.device = device?.id || '';
       if (engine === 'tts') { next.projector = files.projector; next.voice = files.voice; }
       else { await this.model(files.model, preset.kind); if (preset.kind === 'parakeet') next.keepRunning = false; }
     }
@@ -287,7 +327,9 @@ export class LocalAI {
       const verified = await validateBinary(engine, file, 'cpu', environment);
       return { ...verified, env: environment }; // Model presets, not the package flavour, select devices.
     }
-    return validateBinary(engine, file, config.backend === 'auto' && runtime?.selectedBackend && config.mode === 'managed' ? runtime.selectedBackend : config.backend, environment);
+    const verified = await validateBinary(engine, file, config.backend === 'auto' && runtime?.selectedBackend && config.mode === 'managed' ? runtime.selectedBackend : config.backend, environment);
+    if (config.device) runtimeDevice(config, verified);
+    return verified;
   }
   async command(engine, config, port) {
     const runtime = await this.binary(engine, config, { router: engine === 'llama' });
@@ -295,7 +337,7 @@ export class LocalAI {
       if (config.argv.length || config.keepRunning) throw Error('Parakeet uses its on-demand stdin command; clear the custom command and Keep running');
       const executable = path.join(path.dirname(runtime.binary), 'parakeet-cli');
       await fs.access(executable, fs.constants.X_OK); await this.model(config.model, 'parakeet');
-      return { argv: [executable, '--model', config.model, '--file', '-', '--no-prints', ...(runtime.backend === 'cpu' ? ['--no-gpu'] : ['--device', runtime.devices.find(item => item.backend === runtime.backend).id])], cwd: config.cwd, env: runtime.env };
+      return { argv: [executable, '--model', config.model, '--file', '-', '--no-prints', ...(runtime.backend === 'cpu' ? ['--no-gpu'] : ['--device', runtimeDevice(config, runtime).id])], cwd: config.cwd, env: runtime.env };
     }
     let argv = config.argv.length ? config.argv.map(value => value === '{port}' ? String(port) : value) : [runtime.binary, '--host', '127.0.0.1', '--port', String(port)];
     if (!config.argv.length) {
@@ -305,7 +347,7 @@ export class LocalAI {
         // decoders/projectors to Pi as if they were language models.
         argv.push('--models-preset', config.preset, '--offline', '--jinja');
         if (config.keyFile) argv.push('--api-key-file', config.keyFile);
-      } else { argv.push('--model', config.model, '--language', 'auto', '--no-timestamps'); if (runtime.backend === 'cpu') argv.push('--no-gpu'); else argv.push('--device', runtime.devices.find(item => item.backend === runtime.backend).id); }
+      } else { argv.push('--model', config.model, '--language', 'auto', '--no-timestamps'); if (runtime.backend === 'cpu') argv.push('--no-gpu'); else argv.push('--device', runtimeDevice(config, runtime).id); }
     }
     if (await fs.realpath(argv[0]) !== runtime.binary || argument(argv, '--host') !== '127.0.0.1' || argument(argv, '--port') !== String(port)) throw Error('The command must use the selected binary, --host 127.0.0.1 and --port {port}');
     if (engine === 'whisper') {
@@ -319,7 +361,7 @@ export class LocalAI {
       }
       if (argument(argv, '--model') !== config.model) throw Error('Whisper command must use the selected model');
       if (runtime.backend === 'cpu' && !argv.includes('--no-gpu')) throw Error('The selected CPU command needs --no-gpu');
-      if (runtime.backend !== 'cpu' && (argv.includes('--no-gpu') || !runtime.devices.some(device => device.backend === runtime.backend && device.id === (argument(argv, '--device') || '0')))) throw Error('The Whisper command must use the selected, available GPU device');
+      if (runtime.backend !== 'cpu' && (argv.includes('--no-gpu') || runtimeDevice(config, runtime).id !== (argument(argv, '--device') || '0'))) throw Error('The Whisper command must use the selected, available GPU device');
       await this.model(config.model, config.modelKind);
     } else {
       const preset = argument(argv, '--models-preset') || config.env.LLAMA_ARG_MODELS_PRESET;
@@ -609,7 +651,7 @@ export class LocalAI {
     const executable = path.join(path.dirname(runtime.binary), 'llama-tts'); await fs.access(executable, fs.constants.X_OK);
     // TTS maps omitted/negative -n to 512 frames; let its EOS finish the export.
     const argv = [executable, '-m', config.model, '-mm', config.projector, '-p', text, '-n', '2147483647', '--tts-speaker-file', config.voice, '--output', temporary,
-      '--device', runtime.devices.find(item => item.backend === runtime.backend)?.id || 'none', '-ngl', runtime.backend === 'cpu' ? '0' : '999',
+      '--device', runtimeDevice(config, runtime)?.id || 'none', '-ngl', runtime.backend === 'cpu' ? '0' : '999',
       ...(runtime.backend === 'cpu' ? ['--no-mmproj-offload'] : []),
       ...ttsCpuArguments(config, runtime.backend),
       ...(config.modelKind === 'qwen3' ? ['--tts-lang', config.language] : [])];

@@ -8,6 +8,15 @@ export function ttsCpuArguments({ cpuThreads = 0 }, backend) {
   return backend === 'cpu' && cpuThreads > 0 ? ['--threads', String(cpuThreads)] : [];
 }
 
+// Older saved audio settings select a backend only. Preserve that native first
+// device behavior until an explicit device is saved; never retarget a saved ID.
+export function runtimeDevice(config, runtime) {
+  if (runtime.backend === 'cpu') return null;
+  const device = runtime.devices.find(item => item.backend === runtime.backend && (!config.device || item.id === config.device));
+  if (!device) throw Error('The selected audio GPU is unavailable. Choose an available device or CPU in Local AI.');
+  return device;
+}
+
 export function launchInference(command, { signal, capture = true, diagnostics = false, outputPipe = false } = {}) {
   if (outputPipe) command = { ...command, argv: [binary('runtime-guard'), 'pipe-output', ...command.argv] };
   const child = spawn(binary('runtime-guard'), [process.execPath, fileURLToPath(new URL('./inference-worker.mjs', import.meta.url)), 'serve'],

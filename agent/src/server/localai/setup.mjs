@@ -98,18 +98,20 @@ export class FirstRunLocalAI {
       const modelPath = preset?.paths?.[preset.files.find(name => !/mmproj/i.test(name))];
       const selectedModel = router.find(model => modelPath && model.config.model === modelPath) ||
         router.find(model => model.id === routerModelId(path.basename(selected).replace(/\.gguf$/i, ''))) || (!owned ? router[0] : null);
-      const hardware = await this.localAI.guidedDevices(engine), current = engine === 'llama' ? selectedModel?.config.device : config.backend === 'cpu' ? 'none' : 'gpu';
+      const hardware = await this.localAI.guidedDevices(engine);
+      const backend = engine !== 'llama' && config.backend === 'auto' ? (await runtimeInfo(engine === 'tts' ? 'llama' : engine))?.selectedBackend || 'auto' : config.backend;
+      const current = engine === 'llama' ? selectedModel?.config.device : backend === 'cpu' ? 'none'
+        : config.device || hardware.devices.find(item => backend === 'auto' || item.backend === backend)?.id || 'gpu';
       const device = !current || current === 'none' ? 'cpu' : current;
       const devices = [{ id: 'cpu', label: 'CPU', available: true }];
-      if (engine === 'llama') devices.push(...hardware.devices.map(item => ({ id: item.id, label: item.id + ': ' + item.name, available: true })));
-      else devices.push({ id: 'gpu', label: 'GPU', available: Boolean(hardware.devices.length), detail: hardware.error });
+      devices.push(...hardware.devices.map(item => ({ id: item.id, label: (engine === 'whisper' ? ({ cuda: 'CUDA', vulkan: 'Vulkan' }[item.backend] || item.backend) + ' ' : '') + item.id + ': ' + item.name, available: true })));
       if (!devices.some(item => item.id === device)) devices.push({ id: device, label: device + ' (unavailable)', available: false, detail: hardware.error || 'The selected device is no longer available.' });
       const pending = job?.kind === 'localai-guided-select' && job.input.engine === engine;
-      result[engine] = { selected, device, mode: engine !== 'llama' || owned || empty && !config.guided ? 'guided' : 'custom', devices,
+      result[engine] = { selected, device, mode: engine !== 'llama' || owned || empty && !config.guided ? 'guided' : 'custom', devices, deviceError: hardware.error,
         presets: catalogue.presets.filter(item => item.engine === engine && item.guided !== false).map(({ id, title, bytes, modelBytes, projectorBytes, downloaded, status, kind, contextLength }) => ({ id, title, bytes, modelBytes, projectorBytes, downloaded, status, kind, contextLength, recommended: id === defaults[engine].id })),
-        pending: pending && !['complete', 'failed', 'cancelled', 'interrupted'].includes(job.status) ? { id: job.input.id, device: job.input.device, contextSize: job.input.contextSize, status: job.status } : null,
+        pending: pending && !['complete', 'failed', 'cancelled', 'interrupted'].includes(job.status) ? { id: job.input.id, device: job.input.device, contextSize: job.input.contextSize, thinking: job.input.thinking, status: job.status } : null,
         error: pending && job.error || (engine === 'llama' ? routerError || loadError : ''),
-        ...(engine === 'llama' ? { context: { selected: selectedModel?.config.contextSize || 65536, max: preset?.contextLength || null,
+        ...(engine === 'llama' ? { reasoning: await this.localAI.guidedThinking(selectedModel), context: { selected: selectedModel?.config.contextSize || 65536, max: preset?.contextLength || null,
           detail: preset?.contextLength ? 'Model-supported limit from its pinned native configuration. Memory fit uses llama.cpp; a chosen context size remains explicit.' : 'Choose a guided model to see its verified context limit.' },
           images: Boolean(owned && preset?.downloaded && selectedModel?.config.projector &&
             preset.files.some(name => /mmproj/i.test(name) && preset.paths[name] === selectedModel.config.projector)) } : {}) };
@@ -126,6 +128,7 @@ export class FirstRunLocalAI {
     const choice = input.device || 'cpu';
     if (!state[engine].devices.some(item => item.id === choice && item.available)) throw Error('The selected device is unavailable; choose an available device.');
     if (engine === 'llama' && input.contextSize !== undefined && (!Number.isSafeInteger(input.contextSize) || input.contextSize < 1 || !preset.contextLength || input.contextSize > preset.contextLength)) throw Error('Choose a context size within this model’s verified limit.');
+    if (engine === 'llama' && input.thinking !== undefined && typeof input.thinking !== 'string') throw Error('Choose a listed reasoning setting.');
     const controller = new AbortController(); let currentDownload;
     const check = async () => {
       job.checkCancellation(); if (this.localAI.stopping) throw cancelled('Model setup stopped with Agent.');
@@ -165,7 +168,7 @@ export class FirstRunLocalAI {
       let device;
       if (choice !== 'cpu') {
         const hardware = await this.localAI.guidedDevices(engine, { fresh: true });
-        device = engine === 'llama' ? hardware.devices.find(item => item.id === choice) : hardware.devices[0];
+        device = hardware.devices.find(item => item.id === choice);
         if (!device) throw Error(hardware.error || 'The selected GPU is no longer available.');
       }
       // An active router/recognition server keeps its current model until it
@@ -182,7 +185,7 @@ export class FirstRunLocalAI {
       }
       await check(); await job.phase('Selecting ' + preset.title);
       const contextSize = input.contextSize ?? (engine === 'llama' && state.llama.selected === id ? state.llama.context.selected : undefined);
-      await this.localAI.applyGuided({ engine, preset, files, device, revision, contextSize });
+      await this.localAI.applyGuided({ engine, preset, files, device, revision, contextSize, thinking: input.thinking });
       if (running && !this.localAI.stopping) {
         if (engine === 'llama') await this.localAI.reloadRouterPresets();
         else await this.localAI.action(engine, preset.kind === 'parakeet' ? 'stop' : 'reload');
