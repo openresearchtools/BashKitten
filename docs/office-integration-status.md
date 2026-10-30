@@ -5,7 +5,80 @@ This record separates research/temporary comparison evidence from implementation
 and installed-product acceptance. Historical checkpoints below retain the limits
 and failures of their original candidates; the current result is recorded first.
 
+## ESR 153.6 refresh before publication — 30 October 2026
+
+The user added a current upstream/security refresh before publishing the next
+candidate. Firefox ESR 153.6.0 is merged through the existing compact source
+history, retaining the product adaptations and the four installed corrections
+below. The matching released Tor Browser 16.0 lineage contributes six additional
+production commits, including Android download filename validation; all fifteen
+previous backports remain. Exact source commits and applicability are recorded in
+`browser/bashkitten/upstreams.toml` and `UPDATING-FIREFOX.md`. The browser's
+version/history and regenerated full-license checks pass. Builds and installed
+acceptance of this new source remain pending.
+
+Native Tor 0.4.9.15 and Valkey 9.1.3 sources and build pins are updated. The APK's
+separate retained Guardian JNI integration is being rebuilt against the same Tor
+release; the released expert-bundle daemon is not a compatible JNI replacement.
+Node, Files media and Office dependency maintenance updates are being prepared
+through their existing source/build owners. Authelia, Caddy, Podman and its
+selected helper releases were already current at this review. Original source
+archives remain outside Git and are included in normal corresponding-source
+artifacts with full notices.
+
+A fresh Termux:X11 review found the embedded source, browser adapter and loader
+already match the current official `6dfb8b4a4cc887bc329284d31eb049d596bd1208`
+release/nightly. The earlier actual phone Display launch is evidence for that
+pair, not for the pending ESR 153.6 APK. Termux app update checks remain on the
+official stable channel; the prerelease option is only for BashKitten and its
+matching packages. The unpublished 153.5.5 candidate is retained as historical
+build/installed evidence, not the next publication target.
+
 ## 153.5.5 regression work — 30 October 2026
+
+The first full 153.5.5 candidate, `cf0e0a133fc150e529c5f895c864c1fc7ef681ad`,
+passed all 62 jobs in
+[41054415200](https://github.com/openresearchtools/BashKitten/actions/runs/41054415200),
+including six primary packages, all eight Office/Files components and the normal
+source/legal gate. Publication is held for the focused installed findings below;
+build success does not establish their correction.
+
+The installed phone passed sidecar PDF download through the native browser
+prompt, Downloads, Android Open with, local PDF rendering and Share sheet. The
+downloaded bytes matched, and the custom completion row was absent. Its visible
+tab group order was Agent, Files, normal, private and Tor. Installed Wayland and
+real Xorg checks passed Files/Office use, native desktop downloads, Hide Agent/logo
+behavior and resizing. Xorg also passed normal cold startup (Files running about
+2.6 seconds after Local started, before a Files click) and the actual 600-pixel
+narrow layout. Wayland's isolated namespace has a separate machine-service setup
+warning, so it does not establish ordinary cold startup; its 600-pixel window
+check was not established. Existing configuration, models and source documents
+were preserved.
+
+The installed phone also opened the embedded XFCE desktop through the normal
+Display action with the packaged `0755` launcher, then turned Display off through
+the native control. Files navigation remained responsive during cold Office
+loading, and the document rendered successfully. Native landscape pane dragging
+passed. A phone Files-dock gesture result was not established because the test
+browser's picture-in-picture overlay intercepted input during the bounded check;
+the original density and rotation settings were restored. This does not relabel
+the desktop dock check as phone coverage.
+
+Four confirmed corrections are being batched before another candidate: dynamic
+References capture icons still selected colored donor artwork; native manual
+session restoration reused an implicit empty tab and hid an explicitly restored
+New Tab; and native Files launch readiness still waited for the chat catalogue
+on both platforms. Overlapping desktop startup/Files selection could also show
+a false protected-chat warning. The phone's native Termux update check also
+reached a protected-settings allowlist that omitted the two new update actions,
+despite the existing Java adapter handling them. References 1.0.10 changes only the normal action
+artwork paths, retaining capture behavior and saving/error indicators. The
+restoration fix uses native `SSTabRestored` and `SessionStore.isTabRestoring`; its
+bounded one-module Xorg check passed the real failing flow, followed by exact
+restoration of the original archive. Files now waits for authenticated application
+readiness without catalogue/worker readiness, and desktop selection coalesces the
+same backend startup. No public endpoint or authentication fallback was added.
+These corrections still need their final packaged checks.
 
 The reported desktop Files permission failure was reproduced in the published
 Linux package: copying a temporary component directory propagated mode `0700`
@@ -43,7 +116,7 @@ remain separate commits. Both native architectures and the paired Java/AIDL
 sources compiled, with 16 KiB ELF alignment checked. Focused source/build review
 does not replace final signed APK/backend pairing and installed desktop checks.
 
-The full 153.5.5 candidate and its focused installed flows remain pending. The
+The corrections and remaining focused installed flows now carry into 153.6. The
 153.5.4 publication below does not establish that these new regressions are fixed
 in a published package. Scoped evidence is under `Bashkitten-Acceptance/`, in
 `android-regression-20261030/module-overlay/focused-summary.json`,

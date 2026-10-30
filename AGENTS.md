@@ -1,5 +1,19 @@
 # BashKitten · native Pi / Linux and Termux
 
+## 30 October upstream and update-channel clarification
+
+Before the next candidate, refresh applicable official releases of Firefox ESR,
+Tor and the other bundled components through their existing pinned source,
+patch, build and notice owners. Include the applicable browser-engine security
+backports from the matching released **Tor Browser** lineage, separately from
+the Tor networking runtime. Preserve BashKitten's adaptations and compact
+Firefox history. Check embedded Termux:X11 source, browser adapter and loader
+together against its current official release/nightly; do not update only one
+side of the pair. Source checks do not establish installed acceptance.
+The prerelease preference applies to BashKitten and its matching packages only.
+Termux app updates always follow the official stable channel and retain signing
+compatibility checks; do not offer Termux prereleases through that preference.
+
 ## 30 October installed-regression and layout amendment
 
 The user's [latest amendment](docs/native-environments-display-plan.md#installed-regressions-and-wide-layout--30-october-2026)

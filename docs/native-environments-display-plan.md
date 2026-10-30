@@ -62,6 +62,24 @@ Batch these fixes into the next ordinary GitHub Actions prerelease, using the
 existing caches and matching binary/source/legal checks. Test the changed flows
 in installed BashKitten; no unrelated full acceptance restart is requested.
 
+### Later clarification: release refresh and update channels
+
+Before this candidate, check and update applicable official releases of Firefox
+ESR, Tor, Authelia, Podman and the other bundled components using their existing
+source/import/patch and build owners. The browser update must retain existing
+applicable security backports and include new applicable fixes from the matching
+released Tor Browser lineage, including Android fixes. This is separate from the
+Tor networking runtime update. Preserve the compact Firefox history and adapted
+product behavior. Verify the embedded Termux:X11 source, browser adapter and
+paired loader against the current official release/nightly, updating all required
+parts together rather than substituting an unrelated X11 APK.
+
+Termux app updates always follow official stable releases. BashKitten's
+prerelease preference applies only to BashKitten and its matching packages; it
+must not enable Termux prereleases. Preserve installed signer/distribution checks.
+Keep new source/build/installed evidence separate from this requirement and
+preserve the frozen original plan and historical verification records.
+
 ## User amendment — 28 October 2026: Hide Agent inside the sidebar
 
 Keep the BashKitten logo's original position, sidebar action, labels and other
