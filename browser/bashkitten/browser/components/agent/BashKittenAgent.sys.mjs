@@ -22,6 +22,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   BashKittenDisplay: "resource:///modules/BashKittenDisplay.sys.mjs",
   BrowserControlChannel: "resource:///modules/BrowserControlChannel.sys.mjs",
   SessionStore: "resource:///modules/sessionstore/SessionStore.sys.mjs",
+  SessionStartup: "resource:///modules/sessionstore/SessionStartup.sys.mjs",
 });
 const contexts = new Map();
 const ownedViews = new WeakMap();
@@ -245,22 +246,14 @@ class AgentView {
     this.viewBox = xul(doc, "vbox", { id: "bashkitten-agent-views", flex: "1" });
     const workspace = xul(doc, "hbox", { id: "bashkitten-native-workspace", flex: "1" });
     const chat = xul(doc, "vbox", { id: "bashkitten-native-chat", flex: "1" }); chat.append(this.state, this.viewBox);
-    workspace.append(this.sidecar.root, chat); this.pane.append(workspace);
+    this.sidecarSplitter = xul(doc, "splitter", { id: "bashkitten-sidecar-splitter", class: "sidebar-splitter", resizebefore: "sibling", resizeafter: "none", tabindex: "0", "aria-label": "Resize projects and chats" });
+    workspace.append(this.sidecar.root, this.sidecarSplitter, chat); this.pane.append(workspace);
     const tabbox = doc.getElementById("tabbrowser-tabbox");
-    tabbox.before(this.pane);
+    this.paneSplitter = xul(doc, "splitter", { id: "bashkitten-agent-splitter", class: "sidebar-splitter", resizebefore: "sibling", resizeafter: "none", tabindex: "0", "aria-label": "Resize Agent and browser" });
+    tabbox.before(this.pane, this.paneSplitter);
     this.chatsToggle = xul(doc, "toolbarbutton", { id: "bashkitten-chats-toggle", image: "chrome://branding/content/icon32.png", class: "toolbarbutton-1", tooltiptext: "Chats", "aria-label": "Chats", "aria-controls": "bashkitten-native-sidecar", "aria-expanded": String(this.sidecar.isOpen()) });
-    this.chatsToggle.addEventListener("command", () => { if (this.layout !== "full" || this.connectionsPanel) { this.show(); this.sidecar.open(); } else this.sidecar.toggle(); });
+    this.chatsToggle.addEventListener("command", () => { if (this.pane.hidden || this.connectionsPanel) { this.show(); this.sidecar.open(); } else this.sidecar.toggle(); });
     doc.getElementById("tabbrowser-tabs").before(this.chatsToggle);
-    this.paneToggle = xul(doc, "toolbarbutton", { id: "bashkitten-agent-pane-toggle", label: "Hide Agent", class: "toolbarbutton-1", overflows: "false", tooltiptext: "Show or hide the Agent pane", "aria-controls": "bashkitten-agent-pane", "aria-expanded": "true" });
-    this.paneToggle.addEventListener("command", () => {
-      this.browseWithAgent = !this.browseWithAgent;
-      Services.prefs.setBoolPref("bashkitten.agent.splitBrowsing", this.browseWithAgent);
-      this.browse();
-    });
-    doc.getElementById("urlbar-container").before(this.paneToggle);
-    this.sidebarToggle = xul(doc, "toolbarbutton", { id: "bashkitten-agent-sidebar-toggle", image: "chrome://browser/skin/sidebar-collapsed.svg", class: "toolbarbutton-1", overflows: "false", tooltiptext: "Show or hide projects and chats", "aria-label": "Show or hide projects and chats", "aria-controls": "bashkitten-native-sidecar", "aria-expanded": String(this.sidecar.isOpen()), hidden: "true" });
-    this.sidebarToggle.addEventListener("command", () => this.sidecar.toggle());
-    this.paneToggle.after(this.sidebarToggle);
     const appMenu = this.win.PanelUI.mainView.querySelector("#appMenu-settings-button");
     const nativeMenu = xul(doc, "toolbarbutton", { id: "appMenu-bashkitten-about", label: "About BashKitten", class: "subviewbutton" });
     nativeMenu.addEventListener("command", () => { this.win.PanelUI.hide(); this.win.openAboutDialog(); });
@@ -332,8 +325,26 @@ class AgentView {
           !event.target.closest(".tab-close-button")) this.browse();
     });
     this.win.gBrowser.tabContainer.addEventListener("TabClose", event => {
-      if (event.target._endRemoveArgs?.[1]) this.show();
+      if (event.target._endRemoveArgs?.[1]) {
+        this.markEmptyTab();
+        this.show();
+      }
     });
+    this.win.gBrowser.tabContainer.addEventListener("TabOpen", event => {
+      // TabOpen also fires for Gecko's last-tab replacement. Wait until the
+      // TabClose owner has marked that implicit tab before choosing a layout.
+      setTimeout(() => {
+        if (this.win.closed || event.target.closing || event.target === this.emptyTab) return;
+        this.releaseEmptyTab();
+        this.browse();
+      }, 0);
+    });
+    this.tabProgress = { onLocationChange: (browser, progress) => {
+      if (!progress.isTopLevel || browser !== this.emptyTab?.linkedBrowser || this.isEmptyTab(this.emptyTab)) return;
+      this.releaseEmptyTab();
+      this.browse();
+    } };
+    this.win.gBrowser.addTabsProgressListener(this.tabProgress);
     this.tabKey = event => {
       const accel = event.ctrlKey || event.metaKey;
       if ((accel && ["Tab", "PageUp", "PageDown"].includes(event.key)) ||
@@ -341,7 +352,10 @@ class AgentView {
     };
     this.win.addEventListener("keydown", this.tabKey, true);
     DesktopLifetime.attach(this, shutdown);
-    this.show();
+    // Restored explicit New Tabs belong to the user. The sole empty tab on a
+    // fresh startup and Gecko's last-close replacement are implicit surfaces.
+    if (!lazy.SessionStartup.willRestore()) this.markEmptyTab();
+    if (this.hasBrowserTabs()) this.browse(); else this.show();
     const startupLayout = this.layoutEpoch;
     void lazy.SessionStore.promiseAllWindowsRestored.then(() => {
       if (!this.win.closed && !DesktopLifetime.quitting && this.layoutEpoch === startupLayout &&
@@ -462,13 +476,45 @@ class AgentView {
   show() {
     this.layoutEpoch = (this.layoutEpoch || 0) + 1;
     this.closeConnections();
-    this.layout = "full";
+    this.browseWithAgent = true;
+    Services.prefs.setBoolPref("bashkitten.agent.splitBrowsing", true);
+    this.layout = this.hasBrowserTabs() ? "split" : "full";
     this.pane.hidden = false;
     this.doc.documentElement.setAttribute("bashkitten-agent-visible", "true");
-    this.doc.documentElement.setAttribute("bashkitten-agent-layout", "full");
+    this.doc.documentElement.setAttribute("bashkitten-agent-layout", this.layout);
     this.updateDisplayChrome();
     this.activeBrowser?.focus();
   }
+  hide() {
+    this.browseWithAgent = false;
+    Services.prefs.setBoolPref("bashkitten.agent.splitBrowsing", false);
+    this.releaseEmptyTab();
+    this.browse();
+    this.win.gBrowser.selectedBrowser.focus();
+  }
+  isEmptyTab(tab) {
+    return tab && !tab.closing && !tab.pinned && !tab.linkedBrowser.userTypedValue &&
+      !tab.linkedBrowser.canGoBack && !tab.linkedBrowser.canGoForward &&
+      ["about:blank", "about:newtab", "about:home"].includes(tab.linkedBrowser.currentURI.spec);
+  }
+  markEmptyTab() {
+    const tabs = this.win.gBrowser.tabs.filter(tab => !tab.closing);
+    if (tabs.length !== 1 || !this.isEmptyTab(tabs[0])) return;
+    // Gecko requires a selected browser even while Agent is the only surface.
+    // Keep that native tab, but do not present it as a user-created New Tab.
+    this.emptyTab = tabs[0];
+    this.emptyTab.setAttribute("bashkitten-empty-tab", "true");
+  }
+  releaseEmptyTab() {
+    const tab = this.emptyTab;
+    if (!tab) return;
+    this.emptyTab = null;
+    tab.removeAttribute("bashkitten-empty-tab");
+    if (tab.isEmpty && this.isEmptyTab(tab) && this.win.gBrowser.tabs.some(other => other !== tab && !other.closing)) {
+      this.win.gBrowser.removeTab(tab, { animate: false, skipSessionStore: true });
+    }
+  }
+  hasBrowserTabs() { return this.win.gBrowser.tabs.some(tab => !tab.closing && tab !== this.emptyTab); }
   browse() {
     this.layoutEpoch = (this.layoutEpoch || 0) + 1;
     const split = this.browseWithAgent;
@@ -480,12 +526,7 @@ class AgentView {
   }
 
   updateDisplayChrome() {
-    const agentVisible = !this.pane.hidden;
-    const agentLabel = agentVisible ? "Hide Agent" : "Show Agent";
-    this.paneToggle.setAttribute("label", agentLabel);
-    this.paneToggle.setAttribute("aria-label", agentLabel);
-    this.paneToggle.setAttribute("aria-expanded", String(agentVisible));
-    this.sidebarToggle.hidden = !agentVisible;
+    this.paneSplitter.hidden = this.layout !== "split";
     const display = this.layout !== "full" && lazy.BashKittenDisplay.selected(this.win);
     this.doc.documentElement.toggleAttribute("bashkitten-display-visible", Boolean(display));
     if (this.displayControls) {
@@ -643,7 +684,13 @@ class AgentView {
   }
 
   async openFiles(value = {}) {
-    return this.openApplication({ ...value, component: "files" });
+    this.filesLaunches ||= new Map();
+    const key = JSON.stringify([this.selection, value.cwd, value.projectId, value.file, value.url]);
+    if (this.filesLaunches.has(key)) return this.filesLaunches.get(key);
+    const task = this.openApplication({ ...value, component: "files" });
+    this.filesLaunches.set(key, task);
+    try { return await task; }
+    finally { if (this.filesLaunches.get(key) === task) this.filesLaunches.delete(key); }
   }
 
   async openApplication(value = {}) {
@@ -1654,6 +1701,7 @@ class AgentView {
     lazy.BrowserControlChannel.close("browser closed");
     this.win.removeEventListener("keydown", this.tabKey, true);
     this.win.gBrowser.tabContainer.removeEventListener("TabSelect", this.displayChanged);
+    this.win.gBrowser.removeTabsProgressListener(this.tabProgress);
     this.win.removeEventListener("BashKittenDisplayChanged", this.displayChanged);
     Services.obs.removeObserver(this.observer, "bashkitten-agent-remote-changed");
     // Native window hiding never unloads this view; actual Quit stops ownership.

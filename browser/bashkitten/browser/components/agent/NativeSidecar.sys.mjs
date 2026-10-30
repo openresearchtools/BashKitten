@@ -11,6 +11,8 @@ export class NativeSidecar {
     this.sharing = new Map(); this.sharingPending = new Set(); this.sharingEpoch = new Map();
     host.win.addEventListener("unload", () => { this.closed = true; this.renderEpoch++; clearTimeout(this.catalogueTimer); this.resize.disconnect(); }, { once: true });
     this.root = this.node("aside", { id: "bashkitten-native-sidecar", "aria-label": "Environments, projects and chats" });
+    const hide = this.button("Hide Agent", "Hide Agent", () => this.host.hide());
+    hide.className = "native-hide-agent"; this.root.append(hide);
     this.notice = this.node("p", { role: "status" }); this.root.append(this.notice);
     this.groups = new Map();
     for (const kind of ["local", "machine", "remote"]) {
@@ -21,7 +23,7 @@ export class NativeSidecar {
     }
     this.resize = new host.win.ResizeObserver(entries => {
       const width = entries[0]?.contentRect.width;
-      if (width > 0) { this.narrow = width < 720; host.pane.setAttribute("data-sidecar-narrow", String(this.narrow)); }
+      if (width > 0) { this.narrow = width < 560; host.pane.setAttribute("data-sidecar-narrow", String(this.narrow)); }
     });
     this.resize.observe(host.pane); this.open();
   }
@@ -46,7 +48,7 @@ export class NativeSidecar {
     heading.append(this.node("span", {}, title), this.button("+", label, action)); return heading;
   }
   isOpen() { return this.host.pane.getAttribute("data-sidecar-open") !== "false"; }
-  setOpen(open) { this.host.pane.setAttribute("data-sidecar-open", String(open)); this.host.chatsToggle?.setAttribute("aria-expanded", String(open)); this.host.sidebarToggle?.setAttribute("aria-expanded", String(open)); }
+  setOpen(open) { this.host.pane.setAttribute("data-sidecar-open", String(open)); this.host.chatsToggle?.setAttribute("aria-expanded", String(open)); }
   open() { this.setOpen(true); if (this.backends) void this.refresh().catch(error => { this.notice.textContent = error.message; }); }
   close() { this.actionPanel?.close(); this.setOpen(false); }
   toggle() { if (this.isOpen()) this.close(); else this.open(); }
@@ -248,9 +250,7 @@ export class NativeSidecar {
         const newProjectChat = this.button("+", "New chat in " + project.name, async () => { await this.select(backend.id); await this.navigation("new", { projectId: project.id }); await this.refreshChats(); this.chatSelected(); });
         const projectActions = this.button("⋯", "Project actions", async anchor => { const rect = anchor.getBoundingClientRect(); await this.select(backend.id); this.projectActions(project, rect); });
         for (const button of [newProjectChat, projectActions]) button.addEventListener("click", event => event.stopPropagation());
-        const projectFiles = this.button("", "Open " + project.name + " Files", async () => { await this.select(backend.id); await this.host.openFiles({ projectId: project.id }); });
-        projectFiles.append(this.icon("folder")); projectFiles.addEventListener("click", event => event.stopPropagation());
-        summary.append(projectFiles, newProjectChat, projectActions);
+        summary.append(newProjectChat, projectActions);
         for (const chat of roots.filter(chat => chat.projectId === project.id)) appendChat(chat, group, 1);
         section.append(group);
       }

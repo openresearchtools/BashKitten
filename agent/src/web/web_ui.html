@@ -468,7 +468,10 @@
     .question-card input:disabled { opacity:.52; }
     .question-card :is(button,input):focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     #sidebarToggle { display:none; }
-    #app.files-open { grid-template-columns:260px minmax(0,1fr) 300px; }
+    #app.files-open { grid-template-columns:280px minmax(320px,1fr) 6px minmax(280px,min(var(--file-panel-width,320px),calc(100% - 606px))); }
+    #fileSplitter { display:none; min-width:0; cursor:ew-resize; touch-action:none; background:var(--line-soft); }
+    #app.files-open #fileSplitter { display:block; }
+    #fileSplitter:is(:hover,:focus-visible) { background:var(--muted); outline:0; }
     #filePanel { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border-left:1px solid var(--line-soft); background:var(--sidebar); padding:8px; }
     .file-heading { display:flex; flex-shrink:0; align-items:center; gap:2px; min-height:36px; margin-bottom:8px; border-bottom:1px solid var(--line-soft); }
     .file-tabs, .file-toolbar { display:flex; flex-shrink:0; gap:2px; align-items:center; }
@@ -574,10 +577,12 @@
     @media (max-width:1100px) and (min-width:701px) {
       #app { grid-template-columns:220px minmax(0,1fr); }
       #app.files-open { grid-template-columns:220px minmax(0,1fr); }
+      #app.files-open #fileSplitter { display:none; }
       #filePanel { position:absolute; z-index:30; right:0; top:58px; bottom:0; width:320px; border-start-start-radius:var(--radius-card); box-shadow:-10px 0 30px var(--shadow); }
     }
     @media (max-width:700px) {
       #app, #app.files-open { grid-template-columns:minmax(0,1fr); }
+      #app.files-open #fileSplitter { display:none; }
       #sidebarToggle { display:inline-grid; flex-shrink:0; }
       #sidebar { display:none; position:absolute; z-index:40; inset:0 auto 0 0; width:min(86vw,300px); border-radius:0 var(--radius-card) var(--radius-card) 0; box-shadow:10px 0 30px var(--shadow); }
       #app.sidebar-open #sidebar { display:flex; }
@@ -603,8 +608,12 @@
       .settings-page { padding-top: 8px; }
     }
     #app.native-navigation { grid-template-columns: minmax(0, 1fr); }
-    #app.native-navigation.files-open { grid-template-columns: minmax(0, 1fr) 300px; }
-    @media (max-width: 1000px) { #app.native-navigation.files-open { grid-template-columns: minmax(0, 1fr); } }
+    #app.native-navigation.files-open { grid-template-columns: minmax(320px, 1fr) 6px minmax(280px,min(var(--file-panel-width,320px),calc(100% - 326px))); }
+    @media (min-width: 701px) {
+      #app.native-navigation #filePanel { position:static; width:auto; border-radius:0; box-shadow:none; }
+      #app.native-navigation.files-open #fileSplitter { display:block; }
+    }
+    @media (max-width: 700px) { #app.native-navigation.files-open { grid-template-columns: minmax(0, 1fr); } }
     #app.native-navigation #sidebar, #app.native-navigation #sidebarToggle { display:none; }
   </style>
 </head>
@@ -717,6 +726,7 @@
         <div id="imageViewport"><div id="imageStage"><img id="viewerImage" alt=""><span id="viewerError" class="hidden" role="status"></span></div></div>
       </section>
     </main>
+    <div id="fileSplitter" role="separator" aria-orientation="vertical" aria-label="Resize chat and Files" aria-controls="filePanel" tabindex="0"></div>
     <aside id="filePanel" class="hidden" aria-label="Project files and changes">
       <div class="file-heading"><nav class="file-tabs" role="tablist" aria-label="Project view"><button id="filesTab" type="button" role="tab" aria-selected="true" aria-controls="filesView">Files</button><button id="changesTab" type="button" role="tab" aria-selected="false" aria-controls="changesView" tabindex="-1">Changes</button></nav><button id="browseFullFiles" type="button" title="Open the full Files app">Browse Files ↗</button><button id="closeFiles" type="button" class="icon-button" aria-label="Close project panel">×</button></div>
       <section id="filesView" class="file-pane" role="tabpanel" aria-labelledby="filesTab">
@@ -807,7 +817,7 @@
     });
     let models = [];
     let modelDefaults = { model: '', thinking: '' };
-    let newModelSelectionEdited = false, visibleModelsRefresh = null;
+    let newModelSelectionEdited = false, newThinkingSelectionEdited = false, visibleModelsRefresh = null;
     let current = null;
     let source = null, sourceReady = null, sourceSession = null, sourceView = -1;
     let config = null;
@@ -2378,8 +2388,6 @@
         const label = document.createElement('span');
         label.textContent = folderDisplayName(folder);
         heading.append(label);
-        const browse = document.createElement('button'); browse.type='button'; browse.className='icon-button'; browse.append($('#filesToggle svg').cloneNode(true)); browse.title='Files'; browse.setAttribute('aria-label','Open '+displayFolder(folder)+' in Files'); browse.classList.add('file-manager-action');browse.classList.toggle('hidden',!fileManagerAllowed); browse.onclick=event=>{event.stopPropagation();openFilePanel(folder);setSidebar(false);}; heading.append(browse);
-
         if(folder)bindSessionContextMenu(heading,{cwd:folder,project:true});
         group.append(heading);
         function appendSession(session, container) {
@@ -2757,6 +2765,7 @@
       closeImageViewer();
       current = null;
       newModelSelectionEdited = false;
+      newThinkingSelectionEdited = false;
       pendingProjectId = projectId;
       renderQuestions([]);
       chatAgents = { ...agentDefaults, ...config?.default_subagents }; showAgentChoice();
@@ -3147,8 +3156,8 @@
       else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('#composer').requestSubmit(); }
     });
 
-    $('#model').onchange = async () => { if (!current) newModelSelectionEdited = true; setThinking($('#model')); draftChanged(); try { await applyCurrentModel(false); } catch (error) { alert(error.message); } };
-    $('#thinking').onchange = async () => { if (!current) newModelSelectionEdited = true; draftChanged(); try { await applyCurrentModel(); } catch (error) { alert(error.message); } };
+    $('#model').onchange = async () => { if (!current) { newModelSelectionEdited = true; newThinkingSelectionEdited = false; } setThinking($('#model')); draftChanged(); try { await applyCurrentModel(false); } catch (error) { alert(error.message); } };
+    $('#thinking').onchange = async () => { if (!current) { newModelSelectionEdited = true; newThinkingSelectionEdited = true; } draftChanged(); try { await applyCurrentModel(); } catch (error) { alert(error.message); } };
     $('#defaultModel').onchange = () => setThinking($('#defaultModel'), $('#defaultThinking'));
 
     function isSessionCommand(text) { return /^\/compact(?:\s|$)/.test(text) || /^\/(fork|clone|login|providers|settings|attach)$/.test(text); }
@@ -3228,7 +3237,10 @@
           const form = new FormData();
           form.append('prompt', text); form.append('cwd', draft.cwd);
           if (draft.projectId) form.append('projectId', draft.projectId);
-          form.append('model', draft.model); form.append('thinking', draft.thinking);
+          form.append('model', draft.model);
+          // Catalogue defaults are display state. In particular a cold llama
+          // model's provisional Off must not become an explicit --thinking off.
+          if (draft.thinkingSelectionEdited) form.append('thinking', draft.thinking);
           form.append('subagents', JSON.stringify(draft.subagents));
           const result = await api('/api/sessions', {method:'POST', body:form});
           const visible = operationVisible(operation);
@@ -3342,7 +3354,8 @@
       if (!destination) {
         const form = new FormData(); form.append('prompt', text); form.append('cwd', pendingCwd);
         if (pendingProjectId) form.append('projectId', pendingProjectId);
-        form.append('model', $('#model').value); form.append('thinking', $('#thinking').value);
+        form.append('model', $('#model').value);
+        if (newThinkingSelectionEdited) form.append('thinking', $('#thinking').value);
         form.append('subagents', JSON.stringify(chatAgents));
         const result = await api('/api/sessions', { method: 'POST', body: form, signal: capture.abort.signal });
         if (dictation !== capture || dictationDestination() !== capture.destination) return;
@@ -3484,6 +3497,7 @@
         syncSelectedFilePanel();
         chatAgents = { ...config.default_subagents }; showAgentChoice();
         newModelSelectionEdited = false;
+        newThinkingSelectionEdited = false;
         $('#model').value = modelDefaults.model;
         setThinking($('#model'));
         $('#thinking').value = modelDefaults.thinking;
@@ -3559,6 +3573,31 @@
     $('#drawerBackdrop').onclick=()=>{setSidebar(false);closeFiles();};
     $('#closeFiles').onclick=closeFiles;
     window.addEventListener('resize', updateBackdrop);
+    const fileSplitter=$('#fileSplitter');
+    const filesDocked=()=>getComputedStyle(fileSplitter).display!=='none';
+    function resizeFiles(width) {
+      if(!filesDocked())return;
+      const available=$('#app').clientWidth-$('#sidebar').getBoundingClientRect().width-326;
+      const value=Math.round(Math.max(280,Math.min(width,available)));
+      $('#app').style.setProperty('--file-panel-width',value+'px');
+      fileSplitter.setAttribute('aria-valuemin','280');fileSplitter.setAttribute('aria-valuemax',String(Math.floor(available)));fileSplitter.setAttribute('aria-valuenow',String(value));
+    }
+    let fileResize=null;
+    fileSplitter.addEventListener('pointerdown',event=>{
+      if(event.button!==0||!filesDocked())return;
+      event.preventDefault();fileResize={id:event.pointerId,x:event.clientX,width:$('#filePanel').getBoundingClientRect().width};fileSplitter.setPointerCapture(event.pointerId);
+    });
+    fileSplitter.addEventListener('pointermove',event=>{
+      if(fileResize?.id!==event.pointerId)return;
+      resizeFiles(fileResize.width+fileResize.x-event.clientX);
+    });
+    const endFileResize=event=>{if(fileResize?.id===event.pointerId)fileResize=null;};
+    fileSplitter.addEventListener('pointerup',endFileResize);fileSplitter.addEventListener('pointercancel',endFileResize);fileSplitter.addEventListener('lostpointercapture',endFileResize);
+    fileSplitter.addEventListener('keydown',event=>{
+      if(!filesDocked()||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+      event.preventDefault();const width=$('#filePanel').getBoundingClientRect().width;
+      resizeFiles(event.key==='Home'?280:event.key==='End'?Infinity:width+(event.key==='ArrowLeft'?20:-20));
+    });
     let fileRoot='', fileFolder='', fileParent=null, fileScope='', fileSource='', fileGeneration=0, fileTab='files', fileAbort=null, fileTransfer=null, fileDirty=true, filePermissions={};
     let selectingFiles=false, selectedFiles=new Set(), pendingFileAction=null, pendingRepoUpload=null;
     let projectRoot='', changesGeneration=0, changesRoot='', changesLoading=false, changesLoadedAt=0, changesDirty=true, diffPath=null, diffRequest=0, diffAbort=null, diffChatScroll=0;
@@ -3769,7 +3808,11 @@
       }
     }
     $('#filesToggle').onclick=()=>$('#filePanel').classList.contains('hidden')?openFilePanel(current?.cwd||pendingCwd):closeFiles();
-    $('#browseFullFiles').onclick=()=>openFiles(fileRoot?absoluteFilePath(fileFolder):projectRoot, fileRoot?null:pendingProjectId);
+    $('#browseFullFiles').onclick=async event=>{
+      const button=event.currentTarget;if(button.disabled)return;button.disabled=true;button.setAttribute('aria-busy','true');
+      try{await openFiles(fileRoot?absoluteFilePath(fileFolder):projectRoot,fileRoot?null:pendingProjectId);}
+      finally{button.disabled=false;button.removeAttribute('aria-busy');}
+    };
     $('#filesTab').onclick=()=>setFileTab('files');$('#changesTab').onclick=()=>setFileTab('changes');
     $('.file-tabs').onkeydown=event=>{
       if(event.altKey||event.ctrlKey||event.metaKey||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
@@ -4084,7 +4127,7 @@
     window.bashkittenDraft = {
       capture(includeStored = true) {
         if (!initialized || draftRestoring) return null;
-        return {sessionId:current?.id || null,projectId:pendingProjectId,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,notice:chatDrafts.get(composerKey())?.notice || '',cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,modelSelectionEdited:newModelSelectionEdited,subagents:chatAgents,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null,...(includeStored ? {chatDrafts:[...chatDrafts]} : {})};
+        return {sessionId:current?.id || null,projectId:pendingProjectId,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,notice:chatDrafts.get(composerKey())?.notice || '',cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,modelSelectionEdited:newModelSelectionEdited,thinkingSelectionEdited:newThinkingSelectionEdited,subagents:chatAgents,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null,...(includeStored ? {chatDrafts:[...chatDrafts]} : {})};
       },
       async restore(value) {
         if (!initialized || !value || typeof value.text !== 'string') return;
@@ -4111,6 +4154,8 @@
           if (sessionView !== view || $('#prompt').value !== prompt) return;
           if (!current && typeof value.cwd === 'string') pendingCwd = value.cwd;
           if (!current) newModelSelectionEdited = value.modelSelectionEdited === true;
+          if (!current) newThinkingSelectionEdited = value.thinkingSelectionEdited === true ||
+            (!Object.hasOwn(value, 'thinkingSelectionEdited') && value.modelSelectionEdited === true && Boolean(value.thinking));
           if (!current && value.subagents) { chatAgents = { ...agentDefaults, ...value.subagents }; showAgentChoice(); }
           for (const [selector,key] of [['#model','model'],['#thinking','thinking']]) if ([...$(selector).options].some(option => option.value === value[key])) $(selector).value = value[key];
           applyComposerContent(value);
