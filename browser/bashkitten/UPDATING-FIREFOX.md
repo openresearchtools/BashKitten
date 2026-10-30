@@ -46,7 +46,7 @@ Run these commands from the outer BashKitten repository root. Start with a
 clean, committed product checkout:
 
 ```bash
-python3 browser/bashkitten/scripts/firefox_release.py update 153.5
+python3 browser/bashkitten/scripts/firefox_release.py update 153.6
 ```
 
 The tool resolves the exact official tag, then downloads only that release
@@ -77,7 +77,7 @@ original Mozilla commit, as an ancestor.
 If the merge conflicts, resolve and stage the affected files, then finish:
 
 ```bash
-python3 browser/bashkitten/scripts/firefox_release.py finish 153.5
+python3 browser/bashkitten/scripts/firefox_release.py finish 153.6
 ```
 
 Use the full Firefox version for an upstream hotfix, for example `153.3.1`.
@@ -165,6 +165,50 @@ Cargo lock to 0.8.40; its recorded file hashes and package checksum were verifie
 These are source checks. Both native browser builds and installed Android/Linux
 security, browsing, Display, password/passkey and service-boundary acceptance
 remain required in the combined candidate cycle.
+
+The 30 October 2026 refresh uses Firefox **153.6.0esr**, Mozilla's official
+27 October release, at `a34c4160e3f75ab9918fbe4669ff7ae56f1977c8`, with pristine
+tree `1b3994cef30131689aea1623783ab244fb258350`. The bounded updater retains
+that exact tree as the next compact source commit. All 35 files changed by both
+this release and BashKitten retain the same product edits against their
+respective pristine bases. In particular, the merge preserves the Android
+Google SDK/WebPush/Adjust removals, the protected browser/service boundaries,
+References hooks, recent installed-regression fixes and embedded Termux:X11.
+Application Services stays on the release's own **153.0** cohort at
+`d05bd0f98d77e4c0ca2a11e5bae4f7299212c44b`; it is not independently advanced to
+a newer, unmatched Firefox cohort.
+
+The matching **Tor Browser 16.0 stable** release of 29 October is selected by
+the Tor Browser build tag `tbb-16.0-build1`, peeled commit
+`eb1e8801b0ed0a73dbae383ca9328e0d9a25ca89`. That release selects
+`tor-browser-153.6.0esr-16.0-1-build3`, commit
+`1f8c6d9758e139aee1da08d170fe59a5b4580e87`, on the same Firefox release base.
+The original fifteen applied patches have identical stable patch IDs in this
+released stack and remain in place, including the two product adaptations
+described above. Their original source commits are retained in `commits`, with
+the new release counterparts in `matching_release_commits`.
+
+Six additional production commits from that release are applied in order:
+
+| Mozilla bug | Released source commit | Included change |
+| --- | --- | --- |
+| 1822968 | `a724d9f3d2ab8308e02eadfecc7cbb435ffffe41` | Validate Android download filenames through Gecko's native MIME service, matching desktop behavior. |
+| 2076098 | `09c4187c5499fd8ca2c5d10b4ef7d9d6602f0b2f` | Update the complete vendored FreeType source selected by Mozilla to `d1f916a65eb13d5cd44b711cfd24cf8d5949b2d2`, preserving its licenses and vendoring metadata. |
+| 2076695 | `afd09abff72e855b49222c49738108b1e26293d0` | Hold the public timer weakly from its implementation and cancel it during destruction. |
+| 2077075 | `2ea1d53b7384483c1347ebb9203129081bed6e07` | Remove the invalid GC gray-to-nursery marking assertion. |
+| 2077257 | `0f54e8e356e24ed435be6bdfe161616fb9835d01` | Preserve weak-pointer hash identity during object destruction. |
+| 2077257 | `5790737da284b3f736ed86fec4c5d1cfbb8ce4b7` | Apply the accompanying ESR153 build fix, retaining the ESR IndexedDB assertion. |
+
+`additional_applied_ref` identifies these six new entries in both ordered
+commit lists. Their exact upstream patches are available at
+`https://gitlab.torproject.org/tpo/applications/tor-browser/-/commit/<commit>.patch`.
+Only production hunks are applied, following the earlier backport convention;
+the upstream GeckoView, GC and hash-table test hunks are excluded and are not
+claimed as executed. The Windows-only orientation patch and gtest logging-only
+change remain outside the shipped production scope. No unrelated Tor Browser
+features or privacy configuration are imported. Source applicability, retained
+adaptations and provenance checks do not replace the combined native builds and
+installed Android/Linux acceptance.
 
 Relevant Mozilla advisories include [MFSA 2026-73](https://www.mozilla.org/en-US/security/advisories/mfsa2026-73/),
 [2026-74](https://www.mozilla.org/en-US/security/advisories/mfsa2026-74/),

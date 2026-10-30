@@ -86,14 +86,19 @@ scope = "buffer_len checked capacity calculation; upstream production fix only"
 
 [tor_browser_security_backports]
 remote = "https://gitlab.torproject.org/tpo/applications/tor-browser.git"
-version = "16.0a14"
-ref = "tor-browser-153.5.0esr-16.0-1-build2"
-commit = "aeb4c4a33fd3494569e8f2cc2821fab60d7b8acf"
-firefox_source_tree = "0bace55ff3173cceba8c96d5482dac190954d726"
-checked = "2026-10-19"
+version = "16.0"
+ref = "tor-browser-153.6.0esr-16.0-1-build3"
+commit = "1f8c6d9758e139aee1da08d170fe59a5b4580e87"
+firefox_source_tree = "1b3994cef30131689aea1623783ab244fb258350"
+checked = "2026-10-30"
 scope = "Mozilla production backports carried by Tor on the identical ESR baseline; not the complete Tor Browser patchset"
 # Original applied patch provenance; product-specific adaptations are described in UPDATING-FIREFOX.md.
+# The original fifteen commits remain from applied_ref; the six later entries use additional_applied_ref.
 applied_ref = "tor-browser-153.4.0esr-16.0-1-build3"
+additional_applied_ref = "tor-browser-153.6.0esr-16.0-1-build3"
+release_build_remote = "https://gitlab.torproject.org/tpo/applications/tor-browser-build.git"
+release_build_ref = "tbb-16.0-build1"
+release_build_commit = "eb1e8801b0ed0a73dbae383ca9328e0d9a25ca89"
 commits = [
   "b034c49ff636cb210c17c03cbc3cedbcb68138e0", # Bug 2051440: Android resource URI lookup
   "f245c9c322406d859fd51d43c1cee13f8890dc3b", # Bug 1842361: download origin spoofing (adapted)
@@ -110,23 +115,36 @@ commits = [
   "c53f5cbbe64a9adc9a8e98d0527b857afcd377df", # Bug 2052011: about:config inline-handler removal
   "5bdc9fc9b7e1d774ae2e326962fe0e4d5b48e419", # Bug 2054384: download notification filename display
   "2b4271f74521f7119021d9b7584030bff7d6ac65", # Bug 2061470: preserve upload field keys
+  "a724d9f3d2ab8308e02eadfecc7cbb435ffffe41", # Bug 1822968: native MIME download filename validation
+  "09c4187c5499fd8ca2c5d10b4ef7d9d6602f0b2f", # Bug 2076098: FreeType d1f916a65eb13d5cd44b711cfd24cf8d5949b2d2
+  "afd09abff72e855b49222c49738108b1e26293d0", # Bug 2076695: weak timer ownership
+  "2ea1d53b7384483c1347ebb9203129081bed6e07", # Bug 2077075: remove invalid GC marking check
+  "0f54e8e356e24ed435be6bdfe161616fb9835d01", # Bug 2077257: weak pointer hash lifecycle
+  "5790737da284b3f736ed86fec4c5d1cfbb8ce4b7", # Bug 2077257: required ESR153 build fix
 ]
 # Same ordered production patches in the checked release: all full and production-only
 # stable patch IDs match the original commits above. No patch is reapplied for a rebase.
+# The last six entries are the newly applied production fixes from this release.
 matching_release_commits = [
-  "435b0d8dfbb9b6a62912649870ed022b8ab9ec39", # Bug 2051440
-  "632bd20de32160ca3e58bd530c303558ee0cb314", # Bug 1842361
-  "4f90141bb37c9a91ec850cd1ae26b491e406328b", # Bug 1978587
-  "f07d1a9f175132f06670a351eb43972781f93869", # Bug 2049034
-  "792ebcd0a4e5b078078b0fdfa11b03f0d3619f98", # Bug 2049810
-  "05919873e10e49086c1ae91cd67371c69acffa33", # Bug 2055683
-  "a488873289ade07e6432b31a240974e1883f9796", # Bug 2059471
-  "fcd2c45a4f0822f9f648cf48fb155e27af20546a", # Bug 2045435
-  "609d917fec4d7973f305f91368cb0d358fa08f70", # Bug 2053578
-  "8396209c0133a1dec270606e273dbc2e5e9c9510", # Bug 2053578
-  "d9d4b3d24eec9daa41a81b419ed60d1eaa4d451c", # Bug 2058626
-  "525f2c47adc3cfab5087ea65d0c01d42cd7c8223", # Bug 2053320
-  "de40808aaf8a3efefa4fa577d242b906f69c7200", # Bug 2052011
-  "f301febef266818da86ce8ba4e0b4e4058e9bce3", # Bug 2054384
-  "d92082d229b2bcc4f5e636a98c39316258e27a73", # Bug 2061470
+  "7c861dccb57597341887fe92ae1d72eb5dc1fb9a", # Bug 2051440
+  "0dba8b60ef0699486a9a53afcb2cf7b3531f6487", # Bug 1842361
+  "e799a5894cb8d71b0ae8bf27818ee0833f816690", # Bug 1978587
+  "39c8b1579d25537ecdaaa584da3570cf96567146", # Bug 2049034
+  "6e19cffe0abedf0de92eac798325e950ba9b420a", # Bug 2049810
+  "373e10d64be055720076a74922924319a79fcc7a", # Bug 2055683
+  "26321ff16d3084ceb142e8fbc021617280be7b38", # Bug 2059471
+  "39504bf01290111a8bd36baeea85f42b88f72ae9", # Bug 2045435
+  "5f49110f185656b7de560c4c405b6ff7825925a4", # Bug 2053578
+  "cdcad2bd46c836616f3ef5a8fb787743a18d486d", # Bug 2053578
+  "406232912b3d58a723fd856fb08c11502bd276b7", # Bug 2058626
+  "4a62de2ff8d384f27c37e57e196411a42e493972", # Bug 2053320
+  "f268019b35bfb57b6e048e68729384b136c37369", # Bug 2052011
+  "fee1cef5397e6b790ca5e1894dda4ce3db322a04", # Bug 2054384
+  "c2f194d26b515d92cd583659d2e9da99904f4bd1", # Bug 2061470
+  "a724d9f3d2ab8308e02eadfecc7cbb435ffffe41", # Bug 1822968: native MIME download filename validation
+  "09c4187c5499fd8ca2c5d10b4ef7d9d6602f0b2f", # Bug 2076098: FreeType d1f916a65eb13d5cd44b711cfd24cf8d5949b2d2
+  "afd09abff72e855b49222c49738108b1e26293d0", # Bug 2076695: weak timer ownership
+  "2ea1d53b7384483c1347ebb9203129081bed6e07", # Bug 2077075: remove invalid GC marking check
+  "0f54e8e356e24ed435be6bdfe161616fb9835d01", # Bug 2077257: weak pointer hash lifecycle
+  "5790737da284b3f736ed86fec4c5d1cfbb8ce4b7", # Bug 2077257: required ESR153 build fix
 ]
