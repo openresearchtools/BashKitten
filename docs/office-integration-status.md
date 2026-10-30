@@ -25,6 +25,19 @@ checks; non-PDF and desktop transport behavior remained unchanged. The normal
 offline extension build passed. A corrected signed Android installation remains
 required. Evidence is in `Bashkitten-Acceptance/references-repeat-pdf-20261030/`.
 
+The installed phone's main About page passed the selected Zotero, Collabora and
+Quantum full-notice/source/modification-link checks. Its native Office menu
+omitted Options, and the existing dialog's fixed 800-pixel width put controls
+outside the phone viewport. Named patch `0028` exposes the existing action in
+the four mobile menus and bounds the existing settings iframe with scoped CSS.
+The native gate, fields, save handler and authorization are unchanged. A 15-second
+frontend-only build passed without changing the engine/server. The reversible
+phone module check passed actual File → Options, visible controls, native Save,
+full kit shutdown and fresh reopening with the chosen setting retained. The
+original choice and all four original files/modes/hashes were restored. Evidence:
+`Bashkitten-Acceptance/office-mobile-options-20261030/android-native-options-summary.json`.
+This remains module evidence pending the coherent rebuilt package.
+
 The subsequent `479ab3a2513d73cc558d8f0d074a9e87d1e232e9` full batch
 [40958050104](https://github.com/openresearchtools/BashKitten/actions/runs/40958050104)
 hit one Termux ARM64 desktop-package failure: GNU make selected its built-in

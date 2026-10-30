@@ -326,3 +326,12 @@ The runtime manifest requires this named patch. Native controls, translations,
 stylesheet assets and application logic remain upstream; no substitute UI or
 static asset server is introduced. This MPL-2.0 modification is applied only in
 an external build copy, with the pristine source and full notices retained.
+
+The pinned mobile File menus omit the native Options action, and its settings
+iframe assumes an 800-pixel viewport. `0028-native-mobile-options.patch` adds the
+same action to all four mobile editor menus, retaining `canOpenSettings`, the
+native dialog and authenticated persistence. Scoped settings CSS bounds the
+iframe to small viewports, preserves its native navigation and keeps Save/Cancel
+outside the scrolling content. Normal desktop dimensions remain unchanged.
+The common Linux/Termux patch list and runtime marker require this frontend fix;
+it adds no settings implementation, admin access or browser integration.
