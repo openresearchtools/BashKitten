@@ -5,6 +5,46 @@ This record separates research/temporary comparison evidence from implementation
 and installed-product acceptance. Historical checkpoints below retain the limits
 and failures of their original candidates; the current result is recorded first.
 
+## Installed aarch64 Office-only repair — 31 October 2026
+
+All four Office targets passed the existing component workflow
+[41152645192](https://github.com/openresearchtools/office-builds/actions/runs/41152645192)
+at `94aa5b3d43fc30d1792d9209bb26294ad37fe1a3`. The collected Termux aarch64 archive
+has SHA-256 `9c3bd6d2025f470a706f30a6f6e82f558920fba881d75c7eff79336902e02f2f`.
+The normal collector verifies its exact source/target, checksums, provenance,
+legal metadata and complete 7,835-file inventory. Independent staged inspection
+finds 191 correctly targeted ELF files and no undefined `__aarch64_*` helpers.
+
+A reversible replay replaces only the installed native Office runtime and the
+two Office launcher files from `6c1c915f10c2e8f26334856e794ac0148b0e59bc`.
+The separately assembled References extension is retained unchanged, as in
+normal package assembly. The existing supervisor stops/starts only Office;
+the backend/Pi process stays running with its cached prepared descriptor.
+The old runtime, launch modules and private native state remain backed up under
+`services/office/repair-backup-20261031`. The existing proof key is unchanged.
+This is a diagnostic overlay on 153.6, not a complete new package or release.
+
+The rebuilt engine loads successfully. A project-owned copy of the user's
+presentation opens through an authenticated native agent view and a separate
+normal human browser view. Native inspection reaches the first and last of
+47 slides; the browser also lists all 47. Three guarded native shape edits and
+acknowledged saves pass, including a reversible test. At the user's request the
+copy retains a visible first-slide title edit. Reading the saved PPTX confirms
+that edit and clean ZIP CRCs; the original presentation's SHA-256 is unchanged.
+The real document workers report `NoNewPrivs: 1`, seccomp mode 2 and two filters,
+compared with the server's one inherited Android filter. No missing-symbol or
+seccomp-lockdown failure appears in the resulting service output.
+
+Native PDF export is acknowledged and the Android browser completes its
+514,405-byte download through the existing application/TLS owner. Copying that
+completed download back to Pi reports “Download could not be shared”; PDF bytes,
+page count and layout are therefore not independently accepted. Browser screenshot
+capture also fails; DOM loading is verified, not a visual-layout pass. A fresh-room
+reopen is not claimed while the human view remains open. No unrelated three-editor,
+citation, Linux installation or full-product campaign is repeated. No full browser
+build or publication is started. Detailed receipts remain outside Git in
+`~/BashKitten-Office-Repair/20261031/installed-result.json`.
+
 ## Native Termux launcher policy — 31 October 2026
 
 The user's later clarification explicitly removes the per-document isolation
