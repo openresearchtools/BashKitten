@@ -336,6 +336,11 @@ def package(source, args, env, toolchain):
         if header[4] != 2 or header[5] != 1 or int.from_bytes(header[18:20], 'little') != expected_machine:
             raise ValueError('Wrong native target ELF in runtime: ' + str(binary.relative_to(runtime)))
         dynamic = subprocess.check_output([readelf, '-d', binary], text=True)
+        symbols = subprocess.check_output([readelf, '--wide', '--dyn-syms', binary], text=True)
+        builtins = sorted(set(re.findall(r'\bUND\s+(__aarch64_[A-Za-z0-9_]+)', symbols)))
+        if builtins:
+            raise ValueError('Unlinked native compiler builtins in ' + str(binary.relative_to(runtime))
+                             + ': ' + ', '.join(builtins))
         needed.update(re.findall(r'\(NEEDED\).*\[([^]]+)\]', dynamic))
         provided.add(binary.name)
         provided.update(re.findall(r'\(SONAME\).*\[([^]]+)\]', dynamic))

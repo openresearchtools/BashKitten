@@ -5,6 +5,42 @@ This record separates research/temporary comparison evidence from implementation
 and installed-product acceptance. Historical checkpoints below retain the limits
 and failures of their original candidates; the current result is recorded first.
 
+## Native ARM64 import-library load failure — 31 October 2026
+
+A real aarch64 Termux installation of 153.6 cannot start its document engine.
+The shared server remains TCP-reachable, but its forkit logs an unresolved
+`__aarch64_ldadd8_acq_rel` in `liborcus-0.21.so.0` while loading `libmergedlo.so`,
+then receives SIGSEGV. Both files match the shipped manifest. The user's PPTX
+passes ZIP CRC checks and contains its presentation manifest and 47 slide XML
+files; this is not full semantic validation, but the engine fails before loading
+it. Earlier x86_64 Android acceptance does not establish aarch64 execution.
+
+Native ELF inspection finds unresolved outlined-atomic helpers in eight import
+libraries: liborcus, librevenge, libmwaw, libwpd, libwps, libwpg, libstaroffice and
+libodfgen. Named Termux patch 0019 extends the existing libetonyek compiler-rt
+link mechanism through those libraries' native `LIBS` inputs. It selects the
+archive from the actual compiler, retains other library inputs and is empty for
+non-Bionic builds. Linux arm64/glibc and Termux aarch64/Bionic remain distinct
+targets; neither their runtime archives nor their platform libraries are exchanged.
+The existing native packaging pass now rejects undefined `__aarch64_*` helpers
+in every ELF. The runtime contract rejects older Termux artifacts lacking this
+repair rather than describing a reachable server as a working engine.
+
+Focused external checks passed zero-fuzz patch application, sixteen configure
+expansions across the eight filters with and without Bionic, retained link
+inputs, Python/JavaScript syntax and a real native outlined-atomic link/load/
+execution proof. The unlinked object reproduced the missing-symbol error; the
+explicit compiler-selected archive removed it and the operation executed.
+This uses the phone's Clang 21.1.8, not the CI NDK 30, and is not rebuilt Office
+acceptance. Evidence stays outside Git in
+`~/BashKitten-Office-Repair/20261031/link-proof.json`.
+
+Next is the existing `office-builds` component workflow at the exact committed
+source, then checksum/provenance verification and a reversible Office-only
+runtime replacement on this aarch64 phone. Actual document open/edit/save/export,
+native isolation and any subsequent blockers remain pending. No full browser
+rebuild, new publication, changed user document or isolation bypass is claimed.
+
 ## ESR 153.6 refresh before publication — 30 October 2026
 
 The recovered `c83b06f033` candidate is not the publication target. Its focused

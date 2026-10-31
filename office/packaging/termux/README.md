@@ -56,11 +56,17 @@ the LGPL library; the original corresponding-source archive also retains the
 GPL command-line sources. Both complete license texts and per-component license
 identities are checksum-verified and included in the runtime/source notices.
 
-Libetonyek uses the pinned Termux package's explicit compiler-builtins link
-flags. Its bundled libtool otherwise omits those Android runtime helpers from
-the shared library, allowing the build to finish but failing when the native kit
-loads it. The compiler chooses its own builtins archive; the existing NDK source
-owner retains the matching compiler-rt source and full license.
+Libetonyek and the eight affected import libraries (liborcus, librevenge,
+libmwaw, libwpd, libwps, libwpg, libstaroffice and libodfgen) use explicit
+compiler-builtins link inputs. Their bundled libtool otherwise omits Android
+runtime helpers from shared-library links, allowing builds to finish but failing
+when the native kit loads them. The compiler chooses its own builtins archive;
+the existing NDK source owner retains the matching compiler-rt source and full
+license. Patch 0019 passes that archive through each filter's native `LIBS`
+configuration, preserving its other link inputs. Packaging rejects undefined
+`__aarch64_*` runtime helpers in every native ELF, not merely missing `DT_NEEDED`
+filenames. No runtime preload, replacement atomic implementation or isolation
+change is used.
 
 The bundled fontconfig uses its own matching configuration files, already
 installed by the native `fontconfig_data` target. Its Bionic configure flags

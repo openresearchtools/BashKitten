@@ -31,6 +31,7 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
   if (manifest.schema !== 1 || manifest.revision !== exact || manifest.apiVersion !== 1 || requiredPatches.some(id => !manifest.patches?.includes(id))) throw unavailable('the native component does not match the pinned API, field/attribute persistence, undo and UI policy contracts');
   if ((manifest.target || manifest.platform) === 'termux' && !manifest.patches?.includes('native-fontconfig-paths')) throw unavailable('the native Termux font configuration does not match its bundled fontconfig library');
   if ((manifest.target || manifest.platform) === 'termux' && !manifest.patches?.includes('native-iconv-library')) throw unavailable('the native Termux runtime requires its bundled GNU libiconv with UTF-7 support');
+  if ((manifest.target || manifest.platform) === 'termux' && !manifest.patches?.includes('native-import-filter-builtins')) throw unavailable('the native Termux import libraries require linked compiler builtins; rebuild the Office component');
   const paths = Object.fromEntries(['coolwsd', 'engine', 'web', 'config', 'systemplateSetup'].map(key => [key, relative(componentRoot, manifest.paths?.[key])]));
   for (const [name, value] of Object.entries(paths)) {
     try { await fs.access(value, ['coolwsd', 'systemplateSetup'].includes(name) ? fs.constants.X_OK : fs.constants.R_OK); }

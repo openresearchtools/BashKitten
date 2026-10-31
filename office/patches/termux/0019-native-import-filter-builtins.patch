@@ -1,0 +1,105 @@
+diff --git a/engine/solenv/gbuild/ExternalProject.mk b/engine/solenv/gbuild/ExternalProject.mk
+--- a/engine/solenv/gbuild/ExternalProject.mk
++++ b/engine/solenv/gbuild/ExternalProject.mk
+@@ -209,6 +209,12 @@
+ 
+ endef
+ 
++# Libtool omits the Android compiler's implicit builtins archive from shared
++# library links. Keep an explicit -l input, as in the native libetonyek recipe.
++gb_ExternalProject_BIONIC_BUILTINS := $(if $(COM_IS_BIONIC),$(shell $(CC) -print-libgcc-file-name))
++gb_ExternalProject_BIONIC_LIBS := $(if $(gb_ExternalProject_BIONIC_BUILTINS),\
++    -L$(dir $(gb_ExternalProject_BIONIC_BUILTINS)) -l:$(notdir $(gb_ExternalProject_BIONIC_BUILTINS)))
++
+ # Returns flags to include in CFLAGS/CXXFLAGS to enable optimizations and/or debugging.
+ # gb_ExternalProject_get_build_flags project
+ gb_ExternalProject_get_build_flags = $(call gb_LinkTarget__get_debugflags,ExternalProject_$(1))
+diff --git a/engine/external/liborcus/ExternalProject_liborcus.mk b/engine/external/liborcus/ExternalProject_liborcus.mk
+--- a/engine/external/liborcus/ExternalProject_liborcus.mk
++++ b/engine/external/liborcus/ExternalProject_liborcus.mk
+@@ -33,7 +33,7 @@
+ 
+ #$(if $(filter MSC,$(COM)),CPPFLAGS+="-DBOOST_ALL_NO_LIB") CXXFLAGS+="$(BOOST_CXXFLAGS))
+ 
+-liborcus_LIBS=
++liborcus_LIBS=$(gb_ExternalProject_BIONIC_LIBS)
+ ifneq ($(SYSTEM_ZLIB),)
+ liborcus_LIBS+=-lz
+ endif
+diff --git a/engine/external/librevenge/ExternalProject_librevenge.mk b/engine/external/librevenge/ExternalProject_librevenge.mk
+--- a/engine/external/librevenge/ExternalProject_librevenge.mk
++++ b/engine/external/librevenge/ExternalProject_librevenge.mk
+@@ -35,6 +35,7 @@
+ 			--without-docs \
+ 			$(gb_CONFIGURE_DEPENDENCY_TRACKING) \
+ 			$(if $(verbose),--disable-silent-rules,--enable-silent-rules) \
++			$(if $(gb_ExternalProject_BIONIC_LIBS),LIBS="$(gb_ExternalProject_BIONIC_LIBS) $(LIBS)") \
+ 			CXXFLAGS="$(gb_CXXFLAGS) $(call gb_ExternalProject_get_build_flags,librevenge)" \
+ 			CPPFLAGS="$(CPPFLAGS) $(BOOST_CPPFLAGS)" \
+ 			$(gb_CONFIGURE_PLATFORMS) \
+diff --git a/engine/external/libmwaw/ExternalProject_libmwaw.mk b/engine/external/libmwaw/ExternalProject_libmwaw.mk
+--- a/engine/external/libmwaw/ExternalProject_libmwaw.mk
++++ b/engine/external/libmwaw/ExternalProject_libmwaw.mk
+@@ -37,6 +37,7 @@
+ 			$(gb_CONFIGURE_DEPENDENCY_TRACKING) \
+ 			$(if $(verbose),--disable-silent-rules,--enable-silent-rules) \
+ 			--disable-werror \
++			$(if $(gb_ExternalProject_BIONIC_LIBS),LIBS="$(gb_ExternalProject_BIONIC_LIBS) $(LIBS)") \
+ 			CXXFLAGS="$(gb_CXXFLAGS) $(call gb_ExternalProject_get_build_flags,libmwaw)" \
+ 			$(if $(filter LINUX,$(OS)),$(if $(SYSTEM_REVENGE),, \
+ 				'LDFLAGS=-Wl$(COMMA)-z$(COMMA)origin \
+diff --git a/engine/external/libwpd/ExternalProject_libwpd.mk b/engine/external/libwpd/ExternalProject_libwpd.mk
+--- a/engine/external/libwpd/ExternalProject_libwpd.mk
++++ b/engine/external/libwpd/ExternalProject_libwpd.mk
+@@ -37,6 +37,7 @@
+ 				--prefix=/@.__________________________________________________OOO) \
+ 			$(gb_CONFIGURE_DEPENDENCY_TRACKING) \
+ 			$(if $(verbose),--disable-silent-rules,--enable-silent-rules) \
++			$(if $(gb_ExternalProject_BIONIC_LIBS),LIBS="$(gb_ExternalProject_BIONIC_LIBS) $(LIBS)") \
+ 			CXXFLAGS="$(gb_CXXFLAGS) $(call gb_ExternalProject_get_build_flags,libwpd)" \
+ 			CPPFLAGS="$(CPPFLAGS) $(BOOST_CPPFLAGS)" \
+ 			$(if $(filter LINUX,$(OS)),$(if $(SYSTEM_REVENGE),, \
+diff --git a/engine/external/libwps/ExternalProject_libwps.mk b/engine/external/libwps/ExternalProject_libwps.mk
+--- a/engine/external/libwps/ExternalProject_libwps.mk
++++ b/engine/external/libwps/ExternalProject_libwps.mk
+@@ -48,6 +48,7 @@
+ 			--disable-werror \
+ 			$(gb_CONFIGURE_DEPENDENCY_TRACKING) \
+ 			$(if $(verbose),--disable-silent-rules,--enable-silent-rules) \
++			$(if $(gb_ExternalProject_BIONIC_LIBS),LIBS="$(gb_ExternalProject_BIONIC_LIBS) $(LIBS)") \
+ 			$(if $(libwps_CXXFLAGS),CXXFLAGS='$(libwps_CXXFLAGS)') \
+ 			$(if $(libwps_CPPFLAGS),CPPFLAGS='$(libwps_CPPFLAGS)') \
+ 			$(if $(libwps_LDFLAGS),LDFLAGS='$(libwps_LDFLAGS)') \
+diff --git a/engine/external/libwpg/ExternalProject_libwpg.mk b/engine/external/libwpg/ExternalProject_libwpg.mk
+--- a/engine/external/libwpg/ExternalProject_libwpg.mk
++++ b/engine/external/libwpg/ExternalProject_libwpg.mk
+@@ -37,6 +37,7 @@
+ 			$(gb_CONFIGURE_DEPENDENCY_TRACKING) \
+ 			$(if $(verbose),--disable-silent-rules,--enable-silent-rules) \
+ 			$(gb_CONFIGURE_PLATFORMS) \
++			$(if $(gb_ExternalProject_BIONIC_LIBS),LIBS="$(gb_ExternalProject_BIONIC_LIBS) $(LIBS)") \
+ 			CXXFLAGS="$(gb_CXXFLAGS) $(call gb_ExternalProject_get_build_flags,libwpg)" \
+ 			CPPFLAGS="$(CPPFLAGS) $(BOOST_CPPFLAGS)" \
+ 			$(if $(filter LINUX,$(OS)), \
+diff --git a/engine/external/libstaroffice/ExternalProject_libstaroffice.mk b/engine/external/libstaroffice/ExternalProject_libstaroffice.mk
+--- a/engine/external/libstaroffice/ExternalProject_libstaroffice.mk
++++ b/engine/external/libstaroffice/ExternalProject_libstaroffice.mk
+@@ -37,6 +37,7 @@
+ 			$(gb_CONFIGURE_DEPENDENCY_TRACKING) \
+ 			$(if $(verbose),--disable-silent-rules,--enable-silent-rules) \
+ 			--disable-werror \
++			$(if $(gb_ExternalProject_BIONIC_LIBS),LIBS="$(gb_ExternalProject_BIONIC_LIBS) $(LIBS)") \
+ 			CXXFLAGS="$(gb_CXXFLAGS) $(call gb_ExternalProject_get_build_flags,libstaroffice)" \
+ 			$(if $(filter LINUX,$(OS)),$(if $(SYSTEM_REVENGE),, \
+ 				'LDFLAGS=-Wl$(COMMA)-z$(COMMA)origin \
+diff --git a/engine/external/libodfgen/ExternalProject_libodfgen.mk b/engine/external/libodfgen/ExternalProject_libodfgen.mk
+--- a/engine/external/libodfgen/ExternalProject_libodfgen.mk
++++ b/engine/external/libodfgen/ExternalProject_libodfgen.mk
+@@ -37,6 +37,7 @@
+ 			--without-docs \
+ 			$(gb_CONFIGURE_DEPENDENCY_TRACKING) \
+ 			$(if $(verbose),--disable-silent-rules,--enable-silent-rules) \
++			$(if $(gb_ExternalProject_BIONIC_LIBS),LIBS="$(gb_ExternalProject_BIONIC_LIBS) $(LIBS)") \
+ 			CXXFLAGS="$(gb_CXXFLAGS) $(call gb_ExternalProject_get_build_flags,libodfgen)" \
+ 			CPPFLAGS="$(CPPFLAGS) $(if $(SYSTEM_REVENGE),,$(if $(filter-out MSC,$(COM)),-DLIBREVENGE_VISIBILITY))" \
+ 			XML_CFLAGS="$(LIBXML_CFLAGS)" \

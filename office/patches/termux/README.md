@@ -93,6 +93,14 @@ original MPL-2.0/Apache-2.0 notices. These rebased source changes are MPL-2.0.
   retains the native libcap header path without overriding the COKit, Poco and
   OpenSSL include paths needed by Online's remaining autotools compilation.
 
+- `0019-native-import-filter-builtins.patch`: applies the same explicit native
+  compiler-rt link mechanism as 0016 to the eight import libraries found with
+  unresolved ARM64 atomic helpers in the shipped 153.6 runtime. It passes the
+  compiler-selected archive through the filters' existing `LIBS` configuration.
+  The shared variable is empty without `COM_IS_BIONIC`; ordinary Linux ARM64
+  and AMD64 links remain unchanged. The native package gate additionally rejects
+  undefined `__aarch64_*` helpers in all ELF outputs.
+
 The semaphore source, licenses and Python patch are materialized directly from
 the already retained immutable framework archive before applying the named
 delta. `donor.json` lists exact archive members and SHA-256 values. No second
