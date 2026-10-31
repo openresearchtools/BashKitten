@@ -2324,3 +2324,26 @@ available local defaults while preserving deliberate saved choices. External
 grammar services remain disabled unless explicitly configured and authorized.
 These are requirements; implementation, installed Linux checks and Termux
 asset-only evidence remain separately recorded in the status document.
+
+## 29. Native Termux Office isolation policy — 31 October 2026
+
+The user explicitly states that per-document isolation is not required for this
+single-user, human/agent collaborative Termux setup, and requests operation
+without mandatory Landlock on devices that do not expose it. This supersedes
+only the earlier mandatory-Landlock native Termux requirement. Preserve the
+frozen original plan/tag and historical containment evidence unchanged.
+
+Use Collabora's existing `security.capabilities=false` mode and retain mandatory
+upstream seccomp filtering. Landlock may still restrict workers when supported,
+but its absence must not block native Termux Office. This is an explicit platform
+configuration, not a silent retry after isolation failure. Do not add a second
+engine/server, root requirement, proot/container substitute or runtime preload.
+Linux keeps its existing namespace/capability/Landlock and seccomp policy.
+
+Describe the boundary honestly: Android isolates the Termux application UID
+from other apps, not Office workers from projects, agents or credentials under
+that same UID. Seccomp filters syscalls; it is not per-document filesystem
+confinement. Preserve the existing WOPI/file authorization, private service data,
+loopback listeners, remote transport and one shared supervisor-owned Office
+service. Source configuration and probes do not establish document acceptance;
+record actual native worker and open/edit/save/export results separately.

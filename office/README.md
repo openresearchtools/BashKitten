@@ -186,8 +186,11 @@ The light-canvas and Termux changes belong to their respective native owners.
 No citation algorithm is added to Office core. Recheck and retire seams when
 upstream provides the equivalent facility. `prepareOffice()` fails with 503 for
 missing/incompatible native artifacts and uses the existing service owner.
-Termux keeps native Landlock mandatory and supplies its bundled Bionic runtime
-paths in the child service environment; it never disables seccomp.
+Termux uses upstream's explicit no-capabilities mode with mandatory seccomp,
+under the user's [31 October policy](../docs/files-office-bibliography-plan.md#29-native-termux-office-isolation-policy--31-october-2026).
+Landlock is used when available but is not required. Android confines the whole
+Termux UID; this does not isolate documents from other Termux files or secrets.
+Bundled Bionic runtime paths remain child-scoped. Linux isolation is unchanged.
 
 ## Snapshot comparison
 

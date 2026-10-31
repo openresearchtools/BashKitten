@@ -30,10 +30,12 @@ original MPL-2.0/Apache-2.0 notices. These rebased source changes are MPL-2.0.
   with read-only access to the native loader, specific Android/APEX runtime
   directories and Termux libraries/fonts/certificates. It never grants the
   entire app data, home, project or prefix tree. Bionic requires ABI 3 or later
-  to restrict truncation. The native systemplate script recognizes mandatory
-  Landlock mode and creates its native working layout without copying Android
-  system or application data into a fake chroot. Upstream's seccomp filter is
-  unchanged.
+  to restrict truncation when Landlock is available. The native systemplate
+  script recognizes the no-chroot setup switch and creates its working layout
+  without copying Android system or application data into a fake chroot.
+  Since the user's 31 October policy, only that helper receives the switch;
+  the server uses native no-capabilities mode without requiring Landlock.
+  Upstream's seccomp filter is unchanged and remains mandatory.
 - `0003-optional-native-pam-build.patch`: exposes a configure switch for the
   server's **existing** no-PAM branch. Android has no Linux PAM development
   headers. An attempted PAM login still fails closed; normal WOPI and
@@ -140,8 +142,10 @@ key patches are applied separately and remain owned by their respective modules.
 A new pin must pass strict patch application, both native Bionic configurations,
 the retained host/target source graph, native ELF closure, full source/legal
 inventory and actual Termux app execution. Never solve a regression with
-`--enable-androidapp`, `MOBILEAPP`, `--disable-seccomp`, an optional Landlock
-failure, a container substitute, or a broad app-data allowlist.
+`--enable-androidapp`, `MOBILEAPP`, `--disable-seccomp`, a container substitute,
+or a broad app-data allowlist. The explicit 31 October Termux platform policy
+supersedes the earlier mandatory-Landlock requirement; it does not change Linux
+isolation or weaken the retained Landlock rules on supported kernels.
 
 On 28 October 2026 the patched upstream Landlock and unchanged upstream seccomp
 sources compiled with NDK 30 for aarch64 and x86_64. The x86_64 probe ran in the

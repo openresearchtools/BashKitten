@@ -76,11 +76,15 @@ into the pinned engine library; Office still registers its bundled fonts.
 
 The output root is `runtime/`, with native files, upstream SBOMs, full notices,
 resolved ELF dependencies and `manifest.json`. The existing environment owner
-launches the actual server with `COOL_FORCE_LANDLOCK=1`, the fixed Termux prefix,
-and the bundled `engine/program` library path. Only kernels that can enforce
-Landlock ABI 3 or later are accepted; the kit also installs upstream seccomp.
-There is no silent unsandboxed fallback. The native user check is handled by the
-existing nonprivileged host launch option, not an invented Android identity.
+supplies the fixed Termux prefix and bundled `engine/program` library path.
+The user's 31 October policy selects upstream `security.capabilities=false`
+and `security.seccomp=true` for native Termux: Landlock may add restrictions
+when supported, but is not required. Android confines the whole Termux UID,
+not individual documents; workers share Termux's filesystem authority. This is
+an explicit platform policy, not a probe-triggered fallback, and Linux isolation
+is unchanged. `COOL_FORCE_LANDLOCK=1` is passed only to the existing systemplate
+setup helper so it creates its native no-chroot layout, never to the server.
+The native user check retains the existing nonprivileged host launch option.
 
 Native application load/edit/coedit/save/reopen/export, three-editor citations,
 QuickJS/UNO, callback lifetimes, resource measurements and both installed-target

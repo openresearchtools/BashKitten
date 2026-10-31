@@ -10,10 +10,10 @@ for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => {
   if (stopping) return;
   stopping = true; child?.kill('SIGTERM');
 });
-async function run(argv) {
+async function run(argv, environment = {}) {
   if (stopping) throw Error('Office startup cancelled');
   return new Promise((resolve, reject) => {
-    child = spawn(argv[0], argv.slice(1), { cwd: config.cwd, stdio: 'inherit', env: { ...process.env, ...(config.nativeEnvironment || {}) } });
+    child = spawn(argv[0], argv.slice(1), { cwd: config.cwd, stdio: 'inherit', env: { ...process.env, ...(config.nativeEnvironment || {}), ...environment } });
     child.once('error', reject); child.once('exit', (code, signal) => { child = null; code === 0 ? resolve() : reject(Error('Native Office command exited with ' + (signal || code))); });
   });
 }
@@ -23,7 +23,7 @@ const stamp = config.systemplate + '/.bashkitten-source-revision';
 const systemplateRevision = JSON.stringify({ revision: config.revision, engine: config.engine });
 let previous; try { previous = await fs.readFile(stamp, 'utf8'); } catch {}
 if (previous !== systemplateRevision) {
-  await run([config.systemplateSetup, config.systemplate, config.engine]);
+  await run([config.systemplateSetup, config.systemplate, config.engine], config.systemplateEnvironment);
   if (stopping) throw Error('Office startup cancelled');
   await fs.writeFile(stamp, systemplateRevision, { mode: 0o600 });
 }

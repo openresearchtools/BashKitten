@@ -68,7 +68,11 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
   await writeChanged(config, configuration);
   const systemplate = path.join(directory, 'systemplate'), children = path.join(directory, 'jails'), cache = path.join(directory, 'cache');
   await Promise.all([children, cache].map(value => fs.mkdir(value, { recursive: true, mode: 0o700 })));
+  const termux = (manifest.target || manifest.platform) === 'termux';
   const options = {
+    // User-selected Termux policy: Android confines the app UID, not each
+    // document. Reuse upstream's no-capabilities mode; seccomp stays fatal.
+    ...(termux ? { 'security.capabilities': 'false', 'security.seccomp': 'true' } : {}),
     'proof_key.path': proof, 'sys_template_path': systemplate, 'child_root_path': children,
     'file_server_root_path': paths.web,
     'cache_files.path': cache, 'net.proto': 'IPv4', 'net.listen': 'loopback',
@@ -85,24 +89,26 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
     'browser_logging': 'false', 'stop_on_config_change': 'true',
   };
   const nativeArgv = [paths.coolwsd, '--disable-cool-user-checking', '--config-file=' + config, '--lo-template-path=' + paths.engine, '--port=' + port, ...Object.entries(options).map(([key, value]) => '--o:' + key + '=' + value)];
-  const termux = (manifest.target || manifest.platform) === 'termux';
   // Native ForKit correctly rejects a non-cool user inheriting capabilities.
   // Drop the parent's unrelated Linux capability inheritance before native
   // startup; preserve ForKit's checks, namespace selection and seccomp policy.
   if (!termux) { try { await fs.access('/usr/bin/setpriv', fs.constants.X_OK); } catch { throw unavailable('the packaged Linux util-linux dependency is missing'); } }
   const nativeEnvironment = termux ? {
-    COOL_FORCE_LANDLOCK: '1', PREFIX: '/data/data/com.termux/files/usr',
+    PREFIX: '/data/data/com.termux/files/usr',
     LD_LIBRARY_PATH: path.join(paths.engine, 'program'),
     SSL_CERT_FILE: process.env.SSL_CERT_FILE || '/data/data/com.termux/files/usr/etc/tls/cert.pem',
     OPENSSL_CONF: '/data/data/com.termux/files/usr/etc/tls/openssl.cnf',
     FONTCONFIG_FILE: process.env.FONTCONFIG_FILE || path.join(paths.engine, 'share', 'fontconfig', 'fonts.conf'),
     FONTCONFIG_PATH: process.env.FONTCONFIG_PATH || path.join(paths.engine, 'share', 'fontconfig'),
   } : {};
+  // The existing native setup helper uses this switch only to build its
+  // no-chroot template. Do not pass it to the actual server or kit workers.
+  const systemplateEnvironment = termux ? { COOL_FORCE_LANDLOCK: '1' } : undefined;
   const argv = termux ? nativeArgv : ['/usr/bin/setpriv', '--inh-caps=-all', '--ambient-caps=-all', '--', ...nativeArgv];
   const launch = path.join(directory, 'launch.json');
   const artifactRevision = createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
-  await writeChanged(launch, JSON.stringify({ schema: 1, revision: artifactRevision, argv, nativeEnvironment, cwd: directory, systemplateSetup: paths.systemplateSetup, systemplate, engine: paths.engine }));
-  const configRevision = createHash('sha256').update(JSON.stringify({ manifest, configuration, argv, nativeEnvironment })).digest('hex');
+  await writeChanged(launch, JSON.stringify({ schema: 1, revision: artifactRevision, argv, nativeEnvironment, systemplateEnvironment, cwd: directory, systemplateSetup: paths.systemplateSetup, systemplate, engine: paths.engine }));
+  const configRevision = createHash('sha256').update(JSON.stringify({ manifest, configuration, argv, nativeEnvironment, systemplateEnvironment })).digest('hex');
   const service = { id: 'office', name: 'Office', enabled: false, startup: false, configRevision, kind: 'web', scheme: 'http', openPath: serviceRoot + '/', target: { network: 'tcp', address: '127.0.0.1:' + port }, command: { argv: [process.execPath, fileURLToPath(new URL('./launch.mjs', import.meta.url)), launch], cwd: directory, env: { BASHKITTEN_OFFICE_CONFIG_REVISION: configRevision } } };
   return { service, collaboraInternalURL: 'http://127.0.0.1:' + port + serviceRoot, editorBasePath: serviceRoot, wopiURL, extension };
 }

@@ -5,6 +5,27 @@ This record separates research/temporary comparison evidence from implementation
 and installed-product acceptance. Historical checkpoints below retain the limits
 and failures of their original candidates; the current result is recorded first.
 
+## Native Termux launcher policy — 31 October 2026
+
+The user's later clarification explicitly removes the per-document isolation
+requirement for their single-user Termux collaboration environment; the dated
+plan amendment records this without altering historical requirements/evidence.
+The native launcher selects upstream `security.capabilities=false` and retains
+`security.seccomp=true`. It no longer sends `COOL_FORCE_LANDLOCK` to the server;
+only the existing no-chroot systemplate helper receives that setup switch.
+Linux's prepared launch bytes and configuration revision remain unchanged.
+
+On this physical aarch64 phone, both C and Python Landlock VERSION probes return
+`ENOSYS` (errno 38); this does not distinguish kernel configuration from inherited
+Android filtering. A separate short-lived C process successfully installs and
+enforces its own seccomp filter: the count increases from one Android filter to
+two, and the deliberately denied `getppid` returns EACCES. This proves available
+seccomp enforcement, not compatibility of Collabora's complete filter.
+External fixture checks pass Termux options, setup-only environment propagation,
+cold/warm launches and unchanged Linux preparation. Real rebuilt worker and
+presentation acceptance remain pending. Evidence is outside Git in
+`~/BashKitten-Office-Repair/20261031/`.
+
 ## Native ARM64 import-library load failure — 31 October 2026
 
 A real aarch64 Termux installation of 153.6 cannot start its document engine.

@@ -1,5 +1,15 @@
 # BashKitten · native Pi / Linux and Termux
 
+## 31 October native Termux Office policy
+
+The user explicitly does not require per-document filesystem isolation inside
+Termux. Use Collabora's native no-capabilities configuration with mandatory
+seccomp; do not require Landlock on Android kernels that do not expose it.
+Android confines the whole Termux UID, not individual workers or agent secrets.
+Keep Linux isolation unchanged, existing authorization and one service owner.
+This supersedes the earlier mandatory-Landlock Termux requirement only; see the
+[dated Office amendment](docs/files-office-bibliography-plan.md#29-native-termux-office-isolation-policy--31-october-2026).
+
 ## 30 October upstream and update-channel clarification
 
 Before the next candidate, refresh applicable official releases of Firefox ESR,
