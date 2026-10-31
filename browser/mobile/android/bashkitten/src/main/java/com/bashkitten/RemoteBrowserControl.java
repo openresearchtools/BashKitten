@@ -18,7 +18,7 @@ final class RemoteBrowserControl {
     private final BrowserApp app;
     private final java.util.concurrent.ExecutorService files = java.util.concurrent.Executors.newSingleThreadExecutor();
     private final Set<String> completed = new HashSet<>();
-    private GeckoSession session;
+    private volatile GeckoSession session;
     private GeckoSession pendingLocal;
     private String declinedLocalIdentity;
     private String origin, csrf, channel;
@@ -27,6 +27,13 @@ final class RemoteBrowserControl {
     private AgentController.Access access;
     RemoteBrowserControl(BrowserApp app) { this.app = app; }
     boolean active() { return active; }
+    private boolean currentAccess(int version, GeckoSession selected) {
+        if (!active || version != generation || session != selected) return false;
+        // Encoders and file streams also check this lease. Its owner revokes
+        // the volatile generation on disconnect; Gecko readiness is UI-only
+        // and is checked again there before commands/results are delivered.
+        return android.os.Looper.myLooper() != android.os.Looper.getMainLooper() || selected.isOpen();
+    }
     void connectLocal(Activity activity, GeckoSession selected, String address, boolean retry) {
         try {
             URI endpoint = URI.create(address);
@@ -59,7 +66,7 @@ final class RemoteBrowserControl {
                         pendingLocal = null; session = selected; origin = serverOrigin; active = true;
                         access = new AgentController.Access(caller.owner, uid, () -> {
                             caller.check.run();
-                            if (!active || version != generation || session != selected || !selected.isOpen())
+                            if (!currentAccess(version, selected))
                                 throw new SecurityException("Local browser access revoked");
                         }, true);
                         connect(version, "Local Agent");
@@ -106,7 +113,7 @@ final class RemoteBrowserControl {
                     if (version != generation) return;
                     session = selected; origin = serverOrigin; active = true;
                     access = new AgentController.Access("remote:" + serverOrigin, -1, () -> {
-                        if (!active || version != generation || session != selected || !selected.isOpen())
+                        if (!currentAccess(version, selected))
                             throw new SecurityException("Remote browser access revoked");
                     }, true);
                     connect(version, name);

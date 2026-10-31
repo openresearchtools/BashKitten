@@ -5,6 +5,68 @@ This record separates research/temporary comparison evidence from implementation
 and installed-product acceptance. Historical checkpoints below retain the limits
 and failures of their original candidates; the current result is recorded first.
 
+## Android screenshot worker/thread defect — 31 October 2026
+
+The existing Android browser-channel access checker calls `GeckoSession.isOpen()`
+from both native command handling and background screenshot/file workers.
+The pinned Gecko implementation explicitly asserts the UI thread in `isOpen()`.
+`AgentController` runs PNG encoding and its access recheck on a transfer worker,
+so the check throws before returning a screenshot; its catch discards the cause
+and reports only “Screenshot failed”. Download sharing reaches the same faulty
+checker. These source files are unchanged from the installed `b1351a4a17ba` base.
+
+The narrow correction keeps channel generation, active state, captured session
+identity and installed-app grant checks on worker threads, makes the captured
+session reference volatile, and checks Gecko readiness only on its UI thread.
+The existing native session owner still revokes the volatile lease on disconnect;
+main-thread command/result validation and per-chunk file checks remain in place.
+No protected-view, permission, TLS or transport bypass is added. Exact extracted
+guard logic reproduces the old off-thread assertion and passes permitted worker,
+stale/disabled/wrong-session and UI-closed checks. This is a source-level control-
+flow proof, not an Android compilation or installed screenshot pass. The APK must
+be rebuilt and the actual screenshot/download flows repeated. No Java runtime
+or native app files on this phone are replaced by this source correction.
+Evidence is `~/BashKitten-Office-Repair/20261031/browser-worker-guard-proof.json`.
+
+## Impress live-view failure after the aarch64 load repair — 31 October 2026
+
+The subsequent user-observed test does **not** pass live Impress shape coediting. Initial
+bursts were mistakenly directed at a test copy while the user viewed the
+original. After the user explicitly requested edits to the actual original,
+the existing project owner registers its Downloads workspace and the native
+agent opens that file. The agent's document identity matches the human's
+WOPI identity; the human client reports both Pi view 5 and User view 9 on slide 1.
+Guarded native shape edits and save acknowledgements succeed, and reading the
+saved original PPTX confirms the replacement text. Nevertheless, the user's
+01:51 screenshot still displays the old first-slide text and thumbnails.
+Saved-file mutation is therefore not evidence of visible native coediting.
+The user later reports that the edits become visible after the worker/view
+reconnect sequence; this is not a back-to-back visible-update pass. The user
+also reports successful Writer coediting from another chat on this phone.
+Do not generalize this presentation-shape result to all Office collaboration or
+repeat unrelated Writer work. The edits used native UNO shape setters, not
+PPTX XML rewrites; XML was read only to verify acknowledged saved output.
+The rendering/invalidation or API-use cause remains unproved; do not report it
+as fixed or add an engine workaround before checking the proper native edit path.
+
+There are also two worker failures. The first five-edit burst ends in
+`save_failed`, then the participant disappears; the saved copy retains its
+prior revision. Three- and five-edit bursts after an Office-only restart do
+save successfully. A later guarded text-plus-position diagnostic on the actual
+original loses its connection with operation ID retained privately. The native
+worker receives SIGSEGV at address `0x50`; the broker reports losing its kit and
+possible unsaved modifications. That uncertain mutation must be inspected and
+reconciled rather than replayed. The helper-atomic load failure remains repaired,
+but worker stability and live display are now explicit release blockers.
+
+Native diagnostic file logging is private under the Office rollback directory;
+normal launch configuration is restored for the next service start without
+interrupting the user's active original view. Generic browser screenshot capture
+continues to fail, so the user-supplied screenshot establishes the visible
+failure. No client-visible latency measurement, complete repair, full candidate
+or publication is claimed. External receipts include `rapid-edit-result.json`
+and private native logs; never publish their participant credentials.
+
 ## Installed aarch64 Office-only repair — 31 October 2026
 
 All four Office targets passed the existing component workflow
