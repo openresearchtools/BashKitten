@@ -506,15 +506,10 @@ export class ApplicationModules {
         }
       }
       const project = input.projectId ? await this.project(record, input.projectId) : null;
-      const folder = selected?.root || (input.cwd ? (await fileDirectory(input.cwd)).path : project?.cwd || (await fileDirectory()).path);
-      let root = folder;
+      const root = selected?.root || (input.cwd ? (await fileDirectory(input.cwd)).path : project?.cwd || (await fileDirectory()).path);
       if (!selected?.attachment) {
-        await authorizeApplicationPath(folder);
-        if (selected) await authorizeApplicationPath(path.join(folder, selected.path));
-        // Native breadcrumbs are relative to their source. Keep Home as that
-        // source while the chosen folder remains only the initial navigation.
-        const home = (await fileDirectory()).path;
-        if (containsPath(home, folder)) root = home;
+        await authorizeApplicationPath(root);
+        if (selected) await authorizeApplicationPath(path.join(root, selected.path));
       }
       const scope = { id: randomUUID(), projectId: project?.id || null, projectRoot: project?.cwd, root, identity: 'bk_' + randomUUID().replaceAll('-', ''),
         ...(selected?.attachment ? { attachment: selected.attachment } : {}),
@@ -524,8 +519,8 @@ export class ApplicationModules {
         if (typeof module.filesLocation !== 'function') throw unavailable('Files', 'incompatible native launch API');
         const location = module.filesLocation(scope);
         scope.source = location.source;
-        const selectedPath = selected?.attachment ? '' : path.relative(root, selected ? path.join(folder, selected.path) : folder).split(path.sep).map(encodeURIComponent).join('/');
-        scope.openPath = '/' + location.openPath + selectedPath + (!selected && selectedPath ? '/' : '');
+        const selectedPath = selected && !selected.attachment ? selected.path.split(path.sep).map(encodeURIComponent).join('/') : '';
+        scope.openPath = '/' + location.openPath + selectedPath;
         // Return the ordinary tab launch without waiting for a cold process or
         // source reload. Its authenticated requests observe the same preparation
         // promise; no second process/queue or alternate file handler is created.

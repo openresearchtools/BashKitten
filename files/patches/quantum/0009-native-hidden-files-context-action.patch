@@ -1,0 +1,42 @@
+--- a/frontend/src/components/ContextMenu.vue
++++ b/frontend/src/components/ContextMenu.vue
+@@ -65,6 +65,13 @@
+         @action="showUploadPrompt"
+       />
+       <action
++        v-if="showHiddenToggle"
++        :icon="user?.showHidden ? 'check_box' : 'check_box_outline_blank'"
++        :label="$t('profileSettings.showHiddenFiles')"
++        :aria-pressed="!!user?.showHidden"
++        @action="toggleHidden"
++      />
++      <action
+         v-if="showArchive"
+         icon="archive"
+         :label="$t('prompts.archive')"
+@@ -331,6 +338,9 @@
+       if (!this.permissions.create) return false;
+       return this.showCreate && !this.isSearchActive;
+     },
++    showHiddenToggle() {
++      return !this.showLimitedOptions && !this.isShare && getters.isLoggedIn() && getters.currentView() === "listingView";
++    },
+     req() {
+       return state.req;
+     },
+@@ -572,6 +582,15 @@
+     }
+   },
+   methods: {
++    async toggleHidden() {
++      mutations.closeHovers();
++      try {
++        await mutations.updateCurrentUser({ showHidden: !state.user.showHidden });
++        mutations.setReload(true);
++      } catch {
++        // The native preference mutation restores state and reports the failure.
++      }
++    },
+     showInfoPrompt() {
+       if (!this.isPreview) {
+         mutations.closeHovers();

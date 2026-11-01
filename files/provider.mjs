@@ -102,7 +102,7 @@ export async function listFiles({ dataRoot, scope, relative = '', signal, author
   catch (error) { error.message = 'Files could not list this folder: ' + error.message; throw error; }
 }
 const deniedPaths = /^\/(?:api\/(?:settings|users|auth|tokens|sharing|office|access)|public\/share)(?:\/|$|\?)/;
-const quickToggleFields = new Set(['singleClick', 'darkMode', 'stickySidebar', 'viewMode']);
+const quickToggleFields = new Set(['singleClick', 'darkMode', 'stickySidebar', 'viewMode', 'showHidden']);
 const viewModes = new Set(['list', 'compact', 'normal', 'icons', 'gallery']);
 async function quickToggleBody(req, url, username) {
   if ([...url.searchParams.keys()].length !== 1 || url.searchParams.get('username') !== username) throw failure(403, 'Files preferences belong to the current scoped account');
