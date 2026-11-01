@@ -1034,3 +1034,102 @@ h3 {
     padding: 4px 6px;
   }
 }
+
+/* Manager controls use the same native theme variables as the citation chooser. */
+.reference-toolbar { flex-wrap: nowrap; }
+.toolbar-spacer { flex: 1; }
+.reference-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 150px;
+  flex: 1 1 180px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding-inline: 9px;
+  background: var(--surface);
+}
+.reference-search input { width: 100%; min-width: 0; border: 0; background: transparent; }
+.reference-search .icon { color: var(--muted); flex: none; }
+.search-row { flex-wrap: wrap; align-items: center; }
+.search-row #actions { flex: 1 1 170px; min-width: 0; max-width: 100%; }
+#multiSelect { display: inline-flex; gap: 6px; align-items: center; }
+#multiSelect[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+.action-menu { position: relative; padding: 0; border: 0; flex: none; }
+.action-menu > summary {
+  display: grid; place-items: center; width: 34px; height: 34px;
+  cursor: pointer; list-style: none; border: 1px solid var(--line); border-radius: 999px;
+}
+.action-menu > summary::-webkit-details-marker { display: none; }
+.action-menu-items {
+  position: absolute; right: 0; top: calc(100% + 5px); z-index: 20;
+  display: flex; flex-direction: column; gap: 3px; padding: 6px;
+  min-width: 170px; max-width: calc(100vw - 32px);
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  box-shadow: 0 5px 18px #0003;
+}
+.action-menu-items button { text-align: start; border: 0; border-radius: 5px; }
+.reference-grid { display: flex; flex-direction: column; flex: 1; min-height: 120px; overflow: hidden; }
+.reference-grid .item-list { min-height: 0; }
+.reference-grid .virtual-list { min-height: 0; }
+.reference-grid .virtual-space { width: var(--reference-width); min-width: 100%; }
+.reference-grid .virtual-row { right: auto; width: var(--reference-width); min-width: 100%; }
+.reference-grid .record-row,
+.reference-grid .table-header {
+  grid-template-columns: var(--reference-columns);
+  width: var(--reference-width); min-width: var(--reference-width);
+  gap: 0; padding: 0;
+}
+.reference-grid .table-header { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+.reference-grid .reference-column { position: relative; overflow: hidden; min-width: 0; }
+.reference-column > button { width: 100%; padding: 8px 18px 8px 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.reference-grid .record-row > span { padding: 8px; }
+.reference-grid .grid-select-cell { padding: 0; overflow: hidden; text-align: center; }
+.reference-grid:not([data-multiselect="true"]) .grid-select-cell { visibility: hidden; }
+.reference-grid .row-checkbox { width: 16px; height: 16px; padding: 0; margin: 0; }
+.reference-column .citation-column-resizer { right: 0; }
+.reference-column .citation-column-resizer::after { left: auto; right: 0; }
+.detail-form .metadata-field.editable-field { grid-template-columns: minmax(72px,27%) minmax(0,1fr) auto; }
+.field-edit-actions { display: flex; align-items: start; gap: 2px; padding: 0 !important; }
+.field-edit-actions .icon-only { width: 26px; height: 28px; min-height: 0; border-color: transparent; background: transparent; }
+.field-edit-actions .icon { width: 15px; height: 15px; }
+.editable-field:not(.field-is-editing) input:not([type="checkbox"]),
+.editable-field:not(.field-is-editing) textarea,
+.editable-field:not(.field-is-editing) select {
+  background: transparent; border-color: transparent; opacity: 1; color: var(--text);
+}
+.detail-form .section-field textarea { grid-column: 1/3; }
+.detail-form .creator-row.editable-field { grid-template-columns: minmax(0,1fr) minmax(0,1fr) 28px; gap: 5px; }
+.creator-row.editable-field > select { grid-column: 1/3; grid-row: 1; }
+.creator-row.editable-field > input { min-width: 0; grid-row: 2; }
+.creator-row.editable-field > .creator-actions { grid-column: 1/3; grid-row: 3; }
+.creator-row.editable-field > .field-edit-actions { grid-column: 3; grid-row: 1/3; flex-direction: column; }
+.creator-row.editable-field > .creator-identifiers { grid-column: 1/-1; grid-row: 4; }
+.creator-row.editable-field:not(.field-is-editing) > .creator-actions { display: none; }
+.default-style-setting { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.default-style-setting > span { flex: 1 1 180px; overflow-wrap: anywhere; }
+.default-style-setting > .notice { flex-basis: 100%; }
+.references-about pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 12px; }
+.references-about details { margin-block: 10px; }
+@media (max-width: 700px) {
+  .app-header { gap: 6px; }
+  .app-header h1 { font-size: 16px; }
+  .app-header > .icon-only { width: 32px; height: 32px; }
+  .reference-search { flex-basis: calc(100% - 48px); min-width: 0; }
+  .search-row #actions { flex: 1 1 180px; }
+  .reference-toolbar .icon-only,
+  .action-menu > summary { width: 40px; height: 40px; }
+  .reference-grid .table-header { min-height: 40px; }
+  .reference-grid .table-header button { min-height: 40px; }
+  .reference-grid .virtual-row { border-radius: 5px; }
+  .field-edit-actions .icon-only { min-width: 30px; width: 30px; height: 32px; }
+}
+.creator-row.pending-removal > input,
+.creator-row.pending-removal > select { text-decoration: line-through; opacity: .65; }
+@media (max-height: 480px) {
+  .libraries { overflow: auto; }
+  .library-main { overflow: auto; }
+  .library-main > .toolbar,
+  .library-main > .search-row { flex-shrink: 0; }
+  .reference-grid { flex: 1 0 150px; }
+}

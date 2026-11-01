@@ -17,6 +17,7 @@ export class VirtualList {
     role = "listbox",
     rowRole = "option",
     rowAttributes = () => ({}),
+    updateRow = () => {},
     total = null,
     header = null,
   }) {
@@ -32,6 +33,7 @@ export class VirtualList {
       onStatus,
       rowRole,
       rowAttributes,
+      updateRow,
       header,
     });
     this.pages = new Map();
@@ -97,6 +99,10 @@ export class VirtualList {
   }
   setSelection(keys) {
     this.selected = new Set(keys);
+    this.draw();
+  }
+  rerender() {
+    this.renderedRows.clear();
     this.draw();
   }
   item(index) {
@@ -264,6 +270,7 @@ export class VirtualList {
           "aria-selected",
           String(this.selected.has(this.key(item))),
         );
+        this.updateRow(row, item, i);
         if (i === this.focusIndex) active = row.id;
       } else {
         row.classList.add("placeholder");

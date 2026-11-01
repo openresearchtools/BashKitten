@@ -15,6 +15,8 @@ import {
   renderedHTML,
 } from "./common.js";
 import { VirtualList } from "./virtual-list.js";
+import { ReferenceGrid } from "./reference-grid.js";
+import { icon, iconButton } from "./icons.js";
 import { chooseCitation } from "./shared-citation-dialog.js";
 import {
   exportReferences,
@@ -54,34 +56,48 @@ const notify = (message) => {
   const target = $("#status");
   if (target) target.textContent = message?.message || message || "";
 };
-const pane = (name) => ($("#app").dataset.pane = name);
+const pane = (name) => {
+  $("#app").dataset.pane = name;
+  if (name === "items") grid.applyWidths();
+};
 for (const button of document.querySelectorAll("[data-pane]"))
   button.addEventListener("click", () => pane(button.dataset.pane));
-const itemLabel = (item) =>
-  node(
-    "div",
-    { class: "record-row" },
-    node("span", { title: title(item) }, title(item)),
-    node("span", { title: creators(item) }, creators(item)),
-    node(
-      "span",
-      { class: "record-type" },
-      label("itemTypes", item.data.itemType),
-    ),
-    node("span", {}, year(item)),
-    node(
-      "span",
-      {
-        "aria-label":
-          item.meta?.attachmentCount || item.data.itemType === "attachment"
-            ? "Attachments"
-            : "",
-      },
-      item.meta?.attachmentCount || item.data.itemType === "attachment"
-        ? "↧"
-        : "",
-    ),
-  );
+let multipleSelection = false;
+const grid = new ReferenceGrid({
+  root: $("#referenceGrid"), header: $("#itemHeader"),
+  selected: item => selection.has(item.key),
+  onSelect: (item, event) => {
+    if (items) items.focusIndex = event.index;
+    return selectItem(item, event);
+  },
+  onSort: column => {
+    direction = sort === column && direction === "asc" ? "desc" : "asc";
+    sort = column;
+    grid.setSort(sort, direction);
+    selection.clear();
+    items?.reset({ preserveSelection: false });
+  },
+  onColumns: () => items?.reset({ preservePosition: true }),
+});
+for (const [id, artwork, caption] of [
+  ["newItem", "add", "New item"], ["identifiers", "identifier", "Add by identifier"],
+  ["importReferences", "import", "Import references"], ["openalex", "literature", "Search literature with OpenAlex"],
+  ["refresh", "refresh", "Reload references"], ["jobHistory", "jobs", "Jobs"],
+  ["settings", "settings", "References settings"], ["about", "info", "About References"],
+]) iconButton($("#" + id), artwork, caption);
+$("#searchIcon").append(icon("search"));
+$("#menuIcon").replaceChildren(icon("menu"));
+$("#multiSelect").replaceChildren(icon("select"), node("span", {}, "Select"));
+$("#multiSelect").onclick = () => {
+  multipleSelection = !multipleSelection;
+  $("#multiSelect").setAttribute("aria-pressed", String(multipleSelection));
+  grid.setMultiple(multipleSelection);
+  items?.draw();
+};
+$("#columns").onclick = () => grid.chooseColumns();
+$("#referenceMenu").addEventListener("click", event => {
+  if (event.target.closest("button")) $("#referenceMenu").open = false;
+});
 // The pinned native schema supplies every type-specific field. These work
 // identities are the narrow References additions stored by the shared backend.
 const workIdentifierLabels = {
@@ -160,7 +176,7 @@ function renderProjectList() {
         node(
           "small",
           {},
-          project.backendName || context.backendName || context.backendId,
+          project.backendName || context.backendName || "",
           project.isDefault ? " · Default" : "",
           project.archived ? " · Archived" : "",
           nameCounts.get(project.name) > 1 && project.cwd
@@ -184,8 +200,6 @@ function updateProjectActions() {
     "newItem",
     "identifiers",
     "importReferences",
-    "attachment",
-    "note",
     "openalex",
   ]) {
     $("#" + id).disabled = !editable;
@@ -196,6 +210,7 @@ function updateProjectActions() {
     "cite",
     "jobHistory",
     "exportReferences",
+    "columns",
   ]) {
     $("#" + id).disabled = !available;
   }
@@ -339,11 +354,21 @@ async function selectProject(id) {
     const loadedSchema = await scope.request("schema");
     if (generation !== view) return;
     schema = loadedSchema;
+    grid.typeLabel = type => label("itemTypes", type);
+    grid.configure(schema);
+    grid.setSort(sort, direction);
     items = new VirtualList({
       element: $("#items"),
       label: "Project references",
       load: (args) => loadPage(args),
-      render: itemLabel,
+      render: (item, index) => grid.render(item, index),
+      header: grid.header,
+      role: "grid",
+      rowRole: "row",
+      updateRow: (row, item) => {
+        const checkbox = row.querySelector(".row-checkbox");
+        if (checkbox) { checkbox.checked = selection.has(item.key); checkbox.tabIndex = multipleSelection ? 0 : -1; }
+      },
       onSelect: selectItem,
       onActivate: (item) => {
         void openDetail(item.key);
@@ -381,12 +406,13 @@ function loadPage({ start, limit, cursor, signal }) {
         limit,
         cursor,
         deleted: deleted ? 1 : undefined,
+        fields: grid.fields().join(","),
       }),
     { signal },
   );
 }
 async function selectItem(item, event) {
-  event.toggle ||= $("#multiSelect").checked;
+  event.toggle ||= multipleSelection;
   if (
     detailDirty &&
     detail?.key !== item.key &&
@@ -449,22 +475,6 @@ $("#refresh").onclick = () => {
   items?.reset({ preservePosition: true });
   if (detail && !detailDirty) void openDetail(detail.key);
 };
-for (const button of document.querySelectorAll("[data-sort]"))
-  button.onclick = () => {
-    direction =
-      sort === button.dataset.sort && direction === "asc" ? "desc" : "asc";
-    sort = button.dataset.sort;
-    for (const b of document.querySelectorAll("[data-sort]"))
-      b.setAttribute(
-        "aria-sort",
-        b === button
-          ? direction === "asc"
-            ? "ascending"
-            : "descending"
-          : "none",
-      );
-    items?.reset();
-  };
 async function openDetail(key, discard = false) {
   if (detailDirty && !discard && !confirm("Discard unsaved item changes?"))
     return;
@@ -494,6 +504,65 @@ function renderDetail(item, targetScope) {
     notice = node("p", { class: "notice", role: "status" });
   root.append(heading, notice, form);
   const archived = !!currentProject()?.archived;
+  const controller = detailController;
+  let activeEditKey = null;
+  async function saveField(data) {
+    if (archived || detail !== item || !root.contains(form)) return;
+    const controls = [...form.querySelectorAll("input,select,textarea,button")].map(control => [control, control.disabled]);
+    for (const [control] of controls) control.disabled = true;
+    try {
+      const result = await targetScope.request("items/" + encodeURIComponent(item.key), {
+        method: "PATCH", body: { version: item.version, data }, signal: controller.signal,
+      });
+      if (scope !== targetScope || detail !== item || !root.contains(form)) return;
+      detailDirty = false;
+      detail = result;
+      if (selection.has(result.key)) selection.set(result.key, selectedIdentity(result));
+      renderDetail(result, targetScope);
+      items?.reset({ preservePosition: true });
+      notify("Field saved.");
+    } catch (error) {
+      if (!controller.signal.aborted && root.contains(form)) notice.textContent = error.status === 412
+        ? "This item changed elsewhere. Your edit is kept here; reload the item before saving."
+        : error.message;
+    } finally {
+      if (root.contains(form)) for (const [control, disabled] of controls) control.disabled = disabled;
+    }
+  }
+  function guardField(row, controls, values, caption, key = caption) {
+    const state = controls.filter(control => !control.hasAttribute('data-read-action')).map(control => ({ control, disabled: control.disabled, readOnly: control.readOnly }));
+    const actions = node("span", { class: "field-edit-actions" });
+    const edit = iconButton(button("", async () => {
+      if (activeEditKey === key) { await saveField(values()); return; }
+      if (activeEditKey !== null || detailDirty) {
+        notice.textContent = "Save or cancel your current edit first.";
+        return;
+      }
+      activeEditKey = key;
+      apply();
+      controls.find(control => !control.disabled && control.matches('input,select,textarea'))?.focus();
+    }, { disabled: archived }), 'edit', 'Edit ' + caption);
+    const cancel = iconButton(button("", () => void openDetail(item.key, true)), 'close', 'Cancel ' + caption + ' edit');
+    actions.append(edit, cancel); row.append(actions); row.classList.add('editable-field');
+    function apply() {
+      const editing = activeEditKey === key;
+      row.classList.toggle('field-is-editing', editing);
+      for (const { control, disabled, readOnly } of state) {
+        if (control.matches('input:not([type="checkbox"]),textarea')) control.readOnly = archived || !editing || readOnly;
+        else control.disabled = archived || !editing || disabled;
+        control.setAttribute('aria-readonly', String(!editing));
+      }
+      cancel.hidden = !editing;
+      iconButton(edit, editing ? 'save' : 'edit', (editing ? 'Save ' : 'Edit ') + caption);
+    }
+    apply();
+  }
+  form.addEventListener('click', event => {
+    const control = event.target.closest('button');
+    if (activeEditKey === null || !control || control.closest('.field-is-editing,.detail-actions') || control.hasAttribute('data-read-action')) return;
+    event.preventDefault(); event.stopPropagation();
+    notice.textContent = "Save or cancel your current edit first.";
+  }, true);
   function readOnlyControls(container) {
     if (!archived) return;
     for (const control of container.querySelectorAll(
@@ -588,6 +657,7 @@ function renderDetail(item, targetScope) {
   const typeField = field("Item type", type);
   typeField.classList.add("metadata-field");
   form.append(typeField);
+  guardField(typeField, [type], () => ({ itemType: edited.itemType, creators: edited.creators }), "item type");
   const titleFields = node("div", { class: "metadata-fields" }),
     fields = node("div", { class: "metadata-fields" }),
     creatorSection = node("details", { open: true }),
@@ -597,6 +667,7 @@ function renderDetail(item, targetScope) {
   creatorSection.append(creatorTitle, creatorRows, creatorActions);
   form.append(titleFields, creatorSection, fields);
   let creatorStart = 0;
+  const removedCreators = new Set();
   edited.creators ||= [];
   function renderCreators() {
     creatorRows.replaceChildren();
@@ -665,6 +736,8 @@ function renderDetail(item, targetScope) {
       };
       const move = (delta) => {
         if (i + delta < 0 || i + delta >= edited.creators.length) return;
+        activeEditKey = 'creator:' + (i + delta);
+        creatorStart = Math.floor((i + delta) / 20) * 20;
         [edited.creators[i], edited.creators[i + delta]] = [
           edited.creators[i + delta],
           edited.creators[i],
@@ -688,8 +761,9 @@ function renderDetail(item, targetScope) {
             button(
               "×",
               () => {
-                edited.creators.splice(i, 1);
+                removedCreators.add(creator);
                 detailDirty = true;
+                notice.textContent = "Save this creator row to remove it, or cancel the edit.";
                 renderCreators();
               },
               { "aria-label": "Remove creator" },
@@ -705,21 +779,27 @@ function renderDetail(item, targetScope) {
         identifiers.append(field(caption, input));
       }
       creatorRows.lastElementChild.append(identifiers);
+      const creatorRow = creatorRows.lastElementChild;
+      creatorRow.classList.toggle('pending-removal', removedCreators.has(creator));
+      guardField(creatorRow, [...creatorRow.querySelectorAll('input,select,button')], () => ({ creators: edited.creators.filter(value => !removedCreators.has(value)) }), 'creator ' + (i + 1), 'creator:' + i);
     }
     creatorActions.replaceChildren(
       button("Add creator", () => {
+        if (activeEditKey !== null || detailDirty) { notice.textContent = "Save or cancel your current edit first."; return; }
         edited.creators.push({
           creatorType: types[0]?.creatorType || "author",
           firstName: "",
           lastName: "",
         });
         creatorStart = Math.floor((edited.creators.length - 1) / 20) * 20;
+        activeEditKey = 'creator:' + (edited.creators.length - 1);
         detailDirty = true;
         renderCreators();
       }),
       button(
         "Previous",
         () => {
+          if (activeEditKey?.startsWith('creator:')) { notice.textContent = "Save or cancel this creator edit first."; return; }
           creatorStart = Math.max(0, creatorStart - 20);
           renderCreators();
         },
@@ -728,6 +808,7 @@ function renderDetail(item, targetScope) {
       button(
         "Next",
         () => {
+          if (activeEditKey?.startsWith('creator:')) { notice.textContent = "Save or cancel this creator edit first."; return; }
           creatorStart += 20;
           renderCreators();
         },
@@ -759,6 +840,7 @@ function renderDetail(item, targetScope) {
       };
       const row = field(label("fields", name), input);
       row.classList.add("metadata-field");
+      guardField(row, [input], () => ({ [name]: edited[name] }), label("fields", name), 'field:' + name);
       (name === "title" ? titleFields : fields).append(row);
     }
     if (!["attachment", "note", "annotation"].includes(edited.itemType)) {
@@ -780,6 +862,7 @@ function renderDetail(item, targetScope) {
         const row = field(caption, input);
         row.classList.add("metadata-field");
         identifiers.append(row);
+        guardField(row, [input], () => ({ [name]: edited[name], provenance: edited.provenance }), caption, 'identifier:' + name);
         const alternate = node("textarea", { name: "identifierAliases." + name, rows: 2, value: (edited.provenance?.identifierAliases?.[name] || []).join("\n"), spellcheck: false });
         aliasInputs.set(name, alternate);
         alternate.oninput = () => {
@@ -791,6 +874,7 @@ function renderDetail(item, targetScope) {
         const alternateRow = field(caption + " · one per line", alternate);
         alternateRow.classList.add("metadata-field");
         aliases.append(alternateRow);
+        guardField(alternateRow, [alternate], () => ({ provenance: edited.provenance }), caption + ' alternatives', 'alias:' + name);
       }
       identifiers.append(node("p", { class: "notice" }, "Changing or clearing a primary identifier replaces all active values of that kind. Save it before adding verified alternatives."), aliases);
       fields.append(identifiers);
@@ -816,8 +900,14 @@ function renderDetail(item, targetScope) {
   for (const [heading, input] of [
     ["Abstract", abstract],
     ["Tags · one per line", tags],
-  ])
-    form.append(node("details", heading === "Abstract" ? { open: true } : {}, node("summary", {}, heading), input));
+  ]) {
+    const section = node("details", heading === "Abstract" ? { open: true } : {}, node("summary", {}, heading));
+    const row = node('div', { class: 'metadata-field section-field' }, input);
+    section.append(row); form.append(section);
+    guardField(row, [input], () => input === abstract ? { abstractNote: abstract.value } : {
+      tags: tags.value.split('\n').map(tag => tag.trim()).filter(Boolean).map(tag => item.data.tags?.find(existing => existing.tag === tag) || { tag }),
+    }, heading);
+  }
   abstract.oninput = () => {
     edited.abstractNote = abstract.value;
     detailDirty = true;
@@ -916,7 +1006,9 @@ function renderDetail(item, targetScope) {
       edited.note = note.value;
       detailDirty = true;
     };
-    form.append(field("Note", note));
+    const row = field("Note", note);
+    row.classList.add('metadata-field'); form.append(row);
+    guardField(row, [note], () => ({ note: note.value }), 'note');
   }
   const save = node(
     "button",
@@ -957,12 +1049,17 @@ function renderDetail(item, targetScope) {
       } catch (error) { if (error.name !== "AbortError") notice.textContent = error.message; }
       finally { enrich.disabled = archived; }
     }));
+  for (const control of itemActions.querySelectorAll('button')) {
+    const name = control.textContent.trim();
+    iconButton(control, name === 'Save changes' ? 'save' : name === 'Reload item' ? 'refresh' : 'identifier', name);
+  }
   form.prepend(itemActions);
   form.onsubmit = async (event) => {
     event.preventDefault();
     const controls = [...form.querySelectorAll("input,select,textarea,button")].map(control => [control, control.disabled]);
     for (const [control] of controls) control.disabled = true;
     try {
+      edited.creators = edited.creators.filter(value => !removedCreators.has(value));
       edited.tags = tags.value
         .split("\n")
         .map((tag) => tag.trim())
@@ -1003,9 +1100,10 @@ function renderDetail(item, targetScope) {
   attachments.append(
     node("summary", {}, "Attachments and notes"),
     children,
-    button("Add attachment", () => uploadDialog(item.key, targetScope), {
-      disabled: archived,
-    }),
+    node('div', { class: 'toolbar item-child-actions' },
+      iconButton(button('', () => uploadDialog(item.key, targetScope), { disabled: archived }), 'attachment', 'Add attachment to this item'),
+      iconButton(button('', () => void addNote(item.key), { disabled: archived }), 'note', 'Add note to this item'),
+    ),
   );
   root.append(attachments);
   readOnlyControls(form);
@@ -1127,12 +1225,11 @@ $("#newItem").onclick = async () => {
     notify(error);
   }
 };
-$("#note").onclick = async () => {
+async function addNote(parent = detail?.key || null) {
   if (!scope) return;
   const targetScope = scope;
   const text = node("textarea", { rows: 8, required: true }),
-    name = node("input", { placeholder: "Note title" }),
-    parent = selection.size === 1 ? [...selection.keys()][0] : null;
+    name = node("input", { placeholder: "Note title" });
   if (
     !(await promptFields(
       "New note",
@@ -1811,8 +1908,27 @@ async function uploadDialog(parentKey, targetScope = scope) {
   d.el.addEventListener("close", () => controller.abort(), { once: true });
   d.open();
 }
-$("#attachment").onclick = () =>
-  uploadDialog(selection.size === 1 ? [...selection.keys()][0] : null);
+$("#about").onclick = async () => {
+  const d = dialog('About References'), controller = new AbortController();
+  d.el.classList.add('references-about');
+  d.actions.append(button('Close', () => d.el.close()));
+  d.el.addEventListener('close', () => controller.abort(), { once: true });
+  d.body.append(node('p', {}, 'BashKitten reference management, page and PDF capture, and document citations.'));
+  d.open();
+  try {
+    if (!scope) throw Error('Select a References project to load its packaged source and licenses.');
+    const about = await scope.request('about', { signal: controller.signal });
+    if (controller.signal.aborted) return;
+    d.body.replaceChildren(node('p', {}, about.description));
+    const attribution = node('details', {}, node('summary', {}, 'Source and attribution'), node('pre', {}, about.attribution));
+    d.body.append(attribution, node('h3', {}, 'Component licenses'));
+    for (const component of about.components) {
+      const entry = node('details', {}, node('summary', {}, [component.name, component.version, component.license].filter(Boolean).join(' · ')));
+      if (/^https?:\/\//i.test(component.source || '')) entry.append(node('a', { href: component.source, target: '_blank', rel: 'noopener noreferrer' }, 'Original source'));
+      entry.append(node('pre', {}, component.text)); d.body.append(entry);
+    }
+  } catch (error) { if (!controller.signal.aborted) d.notice.textContent = error.message; }
+};
 
 $("#settings").onclick = async () => {
   if (!scope) return;
@@ -1867,9 +1983,22 @@ $("#settings").onclick = async () => {
       value: settings.resolvers,
       spellcheck: "false",
     });
+    let defaultCitationStyle = settings.defaultCitationStyle || null;
+    const styleName = node('span', {}, defaultCitationStyle ? defaultCitationStyle.id : 'Use the document default');
+    const styleSetting = node('div', { class: 'default-style-setting' }, styleName,
+      button('Choose style…', async () => {
+        try {
+          const chosen = await selectStyle(targetScope, defaultCitationStyle || undefined);
+          if (chosen) { defaultCitationStyle = chosen; styleName.textContent = chosen.id; }
+        } catch (error) { d.notice.textContent = error.message; }
+      }),
+      button('Clear', () => { defaultCitationStyle = null; styleName.textContent = 'Use the document default'; }),
+      node('p', { class: 'notice' }, 'Used when citations are first added to a document. Existing document styles and later document-specific choices are preserved.'),
+    );
     const form = node(
       "form",
       {},
+      node('h3', {}, 'Default citation style'), styleSetting,
       field("OpenAlex API key", key),
       field("Remove stored OpenAlex key", removeKey),
       field("Crossref contact email", crossref),
@@ -1901,6 +2030,7 @@ $("#settings").onclick = async () => {
           unpaywallEmail: unpaywall.value,
           automaticPDFs: automatic.checked,
           citationAutoRegenerate: Number(regeneration.value),
+          defaultCitationStyle,
           resolvers: resolvers.value,
         };
         if (removeKey.checked) body.openalexKey = "";
@@ -2619,26 +2749,31 @@ $("#savedSearches").onclick = () => {
 
 async function selectStyle(
   targetScope,
-  initial = { id: "apa", locale: "en-US" },
+  initial,
 ) {
+  let styleOptions;
+  if (!initial) { styleOptions = await targetScope.request('citation-options'); initial = styleOptions.defaultCitationStyle || { id: 'apa', locale: 'en-US' }; }
   const d = dialog("Citation style"),
     search = node("input", {
       type: "search",
-      placeholder: "Search installed styles",
+      placeholder: "Search all citation styles",
     }),
     rows = node("div", { class: "search-results" }),
     locale = node("select");
   let chosen = initial.id,
     accepted = false,
-    term = "";
-  d.body.append(field("Find a style", search), rows, field("Language", locale));
+    term = "",
+    showAll = false;
+  const allStyles = button('Load all styles', () => { showAll = true; allStyles.disabled = true; list.reset(); });
+  d.body.append(field("Find a style", search), allStyles, rows, field("Language", locale));
+  d.notice.textContent = 'Zotero’s bundled styles are shown first. Search finds matches across the full catalogue.';
   const list = new VirtualList({
     element: rows,
     label: "Citation styles",
     key: (item) => item.id,
     load: async ({ start, limit, signal }) => {
       const result = await targetScope.request(
-        "styles?" + query({ query: term, start, limit }),
+        "styles?" + query({ query: term, start, limit, all: showAll ? 1 : undefined, selected: initial.id }),
         { signal },
       );
       return {
@@ -2692,7 +2827,7 @@ async function selectStyle(
   d.open();
   list.setSelection([chosen]);
   try {
-    const options = await targetScope.request("citation-options", {
+    const options = styleOptions || await targetScope.request("citation-options", {
       signal: controller.signal,
     });
     for (const value of options.locales) locale.add(new Option(value, value));

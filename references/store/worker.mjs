@@ -41,6 +41,7 @@ const projectedFields = new Set([
   ...workIdentifierFields,
 ]);
 const connections = new Map();
+const metadataSortIndexes = new WeakMap();
 const key = () => randomBytes(8).toString("hex").toUpperCase();
 const fail = (message, status = 400) => {
   throw Object.assign(Error(message), { status });
@@ -54,6 +55,13 @@ function connection(file) {
   }
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(file);
+  db.function('reference_sort', { deterministic: true }, value => {
+    if (value === null) return '';
+    const text = String(value).trim();
+    const number = Number(text);
+    return text && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(text) && Number.isFinite(number)
+      ? number : text.toLowerCase();
+  });
   db.exec('PRAGMA busy_timeout=5000');
   const priorSchemaVersion = db.prepare("PRAGMA user_version").get().user_version;
   const hasCollectionSearch = db
@@ -532,7 +540,31 @@ function list(db, args = {}) {
     itemType: "type",
     dateModified: "modified",
   };
-  const sort = allowed[args.sort || "title"];
+  const field = args.sort || 'title';
+  let sort = allowed[field];
+  if (!sort && field === 'attachmentCount')
+    sort = "(SELECT count(*) FROM items sort_child WHERE sort_child.parent=items.key AND sort_child.deleted=0 AND sort_child.type='attachment')";
+  if (!sort && projectedFields.has(field)) {
+    const jsonPath = ('$."' + field.replaceAll('"', '\\"') + '"').replaceAll("'", "''");
+    sort = `reference_sort(json_extract(data,'${jsonPath}'))`;
+    const name = 'items_meta_sort_' + Buffer.from(field).toString('hex');
+    let indexes = metadataSortIndexes.get(db);
+    if (!indexes) {
+      indexes = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name GLOB 'items_meta_sort_*' ORDER BY rowid").all().map(row => row.name));
+      metadataSortIndexes.set(db, indexes);
+    }
+    if (!indexes.has(name)) {
+      db.exec(`CREATE INDEX IF NOT EXISTS "${name}" ON items(deleted,${sort},key)`);
+      indexes.add(name);
+    } else { indexes.delete(name); indexes.add(name); }
+    // Keep a small native index cache rather than adding an index for every
+    // metadata column a user has ever sorted.
+    while (indexes.size > 3) {
+      const oldest = indexes.values().next().value;
+      if (!/^items_meta_sort_[a-f0-9]+$/.test(oldest)) fail('Invalid metadata sort index');
+      db.exec(`DROP INDEX "${oldest}"`); indexes.delete(oldest);
+    }
+  }
   if (!sort) fail("Unsupported sort");
   const direction = args.direction === "desc" ? "DESC" : "ASC",
     comparison = direction === "ASC" ? ">" : "<";
@@ -604,7 +636,7 @@ function list(db, args = {}) {
     : "*";
   const rows = db
     .prepare(
-      `SELECT ${columns}${projection.length ? "," + projection.join(",") : ""} FROM items WHERE ${where.join(" AND ")} ORDER BY ${sort} ${direction},key ${direction} LIMIT ? OFFSET ?`,
+      `SELECT ${columns},${sort} AS reference_sort_value${projection.length ? "," + projection.join(",") : ""} FROM items WHERE ${where.join(" AND ")} ORDER BY ${sort} ${direction},key ${direction} LIMIT ? OFFSET ?`,
     )
     .all(...projectionBindings, ...bindings, limit + 1, cursor ? 0 : offset);
   const more = rows.length > limit;
@@ -629,7 +661,7 @@ function list(db, args = {}) {
             scope: queryScope,
             sort,
             direction,
-            value: last[sort],
+            value: last.reference_sort_value,
             key: last.key,
           }),
         ).toString("base64url")
