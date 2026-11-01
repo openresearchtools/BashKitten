@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parent
 REPO=ROOT.parents[1]
 WORK=ROOT/'.build/source'
 OUT=ROOT/'dist/references'
-VERSION='1.0.10'
+VERSION='1.0.11'
 
 def run(*args):subprocess.run(args,cwd=WORK,check=True,env={**os.environ,'NPM_CONFIG_OFFLINE':'true'})
 # Keep npm's content cache; reconstruct source from the named patch every time.
@@ -98,6 +98,7 @@ for path in OUT.rglob('*.html'):
 manifest=json.loads((OUT/'manifest.json').read_text())
 manifest.update(name='References',description='Capture references into the selected BashKitten project.',homepage_url='https://github.com/openresearchtools/BashKitten')
 manifest['browser_action']['default_title']='References Add'
+manifest['browser_action']['default_popup']='references/destination.html'
 manifest['browser_action']['default_area']='navbar'
 manifest['browser_action']['default_icon']=action_icons
 manifest['browser_action']['theme_icons']=[{'size':size,'light':'references-light.svg','dark':'references-dark.svg'} for size in [16,32,48]]

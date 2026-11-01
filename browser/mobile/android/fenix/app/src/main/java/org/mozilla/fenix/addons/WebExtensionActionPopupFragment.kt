@@ -14,6 +14,7 @@ import androidx.navigation.fragment.navArgs
 import mozilla.components.browser.state.action.WebExtensionAction
 import mozilla.components.concept.engine.EngineSession
 import mozilla.components.concept.engine.EngineView
+import mozilla.components.concept.engine.window.WindowRequest
 import mozilla.components.feature.accounts.push.SendTabUseCases
 import mozilla.components.lib.state.ext.consumeFrom
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
@@ -33,6 +34,8 @@ class WebExtensionActionPopupFragment : AddonPopupBaseFragment(), EngineSession.
     private val args by navArgs<WebExtensionActionPopupFragmentArgs>()
     private val coreComponents by lazy { requireComponents.core }
     private val safeArguments get() = requireNotNull(arguments)
+    private val referencesDialog get() =
+        parentFragment as? ReferencesCapturePopupDialogFragment
     private var sessionConsumed
         get() = safeArguments.getBoolean("isSessionConsumed", false)
         set(value) {
@@ -58,8 +61,10 @@ class WebExtensionActionPopupFragment : AddonPopupBaseFragment(), EngineSession.
 
     override fun onResume() {
         super.onResume()
-        val title = args.webExtensionTitle ?: args.webExtensionId
-        showToolbar(title)
+        if (referencesDialog == null) {
+            val title = args.webExtensionTitle ?: args.webExtensionId
+            showToolbar(title)
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -85,7 +90,7 @@ class WebExtensionActionPopupFragment : AddonPopupBaseFragment(), EngineSession.
                     } else if (sessionConsumed) {
                         // In case we can't retrieve the popup session lets close the fragment,
                         // this can happen when Android recreates the activity.
-                        findNavController().popBackStack()
+                        closePopup()
                     }
                 }
             }
@@ -115,6 +120,19 @@ class WebExtensionActionPopupFragment : AddonPopupBaseFragment(), EngineSession.
         super.onDestroyView()
         _binding = null
     }
+
+    override fun onWindowRequest(windowRequest: WindowRequest) {
+        if (referencesDialog != null && windowRequest.type == WindowRequest.Type.CLOSE) {
+            closePopup()
+        } else {
+            super.onWindowRequest(windowRequest)
+        }
+    }
+
+    private fun closePopup() {
+        referencesDialog?.dismiss() ?: findNavController().popBackStack()
+    }
+
     private fun consumePopupSession() {
         coreComponents.store.dispatch(
             WebExtensionAction.UpdatePopupSessionAction(args.webExtensionId, popupSession = null),

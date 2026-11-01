@@ -1,0 +1,32 @@
+--- a/src/browserExt/itemSelector/itemSelector_browserSpecific.js
++++ b/src/browserExt/itemSelector/itemSelector_browserSpecific.js
+@@ -29,8 +29,6 @@
+ function sendMessage() {
+ 	if(responseSent) return;
+ 	responseSent = true;
+-	browser.runtime.sendMessage(["selectDone", [tabID, items]]);
+-	browser.tabs.getCurrent().then(function (tab) {
+-		browser.tabs.remove(tab.id);
+-	});
++	browser.runtime.sendMessage(["selectDone", [tabID, items]])
++		.finally(() => window.close());
+ }
+\ No newline at end of file
+--- a/src/common/itemSelector/itemSelector.html
++++ b/src/common/itemSelector/itemSelector.html
+@@ -19,6 +19,8 @@
+ 	<head>
+ 		<meta charset="UTF-8">
+ 		<meta name="google" content="notranslate">
++		<meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content">
++		<meta name="color-scheme" content="light dark">
+ 		<link rel="stylesheet" type="text/css" media="screen" href="itemSelector.css" />
+ 		<link rel="stylesheet" href="../references/capture.css" />
+ 		<title data-l10n-id="itemSelector_windowTitle" data-l10n-client-name>Zotero Item Selector</title>
+@@ -47,5 +49,6 @@
+ 		<script src="../i18n_common.js"></script>
+ 		<script type="text/javascript" src="itemSelector_browserSpecific.js"></script>
+ 		<script type="text/javascript" src="itemSelector.js"></script>
++		<script src="../references/selector.js"></script>
+ 	</body>
+ </html>

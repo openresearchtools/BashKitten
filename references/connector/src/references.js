@@ -2,7 +2,7 @@
 'use strict';
 globalThis.References = new function () {
   const HOST = 'references-host@bashkitten.org';
-  const destinations = new Map(), sessions = new Map(), choices = new Map();
+  const destinations = new Map(), sessions = new Map(), choices = new Map(), actionSurfaces = new Map();
   const transport = async (message) => {
     const response = await browser.runtime.sendMessage(HOST, {apiVersion: 1, ...message});
     if (!response || response.apiVersion !== 1) throw new Error('References host unavailable or incompatible');
@@ -40,29 +40,36 @@ globalThis.References = new function () {
   this.rpc = (destination, method, data, options={}) => transport({operation: 'request',
     backendId: destination.backendId, projectId: destination.projectId, method, data,
     headers: options.headers || {}, queryString: options.queryString || '', bodyEncoding: options.bodyEncoding || 'json'});
+  const choiceFor = tab => [...choices.values()].find(choice =>
+    !choice.claimed && choice.source.id === tab.id && choice.source.url === tab.url);
+  const createChoice = tab => {
+    const choice = {id:crypto.randomUUID(),source:tab,destination:destinations.get(tab.id),claimed:false,captureStarted:false};
+    choice.result = new Promise(resolve => { choice.finish = value => {
+      if (choice.settled) return;
+      choice.settled = true;
+      resolve(value);
+    }; });
+    choices.set(choice.id, choice);
+    return choice;
+  };
   this.select = async tab => {
-    if (!tab || tab.id < 0) throw new Error('References requires an ordinary source tab');
-    const id = crypto.randomUUID();
-    let finish;
-    const result = new Promise(resolve => { finish = resolve; });
-    choices.set(id, {source: tab, finish, destination: destinations.get(tab.id)});
-    let choiceTab;
+    if (!tab || tab.id < 0 || !/^https?:/.test(tab.url || '')) throw new Error('References requires an ordinary webpage or PDF');
+    const choice = choiceFor(tab) || createChoice(tab);
+    choice.claimed = true;
     const close = tabId => {
-      if (tabId !== choiceTab?.id && tabId !== tab.id) return;
-      browser.tabs.onRemoved.removeListener(close);
-      const pending = choices.get(id);
-      choices.delete(id);
-      if (pending) pending.finish(null);
+      if (tabId === tab.id) choice.finish(null);
     };
     try {
-      choiceTab = (await this.openTabSurface(browser.runtime.getURL('references/destination.html') + '#' + id, {}, tab)).tabs[0];
       browser.tabs.onRemoved.addListener(close);
-      const destination = await result;
-      if (!destination) return false;
-      if (destination.openManager) {
-        await transport({operation:'open',backendId:destination.backendId,...(destination.projectId ? {projectId:destination.projectId} : {})});
-        return false; // Opening the manager never becomes a capture session.
+      // Toolbar clicks use Gecko's action popup. Context-menu saves enter here
+      // directly and show the same native popup over their original source tab.
+      if (!choice.captureStarted) {
+        choice.captureStarted = true;
+        await browser.tabs.update(tab.id, {active:true});
+        await browser.browserAction.openPopup({windowId:tab.windowId});
       }
+      const destination = await choice.result;
+      if (!destination) return false;
       // Validate once more immediately before any capture operation; grants remain backend-owned.
       const readiness = await this.rpc(destination, 'ping', {});
       destination.prefs = Object.freeze({...readiness.prefs});
@@ -73,14 +80,13 @@ globalThis.References = new function () {
       destinations.set(tab.id, Object.freeze({...destination}));
       const captureID = crypto.randomUUID();
       sessions.set(captureID, Object.freeze({...destination, sourceTab:tab.id}));
-      await browser.tabs.update(tab.id, {active: true});
       return captureID;
     } catch (error) {
       await browser.browserAction.setTitle({tabId:tab.id,title:'References: '+error.message}).catch(() => {});
       throw error;
     } finally {
-      choices.delete(id); browser.tabs.onRemoved.removeListener(close);
-      if (choiceTab) await browser.tabs.remove(choiceTab.id).catch(() => {});
+      choices.delete(choice.id);
+      browser.tabs.onRemoved.removeListener(close);
     }
   };
   const resolverJobs = new Map();
@@ -368,7 +374,34 @@ globalThis.References = new function () {
       throw error;
     }
   };
+  const closeActionSurface = async surface => {
+    if (surface.closed) return;
+    surface.closed = true;
+    actionSurfaces.delete(surface.url);
+    surface.port?.disconnect();
+    try {
+      if (await browser.browserAction.getPopup({tabId:surface.source.id}) === surface.url) {
+        await browser.browserAction.setPopup({tabId:surface.source.id,popup:surface.previous});
+      }
+    } catch { /* The source tab may have closed. */ }
+    surface.onClose?.();
+  };
   this.openTabSurface = async (url, options={}, source=null) => {
+    if (url.startsWith(browser.runtime.getURL('itemSelector/itemSelector.html') + '#')) {
+      if (!source) throw new Error('References selector requires its source tab');
+      for (const surface of actionSurfaces.values()) {
+        if (surface.source.id === source.id) await closeActionSurface(surface);
+      }
+      const surface = {url,source,onClose:options.onClose,
+        previous:await browser.browserAction.getPopup({tabId:source.id})};
+      actionSurfaces.set(url,surface);
+      try {
+        await browser.tabs.update(source.id,{active:true});
+        await browser.browserAction.setPopup({tabId:source.id,popup:url});
+        await browser.browserAction.openPopup({windowId:source.windowId});
+        return {id:source.windowId,tabs:[source]};
+      } catch (error) { await closeActionSurface(surface); throw error; }
+    }
     // Let the native browser choose the ordinary user store. An application
     // tab's isolated service context is not a public Firefox container.
     const properties = {url:source?.incognito ? 'about:blank' : url, active:true};
@@ -390,24 +423,95 @@ globalThis.References = new function () {
   };
   browser.tabs.onRemoved.addListener(id => {
     destinations.delete(id);
+    for (const surface of actionSurfaces.values()) {
+      if (surface.source.id === id) void closeActionSurface(surface);
+    }
     // Keep session bindings until completed requests settle; do not redirect them on tab reuse.
     for (const [key, binding] of sessions) if (binding.sourceTab === id) sessions.delete(key);
   });
-  browser.runtime.onMessage.addListener((message, sender) => {
-    if (!message || message.references !== true) return undefined;
-    return (async () => {
-    if (sender.id !== browser.runtime.id || !sender.url?.startsWith(browser.runtime.getURL('references/destination.html'))) {
-      throw new Error('References chooser caller rejected');
+  browser.runtime.onConnect.addListener(port => {
+    if (port.name === 'references-selector') {
+      const surface = actionSurfaces.get(port.sender?.url);
+      if (port.sender?.id !== browser.runtime.id || !surface) { port.disconnect(); return; }
+      surface.port = port;
+      port.onDisconnect.addListener(() => void closeActionSurface(surface));
+      return;
     }
-    const pending = choices.get(message.id);
-    if (!pending) throw new Error('References destination choice expired');
-    if (message.action === 'context') {
-      const context = await this.context();
-      return {...context, previous:pending.destination};
+    if (port.name !== 'references-destination') return;
+    const sender = port.sender;
+    const chooserURL = browser.runtime.getURL('references/destination.html');
+    if (sender?.id !== browser.runtime.id || sender.url?.split(/[?#]/)[0] !== chooserURL) {
+      port.disconnect();
+      return;
     }
-    if (message.action === 'confirm') { pending.finish({...message.destination,target:'',openManager:message.openManager === true}); return true; }
-    if (message.action === 'cancel') { pending.finish(null); return true; }
-    throw new Error('Unknown References chooser operation');
-    })();
+    let choice, disconnected = false;
+    port.onDisconnect.addListener(() => {
+      disconnected = true;
+      // Start the native save after the chooser has actually closed, so a
+      // translator's native multi-item popup never competes with this popup.
+      choice?.finish(choice.confirmed || null);
+      if (choice && !choice.captureStarted) choices.delete(choice.id);
+    });
+    port.onMessage.addListener(message => {
+      (async () => {
+        if (message.action === 'context') {
+          if (choice) throw new Error('References chooser is already initialized');
+          await Zotero.initDeferred.promise;
+          const [tab] = await browser.tabs.query({active:true,currentWindow:true});
+          if (!tab || tab.id < 0) throw new Error('References requires an active browsing tab');
+          choice = choiceFor(tab) || [...choices.values()].find(value =>
+            value.source.id === tab.id && value.source.url === tab.url && !value.settled) || createChoice(tab);
+          const context = await this.context();
+          if (disconnected) { choice.finish(null); return; }
+          if (!/^https?:/.test(tab.url || '')) {
+            choice.captureError = 'This page cannot be captured. Open an ordinary webpage or PDF.';
+            return {...context, previous:choice.destination, captureError:choice.captureError};
+          }
+          if (!choice.captureStarted) {
+            choice.captureStarted = true;
+            // Keep the released Connector's translator/PDF selection and save flow.
+            Promise.resolve(Zotero.Connector_Browser.onZoteroButtonElementClick(tab)).catch(error => {
+              choice.captureError = error.message;
+              choice.finish(null);
+              if (!disconnected) port.postMessage({error:error.message,captureUnavailable:true});
+            }).finally(() => {
+              choice.captureFinished = true;
+              if (!choice.claimed) {
+                choice.finish(null);
+                choices.delete(choice.id);
+                if (!disconnected && !choice.captureError) {
+                  port.postMessage({error:'This page cannot be captured. Open an ordinary webpage or PDF.',captureUnavailable:true});
+                }
+              }
+            });
+          }
+          return {...context, previous:choice.destination};
+        }
+        if (!choice || disconnected) throw new Error('References destination choice expired');
+        const current = await browser.tabs.get(choice.source.id);
+        if (current.url !== choice.source.url) throw new Error('Capture source tab changed');
+        if (message.action === 'confirm') {
+          if (message.openManager === true) {
+            choice.confirmed = null;
+            const destination = message.destination;
+            await transport({operation:'open',backendId:destination.backendId,
+              ...(destination.projectId ? {projectId:destination.projectId} : {})});
+            choice.finish(null);
+          } else {
+            if (choice.captureError) throw new Error(choice.captureError);
+            if (choice.captureFinished && !choice.claimed) throw new Error(choice.captureError || 'This page cannot be captured');
+            choice.confirmed = {...message.destination,target:''};
+          }
+          return true;
+        }
+        if (message.action === 'cancel') { choice.finish(null); return true; }
+        throw new Error('Unknown References chooser operation');
+      })().then(result => {
+        if (!disconnected) port.postMessage({requestId:message.requestId,result});
+      }, error => {
+        if (choice && !choice.captureStarted) { choice.finish(null); choices.delete(choice.id); }
+        if (!disconnected) port.postMessage({requestId:message.requestId,error:error.message});
+      });
+    });
   });
 };

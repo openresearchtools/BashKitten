@@ -98,6 +98,7 @@ import org.mozilla.fenix.GleanMetrics.SplashScreen
 import org.mozilla.fenix.GleanMetrics.StartOnHome
 import org.mozilla.fenix.addons.ExtensionsProcessDisabledBackgroundController
 import org.mozilla.fenix.addons.ExtensionsProcessDisabledForegroundController
+import org.mozilla.fenix.addons.ReferencesCapturePopupDialogFragment
 import org.mozilla.fenix.bindings.ExternalAppLinkStatusBinding
 import org.mozilla.fenix.bindings.SummarizeToolbarHighlightBinding
 import org.mozilla.fenix.bookmarks.DesktopFolders
@@ -1583,6 +1584,18 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     }
 
     private fun openPopup(webExtensionState: WebExtensionState) {
+        if (webExtensionState.id == ReferencesCapturePopupDialogFragment.EXTENSION_ID) {
+            val existing = navHost.childFragmentManager.findFragmentByTag(ReferencesCapturePopupDialogFragment.TAG)
+                as? ReferencesCapturePopupDialogFragment
+            if (
+                !navHost.childFragmentManager.isStateSaved &&
+                (existing == null || existing.isRemoving || existing.dialog?.isShowing == false)
+            ) {
+                ReferencesCapturePopupDialogFragment.newInstance(webExtensionState.name)
+                    .showNow(navHost.childFragmentManager, ReferencesCapturePopupDialogFragment.TAG)
+            }
+            return
+        }
         val action = NavGraphDirections.actionGlobalWebExtensionActionPopupFragment(
             webExtensionId = webExtensionState.id,
             webExtensionTitle = webExtensionState.name,
