@@ -2347,3 +2347,24 @@ confinement. Preserve the existing WOPI/file authorization, private service data
 loopback listeners, remote transport and one shared supervisor-owned Office
 service. Source configuration and probes do not establish document acceptance;
 record actual native worker and open/edit/save/export results separately.
+
+## 30. Native Linux Office isolation policy — 1 November 2026
+
+The user extends the explicit 31 October Termux policy to desktop Linux and
+managed Linux containers. Native Office must work without requiring Landlock
+on older kernels or privileged namespace/chroot helpers. This supersedes the
+previous requirement to leave Linux isolation unchanged; preserve the earlier
+policy and historical acceptance records as dated history.
+
+Use the same upstream `security.capabilities=false` and
+`security.seccomp=true` configuration on Linux and Termux. Landlock may restrict
+workers when supported, but its absence must not prevent startup or document
+work. Keep seccomp mandatory and retain the existing Linux launcher’s clearing
+of inherited capabilities. Apply this policy explicitly through the existing
+Office launcher, without a second service or a failure-triggered retry policy.
+
+Document workers share the filesystem authority of their hosting user; seccomp
+does not provide per-document filesystem confinement. Preserve existing
+WOPI/file authorization, private runtime data, loopback listeners, authenticated
+remote transport and the shared service owner. Record native-worker/document
+probes separately from rebuilt-package and installed Files/editor acceptance.

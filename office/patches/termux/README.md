@@ -144,8 +144,9 @@ the retained host/target source graph, native ELF closure, full source/legal
 inventory and actual Termux app execution. Never solve a regression with
 `--enable-androidapp`, `MOBILEAPP`, `--disable-seccomp`, a container substitute,
 or a broad app-data allowlist. The explicit 31 October Termux platform policy
-supersedes the earlier mandatory-Landlock requirement; it does not change Linux
-isolation or weaken the retained Landlock rules on supported kernels.
+supersedes the earlier mandatory-Landlock requirement and preserves the retained
+Landlock rules on supported kernels. The 1 November policy extends the same
+native no-capabilities mode with mandatory seccomp to Linux.
 
 On 28 October 2026 the patched upstream Landlock and unchanged upstream seccomp
 sources compiled with NDK 30 for aarch64 and x86_64. The x86_64 probe ran in the

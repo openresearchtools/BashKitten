@@ -1,5 +1,15 @@
 # BashKitten · native Pi / Linux and Termux
 
+## 1 November native Linux Office policy
+
+The user extends the 31 October Termux Office policy to desktop Linux and
+managed Linux containers. Use Collabora's native `security.capabilities=false`
+mode with mandatory `security.seccomp=true`; Landlock may apply when available
+but must not be required. Document workers share their hosting user's filesystem
+authority. Preserve existing WOPI/file authorization, private service data and
+one service owner. This supersedes the earlier instruction to keep Linux
+isolation unchanged; see the [dated Office amendment](docs/files-office-bibliography-plan.md#30-native-linux-office-isolation-policy--1-november-2026).
+
 ## 31 October native Termux Office policy
 
 The user explicitly does not require per-document filesystem isolation inside

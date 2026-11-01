@@ -81,9 +81,10 @@ The user's 31 October policy selects upstream `security.capabilities=false`
 and `security.seccomp=true` for native Termux: Landlock may add restrictions
 when supported, but is not required. Android confines the whole Termux UID,
 not individual documents; workers share Termux's filesystem authority. This is
-an explicit platform policy, not a probe-triggered fallback, and Linux isolation
-is unchanged. `COOL_FORCE_LANDLOCK=1` is passed only to the existing systemplate
-setup helper so it creates its native no-chroot layout, never to the server.
+an explicit platform policy, not a probe-triggered fallback. The 1 November
+policy extends the same native mode to Linux. `COOL_FORCE_LANDLOCK=1` is passed
+only to the existing systemplate setup helper so it creates its native no-chroot
+layout, never to the server.
 The native user check retains the existing nonprivileged host launch option.
 
 Native application load/edit/coedit/save/reopen/export, three-editor citations,

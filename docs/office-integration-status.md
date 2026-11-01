@@ -5,6 +5,32 @@ This record separates research/temporary comparison evidence from implementation
 and installed-product acceptance. Historical checkpoints below retain the limits
 and failures of their original candidates; the current result is recorded first.
 
+## Native Linux Office launcher policy — 1 November 2026
+
+The user's new clarification extends the native Termux no-capabilities policy
+to desktop Linux and managed Linux containers. `prepareOffice()` now selects
+`security.capabilities=false` and `security.seccomp=true` for both platforms.
+The server is not given `COOL_FORCE_LANDLOCK`; Linux retains its existing
+inherited-capability clearing, and Termux retains its setup-only environment.
+The dated plan amendment records the shared-user filesystem boundary.
+
+On the Ubuntu arm64 host, installed 153.6 Office from `b1351a4a17ba` previously
+lost its document worker after AppArmor denied mount-namespace setup and the
+capability helper lacked its required capabilities. A separate native instance
+with the new options started workers while an inherited diagnostic seccomp
+filter made all three Landlock syscalls return `ENOSYS`. It loaded an ODT,
+exported PDF and DOCX, then reopened the DOCX and exported a PDF with matching
+text. Document workers had two seccomp filters versus the server's one,
+confirming the native worker filter remained active. This simulates Landlock
+absence on the current kernel; it is not an older-distribution compatibility pass.
+
+Source-launch checks on the updated checkout pass explicit Linux options,
+preserved capability clearing, a changed Linux configuration revision, and
+idempotent warm preparation. A target-manifest fixture confirms Termux launch
+bytes and configuration revision are unchanged. No probes, fixtures or personal
+runtime data are committed. The installed application was not modified, and no
+rebuilt-package or Files/editor browser acceptance is claimed by these checks.
+
 ## Android screenshot worker/thread defect — 31 October 2026
 
 The existing Android browser-channel access checker calls `GeckoSession.isOpen()`

@@ -70,9 +70,9 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
   await Promise.all([children, cache].map(value => fs.mkdir(value, { recursive: true, mode: 0o700 })));
   const termux = (manifest.target || manifest.platform) === 'termux';
   const options = {
-    // User-selected Termux policy: Android confines the app UID, not each
-    // document. Reuse upstream's no-capabilities mode; seccomp stays fatal.
-    ...(termux ? { 'security.capabilities': 'false', 'security.seccomp': 'true' } : {}),
+    // User-selected Linux/Termux policy: workers share their user's filesystem
+    // authority. Landlock is optional; native seccomp stays mandatory.
+    'security.capabilities': 'false', 'security.seccomp': 'true',
     'proof_key.path': proof, 'sys_template_path': systemplate, 'child_root_path': children,
     'file_server_root_path': paths.web,
     'cache_files.path': cache, 'net.proto': 'IPv4', 'net.listen': 'loopback',
@@ -91,7 +91,7 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
   const nativeArgv = [paths.coolwsd, '--disable-cool-user-checking', '--config-file=' + config, '--lo-template-path=' + paths.engine, '--port=' + port, ...Object.entries(options).map(([key, value]) => '--o:' + key + '=' + value)];
   // Native ForKit correctly rejects a non-cool user inheriting capabilities.
   // Drop the parent's unrelated Linux capability inheritance before native
-  // startup; preserve ForKit's checks, namespace selection and seccomp policy.
+  // startup; preserve ForKit's checks and mandatory seccomp policy.
   if (!termux) { try { await fs.access('/usr/bin/setpriv', fs.constants.X_OK); } catch { throw unavailable('the packaged Linux util-linux dependency is missing'); } }
   const nativeEnvironment = termux ? {
     PREFIX: '/data/data/com.termux/files/usr',
