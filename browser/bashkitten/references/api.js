@@ -13,6 +13,8 @@ this.bashkittenReferences = class extends ExtensionAPI {
         return () => Services.obs.removeObserver(observer, "bashkitten-references-resolve");
       } }).api(),
       request(envelope) {
+      const { BrowserControlChannel } = ChromeUtils.importESModule("resource:///modules/BrowserControlChannel.sys.mjs");
+      if (BrowserControlChannel.guestRequested) return BrowserControlChannel.guestReferencesRequest(envelope);
       const win = Services.wm.getMostRecentWindow("navigator:browser");
       if (!win?.BashKittenAgent) throw new Error("Open the owning backend first.");
       return win.BashKittenAgent.referencesRequest(envelope);

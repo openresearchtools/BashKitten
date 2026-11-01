@@ -275,7 +275,7 @@ async function handler(req, res) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Frame-Options', 'DENY');
-    if (await handleGuestBrowser(req, res, route, handleBrowserChannel)) return;
+    if (await handleGuestBrowser(req, res, route, handleBrowserChannel, apps)) return;
     if (route === '/api/instance') {
       if (req.method !== 'GET' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
       return json(res, { pid: process.pid, instance: instanceToken });

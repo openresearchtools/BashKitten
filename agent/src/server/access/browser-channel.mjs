@@ -16,9 +16,17 @@ export const browserSocketPath = id => {
 const failure = (message, code = 'browser_disconnected') => Object.assign(Error(message), { code });
 function close(channel, reason = 'Browser control disconnected') {
   if (!channels.delete(channel.id)) return;
+  channel.abort.abort();
   clearTimeout(channel.expiry); channel.unwatch?.();
   channel.poll?.finish({ closed: true, commands: [] });
   for (const pending of channel.pending.values()) { pending.reject(failure(reason)); }
+}
+export function guestBrowserChannelSignal(record, id) {
+  const channel = channels.get(id);
+  if (!record?.nativeGuest || !channel?.nativeGuest || channel.key !== record.key || channel.owner !== record.username) {
+    throw Object.assign(Error('The native guest browser connection expired'), { status: 403 });
+  }
+  return channel.abort.signal;
 }
 export function closeBrowserChannels(key) {
   for (const channel of channels.values()) if (!key || channel.key === key) close(channel);
@@ -155,7 +163,7 @@ export async function handleBrowserChannel(req, res, record, route) {
     if (!['linux', 'android'].includes(input.platform) || typeof input.clientId !== 'string' || input.clientId.length > 128) throw Error('Invalid browser identity');
     for (const old of channels.values()) if (old.clientId === input.clientId && old.key === record.key) close(old);
     const channel = { id: randomUUID(), clientId: input.clientId, key: record.key, owner: record.username, platform: input.platform,
-      nativeGuest: record.nativeGuest === true, name: String(input.name || 'Browser').slice(0, 100), capabilities: input.capabilities || {}, queue: [], pending: new Map() };
+      nativeGuest: record.nativeGuest === true, abort: new AbortController(), name: String(input.name || 'Browser').slice(0, 100), capabilities: input.capabilities || {}, queue: [], pending: new Map() };
     channel.unwatch = watch(record, () => close(channel, 'Browser authentication expired'));
     channels.set(channel.id, channel); touch(channel); json(res, { channelId: channel.id }); return true;
   }

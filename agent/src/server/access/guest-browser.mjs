@@ -4,8 +4,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { dataDir } from '../common.mjs';
+import { dataDir, json, jsonBody } from '../common.mjs';
 import { processStart } from '../instance.mjs';
+import { guestBrowserChannelSignal } from './browser-channel.mjs';
 
 const equal = (a,b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a),Buffer.from(b));
 export const guestBrowserRole = () => process.platform === 'linux' && process.env.BASHKITTEN_EXECUTION_ROLE === 'container' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(process.env.BASHKITTEN_MACHINE_ID || '');
@@ -55,14 +56,36 @@ export async function guestBrowserBootstrap(stack, value) {
       env.BASHKITTEN_GUEST_BROWSER !== '1' || env.BASHKITTEN_EXECUTION_ROLE !== 'container' || env.BASHKITTEN_MACHINE_ID !== process.env.BASHKITTEN_MACHINE_ID ||
       await fs.realpath(env.BASHKITTEN_DATA_DIR || '') !== await fs.realpath(dataDir) || !await registeredGuestProfile(profile,env,uid) ||
       /^\s*0\s+0\s+4294967295\s*$/.test(uidMap) || !await processStart(browserPid)) throw Error('Guest browser/profile ownership did not match its registered environment');
-  return { version: 1, socket: stack.info.socket, origin: stack.origin, credential: stack.guestBrowserToken, browserPid, started: await processStart(browserPid) };
+  return { version: 1, socket: stack.info.socket, origin: stack.origin, credential: stack.guestBrowserToken,
+    backendId: stack.identity.instanceId, browserPid, started: await processStart(browserPid) };
 }
-export async function handleGuestBrowser(req,res,route,handleBrowserChannel) {
+export async function handleGuestBrowser(req,res,route,handleBrowserChannel,apps) {
   const prefix='/api/native-guest-browser/'; if(!route.startsWith(prefix))return false;
   const secret=process.env.BASHKITTEN_GUEST_BROWSER_OWNER_TOKEN;
   if(!guestBrowserRole()||!secret||req.method!=='POST'||req.headers.origin||req.headers['x-bashkitten-proxy']||req.socket.remoteAddress||!equal(req.headers.authorization,'Bearer '+secret))throw Object.assign(Error('Native guest browser authorization required'),{status:403});
-  const operation=route.slice(prefix.length);if(!['open','poll','result','close','bind'].includes(operation))throw Object.assign(Error('Unknown guest browser operation'),{status:404});
+  const operation=route.slice(prefix.length);if(!['open','poll','result','close','bind','references'].includes(operation))throw Object.assign(Error('Unknown guest browser operation'),{status:404});
   const cookie=process.env.BASHKITTEN_LOCAL_TOKEN;
   const record={local:true,nativeGuest:true,username:'local',cookie,key:createHash('sha256').update('local\0'+cookie).digest('hex'),origin:process.env.BASHKITTEN_ACCESS_ORIGIN};
+  if(operation==='references') {
+    const request=await jsonBody(req), input=request.envelope;
+    const channelSignal=guestBrowserChannelSignal(record,request.channelId),backendId=await apps.identity();
+    if(!input||input.apiVersion!==1||!['context','request','open'].includes(input.operation))throw Object.assign(Error('Unsupported References host API'),{status:400});
+    if(input.operation!=='context'&&input.backendId!==backendId)throw Object.assign(Error('The References backend changed'),{status:403});
+    if(input.operation!=='context'&&!(input.operation==='open'&&input.projectId==null)&&!/^[a-f0-9-]{36}$/.test(input.projectId||''))throw Object.assign(Error('Choose a References project'),{status:400});
+    const controller=new AbortController(),cancel=()=>controller.abort(Error('Guest browser request ended'));
+    const signal=AbortSignal.any([channelSignal,controller.signal]);
+    res.once('close',cancel);
+    try {
+      signal.throwIfAborted();
+      let response;
+      if(input.operation==='open')response={apiVersion:1,launch:await apps.open('references',{projectId:input.projectId},record)};
+      else if(input.operation==='context') {
+        const context=await apps.connector(input,record,{signal});
+        response={apiVersion:1,body:{...context,selectedProjectId:context.referenceProjectId||null}};
+      } else response={...await apps.connector(input,record,{signal}),apiVersion:1};
+      signal.throwIfAborted();json(res,response);
+    } finally {res.off('close',cancel);}
+    return true;
+  }
   await handleBrowserChannel(req,res,record,'/api/browser-channel/'+operation);return true;
 }

@@ -19,7 +19,7 @@ const send=value=>process.stdout.write(JSON.stringify(value)+'\n');
 let active, watcher, refreshTimer, candidate, revision=0, wake;
 async function request(state,operation,body,signal=state.abort.signal){
   const {link}=state;
-  const response=await unixRequest(link.socket,'/api/native-guest-browser/'+operation,{method:'POST',headers:{host:new URL(link.origin).host,authorization:'Bearer '+link.credential,'content-type':'application/json'},body:JSON.stringify(body),timeout:operation==='poll'?30000:10000,signal});
+  const response=await unixRequest(link.socket,'/api/native-guest-browser/'+operation,{method:'POST',headers:{host:new URL(link.origin).host,authorization:'Bearer '+link.credential,'content-type':'application/json'},body:JSON.stringify(body),timeout:operation==='references'?120000:operation==='poll'?30000:10000,signal});
   const value=JSON.parse(response.body);if(response.status!==200)throw Error(value.error||'Guest browser channel closed');return value;
 }
 async function connection(link,registration){
@@ -28,17 +28,21 @@ async function connection(link,registration){
   try {
     const opened=await request(state,'open',{clientId:registration.clientId||randomUUID(),name:'Container browser',platform:'linux',capabilities:registration.capabilities});
     state.channelId=opened.channelId;if(!state.channelId)throw Error('Guest browser channel unavailable');
-    await writeJson(file,{connected:true,pid:registration.browserPid,error:null});send({ready:true});
+    await writeJson(file,{connected:true,pid:registration.browserPid,error:null});send({ready:true,backendId:link.backendId,channelId:state.channelId});
     const cancelled=new Promise((_,reject)=>state.abort.signal.addEventListener('abort',()=>reject(Error('Guest browser connection changed')),{once:true}));
     const poll=(async()=>{while(!state.abort.signal.aborted){
       if(await processStart(link.browserPid)!==link.started)throw Error('Guest browser owner exited');
       const response=await request(state,'poll',{channelId:state.channelId});
       if(response.closed)throw Error('Guest browser channel closed');
       if(!Array.isArray(response.commands)||response.commands.length>64)throw Error('Invalid guest browser command batch');
-      await Promise.all(response.commands.map(async command=>{
+      await Promise.all(response.commands.map(command=>{
         if(typeof command.id!=='string'||state.pending.has(command.id))throw Error('Invalid guest browser command identity');
         const reply=new Promise((resolve,reject)=>state.pending.set(command.id,{resolve,reject}));send(command);
-        const value=await reply;await request(state,'result',{channelId:state.channelId,id:command.id,...(value.error?{error:value.error}:{result:value.result})});
+        const receipt=reply.then(value=>request(state,'result',{channelId:state.channelId,id:command.id,...(value.error?{error:value.error}:{result:value.result})}));
+        // Human resolver challenges keep their existing bounded receipt while
+        // ordinary browser commands continue through the same guest channel.
+        if(command.method==='references.resolve'){void receipt.catch(()=>state.abort.abort());return;}
+        return receipt;
       }));
     }})();
     await Promise.race([poll,cancelled]);
@@ -75,7 +79,16 @@ async function run(){
   watcher.on('error',()=>shutdown.abort());
   await refresh();
   const input=(async()=>{for await(const line of{[Symbol.asyncIterator]:()=>iterator}){
-    const value=JSON.parse(line);const pending=active?.pending.get(value.id);
+    const value=JSON.parse(line);
+    if(value.references) {
+      const state=active,{id,channelId,envelope}=value.references;
+      if(!state||state.abort.signal.aborted||channelId!==state.channelId||typeof id!=='string'||!/^[a-f0-9-]{36}$/.test(id))continue;
+      void request(state,'references',{channelId,envelope}).then(result=>({result}),error=>({error:error.message||'References request failed'})).then(result=>{
+        if(active===state&&!state.abort.signal.aborted)send({references:{id,channelId,...result}});
+      });
+      continue;
+    }
+    const pending=active?.pending.get(value.id);
     // An already dispatched command can finish after service revocation. Its
     // response has no destination and is never carried into the new channel.
     if(pending){active.pending.delete(value.id);pending.resolve(value);}

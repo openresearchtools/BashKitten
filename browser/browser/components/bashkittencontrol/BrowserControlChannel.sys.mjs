@@ -45,7 +45,7 @@ export const BrowserControlChannel = {
   },
 
   async openGuest() {
-    const state = { controller: new AbortController(), results: new Map(), write: Promise.resolve(), connected: false, generation: 0 };
+    const state = { controller: new AbortController(), results: new Map(), references: new Map(), resolvers: new Map(), write: Promise.resolve(), connected: false, generation: 0 };
     this.guest = state;
     state.process = await lazy.Subprocess.call({
       command: "/usr/lib/bashkitten/node/bin/node",
@@ -54,10 +54,11 @@ export const BrowserControlChannel = {
     });
     // Do not expose command content, credentials or runtime output in logs.
     const stderr = (async () => { while (await state.process.stderr.readString()) {} })().catch(() => {});
-    const send = value => {
-      state.write = state.write.then(() => state.process.stdin.write(JSON.stringify(value) + "\n"));
+    const send = (value, current = () => true) => {
+      state.write = state.write.then(() => current() ? state.process.stdin.write(JSON.stringify(value) + "\n") : undefined);
       return state.write;
     };
+    state.send = send;
     try {
       if (state.controller.signal.aborted) throw new Error("Guest browser is stopping");
       const capabilities = await BrowserControl.execute({ method: "capabilities" });
@@ -70,13 +71,23 @@ export const BrowserControlChannel = {
         while ((newline = buffered.indexOf("\n")) !== -1) {
           const command = JSON.parse(buffered.slice(0, newline));
           buffered = buffered.slice(newline + 1);
-          if (command.ready === true) { state.controller = new AbortController(); state.generation++; state.connected = true; continue; }
+          if (command.ready === true) {
+            if (!/^[a-f0-9-]{36}$/.test(command.backendId || "") || !/^[a-f0-9-]{36}$/.test(command.channelId || "")) throw new Error("Invalid guest backend identity");
+            state.controller.abort();
+            state.backendId = command.backendId; state.channelId = command.channelId;
+            state.controller = new AbortController(); state.generation++; state.connected = true; continue;
+          }
           if (command.disconnected) {
             state.connected = false; state.generation++; state.controller.abort(); state.results.clear();
             Services.obs.notifyObservers(null, "bashkitten-browser-control-disconnected", "container");
             continue;
           }
           if (command.closed) throw new Error("Guest browser control disconnected");
+          if (command.references) {
+            const reply = command.references, pending = state.references.get(reply.id);
+            if (pending && reply.channelId === state.channelId) pending.finish(reply.error ? new Error(reply.error) : null, reply.result);
+            continue;
+          }
           if (!state.connected || typeof command.id !== "string" || typeof command.method !== "string" ||
               !command.params || typeof command.params !== "object" || Array.isArray(command.params)) {
             throw new Error("Invalid guest browser command");
@@ -113,6 +124,7 @@ export const BrowserControlChannel = {
 
   async executeGuest(state, command) {
     const { signal } = state.controller;
+    if (command.method === "references.resolve") return this.resolveGuestReference(state, command.params, signal);
     if (!lazy.BrowserWindowTracker.getTopWindow() &&
         (["tabs.create", "tabs.open"].includes(command.method) ||
          (command.method === "tabs" && ["new", "open", "create"].includes(command.params.action)))) {
@@ -125,6 +137,86 @@ export const BrowserControlChannel = {
       await state.openingWindow;
     }
     return BrowserControl.execute({ method: command.method, params: command.params }, { signal });
+  },
+
+  async guestReferencesRequest(envelope) {
+    const state = this.guest;
+    const generation = state?.generation, signal = state?.controller.signal, channelId = state?.channelId;
+    const current = () => this.guestRequested && this.guest === state && state?.connected &&
+      state.generation === generation && state.channelId === channelId && !signal.aborted && !this.guestQuitting;
+    if (!current()) throw new Error("The container browser is not connected to its backend.");
+    if (envelope?.apiVersion !== 1) throw new Error("Unsupported References host API.");
+    if (envelope.operation !== "context" && (envelope.backendId !== state.backendId ||
+        !((envelope.operation === "open" && envelope.projectId == null) || /^[a-f0-9-]{36}$/.test(envelope.projectId || "")))) {
+      throw new Error("Select the capture's owning backend and project.");
+    }
+    if (envelope.operation === "resolver-result") {
+      const pending = state.resolvers.get(envelope.requestId);
+      if (!pending || !pending.current() || envelope.projectId !== pending.projectId || JSON.stringify(envelope).length > 8192) {
+        throw new Error("Resolver request is no longer active.");
+      }
+      pending.finish(envelope.error ? new Error(String(envelope.error).slice(0, 500)) : null, envelope.result);
+      return { apiVersion: 1, body: { ok: true } };
+    }
+    if (!["context", "request", "open"].includes(envelope.operation)) throw new Error("Unsupported References operation.");
+    const response = await this.guestReferenceCall(state, envelope);
+    if (!current()) throw new Error("The container backend changed.");
+    if (response?.apiVersion !== 1) throw new Error("Incompatible References backend host.");
+    if (envelope.operation === "context" && response.body?.backendId !== state.backendId) throw new Error("The References backend changed.");
+    if (envelope.operation !== "open") return response;
+    const launch = response.launch, url = new URL(launch?.url);
+    if (launch.component !== "references" || launch.serviceId !== "files" || launch.identity?.instanceId !== state.backendId ||
+        url.protocol !== "https:" || url.hostname !== "127.0.0.1" || url.username || url.password || url.hash ||
+        !/^\/apps\/references\/[a-f0-9-]{36}\//.test(url.pathname) || url.pathname + url.search !== launch.openPath) {
+      throw new Error("References did not return a valid local launch address.");
+    }
+    const win = lazy.BrowserWindowTracker.getTopWindow();
+    if (!win?.gBrowser || win.closed) throw new Error("No browser window is ready.");
+    const userContextId = AgentRemotes.applicationContext("guest:" + state.backendId, Number(url.port) || 443, launch.identity);
+    win.gBrowser.selectedTab = win.gBrowser.addTrustedTab(url.href, { userContextId });
+    return { apiVersion: 1, body: { ok: true } };
+  },
+
+  guestReferenceCall(state, envelope) {
+    return new Promise((resolve, reject) => {
+      const id = crypto.randomUUID(), { signal } = state.controller, generation = state.generation, channelId = state.channelId;
+      let timer;
+      const abort = () => pending.finish(new Error("The container backend changed."));
+      const pending = { finish: (error, result) => {
+        if (state.references.get(id) !== pending) return;
+        state.references.delete(id); clearTimeout(timer); signal.removeEventListener("abort", abort);
+        if (error) reject(error); else resolve(result);
+      } };
+      state.references.set(id, pending);
+      timer = setTimeout(() => pending.finish(new Error("References request timed out.")), 120000);
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) { abort(); return; }
+      void state.send({ references: { id, channelId, envelope } }, () => this.guest === state && state.connected &&
+        state.generation === generation && state.channelId === channelId && !signal.aborted && !this.guestQuitting).catch(error => pending.finish(error));
+    });
+  },
+
+  resolveGuestReference(state, value, signal) {
+    const current = () => this.guest === state && state.connected && !this.guestQuitting && !signal.aborted;
+    if (!current() || (value.backendId && value.backendId !== state.backendId) ||
+        !/^[a-f0-9-]{36}$/.test(value.projectId || "") || !/^[a-f0-9-]{36}$/.test(value.requestId || "")) {
+      throw new Error("Select the resolver job's owning backend and project.");
+    }
+    if (state.resolvers.has(value.requestId) || state.resolvers.size >= 32) throw new Error("A resolver request is already pending.");
+    if (!Services.obs.enumerateObservers("bashkitten-references-resolve").hasMoreElements()) throw new Error("References capture is not ready.");
+    return new Promise((resolve, reject) => {
+      let timer;
+      const abort = () => pending.finish(new Error("Resolver request cancelled."));
+      const pending = { projectId: value.projectId, current, finish: (error, result) => {
+        if (state.resolvers.get(value.requestId) !== pending) return;
+        state.resolvers.delete(value.requestId); clearTimeout(timer); signal.removeEventListener("abort", abort);
+        if (error) reject(error); else resolve(result);
+      } };
+      state.resolvers.set(value.requestId, pending);
+      timer = setTimeout(() => pending.finish(new Error("Resolver browser response timed out; check the job status.")), 600000);
+      signal.addEventListener("abort", abort, { once: true });
+      Services.obs.notifyObservers(null, "bashkitten-references-resolve", JSON.stringify({ backendId: state.backendId, projectId: value.projectId, requestId: value.requestId }));
+    });
   },
 
   async closeGuest() {
