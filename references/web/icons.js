@@ -10,6 +10,8 @@ const paths = {
   refresh: '<path d="M20 7V3l-3 3a8 8 0 1 0 3 10M20 3h-5"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
   columns: '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M9 4v16M15 4v16"/>',
+  'sidebar-left': '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M6 8v8"/>',
+  'sidebar-right': '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M18 8v8"/>',
   select: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3 3 7-7"/>',
   edit: '<path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14z"/>',
   save: '<path d="m5 12 4 4L20 5"/>',

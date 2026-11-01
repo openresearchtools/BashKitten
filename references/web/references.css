@@ -168,10 +168,18 @@ h3 {
   margin-right: auto;
 }
 .library-layout {
+  --projects-width: 220px;
+  --details-width: 370px;
   display: grid;
-  grid-template-columns: 220px minmax(260px, 1fr) minmax(290px, 370px);
+  grid-template-columns: var(--projects-width) minmax(260px, 1fr) var(--details-width);
   min-height: 0;
 }
+.app[data-sidecar-layout="fixed"][data-projects-open="false"] .library-layout { --projects-width: 0px; }
+.app[data-sidecar-layout="fixed"][data-details-open="false"] .library-layout { --details-width: 0px; }
+.libraries { grid-column: 1; }
+.library-main { grid-column: 2; }
+.item-details { grid-column: 3; }
+.libraries, .library-main, .item-details { grid-row: 1; }
 .libraries,
 .library-main,
 .item-details {
@@ -186,6 +194,14 @@ h3 {
   border-right: 1px solid var(--line);
   gap: 12px;
 }
+.item-details-content { display: flex; flex-direction: column; min-width: 0; gap: 12px; }
+.sidecar-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; }
+.sidecar-header h2 { font-size: 14px; }
+.item-details > .sidecar-header { position: sticky; top: -12px; z-index: 5; padding-block: 5px; background: var(--bg); }
+.sidecar-header .icon-only { width: 28px; height: 28px; }
+.libraries > .sidecar-header { position: sticky; top: -12px; z-index: 5; padding-block: 5px; background: var(--panel); }
+.sidecar-backdrop { position: fixed; inset: 0; z-index: 40; border: 0; border-radius: 0; background: #0006; }
+.sidecar-backdrop:hover:not(:disabled) { background: #0006; }
 .libraries h2 {
   font-size: 14px;
 }
@@ -195,6 +211,7 @@ h3 {
 }
 .item-details {
   border-left: 1px solid var(--line);
+  background: var(--bg);
   padding: 12px;
   overflow: auto;
   gap: 12px;
@@ -778,9 +795,6 @@ h3 {
   border-radius: 8px;
   line-height: 1.5;
 }
-.mobile-tabs {
-  display: none;
-}
 .search-results {
   height: 300px;
   display: flex;
@@ -855,7 +869,9 @@ h3 {
 }
 @media (max-width: 1000px) {
   .library-layout {
-    grid-template-columns: 180px minmax(200px, 1fr) 290px;
+    --projects-width: 180px;
+    --details-width: 290px;
+    grid-template-columns: var(--projects-width) minmax(200px, 1fr) var(--details-width);
   }
   .record-row,
   .table-header {
@@ -881,33 +897,6 @@ h3 {
   }
   .app-header h1 {
     font-size: 16px;
-  }
-  .mobile-tabs {
-    display: flex;
-    flex-basis: 100%;
-    order: 1;
-    gap: 4px;
-  }
-  .mobile-tabs button {
-    padding: 6px 9px;
-    font-size: 12px;
-  }
-  .library-layout {
-    display: block;
-    position: relative;
-  }
-  .libraries,
-  .library-main,
-  .item-details {
-    position: absolute;
-    inset: 0;
-    display: none;
-    border: 0;
-  }
-  .app[data-pane="libraries"] .libraries,
-  .app[data-pane="items"] .library-main,
-  .app[data-pane="details"] .item-details {
-    display: flex;
   }
   .record-row,
   .table-header {
@@ -1036,8 +1025,9 @@ h3 {
 }
 
 /* Manager controls use the same native theme variables as the citation chooser. */
-.reference-toolbar { flex-wrap: nowrap; }
-.toolbar-spacer { flex: 1; }
+.reference-toolbar { flex-wrap: nowrap; flex-shrink: 0; min-width: 0; overflow-x: auto; overflow-y: hidden; padding-block: 2px; scrollbar-width: thin; overscroll-behavior-x: contain; }
+.reference-toolbar > button { flex: none; }
+.reference-toolbar > [aria-expanded="true"] { background: var(--hover); }
 .reference-search {
   display: flex;
   align-items: center;
@@ -1052,22 +1042,25 @@ h3 {
 .reference-search input { width: 100%; min-width: 0; border: 0; background: transparent; }
 .reference-search .icon { color: var(--muted); flex: none; }
 .search-row { flex-wrap: wrap; align-items: center; }
-.search-row #actions { flex: 1 1 170px; min-width: 0; max-width: 100%; }
-#multiSelect { display: inline-flex; gap: 6px; align-items: center; }
-#multiSelect[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
-.action-menu { position: relative; padding: 0; border: 0; flex: none; }
-.action-menu > summary {
-  display: grid; place-items: center; width: 34px; height: 34px;
-  cursor: pointer; list-style: none; border: 1px solid var(--line); border-radius: 999px;
+.library-main { container: references-pane / inline-size; }
+.selection-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.selection-row #actions { flex: 1 1 140px; min-width: 0; max-width: 100%; }
+.selection-row button { flex: none; padding: 7px 10px; white-space: nowrap; }
+.selection-label-wide { display: none; }
+@container references-pane (min-width: 420px) {
+  .selection-label-wide { display: inline; }
+  .selection-label-short { display: none; }
 }
-.action-menu > summary::-webkit-details-marker { display: none; }
+.action-menu-toggle { margin-inline-start: auto; }
 .action-menu-items {
-  position: absolute; right: 0; top: calc(100% + 5px); z-index: 20;
+  position: fixed; inset: auto; margin: 0; z-index: 20;
   display: flex; flex-direction: column; gap: 3px; padding: 6px;
   min-width: 170px; max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 16px); overflow: auto;
   border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
   box-shadow: 0 5px 18px #0003;
 }
+.action-menu-items:not(:popover-open) { display: none; }
 .action-menu-items button { text-align: start; border: 0; border-radius: 5px; }
 .reference-grid { display: flex; flex-direction: column; flex: 1; min-height: 120px; overflow: hidden; }
 .reference-grid .item-list { min-height: 0; }
@@ -1084,8 +1077,9 @@ h3 {
 .reference-grid .reference-column { position: relative; overflow: hidden; min-width: 0; }
 .reference-column > button { width: 100%; padding: 8px 18px 8px 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .reference-grid .record-row > span { padding: 8px; }
+.reference-grid .record-row { height: 100%; touch-action: manipulation; user-select: none; }
+.reference-grid .record-row > .grid-select-cell { display: grid; place-items: center; align-self: stretch; cursor: pointer; }
 .reference-grid .grid-select-cell { padding: 0; overflow: hidden; text-align: center; }
-.reference-grid:not([data-multiselect="true"]) .grid-select-cell { visibility: hidden; }
 .reference-grid .row-checkbox { width: 16px; height: 16px; padding: 0; margin: 0; }
 .reference-column .citation-column-resizer { right: 0; }
 .reference-column .citation-column-resizer::after { left: auto; right: 0; }
@@ -1115,10 +1109,8 @@ h3 {
   .app-header { gap: 6px; }
   .app-header h1 { font-size: 16px; }
   .app-header > .icon-only { width: 32px; height: 32px; }
-  .reference-search { flex-basis: calc(100% - 48px); min-width: 0; }
-  .search-row #actions { flex: 1 1 180px; }
-  .reference-toolbar .icon-only,
-  .action-menu > summary { width: 40px; height: 40px; }
+  .reference-search { flex-basis: 100%; min-width: 0; }
+  .reference-toolbar .icon-only { width: 40px; height: 40px; }
   .reference-grid .table-header { min-height: 40px; }
   .reference-grid .table-header button { min-height: 40px; }
   .reference-grid .virtual-row { border-radius: 5px; }
@@ -1130,6 +1122,18 @@ h3 {
   .libraries { overflow: auto; }
   .library-main { overflow: auto; }
   .library-main > .toolbar,
-  .library-main > .search-row { flex-shrink: 0; }
+  .library-main > .search-row,
+  .library-main > .selection-row { flex-shrink: 0; }
   .reference-grid { flex: 1 0 150px; }
+}
+@media (max-width: 768px) {
+  .library-layout { display: block; position: relative; }
+  .library-main { height: 100%; }
+  .libraries,
+  .item-details {
+    position: fixed; z-index: 50; inset: 0 auto 0 0;
+    width: min(86vw, 280px); height: 100dvh;
+    border: 0; box-shadow: 10px 0 30px #0004;
+  }
+  .item-details { inset-inline: auto 0; width: min(94vw, 370px); box-shadow: -10px 0 30px #0004; }
 }

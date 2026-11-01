@@ -10,12 +10,11 @@ const defaults = [
 ];
 const preferenceKey = 'bashkitten.references.grid.v1';
 export class ReferenceGrid {
-  constructor({ root, header, selected, onSelect, onSort, onColumns }) {
-    Object.assign(this, { root, header, selected, onSelect, onSort, onColumns });
+  constructor({ root, header, selected, onSelect, onSort, onColumns, onActivate = () => {} }) {
+    Object.assign(this, { root, header, selected, onSelect, onSort, onColumns, onActivate });
     this.available = new Map(defaults.map(column => [column.id, column]));
     this.visible = defaults.map(column => column.id);
     this.widths = new Map();
-    this.multiple = false;
     this.observer = new ResizeObserver(() => this.applyWidths());
     this.observer.observe(root);
     try {
@@ -44,11 +43,6 @@ export class ReferenceGrid {
   }
   columns() { return this.visible.map(id => this.available.get(id)); }
   fields() { return this.visible.filter(id => !defaults.some(column => column.id === id)); }
-  setMultiple(enabled) {
-    this.multiple = enabled;
-    this.root.dataset.multiselect = String(enabled);
-    this.applyWidths();
-  }
   setSort(sort, direction) { this.sort = sort; this.direction = direction; this.renderHeader(); }
   save() {
     try { localStorage.setItem(preferenceKey, JSON.stringify({ columns: this.visible, widths: Object.fromEntries(this.widths) })); }
@@ -58,7 +52,7 @@ export class ReferenceGrid {
     if (!this.root.clientWidth) return;
     const columns = this.columns();
     const widths = columns.map(column => this.widths.get(column.id) || column.width);
-    const selectionWidth = this.multiple ? 32 : 0;
+    const selectionWidth = 32;
     const room = this.root.clientWidth - selectionWidth;
     const shortage = widths.reduce((sum, width) => sum + width, 0) - room;
     const flexible = columns.reduce((sum, column, index) => sum + (this.widths.has(column.id) ? 0 : widths[index] - column.min), 0);
@@ -67,8 +61,8 @@ export class ReferenceGrid {
         if (!this.widths.has(column.id)) widths[index] -= Math.min(shortage, flexible) * (widths[index] - column.min) / flexible;
       });
     this.renderedWidths = new Map(columns.map((column, index) => [column.id, widths[index]]));
-    this.root.style.setProperty('--reference-columns', [this.multiple ? '32px' : '0px', ...widths.map(width => width + 'px')].join(' '));
-    this.root.style.setProperty('--reference-width', (widths.reduce((sum, width) => sum + width, this.multiple ? 32 : 0)) + 'px');
+    this.root.style.setProperty('--reference-columns', ['32px', ...widths.map(width => width + 'px')].join(' '));
+    this.root.style.setProperty('--reference-width', (widths.reduce((sum, width) => sum + width, selectionWidth)) + 'px');
     for (const separator of this.header.querySelectorAll('.citation-column-resizer')) {
       const column = this.available.get(separator.parentElement.dataset.column);
       separator.setAttribute('aria-valuemin', String(column.min));
@@ -137,11 +131,35 @@ export class ReferenceGrid {
       await this.onSelect(item, { toggle: true, range, index });
       checkbox.checked = this.selected(item);
     };
-    const row = node('div', { class: 'record-row' }, node('span', { class: 'grid-select-cell' }, checkbox));
+    const selectionCell = node('label', { class: 'grid-select-cell', role: 'gridcell' }, checkbox);
+    selectionCell.onclick = event => event.stopPropagation();
+    const row = node('div', { class: 'record-row' }, selectionCell);
     for (const column of this.columns()) {
       const value = this.value(item, column);
       row.append(node('span', { role: 'gridcell', title: value }, value));
     }
+    let touchStart, lastTap = null, touchActivation = -Infinity;
+    row.onpointerdown = event => {
+      if (event.pointerType === 'touch') touchStart = { id: event.pointerId, x: event.clientX, y: event.clientY, time: event.timeStamp };
+    };
+    row.onpointercancel = () => { touchStart = null; lastTap = null; };
+    row.onpointerup = event => {
+      if (event.pointerType !== 'touch') return;
+      const start = touchStart;
+      touchStart = null;
+      if (!start || start.id !== event.pointerId || event.timeStamp - start.time > 300 ||
+          Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10 || event.target.closest('input,label,button,a')) {
+        lastTap = null;
+        return;
+      }
+      if (lastTap !== null && event.timeStamp - lastTap < 350) {
+        lastTap = null;
+        touchActivation = event.timeStamp;
+        this.onActivate(item);
+      } else lastTap = event.timeStamp;
+    };
+    // Some touch browsers also emit a mouse double-click for the same gesture.
+    row.ondblclick = event => { if (event.timeStamp - touchActivation < 500) event.stopPropagation(); };
     return row;
   }
   chooseColumns() {

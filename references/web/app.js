@@ -16,6 +16,8 @@ import {
 } from "./common.js";
 import { VirtualList } from "./virtual-list.js";
 import { ReferenceGrid } from "./reference-grid.js";
+import { createSidecars } from "./sidecars.js";
+import { createReferenceToolbar } from "./toolbar.js";
 import { icon, iconButton } from "./icons.js";
 import { chooseCitation } from "./shared-citation-dialog.js";
 import {
@@ -50,6 +52,7 @@ let projectId,
   jobTimer,
   jobsPolling = false,
   appRetired = false,
+  selectionPending = false,
   activeSearch = "",
   deleted = false;
 const notify = (message) => {
@@ -57,47 +60,102 @@ const notify = (message) => {
   if (target) target.textContent = message?.message || message || "";
 };
 const pane = (name) => {
-  $("#app").dataset.pane = name;
-  if (name === "items") grid.applyWidths();
+  if (name === "details") sidecars.show("details");
+  else if (name === "libraries") sidecars.show("projects");
+  else sidecars.showMain();
 };
-for (const button of document.querySelectorAll("[data-pane]"))
-  button.addEventListener("click", () => pane(button.dataset.pane));
-let multipleSelection = false;
 const grid = new ReferenceGrid({
   root: $("#referenceGrid"), header: $("#itemHeader"),
   selected: item => selection.has(item.key),
+  onActivate: activateItem,
   onSelect: (item, event) => {
     if (items) items.focusIndex = event.index;
     return selectItem(item, event);
   },
   onSort: column => {
+    cancelSelection();
     direction = sort === column && direction === "asc" ? "desc" : "asc";
     sort = column;
     grid.setSort(sort, direction);
     selection.clear();
     items?.reset({ preserveSelection: false });
+    updateSelectionActions();
   },
-  onColumns: () => items?.reset({ preservePosition: true }),
+  onColumns: () => {
+    cancelSelection();
+    items?.reset({ preservePosition: true });
+  },
 });
 for (const [id, artwork, caption] of [
   ["newItem", "add", "New item"], ["identifiers", "identifier", "Add by identifier"],
   ["importReferences", "import", "Import references"], ["openalex", "literature", "Search literature with OpenAlex"],
   ["refresh", "refresh", "Reload references"], ["jobHistory", "jobs", "Jobs"],
   ["settings", "settings", "References settings"], ["about", "info", "About References"],
+  ["toggleProjects", "sidebar-left", "Projects sidecar"], ["toggleDetails", "sidebar-right", "Item details sidecar"],
+  ["closeProjects", "close", "Close Projects"], ["closeDetails", "close", "Close item details"],
 ]) iconButton($("#" + id), artwork, caption);
+const sidecars = createSidecars({
+  app: $("#app"), header: $(".app-header"), main: $("#referenceMain"),
+  projects: $("#projectsPanel"), details: $("#detailsPanel"),
+  projectsToggle: $("#toggleProjects"), detailsToggle: $("#toggleDetails"),
+  projectsClose: $("#closeProjects"), detailsClose: $("#closeDetails"),
+  backdrop: $("#sidecarBackdrop"),
+  onLayout: () => { grid.applyWidths(); items?.draw(); },
+});
 $("#searchIcon").append(icon("search"));
 $("#menuIcon").replaceChildren(icon("menu"));
-$("#multiSelect").replaceChildren(icon("select"), node("span", {}, "Select"));
-$("#multiSelect").onclick = () => {
-  multipleSelection = !multipleSelection;
-  $("#multiSelect").setAttribute("aria-pressed", String(multipleSelection));
-  grid.setMultiple(multipleSelection);
-  items?.draw();
+const referenceToolbar = createReferenceToolbar({
+  toolbar: $(".reference-toolbar"), button: $("#referenceMenuButton"), menu: $("#referenceMenu"),
+});
+$("#selectNone").onclick = () => {
+  cancelSelection();
+  selection.clear();
+  anchor = null;
+  syncSelection();
+  notify("No items selected.");
+};
+$("#selectAll").onclick = async () => {
+  if (!scope || !items || !projectReady) return;
+  cancelSelection();
+  const targetScope = scope, list = items, generation = list.generation,
+    configuration = itemQuery(), controller = (rangeController = new AbortController()),
+    signal = AbortSignal.any([controller.signal, list.controller.signal]), chosen = new Map();
+  const current = () => !signal.aborted && scope === targetScope && items === list &&
+    generation === list.generation && rangeController === controller;
+  let cursor, start = 0, version = list.version;
+  selectionPending = true;
+  updateSelectionActions();
+  try {
+    do {
+      signal.throwIfAborted();
+      const page = await targetScope.request("items?" + query({ ...configuration, start, limit: 200, cursor }), { signal });
+      if (!current()) return;
+      version ??= page.version;
+      if ((version !== undefined && page.version !== version) ||
+          (list.version !== null && page.version !== list.version))
+        throw Error("The library changed. Reload references before selecting all.");
+      for (const item of page.items) chosen.set(item.key, selectedIdentity(item));
+      notify("Selecting " + chosen.size + " references…");
+      start += page.items.length;
+      cursor = page.next;
+    } while (cursor);
+    if (!current()) return;
+    selection.clear();
+    for (const [key, identity] of chosen) selection.set(key, identity);
+    anchor = null;
+    syncSelection();
+    notify(selection.size + " selected");
+  } catch (error) {
+    if (current()) notify(error);
+  } finally {
+    if (rangeController === controller) {
+      rangeController = null;
+      selectionPending = false;
+      updateSelectionActions();
+    }
+  }
 };
 $("#columns").onclick = () => grid.chooseColumns();
-$("#referenceMenu").addEventListener("click", event => {
-  if (event.target.closest("button")) $("#referenceMenu").open = false;
-});
 // The pinned native schema supplies every type-specific field. These work
 // identities are the narrow References additions stored by the shared backend.
 const workIdentifierLabels = {
@@ -111,6 +169,31 @@ const label = (kind, value) =>
   schema?.locales?.["en-US"]?.[kind]?.[value] || human(value);
 function selectedIdentity(item) {
   return { key: item.key, id: item.id, version: item.version };
+}
+function activateItem(item) {
+  void openDetail(item.key);
+  pane("details");
+}
+function updateSelectionActions() {
+  const all = $("#selectAll"), none = $("#selectNone"), actions = $("#actions");
+  if (!all || !none || !actions) return;
+  const available = !!scope && projectReady;
+  all.disabled = !available || selectionPending;
+  all.setAttribute("aria-busy", String(selectionPending));
+  none.disabled = !available || (!selection.size && !selectionPending);
+  actions.disabled = !available || selectionPending || !selection.size;
+  actions.options[0].textContent = selection.size > 1 ? selection.size + " selected items…"
+    : selection.size === 1 ? "Selected item…" : "Selected items…";
+}
+function syncSelection() {
+  items?.setSelection(selection.keys());
+  updateSelectionActions();
+}
+function cancelSelection() {
+  rangeController?.abort();
+  rangeController = null;
+  selectionPending = false;
+  updateSelectionActions();
 }
 async function boot() {
   context = await api.request("context");
@@ -216,11 +299,11 @@ function updateProjectActions() {
   }
   for (const option of $("#actions").options)
     option.disabled = !!option.value && option.value !== "export" && !editable;
-  $("#actions").disabled = !available;
+  updateSelectionActions();
 }
 function clearProjectSelection() {
   ++view;
-  detailController?.abort(); rangeController?.abort(); jobListController?.abort();
+  detailController?.abort(); cancelSelection(); jobListController?.abort();
   items?.destroy(); items = null; scope = null; projectId = null; projectReady = false;
   detailDirty = false; detail = null; selection.clear(); activeSearch = "";
   $("#search").value = "";
@@ -257,10 +340,12 @@ async function openProjectSettings(project) {
     },
     onRetired: () => {
       appRetired = true;
+      referenceToolbar.destroy();
+      sidecars.destroy();
       detailDirty = false;
       ++view;
       detailController?.abort();
-      rangeController?.abort();
+      cancelSelection();
       jobListController?.abort();
       clearTimeout(jobTimer);
       items?.destroy();
@@ -327,7 +412,7 @@ async function selectProject(id) {
   }
   const generation = ++view;
   detailController?.abort();
-  rangeController?.abort();
+  cancelSelection();
   jobListController?.abort();
   items?.destroy();
   $("#items").replaceChildren();
@@ -367,14 +452,12 @@ async function selectProject(id) {
       rowRole: "row",
       updateRow: (row, item) => {
         const checkbox = row.querySelector(".row-checkbox");
-        if (checkbox) { checkbox.checked = selection.has(item.key); checkbox.tabIndex = multipleSelection ? 0 : -1; }
+        if (checkbox) checkbox.checked = selection.has(item.key);
       },
       onSelect: selectItem,
-      onActivate: (item) => {
-        void openDetail(item.key);
-        pane("details");
-      },
+      onActivate: activateItem,
       onStatus: (text, error) => {
+        updateSelectionActions();
         if (error) notify(error);
         else
           notify(
@@ -389,30 +472,31 @@ async function selectProject(id) {
     projectReady = true;
     history.replaceState({ ...history.state, referencesProject: { backendId: context.backendId, projectId: id } }, "");
     updateProjectActions();
+    sidecars.showMain();
     void restoreJobs(id, generation);
     pollJobs();
   } catch (error) {
     if (generation === view) notify(error);
   }
 }
+function itemQuery() {
+  return { q: activeSearch, sort, direction, deleted: deleted ? 1 : undefined,
+    fields: grid.fields().join(",") };
+}
 function loadPage({ start, limit, cursor, signal }) {
   return scope.request(
     "items?" +
       query({
-        q: activeSearch,
-        sort,
-        direction,
+        ...itemQuery(),
         start,
         limit,
         cursor,
-        deleted: deleted ? 1 : undefined,
-        fields: grid.fields().join(","),
       }),
     { signal },
   );
 }
 async function selectItem(item, event) {
-  event.toggle ||= multipleSelection;
+  cancelSelection();
   if (
     detailDirty &&
     detail?.key !== item.key &&
@@ -420,7 +504,6 @@ async function selectItem(item, event) {
   )
     return;
   if (detailDirty && detail?.key !== item.key) detailDirty = false;
-  rangeController?.abort();
   if (
     event.range &&
     anchor?.view === view &&
@@ -428,50 +511,58 @@ async function selectItem(item, event) {
   ) {
     const from = Math.min(anchor.index, event.index),
       to = Math.max(anchor.index, event.index),
-      generation = view,
-      controller = (rangeController = new AbortController());
-    selection.clear();
+      generation = view, list = items, listGeneration = list.generation,
+      controller = (rangeController = new AbortController()), chosen = new Map(),
+      signal = AbortSignal.any([controller.signal, list.controller.signal]);
+    const current = () => !signal.aborted && generation === view && items === list &&
+      listGeneration === list.generation && rangeController === controller;
+    selectionPending = true;
+    updateSelectionActions();
     try {
-      for await (const page of items.range(from, to, {
-        signal: controller.signal,
-      })) {
-        if (generation !== view || controller.signal.aborted) return;
+      for await (const page of list.range(from, to, { signal })) {
+        if (!current()) return;
         for (const record of page)
-          selection.set(record.key, selectedIdentity(record));
-        items.setSelection(selection.keys());
-        notify(selection.size + " selected");
+          chosen.set(record.key, selectedIdentity(record));
       }
+      if (!current()) return;
+      selection.clear();
+      for (const [key, identity] of chosen) selection.set(key, identity);
+      syncSelection();
+      notify(selection.size + " selected");
     } catch (error) {
-      if (generation === view && !controller.signal.aborted) {
-        selection.clear();
-        items.setSelection([]);
-        notify(error);
-      }
+      if (current()) notify(error);
       return;
+    } finally {
+      if (rangeController === controller) {
+        rangeController = null;
+        selectionPending = false;
+        updateSelectionActions();
+      }
     }
   } else {
     anchor = { index: event.index, view, generation: items.generation };
     if (!event.toggle) selection.clear();
     if (event.toggle && selection.has(item.key)) selection.delete(item.key);
     else selection.set(item.key, selectedIdentity(item));
-    items.setSelection(selection.keys());
+    syncSelection();
     notify(selection.size + " selected");
   }
   if (selection.has(item.key) && !detailDirty) await openDetail(item.key);
 }
 const searchChanged = debounce(() => {
   activeSearch = $("#search").value;
-  rangeController?.abort();
+  cancelSelection();
   selection.clear();
   items?.reset({ preserveSelection: false });
+  updateSelectionActions();
 });
 $("#search").addEventListener("input", () => {
   items?.controller.abort();
-  rangeController?.abort();
+  cancelSelection();
   searchChanged();
 });
 $("#refresh").onclick = () => {
-  rangeController?.abort();
+  cancelSelection();
   items?.reset({ preservePosition: true });
   if (detail && !detailDirty) void openDetail(detail.key);
 };
@@ -532,7 +623,8 @@ function renderDetail(item, targetScope) {
   function guardField(row, controls, values, caption, key = caption) {
     const state = controls.filter(control => !control.hasAttribute('data-read-action')).map(control => ({ control, disabled: control.disabled, readOnly: control.readOnly }));
     const actions = node("span", { class: "field-edit-actions" });
-    const edit = iconButton(button("", async () => {
+    const edit = iconButton(button("", async event => {
+      event.preventDefault();
       if (activeEditKey === key) { await saveField(values()); return; }
       if (activeEditKey !== null || detailDirty) {
         notice.textContent = "Save or cancel your current edit first.";
@@ -553,6 +645,7 @@ function renderDetail(item, targetScope) {
         control.setAttribute('aria-readonly', String(!editing));
       }
       cancel.hidden = !editing;
+      edit.type = editing ? "submit" : "button";
       iconButton(edit, editing ? 'save' : 'edit', (editing ? 'Save ' : 'Edit ') + caption);
     }
     apply();
@@ -927,13 +1020,9 @@ function renderDetail(item, targetScope) {
           "div",
           { class: "attachment-row" },
           node("span", {}, relationNames.get(id) || id),
-          button("Remove", () => {
-            edited.relations["dc:relation"] = values.filter(
-              (value) => value !== id,
-            );
-            detailDirty = true;
-            renderRelated();
-          }),
+          button("Remove", () => saveField({ relations: { ...edited.relations,
+            "dc:relation": values.filter(value => value !== id),
+          } })),
         ),
       );
     }
@@ -988,14 +1077,11 @@ function renderDetail(item, targetScope) {
   related.append(
     relatedRows,
     button("Add related item", async () => {
-      const selected = await chooseLibraryItem(targetScope);
+      const selected = await chooseLibraryItem(targetScope, { signal: controller.signal });
       if (!selected || selected.id === item.id) return;
       const values = new Set([].concat(edited.relations["dc:relation"] || []));
       values.add(selected.id);
-      edited.relations["dc:relation"] = [...values];
-      relationNames.set(selected.id, title(selected));
-      detailDirty = true;
-      renderRelated();
+      await saveField({ relations: { ...edited.relations, "dc:relation": [...values] } });
     }),
   );
   renderRelated();
@@ -1010,16 +1096,10 @@ function renderDetail(item, targetScope) {
     row.classList.add('metadata-field'); form.append(row);
     guardField(row, [note], () => ({ note: note.value }), 'note');
   }
-  const save = node(
-    "button",
-    { type: "submit", class: "primary" },
-    "Save changes",
-  );
   const itemActions =
     node(
       "div",
       { class: "toolbar detail-actions" },
-      save,
       button(
         "Reload item",
         () => {
@@ -1051,49 +1131,12 @@ function renderDetail(item, targetScope) {
     }));
   for (const control of itemActions.querySelectorAll('button')) {
     const name = control.textContent.trim();
-    iconButton(control, name === 'Save changes' ? 'save' : name === 'Reload item' ? 'refresh' : 'identifier', name);
+    iconButton(control, name === 'Reload item' ? 'refresh' : 'identifier', name);
   }
   form.prepend(itemActions);
-  form.onsubmit = async (event) => {
+  form.onsubmit = (event) => {
     event.preventDefault();
-    const controls = [...form.querySelectorAll("input,select,textarea,button")].map(control => [control, control.disabled]);
-    for (const [control] of controls) control.disabled = true;
-    try {
-      edited.creators = edited.creators.filter(value => !removedCreators.has(value));
-      edited.tags = tags.value
-        .split("\n")
-        .map((tag) => tag.trim())
-        .filter(Boolean)
-        .map(
-          (tag) =>
-            item.data.tags?.find((existing) => existing.tag === tag) || { tag },
-        );
-      const result = await targetScope.request("items/" + item.key, {
-        method: "PUT",
-        body: { version: item.version, data: edited },
-        signal: detailController.signal,
-      });
-      if (scope === targetScope && root.contains(form) && detail === item) {
-        detailDirty = false;
-        detail = result;
-        if (selection.delete(item.key)) {
-          selection.set(result.key, selectedIdentity(result));
-          items.setSelection(selection.keys());
-        }
-        renderDetail(result, targetScope);
-        items.reset({ preservePosition: true });
-        notify(Object.keys(result.identityConflicts || {}).length
-          ? "Item saved. Differing identifiers were retained as alternatives."
-          : "Item saved.");
-      }
-    } catch (error) {
-      notice.textContent =
-        error.status === 412
-          ? "This item changed elsewhere. Your edits are kept here; reload before saving a revised version."
-          : error.message;
-    } finally {
-      for (const [control, disabled] of controls) control.disabled = disabled;
-    }
+    form.querySelector(".field-is-editing .field-edit-actions > button")?.click();
   };
   const attachments = node("details", { open: true }),
     children = node("div");
@@ -1150,7 +1193,7 @@ async function loadChildren(item, targetScope, target, cursor, history = []) {
           });
           if (detail?.key !== item.key || scope !== targetScope) return;
           selection.delete(child.key);
-          items.setSelection(selection.keys());
+          syncSelection();
           items.reset({ preservePosition: true });
           if (child.key === item.key) { detail = null; $("#details").replaceChildren(); }
           else await loadChildren(item, targetScope, target, cursor, history);
@@ -1304,7 +1347,7 @@ $("#identifiers").onclick = async () => {
 $("#actions").onchange = async () => {
   const action = $("#actions").value;
   $("#actions").value = "";
-  if (!action) return;
+  if (!action || selectionPending) return;
   if (!selection.size) {
     notify("Select one or more items first.");
     return;
@@ -2623,8 +2666,9 @@ async function saveSearch(targetScope, configuration, notice) {
 $("#deletedItems").onclick = () => {
   deleted = true;
   selection.clear();
-  rangeController?.abort();
+  cancelSelection();
   items.reset({ preserveSelection: false });
+  updateSelectionActions();
   notify(
     "Deleted items · select items and choose Restore to return them to the library.",
   );
@@ -2733,8 +2777,10 @@ $("#savedSearches").onclick = () => {
         try {
           if (data.collection) throw Error("This saved search used a retired collection filter. Save a new search for this project.");
           if (scope !== targetScope) return;
+          cancelSelection();
           selection.clear();
           items.reset({ preserveSelection: false });
+          updateSelectionActions();
           pane("items");
         } catch (error) {
           notify(error);
