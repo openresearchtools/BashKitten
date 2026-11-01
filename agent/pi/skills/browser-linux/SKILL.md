@@ -11,6 +11,7 @@ description: Operate ordinary tabs in the connected BashKitten Linux desktop bro
 Use this skill for the **connected browser**, not for the computer running the
 agent. The browser may be remote. A Linux agent can be connected to Android;
 that connection requires the Android skill instead.
+For responsive/mobile emulation and advanced page diagnostics, discover `browser_debug` and read its matching `browserDebugGuide` or call its `help` once.
 
 `browser` is a Pi tool, not a shell executable. Its arguments are one
 object: `{"method":"METHOD","params":{...}}`. Send one request per tool call.

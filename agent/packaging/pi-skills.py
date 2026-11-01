@@ -15,7 +15,8 @@ def replace(text, old, new):
 
 def browser_guide(text, target):
     text = replace(text, f'name: browser-{target}', 'name: browser')
-    text = re.sub(r'^description: .*$', 'description: Read and control ordinary browser tabs: pages, forms, screenshots, downloads and debugging. Start with browser capabilities and its browserGuide.', text, count=1, flags=re.M)
+    description = 'Read and control ordinary browser tabs: pages, forms, screenshots, downloads and debugging. Start with browser capabilities and its browserGuide.'
+    text = re.sub(r'^description: .*$', 'description: ' + json.dumps(description), text, count=1, flags=re.M)
     if target == 'linux':
         changes = [
             ('# BashKitten desktop browser', '# Browser'),
@@ -90,6 +91,18 @@ def search_guide(text):
     return text
 
 
+def browser_debug_guide(text, target):
+    text = replace(text, f'name: browser-debugging-{target}', 'name: browser-debugging')
+    description = 'Debug ordinary browser pages: responsive/mobile emulation, page diagnostics and controlled test state. Start with browser_debug capabilities and its browserDebugGuide.'
+    text = re.sub(r'^description: .*$', 'description: ' + json.dumps(description), text, count=1, flags=re.M)
+    title = '# BashKitten desktop browser debugging' if target == 'linux' else '# BashKitten Android browser debugging'
+    text = replace(text, title, '# Browser debugging')
+    heading = '### Local shell entry point for agents without Pi tools' if target == 'linux' else '### Local Termux entry point for agents without Pi tools'
+    start = text.index(heading)
+    finish = text.index('### Recovery and boundaries', start)
+    return text[:start] + text[finish:]
+
+
 def curate(root, target):
     package_file = root / 'package.json'
     package = json.loads(package_file.read_text())
@@ -102,6 +115,15 @@ def curate(root, target):
         path.write_text(browser_guide(source.read_text(), platform))
         guides[platform] = destination
         shutil.rmtree(source.parent)
+    debug_guides = {}
+    for platform in ['linux', 'android']:
+        source = root / f'skills/browser-debugging-{platform}/SKILL.md'
+        destination = 'skills/browser-debugging/SKILL.md' if platform == target else f'browser-debugging-guides/{platform}.md'
+        path = root / destination
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(browser_debug_guide(source.read_text(), platform))
+        debug_guides[platform] = destination
+        shutil.rmtree(source.parent)
     search = root / 'skills/web-search'
     destination = root / 'skills/websearch'
     destination.mkdir()
@@ -111,14 +133,16 @@ def curate(root, target):
         shutil.rmtree(root / 'skills/termux-display')
         shutil.rmtree(root / 'skills/phoneuse', ignore_errors=True)
     omitted = {'./skills/browser-' + ('android' if target == 'linux' else 'linux')}
+    omitted.add('./skills/browser-debugging-' + ('android' if target == 'linux' else 'linux'))
     if target == 'linux':
         omitted.update({'./skills/termux-display', './skills/phoneuse'})
     renamed = {'./skills/browser-' + target: './skills/browser',
+               './skills/browser-debugging-' + target: './skills/browser-debugging',
                './skills/web-search': './skills/websearch'}
     package['pi']['skills'] = [renamed.get(value, value) for value in package['pi']['skills']
                                if value not in omitted]
     package['pi']['skills'].extend(['./desktop-guides/termux-use', './desktop-guides/computer-use'])
-    package['bashkitten'] = {'browserGuides': guides}
+    package['bashkitten'] = {**package.get('bashkitten', {}), 'browserGuides': guides, 'browserDebugGuides': debug_guides}
     package_file.write_text(json.dumps(package, indent=2) + '\n')
 
 

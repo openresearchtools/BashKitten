@@ -164,6 +164,15 @@ class TracerActor extends Actor {
       return;
     }
 
+    // The native tracer is shared by the current thread. Reject before adding
+    // this actor's listener, or it would receive another owner's trace and its
+    // stopTracing() would stop that owner's recording.
+    if (lazy.JSTracer.isTracing()) {
+      throw new Error(
+        "Another JavaScript tracer is already active in this thread"
+      );
+    }
+
     // Flush any previous recorded data only when we start a new tracer
     // as we may still analyse trace data after stopping the trace.
     // The pool will then be re-created on demand from createValueGrip.

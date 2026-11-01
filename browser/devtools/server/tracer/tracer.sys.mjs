@@ -976,6 +976,14 @@ function formatDisplayName(frame) {
 let activeTracer = null;
 
 /**
+ * Whether the current thread has a tracer, including one waiting for interaction.
+ * Callers must check before registering listeners for a new tracing owner.
+ */
+function isTracing() {
+  return activeTracer !== null;
+}
+
+/**
  * Start tracing JavaScript.
  * i.e. log the name of any function being called in JS and its location in source code.
  *
@@ -1106,6 +1114,7 @@ function syncPause(duration) {
 }
 
 export const JSTracer = {
+  isTracing,
   startTracing,
   stopTracing,
   addTracingListener,

@@ -52,6 +52,8 @@ async function register() {
     (directory !== './skills/phoneuse' || role === 'termux') &&
     (directory !== './skills/browser-android' || platform === 'termux') &&
     (directory !== './skills/browser-linux' || platform !== 'termux') &&
+    (directory !== './skills/browser-debugging-android' || platform === 'termux') &&
+    (directory !== './skills/browser-debugging-linux' || platform !== 'termux') &&
     (directory !== './skills/termux-display' || platform === 'termux')
   ).map(directory => directory.replace(/^\.\//, '') + '/SKILL.md');
   const skills = [...commonSkills];

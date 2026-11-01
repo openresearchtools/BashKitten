@@ -4,7 +4,9 @@ package com.bashkitten;
 import android.app.Activity;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import java.net.URI;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -18,6 +20,7 @@ final class RemoteBrowserControl {
     private final BrowserApp app;
     private final java.util.concurrent.ExecutorService files = java.util.concurrent.Executors.newSingleThreadExecutor();
     private final Set<String> completed = new HashSet<>();
+    private final Map<String, String> debuggingTabs = new HashMap<>();
     private volatile GeckoSession session;
     private GeckoSession pendingLocal;
     private String declinedLocalIdentity;
@@ -176,31 +179,47 @@ final class RemoteBrowserControl {
                 next(version, commands, index + 1);
                 return;
             }
+            String method = request.getString("method");
+            String tabId = request.getJSONObject("params").optString("tabId", null);
+            boolean debugging = method.startsWith("debug.") && !method.equals("debug.capabilities");
+            if (debugging && !method.equals("debug.reset") && tabId != null) debuggingTabs.put(tabId, id);
+            String debugMarker = debuggingTabs.get(tabId);
+            boolean detached = debugging || debuggingTabs.containsKey(tabId);
             if (request.getString("method").equals("screenshot")) request.getJSONObject("params").remove("transfer");
             app.controller.execute(access, request.toString(), response -> {
                 if (!active || version != generation) return;
                 try {
                     JSONObject value = new JSONObject(response);
                     JSONObject result = value.optJSONObject("result");
+                    if (method.equals("debug.reset") && result != null && result.optBoolean("reset") && !value.has("error")) {
+                        // A newer debug request may already have started while
+                        // this reset receipt was pending. Keep its tab marked.
+                        debuggingTabs.remove(tabId, debugMarker);
+                    }
                     if (result != null && result.has("launch")) {
                         app.commands.show(result.getString("launch")); value.put("result", true);
                     }
                     if (result != null && result.has("transfer")) {
                         exportFile(version, result, exported -> {
-                            try { value.put("result", exported); reply(version, id, value, commands, index); }
+                            try { value.put("result", exported); reply(version, id, value, commands, index, detached); }
                             catch (Exception error) { failed(version, "Agent file response failed"); }
                         }, error -> {
-                            try { reply(version, id, new JSONObject().put("error", error), commands, index); }
+                            try { reply(version, id, new JSONObject().put("error", error), commands, index, detached); }
                             catch (Exception invalid) { failed(version, "Agent file response failed"); }
                         });
-                    } else reply(version, id, value, commands, index);
+                    } else reply(version, id, value, commands, index, detached);
                 } catch (Exception error) { failed(version, "Agent browser response failed"); }
             });
+            // Reuse the existing receipt callback while continuing the same
+            // authorized stream, so a resume/continue can release a paused page.
+            if (detached) next(version, commands, index + 1);
         } catch (Exception error) { failed(version, error.getMessage()); }
     }
-    private void reply(int version, String id, JSONObject value, JSONArray commands, int index) throws Exception {
+    private void reply(int version, String id, JSONObject value, JSONArray commands, int index, boolean detached) throws Exception {
         value.put("channelId", channel).put("id", id);
-        request(version, "/api/browser-channel/result", value, ignored -> next(version, commands, index + 1));
+        request(version, "/api/browser-channel/result", value, ignored -> {
+            if (!detached) next(version, commands, index + 1);
+        });
     }
     private void exportFile(int version, JSONObject result, Consumer<JSONObject> done, Consumer<String> fail) {
         files.execute(() -> {
@@ -278,7 +297,23 @@ final class RemoteBrowserControl {
     void disconnect() {
         GeckoSession previous = session;
         String previousOrigin = origin, previousToken = csrf, previousChannel = channel;
-        generation++; active = false; session = null; pendingLocal = null; origin = csrf = channel = null; access = null; completed.clear();
+        Set<GeckoSession> debugSessions = new HashSet<>();
+        if (access != null) for (String tabId : new HashSet<>(debuggingTabs.keySet())) {
+            try {
+                BrowserApp.Tab tab = app.owned(tabId, access.owner);
+                if (tab.session != null && tab.session.isOpen()) debugSessions.add(tab.session);
+            } catch (SecurityException ignored) { }
+        }
+        generation++; active = false; session = null; pendingLocal = null; origin = csrf = channel = null; access = null; completed.clear(); debuggingTabs.clear();
+        for (GeckoSession debugSession : debugSessions) {
+            // Cleanup only: do not route general commands through revoked access.
+            try {
+                BashKittenController.request(debugSession, "{\"method\":\"debug.reset\"}").accept(value -> {
+                    try { if (new JSONObject(value).has("error")) android.util.Log.e("BashKitten", "Debugging cleanup failed"); }
+                    catch (Exception error) { android.util.Log.e("BashKitten", "Invalid debugging cleanup response"); }
+                }, error -> android.util.Log.e("BashKitten", "Debugging cleanup failed"));
+            } catch (Exception error) { android.util.Log.e("BashKitten", "Debugging cleanup unavailable"); }
+        }
         if (previous == null || !previous.isOpen()) return;
         try {
             BashKittenController.request(previous, "{\"method\":\"agent.cancel\"}").accept(ignored -> {

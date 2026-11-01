@@ -26,6 +26,8 @@
     "skills": [
       "./skills/browser-android",
       "./skills/browser-linux",
+      "./skills/browser-debugging-android",
+      "./skills/browser-debugging-linux",
       "./skills/web-search",
       "./skills/termux-display",
       "./skills/subagents",

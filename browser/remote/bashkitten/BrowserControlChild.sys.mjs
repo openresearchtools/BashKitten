@@ -1401,6 +1401,16 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
         return this.#clearOverlay();
       case "viewport":
         return this.#viewport();
+      case "debug_environment": {
+        const result = await this.#evaluate({ code: "return {width:innerWidth,height:innerHeight,devicePixelRatio,screen:{width:screen.width,height:screen.height},orientation:{type:screen.orientation.type,angle:screen.orientation.angle},maxTouchPoints:navigator.maxTouchPoints};" });
+        return result.value;
+      }
+      case "debug_permissions": {
+        const descriptor = this.contentWindow.navigator.permissions.parseSetParameters(message.data);
+        return { type: descriptor.type };
+      }
+      case "debug_coverage":
+        return this.#coverage(message.data);
       case "resolveRef":
         return this.#resolveRef(message.data);
       case "rawNode":
@@ -1426,6 +1436,27 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
     this.#debugger.onNewScript = this.#onNewDebuggerScript;
     this.#debugger.addDebuggee(this.contentWindow);
     return { enabled: true };
+  }
+
+  #coverage({ action = "read", url } = {}) {
+    if (action === "stop") {
+      if (this.#debugger) this.#debugger.collectCoverageInfo = false;
+      return { enabled: false };
+    }
+    this.#enableDebugger();
+    if (action === "start") {
+      this.#debugger.collectCoverageInfo = true;
+      return { enabled: true };
+    }
+    if (action !== "read") throw new Error("Choose coverage start, read or stop");
+    if (!this.#debugger.collectCoverageInfo) throw new Error("Start JavaScript coverage before reading it");
+    const scripts = [];
+    for (const script of this.#debugger.findScripts()) {
+      if (!script.url || (url !== undefined && script.url !== url) || script.format === "wasm") continue;
+      const offsets = script.getOffsetsCoverage();
+      if (offsets) scripts.push({ url: script.url, startLine: script.startLine, startColumn: script.startColumn, offsets });
+    }
+    return { enabled: true, scripts };
   }
 
   #destroyDebugger() {

@@ -11,6 +11,7 @@ Cu.importGlobalProperties(["File"]);
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  BrowserDebug: "chrome://remote/content/bashkitten/BrowserDebug.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   Downloads: "resource://gre/modules/Downloads.sys.mjs",
   NavigableManager: "chrome://remote/content/shared/NavigableManager.sys.mjs",
@@ -506,6 +507,10 @@ class BrowserControlService {
     if (!this.started) {
       return;
     }
+    if (this.debuggingStarted) {
+      this.debuggingStarted = false;
+      void lazy.BrowserDebug.stop();
+    }
 
     for (const { tab } of this.tabs()) {
       tab.removeAttribute("bashkitten-automation-active");
@@ -538,6 +543,7 @@ class BrowserControlService {
 
   #onTabReplaced = subject => {
     const { oldBrowser, newBrowser, newTab } = subject.wrappedJSObject;
+    if (this.debuggingStarted) void lazy.BrowserDebug.release(oldBrowser).catch(console.error);
     const page = this.pageIds.get(oldBrowser);
     if (!page) {
       return;
@@ -2140,6 +2146,42 @@ class BrowserControlService {
     const args = { ...request.params };
     if ("tabId" in args) { args.page = args.tabId; delete args.tabId; }
     if (typeof args.page === "string" && /^[1-9]\d*$/.test(args.page)) args.page = Number(args.page);
+    if (method.startsWith("debug.")) {
+      const command = method.slice(6);
+      if (command === "capabilities") return lazy.BrowserDebug.capabilities("linux");
+      if (!Number.isInteger(args.page)) throw new Error("Debugging requires an explicit tabId from tabs.list");
+      if (command === "reset") return lazy.BrowserDebug.resetTab(args.page);
+      for (const key of ["session", "sessionId", "windowId", "profile"]) {
+        if (key in args) throw new Error(`${key} is not supported; use an ordinary tabId`);
+      }
+      const { browser, tab, window } = await this.ensurePageReady(args.page, signal);
+      const page = args.page;
+      const params = { ...args };
+      delete params.page;
+      if (!this.debuggingStarted) this.debuggingStarted = true;
+      if (!tab._bashkittenDebugCleanup) {
+        tab._bashkittenDebugCleanup = true;
+        tab.addEventListener("TabClose", () => {
+          void lazy.BrowserDebug.release(tab.linkedBrowser).catch(console.error);
+        }, { once: true });
+      }
+      return this.withTabActivity([page], () => lazy.BrowserDebug.execute(command, params, {
+        platform: "linux", browser, tab, window, tabId: page, cwd, signal,
+        resolvePath: value => safeControlPath(cwd, String(value)),
+        query: (name, data, frameId) => {
+          const context = frameId === undefined ? browser.browsingContext : BrowsingContext.get(Number(frameId));
+          if (!context || context.top !== browser.browsingContext.top) throw new Error("Frame is outside this tab");
+          return this.actorForBrowsingContext(context).sendQuery(name, data);
+        },
+        ordinary: (name, data) => this.execute({ method: name, params: { ...data, tabId: page } }, { cwd, signal }),
+        cleanupLogpoint: logpoint => this.execute({ method: "remove_logpoint", params: { tabId: page, logpoint } }, { cwd }),
+        navigateContext: (contextId, url) => {
+          const context = lazy.NavigableManager.getBrowsingContextById(contextId);
+          if (!context || context.parent) throw new Error("Test context tab is unavailable");
+          return this.execute({ method: "navigate", params: { tabId: this.pageIdFor(context.embedderElement), url } }, { cwd, signal });
+        },
+      }), signal);
+    }
     if (method === "capabilities") {
       return { platform: "linux", transport: "unix", explicitTabIds: true,
         methods: [...CONTROL_TOOLS, "tabs.list", "tabs.create", "tabs.open", "tabs.show", "tabs.close", "references.resolve"],

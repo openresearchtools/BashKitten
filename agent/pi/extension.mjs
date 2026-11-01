@@ -3,6 +3,7 @@
 import { Type } from 'typebox';
 import { browserCall, captureScreenshot, saveDownload } from './client.mjs';
 import { browserDocumentation, browserHelp } from './browser-help.mjs';
+import { browserDebugDocumentation, browserDebugHelp } from './browser-debug-help.mjs';
 import { searchWeb } from './search.mjs';
 
 export default function bashkitten(pi) {
@@ -11,6 +12,20 @@ export default function bashkitten(pi) {
   pi.on('session_start', () => {
     if (!pi.getAllTools().some(tool => tool.name === 'tool_search')) throw Error('This Pi runtime needs its native tool_search extension');
     pi.setActiveTools([...new Set([...pi.getActiveTools(), 'tool_search'])]);
+  });
+  pi.registerTool({
+    name: 'browser_debug', label: 'Browser debugging', exposure: 'deferred',
+    description: 'Debug ordinary browser pages. Start with capabilities and read its browserDebugGuide once, or call help for that guide.',
+    parameters: Type.Object({ method: Type.String(), params: Type.Optional(Type.Record(Type.String(), Type.Any())) }),
+    async execute(_id, { method, params = {} }, signal) {
+      let result = method === 'help'
+        ? await browserDebugHelp(await browserCall('debug.capabilities', {}, { signal }))
+        : await browserCall(`debug.${method}`, params, { signal });
+      if (method === 'capabilities' && result?.platform) {
+        result = { ...result, ...browserDebugDocumentation(result.platform) };
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(result) }], details: { result } };
+    },
   });
   pi.registerTool({
     name: 'browser', label: 'Browser', exposure: 'deferred',

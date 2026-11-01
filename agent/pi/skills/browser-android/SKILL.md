@@ -11,6 +11,7 @@ description: Operate ordinary tabs in the connected BashKitten Android browser. 
 Use this skill for the **connected Android browser**, including a browser
 controlled remotely by Pi running on Linux. The agent host's OS does not select
 the skill. This is browser-page automation, not phone-wide Android UI control.
+For responsive/mobile emulation and advanced page diagnostics, discover `browser_debug` and read its matching `browserDebugGuide` or call its `help` once.
 
 `browser` is a Pi tool, not a shell executable. Send one object per
 call: `{"method":"METHOD","params":{...}}`. Omit `params` for methods without

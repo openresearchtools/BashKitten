@@ -6,6 +6,10 @@ import { BashKittenAndroid } from "resource://gre/modules/BashKittenAndroid.sys.
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const { NetUtil } = ChromeUtils.importESModule("resource://gre/modules/NetUtil.sys.mjs");
+const debugLazy = {};
+ChromeUtils.defineESModuleGetters(debugLazy, {
+  BrowserDebug: "chrome://remote/content/bashkitten/BrowserDebug.sys.mjs",
+});
 
 const certificates = Cc["@mozilla.org/security/certoverride;1"].getService(Ci.nsICertOverrideService);
 const certDB = Cc["@mozilla.org/security/x509certdb;1"].getService(Ci.nsIX509CertDB);
@@ -30,6 +34,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
   }
   onDestroy() {
     this.destroyed = true;
+    if (this.debuggingStarted) void debugLazy.BrowserDebug.release(this.browser).catch(Cu.reportError);
     this.cancelLoginResponse();
     if (protectedContext(this.context)) Services.obs.removeObserver(this, "http-on-opening-request");
     BashKittenHost.close(this.browser);
@@ -51,6 +56,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     }
   }
   async request({ method, params = {} }) {
+    if (method === "debug.capabilities") return debugLazy.BrowserDebug.capabilities("android");
     if (BashKittenSettings.isContext(this.context)) {
       if (method === "settings.configure") return BashKittenSettings.configure(this.browser, this.context, params);
       if (method === "settings.visibility") return BashKittenSettings.visible(this.browser, params.visible);
@@ -92,7 +98,11 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       return this.agentRequest(params);
     }
     if (protectedContext(this.context)) throw new Error("Agent views cannot be controlled");
-    if (!commands.has(method)) throw new Error("Unsupported page method");
+    if (method === "debug.reset") {
+      await debugLazy.BrowserDebug.release(this.browser);
+      return { reset: true };
+    }
+    if (!commands.has(method) && !method.startsWith("debug.")) throw new Error("Unsupported page method");
     const top = this.browser.browsingContext;
     let context = top;
     if (params.frameId) {
@@ -106,6 +116,18 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       documentURI?.spec === "about:blank";
     if (!principal || principal.isSystemPrincipal || !ordinaryDocument) {
       throw new Error("Browser chrome cannot be controlled as an ordinary page");
+    }
+    if (method.startsWith("debug.")) {
+      this.debuggingStarted = true;
+      return debugLazy.BrowserDebug.execute(method.slice(6), structuredClone(params), {
+        platform: "android", browser: this.browser,
+        resolvePath() { throw new Error("Desktop file-path diagnostics are unavailable on Android"); },
+        query: (name, data, frameId) => {
+          const frame = frameId === undefined ? this.browser.browsingContext : BrowsingContext.get(Number(frameId));
+          if (!frame || frame.top !== this.browser.browsingContext.top) throw new Error("Frame is outside this tab");
+          return frame.currentWindowGlobal.getActor("BashKittenBrowserControl").sendQuery(name, data);
+        },
+      });
     }
     if (method === "diagnostics") {
       const evaluated = await context.currentWindowGlobal.getActor("BashKittenBrowserControl").sendQuery("evaluate", {

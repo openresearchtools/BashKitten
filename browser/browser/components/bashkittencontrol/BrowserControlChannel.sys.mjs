@@ -9,6 +9,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   Subprocess: "resource://gre/modules/Subprocess.sys.mjs",
   AsyncShutdown: "resource://gre/modules/AsyncShutdown.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
+  BrowserDebug: "chrome://remote/content/bashkitten/BrowserDebug.sys.mjs",
 });
 
 /** An authenticated outbound channel. It never opens a browser-control listener. */
@@ -45,7 +46,7 @@ export const BrowserControlChannel = {
   },
 
   async openGuest() {
-    const state = { controller: new AbortController(), results: new Map(), references: new Map(), resolvers: new Map(), write: Promise.resolve(), connected: false, generation: 0 };
+    const state = { controller: new AbortController(), results: new Map(), debuggingTabs: new Map(), references: new Map(), resolvers: new Map(), write: Promise.resolve(), connected: false, generation: 0 };
     this.guest = state;
     state.process = await lazy.Subprocess.call({
       command: "/usr/lib/bashkitten/node/bin/node",
@@ -73,12 +74,16 @@ export const BrowserControlChannel = {
           buffered = buffered.slice(newline + 1);
           if (command.ready === true) {
             if (!/^[a-f0-9-]{36}$/.test(command.backendId || "") || !/^[a-f0-9-]{36}$/.test(command.channelId || "")) throw new Error("Invalid guest backend identity");
+            state.connected = false;
             state.controller.abort();
+            await this.resetDebuggingTabs(state);
+            state.results.clear();
             state.backendId = command.backendId; state.channelId = command.channelId;
             state.controller = new AbortController(); state.generation++; state.connected = true; continue;
           }
           if (command.disconnected) {
             state.connected = false; state.generation++; state.controller.abort(); state.results.clear();
+            await this.resetDebuggingTabs(state);
             Services.obs.notifyObservers(null, "bashkitten-browser-control-disconnected", "container");
             continue;
           }
@@ -94,7 +99,7 @@ export const BrowserControlChannel = {
           }
           let entry = state.results.get(command.id);
           if (!entry) {
-            entry = { complete: false };
+            entry = this.debuggingReceipt(state, command);
             entry.promise = this.executeGuest(state, command).then(result => ({ result }),
               error => ({ error: { code: "browser_command_failed", message: error.message } }));
             state.results.set(command.id, entry);
@@ -104,6 +109,7 @@ export const BrowserControlChannel = {
           const generation = state.generation;
           void entry.promise.then(result => {
             entry.complete = true;
+            this.completeDebuggingReceipt(entry, result);
             for (const [id, cached] of state.results) {
               if (state.results.size <= 256) break;
               if (cached.complete) state.results.delete(id);
@@ -116,6 +122,7 @@ export const BrowserControlChannel = {
     } finally {
       state.connected = false;
       state.controller.abort();
+      await this.resetDebuggingTabs(state);
       state.process.kill();
       await state.process.wait().catch(() => {});
       await stderr;
@@ -223,6 +230,7 @@ export const BrowserControlChannel = {
     const state = this.guest;
     if (!state) return;
     state.controller.abort();
+    await this.resetDebuggingTabs(state);
     state.process?.kill();
     await state.process?.wait().catch(() => {});
   },
@@ -291,7 +299,7 @@ export const BrowserControlChannel = {
       Services.prefs.setStringPref("bashkitten.agent.browserClientId", clientId);
     }
     const controller = new AbortController();
-    const state = { connection, controller, csrf: bootstrap.data.csrf, channelId: null, results: new Map() };
+    const state = { connection, controller, csrf: bootstrap.data.csrf, channelId: null, results: new Map(), debuggingTabs: new Map() };
     const capabilities = await BrowserControl.execute({ method: "capabilities" });
     const opened = await this.post(state, "open", { clientId, name: "BashKitten desktop", platform: "linux", capabilities });
     if (!opened.channelId) throw new Error("Agent server did not create a browser channel");
@@ -307,6 +315,7 @@ export const BrowserControlChannel = {
       if (this.current === state) {
         this.current = null;
         controller.abort();
+        void this.resetDebuggingTabs(state);
         Services.obs.notifyObservers(null, "bashkitten-browser-control-disconnected", connection.id);
       }
     });
@@ -332,11 +341,20 @@ export const BrowserControlChannel = {
       const response = await this.post(state, "poll", { channelId: state.channelId });
       const commands = response.commands ?? [];
       if (!Array.isArray(commands) || commands.length > 64) throw new Error("Invalid browser command batch");
+      const startingDebugTabs = new Set();
+      for (const command of commands) {
+        if (typeof command?.method !== "string" || !command.method.startsWith("debug.") ||
+            ["debug.capabilities", "debug.reset"].includes(command.method)) continue;
+        const tabId = Number(command.params?.tabId ?? command.params?.page);
+        if (Number.isInteger(tabId)) startingDebugTabs.add(tabId);
+      }
       await Promise.all(commands.map(command => {
         if (!command || typeof command.id !== "string") throw new Error("Invalid browser command identity");
+        const debugging = typeof command.method === "string" && command.method.startsWith("debug.") && command.method !== "debug.capabilities";
+        const tabId = Number(command.params?.tabId ?? command.params?.page);
         let entry = state.results.get(command.id);
         if (!entry) {
-          entry = { complete: false };
+          entry = this.debuggingReceipt(state, command);
           entry.promise = BrowserControl.execute({ method: command.method, params: command.params }, {
             signal: state.controller.signal,
           }).then(result => ({ result }), error => ({ error: { code: "browser_command_failed", message: error.message } }));
@@ -344,6 +362,7 @@ export const BrowserControlChannel = {
         }
         entry.receipt ||= entry.promise.then(async result => {
           entry.complete = true;
+          this.completeDebuggingReceipt(entry, result);
           for (const [id, cached] of state.results) {
             if (state.results.size <= 256) break;
             if (cached.complete) state.results.delete(id);
@@ -351,11 +370,15 @@ export const BrowserControlChannel = {
           if (state.controller.signal.aborted) return;
           await this.post(state, "result", { channelId: state.channelId, id: command.id, ...result });
         });
-        if (command.method === "references.resolve") {
-          // A visible human challenge must not hold the existing command poll.
-          // Keep the one receipt tied to this channel's authority and lifetime.
+        const debugTab = Number.isInteger(tabId) && (startingDebugTabs.has(tabId) || lazy.BrowserDebug.hasTab(tabId) ||
+          [...state.results.values()].some(pending => !pending.complete && pending.debugTab === tabId));
+        if (command.method === "references.resolve" || debugging || debugTab) {
+          // Human challenges and paused pages must leave the existing poll
+          // available for follow-up commands. Pending debug receipts cover
+          // setup before the native tab session is ready.
           void entry.receipt.catch(() => {
-            if (this.current === state) void this.close("Resolver browser response could not be delivered");
+            if (this.current === state) void this.close(command.method === "references.resolve" ?
+              "Resolver browser response could not be delivered" : "Browser response could not be delivered");
           });
           return;
         }
@@ -371,6 +394,30 @@ export const BrowserControlChannel = {
     }
   },
 
+  debuggingReceipt(state, command) {
+    const tabId = Number(command.params?.tabId ?? command.params?.page);
+    const starts = typeof command.method === "string" && command.method.startsWith("debug.") &&
+      !["debug.capabilities", "debug.reset"].includes(command.method) && Number.isInteger(tabId);
+    const debuggingTabs = state.debuggingTabs;
+    if (starts) debuggingTabs.set(tabId, command.id);
+    return { complete: false, debugTab: starts ? tabId : null, debuggingTabs,
+      resetTab: command.method === "debug.reset" && Number.isInteger(tabId) ? tabId : null,
+      resetMarker: debuggingTabs.get(tabId) };
+  },
+
+  completeDebuggingReceipt(entry, value) {
+    if (entry.resetTab !== null && value.result?.reset === true && !value.error &&
+        entry.debuggingTabs.get(entry.resetTab) === entry.resetMarker) entry.debuggingTabs.delete(entry.resetTab);
+  },
+
+  async resetDebuggingTabs(state) {
+    const debuggingTabs = state.debuggingTabs;
+    state.debuggingTabs = new Map();
+    state.debuggingCleanup = Promise.all([state.debuggingCleanup, ...[...debuggingTabs.keys()].map(tabId =>
+      lazy.BrowserDebug.resetTab(tabId).catch(error => console.error(error)))]);
+    await state.debuggingCleanup;
+  },
+
   async close(reason = "closed") {
     this.epoch++;
     this.pending = null;
@@ -378,6 +425,7 @@ export const BrowserControlChannel = {
     this.current = null;
     if (!state) return;
     state.controller.abort(reason);
+    await this.resetDebuggingTabs(state);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 2000);
     try {

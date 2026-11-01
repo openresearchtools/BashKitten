@@ -58,6 +58,21 @@ final class AgentController extends ContextWrapper {
         if (request.has("session")) throw new IllegalArgumentException("Use explicit tabId values");
         String method = request.getString("method");
         JSONObject params = request.optJSONObject("params"); if (params == null) params = new JSONObject();
+        if (method.equals("debug.capabilities")) {
+            org.mozilla.geckoview.GeckoSession session = app.agent.session;
+            if (session == null || !session.isOpen()) {
+                session = null;
+                for (BrowserApp.Tab candidate : app.tabs.values()) {
+                    if (candidate.session != null && candidate.session.isOpen()) { session = candidate.session; break; }
+                }
+            }
+            if (session == null) throw new IllegalStateException("Open an ordinary browser tab first");
+            org.mozilla.geckoview.BashKittenController.request(session, new JSONObject().put("method", method).toString()).accept(value -> {
+                try { send.accept(new JSONObject(value)); }
+                catch (Exception error) { fail.accept("Invalid debugging capabilities"); }
+            }, error -> fail.accept("Debugging capabilities unavailable"));
+            return;
+        }
         if (method.equals("capabilities")) {
             JSONArray methods = new JSONArray(Arrays.asList("tabs.list", "tabs.create", "tabs.close", "navigate", "back", "forward", "reload", "stop", "snapshot", "act", "read", "evaluate", "wait", "console", "clearConsole", "viewport", "screenshot", "tabs.setDesktopMode", "tabs.setAdblocking", "tabs.show", "diagnostics", "downloads.list", "downloads.accept", "downloads.get", "references.resolve"));
             send.accept(new JSONObject().put("result", new JSONObject().put("protocol", 2).put("engine", "gecko").put("platform", "android")
@@ -127,6 +142,9 @@ final class AgentController extends ContextWrapper {
             return;
         }
         params.remove("tabId");
+        if (method.startsWith("debug.")) {
+            app.page(tab, method, params, send, fail); return;
+        }
         switch (method) {
             case "tabs.close": app.close(tab); break;
             case "tabs.show": send.accept(new JSONObject().put("result", new JSONObject().put("launch", app.commands.launch(access, tab.id)))); return;
