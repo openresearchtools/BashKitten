@@ -1,7 +1,7 @@
 /* Gnozzard palette; scoped to the requested XFCE surfaces, not other apps. */
 /* Panel background is a defaults-only XFConf value so user background edits win. */
 .xfce4-panel, .xfce4-panel.background { color: #ffffff; }
-.xfce4-panel button { background: transparent; color: #ffffff; border-color: transparent; box-shadow: none; }
+.xfce4-panel button { background: transparent; color: #ffffff; border-color: transparent; box-shadow: none; text-shadow: none; }
 .xfce4-panel button:hover { background: #3f3f3f; }
 .xfce4-panel button:checked { background: #3f3f3f; }
 window.thunar, window.thunar .standard-view, window.thunar .sidebar,

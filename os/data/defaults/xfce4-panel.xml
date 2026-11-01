@@ -18,10 +18,10 @@
   <property name="plugin-1" type="string" value="launcher">
    <property name="items" type="array"><value type="string" value="@PREFIX@/share/applications/org.bashkitten.Applications.desktop"/></property>
    <property name="show-label" type="bool" value="true"/>
-   <property name="disable-tooltips" type="bool" value="false"/>
+   <property name="disable-tooltips" type="bool" value="true"/>
    <property name="arrow-position" type="uint" value="0"/>
   </property>
-  <property name="plugin-2" type="string" value="tasklist"><property name="show-labels" type="bool" value="true"/><property name="show-handle" type="bool" value="false"/><property name="grouping" type="bool" value="true"/></property>
+  <property name="plugin-2" type="string" value="tasklist"><property name="show-labels" type="bool" value="true"/><property name="show-tooltips" type="bool" value="false"/><property name="show-handle" type="bool" value="false"/><property name="grouping" type="bool" value="true"/></property>
   <property name="plugin-3" type="string" value="separator"><property name="expand" type="bool" value="true"/><property name="style" type="uint" value="0"/></property>
   <property name="plugin-4" type="string" value="systray"/>
  </property>

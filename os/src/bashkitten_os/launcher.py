@@ -141,7 +141,7 @@ class Launcher(Gtk.ApplicationWindow):
     def application_row(self, app):
         button = Gtk.Button(); button.set_size_request(-1, 42)
         button.get_style_context().add_class('application-row')
-        button.set_tooltip_text(app.get_display_name())
+        button.get_accessible().set_name(app.get_display_name())
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         icon = Gtk.Image(); icon.set_pixel_size(24); icon.set_size_request(24,24); box.pack_start(icon, False, False, 0)
         scale=self.get_scale_factor()

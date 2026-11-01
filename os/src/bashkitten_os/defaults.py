@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # First-use XFCE configuration; Thunar action merging follows BuzzardOS 6c1b89f.
-import os, shutil, subprocess, tempfile
+import os, re, shutil, subprocess, tempfile
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from .common import PREFIX,SHARE,linux_guest,settings,Gio
@@ -58,6 +58,37 @@ def finish_initial_scale():
             if not prefs.set_string('scale',label):raise RuntimeError('Could not save initial desktop scaling')
             Gio.Settings.sync()
         pending.unlink(missing_ok=True)
+
+def migrate_panel_tooltips():
+    # XFConf owns live panel settings. Migrate once after the session bus starts,
+    # keeping later user tooltip choices and unrelated launcher plugins intact.
+    from .scaling import XfconfSetting,run_command,xfconf_set_if_needed
+    config=Path(os.environ.get('XDG_CONFIG_HOME',Path.home()/'.config'))
+    migrated=config/'bashkitten-os/panel-name-tooltips-v1'
+    if migrated.exists():return
+    env=os.environ.copy()
+    channel='xfce4-panel'
+    properties=run_command(['xfconf-query','-c',channel,'-l'],env,check=True).stdout.splitlines()
+    source=SHARE.parent/'applications/org.bashkitten.Applications.desktop'
+    for path in properties:
+        match=re.fullmatch(r'/plugins/plugin-(\d+)',path)
+        if not match:continue
+        kind=run_command(['xfconf-query','-c',channel,'-p',path],env,check=True).stdout.strip()
+        if kind=='tasklist':
+            xfconf_set_if_needed(XfconfSetting(channel,path+'/show-tooltips','bool'),'false',env)
+        elif kind=='launcher':
+            if path+'/items' not in properties:continue
+            items=run_command(['xfconf-query','-c',channel,'-p',path+'/items'],env,check=True).stdout.splitlines()
+            for item in items:
+                candidate=Path(item)
+                if not candidate.is_absolute():candidate=config/'xfce4/panel'/f'launcher-{match[1]}'/item
+                if not candidate.is_file():continue
+                app=Gio.DesktopAppInfo.new_from_filename(str(candidate))
+                if app and app.get_commandline()=='bashkitten-os launcher' and (
+                        candidate==source or app.get_string('X-XFCE-Source')==source.as_uri()):
+                    xfconf_set_if_needed(XfconfSetting(channel,path+'/disable-tooltips','bool'),'true',env)
+                    break
+    atomic(migrated,'1\n')
 
 def initialize():
     config=Path(os.environ.get('XDG_CONFIG_HOME',Path.home()/'.config'))
