@@ -3787,19 +3787,19 @@
       "source": "browser/components/blocker/content/blockerShield.svg",
       "original_sha256": "150fe3b6bcee722784ea2498410bb99212c8ddab385f00342f78bd74d1025a01",
       "action": "original protection artwork",
-      "sha256": "846ae87663baf6cf851c7899553f653ddace5ea8c131b36ddd4b4f16366a6733"
+      "sha256": "494de33bcbef518d530d27f18ff2c20b08e32cee097d42a28854216096bc8692"
     },
     "chrome/toolkit/content/global/elements/moz-checkbox-icon.svg": {
       "source": "toolkit/content/widgets/moz-checkbox/moz-checkbox-icon.svg",
       "original_sha256": "c96623c239c4e107b4ba4d103243f8e97dcb0f481453099e295338f8eb6a32a5",
       "action": "original check artwork",
-      "sha256": "f854a49678a662fe99790e51c6bdd02ec2d03cdb9c7c57b6591f5acba5c756bc"
+      "sha256": "5c8e5f48ed875099180b24049f609960204222089220b033ebfaf7ddf9d3abf7"
     },
     "chrome/toolkit/content/global/httpsonlyerror/secure-broken.svg": {
       "source": "toolkit/components/httpsonlyerror/content/secure-broken.svg",
       "original_sha256": "8d3bb669a6a8f6721a09d8ba1ca332a0cbba049c6dc9857e2417c26c80658202",
       "action": "original warning artwork",
-      "sha256": "222038460daf5f189b4982e7c93de463512e62d397f28a8b8f8f9eb3151c01f7"
+      "sha256": "fa9f0935e19e9d95c1f56e6e3c0ce41e2cd0526f2c044bbd9db6cdde03a53981"
     },
     "chrome/toolkit/content/global/megalist/icons/cpm-fox-illustration.svg": {
       "source": "toolkit/components/satchel/megalist/content/icons/cpm-fox-illustration.svg",
@@ -3823,7 +3823,7 @@
       "source": "layout/style/res/close-12.svg",
       "original_sha256": "5a7684bbeb81aff73d4c4b3216ee7d15b294c3f9c5d307b62579f4815b337c01",
       "action": "original cross artwork",
-      "sha256": "bec45f871bee565b96912556a24c0060ac64a95d33d8fbc824255de8c99f31bd"
+      "sha256": "a7ae673663d178741fc7841703d4783dba6e5303d3bbc1707b2dd3d0cc271c0e"
     },
     "contentaccessible/html/folder.png": {
       "source": "layout/generic/folder.png",
@@ -3841,145 +3841,145 @@
       "source": "layout/style/res/accessiblecaret-normal.svg",
       "original_sha256": "a23b8d2890a39de4da20a2a491386cc02cc08ffc8f671ab2016b92fc2e0c9a54",
       "action": "original caret artwork",
-      "sha256": "be9802cf6901099108ad98e285aad70bbbc6d401a824dd706dc042f39455b450"
+      "sha256": "c53e90e195e8cdbb699b31e6676c57f6e33a10b7c3dd638c083c6de2bdcd87df"
     },
     "chrome/toolkit/res/accessiblecaret-tilt-left.svg": {
       "source": "layout/style/res/accessiblecaret-tilt-left.svg",
       "original_sha256": "9e5c1e1727c642a0dd41e10b4518d4c82978e031f7b1dab0248ffe4e3f82a8f3",
       "action": "original caret artwork",
-      "sha256": "be9802cf6901099108ad98e285aad70bbbc6d401a824dd706dc042f39455b450"
+      "sha256": "c53e90e195e8cdbb699b31e6676c57f6e33a10b7c3dd638c083c6de2bdcd87df"
     },
     "chrome/toolkit/res/accessiblecaret-tilt-right.svg": {
       "source": "layout/style/res/accessiblecaret-tilt-right.svg",
       "original_sha256": "638adc97f2e9672d87e976b43d031fd4b86f1992154e6605e794c5cde3218a06",
       "action": "original caret artwork",
-      "sha256": "be9802cf6901099108ad98e285aad70bbbc6d401a824dd706dc042f39455b450"
+      "sha256": "c53e90e195e8cdbb699b31e6676c57f6e33a10b7c3dd638c083c6de2bdcd87df"
     },
     "chrome/toolkit/skin/classic/global/icons/edit-copy.svg": {
       "source": "toolkit/themes/shared/icons/edit-copy.svg",
       "original_sha256": "2547ba46f25d2ba0e3cb94d9bc249e3f5cba56f98be9f6fb79741ab1991a9b8c",
       "action": "original copy artwork",
-      "sha256": "4df8f47604fd76ae8e83291a779d1eb5b9b85425047b9fc9c1c03796ecc194d9"
+      "sha256": "a615a3d5d381c00636e14b18adadf496e31e8533d5748c2c48dd59f26abefeab"
     },
     "chrome/toolkit/skin/classic/global/icons/error.svg": {
       "source": "toolkit/themes/shared/icons/error.svg",
       "original_sha256": "9aa4d65ddf59c9b6d3567fed0cde88471d880d3ca0190ffc9b0eb43a1f92a76e",
       "action": "original warning artwork",
-      "sha256": "222038460daf5f189b4982e7c93de463512e62d397f28a8b8f8f9eb3151c01f7"
+      "sha256": "fa9f0935e19e9d95c1f56e6e3c0ce41e2cd0526f2c044bbd9db6cdde03a53981"
     },
     "chrome/toolkit/skin/classic/global/icons/eye-slash.svg": {
       "source": "toolkit/themes/shared/icons/eye-slash.svg",
       "original_sha256": "5f772ff402755ac285e5b3e07cf7e0956349343287b254820cb34edca5f2be75",
       "action": "original eye-slash artwork",
-      "sha256": "421ef050aa202df1f94bb2ae2ae1a4f4358502d35035f5e694715542df50ea6d"
+      "sha256": "e108286fd4fe1ad3506ae1e8e07a202c3a0b6a4fcd8a68a3484d10f4a253d004"
     },
     "chrome/toolkit/skin/classic/global/icons/eye.svg": {
       "source": "toolkit/themes/shared/icons/eye.svg",
       "original_sha256": "4c8e469b2e65888a02f07cb0f7a273c86e24f6159fa313277e9798e299b6e326",
       "action": "original eye artwork",
-      "sha256": "7ae243eacf15d244ff2d0e10941853d302e2022021626327b3508ceefa184286"
+      "sha256": "64504669e099861c23ada3ba813bdc99a9cac906d190794c92213d3ebb0d5375"
     },
     "chrome/toolkit/skin/classic/global/icons/more.svg": {
       "source": "toolkit/themes/shared/icons/more.svg",
       "original_sha256": "25a693c38c9d7cac6634066ac686416fa9bcf9a155c63ba5579f438de82d60b7",
       "action": "original more artwork",
-      "sha256": "e4f7adee1d17631185260a139ef2886367f688ca81203d651b4036f6cb70de4f"
+      "sha256": "0a7dbb01ea4d28c73f4dbcb6eafdf95d6eeb3cbc3ca401f2624337cb722bc072"
     },
     "chrome/toolkit/skin/classic/global/icons/open-in-new.svg": {
       "source": "toolkit/themes/shared/icons/open-in-new.svg",
       "original_sha256": "b66ff538f4f89404b578d5ae4341ad737eeb380bdbaaf028ad92b125f50eb220",
       "action": "original external artwork",
-      "sha256": "359898b7af5f70d2b0ba58b8a7f57eb3e0cb7d622d167a6709dcb9e1f8ddaddd"
+      "sha256": "b277edc01caaff6deda2d286a0800eee269301bdeb20b63b418fc563e645e1fc"
     },
     "chrome/toolkit/skin/classic/global/icons/resizer.svg": {
       "source": "toolkit/themes/shared/icons/resizer.svg",
       "original_sha256": "e21083555dfc6bc3443ade5d60a29e3d358da446bcc870f3e6108541d6d986a6",
       "action": "original resize artwork",
-      "sha256": "ba35b45b7b40fab96b047923fde7a1dae53dd27123c91ead6e7d62c17ce46d8f"
+      "sha256": "45d81d5a8f2e2c56caae86993bc8f6678f406c3f10054a5482c49f3e5e19a073"
     },
     "chrome/toolkit/skin/classic/global/media/audio-muted.svg": {
       "source": "toolkit/themes/shared/media/audio-muted.svg",
       "original_sha256": "a1268d60a1ac59ded9fde7578d2fa14bf5e7cb2074e3cc42edc9e07bc01e9d07",
       "action": "original sound-slash artwork",
-      "sha256": "a61308797c89afa2f6df25d8d7fcfd2965b3438bd09c7406be1f0bb72ce1cb9b"
+      "sha256": "26b9f3ca590093a2661a59710b49af7abf17dbda1e8f7b6232dde48af6b653cf"
     },
     "chrome/toolkit/skin/classic/global/media/audio.svg": {
       "source": "toolkit/themes/shared/media/audio.svg",
       "original_sha256": "f1eb0365d209b40d339a37ef5cbbd9b96794806e95fb4c0f62ed4659abecfb6a",
       "action": "original sound artwork",
-      "sha256": "c586de06dfd9742f12ef90b784a785270276e5107919bca71a44c2f2d5d800a7"
+      "sha256": "631505d85573358e76a72162a0c995b6c2a3009b4784904d33561ee614776fb3"
     },
     "chrome/toolkit/skin/classic/global/media/audioNoAudioButton.svg": {
       "source": "toolkit/themes/shared/media/audioNoAudioButton.svg",
       "original_sha256": "103b6f86a731c47944086d3b4a7ca6c7d3d9b2db270233f041315073076a258b",
       "action": "original sound-slash artwork",
-      "sha256": "a61308797c89afa2f6df25d8d7fcfd2965b3438bd09c7406be1f0bb72ce1cb9b"
+      "sha256": "26b9f3ca590093a2661a59710b49af7abf17dbda1e8f7b6232dde48af6b653cf"
     },
     "chrome/toolkit/skin/classic/global/media/closed-caption-settings-button.svg": {
       "source": "toolkit/themes/shared/media/closed-caption-settings-button.svg",
       "original_sha256": "08e8ae5dbdb84d626a351f6442a5ee49f3e4ed83f1b5d51814e3776d19d34872",
       "action": "original settings artwork",
-      "sha256": "a12bc48fd7241dbedc03f56d844df9782089efc48023c76fdba681edf1e64a04"
+      "sha256": "f3785701af82cd71bc855c271e84eab7aa034c2d86b5f3bbd50dcb19d4d2c321"
     },
     "chrome/toolkit/skin/classic/global/media/closedCaptionButton-cc-off.svg": {
       "source": "toolkit/themes/shared/media/closedCaptionButton-cc-off.svg",
       "original_sha256": "c933aaf8c1ee39e066f268152a34b9dfb77f3a17b888363786a1837836cdb297",
       "action": "original caption-slash artwork",
-      "sha256": "94bcc45e84dc1faed5637525d892d5e49ed6798f4b6e62ddd34146177a44cc9d"
+      "sha256": "0869771522c35123665096f10da738d7ba796e5c8928202acf39e1fb50702a00"
     },
     "chrome/toolkit/skin/classic/global/media/closedCaptionButton-cc-on.svg": {
       "source": "toolkit/themes/shared/media/closedCaptionButton-cc-on.svg",
       "original_sha256": "8fa469764fcba19842e23de2843d837fb9c3ee277631e6e7a729f8f75c0667ec",
       "action": "original caption artwork",
-      "sha256": "2a6d35c8383378cd1ed60f1df431557aa6927fdc38f6407b681fc8ed7ed62fb6"
+      "sha256": "bbb4a6fcd63fa4b81e3a93910ce3b43371013956b9a300caf944e07f5ce74602"
     },
     "chrome/toolkit/skin/classic/global/media/fullscreenEnterButton.svg": {
       "source": "toolkit/themes/shared/media/fullscreenEnterButton.svg",
       "original_sha256": "802743031681b74333677649ddf7960cbdddb279ac8a9a36a8266a1c34411d3d",
       "action": "original focus artwork",
-      "sha256": "cd98145d1fbdc416ebee7adb94746df6b8e1b4cba24d07ae935e0295d726a2cd"
+      "sha256": "a45422556afed8e82c9b4f4d072688d342c55a47c07c7db72e2efe8a3610ffd2"
     },
     "chrome/toolkit/skin/classic/global/media/fullscreenExitButton.svg": {
       "source": "toolkit/themes/shared/media/fullscreenExitButton.svg",
       "original_sha256": "c6e6e2ab6caec0040d0c6c497e4e7ddde8ed95a40022e7f0f8294b60958f8a7f",
       "action": "original focus artwork",
-      "sha256": "cd98145d1fbdc416ebee7adb94746df6b8e1b4cba24d07ae935e0295d726a2cd"
+      "sha256": "a45422556afed8e82c9b4f4d072688d342c55a47c07c7db72e2efe8a3610ffd2"
     },
     "chrome/toolkit/skin/classic/global/media/pause-fill.svg": {
       "source": "toolkit/themes/shared/media/pause-fill.svg",
       "original_sha256": "b626ee7b432d57fa95a2e678f580de5deac8d6e77e1e669766d1295eb98ed587",
       "action": "original pause artwork",
-      "sha256": "86a63bd899df90cb6324bdb50856bd62a859bd269e4cc778ae1024a2d8fde90e"
+      "sha256": "f9c119905a1d9a6b1c055fba511e9beea76cb57defe2cabf10ed3c3bf298c472"
     },
     "chrome/toolkit/skin/classic/global/media/play-fill.svg": {
       "source": "toolkit/themes/shared/media/play-fill.svg",
       "original_sha256": "24da5f0467e2a39971786fae8518fa7b108c6889408e0dbf2d173c33a20769a7",
       "action": "original play artwork",
-      "sha256": "11f923585e6e13c3eac47b623222167eb48de3635f1cf7922f9bd6e3ac59be1c"
+      "sha256": "f81ccf87e854032c0888d8fcd6c1890ff4666f0cedd7042ee8ed86e692aff0aa"
     },
     "chrome/toolkit/skin/classic/global/media/picture-in-picture-enter-fullscreen-button.svg": {
       "source": "toolkit/themes/shared/media/picture-in-picture-enter-fullscreen-button.svg",
       "original_sha256": "586cb9b68c7b37b195d41e951d05fa9a386709709f1235bea5ab2080dc841a14",
       "action": "original focus artwork",
-      "sha256": "cd98145d1fbdc416ebee7adb94746df6b8e1b4cba24d07ae935e0295d726a2cd"
+      "sha256": "a45422556afed8e82c9b4f4d072688d342c55a47c07c7db72e2efe8a3610ffd2"
     },
     "chrome/toolkit/skin/classic/global/media/picture-in-picture-exit-fullscreen-button.svg": {
       "source": "toolkit/themes/shared/media/picture-in-picture-exit-fullscreen-button.svg",
       "original_sha256": "197464ccaa49bf9c0bb3cd07ad5866dc4581dd56cf1ddd4567d1d079ffdef7fa",
       "action": "original focus artwork",
-      "sha256": "cd98145d1fbdc416ebee7adb94746df6b8e1b4cba24d07ae935e0295d726a2cd"
+      "sha256": "a45422556afed8e82c9b4f4d072688d342c55a47c07c7db72e2efe8a3610ffd2"
     },
     "chrome/toolkit/skin/classic/global/media/picture-in-picture-seekBackward-button.svg": {
       "source": "toolkit/themes/shared/media/picture-in-picture-seekBackward-button.svg",
       "original_sha256": "05a8cc81a1ef5ae4867ece8cb52fbb79e77535c20527a82e97cefcf4b8ceb838",
       "action": "original back artwork",
-      "sha256": "32279b41b208cab6b0a48aa68348bc75180b098c7d534d9be8258eb0884f31a6"
+      "sha256": "a7e78cba60fdddcbc41f98bcc0e0c6fb740af3036f342d14676342d048803fd0"
     },
     "chrome/toolkit/skin/classic/global/media/picture-in-picture-seekForward-button.svg": {
       "source": "toolkit/themes/shared/media/picture-in-picture-seekForward-button.svg",
       "original_sha256": "1a34ef8d862de45e7ecf5303232e3bc5a7e9febaecf0758fcbed21ebe184b4ae",
       "action": "original forward artwork",
-      "sha256": "bedfa4e843ce257479a54fb10ffcd37ccf1b097526f151da9924cbbde58c6a43"
+      "sha256": "c4861b8defdcdce792333b41c7eb7b5f8b823921b0b014c7aacccc730cf2f009"
     },
     "chrome/toolkit/skin/classic/global/media/error.png": {
       "source": "toolkit/themes/shared/media/error.png",
@@ -4015,85 +4015,85 @@
       "source": "devtools/shared/images/alert-small.svg",
       "original_sha256": "58e65e7a82773b42012663cd5d758fa0ff2b1e39253e2f70d3d4116de9017215",
       "action": "original warning artwork",
-      "sha256": "222038460daf5f189b4982e7c93de463512e62d397f28a8b8f8f9eb3151c01f7"
+      "sha256": "fa9f0935e19e9d95c1f56e6e3c0ce41e2cd0526f2c044bbd9db6cdde03a53981"
     },
     "chrome/devtools/modules/devtools/shared/images/command-pick-remote-touch.svg": {
       "source": "devtools/shared/images/command-pick-remote-touch.svg",
       "original_sha256": "3c54b7f3520b22209a213b1808406ecf9d1093ead7f9209fb1d502e842701097",
       "action": "original accessible artwork",
-      "sha256": "e1782efec91134747de6606ae1b9b4ccfc44ebee637329e1e103bc216df44b07"
+      "sha256": "1758278f9063318178f2a98d7a6e4503d57241d37a6bd71c017d2820d16ded17"
     },
     "chrome/devtools/modules/devtools/shared/images/command-pick.svg": {
       "source": "devtools/shared/images/command-pick.svg",
       "original_sha256": "b521da1167bc180e09409a768e186a6a15d076f4033bd557e976d28053828377",
       "action": "original forward artwork",
-      "sha256": "bedfa4e843ce257479a54fb10ffcd37ccf1b097526f151da9924cbbde58c6a43"
+      "sha256": "c4861b8defdcdce792333b41c7eb7b5f8b823921b0b014c7aacccc730cf2f009"
     },
     "chrome/devtools/modules/devtools/shared/images/error-small.svg": {
       "source": "devtools/shared/images/error-small.svg",
       "original_sha256": "496eb638540c5076ae6a9282b947796e46c25ac57c286392685989a1e76eba32",
       "action": "original warning artwork",
-      "sha256": "222038460daf5f189b4982e7c93de463512e62d397f28a8b8f8f9eb3151c01f7"
+      "sha256": "fa9f0935e19e9d95c1f56e6e3c0ce41e2cd0526f2c044bbd9db6cdde03a53981"
     },
     "chrome/devtools/modules/devtools/shared/images/info-small.svg": {
       "source": "devtools/shared/images/info-small.svg",
       "original_sha256": "67ba77cf84ee59a58e13813f4f0694ecb50323f81750fa027ebd94ae9cca8df8",
       "action": "original info artwork",
-      "sha256": "ea41894e31de79eaa3641b27d45da6570c29632855749fb1aed21cc2fcfa16bc"
+      "sha256": "cc0e149607a52a60fe0065cb80bca571dd4f116c32de621c11126b5a5a2cecad"
     },
     "chrome/devtools/modules/devtools/shared/images/resume.svg": {
       "source": "devtools/shared/images/resume.svg",
       "original_sha256": "57b07fde7c7e75f22390fe4d25d10eb9f428d9c4a92d0c9585266ce85da027cf",
       "action": "original play artwork",
-      "sha256": "11f923585e6e13c3eac47b623222167eb48de3635f1cf7922f9bd6e3ac59be1c"
+      "sha256": "f81ccf87e854032c0888d8fcd6c1890ff4666f0cedd7042ee8ed86e692aff0aa"
     },
     "chrome/devtools/modules/devtools/shared/images/stepOver.svg": {
       "source": "devtools/shared/images/stepOver.svg",
       "original_sha256": "aed152d8f52512bda2eae013ddd42549041da351374079d022a5b0b1ca6d016b",
       "action": "original forward artwork",
-      "sha256": "bedfa4e843ce257479a54fb10ffcd37ccf1b097526f151da9924cbbde58c6a43"
+      "sha256": "c4861b8defdcdce792333b41c7eb7b5f8b823921b0b014c7aacccc730cf2f009"
     },
     "chrome/geckoview/skin/images/add.svg": {
       "source": "mobile/android/themes/geckoview/images/add.svg",
       "original_sha256": "dd87d23c38d868a49efea591f7c8c98dbcdfc991b1808b7f8e87d99364573f59",
       "action": "original plus artwork",
-      "sha256": "7621d609b7f71f83c696fe7dccb6d9002a8da6716d97f5d7a5bd15e167e55677"
+      "sha256": "f3fdf0ca0e7cf2a0a6bc2124a0d1a7ee010ba040a03924b67b1b61fcb8b884f2"
     },
     "chrome/geckoview/skin/images/arrow-down.svg": {
       "source": "mobile/android/themes/geckoview/images/arrow-down.svg",
       "original_sha256": "ebede02792f64cbebcfd6820d78ee8a0f65a214d1c7d1e202d836439b5bc6707",
       "action": "original down artwork",
-      "sha256": "233960af5c7ee1c2729b3dccd50cca1951ae26dbf1eb3692c8e08f48e50e141f"
+      "sha256": "b5166f3a879c1fb7d51666578e84d1ef5117b0065f878e284d5b5a9e0f77d53d"
     },
     "chrome/geckoview/skin/images/arrow-up.svg": {
       "source": "mobile/android/themes/geckoview/images/arrow-up.svg",
       "original_sha256": "6998d866c3aa9759f29ba2e7f5563e626f0e9613dfe5c43404aa203829d6aa19",
       "action": "original up artwork",
-      "sha256": "01f361e0f791d3c5a8873d2b1daa8bf054b73e689c2ff7482b461fc4b94536ef"
+      "sha256": "ac1416c8c9af4b20936349ccd1abe6cf7b9a88659ede71943c98db4ce6028560"
     },
     "chrome/geckoview/skin/images/dropmarker-right.svg": {
       "source": "mobile/android/themes/geckoview/images/dropmarker-right.svg",
       "original_sha256": "7e9869661c85fa32c0ebe160bad74478bdb3358b87fae00d2c20f20b0094493d",
       "action": "original right artwork",
-      "sha256": "db069c03e8734368181c7b27fecfe6dc33debf5a99fb4e8b0e170abc3082758e"
+      "sha256": "30add74002543169a29c04b59f85a9b2a7f55fb00f88e992b9927fb27f280be5"
     },
     "chrome/geckoview/skin/images/dropmarker.svg": {
       "source": "mobile/android/themes/geckoview/images/dropmarker.svg",
       "original_sha256": "624ebbcf2b1d28958f6052fa01158379b27ef8a88cd5767172ea119cd9446887",
       "action": "original down artwork",
-      "sha256": "233960af5c7ee1c2729b3dccd50cca1951ae26dbf1eb3692c8e08f48e50e141f"
+      "sha256": "b5166f3a879c1fb7d51666578e84d1ef5117b0065f878e284d5b5a9e0f77d53d"
     },
     "chrome/geckoview/skin/images/lock.svg": {
       "source": "mobile/android/themes/geckoview/images/lock.svg",
       "original_sha256": "0f98bec36c418f91ee85b445c87437d159fd1bce0c71d06b76f7b03be2382bcb",
       "action": "original lock artwork",
-      "sha256": "b7449e882a8e93c4ded99176cf1fd09ff651dcc96a6d8812bb53ca8f266aebef"
+      "sha256": "d66ff83c68fe97f8a4a4521403d3fea389c00041ea870af6593d9c92cd9d7628"
     },
     "chrome/geckoview/skin/images/search.svg": {
       "source": "mobile/android/themes/geckoview/images/search.svg",
       "original_sha256": "5eb72634641884df15686abf6bd799c233506ed81c4731a61ec91c1bb557c7e5",
       "action": "original search artwork",
-      "sha256": "b09bda3e735a722782c0643c66237751695a4452f75d3e3c3f117aefb5f1d046"
+      "sha256": "4adb272c398ef117f1c244bbdcb334f3a789d62e61b10f21b9bef576e947a992"
     },
     "res/table-remove-column-active.gif": {
       "source": "editor/composer/res/table-remove-column-active.gif",

@@ -21,7 +21,9 @@ for name,symbol in {'disqus':'document','facebook':'person','instagram':'image',
 for member,(original,symbol) in sources.items():
  out=assets/member
  out.parent.mkdir(parents=True,exist_ok=True)
- out.write_text('<!-- SPDX-License-Identifier: AGPL-3.0-or-later; original Wild Buzzard artwork. -->\n'+f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="{icons.PATHS[symbol]}" fill="none" stroke="#b89b65" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/></svg>\n')
+ # These images are decoded by extension UI or embedded in web content,
+ # where Gecko's native chrome-only context paint is unavailable.
+ out.write_text('<!-- SPDX-License-Identifier: AGPL-3.0-or-later; original Wild Buzzard artwork. -->\n'+f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="color-scheme: light dark; color: CanvasText"><path d="{icons.PATHS[symbol]}" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/></svg>\n')
  rows['assets/'+member]={'source':str(out.relative_to(ROOT)),'original_source':original,'original_sha256':hashlib.sha256((ROOT/original).read_bytes()).hexdigest(),'action':'original '+symbol+' icon'}
 # This local transparent placeholder replaces blocked tracking pixels; it is
 # structural image data and is not browser illustration or an outbound request.

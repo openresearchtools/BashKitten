@@ -248,8 +248,9 @@ internal fun WebExtensionMenuItems(
                     BitmapPainter(image = icon.asImageBitmap())
                 }
                     ?: painterResource(iconsR.drawable.mozac_ic_extension_fill_24),
-                iconTint = when (extension.icon) {
-                    null -> MaterialTheme.colorScheme.onSurface
+                iconTint = when {
+                    extension.icon == null || extension.id == "references@bashkitten.org" ->
+                        MaterialTheme.colorScheme.onSurface
                     else -> Color.Unspecified
                 },
                 enabled = extension.enabled,

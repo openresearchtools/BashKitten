@@ -85,7 +85,13 @@ def main():
    base=key.removesuffix('-slash');d=extra.get(base,art.PATHS.get(base,''))
    if key.endswith('-slash'):d+='M2,2L22,22'
    svg=f'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="{d}" fill="none" stroke="#AFA38B" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/></svg>\n'
-   if p.suffix=='.svg':p.write_text('<!-- SPDX-License-Identifier: AGPL-3.0-or-later; original Wild Buzzard artwork. -->\n'+svg)
+   if p.suffix=='.svg':
+    # Native consumers provide fill, except Nova's checkbox which provides
+    # stroke. Standalone images retain a system-color fallback; text selection
+    # handles keep the platform's native accent rather than page text color.
+    paint='AccentColor' if key=='caret' else 'context-stroke currentColor' if key=='check' else 'context-fill currentColor'
+    svg=svg.replace('viewBox="0 0 24 24"','viewBox="0 0 24 24" style="color-scheme: light dark; color: CanvasText"').replace('stroke="#AFA38B"',f'stroke="{paint}"')
+    p.write_text('<!-- SPDX-License-Identifier: AGPL-3.0-or-later; original Wild Buzzard artwork. -->\n'+svg)
    else:
     width,height=struct.unpack('<HH',original[6:10]) if p.suffix=='.gif' else struct.unpack('>II',original[16:24])
     if p.suffix=='.gif':

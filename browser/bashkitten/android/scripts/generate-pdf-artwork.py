@@ -12,7 +12,11 @@ for p in (root/'toolkit/components/pdfjs/content/web/images').glob('*.svg'):
  key=next((v for pat,v in rules if re.search(pat,n)),None)
  if key is None:raise ValueError(n)
  data=subprocess.check_output(['git','show','ac1d153497b7:'+str(p.relative_to(root))],cwd=root);path='M4,12H20' if key=='minus' else '' if key=='empty' else a.PATHS[key]
- # SVGs are used both as CSS masks and as direct images in the viewer.
- p.write_text('<!-- SPDX-License-Identifier: AGPL-3.0-or-later; original Wild Buzzard artwork. -->\n'+f'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="{path}" fill="none" stroke="#555555" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/></svg>\n')
+ # Toolbar masks already take their color from the viewer's native CSS.
+ # Annotation images belong to document content; only the direct UI cursors
+ # need their own light/dark system color, including forced colors.
+ theme=' style="color-scheme: light dark; color: CanvasText"' if n.startswith('cursor-') else ''
+ paint='currentColor' if n.startswith('cursor-') else '#555555'
+ p.write_text('<!-- SPDX-License-Identifier: AGPL-3.0-or-later; original Wild Buzzard artwork. -->\n'+f'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"{theme}><path d="{path}" fill="none" stroke="{paint}" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/></svg>\n')
  rows[str(p.relative_to(root))]={'sha256':hashlib.sha256(data).hexdigest(),'action':'original '+key+' icon'}
 x['pdf_viewer_images']=rows;(root/'bashkitten/android/ui-artwork.json').write_text(json.dumps(x,indent=2)+'\n');print('PDF icons replaced:',len(rows))

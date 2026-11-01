@@ -42,22 +42,33 @@ for filename in ['api.js','oauthsimple.js','updaterFix.js','manifest-v3.json']:
 # Donor legal attribution stays in legal/; main BashKitten branding is separate.
 icons=ROOT/'src/icons'
 for size in [16,32,64,128]:shutil.copy(icons/f'Icon-{size}.png',OUT/f'Icon-{size}.png')
+artwork=(icons/'references.svg').read_text()
+if artwork.count('color: CanvasText')!=1:raise SystemExit('Pinned References SVG theme color changed')
+(OUT/'references.svg').write_text(artwork)
+for name,color in [('light','white'),('dark','black')]:
+ # Native theme_icons selects by toolbar/popup text contrast, independently
+ # of the OS theme. currentColor also retains native forced-colors handling.
+ (OUT/f'references-{name}.svg').write_text(artwork.replace('color: CanvasText',f'color: {color}'))
 for path in (OUT/'images').rglob('*zotero*'):
  if path.suffix=='.png':shutil.copy(icons/('Icon-16.png' if '-16px' in path.name else 'Icon-32.png'),path)
 # Native per-tab detection replaces the manifest icon with item-type artwork.
 # Brand only those action paths; retain the donor's item icons in capture UI
 # and its separate saving/success/failure indicators, titles and enabled state.
-action_icons={'16':'Icon-16.png','32':'Icon-32.png','48':'Icon-64.png'}
+action_icons={str(size):'references.svg' for size in [16,32,48]}
 capture_icon_paths={
  'translator': 'path:(itemType === "multiple"\n\t\t\t\t? "images/treesource-collection.png"\n\t\t\t\t: Zotero.ItemTypes.getImageSrc(itemType))',
  'webpage': 'path: Zotero.ItemTypes.getImageSrc("webpage-gray")',
  'pdf': "path: browser.runtime.getURL('images/pdf.png')",
+ 'status': 'path: icon\n',
+ 'message': 'path: `images/${icon}`',
 }
 background=OUT/'background.js'
 text=background.read_text()
 for state,expression in capture_icon_paths.items():
  if text.count(expression)!=1:raise SystemExit('Pinned Connector action icon changed: '+state)
- text=text.replace(expression,'path: '+json.dumps(action_icons),1)
+ # Reset the per-tab override so Firefox keeps the manifest's theme_icons.
+ # Titles/enabled state and separate saving/success/failure icons stay native.
+ text=text.replace(expression,'path: null'+ ('\n' if expression.endswith('\n') else ''),1)
 background.write_text(text)
 # Retired cloud/reporting/editor surfaces must not advertise donor services.
 retired_messages=('integration_', 'reports_', 'preferences_onlineLibrary_',
@@ -89,6 +100,7 @@ manifest.update(name='References',description='Capture references into the selec
 manifest['browser_action']['default_title']='References Add'
 manifest['browser_action']['default_area']='navbar'
 manifest['browser_action']['default_icon']=action_icons
+manifest['browser_action']['theme_icons']=[{'size':size,'light':'references-light.svg','dark':'references-dark.svg'} for size in [16,32,48]]
 # Keep Gecko's configurable action command without the donor's screenshot shortcut.
 manifest['commands']['_execute_browser_action'].pop('suggested_key',None)
 manifest.pop('applications',None)
