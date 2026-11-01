@@ -3,47 +3,56 @@
     {
       "id": "citation",
       "title": "Add/Edit Citation",
-      "background": true
+      "background": true,
+      "iconCommand": ".uno:ZoteroAddEditCitation"
     },
     {
       "id": "edit",
       "title": "Edit Citation",
-      "background": true
+      "background": true,
+      "iconCommand": ".uno:Edit"
     },
     {
       "id": "remove",
       "title": "Remove Citation",
-      "background": true
+      "background": true,
+      "iconCommand": ".uno:ZoteroUnlink"
     },
     {
       "id": "bibliography",
       "title": "Add Bibliography",
-      "background": true
+      "background": true,
+      "iconCommand": ".uno:ZoteroAddEditBibliography"
     },
     {
       "id": "refresh",
       "title": "Refresh Citations",
-      "background": true
+      "background": true,
+      "iconCommand": ".uno:ZoteroRefresh"
     },
     {
       "id": "settings",
       "title": "Settings",
-      "background": true
+      "background": true,
+      "iconCommand": ".uno:ZoteroSetDocPrefs"
     },
     {
       "id": "codes",
       "title": "Convert citation codes",
-      "background": true
+      "background": true,
+      "iconCommand": ".uno:InsertField"
     },
     {
       "id": "text-copy",
       "title": "Save copy with text citations",
-      "background": true
+      "background": true,
+      "iconCommand": ".uno:SaveAs"
     },
     {
       "id": "import-snapshots",
       "title": "Import copied references",
-      "background": true
+      "background": true,
+      "iconCommand": ".uno:PasteSpecial"
     }
   ],
   "extensionsMenu": [
@@ -93,7 +102,7 @@
       "groups": [
         {
           "id": "citations",
-          "label": "References",
+          "label": "Citations",
           "items": [
             {
               "type": "button",
@@ -111,19 +120,19 @@
               "size": "large"
             },
             {
-              "type": "menu",
-              "title": "Convert",
-              "items": [
-                {
-                  "command": "codes"
-                },
-                {
-                  "command": "text-copy"
-                },
-                {
-                  "command": "import-snapshots"
-                }
-              ]
+              "type": "button",
+              "command": "codes",
+              "size": "large"
+            },
+            {
+              "type": "button",
+              "command": "text-copy",
+              "size": "large"
+            },
+            {
+              "type": "button",
+              "command": "import-snapshots",
+              "size": "large"
             },
             {
               "type": "button",
@@ -135,7 +144,9 @@
               "command": "settings",
               "size": "large"
             }
-          ]
+          ],
+          "nofold": true,
+          "mobile": true
         }
       ]
     }

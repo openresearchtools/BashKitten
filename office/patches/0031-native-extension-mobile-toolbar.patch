@@ -1,0 +1,143 @@
+--- a/browser/src/control/Control.Extension.ts
++++ b/browser/src/control/Control.Extension.ts
+@@ -174,6 +174,8 @@
+ 	label: string;
+ 	// Native OverflowGroup keeps its controls visible in the scrollable bar.
+ 	nofold?: boolean;
++	// Offer this group in the existing phone editing toolbar too.
++	mobile?: boolean;
+ 	items: ExtensionNotebookbarItem[];
+ }
+ 
+@@ -654,6 +656,7 @@
+ 			: undefined;
+ 		const command =
+ 			commands && commands.find((c: ExtensionCommand) => c.id === commandId);
++		if (command) JSDialog.CloseAllDropdowns();
+ 		if (command && command.background) {
+ 			this._invokeBackgroundCommand(commandId);
+ 			return;
+--- a/browser/src/control/Control.MobileTopBar.ts
++++ b/browser/src/control/Control.MobileTopBar.ts
+@@ -79,13 +79,63 @@
+ 		}
+ 	}
+ 
++	// Reuse the notebookbar's item adapter and JSDialog's native popup widgets;
++	// phones have no notebookbar of their own.
++	private getExtensionToolItems(): any[] {
++		if (!window.enableExperimentalFeatures) return [];
++		const items: any[] = [];
++		const extensions = this.map._extensions || {};
++		const counter = { _nextContributedId: 0 };
++		const buildItem = window.L.Control.Notebookbar.prototype._buildContributedItem;
++		Object.keys(extensions).sort().forEach((extId, extIndex) => {
++			const { manifest, baseUrl } = extensions[extId].options;
++			const contributes = manifest.contributes;
++			if (!contributes) return;
++			(contributes.notebookbar || []).forEach((tab: ExtensionNotebookbarTab, tabIndex: number) => {
++				tab.groups.forEach((group, groupIndex) => {
++					if (!group.mobile) return;
++					const children = group.items.map((item) => buildItem.call(
++						counter, extId, contributes.commands || [], baseUrl,
++						'notebookbar group "' + group.id + '"', item,
++					)).filter(Boolean).map((item: any) => ({ ...item, cssClass: 'notebookbar' }));
++					if (!children.length) return;
++					const id = 'extmobile_' + extIndex + '_' + tabIndex + '_' + groupIndex;
++					items.push({
++						id, type: 'menubutton', text: group.label, noLabel: true,
++						icon: children.find((item: any) => item.icon)?.icon,
++						menu: [{ type: 'json', content: {
++							id: id + '_scroll', type: 'scrollwindow', cssClass: 'ui-extension-mobile-toolbar',
++							vertical: { policy: 'never' }, horizontal: { policy: 'always' },
++							children: [{ id: id + '_tools', type: 'toolbox', cssClass: 'notebookbar', children }],
++						} }, { type: 'separator' }],
++					});
++				});
++			});
++		});
++		return items;
++	}
++
++	// Discovery finishes after the normal controls are live. Insert only the
++	// contributed controls so Undo/Redo and the current permission state survive.
++	refreshExtensions() {
++		const before = this.getItemElement('undo');
++		for (const item of this.getExtensionToolItems()) {
++			if (this.getItemElement(item.id)) continue;
++			this.builder.build(this.parentContainer, [item]);
++			const control = this.getItemElement(item.id);
++			if (control && before) this.parentContainer.insertBefore(control, before);
++			this.showItem(item.id, this.map.isEditMode());
++		}
++	}
++
+ 	create() {
+ 		const items = this.getToolItems();
+ 		this.builder.build(this.parentContainer, items);
++		this.refreshExtensions();
+ 	}
+ 
+ 	onUpdatePermission(e: any) {
+-		const toolbarButtons: string[] = ['undo', 'redo', 'mobile_wizard', 'insertion_mobile_wizard', 'comment_wizard'];
++		const toolbarButtons: string[] = ['undo', 'redo', 'mobile_wizard', 'insertion_mobile_wizard', 'comment_wizard', ...this.getExtensionToolItems().map((item) => item.id)];
+ 		const badgeContainer = document.getElementById('permissionmode-container');
+ 		if (badgeContainer) {
+ 			badgeContainer.replaceChildren(getPermissionModeElements(app.isReadOnly(), !app.isReadOnly(), this.map));
+--- a/browser/src/app/ServerConnectionService.ts
++++ b/browser/src/app/ServerConnectionService.ts
+@@ -187,6 +187,7 @@
+ 						app.map.uiManager.notebookbar.impl.refresh();
+ 					}
+ 					if (app.map.contextToolbar) app.map.contextToolbar.refresh();
++					if (app.map.mobileTopBar) app.map.mobileTopBar.refreshExtensions();
+ 					// KeyboardShortcuts' class lives in a @ts-strict-ignore'd file, so
+ 					// its methods are not visible to the strict compile of this file.
+ 					(window.KeyboardShortcuts as any).applyExtensionKeybindings();
+--- a/browser/src/control/jsdialog/Control.ContextMenu.ts
++++ b/browser/src/control/jsdialog/Control.ContextMenu.ts
+@@ -142,6 +142,12 @@
+ 
+ 		if (window.mode.isSmallScreenDevice()) {
+ 			window.contextMenuWizard = true;
++			// Mobile menu command entries otherwise go through sendUnoCommand.
++			// Extension actions use the same dispatcher as their desktop entries.
++			for (const [command, entry] of Object.entries(contextMenu)) {
++				if (command.startsWith('ext:') && typeof entry !== 'string')
++					entry.callback = () => app.dispatcher.dispatch(command);
++			}
+ 			const insertCommentEntry = contextMenu['.uno:InsertAnnotation'];
+ 			if (insertCommentEntry && typeof insertCommentEntry !== 'string')
+ 				insertCommentEntry.callback = () => app.map.insertComment();
+--- a/browser/css/notebookbar.css
++++ b/browser/css/notebookbar.css
+@@ -1343,3 +1343,16 @@
+ 	height: 1px;
+ 	margin: var(--spacing-xs) 0;
+ }
++
++/* Extension tools on phones use the same icon-over-label notebookbar widgets. */
++.ui-extension-mobile-toolbar {
++	max-width: calc(100vw - 24px);
++}
++
++.ui-extension-mobile-toolbar > .ui-scrollwindow-content {
++	width: max-content;
++}
++
++.ui-extension-mobile-toolbar .unotoolbutton.notebookbar {
++	height: var(--notebookbar-element-height);
++}
+--- a/browser/extensions/README.md
++++ b/browser/extensions/README.md
+@@ -166,7 +166,9 @@
+   A **group** (`{ id, label, items }`) is a labeled cluster, like Writer's "Clipboard"
+   or "Font" group - it collapses into a dropdown on its own when the window is too
+   narrow, the same as every built-in group. Set `nofold: true` to keep a group
+-  visible inside the native horizontally scrollable notebookbar instead. Each
++  visible inside the native horizontally scrollable notebookbar instead. Set
++  `mobile: true` to offer the same tools from a button in the phone editing toolbar;
++  its native popup scrolls horizontally and uses the same command dispatcher. Each
+   entry in `items` is one of exactly
+   three kinds:
+   - **button** - `{ type: "button", command, size?: "large" | "small" }` (default

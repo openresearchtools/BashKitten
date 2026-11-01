@@ -1,0 +1,83 @@
+--- a/browser/src/control/Control.Extension.ts
++++ b/browser/src/control/Control.Extension.ts
+@@ -118,6 +118,8 @@
+ 	id: string;
+ 	title: string;
+ 	icon?: string;
++	// Reuse a native command's themed icon when no extension icon is provided.
++	iconCommand?: string;
+ 	// Kit-side command: the script file holding the `commands` object.
+ 	script?: string;
+ 	source?: string;
+@@ -168,6 +170,8 @@
+ interface ExtensionNotebookbarGroup {
+ 	id: string;
+ 	label: string;
++	// Native OverflowGroup keeps its controls visible in the scrollable bar.
++	nofold?: boolean;
+ 	items: ExtensionNotebookbarItem[];
+ }
+ 
+--- a/browser/src/control/Control.Notebookbar.js
++++ b/browser/src/control/Control.Notebookbar.js
+@@ -382,7 +382,8 @@
+ 				menu.push({
+ 					'id': 'ext:' + id + ':extentry:' + item.command,
+ 					'text': command.title,
+-					'icon': command.icon ? baseUrl + command.icon : undefined,
++					'icon': command.icon ? baseUrl + command.icon
++						: command.iconCommand ? app.LOUtil.getIconNameOfCommand(command.iconCommand) : undefined,
+ 					'action': 'ext:' + id + ':' + item.command,
+ 				});
+ 			});
+@@ -448,7 +449,8 @@
+ 				'id': 'ext:' + extId + ':btn:' + (this._nextContributedId++),
+ 				'type': item.size === 'large' ? 'bigcustomtoolitem' : 'customtoolitem',
+ 				'text': command.title,
+-				'icon': command.icon ? baseUrl + command.icon : undefined,
++				'icon': command.icon ? baseUrl + command.icon
++						: command.iconCommand ? app.LOUtil.getIconNameOfCommand(command.iconCommand) : undefined,
+ 				'command': 'ext:' + extId + ':' + item.command,
+ 			};
+ 		}
+@@ -460,7 +462,8 @@
+ 				return {
+ 					'id': 'ext:' + extId + ':entry:' + (self._nextContributedId++),
+ 					'text': entryCommand.title,
+-					'icon': entryCommand.icon ? baseUrl + entryCommand.icon : undefined,
++					'icon': entryCommand.icon ? baseUrl + entryCommand.icon
++						: entryCommand.iconCommand ? app.LOUtil.getIconNameOfCommand(entryCommand.iconCommand) : undefined,
+ 					'action': 'ext:' + extId + ':' + entry.command,
+ 				};
+ 			}).filter(function(entry) { return !!entry; });
+@@ -497,6 +500,7 @@
+ 			// is unique across all contributed tabs and extensions in this bar.
+ 			'id': 'extgroup_' + (this._nextContributedId++),
+ 			'type': 'overflowgroup',
++			'nofold': group.nofold === true,
+ 			'name': group.label,
+ 			'children': children,
+ 		};
+--- a/browser/extensions/README.md
++++ b/browser/extensions/README.md
+@@ -103,7 +103,8 @@
+   no other browser capability - and it runs without ever loading a visible panel,
+   so the command works whether or not the extension has a sidebar UI at all. `icon`
+   is optional and shown on a notebookbar button or dropdown entry that references
+-  this command - the classic menu never renders it.
++  this command - the classic menu never renders it. `iconCommand` may name a native
++  command whose existing themed icon is used when `icon` is absent.
+ 
+ - `contributes.extensionsMenu` offers commands under the extension's own name, in the
+   Extensions menu and as a dropdown in the Extensions notebookbar tab, in the order
+@@ -164,7 +165,9 @@
+ 
+   A **group** (`{ id, label, items }`) is a labeled cluster, like Writer's "Clipboard"
+   or "Font" group - it collapses into a dropdown on its own when the window is too
+-  narrow, the same as every built-in group. Each entry in `items` is one of exactly
++  narrow, the same as every built-in group. Set `nofold: true` to keep a group
++  visible inside the native horizontally scrollable notebookbar instead. Each
++  entry in `items` is one of exactly
+   three kinds:
+   - **button** - `{ type: "button", command, size?: "large" | "small" }` (default
+     `"small"`). `size` chooses a tall icon-over-label button or a compact
