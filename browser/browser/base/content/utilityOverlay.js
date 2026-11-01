@@ -385,11 +385,8 @@ function isBidiEnabled() {
 
 function openAboutDialog() {
   const browserWindow = BrowserWindowTracker.getTopWindow();
-  if (
-    AppConstants.MOZ_APP_NAME == "bashkitten" &&
-    browserWindow?.BashKittenAgent
-  ) {
-    browserWindow.BashKittenAgent.browse();
+  if (AppConstants.MOZ_APP_NAME == "bashkitten" && browserWindow) {
+    browserWindow.BashKittenAgent?.browse();
     browserWindow.openPreferences("paneAbout");
     return;
   }

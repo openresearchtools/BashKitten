@@ -27,10 +27,10 @@ function init() {
     const link = document.getElementById("bashkittenBundledLicensesLink");
     if (!link?.contains(event.target) || link.disabled || event.defaultPrevented || ![0, 1].includes(event.button)) return;
     const browser = Services.wm.getMostRecentWindow("navigator:browser");
-    if (!browser?.BashKittenAgent) return; // The existing link opens About settings if no browser owns the dialog.
+    if (!browser) return; // The existing link opens About settings if no browser owns the dialog.
     event.preventDefault();
     browser.focus();
-    browser.BashKittenAgent.licenses();
+    ChromeUtils.importESModule("resource:///modules/BashKittenAbout.sys.mjs").BashKittenAbout.licenses(browser);
     window.close();
   }, true);
 

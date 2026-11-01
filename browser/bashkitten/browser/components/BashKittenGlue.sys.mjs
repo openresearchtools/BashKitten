@@ -7,6 +7,7 @@ import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  BashKittenAbout: "resource:///modules/BashKittenAbout.sys.mjs",
   BashKittenAgent: "resource:///modules/BashKittenAgent.sys.mjs",
   BrowserControlChannel: "resource:///modules/BrowserControlChannel.sys.mjs",
   ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
@@ -98,6 +99,7 @@ export const BashKittenGlue = {
   observe(subject, topic) {
     switch (topic) {
       case "browser-delayed-startup-finished":
+        lazy.BashKittenAbout.onWindowOpened(subject);
         if (lazy.BrowserControlChannel.guestRequested) {
           void lazy.BrowserControlChannel.startGuest();
         } else {

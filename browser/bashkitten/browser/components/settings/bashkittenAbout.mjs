@@ -2,6 +2,7 @@
 
 import { Preferences } from "chrome://global/content/preferences/Preferences.mjs";
 import { SettingGroupManager } from "chrome://browser/content/preferences/config/SettingGroupManager.mjs";
+const { BashKittenAbout } = ChromeUtils.importESModule("resource:///modules/BashKittenAbout.sys.mjs");
 
 Preferences.addSetting({
   id: "bashkittenAboutDescription",
@@ -36,7 +37,7 @@ Preferences.addSetting({
   id: "bashkittenAboutLicenses",
   onUserClick(event) {
     event.preventDefault();
-    window.browsingContext.topChromeWindow.BashKittenAgent.licenses();
+    BashKittenAbout.licenses(window.browsingContext.topChromeWindow);
   },
 });
 Preferences.addSetting({ id: "bashkittenPackageUpdatesDescription" });

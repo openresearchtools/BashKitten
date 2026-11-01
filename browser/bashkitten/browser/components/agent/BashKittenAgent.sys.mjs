@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 
 import { BashKittenDrafts } from "resource:///modules/BashKittenDrafts.sys.mjs";
+import { BashKittenAbout } from "resource:///modules/BashKittenAbout.sys.mjs";
 import { DesktopLifetime } from "resource:///modules/DesktopLifetime.sys.mjs";
 import { autostartController, localAutostart } from "resource:///modules/DesktopAutostart.sys.mjs";
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
@@ -254,17 +255,13 @@ class AgentView {
     this.chatsToggle = xul(doc, "toolbarbutton", { id: "bashkitten-chats-toggle", image: "chrome://branding/content/icon32.png", class: "toolbarbutton-1", tooltiptext: "Chats", "aria-label": "Chats", "aria-controls": "bashkitten-native-sidecar", "aria-expanded": String(this.sidecar.isOpen()) });
     this.chatsToggle.addEventListener("command", () => { if (this.pane.hidden || this.connectionsPanel) { this.show(); this.sidecar.open(); } else this.sidecar.toggle(); });
     doc.getElementById("tabbrowser-tabs").before(this.chatsToggle);
-    const appMenu = this.win.PanelUI.mainView.querySelector("#appMenu-settings-button");
-    const nativeMenu = xul(doc, "toolbarbutton", { id: "appMenu-bashkitten-about", label: "About BashKitten", class: "subviewbutton" });
-    nativeMenu.addEventListener("command", () => { this.win.PanelUI.hide(); this.win.openAboutDialog(); });
-    appMenu.before(nativeMenu);
     this.installSettingsMenu();
     this.displayToggle = xul(doc, "toolbarbutton", { id: "bashkitten-display-toggle", image: "chrome://browser/skin/device-desktop.svg", class: "toolbarbutton-1", hidden: "true", checked: "true", "aria-pressed": "true" });
     this.displayToggle.addEventListener("command", () => {
       const display = lazy.BashKittenDisplay.selected(this.win);
       if (display) lazy.BashKittenDisplay.close(this.win, display.id);
     });
-    doc.getElementById("bashkitten-settings-button").before(this.displayToggle);
+    this.chatsToggle.after(this.displayToggle);
     this.displayControls = xul(doc, "hbox", { id: "bashkitten-display-controls", align: "center", flex: "1", hidden: "true", overflows: "false" });
     const displaySwitch = (title, id) => {
       const label = html(doc, "label", { class: "native-display-switch" });
@@ -413,7 +410,12 @@ class AgentView {
     const views = xul(this.doc, "panelmultiview", { mainViewId: "bashkitten-settings-mainView" });
     const view = xul(this.doc, "panelview", { id: "bashkitten-settings-mainView", class: "PanelUI-subView" });
     const body = xul(this.doc, "vbox", { class: "panel-subview-body" });
-    const gear = xul(this.doc, "toolbarbutton", { id: "bashkitten-settings-button", image: "chrome://global/skin/icons/settings.svg", class: "toolbarbutton-1", tooltiptext: "Configuration", "aria-label": "Configuration", "aria-haspopup": "menu" });
+    const gear = this.sidecar.settingsButton;
+    for (const [name, expanded] of [["popupshown", "true"], ["popuphidden", "false"]]) {
+      popup.addEventListener(name, event => {
+        if (event.target === popup) gear.setAttribute("aria-expanded", expanded);
+      });
+    }
     const toggle = event => {
       if (popup.state === "open") { lazy.PanelMultiView.hidePopup(popup); return; }
       if (popup.state !== "closed") return;
@@ -436,13 +438,16 @@ class AgentView {
     gear.addEventListener("mousedown", event => {
       if (event.button === 0) toggle(event);
     });
+    gear.addEventListener("click", event => {
+      if (event.detail === 0) toggle(event);
+    });
     gear.addEventListener("keypress", event => {
       if (event.key === " " || event.key === "Enter") {
         toggle(event);
+        event.preventDefault();
         event.stopPropagation();
       }
     });
-    this.chatsToggle.after(gear);
     for (const [section, title, image] of [
       ["localai", "Local AI", "chrome://global/skin/icons/lightbulb.svg"],
       ["remotes", "Remote Connections", "chrome://global/skin/icons/link.svg"],
@@ -1216,19 +1221,7 @@ class AgentView {
   }
 
   dialog(title) {
-    const dialog = html(this.doc, "dialog", { class: "bashkitten-agent-dialog" });
-    dialog.append(html(this.doc, "h2", {}, title));
-    const content = html(this.doc, "div");
-    dialog.append(content);
-    const actions = html(this.doc, "div", { class: "actions" });
-    const close = html(this.doc, "button", { type: "button" }, "Close");
-    close.addEventListener("click", () => dialog.close());
-    actions.append(close);
-    dialog.append(actions);
-    dialog.addEventListener("close", () => dialog.remove(), { once: true });
-    this.doc.documentElement.append(dialog);
-    dialog.showModal();
-    return { dialog, content, actions };
+    return BashKittenAbout.dialog(this.win, title);
   }
 
   async microphonePermission(browser, actor, request) {
@@ -1654,51 +1647,7 @@ class AgentView {
   }
 
   async licenses() {
-    const { dialog, content } = this.dialog("Licenses and source");
-    const downloaded = html(this.doc, "button", { type: "button" }, "AI runtimes and models");
-    downloaded.addEventListener("click", () => { dialog.close(); this.aiLicenses(); }); content.append(downloaded);
-    try {
-      const records = await IOUtils.readJSON("/usr/lib/bashkitten/licenses.json");
-      content.append(html(this.doc, "h3", {}, "Bundled components"));
-      content.append(html(this.doc, "p", {}, "Full notices and source information for the bundled browser, Agent, References, Files, Office, private Node/npm, Pi, search and authentication components. Python and Linux system libraries retain their separately installed package licenses."));
-      const appendText = (parent, value) => {
-        const text = String(value), links = /https?:\/\/[^\s<>"']+/g;
-        let offset = 0;
-        for (const match of text.matchAll(links)) {
-          const source = match[0].replace(/[),.;\]]+$/, "");
-          let url;
-          try { url = new URL(source); } catch { continue; }
-          if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) continue;
-          parent.append(this.doc.createTextNode(text.slice(offset, match.index)));
-          const link = html(this.doc, "a", { href: url.href, rel: "noreferrer noopener" }, source);
-          link.addEventListener("click", event => { event.preventDefault(); this.win.openTrustedLinkIn(url.href, "tab"); });
-          parent.append(link);
-          offset = match.index + source.length;
-        }
-        parent.append(this.doc.createTextNode(text.slice(offset)));
-      };
-      for (const record of records) {
-        const detail = html(this.doc, "details");
-        detail.append(html(this.doc, "summary", {}, [record.name, record.version, record.license].filter(Boolean).join(" · ")));
-        detail.addEventListener("toggle", () => {
-          if (detail.open && detail.childElementCount === 1) {
-            const fields = [["source", "Source"], ["sourceCommit", "Source revision"], ["commit", "Revision"],
-              ["sourceProvenance", "Source provenance"], ["modifications", "Modifications"], ["attribution", "Attribution"]];
-            for (const [key, label] of fields) {
-              if (record[key] == null) continue;
-              const value = typeof record[key] === "string" ? record[key] : JSON.stringify(record[key], null, 2);
-              const metadata = html(this.doc, "pre", { style: "white-space:pre-wrap;overflow-wrap:anywhere" });
-              appendText(metadata, label + ": " + value); detail.append(metadata);
-            }
-            const text = html(this.doc, "pre", { style: "max-height:24rem;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere" });
-            appendText(text, record.text); detail.append(text);
-          }
-        });
-        content.append(detail);
-      }
-    } catch (error) {
-      content.append(html(this.doc, "p", {}, `Offline license files could not be opened: ${error.message || error}`));
-    }
+    return BashKittenAbout.licenses(this.win);
   }
 
   destroy() {

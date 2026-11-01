@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 EXTRA_JS_MODULES += [
+    "BashKittenAbout.sys.mjs",
     "BashKittenAgent.sys.mjs",
     "BashKittenAgentChild.sys.mjs",
     "BashKittenAgentParent.sys.mjs",

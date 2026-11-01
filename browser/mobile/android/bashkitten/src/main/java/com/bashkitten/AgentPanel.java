@@ -52,7 +52,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         super(activity); this.activity = activity; this.browser = browser;
         this.visibilityChanged = visibilityChanged;
         app = BrowserApp.get(activity); runtime = app.agent;
-        sidecar = new AgentSidecar(activity, runtime, this::hideAgent);
+        sidecar = new AgentSidecar(activity, runtime, this::hideAgent, openSettingsMenu);
         runtime.activity = new java.lang.ref.WeakReference<>(activity);
         setOrientation(HORIZONTAL);
         // Weighted panes must keep a bounded height: baseline alignment first
@@ -73,7 +73,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         displayButton.setBackgroundResource(R.drawable.bashkitten_display_toggle);
         bar.addView(displayButton, new LayoutParams(dp(48), -1));
         displayChanged();
-        bar.addView(barIcon("Configuration", R.drawable.ic_agent_gear, openSettingsMenu), new LayoutParams(dp(48), -1));
         bar.addView(tabSwitcher, new LayoutParams(dp(48), -1));
         ImageButton menu = barIcon("Browser menu", R.drawable.ic_agent_browser_menu, openBrowserMenu); bar.addView(menu, new LayoutParams(dp(48), -1));
         FrameLayout chatContent = new FrameLayout(activity); agent.addView(chatContent, new LayoutParams(-1, 0, 1));

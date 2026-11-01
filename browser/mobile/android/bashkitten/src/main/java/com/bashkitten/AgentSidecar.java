@@ -24,7 +24,7 @@ public final class AgentSidecar {
     private final Activity activity;
     private final AgentRuntime runtime;
     private final BrowserApp app;
-    private final Runnable hideAgent;
+    private final Runnable hideAgent, openSettingsMenu;
     private final Map<String, JSONObject> snapshots = new LinkedHashMap<>();
     private final Set<String> collapsed = new HashSet<>();
     private final Set<AgentRuntime.Listener> pendingSelections = new HashSet<>();
@@ -53,8 +53,8 @@ public final class AgentSidecar {
     private boolean sharingLoading, sharingChanging;
     private long sharingChecked;
 
-    AgentSidecar(Activity activity, AgentRuntime runtime, Runnable hideAgent) {
-        this.activity = activity; this.runtime = runtime; this.hideAgent = hideAgent; app = BrowserApp.get(activity);
+    AgentSidecar(Activity activity, AgentRuntime runtime, Runnable hideAgent, Runnable openSettingsMenu) {
+        this.activity = activity; this.runtime = runtime; this.hideAgent = hideAgent; this.openSettingsMenu = openSettingsMenu; app = BrowserApp.get(activity);
         scroll = new ScrollView(activity); scroll.setFillViewport(true);
         readPalette();
         body = column(); body.setPadding(dp(8), dp(7), dp(8), dp(16)); scroll.addView(body);
@@ -318,7 +318,10 @@ public final class AgentSidecar {
     }
     private void render() {
         final int y = scroll.getScrollY(); body.removeAllViews();
-        body.addView(button("Hide Agent", hideAgent));
+        LinearLayout controls = row();
+        controls.addView(button("Hide Agent", hideAgent), new LinearLayout.LayoutParams(0, dp(41), 1));
+        controls.addView(icon("Configuration", R.drawable.ic_agent_gear, openSettingsMenu));
+        body.addView(controls);
         notice.setVisibility(notice.getText().length() == 0 ? View.GONE : View.VISIBLE); body.addView(notice);
         backend("local", "Local", false);
         divider();
