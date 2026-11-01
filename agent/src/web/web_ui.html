@@ -261,11 +261,23 @@
     .markdown code { padding: 2px 5px; border-radius: var(--radius-small); background: var(--code); color: var(--text); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
     .markdown pre, .tool-body pre { margin: 6px 0 0; padding: 9px 10px; overflow: auto; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--code); color: var(--text); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
     .code-block { margin: 6px 0 10px; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--code); }
-    .code-block-toolbar { display: flex; justify-content: flex-end; padding: 4px 6px 0; }
-    .code-copy { min-height: 28px; padding: 3px 9px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 11px; }
-    .code-copy:hover, .code-copy:focus-visible { border-color: var(--line); background: var(--surface-2); color: var(--text); }
+    .code-block-toolbar, .table-block-toolbar { display: flex; justify-content: flex-end; padding: 4px 6px; }
+    .code-copy, .table-copy { min-height: 28px; padding: 3px 9px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 11px; }
+    .code-copy:hover, .code-copy:focus-visible, .table-copy:hover, .table-copy:focus-visible { border-color: var(--line); background: var(--surface-2); color: var(--text); }
     .markdown .code-block pre { margin: 0; border: 0; border-radius: 0; }
     .markdown pre code { padding: 0; border-radius: 0; background: transparent; font: inherit; }
+    .markdown { min-width: 0; max-width: 100%; }
+    .table-block { width: 100%; min-width: 0; max-width: 100%; margin: 8px 0 12px; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); }
+    .table-block-toolbar { background: var(--surface-2); border-bottom: 1px solid var(--line-soft); }
+    .table-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+    .table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .table-scroll table { width: max-content; min-width: 100%; border-collapse: collapse; text-align: left; overflow-wrap: normal; }
+    .table-scroll th, .table-scroll td { padding: 7px 12px; border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); white-space: nowrap; vertical-align: top; }
+    .table-scroll th { background: var(--surface-2); font-weight: 600; }
+    .table-scroll tr > :last-child { border-right: 0; }
+    .table-scroll tbody tr:last-child td { border-bottom: 0; }
+    .table-scroll .align-center { text-align: center; }
+    .table-scroll .align-right { text-align: right; }
     .message-images { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 9px; }
     .inline-image { position: relative; display: inline-flex; max-width: 100%; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--activity); }
     .inline-image img { display: block; max-width: 100%; max-height: 240px; cursor: zoom-in; object-fit: contain; }
@@ -800,6 +812,7 @@
     </form>
   </dialog>
 
+  <script src="/markdown.js"></script>
   <script>
     let csrf = '';
     let initialized = false, authRequired = false;
@@ -1029,67 +1042,44 @@
       return /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i.test(fileReferenceName(reference));
     }
 
-    function inlineMarkdown(value) {
-      // Tokenize before escaping so code stays literal and labels/URLs cannot inject HTML.
-      // Destinations support angle brackets for spaces and parentheses in filenames.
-      const tokens = /`([^`]+)`|(!?)\[((?:\\.|[^\]\\\n])*)\]\(\s*(<[^>\n]+>|(?:\\.|[^\\\s()]|\((?:\\.|[^\\\s()])*\))+)(?:\s+"[^"\n]*")?\s*\)|\*\*([^*]+)\*\*/g;
-      const text = String(value ?? '');
-      let html = '', end = 0;
-      for (const match of text.matchAll(tokens)) {
-        html += escapeHtml(text.slice(end, match.index));
-        end = match.index + match[0].length;
-        const [, code, image, rawLabel, destination, bold] = match;
-        if (code !== undefined) { html += `<code>${escapeHtml(code)}</code>`; continue; }
-        if (bold !== undefined) { html += `<strong>${escapeHtml(bold)}</strong>`; continue; }
-        const label = rawLabel.replace(/\\([\\\[\]])/g, '$1');
-        const target = destination.replace(/^<|>$/g, '').replace(/\\([\\()])/g, '$1');
-        if (image) {
-          let reference = target;
+    // Use the same pinned Markdown parser as Pi, retaining our file/image
+    // authorization and escaping raw HTML rather than trusting message content.
+    const markdownRenderer = new marked.Marked({
+      gfm: true,
+      breaks: true,
+      renderer: {
+        html({ text }) { return escapeHtml(text); },
+        code({ text }) {
+          return `<div class="code-block"><div class="code-block-toolbar"><button type="button" class="code-copy" aria-label="Copy code" aria-live="polite" title="Copy code">Copy</button></div><pre><code>${escapeHtml(text)}</code></pre></div>`;
+        },
+        link({ href, tokens, raw }) {
+          const label = this.parser.parseInline(tokens);
+          if (/^https?:\/\//i.test(href)) return `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${label}</a>`;
+          const urls = fileReferenceUrls(current?.id, href);
+          if (!urls) return escapeHtml(raw);
+          return `<a class="file-reference" href="${escapeHtml(urls.content)}" data-file-session="${escapeHtml(current.id)}" data-file-reference="${escapeHtml(href)}" aria-disabled="${!fileManagerAllowed}" title="${isImageReference(href) ? 'View image' : 'Open in Files'} · ${escapeHtml(href)}">${label}</a>`;
+        },
+        image({ href, text, raw }) {
+          let reference = href;
           if (!reference.startsWith('file:')) { try { reference = decodeURIComponent(reference); } catch {} }
           const source = serverImageUrl(reference);
-          if (source) {
-            html += imageMarkup(source, label || reference.split('/').pop() || 'Image', serverImageUrl(reference, true), reference.split('/').pop() || 'image');
-            continue;
-          }
-        }
-        if (/^https?:\/\//i.test(target)) html += `<a href="${escapeHtml(target)}" target="_blank" rel="noreferrer">${escapeHtml(label || target)}</a>`;
-        else {
-          const urls = !image && fileReferenceUrls(current?.id, target);
-          if (urls) html += `<a class="file-reference" href="${escapeHtml(urls.content)}" data-file-session="${escapeHtml(current.id)}" data-file-reference="${escapeHtml(target)}" aria-disabled="${!fileManagerAllowed}" title="${isImageReference(target) ? 'View image' : 'Open in Files'} · ${escapeHtml(target)}">${escapeHtml(label || target)}</a>`;
-          else html += escapeHtml(match[0]);
+          if (!source) return escapeHtml(raw);
+          return imageMarkup(source, text || reference.split('/').pop() || 'Image', serverImageUrl(reference, true), reference.split('/').pop() || 'image');
+        },
+        table({ header, rows }) {
+          const cell = (entry, tag) => {
+            const alignment = ['center', 'right'].includes(entry.align) ? ` class="align-${entry.align}"` : '';
+            return `<${tag}${tag === 'th' ? ' scope="col"' : ''}${alignment}>${this.parser.parseInline(entry.tokens)}</${tag}>`;
+          };
+          const head = `<thead><tr>${header.map(entry => cell(entry, 'th')).join('')}</tr></thead>`;
+          const body = `<tbody>${rows.map(row => `<tr>${row.map(entry => cell(entry, 'td')).join('')}</tr>`).join('')}</tbody>`;
+          return `<div class="table-block"><div class="table-block-toolbar"><button type="button" class="table-copy" aria-label="Copy table" aria-live="polite" title="Copy table">Copy table</button></div><div class="table-scroll" tabindex="0" role="region" aria-label="Table, scroll horizontally"><table>${head}${body}</table></div></div>`;
         }
       }
-      return html + escapeHtml(text.slice(end));
-    }
+    });
 
     function markdown(value) {
-      const pieces = String(value ?? '').split(/```/);
-      return pieces.map((piece, index) => {
-        if (index % 2) {
-          const body = piece.replace(/^[^\n]*\n/, '');
-          return `<div class="code-block"><div class="code-block-toolbar"><button type="button" class="code-copy" aria-label="Copy code" aria-live="polite" title="Copy code">Copy</button></div><pre><code>${escapeHtml(body)}</code></pre></div>`;
-        }
-        const lines = piece.split('\n');
-        let html = '';
-        let list = '';
-        const closeList = () => { if (list) { html += `</${list}>`; list = ''; } };
-        for (const line of lines) {
-          const bullet = line.match(/^\s*[-*]\s+(.+)/);
-          const numbered = line.match(/^\s*\d+[.)]\s+(.+)/);
-          if (bullet || numbered) {
-            const wanted = bullet ? 'ul' : 'ol';
-            if (list !== wanted) { closeList(); html += `<${wanted}>`; list = wanted; }
-            html += `<li>${inlineMarkdown((bullet || numbered)[1])}</li>`;
-            continue;
-          }
-          closeList();
-          const heading = line.match(/^(#{1,3})\s+(.+)/);
-          if (heading) { const level = heading[1].length; html += `<h${level}>${inlineMarkdown(heading[2])}</h${level}>`; }
-          else if (line.trim()) html += `<p>${inlineMarkdown(line)}</p>`;
-        }
-        closeList();
-        return html;
-      }).join('');
+      return markdownRenderer.parse(String(value ?? ''));
     }
 
     function textBlocks(content) {
@@ -1163,14 +1153,19 @@
       return [text, ...files].filter(Boolean).join('\n');
     }
 
-    async function copyText(value, button) {
+    async function copyText(value, button, html = null) {
       if (button.disabled) return;
       const label = button.textContent;
       const accessibleLabel = button.getAttribute('aria-label');
       button.disabled = true;
       try {
         try {
-          await navigator.clipboard.writeText(value);
+          if (html && typeof ClipboardItem === 'function' && navigator.clipboard.write) {
+            await navigator.clipboard.write([new ClipboardItem({
+              'text/plain': new Blob([value], { type: 'text/plain' }),
+              'text/html': new Blob([html], { type: 'text/html' })
+            })]);
+          } else await navigator.clipboard.writeText(value);
         } catch {
           const focused = document.activeElement;
           const field = document.createElement('textarea');
@@ -1217,6 +1212,17 @@
       }
       const image = event.target.closest('.inline-image img');
       if (image) { openImageViewer(image.src, image.alt); return; }
+      const tableButton = event.target.closest('.table-copy');
+      if (tableButton) {
+        const table = tableButton.closest('.table-block')?.querySelector('table');
+        if (!table) return;
+        const text = [...table.rows].map(row => [...row.cells].map(cell => {
+          const value = cell.innerText;
+          return /[\t\r\n"]/.test(value) ? '"' + value.replaceAll('"', '""') + '"' : value;
+        }).join('\t')).join('\n');
+        copyText(text, tableButton, table.outerHTML);
+        return;
+      }
       const button = event.target.closest('.code-copy');
       if (!button) return;
       const code = button.closest('.code-block')?.querySelector('pre code');

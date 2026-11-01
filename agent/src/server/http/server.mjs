@@ -214,6 +214,7 @@ async function applicationBody(req) {
 }
 const logo = await fs.readFile(path.join(here, '../../web/logo.png'));
 const favicon = await fs.readFile(path.join(here, '../../web/favicon.ico'));
+const markdownScript = await fs.readFile(new URL('./marked.umd.js', import.meta.resolve('marked')));
 const logoUrl = '/logo.png?v=' + createHash('sha256').update(logo).digest('hex');
 const faviconUrl = '/favicon.ico?v=' + createHash('sha256').update(favicon).digest('hex');
 const build = await readJson(path.join(here, '../../../build-platform.json'), {});
@@ -327,6 +328,7 @@ async function handler(req, res) {
     auth.origin(req);
     if (route === '/.well-known/bashkitten-ca' && req.method === 'GET') return json(res, await readJson(paths.identity));
     if (['/', '/pi-login'].includes(route) && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" }); return res.end(route === '/' ? html : loginHtml); }
+    if (route === '/markdown.js' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(markdownScript); }
     if (route === '/app.css' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(css); }
     if (['/logo.png', '/favicon.ico'].includes(route) && ['GET', 'HEAD'].includes(req.method)) {
       const image = route === '/logo.png' ? logo : favicon;

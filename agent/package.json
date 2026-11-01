@@ -19,6 +19,7 @@
     "@earendil-works/pi-ai": "1.4.0",
     "@earendil-works/pi-coding-agent": "1.4.0",
     "busboy": "1.6.0",
+    "marked": "18.0.11",
     "mdast-util-from-markdown": "2.1.0",
     "mdast-util-gfm-table": "2.0.0",
     "micromark-extension-gfm-table": "2.1.2",
