@@ -9,6 +9,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { agentPackageRoot } from './host-paths.mjs';
 import { truncateFilename, validFilename } from './attachment-names.mjs';
+import { isShortToken, ownsShortDirectory, reserveShortDirectory } from './short-paths.mjs';
 const { publishNewFile } = await import(new URL('src/server/localai/files.mjs', agentPackageRoot));
 const fail = (message, status = 409) => { throw Object.assign(Error(message), { status }); };
 const inside = (root, file) => file.startsWith(root + path.sep);
@@ -64,6 +65,17 @@ async function pruneEmpty(folder, root) {
     catch (error) { if (['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) break; throw error; }
   }
 }
+async function pruneMarked(folder, identity) {
+  if (!await ownsShortDirectory(folder, identity)) return;
+  if ((await fs.readdir(folder)).some(name => name !== '.reference-owner')) return;
+  const marker = path.join(folder, '.reference-owner');
+  await fs.unlink(marker);
+  try { await fs.rmdir(folder); }
+  catch (error) {
+    if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error;
+    if (error.code !== 'ENOENT') await fs.writeFile(marker, identity, { flag: 'wx', mode: 0o600 }).catch(failure => { if (failure.code !== 'EEXIST') throw failure; });
+  }
+}
 
 export function createAttachmentStorage({ call, fileBaseName }) {
   if (typeof call !== 'function') throw Error('Attachment storage needs the existing References storage owner');
@@ -80,8 +92,11 @@ export function createAttachmentStorage({ call, fileBaseName }) {
     if (data.itemType && data.itemType !== 'attachment') fail('Item is not a file attachment', 404);
     const root = data.pathBase === 'bibliography' ? p.bibliographyPath : path.join(p.legacyCwd, 'Bibliography');
     const candidate = path.resolve(data.pathBase === 'bibliography' ? root : p.legacyCwd, data.path || '');
-    const namespace = createHash('sha256').update(p.id).digest('hex').slice(0, 24);
-    if (!inside(path.join(path.resolve(root), namespace), candidate)) fail('Attachment is outside this References project', 403);
+    const namespace = path.relative(path.resolve(root), candidate).split(path.sep)[0];
+    const legacyNamespace = createHash('sha256').update(p.id).digest('hex').slice(0, 24);
+    if (!inside(path.join(path.resolve(root), namespace), candidate) ||
+        !(namespace === legacyNamespace || (isShortToken(namespace) && await ownsShortDirectory(path.join(root, namespace), p.id))))
+      fail('Attachment is outside this References project', 403);
     await authorize(p, candidate, { write: false });
     const canonicalRoot = await fs.realpath(root), file = await fs.realpath(candidate);
     if (!inside(path.join(canonicalRoot, namespace), file) || !(await fs.stat(file)).isFile()) fail('Attachment is outside this References project', 403);
@@ -93,8 +108,9 @@ export function createAttachmentStorage({ call, fileBaseName }) {
     if (p.bibliographyMove) fail('Finish the Bibliography folder move before saving attachments');
     if (!/^[A-Z0-9]+$/.test(parentKey || attachmentKey || '')) fail('Attachment needs its stable item identity', 400);
     const root = await directory(p, p.bibliographyPath);
-    const namespace = createHash('sha256').update(p.id).digest('hex').slice(0, 24);
-    const folder = await subdirectory(p, root, path.join(namespace, parentKey || attachmentKey));
+    const namespace = await reserveShortDirectory(root, p.id, p.storageId);
+    const group = await reserveShortDirectory(namespace.folder, p.id + ':' + (parentKey || attachmentKey));
+    const folder = await subdirectory(p, root, path.join(namespace.token, group.token));
     const temporary = path.join(folder, '.attachment-' + randomUUID() + '.partial');
     let created;
     try {
@@ -125,13 +141,35 @@ export function createAttachmentStorage({ call, fileBaseName }) {
       await tick();
     } while (cursor);
   }
-  async function moveBibliography(p, { bibliographyPath, expectedBibliographyPath, signal, onProgress = () => {}, officeCommit }) {
+  async function projectDirectories(p, selectedRoot = p.bibliographyPath) {
+    const root = await fs.realpath(selectedRoot).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+    if (!root) return [];
+    const legacy = createHash('sha256').update(p.id).digest('hex').slice(0, 24);
+    const entries = await fs.readdir(root, { withFileTypes: true }).catch(error => { if (error.code === 'ENOENT') return []; throw error; });
+    const folders = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+      if (entry.name === legacy || (isShortToken(entry.name) && await ownsShortDirectory(path.join(root, entry.name), p.id)))
+        folders.push(path.join(root, entry.name));
+    }
+    return folders;
+  }
+  async function moveBibliography(p, { bibliographyPath, expectedBibliographyPath, signal, onProgress = () => {}, officeCommit, officeComplete, officeRollback, moveId }) {
     p = await currentProject(p, signal);
     if (!path.isAbsolute(bibliographyPath || '')) fail('Choose an absolute Bibliography folder', 400);
     const requested = path.resolve(bibliographyPath), existingMove = p.bibliographyMove;
     if (existingMove && existingMove.target !== requested) fail('Finish the pending Bibliography move before choosing another folder');
     if (!existingMove && p.bibliographyPath !== expectedBibliographyPath) fail('Bibliography folder changed; reload before moving');
-    if (!existingMove && requested === p.bibliographyPath) return { bibliographyPath: p.bibliographyPath, moved: 0, unchanged: true };
+    if (!existingMove && requested === p.bibliographyPath && (await call(p, 'record', { id: 'path-layout' }, signal))?.version === 1) return { bibliographyPath: p.bibliographyPath, moved: 0, unchanged: true };
+    const firstPlan = existingMove && (await call(p, 'recordPage', { prefix: 'bibliography-move:' + existingMove.id + ':file:', limit: 1 }, signal)).items[0];
+    const plannedParts = (firstPlan?.newPath || firstPlan?.relativeDirectory || '').split(path.sep).filter(Boolean);
+    const legacyLayout = plannedParts.length > 0 && !plannedParts.slice(0, 2).every(isShortToken);
+    const id = existingMove?.id || moveId || randomUUID();
+    const finalization = await call(p, 'record', { id: 'bibliography-finalized:' + id }, signal);
+    const aborted = await call(p, 'record', { id: 'bibliography-aborted:' + id }, signal);
+    const compactRoot = await directory(p, requested);
+    const compactNamespace = await reserveShortDirectory(compactRoot, p.id, isShortToken(plannedParts[0]) ? plannedParts[0] : p.storageId);
+    const targetNamespace = legacyLayout ? path.join(compactRoot, createHash('sha256').update(p.id).digest('hex').slice(0, 24)) : compactNamespace.folder;
     if (p.withAttachmentMove) {
       const paths = (async function* () {
         if (existingMove?.phase === 'cleanup') {
@@ -150,17 +188,36 @@ export function createAttachmentStorage({ call, fileBaseName }) {
           await tick();
         }
       })();
-      const namespace = createHash('sha256').update(p.id).digest('hex').slice(0, 24);
-      const sourceRoots = [...new Set([p.bibliographyPath, path.join(p.legacyCwd, 'Bibliography'), existingMove?.source].filter(Boolean).map(root => path.join(root, namespace)))];
-      return p.withAttachmentMove({ paths, sourceRoots, targetRoot: path.join(requested, namespace), signal }, ({ commit }) => moveBibliography({ ...p, withAttachmentMove: undefined }, {
-        bibliographyPath, expectedBibliographyPath, signal, onProgress, officeCommit: commit,
-      }));
+      const roots = [...new Set([p.bibliographyPath, path.join(p.legacyCwd, 'Bibliography'), existingMove?.source].filter(Boolean))];
+      const sourceRoots = [...new Set((await Promise.all(roots.map(root => projectDirectories(p, root)))).flat())];
+      sourceRoots.push(targetNamespace);
+      const moved = await p.withAttachmentMove({ operationId: id,
+        prepare: () => call(p, 'beginBibliographyMove', { id, source: existingMove?.source || p.bibliographyPath, target: compactRoot }, signal),
+        cleanupComplete: Boolean(finalization?.complete), rollbackComplete: Boolean(aborted?.confirmed), paths, sourceRoots, targetRoot: targetNamespace, signal }, async ({ commit, complete, rollback }) => {
+        if (typeof complete !== 'function' || typeof rollback !== 'function') fail('Update the native Office attachment-move owner before moving References files', 503);
+        if (aborted?.confirmed) {
+          await rollback();
+          await call(p, 'abortBibliographyMove', { id });
+          return { retryRolledBack: true };
+        }
+        return moveBibliography({ ...p, withAttachmentMove: undefined }, {
+          bibliographyPath: compactRoot, expectedBibliographyPath, signal, onProgress, officeCommit: commit, officeComplete: complete, officeRollback: rollback, moveId: id,
+        });
+      });
+      if (moved?.retryRolledBack) return moveBibliography(p, { bibliographyPath: compactRoot, expectedBibliographyPath, signal, onProgress });
+      return moved;
     }
-    const target = await directory(p, requested), id = existingMove?.id || randomUUID();
+    const target = await directory(p, requested);
     if (existingMove && target !== existingMove.target) fail('Pending Bibliography target changed');
     const source = existingMove?.source || p.bibliographyPath;
     const settings = await call(p, 'beginBibliographyMove', { id, source, target }, signal);
     let committed = settings.move.phase === 'cleanup', total = settings.move.total || 0;
+    if (finalization?.complete) {
+      await officeComplete?.();
+      await call(p, 'finishBibliographyMove', { id }, signal);
+      if (finalization.compacted) await call(p, 'record', { id: 'path-layout', data: { version: 1 } }, signal);
+      return { bibliographyPath: target, moved: finalization.moved, cleanupPending: false, compacted: finalization.compacted };
+    }
     const record = (entry, activeSignal = signal) => call(p, 'record', { id: 'bibliography-move:' + id + ':file:' + entry.key, data: entry }, activeSignal);
     try {
       if (!committed) {
@@ -175,6 +232,8 @@ export function createAttachmentStorage({ call, fileBaseName }) {
             if (entry?.status === 'published') {
               const file = path.resolve(target, entry.newPath);
               if (!inside(target, file) || !same(await stat(file), entry.identity) || await digest(file, signal) !== entry.sha256) fail('A copied attachment changed; original files were preserved');
+              if (entry.temporary && !await removeOwned(entry.temporary, entry.identity, entry.sha256))
+                fail('A staged attachment changed; original files were preserved');
               onProgress({ completed: total, phase: 'copying' });
               continue;
             }
@@ -183,7 +242,20 @@ export function createAttachmentStorage({ call, fileBaseName }) {
               const sourceRoot = row.pathBase === 'bibliography' ? source : path.join(p.legacyCwd, 'Bibliography');
               const sourceCanonical = await fs.realpath(sourceRoot), relative = path.relative(sourceCanonical, original);
               if (!relative || path.isAbsolute(relative) || relative === '..' || relative.startsWith('..' + path.sep)) fail('Attachment path leaves its Bibliography');
-              const folder = await subdirectory(p, target, path.dirname(relative));
+              const item = await call(p, 'get', { key: row.key }, signal);
+              const group = await reserveShortDirectory(compactNamespace.folder, p.id + ':' + (item.data.parentItem || row.key));
+              const compactRelative = legacyLayout ? path.dirname(relative) : path.join(compactNamespace.token, group.token);
+              const folder = await subdirectory(p, target, compactRelative);
+              if (!legacyLayout && path.dirname(original) === folder) {
+                const hash = await digest(original, signal);
+                entry = { key: row.key, version: row.version, oldPath: row.path, oldPathBase: row.pathBase || null,
+                  sourcePath: original, sourceRoot: sourceCanonical, sourceIdentity: identity(before), identity: identity(before),
+                  sha256: hash, byteLength: before.size, filename: path.basename(original), newPath: path.relative(target, original),
+                  preserveSource: true, status: 'published' };
+                await record(entry);
+                onProgress({ completed: total, phase: 'copying' });
+                continue;
+              }
               const temporary = path.join(folder, '.bibliography-move-' + id + '-' + randomUUID() + '.partial');
               try {
                 await pipeline(createReadStream(original), createWriteStream(temporary, { flags: 'wx', mode: 0o600 }), { signal });
@@ -191,10 +263,9 @@ export function createAttachmentStorage({ call, fileBaseName }) {
                 if (before.dev !== afterCopy.dev || before.ino !== afterCopy.ino || before.size !== afterCopy.size || before.mtimeMs !== afterCopy.mtimeMs || before.size !== copied.size) fail('An attachment changed while copying; original files were preserved');
                 let originalFilename = row.filename || path.basename(original);
                 if (fileBaseName) {
-                  const item = await call(p, 'get', { key: row.key }, signal);
                   originalFilename = validFilename(await fileBaseName(p, item, signal)) + path.extname(originalFilename);
                 }
-                entry = { key: row.key, version: row.version, oldPath: row.path, oldPathBase: row.pathBase || null, sourcePath: original, sourceRoot: sourceCanonical, sourceIdentity: identity(before), temporary, identity: identity(copied), sha256: hash, byteLength: copied.size, relativeDirectory: path.dirname(relative), originalFilename, status: 'prepared' };
+                entry = { key: row.key, version: row.version, oldPath: row.path, oldPathBase: row.pathBase || null, sourcePath: original, sourceRoot: sourceCanonical, sourceIdentity: identity(before), temporary, identity: identity(copied), sha256: hash, byteLength: copied.size, relativeDirectory: compactRelative, originalFilename, status: 'prepared' };
                 await record(entry);
               } catch (error) { await fs.rm(temporary, { force: true }); throw error; }
             }
@@ -229,7 +300,7 @@ export function createAttachmentStorage({ call, fileBaseName }) {
       }
       if (officeCommit) {
         const moves = (async function* () {
-          for await (const entry of plans(p, id, signal)) yield { from: entry.sourcePath, to: path.resolve(target, entry.newPath) };
+          for await (const entry of plans(p, id, signal)) if (!entry.preserveSource) yield { from: entry.sourcePath, to: path.resolve(target, entry.newPath) };
         })();
         await officeCommit({ moves });
       }
@@ -239,28 +310,53 @@ export function createAttachmentStorage({ call, fileBaseName }) {
         const destination = path.resolve(target, entry.newPath);
         if (!inside(target, destination) || await digest(destination, signal) !== entry.sha256) fail('The new attachment copy is unavailable; the old file was retained');
         await authorize(p, entry.sourcePath, { write: true });
-        if (!await removeOwned(entry.sourcePath, entry.sourceIdentity, entry.sha256)) fail('An original attachment changed after copying; both copies were retained');
-        await fs.rm(entry.temporary, { force: true });
+        if (!entry.preserveSource && !await removeOwned(entry.sourcePath, entry.sourceIdentity, entry.sha256)) fail('An original attachment changed after copying; both copies were retained');
+        if (entry.temporary) await fs.rm(entry.temporary, { force: true });
         await pruneEmpty(path.dirname(entry.sourcePath), entry.sourceRoot);
         cleaned++; onProgress({ completed: cleaned, total, phase: 'cleaning' });
       }
+      const metadata = await p.bibliographyMoved?.({ from: source, to: target });
+      if (metadata?.managed && source !== target) {
+        for (const namespace of await projectDirectories(p, source)) {
+          if (!isShortToken(path.basename(namespace))) continue;
+          for (const entry of await fs.readdir(namespace, { withFileTypes: true })) {
+            if (!entry.isDirectory() || !isShortToken(entry.name)) continue;
+            const group = path.join(namespace, entry.name), marker = path.join(group, '.reference-owner');
+            const owner = await fs.readFile(marker, 'utf8').catch(error => { if (error.code === 'ENOENT') return ''; throw error; });
+            if (owner.startsWith(p.id + ':')) await pruneMarked(group, owner);
+          }
+          await pruneMarked(namespace, p.id);
+        }
+        for (const oldFolder of [source, path.dirname(source)]) {
+          const info = await stat(oldFolder);
+          if (!info || !info.isDirectory() || info.isSymbolicLink()) continue;
+          await fs.rmdir(oldFolder).catch(error => { if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error; });
+        }
+      }
+      await call(p, 'record', { id: 'bibliography-finalized:' + id, data: { complete: true, compacted: !legacyLayout, moved: total } }, signal);
+      await officeComplete?.();
       await call(p, 'finishBibliographyMove', { id }, signal);
-      return { bibliographyPath: target, moved: total, cleanupPending: false };
+      if (!legacyLayout) await call(p, 'record', { id: 'path-layout', data: { version: 1 } }, signal);
+      return { bibliographyPath: target, moved: total, cleanupPending: false, compacted: !legacyLayout };
     } catch (error) {
       // A cancelled worker request may have committed before its reply. Read the
       // single DB authority without the cancelled signal before considering undo.
-      const latest = await currentProject(p).catch(() => null);
+      const latest = await currentProject(p);
       committed ||= latest?.bibliographyMove?.id === id && latest.bibliographyMove.phase === 'cleanup';
       if (!committed) {
+        if (latest.bibliographyPath !== source || latest.bibliographyMove?.id !== id || latest.bibliographyMove.phase !== 'copying')
+          fail('Bibliography move status is uncertain; its files and native reservation were retained');
         for await (const entry of plans(p, id)) {
-          if (entry.newPath) await removeOwned(path.resolve(target, entry.newPath), entry.identity, entry.sha256).catch(() => false);
+          if (entry.newPath && !entry.preserveSource) await removeOwned(path.resolve(target, entry.newPath), entry.identity, entry.sha256).catch(() => false);
           if (entry.temporary) await removeOwned(entry.temporary, entry.identity, entry.sha256).catch(() => false);
         }
+        await call(p, 'record', { id: 'bibliography-aborted:' + id, data: { confirmed: true } });
+        await officeRollback?.();
         await call(p, 'abortBibliographyMove', { id });
         throw error;
       }
       return { bibliographyPath: target, moved: total, cleanupPending: true, warning: error.message };
     }
   }
-  return { currentProject, attachmentPath, createFile, discardFile, moveBibliography };
+  return { currentProject, attachmentPath, createFile, discardFile, projectDirectories, moveBibliography };
 }

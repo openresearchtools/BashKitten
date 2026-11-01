@@ -5,7 +5,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { dataDir, digest, readJson, writeJson } from '../common.mjs';
 import { projects as workspaceProjects } from '../projects.mjs';
 
@@ -21,7 +21,25 @@ const present = async filename => fs.stat(filename).then(stat => stat.isFile(), 
   if (error.code === 'ENOENT') return false;
   throw error;
 });
-const managedFolder = id => path.join(os.homedir(), 'References', id, 'Bibliography');
+const managedFolder = storageId => path.join(os.homedir(), 'References', storageId, 'Bibliography');
+async function allocateStorageId(catalogue) {
+  const used = new Set(catalogue.projects.map(project => project.storageId).filter(Boolean));
+  for (;;) {
+    const token = randomBytes(3).toString('base64url');
+    if (used.has(token)) continue;
+    if (await fs.lstat(path.join(root, token)).then(() => true, error => { if (error.code !== 'ENOENT') throw error; return false; })) continue;
+    return token;
+  }
+}
+async function compactProjectIdentity(catalogue, project) {
+  let changed = false;
+  if (!/^[A-Za-z0-9_-]{4}$/.test(project.storageId || '') || catalogue.projects.some(other => other !== project && other.storageId === project.storageId)) { project.storageId = await allocateStorageId(catalogue); changed = true; }
+  const oldManaged = managedFolder(project.id);
+  if (project.initialBibliographyPath === oldManaged && !project.compactBibliographyPath) {
+    project.compactBibliographyPath = managedFolder(project.storageId); changed = true;
+  }
+  return changed;
+}
 let initialization, transaction = Promise.resolve();
 
 async function initialize() {
@@ -31,10 +49,24 @@ async function initialize() {
     // Finish the catalogue side if a prior deliberate database deletion reached
     // its durable tombstone immediately before the backend stopped.
     let changed = false;
+    const directories = await fs.readdir(root, { withFileTypes: true });
+    const owned = new Map();
+    for (const entry of directories) {
+      if (!entry.isDirectory() || !/^[A-Za-z0-9_-]{4}$/.test(entry.name)) continue;
+      const identity = await fs.readFile(path.join(root, entry.name, '.reference-owner'), 'utf8').catch(error => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      });
+      if (identity && !owned.has(identity)) owned.set(identity, entry.name);
+    }
     for (const project of saved.projects) {
+      if (owned.has(project.id) && project.storageId !== owned.get(project.id)) {
+        project.storageId = owned.get(project.id); changed = true;
+      }
+      changed = await compactProjectIdentity(saved, project) || changed;
       if (project.deletedAt) continue;
-      const deleted = await readJson(path.join(root, digest(project.id), 'deleted.json'), null);
-      if (deleted) { project.deletedAt = deleted.deletedAt || new Date().toISOString(); project.revision++; changed = true; }
+      const deleted = await readJson(path.join(root, project.storageId, 'deleted.json'), null) || await readJson(path.join(root, digest(project.id), 'deleted.json'), null);
+      if (deleted?.projectId === project.id) { project.deletedAt = deleted.deletedAt || new Date().toISOString(); project.revision++; changed = true; }
     }
     if (changed) await writeJson(file, saved);
     return;
@@ -60,8 +92,10 @@ async function initialize() {
     if (entry.isDirectory() && /^[a-f0-9]{64}$/.test(entry.name) && !known.has(entry.name) &&
         await present(path.join(root, entry.name, 'library.sqlite'))) catalogue.unmappedDatabases.push(entry.name);
   }
-  const bibliographyPath = managedFolder(catalogue.defaultProjectId);
-  catalogue.projects.unshift({ id: catalogue.defaultProjectId, name: 'Default', cwd: path.dirname(bibliographyPath), initialBibliographyPath: bibliographyPath, revision: 1, archived: false });
+  for (const project of catalogue.projects) await compactProjectIdentity(catalogue, project);
+  const storageId = await allocateStorageId(catalogue);
+  const bibliographyPath = managedFolder(storageId);
+  catalogue.projects.unshift({ id: catalogue.defaultProjectId, storageId, name: 'Default', cwd: path.dirname(bibliographyPath), initialBibliographyPath: bibliographyPath, revision: 1, archived: false });
   await writeJson(file, catalogue);
 }
 const ready = () => initialization ||= initialize().catch(error => { initialization = undefined; throw error; });
@@ -98,10 +132,11 @@ export async function referenceProject(id) {
 export async function createReferenceProject({ name, bibliographyPath, cwd } = {}) {
   name = title(name);
   const id = randomUUID();
-  bibliographyPath ||= cwd ? path.join(cwd, 'Bibliography') : managedFolder(id);
-  if (!path.isAbsolute(bibliographyPath) || bibliographyPath.includes('\0')) fail('Choose an absolute Bibliography folder');
-  return change(catalogue => {
-    const project = { id, name, cwd: cwd || path.dirname(bibliographyPath), initialBibliographyPath: bibliographyPath, archived: false, revision: 1 };
+  return change(async catalogue => {
+    const storageId = await allocateStorageId(catalogue);
+    bibliographyPath ||= cwd ? path.join(cwd, 'Bibliography') : managedFolder(storageId);
+    if (!path.isAbsolute(bibliographyPath) || bibliographyPath.includes('\0')) fail('Choose an absolute Bibliography folder');
+    const project = { id, storageId, name, cwd: cwd || path.dirname(bibliographyPath), initialBibliographyPath: bibliographyPath, archived: false, revision: 1 };
     catalogue.projects.push(project);
     return view(catalogue, project);
   });
@@ -124,5 +159,24 @@ export function deleteReferenceProject(id) {
     const project = find(catalogue, id, { deleted: true });
     project.deletedAt ||= new Date().toISOString(); project.revision++;
     return { deleted: id };
+  });
+}
+
+export function compactReferenceProjectLocation(id, { from, to }) {
+  return change(async catalogue => {
+    const project = find(catalogue, id);
+    if (!project.storageId || !path.isAbsolute(from || '') || !path.isAbsolute(to || '')) return { managed: false };
+    const oldManaged = managedFolder(project.id);
+    const oldCanonical = await fs.realpath(oldManaged).catch(error => { if (error.code === 'ENOENT') return path.resolve(oldManaged); throw error; });
+    if (path.resolve(from) !== path.resolve(oldManaged) && path.resolve(from) !== oldCanonical) return { managed: false };
+    const target = await fs.realpath(managedFolder(project.storageId));
+    if (path.resolve(to) !== target) return { managed: false };
+    if (![path.resolve(oldManaged), oldCanonical, target].includes(path.resolve(project.initialBibliographyPath)))
+      fail('References project folder changed; reload before completing its move', 409);
+    project.cwd = path.dirname(target);
+    project.initialBibliographyPath = target;
+    delete project.compactBibliographyPath;
+    project.revision++;
+    return { managed: true };
   });
 }

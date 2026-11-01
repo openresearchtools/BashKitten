@@ -77,6 +77,16 @@ const plain = (html) =>
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'");
 let catalog;
+// Zotero's native bundled-styles selection, 17a34cd4e366c2778c2c0db832fc34180f10efd7.
+// The complete pinned CSL catalogue remains available for search and Load all.
+export const defaultStyleIDs = Object.freeze([
+  "american-chemical-society", "american-medical-association",
+  "american-political-science-association", "american-sociological-association",
+  "apa", "chicago-author-date", "chicago-notes-bibliography",
+  "chicago-shortened-notes-bibliography", "elsevier-harvard",
+  "harvard-cite-them-right", "ieee", "mhra-notes",
+  "modern-language-association", "nature", "nlm-citation-sequence",
+]);
 async function getStyle(id, seen = new Set(), customDirectory) {
   const name = safeName(id || "apa", "style");
   if (seen.has(name)) throw Error("Dependent style cycle");
@@ -108,6 +118,7 @@ async function getStyle(id, seen = new Set(), customDirectory) {
     : null;
   return {
     id: name,
+    title: plain(doc.querySelector("info > title")?.textContent || name),
     xml: resolvedParent?.xml || xml,
     version: createHash("sha256")
       .update(xml + (resolvedParent?.version || ""))
@@ -126,8 +137,12 @@ export async function listStyles({
   start = 0,
   limit = 80,
   customDirectory,
+  all = false,
+  selected,
 } = {}) {
-  if (!catalog)
+  query = String(query).trim();
+  const fullCatalogue = all === true || all === "1" || all === "true" || !!query;
+  if (fullCatalogue && !catalog)
     catalog = (async () => {
       const list = [];
       for (const sub of ["", "dependent"]) {
@@ -157,20 +172,40 @@ export async function listStyles({
         title: plain(xml.match(/<title>([\s\S]*?)<\/title>/)?.[1] || name),
       });
     }
+  const defaults = fullCatalogue ? await catalog : await Promise.all(
+    [...new Set([...defaultStyleIDs, ...(selected ? [safeName(selected, "style")] : [])])].map(async id => {
+      const style = await getStyle(id, new Set(), customDirectory);
+      return { id, title: style.title };
+    }),
+  );
   const overrides = new Set(extra.map((x) => x.id));
-  const all = [
+  const matches = [
     ...extra,
-    ...(await catalog).filter((x) => !overrides.has(x.id)),
+    ...defaults.filter((x) => !overrides.has(x.id)),
   ].filter((x) =>
     (x.title + " " + x.id).toLowerCase().includes(query.toLowerCase()),
-  );
+  ).sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
   limit = Math.min(200, Math.max(1, Number(limit) || 80));
   start = Math.max(0, Number(start) || 0);
   return {
-    items: all.slice(start, start + limit),
-    total: all.length,
-    nextStart: start + limit < all.length ? start + limit : null,
+    items: matches.slice(start, start + limit),
+    total: matches.length,
+    nextStart: start + limit < matches.length ? start + limit : null,
+    scope: fullCatalogue ? "all" : "defaults",
+    defaultIDs: defaultStyleIDs,
   };
+}
+export async function validateCitationStyle(style, customDirectory) {
+  if (!style || typeof style !== "object" || Array.isArray(style) || typeof style.id !== "string" || !style.id ||
+      Object.keys(style).some(key => !["id", "locale"].includes(key)))
+    throw Object.assign(Error("Choose a citation style and language"), { status: 400 });
+  const resolved = await getStyle(style.id, new Set(), customDirectory);
+  const locale = safeName(style.locale || "en-US", "locale");
+  await fs.access(path.join(localeRoot, "locales-" + locale + ".xml")).catch(error => {
+    if (error.code === "ENOENT") throw Object.assign(Error("Citation language is not installed: " + locale), { status: 400 });
+    throw error;
+  });
+  return { id: resolved.id, locale };
 }
 export function validateCluster(cluster) {
   if (

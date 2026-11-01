@@ -13,6 +13,7 @@ import { decodeRFC2047 } from "./headers.mjs";
 import { updateCaptureSession } from "./capture-session.mjs";
 import { createAttachmentStorage } from "./attachment-storage.mjs";
 import { attachmentExtension } from "./attachment-names.mjs";
+import { compactDatabaseDirectory } from "./short-paths.mjs";
 import {
   normalizeIdentifier,
   resolveIdentifiers,
@@ -50,6 +51,7 @@ export async function createReferencesService({
   backendId,
   authorizeProject,
   authorizeLibraryLifecycle,
+  withLibraryTransition,
   listProjects,
   translator,
   resolver,
@@ -75,6 +77,15 @@ export async function createReferencesService({
     deletedLibraries = new Set(),
     deletingLibraries = new Set(),
     uploads = new Map();
+  const databaseDirectories = new Map(), compactionStarts = new Map();
+  const projectFile = async p => {
+    let directory = databaseDirectories.get(p.id);
+    if (!directory) {
+      directory = compactDatabaseDirectory(root, p.id, p.storageId).catch(error => { databaseDirectories.delete(p.id); throw error; });
+      databaseDirectories.set(p.id, directory);
+    }
+    return path.join(await directory, "library.sqlite");
+  };
   const settingsFile = path.join(root, "settings.json");
   let settings = await fs
     .readFile(settingsFile, "utf8")
@@ -87,7 +98,7 @@ export async function createReferencesService({
     const p = await authorizeProject(authority, id);
     if (!p || p.id !== id || !path.isAbsolute(p.cwd || ""))
       fail("Project is not authorized", 403);
-    const file = path.join(root, digest(p.id), "library.sqlite");
+    const file = await projectFile(p);
     if (
       await fs.access(path.join(path.dirname(file), "deleted.json")).then(
         () => true,
@@ -101,7 +112,17 @@ export async function createReferencesService({
         410,
       );
     if (deletingLibraries.has(id)) fail("Library deletion is in progress", 409);
-    return attachmentStorage.currentProject({ ...p, file });
+    const current = await attachmentStorage.currentProject({ ...p, file });
+    if (typeof withLibraryTransition === "function" && !p.archived && !jobs.has(p.id + ":compact-paths-v1") && !compactionStarts.has(p.id)) {
+      const starting = (async () => {
+        if ((await call(current, "record", { id: "path-layout" }))?.version !== 1)
+          await compactPaths(current, authority, {});
+      })().finally(() => compactionStarts.delete(p.id));
+      compactionStarts.set(p.id, starting);
+      // The existing Jobs owner retains failures and supports an explicit retry.
+      void starting.catch(() => {});
+    }
+    return current;
   };
   const call = async (p, op, args, signal) => {
     if (deletedLibraries.has(p.id) || deletingLibraries.has(p.id))
@@ -987,8 +1008,7 @@ export async function createReferencesService({
         mode: 0o700,
       });
       const expected = path.join(
-        await fs.realpath(root),
-        digest(p.id),
+        await fs.realpath(path.dirname(p.file)),
         "exports",
       );
       if ((await fs.realpath(path.dirname(outputFile))) !== expected)
@@ -1098,8 +1118,7 @@ export async function createReferencesService({
       const info = await handle.stat();
       const actual = await fs.realpath("/proc/self/fd/" + handle.fd);
       const expected = path.join(
-        await fs.realpath(root),
-        digest(p.id),
+        await fs.realpath(path.dirname(p.file)),
         "exports",
         exportId,
       );
@@ -1262,7 +1281,7 @@ export async function createReferencesService({
       : await authorizeProject(authority, projectId);
     if (!p || p.id !== projectId || !path.isAbsolute(p.cwd || ""))
       fail("Project lifecycle is not authorized", 403);
-    return attachmentStorage.currentProject({ ...p, file: path.join(root, digest(projectId), "library.sqlite") });
+    return attachmentStorage.currentProject({ ...p, file: await projectFile(p) });
   }
   async function moveBibliography({ projectId, bibliographyPath, expectedBibliographyPath, authority, signal, onProgress }) {
     const p = await lifecycleProject(authority, projectId, { operation: "relink", bibliographyPath });
@@ -1273,6 +1292,27 @@ export async function createReferencesService({
       }), activeSignal);
     };
     return p.runAuthorized ? p.runAuthorized(move) : move(signal);
+  }
+  async function compactPaths(p, authority, { resume = false } = {}) {
+    if (typeof withLibraryTransition !== "function") fail("References path compaction needs its existing project transition owner", 503);
+    // Job receipts use lifecycle authorization so progress can be saved while
+    // normal project publication is blocked and drained by that same owner.
+    const jobProject = await lifecycleProject(authority, p.id, { operation: "relink" });
+    return job(jobProject, authority, "path-compaction", [{ version: 1 }],
+      async (_value, signal, _receipt, { onProgress }) => withLibraryTransition(authority, p.id, async () => {
+        signal.throwIfAborted();
+        const current = await lifecycleProject(authority, p.id, { operation: "relink" });
+        const target = current.bibliographyMove?.target ||
+          (current.bibliographyPath === current.initialBibliographyPath && current.compactBibliographyPath) || current.bibliographyPath;
+        let result = await moveBibliography({ projectId: p.id, bibliographyPath: target,
+          expectedBibliographyPath: current.bibliographyPath, authority, signal,
+          onProgress: value => onProgress({ key: "paths", ...value }) });
+        if (result.compacted === false && !result.cleanupPending)
+          result = await moveBibliography({ projectId: p.id, bibliographyPath: result.bibliographyPath,
+            expectedBibliographyPath: result.bibliographyPath, authority, signal,
+            onProgress: value => onProgress({ key: "paths", ...value }) });
+        return { ...result, status: result.cleanupPending ? "partial" : "complete" };
+      }), "compact-paths-v1", { resume, request: { path: `/projects/${encodeURIComponent(p.id)}/storage/compact`, body: {} } });
   }
   async function deleteLibrary({
     projectId,
@@ -1298,18 +1338,15 @@ export async function createReferencesService({
         fail("Library deletion is already in progress", 409);
       deletingLibraries.add(projectId);
       try {
-        let attachmentDirectory;
+        let attachmentDirectories = [];
         if (attachments === "delete") {
           if (p.bibliographyMove) fail("Finish the Bibliography move before deleting attachment files", 409);
-          const base = await fs.realpath(p.bibliographyPath).catch(error => { if (error.code === "ENOENT") return null; throw error; });
-          const expected = base && path.join(base, digest(projectId).slice(0, 24));
-          if (expected) await p.authorizePath?.(expected, { write: true });
-          attachmentDirectory = expected && await fs.realpath(expected).catch((error) => {
-            if (error.code === "ENOENT") return null;
-            throw error;
-          });
-          if (attachmentDirectory && attachmentDirectory !== expected)
-            fail("Library attachment directory is a symlink", 409);
+          attachmentDirectories = await attachmentStorage.projectDirectories(p);
+          for (const directory of attachmentDirectories) {
+            await p.authorizePath?.(directory, { write: true });
+            if (await fs.realpath(directory) !== directory)
+              fail("Library attachment directory is a symlink", 409);
+          }
         }
         for (const [key, controller] of jobs)
           if (key.startsWith(projectId + ":"))
@@ -1338,12 +1375,12 @@ export async function createReferencesService({
           recursive: true,
           force: true,
         });
-        if (attachmentDirectory)
-          await fs.rm(attachmentDirectory, { recursive: true, force: true });
+        for (const directory of attachmentDirectories)
+          await fs.rm(directory, { recursive: true, force: true });
         return {
           deleted: projectId,
           attachments,
-          attachmentDirectoryRemoved: !!attachmentDirectory,
+          attachmentDirectoryRemoved: !!attachmentDirectories.length,
         };
       } finally {
         deletingLibraries.delete(projectId);
@@ -2395,7 +2432,7 @@ export async function createReferencesService({
       )
         fail("Method not allowed", 405);
       if (
-        ["schema", "styles", "citation-options", "translators"].includes(op) &&
+        ["schema", "styles", "citation-options", "translators", "about"].includes(op) &&
         method !== "GET"
       )
         fail("Method not allowed", 405);
@@ -2446,6 +2483,7 @@ export async function createReferencesService({
             signal,
           )),
           citationAutoRegenerate: settings.citationAutoRegenerate ?? -1,
+          defaultCitationStyle: settings.defaultCitationStyle || null,
         };
       else if (op === "translators" && key === "export")
         result = { items: await native.call("exportTranslators", [], signal) };
@@ -2541,7 +2579,13 @@ export async function createReferencesService({
           filePath: receipt.filePath,
           referenceExport: { projectId: p.id, exportId: key },
         };
-      } else if (op === "schema")
+      } else if (op === "storage" && key === "compact") {
+        if (method !== "POST") fail("Method not allowed", 405);
+        result = await compactPaths(p, authority, { resume: Boolean(body.resume) });
+        status = 202;
+      } else if (op === "about")
+        result = await native.call("referenceAbout", [], signal);
+      else if (op === "schema")
         result = await native.call("schema", [], signal);
       else if (op === "settings") {
         if (method === "PATCH") {
@@ -2553,6 +2597,7 @@ export async function createReferencesService({
             "resolvers",
             "automaticPDFs",
             "citationAutoRegenerate",
+            "defaultCitationStyle",
           ];
           for (const name of Object.keys(body))
             if (!allowed.includes(name)) fail("Unknown setting");
@@ -2571,6 +2616,8 @@ export async function createReferencesService({
             fail("Citation regeneration preference must be -1, 0 or 1");
           if (body.resolvers !== undefined)
             await native.call("validateResolvers", [body.resolvers], signal);
+          if (body.defaultCitationStyle !== undefined && body.defaultCitationStyle !== null)
+            body.defaultCitationStyle = await native.call("validateCitationStyle", [body.defaultCitationStyle, path.join(root, "styles")], signal);
           for (const name of ["crossrefEmail", "unpaywallEmail"])
             if (body[name] && !/^[^@\s<>]+@[^@\s<>]+$/.test(body[name]))
               fail("Invalid contact email");
@@ -2613,6 +2660,7 @@ export async function createReferencesService({
           resolvers: settings.resolvers || "[]",
           automaticPDFs: !!settings.automaticPDFs,
           citationAutoRegenerate: settings.citationAutoRegenerate ?? -1,
+          defaultCitationStyle: settings.defaultCitationStyle || null,
         };
       } else if (op === "jobs") {
         if (key && action === "results" && method === "GET") {

@@ -136,7 +136,13 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
       const m = await load(id); const binding = m.grants[claims.grant];
       if (!binding || binding.projectId !== scope.id || !binding.participants[claims.participant]) throw failure(403, 'Document grant was revoked');
       if (claims.snapshot || claims.historyOnly) await historicalPath(scope, m.path);
-      else { if (m.retired || m.recovery) throw failure(409, 'This live document identity was retired or needs recovery'); await permitted(scope, m.path); }
+      else {
+        if (m.retired || m.recovery) throw failure(409, 'This live document identity was retired or needs recovery');
+        const registry = await json(path.join(root, 'documents.json'), { environmentId, paths: {} });
+        if (Object.values(registry.pending || {}).some(entry => entry.documents?.includes(id) || entry.paths.some(folder => inside(folder, m.path))))
+          throw failure(409, 'A previous native file operation requires recovery', 'NATIVE_FILES_UNCERTAIN');
+        await permitted(scope, m.path);
+      }
       signal?.throwIfAborted();
       if (!claims.snapshot && !claims.historyOnly && claims.generation && claims.generation !== m.generation) throw failure(409, 'Document was restored; reopen it', 'STALE_GENERATION');
       return action(m, scope, signal, binding.participants[claims.participant]);
@@ -424,8 +430,8 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
   // References owns its file copies and SQLite path transaction. Reuse this
   // owner's reservations/queues for registered Office attachments, without
   // manufacturing a Quantum source grant or native completion receipt.
-  async function withAttachmentMove({ paths, sourceRoots, targetRoot, signal }, perform, busy) {
-    if (!paths?.[Symbol.asyncIterator] || !Array.isArray(sourceRoots) || !sourceRoots.length || !path.isAbsolute(targetRoot || '') || typeof perform !== 'function') throw failure(400, 'Invalid attachment move');
+  async function withAttachmentMove({ operationId, prepare, cleanupComplete = false, rollbackComplete = false, paths, sourceRoots, targetRoot, signal }, perform, busy) {
+    if ((cleanupComplete && rollbackComplete) || (prepare !== undefined && typeof prepare !== 'function') || !uuid(operationId) || !paths?.[Symbol.asyncIterator] || !Array.isArray(sourceRoots) || !sourceRoots.length || !path.isAbsolute(targetRoot || '') || typeof perform !== 'function') throw failure(400, 'Invalid attachment move');
     const reserved = [...new Set([...sourceRoots, targetRoot].map(filename => {
       if (!path.isAbsolute(filename || '')) throw failure(400, 'Attachment move needs absolute folders');
       return path.resolve(filename);
@@ -433,9 +439,40 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
     for (const filename of reserved) await authorizePath(filename);
     return serialized('native-files', async () => {
       const registryFile = path.join(root, 'documents.json'), affected = new Map(), affectedPaths = new Map();
+      const pendingKey = 'attachment:' + operationId;
+      if (cleanupComplete || rollbackComplete) {
+        // SQLite durably confirmed cleanup or precommit rollback. Releasing its
+        // matching receipt cannot disturb a newly opened view.
+        await serialized('registry', async () => {
+          const registry = await json(registryFile, { environmentId, paths: {} }), held = registry.pending?.[pendingKey];
+          if (held && (held.kind !== 'attachment-move' || held.operationId !== operationId || held.phase !== (rollbackComplete ? 'prepared' : 'office-committed') || held.targetRoot !== path.resolve(targetRoot)))
+            throw failure(409, 'Attachment finalization does not match its native receipt', 'NATIVE_FILES_UNCERTAIN');
+        });
+        const release = () => serialized('registry', async () => {
+          const registry = await json(registryFile, { environmentId, paths: {} });
+          const held = registry.pending?.[pendingKey];
+          if (held && (held.kind !== 'attachment-move' || held.operationId !== operationId || held.phase !== (rollbackComplete ? 'prepared' : 'office-committed') || held.targetRoot !== path.resolve(targetRoot)))
+            throw failure(409, 'Attachment finalization does not match its native receipt', 'NATIVE_FILES_UNCERTAIN');
+          if (held) { delete registry.pending[pendingKey]; await writeJSON(registryFile, registry); }
+        });
+        return perform({ commit: async () => { throw failure(409, 'Attachment recovery was already confirmed'); },
+          rollback: rollbackComplete ? release : async () => { throw failure(409, 'A completed attachment move cannot be rolled back'); },
+          complete: cleanupComplete ? release : async () => { throw failure(409, 'An aborted attachment move cannot be completed'); } });
+      }
       await serialized('registry', async () => {
         const registry = await json(registryFile, { environmentId, paths: {} });
-        if (Object.values(registry.pending || {}).some(entry => entry.paths.some(folder => reserved.some(candidate => inside(folder, candidate) || inside(candidate, folder))))) throw failure(409, 'Finish the pending Files operation before moving attachments', 'NATIVE_FILES_UNCERTAIN');
+        const held = registry.pending?.[pendingKey];
+        if (held) {
+          if (held.kind !== 'attachment-move' || held.operationId !== operationId || !['prepared', 'office-committed'].includes(held.phase) || held.targetRoot !== path.resolve(targetRoot))
+            throw failure(409, 'Attachment recovery does not match this move', 'NATIVE_FILES_UNCERTAIN');
+          for (const folder of held.paths) if (!reserved.includes(folder)) reserved.push(folder);
+          for (const [id, filename] of Object.entries(held.bindings || {})) {
+            affected.set(id, filename);
+            if (!affectedPaths.has(filename)) affectedPaths.set(filename, new Set());
+            affectedPaths.get(filename).add(id);
+          }
+        }
+        if (Object.entries(registry.pending || {}).some(([key, entry]) => key !== pendingKey && entry.paths.some(folder => reserved.some(candidate => inside(folder, candidate) || inside(candidate, folder))))) throw failure(409, 'Finish the pending Files operation before moving attachments', 'NATIVE_FILES_UNCERTAIN');
         const retired = new Map();
         for (const [id, filename] of Object.entries(registry.retired || {})) {
           if (!retired.has(filename)) retired.set(filename, []);
@@ -466,8 +503,33 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
             try { await retain(m, m.path, 'pre-bibliography-move', { force: true }); }
             catch (error) { if (error.code !== 'ENOENT') throw error; }
           }
-          return perform({ commit: async ({ moves }) => serialized('registry', async () => {
+          // References begins its durable intent only after a busy Office view
+          // has been rejected, and before this owner's crash-recovery fence.
+          await prepare?.();
+          await serialized('registry', async () => {
             const registry = await json(registryFile, { environmentId, paths: {} });
+            registry.pending ||= {};
+            registry.pending[pendingKey] ||= { kind: 'attachment-move', operationId, targetRoot: path.resolve(targetRoot),
+              paths: reserved, documents: [...affected.keys()], bindings: Object.fromEntries(affected), phase: 'prepared' };
+            await fs.mkdir(root, { recursive: true, mode: 0o700 });
+            await writeJSON(registryFile, registry);
+          });
+          const finish = rollback => serialized('registry', async () => {
+            const registry = await json(registryFile, { environmentId, paths: {} });
+            const held = registry.pending?.[pendingKey];
+            if (!held) return;
+            if (held.kind !== 'attachment-move' || held.operationId !== operationId ||
+                held.phase !== (rollback ? 'prepared' : 'office-committed') || held.targetRoot !== path.resolve(targetRoot))
+              throw failure(409, 'Attachment recovery has not reached its confirmed completion', 'NATIVE_FILES_UNCERTAIN');
+            delete registry.pending[pendingKey];
+            await writeJSON(registryFile, registry);
+          });
+          return perform({ complete: () => finish(false), rollback: () => finish(true),
+            commit: async ({ moves }) => serialized('registry', async () => {
+            const registry = await json(registryFile, { environmentId, paths: {} });
+            const held = registry.pending?.[pendingKey];
+            if (held?.kind !== 'attachment-move' || held.operationId !== operationId)
+              throw failure(409, 'Attachment move reservation is unavailable', 'NATIVE_FILES_UNCERTAIN');
             const updates = new Map();
             for await (const { from, to } of moves) {
               signal?.throwIfAborted();
@@ -493,7 +555,8 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
               if (registry.paths[from] === m.id) { delete registry.paths[from]; registry.paths[to] = m.id; }
               if (registry.retired?.[m.id] === from) registry.retired[m.id] = to;
             }
-            if (updates.size) await writeJSON(registryFile, registry);
+            held.phase = 'office-committed';
+            await writeJSON(registryFile, registry);
             return { movedDocumentIds: [...updates.keys()] };
           }) });
         });

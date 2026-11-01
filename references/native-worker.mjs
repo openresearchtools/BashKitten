@@ -9,6 +9,7 @@ import {
 import * as citations from "./citations.mjs";
 import { citationParser } from "./host-paths.mjs";
 import requestContext from "./runtime/request-context.js";
+import { referenceAbout } from "./about.mjs";
 const controllers = new Map();
 parentPort.on("message", async ({ id, method, args, cancel, cancelBuffer }) => {
   if (cancel) {
@@ -19,7 +20,9 @@ parentPort.on("message", async ({ id, method, args, cancel, cancelBuffer }) => {
   controllers.set(id, controller);
   try {
     const result =
-      method === "renderDocument"
+      method === "referenceAbout"
+        ? await referenceAbout()
+        : method === "renderDocument"
         ? await citations.renderDocument(args[0], { signal: controller.signal })
         : method === "parseCitations"
           ? await (async () => {
@@ -38,6 +41,8 @@ parentPort.on("message", async ({ id, method, args, cancel, cancelBuffer }) => {
             })()
           : method === "installStyle"
             ? await citations.installStyle(args[0])
+            : method === "validateCitationStyle"
+              ? await citations.validateCitationStyle(args[0], args[1])
             : method === "listStyles"
               ? await citations.listStyles(args[0])
               : method === "citationOptions"

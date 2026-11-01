@@ -13,7 +13,7 @@ import { controlRequest } from '../control.mjs';
 import { dispatchReferenceResolver } from '../access/browser-channel.mjs';
 import { publishNewFile } from '../localai/files.mjs';
 import { projects, withProjectOperation, withProjectTransition } from '../projects.mjs';
-import { referenceProjects, referenceProject, createReferenceProject, renameReferenceProject, archiveReferenceProject, deleteReferenceProject } from './reference-projects.mjs';
+import { referenceProjects, referenceProject, createReferenceProject, renameReferenceProject, archiveReferenceProject, deleteReferenceProject, compactReferenceProjectLocation } from './reference-projects.mjs';
 import { containsPath, fileDirectory, filePath, relativePath, referencedFile, referencedPath, storedAttachment, sendFile, sendFileHandle } from '../files/files.mjs';
 import { authorizeApplicationPath, canonicalManagerPath, privateManagerPaths, managerAllowed, runManagerOperation } from '../files/access.mjs';
 import { ApplicationGateway } from './gateway.mjs';
@@ -134,6 +134,10 @@ export class ApplicationModules {
           target: { network: 'unix', address: endpoint.socketPath }, openPath: '/', enabled: false, startup: false, command: null }, false);
         return module.createReferencesService({ dataDir, backendId: await this.identity(), authorizeProject: (authority, id) => this.referenceProject(authority, id),
           authorizeLibraryLifecycle: (authority, id, options) => this.libraryAuthority(authority, id, options),
+          withLibraryTransition: (authority, id, work) => withProjectTransition('references:' + id, async () => {
+            await this.referenceProject(authority, id, { transition: true });
+            return work();
+          }),
           resolveInBrowser: ({ authority, projectId, requestId, signal }) => this.authorize(authority, async operation => {
             await this.referenceProject(authority, projectId);
             const activeSignal = signal ? AbortSignal.any([signal, operation.signal]) : operation.signal;
@@ -172,7 +176,7 @@ export class ApplicationModules {
   async libraryAuthority(record, id, options = {}) {
     const project = await this.referenceProject(record, id, { transition: true });
     if (options.bibliographyPath) await this.referencePath(options.bibliographyPath);
-    return { ...project, withAttachmentMove: async (input, perform) => {
+    return { ...project, bibliographyMoved: value => compactReferenceProjectLocation(id, value), withAttachmentMove: async (input, perform) => {
       await this.office(); // Construct the existing document owner; no renderer startup.
       return this.officeProvider.withAttachmentMove(input, perform);
     } };
