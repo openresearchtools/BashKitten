@@ -92,6 +92,12 @@ the configured name and removes the irrelevant canonical tags. Retire it when
 upstream's branding owner supplies those behaviors. The original source/license,
 source manifests and all other notices remain unchanged.
 
+The native sidebar already honors an injected `disableSidebar` flag, but this
+release exposes it only on shares. `0008-configurable-native-sidebar.patch`
+connects `frontend.disableSidebar` to that existing flag and omits the sidebar
+component/menu while retaining native file navigation and view controls. Retire
+it when upstream offers equivalent global configuration.
+
 `vendor/dependencies/sources.json` binds the exact Quantum Go/npm lockfiles to
 92 Go modules and 460 npm package archives, including target-specific optional
 packages. Go module sums and npm SRI values are preserved, as are archive hashes

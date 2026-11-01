@@ -1,0 +1,61 @@
+--- a/backend/pkg/settings/structs.go
++++ b/backend/pkg/settings/structs.go
+@@ -295,6 +295,7 @@
+ type Frontend struct {
+ 	Name                  string         `json:"name"`                  // display name, PWA installation name is capped at 30 characters
+ 	DisableDefaultLinks   bool           `json:"disableDefaultLinks"`   // disable default links in the sidebar
++	DisableSidebar        bool           `json:"disableSidebar"`        // disable the native sidebar and its menu button
+ 	DisableUsedPercentage bool           `json:"disableUsedPercentage"` // disable used percentage for the sources in the sidebar
+ 	ExternalLinks         []ExternalLink `json:"externalLinks"`
+ 	DisableNavButtons     bool           `json:"disableNavButtons"` // disable the nav buttons in the sidebar
+--- a/backend/internal/web/static.go
++++ b/backend/internal/web/static.go
+@@ -150,7 +150,7 @@
+ 	description := settings.Config.Frontend.Description
+ 	title := settings.Config.Frontend.Name
+ 	banner := staticURL + "/icons/pwa-icon-512.png" // largest generated PWA icon
+-	disableSidebar := false
++	disableSidebar := settings.Config.Frontend.DisableSidebar
+ 
+ 	// Use custom favicon if configured and validated, otherwise fall back to default
+ 	// Determine the correct favicon extension based on type
+--- a/frontend/src/views/Layout.vue
++++ b/frontend/src/views/Layout.vue
+@@ -5,7 +5,7 @@
+       <div v-bind:style="{ width: `${this.progress}%` }"></div>
+     </div>
+     <defaultBar :class="{ 'dark-mode-header': isDarkMode }"></defaultBar>
+-    <sidebar v-if="!invalidShare"></sidebar>
++    <sidebar v-if="!invalidShare && !sidebarDisabled"></sidebar>
+     <Scrollbar id="main" :class="{
+       'dark-mode': isDarkMode,
+       moveWithSidebar: moveWithSidebar.shouldMove,
+@@ -93,6 +93,7 @@
+     this.initialize();
+   },
+   computed: {
++    sidebarDisabled: () => globalVars.disableSidebar,
+     showSearch() {
+       return getters.isLoggedIn() && getters.currentView() === "listingView" && !getters.isShare();
+     },
+--- a/frontend/src/views/bars/Default.vue
++++ b/frontend/src/views/bars/Default.vue
+@@ -1,7 +1,7 @@
+ <template>
+   <header v-if="!isOnlyOffice" :class="['flexbar', { 'dark-mode-header': isDarkMode }]">
+     <action
+-      v-if="!disableNavButtons"
++      v-if="!disableNavButtons && !sidebarMenuDisabled"
+       class="nav-toggle-button"
+       icon="close_back"
+       :label="$t('general.close')"
+@@ -153,6 +153,9 @@
+       }
+       return this.$t("buttons.switchView");
+     },
++    sidebarMenuDisabled() {
++      return globalVars.disableSidebar && getters.multibuttonState() === "menu";
++    },
+     isDisabledMultiAction() {
+       const regularDisabled = getters.isStickySidebar() && getters.multibuttonState() === "menu";
+       const shareDisabled = state.shareInfo?.disableSidebar && getters.multibuttonState() === "menu";
