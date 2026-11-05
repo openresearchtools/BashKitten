@@ -1,0 +1,73 @@
+name: Migrate verified Office release outputs
+run-name: Office migration ${{ inputs.target }} / ${{ inputs.source_sha }}
+'on':
+  workflow_dispatch:
+    inputs:
+      source_sha: {required: true, type: string}
+      target: {required: true, type: string}
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: native-components-${{ inputs.target }}
+  cancel-in-progress: false
+jobs:
+  seed:
+    runs-on: ${{ inputs.target == 'linux-arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GIT_LFS_SKIP_SMUDGE: '1'
+      TASKARIAN_SOURCE_CACHE: /tmp/taskarian-office-seed-sources
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: openresearchtools/Taskarian
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /LICENSE
+            /agent/packaging/
+            /agent/licenses/
+            /agent/vendor/node/sources.json
+            /agent/vendor/node/libcxx/
+            /office/
+            /files/patches/collabora/
+            /browser/taskarian/browser/branding/
+      - name: Fetch the exact original producer metadata
+        run: git fetch --no-tags --filter=blob:none --depth=1 origin d0b83e413d4c9733fb621de2ce9f7a52660e3183
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.TASKARIAN_SOURCE_CACHE }}
+          key: office-seed-original-sources-${{ inputs.target }}
+      - name: Download only the known completed native archive
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          python3 - <<'PYTHON'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('original_office', 'agent/packaging/remote-office.py')
+          owner = importlib.util.module_from_spec(spec); spec.loader.exec_module(owner)
+          target = os.environ['TARGET']
+          ids = {'linux-amd64': 13452169545, 'linux-arm64': 13452851836,
+                 'termux-aarch64': 13453036832, 'termux-x86_64': 13451374304}
+          record = owner.native.api('repos/openresearchtools/office-builds/actions/artifacts/' + str(ids[target]))
+          if record['name'] != 'office-' + target + '-d0b83e413d4c9733fb621de2ce9f7a52660e3183' or record['workflow_run']['id'] != 42103511716:
+              raise ValueError('Original Office archive identity differs')
+          destination = Path(os.environ['RUNNER_TEMP']) / 'office-original'; destination.mkdir()
+          owner.download(record, destination)
+          PYTHON
+      - name: Verify and publish original native leaves with matching sources and licenses
+        env:
+          TARGET: ${{ inputs.target }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          python3 agent/packaging/office/components.py seed-office --target "$TARGET" --source "$SOURCE_SHA" \
+            --seed-directory "$RUNNER_TEMP/office-original" --producer-source d0b83e413d4c9733fb621de2ce9f7a52660e3183 \
+            --producer-run 42103511716 --directory "$RUNNER_TEMP/office-components" \
+            --work "$RUNNER_TEMP/office-seed" --cache "$TASKARIAN_SOURCE_CACHE"
+          python3 agent/packaging/office/components.py aggregate --family office --target "$TARGET" \
+            --source "$SOURCE_SHA" --directory "$RUNNER_TEMP/office-components"

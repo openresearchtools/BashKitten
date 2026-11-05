@@ -62,6 +62,7 @@ def main():
     parser.add_argument('--ndk-archive', type=pathlib.Path)
     parser.add_argument('--go', default='go')
     parser.add_argument('--jobs', type=int, default=4)
+    parser.add_argument('--component', choices=['all', 'server', 'ui', 'media', 'office-addon'], default='all')
     parser.add_argument('--prepare-only', action='store_true')
     parser.add_argument('--source-cache', type=pathlib.Path, help='External verified original-source cache (or TASKARIAN_SOURCE_CACHE)')
     parser.add_argument('--offline-sources', action='store_true', help='Require every pinned source in the cache or an existing verified local archive')
@@ -70,7 +71,7 @@ def main():
     args.source_cache = (args.source_cache or source_cache.default_cache()).expanduser().resolve()
     if args.source_cache == ROOT.parent or ROOT.parent in args.source_cache.parents: raise ValueError('Source cache must stay outside the repository')
     if args.target == 'linux' and args.architecture != {'x86_64':'amd64','aarch64':'arm64'}.get(platform.machine()): raise ValueError('Linux builds require the native runner architecture')
-    if args.target == 'termux' and (args.architecture not in ['aarch64','x86_64'] or not args.ndk): raise ValueError('Termux requires --architecture aarch64|x86_64 and the pinned --ndk')
+    if args.target == 'termux' and (args.architecture not in ['aarch64','x86_64'] or args.component != 'ui' and not args.ndk): raise ValueError('Termux native code requires --architecture aarch64|x86_64 and the pinned --ndk')
     inputs = ['files','auth/dependencies/go-toolchain','agent/packaging/source_cache.py','auth/build/go-notices.py',*notices.source_inputs()]
     if args.target == 'termux': inputs += ['agent/packaging/termux/native_toolchain.py','agent/packaging/node/lock.json','agent/vendor/node/libcxx']
     source_tree, source_dirty = input_state(inputs)
@@ -84,6 +85,22 @@ def main():
         if sha((ROOT/name).read_bytes()) != expected: raise ValueError('Dependency lock changed: '+name)
     archives = work/'archives'; archives.mkdir(exist_ok=True); proxy = work/'goproxy'; proxy.mkdir(exist_ok=True)
     npm_archives = []; all_components = graph['components'] + native['components']
+    if args.component != 'all':
+        wanted_native = {'server': {'mupdf', 'nasm'}, 'ui': {'esbuild', 'rollup'},
+                         'media': {'mupdf', 'ffmpeg', 'dav1d', 'nasm', 'quantum-ffmpeg-recipe'},
+                         'office-addon': set()}[args.component]
+        wanted = {notices.component_key(entry) for entry in all_components
+                  if (entry['ecosystem'] == 'go' and (args.component == 'server' or
+                      args.component == 'office-addon' and entry['name'] == 'github.com/golang-jwt/jwt/v4'))
+                  or (entry['ecosystem'] == 'npm' and args.component == 'ui')
+                  or entry['name'] in wanted_native}
+        supplements = json.loads(notices.SUPPLEMENTS.read_text())['components']
+        while True:
+            closure = wanted | {source['component'] for key in wanted
+                for source in supplements.get(key, {}).get('sources', []) if 'component' in source}
+            if closure == wanted: break
+            wanted = closure
+        all_components = [entry for entry in all_components if notices.component_key(entry) in wanted]
     for entry in all_components:
         previous = archives / (entry.get('filename') or (safe_component(entry['name'])+'@'+entry['version']+('.zip' if entry['ecosystem']=='go' else '.tgz')))
         destination = source_archive(entry['archive'], entry['url'], args, previous if previous.is_file() else None)
@@ -95,8 +112,9 @@ def main():
                 shutil.copyfile(metadata, target.with_suffix(extension))
         elif entry['ecosystem'] == 'npm': npm_archives.append(destination)
     go_source = ROOT.parent/'auth/dependencies/go-toolchain'; go_pin = json.loads((go_source/'sources.json').read_text())
-    source_cache.fetch(go_pin, args.source_cache, local=go_source/go_pin['file'], offline=args.offline_sources)
-    if args.target == 'termux':
+    if args.component in ('all', 'server', 'office-addon'):
+        source_cache.fetch(go_pin, args.source_cache, local=go_source/go_pin['file'], offline=args.offline_sources)
+    if args.target == 'termux' and args.component != 'ui':
         import termux
         termux.recipe_archive(args)
     source = work/'quantum'
@@ -104,9 +122,10 @@ def main():
     shutil.copytree(ROOT/'vendor/quantum/source', source)
     for name in (ROOT/'patches/quantum/series').read_text().splitlines():
         if name and not name.startswith('#'): run(['patch','-p1','--fuzz=0','--batch','-i',ROOT/'patches/quantum'/name], source)
-    go_runtime.prepare(source, graph['components'])
+    if args.component in ('all', 'server'):
+        go_runtime.prepare(source, [entry for entry in all_components if entry['ecosystem'] == 'go'])
     source_dirs = {}
-    for entry in native['components']:
+    for entry in [entry for entry in native['components'] if entry in all_components]:
         if entry['role'] in ('runtime-source','native-build-tool-source'):
             directory = work/'native'/entry['name']; marker = directory/'.archive-sha256'
             if not marker.exists() or marker.read_text() != entry['archive']['sha256']:
@@ -122,57 +141,74 @@ def main():
     # to discover a dependency whose complete original notices are absent.
     legal_records = notices.collect(all_components)
     host_env = dict(os.environ); env = dict(host_env); toolchain = None
-    if args.target == 'termux':
+    if args.target == 'termux' and args.component != 'ui':
         import termux
         env, toolchain = termux.environment(args, work, source_dirs)
     env.update({'GOPROXY':proxy.as_uri(),'GOSUMDB':'off','GOTOOLCHAIN':'local','GOMODCACHE':str(work/'gomodcache'),'CGO_ENABLED':'1','GOTELEMETRY':'off','GOMAXPROCS':str(max(1,args.jobs))})
-    version = subprocess.check_output([args.go,'version'],env=env,text=True)
-    if version.split()[2] != 'go'+go_pin['version']: raise ValueError('Go compiler must match retained release '+go_pin['version'])
-    go_legal = go_notices['toolchain_notices'](args.go, env, args.source_cache, args.offline_sources)
+    go_legal = None
+    if args.component in ('all', 'server', 'office-addon'):
+        version = subprocess.check_output([args.go,'version'],env=env,text=True)
+        if version.split()[2] != 'go'+go_pin['version']: raise ValueError('Go compiler must match retained release '+go_pin['version'])
+        go_legal = go_notices['toolchain_notices'](args.go, env, args.source_cache, args.offline_sources)
     prefix = work/'prefix'; prefix.mkdir(exist_ok=True)
     env['PATH'] = str(prefix/'bin') + os.pathsep + env['PATH']; env['PKG_CONFIG_PATH'] = str(prefix/'lib/pkgconfig')
     env['PKG_CONFIG_LIBDIR'] = str(prefix/'lib/pkgconfig')
     jobs = str(max(1,args.jobs))
-    if args.architecture in ['amd64','x86_64']:
-        nasm = source_dirs['nasm']; run(['./configure','--prefix='+str(prefix)],nasm,host_env); run(['make','-j'+jobs],nasm,host_env); run(['make','install'],nasm,host_env)
-    mupdf = source_dirs['mupdf']
-    run(['make','-j'+jobs,'build=release','USE_SYSTEM_LIBS=no','HAVE_X11=no','HAVE_GLUT=no','HAVE_OBJC=no','HAVE_LIBCRYPTO=no',*(['HAVE_OBJCOPY=no','XCFLAGS=-fPIC'] if toolchain else []),'libs'],mupdf,env)
-    zlib = mupdf/'thirdparty/zlib'; run(['./configure','--static','--prefix='+str(prefix)],zlib,env); run(['make','-j'+jobs,'libz.a'],zlib,env); run(['make','install-libs'],zlib,env)
-    dav1d = source_dirs['dav1d']
-    # Meson remembers its source directory; a release update requires a new one.
-    davpin = next(e for e in native['components'] if e['name']=='dav1d')
-    davbuild = work/('dav1d-build-'+davpin['version']+'-'+davpin['archive']['sha256'][:12])
-    if not davbuild.exists(): run(['meson','setup',davbuild,'--prefix='+str(prefix),'--libdir=lib','--default-library=static','--buildtype=release','-Denable_tools=false','-Denable_tests=false',*(['--cross-file',termux.meson_file(work,env,args.architecture)] if toolchain else [])],dav1d,env)
-    run(['meson','compile','-C',davbuild,'-j',jobs],dav1d,env); run(['meson','install','-C',davbuild],dav1d,env)
-    ffmpeg = source_dirs['ffmpeg']; flags = ['--prefix='+str(prefix),'--disable-autodetect','--disable-shared','--enable-static','--disable-doc','--disable-debug','--disable-network','--enable-pthreads','--enable-zlib','--enable-libdav1d','--pkg-config-flags=--static','--extra-cflags=-I'+str(prefix/'include'),'--extra-ldflags=-L'+str(prefix/'lib')]
-    if toolchain: flags += ['--enable-cross-compile','--target-os=android','--arch='+args.architecture,'--cc='+env['CC'],'--cxx='+env['CXX'],'--ar='+env['AR'],'--nm='+env['NM'],'--ranlib='+env['RANLIB'],'--strip='+env['STRIP'],'--extra-cflags='+env['CFLAGS'],'--extra-ldflags='+env['LDFLAGS']]
-    run(['./configure',*flags],ffmpeg,env); run(['make','-j'+jobs,'ffmpeg','ffprobe'],ffmpeg,env)
-    npmcache = work/'npmcache'
-    for offset in range(0,len(npm_archives),50): run(['npm','cache','add','--cache',npmcache,'--offline','--ignore-scripts',*npm_archives[offset:offset+50]],work,env)
-    run(['npm','ci','--cache',npmcache,'--offline','--ignore-scripts','--no-audit','--no-fund'],source/'frontend',env); shutil.copytree(source/'frontend/node_modules/ace-builds/src-min-noconflict',source/'frontend/public/ace',dirs_exist_ok=True); run(['npm','run','build'],source/'frontend',env)
-    include = source/'backend/internal/preview/gofitzinclude'; include.symlink_to(mupdf/'include')
-    env['CGO_CFLAGS'] = '-I'+str(mupdf/'include'); env['CGO_LDFLAGS'] = '-L'+str(mupdf/'build/release')+' -lmupdf -lmupdf-third -lm '+(env['LDFLAGS']+' -lc++_static -lc++abi -llog' if toolchain else '-lpthread -lstdc++')
+    if args.component in ('all', 'server', 'media'):
+        if args.architecture in ['amd64','x86_64']:
+            nasm = source_dirs['nasm']; run(['./configure','--prefix='+str(prefix)],nasm,host_env); run(['make','-j'+jobs],nasm,host_env); run(['make','install'],nasm,host_env)
+    if args.component in ('all', 'server', 'media'):
+        mupdf = source_dirs['mupdf']
+        if args.component in ('all', 'server'):
+            run(['make','-j'+jobs,'build=release','USE_SYSTEM_LIBS=no','HAVE_X11=no','HAVE_GLUT=no','HAVE_OBJC=no','HAVE_LIBCRYPTO=no',*(['HAVE_OBJCOPY=no','XCFLAGS=-fPIC'] if toolchain else []),'libs'],mupdf,env)
+    if args.component in ('all', 'media'):
+        zlib = mupdf/'thirdparty/zlib'; run(['./configure','--static','--prefix='+str(prefix)],zlib,env); run(['make','-j'+jobs,'libz.a'],zlib,env); run(['make','install-libs'],zlib,env)
+    if args.component in ('all', 'media'):
+        dav1d = source_dirs['dav1d']
+        # Meson remembers its source directory; a release update requires a new one.
+        davpin = next(e for e in native['components'] if e['name']=='dav1d')
+        davbuild = work/('dav1d-build-'+davpin['version']+'-'+davpin['archive']['sha256'][:12])
+        if not davbuild.exists(): run(['meson','setup',davbuild,'--prefix='+str(prefix),'--libdir=lib','--default-library=static','--buildtype=release','-Denable_tools=false','-Denable_tests=false',*(['--cross-file',termux.meson_file(work,env,args.architecture)] if toolchain else [])],dav1d,env)
+        run(['meson','compile','-C',davbuild,'-j',jobs],dav1d,env); run(['meson','install','-C',davbuild],dav1d,env)
+        ffmpeg = source_dirs['ffmpeg']; flags = ['--prefix='+str(prefix),'--disable-autodetect','--disable-shared','--enable-static','--disable-doc','--disable-debug','--disable-network','--enable-pthreads','--enable-zlib','--enable-libdav1d','--pkg-config-flags=--static','--extra-cflags=-I'+str(prefix/'include'),'--extra-ldflags=-L'+str(prefix/'lib')]
+        if toolchain: flags += ['--enable-cross-compile','--target-os=android','--arch='+args.architecture,'--cc='+env['CC'],'--cxx='+env['CXX'],'--ar='+env['AR'],'--nm='+env['NM'],'--ranlib='+env['RANLIB'],'--strip='+env['STRIP'],'--extra-cflags='+env['CFLAGS'],'--extra-ldflags='+env['LDFLAGS']]
+        run(['./configure',*flags],ffmpeg,env); run(['make','-j'+jobs,'ffmpeg','ffprobe'],ffmpeg,env)
+    if args.component in ('all', 'ui'):
+        npmcache = work/'npmcache'
+        for offset in range(0,len(npm_archives),50): run(['npm','cache','add','--cache',npmcache,'--offline','--ignore-scripts',*npm_archives[offset:offset+50]],work,env)
+        run(['npm','ci','--cache',npmcache,'--offline','--ignore-scripts','--no-audit','--no-fund'],source/'frontend',env); shutil.copytree(source/'frontend/node_modules/ace-builds/src-min-noconflict',source/'frontend/public/ace',dirs_exist_ok=True); run(['npm','run','build:docker'],source/'frontend',env)
+    if args.component in ('all', 'server'):
+        include = source/'backend/internal/preview/gofitzinclude'; include.symlink_to(mupdf/'include')
+        env['CGO_CFLAGS'] = '-I'+str(mupdf/'include'); env['CGO_LDFLAGS'] = '-L'+str(mupdf/'build/release')+' -lmupdf -lmupdf-third -lm '+(env['LDFLAGS']+' -lc++_static -lc++abi -llog' if toolchain else '-lpthread -lstdc++')
     payload = work/'payload';
     if payload.exists(): shutil.rmtree(payload)
     (payload/'bin').mkdir(parents=True)
-    native_version = 'github.com/gtsteffaniak/filebrowser/backend/internal/version'
-    ldflags = '-s -w -X '+native_version+'.Version=2.0.2-stable+taskarian -X '+native_version+'.CommitSHA=2c071d1e6eb48d4b88da2657885d345663a0a88b'
-    tags = 'mupdf,extlib,static'+(',cgosql' if toolchain else '')
-    prepared_modules = go_runtime.resolved(args.go, source/'backend', env, tags)
-    run([args.go,'build','-mod=readonly','-trimpath','-tags='+tags,'-ldflags='+ldflags,'-o',payload/'bin/filebrowser','.'],source/'backend',env)
-    linked_modules = go_runtime.linked(args.go, payload/'bin/filebrowser', env)
-    addon = work/'addon';
-    if addon.exists(): shutil.rmtree(addon)
-    shutil.copytree(ROOT/'addon',addon)
-    clean_env = dict(env); clean_env.pop('CGO_CFLAGS');clean_env.pop('CGO_LDFLAGS')
-    run([args.go,'build','-mod=vendor','-trimpath','-ldflags=-s -w','-o',payload/'bin/files-office-addon','.'],addon,clean_env)
-    for name in ['ffmpeg','ffprobe']: shutil.copy2(ffmpeg/name,payload/'bin'/name)
+    (payload/'legal').mkdir()
+    prepared_modules, linked_modules = [], []
+    if args.component in ('all', 'server'):
+        native_version = 'github.com/gtsteffaniak/filebrowser/backend/internal/version'
+        ldflags = '-s -w -X '+native_version+'.Version=2.0.2-stable+taskarian -X '+native_version+'.CommitSHA=2c071d1e6eb48d4b88da2657885d345663a0a88b'
+        tags = 'mupdf,extlib,static'+(',cgosql' if toolchain else '')
+        prepared_modules = go_runtime.resolved(args.go, source/'backend', env, tags)
+        run([args.go,'build','-mod=readonly','-trimpath','-tags='+tags,'-ldflags='+ldflags,'-o',payload/'bin/filebrowser','.'],source/'backend',env)
+        linked_modules = go_runtime.linked(args.go, payload/'bin/filebrowser', env)
+    if args.component in ('all', 'office-addon'):
+        addon = work/'addon';
+        if addon.exists(): shutil.rmtree(addon)
+        shutil.copytree(ROOT/'addon',addon)
+        clean_env = dict(env); clean_env.pop('CGO_CFLAGS',None);clean_env.pop('CGO_LDFLAGS',None)
+        run([args.go,'build','-mod=vendor','-trimpath','-ldflags=-s -w','-o',payload/'bin/files-office-addon','.'],addon,clean_env)
+    if args.component in ('all', 'media'):
+        for name in ['ffmpeg','ffprobe']: shutil.copy2(ffmpeg/name,payload/'bin'/name)
+    if args.component in ('all', 'ui'):
+        shutil.copytree(source/'backend/internal/web/dist',payload/'ui/internal/web/dist')
     licenses = notices.write(payload, legal_records)
     shutil.copy2(ROOT/'vendor/quantum/source/LICENSE',payload/'legal/Quantum-LICENSE')
     for name in ['COPYING','LICENSE','NOTICE']: shutil.copy2(ROOT/'addon'/name,payload/'legal'/('addon-'+name))
     licenses.extend([{'name':'File Browser Quantum','version':'2.0.2-stable','license':'Apache-2.0','text':(payload/'legal/Quantum-LICENSE').read_text()}, {'name':'Taskarian Files adapters and Office add-on','license':'AGPL-3.0-only AND Apache-2.0 AND MIT','text':'\n\n'.join((ROOT/'addon'/name).read_text() for name in ['NOTICE','COPYING','LICENSE'])}])
-    go_notices['write_toolchain_notices'](go_legal, payload/'legal/go-toolchain')
-    licenses.append(go_legal['record'])
+    if go_legal:
+        go_notices['write_toolchain_notices'](go_legal, payload/'legal/go-toolchain')
+        licenses.append(go_legal['record'])
     if toolchain: licenses.extend(termux.notices(args,toolchain))
     write_json(payload/'licenses.json',licenses)
     (payload/'sources').mkdir(exist_ok=True); write_json(payload/'sources/dependencies.json', {**graph, 'components': [{key:value for key,value in entry.items() if key != 'localArchive'} for entry in graph['components']]});shutil.copy2(DEPS/'native-sources.json',payload/'sources/native-dependencies.json')
@@ -181,8 +217,8 @@ def main():
     shutil.copy2(DEPS/'notice-sources.json',payload/'sources/notice-sources.json')
     shutil.copy2(go_source/'sources.json',payload/'sources/go-toolchain.json')
     revision = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
-    depends, abi = linux_metadata(payload, work, args.architecture) if args.target == 'linux' else termux.metadata(payload,args,toolchain)
-    manifest={'schema':1,'target':args.target,'architecture':args.architecture,'sourceCommit':revision,'upstream':{'quantum':'2c071d1e6eb48d4b88da2657885d345663a0a88b','wopi':'fd64a470d3a521b0ad026f0f5307c20dd04b472f'},'patches':[{'name':str(p.relative_to(ROOT/'patches')),'sha256':sha(p.read_bytes())} for group in ['quantum','go-ffmpeg'] for p in sorted((ROOT/'patches'/group).glob('*.patch'))],'facades':[{'name':str(p.relative_to(ROOT)),'sha256':sha(p.read_bytes())} for p in sorted((ROOT/'adapters').glob('*/*.go'))],'depends':depends,'abi':abi,'sourceDependencies':[{'name':e['name'],'version':e['version'],'sha256':e['archive']['sha256']} for e in all_components],'executables':['bin/filebrowser','bin/files-office-addon','bin/ffmpeg','bin/ffprobe'],'files':{}}
+    depends, abi = ([], {}) if args.component == 'ui' else linux_metadata(payload, work, args.architecture) if args.target == 'linux' else termux.metadata(payload,args,toolchain)
+    manifest={'schema':1,'target':args.target,'architecture':args.architecture,'sourceCommit':revision,'upstream':{'quantum':'2c071d1e6eb48d4b88da2657885d345663a0a88b','wopi':'fd64a470d3a521b0ad026f0f5307c20dd04b472f'},'patches':[{'name':str(p.relative_to(ROOT/'patches')),'sha256':sha(p.read_bytes())} for group in ['quantum','go-ffmpeg'] for p in sorted((ROOT/'patches'/group).glob('*.patch'))],'facades':[{'name':str(p.relative_to(ROOT)),'sha256':sha(p.read_bytes())} for p in sorted((ROOT/'adapters').glob('*/*.go'))],'depends':depends,'abi':abi,'sourceDependencies':[{'name':e['name'],'version':e['version'],'sha256':e['archive']['sha256']} for e in all_components],'executables':[str(p.relative_to(payload)) for p in sorted((payload/'bin').iterdir())],'files':{}}
     for filename in sorted(payload.rglob('*')):
         if filename.is_file(): manifest['files'][str(filename.relative_to(payload))]={'sha256':sha(filename.read_bytes()),'mode':filename.stat().st_mode & 0o777}
     final_tree, dirty = input_state(inputs)

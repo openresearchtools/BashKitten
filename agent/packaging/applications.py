@@ -189,15 +189,38 @@ def verify_files(root, records):
                     raise ValueError('Native component file checksum mismatch: ' + name)
 
 
+def install_component(archive, component, destination, args, revision, checked_archive, extract):
+    checksum = checked_archive(archive)
+    metadata = json.loads(archive.with_name(archive.name + '.component.json').read_text())
+    owner = runpy.run_path(str(ROOT / 'agent/packaging/office/components.py'))
+    transport = owner['store']()
+    manifest = metadata['manifest']
+    transport.validate(manifest, transport.identity(component, args.target + '-' + args.architecture,
+        owner['inputs'](component, args.target + '-' + args.architecture, revision)))
+    if hashlib.sha256(transport.canonical(manifest) + b'\n').hexdigest() != metadata['manifestSha256']:
+        raise ValueError('Application component manifest checksum differs')
+    runtime = [item for item in manifest['assets'] if item['role'] == 'runtime']
+    if len(runtime) != 1 or runtime[0]['sha256'] != checksum:
+        raise ValueError('Application runtime differs from its published component')
+    with tempfile.TemporaryDirectory(prefix=component + '-input-', dir=destination.parent) as temporary:
+        incoming = Path(temporary)
+        extract(archive, incoming)
+        owner['verify_payload'](incoming, component, args.target + '-' + args.architecture)
+        shutil.copytree(incoming, destination, dirs_exist_ok=True, symlinks=True)
+        destination.chmod(0o755)
+    return metadata
+
+
 def install(args, app, revision, cache, checked_archive, extract):
-    copy_patterns(ROOT / 'files', app / 'files', ['*.mjs', 'web/**/*'])
-    office_source = ROOT / 'office'
-    office_package = json.loads((office_source / 'package.json').read_text())
-    declared = ['package.json', 'package-lock.json', *office_package['files']]
-    copy_patterns(office_source, app / 'office',
-                  [name + '/**/*' if (office_source / name).is_dir() else name for name in declared])
-    install_npm(ROOT / 'office', app / 'office', cache, args.target, args.architecture)
-    references(app / 'references', cache, args.target, args.architecture)
+    integration = {}
+    for component, destination in [('files-integration', app / 'files'),
+                                   ('office-integration', app / 'office'),
+                                   ('references', app / 'references')]:
+        archive = getattr(args, component.replace('-', '_') + '_archive', None)
+        if archive is None:
+            raise ValueError('A complete package requires --' + component + '-archive')
+        integration[component] = install_component(archive, component, destination, args,
+                                                   revision, checked_archive, extract)
     result = {}
     for component in ['files', 'office']:
         archive = getattr(args, component + '_archive', None)
@@ -214,14 +237,29 @@ def install(args, app, revision, cache, checked_archive, extract):
             if component == 'office' and {path.name for path in incoming.iterdir()} != {'runtime'}:
                 raise ValueError('Office archive may only replace its native runtime')
             if component == 'files' and not {path.name for path in incoming.iterdir()}.issubset(
-                    {'bin', 'lib', 'share', 'legal', 'sources', 'manifest.json', 'licenses.json'}):
+                    {'bin', 'lib', 'share', 'legal', 'sources', 'ui', 'manifest.json', 'licenses.json'}):
                 raise ValueError('Files archive contains files outside its native component boundary')
             metadata = json.loads((root / 'manifest.json').read_text())
-            if (metadata.get('schema') != 1 or metadata.get('target') != args.target
+            if (metadata.get('schema') not in (1, 2) or metadata.get('target') != args.target
                     or metadata.get('architecture') != args.architecture):
                 raise ValueError('Native ' + component + ' artifact target/source mismatch')
             equivalence = None
-            if metadata.get('sourceCommit') != revision:
+            if metadata.get('schema') == 2:
+                owner = runpy.run_path(str(ROOT / 'agent/packaging/office/components.py'))
+                if not re.fullmatch('[0-9a-f]{40}', metadata.get('assemblySource', '')):
+                    raise ValueError('Application aggregate lacks its original assembly source')
+                for name, leaf in metadata.get('components', {}).items():
+                    transport = owner['store']()
+                    transport.validate(leaf['manifest'], transport.identity(name,
+                        args.target + '-' + args.architecture,
+                        owner['inputs'](name, args.target + '-' + args.architecture, revision)))
+                    if hashlib.sha256(transport.canonical(leaf['manifest']) + b'\n').hexdigest() != leaf['manifestSha256']:
+                        raise ValueError('Native leaf manifest checksum differs')
+                required = {'office-engine', 'office-server', 'office-ui'} if component == 'office' else {
+                    'files-server', 'files-ui', 'files-media', 'files-office-addon'}
+                if set(metadata.get('components', {})) != required:
+                    raise ValueError('Application component dependency closure is incomplete')
+            elif metadata.get('sourceCommit') != revision:
                 owner = runpy.run_path(str(ROOT / 'agent/packaging/remote-office.py'))
                 equivalence = owner['verify_receipt'](archive.parent, component,
                     args.target + '-' + args.architecture, revision, metadata.get('sourceCommit'), digest,
@@ -243,8 +281,13 @@ def install(args, app, revision, cache, checked_archive, extract):
         result[component] = {'available': True, 'archive': archive.name, 'sha256': digest, 'metadata': metadata}
         if equivalence:
             result[component]['inputEquivalence'] = equivalence
+    result['integrations'] = integration
     if result['office']['available']:
-        result['office']['extension'] = office_extension(app / 'office/runtime')
+        archive = app / 'office/runtime/share/taskarian/org.taskarian.references.zip'
+        if not archive.is_file():
+            raise ValueError('The Office integration component lacks its native extension')
+        result['office']['extension'] = {'file': str(archive.relative_to(app / 'office/runtime')),
+                                       'sha256': hashlib.sha256(archive.read_bytes()).hexdigest()}
     return result
 
 

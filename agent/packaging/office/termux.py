@@ -21,6 +21,8 @@ import source_graph
 from build import ENGINE_OPTIONS, PATCHES as COMMON_PATCHES, inventory, prepare_stage, run, write_json
 import runtime_metadata
 import branding
+from server import build_termux as build_online
+from engine import configure_termux as configure_engine
 
 ROOT = Path(__file__).resolve().parents[3]
 PREFIX = '/data/data/com.termux/files/usr'
@@ -200,23 +202,6 @@ def build_libiconv(args, env):
     return source
 
 
-def configure_engine(source, args, env):
-    options = [*ENGINE_OPTIONS, *branding.engine_options(), '--build=x86_64-pc-linux-gnu',
-               '--host=' + args.architecture + '-linux', '--prefix=' + RUNTIME,
-               '--with-parallelism=' + str(args.jobs), '--with-external-tar=' + str(args.cache),
-               '--with-external-dict-dir=' + PREFIX + '/share/hunspell',
-               '--with-external-hyph-dir=' + PREFIX + '/share/hyphen',
-               '--with-external-thes-dir=' + PREFIX + '/share/mythes', '--without-system-libxml']
-    run(['sh', './autogen.sh', *options], cwd=source / 'engine', env=env)
-    # Check the selected native graph before make can fetch anything. A new
-    # dependency needs a separately reviewed/materialized source input.
-    retained = {row['name']: row['sha256'] for row in source_graph.verify_dependencies()['components']}
-    for config in [source / 'engine/config_host.mk', source / 'engine/config_build.mk']:
-        for row in source_graph.engine_inputs(config):
-            if retained.get(row['name']) != row['sha256']:
-                raise ValueError('Unmaterialized Bionic build dependency: ' + row['name'])
-    branding.verify_engine(source)
-    return options
 
 
 def online_make_inputs(libcap, libiconv):
@@ -224,38 +209,6 @@ def online_make_inputs(libcap, libiconv):
             'ICONV_LIBS=-L' + str(libiconv / 'lib/.libs') + ' -liconv']
 
 
-def build_online(source, args, env):
-    libcap = build_libcap(args, env)
-    libiconv = build_libiconv(args, env)
-    native = {**env, 'CPPFLAGS': env['CPPFLAGS'] + ' -I' + str(libcap / 'libcap/include')
-              + ' -I' + str(libiconv / 'include'),
-              'LDFLAGS': env['LDFLAGS'] + ' -L' + str(libcap / 'libcap')
-              + ' -L' + str(libiconv / 'lib/.libs'), 'LIBS': '-liconv'}
-    run(['bash', './autogen.sh'], cwd=source, env=native)
-    run(['./configure', '--build=x86_64-pc-linux-gnu', '--host=' + args.architecture + '-linux-android',
-         '--prefix=' + RUNTIME, '--sysconfdir=' + RUNTIME + '/etc', '--localstatedir=' + RUNTIME + '/var',
-         '--disable-tests', '--disable-pam', '--enable-landlock', '--enable-seccomp',
-         *branding.online_options(),
-         '--with-lo-builddir=' + str(source / 'engine'),
-         '--with-lokit-path=' + str(source / 'engine/include'), '--with-lo-path=' + RUNTIME + '/engine'],
-        cwd=source, env=native)
-    branding.verify_online(source)
-    config = (source / 'config.h').read_text()
-    for required in ['#define MOBILEAPP 0', '#define DISABLE_SECCOMP 0', '#define DISABLE_LANDLOCK 0',
-                     '#define HAVE_LIBCAP 1', '#define TASKARIAN_TERMUX_PREFIX "' + PREFIX + '"']:
-        if required not in config:
-            raise ValueError('Native server/isolation configuration missing: ' + required)
-    # Online forwards its complete configured CPPFLAGS to native gbuild. Keep
-    # configure's COKit/Poco/OpenSSL additions for the remaining autotools units;
-    # overriding top-level CPPFLAGS would remove those required include paths.
-    run(['make', '-j' + str(args.jobs), *online_make_inputs(libcap, libiconv)], cwd=source, env=native)
-    run(['make', 'sbom-check'], cwd=source, env=native)
-    readelf = args.ndk / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf'
-    server = source / 'coolwsd'
-    dynamic = subprocess.check_output([readelf, '-d', server], text=True)
-    symbols = subprocess.check_output([readelf, '--dyn-syms', server], text=True)
-    if not re.search(r'\(NEEDED\).*\[libiconv\.so\]', dynamic) or 'libiconv_open' not in symbols:
-        raise ValueError('Native WOPI server is not linked to the required GNU UTF-7 converter')
 
 
 def package(source, args, env, toolchain):

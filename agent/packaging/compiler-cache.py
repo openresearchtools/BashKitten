@@ -83,8 +83,13 @@ def save(engine, target, contract, directory, repository=None):
     if not directory.is_dir() or not any(directory.iterdir()):
         return False
     if store.gh('api', f'repos/{repository}/releases/tags/{store.TAG}') is None:
-        store.gh('release', 'create', store.TAG, '--repo', repository, '--title', 'Taskarian build components',
-                 '--notes', store.NOTE, '--prerelease', '--latest=false')
+        try:
+            store.gh('release', 'create', store.TAG, '--repo', repository, '--title', 'Taskarian build components',
+                     '--notes', store.NOTE, '--prerelease', '--latest=false')
+        except store.StoreUnavailable:
+            # Parallel architecture jobs may create their shared release first.
+            if store.gh('api', f'repos/{repository}/releases/tags/{store.TAG}') is None:
+                raise
     with tempfile.TemporaryDirectory(prefix='compiler-cache-publish-', dir=directory.parent) as temporary:
         temporary = Path(temporary)
         archive = temporary / 'objects.tar.zst'

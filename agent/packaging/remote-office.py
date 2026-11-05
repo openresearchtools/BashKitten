@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Restore or build native Files/Office inputs through ordinary GitHub Actions."""
+"""Verify original Office artifacts for explicit migration; production uses four builders."""
 import argparse
 import base64
 from functools import cache
@@ -183,30 +183,8 @@ def verify_run(run, source, request):
 
 
 def dispatch(request, force):
-    source = source_revision()
-    verify_workflow('main')
-    endpoint = f'repos/{REPOSITORY}/actions/workflows/{WORKFLOW}'
-    title = f'Office {source} / {request}'
-    runs = api(endpoint + '/runs?event=workflow_dispatch&per_page=100')['workflow_runs']
-    run = next((value for value in runs if value['display_title'] == title), None)
-    if run is None:
-        api(endpoint + '/dispatches', {'ref': 'main', 'inputs': {'source_sha': source, 'request_id': request, 'force_rebuild': force}})
-    deadline = time.monotonic() + 300
-    while run is None:
-        if time.monotonic() >= deadline:
-            raise TimeoutError('Office workflow did not appear within five minutes')
-        time.sleep(10)
-        runs = api(endpoint + '/runs?event=workflow_dispatch&per_page=100')['workflow_runs']
-        run = next((value for value in runs if value['display_title'] == title), None)
-    verify_run(run, source, request)
-    verify_workflow(run['head_sha'])
-    print(run['html_url'], flush=True)
-    if os.environ.get('GITHUB_OUTPUT'):
-        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-            output.write('run=' + str(run['id']) + '\n')
-    if os.environ.get('GITHUB_STEP_SUMMARY'):
-        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-            summary.write(f'- [Native Office builds and artifacts]({run["html_url"]})\n')
+    # The old repository remains a historical artifact/cache source only.
+    raise ValueError('Office production moved to build-components.yml and the four architecture builders')
 
 
 def verify_artifact(directory, target, source, component='office', requested=None):

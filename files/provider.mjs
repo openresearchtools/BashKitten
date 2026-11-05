@@ -33,6 +33,19 @@ export async function prepareFiles({ dataRoot, scope, endpoint, privatePaths = [
   if (!scope?.id || !scope.identity || !path.isAbsolute(scope.root) || !path.isAbsolute(dataRoot)) throw failure(400, 'An authenticated owning folder is required');
   return serial(dataRoot, async () => {
     const directory = path.join(dataRoot, 'services', 'files'); await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+    // Quantum's production filesystem mode is selected by this upstream path.
+    // Keep its mutable service cwd private while serving the installed UI read-only.
+    const assetParent = path.join(directory, 'internal', 'web');
+    const assetPath = path.join(assetParent, 'dist');
+    const assetTarget = path.join(moduleRoot, 'ui', 'internal', 'web', 'dist');
+    await fs.access(path.join(assetTarget, 'index.html'));
+    await fs.mkdir(assetParent, { recursive: true, mode: 0o700 });
+    try {
+      if (await fs.readlink(assetPath) !== assetTarget) throw failure(503, 'Files UI location differs from its installed component');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      await fs.symlink(assetTarget, assetPath);
+    }
     await fs.mkdir(socketRoot, { recursive: true, mode: 0o700 }); const socketPath = path.join(socketRoot, 'quantum.sock');
     if (Buffer.byteLength(socketPath) > 107) throw failure(503, 'The backend runtime directory is too long for a native Unix socket');
     const root = await fs.realpath(scope.root); scope = { ...scope, root };

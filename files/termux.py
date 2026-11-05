@@ -26,6 +26,8 @@ def environment(args, work, sources):
     patches = []
     with tarfile.open(archive) as upstream:
         for component, names in selected.items():
+            if component not in sources:
+                continue
             for name in names:
                 member = next(m for m in upstream.getmembers() if m.name.endswith('/packages/'+component+'/'+name))
                 raw = upstream.extractfile(member).read()

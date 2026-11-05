@@ -28,7 +28,7 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
   let manifest;
   try { manifest = JSON.parse(await fs.readFile(path.join(componentRoot, 'manifest.json'), 'utf8')); }
   catch { throw unavailable('the native component artifact is not installed'); }
-  if (manifest.schema !== 1 || manifest.revision !== exact || manifest.apiVersion !== 1 || requiredPatches.some(id => !manifest.patches?.includes(id))) throw unavailable('the native component does not match the pinned API, field/attribute persistence, undo and UI policy contracts');
+  if (![1, 2].includes(manifest.schema) || manifest.revision !== exact || manifest.apiVersion !== 1 || requiredPatches.some(id => !manifest.patches?.includes(id))) throw unavailable('the native component does not match the pinned API, field/attribute persistence, undo and UI policy contracts');
   if ((manifest.target || manifest.platform) === 'termux' && !manifest.patches?.includes('native-fontconfig-paths')) throw unavailable('the native Termux font configuration does not match its bundled fontconfig library');
   if ((manifest.target || manifest.platform) === 'termux' && !manifest.patches?.includes('native-iconv-library')) throw unavailable('the native Termux runtime requires its bundled GNU libiconv with UTF-7 support');
   if ((manifest.target || manifest.platform) === 'termux' && !manifest.patches?.includes('native-import-filter-builtins')) throw unavailable('the native Termux import libraries require linked compiler builtins; rebuild the Office component');

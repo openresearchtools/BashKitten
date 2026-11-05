@@ -20,6 +20,8 @@ import tempfile
 import source_graph
 import runtime_metadata
 import branding
+from engine import ENGINE_OPTIONS, configure_linux as configure_engine
+from server import build_linux as build_online
 
 ROOT = Path(__file__).resolve().parents[3]
 PREFIX = '/usr/lib/taskarian/office/runtime'
@@ -51,9 +53,6 @@ PATCHES = [
     'office/patches/0031-native-extension-mobile-toolbar.patch',
     *source_graph.DEPENDENCY_PATCHES,
 ]
-ENGINE_OPTIONS = ['--with-distro=CPLinux-LOKit', '--disable-epm',
-                  '--without-package-format', '--disable-symbols',
-                  '--without-export-validation']
 
 
 def run(command, cwd=None, env=None):
@@ -131,28 +130,6 @@ def prepare(work, cache):
     source_graph.prepare_browser_dependencies(source)
     return source
 
-
-def configure_engine(source, cache, jobs, env):
-    run(['sh', './autogen.sh', *ENGINE_OPTIONS, *branding.engine_options(), '--with-parallelism=' + str(jobs),
-         '--with-external-tar=' + str(cache)], cwd=source / 'engine', env=env)
-    selected = source_graph.engine_inputs(source / 'engine/config_host.mk')
-    retained = {row['name']: row['sha256'] for row in source_graph.verify_dependencies()['components']}
-    if any(retained.get(row['name']) != row['sha256'] for row in selected):
-        raise ValueError('Configured native dependency graph contains an unmaterialized source')
-    branding.verify_engine(source)
-
-
-def build_online(source, jobs, env):
-    run(['./autogen.sh'], cwd=source, env=env)
-    run(['./configure', '--prefix=' + PREFIX, '--sysconfdir=' + PREFIX + '/etc',
-         '--localstatedir=' + PREFIX + '/var', '--disable-tests',
-         *branding.online_options(),
-         '--with-lo-builddir=' + str(source / 'engine'),
-         '--with-lokit-path=' + str(source / 'engine/include'),
-         '--with-lo-path=' + PREFIX + '/engine'], cwd=source, env=env)
-    branding.verify_online(source)
-    run(['make', '-j' + str(jobs)], cwd=source, env=env)
-    run(['make', 'sbom-check'], cwd=source, env=env)
 
 
 def inventory(root):

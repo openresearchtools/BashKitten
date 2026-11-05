@@ -44,9 +44,13 @@ def collect(components):
     mapping = json.loads(SUPPLEMENTS.read_text())['components']
     indexed = {component_key(entry): entry for entry in components}
     selected = {key: set(entry['notices']) for key, entry in indexed.items()}
-    for supplement in mapping.values():
+    for key, supplement in mapping.items():
+        if key not in indexed:
+            continue
         for source in supplement.get('sources', []):
             if 'component' in source:
+                if source['component'] not in indexed:
+                    raise ValueError('Selected component lacks its native notice dependency: ' + source['component'])
                 selected[source['component']].add(source['member'])
     extracted = {key: archive_members(indexed[key], members) for key, members in selected.items() if members}
     records = []

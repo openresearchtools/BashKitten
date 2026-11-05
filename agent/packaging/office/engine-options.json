@@ -1,0 +1,7 @@
+[
+  "--with-distro=CPLinux-LOKit",
+  "--disable-epm",
+  "--without-package-format",
+  "--disable-symbols",
+  "--without-export-validation"
+]

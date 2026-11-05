@@ -1,7 +1,18 @@
-name: Collect native Files and Office components
+name: Build independent Office, Files and References components
 'on':
+  workflow_dispatch:
+    inputs:
+      target:
+        type: string
+        default: all
+      force_rebuild:
+        type: boolean
+        default: false
   workflow_call:
     inputs:
+      target:
+        type: string
+        default: all
       force_rebuild:
         type: boolean
         default: false
@@ -12,61 +23,10 @@ permissions:
   contents: read
   actions: read
 jobs:
-  dispatch:
-    runs-on: ubuntu-24.04
-    outputs:
-      run: ${{ steps.builder.outputs.run }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          filter: blob:none
-          sparse-checkout-cone-mode: false
-          sparse-checkout: |
-            /.github/builders/office.yml
-            /agent/packaging/remote-office.py
-            /agent/packaging/native-component.py
-            /agent/packaging/applications.py
-            /agent/packaging/build.py
-      - id: builder
-        name: Dispatch one source-pinned component batch
-        env:
-          GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
-          REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
-          FORCE_REBUILD: ${{ inputs.force_rebuild }}
-        run: python3 agent/packaging/remote-office.py dispatch --request "$REQUEST_ID" --force "$FORCE_REBUILD"
-  collect:
-    needs: dispatch
-    strategy:
-      fail-fast: false
-      matrix:
-        component: [office, files]
-        target: [linux-amd64, linux-arm64, termux-aarch64, termux-x86_64]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 360
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          filter: blob:none
-          sparse-checkout-cone-mode: false
-          sparse-checkout: |
-            /.github/builders/office.yml
-            /agent/packaging/remote-office.py
-            /agent/packaging/native-component.py
-            /agent/packaging/applications.py
-            /agent/packaging/build.py
-      - name: Collect this target as soon as its native build finishes
-        env:
-          GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
-          REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
-          BUILD_RUN: ${{ needs.dispatch.outputs.run }}
-          TARGET: ${{ matrix.target }}
-          COMPONENT: ${{ matrix.component }}
-        run: python3 agent/packaging/remote-office.py collect --component "$COMPONENT" --request "$REQUEST_ID" --run "$BUILD_RUN" --target "$TARGET" --directory "$RUNNER_TEMP/office"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: ${{ matrix.component }}-${{ matrix.target }}
-          path: ${{ runner.temp }}/office/
-          if-no-files-found: error
-          compression-level: 0
+  components:
+    uses: ./.github/workflows/build-components.yml
+    with:
+      components: '["office-engine","office-server","office-ui","office-integration","files-server","files-ui","files-media","files-office-addon","files-integration","references"]'
+      target: ${{ inputs.target }}
+      force_rebuild: ${{ inputs.force_rebuild }}
+    secrets: inherit
