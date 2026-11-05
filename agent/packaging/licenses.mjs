@@ -181,7 +181,7 @@ export async function collectLicenses(root, { target, version, browser, 'backend
   for (const name of ['authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote']) {
     if (!components.has(name)) throw Error('Missing native access component: ' + name);
     await fs.access(path.join(root, 'auth/bin', { valkey: 'valkey-server', remote: 'taskarian-remote' }[name] || name));
-    const license = name === 'remote' ? 'remote/github.com__openresearchtools__taskarian__remote/LICENSE' : name + '/LICENSE';
+    const license = name === 'remote' ? 'remote/github.com__openresearchtools__Taskarian__remote/LICENSE' : name + '/LICENSE';
     await relativeText(path.join(root, 'auth/share/licenses'), license);
   }
   const records = await npmInventory(root, target, auth.architecture);

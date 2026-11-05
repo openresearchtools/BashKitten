@@ -19,21 +19,90 @@ export function nativeOperation(request) {
   const has = name => properties.getPropertySetInfo().hasPropertyByName(name);
   const portablePrefix = 'ADDIN TASKARIAN_CITATION ';
   const portableNamespace = 'urn:taskarian:references:1';
-  let fieldCache, objectCache, applyingState;
+  let fieldCache, objectCache, applyingState, legacyCache;
+  const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const referenceID = value => typeof value === 'string' && /^bkref:[A-Za-z0-9._~-]+\/[A-Za-z0-9._~-]+\/[A-Z0-9]+$/.test(value);
+  const identifier = value => typeof value === 'string' && value.length > 0 && value.length <= 4096;
+  const styleIdentity = value => record(value) && typeof value.id === 'string' && value.id.length > 0 && value.id.length <= 8192 && (value.locale === undefined || identifier(value.locale));
+  function legacySnapshots(embedded) {
+    return record(embedded) && Object.entries(embedded).every(([id, snapshot]) => referenceID(id) && record(snapshot) && identifier(snapshot.type) &&
+      (snapshot.title === undefined || typeof snapshot.title === 'string') &&
+      // Merged records retain their source key, but may use the surviving CSL
+      // key from that same backend/project. Untitled CSL records are valid.
+      (snapshot.id === undefined || referenceID(snapshot.id) && snapshot.id.slice(0, snapshot.id.lastIndexOf('/')) === id.slice(0, id.lastIndexOf('/'))));
+  }
+  function legacyItems(items, embedded) {
+    return Array.isArray(items) && items.length > 0 && items.length <= 1000 && items.every(item => {
+      if (!record(item) || !referenceID(item.id) || !Object.prototype.hasOwnProperty.call(embedded, item.id)) return false;
+      return ['locator', 'label', 'prefix', 'suffix'].every(key => item[key] === undefined || typeof item[key] === 'string' && item[key].length <= 2048);
+    });
+  }
+  function legacyState(state) {
+    if (!record(state) || state.version !== 1 || state.bindingVersion !== 1 || !Number.isSafeInteger(state.revision) || state.revision < 0 ||
+      !identifier(state.libraryId) || state.projectId !== undefined && state.projectId !== state.libraryId || !styleIdentity(state.style) ||
+      !Array.isArray(state.citations) || state.citations.length > 10000 || state.embeddedItems !== undefined && !record(state.embeddedItems)) return false;
+    const embedded = state.embeddedItems || {}, ids = new Set();
+    if (!legacySnapshots(embedded)) return false;
+    const anchor = value => record(value) && ['field', 'cell', 'shape'].includes(value.kind) && identifier(value.name);
+    for (const citation of state.citations) {
+      if (!record(citation) || !identifier(citation.id) || citation.id === 'bibliography' || ids.has(citation.id) ||
+        !anchor(citation.anchor) || !legacyItems(citation.items, embedded)) return false;
+      ids.add(citation.id);
+    }
+    const bibliography = state.bibliography;
+    return bibliography === null || record(bibliography) && bibliography.id === 'bibliography' && anchor(bibliography.anchor) &&
+      (bibliography.copies === undefined || Array.isArray(bibliography.copies) && bibliography.copies.length <= 10000 && bibliography.copies.every(copy => record(copy) && anchor(copy.anchor)));
+  }
+  function legacyIdentity() {
+    if (legacyCache !== undefined) return legacyCache;
+    legacyCache = null;
+    const descriptors = properties.getPropertySetInfo().getProperties();
+    for (const descriptor of descriptors) {
+      if (descriptor.Name === propertyName) continue;
+      const match = /^([A-Z][A-Za-z0-9]*)ReferencesV1$/.exec(descriptor.Name);
+      if (!match) continue;
+      const raw = properties.getPropertyValue(descriptor.Name);
+      if (typeof raw !== 'string' || raw.length > 2 * 1024 * 1024) continue;
+      let state; try { state = JSON.parse(raw); } catch (_) { continue; }
+      if (!legacyState(state)) continue;
+      const prefix = 'ADDIN ' + match[1].toUpperCase() + '_CITATION ', namespace = 'urn:' + match[1].toLowerCase() + ':references:1';
+      if (legacyCache || prefix === portablePrefix || namespace === portableNamespace || !(descriptor.Attributes & 128) ||
+        descriptors.some(other => other.Name !== descriptor.Name && other.Name.startsWith(descriptor.Name))) fail('Ambiguous References document metadata');
+      legacyCache = { name: descriptor.Name, raw, state, prefix, namespace };
+    }
+    return legacyCache;
+  }
+  function readPayload(raw, legacy) {
+    if (typeof raw !== 'string' || raw.length > 2 * 1024 * 1024) return null;
+    let payload; try { payload = JSON.parse(raw); } catch (_) { return null; }
+    if (!record(payload) || payload.version !== 1 || !payload.citation?.id || !(Array.isArray(payload.citation.items) || payload.bibliography === true)) return null;
+    if (!legacy) return payload;
+    const identity = legacyIdentity(), citation = payload.citation;
+    if (!identity || !identifier(citation.id) || !legacySnapshots(payload.embeddedItems) || payload.libraryId !== identity.state.libraryId ||
+      !styleIdentity(payload.style) ||
+      !(payload.bibliography === true ? citation.id === 'bibliography' : payload.bibliography === false && legacyItems(citation.items, payload.embeddedItems))) return null;
+    return payload;
+  }
   function drawingPages() {
     const pages = documentType === 'spreadsheet' ? model.getSheets() : model.getDrawPages();
     return Array.from({ length: pages.getCount() }, (_, index) => documentType === 'spreadsheet' ? pages.getByIndex(index).getDrawPage() : pages.getByIndex(index));
   }
-  function objectPayload(object) {
+  function objectReference(object) {
     if (!object.getPropertySetInfo().hasPropertyByName('UserDefinedAttributes')) return null;
-    const attrs = object.getPropertyValue('UserDefinedAttributes');
+    const attrs = object.getPropertyValue('UserDefinedAttributes'), identity = legacyIdentity();
+    let found = null;
     for (const key of attrs.getElementNames()) {
       const value = attrs.getByName(key);
-      if (value.Namespace !== portableNamespace || key.split(':').at(-1) !== 'reference' || value.Value.length > 2 * 1024 * 1024) continue;
-      try { const payload = JSON.parse(value.Value); if (payload.version === 1 && payload.citation?.id && (Array.isArray(payload.citation.items) || payload.bibliography)) return payload; } catch (_) {}
+      if (key.split(':').at(-1) !== 'reference' || value.Namespace !== portableNamespace && value.Namespace !== identity?.namespace) continue;
+      const legacy = value.Namespace !== portableNamespace, payload = readPayload(value.Value, legacy);
+      if (legacy && !payload) fail('Invalid legacy native reference attribute');
+      if (!payload) continue;
+      if (found) fail('Ambiguous native reference attributes');
+      found = { attrs, key, payload, legacy };
     }
-    return null;
+    return found;
   }
+  function objectPayload(object) { return objectReference(object)?.payload || null; }
   function portableObjects() {
     if (objectCache) return objectCache;
     objectCache = []; let visited = 0;
@@ -46,11 +115,11 @@ export function nativeOperation(request) {
         if (formats.getCount() > 10000) fail('Citation metadata inspection exceeds the native format-group bound');
         for (let f = 0; f < formats.getCount(); f++) {
           const ranges = formats.getByIndex(f).getRangeAddresses(); if (!ranges.length) continue;
-          const sample = owner.getCellByPosition(ranges[0].StartColumn, ranges[0].StartRow), payload = objectPayload(sample);
+          const sample = owner.getCellByPosition(ranges[0].StartColumn, ranges[0].StartRow), reference = objectReference(sample), payload = reference?.payload;
           if (!payload) continue;
           for (const range of ranges) {
             if ((range.EndColumn - range.StartColumn + 1) * (range.EndRow - range.StartRow + 1) + objectCache.length > 10000) fail('Copied managed cells exceed the document citation bound');
-            for (let row = range.StartRow; row <= range.EndRow; row++) for (let col = range.StartColumn; col <= range.EndColumn; col++) objectCache.push({ object: owner.getCellByPosition(col, row), payload, anchor: { kind: 'cell', nativeKey: s + ':' + row + ':' + col }, position: [s, row, col] });
+            for (let row = range.StartRow; row <= range.EndRow; row++) for (let col = range.StartColumn; col <= range.EndColumn; col++) objectCache.push({ object: owner.getCellByPosition(col, row), payload, legacy: reference.legacy, anchor: { kind: 'cell', nativeKey: s + ':' + row + ':' + col }, position: [s, row, col] });
           }
         }
       }
@@ -60,8 +129,8 @@ export function nativeOperation(request) {
       function walk(collection, page, path) {
         for (let index = 0; index < collection.getCount(); index++) {
           if (++visited > 20000) fail('Citation metadata inspection exceeds the native shape bound');
-          const object = collection.getByIndex(index), indices = [...path, index], payload = objectPayload(object);
-          if (payload) objectCache.push({ object, parent: collection, payload, anchor: { kind: 'shape', name: object.getName(), nativeKey: (documentType === 'spreadsheet' ? 'shape:' : '') + page + ':' + indices.join('.') }, position: [page, ...indices] });
+          const object = collection.getByIndex(index), indices = [...path, index], reference = objectReference(object), payload = reference?.payload;
+          if (payload) objectCache.push({ object, parent: collection, payload, legacy: reference.legacy, anchor: { kind: 'shape', name: object.getName(), nativeKey: (documentType === 'spreadsheet' ? 'shape:' : '') + page + ':' + indices.join('.') }, position: [page, ...indices] });
           if (object.supportsService('com.sun.star.drawing.GroupShape')) walk(object, page, indices);
         }
       }
@@ -70,8 +139,8 @@ export function nativeOperation(request) {
     return objectCache;
   }
   function writeObjectPayload(object, citation) {
-    const attrs = object.getPropertyValue('UserDefinedAttributes');
-    for (const key of attrs.getElementNames()) if (attrs.getByName(key).Namespace === portableNamespace && key.split(':').at(-1) === 'reference') attrs.removeByName(key);
+    const reference = objectReference(object), attrs = reference?.attrs || object.getPropertyValue('UserDefinedAttributes');
+    if (reference) attrs.removeByName(reference.key);
     if (citation) attrs.insertByName('bk:reference', new css.xml.AttributeData({ Namespace: portableNamespace, Type: 'CDATA', Value: portablePayload(citation).slice(portablePrefix.length) }));
     object.setPropertyValue('UserDefinedAttributes', attrs); objectCache = null;
   }
@@ -88,17 +157,22 @@ export function nativeOperation(request) {
       const params = field.getParameters(), key = 'vnd.oasis.opendocument.field.code';
       if (!params.hasByName(key)) continue;
       const code = params.getByName(key);
-      if (typeof code !== 'string' || !code.startsWith(portablePrefix) || code.length > 2 * 1024 * 1024) continue;
-      try { const payload = JSON.parse(code.slice(portablePrefix.length)); if (payload.version === 1 && payload.citation?.id && (Array.isArray(payload.citation.items) || payload.bibliography === true)) fieldCache.push({ field, payload }); } catch (_) {}
+      if (typeof code !== 'string') continue;
+      const identity = legacyIdentity(), prefix = code.startsWith(portablePrefix) ? portablePrefix : identity && code.startsWith(identity.prefix) ? identity.prefix : null;
+      if (!prefix) continue;
+      const payload = code.length <= 2 * 1024 * 1024 ? readPayload(code.slice(prefix.length), prefix !== portablePrefix) : null;
+      if (prefix !== portablePrefix && !payload) fail('Invalid legacy native citation field');
+      if (payload) fieldCache.push({ field, payload, prefix });
     }
     return fieldCache;
   }
   const metadata = () => {
-    const raw = has(propertyName) ? properties.getPropertyValue(propertyName) : null;
+    const identity = legacyIdentity(), raw = has(propertyName) ? properties.getPropertyValue(propertyName) : identity?.raw ?? null;
     if (raw !== null && (typeof raw !== 'string' || raw.length > 2 * 1024 * 1024)) fail('Embedded citation state exceeds the document bound');
     const state = raw === null ? { version: 1, revision: 0, citations: [], bibliography: null } : JSON.parse(raw);
     if (state.version !== 1 || !Array.isArray(state.citations) || state.citations.length > 10000) fail('The embedded citation state is invalid or requires another plugin version');
     const carriers = [...portableFields().map(({ field, payload }) => ({ payload, anchor: { kind: 'field', name: field.getName(), note: payload.citation.note || null }, key: field.getName() })), ...portableObjects().map(item => ({ ...item, key: item.anchor.nativeKey }))];
+    if (identity && state.libraryId !== identity.state.libraryId && (portableFields().some(item => item.prefix === identity.prefix) || portableObjects().some(item => item.legacy))) fail('References metadata has conflicting project bindings');
     const fieldOwners = new Map(carriers.filter(entry => entry.anchor.kind === 'field').map(entry => [entry.anchor.name, entry.payload.citation.id]));
     const groups = new Map();
     for (const carrier of carriers) { const id = carrier.payload.citation.id; if (!groups.has(id)) groups.set(id, []); groups.get(id).push(carrier); }
@@ -165,10 +239,18 @@ export function nativeOperation(request) {
     if (value?.length > 2 * 1024 * 1024) fail('Embedded citation metadata exceeds the document bound');
     const property = (name, value) => new css.beans.PropertyValue({ Name: name, Handle: 0, Value: value, State: css.beans.PropertyState.DIRECT_VALUE });
     const sequence = uno.type.sequence(uno.type.struct(css.beans.PropertyValue));
-    const updated = [property('NamePrefix', propertyName), property('UserDefinedProperties', new uno.Any(sequence, value === null ? [] : [property(propertyName, value)]))];
+    const identity = legacyIdentity(), remaining = identity && (portableFields().some(item => item.prefix === identity.prefix) || portableObjects().some(item => item.legacy));
+    if (value === null && remaining) fail('Legacy managed citations remain; refresh before unlinking');
+    const update = (prefix, entries) => {
+      const updated = [property('NamePrefix', prefix), property('UserDefinedProperties', new uno.Any(sequence, entries))];
+      css.frame.DispatchHelper.create(uno.componentContext).executeDispatch(view.getFrame(), '.uno:SetDocumentProperties', '', 0, [property('UpdatedProperties', new uno.Any(sequence, updated))]);
+    };
     // Native SetDocumentProperties participates in the same undo context through
     // the isolated generic property-undo patch, and outlives this participant.
-    css.frame.DispatchHelper.create(uno.componentContext).executeDispatch(view.getFrame(), '.uno:SetDocumentProperties', '', 0, [property('UpdatedProperties', new uno.Any(sequence, updated))]);
+    update(propertyName, value === null ? [] : [property(propertyName, value)]);
+    // Keep the verified source property while any carrier still needs its
+    // namespace on reopen. Delete it only through the same native undo owner.
+    if (identity && !remaining) { update(identity.name, []); legacyCache = null; }
     return state;
   };
   const checkRevision = state => {
@@ -585,13 +667,15 @@ export function nativeOperation(request) {
       const dispatch = css.frame.DispatchHelper.create(uno.componentContext);
       const sameNote = anchor && (citation.anchor.note || null) === (citation.note || null);
       if (sameNote && citation.anchor.kind === 'field') {
+        const mark = nativeMark(citation), prefix = portableFields().find(item => item.field.getName() === mark.getName())?.prefix;
+        if (!prefix) fail('The managed field identity changed; inspect before editing');
         // Zotero skips unchanged citation text; Refresh still rewrites its
         // bibliography. Our portable command must also match so copied fields
         // and refreshed embedded metadata
         // still use the native undo-aware command update when needed.
-        if (!isBibliography && anchor.getString() === citation.text && nativeMark(citation).getParameters().getByName('vnd.oasis.opendocument.field.code') === fieldCommand) return citation;
+        if (!isBibliography && anchor.getString() === citation.text && mark.getParameters().getByName('vnd.oasis.opendocument.field.code') === fieldCommand) return citation;
         const cursor = anchor.getText().createTextCursorByRange(anchor.getStart()); cursor.goRight(1, false); controller.select(cursor);
-        dispatch.executeDispatch(frame, '.uno:UpdateTextFormField', '', 0, [property('FieldType', fieldType), property('FieldCommandPrefix', portablePrefix), property('Field', new uno.Any(sequence, fields))]);
+        dispatch.executeDispatch(frame, '.uno:UpdateTextFormField', '', 0, [property('FieldType', fieldType), property('FieldCommandPrefix', prefix), property('Field', new uno.Any(sequence, fields))]);
       } else {
         let range = preparedTarget || (!anchor ? writerRange(target || {}) : null);
         if (anchor) {
