@@ -141,3 +141,13 @@
    entry in `items` is one of exactly
    three kinds:
    - **button** - `{ type: "button", command, size?: "large" | "small" }` (default
+--- a/browser/mocha_tests/sources.ts
++++ b/browser/mocha_tests/sources.ts
+@@ -299,6 +299,7 @@
+ /// <reference path="../src/control/jsdialog/Widget.Text.ts" />
+ /// <reference path="../src/control/jsdialog/Widget.TreeView.ts" />
+ /// <reference path="../src/control/Control.MobileSearchBar.ts" />
++/// <reference path="../src/control/Control.Extension.ts" />
+ /// <reference path="../src/control/Control.MobileTopBar.ts" />
+ /// <reference path="../src/control/Control.UserList.ts" />
+ /// <reference path="../src/control/Control.SaveState.tsx" />
