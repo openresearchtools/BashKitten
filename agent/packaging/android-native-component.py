@@ -36,8 +36,8 @@ spec.loader.exec_module(component)
 
 
 def git(*args):
-    if args and args[0] == 'show':
-        return component.network_command(['git', *args]).encode()
+    if args and args[0] in ('show', 'ls-tree'):
+        return component.network_command(['git', *args], binary=True)
     return subprocess.check_output(['git', *args], cwd=ROOT)
 
 
@@ -89,7 +89,8 @@ def native_tree(revision):
 
 @cache
 def native_inputs(revision, target, legacy_android_module=False,
-                  legacy_fixture_metadata=False, legacy_desktop_resources=False):
+                  legacy_fixture_metadata=False, legacy_desktop_resources=False,
+                  legacy_artifact_policy=False):
     if not isinstance(revision, str) or not re.fullmatch('[0-9a-f]{40}', revision):
         raise ValueError('Invalid native source revision')
     if subprocess.run(['git', 'cat-file', '-e', revision + '^{commit}'], cwd=ROOT,
@@ -112,6 +113,13 @@ def native_inputs(revision, target, legacy_android_module=False,
             continue
         if path == COLLECTOR or path.startswith(APPLICATION_PATHS) or '/__pycache__/' in path:
             continue
+        if path in component.NATIVE_POLICY_FILES and not legacy_artifact_policy:
+            # These exact delimited additions only assemble Linux resources.
+            # Preserve every native recipe byte outside the proven blocks.
+            header, raw_path = entry.split(b'\t', 1)
+            mode, kind, _identity = header.split()
+            identity = component.blob_identity(component.artifact_policy_base(git('show', revision + ':' + path)))
+            entry = mode + b' ' + kind + b' ' + identity.encode() + b'\t' + raw_path
         entries.append(entry)
     recipe = native_recipe(git('show', revision + ':' + WORKFLOW).decode())
     return hashlib.sha256(target.encode() + b'\0' + b'\0'.join(entries) + b'\0' +
@@ -148,8 +156,9 @@ def verify_native(apk, record, target):
     # Preserve old receipts, including their original digest. Validate that
     # digest under its actual producer's old/new calculation before comparing
     # current native inputs with the producer under the narrow resource rule.
-    recorded_inputs = {native_inputs(record.get('source', ''), target, module, fixtures, desktop)
-                       for module in (False, True) for fixtures in (False, True) for desktop in (False, True)}
+    recorded_inputs = {native_inputs(record.get('source', ''), target, module, fixtures, desktop, policy)
+                       for module in (False, True) for fixtures in (False, True)
+                       for desktop in (False, True) for policy in (False, True)}
     if (record.get('schema') != 1 or record.get('architecture') != abi or
             record.get('input_sha256') not in recorded_inputs or
             producer_inputs != native_inputs(current, target) or
@@ -326,8 +335,9 @@ def restore_early(directory, target):
                 evidence = early_producer(repository, run, artifact)
                 if not source or not evidence or native_inputs(source[1], target) != digest:
                     continue
-                accepted_names = {native_artifact(target, native_inputs(source[1], target, module, fixtures, desktop))
-                                  for module in (False, True) for fixtures in (False, True) for desktop in (False, True)}
+                accepted_names = {native_artifact(target, native_inputs(source[1], target, module, fixtures, desktop, policy))
+                                  for module in (False, True) for fixtures in (False, True)
+                                  for desktop in (False, True) for policy in (False, True)}
                 if artifact['name'] not in accepted_names:
                     continue
                 with tempfile.TemporaryDirectory(prefix='gecko-restore-', dir=directory.parent) as temporary:
