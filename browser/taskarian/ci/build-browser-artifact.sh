@@ -113,6 +113,12 @@ install -m 0644 -- \
 install -m 0644 -- \
   "${browser_run}/build-manifest.txt" \
   "${artifact_dir}/browser-build-manifest.txt"
+# TASKARIAN_ARTIFACT_ONLY_BEGIN
+# Preserve the native packager's XPT sibling for subsequent resource-only builds.
+install -m 0644 -- \
+  "$(one_file "${browser_run}/obj/dist" "*.xpt_artifacts.zip")" \
+  "${artifact_dir}/"
+# TASKARIAN_ARTIFACT_ONLY_END
 
 cat >"${artifact_dir}/browser-artifact-manifest.txt" <<EOF
 taskarian_commit=${commit}
@@ -123,6 +129,10 @@ firefox_version=$(cat "${taskarian}/browser/config/version_display.txt")
 runner=ubuntu-24.04
 external_components=deferred-to-final-assembly
 EOF
+# TASKARIAN_ARTIFACT_ONLY_BEGIN
+python3 "${taskarian}/../agent/packaging/browser-component.py" record-native \
+  "linux-${architecture}" --directory "${artifact_dir}"
+# TASKARIAN_ARTIFACT_ONLY_END
 
 (
   cd -- "${artifact_dir}"

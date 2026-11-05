@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import tarfile
 import zipfile
 
 from release import validate_termux_update, TERMUX_UPDATE_ASSET, TERMUX_BOOTSTRAP_ASSET, TERMUX_PREPARER_ASSET
@@ -22,6 +23,12 @@ from release import validate_termux_update, TERMUX_UPDATE_ASSET, TERMUX_BOOTSTRA
 ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = 'agent/packaging/browser-component.py'
 EQUIVALENCE = 'browser-input-equivalence.json'
+NATIVE_ENGINE_RECEIPT = 'browser-native-engine.json'
+NATIVE_POLICY_FILES = (
+    'browser/taskarian/scripts/build-linux-external.sh',
+    'browser/taskarian/ci/build-browser-artifact.sh',
+    'browser/python/mozbuild/mozbuild/artifacts.py',
+)
 ANDROID_ONLY_MODULE = 'browser/mobile/shared/modules/geckoview/TaskarianAndroid.sys.mjs'
 # Desktop DIST_SUBDIR=browser resources are not native/JNI input. The Android
 # packager does not include that subtree; any optional copy still must be fresh.
@@ -65,12 +72,15 @@ class NetworkUnavailable(RuntimeError):
     """Retry the reuse check later instead of starting duplicate compilation."""
 
 
-def network_command(command):
+def network_command(command, binary=False):
     for attempt in range(3):
-        result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+        result = subprocess.run(command, cwd=ROOT, text=not binary, capture_output=True)
         if result.returncode == 0:
             return result.stdout
-        if re.search(r'HTTP 404|"status"\s*:\s*"?404|does not exist in|not our ref|couldn.t find remote ref', result.stderr + result.stdout):
+        diagnostic = result.stderr + result.stdout
+        if binary:
+            diagnostic = diagnostic.decode(errors='replace')
+        if re.search(r'HTTP 404|"status"\s*:\s*"?404|does not exist in|not our ref|couldn.t find remote ref', diagnostic):
             raise FileNotFoundError('Published producer metadata/artifact is no longer available')
         if attempt < 2:
             time.sleep(5 * (attempt + 1))
@@ -217,6 +227,268 @@ def equivalent_source(source, target):
                                 source, current, '--', *paths])
 
 
+def artifact_policy_base(data):
+    """Remove only explicitly delimited artifact-only policy additions."""
+    output, inside = [], False
+    for line in data.splitlines(keepends=True):
+        marker = line.strip()
+        if marker == b'# TASKARIAN_ARTIFACT_ONLY_BEGIN':
+            if inside:
+                raise ValueError('Nested artifact-only policy block')
+            inside = True
+        elif marker == b'# TASKARIAN_ARTIFACT_ONLY_END':
+            if not inside:
+                raise ValueError('Unmatched artifact-only policy block')
+            inside = False
+        elif not inside:
+            output.append(line)
+    if inside:
+        raise ValueError('Unclosed artifact-only policy block')
+    return b''.join(output)
+
+
+def blob_identity(data):
+    return hashlib.sha1(f'blob {len(data)}\0'.encode() + data).hexdigest()
+
+
+@cache
+def linux_engine_inputs(source, target):
+    if target not in ('linux-amd64', 'linux-arm64'):
+        raise ValueError('Linux native engine target required')
+    ensure_source(source)
+    workflow = '.github/builders/linux.yml'
+    paths = [path for path in input_paths(target) if not path.startswith(':')]
+    entries = network_command(['git', 'ls-tree', '-r', '-z', source, '--', *paths], binary=True)
+    excluded = {*FIXTURE_METADATA, *ANDROID_DESKTOP_RESOURCES, ANDROID_ONLY_MODULE}
+    canonical = []
+    for entry in entries.split(b'\0'):
+        if not entry:
+            continue
+        header, raw_path = entry.split(b'\t', 1)
+        path = raw_path.decode()
+        if (path in excluded or path.startswith(('browser/mobile/android/', 'browser/taskarian/android/'))):
+            continue
+        mode, kind, identity = header.decode().split()
+        if path == workflow:
+            text = network_command(['git', 'show', source + ':' + path])
+            identity = blob_identity(json.dumps(linux_native_recipe(text), sort_keys=True).encode())
+        elif path in NATIVE_POLICY_FILES:
+            text = network_command(['git', 'show', source + ':' + path]).encode()
+            identity = blob_identity(artifact_policy_base(text))
+        canonical.append(f'{mode} {kind} {identity}\t'.encode() + raw_path)
+    return hashlib.sha256(target.encode() + b'\0' + b'\0'.join(canonical)).hexdigest()
+
+
+def native_elf_inventory(archive):
+    """Read actual native payloads from the verified custom browser package."""
+    result = {}
+    with tarfile.open(archive, 'r:*') as package:
+        names = set()
+        for member in package:
+            if member.name in names:
+                raise ValueError('Duplicate native archive member')
+            names.add(member.name)
+            path = Path(member.name)
+            if path.is_absolute() or '..' in path.parts or not path.parts or path.parts[0] != 'taskarian':
+                raise ValueError('Native browser archive leaves its product directory')
+            if not member.isfile() and not member.islnk():
+                continue
+            with package.extractfile(member) as stream:
+                header = stream.read(4)
+                if header == b'\x7fELF':
+                    checksum = hashlib.sha256(header)
+                    while chunk := stream.read(1024 * 1024):
+                        checksum.update(chunk)
+                    result['/'.join(path.parts[1:])] = checksum.hexdigest()
+    if 'libxul.so' not in result or 'taskarian' not in result:
+        raise ValueError('Native browser archive lacks its engine or launcher')
+    return result
+
+
+def verify_linux_engine(directory, target, manifest):
+    receipt = Path(directory) / NATIVE_ENGINE_RECEIPT
+    if not receipt.exists():
+        if 'native_engine_source' in manifest or 'native_engine_receipt_sha256' in manifest:
+            raise ValueError('Linux native engine manifest is missing its receipt')
+        return
+    record = json.loads(receipt.read_text())
+    if (not isinstance(record, dict) or
+            manifest.get('native_engine_source') != record.get('source') or
+            manifest.get('native_engine_receipt_sha256') != hashlib.sha256(receipt.read_bytes()).hexdigest()):
+        raise ValueError('Linux native engine manifest differs from its receipt')
+    source = manifest['taskarian_commit']
+    if (record.get('schema') != 1 or record.get('target') != target or
+            record.get('resourceSource') != source or
+            linux_engine_inputs(record.get('source', ''), target) != linux_engine_inputs(source, target) or
+            record.get('inputSha256') != linux_engine_inputs(source, target)):
+        raise ValueError('Linux native engine provenance or effective compiler inputs differ')
+    archives = list(Path(directory).glob('taskarian*.tar.*'))
+    if len(archives) != 1 or native_elf_inventory(archives[0]) != record.get('nativeFiles'):
+        raise ValueError('Reassembled browser changed its borrowed native ELF payload')
+    producer = record.get('producer', {})
+    if (producer.get('source') != record.get('source') or
+            producer.get('runSource') != record.get('source') or
+            producer.get('repository') != 'openresearchtools/taskarian-build-' + target.removeprefix('linux-') or
+            not re.fullmatch('[0-9a-f]{64}', producer.get('archiveSha256', '')) or
+            not re.fullmatch('[0-9a-f]{64}', producer.get('manifestSha256', '')) or
+            not producer.get('steps', {}).get('build') or
+            any(step.get('conclusion') != 'success' for step in producer['steps']['build']) or
+            producer.get('steps', {}).get('verify', {}).get('conclusion') != 'success' or
+            producer.get('steps', {}).get('upload', {}).get('conclusion') != 'success'):
+        raise ValueError('Linux native engine lacks its original verified producer proof')
+
+
+@cache
+def revision_browser_fingerprints(source, target):
+    """Recover original archive identities from Git metadata, not source downloads."""
+    ensure_source(source)
+    results = set()
+    for include_verifier in (False, True):
+        paths = [path for path in input_paths(target, include_verifier) if not path.startswith(':')]
+        listing = network_command(['git', 'ls-tree', '-r', '-z', source, '--', *paths], binary=True)
+        entries = []
+        for entry in listing.split(b'\0'):
+            if not entry:
+                continue
+            header, path = entry.split(b'\t', 1)
+            if path.startswith((b'browser/mobile/android/', b'browser/taskarian/android/')):
+                continue
+            mode, _kind, identity = header.split()
+            entries.append(mode + b' ' + identity + b' 0\t' + path)
+        results.add(hashlib.sha256(target.encode() + b'\0' + b'\0'.join(entries) + b'\0').hexdigest())
+    return results
+
+
+def restore_native_available(directory, target, digest):
+    repository = os.environ['GITHUB_REPOSITORY']
+    page = 1
+    while True:
+        artifacts = api(f'repos/{repository}/actions/artifacts?per_page=100&page={page}')['artifacts']
+        for artifact in artifacts:
+            if artifact['expired'] or not artifact['name'].startswith(f'taskarian-browser-{target}-'):
+                continue
+            try:
+                run = api(f'repos/{repository}/actions/runs/{artifact["workflow_run"]["id"]}')
+                source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
+                evidence = completed_producer(repository, run, target, artifact)
+                if not source or not evidence or linux_engine_inputs(source[1], target) != digest:
+                    continue
+                if artifact['name'].rsplit('-', 1)[1] not in revision_browser_fingerprints(source[1], target):
+                    continue
+                with tempfile.TemporaryDirectory(prefix='linux-engine-', dir=directory.parent) as temporary:
+                    candidate = Path(temporary)
+                    download(repository, run['id'], artifact['name'], candidate)
+                    verify_checksums(candidate)
+                    manifest_file = candidate / 'browser-artifact-manifest.txt'
+                    manifest = dict(line.split('=', 1) for line in manifest_file.read_text().splitlines())
+                    resource_source = manifest.get('taskarian_commit', '')
+                    if (manifest.get('architecture') != target.removeprefix('linux-') or
+                            manifest.get('browser_input_sha256') not in revision_browser_fingerprints(resource_source, target)):
+                        raise ValueError('Linux engine archive original source/target identity differs')
+                    archives = list(candidate.glob('taskarian*.tar.*'))
+                    if len(archives) != 1:
+                        raise ValueError('Expected one original native browser package')
+                    archive = archives[0]
+                    proof = {'repository': repository, 'run': run['id'], 'artifact': artifact['id'],
+                        'runSource': source[1], 'source': resource_source, 'archive': archive.name,
+                        'archiveSha256': hashlib.sha256(archive.read_bytes()).hexdigest(),
+                        'manifestSha256': hashlib.sha256(manifest_file.read_bytes()).hexdigest(), 'steps': evidence}
+                    existing = candidate / NATIVE_ENGINE_RECEIPT
+                    if existing.exists():
+                        verify_linux_engine(candidate, target, manifest)
+                        record = json.loads(existing.read_text())
+                    else:
+                        # Old whole-archive aliases did not always retain the
+                        # first compiler producer. Continue to its actual build
+                        # upload instead of relabeling a restore as compilation.
+                        if not evidence.get('build') or resource_source != source[1]:
+                            continue
+                        record = {'schema': 1, 'target': target, 'source': resource_source,
+                                  'nativeFiles': native_elf_inventory(archive), 'producer': proof}
+                    if linux_engine_inputs(record['source'], target) != digest:
+                        continue
+                    current = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+                    record.update(inputSha256=digest, resourceSource=current, restoredFrom=proof)
+                    # Retain the complete downloaded producer package/provenance.
+                    xpts = list(candidate.glob('*.xpt_artifacts.zip'))
+                    if len(xpts) > 1:
+                        raise ValueError('Duplicate native XPT metadata archives')
+                    producer = directory / 'producer'
+                    shutil.move(str(candidate), producer)
+                    receipt = directory / NATIVE_ENGINE_RECEIPT
+                    receipt.write_text(json.dumps(record, indent=2) + '\n')
+                    with Path(os.environ['GITHUB_ENV']).open('a') as environment:
+                        environment.write(f'MOZ_ARTIFACT_FILE={(producer / archive.name).resolve()}\n'
+                                          f'TASKARIAN_LINUX_NATIVE_RECEIPT={receipt.resolve()}\n')
+                        if xpts:
+                            environment.write(f'TASKARIAN_LINUX_XPT_ARTIFACT={(producer / xpts[0].name).resolve()}\n')
+                print(f'Reusing original Taskarian native engine {record["source"]} from {run["html_url"]}; '
+                      'Mozilla will rebuild current resources.', flush=True)
+                return True
+            except (OSError, ValueError, KeyError, TypeError, UnicodeError, tarfile.TarError, subprocess.CalledProcessError) as error:
+                for item in directory.iterdir():
+                    shutil.rmtree(item) if item.is_dir() else item.unlink()
+                print(f'Skipping unusable native engine cache {artifact["id"]}: {error}', flush=True)
+        if len(artifacts) < 100:
+            return False
+        page += 1
+
+
+def restore_native(directory, target):
+    repository = os.environ['GITHUB_REPOSITORY']
+    if repository != 'openresearchtools/taskarian-build-' + target.removeprefix('linux-'):
+        raise ValueError('Native engine restoration must use the matching builder')
+    source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    digest = linux_engine_inputs(source, target)
+    current_run = int(os.environ.get('GITHUB_RUN_ID', '0'))
+    deadline = time.monotonic() + 5 * 60 * 60
+    while True:
+        if restore_native_available(directory, target, digest):
+            return True
+        if not current_run or time.monotonic() >= deadline:
+            return False
+        pending = None
+        runs = api(f'repos/{repository}/actions/workflows/build.yml/runs?event=workflow_dispatch&per_page=100')['workflow_runs']
+        for run in sorted(runs, key=lambda item: item['id']):
+            if run['id'] >= current_run or run['status'] == 'completed' or run.get('head_branch') != 'main':
+                continue
+            producer = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
+            if not producer or linux_engine_inputs(producer[1], target) != digest:
+                continue
+            if completed_producer(repository, run, target):
+                continue
+            jobs = api(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100')['jobs']
+            if any(step.get('conclusion') in ('failure', 'cancelled') for job in jobs for step in job.get('steps', [])
+                   if step['name'] in ('Build the complete browser archive', 'Verify the browser archive and source inputs')):
+                continue
+            pending = run
+            break
+        if pending is None:
+            return False
+        print(f'Waiting for compatible native engine upload {pending["html_url"]}; no duplicate C++ compilation.', flush=True)
+        time.sleep(30)
+
+
+def record_native(directory, target):
+    receipt = os.environ.get('TASKARIAN_LINUX_NATIVE_RECEIPT')
+    if not receipt:
+        if os.environ.get('MOZ_ARTIFACT_FILE'):
+            raise ValueError('Release artifact builds require verified native producer provenance')
+        return
+    manifest_path = directory / 'browser-artifact-manifest.txt'
+    manifest = dict(line.split('=', 1) for line in manifest_path.read_text().splitlines())
+    record = json.loads(Path(receipt).read_text())
+    record['resourceSource'] = manifest['taskarian_commit']
+    destination = directory / NATIVE_ENGINE_RECEIPT
+    destination.write_text(json.dumps(record, indent=2) + '\n')
+    manifest.update(native_engine_source=record['source'],
+                    native_engine_receipt_sha256=hashlib.sha256(destination.read_bytes()).hexdigest())
+    verify_linux_engine(directory, target, manifest)
+    with manifest_path.open('a') as output:
+        output.write(f'native_engine_source={manifest["native_engine_source"]}\n'
+                     f'native_engine_receipt_sha256={manifest["native_engine_receipt_sha256"]}\n')
+
+
 def artifact_name(target, digest):
     return f'taskarian-browser-{target}-{digest}'
 
@@ -349,6 +621,7 @@ def verify(directory, target, digest, legacy_android_module=None):
             raise ValueError('Linux component inputs do not match this source')
         matching_input(directory, target, manifest.get('browser_input_sha256'), digest,
                        manifest['taskarian_commit'], legacy_android_module)
+        verify_linux_engine(directory, target, manifest)
 
 
 def verify_package(directory, target, source, digest):
@@ -670,11 +943,30 @@ def restore(directory, target, digest):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['fingerprint', 'restore', 'verify'])
+    parser.add_argument('action', choices=['fingerprint', 'restore', 'verify', 'restore-native', 'record-native'])
     parser.add_argument('target', choices=['linux-arm64', 'linux-amd64', 'android', 'android-x86_64'])
     parser.add_argument('--directory', type=Path)
     parser.add_argument('--force-build', action='store_true', help='Bypass optional artifact restoration')
     args = parser.parse_args()
+    if args.action in ('restore-native', 'record-native'):
+        if args.target.startswith('android') or args.directory is None:
+            parser.error('Linux native actions require --directory and a Linux target')
+        args.directory.mkdir(parents=True, exist_ok=True)
+        if args.action == 'record-native':
+            record_native(args.directory, args.target)
+            return
+        if any(args.directory.iterdir()):
+            raise ValueError('Native restore directory must be empty')
+        source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+        native_digest = linux_engine_inputs(source, args.target)
+        forced = args.force_build or os.environ.get('TASKARIAN_FORCE_FULL_BUILD') == '1'
+        if forced:
+            with Path(os.environ['GITHUB_ENV']).open('a') as environment:
+                environment.write('MOZ_ARTIFACT_FILE=\nTASKARIAN_LINUX_NATIVE_RECEIPT=\nTASKARIAN_LINUX_XPT_ARTIFACT=\n')
+        hit = False if forced else restore_native(args.directory.resolve(), args.target)
+        with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+            output.write(f'hit={str(hit).lower()}\nnative_digest={native_digest}\n')
+        return
     digest = fingerprint(args.target)
     name = artifact_name(args.target, digest)
     if args.action == 'fingerprint':

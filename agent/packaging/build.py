@@ -405,6 +405,10 @@ def package_browser(args, app, stage, version, auth):
         metadata['input_equivalence'] = read_json(equivalence)
         metadata['producer_browser_input_sha256'] = metadata['browser_input_sha256']
         metadata['browser_input_sha256'] = compile_digest
+    native_engine = directory / component['NATIVE_ENGINE_RECEIPT']
+    if native_engine.exists():
+        shutil.copy2(native_engine, provenance / native_engine.name)
+        metadata['native_engine'] = read_json(native_engine)
     run(['python3', str(REPOSITORY / 'browser/taskarian/scripts/generate-third-party-notices.py'),
          '--browser-dir', str(browser), '--json-output', str(browser / 'notices/licenses.json')])
     return {'archive': archive.name, 'sha256': digest, **metadata}

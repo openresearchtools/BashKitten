@@ -201,9 +201,18 @@ run_step references-capture python3 -B ../agent/packaging/references-component.p
 run_step release-version python3 -I -B taskarian/scripts/firefox_release.py check --versions-only
 
 if [[ "${run_bootstrap}" == true || ! -x "${state_dir}/cbindgen/cbindgen" ]]; then
+  # TASKARIAN_ARTIFACT_ONLY_BEGIN
+  if [[ -n "${TASKARIAN_LINUX_NATIVE_RECEIPT:-}" ]]; then
+    run_step bootstrap ./mach --no-interactive bootstrap \
+      --application-choice browser_artifact_mode --no-system-changes
+  else
+  # TASKARIAN_ARTIFACT_ONLY_END
   run_step bootstrap ./mach --no-interactive bootstrap \
     --application-choice browser \
     --no-system-changes
+  # TASKARIAN_ARTIFACT_ONLY_BEGIN
+  fi
+  # TASKARIAN_ARTIFACT_ONLY_END
 fi
 
 # Bootstrap installs Mozilla's pinned sccache into the state directory. Write
@@ -226,6 +235,18 @@ fi
     echo "ac_add_options --with-ccache=$(command -v ccache)"
   fi
 } >"${checkout_dir}/.mozconfig"
+# TASKARIAN_ARTIFACT_ONLY_BEGIN
+if [[ -n "${TASKARIAN_LINUX_NATIVE_RECEIPT:-}" ]]; then
+  test -f "${TASKARIAN_LINUX_NATIVE_RECEIPT}"
+  test -n "${MOZ_ARTIFACT_FILE:-}"
+  # The full-native configuration above stays unchanged. Artifact configure has
+  # no C/C++ toolchain, so omit only its compiler-only options.
+  sed -E '/^ac_add_options (--enable-optimize|--disable-debug-symbols|--with-ccache=)/d' \
+    "${checkout_dir}/.mozconfig" >"${checkout_dir}/.mozconfig-artifact"
+  echo 'ac_add_options --enable-artifact-builds' >>"${checkout_dir}/.mozconfig-artifact"
+  export MOZCONFIG="${checkout_dir}/.mozconfig-artifact"
+fi
+# TASKARIAN_ARTIFACT_ONLY_END
 
 case "${action}" in
   configure)
@@ -243,6 +264,22 @@ case "${action}" in
     ;;
   archive)
     run_step configure ./mach configure
+    # TASKARIAN_ARTIFACT_ONLY_BEGIN
+    if [[ -n "${TASKARIAN_LINUX_NATIVE_RECEIPT:-}" && -n "${TASKARIAN_LINUX_XPT_ARTIFACT:-}" ]]; then
+      test -f "${TASKARIAN_LINUX_XPT_ARTIFACT}"
+      export MOZ_ARTIFACT_FILE="${MOZ_ARTIFACT_FILE}:${TASKARIAN_LINUX_XPT_ARTIFACT}"
+    fi
+    if [[ -n "${TASKARIAN_LINUX_NATIVE_RECEIPT:-}" && "${MOZ_ARTIFACT_FILE}" != *".xpt_artifacts.zip"* ]]; then
+      # Historical native uploads omitted Mozilla's XPT sibling. Regenerate the
+      # same interface metadata from unchanged IDL through its Python-only owner;
+      # xptdata.stub generates metadata/C++ source, never compiles Gecko binaries.
+      run_step xpt-metadata ./mach build --allow-subdirectory-build -C config/makefiles/xpidl xptdata.stub
+      xpt_archive="${run_root}/taskarian-native.xpt_artifacts.zip"
+      run_step xpt-archive ./mach python -m mozbuild.action.zip --error-if-empty \
+        -C "${object_dir}/config/makefiles/xpidl" "${xpt_archive}" '*.xpt'
+      export MOZ_ARTIFACT_FILE="${MOZ_ARTIFACT_FILE}:${xpt_archive}"
+    fi
+    # TASKARIAN_ARTIFACT_ONLY_END
     run_step build ./mach build
     run_step package ./mach package
     ;;

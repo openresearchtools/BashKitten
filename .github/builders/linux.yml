@@ -86,6 +86,12 @@ jobs:
       env:
         TASKARIAN_FORCE_FULL_BUILD: ${{ inputs.force_rebuild && '1' || '0' }}
       run: python3 source/taskarian/agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
+    - id: native-component
+      name: Restore a matching custom Gecko engine for current resources
+      if: steps.component.outputs.hit != 'true'
+      env:
+        TASKARIAN_FORCE_FULL_BUILD: ${{ inputs.force_rebuild && '1' || '0' }}
+      run: python3 source/taskarian/agent/packaging/browser-component.py restore-native "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/native"
     - name: Materialize required build or assembly sources
       working-directory: source/taskarian
       env:
@@ -121,7 +127,7 @@ jobs:
       if: steps.component.outputs.hit != 'true'
       run: source/taskarian/agent/packaging/linux/prepare-runner.sh
     - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
-      if: steps.component.outputs.hit != 'true'
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
       with:
         version: v0.17.0
     - name: Install the compatible Rust toolchain
@@ -131,11 +137,15 @@ jobs:
         rustup toolchain install "$version" --profile minimal --component rust-docs --target wasm32-unknown-unknown
         printf '%s\n' "TASKARIAN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "TASKARIAN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
     - name: Bootstrap pinned Mozilla toolchain
-      if: steps.component.outputs.hit != 'true'
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
       working-directory: source/taskarian/browser
       run: ./mach --no-interactive bootstrap --application-choice browser
+    - name: Bootstrap Mozilla resource assembly tools
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit == 'true'
+      working-directory: source/taskarian/browser
+      run: ./mach --no-interactive bootstrap --application-choice browser_artifact_mode
     - name: Optional native Rust cache warm-up
-      if: steps.component.outputs.hit != 'true' && inputs.warm_gkrust
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && inputs.warm_gkrust
       run: source/taskarian/browser/taskarian/scripts/build-linux-external.sh --action gkrust --build-root "$RUNNER_TEMP/bk/warm" --jobs 2 --ref HEAD
     - name: Build the complete browser archive
       if: steps.component.outputs.hit != 'true'
@@ -211,12 +221,12 @@ jobs:
         if-no-files-found: error
         compression-level: 0
     - name: Record actual compiler cache statistics
-      if: always() && steps.component.outputs.hit != 'true' && env.SCCACHE_PATH != ''
+      if: always() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && env.SCCACHE_PATH != ''
       run: |
         "$SCCACHE_PATH" --show-stats --stats-format=json > "$RUNNER_TEMP/sccache-statistics.json"
         "$SCCACHE_PATH" --show-stats >> "$GITHUB_STEP_SUMMARY"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      if: always() && steps.component.outputs.hit != 'true'
+      if: always() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
       with:
         name: compiler-cache-statistics
         path: ${{ runner.temp }}/sccache-statistics.json

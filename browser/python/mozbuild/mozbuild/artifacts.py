@@ -642,6 +642,16 @@ class LinuxArtifactJob(ArtifactJob):
         "{product}/**/*.sig",
     }
 
+    # TASKARIAN_ARTIFACT_ONLY_BEGIN
+    @property
+    def product(self):
+        # Consume our verified custom engine through Mozilla's artifact installer.
+        # Other products retain their normal upstream archive-root selection.
+        if self._substs and self._substs.get("MOZ_APP_NAME") == "taskarian":
+            return "taskarian"
+        return super().product
+
+    # TASKARIAN_ARTIFACT_ONLY_END
     @property
     def package_artifact_patterns(self):
         return {p.format(product=self.product) for p in self._package_artifact_patterns}
