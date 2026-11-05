@@ -13,12 +13,12 @@ var { XPCOMUtils } = ChromeUtils.importESModule(
 // Keep the upstream controller anchors, but never offer controls for services
 // or additional windows/profiles that this product does not provide. Menus and
 // panel views are also created lazily, so apply this after their own setup.
-function updateBashKittenMenus() {
-  if (AppConstants.MOZ_APP_NAME != "bashkitten") {
+function updateTaskarianMenus() {
+  if (AppConstants.MOZ_APP_NAME != "taskarian") {
     return;
   }
   for (const node of document.querySelectorAll(
-    '[data-bashkitten-unavailable], [is="moz-support-link"]'
+    '[data-taskarian-unavailable], [is="moz-support-link"]'
   )) {
     node.hidden = true;
     node.setAttribute("disabled", "true");
@@ -29,13 +29,13 @@ function updateBashKittenMenus() {
   }
 }
 
-if (AppConstants.MOZ_APP_NAME == "bashkitten") {
-  document.addEventListener("DOMContentLoaded", updateBashKittenMenus, {
+if (AppConstants.MOZ_APP_NAME == "taskarian") {
+  document.addEventListener("DOMContentLoaded", updateTaskarianMenus, {
     once: true,
   });
-  document.addEventListener("popupshowing", updateBashKittenMenus);
-  document.addEventListener("ViewShowing", updateBashKittenMenus);
-  document.addEventListener("customizationready", updateBashKittenMenus);
+  document.addEventListener("popupshowing", updateTaskarianMenus);
+  document.addEventListener("ViewShowing", updateTaskarianMenus);
+  document.addEventListener("customizationready", updateTaskarianMenus);
 }
 
 ChromeUtils.defineESModuleGetters(this, {
@@ -385,8 +385,8 @@ function isBidiEnabled() {
 
 function openAboutDialog() {
   const browserWindow = BrowserWindowTracker.getTopWindow();
-  if (AppConstants.MOZ_APP_NAME == "bashkitten" && browserWindow) {
-    browserWindow.BashKittenAgent?.browse();
+  if (AppConstants.MOZ_APP_NAME == "taskarian" && browserWindow) {
+    browserWindow.TaskarianAgent?.browse();
     browserWindow.openPreferences("paneAbout");
     return;
   }
@@ -526,8 +526,8 @@ function openSwitchingDevicesPage() {
 }
 
 function buildHelpMenu() {
-  if (AppConstants.MOZ_APP_NAME == "bashkitten") {
-    updateBashKittenMenus();
+  if (AppConstants.MOZ_APP_NAME == "taskarian") {
+    updateTaskarianMenus();
     document.getElementById("helpSafeMode").disabled =
       !Services.policies.isAllowed("safeMode");
     document.getElementById("troubleShooting").disabled =
@@ -591,8 +591,8 @@ function makeURLAbsolute(aBase, aUrl) {
 }
 
 function getHelpLinkURL(aHelpTopic) {
-  if (AppConstants.MOZ_APP_NAME == "bashkitten") {
-    return "https://github.com/openresearchtools/bashkitten#readme";
+  if (AppConstants.MOZ_APP_NAME == "taskarian") {
+    return "https://github.com/openresearchtools/Taskarian#readme";
   }
   var url = Services.urlFormatter.formatURLPref("app.support.baseURL");
   return url + aHelpTopic;

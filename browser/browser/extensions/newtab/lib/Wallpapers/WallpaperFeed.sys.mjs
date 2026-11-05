@@ -4,8 +4,8 @@
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
-  BashKittenSettingsPolicy:
-    "resource://services-settings/BashKittenSettingsPolicy.sys.mjs",
+  TaskarianSettingsPolicy:
+    "resource://services-settings/TaskarianSettingsPolicy.sys.mjs",
   RemoteSettings: "resource://services-settings/remote-settings.sys.mjs",
   Utils: "resource://services-settings/Utils.sys.mjs",
 });
@@ -160,12 +160,12 @@ export class WallpaperFeed {
 
     // retrieving all records in collection
     let records = await this.wallpaperClient.get();
-    const canDownload = lazy.BashKittenSettingsPolicy.canDownloadAttachments(
+    const canDownload = lazy.TaskarianSettingsPolicy.canDownloadAttachments(
       this.wallpaperClient.bucketName,
       this.wallpaperClient.collectionName
     );
     if (!canDownload) {
-      // BashKitten: catalog URLs load directly in content, bypassing the Remote
+      // Taskarian: catalog URLs load directly in content, bypassing the Remote
       // Settings attachment downloader. Keep only local colors when this
       // collection is offline; custom uploads use their own local URI above.
       records = records?.filter(

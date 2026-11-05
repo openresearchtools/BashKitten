@@ -9,9 +9,9 @@ export async function appsRequest(value, { signal } = {}) {
   signal?.throwIfAborted();
   const info = await readJson(serverFile, null);
   if (!info?.socket || !/^https:\/\/127\.0\.0\.1:\d+$/.test(info.url || '') || !/^[a-f0-9]{64}$/.test(info.token || '')) {
-    throw Error('The owning BashKitten backend is unavailable');
+    throw Error('The owning Taskarian backend is unavailable');
   }
-  if (process.env.BASHKITTEN_INSTANCE_TOKEN && process.env.BASHKITTEN_INSTANCE_TOKEN !== info.token) throw Error('The owning backend restarted; reconnect this Pi session');
+  if (process.env.TASKARIAN_INSTANCE_TOKEN && process.env.TASKARIAN_INSTANCE_TOKEN !== info.token) throw Error('The owning backend restarted; reconnect this Pi session');
   const response = await unixRequest(info.socket, '/api/instance/apps', {
     method: 'POST', headers: { host: new URL(info.url).host, authorization: 'Bearer ' + info.token, 'content-type': 'application/json' },
     body: JSON.stringify(value), signal, timeout: 0, limit: 16 * 1024 * 1024,

@@ -168,8 +168,8 @@ export class GeckoViewNavigation extends GeckoViewModule {
         this.browser.gotoIndex(aData.index);
         break;
       case "GeckoView:LoadUri": {
-        const { BashKittenAndroid } = ChromeUtils.importESModule("resource://gre/modules/BashKittenAndroid.sys.mjs");
-        await BashKittenAndroid.init();
+        const { TaskarianAndroid } = ChromeUtils.importESModule("resource://gre/modules/TaskarianAndroid.sys.mjs");
+        await TaskarianAndroid.init();
         const {
           uri,
           referrerUri,

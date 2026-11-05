@@ -35,9 +35,9 @@ import org.mozilla.fenix.tabstray.controller.TabInteractionHandler
 import org.mozilla.fenix.tabstray.data.TabsTrayItem
 import org.mozilla.fenix.tabstray.redux.state.TabsTrayState
 import org.mozilla.fenix.theme.FirefoxTheme
-import org.mozilla.fenix.bashkitten.TorPrivacyNotice
-import com.bashkitten.BrowserApp
-import com.bashkitten.OnionActivity
+import org.mozilla.fenix.taskarian.TorPrivacyNotice
+import com.taskarian.BrowserApp
+import com.taskarian.OnionActivity
 
 /** Tor is a route, not a replacement for private browsing or its lock. */
 @Composable

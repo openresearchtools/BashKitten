@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Taskarian
+Comment=Native Pi coding sessions
+Exec=taskarian
+Icon=utilities-terminal
+Terminal=false
+Type=Application
+Categories=Development;
+StartupNotify=true

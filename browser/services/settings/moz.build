@@ -16,7 +16,7 @@ EXTRA_COMPONENTS += [
 
 EXTRA_JS_MODULES["services-settings"] += [
     "Attachments.sys.mjs",
-    "BashKittenSettingsPolicy.sys.mjs",
+    "TaskarianSettingsPolicy.sys.mjs",
     "Database.sys.mjs",
     "IDBHelpers.sys.mjs",
     "remote-settings.sys.mjs",

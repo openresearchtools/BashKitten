@@ -37,12 +37,12 @@ jobs:
           path: |
             ${{ runner.temp }}/machines-cache
             ${{ runner.temp }}/display-cache
-          key: native-environments-${{ matrix.architecture }}-${{ hashFiles('agent/packaging/machines/**', 'agent/machines/vendor/**/source.json', 'agent/machines/license-supplements/**', 'agent/machines/rust-toolchain/**', 'auth/build/go-notices.py', 'auth/dependencies/go-toolchain/**', 'browser/bashkitten/display/**') }}
+          key: native-environments-${{ matrix.architecture }}-${{ hashFiles('agent/packaging/machines/**', 'agent/machines/vendor/**/source.json', 'agent/machines/license-supplements/**', 'agent/machines/rust-toolchain/**', 'auth/build/go-notices.py', 'auth/dependencies/go-toolchain/**', 'browser/taskarian/display/**') }}
           restore-keys: native-environments-${{ matrix.architecture }}-
       - name: Build private engine and display from tracked sources
         run: |
           python3 agent/packaging/machines/build.py --architecture ${{ matrix.architecture }} --work "$RUNNER_TEMP/machines-cache" --output "$RUNNER_TEMP/machines" --jobs 2
-          python3 browser/bashkitten/display/build.py --work-dir "$RUNNER_TEMP/display-cache" --output "$RUNNER_TEMP/display"
+          python3 browser/taskarian/display/build.py --work-dir "$RUNNER_TEMP/display-cache" --output "$RUNNER_TEMP/display"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: machines-runtime-linux-${{ matrix.architecture }}
@@ -86,7 +86,7 @@ jobs:
             export DEBIAN_FRONTEND=noninteractive PATH=/rust-bin:$PATH
             apt-get update
             apt-get install -y --no-install-recommends ca-certificates build-essential git python3 meson ninja-build gettext pkg-config libgtk-3-dev libwnck-3-dev libxfce4ui-2-dev libxfce4util-dev libxfconf-0-dev libx11-dev libxrandr-dev libdbusmenu-gtk3-dev libnotify-dev libexo-2-dev libgarcon-1-dev libgarcon-gtk3-1-dev xfce4-dev-tools wayland-protocols libwayland-dev libxkbcommon-dev libegl-dev libepoxy-dev gobject-introspection libgirepository1.0-dev libdisplay-info-dev
-            version=$(cat /source/browser/bashkitten/config/version.txt)
+            version=$(cat /source/browser/taskarian/config/version.txt)
             python3 /source/os/packaging/build.py --target linux --architecture "$ARCH" --version "$version" --source-commit "$SOURCE_COMMIT" --output /output --build-dir /cache/os --jobs 2
             python3 /source/agent/machines/build-guest.py --architecture "$ARCH" --version "$version" --revision "$SOURCE_COMMIT" --output /output --work /cache/guest
           '
@@ -144,15 +144,15 @@ jobs:
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37.0' 'build-tools;37.0.0'
           signer=$(python3 -c 'import sys;sys.path.insert(0,"agent/packaging");from release import CERT;print(CERT)')
-          python3 browser/mobile/android/bashkitten/display/loader/build.py \
+          python3 browser/mobile/android/taskarian/display/loader/build.py \
             --jdk "$JAVA_HOME_17_X64" --android-jar "$ANDROID_HOME/platforms/android-37.0/android.jar" \
-            --d8 "$ANDROID_HOME/build-tools/37.0.0/d8" --package com.bashkitten --signer "$signer" --output "$RUNNER_TEMP/loader"
+            --d8 "$ANDROID_HOME/build-tools/37.0.0/d8" --package com.taskarian --signer "$signer" --output "$RUNNER_TEMP/loader"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: display-loader-termux
           path: |
-            ${{ runner.temp }}/loader/bashkitten-x11
-            ${{ runner.temp }}/loader/bashkitten-x11-loader.jar
+            ${{ runner.temp }}/loader/taskarian-x11
+            ${{ runner.temp }}/loader/taskarian-x11-loader.jar
             ${{ runner.temp }}/loader/manifest.json
             ${{ runner.temp }}/loader/licenses/
           if-no-files-found: error

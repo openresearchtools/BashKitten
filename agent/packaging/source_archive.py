@@ -11,7 +11,7 @@ import subprocess
 import tarfile
 
 
-def archive_revision(repository, revision, destination, prefix='bashkitten/'):
+def archive_revision(repository, revision, destination, prefix='taskarian/'):
     repository = Path(repository)
     commit = subprocess.check_output(['git', 'rev-parse', revision + '^{commit}'], cwd=repository, text=True).strip()
     timestamp = int(subprocess.check_output(['git', 'show', '-s', '--format=%ct', commit], cwd=repository, text=True))

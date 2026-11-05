@@ -26,7 +26,7 @@ let meta = await readMeta(id);
 // A resumed native fork gets its own worker; only a live fork retains the
 // original process identity and browser socket until that process exits.
 meta.workerOwner = id;
-meta.browserOwner = process.env.BASHKITTEN_BROWSER_OWNER || id;
+meta.browserOwner = process.env.TASKARIAN_BROWSER_OWNER || id;
 let phoneWorker, phoneSession;
 let rpc, providersVersion, localProviderRevision, projectNativeSession, busy = false, compacting = false, stopping = false, changing = false;
 let entries = [], events = [], usage = null, queue = [], pendingModel = null, pendingContext = false, contextUpdates = 0;
@@ -214,7 +214,7 @@ async function launch() {
   localProviderRevision = (await managedLocalProvider()).revision;
   projectNativeSession = (await loadPi()).pi.buildSessionContext;
   meta.cwd = (await savedSession(meta))?.getCwd() || meta.cwd;
-  rpc = new PiRpc(meta, { ...phoneWorker.environment, BASHKITTEN_WORKER_SOCKET: privateSocket, BASHKITTEN_WORKER_KEY: workerKey });
+  rpc = new PiRpc(meta, { ...phoneWorker.environment, TASKARIAN_WORKER_SOCKET: privateSocket, TASKARIAN_WORKER_KEY: workerKey });
   let lastAssistantMessage;
   rpc.on('event', event => {
     if (event.type === 'tool_execution_start') liveToolCalls.set(event.toolCallId, { name: event.toolName, parent: event.parentToolCallId });
@@ -332,8 +332,8 @@ async function applyPending() {
   }
 }
 async function prepareManagedModel(model = meta.model) {
-  if (!model?.startsWith('bashkitten-llama/')) return;
-  const modelId = model.slice('bashkitten-llama/'.length);
+  if (!model?.startsWith('taskarian-llama/')) return;
+  const modelId = model.slice('taskarian-llama/'.length);
   let managed = await managedLocalProvider(), ready, readinessError;
   if (managed.owned) {
     emit({ type: 'notice', message: 'Checking local llama.cpp readiness' }, false);
@@ -350,7 +350,7 @@ async function prepareManagedModel(model = meta.model) {
     if (managed.unknownThinking.includes(modelId)) throw Error('The local model loaded, but its reasoning capabilities could not be checked. Retry after checking the llama.cpp service.');
   }
   const available = managed.owned ? (await rpc.command('get_available_models')).models : [];
-  const loaded = available.find(item => item.provider === 'bashkitten-llama' && item.id === modelId);
+  const loaded = available.find(item => item.provider === 'taskarian-llama' && item.id === modelId);
   const version = await providerRevision();
   managed = await managedLocalProvider();
   if (stopping) throw Error('Pi instance is stopping');
@@ -370,11 +370,11 @@ async function prepareManagedModel(model = meta.model) {
   if (!managed.owned) return;
   if (!ready) throw Error('Pi model ownership changed while reloading. Retry the operation.');
   const updated = await rpc.command('get_available_models');
-  if (!updated.models.some(item => item.provider === 'bashkitten-llama' && item.id === modelId && item.baseUrl === ready.url + '/v1')) throw Error('Pi could not load the ready local llama.cpp model');
+  if (!updated.models.some(item => item.provider === 'taskarian-llama' && item.id === modelId && item.baseUrl === ready.url + '/v1')) throw Error('Pi could not load the ready local llama.cpp model');
   const resumed = await rpc.command('get_state');
   const current = await managedLocalProvider();
   if (stopping || !current.owned || current.revision !== localProviderRevision) throw Error('Pi model configuration changed while reloading. Retry the operation.');
-  if (resumed.model?.provider !== 'bashkitten-llama' || resumed.model?.id !== modelId) await rpc.command('set_model', { provider: 'bashkitten-llama', modelId });
+  if (resumed.model?.provider !== 'taskarian-llama' || resumed.model?.id !== modelId) await rpc.command('set_model', { provider: 'taskarian-llama', modelId });
   await refresh();
   const refreshed = await managedLocalProvider();
   if (stopping || !refreshed.owned || refreshed.revision !== localProviderRevision) throw Error('Pi model configuration changed while reloading. Retry the operation.');
@@ -489,7 +489,7 @@ async function handle(req, res) {
   res.setHeader('Connection', 'close');
   try {
     if (req.url === '/events') {
-      void rpc.command('get_commands').then(({ commands }) => { if (commands.some(command => command.source === 'extension' && command.name === 'bashkitten-usage-refresh')) return rpc.command('prompt', { message: '/bashkitten-usage-refresh' }); }).catch(() => {});
+      void rpc.command('get_commands').then(({ commands }) => { if (commands.some(command => command.source === 'extension' && command.name === 'taskarian-usage-refresh')) return rpc.command('prompt', { message: '/taskarian-usage-refresh' }); }).catch(() => {});
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
       clients.add(res);
       res.write(`data: ${JSON.stringify({ ok: true, message: 'subscribed', data: snapshot() })}\n\n`);
@@ -520,7 +520,7 @@ async function handle(req, res) {
         if (stopping) return;
         if (await providerRevision() !== providersVersion) {
           for (const statusKey of ['chatgpt-usage', 'chatgpt-usage:data']) { extensionStatuses.delete(statusKey); emit({ type: 'extension_ui_request', method: 'setStatus', statusKey }, false); }
-          void rpc.command('get_commands').then(({ commands }) => { if (commands.some(command => command.source === 'extension' && command.name === 'bashkitten-usage-refresh')) return rpc.command('prompt', { message: '/bashkitten-usage-refresh invalidate' }); }).catch(() => {});
+          void rpc.command('get_commands').then(({ commands }) => { if (commands.some(command => command.source === 'extension' && command.name === 'taskarian-usage-refresh')) return rpc.command('prompt', { message: '/taskarian-usage-refresh invalidate' }); }).catch(() => {});
         }
         pendingContext ||= Boolean(value.reload) || (await syncContext()) !== meta.contextVersion;
         await applyPending();
@@ -533,8 +533,8 @@ async function handle(req, res) {
     if (req.url === '/sidebar-changed') { emit({ type: 'sessions_changed' }, false); return json(res, { ok: true }); }
     if (req.url === '/subagent-settings') {
       const { commands } = await rpc.command('get_commands');
-      if (!commands.some(command => command.source === 'extension' && command.name === 'bashkitten-agents-refresh')) throw Error('The BashKitten subagents extension is not loaded in this Pi chat');
-      await rpc.command('prompt', { message: '/bashkitten-agents-refresh' });
+      if (!commands.some(command => command.source === 'extension' && command.name === 'taskarian-agents-refresh')) throw Error('The Taskarian subagents extension is not loaded in this Pi chat');
+      await rpc.command('prompt', { message: '/taskarian-agents-refresh' });
       emit({ type: 'subagent_settings', settings: await readSubagentSettings(id) }, false);
       return json(res, { ok: true });
     }

@@ -18,7 +18,7 @@ from release import validate_termux_update, TERMUX_UPDATE_ASSET, TERMUX_BOOTSTRA
 ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = 'agent/packaging/browser-component.py'
 EQUIVALENCE = 'browser-input-equivalence.json'
-ANDROID_ONLY_MODULE = 'browser/mobile/shared/modules/geckoview/BashKittenAndroid.sys.mjs'
+ANDROID_ONLY_MODULE = 'browser/mobile/shared/modules/geckoview/TaskarianAndroid.sys.mjs'
 
 
 def fingerprint(target, legacy_verifier=None, legacy_android_module=None):
@@ -63,7 +63,7 @@ def fingerprint(target, legacy_verifier=None, legacy_android_module=None):
                   '.github/workflows/auth-native.yml', '.github/workflows/search-native.yml']
     else:
         paths += ['.github/builders/linux.yml', 'agent/packaging/linux/prepare-runner.sh',
-                  ':(exclude)browser/mobile/android', ':(exclude)browser/bashkitten/android']
+                  ':(exclude)browser/mobile/android', ':(exclude)browser/taskarian/android']
     listing = subprocess.check_output(['git', 'ls-files', '--stage', '-z', '--', *paths], cwd=ROOT)
     if legacy_android_module and target.startswith('android'):
         raise ValueError('Android APK resources cannot use Linux input equivalence')
@@ -82,7 +82,7 @@ def fingerprint(target, legacy_verifier=None, legacy_android_module=None):
 
 
 def artifact_name(target, digest):
-    return f'bashkitten-browser-{target}-{digest}'
+    return f'taskarian-browser-{target}-{digest}'
 
 
 def api(endpoint):
@@ -111,8 +111,8 @@ def verify_android_resources(apk):
         from android_native_sources import verify_android_tor
         verify_android_tor(archive, ROOT)
         names = archive.namelist()
-        for directory, extension_id in [('references', 'references@bashkitten.org'),
-                                         ('references-host', 'references-host@bashkitten.org')]:
+        for directory, extension_id in [('references', 'references@taskarian.org'),
+                                         ('references-host', 'references-host@taskarian.org')]:
             prefix = 'assets/' + directory + '/'
             manifest_path = prefix + 'manifest.json'
             if names.count(manifest_path) != 1:
@@ -139,7 +139,7 @@ def verify_android_resources(apk):
                     or hashlib.sha256(archive.read(prefix + name)).hexdigest() != expected):
                 raise ValueError('APK References capture checksum mismatch: ' + name)
         with zipfile.ZipFile(io.BytesIO(archive.read('assets/omni.ja'))) as omni:
-            if omni.read('modules/BashKittenAndroid.sys.mjs') != (ROOT / ANDROID_ONLY_MODULE).read_bytes():
+            if omni.read('modules/TaskarianAndroid.sys.mjs') != (ROOT / ANDROID_ONLY_MODULE).read_bytes():
                 raise ValueError('Android omnijar module does not match the current source')
 
 
@@ -190,10 +190,10 @@ def verify(directory, target, digest, legacy_android_module=None):
             native_component.verify_native(apks[0], manifest['native_gecko'], target)
     else:
         manifest = dict(line.split('=', 1) for line in (directory / 'browser-artifact-manifest.txt').read_text().splitlines())
-        if manifest.get('architecture') != target.removeprefix('linux-') or not re.fullmatch('[0-9a-f]{40}', manifest.get('bashkitten_commit', '')):
+        if manifest.get('architecture') != target.removeprefix('linux-') or not re.fullmatch('[0-9a-f]{40}', manifest.get('taskarian_commit', '')):
             raise ValueError('Linux component inputs do not match this source')
         matching_input(directory, target, manifest.get('browser_input_sha256'), digest,
-                       manifest['bashkitten_commit'], legacy_android_module)
+                       manifest['taskarian_commit'], legacy_android_module)
 
 
 def verify_package(directory, target, source, digest):
@@ -246,7 +246,7 @@ def completed_android_producer(repository, run, jobs):
     build_numbers = [command_number(command) for command in (
         'set -o pipefail; ./mach build 2>&1 | tee ../artifacts/gecko-build.log',
         'set -o pipefail; ./mach gradle :fenix:assembleRelease --profile 2>&1 | tee ../artifacts/apk-build.log',
-        'python3 browser/bashkitten/android/scripts/collect-artifacts.py candidate')]
+        'python3 browser/taskarian/android/scripts/collect-artifacts.py candidate')]
     verify_number = command_number('python3 agent/packaging/browser-component.py verify "$BROWSER_TARGET" --directory candidate')
     restore_number = command_number('python3 agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory candidate')
     if not verify_number or not all(build_numbers) or max(build_numbers) >= verify_number:
@@ -321,12 +321,12 @@ def source_blob(source, path):
                            text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     if local.returncode == 0:
         return local.stdout.strip()
-    return api(f'repos/openresearchtools/bashkitten/contents/{path}?ref={source}')['sha']
+    return api(f'repos/openresearchtools/Taskarian/contents/{path}?ref={source}')['sha']
 
 
 def restore(directory, target, digest):
     repository = os.environ['GITHUB_REPOSITORY']
-    expected = 'openresearchtools/bashkitten-build-' + target.removeprefix('linux-')
+    expected = 'openresearchtools/taskarian-build-' + target.removeprefix('linux-')
     if repository != expected:
         raise ValueError('Component restoration must run in the matching build repository')
     name = artifact_name(target, digest)
@@ -334,14 +334,14 @@ def restore(directory, target, digest):
     while True:
         artifacts = api(f'repos/{repository}/actions/artifacts?per_page=100&page={page}')['artifacts']
         for artifact in artifacts:
-            if artifact['expired'] or not artifact['name'].startswith(f'bashkitten-browser-{target}-'):
+            if artifact['expired'] or not artifact['name'].startswith(f'taskarian-browser-{target}-'):
                 continue
             run = api(f'repos/{repository}/actions/runs/{artifact["workflow_run"]["id"]}')
             if target.startswith('android'):
                 # The APK carries exact companion package expectations. A
                 # different assembly revision needs new APK resources, even
                 # when unchanged Gecko objects remain in the compiler cache.
-                source = re.match(r'^BashKitten ([0-9a-f]{40}) / ', run.get('display_title', ''))
+                source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
                 current = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
                 if not source or source[1] != current:
                     continue
@@ -352,7 +352,7 @@ def restore(directory, target, digest):
             legacy_module = None
             expected = digest
             if artifact['name'] != name:
-                source = re.match(r'^BashKitten ([0-9a-f]{40}) / ', run.get('display_title', ''))
+                source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
                 if not source:
                     continue
                 verifier = source_blob(source[1], VERIFIER)
@@ -375,7 +375,7 @@ def restore(directory, target, digest):
             if expected != digest:
                 manifest_file = Path(directory) / ('build-manifest.json' if target.startswith('android') else 'browser-artifact-manifest.txt')
                 manifest = json.loads(manifest_file.read_text()) if target.startswith('android') else dict(line.split('=', 1) for line in manifest_file.read_text().splitlines())
-                producer = manifest['source' if target.startswith('android') else 'bashkitten_commit']
+                producer = manifest['source' if target.startswith('android') else 'taskarian_commit']
                 receipt_file = Path(directory) / EQUIVALENCE
                 if receipt_file.exists():
                     # verify() already checked the previous receipt and complete

@@ -324,15 +324,15 @@ export const CustomizableWidgets = [
     },
   },
   {
-    id: "bashkitten-blocker-toolbar-button",
-    l10nId: "bashkitten-blocker-toolbar-button",
+    id: "taskarian-blocker-toolbar-button",
+    l10nId: "taskarian-blocker-toolbar-button",
     defaultArea: "nav-bar",
     introducedInVersion: 25,
     onCreated(aNode) {
       aNode.setAttribute("badged", "true");
-      // Match the default of the lazy getter in BashKittenBlockerPanel.
+      // Match the default of the lazy getter in TaskarianBlockerPanel.
       aNode.hidden = !Services.prefs.getBoolPref(
-        "bashkitten.blocker.ui.enabled",
+        "taskarian.blocker.ui.enabled",
         false
       );
     },
@@ -341,15 +341,15 @@ export const CustomizableWidgets = [
       if (!win?.gBrowser) {
         return;
       }
-      const { BashKittenBlockerPanel } = ChromeUtils.importESModule(
-        "resource:///modules/BashKittenBlockerPanel.sys.mjs"
+      const { TaskarianBlockerPanel } = ChromeUtils.importESModule(
+        "resource:///modules/TaskarianBlockerPanel.sys.mjs"
       );
-      BashKittenBlockerPanel._openToolbarPanel(win, aEvent);
+      TaskarianBlockerPanel._openToolbarPanel(win, aEvent);
     },
   },
   {
-    id: "bashkitten-tor-toolbar-button",
-    l10nId: "bashkitten-tor-toolbar-button",
+    id: "taskarian-tor-toolbar-button",
+    l10nId: "taskarian-tor-toolbar-button",
     defaultArea: "nav-bar",
     introducedInVersion: 28,
     onCreated(aNode) {
@@ -363,20 +363,20 @@ export const CustomizableWidgets = [
         aNode.toggleAttribute("busy", status.busy);
         aNode.setAttribute("aria-pressed", String(status.active));
         aNode.setAttribute("aria-busy", String(status.busy));
-        let l10nId = "bashkitten-tor-toolbar-button";
+        let l10nId = "taskarian-tor-toolbar-button";
         if (status.error) {
-          l10nId = "bashkitten-tor-toolbar-button-error";
+          l10nId = "taskarian-tor-toolbar-button-error";
         } else if (status.busy) {
-          l10nId = "bashkitten-tor-toolbar-button-starting";
+          l10nId = "taskarian-tor-toolbar-button-starting";
         } else if (status.active) {
-          l10nId = "bashkitten-tor-toolbar-button-on";
+          l10nId = "taskarian-tor-toolbar-button-on";
         }
         aNode.ownerDocument.l10n.setAttributes(aNode, l10nId);
       };
       const widgetListener = {
         onWidgetInstanceRemoved(widgetId, document) {
           if (
-            widgetId != "bashkitten-tor-toolbar-button" ||
+            widgetId != "taskarian-tor-toolbar-button" ||
             document != aNode.ownerDocument
           ) {
             return;
@@ -598,7 +598,7 @@ if (
 }
 
 if (
-  AppConstants.MOZ_APP_NAME != "bashkitten" &&
+  AppConstants.MOZ_APP_NAME != "taskarian" &&
   Services.prefs.getBoolPref("identity.fxaccounts.enabled")
 ) {
   CustomizableWidgets.push({
@@ -786,7 +786,7 @@ if (AppConstants.platform == "macosx") {
 CustomizableWidgets.push(preferencesButton);
 
 if (
-  AppConstants.MOZ_APP_NAME != "bashkitten" &&
+  AppConstants.MOZ_APP_NAME != "taskarian" &&
   Services.prefs.getBoolPref("privacy.panicButton.enabled")
 ) {
   CustomizableWidgets.push({
@@ -866,12 +866,12 @@ if (PrivateBrowsingUtils.enabled) {
   CustomizableWidgets.push({
     id: "privatebrowsing-button",
     l10nId:
-      AppConstants.MOZ_APP_NAME == "bashkitten"
+      AppConstants.MOZ_APP_NAME == "taskarian"
         ? "new-private-tab"
         : "toolbar-button-new-private-window",
     onCommand(e) {
       let win = e.target.documentGlobal;
-      if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      if (AppConstants.MOZ_APP_NAME == "taskarian") {
         win.openTrustedLinkIn("about:blank", "tab", { private: true });
       } else {
         win.OpenBrowserWindow({ private: true });

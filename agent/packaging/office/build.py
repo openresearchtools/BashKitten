@@ -22,7 +22,7 @@ import runtime_metadata
 import branding
 
 ROOT = Path(__file__).resolve().parents[3]
-PREFIX = '/usr/lib/bashkitten/office/runtime'
+PREFIX = '/usr/lib/taskarian/office/runtime'
 PATCHES = [
     'files/patches/collabora/0001-native-locked-light-theme.patch',
     'office/patches/0001-native-extensions-small-screen-dialog.patch',
@@ -174,8 +174,8 @@ def prepare_stage(source, work, stage_dir=None):
     if (stage.is_relative_to(ROOT) or ROOT.is_relative_to(stage)
             or stage.is_relative_to(source) or source.is_relative_to(stage)):
         raise ValueError('Package stage must be outside the source checkout and prepared source')
-    marker = stage / '.bashkitten-office-stage.json'
-    owner = {'schema': 1, 'owner': 'bashkitten-office-build',
+    marker = stage / '.taskarian-office-stage.json'
+    owner = {'schema': 1, 'owner': 'taskarian-office-build',
              'work': str(work.resolve()), 'source': str(source)}
     if stage.exists() and not stage.is_dir():
         raise ValueError('Package stage is not a directory')

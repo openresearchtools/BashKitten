@@ -1,6 +1,6 @@
 /*
  * Copyright © 2009 Center for History and New Media, George Mason University.
- * BashKitten web adaptation, 2026. SPDX-License-Identifier: AGPL-3.0-or-later
+ * Taskarian web adaptation, 2026. SPDX-License-Identifier: AGPL-3.0-or-later
  * Retains pinned classic citation behavior and native CSL processing. The
  * compact table/chip layout follows the user's 28 October UI amendment.
  * The caller owns the captured project, document/view and final mutation.

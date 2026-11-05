@@ -1,4 +1,4 @@
-//go:build !bashkitten_client
+//go:build !taskarian_client
 
 // SPDX-License-Identifier: AGPL-3.0-only
 

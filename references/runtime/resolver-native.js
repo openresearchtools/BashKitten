@@ -24,12 +24,12 @@
 */
 
 
-// BashKitten 2026-10-28: exact native resolver/queue methods, runtime interfaces injected.
+// Taskarian 2026-10-28: exact native resolver/queue methods, runtime interfaces injected.
 module.exports = function(Zotero, host) {
 const { Services, OS, _enforceFileType, _getTitleFromVersion }=host;
 const nativeRequire=require; const requireResolver=p=>p==='resource://zotero/jspath.js'?nativeRequire('jspath'):nativeRequire(p);
 let _findFileQueue=[],_findFileQueuePromise=null;
-// BashKitten: one owner serves all libraries; preserve native not-before times between batches.
+// Taskarian: one owner serves all libraries; preserve native not-before times between batches.
 const _domainPacing=new Map();
 const urlToDomain=url=>new URL(url).hostname;
 const self=this;

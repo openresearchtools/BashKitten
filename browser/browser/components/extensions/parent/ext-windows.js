@@ -447,7 +447,7 @@ this.windows = class extends ExtensionAPIPersistent {
             );
           }
 
-          if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+          if (AppConstants.MOZ_APP_NAME == "taskarian") {
             const window = await BrowserWindowTracker.promiseOpenWindow({
               args,
               private: createData.incognito,

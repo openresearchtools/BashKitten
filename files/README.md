@@ -18,7 +18,7 @@ version is 1; installation requires matching native artifacts.
 - Quantum proxy authentication creates ordinary users. Native user APIs reconcile
   explicit source scopes/permissions; the reserved bootstrap administrator never
   becomes a browser account. Native access APIs deny private paths in addition to
-  native index rules. Native branding configuration supplies the BashKitten icon,
+  native index rules. Native branding configuration supplies the Taskarian icon,
   name, dark/orange CSS, disabled seasonal decoration and disabled account settings.
 - Actual canonical project folders are native sources. `createUserDir` is false;
   database/cache are private under the owning data directory. No synchronized copy
@@ -49,7 +49,7 @@ The backend supplies canonical scope/root, identity, live permissions and
 `authorizeOperation(grantId,operation,work)`, invoking `work(scope,signal)` inside
 its existing auth/revocation/drain owner. `authorizePath(path,{tree})` rejects
 private paths and link aliases. No browser header or request body supplies those
-trusted values. All `x-bashkitten-*`, cookies and authentication headers are removed
+trusted values. All `x-taskarian-*`, cookies and authentication headers are removed
 before forwarding explicitly selected native identity fields.
 
 Browser URLs are absolute HTTPS through the existing Caddy/trust/tunnel owner.
@@ -183,7 +183,7 @@ file. A dependency with neither usable original terms nor an explicit declaratio
 blocks artifact sealing. The shared main-package collector retains its own check.
 Linux packaging requires Ubuntu 24.04 and inspects the actual ELF dependency/ABI
 closure. `SHA256SUMS` accompanies the artifact. Every payload file has a checksum; the manifest binds target,
-architecture, upstream pins, patch hashes and the committed BashKitten revision.
+architecture, upstream pins, patch hashes and the committed Taskarian revision.
 Accepted packaging requires committed module source unchanged throughout the build. Runtime JS/web files are
 collected separately and cannot be overwritten by the native artifact. Pristine
 upstream tests and imported archives are source material, never product fixtures.

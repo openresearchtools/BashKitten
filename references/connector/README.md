@@ -1,11 +1,11 @@
 # References browser capture component
 
-The fixed host (`host/`, `references-host@bashkitten.org`, API 1) exposes only the
+The fixed host (`host/`, `references-host@taskarian.org`, API 1) exposes only the
 existing authenticated backend's project context and named Connector operations.
-It accepts messages only from the background of `references@bashkitten.org`;
+It accepts messages only from the background of `references@taskarian.org`;
 page scripts cannot call the host. Desktop packaging adds the tiny native
-`bashkittenReferences.request` Experiment. Android uses GeckoView's built-in
-native-messaging delegate `bashkitten_references`. No tokens, filesystem handles
+`taskarianReferences.request` Experiment. Android uses GeckoView's built-in
+native-messaging delegate `taskarian_references`. No tokens, filesystem handles
 or arbitrary native URL fetch are exposed to the capture extension.
 
 The independently built capture extension (currently 1.0.11), preinstalled separately from the fixed host, reuses Connector 5.0.217's
@@ -29,14 +29,14 @@ Firefox build, then produces
 `dist/references.xpi`, unpacked `dist/references/`, a runtime hash inventory and
 `dist/component.json`. The XPI is **unsigned** until the normal release signing
 process signs it. These artifact/syntax checks are not installed product tests.
-No new BashKitten scripted product tests are part of this component.
+No new Taskarian scripted product tests are part of this component.
 
 `agent/packaging/source_cache.py` fetches the exact pinned HTTPS archive bytes into
-`BASHKITTEN_SOURCE_CACHE` (or the shared default user cache), verifies SHA-256 and
+`TASKARIAN_SOURCE_CACHE` (or the shared default user cache), verifies SHA-256 and
 size, and can use an existing whole repository archive as an optional seed. The
 build passes verified external paths to npm's native content cache, retaining
 the original lock integrity checks and offline `npm ci`; repository tarballs are
-not required. Set `BASHKITTEN_OFFLINE_SOURCES=1` to forbid source downloads and
+not required. Set `TASKARIAN_OFFLINE_SOURCES=1` to forbid source downloads and
 require an already populated cache. Include the shared helper alongside the
 Connector source, pinned translators and branding inputs when preparing a
 standalone source-review/build bundle.
@@ -47,7 +47,7 @@ and requested snapshots/PDFs go to the explicitly selected local or remote backe
 About References describes that flow and reads its version from the native
 extension manifest. There is no analytics permission or new consent/updater UI.
 Desktop 140 and Android 142 are the minimum versions supporting this native
-data-permission prompt; the current BashKitten source is newer on both targets.
+data-permission prompt; the current Taskarian source is newer on both targets.
 
 The capture action retains Gecko's native configurable extension command without
 a default shortcut: the donor's Ctrl+Shift+S conflicts with browser screenshots.
@@ -84,7 +84,7 @@ controls; its collection tree and retarget action are removed. The legacy
 `getSelectedCollection` method name remains a root-only compatibility seam.
 
 Capture, selector, progress and manager styling reuse `web/theme.css`, with the
-existing BashKitten sidecar palette and the browser's native
+existing Taskarian sidecar palette and the browser's native
 `prefers-color-scheme`. There is no separate References theme setting or store.
 The shared Office chooser keeps its explicit light theme.
 
@@ -194,7 +194,7 @@ version checks and manual rollback; no custom update catalogue is needed.
 versioned artifact/signing procedure and remaining gates. The generated XPI is
 unsigned; no signing credentials or successful signed installation are claimed.
 Android has the native signed installer and verified References-ID permission
-gate. The **BashKitten settings gear → Update References from file** entry uses
+gate. The **Taskarian settings gear → Update References from file** entry uses
 the existing native `AddonFilePicker` and `AddonManager`, with file preparation
 off the UI thread. Download the signed package first; Android does not register
 the desktop XPI hyperlink content handler. This entry is source-wired for the

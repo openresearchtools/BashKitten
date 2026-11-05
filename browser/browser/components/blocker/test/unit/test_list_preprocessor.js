@@ -32,7 +32,7 @@ add_task(function test_firefox_environment_branch() {
       ].join("\n")
     ),
     ["always", "firefox"],
-    "BashKitten should evaluate list preprocessing as Firefox, not Chromium"
+    "Taskarian should evaluate list preprocessing as Firefox, not Chromium"
   );
 });
 
@@ -110,7 +110,7 @@ add_task(function test_youtube_firefox_scriptlet_branch() {
       "youtube.com##+js(json-prune, playerResponse.adPlacements)",
       "www.youtube.com##+js(trusted-replace-fetch-response, adPlacements)",
     ],
-    "Current BashKitten capabilities should select the Firefox scriptlet fallback branch"
+    "Current Taskarian capabilities should select the Firefox scriptlet fallback branch"
   );
 });
 

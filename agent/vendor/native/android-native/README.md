@@ -41,10 +41,10 @@ collection never downloads sources.
 
 Both Android dependency source outputs include `android-native-sources/` with
 the inventory and original archives/license supplements at their repository
-paths. The complete BashKitten source archive also includes all tracked inputs.
+paths. The complete Taskarian source archive also includes all tracked inputs.
 For upstream rebuilding, extract the source archives, use the retained Cargo
 packages with Cargo's source replacement/vendor mechanism, and put the retained
 NSS archive beside `libs/build-all.sh`. Follow the retained upstream Android
-build and toolchain instructions. BashKitten continues to consume the exact
+build and toolchain instructions. Taskarian continues to consume the exact
 Maven releases; source retention does not claim a local native rebuild or
 bit-for-bit toolchain reproduction.

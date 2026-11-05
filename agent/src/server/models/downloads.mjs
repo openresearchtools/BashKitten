@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Changed JavaScript adaptation of BashKitten Rust / SimpleHF download behavior.
+// Changed JavaScript adaptation of Taskarian Rust / SimpleHF download behavior.
 // Original authors, source revisions and licenses: third_party/NOTICE.
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
@@ -93,7 +93,7 @@ async function outputDirectory(job, file, create = true) {
       const child = await fs.open(target, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
       await parent.close(); parent = child;
     }
-    return { parent, final: `/proc/self/fd/${parent.fd}/${filename}`, partial: `/proc/self/fd/${parent.fd}/.bashkitten-${job.id}-${job.files.indexOf(file)}.part` };
+    return { parent, final: `/proc/self/fd/${parent.fd}/${filename}`, partial: `/proc/self/fd/${parent.fd}/.taskarian-${job.id}-${job.files.indexOf(file)}.part` };
   } catch (error) { await parent.close(); throw error; }
 }
 const statOrNull = file => fs.lstat(file).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
@@ -325,7 +325,7 @@ async function saveModelInformation(job, signal) {
   await saveModelNoticeManifest({
     repository: job.repository, revision: job.revision, license: license || 'Not declared by the repository',
     attribution: 'Downloaded from https://huggingface.co/' + job.repository + '/tree/' + job.revision,
-    distribution: 'These user-selected model assets and upstream notices are downloaded separately; they are not bundled with BashKitten.',
+    distribution: 'These user-selected model assets and upstream notices are downloaded separately; they are not bundled with Taskarian.',
     provenanceNotes, files: origins, notices,
   }, { signal });
 }

@@ -36,7 +36,7 @@ jobs:
       if: steps.component.outputs.hit != 'true'
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
       with:
-        path: ~/.cache/bashkitten-node
+        path: ~/.cache/Taskarian/sources
         key: node-${{ matrix.platform }}-${{ matrix.architecture }}-${{ hashFiles('agent/packaging/node/**') }}
         restore-keys: node-${{ matrix.platform }}-${{ matrix.architecture }}-
     - name: Assemble pinned private runtime and corresponding source

@@ -36,7 +36,7 @@ class HttpsOnlyFragment : Fragment(), SystemInsetsPaddedFragment {
         val binding = SettingsHttpsOnlyBinding.inflate(inflater)
 
         binding.httpsOnlySummary.text = getString(R.string.preferences_https_only_summary) + "\n" +
-            getString(R.string.bashkitten_https_only_exclusions)
+            getString(R.string.taskarian_https_only_exclusions)
 
         binding.httpsOnlySwitch.run {
             isChecked = context.components.settings.shouldUseHttpsOnly

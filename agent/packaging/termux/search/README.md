@@ -1,7 +1,7 @@
 # Native search dependencies
 
 `python-primp` builds the pinned Rust/PyO3 source for Android/Bionic in the
-upstream Termux build environment. It installs only into BashKitten's private
+upstream Termux build environment. It installs only into Taskarian's private
 search directory. No Linux wheel or on-device compiler is used.
 
 The build framework and Python/native package recipes are recorded by exact

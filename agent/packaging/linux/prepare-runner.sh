@@ -10,11 +10,11 @@ done
 sudo apt-get update
 sudo apt-get install -y imagemagick
 sudo apt-get clean
-if ! swapon --show=NAME --noheadings | grep -qx /mnt/bashkitten-build.swap; then
-  sudo fallocate --length 8G /mnt/bashkitten-build.swap
-  sudo chmod 0600 /mnt/bashkitten-build.swap
-  sudo mkswap /mnt/bashkitten-build.swap
-  sudo swapon /mnt/bashkitten-build.swap
+if ! swapon --show=NAME --noheadings | grep -qx /mnt/taskarian-build.swap; then
+  sudo fallocate --length 8G /mnt/taskarian-build.swap
+  sudo chmod 0600 /mnt/taskarian-build.swap
+  sudo mkswap /mnt/taskarian-build.swap
+  sudo swapon /mnt/taskarian-build.swap
 fi
 mkdir -p "$MOZBUILD_STATE_PATH"
 cat > "$MOZBUILD_STATE_PATH/machrc" <<'MACHRC'

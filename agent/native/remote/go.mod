@@ -1,4 +1,4 @@
-module github.com/openresearchtools/bashkitten/remote
+module github.com/openresearchtools/Taskarian/remote
 
 go 1.27.0
 

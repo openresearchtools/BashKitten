@@ -57,9 +57,9 @@ ChromeUtils.defineESModuleGetters(lazy, {
   TaskbarTabs: "resource:///modules/taskbartabs/TaskbarTabs.sys.mjs",
   UIState: "resource://services-sync/UIState.sys.mjs",
   UITour: "moz-src:///browser/components/uitour/UITour.sys.mjs",
-  BashKittenOnboardingActions:
+  TaskarianOnboardingActions:
     // eslint-disable-next-line mozilla/no-browser-refs-in-toolkit
-    "resource:///modules/BashKittenOnboardingActions.sys.mjs",
+    "resource:///modules/TaskarianOnboardingActions.sys.mjs",
 });
 
 export const SpecialMessageActions = {
@@ -977,8 +977,8 @@ export const SpecialMessageActions = {
       case "SET_PREF":
         this.setPref(action.data.pref, action.data.onImpression);
         break;
-      case "BASHKITTEN_ONBOARDING":
-        await lazy.BashKittenOnboardingActions.handle(action.data);
+      case "TASKARIAN_ONBOARDING":
+        await lazy.TaskarianOnboardingActions.handle(action.data);
         break;
       case "MULTI_ACTION":
         await this.handleMultiAction(

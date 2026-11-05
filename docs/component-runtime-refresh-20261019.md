@@ -70,7 +70,7 @@ updated libc and serde_json. These Rust checks used the existing Rust 1.96.0
 toolchain; compiler dead-code warnings remain.
 
 Scratch downloads, component outputs and compile logs are under
-`/home/user/Bashkitten-Acceptance/component-refresh-20261019/native`.
+`/home/user/Taskarian-Acceptance/component-refresh-20261019/native`.
 The signed-index files and exact output identities remain there for the
 combined acceptance coordinator. These checks did not run installed Android
 Node/npm, start containers, exercise rootless lifetime cleanup, inject Display
@@ -80,7 +80,7 @@ traffic reconciliation remain part of the combined installed acceptance.
 ## Additional owned Display dependency checks
 
 The complete registry dependency audit subsequently found compatible updates in
-BashKitten's own Display lock: cc 1.8.0 → 1.9.0, find-msvc-tools 0.1.14 →
+Taskarian's own Display lock: cc 1.8.0 → 1.9.0, find-msvc-tools 0.1.14 →
 0.1.15, syn 3.0.7 → 3.0.9, and unicode-ident 1.0.26 → 1.0.27. These are now
 materialized with registry SHA256s, crate release-commit metadata and complete
 notices. The final offline Display build and seven unit tests pass again.
@@ -90,7 +90,7 @@ generic-array 0.14.9 is available, but crypto-common 0.1.7 requires exactly
 resolution error, so 0.14.7 remains pinned. The upstream requirement was not
 relaxed. Imported Podman/Firefox release vendor graphs retain their respective
 upstream-tested dependency selections; this additional refresh applies to
-BashKitten's own helper lock.
+Taskarian's own helper lock.
 
 ## Embedded Android X11 dependency refresh
 

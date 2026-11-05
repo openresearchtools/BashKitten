@@ -8,7 +8,7 @@
 	const asset = name => new URL(name, base).href;
 
 	window.brandProductName = 'Office';
-	window.brandProductURL = 'https://github.com/openresearchtools/BashKitten';
+	window.brandProductURL = 'https://github.com/openresearchtools/Taskarian';
 	// Native loading and document-header code already consume this setting. Keep
 	// the native create-document action; do not install another logo click owner.
 	window.logoURL = asset('images/office.svg');
@@ -33,13 +33,13 @@
 	const product = about.querySelector('#product-name');
 	if (product) product.textContent = 'Office';
 	const info = about.querySelector('#about-dialog-info');
-	if (!info || info.querySelector('.bashkitten-office-attribution')) return;
+	if (!info || info.querySelector('.taskarian-office-attribution')) return;
 	const attribution = document.createElement('p');
-	attribution.className = 'about-dialog-info-div bashkitten-office-attribution';
-	attribution.textContent = 'BashKitten integrated Office built on Collabora Online. Uses LibreOffice technology.';
+	attribution.className = 'about-dialog-info-div taskarian-office-attribution';
+	attribution.textContent = 'Taskarian integrated Office built on Collabora Online. Uses LibreOffice technology.';
 	info.appendChild(attribution);
 	const legal = document.createElement('p');
-	legal.className = 'about-dialog-info-div bashkitten-office-legal';
+	legal.className = 'about-dialog-info-div taskarian-office-legal';
 	const link = document.createElement('a');
 	link.href = asset('branding-notices.html');
 	link.target = '_blank';

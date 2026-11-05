@@ -31,7 +31,7 @@ const activationWatchers = new Map(), activationWaiters = new Set();
 let server, browserOwner, browserWatcher, closing = false, shutdownPromise, shutdownReply = false, exiting = false;
 let browserAdoption = Promise.resolve();
 function armGuard() {
-  if (Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid) throw Error('The container runtime guard is unavailable');
+  if (Number(process.env.TASKARIAN_GUARD_PID) !== process.ppid) throw Error('The container runtime guard is unavailable');
   process.kill(process.ppid, 'SIGTERM');
 }
 function shutdown() {
@@ -154,7 +154,7 @@ async function inspect(id, { signal } = {}) {
 async function checkRuntimeIdentity(id, info) {
   const p = locations(id);
   const mounts = info.Mounts || [];
-  for (const [source,target] of [[p.rootfs,'/'],[p.exchange,'/run/bashkitten-host'],[p.settings,'/run/bashkitten-settings'],[p.guestDisplay,'/run/bashkitten-display']]) {
+  for (const [source,target] of [[p.rootfs,'/'],[p.exchange,'/run/taskarian-host'],[p.settings,'/run/taskarian-settings'],[p.guestDisplay,'/run/taskarian-display']]) {
     if (mounts.filter(item => item.Destination === target).length !== 1 || !mounts.some(item => item.Source === source && item.Destination === target)) throw Error('Podman changed the owned endpoint/rootfs mounts; stopped before launch');
   }
 }
@@ -255,8 +255,8 @@ async function prepareImage(config, job) {
     try { for await (const bytes of file.createReadStream()) hash.update(bytes); } finally { await file.close(); }
     if (hash.digest('hex') !== item.sha256) throw Error('Guest package checksum mismatch: ' + item.file);
   }
-  const image = 'localhost/bashkitten-machine:' + config.id;
-  await job.phase('Building Debian, XFCE and the BashKitten guest');
+  const image = 'localhost/taskarian-machine:' + config.id;
+  await job.phase('Building Debian, XFCE and the Taskarian guest');
   await podman(['build','--layers','--tag',image,'--file',path.join(context,'Containerfile'),context], { output: job.output, signal: job.signal });
   job.check();
   await job.phase('Materializing the persistent rootfs with native UID mapping');
@@ -264,7 +264,7 @@ async function prepareImage(config, job) {
   // Export a never-started image container, as in the donor. Archiving a running
   // helper's / would include live proc/sys mountpoint metadata and OCI injections.
   // Extract in the machine's namespace so numeric guest IDs map natively.
-  const copy = 'set -e; chown 0:0 /run/bashkitten-materialize; chmod 0755 /run/bashkitten-materialize; exec tar --numeric-owner --xattrs --xattrs-include="*" --acls -xpf - -C /run/bashkitten-materialize';
+  const copy = 'set -e; chown 0:0 /run/taskarian-materialize; chmod 0755 /run/taskarian-materialize; exec tar --numeric-owner --xattrs --xattrs-include="*" --acls -xpf - -C /run/taskarian-materialize';
   const materializer = containerName(config.id) + '-materialize', source = containerName(config.id) + '-source';
   const archive = path.join(p.directory, 'materialize.tar');
   let input;
@@ -273,7 +273,7 @@ async function prepareImage(config, job) {
     await podman(['export','--output',archive,source], { output: job.output, signal: job.signal });
     input = await fs.open(archive, 'r');
     await podman(['run','--rm','--interactive','--name',materializer,'--label',`${machineLabel}=${config.id}`,userNamespace,'--user=0','--network=none','--no-hosts','--read-only','--log-driver=none', '--entrypoint=/bin/bash',
-      '--mount',mount(p.rootfs,'/run/bashkitten-materialize'),image,'-c',copy], { input: input.fd, output: job.output, signal: job.signal });
+      '--mount',mount(p.rootfs,'/run/taskarian-materialize'),image,'-c',copy], { input: input.fd, output: job.output, signal: job.signal });
   } finally {
     await input?.close();
     // Cancelling the CLI alone need not terminate its attached container.
@@ -290,7 +290,7 @@ async function startGateway(config, job) {
   const existing = await readJson(path.join(p.runtime,'gateway.json'), null);
   if (existing && existing.pid && await processStart(existing.pid) === existing.started) return existing;
   await stopGateway(config.id); job.check();
-  const executable = path.join(packageRoot, '../display/bashkitten-display');
+  const executable = path.join(packageRoot, '../display/taskarian-display');
   await fs.access(executable, fs.constants.X_OK);
   await fs.rm(path.join(p.display,'ready.json'), { force: true });
   const args = ['gateway','--directory',p.display,'--width','1280','--height','720'];
@@ -345,7 +345,7 @@ async function displayStatus(id, info) {
   const configured = await readJson(path.join(p.settings, 'display.json'), null);
   const status = await readJson(path.join(p.exchange, 'display-status.json'), null);
   const live = gateway && await processStart(gateway.pid) === gateway.started;
-  const result = info?.State?.Running ? await podman(['exec', '--user', '0', info.Id, '/usr/bin/systemctl', 'show', 'bashkitten-display.service', '--property=ActiveState', '--value']) : null;
+  const result = info?.State?.Running ? await podman(['exec', '--user', '0', info.Id, '/usr/bin/systemctl', 'show', 'taskarian-display.service', '--property=ActiveState', '--value']) : null;
   const unit = result?.stdout.trim();
   const current = status?.generation === configured?.generation ? status : null;
   const error = configured?.enabled !== false && (current?.error || (unit === 'failed' ? 'The Display service stopped. Check its launch command and service log.' : null));
@@ -368,7 +368,7 @@ async function changeDisplay(id, enabled) {
     if (!info?.State?.Running) throw Error('Start this container before changing Display');
     const job = { signal: cancel.signal, check: () => cancel.signal.throwIfAborted(),
       output: data => fs.appendFile(path.join(files.directory, 'display.log'), data, { mode: 0o600 }) };
-    const unit = action => podman(['exec', '--user', '0', info.Id, '/usr/bin/systemctl', action, 'bashkitten-display.service'], { signal: cancel.signal, output: job.output });
+    const unit = action => podman(['exec', '--user', '0', info.Id, '/usr/bin/systemctl', action, 'taskarian-display.service'], { signal: cancel.signal, output: job.output });
     if (!enabled) {
       const file = path.join(files.settings, 'display.json');
       await writeJson(file, { ...await readJson(file), enabled: false });
@@ -405,7 +405,7 @@ async function changeDisplay(id, enabled) {
           // No unattended retry and no software/headless substitute after a
           // failed explicit start. Keep the actual error and the Pi backend.
           await failAfterCleanup(error, [
-            ['Display service', () => podman(['exec', '--user', '0', info.Id, '/usr/bin/systemctl', 'stop', 'bashkitten-display.service'])],
+            ['Display service', () => podman(['exec', '--user', '0', info.Id, '/usr/bin/systemctl', 'stop', 'taskarian-display.service'])],
             ['media', () => stopMedia(id)], ['display gateway', () => stopGateway(id)],
           ]);
         }
@@ -473,7 +473,7 @@ async function start(config, job) {
       const live=await inspect(id); if (!live?.State?.Running) throw Error('Guest stopped during startup; inspect the guest service log');
       await sleep(250);
     }
-    throw Error(startDisplay ? 'Guest BashKitten Agent and Display did not become ready within 60 seconds' : 'Guest BashKitten Agent did not become ready within 60 seconds');
+    throw Error(startDisplay ? 'Guest Taskarian Agent and Display did not become ready within 60 seconds' : 'Guest Taskarian Agent did not become ready within 60 seconds');
   } catch (error) {
     // A failed Start cannot leave a partially ready desktop appearing On.
     await failAfterCleanup(error, [
@@ -723,7 +723,7 @@ async function action(name,value={},requestSignal) {
     let type=value.type || 'text/plain';
     if(!['read','write'].includes(value.action)||!['text/plain','image/png'].includes(type))throw Error('Clipboard supports text/plain and image/png read/write');
     const signal=AbortSignal.any([AbortSignal.timeout(18000),...(requestSignal?[requestSignal]:[])]);
-    const args=['exec',...(value.action==='write'?['--interactive']:[]),'--user','1000:1000','--env','DISPLAY=:0','--env','XAUTHORITY=/run/user/1000/bashkitten-Xauthority',info.Id,'/usr/bin/timeout','--kill-after=2','15','/usr/bin/xclip','-selection','clipboard'];
+    const args=['exec',...(value.action==='write'?['--interactive']:[]),'--user','1000:1000','--env','DISPLAY=:0','--env','XAUTHORITY=/run/user/1000/taskarian-Xauthority',info.Id,'/usr/bin/timeout','--kill-after=2','15','/usr/bin/xclip','-selection','clipboard'];
     let target=type==='image/png'?'image/png':'UTF8_STRING';
     if(value.action==='read'&&!value.type) {
       const available=(await podman([...args,'-out','-target','TARGETS'],{binary:true,signal})).stdout.toString('utf8').split(/\r?\n/);
@@ -804,7 +804,7 @@ async function action(name,value={},requestSignal) {
 // Bind the initial browser before recovering or starting any machine. A browser
 // which died while systemd was starting us must not leave an unowned service.
 try {
-  await adoptBrowser({ pid: Number(process.env.BASHKITTEN_BROWSER_PID), started: process.env.BASHKITTEN_BROWSER_STARTED });
+  await adoptBrowser({ pid: Number(process.env.TASKARIAN_BROWSER_PID), started: process.env.TASKARIAN_BROWSER_STARTED });
   await prepareStorage();
 } catch (error) {
   console.error('Container browser ownership:', error.message);

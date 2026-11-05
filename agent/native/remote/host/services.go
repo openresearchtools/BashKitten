@@ -1,4 +1,4 @@
-//go:build !bashkitten_client
+//go:build !taskarian_client
 
 // SPDX-License-Identifier: AGPL-3.0-only
 package host
@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/openresearchtools/bashkitten/remote/tunnel"
+	"github.com/openresearchtools/Taskarian/remote/tunnel"
 )
 
 // Only catalogue reads and fixed actions cross into the existing private

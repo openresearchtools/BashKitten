@@ -204,8 +204,8 @@ export class BrowserDOMWindow {
 
     let browser = win.gBrowser.getBrowserForTab(tab);
 
-    if (!loadInBackground && win.BashKittenAgent?.layout === "full") {
-      win.BashKittenAgent.browse();
+    if (!loadInBackground && win.TaskarianAgent?.layout === "full") {
+      win.TaskarianAgent.browse();
     }
 
     if (needToFocusWin || (!loadInBackground && aIsExternal)) {
@@ -335,7 +335,7 @@ export class BrowserDOMWindow {
     }
 
     if (
-      AppConstants.MOZ_APP_NAME == "bashkitten" &&
+      AppConstants.MOZ_APP_NAME == "taskarian" &&
       aWhere == Ci.nsIBrowserDOMWindow.OPEN_NEWWINDOW
     ) {
       // Preserve opener, principal, POST and popup policy through the native

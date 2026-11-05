@@ -161,7 +161,7 @@ internal class HomeToolbarComposable(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (context is HomeActivity) {
-                    org.mozilla.fenix.bashkitten.AgentEntryButton(context)
+                    org.mozilla.fenix.taskarian.AgentEntryButton(context)
                 }
                 Box(modifier = Modifier.weight(1f)) {
                     if (settings.enableHomepageSearchBar) {

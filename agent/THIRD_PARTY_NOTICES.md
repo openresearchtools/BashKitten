@@ -8,10 +8,10 @@ The server package bundles private Node.js/npm, unmodified Pi and its npm depend
 Authelia, Tor, Valkey and the DDGS search runtime. **Unsloth Studio — adapted
 search and page reading** has its own offline license entry with original
 copyright, exact upstream revision, full AGPL-3.0-only text and the dated
-BashKitten modification notice. Search also retains the separately credited
+Taskarian modification notice. Search also retains the separately credited
 Buzzard Search and pi-web-access work. Access configuration preserves Torkitten's Apache-2.0
 notice. Releases provide corresponding source and build material.
-Model downloads adapt BashKitten Rust and SimpleHF behavior, retaining their
+Model downloads adapt Taskarian Rust and SimpleHF behavior, retaining their
 Apache-2.0/MIT notices and the credited rust-hf-downloader and Pi client notices.
 Full texts and source pins are in `src/server/models/third_party/` and About.
 
@@ -22,14 +22,14 @@ are recorded in the component manifest.
 
 Termux, Python, Git, GitHub CLI and declared system libraries are
 installed separately under their package licenses. The Android APK and Termux
-server are separate parts of BashKitten; both inventories are available in the
+server are separate parts of Taskarian; both inventories are available in the
 Android app's offline About page. Linux includes its browser and server notices,
 including the distinction between bundled software and external GTK/system
 libraries. Optional llama.cpp, GPU drivers and model weights are separate.
 
 The browser's offline notices separately identify **Waterfox** and **BrowserOS**,
-their retained code, licenses and BashKitten adaptations. Original per-file
-notices remain intact; third-party code is not relicensed by BashKitten’s own AGPL-3.0-only choice.
+their retained code, licenses and Taskarian adaptations. Original per-file
+notices remain intact; third-party code is not relicensed by Taskarian’s own AGPL-3.0-only choice.
 
 ## pillama
 

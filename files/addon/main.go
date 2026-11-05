@@ -1,4 +1,4 @@
-// BashKitten Office host boundary. Quantum protocol logic is adapted in wopi_*.go.
+// Taskarian Office host boundary. Quantum protocol logic is adapted in wopi_*.go.
 package main
 
 import (
@@ -64,7 +64,7 @@ func ownerRequest(ctx context.Context, op string, claims *wopiClaims, body io.Re
 	req.Header.Set("Authorization", "Bearer "+config.CallbackToken)
 	if claims != nil {
 		raw, _ := json.Marshal(claims)
-		req.Header.Set("X-BashKitten-Grant", string(raw))
+		req.Header.Set("X-Taskarian-Grant", string(raw))
 	}
 	for key, values := range headers {
 		req.Header[key] = values
@@ -325,7 +325,7 @@ func main() {
 	mux.HandleFunc("GET /wopi/settings/{id}/{name}", withSettingsToken(settingsPresetHandler))
 	mux.HandleFunc("GET /wopi/settings/{id}/manifest", withSettingsToken(settingsManifestHandler))
 	mux.HandleFunc("GET /wopi/settings/{id}/browser", withSettingsToken(settingsBrowserHandler))
-	mux.HandleFunc("GET /wopi/settings/{id}/org.bashkitten.references.zip", withSettingsToken(settingsExtensionHandler))
+	mux.HandleFunc("GET /wopi/settings/{id}/org.taskarian.references.zip", withSettingsToken(settingsExtensionHandler))
 	mux.HandleFunc("POST /wopi/settings/upload", settingsUploadHandler)
 	mux.HandleFunc("GET /wopi/files/{id}", withWopiToken(wopiCheckFileInfoHandler))
 	mux.HandleFunc("POST /wopi/files/{id}", withWopiToken(wopiFilesPostHandler))

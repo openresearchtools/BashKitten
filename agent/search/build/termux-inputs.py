@@ -39,5 +39,5 @@ def main():
         (target/'.cargo-checksum.json').write_text(json.dumps({'package':crate['checksum'],'files':files})+'\n')
     config=a.output/'.cargo';config.mkdir(exist_ok=True)
     with (config/'config.toml').open('a') as stream:
-        stream.write('\n[source.crates-io]\nreplace-with="bashkitten-retained"\n[source.bashkitten-retained]\ndirectory="vendor"\n[net]\noffline=true\n')
+        stream.write('\n[source.crates-io]\nreplace-with="taskarian-retained"\n[source.taskarian-retained]\ndirectory="vendor"\n[net]\noffline=true\n')
 if __name__=='__main__':main()

@@ -1,16 +1,16 @@
 {
-  "name": "bashkitten",
+  "name": "taskarian",
   "version": "153.6.0",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-only",
-  "description": "BashKitten's browser UI for native Pi RPC sessions on Linux and Termux",
+  "description": "Taskarian's browser UI for native Pi RPC sessions on Linux and Termux",
   "engines": {
     "node": ">=22.19.0"
   },
   "bin": {
-    "bashkitten-web": "src/server/http/server.mjs",
-    "bashkittenctl": "src/server/control.mjs"
+    "taskarian-web": "src/server/http/server.mjs",
+    "taskarianctl": "src/server/control.mjs"
   },
   "scripts": {
     "start": "node src/server/http/server.mjs"

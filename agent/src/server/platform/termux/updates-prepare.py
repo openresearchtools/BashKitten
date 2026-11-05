@@ -18,8 +18,8 @@ import time
 import uuid
 
 PREFIX = Path('/data/data/com.termux/files/usr')
-APP = PREFIX / 'lib/bashkitten'
-DATA = Path(os.environ.get('BASHKITTEN_DATA_DIR', str(Path.home() / '.local/share/bashkitten-pi')))
+APP = PREFIX / 'lib/taskarian'
+DATA = Path(os.environ.get('TASKARIAN_DATA_DIR', str((Path(os.environ['XDG_DATA_HOME']) if Path(os.environ.get('XDG_DATA_HOME', '')).is_absolute() else Path.home() / '.local/share') / 'Taskarian')))
 DIRECTORY = DATA / 'updates/apk-bootstrap'
 JOBS = DATA / 'updates/apk-jobs'
 STATE = DIRECTORY / 'state.json'
@@ -54,7 +54,7 @@ def process_start(pid):
 def node_environment(node):
     environment = {key: value for key, value in os.environ.items() if key not in ('NODE_OPTIONS', 'NODE_PATH')}
     environment.update(OPENSSL_CONF=str(node.parent.parent / 'etc/openssl.cnf'),
-                       TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE='disable', BASHKITTEN_EXECUTION_ROLE='termux')
+                       TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE='disable', TASKARIAN_EXECUTION_ROLE='termux')
     return environment
 
 
@@ -115,7 +115,7 @@ def prepare(module, request, state):
         temporary.mkdir(mode=0o700)
         os.environ['TMPDIR'] = str(temporary)
         target = request['target']
-        backend = next(item for item in target['packages'] if item['name'] == 'bashkitten')
+        backend = next(item for item in target['packages'] if item['name'] == 'taskarian')
 
         def phase(message):
             if cancelled(state):
@@ -131,14 +131,14 @@ def prepare(module, request, state):
             phase('Refreshing signed repositories for the matching bundled runtime')
             command([*APT, 'update'])
             phase('Downloading the matching bundled runtime')
-            command([*APT, 'download', 'bashkitten=' + backend['version']], cwd=stage)
+            command([*APT, 'download', 'taskarian=' + backend['version']], cwd=stage)
             archives = list(stage.glob('*.deb'))
             if len(archives) != 1:
                 raise ValueError('APT did not return one matching backend archive.')
             archive = archives[0]
             fields = subprocess.check_output(['dpkg-deb', '-f', archive, 'Package', 'Version', 'Architecture'], text=True)
             metadata = dict(line.split(': ', 1) for line in fields.splitlines())
-            if metadata != {'Package': 'bashkitten', 'Version': backend['version'], 'Architecture': target['architecture']}:
+            if metadata != {'Package': 'taskarian', 'Version': backend['version'], 'Architecture': target['architecture']}:
                 raise ValueError('The signed APT archive does not match this app.')
             if backend.get('sha256'):
                 with archive.open('rb') as stream:
@@ -207,7 +207,7 @@ def main():
     if os.environ.get('PREFIX') != str(PREFIX):
         raise ValueError('Run package preparation inside Termux.')
     target = request['target']
-    backend = next(item for item in target['packages'] if item['name'] == 'bashkitten')
+    backend = next(item for item in target['packages'] if item['name'] == 'taskarian')
     if (not re.fullmatch(r'[0-9][0-9A-Za-z.+:~_-]*', backend['version'])
             or not re.fullmatch(r'[a-f0-9]{40}', backend['sourceCommit'])
             or backend['version'] != target['productVersion'] or backend['sourceCommit'] != target['sourceCommit']
@@ -238,7 +238,7 @@ def main():
                 job_target = {key: target[key] for key in
                               ('schema', 'productVersion', 'sourceCommit', 'bootstrapSha256', 'architecture', 'apkAbi')}
                 job_target['packages'] = []
-                for name in ('bashkitten', 'bashkitten-os'):
+                for name in ('taskarian', 'taskarian-os'):
                     item = next(item for item in target['packages'] if item['name'] == name)
                     package = {key: item[key] for key in ('name', 'version', 'architecture', 'sourceCommit')}
                     package.update({key: item[key] for key in ('sha256', 'installedManifestSha256') if item.get(key)})

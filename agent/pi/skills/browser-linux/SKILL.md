@@ -1,8 +1,8 @@
 ---
 name: browser-linux
-description: Operate ordinary tabs in the connected BashKitten Linux desktop browser. Use for page reading, forms, screenshots, file transfer and page debugging when capabilities.platform is linux.
+description: Operate ordinary tabs in the connected Taskarian Linux desktop browser. Use for page reading, forms, screenshots, file transfer and page debugging when capabilities.platform is linux.
 ---
-# BashKitten desktop browser
+# Taskarian desktop browser
 
 ## Part 1 — Choose, inspect, act, verify
 
@@ -706,7 +706,7 @@ a substitute for an established remote Pi connection. The native executable
 accepts one request on standard input:
 
 ```sh
-printf '%s\n' '{"method":"tabs.list","params":{}}' | bashkitten --no-start --agent-json
+printf '%s\n' '{"method":"tabs.list","params":{}}' | taskarian --no-start --agent-json
 ```
 
 Replace the JSON object with a browser request from this reference. Native

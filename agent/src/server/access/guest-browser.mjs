@@ -9,7 +9,7 @@ import { processStart } from '../instance.mjs';
 import { guestBrowserChannelSignal } from './browser-channel.mjs';
 
 const equal = (a,b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a),Buffer.from(b));
-export const guestBrowserRole = () => process.platform === 'linux' && process.env.BASHKITTEN_EXECUTION_ROLE === 'container' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(process.env.BASHKITTEN_MACHINE_ID || '');
+export const guestBrowserRole = () => process.platform === 'linux' && process.env.TASKARIAN_EXECUTION_ROLE === 'container' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(process.env.TASKARIAN_MACHINE_ID || '');
 async function registeredGuestProfile(profile, env, uid) {
   const home = await fs.realpath(process.env.HOME);
   if (await fs.realpath(env.HOME || '') !== home ||
@@ -17,10 +17,10 @@ async function registeredGuestProfile(profile, env, uid) {
       (env.MOZ_LEGACY_HOME || '') !== (process.env.MOZ_LEGACY_HOME || '')) return false;
   // Match the product's nsXREDirProvider selection, then require the exact
   // profile registered there. Never accept arbitrary owned/private directories.
-  const legacy = path.join(home,'.bashkitten','bashkitten');
+  const legacy = path.join(home,'.Taskarian');
   const legacyExists = await fs.stat(legacy).then(() => true, error => { if(error.code==='ENOENT')return false;throw error; });
   const configHome = path.isAbsolute(process.env.XDG_CONFIG_HOME || '') ? process.env.XDG_CONFIG_HOME : path.join(home,'.config');
-  const directory = legacyExists || process.env.MOZ_LEGACY_HOME?.startsWith('1') ? legacy : path.join(configHome,'bashkitten','bashkitten');
+  const directory = legacyExists || process.env.MOZ_LEGACY_HOME?.startsWith('1') ? legacy : path.join(configHome,'Taskarian');
   const registry = path.join(directory,'profiles.ini');
   const [root, base, info] = await Promise.all([fs.realpath(profile),fs.realpath(directory),fs.lstat(registry)]);
   if (!root.startsWith(base + path.sep) || info.uid!==uid || !info.isFile() || info.isSymbolicLink() || info.mode & 0o077) return false;
@@ -50,22 +50,22 @@ export async function guestBrowserBootstrap(stack, value) {
   ]);
   const env = Object.fromEntries(environment.split('\0').filter(v=>v.includes('=')).map(v=>[v.slice(0,v.indexOf('=')),v.slice(v.indexOf('=')+1)]));
   const parent = Number(stat.slice(stat.lastIndexOf(')')+2).split(' ')[1]);
-  const nativeRoot = await fs.realpath('/usr/lib/bashkitten/browser');
+  const nativeRoot = await fs.realpath('/usr/lib/taskarian/browser');
   if (browser.uid !== uid || helper.uid !== uid || profileStat.uid !== uid || !profileStat.isDirectory() || profileStat.isSymbolicLink() || (profileStat.mode & 0o077) ||
-      !executable.startsWith(nativeRoot + '/') || parent !== browserPid || !command.split('\0').includes('/usr/lib/bashkitten/src/server/access/guest-browser-relay.mjs') ||
-      env.BASHKITTEN_GUEST_BROWSER !== '1' || env.BASHKITTEN_EXECUTION_ROLE !== 'container' || env.BASHKITTEN_MACHINE_ID !== process.env.BASHKITTEN_MACHINE_ID ||
-      await fs.realpath(env.BASHKITTEN_DATA_DIR || '') !== await fs.realpath(dataDir) || !await registeredGuestProfile(profile,env,uid) ||
+      !executable.startsWith(nativeRoot + '/') || parent !== browserPid || !command.split('\0').includes('/usr/lib/taskarian/src/server/access/guest-browser-relay.mjs') ||
+      env.TASKARIAN_GUEST_BROWSER !== '1' || env.TASKARIAN_EXECUTION_ROLE !== 'container' || env.TASKARIAN_MACHINE_ID !== process.env.TASKARIAN_MACHINE_ID ||
+      await fs.realpath(env.TASKARIAN_DATA_DIR || '') !== await fs.realpath(dataDir) || !await registeredGuestProfile(profile,env,uid) ||
       /^\s*0\s+0\s+4294967295\s*$/.test(uidMap) || !await processStart(browserPid)) throw Error('Guest browser/profile ownership did not match its registered environment');
   return { version: 1, socket: stack.info.socket, origin: stack.origin, credential: stack.guestBrowserToken,
     backendId: stack.identity.instanceId, browserPid, started: await processStart(browserPid) };
 }
 export async function handleGuestBrowser(req,res,route,handleBrowserChannel,apps) {
   const prefix='/api/native-guest-browser/'; if(!route.startsWith(prefix))return false;
-  const secret=process.env.BASHKITTEN_GUEST_BROWSER_OWNER_TOKEN;
-  if(!guestBrowserRole()||!secret||req.method!=='POST'||req.headers.origin||req.headers['x-bashkitten-proxy']||req.socket.remoteAddress||!equal(req.headers.authorization,'Bearer '+secret))throw Object.assign(Error('Native guest browser authorization required'),{status:403});
+  const secret=process.env.TASKARIAN_GUEST_BROWSER_OWNER_TOKEN;
+  if(!guestBrowserRole()||!secret||req.method!=='POST'||req.headers.origin||req.headers['x-taskarian-proxy']||req.socket.remoteAddress||!equal(req.headers.authorization,'Bearer '+secret))throw Object.assign(Error('Native guest browser authorization required'),{status:403});
   const operation=route.slice(prefix.length);if(!['open','poll','result','close','bind','references'].includes(operation))throw Object.assign(Error('Unknown guest browser operation'),{status:404});
-  const cookie=process.env.BASHKITTEN_LOCAL_TOKEN;
-  const record={local:true,nativeGuest:true,username:'local',cookie,key:createHash('sha256').update('local\0'+cookie).digest('hex'),origin:process.env.BASHKITTEN_ACCESS_ORIGIN};
+  const cookie=process.env.TASKARIAN_LOCAL_TOKEN;
+  const record={local:true,nativeGuest:true,username:'local',cookie,key:createHash('sha256').update('local\0'+cookie).digest('hex'),origin:process.env.TASKARIAN_ACCESS_ORIGIN};
   if(operation==='references') {
     const request=await jsonBody(req), input=request.envelope;
     const channelSignal=guestBrowserChannelSignal(record,request.channelId),backendId=await apps.identity();

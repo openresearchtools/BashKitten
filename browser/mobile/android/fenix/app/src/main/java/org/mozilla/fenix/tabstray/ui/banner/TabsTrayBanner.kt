@@ -327,10 +327,10 @@ private fun TabPageBannerTabs(
     BannerTab(
         selected = false,
         testTag = "agent_page_button",
-        contentDescription = stringResource(R.string.bashkitten_open_agent),
+        contentDescription = stringResource(R.string.taskarian_open_agent),
         onClick = onOpenAgentClick,
     ) {
-        org.mozilla.fenix.bashkitten.AgentLogo()
+        org.mozilla.fenix.taskarian.AgentLogo()
     }
 
     BannerTab(
@@ -369,7 +369,7 @@ private fun TabPageBannerTabs(
         contentDescription = "Tor tabs: $torTabCount",
         onClick = { onTabPageIndicatorClicked(Page.TorTabs) },
     ) {
-        Icon(painterResource(R.drawable.ic_bashkitten_tor), null)
+        Icon(painterResource(R.drawable.ic_taskarian_tor), null)
     }
 }
 

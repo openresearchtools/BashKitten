@@ -9,17 +9,17 @@ if [[ $target == termux-aarch64 || $target == termux-x86_64 ]]; then
   exec "$root/auth/build/termux-component.sh" valkey "$output" "${target#termux-}"
 fi
 case "$target:$(uname -m)" in linux-amd64:x86_64|linux-arm64:aarch64) ;; *) echo "Use a native runner for $target." >&2; exit 2 ;; esac
-work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/bashkitten-valkey.XXXXXX")
+work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/taskarian-valkey.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 cp -a "$root/auth/valkey/." "$work/source"
 cmake -S "$work/source" -B "$work/build" -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/usr/lib/bashkitten/auth -DBUILD_MALLOC=libc \
+  -DCMAKE_INSTALL_PREFIX=/usr/lib/taskarian/auth -DBUILD_MALLOC=libc \
   -DBUILD_TLS=OFF -DBUILD_RDMA=OFF -DBUILD_LUA=static
-cmake --build "$work/build" --target valkey-server -j "${BASHKITTEN_BUILD_JOBS:-2}"
+cmake --build "$work/build" --target valkey-server -j "${TASKARIAN_BUILD_JOBS:-2}"
 install -Dm755 "$work/build/bin/valkey-server" "$output/bin/valkey-server"
 python3 "$root/auth/build/valkey-notices.py" "$work/source" "$output"
 mkdir -p "$output/share/metadata" "$work/debian"
-printf 'Source: bashkitten-auth\nSection: utils\nPriority: optional\nMaintainer: Open Research Tools\nStandards-Version: 4.7.0\n\nPackage: bashkitten-auth\nArchitecture: any\nDescription: BashKitten native access stack\n' > "$work/debian/control"
+printf 'Source: taskarian-auth\nSection: utils\nPriority: optional\nMaintainer: Open Research Tools\nStandards-Version: 4.7.0\n\nPackage: taskarian-auth\nArchitecture: any\nDescription: Taskarian native access stack\n' > "$work/debian/control"
 cd "$work"
 dpkg-shlibdeps -O -e"$output/bin/valkey-server" | sed 's/^shlibs:Depends=//' > "$output/share/metadata/valkey.dependencies"
 "$output/bin/valkey-server" --version

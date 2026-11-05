@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import http from 'node:http';
 export function workerRequest(route, value, signal) {
-  const socketPath = process.env.BASHKITTEN_WORKER_SOCKET, key = process.env.BASHKITTEN_WORKER_KEY;
-  if (!socketPath || !key) throw Error('This tool requires a live BashKitten Pi worker');
+  const socketPath = process.env.TASKARIAN_WORKER_SOCKET, key = process.env.TASKARIAN_WORKER_KEY;
+  if (!socketPath || !key) throw Error('This tool requires a live Taskarian Pi worker');
   return new Promise((resolve, reject) => {
     const req = http.request({ socketPath, path: route, method: 'POST', signal,
       headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' } }, res => {

@@ -8,7 +8,7 @@ const defaults = [
   { id: 'year', label: 'Year', width: 60, min: 48 },
   { id: 'attachmentCount', label: 'Attachments', width: 48, min: 40 },
 ];
-const preferenceKey = 'bashkitten.references.grid.v1';
+const preferenceKey = 'taskarian.references.grid.v1';
 export class ReferenceGrid {
   constructor({ root, header, selected, onSelect, onSort, onColumns, onActivate = () => {} }) {
     Object.assign(this, { root, header, selected, onSelect, onSort, onColumns, onActivate });

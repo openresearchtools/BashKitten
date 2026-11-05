@@ -1,8 +1,0 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
-<resources>
-    <!-- Same neutral palette as agent/src/web/web_ui.html. -->
-    <color name="bashkitten_surface">#f3f3f3</color>
-    <color name="bashkitten_text">#242426</color>
-    <color name="bashkitten_secondary">#66666b</color>
-    <color name="bashkitten_button">#e5e5e7</color>
-</resources>

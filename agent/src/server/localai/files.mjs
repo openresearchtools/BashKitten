@@ -36,7 +36,7 @@ export async function publishNewFile(temporary, output) {
     if (!identity.isFile() || identity.dev !== (await targetParent.stat()).dev) throw Error('Create the temporary file on the output filesystem');
     if (await statOrNull(to)) throw Error('The output file already exists; choose another filename');
     await source.sync();
-    if (process.platform === 'android' || process.env.BASHKITTEN_TERMUX === '1') {
+    if (process.platform === 'android' || process.env.TASKARIAN_TERMUX === '1') {
       // Android app SELinux prohibits link(2). Termux coreutils uses native
       // renameat2(RENAME_NOREPLACE) for this same-filesystem no-clobber move.
       await new Promise((resolve, reject) => {

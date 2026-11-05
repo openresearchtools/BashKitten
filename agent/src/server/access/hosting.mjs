@@ -1,5 +1,5 @@
 // Service definitions and native lifecycle, adapted from TorKitten v2 (Apache-2.0).
-// BashKitten adaptations: SPDX-License-Identifier: AGPL-3.0-only
+// Taskarian adaptations: SPDX-License-Identifier: AGPL-3.0-only
 import fs from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
@@ -17,10 +17,10 @@ const script = fileURLToPath(import.meta.url);
 const idPattern = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const localAI = id => ['localai-llama', 'localai-whisper'].includes(id);
 const applications = new Set(['files', 'quantum', 'office', 'office-addon', 'office-wopi', 'references']);
-const unit = id => `bashkitten-service-${id}.scope`;
+const unit = id => `taskarian-service-${id}.scope`;
 // Managed guests have their own session supervisor, not a systemd user manager.
 // Capture the controller's execution role before applying a command environment.
-const useUserScope = platform === 'linux' && process.env.BASHKITTEN_EXECUTION_ROLE !== 'container';
+const useUserScope = platform === 'linux' && process.env.TASKARIAN_EXECUTION_ROLE !== 'container';
 const text = value => typeof value === 'string' && !value.includes('\0');
 
 function target(value) {
@@ -144,7 +144,7 @@ export class HostedServices {
   async action({ id, action }, { remote = false } = {}) {
     const entry = (await this.entries()).find(entry => entry.id === id && (!remote || entry.enabled));
     if (!entry) throw Error('Service is not available');
-    if (!entry.command && entry.application !== 'references') throw Error('This external service has no BashKitten launch command');
+    if (!entry.command && entry.application !== 'references') throw Error('This external service has no Taskarian launch command');
     if (!['start', 'stop', 'reload'].includes(action)) throw Error('Unknown service action');
     if (action !== 'start') {
       await this.unpublish(id);
@@ -316,7 +316,7 @@ export class HostedServices {
 if (process.argv[1] && path.resolve(process.argv[1]) === script) {
   try {
     const [id, action] = process.argv.slice(2);
-    if (action !== 'serve' || !idPattern.test(id) || process.env.BASHKITTEN_GUARDED !== '1' || Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid) throw Error('Service must start through its private controller');
+    if (action !== 'serve' || !idPattern.test(id) || process.env.TASKARIAN_GUARDED !== '1' || Number(process.env.TASKARIAN_GUARD_PID) !== process.ppid) throw Error('Service must start through its private controller');
     const entry = definition(await readJson(path.join(runningDir, id + '.json')));
     let child, stopping = false;
     for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => {
@@ -329,7 +329,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
     // detached user services would survive a killed controller. Never expand arguments.
     child = useUserScope
       ? spawn('systemd-run', ['--user', '--scope', '--quiet', '--collect', '--no-ask-password', '--expand-environment=no', '--unit=' + unit(id),
-        '--description=BashKitten ' + entry.name, '--', ...args], { cwd: entry.command.cwd, env, stdio: 'inherit' })
+        '--description=Taskarian ' + entry.name, '--', ...args], { cwd: entry.command.cwd, env, stdio: 'inherit' })
       : spawn(args[0], args.slice(1), { cwd: entry.command.cwd, env, stdio: 'inherit' });
     child.once('error', error => { console.error(error.message); process.exit(1); });
     child.once('close', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));

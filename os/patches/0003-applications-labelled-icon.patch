@@ -1,7 +1,7 @@
-From: BashKitten
+From: Taskarian
 Subject: Keep the Applications label beside its proportionally sized product icon
 
-Only the owned BashKitten Applications launcher adds an image in labelled mode.
+Only the owned Taskarian Applications launcher adds an image in labelled mode.
 Other launchers and user show-label choices retain their existing behavior.
 
 --- a/plugins/launcher/launcher.c
@@ -35,7 +35,7 @@ Other launchers and user show-label choices retain their existing behavior.
 +      plugin->label_box = NULL;
 +      plugin->label_image = NULL;
 +
-+      /* Preserve labelled launchers; only BashKitten Applications adds its icon. */
++      /* Preserve labelled launchers; only Taskarian Applications adds its icon. */
        if (G_UNLIKELY (plugin->show_label))
 -        plugin->child = gtk_label_new (NULL);
 +        {
@@ -79,11 +79,11 @@ Other launchers and user show-label choices retain their existing behavior.
 +      gtk_orientable_set_orientation (GTK_ORIENTABLE (plugin->label_box),
 +                                      mode == XFCE_PANEL_PLUGIN_MODE_VERTICAL
 +                                        ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL);
-+      gtk_image_set_from_icon_name (GTK_IMAGE (plugin->label_image), "bashkitten-os", GTK_ICON_SIZE_BUTTON);
++      gtk_image_set_from_icon_name (GTK_IMAGE (plugin->label_image), "taskarian-os", GTK_ICON_SIZE_BUTTON);
 +      gtk_image_set_pixel_size (GTK_IMAGE (plugin->label_image), icon_size);
 +      gtk_widget_set_visible (plugin->label_image,
 +                              item != NULL && g_strcmp0 (garcon_menu_item_get_command (item),
-+                                                        "bashkitten-os launcher") == 0);
++                                                        "taskarian-os launcher") == 0);
      }
    else if (G_LIKELY (item != NULL))
      {

@@ -1,6 +1,6 @@
 // Copyright 2026 The Torkitten Authors
 // SPDX-License-Identifier: Apache-2.0
-// BashKitten adaptations: AGPL-3.0-only; protected browser owns login cookies.
+// Taskarian adaptations: AGPL-3.0-only; protected browser owns login cookies.
 
 // Package oauth implements the native public-client flow for pinned Authelia.
 // The caller owns Tor, verified TLS/mTLS, the trusted login UI, and encrypted

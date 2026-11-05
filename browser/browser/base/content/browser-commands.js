@@ -361,7 +361,7 @@ var BrowserCommands = {
     }
 
     // Agent is a permanent browser-owned view, not the tab behind it.
-    if (window.BashKittenAgent?.layout === "full") return;
+    if (window.TaskarianAgent?.layout === "full") return;
 
     // In a multi-select context, close all selected tabs
     if (gBrowser.multiSelectedTabsCount) {

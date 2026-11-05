@@ -10,12 +10,12 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[3]
 BRANDING = ROOT / 'office/branding'
 PRODUCT = 'Office'
-VENDOR = 'BashKitten'
-PRODUCT_URL = 'https://github.com/openresearchtools/BashKitten'
+VENDOR = 'Taskarian'
+PRODUCT_URL = 'https://github.com/openresearchtools/Taskarian'
 ENGINE_IMAGES = ['intro.png', 'intro-highres.png', 'logo.svg', 'logo_inverted.svg',
                  'logo-sc.svg', 'logo-sc_inverted.svg', 'about.svg']
 ONLINE_FILES = ['branding.js', 'branding.css', 'images/toolbar-bg-logo.svg',
-                'branding-sources.json', 'branding-bashkitten-LICENSE.txt']
+                'branding-sources.json', 'branding-taskarian-LICENSE.txt']
 
 
 def digest(path):
@@ -32,7 +32,7 @@ def inputs():
         if not path.is_file() or not path.stat().st_size:
             raise ValueError('Missing Office branding input: ' + name)
     attribution = (BRANDING / 'ATTRIBUTION.txt').read_text()
-    if 'BashKitten integrated Office built on Collabora Online' not in attribution or 'LibreOffice' not in attribution:
+    if 'Taskarian integrated Office built on Collabora Online' not in attribution or 'LibreOffice' not in attribution:
         raise ValueError('Office integration attribution must identify Collabora Online and LibreOffice')
     provenance = json.loads((BRANDING / 'online/branding-sources.json').read_text())
     pin = json.loads((ROOT / 'office/upstream/online/source.json').read_text())

@@ -19,9 +19,9 @@ under `upstream/online/source`.
 
 The Collabora import contains the complete recorded upstream Git tree, including
 the engine. Build preparation fetches the exact dependency archives selected by
-the committed URLs and checksums into `BASHKITTEN_SOURCE_CACHE` (default
-`~/.cache/bashkitten-sources`). Downloaded archives and split copies are not
-stored in Git. A prepared cache supports `BASHKITTEN_OFFLINE_SOURCES=1`; the
+the committed URLs and checksums into `TASKARIAN_SOURCE_CACHE` (default
+`~/.cache/Taskarian/sources`). Downloaded archives and split copies are not
+stored in Git. A prepared cache supports `TASKARIAN_OFFLINE_SOURCES=1`; the
 normal build verifies the source tree and original archive checksums. Matching
 original dependency sources are delivered with the normal corresponding-source
 artifacts, including instructions for using that cache offline.
@@ -164,7 +164,7 @@ available and the document is not silently retargeted.
 `package-extension.mjs` builds browser `.js` assets from source `.mjs` modules
 because the pinned native server does not assign JavaScript MIME to `.mjs`.
 Packaging puts the ZIP contents directly at its root and installs
-`runtime/share/bashkitten/org.bashkitten.references.zip`. `prepareOffice()`
+`runtime/share/taskarian/org.taskarian.references.zip`. `prepareOffice()`
 returns its fixed path and SHA256 to the WOPI owner. Native UserSettings exposes
 `extensions:[{uri,stamp}]`; the ZIP filename identifies the plugin and native
 presets own download/cache/atomic replacement. `../cool.js` resolves to the
@@ -325,7 +325,7 @@ The pinned release incorrectly blocks that immutable bundle when
 `admin_console.enable=false`, leaving the user settings iframe empty.
 `0027-native-user-settings-bundle.patch` removes only that static bundle guard.
 The separate native admin HTML authentication and admin WebSocket enable checks
-remain unchanged, and BashKitten continues to configure the admin console Off.
+remain unchanged, and Taskarian continues to configure the admin console Off.
 The runtime manifest requires this named patch. Native controls, translations,
 stylesheet assets and application logic remain upstream; no substitute UI or
 static asset server is introduced. This MPL-2.0 modification is applied only in

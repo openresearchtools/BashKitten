@@ -1,6 +1,6 @@
 ---
 name: references
-description: Manage independent project databases, metadata, identifiers, abstracts, PDFs, full text and citation styles through BashKitten References.
+description: Manage independent project databases, metadata, identifiers, abstracts, PDFs, full text and citation styles through Taskarian References.
 ---
 
 # References
@@ -10,7 +10,7 @@ backend and the same service as the human UI. Start with `GET /projects`; choose
 an explicit References project ID. Each backend initially provides a ready-to-use `Default`. Explicit later
 rename/archive/delete follows the normal lifecycle; never recreate a deliberately
 deleted database.
-These are independent named databases, not BashKitten chat/workspace projects:
+These are independent named databases, not Taskarian chat/workspace projects:
 one workspace may use several. Users and agents create them with `POST /projects
 {name,cwd?}` and select one returned ID for subsequent calls. Databases stay
 outside repositories; attachments use the project's independently chosen

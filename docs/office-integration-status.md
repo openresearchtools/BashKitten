@@ -52,7 +52,7 @@ stale/disabled/wrong-session and UI-closed checks. This is a source-level contro
 flow proof, not an Android compilation or installed screenshot pass. The APK must
 be rebuilt and the actual screenshot/download flows repeated. No Java runtime
 or native app files on this phone are replaced by this source correction.
-Evidence is `~/BashKitten-Office-Repair/20261031/browser-worker-guard-proof.json`.
+Evidence is `~/Taskarian-Office-Repair/20261031/browser-worker-guard-proof.json`.
 
 ## Impress live-view failure after the aarch64 load repair — 31 October 2026
 
@@ -131,7 +131,7 @@ capture also fails; DOM loading is verified, not a visual-layout pass. A fresh-r
 reopen is not claimed while the human view remains open. No unrelated three-editor,
 citation, Linux installation or full-product campaign is repeated. No full browser
 build or publication is started. Detailed receipts remain outside Git in
-`~/BashKitten-Office-Repair/20261031/installed-result.json`.
+`~/Taskarian-Office-Repair/20261031/installed-result.json`.
 
 ## Native Termux launcher policy — 31 October 2026
 
@@ -152,7 +152,7 @@ seccomp enforcement, not compatibility of Collabora's complete filter.
 External fixture checks pass Termux options, setup-only environment propagation,
 cold/warm launches and unchanged Linux preparation. Real rebuilt worker and
 presentation acceptance remain pending. Evidence is outside Git in
-`~/BashKitten-Office-Repair/20261031/`.
+`~/Taskarian-Office-Repair/20261031/`.
 
 ## Native ARM64 import-library load failure — 31 October 2026
 
@@ -182,7 +182,7 @@ execution proof. The unlinked object reproduced the missing-symbol error; the
 explicit compiler-selected archive removed it and the operation executed.
 This uses the phone's Clang 21.1.8, not the CI NDK 30, and is not rebuilt Office
 acceptance. Evidence stays outside Git in
-`~/BashKitten-Office-Repair/20261031/link-proof.json`.
+`~/Taskarian-Office-Repair/20261031/link-proof.json`.
 
 Next is the existing `office-builds` component workflow at the exact committed
 source, then checksum/provenance verification and a reversible Office-only
@@ -203,7 +203,7 @@ changed; no native-artifact fingerprint exception or routing fallback was added.
 
 At the user's direction, wider installed checks stopped. The corrected normal
 prepare run
-[41131178347](https://github.com/openresearchtools/BashKitten/actions/runs/41131178347)
+[41131178347](https://github.com/openresearchtools/Taskarian/actions/runs/41131178347)
 uses the pushed fix and retains version 153.6. Publication is authorized as a
 prerelease after its normal package/source/legal gates pass. Existing successful
 components, archives and compiler caches remain available; that does not claim
@@ -215,7 +215,7 @@ Recorded observation bounds were 20.5 seconds for Office and 6.8 seconds for a
 warm Files launch, not the preliminary 14/2-second estimates. Android Files-dock
 dragging remains unverified; the single recorded gesture did not establish a
 source defect. No wider acceptance or model downloads/inference were repeated.
-Evidence is in `Bashkitten-Acceptance/android-153.6-recovery-20261030/` and
+Evidence is in `Taskarian-Acceptance/android-153.6-recovery-20261030/` and
 `desktop-153.6.0-focused-20261030/recovery-c83b06/wayland/tor-overlay/`.
 
 The user added a current upstream/security refresh before publishing the next
@@ -224,12 +224,12 @@ history, retaining the product adaptations and the four installed corrections
 below. The matching released Tor Browser 16.0 lineage contributes six additional
 production commits, including Android download filename validation; all fifteen
 previous backports remain. Exact source commits and applicability are recorded in
-`browser/bashkitten/upstreams.toml` and `UPDATING-FIREFOX.md`. The browser's
+`browser/taskarian/upstreams.toml` and `UPDATING-FIREFOX.md`. The browser's
 version/history and regenerated full-license checks pass. The normal prepare run
-[41079252949](https://github.com/openresearchtools/BashKitten/actions/runs/41079252949)
+[41079252949](https://github.com/openresearchtools/Taskarian/actions/runs/41079252949)
 created candidate `1a8b9b8b99e2104a3e0dd2bca5bd4745b322d67d`, version 153.6.
 Its initial combined build
-[41079559761](https://github.com/openresearchtools/BashKitten/actions/runs/41079559761)
+[41079559761](https://github.com/openresearchtools/Taskarian/actions/runs/41079559761)
 passed all eight native Office/Files jobs, both Termux assemblies and normal
 corresponding-source collection. Android x86_64 reached native linking, then
 failed in the native resource packager: a literal `#include` example in the newly
@@ -238,12 +238,12 @@ included FreeType notice was treated as a preprocessing directive. Correction
 preprocessor reproduced the original missing-file error; corrected preprocessing
 and the full affected JarMaker manifest pass. Rendered legal text and all 28
 original notice inputs remain unchanged. The receipt is
-`Bashkitten-Acceptance/legal-html-preprocessor-20261030/result.json`.
+`Taskarian-Acceptance/legal-html-preprocessor-20261030/result.json`.
 
 The normal prepare run
-[41098105938](https://github.com/openresearchtools/BashKitten/actions/runs/41098105938)
+[41098105938](https://github.com/openresearchtools/Taskarian/actions/runs/41098105938)
 retained unpublished version 153.6 and dispatched corrected combined build
-[41098376401](https://github.com/openresearchtools/BashKitten/actions/runs/41098376401)
+[41098376401](https://github.com/openresearchtools/Taskarian/actions/runs/41098376401)
 at `c83b06f0335e06e68983fda5d011f5e90306b906`. Obsolete active runs were cancelled;
 completed artifacts and compiler caches are retained. Corrected packages, the
 complete-candidate gate and installed acceptance remain pending; publication is held.
@@ -256,7 +256,7 @@ treats exhausted metadata HTTP 5xx as an ordinary cache miss only while the
 destination is empty; authentication, identity, checksum and partial-payload
 failures remain fatal. The existing Node assembly inputs are unchanged.
 Standalone Node run
-[41122771431](https://github.com/openresearchtools/BashKitten/actions/runs/41122771431)
+[41122771431](https://github.com/openresearchtools/Taskarian/actions/runs/41122771431)
 passed all four targets, and the original `c83b06f033` verifier accepted their
 runtime, source and provenance archives. This supplies the original candidate;
 it does not change its publication source or relabel a producer.
@@ -269,7 +269,7 @@ restored the verified browser archive with compilation skipped. The original
 Android ARM64 job also survived and reached APK assembly using its compiled
 Gecko output. Final backend/package assembly, source collection, the complete
 release gate and focused installed checks remain pending. Recovery receipts are
-in `Bashkitten-Acceptance/candidates/153.6-c83b06f0335e/` outside the repository.
+in `Taskarian-Acceptance/candidates/153.6-c83b06f0335e/` outside the repository.
 
 Native Tor 0.4.9.15 and Valkey 9.1.3 sources and build pins are updated. Both APK
 architectures built Tor 0.4.9.15 with the retained Guardian JNI API and passed the
@@ -300,15 +300,15 @@ reading prior-job metadata, before compilation. The same-source retry passed
 that step and its new native Tor build and is compiling Gecko. The failed parent
 collector remained failed when that candidate was superseded; this is
 not recorded as a complete pipeline pass. The verified x86_64 Termux package
-retains readable/traversable Files modules and an executable `bashkitten-x11`.
+retains readable/traversable Files modules and an executable `taskarian-x11`.
 Build identities, recovery actions and package receipts are retained under
-`Bashkitten-Acceptance/candidates/153.6-1a8b9b8b99e2/` outside the repository.
+`Taskarian-Acceptance/candidates/153.6-1a8b9b8b99e2/` outside the repository.
 
 A fresh Termux:X11 review found the embedded source, browser adapter and loader
 already match the current official `6dfb8b4a4cc887bc329284d31eb049d596bd1208`
 release/nightly. The earlier actual phone Display launch is evidence for that
 pair, not for the pending ESR 153.6 APK. Termux app update checks remain on the
-official stable channel; the prerelease option is only for BashKitten and its
+official stable channel; the prerelease option is only for Taskarian and its
 matching packages. The unpublished 153.5.5 candidate is retained as historical
 build/installed evidence, not the next publication target.
 
@@ -316,7 +316,7 @@ build/installed evidence, not the next publication target.
 
 The first full 153.5.5 candidate, `cf0e0a133fc150e529c5f895c864c1fc7ef681ad`,
 passed all 62 jobs in
-[41054415200](https://github.com/openresearchtools/BashKitten/actions/runs/41054415200),
+[41054415200](https://github.com/openresearchtools/Taskarian/actions/runs/41054415200),
 including six primary packages, all eight Office/Files components and the normal
 source/legal gate. Publication is held for the focused installed findings below;
 build success does not establish their correction.
@@ -396,16 +396,16 @@ does not replace final signed APK/backend pairing and installed desktop checks.
 
 The corrections and remaining focused installed flows now carry into 153.6. The
 153.5.4 publication below does not establish that these new regressions are fixed
-in a published package. Scoped evidence is under `Bashkitten-Acceptance/`, in
+in a published package. Scoped evidence is under `Taskarian-Acceptance/`, in
 `android-regression-20261030/module-overlay/focused-summary.json`,
 `package-permissions-20261030/`, `audio-device-guidance-20261030/`,
 `local-reasoning-20261030/` and `termux-update-20261030/verification.json`.
 
 ## Published 153.5.4 prerelease — 30 October 2026
 
-[BashKitten 153.5.4](https://github.com/openresearchtools/BashKitten/releases/tag/v153.5.4)
+[Taskarian 153.5.4](https://github.com/openresearchtools/Taskarian/releases/tag/v153.5.4)
 was published by the successful normal
-[publication workflow 40991977149](https://github.com/openresearchtools/BashKitten/actions/runs/40991977149).
+[publication workflow 40991977149](https://github.com/openresearchtools/Taskarian/actions/runs/40991977149).
 The actual tag points to `bde45b30065badac617e5b548b4acfa5454a3f62`;
 GitHub confirms prerelease true, draft false and latest false. All 47 published
 asset names, sizes and server SHA-256 digests match the release manifest and
@@ -414,7 +414,7 @@ archives represented by 29 source assets, plus metadata/reconstruction files.
 This is a testing prerelease, with the existing testing notice retained.
 
 Exact source `bde45b30065badac617e5b548b4acfa5454a3f62` passed the full
-[candidate run 40982042345](https://github.com/openresearchtools/BashKitten/actions/runs/40982042345),
+[candidate run 40982042345](https://github.com/openresearchtools/Taskarian/actions/runs/40982042345),
 attempt 2: all 62 effective jobs, all six primary binaries, eight Office/Files
 components and the matching source/legal gate. The retry retained 57 successful
 executions and ran five failed/dependent jobs. A transient wrong response from
@@ -433,7 +433,7 @@ Files → Quantum → document → File → Options route: the existing dialog a
 Cancel/Save controls fit the 414-pixel phone viewport. No overlays, preference
 changes or repeated full acceptance campaign were used for these final checks.
 
-Main About retains the complete notices, upstream/source links and BashKitten
+Main About retains the complete notices, upstream/source links and Taskarian
 modification information for Zotero-derived components, Collabora Online and its
 LibreOffice engine, File Browser Quantum and other bundled dependencies. Component
 legal UIs remain available too. The final package comparison retained all 3,057
@@ -445,11 +445,11 @@ mobile CSS matches the tested native-menu/dialog module; the packaged JavaScript
 differs only in ordering/wrapping of identical datepicker locale modules.
 
 Build/package receipts are under
-`Bashkitten-Acceptance/candidates/153.5.4-bde45b30065b/`, including
+`Taskarian-Acceptance/candidates/153.5.4-bde45b30065b/`, including
 `complete-candidate-verification.json`, `published-release-verification.json`,
 `verified-pairing.json` and the Linux/
 Termux application and Office asset comparisons. Final installed phone evidence
-is in `Bashkitten-Acceptance/android-final-bde45b-20261030/focused-summary.json`,
+is in `Taskarian-Acceptance/android-final-bde45b-20261030/focused-summary.json`,
 with scoped cleanup recorded and settings, models and profiles preserved. Earlier
 native Options save/kit-exit/reopen evidence remains in the mobile module record below;
 the final brief phone check does not relabel that as a repeated persistence test.
@@ -457,7 +457,7 @@ the final brief phone check does not relabel that as a repeated persistence test
 ## Current integration checkpoint — 29 October 2026
 
 The corrected `72abe63d2bd7a973bf1a170ae129387b5adba1bf` full batch passed
-all 62 jobs in [40967838971](https://github.com/openresearchtools/BashKitten/actions/runs/40967838971),
+all 62 jobs in [40967838971](https://github.com/openresearchtools/Taskarian/actions/runs/40967838971),
 including all six primary packages and the matching source/legal gate. Its
 installed Wayland and Xorg checks passed the main About notices/source links and
 native Office settings persistence. All 3,057 full Linux notice texts are retained.
@@ -473,7 +473,7 @@ cookie/session or permission changes are involved. The actual old failure and
 corrected first-save/reset/second-save sequence passed focused source and packaged
 checks; non-PDF and desktop transport behavior remained unchanged. The normal
 offline extension build passed. A corrected signed Android installation remains
-required. Evidence is in `Bashkitten-Acceptance/references-repeat-pdf-20261030/`.
+required. Evidence is in `Taskarian-Acceptance/references-repeat-pdf-20261030/`.
 
 The installed phone's main About page passed the selected Zotero, Collabora and
 Quantum full-notice/source/modification-link checks. Its native Office menu
@@ -485,11 +485,11 @@ frontend-only build passed without changing the engine/server. The reversible
 phone module check passed actual File → Options, visible controls, native Save,
 full kit shutdown and fresh reopening with the chosen setting retained. The
 original choice and all four original files/modes/hashes were restored. Evidence:
-`Bashkitten-Acceptance/office-mobile-options-20261030/android-native-options-summary.json`.
+`Taskarian-Acceptance/office-mobile-options-20261030/android-native-options-summary.json`.
 This remains module evidence pending the coherent rebuilt package.
 
 The subsequent `479ab3a2513d73cc558d8f0d074a9e87d1e232e9` full batch
-[40958050104](https://github.com/openresearchtools/BashKitten/actions/runs/40958050104)
+[40958050104](https://github.com/openresearchtools/Taskarian/actions/runs/40958050104)
 hit one Termux ARM64 desktop-package failure: GNU make selected its built-in
 C-to-executable rule for libdbusmenu's source XML during installation. The fix
 uses native `make -r` only for that dependency's existing build/install calls.
@@ -499,7 +499,7 @@ The corrected ARM64 CI package and full release gate remain pending. Healthy
 producers continue for normal validated reuse; this failed batch is not releasable.
 
 The full `53c81a4c27561888d5f6ff9d5d145929f925b09b` batch passed all
-62 jobs in [40917628193](https://github.com/openresearchtools/BashKitten/actions/runs/40917628193),
+62 jobs in [40917628193](https://github.com/openresearchtools/Taskarian/actions/runs/40917628193),
 including all six primary packages, eight Office/Files components and the normal
 matching source/legal gate. Complete artifact `12922311255` is retained without
 another local download. Publication remains held on the installed Android result.
@@ -509,8 +509,8 @@ checks. These covered References metadata persistence, native extension entry,
 Files appearance/launching and Office filename/light rendering. Wayland also
 completed a packaged native citation refresh without the legacy UNO banner.
 Normal Quit drained the scoped services and preserved existing settings. Evidence
-is in `Bashkitten-Acceptance/candidates/153.5.4-53c81a4c2756/wayland-final/`
-and `Bashkitten-Acceptance/native-xorg-final-53c81-20261029/`.
+is in `Taskarian-Acceptance/candidates/153.5.4-53c81a4c2756/wayland-final/`
+and `Taskarian-Acceptance/native-xorg-final-53c81-20261029/`.
 
 The coherent Android installation preserves its configuration and cached models
 and runs the exact `53c81` manager, host 1.0.1 and capture 1.0.6. Its first capture
@@ -525,18 +525,18 @@ round trip. Visiting the same Files tab after a browser restart passed on the
 coherent Android candidate. Capture and the phone metadata pane remain blocked
 by the host reply until the corrected APK is installed; no Android capture pass
 or release is claimed.
-Evidence is in `Bashkitten-Acceptance/android-final-53c81-20261029/`.
+Evidence is in `Taskarian-Acceptance/android-final-53c81-20261029/`.
 
 The subsequent exact `1f8341ccb402edb478e3192fc68d30ba7aa95162` diagnostic
-passed native-only parent [40931329451](https://github.com/openresearchtools/BashKitten/actions/runs/40931329451)
-and signed x86 Android daughter [40931342528](https://github.com/openresearchtools/bashkitten-build-android-x86_64/actions/runs/40931342528).
+passed native-only parent [40931329451](https://github.com/openresearchtools/Taskarian/actions/runs/40931329451)
+and signed x86 Android daughter [40931342528](https://github.com/openresearchtools/taskarian-build-android-x86_64/actions/runs/40931342528).
 Its actual APK bytecode contains both native bundle conversions. Installed on
 the phone with its matching backend/OS packages, the native reply now completes:
 the project chooser loads and the References manager opens. The actual phone
 metadata pane passed five editable identifier fields, wrapping/scrolling,
 reachable sticky actions and one native UI save verified through the API.
 No soft-keyboard layout result is claimed for that check. Settings and cached
-models were preserved. Evidence is in `Bashkitten-Acceptance/android-capture-1f8341-20261029/`.
+models were preserved. Evidence is in `Taskarian-Acceptance/android-capture-1f8341-20261029/`.
 
 The first controlled PDF capture saved metadata but failed before any request
 reached the fixture server. Its injected connector script called Firefox's
@@ -549,7 +549,7 @@ establish Android acceptance. No signature bypass is used. Diagnostic builds
 remain ineligible for publication without the normal full release gate.
 
 The coherent `87c68c876808a61f174fdc36cc02b509f0c4b051` build passed all
-62 jobs in [40878527390](https://github.com/openresearchtools/BashKitten/actions/runs/40878527390),
+62 jobs in [40878527390](https://github.com/openresearchtools/Taskarian/actions/runs/40878527390),
 including six primary binaries, eight Office/Files jobs and the normal matching
 source/legal/complete-candidate gate. Its complete artifact is `12903898838`.
 Publication remains held: later source fixes and the Android capture failure
@@ -561,8 +561,8 @@ launching. Wayland also checked native upload/download and an unsent Reference
 in chat with the exact owning path. The sent-message Markdown-link and stored
 attachment-card click paths were not exercised without a configured model;
 source checks are not substituted for those installed results. Evidence is in
-`Bashkitten-Acceptance/candidates/153.5.4-87c68c876808/wayland-limited/`
-and `Bashkitten-Acceptance/native-xorg-changed-87c68-20261029/`.
+`Taskarian-Acceptance/candidates/153.5.4-87c68c876808/wayland-limited/`
+and `Taskarian-Acceptance/native-xorg-changed-87c68-20261029/`.
 
 The matching installed Android APK/backend/OS passed native Files tab-group,
 child-tab inheritance, restart persistence and the ordinary flat widescreen
@@ -570,13 +570,13 @@ strip checks. References capture still returned an opaque error before showing
 destinations; no successful capture is claimed. Restored service tabs also
 needed their native route rebound after browser restart. The existing authority
 and service owners are being retained while these specific gaps are corrected.
-Evidence is in `Bashkitten-Acceptance/android-native-87c68-20261029/`.
+Evidence is in `Taskarian-Acceptance/android-native-87c68-20261029/`.
 
 The exact committed `1a1d88490c974d1a5c7475f81ef341ead234770a` diagnostic
 built successfully through native-only parent
-[40906939972](https://github.com/openresearchtools/BashKitten/actions/runs/40906939972)
+[40906939972](https://github.com/openresearchtools/Taskarian/actions/runs/40906939972)
 and signed Android x86 daughter
-[40906956016](https://github.com/openresearchtools/bashkitten-build-android-x86_64/actions/runs/40906956016).
+[40906956016](https://github.com/openresearchtools/taskarian-build-android-x86_64/actions/runs/40906956016).
 It contains the Files appearance/scope/pane corrections and bounded native
 References error reporting. Its signed APK and exact backend/OS pair were
 verified and installed. The normal complete-release gate was intentionally
@@ -589,7 +589,7 @@ the native GeckoView permission and has version 1.0.1 so existing profiles updat
 Desktop staging and sender/authorization checks are unchanged. Twelve focused
 staging/native-source checks passed; actual corrected capture remains pending
 the next candidate. The earlier mixed-runtime attempt is recorded separately
-from the coherent retry in `Bashkitten-Acceptance/android-references-diagnostic-1a1d-20261029/`.
+from the coherent retry in `Taskarian-Acceptance/android-references-diagnostic-1a1d-20261029/`.
 
 The shared citation processor now uses the exact pinned Zotero processor and
 Style settings. Five independent native-oracle cases, packaged payload/legal
@@ -597,7 +597,7 @@ checks and the real References worker passed. A narrow Office adapter change
 also passed ten native Writer checks and three occurrence/copy checks, including
 Vancouver numbering, real save/reopen, unchanged-citation formatting and native
 idle autosave. Those module diagnostics do not claim a rebuilt installed
-candidate. Evidence is under `BashkittenBuild/verification/citation-formatting-20261029/`
+candidate. Evidence is under `TaskarianBuild/verification/citation-formatting-20261029/`
 and `office-citation-basics-20261029/`. The subsequent Writer bibliography change
 uses the native `Bibliography 1` style and passed twelve focused native checks,
 including style customizations, direct-format reset and real save/reopen.
@@ -610,7 +610,7 @@ browser passed desktop UI-to-API/API-to-UI editing, a local XML attachment and
 live light/dark appearance. Original files, settings and four existing databases
 were restored unchanged. This is module verification, not a coherent new build;
 phone-width rendering is deferred to the actual Android candidate. Evidence is
-in `Bashkitten-Acceptance/references-metadata-20261029/`.
+in `Taskarian-Acceptance/references-metadata-20261029/`.
 
 The [component attribution map](../references/legal/COMPONENT-ATTRIBUTION.md)
 identifies pinned upstream sources, our adapters, modifications and retained
@@ -637,11 +637,11 @@ transport are removed, with translator updates reading bundled resources. Pi's
 native offline/telemetry flags suppress its install reporter. Evidence, including
 exact payload identities and limits, is:
 
-- `/run/media/user/Data/BashkittenBuild/verification/files-privacy-audit-20261029/audit.json`
+- `/run/media/user/Data/TaskarianBuild/verification/files-privacy-audit-20261029/audit.json`
   covers Linux `53c81` and the selected Termux `1f8341` Files artifact.
-- `/run/media/user/Data/BashkittenBuild/verification/office-egress-audit-20261029/result.json`
+- `/run/media/user/Data/TaskarianBuild/verification/office-egress-audit-20261029/result.json`
   records native Office source and effective installed Linux `53c81` settings.
-- `/run/media/user/Data/BashkittenBuild/verification/references-privacy-20261029/result.json`
+- `/run/media/user/Data/TaskarianBuild/verification/references-privacy-20261029/result.json`
   covers installed `53c81` capture 1.0.6 and built `e6d71` capture 1.0.7, with
   eleven isolated reporting/update checks. It does not establish installed 1.0.7
   capture acceptance.
@@ -658,7 +658,7 @@ is recorded in `startup-fastly-address-mapping.json` in the Files audit director
 The observer excludes payloads, headers, environment and DNS names, and cannot
 establish all traffic on pre-existing sockets or unconnected UDP destinations.
 These results and source audits do not establish universal absence of reporting.
-Receipt: `/home/user/Bashkitten-Acceptance/privacy-files-53c81-20261029/bounded-runtime-summary.json`.
+Receipt: `/home/user/Taskarian-Acceptance/privacy-files-53c81-20261029/bounded-runtime-summary.json`.
 
 Installed Linux `53c81` passed native UK/US Hunspell spelling, suggestions,
 local Lightproof spacing/punctuation checks and Save, with the normal editor's
@@ -679,7 +679,7 @@ No Office engine or browser-core changes are required.
 Five Go race tests, the owner identity/storage test and the native settings-proxy
 test passed, including actual pinned Options-generated XML, scoped upload/read
 requests and snapshot views. Independent review passed. Evidence is under
-`BashkittenBuild/verification/office-native-settings-20261029/`.
+`TaskarianBuild/verification/office-native-settings-20261029/`.
 
 The native Xorg module check then passed visible defaults, one saved false
 choice, actual document-kit exit, reopening with that choice retained, and a
@@ -689,7 +689,7 @@ JavaScript when its admin console is disabled. Named patch `0027` removes only
 that shared-asset restriction; the admin page still returned 403. The server-only
 cached rebuild took 9.6 seconds without rebuilding the engine or browser.
 
-Receipt: `Bashkitten-Acceptance/office-native-settings-module-20261029/native-settings-module-summary.json`.
+Receipt: `Taskarian-Acceptance/office-native-settings-module-20261029/native-settings-module-summary.json`.
 This was a reversible diagnostic overlay with an explicitly recorded local
 server lineage, not a coherent rebuilt package. All seven original installed
 files and modes were restored, and normal Quit drained the test processes.
@@ -707,14 +707,14 @@ five focused rendering/escaping checks. Desktop Help → About also links to thi
 same bundled inventory, alongside Mozilla's existing Licensing link; six native
 event-order cases passed. Missing source metadata cannot silently drop valid
 notices, with three focused regression cases passing. Evidence is under
-`BashkittenBuild/verification/main-about-licenses-20261029/`. The updated main
+`TaskarianBuild/verification/main-about-licenses-20261029/`. The updated main
 About view still needs the focused installed check on the new candidate.
 
 ## Earlier integration checkpoint — 29 October 2026
 
 The earlier coherent build is version **153.5.4** at
 `45390d6a25518f69eb36fb1de436f915a572a83d`, main
-[40837599063](https://github.com/openresearchtools/BashKitten/actions/runs/40837599063),
+[40837599063](https://github.com/openresearchtools/Taskarian/actions/runs/40837599063),
 which finished **successfully**. All six primary binary targets, eight native
 Office/Files jobs, normal source collection and the existing complete-candidate
 gate passed. Source collection completed in 18m 53s and uploaded its 15-file,
@@ -735,10 +735,10 @@ the complete Go texts, compiled Gecko/capture notices and Office branding.
 Dependency/source manifests are unchanged since cf62. The audit used the staged
 packages and successful normal CI source/gate logs; neither large artifact was
 downloaded or independently unpacked locally. Receipts are under
-`Bashkitten-Acceptance/final-packages-legal-45390-20261029/` in
+`Taskarian-Acceptance/final-packages-legal-45390-20261029/` in
 `acceptance-review.json`, `verification.json` and `apk-verification.json`.
 The source and complete-gate receipts are in
-`Bashkitten-Acceptance/candidates/153.5.4-45390d6a2551/` as
+`Taskarian-Acceptance/candidates/153.5.4-45390d6a2551/` as
 `source-collection/verification.json` and `complete-candidate-verification.json`.
 
 Clean installed 45390 real-Xorg testing passed rebuilt empty-query clearing and
@@ -758,7 +758,7 @@ reopen retained the edit. This was one DOCX/PDF round trip, not six-format or
 browserless dirty-save acceptance; the PDF helper's filesystem-download wait
 timed out because the export opened the normal viewer. Normal Local Off/Quit
 preserved profiles, models and custom INI. The receipt is
-`Bashkitten-Acceptance/native-xorg-153.5.4-45390-20261029/installed-acceptance-summary.json`.
+`Taskarian-Acceptance/native-xorg-153.5.4-45390-20261029/installed-acceptance-summary.json`.
 
 The coherent Xorg capture follow-up passed selector Cancel with exact unchanged
 item/attachment manifests, website snapshot, byte-exact ordinary PDF capture and
@@ -768,7 +768,7 @@ pre-repin Extensions-row capture remains separate evidence; the earlier navbar
 observation does not establish an unavailable action. Native manager confirmation
 and normal Local Off/Quit passed. The annotated receipt retains references to
 the unchanged raw evidence:
-`Bashkitten-Acceptance/native-xorg-153.5.4-45390-20261029/capture-followup/installed-capture-summary.json`.
+`Taskarian-Acceptance/native-xorg-153.5.4-45390-20261029/capture-followup/installed-capture-summary.json`.
 The adjacent `source-placement-review.json` records the corrected interpretation.
 
 The clean 45390 Wayland package separately passed native right-click, Office
@@ -784,18 +784,18 @@ public ACM replay saved 2,570,670 bytes with SHA-256
 matching the recorded native Zotero PDF. The final inline-disposition correction passed the installed native background
 PDF replay, preserving the active manager and exact PDF bytes. The artificial normal-session request to the isolated
 Files application origin is not publisher-cookie parity evidence. Receipts are
-in `Bashkitten-Acceptance/references-native-tabs-20261029/`; the original failure is in
-`Bashkitten-Acceptance/native-wayland-153.5.4-45390-20261029/verification.json`.
+in `Taskarian-Acceptance/references-native-tabs-20261029/`; the original failure is in
+`Taskarian-Acceptance/native-wayland-153.5.4-45390-20261029/verification.json`.
 Android's exact 45390 APK/backend/OS pairing and both active built-in References
 registrations passed, but the visible enabled References Add action did nothing
-when tapped. Both native API-created and + tabs retain BashKitten context IDs as
+when tapped. Both native API-created and + tabs retain Taskarian context IDs as
 strings. A separate correction to the existing native tabs API initializes the
 ordinary engine session and preserves its actual decoded context/privacy state;
 production Kotlin compilation passed. It adds no custom tab/cookie bridge or
 cookie copying. Runtime invocation, background focus and private-session checks
 remain pending a coherent signed candidate.
 Its receipts are `installed-package-identity.json` and `installed-addon-state.json`
-under `Bashkitten-Acceptance/android-153.5.4-45390d6a2551-20261029/`.
+under `Taskarian-Acceptance/android-153.5.4-45390d6a2551-20261029/`.
 
 The current module batch implements the user's independent named References
 projects, with an automatic Default per backend, direct clickable sidebar,
@@ -808,7 +808,7 @@ Focused manager DOM (9), packaged Office settings (8) and real SQLite/service (9
 checks passed. Actual service capture/naming, two-file folder move and restart
 checks (7), plus manager lifecycle/direct-launch checks (13), also passed.
 Combined installed verification remains pending. Receipts are in `references-independent-projects-20261029/` under
-`Bashkitten-Acceptance/`. The separate
+`Taskarian-Acceptance/`. The separate
 Android existing-native-API correction has compilation/regression evidence,
 with signed-candidate runtime validation still pending. The current verification
 scope is Files/Office/References, model/audio changes and reported UI fixes plus
@@ -819,7 +819,7 @@ separate sidebar button was absent, the main logo opened Agent and its sidebar,
 and the existing inside Hide Agent action returned to the ordinary browser.
 This did not make the separate References Add action work. The receipt is
 `android-153.5.4-45390d6a2551-20261029/toolbar-portrait-landscape-result.json`
-under `Bashkitten-Acceptance/`. The existing native setting
+under `Taskarian-Acceptance/`. The existing native setting
 `Settings → Customize → Tab bar display → Show tab bar on wide windows` is
 also passed actual UI replay: Off hid the strip and persisted through normal
 navigation; On restored it. The original setting and rotation were restored.
@@ -838,10 +838,10 @@ fix `50fdb0ede0` passed an actual two-file Wayland overlay using native Collabor
 `Doc_Title`: initial/load titles, native rename with an escaped ampersand, normal
 reload and the renamed disk file all matched. The original 45390 `omni.ja` was
 restored; this is not a coherent rebuild. Its receipt is
-`Bashkitten-Acceptance/office-filename-title-20261029/verification.json`.
+`Taskarian-Acceptance/office-filename-title-20261029/verification.json`.
 
 The preceding cf62 binary batch was
-[40823770402](https://github.com/openresearchtools/BashKitten/actions/runs/40823770402),
+[40823770402](https://github.com/openresearchtools/Taskarian/actions/runs/40823770402),
 version **153.5.4**, from `cf62bf9be5cd068921f5941916099531cd3ce1a7`.
 All eight native Office/Files jobs, both Linux packages, both Termux packages and
 both Android APKs passed. This batch includes `550d52b0a2`, `f09b7d27bb` and the
@@ -853,7 +853,7 @@ No corresponding-source or complete-candidate artifact/pass was produced; these
 binary results do not establish source publication, prerelease completion or
 full installed acceptance. The build receipt is
 `verification/ci-monitor-cf62bf9be5cd-20261029.json`; staged identities are under
-`Bashkitten-Acceptance/candidates/153.5.4-cf62bf9be5cd/`.
+`Taskarian-Acceptance/candidates/153.5.4-cf62bf9be5cd/`.
 
 Later source-preparation correction `1eab4ec1df` adds native Git bulk backfill
 before the existing collector. The exact workflow step passed a pinned shallow
@@ -861,7 +861,7 @@ partial-clone fixture; the existing exporter produced identical archive bytes
 with one fetch process instead of 40. Source serialization and content are
 unchanged. This fixture preceded the actual 45390 source-collection pass above;
 neither is a release-publication claim.
-Receipts are under `Bashkitten-Acceptance/source-archive-backfill-20261029/` in
+Receipts are under `Taskarian-Acceptance/source-archive-backfill-20261029/` in
 `workflow-step-verification.json` and `verified-run/verification.json`.
 `9e64389692` adds disk/object-usage reporting around that native backfill;
 it does not change source serialization or establish a publication pass.
@@ -877,12 +877,12 @@ original members and retain declared terms. Its SHA256 is
 `7d397ad240ad08dcb6ea6fcbb5900ea25a37187800e2a2978badefc46302e275`.
 The independent current-source receipts are `verification.json` and
 `apk-verification.json` under
-`Bashkitten-Acceptance/final-packages-legal-cf62-20261029/`.
+`Taskarian-Acceptance/final-packages-legal-cf62-20261029/`.
 These are artifact legal/About passes; matching source publication remains
 separate, and the 16f0 evidence below retains its historical identity.
 
 The preceding full Actions attempt was
-[40815191205](https://github.com/openresearchtools/BashKitten/actions/runs/40815191205),
+[40815191205](https://github.com/openresearchtools/Taskarian/actions/runs/40815191205),
 version **153.5.4**, from `16f0a0330ac7f800fba6c97b8aaf778d32922843`.
 It includes guided/background model setup, the replacement citation commands and
 the source/license corrections, plus the remote application URL and phone
@@ -897,7 +897,7 @@ eight native Office/Files jobs in daughter
 each component passed Linux amd64/arm64 and Termux aarch64/x86_64. Both complete
 Linux DEBs and both Termux packages also built. Both Android Gecko compilations
 passed, but neither APK was produced: the ARM64 and x86_64 Gradle builds failed
-at `stageBashKittenAbout` with `KeyError: 'licenses'`. The new native Go runtime
+at `stageTaskarianAbout` with `KeyError: 'licenses'`. The new native Go runtime
 record supplies full `text` and `licenseFiles`; that About loop expected module
 license filenames. `f09b7d27bb` updates the existing loop to accept both forms,
 preserving declared terms and rejecting incomplete text. Its focused offline
@@ -916,7 +916,7 @@ damaged archives, members and retained notices. Those artifacts retain
 `16f0a0330a`; the subsequent normal source-collection pass belongs to 45390 above.
 Build outcomes are recorded in
 `verification/ci-monitor-40811847474-to-16f0-20261029.json`; the focused source and
-Android About receipts are under `Bashkitten-Acceptance/` in
+Android About receipts are under `Taskarian-Acceptance/` in
 `android-notice-archive-16f0-20261029/owner-regression.json` and
 `android-about-go-16f0-20261029/verification.json`.
 
@@ -927,7 +927,7 @@ compiled Gecko/capture notice records and installed Office branding matched.
 Both structured Go runtime records retained their full text and 38 original
 hashes; Office's 66 original Python legal files reached About. This package has
 SHA256 `23da7e91d9980a716f1f9cf67ae78998afd43f97217fdea83d62429bd8b1250e`.
-The receipt is `Bashkitten-Acceptance/final-deb-legal-16f0-20261029/verification.json`.
+The receipt is `Taskarian-Acceptance/final-deb-legal-16f0-20261029/verification.json`.
 It establishes packaged notice coverage, not source publication or installed
 feature acceptance. The later cf62 binary results do not relabel this 16f0 audit;
 matching published sources and full installed acceptance remain outstanding.
@@ -1088,7 +1088,7 @@ anchors. This was a short-frame overlay on the older APK; the controller update
 required native Force Stop/reopen and does not prove seamless reconnect.
 Phone evidence is `verification/office-command-phone-ui-20261029/evidence.json`;
 the native state receipt is
-`BashKittenOfficeBuild/20261028/diagnostics-6522/native-server/command-ui-20261029/writer-inspect-ieee-landscape-20261029.json`.
+`TaskarianOfficeBuild/20261028/diagnostics-6522/native-server/command-ui-20261029/writer-inspect-ieee-landscape-20261029.json`.
 Later phone replay on that same older APK passed Writer's native history list,
 immutable read-only Open, normal Back and Restore on the disposable proof file.
 The restored snapshot predates the bibliography; no bibliography loss is inferred.
@@ -1127,7 +1127,7 @@ projects shared one Quantum process; closing one tab preserved that process and
 the remaining Files tab reloaded. The retained project picker and actual Changes
 untracked-file view passed. Normal Local Off/Quit preserved the custom main INI.
 The receipt is
-`Bashkitten-Acceptance/files-xorg-153.5.4-cf62-20261029/installed-acceptance-summary.json`.
+`Taskarian-Acceptance/files-xorg-153.5.4-cf62-20261029/installed-acceptance-summary.json`.
 Shared-chat attachment upload, capture toolbar and native Save-As naming were
 not proven by this Files checkpoint.
 
@@ -1222,7 +1222,7 @@ acceptance remains separate and does not relabel these earlier results.
 
 Likewise, `6b01947a60` uses native input semantics when clearing browser fields;
 bounded helper/native-event checks are recorded in
-`Bashkitten-Acceptance/browser-fill-clear-20261029/verification.json`.
+`Taskarian-Acceptance/browser-fill-clear-20261029/verification.json`.
 The rebuilt 45390 Xorg clear-query/Entire-library scope and Wayland stable-field
 clear checks passed above, alongside native secondary-click menus. Other actor
 cases and the newly exposed application-context References failure remain open.
@@ -1232,9 +1232,9 @@ WebDriver `mousedown`, `contextmenu`, `mouseup` sequence. Ten component checks
 preserve ordinary-tab/frame authorization and button cleanup. The actual Files
 test had reproduced the missing API menu while physical right-click worked;
 the rebuilt-actor replay remains pending. Its receipt is
-`Bashkitten-Acceptance/browser-right-click-component-20261029.json`.
+`Taskarian-Acceptance/browser-right-click-component-20261029.json`.
 
-Evidence lives outside Git under `BashkittenBuild/verification/`, including
+Evidence lives outside Git under `TaskarianBuild/verification/`, including
 `restored-native-seat-20261029`, `office-native-ui-20261029`,
 `references-capture-ui-20261029` and `references-real-parity-20261028`.
 The checkpoints below are historical: their earlier archive-retention statements
@@ -1300,7 +1300,7 @@ no additional user account or login.
 - The backend HTTPS gateway diagnostic passed certificate validation against
   the existing backend CA, one-use launch, secure scoped cookies, nonce-replay
   rejection and origin checks. Evidence is outside the repository at
-  `BashkittenBuild/verification/apps-boundary-20261028/https-gateway-evidence.json`.
+  `TaskarianBuild/verification/apps-boundary-20261028/https-gateway-evidence.json`.
   This does not establish normal-tab trust in the installed browser. The narrow
   native service-context trust changes require a new browser build.
 - Native citation persistence diagnostics passed for DOCX, ODT, XLSX, ODS,
@@ -1322,7 +1322,7 @@ retains them, and release source collection now reads all tracked Git file
 contents instead of applying those exclusions. This source-completeness change
 does not substitute prebuilt executable binaries for native builds.
 
-Build-history reconciliation uses the existing BashkittenBuild README, current
+Build-history reconciliation uses the existing TaskarianBuild README, current
 verification/acceptance records and the build-environment thread. The README
 contains older candidate identities; the 24 October records include newer
 artifact-build and rollback evidence. The 11 October Cuttlefish audio-buffer
@@ -1353,7 +1353,7 @@ The real native Termux Files component ran under the Android app UID and SELinux
 domain. Listing, private-path rejection, PDF/video thumbnails, native SQLite and
 the add-on health route passed; owned child processes exited. The single-frame
 video seek edge case remains recorded. Evidence is in
-`BashkittenBuild/verification/files-termux-20261028/native-termux-evidence.json`.
+`TaskarianBuild/verification/files-termux-20261028/native-termux-evidence.json`.
 Native Termux Office engine/server compilation is still in progress; Files
 success does not establish Office support on that platform.
 
@@ -1362,7 +1362,7 @@ sharing one Quantum process, native Pi editing/save/PDF export, project-scoped
 References, managed citations, snapshot history/restore and stale-session
 rejection. Backend shutdown removed its owned processes; reopening with
 autostart disabled left heavy services stopped. Evidence is in
-`BashkittenBuild/verification/apps-native-gateway-20261028/`. These are native
+`TaskarianBuild/verification/apps-native-gateway-20261028/`. These are native
 module/API diagnostics, not installed desktop/phone UI acceptance or real Tor
 transport coverage. Mapped-origin browser forms and sockets are being checked
 separately against the exact forwarded HTTPS origin.
@@ -1387,7 +1387,7 @@ coverage must still be recorded separately.
 Linux, Termux and Android iteration packages have now passed build and package
 checks at frozen browser revision `4be2563e5e`, version `153.5.2`. Exact paths,
 hashes and the explicit `integrationIteration` designation are recorded in
-`BashkittenBuild/verification/browser-integration-4be2563e5e.json`. These packages
+`TaskarianBuild/verification/browser-integration-4be2563e5e.json`. These packages
 include the independently installed module sources and capture boundary; native
 Files/Office payloads were explicitly unavailable in that early iteration.
 They are not complete release packages. Current module updates must retain their
@@ -1397,7 +1397,7 @@ browser revision covers later changes.
 Three independently sealed Files archives (Linux amd64 and Termux aarch64/x86_64)
 passed the normal collector with source `12923eaccb`, `development: false` and
 599 inventoried files each. Receipts are in
-`BashkittenBuild/components/files/artifacts/sealed-receipts-20261028.json`.
+`TaskarianBuild/components/files/artifacts/sealed-receipts-20261028.json`.
 The Linux Office development artifact includes the eight shared native patches
 and full source/license inventory. The Termux port checkpoint is committed in
 `09c02b18fa`; native Python/libffi, multiprocessing and shared-memory dependency
@@ -1430,7 +1430,7 @@ from canonical license text. The three pinned Go dependencies without establishe
 license coverage remain unresolved; licensed native replacements are under
 review. No missing grant is inferred, and existing sealed artifacts are not
 edited or relabelled. Evidence is in `verification/go-module-legal-20261028/`
-and `verification/module-iteration-fa2-legal-check.json` under BashkittenBuild.
+and `verification/module-iteration-fa2-legal-check.json` under TaskarianBuild.
 
 The earlier citation Undo result used the native `XUndoManager` API, not the
 collaborative toolbar command. A subsequent `.uno:Undo` diagnostic found that
@@ -1468,7 +1468,7 @@ locators and manual source ordering. Native keyboard edits opened the regenerati
 choice; keeping custom text, regenerating the APA citation and confirming with
 Return passed. Evidence and screenshots are in
 `verification/references-ui-20261028/`. This is independent web UI evidence,
-not installed BashKitten TLS, capture or phone acceptance.
+not installed Taskarian TLS, capture or phone acceptance.
 
 The export checkpoint `ee7cd40449` also fixes concurrent job reservation, saves
 the versioned retry request before dispatch and preserves completed receipts on

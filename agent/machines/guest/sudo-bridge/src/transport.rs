@@ -9,7 +9,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicI32, Ordering};
 
-const SOCKET_PATH: &str = "/run/bashkitten/sudo.sock";
+const SOCKET_PATH: &str = "/run/taskarian/sudo.sock";
 const MAGIC: &[u8; 8] = b"BZSDO001";
 const INTERACTIVE_UID: u32 = 1000;
 const INTERACTIVE_GID: u32 = 1000;
@@ -566,7 +566,7 @@ fn run_server_request(mut connection: UnixStream, request: Request) -> io::Resul
     }
     if child == 0 {
         let result = child_exec(&request, master.as_ref(), slave.as_ref(), &mut connection);
-        let message = format!("bashkitten sudo handoff failed: {result}\n");
+        let message = format!("taskarian sudo handoff failed: {result}\n");
         let output = if request.tty_mask != 0 {
             slave.as_ref().map(AsRawFd::as_raw_fd).unwrap_or(2)
         } else {

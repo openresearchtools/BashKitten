@@ -36,9 +36,9 @@ def main():
     shutil.copytree(ROOT/'guest/sudo-bridge',source)
     env={**os.environ,'CARGO_TARGET_DIR':str(args.work/'target')}
     run(['cargo','build','--locked','--offline','--release'],cwd=source,env=env)
-    bindir=stage/'usr/lib/bashkitten/machines/bin';bindir.mkdir(parents=True)
-    binary=args.work/'target/release/bashkitten-sudo'
-    for name in ['bashkitten-sudo','bashkitten-sudo-exec','sudo-policy']:
+    bindir=stage/'usr/lib/taskarian/machines/bin';bindir.mkdir(parents=True)
+    binary=args.work/'target/release/taskarian-sudo'
+    for name in ['taskarian-sudo','taskarian-sudo-exec','sudo-policy']:
         shutil.copy2(binary,bindir/name)
     # Reuse the engine source verifier; only the unmodified native helper is
     # needed in the guest, not another libfuse or a privileged mount service.
@@ -56,16 +56,16 @@ def main():
     shutil.copy2(fuse_source/'build/util/fusermount3',bindir/'fusermount3')
     (bindir/'fusermount3').chmod(0o4755)
     commands=stage/'usr/bin';commands.mkdir(parents=True)
-    (commands/'fusermount3').symlink_to('/usr/lib/bashkitten/machines/bin/fusermount3')
+    (commands/'fusermount3').symlink_to('/usr/lib/taskarian/machines/bin/fusermount3')
     units=stage/'usr/lib/systemd/system';units.mkdir(parents=True)
     for file in (ROOT/'guest/assets').iterdir():
         destination=(units if file.suffix in ['.service','.socket'] else bindir)/file.name
         shutil.copy2(file,destination)
         destination.chmod(0o644 if file.suffix in ['.service','.socket','.mjs'] else 0o755)
     aliases=stage/'usr/local/bin';aliases.mkdir(parents=True)
-    for name in ['sudo','sudoedit']:(aliases/name).symlink_to('/usr/lib/bashkitten/machines/bin/bashkitten-sudo')
+    for name in ['sudo','sudoedit']:(aliases/name).symlink_to('/usr/lib/taskarian/machines/bin/taskarian-sudo')
     # Debian slim drops most /usr/share/doc files during installation.
-    docs=stage/'usr/share/bashkitten-machines-guest';docs.mkdir(parents=True)
+    docs=stage/'usr/share/taskarian-machines-guest';docs.mkdir(parents=True)
     shutil.copy2(ROOT/'upstream/buzzard-runtime/LICENSE',docs/'COPYING')
     shutil.copy2(ROOT/'NOTICE',docs/'copyright')
     machine_build.rust_toolchain_notices(docs/'rust-toolchain')
@@ -73,23 +73,23 @@ def main():
     for license in libc.glob('LICENSE*'):shutil.copy2(license,docs/('libc-'+license.name))
     for license in fuse_record['license_paths']:
         shutil.copy2(fuse_vendor/license,docs/('libfuse-'+Path(license).name))
-    (docs/'source.json').write_text(json.dumps({'revision':args.revision,'source':'https://github.com/openresearchtools/BashKitten','donor':json.loads((ROOT/'upstream/buzzard-runtime/provenance.json').read_text()),'libc':{'version':'0.2.191','checksum':'65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a'},'fusermount3':fuse_record},indent=2)+'\n')
-    copyright_dir=stage/'usr/share/doc/bashkitten-machines-guest';copyright_dir.mkdir(parents=True)
-    (copyright_dir/'copyright').symlink_to('../../bashkitten-machines-guest/copyright')
+    (docs/'source.json').write_text(json.dumps({'revision':args.revision,'source':'https://github.com/openresearchtools/Taskarian','donor':json.loads((ROOT/'upstream/buzzard-runtime/provenance.json').read_text()),'libc':{'version':'0.2.191','checksum':'65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a'},'fusermount3':fuse_record},indent=2)+'\n')
+    copyright_dir=stage/'usr/share/doc/taskarian-machines-guest';copyright_dir.mkdir(parents=True)
+    (copyright_dir/'copyright').symlink_to('../../taskarian-machines-guest/copyright')
     debian=stage/'DEBIAN';debian.mkdir()
     for script in (ROOT/'guest/debian').iterdir():
         shutil.copy2(script,debian/script.name)
         (debian/script.name).chmod(0o755)
-    (debian/'control').write_text(f'''Package: bashkitten-machines-guest
+    (debian/'control').write_text(f'''Package: taskarian-machines-guest
 Version: {args.version}
 Architecture: {args.architecture}
 Maintainer: openresearchtools <openresearchtools@gmail.com>
 Depends: libc6, python3, systemd, util-linux, sudo, dbus-user-session, xwayland, xauth, x11-utils, xfce4-session, pipewire, pipewire-pulse, wireplumber, gstreamer1.0-tools, gstreamer1.0-pipewire, gstreamer1.0-pulseaudio, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, fuse3
-Description: BashKitten private container guest session and native sudo handoff
+Description: Taskarian private container guest session and native sudo handoff
  Rootless Podman guest services, independent desktop and private Agent endpoint.
 ''')
     args.output.mkdir(parents=True,exist_ok=True)
-    target=args.output/f'bashkitten-machines-guest_{args.version}_{args.architecture}.deb'
+    target=args.output/f'taskarian-machines-guest_{args.version}_{args.architecture}.deb'
     run(['dpkg-deb','--root-owner-group','--build',stage,target])
     (target.with_suffix('.deb.json')).write_text(json.dumps({'file':target.name,'sha256':hashlib.sha256(target.read_bytes()).hexdigest(),'revision':args.revision,'architecture':args.architecture},indent=2)+'\n')
     print(target)

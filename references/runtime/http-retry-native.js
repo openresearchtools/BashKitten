@@ -23,7 +23,7 @@
     ***** END LICENSE BLOCK *****
 */
 
-// BashKitten 2026-10-28: native retry methods and delay generator from Zotero 10.0.6.
+// Taskarian 2026-10-28: native retry methods and delay generator from Zotero 10.0.6.
 // Node transport already rejects certificate/network errors; only native UI checks are omitted.
 module.exports = function(base, context) {
 const Zotero={...base, Promise:class extends Promise {}, Utilities:{...base.Utilities,Internal:{...base.Utilities.Internal}}};

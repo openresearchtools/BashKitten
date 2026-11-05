@@ -10,7 +10,7 @@ def digest(path):
 
 def run(argv,**kwargs):subprocess.run(list(map(str,argv)),check=True,**kwargs)
 
-def meson():return shlex.split(os.environ.get('BASHKITTEN_MESON','meson'))
+def meson():return shlex.split(os.environ.get('TASKARIAN_MESON','meson'))
 
 def write(path,text,mode=0o644):
     path.parent.mkdir(parents=True,exist_ok=True);path.write_text(text);path.chmod(mode)
@@ -60,7 +60,7 @@ def build_dbusmenu(args,prefix,stage):
         for patch in sorted((ROOT/'patches/libdbusmenu').glob('*.patch')):
             run(['patch','-p1','--input',patch.resolve()],cwd=source)
     build.mkdir(parents=True,exist_ok=True)
-    private=prefix+'/lib/bashkitten-os/panel'
+    private=prefix+'/lib/taskarian-os/panel'
     env=os.environ.copy()
     env['LDFLAGS']=env.get('LDFLAGS','')+' -Wl,-rpath,'+private+'/lib -Wl,-z,max-page-size=16384 -lm'
     if not (build/'Makefile').exists():
@@ -81,7 +81,7 @@ def build_windowing(args,prefix,stage):
     work=args.build_dir/'windowing';work.mkdir(parents=True,exist_ok=True)
     invalidate(work,cache_key(args,prefix).hexdigest())
     build=work/'build';source=ROOT/'upstream/libxfce4windowing'
-    private=prefix+'/lib/bashkitten-os/panel'
+    private=prefix+'/lib/taskarian-os/panel'
     if not (build/'build.ninja').exists():
         argv=meson()+['setup',build,source,'--prefix='+private,'--libdir=lib','--buildtype=release',
               '-Dx11=enabled','-Dwayland=disabled','-Dintrospection=false','-Dvala=disabled','-Dtests=false',
@@ -107,7 +107,7 @@ def build_panel(args,prefix,stage):
         shutil.copytree(ROOT/'upstream/xfce4-panel',source)
         for patch in sorted((ROOT/'patches').glob('*.patch')):run(['patch','-p1','--input',patch.resolve()],cwd=source)
         stamp.write_text(identity)
-    panel_prefix=prefix+'/lib/bashkitten-os/panel'
+    panel_prefix=prefix+'/lib/taskarian-os/panel'
     # Meson already includes this build-source root before dependency -I paths.
     # Stage the matching private headers here: distro libxfce4ui exposes a broad
     # /include/xfce4 path that would otherwise shadow our newer pinned windowing.
@@ -129,7 +129,7 @@ def build_panel(args,prefix,stage):
 
 def theme(stage,prefix):
     for factor,touch in ((factor,touch) for factor in (1,2,3) for touch in (False,True)):
-        family='BashKitten-Touch' if touch else 'BashKitten'
+        family='Taskarian-Touch' if touch else 'Taskarian'
         name=family if factor==1 else f'{family}-{factor}x'
         theme_root=stage/prefix.lstrip('/')/'share/themes'/name/'xfwm4';theme_root.mkdir(parents=True)
         for source in (ROOT/'upstream/xfwm4-theme/themes/default').glob('*.xpm'):
@@ -174,9 +174,9 @@ def theme(stage,prefix):
 
 def linux_shlibs(stage,work):
     directory=work/'shlibs';(directory/'debian').mkdir(parents=True,exist_ok=True)
-    write(directory/'debian/control','Source: bashkitten-os\nSection: x11\nPriority: optional\nMaintainer: BashKitten <maintainers@openresearchtools.org>\n\nPackage: bashkitten-os\nArchitecture: any\nDescription: BashKitten OS\n')
-    private=stage/'usr/lib/bashkitten-os/panel/lib';records=[];elf=[]
-    for path in (stage/'usr/lib/bashkitten-os/panel').rglob('*'):
+    write(directory/'debian/control','Source: taskarian-os\nSection: x11\nPriority: optional\nMaintainer: Taskarian <maintainers@openresearchtools.org>\n\nPackage: taskarian-os\nArchitecture: any\nDescription: Taskarian OS\n')
+    private=stage/'usr/lib/taskarian-os/panel/lib';records=[];elf=[]
+    for path in (stage/'usr/lib/taskarian-os/panel').rglob('*'):
         if not path.is_file() or path.is_symlink():continue
         with path.open('rb') as stream:
             if stream.read(4)!=b'\x7fELF':continue
@@ -185,9 +185,9 @@ def linux_shlibs(stage,work):
         soname=re.search(r'\(SONAME\).*\[([^]]+)\]',dynamic)
         if soname:
             parts=soname.group(1).split('.so.')
-            if len(parts)==2:records.append(parts[0]+' '+parts[1]+' bashkitten-os')
+            if len(parts)==2:records.append(parts[0]+' '+parts[1]+' taskarian-os')
     shlibs=directory/'debian/shlibs.local';write(shlibs,'\n'.join(records)+'\n')
-    result=subprocess.check_output(['dpkg-shlibdeps','-O','-xbashkitten-os','-l'+str(private),
+    result=subprocess.check_output(['dpkg-shlibdeps','-O','-xtaskarian-os','-l'+str(private),
                                     '-L'+str(shlibs),*['-e'+str(path) for path in elf]],cwd=directory,text=True)
     return next(line.partition('=')[2].split(', ') for line in result.splitlines() if line.startswith('shlibs:Depends='))
 
@@ -215,10 +215,10 @@ def main():
     build_dbusmenu(args,prefix,stage)
     build_windowing(args,prefix,stage)
     panel_key=build_panel(args,prefix,stage)
-    base=stage/prefix.lstrip('/');library=base/'lib/bashkitten-os';share=base/'share/bashkitten-os'
-    shutil.copytree(ROOT/'src/bashkitten_os',library/'bashkitten_os',ignore=shutil.ignore_patterns('__pycache__'))
+    base=stage/prefix.lstrip('/');library=base/'lib/taskarian-os';share=base/'share/taskarian-os'
+    shutil.copytree(ROOT/'src/taskarian_os',library/'taskarian_os',ignore=shutil.ignore_patterns('__pycache__'))
     shutil.copytree(ROOT/'data',share)
-    shutil.copyfile(REPO/'browser/bashkitten/browser/branding/assets/bashkitten-logo-glasses-original.png',share/'logo.png')
+    shutil.copyfile(REPO/'browser/taskarian/browser/branding/assets/taskarian-logo-glasses-original.png',share/'logo.png')
     shutil.copytree(ROOT/'licenses',share/'licenses');shutil.copy(ROOT/'NOTICE',share/'NOTICE')
     shutil.copy(ROOT/'upstream/sources.json',share/'sources.json')
     write(share/'build.json',json.dumps({'schemaVersion':1,'sourceCommit':source_commit,
@@ -230,33 +230,33 @@ def main():
                 source=donor/relative;target=share/'licenses/upstream'/record['name']/relative
                 target.parent.mkdir(parents=True,exist_ok=True);shutil.copy(source,target)
     python=prefix+'/bin/python' if termux else '/usr/bin/python3'
-    for command,module in [('bashkitten-os','main'),('bashkitten-desktop-context','desktop_context'),('bashkitten-atspi','atspi')]+([] if termux else [('bashkitten-app','applications')]):
-        write(base/'bin'/command,f'#!{python}\nimport sys\nsys.path.insert(0,{str(Path(prefix)/"lib/bashkitten-os")!r})\nfrom bashkitten_os.{module} import main\nsys.exit(main())\n',0o755)
-    write(base/'bin/xfce4-panel',f'#!{python}\nimport os,sys\nos.execv({(prefix+"/lib/bashkitten-os/panel/bin/xfce4-panel")!r},sys.argv)\n',0o755)
-    for name in ['org.bashkitten.OS.desktop','org.bashkitten.Applications.desktop']:
+    for command,module in [('taskarian-os','main'),('taskarian-desktop-context','desktop_context'),('taskarian-atspi','atspi')]+([] if termux else [('taskarian-app','applications')]):
+        write(base/'bin'/command,f'#!{python}\nimport sys\nsys.path.insert(0,{str(Path(prefix)/"lib/taskarian-os")!r})\nfrom taskarian_os.{module} import main\nsys.exit(main())\n',0o755)
+    write(base/'bin/xfce4-panel',f'#!{python}\nimport os,sys\nos.execv({(prefix+"/lib/taskarian-os/panel/bin/xfce4-panel")!r},sys.argv)\n',0o755)
+    for name in ['org.taskarian.OS.desktop','org.taskarian.Applications.desktop']:
         write(base/'share/applications'/name,(ROOT/'data'/name).read_text())
-    write((base/'etc' if termux else stage/'etc')/'xdg/autostart/bashkitten-os-session.desktop',(ROOT/'data/bashkitten-os-session.desktop').read_text())
+    write((base/'etc' if termux else stage/'etc')/'xdg/autostart/taskarian-os-session.desktop',(ROOT/'data/taskarian-os-session.desktop').read_text())
     schema=base/'share/glib-2.0/schemas';schema.mkdir(parents=True,exist_ok=True)
-    shutil.copy(ROOT/'data/org.bashkitten.OS.gschema.xml',schema)
+    shutil.copy(ROOT/'data/org.taskarian.OS.gschema.xml',schema)
     run(['glib-compile-schemas','--strict',schema])
     (schema/'gschemas.compiled').unlink()
-    write(base/'share/dbus-1/services/org.freedesktop.impl.portal.desktop.bashkitten.service',(ROOT/'data/org.freedesktop.impl.portal.desktop.bashkitten.service').read_text().replace('@PREFIX@',prefix))
-    write(base/'share/xdg-desktop-portal/portals/bashkitten.portal',(ROOT/'data/bashkitten.portal').read_text())
+    write(base/'share/dbus-1/services/org.freedesktop.impl.portal.desktop.taskarian.service',(ROOT/'data/org.freedesktop.impl.portal.desktop.taskarian.service').read_text().replace('@PREFIX@',prefix))
+    write(base/'share/xdg-desktop-portal/portals/taskarian.portal',(ROOT/'data/taskarian.portal').read_text())
     # xfce4-session owns the public XFCE portal default on both target systems.
     # Provision this private template into an unset owned profile instead.
     write(share/'xfce-portals.conf',(ROOT/'data/xfce-portals.conf').read_text().replace('default=gtk\n','') if termux else (ROOT/'data/xfce-portals.conf').read_text())
     # Install correctly sized existing branding assets. The original wallpaper
     # logo is 1254px; labelling it as 256px makes GTK launcher tooltips oversized.
     for size in (48,64,128,256):
-        icon=base/f'share/icons/hicolor/{size}x{size}/apps/bashkitten-os.png'
+        icon=base/f'share/icons/hicolor/{size}x{size}/apps/taskarian-os.png'
         icon.parent.mkdir(parents=True,exist_ok=True)
-        shutil.copy(REPO/f'browser/bashkitten/browser/branding/default{size}.png',icon)
-    shutil.copytree(ROOT/'upstream/gnozzard/data/icons/Gnozzard',base/'share/icons/BashKitten')
-    index=base/'share/icons/BashKitten/index.theme';index.write_text(index.read_text().replace('Gnozzard','BashKitten'))
+        shutil.copy(REPO/f'browser/taskarian/browser/branding/default{size}.png',icon)
+    shutil.copytree(ROOT/'upstream/gnozzard/data/icons/Gnozzard',base/'share/icons/Taskarian')
+    index=base/'share/icons/Taskarian/index.theme';index.write_text(index.read_text().replace('Gnozzard','Taskarian'))
     theme(stage,prefix)
     shutil.copytree(ROOT/'skills',share/'skills')
     if not termux:
-        write(base/'share/applications/org.bashkitten.AppImage.desktop','[Desktop Entry]\nType=Application\nName=BashKitten AppImage\nNoDisplay=true\nExec=bashkitten-app launch %f\nMimeType=application/vnd.appimage;application/x-iso9660-appimage;\nIcon=application-x-executable\n')
+        write(base/'share/applications/org.taskarian.AppImage.desktop','[Desktop Entry]\nType=Application\nName=Taskarian AppImage\nNoDisplay=true\nExec=taskarian-app launch %f\nMimeType=application/vnd.appimage;application/x-iso9660-appimage;\nIcon=application-x-executable\n')
     dependencies=(['python','pygobject','gtk3','libwnck','xfconf','xfwm4','xfce4-session','xfdesktop','thunar','xfce4-terminal','xdotool','scrot','at-spi2-core (>= 2.62.0)','xorg-xrandr','xorg-xrdb','xorg-xprop','xdg-desktop-portal','libdisplay-info','libxfce4ui','libxfce4util','garcon','exo'] if termux else ['python3','python3-gi','gir1.2-gtk-3.0','gir1.2-wnck-3.0','gir1.2-atspi-2.0','libgtk-3-0t64','libwnck-3-0','libxfconf-0-3','xfconf','xfwm4','xfce4-session','xfdesktop4','thunar','xfce4-terminal','xdotool','scrot','at-spi2-core (>= 2.62.0)','x11-xserver-utils','x11-utils','xdg-desktop-portal','xdg-desktop-portal-gtk','libdbusmenu-gtk3-4','libxfce4ui-2-0','libxfce4util7','libgarcon-1-0','libgarcon-gtk3-1-0','libexo-2-0','zenity','squashfs-tools','desktop-file-utils','xdg-utils','libfuse2t64','sudo'])
     # The inherited icon themes do not require the SVG loader used by our icons.
     dependencies.append('librsvg' if termux else 'librsvg2-common')
@@ -264,17 +264,17 @@ def main():
         # Required by postinst even when the guest installs without Recommends.
         dependencies += ['libglib2.0-bin', 'libatk-bridge2.0-0t64 (>= 2.62.0)'] + linux_shlibs(stage,args.build_dir)
     dependencies=list(dict.fromkeys(dependencies))
-    control=f'''Package: bashkitten-os
+    control=f'''Package: taskarian-os
 Version: {args.version}
 Architecture: {args.architecture}
-Maintainer: BashKitten <maintainers@openresearchtools.org>
+Maintainer: Taskarian <maintainers@openresearchtools.org>
 Section: x11
 Priority: optional
 Depends: {', '.join(dependencies)}
 Provides: xfce4-panel (= 4.20.8)
 Conflicts: xfce4-panel
 Replaces: xfce4-panel
-Description: BashKitten OS desktop customization
+Description: Taskarian OS desktop customization
  Shared native XFCE launcher, layout, scaling and application integration.
 '''
     write(stage/'DEBIAN/control',control)
@@ -286,7 +286,7 @@ Description: BashKitten OS desktop customization
     if args.stage_only:
         print(stage);return
     write_md5sums(stage)
-    artifact=args.output/f'BashKittenOS_{args.version}_{args.architecture}.deb'
+    artifact=args.output/f'TaskarianOS_{args.version}_{args.architecture}.deb'
     run(['dpkg-deb','--root-owner-group','--build',stage,artifact])
     write(Path(str(artifact)+'.sha256'),digest(artifact)+'  '+artifact.name+'\n')
     provenance={'target':args.target,'architecture':args.architecture,'version':args.version,'panelKey':panel_key,'sources':[{k:v for k,v in r.items() if k!='files'} for r in records],

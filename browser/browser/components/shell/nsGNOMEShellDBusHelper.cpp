@@ -13,9 +13,9 @@
 #include "nsImportModule.h"
 #include "nsIOpenTabsProvider.h"
 
-#ifdef MOZ_BASHKITTEN
-#  define DBUS_BUS_NAME_TEMPLATE "com.bashkitten.SearchProvider"
-#  define DBUS_OBJECT_PATH_TEMPLATE "/com/bashkitten/SearchProvider"
+#ifdef MOZ_TASKARIAN
+#  define DBUS_BUS_NAME_TEMPLATE "com.taskarian.SearchProvider"
+#  define DBUS_OBJECT_PATH_TEMPLATE "/com/taskarian/SearchProvider"
 #else
 #  define DBUS_BUS_NAME_TEMPLATE "org.mozilla.%s.SearchProvider"
 #  define DBUS_OBJECT_PATH_TEMPLATE "/org/mozilla/%s/SearchProvider"
@@ -23,7 +23,7 @@
 
 const char* GetDBusBusName() {
   static const char* name = []() {
-#ifdef MOZ_BASHKITTEN
+#ifdef MOZ_TASKARIAN
     return ToNewCString(nsLiteralCString(DBUS_BUS_NAME_TEMPLATE));
 #else
     nsAutoCString appName;
@@ -37,7 +37,7 @@ const char* GetDBusBusName() {
 
 const char* GetDBusObjectPath() {
   static const char* path = []() {
-#ifdef MOZ_BASHKITTEN
+#ifdef MOZ_TASKARIAN
     return ToNewCString(nsLiteralCString(DBUS_OBJECT_PATH_TEMPLATE));
 #else
     nsAutoCString appName;

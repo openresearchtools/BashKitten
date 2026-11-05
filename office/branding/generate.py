@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the native Office branding inputs from existing BashKitten art.
+"""Regenerate the native Office branding inputs from existing Taskarian art.
 
 This is a maintainer tool, never a build-time download or runtime dependency.
 It copies upstream legal documents byte-for-byte and embeds the existing PNG
@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw, ImageFont
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 UPSTREAM = ROOT / 'office/upstream/online/source'
-ART = ROOT / 'browser/bashkitten/browser/branding/content/about-logo@2x.png'
+ART = ROOT / 'browser/taskarian/browser/branding/content/about-logo@2x.png'
 FONT = Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf')
 FONT_BOLD = FONT.with_name('DejaVuSans-Bold.ttf')
 ENGINE = HERE / 'engine'
@@ -36,7 +36,7 @@ def write(path, data):
 
 def svg(width, height, content):
     return f'''<!-- SPDX-License-Identifier: AGPL-3.0-only -->
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="Office, part of BashKitten">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="Office, part of Taskarian">
 {content}
 </svg>
 '''
@@ -49,7 +49,7 @@ def image(x, y, size, encoded):
 def wordmark(ink, muted, encoded):
     return svg(300, 88, image(0, 0, 88, encoded) + f'''
 <text x="100" y="48" fill="{ink}" font-family="system-ui, sans-serif" font-size="44" font-weight="700">Office</text>
-<text x="102" y="74" fill="{muted}" font-family="system-ui, sans-serif" font-size="18">BashKitten</text>''')
+<text x="102" y="74" fill="{muted}" font-family="system-ui, sans-serif" font-size="18">Taskarian</text>''')
 
 
 def main():
@@ -67,7 +67,7 @@ def main():
         'logo-sc_inverted.svg': icon,
         'about.svg': svg(320, 240, image(96, 4, 128, encoded) + '''
 <text x="160" y="185" text-anchor="middle" fill="#10243c" font-family="system-ui, sans-serif" font-size="40" font-weight="700">Office</text>
-<text x="160" y="218" text-anchor="middle" fill="#5f5f65" font-family="system-ui, sans-serif" font-size="20">BashKitten</text>'''),
+<text x="160" y="218" text-anchor="middle" fill="#5f5f65" font-family="system-ui, sans-serif" font-size="20">Taskarian</text>'''),
     }
     for name, content in assets.items():
         write(ENGINE / name, content)
@@ -78,7 +78,7 @@ def main():
         canvas.alpha_composite(kitten, (24 * scale, 18 * scale))
         draw = ImageDraw.Draw(canvas)
         draw.text((212 * scale, 35 * scale), 'Office', fill='#10243c', font=ImageFont.truetype(str(FONT_BOLD), 60 * scale))
-        draw.text((216 * scale, 112 * scale), 'BashKitten', fill='#5f5f65', font=ImageFont.truetype(str(FONT), 25 * scale))
+        draw.text((216 * scale, 112 * scale), 'Taskarian', fill='#5f5f65', font=ImageFont.truetype(str(FONT), 25 * scale))
         output = io.BytesIO()
         canvas.convert('RGB').save(output, format='PNG', optimize=True)
         write(ENGINE / name, output.getvalue())
@@ -90,14 +90,14 @@ def main():
     write(ONLINE / 'images/collabora-office-white.svg', dark)
     # Office has a light UI regardless of the surrounding browser/OS theme.
     # Retain the existing wordmark while fixing its ink to its own light color.
-    wordmark_source = ROOT / 'browser/bashkitten/browser/branding/content/bashkitten-wordmark.svg'
+    wordmark_source = ROOT / 'browser/taskarian/browser/branding/content/taskarian-wordmark.svg'
     wordmark_text = wordmark_source.read_text(encoding='utf-8').replace(
         '</style>', '.wordmark { fill: #10243c !important; }\n  </style>')
-    write(ONLINE / 'images/bashkitten-wordmark.svg', wordmark_text)
+    write(ONLINE / 'images/taskarian-wordmark.svg', wordmark_text)
     legal = {
         'branding-attribution.txt': HERE / 'ATTRIBUTION.txt',
-        'branding-bashkitten-LICENSE.txt': ROOT / 'LICENSE',
-        'branding-artwork-LICENSE.txt': ROOT / 'browser/bashkitten/browser/branding/LICENSE',
+        'branding-taskarian-LICENSE.txt': ROOT / 'LICENSE',
+        'branding-artwork-LICENSE.txt': ROOT / 'browser/taskarian/browser/branding/LICENSE',
         'branding-online-COPYING.txt': UPSTREAM / 'COPYING',
         'branding-engine-COPYING.txt': UPSTREAM / 'engine/COPYING',
         'branding-engine-COPYING.MPL.txt': UPSTREAM / 'engine/COPYING.MPL',

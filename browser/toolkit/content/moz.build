@@ -34,7 +34,7 @@ if CONFIG["OS_TARGET"] == "Android":
 if CONFIG["MOZ_INSTALL_TRACKING"]:
     DEFINES["MOZ_INSTALL_TRACKING"] = 1
 
-if CONFIG["MOZ_APP_DISPLAYNAME"] == "BashKitten":
+if CONFIG["MOZ_APP_DISPLAYNAME"] == "Taskarian":
     # GeckoView uses this page directly; desktop also supplies a browser override.
     for name, filename in (
         ("APP_LICENSE_BLOCK", "app-license.html"),

@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+mk_add_options MOZ_OBJDIR=${TASKARIAN_ANDROID_OBJDIR:-@TOPSRCDIR@/../../obj-taskarian-android}
+mk_add_options MOZ_MAKE_FLAGS="-j4"
+ac_add_options --enable-application=mobile/android
+case "${TASKARIAN_ANDROID_ABI:-arm64-v8a}" in
+  arm64-v8a) ac_add_options --target=aarch64-linux-android ;;
+  x86_64) ac_add_options --target=x86_64-linux-android ;;
+  *) echo 'Unsupported Taskarian Android ABI' >&2; exit 1 ;;
+esac
+ac_add_options --enable-android-subproject=fenix
+ac_add_options --disable-debug
+ac_add_options --enable-optimize
+ac_add_options --disable-debug-symbols
+ac_add_options --disable-tests
+ac_add_options --with-branding=mobile/android/branding/taskarian
+if [ -n "$SCCACHE_PATH" ]; then
+  ac_add_options --with-ccache="$SCCACHE_PATH"
+else
+  ac_add_options --with-ccache=sccache
+fi

@@ -233,7 +233,7 @@ export class ListUpdatesState {
                 : String(err || "unknown error");
             nextEntry.lastError = message.slice(0, 500);
             console.warn(
-              `[BashKittenBlocker] Failed to update list: ${descriptor.url}`,
+              `[TaskarianBlocker] Failed to update list: ${descriptor.url}`,
               err
             );
           }

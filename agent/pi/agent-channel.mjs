@@ -4,12 +4,12 @@ import http from 'node:http';
 // This socket and credential are inherited only by the local backend's workers.
 // Caddy does not publish /api/instance/* on either web listener.
 export function agentRequest(value, signal) {
-  const socketPath = process.env.BASHKITTEN_BACKEND_SOCKET;
-  if (!socketPath) throw Error('Agent coordination requires a BashKitten chat');
+  const socketPath = process.env.TASKARIAN_BACKEND_SOCKET;
+  if (!socketPath) throw Error('Agent coordination requires a Taskarian chat');
   return new Promise((resolve, reject) => {
     const request = http.request({ socketPath, path: '/api/instance/subagents', method: 'POST', signal,
-      headers: { host: new URL(process.env.BASHKITTEN_ACCESS_ORIGIN).host,
-        authorization: 'Bearer ' + process.env.BASHKITTEN_INSTANCE_TOKEN, 'content-type': 'application/json' } }, response => {
+      headers: { host: new URL(process.env.TASKARIAN_ACCESS_ORIGIN).host,
+        authorization: 'Bearer ' + process.env.TASKARIAN_INSTANCE_TOKEN, 'content-type': 'application/json' } }, response => {
       let text = '';
       response.setEncoding('utf8'); response.on('data', part => { text += part; });
       response.on('error', reject);

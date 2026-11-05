@@ -35,7 +35,7 @@ export function selectedRuntime() {
       // independent npm/custom choices remain selected across a rollback.
       const followsPackage = selection && selection.selection !== 'explicit' &&
         selection.root === selection.packagedRoot;
-      const upgrade = !selection || (managed?.owner === 'bashkitten' &&
+      const upgrade = !selection || (managed?.owner === 'taskarian' &&
         (process.platform === 'android' ? followsPackage : semver.gte(bundled.version, selection.version)));
       const previous = selection && { root: selection.root, version: selection.version };
       selection = upgrade ? { ...bundled, selection: 'packaged', ...(previous && previous.root !== bundled.root ? { previous } : {}) } : selection;

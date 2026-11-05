@@ -1,5 +1,5 @@
-BashKitten OS — desktop customization within BashKitten.
-New BashKitten code: AGPL-3.0-only. See licenses/AGPL-3.0.txt.
+Taskarian OS — desktop customization within Taskarian.
+New Taskarian code: AGPL-3.0-only. See licenses/AGPL-3.0.txt.
 
 Retained and adapted source:
 - Gnozzard, https://github.com/openresearchtools/gnozzard,
@@ -21,8 +21,8 @@ Retained and adapted source:
   stock tasklist and systray implementations remain.
 - Xfwm4 4.20.0, 7cadce33226be955fa2677b97a1969701d246b80:
   default decoration theme, GPL-2.0-or-later. Recolored to Gnozzard palette.
-- BashKitten kitten-with-glasses logo, AGPL-3.0-only; original retained in
-  browser/bashkitten/browser/branding/assets/bashkitten-logo-glasses-original.png.
+- Taskarian kitten-with-glasses logo, AGPL-3.0-only; original retained in
+  browser/taskarian/browser/branding/assets/taskarian-logo-glasses-original.png.
 
 Full pristine source, exact selected-file hashes and upstream paths are in
 os/upstream/sources.json and os/upstream/. All modifications are in os/src,
@@ -36,7 +36,7 @@ added. Source review/build checks are not a claim of completed traffic acceptanc
 Termux tray menu dependency: libdbusmenu 16.04.0 official Launchpad release,
 source SHA256 b9cc4a2acd74509435892823607d966d424bd9ad5d0b00938f27240a1bfa878a,
 LGPL-2.1-or-later / LGPL-3.0-or-later component notices retained. GTK3 build is
-private to BashKitten OS; Termux's GLib-only package is not substituted for it.
+private to Taskarian OS; Termux's GLib-only package is not substituted for it.
 The named configure patch defines its Valgrind conditional when donor tests are
 disabled; no donor tests or introspection/dumper tools enter the runtime package.
 

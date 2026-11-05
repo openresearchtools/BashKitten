@@ -1,4 +1,4 @@
-From: BashKitten contributors
+From: Taskarian contributors
 Subject: [PATCH] Bound native configuration cache directory keys
 
 The released cache encodes the complete settings identity and resource URL into

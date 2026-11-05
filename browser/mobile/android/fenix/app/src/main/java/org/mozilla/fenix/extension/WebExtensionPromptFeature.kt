@@ -140,7 +140,7 @@ class WebExtensionPromptFeature(
     @VisibleForTesting
     internal fun handleAfterInstallationRequest(promptRequest: WebExtensionPromptRequest.AfterInstallation) {
         if (promptRequest is WebExtensionPromptRequest.AfterInstallation.Permissions.Required &&
-            promptRequest.extension.id != "references@bashkitten.org"
+            promptRequest.extension.id != "references@taskarian.org"
         ) {
             handlePermissions(
                 promptRequest,
@@ -150,7 +150,7 @@ class WebExtensionPromptFeature(
             )
             MaterialAlertDialogBuilder(context)
                 .setTitle("References")
-                .setMessage("Only signed References capture updates can be installed in BashKitten.")
+                .setMessage("Only signed References capture updates can be installed in Taskarian.")
                 .setPositiveButton(android.R.string.ok, null)
                 .show()
             return

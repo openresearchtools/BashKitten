@@ -1,8 +1,8 @@
-From: BashKitten contributors
+From: Taskarian contributors
 Subject: [PATCH] rootless: require the configured private pause helper
 
 Podman v6.1.3 hardcodes its C pause-helper path independently of Makefile
-LIBEXECPODMAN and Go's install prefix. Require the BashKitten build's explicit
+LIBEXECPODMAN and Go's install prefix. Require the Taskarian build's explicit
 catatonit path and fail if it cannot execute; do not use host catatonit or an
 unreported substitute. This modification retains Podman's Apache-2.0 terms.
 
@@ -12,8 +12,8 @@ unreported substitute. This modification retains Podman's Apache-2.0 terms.
  #define ETC_PREEXEC_HOOKS "/etc/containers/pre-exec-hooks"
  #define LIBEXECPODMAN "/usr/libexec/podman"
  
-+#ifndef BASHKITTEN_CATATONIT
-+#error "The private catatonit path must be configured by the BashKitten build"
++#ifndef TASKARIAN_CATATONIT
++#error "The private catatonit path must be configured by the Taskarian build"
 +#endif
 +
  #ifndef FD_NSFS_ROOT
@@ -31,9 +31,9 @@ unreported substitute. This modification retains Podman's Apache-2.0 terms.
 -  prctl (PR_SET_NAME, "podman pause", NULL, NULL, NULL);
 -  while (1)
 -    pause ();
-+  /* BashKitten owns this helper; never adopt a host installation.  */
-+  execl (BASHKITTEN_CATATONIT, "catatonit", "-P", NULL);
-+  fprintf (stderr, "cannot execute private catatonit %s: %m\n", BASHKITTEN_CATATONIT);
++  /* Taskarian owns this helper; never adopt a host installation.  */
++  execl (TASKARIAN_CATATONIT, "catatonit", "-P", NULL);
++  fprintf (stderr, "cannot execute private catatonit %s: %m\n", TASKARIAN_CATATONIT);
 +  _exit (EXIT_FAILURE);
  }
  

@@ -490,7 +490,7 @@ class XPCShellTestsTests(unittest.TestCase):
     def testBrowserAppDirKey(self):
         self.assertEqual(
             "firefox-appdir",
-            get_app_dir_key({"appname": "bashkitten", "buildapp": "browser"}),
+            get_app_dir_key({"appname": "taskarian", "buildapp": "browser"}),
         )
 
     def testNonBrowserAppDirKey(self):

@@ -15,7 +15,7 @@ def fingerprint():
     roots = [CONNECTOR, ROOT / 'references/vendor/translators', ROOT / 'references/legal']
     paths = [path for base in roots for path in base.rglob('*') if path.is_file()
              and not {'.build', 'dist', 'node_modules', '__pycache__'}.intersection(path.relative_to(base).parts)]
-    paths += [ROOT / f'browser/bashkitten/browser/branding/default{size}.png' for size in [16, 32, 64, 128]]
+    paths += [ROOT / f'browser/taskarian/browser/branding/default{size}.png' for size in [16, 32, 64, 128]]
     paths.append(ROOT / 'agent/packaging/source_cache.py')
     paths.append(ROOT / 'references/web/theme.css')
     for path in sorted(paths):
@@ -34,7 +34,7 @@ def verify_output():
         if not path.resolve().is_relative_to(runtime.resolve()) or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
             raise ValueError('References capture checksum mismatch: ' + name)
     component = json.loads((CONNECTOR / 'dist/component.json').read_text())
-    if component['extensionId'] != 'references@bashkitten.org' or component['hostId'] != 'references-host@bashkitten.org':
+    if component['extensionId'] != 'references@taskarian.org' or component['hostId'] != 'references-host@taskarian.org':
         raise ValueError('Unexpected References extension identity')
     if hashlib.sha256((CONNECTOR / 'dist/references.xpi').read_bytes()).hexdigest() != component['sha256']:
         raise ValueError('References capture package checksum mismatch')

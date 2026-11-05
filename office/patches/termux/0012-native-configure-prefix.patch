@@ -6,7 +6,7 @@ diff --git a/configure.ac b/configure.ac
  
  AC_CONFIG_SRCDIR([wsd/COOLWSD.cpp])
 +
-+AC_DEFINE([BASHKITTEN_TERMUX_PREFIX], ["@TERMUX_PREFIX@"], [Native Termux package prefix.])
++AC_DEFINE([TASKARIAN_TERMUX_PREFIX], ["@TERMUX_PREFIX@"], [Native Termux package prefix.])
  
  AC_DEFINE_UNQUOTED([COOLWSD_BUILDCONFIG],[["$ac_configure_args"]],[Options passed to configure script])
  
@@ -19,7 +19,7 @@ diff --git a/config.h.in b/config.h.in
  #undef APP_NAME
 +
 +/* Native Termux package prefix. */
-+#undef BASHKITTEN_TERMUX_PREFIX
++#undef TASKARIAN_TERMUX_PREFIX
  
  /* Default value of feature_lock.calc_unlock_highlights */
  #undef CALC_UNLOCK_HIGHLIGHTS

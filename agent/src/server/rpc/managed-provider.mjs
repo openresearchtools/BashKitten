@@ -21,7 +21,7 @@ const runtimeDefinition = provider => provider && { ...provider, models: provide
 /** Caller owns opt-in/readiness. Never change Pi credentials, defaults or sessions. */
 export function syncManagedProvider({ id, name, baseUrl, apiKey, apiKeyFile, models }) {
   const work = pending.then(async () => {
-    if (!/^bashkitten-(?:llama|remote-[a-f0-9]{48}-[a-z0-9_-]{1,64})$/.test(id)) throw Error('Invalid managed provider identity');
+    if (!/^taskarian-(?:llama|remote-[a-f0-9]{48}-[a-z0-9_-]{1,64})$/.test(id)) throw Error('Invalid managed provider identity');
     const url = new URL(baseUrl);
     if (!['http:', 'https:'].includes(url.protocol) || url.hostname !== '127.0.0.1' || !url.port || url.pathname !== '/v1' || url.search || url.hash || url.username || url.password) throw Error('Pi import needs the actual client-local /v1 endpoint');
     if (!Array.isArray(models) || !models.length || models.some(model => typeof model.id !== 'string' || !model.id)) throw Error('No routable models are available');
@@ -39,7 +39,7 @@ export function syncManagedProvider({ id, name, baseUrl, apiKey, apiKeyFile, mod
     value.providers ||= {};
     const ownerFile = path.join(accessDir, 'managed-providers', id + '.json');
     let previous = await readJson(ownerFile, null);
-    if (!previous && id === 'bashkitten-llama') previous = await readJson(path.join(dataDir, 'llama/pi-provider.json'), null);
+    if (!previous && id === 'taskarian-llama') previous = await readJson(path.join(dataDir, 'llama/pi-provider.json'), null);
     const existing = value.providers[id];
     if (existing && !same(existing, previous?.provider) && !same(existing, previous?.pending)) throw Error(`Pi provider ${id} was edited independently; preserve or rename it before importing`);
     // An unloaded router model has not supplied its template yet. Keep only
@@ -85,18 +85,18 @@ export function syncManagedProvider({ id, name, baseUrl, apiKey, apiKeyFile, mod
 
 /** Ownership follows the complete saved definition, never its provider name. */
 export async function managedLocalProvider() {
-  const owner = await readJson(path.join(accessDir, 'managed-providers/bashkitten-llama.json'), null);
+  const owner = await readJson(path.join(accessDir, 'managed-providers/taskarian-llama.json'), null);
   const { pi: { getAgentDir } } = await loadPi();
   const config = await readJson(path.join(getAgentDir(), 'models.json'), {});
-  const provider = config.providers?.['bashkitten-llama'], expected = owner?.pending || owner?.provider;
+  const provider = config.providers?.['taskarian-llama'], expected = owner?.pending || owner?.provider;
   const owned = Boolean(expected && same(provider, expected));
   return { owned, revision: digest(JSON.stringify((owned ? runtimeDefinition(provider) : provider) ?? null)), unknownThinking: owned ? owner.unknownThinking || [] : [] };
 }
 
 /** Private discovery state, never an extra field in Pi's model schema. */
 export async function managedThinkingUnknown(model) {
-  if (!model?.startsWith('bashkitten-llama/')) return false;
-  return (await managedLocalProvider()).unknownThinking.includes(model.slice('bashkitten-llama/'.length));
+  if (!model?.startsWith('taskarian-llama/')) return false;
+  return (await managedLocalProvider()).unknownThinking.includes(model.slice('taskarian-llama/'.length));
 }
 
 /** Called only by native local control for an already authenticated mapping. */
@@ -107,7 +107,7 @@ export async function importRemoteProvider({ enabled, bundle, service, name, bas
   if (!['http:', 'https:'].includes(url.protocol) || url.hostname !== '127.0.0.1' || !url.port || url.pathname !== '/v1' || url.search || url.hash || url.username || url.password) throw Error('Choose this device’s mapped /v1 endpoint');
   if (typeof apiKey !== 'string' || /[\r\n\0]/.test(apiKey)) throw Error('Invalid application API key');
   const models = await discoverManagedModels(baseUrl, apiKey, name);
-  return syncManagedProvider({ id: `bashkitten-remote-${bundle}-${service}`, name, baseUrl, apiKey, models });
+  return syncManagedProvider({ id: `taskarian-remote-${bundle}-${service}`, name, baseUrl, apiKey, models });
 }
 
 /** Read the upstream router catalogue without loading or waking models. */

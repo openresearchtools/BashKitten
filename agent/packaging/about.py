@@ -11,24 +11,24 @@ parser.add_argument('licenses', type=Path)
 parser.add_argument('output', type=Path)
 parser.add_argument('--version', default=None)
 args = parser.parse_args()
-notice = ('This APK contains the BashKitten browser and its bundled browser dependencies. The companion Termux package supplies the BashKitten server, private Node.js/npm, unmodified Pi and its dependencies, DDGS search, Caddy, Authelia, Tor and Valkey under their respective licenses. Termux, Python and declared system libraries are installed separately and retain their own licenses.' if args.shell == 'android' else
-          'This package contains the BashKitten browser and server, private Node.js/npm, unmodified Pi and its dependencies, DDGS search, Caddy, Authelia, Tor and Valkey under their respective licenses. Python, GTK and other declared operating-system libraries are installed separately and retain their own licenses.')
+notice = ('This APK contains the Taskarian browser and its bundled browser dependencies. The companion Termux package supplies the Taskarian server, private Node.js/npm, unmodified Pi and its dependencies, DDGS search, Caddy, Authelia, Tor and Valkey under their respective licenses. Termux, Python and declared system libraries are installed separately and retain their own licenses.' if args.shell == 'android' else
+          'This package contains the Taskarian browser and server, private Node.js/npm, unmodified Pi and its dependencies, DDGS search, Caddy, Authelia, Tor and Valkey under their respective licenses. Python, GTK and other declared operating-system libraries are installed separately and retain their own licenses.')
 if args.shell == 'termux':
-    notice = 'This Termux package contains the BashKitten server, private Node.js/npm, unmodified Pi and its dependencies, DDGS search, Caddy, Authelia, Tor and Valkey under their respective licenses. The Android browser is a separate APK. Termux, Python and declared system libraries are installed separately and retain their own licenses.'
-version_file = ROOT.parent / 'browser/bashkitten/config/version.txt'
+    notice = 'This Termux package contains the Taskarian server, private Node.js/npm, unmodified Pi and its dependencies, DDGS search, Caddy, Authelia, Tor and Valkey under their respective licenses. The Android browser is a separate APK. Termux, Python and declared system libraries are installed separately and retain their own licenses.'
+version_file = ROOT.parent / 'browser/taskarian/config/version.txt'
 version = args.version or (version_file.read_text().strip() if version_file.exists() else json.loads((ROOT / 'package.json').read_text())['version'])
 data = {'version': version, 'notice': notice, 'licenses': json.loads(args.licenses.read_text())}
 args.output.write_text('''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
-<title>Component licenses · BashKitten</title><style>
+<title>Component licenses · Taskarian</title><style>
 :root { color-scheme:light dark; font:message-box; background:Canvas; color:CanvasText; }
 body { max-width:70em; margin:0 auto; padding:1.5rem; line-height:1.5; }
 h1 { font-size:1.5rem; } summary { cursor:pointer; padding:.5rem 0; }
 pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:30rem; overflow:auto; }
 </style></head><body><h1>Component licenses</h1><p id="version"></p><p id="notice"></p><main id="licenses"></main>
 <script>const data = ''' + json.dumps(data, ensure_ascii=True).replace('<', '\\u003c') + ''';
-document.querySelector('#version').textContent = 'BashKitten ' + data.version;
+document.querySelector('#version').textContent = 'Taskarian ' + data.version;
 document.querySelector('#notice').textContent = data.notice;
 function appendText(parent, value) {
   const text = String(value), links = /https?:\\/\\/[^\\s<>"']+/g;

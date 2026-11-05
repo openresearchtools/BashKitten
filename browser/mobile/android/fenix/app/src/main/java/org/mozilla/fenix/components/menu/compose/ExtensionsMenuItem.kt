@@ -249,7 +249,7 @@ internal fun WebExtensionMenuItems(
                 }
                     ?: painterResource(iconsR.drawable.mozac_ic_extension_fill_24),
                 iconTint = when {
-                    extension.icon == null || extension.id == "references@bashkitten.org" ->
+                    extension.icon == null || extension.id == "references@taskarian.org" ->
                         MaterialTheme.colorScheme.onSurface
                     else -> Color.Unspecified
                 },

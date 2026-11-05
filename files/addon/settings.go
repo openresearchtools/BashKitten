@@ -94,7 +94,7 @@ func settingsManifestHandler(w http.ResponseWriter, r *http.Request, req *wopiRe
 		return errorStatus(err)
 	}
 	if extension.Available {
-		manifest["extensions"] = []map[string]string{{"uri": settingURI(r, req, "org.bashkitten.references.zip"), "stamp": extension.Stamp}}
+		manifest["extensions"] = []map[string]string{{"uri": settingURI(r, req, "org.taskarian.references.zip"), "stamp": extension.Stamp}}
 	}
 	jsonResponse(w, 200, manifest)
 	return 0

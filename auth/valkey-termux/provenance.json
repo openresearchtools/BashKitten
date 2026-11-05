@@ -42,6 +42,6 @@
   "license": "BSD-3-Clause",
   "licensePolicy": "https://github.com/termux/termux-packages/blob/8646fe473c9501799fcad6e26138d49b32810561/LICENSE.md",
   "omittedPatches": {
-    "valkey.conf.patch": "The public system daemon configuration is not installed; BashKitten generates its private Unix-socket configuration."
+    "valkey.conf.patch": "The public system daemon configuration is not installed; Taskarian generates its private Unix-socket configuration."
   }
 }

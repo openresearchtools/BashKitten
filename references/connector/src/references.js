@@ -1,7 +1,7 @@
-/* BashKitten adaptations, 2026. AGPL-3.0-or-later. Donor capture remains in its original modules. */
+/* Taskarian adaptations, 2026. AGPL-3.0-or-later. Donor capture remains in its original modules. */
 'use strict';
 globalThis.References = new function () {
-  const HOST = 'references-host@bashkitten.org';
+  const HOST = 'references-host@taskarian.org';
   const destinations = new Map(), sessions = new Map(), choices = new Map(), actionSurfaces = new Map();
   const transport = async (message) => {
     const response = await browser.runtime.sendMessage(HOST, {apiVersion: 1, ...message});

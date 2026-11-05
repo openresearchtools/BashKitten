@@ -32,7 +32,7 @@ COMPONENTS = ('podman', 'crun', 'conmon', 'netavark', 'aardvark-dns',
               'passt', 'libfuse', 'fuse-overlayfs', 'catatonit')
 BINARIES = ('podman', 'rootlessport', 'crun', 'conmon', 'netavark',
             'aardvark-dns', 'pasta', 'passt', 'pesto', 'fusermount3', 'fuse-overlayfs', 'catatonit')
-PREFIX = '/usr/lib/bashkitten/machines'
+PREFIX = '/usr/lib/taskarian/machines'
 
 
 def sha(path):
@@ -264,7 +264,7 @@ def build(args):
             (source / '.cargo/config.toml').write_text('[source.crates-io]\nreplace-with = "vendored-sources"\n'
                                                       '[source.vendored-sources]\ndirectory = "vendor"\n')
         licenses.extend(license_records(record, source, vendor))
-        if (source / '.bashkitten-built').exists():
+        if (source / '.taskarian-built').exists():
             print('Cached', name, record['version'], flush=True)
             continue
         print('Building', name, record['version'], flush=True)
@@ -279,7 +279,7 @@ def build(args):
                 # The pinned C pause implementation does not consume the Go or
                 # Makefile install prefix. Its named patch requires this path.
                 podman_env = {**env, 'CGO_CFLAGS': env.get('CGO_CFLAGS', '-O2 -g') + ' ' +
-                              shlex.quote('-DBASHKITTEN_CATATONIT=' + json.dumps(PREFIX + '/bin/catatonit'))}
+                              shlex.quote('-DTASKARIAN_CATATONIT=' + json.dumps(PREFIX + '/bin/catatonit'))}
                 for binary in ('podman', 'rootlessport'):
                     run(['go', 'build', '-p', jobs, '-ldflags', ldflags, '-tags', tags,
                          '-o', runtime / 'bin' / binary, './cmd/' + binary], source, podman_env, log)
@@ -296,7 +296,7 @@ def build(args):
                 command(['make', '-j' + jobs, 'bin', 'bin/conmon', 'GIT_COMMIT=' + record['commit']])
                 copy_executable(source / 'bin/conmon', runtime / 'bin/conmon')
             elif name in ('netavark', 'aardvark-dns'):
-                rust_env = {**env, 'BASHKITTEN_UPSTREAM_COMMIT': record['commit']}
+                rust_env = {**env, 'TASKARIAN_UPSTREAM_COMMIT': record['commit']}
                 run(['cargo', 'build', '--release', '--frozen', '--offline', '--jobs', jobs, '--bin', name],
                     source, rust_env, log)
                 copy_executable(Path(env['CARGO_TARGET_DIR']) / 'release' / name, runtime / 'bin' / name)
@@ -333,21 +333,21 @@ def build(args):
                 command(['./configure', '--prefix=' + PREFIX])
                 command(['make', '-j' + jobs])
                 copy_executable(source / name, runtime / 'bin' / name)
-        (source / '.bashkitten-built').touch()
+        (source / '.taskarian-built').touch()
     for binary in binaries:
         require(os.access(runtime / 'bin' / binary, os.X_OK), 'Missing runtime executable: ' + binary)
     linked_go = {name: verify_go_closure(runtime / 'bin' / name, records['podman'])
                  for name in ('podman', 'rootlessport')}
     dependency_work = cache / 'dependencies'; (dependency_work / 'debian').mkdir(parents=True, exist_ok=True)
-    (dependency_work / 'debian/control').write_text('Source: bashkitten\nSection: utils\nPriority: optional\n'
-        'Maintainer: Open Research Tools <openresearchtools@gmail.com>\n\nPackage: bashkitten\n'
+    (dependency_work / 'debian/control').write_text('Source: taskarian\nSection: utils\nPriority: optional\n'
+        'Maintainer: Open Research Tools <openresearchtools@gmail.com>\n\nPackage: taskarian\n'
         'Architecture: any\nDescription: private container engine\n')
-    (dependency_work / 'debian/shlibs.local').write_text('libfuse3 4 bashkitten-private-fuse\n')
+    (dependency_work / 'debian/shlibs.local').write_text('libfuse3 4 taskarian-private-fuse\n')
     dependency_text = output(['dpkg-shlibdeps', '-O', '-l' + str(runtime / 'lib'), *('-e' + str(runtime / 'bin' / b) for b in binaries),
                               '-e' + str(runtime / 'lib/libfuse3.so.4')], dependency_work)
     depends = [item for item in dependency_text.removeprefix('shlibs:Depends=').split(', ')
-               if item != 'bashkitten-private-fuse'] + ['uidmap', 'iptables', 'systemd', 'dbus-user-session', 'pipewire-bin', 'gstreamer1.0-tools', 'gstreamer1.0-pipewire', 'gstreamer1.0-pulseaudio', 'gstreamer1.0-plugins-base', 'gstreamer1.0-plugins-good', 'gstreamer1.0-plugins-bad']
-    licenses.append({'name': 'BashKitten machine runtime adaptation notices',
+               if item != 'taskarian-private-fuse'] + ['uidmap', 'iptables', 'systemd', 'dbus-user-session', 'pipewire-bin', 'gstreamer1.0-tools', 'gstreamer1.0-pipewire', 'gstreamer1.0-pulseaudio', 'gstreamer1.0-plugins-base', 'gstreamer1.0-plugins-good', 'gstreamer1.0-plugins-bad']
+    licenses.append({'name': 'Taskarian machine runtime adaptation notices',
                      'license': 'See individual component licenses',
                      'text': (ROOT / 'agent/machines/NOTICE').read_text()})
     (runtime / 'licenses.json').write_text(json.dumps(licenses, indent=2) + '\n')
@@ -355,7 +355,7 @@ def build(args):
     for name in COMPONENTS:
         shutil.copy2(VENDOR / name / 'source.json', provenance / (name + '.json'))
     shutil.copytree(patch_root, provenance / 'patches', dirs_exist_ok=True)
-    shutil.copy2(ROOT / 'agent/machines/NOTICE', provenance / 'BASHKITTEN-NOTICE')
+    shutil.copy2(ROOT / 'agent/machines/NOTICE', provenance / 'TASKARIAN-NOTICE')
     shutil.copy2(ROOT / 'auth/dependencies/go-toolchain/sources.json', provenance / 'go-toolchain.json')
     (provenance / 'linked-go-modules.json').write_text(json.dumps(linked_go, indent=2) + '\n')
     manifest = {'schema': 1, 'platform': 'linux', 'architecture': architecture,

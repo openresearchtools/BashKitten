@@ -137,7 +137,7 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
         shutil.copy2(inventory, source / "vendor/sources/sources.json")
     for name in ("src", "third_party"):
         shutil.copytree(ROOT / name, source / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "README.md", "pyproject.toml", "bashkitten-search"):
+    for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "README.md", "pyproject.toml", "taskarian-search"):
         shutil.copy(ROOT / name, source / name)
     for path in ROOT.glob("requirements-*.txt"):
         shutil.copy(path, source / path.name)

@@ -49,7 +49,7 @@ async function readConfiguration() {
   if (legacy) {
     llama.mode = 'custom'; llama.binary = '/usr/bin/llama-server'; llama.backend = legacy.backend || 'auto'; llama.startup = Boolean(legacy.enabled);
     llama.keyFile = path.join(dataDir, 'llama/api-key');
-    if (path.isAbsolute(legacy.model || '')) llama.argv = ['/usr/bin/llama-server', '--model', legacy.model, '--alias', legacy.alias || 'bashkitten-local', '--host', '127.0.0.1', '--port', '{port}', '--api-key-file', llama.keyFile,
+    if (path.isAbsolute(legacy.model || '')) llama.argv = ['/usr/bin/llama-server', '--model', legacy.model, '--alias', legacy.alias || 'taskarian-local', '--host', '127.0.0.1', '--port', '{port}', '--api-key-file', llama.keyFile,
       '--ctx-size', String(legacy.contextSize ?? 8192), '--gpu-layers', String(legacy.backend === 'cpu' ? 0 : legacy.gpuLayers ?? 'auto'), '--offline', '--jinja', ...(legacy.threads ? ['--threads', String(legacy.threads)] : [])];
   }
   return { version: 1, llama, whisper: defaults('whisper'), tts: defaults('tts') };
@@ -221,7 +221,7 @@ export class LocalAI {
       // Keep previous owned entries routable for Pi chats which still select
       // them. The native router owns their lazy loading and aliases; no shadow
       // provider or silent Pi model retargeting accompanies this selection.
-      const previous = snapshot.owned.llama ? snapshot.ini.content : `# BashKitten guided models. Editing this file switches to Advanced.\n[*]\nctx-size = ${defaultContextSize}\n`;
+      const previous = snapshot.owned.llama ? snapshot.ini.content : `# Taskarian guided models. Editing this file switches to Advanced.\n[*]\nctx-size = ${defaultContextSize}\n`;
       const existing = parseRouterINI(previous).models.find(model => model.name === name);
       const previousExtra = existing?.config.extra || guidedCache;
       const extra = thinkingParameters(previousExtra, thinking,
@@ -477,9 +477,9 @@ export class LocalAI {
       const key = await this.key(info.config);
       const models = await discoverManagedModels(info.url + '/v1', key, 'Local llama.cpp');
       if (JSON.stringify((await this.config()).llama) !== JSON.stringify(config)) return;
-      const result = await syncManagedProvider({ id: 'bashkitten-llama', name: 'Local llama.cpp', baseUrl: info.url + '/v1',
+      const result = await syncManagedProvider({ id: 'taskarian-llama', name: 'Local llama.cpp', baseUrl: info.url + '/v1',
         ...(info.config.keyFile ? { apiKeyFile: info.config.keyFile } : key ? { apiKey: key } : {}), models });
-      this.importState = { state: result?.state === 'pending' ? 'pending' : 'ready', provider: 'bashkitten-llama', endpoint: info.url + '/v1' };
+      this.importState = { state: result?.state === 'pending' ? 'pending' : 'ready', provider: 'taskarian-llama', endpoint: info.url + '/v1' };
     } catch (error) { this.importState = { state: 'pending', error: error.message }; }
   }
   async waitReady(model, signal) {
@@ -647,7 +647,7 @@ export class LocalAI {
     const runtime = await this.binary('llama', config);
     for (const file of [config.model, config.projector, config.voice]) { if (!file) throw Error('Choose a TTS model, its matching projector and reference voice'); await fs.access(file); }
     if (await fs.stat(output).catch(error => { if (error.code !== 'ENOENT') throw error; return null; })) throw Error('The output file already exists; choose a new WAV filename');
-    const temporary = path.join(path.dirname(output), '.bashkitten-tts-' + randomUUID() + '.wav');
+    const temporary = path.join(path.dirname(output), '.taskarian-tts-' + randomUUID() + '.wav');
     const executable = path.join(path.dirname(runtime.binary), 'llama-tts'); await fs.access(executable, fs.constants.X_OK);
     // TTS maps omitted/negative -n to 512 frames; let its EOS finish the export.
     const argv = [executable, '-m', config.model, '-mm', config.projector, '-p', text, '-n', '2147483647', '--tts-speaker-file', config.voice, '--output', temporary,

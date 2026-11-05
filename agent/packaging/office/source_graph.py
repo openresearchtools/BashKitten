@@ -50,7 +50,7 @@ def dependency_refresh():
 def dependency_source():
     """Apply only the recorded dependency patches to a small external copy."""
     dependency_refresh()
-    with tempfile.TemporaryDirectory(prefix='bashkitten-office-dependencies-') as directory:
+    with tempfile.TemporaryDirectory(prefix='taskarian-office-dependencies-') as directory:
         root = Path(directory)
         for name in DEPENDENCY_PATCHES:
             patch = ROOT / name

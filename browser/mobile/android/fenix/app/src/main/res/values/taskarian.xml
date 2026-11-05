@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<resources>
+    <string name="taskarian_about_content" translatable="false">Taskarian is an agentic browser built as a fork of Mozilla Firefox.* Copyright and license notices are provided below.</string>
+    <string name="taskarian_about_fork_notice" translatable="false">* Taskarian is not affiliated with or endorsed by Mozilla.</string>
+    <string name="taskarian_engine_licenses" translatable="false">Firefox and Gecko licenses</string>
+    <string name="taskarian_licenses_and_source" translatable="false">Licenses and source</string>
+    <string name="taskarian_saved_passwords_description">Passwords saved in %s are encrypted and stored on this device.</string>
+    <string name="taskarian_cookie_banner_unsupported">Automatic cookie-banner handling is not available for this site. You can choose the cookie options on the page.</string>
+    <string name="taskarian_tracking_explanation">Blocks tracking cookies and scripts according to the protection mode you choose.</string>
+    <string name="taskarian_tracking_strict_explanation">Blocks additional trackers. Some sites may not work properly.</string>
+    <string name="taskarian_delete_history_explanation">Removes browsing history from this device.</string>
+    <string name="taskarian_private_browsing_explanation">History, cookies and site data are cleared when all private tabs are closed. Bookmarks and downloaded files remain.</string>
+</resources>

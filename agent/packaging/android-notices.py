@@ -31,8 +31,8 @@ cpu = 'x64' if args.architecture == 'x86_64' else 'arm64'
 target = 'termux-' + args.architecture
 for archive in (args.auth_archive, args.search_archive):
     checked_archive(archive)
-version = (ROOT.parent / 'browser/bashkitten/config/version.txt').read_text().strip()
-with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
+version = (ROOT.parent / 'browser/taskarian/config/version.txt').read_text().strip()
+with tempfile.TemporaryDirectory(prefix='taskarian-apk-notices-') as temporary:
     stage = Path(temporary)
     for name in ('LICENSE', 'PI_UPSTREAM.md', 'THIRD_PARTY_NOTICES.md', 'package.json', 'package-lock.json',
                  'src/server/access/NOTICE', 'src/server/access/TORKITTEN-LICENSE'):
@@ -75,9 +75,9 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
         'architecture': args.architecture,
         'apkAbi': 'x86_64' if args.architecture == 'x86_64' else 'arm64-v8a',
         'packages': [
-            {'name': 'bashkitten', 'version': version, 'architecture': args.architecture,
+            {'name': 'taskarian', 'version': version, 'architecture': args.architecture,
              'sourceCommit': revision},
-            {'name': 'bashkitten-os', 'version': os_metadata['version'], 'architecture': os_metadata['architecture'],
+            {'name': 'taskarian-os', 'version': os_metadata['version'], 'architecture': os_metadata['architecture'],
              'sourceCommit': os_identity['sourceCommit'], 'sha256': os_metadata['sha256'],
              'installedManifestSha256': os_identity['installedManifestSha256']},
         ],

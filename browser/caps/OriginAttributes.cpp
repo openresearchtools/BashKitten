@@ -5,7 +5,7 @@
 #include "mozilla/OriginAttributes.h"
 #include "mozilla/Assertions.h"
 #include "mozilla/Preferences.h"
-#include "mozilla/StaticPrefs_bashkitten.h"
+#include "mozilla/StaticPrefs_taskarian.h"
 #include "mozilla/dom/BlobURLProtocolHandler.h"
 #include "mozilla/dom/quota/QuotaManager.h"
 #include "nsIEffectiveTLDService.h"
@@ -20,10 +20,10 @@ static const char kSanitizedChar = '+';
 
 namespace mozilla {
 
-bool OriginAttributes::IsBashKittenNetworkIsolated(bool aIncludeAgent) const {
+bool OriginAttributes::IsTaskarianNetworkIsolated(bool aIncludeAgent) const {
   if (mUserContextId &&
-      (mUserContextId == StaticPrefs::bashkitten_tor_containerId() ||
-       mUserContextId == StaticPrefs::bashkitten_tor_persistentContainerId() ||
+      (mUserContextId == StaticPrefs::taskarian_tor_containerId() ||
+       mUserContextId == StaticPrefs::taskarian_tor_persistentContainerId() ||
        (aIncludeAgent && mUserContextId >= 0xB4500000 &&
         mUserContextId <= 0xB450FFFF))) {
     return true;

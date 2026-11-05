@@ -669,8 +669,8 @@ function createStartupConfig(hidden = false) {
     items: [
       {
         id: "browserRestoreSession",
-        l10nId: AppConstants.MOZ_APP_NAME == "bashkitten"
-          ? "bashkitten-restore-tabs"
+        l10nId: AppConstants.MOZ_APP_NAME == "taskarian"
+          ? "taskarian-restore-tabs"
           : "startup-restore-windows-and-tabs",
         items: [
           {
@@ -858,14 +858,14 @@ var gMainPane = {
     initSettingGroup("defaultBrowser");
     initSettingGroup("startup");
     if (
-      AppConstants.MOZ_APP_NAME === "bashkitten" &&
+      AppConstants.MOZ_APP_NAME === "taskarian" &&
       AppConstants.platform === "linux"
     ) {
-      initSettingGroup("bashkittenDesktop");
+      initSettingGroup("taskarianDesktop");
     }
     initSettingGroup("importBrowserData");
     initSettingGroup("tabs");
-    if (AppConstants.MOZ_APP_NAME != "bashkitten") {
+    if (AppConstants.MOZ_APP_NAME != "taskarian") {
       initSettingGroup("profiles");
       initSettingGroup("profilePane");
     }
@@ -1603,7 +1603,7 @@ var gMainPane = {
    *  Shows a window dialog containing the profile selector page.
    */
   manageProfiles() {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
+    if (AppConstants.MOZ_APP_NAME == "taskarian") return;
     const win = window.browsingContext.topChromeWindow;
 
     win.toOpenWindowByType(

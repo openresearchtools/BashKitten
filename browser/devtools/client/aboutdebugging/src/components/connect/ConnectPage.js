@@ -199,7 +199,7 @@ class ConnectPage extends PureComponent {
                 className: "qa-connect-usb-disabled-message",
               },
               "Enabling this will download and add the required Android USB debugging " +
-                "components to BashKitten."
+                "components to Taskarian."
             )
           )
     );

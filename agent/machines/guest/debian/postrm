@@ -4,7 +4,7 @@ set -eu
 
 case "$1" in
     remove|purge|abort-install)
-        dpkg-divert --package bashkitten-machines-guest --remove --rename \
+        dpkg-divert --package taskarian-machines-guest --remove --rename \
             --divert /usr/bin/fusermount3.distrib /usr/bin/fusermount3
         ;;
 esac

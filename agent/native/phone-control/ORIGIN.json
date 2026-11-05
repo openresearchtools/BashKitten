@@ -2,7 +2,7 @@
   "release": "v1.12.0",
   "commit": "3777403d148283c5a18a3e8122ff819da4eed808",
   "pristine_import": "653010bc9d",
-  "adapted_root": "browser/mobile/android/bashkitten/src/main/java/com/bashkitten/phone",
+  "adapted_root": "browser/mobile/android/taskarian/src/main/java/com/taskarian/phone",
   "operations": {
     "PhoneProviders.java": [
       "services/notifications/NotificationProviderImpl.kt",

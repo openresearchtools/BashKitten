@@ -1,14 +1,14 @@
 # Native environments implementation and acceptance
 
 Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
-`bashkitten/plan/native-environments-2026-10-11`. The original remains unchanged;
+`taskarian/plan/native-environments-2026-10-11`. The original remains unchanged;
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
 ## Current build and lifecycle checkpoint — 29 October 2026
 
 The coherent 153.5.4 build at `45390d6a25518f69eb36fb1de436f915a572a83d`, main
-[40837599063](https://github.com/openresearchtools/BashKitten/actions/runs/40837599063),
+[40837599063](https://github.com/openresearchtools/Taskarian/actions/runs/40837599063),
 finished successfully: six primary binaries, eight native Office/Files jobs,
 normal source collection and the existing complete-candidate gate all passed.
 The source job uploaded 15 files/8,617,195,586 bytes in 18m 53s; the complete gate
@@ -24,9 +24,9 @@ RPC checks passing. Updated installed-runtime acceptance remains separate.
 The actual staged 45390 DEB/APK notice/About checks passed all 3,056/2,918 complete
 records and the matching companion, Go, Gecko/capture and Office branding
 inventories. Receipts are under
-`Bashkitten-Acceptance/final-packages-legal-45390-20261029/`; normal source and
+`Taskarian-Acceptance/final-packages-legal-45390-20261029/`; normal source and
 complete-gate metadata/logs are under
-`Bashkitten-Acceptance/candidates/153.5.4-45390d6a2551/`.
+`Taskarian-Acceptance/candidates/153.5.4-45390d6a2551/`.
 
 Unmodified 45390 real-Xorg testing passed the rebuilt clear-query/export scope,
 native secondary-click menus, registration and one controlled native-menu
@@ -36,7 +36,7 @@ preserved the custom INI and profiles. Clean Wayland testing separately passed
 right-click, Office edit/Save and References opening from an ordinary web tab.
 Receipts are `native-xorg-153.5.4-45390-20261029/installed-acceptance-summary.json`
 and `native-wayland-153.5.4-45390-20261029/verification.json` under
-`Bashkitten-Acceptance/`. These are bounded installed checks, not the full matrix.
+`Taskarian-Acceptance/`. These are bounded installed checks, not the full matrix.
 Default Pin to Toolbar was checked, but the button was not visible in the navbar
 or `»` menu. The initial default-placement failure label was corrected after
 native source review: `browser_action.default_area` is `navbar`, and native
@@ -50,7 +50,7 @@ interleaved destinations in two distinct databases/Bibliography roots. Native
 manager confirmation and normal Off/Quit passed. The annotated summaries retain
 the original raw observations and the successful pre-repin Extensions-row action.
 Receipt: `native-xorg-153.5.4-45390-20261029/capture-followup/installed-capture-summary.json`
-under `Bashkitten-Acceptance/`, with adjacent `source-placement-review.json`.
+under `Taskarian-Acceptance/`, with adjacent `source-placement-review.json`.
 
 Unmodified 45390 References opening from a Files/Office application tab failed with an
 invalid `firefox-container-3025207296` cookie-store ID. The proposed custom native
@@ -62,10 +62,10 @@ correction now saved the actual public ACM PDF: 2,570,670 bytes, SHA-256
 matching the native Zotero comparison. The final inline-disposition focus replay
 passed in the installed browser, preserving the active manager and exact bytes;
 the isolated Files-origin TLS fixture is not publisher-cookie evidence. Receipts are under
-`Bashkitten-Acceptance/references-native-tabs-20261029/`.
+`Taskarian-Acceptance/references-native-tabs-20261029/`.
 Exact 45390 Android pairing and active
 capture/host registration passed, but the visible enabled Add action did nothing
-on actual tap. API-created and native + tabs both retain BashKitten context IDs
+on actual tap. API-created and native + tabs both retain Taskarian context IDs
 as strings. The separate existing-native-API correction initializes ordinary
 engine context and preserves decoded context/privacy state; its Kotlin checks
 pass, but invocation, background/private behavior and capture require the next
@@ -76,7 +76,7 @@ pending. Filename-title fix `50fdb0ede0` passed a two-file Wayland overlay throu
 native Collabora `Doc_Title` for initial/load, native rename/escaped ampersand,
 reload and disk rename. Original 45390 `omni.ja` was restored; this is not a
 coherent rebuilt pass. Receipt:
-`Bashkitten-Acceptance/office-filename-title-20261029/verification.json`.
+`Taskarian-Acceptance/office-filename-title-20261029/verification.json`.
 Detailed identities
 and the earlier overlay evidence are retained in
 [the Office status record](office-integration-status.md).
@@ -92,7 +92,7 @@ Focused manager DOM (9), packaged Office settings (8) and real SQLite/service (9
 checks passed. Actual service capture/naming, two-file folder move and restart
 checks (7), plus manager lifecycle/direct-launch checks (13), also passed.
 Combined installed verification remains pending. Receipts are in `references-independent-projects-20261029/` under
-`Bashkitten-Acceptance/`. The separate
+`Taskarian-Acceptance/`. The separate
 Android existing-native-API correction has compilation/regression evidence,
 with signed-candidate runtime validation still pending. The current verification
 scope is Files/Office/References, model/audio changes and reported UI fixes plus
@@ -102,7 +102,7 @@ Coherent 45390 phone portrait/landscape toolbar checks passed main-logo Agent/
 sidebar opening, inside Hide Agent return and absence of the obsolete separate
 sidebar button. The receipt is
 `android-153.5.4-45390d6a2551-20261029/toolbar-portrait-landscape-result.json`
-under `Bashkitten-Acceptance/`. Native
+under `Taskarian-Acceptance/`. Native
 `Settings → Customize → Tab bar display → Show tab bar on wide windows` already
 passed actual UI Off/persisted-navigation/On replay; original choice and rotation
 were restored. No duplicate setting was added. See `native-tabbar-off-on-result.json`
@@ -112,13 +112,13 @@ Settings → compact chooser/search/Cancel also passed there in
 empty library, and the software IME did not open in that run.
 
 The earlier 153.5.4 binary batch at `cf62bf9be5cd068921f5941916099531cd3ce1a7`, parent
-[40823770402](https://github.com/openresearchtools/BashKitten/actions/runs/40823770402),
+[40823770402](https://github.com/openresearchtools/Taskarian/actions/runs/40823770402),
 passed all eight native Office/Files jobs, both Linux packages, both Termux
 packages and both Android APKs. The staged x86_64 APK's production certificate
 and exact-source backend/OS pairing passed normal verification. Actual cf62
 amd64 DEB and x86_64 APK legal/About checks also passed, with 3,056 and 2,918
 complete records respectively; the APK preserves all 2,427 matching companion
-records. Receipts are under `Bashkitten-Acceptance/final-packages-legal-cf62-20261029/`.
+records. Receipts are under `Taskarian-Acceptance/final-packages-legal-cf62-20261029/`.
 The parent source job was cancelled after its collection step ran for 1h 23m 44s;
 binary artifacts remain retained, but no corresponding-source or complete-candidate artifact/pass
 was produced. Binary success is not complete source publication or installed
@@ -133,7 +133,7 @@ step and exporter fixtures passed with identical archive bytes, reducing 40
 fetch processes to one. This changes preparation only, not source serialization
 or content; the later 45390 normal source collection passed as recorded above.
 Receipts are
-in `Bashkitten-Acceptance/source-archive-backfill-20261029/`.
+in `Taskarian-Acceptance/source-archive-backfill-20261029/`.
 `9e64389692` adds disk/object-usage observability around that native backfill,
 without changing source content or claiming successful publication.
 
@@ -153,7 +153,7 @@ actual Changes view. Two project tabs shared one Quantum owner, and closing one
 left the remaining Files view healthy. Normal Local Off/Quit preserved the
 custom main INI; attachment upload/capture and Save-As naming remain unproven.
 Its receipt is
-`Bashkitten-Acceptance/files-xorg-153.5.4-cf62-20261029/installed-acceptance-summary.json`.
+`Taskarian-Acceptance/files-xorg-153.5.4-cf62-20261029/installed-acceptance-summary.json`.
 
 `c348ac5092` updates the existing shutdown owners to drain native Office saves
 before callback services stop. Source fixtures passed signal/exit ordering,
@@ -192,7 +192,7 @@ rebuilt 45390 Xorg query-clear/Entire-library scope and Wayland stable-field
 clear checks passed above, alongside `73f0b90e85` native secondary clicking.
 This does not close every actor/control case. Its earlier bounded
 source/native-event receipt is
-`Bashkitten-Acceptance/browser-fill-clear-20261029/verification.json`.
+`Taskarian-Acceptance/browser-fill-clear-20261029/verification.json`.
 These source changes postdate the cf62 binaries and are included in 45390.
 
 ## Guided local models — 29 October 2026
@@ -309,7 +309,7 @@ The failed 16f0 Android build remains historical; it is not relabelled as cf62.
 The earlier parent source-job cancellation remains historical; 45390 normal
 source collection passed above, while release publication remains held.
 External receipts and screenshots are under
-`/home/user/Bashkitten-Acceptance/localai-153.5.4-16f0-20261029/`, including
+`/home/user/Taskarian-Acceptance/localai-153.5.4-16f0-20261029/`, including
 `first-launch-settings-closed.json`, `ready-status.json`,
 `installed-pi-model-catalog.json`, `after-restart-preservation.json` and
 `after-gui-retry.json`; `installed-acceptance-summary.json` also links the three
@@ -362,8 +362,8 @@ checksums, sources, full notices and the existing executable/ABI/alignment/VAD
 checks. Its first two runs failed because the workflow still invoked a removed
 source-audit test. `91df28f1133b249dbd08002ae31d2b1aec7cd8ff` removes that stale
 invocation. Replacement all-target, publishing-enabled runs are
-[llama 39337603129](https://github.com/openresearchtools/bashkitten-localai/actions/runs/39337603129)
-and [Whisper 39337605512](https://github.com/openresearchtools/bashkitten-localai/actions/runs/39337605512).
+[llama 39337603129](https://github.com/openresearchtools/taskarian-localai/actions/runs/39337603129)
+and [Whisper 39337605512](https://github.com/openresearchtools/taskarian-localai/actions/runs/39337605512).
 At the checked checkpoint, both Linux Vulkan llama jobs and all four Vulkan
 Whisper jobs passed; remaining Android llama/CUDA jobs were still building.
 No publication or installed runtime pass is inferred from this state. Browser
@@ -375,7 +375,7 @@ retain useful compiler work and their actual source identities. Native logout
 changes affect packaged browser and remote-helper inputs, so final candidates
 must use the integrated source and normal incremental/cache comparison rather
 than relabel earlier binaries. Local source/object/cache preparation lives under
-`/home/user/Bashkitten-Acceptance/local-candidates-e6c96a-20261019`; final packaging
+`/home/user/Taskarian-Acceptance/local-candidates-e6c96a-20261019`; final packaging
 and installed Android/Wayland/real-Xorg acceptance remain pending. All other
 unclosed plan acceptance groups remain required.
 
@@ -383,7 +383,7 @@ unclosed plan acceptance groups remain required.
 
 Later licensing follow-up: the retained Mozilla source audit against pristine
 Firefox 153.5 found no lost MPL notice in modified non-artwork files. Completely
-replaced artwork has its replacement-artwork license; BashKitten's AGPL does
+replaced artwork has its replacement-artwork license; Taskarian's AGPL does
 not overwrite inherited file-level notices. The user also clarified that the
 MIT-licensed daughter runtime repository retains CUDA with NVIDIA's own
 component notices and explicit source availability. The dated plan amendment
@@ -427,12 +427,12 @@ runtime run is not release approval. Keep runtime builds in daughter CI.
 
 CVD6520 now has verified KeePassDX Libre 4.5.6 installed and selected through
 ordinary Android consent, with a disposable encrypted vault and explicit trust
-for the installed BashKitten signing identity through the provider's UI. Normal
-vault lock/reopen succeeded using Cuttlefish in the isolated BashKitten browser.
+for the installed Taskarian signing identity through the provider's UI. Normal
+vault lock/reopen succeeded using Cuttlefish in the isolated Taskarian browser.
 Credentials and backups remain outside repositories in private local storage.
 This is provider setup only: actual 153.5 create/sign-in/cancel and password/
 notification acceptance remain pending, including comparison of its signer.
-Evidence: `Bashkitten-Acceptance/framework-passkeys-153.5-20261019/setup-receipt.json`.
+Evidence: `Taskarian-Acceptance/framework-passkeys-153.5-20261019/setup-receipt.json`.
 
 The installed `bd393` real-Xorg container also exercised Pi-driven GUI launch.
 The first attempt failed: Mousepad was absent and the model substituted Thunar.
@@ -446,7 +446,7 @@ to its earlier Files acceptance hash. Shared desktop guidance now documents
 this persistent-application launch method, without changing the bounded helper
 or introducing a separate service. This proves the corrected installed path,
 not unguided model reliability or installed discovery of the newly edited guide.
-Evidence: `Bashkitten-Acceptance/desktop-agent-context-20261019/acceptance.json`.
+Evidence: `Taskarian-Acceptance/desktop-agent-context-20261019/acceptance.json`.
 
 ## Integrated release refresh — 19 October 2026, final source batch
 
@@ -508,7 +508,7 @@ find the earlier renamed/regrouped chat, Pi discovered the `chats` skill/tool,
 listed and read that history and correctly reported its original cwd and README
 contents. The earlier JSONL remained byte-identical after lookup. The receipt
 now has 11 scoped cases and 59 checked evidence references:
-`Bashkitten-Acceptance/xorg-fresh-container-bd393-20261019/acceptance.json`.
+`Taskarian-Acceptance/xorg-fresh-container-bd393-20261019/acceptance.json`.
 Duplicate titles, unavailable remotes, fork/queue identity and other backends
 remain separate cases.
 
@@ -520,20 +520,20 @@ ringing, and user call-in/reply retaining Messages mode. Unanswered delivery
 settled after 45.14 seconds and did not ring again during the subsequent
 20.99-second observation. All temporary permissions and phone settings were
 restored; models and LocalAI/Pi configuration were unchanged. Evidence:
-`Bashkitten-Acceptance/voicemail6520-bd393-20261019/result.json`.
+`Taskarian-Acceptance/voicemail6520-bd393-20261019/result.json`.
 This found a real presentation defect: identical dictated text from different
 channels can label a later call reply as a voicemail reply. Dispatch and saved
 mode were correct; source-attribution repair and rebuilt acceptance remain
 required. No remote/OEM/Android Auto or full concurrency pass is inferred.
 
-The user's standalone Pi conflict was traced to an old BashKitten package entry
+The user's standalone Pi conflict was traced to an old Taskarian package entry
 in its global settings, written at 10:07 UTC on 8 October, before private-profile
-isolation commit `b6c435807f` at 10:55 UTC. The installed/current BashKitten
+isolation commit `b6c435807f` at 10:55 UTC. The installed/current Taskarian
 launcher sets its private `PI_CODING_AGENT_DIR` before SDK loading. Only the
-stale BashKitten registration was removed from this host's standalone settings,
+stale Taskarian registration was removed from this host's standalone settings,
 with a private backup outside repositories; standalone Pillama/accounts/sessions
 were retained. The installed standalone resource loader then loaded its three
-own extensions with zero errors and no BashKitten extension, without changing
+own extensions with zero errors and no Taskarian extension, without changing
 settings. This is a local repair, not an automatic migration of users' profiles.
 
 Runtime updates must also preserve speech integration. `PhoneSpeech.vadFiles`
@@ -568,10 +568,10 @@ ordinary preview with Download retained. These are scoped software-rendered
 amd64/Xorg passes, not all layout/input/GPU cases. The stock GTK Save Contents
 dialog was usable at the observed 980-by-700 window; the earlier narrow/tall
 chooser finding remains open. Receipt with 45 checked evidence references:
-`Bashkitten-Acceptance/xorg-fresh-container-bd393-20261019/acceptance.json`.
+`Taskarian-Acceptance/xorg-fresh-container-bd393-20261019/acceptance.json`.
 
 The matching publisher-signed Android x86_64 candidate and Termux backend/OS
-passed the core Callback flow in Cuttlefish 6520 through the desktop BashKitten
+passed the core Callback flow in Cuttlefish 6520 through the desktop Taskarian
 viewer: native calling setup, keypad routing, Parakeet/Silero/Pocket dictation
 and speech, silence review, Add more, Change, explicit `#`, and confirmed Send.
 Native Pi history contained exactly one resulting user entry. Hangup left the
@@ -582,7 +582,7 @@ required an authorized clean native install after a signing-key mismatch and
 one recovery of a Cuttlefish WebRTC process crash. It does not establish an
 upgrade, the reserved signed updater path, all section-13 cases, physical/OEM
 behavior or Android Auto. Receipt:
-`Bashkitten-Acceptance/callback6520-bd393-20261019/result.json`.
+`Taskarian-Acceptance/callback6520-bd393-20261019/result.json`.
 
 The fresh-profile About/Licenses/Quit flow exposed a real shutdown defect.
 Settings imported the runtime owner through its window's module global,
@@ -627,7 +627,7 @@ sidecar switch, retiring the saved prior Podman pause-PID error. No manual
 runtime deletion or permission change was needed. The ordinary host browser
 shows only the view-only desktop and background Cuttlefish pages; desktop test
 input stays inside the dedicated test user or owned Xorg VM. Recovery evidence:
-`Bashkitten-Acceptance/environment-recovery-20261019/android-xorg-readiness.json`.
+`Taskarian-Acceptance/environment-recovery-20261019/android-xorg-readiness.json`.
 
 Actual Android remote Send with Files Off passed on 18 October through the
 normal QR, password, Tor/mTLS, Authelia TOTP and consent flow. A new chat under
@@ -643,7 +643,7 @@ state instead of copying them into the sidebar's persistent action notice;
 unrelated operation errors and actual readiness timeouts remain visible. The
 focused production-classpath Java compile passed; installed recovery and
 unrelated-notice regression checks remain pending. Exact scope and mixed-component identities:
-`Bashkitten-Acceptance/android6522-remote-files-off-20261018/acceptance.json`.
+`Taskarian-Acceptance/android6522-remote-files-off-20261018/acceptance.json`.
 
 Selected-container configuration was exercised through the host UI while host
 Local was Off. General settings saved the container's working folder, and the
@@ -654,7 +654,7 @@ through the UI, and host Local was restored On after recovery. The guest tray's
 normal Stop action restored its prior Agent Off, leaving the container and
 Display alive. This does not claim a completed provider OAuth or all Local AI
 settings test. Evidence:
-`Bashkitten-Acceptance/xorg-container-settings-20261018/acceptance-recovery-20261019.json`.
+`Taskarian-Acceptance/xorg-container-settings-20261018/acceptance-recovery-20261019.json`.
 
 The guest tray's saved Agent-Off state exposed a missing recovery action in the
 host view. `07bc82680c` adds **Turn on Agent** to that existing disconnected
@@ -694,14 +694,14 @@ children were active. That check also completed and cleaned up without changing
 the configuration or normal router identity. These checks use the existing mixed
 candidate; they do not establish all navigation/chat or stalled-display
 responsiveness, GPU/Android behavior or the complete 153.4.6 candidate. Evidence:
-`Bashkitten-Acceptance/xorg-model-check-20261019/acceptance.json`.
+`Taskarian-Acceptance/xorg-model-check-20261019/acceptance.json`.
 
 The same Xorg installation verified the shared Local AI startup choice in both
 directions: disabling llama.cpp startup in Autostart appeared Off in Local AI;
 enabling and saving it in Local AI appeared On in Autostart. The original
 configuration bytes were restored exactly, with no model/provider changes.
 This covers that saved-choice integration, not all startup services or platforms.
-Receipt: `Bashkitten-Acceptance/xorg-autostart-authority-20261019/acceptance.json`.
+Receipt: `Taskarian-Acceptance/xorg-autostart-authority-20261019/acceptance.json`.
 
 The installed Xorg question flow returned pending in 11 ms and completed an
 independent Bash tool while the question remained unanswered. Actual UI actions
@@ -714,7 +714,7 @@ The small local model made three separate question tool calls despite the
 one-question instruction and emitted a premature acknowledgement; these model
 behaviors are explicitly distinguished from backend delivery evidence. This is
 mixed-candidate coverage, not the cross-channel/Stop/crash race matrix. Receipt:
-`Bashkitten-Acceptance/xorg-question-dismiss-20261019/acceptance.json`.
+`Taskarian-Acceptance/xorg-question-dismiss-20261019/acceptance.json`.
 
 Android Phone acceptance exposed two lifecycle failures. Granting notification
 access while its feature was Off could race two listener-unbind requests and
@@ -768,7 +768,7 @@ Autostart stopped its parent and child without deleting its files or stopping
 the browser. The original empty startup configuration was restored byte-for-byte.
 This covers Local custom commands, not container/Termux commands, crash cleanup
 or the entire startup matrix. Receipt:
-`Bashkitten-Acceptance/xorg-autostart-command-20261019/acceptance.json`.
+`Taskarian-Acceptance/xorg-autostart-command-20261019/acceptance.json`.
 
 Restarting the dedicated headless test browser exposed a stale private control
 socket after its owner exited. The fixture was recovered only after verifying
@@ -778,7 +778,7 @@ shutdown cleanup; live peers, timeouts, symlinks, foreign owners and replacement
 paths remain protected. Baseline reproduction and 15 helper cases passed. This
 fix is later than `bd393bd7ec59`: manual fixture recovery is not installed repair
 acceptance. Evidence: `verification/control-stale-socket-20261019/` and
-`Bashkitten-Acceptance/operator-browser-20261019/stale-control-socket-bd393.json`.
+`Taskarian-Acceptance/operator-browser-20261019/stale-control-socket-bd393.json`.
 
 The retained private Wayland desktop passed scoped same-application window
 pairing, divider dragging with minimum/increment hints, parent-dialog exclusion,
@@ -814,7 +814,7 @@ Display and whole-container Off/On checks passed with the two candidate units:
 XFCE, browser, backend and the existing llama process run as guest UID/GID 1000
 with zero effective/permitted/inheritable/ambient capabilities. GLX reports
 `Mesa Intel(R) Graphics (ARL)`. Only selected Intel `/dev/dri/renderD128` was used;
-host device permissions, ACLs and NVIDIA were untouched. Host BashKitten and
+host device permissions, ACLs and NVIDIA were untouched. Host Taskarian and
 Podman remain rootless. Evidence is in the private desktop's
 `diagnostics/gpu-groups/summary.json`. The separate document-portal FUSE error
 was subsequently repaired in `154540f00e`: the guest package uses the pristine
@@ -822,7 +822,7 @@ pinned libfuse native helper at a private guest path, removes the replaced Pytho
 broker and safely diverts/restores the distro command. Actual private Wayland
 portal mounting, Thunar direct AppImage launch/unmount, persistent extraction
 reuse, package removal/reinstallation and normal container Off/On passed with
-that focused guest component. Host BashKitten/Podman remain rootless and host
+that focused guest component. Host Taskarian/Podman remain rootless and host
 permissions were unchanged. The full matching candidate and Xorg repeat remain
 required; evidence: `verification/fuse-portal-20261018/repair-result.json`.
 
@@ -837,7 +837,7 @@ An installed three-module diagnostic overlay then passed PDF Download and text
 Download with the original bytes, plus the ordinary 19-page PDF View. The fresh
 log contains no protected-popup abort. This is an overlay check, not a rebuilt
 combined-package pass; Android regression remains separate. Evidence:
-`Bashkitten-Acceptance/xorg-files-project-20261018/acceptance-final.json` and Build
+`Taskarian-Acceptance/xorg-files-project-20261018/acceptance-final.json` and Build
 `verification/files-native-download-20261018/acceptance.json`.
 
 The signed Android upgrade failure was a missing bootstrap runtime: the old
@@ -857,7 +857,7 @@ boundaries passed; they do not replace the signed-device update. Build receipts:
 `verification/review-updater-pdf-20261018/handoff-parent-death.json`.
 
 An independent Android Callback test found another real blocker: an in-app call
-works, but a call from the saved Kitten contact reaches Telecom and is rejected
+works, but a call from the saved Taskarian contact reaches Telecom and is rejected
 when its microphone foreground service starts from the background. Recording
 permission is already granted. `21127c4495` now retains the enabled reception
 owner as a microphone-type foreground service without recording while idle.
@@ -911,7 +911,7 @@ Desktop default Qwen3.5 4B vision correctly identified the attached synthetic
 red square, green circle and blue triangle through the normal chat flow.
 The `3107` Local AI Generate speech UI produced the requested Pocket TTS phrase
 with unchanged CPU defaults. Diagnostic CPU Parakeet transcription of that WAV
-returned “Hello from Bash kitten.” Evidence includes the isolated desktop's
+returned “Hello from Taskarian.” Evidence includes the isolated desktop's
 `default-vision-result.json` and Build
 `verification/desktop-3107/wayland-generated-voice-asr.json`.
 
@@ -947,9 +947,9 @@ backend update. The original failure is preserved under Build
 
 ## Isolated installed follow-up — 17 October 2026, evening
 
-Desktop input now uses only the dedicated `bashkitten-acceptance` user, its own
+Desktop input now uses only the dedicated `taskarian-acceptance` user, its own
 systemd user manager/session bus and Intel Weston screen. The ordinary host's
-BashKitten viewer is view-only; test input does not target the host keyboard,
+Taskarian viewer is view-only; test input does not target the host keyboard,
 pointer or focus. This resolves the earlier private-session systemd limitation.
 The user's private llama VM remains outside the test environment.
 
@@ -962,7 +962,7 @@ Interact accepted it, and closing/reopening the Display tab preserved the same
 guest browser and draft. Manage window size Off disabled Two app mode while
 retaining its saved choice; On re-enabled the control. A too-small two-app
 viewport reported its constraint and is not counted as a successful split.
-Evidence is under `Bashkitten-Acceptance/isolated-wayland-20261017`, including
+Evidence is under `Taskarian-Acceptance/isolated-wayland-20261017`, including
 `diagnostics/cab1-container-namespace-monitor.json` and the matching screenshots.
 
 The Applications acceptance reference is the plan's **Applications list
@@ -994,7 +994,7 @@ Android 17 development installations now have matching `cab1310f182` APK,
 Termux backend and OS packages. The retained-profile upgrade preserved the
 model/router/Pi configuration hashes. On a separately cleared browser/backend
 profile, ordinary setup permissions were accepted through Cuttlefish in
-BashKitten, and first-run setup automatically downloaded Qwen3.5-2B-Q4_0 plus
+Taskarian, and first-run setup automatically downloaded Qwen3.5-2B-Q4_0 plus
 vision projector, Parakeet v3 Q4_0, Pocket TTS plus projector/reference voice,
 and their runtime/source/license records. The UI reached Ready and the generated
 router explicitly selected CPU with GPU/projector/KV offload disabled. No model
@@ -1031,7 +1031,7 @@ fixture. Evidence: `verification/android17-fresh-cab1/model-and-dictation.json`
 and `native-session-proof.json`. The normal Android attachment picker then
 selected a synthetic image, and the default Qwen model with its downloaded
 projector correctly identified the red square, green circle and blue triangle.
-Local AI's Generate speech produced “Hello from BashKitten” using the untouched
+Local AI's Generate speech produced “Hello from Taskarian” using the untouched
 Pocket TTS CPU defaults. Independent diagnostic transcription of that generated
 WAV recovered the requested phrase. Evidence: `vision-and-synthesis.json` and
 `generated-voice-asr.json` in the same directory. These checks establish the
@@ -1040,7 +1040,7 @@ GPU behavior, all Callback flows or whole-app acceptance.
 
 A separate `26ba` native Quit returned exit 0 with the container already stopped
 and no Display opened during that launch. Diagnostic logging shows all four
-quit-application blockers and the later BashKitten cleanup blockers completed.
+quit-application blockers and the later Taskarian cleanup blockers completed.
 The earlier `cab` crash is specifically Gecko's AppShutdownConfirmed watchdog
 inside the quit-application async shutdown phase. Its exact pending blocker was
 not recoverable from that core. This narrower successful repeat does not close
@@ -1068,7 +1068,7 @@ wallpaper choices.
 
 The full CI artifact audit at `26ba97cd4a` verified all ten DEBs and the signed
 ARM64 APK with its exact Termux/OS pair. It found the APT repository's
-case-sensitive asset filter omitted both `BashKittenOS` DEBs. APT commit
+case-sensitive asset filter omitted both `TaskarianOS` DEBs. APT commit
 `d00a8c8e984f2698b073e702b59dafb6021e9dee` changes only that source's pattern;
 normal selection-loop checks now include all ten packages in stable and nightly.
 No publication or signed device upgrade is claimed by this artifact check.
@@ -1107,7 +1107,7 @@ and a new installed fresh-profile run is required after packaging this fix.
 At the user's request, desktop UI automation is moving to an isolated Intel
 Wayland screen with a view-only browser viewer; no host keyboard, pointer or focus
 injection is permitted for these tests. Cuttlefish interaction remains through
-the desktop BashKitten browser. Weston and the private test browser were verified
+the desktop Taskarian browser. Weston and the private test browser were verified
 against Intel `renderD128`, with no NVIDIA device/library use. The first private
 session lacked the systemd user manager needed for containers; that is an
 unresolved test-environment limitation, not a container acceptance pass. Its
@@ -1119,7 +1119,7 @@ environment records do not replace real-Xorg or full container acceptance.
 
 The normal Android upgrade to local candidate `e226372894` installed its matching
 backend and OS package while preserving the existing model/router/Pi settings.
-Installed Cuttlefish acceptance through the desktop BashKitten browser confirms
+Installed Cuttlefish acceptance through the desktop Taskarian browser confirms
 the `bba43be57d` composer correction at 411- and 360-CSS-pixel widths, both with
 the keyboard open and closed: attachment, model, reasoning, Agents, Phone,
 dictation and Send occupy one row, with roughly 2-CSS-pixel gaps, no overlap and
@@ -1176,7 +1176,7 @@ evidence: `acceptance/update-channels-20261017/verification.json` in the separat
 Build workspace.
 
 On installed Android 17, the saved TTS CPU-thread control was set to two through
-Local AI. Actual native calls through the desktop BashKitten Cuttlefish UI passed
+Local AI. Actual native calls through the desktop Taskarian Cuttlefish UI passed
 dictation/read-back, Add more preserving both segments, Change replacing the
 draft, `#` completion, explicit Send and hangup preserving active Pi. The final
 native chat and Pi history contain exactly one revised user message. The test
@@ -1246,7 +1246,7 @@ A separate clean Android 17 instance now has the production-signed public
 onboarding command. An initial ADB run-as Perl execution-context failure was
 corrected by running the same command through Termux's own documented service;
 that setup-method failure is preserved, not counted as a product failure. The
-normal bootstrap completed successfully and returned to BashKitten. Its old
+normal bootstrap completed successfully and returned to Taskarian. Its old
 backend has the new APK updater's required installed APIs. This is the baseline
 for the real published upgrade, not an update acceptance claim. Evidence:
 `acceptance/production-update-20261017/public15344-bootstrap-installation.json`.
@@ -1337,7 +1337,7 @@ workspace. These commits require a combined build and installed acceptance;
 the changed native Display module must actually be recompiled and linked.
 
 Fresh Android 17 CVD03 completed first-use setup on the earlier `e7f74f5fa8`
-candidate through the installed desktop BashKitten Cuttlefish UI. Qwen3.5-2B-Q4_0
+candidate through the installed desktop Taskarian Cuttlefish UI. Qwen3.5-2B-Q4_0
 was selected automatically, reasoning was Off, and a first chat requesting
 `READY` returned `READY`. Saved llama, speech-recognition and synthesis backend
 preferences are all CPU. Evidence: `verification/android17-fresh-e7f7/first-use-result.json`.
@@ -1429,7 +1429,7 @@ Installed Wayland Autostart now passes the reported stale-notice case: a missing
 executable added through the UI produces a nonblocking error, and both disabling
 it and removing it clear that notice immediately without restarting the browser.
 A separate custom program added using the documented installed
-`bashkittenctl autostart-status` / `autostart-save --stdin` interface appears in
+`taskarianctl autostart-status` / `autostart-save --stdin` interface appears in
 the same settings UI and starts with the exact configured folder/environment.
 Normal native Quit removes all 25 captured process identities, including its
 parent and child; abruptly killing the test browser removes all 30 identities in
@@ -1441,7 +1441,7 @@ matrix or unrelated service tests.
 
 The installed Android Display icons are visible in light and dark mode, including
 the unchecked Observe icon. Evidence is under `verification/android17-ea7c/`.
-The fresh Android profile selects `bashkitten-llama` / `Qwen3.5-2B-Q4_0` without a
+The fresh Android profile selects `taskarian-llama` / `Qwen3.5-2B-Q4_0` without a
 manual model choice, but its protected UI exposed a missed counterpart in the
 draft-path repair: Java generated the bounded identity hash while Gecko still
 validated the old raw fingerprint/UUID name. Commit `a7f714b996` uses the same
@@ -1550,7 +1550,7 @@ its own input and lost a synthetic marker on restart. The launcher now uses a
 stable input image outside assembler output; a new marker survived two scoped
 stop/start cycles with native KVM, 16 GiB RAM and 128 GiB storage. No application
 profiles existed during this repair. This is test-environment evidence, not a
-BashKitten feature pass. The user's private llama VM remains untouched.
+Taskarian feature pass. The user's private llama VM remains untouched.
 
 Fresh Android 17 first-run setup now downloaded the published Vulkan-capable
 runtimes and all pinned Qwen 2B vision, Parakeet and Pocket TTS weights. The UI
@@ -1559,7 +1559,7 @@ matched their pinned hashes with offline notices/source records present. This
 does not establish inference, cancellation/resume or the full published installer
 flow: exact candidate packages and the installer’s final Termux bridge setup were
 prepared with authorized ADB; native permission/enrollment and setup were exercised
-through the desktop BashKitten Cuttlefish UI. Stop setup was not accepted as tested
+through the desktop Taskarian Cuttlefish UI. Stop setup was not accepted as tested
 because the moving progress layout and quick completion prevented a confirmed stop.
 
 The first fresh composer nevertheless had no default model: normal Pi package
@@ -1664,7 +1664,7 @@ startup, rendering, remote, lifecycle or release acceptance obligations.
 
 The composer now allows its controls to wrap instead of compressing every
 dropdown onto one row. Exact production markup and styles rendered in installed
-BashKitten passed 280, 320, 360, 420, 780 and 1280 px viewport checks: two rows on
+Taskarian passed 280, 320, 360, 420, 780 and 1280 px viewport checks: two rows on
 the narrow cases, one on the wider cases, and no control outside the viewport.
 Both native Configuration menus already inherit Firefox's bounded scrolling;
 no menu styling was changed. Installed narrow-window menu scrolling remains an
@@ -1796,7 +1796,7 @@ line endings) inside the existing authorized snapshot transfer. Large top-level
 Markdown tables now arrive as separate 32-row render chunks; byte fixtures and
 2,000-row chunk checks pass. Installed responsiveness, including large nested
 Markdown structures, remains a separate acceptance requirement. Standalone XFCE
-must also skip BashKitten OS autostart/layout controls when outside an owned
+must also skip Taskarian OS autostart/layout controls when outside an owned
 Termux or container role; the changed panel patch requires a real component build.
 
 The complete feature and acceptance register below remains mandatory. No feature
@@ -1823,7 +1823,7 @@ the loader to `0400` and package verification is clean. These installations
 preserved the existing acceptance profiles; they are upgrade evidence, not fresh
 architecture acceptance.
 
-The candidate contains BashKitten OS from `0f16d716aa`, private engine from
+The candidate contains Taskarian OS from `0f16d716aa`, private engine from
 `136d077c9f` and a guest package built at `656abcd94b`. Its guest launcher prevents
 automatic crash-count Troubleshoot Mode for the managed browser through the
 supported environment setting; other browser launches are unchanged. The native
@@ -1857,7 +1857,7 @@ preview or desktop matrix. Evidence is in
 
 Android 16 `005d3e5b2d` showed Callback, matching installed Termux packages and
 Pi 1.1.0 in Updates. Its normal contact editor saved
-`kitten-phone@bashkitten.local`; calling that contact reached the managed call UI
+`taskarian-phone@taskarian.local`; calling that contact reached the managed call UI
 and normal hangup worked. The retained per-Local test alias still contains the
 old development address and is correctly rejected. There is no migration or
 transport fallback, and no fresh per-backend contact pass yet. A pending question
@@ -1905,7 +1905,7 @@ Current receipts in the Build repository include
 The previous combined development candidate was
 `0cf34b8857d8d6faef040ca1135038bded74618c`, installed on the native Wayland
 host, real Xorg VM and Android 16/17. Both Android installations have its matched
-Termux backend and the separately installed BashKitten OS component from
+Termux backend and the separately installed Taskarian OS component from
 `6a8fe303ce`. Normal installation sets the paired X11 loader to `0400`.
 The desktop package also contains OS `6a8fe303ce`, the newly built private engine
 from `136d077c9f`, the Linux lifetime guard from `9ffeedb41d` and a guest package
@@ -2079,7 +2079,7 @@ shared Local AI settings now load on the Wayland host and Xorg VM; Android 16
 also renders the Phone controls page and its optional Accessibility guidance.
 This verifies those entry/rendering paths, not all controls or authorization
 cases. The logo-only toolbar and Configuration gear are visible; the written
-BashKitten pill is removed.
+Taskarian pill is removed.
 
 `0753b2edfc` applies the latest user correction: desktop Configuration has no
 Computer use/Termux use settings; the execution-role Pi skills/tools remain.
@@ -2219,7 +2219,7 @@ Actual installed observations:
   matrix remain open; the earlier materialization-only result is historical.
 - The Android sidebar's floating popup, pink buttons and ambiguous icons failed
   the user's design review. `acfa9df6ba` restores the flat sidebar and embeds it
-  below the toolbar. The user's final direction is a BashKitten logo/sidebar,
+  below the toolbar. The user's final direction is a Taskarian logo/sidebar,
   separate settings gear, unchanged Firefox menu and repeated flat Local,
   Containers and Remotes sections. Shared protected Gecko settings and native
   adapters are integrated, including removal of the superseded forms. The
@@ -2246,7 +2246,7 @@ The full plan's feature, failure, lifecycle and platform matrix remains required
 Android 16's remaining feature flows, physical-device/OEM/Android Auto coverage
 and the complete artifact/traffic audit are not established by the checks above.
 
-Checkpoint receipts are under `/run/media/user/Data/BashkittenBuild/`:
+Checkpoint receipts are under `/run/media/user/Data/TaskarianBuild/`:
 
 | Record | Confirmed scope |
 | --- | --- |
@@ -2270,7 +2270,7 @@ Checkpoint receipts are under `/run/media/user/Data/BashkittenBuild/`:
 | Linux Display / persistent gateway | Native module committed; current native helper/package source checks pass | Partial actual Xorg fresh-machine Display/input; complete Wayland/Xorg matrix pending |
 | Container lifecycle / private Podman | Persistent owner, private engine/namespace lifetime, guest lifecycle/sudo and desktop context packaged; managed-launch correction in `656abcd94b` | Fresh Xorg creation/Display and sudo job control pass on `005d3e5b2d`; upgraded retained guest runs and renders on `656abcd94b`; full lifecycle matrix pending |
 | Native sidecar / projects / chats | Android hierarchy committed; desktop hierarchy, project folder ownership and private container connection integrated | Partial Xorg project/cwd/move/draft and one subagent completion path; Android/full matrix pending |
-| BashKitten OS / XFCE | Shared launcher/settings, layout, tray, scaling, application actions and role-specific CUA skills committed; Linux/native Termux packages built; fresh Termux initialization passes | Partial Xorg launcher/settings/input observations; remaining Termux/Linux desktop matrix open |
+| Taskarian OS / XFCE | Shared launcher/settings, layout, tray, scaling, application actions and role-specific CUA skills committed; Linux/native Termux packages built; fresh Termux initialization passes | Partial Xorg launcher/settings/input observations; remaining Termux/Linux desktop matrix open |
 | Phone controls / phoneuse | Main-APK module, live worker grants, revocation and CLI committed; Android-only configuration | Android 16 earlier Apps discovery/list and feature-Off denial; current Android 17 themes/master-choice retention observed; complete authorization/revocation matrix pending |
 | Telephony / contacts / messages / voicemail | Native library, private gateway, confirmed call speech, encrypted remote hooks and shared question delivery committed; integrated Java compilation passes | Pending |
 | Pi release / usage / ask_user | Pi 1.1.0, selected-account usage and deferred questions integrated using stock APIs | Pending |
@@ -2278,7 +2278,7 @@ Checkpoint receipts are under `/run/media/user/Data/BashkittenBuild/`:
 
 Cuttlefish remains on stock Android 17 build 16373615 with native KVM, 16 GiB RAM
 and 128 GiB SSD userdata. The separate libvirt test VM
-`bashkitten-test-debian13-xorg` now runs a real Debian 13 LightDM/Xorg login session.
+`taskarian-test-debian13-xorg` now runs a real Debian 13 LightDM/Xorg login session.
 Neither environment has accepted the new whole-plan candidate yet.
 
 The earlier Android composer `[BLANK_AUDIO]` failure was traced to Cuttlefish's
@@ -2300,7 +2300,7 @@ recorded above; integrated phone STT/TTS and the full runtime/model matrix remai
 mandatory. No AI engine was built on this workstation.
 
 Detailed component records are retained outside the repository under
-`/run/media/user/Data/BashkittenBuild/verification/` and `native-environments/`.
+`/run/media/user/Data/TaskarianBuild/verification/` and `native-environments/`.
 Source/license collection and limited offline Pi process traces are not a
 whole-product telemetry audit. Actual candidate artifact reconciliation and
 external traffic checks remain release gates, along with the required UI flows.
@@ -2325,8 +2325,8 @@ from Cuttlefish. Additional detailed cases remain mandatory in the frozen plan.
 | --- | --- | --- | --- |
 | 1. Sources and runtime contracts | Track all built/bundled component source, official release commits, donor subsets, licenses and private Podman/helper matrix; update Pi through supported APIs. | Clean-checkout builds consume tracked source/locks; no floating refs, missing source/notices or unexpected system runtime selection; Pi API/packaging checks. | Pending |
 | 2. Native Display feasibility | Reusable module and own renderer child; Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real cross-process viewport attachment/input/resize and child-failure containment. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK; small documented Firefox integration patch set. | Pending |
-| 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest BashKitten and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. | Pending |
-| 4. BashKitten OS package | Shared `.deb`/native Termux packaging and initially pinned settings app, single-workplace default, Manage window size, bottom taskbar/right application tray, maximized search/pins/app-grid Start, no dock/default shortcuts, main-window maximize/two-app behavior, scaling and Gnozzard styling; Linux Thunar actions. | Matching responsive Linux/Termux layouts, On/Off behavior and parent-dialog exclusions, both tray protocols and guest BashKitten icon/activation, preserved user choices, real apps/input/scaling; donor launch rules, passwordless APT, menu/shortcut management and wallpaper. | Pending |
+| 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest Taskarian and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. | Pending |
+| 4. Taskarian OS package | Shared `.deb`/native Termux packaging and initially pinned settings app, single-workplace default, Manage window size, bottom taskbar/right application tray, maximized search/pins/app-grid Start, no dock/default shortcuts, main-window maximize/two-app behavior, scaling and Gnozzard styling; Linux Thunar actions. | Matching responsive Linux/Termux layouts, On/Off behavior and parent-dialog exclusions, both tray protocols and guest Taskarian icon/activation, preserved user choices, real apps/input/scaling; donor launch rules, passwordless APT, menu/shortcut management and wallpaper. | Pending |
 | 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects with folder-picker creation and new-chat cwd inheritance, standalone chats, rename/move, selected-chat web view. | New project chats use their project's directory; standalone behavior and existing histories/cwd remain unchanged; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. | Pending |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. | Pending |
 | 7. Phone module and CLI | Main-APK MCP port, native master/feature policy, optional Accessibility, owned-Pi worker grants, Termux CLI and `phoneuse` skill. | Complete section 12's user-flow and denial checks; no camera/microphone commands, companion APK, exposed MCP catalog or reusable general-shell token. | Pending |
@@ -2336,12 +2336,12 @@ from Cuttlefish. Additional detailed cases remain mandatory in the frozen plan.
 
 | Manual case | Expected result | State |
 | --- | --- | --- |
-| Android fresh install | Termux setup installs native dependencies/paired loader; Display opens inside BashKitten with no X11 companion APK and no shipped root/ADB requirement. | Pending |
+| Android fresh install | Termux setup installs native dependencies/paired loader; Display opens inside Taskarian with no X11 companion APK and no shipped root/ADB requirement. | Pending |
 | Android input/viewport | Real GUI app accepts hardware modifiers, Unicode/composing IME, touch/mouse/scroll; keyboard shrink/restore and portrait/landscape maintain correct pointer coordinates. | Pending |
 | Android lifetime | Tab close/reopen, browser background/recreation and rotation preserve the desktop; Stop/Local heading Off stop only their owned processes; display crash leaves chats usable and independent remotes stay connected. | Pending |
 | Linux preparation/config | Visible real package output while the browser stays usable; edited launch flags take effect; invalid config shows the real error without another runtime. | Pending |
 | Linux persistence/startup | Guest-installed packages, files and Pi work survive viewer/browser-window close and later attachment; per-container startup on/off behaves independently. | Pending |
-| Machine storage/name/delete | Default and configured BashKitten data roots contain the rootfs/configuration/state; chosen names resolve to the correct stable directory; rename preserves work; deletion removes only the selected machine and its owned data, preserving other machines/shared caches/host-mounted folders. | Pending |
+| Machine storage/name/delete | Default and configured Taskarian data roots contain the rootfs/configuration/state; chosen names resolve to the correct stable directory; rename preserves work; deletion removes only the selected machine and its owned data, preserving other machines/shared caches/host-mounted folders. | Pending |
 | Host rendering | Same guest works in X11-host and Wayland-host sessions; deliberately unavailable acceleration selects the actual software path without modifying saved GPU choice. | Pending |
 | Native X11 host VM | Installed candidate runs its local container Display inside a virt-manager-managed Debian/Ubuntu VM logged into real Xorg; session/backend/renderer and the native product flows above are recorded. Xwayland-on-Wayland alone is insufficient. | Pending |
 | UI responsiveness, including Display | During provisioning/deletion, expensive GPU/software frames, resize/rotation and stalled display/backend I/O, chat/sidebar/navigation/tab close remain usable; no synchronous frame/fence/process wait blocks the UI. Detached views release work asynchronously without stopping their guest. | Pending |
@@ -2350,14 +2350,14 @@ from Cuttlefish. Additional detailed cases remain mandatory in the frozen plan.
 | GPU limits | Actual supported devices and optional NVIDIA path verified; no physical-GPU claim from Cuttlefish, no guaranteed CUDA/game support from software rendering. | Pending |
 | Sudo | Noninteractive `sudo -n` package work, interactive PTY programs and `sudoedit` work; redirected input/output, interrupt, Ctrl-Z/`fg`, terminal resize and terminal restoration remain correct; no host privilege gained. | Pending |
 | XFCE layout | Fresh Termux and Linux desktops have one workplace and one bottom taskbar with Applications/kitten icon, normal running-window buttons and right-aligned application tray. No XFCE menu icon, clock/date, preseeded network/audio/power widgets, workspace switcher, Show Desktop, dock, pinned taskbar launcher or default desktop shortcut. Switching, resize, keyboard, rotation and scaling preserve the bottom workarea. Relaunch does not reset user edits. | Pending |
-| Application tray | Real StatusNotifier/AppIndicator and legacy XEmbed applications appear with working activation/menus; newly installed apps require no allowlist. Automatic guest BashKitten startup supplies exactly one real guest indicator, accurate status and the existing protected host activation path. Panel restart, browser closure, explicit Quit, icon hide/reorder and resizing behave correctly; no shared host bus, duplicate runtime, second protected Agent in the guest, injected system applets or UI stalls. | Pending |
-| BashKitten OS settings | Correct native package installs the application/icon and seeds its Start pin once. Manage window size defaults On; Off relinquishes layout and disables Two app mode while retaining its saved preference. Scaling/appearance/tray remain independent. Changes are responsive and persist across restart/upgrade; pin/unpin choices survive. Host/container-sharing controls are not duplicated here. | Pending |
-| Application Dark/Light preference | Change Dark/Light on Linux and Termux; the owning session's portal reads 1/2 and emits the change, and representative apps that follow system appearance observe it. Save/restart/upgrade retains the choice. BashKitten's dark/orange surfaces, Thunar customization and user wallpaper stay unchanged, as do other environments and host settings. No UI stalls, forced app restart or hidden polling. | Pending |
+| Application tray | Real StatusNotifier/AppIndicator and legacy XEmbed applications appear with working activation/menus; newly installed apps require no allowlist. Automatic guest Taskarian startup supplies exactly one real guest indicator, accurate status and the existing protected host activation path. Panel restart, browser closure, explicit Quit, icon hide/reorder and resizing behave correctly; no shared host bus, duplicate runtime, second protected Agent in the guest, injected system applets or UI stalls. | Pending |
+| Taskarian OS settings | Correct native package installs the application/icon and seeds its Start pin once. Manage window size defaults On; Off relinquishes layout and disables Two app mode while retaining its saved preference. Scaling/appearance/tray remain independent. Changes are responsive and persist across restart/upgrade; pin/unpin choices survive. Host/container-sharing controls are not duplicated here. | Pending |
+| Application Dark/Light preference | Change Dark/Light on Linux and Termux; the owning session's portal reads 1/2 and emits the change, and representative apps that follow system appearance observe it. Save/restart/upgrade retains the choice. Taskarian's dark/orange surfaces, Thunar customization and user wallpaper stay unchanged, as do other environments and host settings. No UI stalls, forced app restart or hidden polling. | Pending |
 | Maximized launcher | Apply the 15 October Applications-list amendment: vertical alphabetical icon/title rows, Pinned immediately above fixed bottom search, independent scrolling and natural pin height capped at 60% of available list space. Phone/tablet/desktop widths and keyboard/rotation reflow without overflow. Launch/search/pin/unpin/context actions/close stay responsive; pins survive rename/reopen/restart/update, appear once and disappear on explicit managed-entry deletion. No hidden polling, second Start menu, Garcon fork or split-layout disruption. | Pending |
 | XFCE behavior | Normal main windows maximize within the workarea; in-app modals, separate/late parent dialogs, file pickers, utilities, menus and fullscreen keep native behavior and do not dissolve a pair. Independent same-app windows remain main windows. Check pairing/drag, third main-window activation, member close, minimum sizes and viewport changes. Toggle management Off during queued resize/drag: divider disappears, pending enforcement stops, user moves/resizes normally, and no stale callback reapplies layout. On resumes without restarting apps or resurrecting a stale pair; no automatic extra workplace allocation. | Pending |
 | Linux application actions | Use real Thunar secondary-click actions on matching-architecture AppImages, `.desktop` launchers and `.deb` packages. Verify direct FUSE launch, explicit persistent extraction/reuse, explicit no-sandbox marker, icon/menu registration and rename/removal, requested desktop shortcuts and package dependencies through passwordless guest sudo. Menu/file names with spaces and percent signs work; source apps survive registration deletion. Check actual failure/cancel reporting, UI responsiveness, preservation of unrelated Thunar actions and no host/Termux installation. Record amd64/arm64 coverage separately. | Pending |
 | Scaling | Saved profiles update owned XFCE settings and new app launches; launcher reflows and the exact Gnozzard palette remains consistent; restart-needed apps are reported truthfully; no startup script resets user edits. | Pending |
-| Appearance/wallpaper persistence | Panel/menu/Thunar/default background use the recorded Gnozzard dark/orange colors on both platforms. The default wallpaper centers the existing BashKitten logo proportionally over #202225, shrinking when needed and never exceeding its 1254 × 1254 native pixels, including on high-DPI/large screens. Set a user wallpaper and placement through XFCE, then reopen Start/Display, rotate/resize, change scale, restart the desktop and upgrade the package; the saved image/placement and user appearance changes remain. No copied lock-screen override. | Pending |
+| Appearance/wallpaper persistence | Panel/menu/Thunar/default background use the recorded Gnozzard dark/orange colors on both platforms. The default wallpaper centers the existing Taskarian logo proportionally over #202225, shrinking when needed and never exceeding its 1254 × 1254 native pixels, including on high-DPI/large screens. Set a user wallpaper and placement through XFCE, then reopen Start/Display, rotate/resize, change scale, restart the desktop and upgrade the package; the saved image/placement and user appearance changes remain. No copied lock-screen override. | Pending |
 | Sidecar/backend controls | One + routes to remote setup or Linux container creation; every container heading opens its own full Display tab and Settings; individual toggles affect only their backend; remotes have no Display/settings; no large selector or artificial machine-count cap. | Pending |
 | Projects/sessions | Create chats with no project on every backend; create/rename projects, rename chats, move chats into/between/out of projects, retain subagents and reconnect; same native Pi history/cwd and correct effective model/reasoning/draft/queue ownership. | Pending |
 | Project working directory | Create a project through the modal on each backend, then create multiple chats beneath it without another folder prompt and verify their actual Pi cwd. Cancel leaves no project; missing/inaccessible directories report an error. Standalone new chats retain current behavior; reopening or regrouping existing chats preserves their recorded cwd. | Pending |
@@ -2379,9 +2379,9 @@ coordinator's matrices above.
 | Plan workstream | Source connections inspected |
 | --- | --- |
 | Sources/runtime contracts | Pi 1.1.0 release metadata and stock SDK adapter; tracked OS/private runtime source inventories; private bundled Node wrappers and role-specific package registration. No alternate system-Pi runtime path was added. |
-| Native Display | Main-APK `:display` renderer service and paired loader, native Display entry point and Fenix hooks; Linux module spawning the packaged renderer child, persistent gateway, native frame receiver and explicit GPU/software startup. The Termux launcher now uses `bashkitten-x11`; the remaining old launcher reference is exact-default migration and a preserved-custom-command advisory, not an external-APK launch route. |
+| Native Display | Main-APK `:display` renderer service and paired loader, native Display entry point and Fenix hooks; Linux module spawning the packaged renderer child, persistent gateway, native frame receiver and explicit GPU/software startup. The Termux launcher now uses `taskarian-x11`; the remaining old launcher reference is exact-default migration and a preserved-custom-command advisory, not an external-APK launch route. |
 | Persistent environments | Machine controller dispatch, user-data rootfs/config/image storage, editable Containerfile/launch arguments, operation output and retry, stable named deletion, startup, guest service and sudo helper packaging. |
-| BashKitten OS | Shared package/defaults, launcher/pins, layout settings, appearance/scaling, guest tray activation and Thunar helper integration. Linux provisioning invokes first-use initialization. The missing Termux initialization connection is recorded below. |
+| Taskarian OS | Shared package/defaults, launcher/pins, layout settings, appearance/scaling, guest tray activation and Thunar helper integration. Linux provisioning invokes first-use initialization. The missing Termux initialization connection is recorded below. |
 | Native hierarchy | Desktop/Android native sidecars, protected navigation adapters, per-backend controls, container-only Display/settings, projects and owning-backend folder picker, cwd inheritance, rename/move, native session parser, per-chat drafts and queue-edit identity. |
 | Integration boundaries | Native container TLS byte relay over its allocated socket, separate saved-remote route, guest browser relay and host-filesystem guards; media/port configuration and actual declared helper dependencies. `xclip`, X11 inspection/input tools and accessibility helper are present in the guest recipe/package paths. |
 | Phone controls | Main-APK panel, independent policy/Accessibility choices, lazy command registry, live worker grant/CLI path and package launcher; `phoneuse` is omitted from desktop discovery. Shared desktop guides are selected by execution role, not the attached browser platform. |
@@ -2403,7 +2403,7 @@ Concrete review findings and follow-up:
 - Phone finals no longer disappear from the backend outbox merely because five
   minutes elapsed. Messages remain deliverable; expired call invitations route
   to voicemail. Questions retain their independent authoritative deadline.
-- Fresh Termux setup did not invoke `bashkitten-os initialize`, so the shared
+- Fresh Termux setup did not invoke `taskarian-os initialize`, so the shared
   defaults would not be seeded. The package owner added that invocation to
   `agent/packaging/termux/install.sh` after package installation and before the
   native setup-complete return. It is explicit setup provisioning, preserves

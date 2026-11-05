@@ -670,7 +670,7 @@ Preferences.addSetting({
 
 Preferences.addSetting({
   id: "profilesPane",
-  visible: () => lazy.AppConstants.MOZ_APP_NAME != "bashkitten",
+  visible: () => lazy.AppConstants.MOZ_APP_NAME != "taskarian",
   onUserClick(e) {
     e.preventDefault();
     window.gotoPref("paneProfiles");
@@ -688,7 +688,7 @@ Preferences.addSetting({
 });
 Preferences.addSetting({
   id: "manageProfiles",
-  visible: () => lazy.AppConstants.MOZ_APP_NAME != "bashkitten",
+  visible: () => lazy.AppConstants.MOZ_APP_NAME != "taskarian",
   onUserClick: e => {
     e.preventDefault();
     // Using the existing function for now, since privacy.js also calls it
@@ -1029,7 +1029,7 @@ SettingGroupManager.registerGroups({
     ],
   },
   profilePane: {
-    hidden: lazy.AppConstants.MOZ_APP_NAME == "bashkitten",
+    hidden: lazy.AppConstants.MOZ_APP_NAME == "taskarian",
     headingLevel: 2,
     id: "browserProfilesGroupPane",
     l10nId: "preferences-profiles-subpane-description",
@@ -1073,7 +1073,7 @@ SettingGroupManager.registerGroups({
     ],
   },
   profiles: {
-    hidden: lazy.AppConstants.MOZ_APP_NAME == "bashkitten",
+    hidden: lazy.AppConstants.MOZ_APP_NAME == "taskarian",
     id: "profilesGroup",
     l10nId: "preferences-profiles-section-header",
     headingLevel: 2,

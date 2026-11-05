@@ -62,7 +62,7 @@ def locked_archives(root=AGENT, cache=None, *, offline=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cache', type=Path, help='Seed this native npm content cache')
-    parser.add_argument('--source-cache', type=Path, help='Override BASHKITTEN_SOURCE_CACHE for original archives')
+    parser.add_argument('--source-cache', type=Path, help='Override TASKARIAN_SOURCE_CACHE for original archives')
     parser.add_argument('--offline', action='store_true', help='Use only verified cached archives or local seeds')
     args = parser.parse_args()
     sources = locked_archives(cache=args.source_cache, offline=args.offline)

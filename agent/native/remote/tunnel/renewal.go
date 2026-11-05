@@ -8,11 +8,11 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/openresearchtools/bashkitten/remote/oauth"
+	"github.com/openresearchtools/Taskarian/remote/oauth"
 	"golang.org/x/crypto/ssh"
 )
 
-const renewalRequest = "credentials@bashkitten-v1"
+const renewalRequest = "credentials@taskarian-v1"
 
 // ErrCarrierClosed means no renewal was sent, so another still-live carrier may
 // be selected. Errors after SendRequest must never cause a refresh-token retry.

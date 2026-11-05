@@ -1,5 +1,5 @@
 TERMUX_PKG_HOMEPAGE=https://github.com/jpillora/chisel
-TERMUX_PKG_DESCRIPTION="BashKitten private native Chisel tunnel transport"
+TERMUX_PKG_DESCRIPTION="Taskarian private native Chisel tunnel transport"
 TERMUX_PKG_LICENSE="MIT"
 TERMUX_PKG_LICENSE_FILE=LICENSE
 TERMUX_PKG_MAINTAINER="openresearchtools <openresearchtools@gmail.com>"
@@ -10,7 +10,7 @@ TERMUX_PKG_AUTO_UPDATE=false
 
 termux_step_make() {
   termux_setup_golang
-  source "$BASHKITTEN_SOURCE_ROOT/auth/build/go-env.sh"
+  source "$TASKARIAN_SOURCE_ROOT/auth/build/go-env.sh"
   case "$TERMUX_ARCH" in
     aarch64) export GOARCH=arm64 ;;
     x86_64) export GOARCH=amd64 ;;
@@ -26,7 +26,7 @@ termux_step_make() {
 }
 
 termux_step_make_install() {
-  local payload="$TERMUX_PREFIX/lib/bashkitten/auth"
+  local payload="$TERMUX_PREFIX/lib/taskarian/auth"
   install -Dm755 "$TERMUX_PKG_BUILDDIR/chisel" "$payload/bin/chisel"
-  python3 "$BASHKITTEN_SOURCE_ROOT/auth/build/go-notices.py" "$TERMUX_PKG_SRCDIR" "$payload" chisel
+  python3 "$TASKARIAN_SOURCE_ROOT/auth/build/go-notices.py" "$TERMUX_PKG_SRCDIR" "$payload" chisel
 }

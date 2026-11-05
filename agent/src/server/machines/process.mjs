@@ -64,10 +64,10 @@ export async function quiescePodman() {
   } finally { clearTimeout(timer); }
 }
 export async function installed() {
-  if (process.getuid?.() === 0) throw Error('Run BashKitten machines as your desktop user, not host root');
+  if (process.getuid?.() === 0) throw Error('Run Taskarian machines as your desktop user, not host root');
   for (const name of ['podman','crun','conmon','pasta','netavark','aardvark-dns','fuse-overlayfs','fusermount3','catatonit']) {
     try { await fs.access(helper(name), fs.constants.X_OK); }
-    catch { throw Error(`The private ${name} runtime is missing; reinstall the BashKitten machine package`); }
+    catch { throw Error(`The private ${name} runtime is missing; reinstall the Taskarian machine package`); }
   }
   for (const name of ['/usr/bin/newuidmap','/usr/bin/newgidmap']) {
     try { await fs.access(name, fs.constants.X_OK); } catch { throw Error('Rootless containers require the host uidmap package (newuidmap and newgidmap)'); }

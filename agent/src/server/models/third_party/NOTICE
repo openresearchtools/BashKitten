@@ -1,18 +1,18 @@
 Hugging Face repository and download adaptation
 
-BashKitten's JavaScript model-download implementation adapts the repository
+Taskarian's JavaScript model-download implementation adapts the repository
 listing, private settings, job controls and resumable download design from:
 
-  BashKitten Rust
-  https://github.com/openresearchtools/bashkitten-rust
+  Legacy Rust implementation
+  https://api.github.com/repositories/1377711242
   Commit: ae98be510992103ec2e9535d46d31117c4a65307
   Reference files: src/huggingface.rs, src/download.rs,
                    src/web/download_api.rs, THIRD_PARTY_NOTICES.md
-  License: Apache-2.0; full text in BASHKITTEN-RUST-LICENSE.
+  License: Apache-2.0; full text in TASKARIAN-RUST-LICENSE.
 
 The implementation is changed: it is a dependency-free JavaScript adaptation
 for the existing Node server, rather than the donor's Rust implementation.
-BashKitten's original JavaScript code and modifications are AGPL-3.0-only;
+Taskarian's original JavaScript code and modifications are AGPL-3.0-only;
 the original source licenses and attributions remain applicable.
 
 The Rust donor records SimpleHF as the source of its repository listing and
@@ -49,7 +49,7 @@ extensions/llama/huggingface.ts:
   Copyright (c) 2025 Mario Zechner
   License: MIT; full text in PI-LICENSE, preserved from the Rust donor's
   THIRD_PARTY_NOTICES.md. This is the historical client reference, separate
-  from the native Pi runtime version shipped with BashKitten.
+  from the native Pi runtime version shipped with Taskarian.
 
-No SimpleHF or BashKitten Rust executable, GUI, Rust runtime dependencies or
+No SimpleHF or Taskarian Rust executable, GUI, Rust runtime dependencies or
 third-party model weights are included by this adaptation.

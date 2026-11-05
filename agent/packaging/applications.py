@@ -241,13 +241,13 @@ def install(args, app, revision, cache, checked_archive, extract):
 
 
 def office_extension(runtime):
-    archive = runtime / 'share/bashkitten/org.bashkitten.references.zip'
+    archive = runtime / 'share/taskarian/org.taskarian.references.zip'
     archive.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='references-office-extension-', dir=runtime.parent) as temporary:
         destination = Path(temporary)
         subprocess.run(['node', str(ROOT / 'office/package-extension.mjs'), str(destination)], check=True)
         legal = destination / 'legal'; legal.mkdir(exist_ok=True)
-        for source, name in [(ROOT / 'agent/LICENSE', 'BashKitten-LICENSE'),
+        for source, name in [(ROOT / 'agent/LICENSE', 'Taskarian-LICENSE'),
                              (ROOT / 'references/THIRD_PARTY_NOTICES.md', 'References-NOTICE'),
                              (ROOT / 'references/vendor/classic-dialog/source/COPYING', 'Classic-dialog-LICENSE')]:
             shutil.copy2(source, legal / name)

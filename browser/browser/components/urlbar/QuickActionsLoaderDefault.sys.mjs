@@ -108,7 +108,7 @@ const DEFAULT_ACTIONS = {
     l10nCommands: ["quickactions-cmd-help"],
     icon: "chrome://global/skin/icons/help.svg",
     label: "quickactions-help",
-    onPick: openUrlFun("https://github.com/openresearchtools/bashkitten/issues"),
+    onPick: openUrlFun("https://github.com/openresearchtools/Taskarian/issues"),
   },
   inspect: {
     l10nCommands: ["quickactions-cmd-inspector2"],

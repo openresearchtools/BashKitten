@@ -32,7 +32,7 @@ export class NativeTunnel {
     lines.once('close', failed);
   }
   static async launch(stack) {
-    return new NativeTunnel(await stack.launch('remote', binary('bashkitten-remote'), [], process.env, { pipe: true }));
+    return new NativeTunnel(await stack.launch('remote', binary('taskarian-remote'), [], process.env, { pipe: true }));
   }
   call(method, params = {}) {
     if (this.closed) return Promise.reject(Error('Native tunnel controller is stopped'));

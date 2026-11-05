@@ -190,7 +190,7 @@ private fun FallbackContent(
             )
         } else if (tabUrl == ABOUT_HOME_URL) {
             Image(
-                painter = painterResource(id = R.drawable.bashkitten_logo),
+                painter = painterResource(id = R.drawable.taskarian_logo),
                 contentDescription = null,
                 modifier = Modifier
                     .size(FallbackIconSize)

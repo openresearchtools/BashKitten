@@ -215,8 +215,8 @@ def main():
     choices = record['archives'] if args.platform == 'linux' else record['architectures']
     if args.architecture not in choices:
         parser.error('architecture must be one of ' + ', '.join(choices))
-    cache = (Path(os.environ['BASHKITTEN_NODE_CACHE']).expanduser()
-             if os.environ.get('BASHKITTEN_NODE_CACHE') else default_cache())
+    cache = (Path(os.environ['TASKARIAN_NODE_CACHE']).expanduser()
+             if os.environ.get('TASKARIAN_NODE_CACHE') else default_cache())
     cache.mkdir(parents=True, exist_ok=True)
     args.output.mkdir(parents=True, exist_ok=True)
     identity = f'{args.platform}-{args.architecture}'

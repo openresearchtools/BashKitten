@@ -1,4 +1,4 @@
-From: BashKitten contributors
+From: Taskarian contributors
 Subject: [PATCH] meson: order common compilation after its generated enum header
 
 common/panel-utils.h includes libxfce4panel.h, which includes the generated

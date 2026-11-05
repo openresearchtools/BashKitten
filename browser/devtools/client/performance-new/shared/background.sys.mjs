@@ -115,7 +115,7 @@ export async function captureProfile(pageContext) {
     .RecordingUtils()
     .getProfileDataAsGzippedArrayBufferThenStop();
   cleanupMozLogs();
-  if (AppConstants.MOZ_APP_NAME === "bashkitten") {
+  if (AppConstants.MOZ_APP_NAME === "taskarian") {
     await lazy.BrowserModule().saveProfileToFile(profileCaptureResult);
     return;
   }

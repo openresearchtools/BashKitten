@@ -226,7 +226,7 @@ private fun AfterListItemAction(
                         }
                         val opened = intent != null && runCatching {
                             context.startActivity(
-                                Intent.createChooser(intent, context.getString(R.string.bashkitten_download_open_with))
+                                Intent.createChooser(intent, context.getString(R.string.taskarian_download_open_with))
                                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                             )
                         }.isSuccess
@@ -291,7 +291,7 @@ private fun getContextMenuItems(
 ) = when (status) {
     FileItem.Status.Completed -> listOf(
         MenuItem.TextItem(
-            text = Text.Resource(R.string.bashkitten_download_open_with),
+            text = Text.Resource(R.string.taskarian_download_open_with),
             onClick = onOpenWithClick,
             level = MenuItem.FixedItem.Level.Default,
         ),

@@ -6,7 +6,7 @@ import { dataDir, digest, privateDir, randomToken } from '../common.mjs';
 import { platform } from '../platform/index.mjs';
 import { ensureIntegration } from './integration.mjs';
 
-const begin = '<!-- bashkitten:environment -->', end = '<!-- /bashkitten:environment -->';
+const begin = '<!-- taskarian:environment -->', end = '<!-- /taskarian:environment -->';
 async function read(file) { try { return await fs.readFile(file, 'utf8'); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } }
 
 export async function syncContext({ agentDir, target = platform, home = os.homedir(), prefix = process.env.PREFIX || '/data/data/com.termux/files/usr' } = {}) {
@@ -32,11 +32,11 @@ export async function syncContext({ agentDir, target = platform, home = os.homed
     }
     text ||= '';
     const start = text.indexOf(begin), finish = text.indexOf(end);
-    if ((start >= 0) !== (finish >= 0) || (start >= 0 && finish < start)) throw Error(`Repair the incomplete BashKitten environment block in ${file}`);
+    if ((start >= 0) !== (finish >= 0) || (start >= 0 && finish < start)) throw Error(`Repair the incomplete Taskarian environment block in ${file}`);
     const next = start < 0 ? (text ? text.trimEnd() + '\n\n' : '') + block + '\n' : text.slice(0, start) + block + text.slice(finish + end.length);
     if (next === previous) continue;
     if (previous !== null) {
-      try { await fs.writeFile(file + '.bashkitten-backup', previous, { flag: 'wx', mode: 0o600 }); }
+      try { await fs.writeFile(file + '.taskarian-backup', previous, { flag: 'wx', mode: 0o600 }); }
       catch (error) { if (error.code !== 'EEXIST') throw error; }
     }
     const temporary = file + '.' + randomToken() + '.tmp';

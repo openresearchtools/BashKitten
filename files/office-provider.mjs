@@ -60,7 +60,7 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
       callback = http.createServer(async (req, res) => {
         try {
           const supplied = String(req.headers.authorization || '').replace(/^Bearer /, ''); if (supplied.length !== callbackToken.length || !timingSafeEqual(Buffer.from(supplied), Buffer.from(callbackToken))) throw fail(401, 'Unauthorized callback');
-          const claims = JSON.parse(req.headers['x-bashkitten-grant'] || '{}');
+          const claims = JSON.parse(req.headers['x-taskarian-grant'] || '{}');
           if (req.method !== 'POST') throw fail(405, 'Unsupported method');
           switch (req.url) {
             case '/v1/owner/extension-info': { const bytes = await extensionBytes(claims); send(res, 200, bytes ? { available: true, stamp: extension.sha256 } : { available: false }); break; }
@@ -300,7 +300,7 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
       let uri; try { uri = new URL(value); } catch { return false; }
       if (uri.hash || uri.username || uri.password || uri.searchParams.get('access_token') !== token || [...uri.searchParams.keys()].length !== 1) return false;
       uri.search = '';
-      return (selectedName ? [selectedName] : ['browser', 'documentView.xcu', 'viewsetting.json', 'org.bashkitten.references.zip']).some(name => uri.href === new URL(base + '/' + settingsFileId + '/' + name).href);
+      return (selectedName ? [selectedName] : ['browser', 'documentView.xcu', 'viewsetting.json', 'org.taskarian.references.zip']).some(name => uri.href === new URL(base + '/' + settingsFileId + '/' + name).href);
     };
     if (route === 'fetch-settings-config') {
       if (text('accessToken') !== token || text('type') !== 'userconfig' || !ownedBase(text('sharedConfigUrl'))) throw fail(403, 'Settings manifest is outside this document owner');
@@ -359,7 +359,7 @@ export function createOfficeProvider({ dataRoot, environmentId, authorizeOperati
     const internal = new URL(collaboraInternalURL);
     if (!['http:', 'https:'].includes(internal.protocol)) throw fail(503, 'Invalid internal Office endpoint');
     const headers = { ...req.headers };
-    for (const key of Object.keys(headers)) if (key.startsWith('x-bashkitten-') || ['authorization', 'cookie', 'forwarded', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip'].includes(key)) delete headers[key];
+    for (const key of Object.keys(headers)) if (key.startsWith('x-taskarian-') || ['authorization', 'cookie', 'forwarded', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip'].includes(key)) delete headers[key];
     if (isNativeSettingsPost(req) && req.officeSettingsBearer === req.officeIssuedSession?.session.accessToken) headers.authorization = 'Bearer ' + req.officeSettingsBearer;
     headers.host = external.host; headers['x-forwarded-host'] = external.host; headers['x-forwarded-proto'] = 'https';
     const publicPath = req.url.slice('/apps/office'.length); const targetPath = internal.pathname.replace(/\/$/, '') + publicPath;

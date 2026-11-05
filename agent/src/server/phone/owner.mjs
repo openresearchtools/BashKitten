@@ -79,7 +79,7 @@ export async function initializePhoneOwner() {
   return phoneOwnerEnvironment();
 }
 export function phoneOwnerEnvironment() {
-  return server ? { BASHKITTEN_PHONE_REGISTRAR_SOCKET: socket, BASHKITTEN_PHONE_REGISTRAR_KEY: registrar } : {};
+  return server ? { TASKARIAN_PHONE_REGISTRAR_SOCKET: socket, TASKARIAN_PHONE_REGISTRAR_KEY: registrar } : {};
 }
 export async function configurePhoneOwner(link) {
   if (platform !== 'termux' || !server || link.version !== 1 || typeof link.owner !== 'string' || link.owner.length < 32) throw Error('Native Phone authority unavailable');
@@ -117,15 +117,15 @@ export async function closePhoneOwner() {
   if (server) { server.close(); server.closeAllConnections(); server = undefined; await fs.rm(socket, { force: true }); }
 }
 export async function createPhoneWorkerSlot(worker) {
-  const socketPath = process.env.BASHKITTEN_PHONE_REGISTRAR_SOCKET, key = process.env.BASHKITTEN_PHONE_REGISTRAR_KEY;
+  const socketPath = process.env.TASKARIAN_PHONE_REGISTRAR_SOCKET, key = process.env.TASKARIAN_PHONE_REGISTRAR_KEY;
   if (platform !== 'termux' || !socketPath || !key) return { environment: {}, attach: async () => {}, close: async () => {} };
   const { secret } = await privateRequest(socketPath, key, 'register', { worker });
   const close = () => privateRequest(socketPath, key, 'revoke', { secret }).catch(() => {});
-  return { environment: { BASHKITTEN_PHONE_OWNER_SOCKET: socketPath, BASHKITTEN_PHONE_OWNER_WORKER_KEY: secret },
+  return { environment: { TASKARIAN_PHONE_OWNER_SOCKET: socketPath, TASKARIAN_PHONE_OWNER_WORKER_KEY: secret },
     async attach(child) { try { await privateRequest(socketPath, key, 'attach', { secret, pid: child.pid }); child.once('exit', close); child.once('error', close); } catch (error) { await close(); throw error; } }, close };
 }
 export function withoutPhoneIssuers(environment) {
   const result = { ...environment };
-  for (const key of Object.keys(result)) if (key.startsWith('BASHKITTEN_PHONE_REGISTRAR_') || key.startsWith('BASHKITTEN_PHONE_OWNER_')) delete result[key];
+  for (const key of Object.keys(result)) if (key.startsWith('TASKARIAN_PHONE_REGISTRAR_') || key.startsWith('TASKARIAN_PHONE_OWNER_')) delete result[key];
   return result;
 }

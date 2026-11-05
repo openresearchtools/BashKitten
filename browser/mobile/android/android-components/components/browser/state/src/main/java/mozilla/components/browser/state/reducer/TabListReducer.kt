@@ -9,8 +9,8 @@ import mozilla.components.browser.state.action.TabGroupAction
 import mozilla.components.browser.state.selector.findTab
 import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.state.state.BrowserState
-import mozilla.components.browser.state.state.BASHKITTEN_FILES_PARTITION
-import mozilla.components.browser.state.state.BASHKITTEN_FILES_GROUP
+import mozilla.components.browser.state.state.TASKARIAN_FILES_PARTITION
+import mozilla.components.browser.state.state.TASKARIAN_FILES_GROUP
 import mozilla.components.browser.state.state.TabPartition
 import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.browser.state.state.filesTabIds
@@ -52,8 +52,8 @@ internal object TabListReducer {
                 // Reuse native group assignment and the actual opener, never the selected tray page.
                 if (action.tab.parentId in state.filesTabIds()) {
                     TabGroupReducer.reduce(updatedState, TabGroupAction.AddTabAction(
-                        partition = BASHKITTEN_FILES_PARTITION,
-                        group = BASHKITTEN_FILES_GROUP,
+                        partition = TASKARIAN_FILES_PARTITION,
+                        group = TASKARIAN_FILES_GROUP,
                         tabId = action.tab.id,
                     ))
                 } else updatedState

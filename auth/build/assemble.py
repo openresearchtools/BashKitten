@@ -16,11 +16,11 @@ metadata = stage / 'share/metadata'
 metadata.mkdir(parents=True, exist_ok=True)
 components = []
 for component in ('authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote'):
-    binary = stage / 'bin' / {'valkey': 'valkey-server', 'remote': 'bashkitten-remote'}.get(component, component)
+    binary = stage / 'bin' / {'valkey': 'valkey-server', 'remote': 'taskarian-remote'}.get(component, component)
     if not binary.is_file():
         raise SystemExit(f'Missing binary: {binary}')
     record = root / 'auth/upstreams.lock.json'
-    details = ({'version': '1', 'repository': 'https://github.com/openresearchtools/BashKitten',
+    details = ({'version': '1', 'repository': 'https://github.com/openresearchtools/Taskarian',
                 'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()}
                if component == 'remote' else json.loads(record.read_text())[component])
     components.append(dict(name=component, version=details['version'], source=details['repository'], commit=details['commit'], sha256=hashlib.sha256(binary.read_bytes()).hexdigest()))

@@ -2214,7 +2214,7 @@ static void DumpHelp() {
       "                     written to stdout.\n",
       (const char*)gAppData->name, (const char*)gAppData->name);
 
-  if (!nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+  if (!nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("taskarian")) {
     printf("  -P <profile>       Start with <profile>.\n"
            "  --profile <path>   Start with profile at <path>.\n"
            "  --ProfileManager   Start with ProfileManager.\n"
@@ -4742,21 +4742,21 @@ int XREMain::XRE_mainInit(bool* aExitFlag,
   CrashReporter::RegisterAnnotationBool(CrashReporter::Annotation::SafeMode,
                                         &gSafeMode);
 
-  // BashKitten has one profile and uses the existing instance for URL launches.
+  // Taskarian has one profile and uses the existing instance for URL launches.
   // Reject these before either profile selection or remote-client startup.
 #ifndef MOZ_WIDGET_ANDROID
-  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("taskarian")) {
     for (const char* flag : {"p", "profile", "profilemanager", "createprofile",
                              "new-instance", "no-remote"}) {
       if (CheckArg(flag, nullptr, CheckArgFlag::None) != ARG_NONE) {
         PR_fprintf(PR_STDERR,
-                   "BashKitten uses one profile and window; --%s is not supported.\n",
+                   "Taskarian uses one profile and window; --%s is not supported.\n",
                    flag);
         return 1;
       }
     }
     if (EnvHasValue("MOZ_NEW_INSTANCE")) {
-      PR_fprintf(PR_STDERR, "BashKitten does not support MOZ_NEW_INSTANCE.\n");
+      PR_fprintf(PR_STDERR, "Taskarian does not support MOZ_NEW_INSTANCE.\n");
       return 1;
     }
   }

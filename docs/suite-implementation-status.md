@@ -44,7 +44,7 @@ emulator allowance and TLS has its `openssl-tool` test dependency. Fixture OAuth
 ## Android device evidence
 
 The disposable Cuttlefish Android 17 / aarch64 / 4 KB device is
-`0.0.0.0:6521`, group `bashkittensuite`. Preserve the original, differently signed
+`0.0.0.0:6521`, group `taskariansuite`. Preserve the original, differently signed
 Termux device at `192.168.97.2:5555`.
 
 - Suite-signed Termux initializes through the protected setup activity without
@@ -52,12 +52,12 @@ Termux device at `192.168.97.2:5555`.
   debug-signed probe APK requests the trusted permission and is denied by Android
   (`PASS: unrelated signer denied`). The public external-command policy remains.
 - Core setup installed native Node, Python, Git, gh, ripgrep, fd, API CLI and the
-  existing Termux APT keyring. Candidate BashKitten packages are installed through
+  existing Termux APT keyring. Candidate Taskarian packages are installed through
   the protected command path. The published 0.2.2 package also installs from the
   existing signed APT repository; the manager reloads it and retains Pi 0.86.0.
 - The manager runs as a real long-lived task in Termux's foreground service.
   A native Pi turn using a local model fixture completes after force-stopping
-  BashKitten; the backend and worker remain alive.
+  Taskarian; the backend and worker remain alive.
 - **APK file flow passes** on production APK code 4 / 0.2.1: persistent login across
   activity recreation, home-confined working-folder picker, Unicode folder name,
   ordinary Android system image picker, decoded image preview, repository upload,
@@ -73,15 +73,15 @@ Termux device at `192.168.97.2:5555`.
   suite restores unmodified upstream API; notifications now use its standard text
   interface without a custom notification-link action. Camera/microphone/location/
   contacts remain unrequested.
-- **Real Termux:API store update passes** on BashKitten APK code 3 (**35492190686**):
+- **Real Termux:API store update passes** on Taskarian APK code 3 (**35492190686**):
   signed catalog verification, GitHub HTTPS download, APK hash/certificate checks,
   Android installer confirmation, API code 1002 → 1003, durable service pause and
   automatic backend recovery. Android 17's confirmation intent contains Binder
   data: store it in a system PendingIntent and persist only its lookup identity.
   The earlier candidate's Parcel-to-disk implementation crashed in this test;
-  it is not suitable for release. **BashKitten self-update code 3 → 4 also passes**
+  it is not suitable for release. **Taskarian self-update code 3 → 4 also passes**
   through the signed catalog and native installer; PackageManager records
-  `com.bashkitten` as installer. Android ends the instrumentation process during
+  `com.taskarian` as installer. Android ends the instrumentation process during
   APK replacement, so the resulting package identity was verified separately.
   Reopening retains the authenticated WebView cookie and existing conversation.
 - **Software X11/XFCE passes** with Mesa 26.2.3 llvmpipe (LLVM 21.1.8), OpenGL 4.6,
@@ -107,7 +107,7 @@ notification-link patch has been removed.
 All eight apps, both X11 variants and the paired aarch64 companion pass Actions
 build/signing checks in **35495776147**, published as **suite-35495776147**.
 API is 0.53.0 suite revision 3/code 1004; Termux is 0.118.3 suite revision 2/code
-1003. The companion and BashKitten 0.2.2 are indexed in the existing APT repository.
+1003. The companion and Taskarian 0.2.2 are indexed in the existing APT repository.
 The production signed catalog contains all ten APK entries (including both X11
 variants); renewal **35497362022** passed. Upstream displayed
 versions and individual licenses are retained.
@@ -127,7 +127,7 @@ packages**, retaining recipes, patches and toolchain provenance. A complete loca
 suite release assembly includes the unmodified API revision 3 and is published
 with its bootstrap source inputs.
 
-BashKitten's source collector successfully verifies **202 npm archives**, keeps
+Taskarian's source collector successfully verifies **202 npm archives**, keeps
 unmodified license/notice payloads, and includes exact Pi upstream source plus
 tracked application/build source. The root lock now supplies exact registry SRI
 where Pi's published shrinkwrap omitted internal-package integrity. Versions and
@@ -198,7 +198,7 @@ Pi 0.86.0 up to date. Its bounded output remains available in Apps. Android buil
 permission screens and activity restarts. Normal remains the fresh-install default. The installed local Linux 0.2.3 candidate passed native file/folder/URL,
 image picker/paste, provider-login helper and persistent-cookie tests under Xvfb.
 
-BashKitten **v0.2.2** is a normal release with the Android APK, five native
+Taskarian **v0.2.2** is a normal release with the Android APK, five native
 packages, tracked application source and 202 dependency source archives. APT
 publisher **35497361590** succeeded. Actual signed-index upgrade/reinstall and
 retained-login checks passed on native **arm64 and amd64** in **35497614997**;
@@ -216,7 +216,7 @@ backend replacement reloaded services successfully and preserved selected Pi
 0.86.0. This records a recoverable timeout, not a claim that every install was
 uninterrupted.
 
-BashKitten **v0.2.3** is published with the signed APK, five native packages and
+Taskarian **v0.2.3** is published with the signed APK, five native packages and
 matching application/Pi/202 dependency source archives. Final Linux build
 **35503218579** passes both architectures. Catalog renewal **35503885568** and APT
 publication **35503885573** succeeded; signed-index upgrade/reinstall and retained
@@ -236,7 +236,7 @@ key remains separate. No private key is tracked.
 
 ## License delivery and production-only source (20 September 2026)
 
-BashKitten 0.2.4 adds offline Android About/Licenses and shared web/Linux
+Taskarian 0.2.4 adds offline Android About/Licenses and shared web/Linux
 Settings → About. The Android APK contains 76 license records, the Termux server
 168 and each Linux server 170, including full texts and native dependency
 notices. Release sources include exact Android source jars, locked npm/Pi source
@@ -252,16 +252,16 @@ serves 168 license records. Termux suite build **35505368171** rebuilt all nine
 APK variants and the matching companion; its short Termux-only About notice
 was checked on that device. Add-on source and app screens remain upstream.
 
-BashKitten-owned test suites, fixtures, instrumentation, permission probes and
+Taskarian-owned test suites, fixtures, instrumentation, permission probes and
 test dependencies were removed from the app repository and build workflows.
 Local verification material is outside the repository. Both test-only APKs and
 the two fixture chats/provider were removed from the disposable suite emulator;
-only `com.bashkitten` remains among BashKitten package IDs. Production package
+only `com.taskarian` remains among Taskarian package IDs. Production package
 payloads have no app test script or development dependency. Unmodified upstream
 source archives retain their original contents and licenses. Historical checks
 above describe earlier verification, not a suite shipped with the application.
 
-BashKitten **v0.2.4** and rebuilt suite **suite-35505368171** are published
+Taskarian **v0.2.4** and rebuilt suite **suite-35505368171** are published
 with short user-facing release notes and matching source/license archives.
 All preceding application releases were deleted, and the catalog release was
 recreated. Catalog renewal **35507618879** and APT publication **35507634926**
@@ -365,7 +365,7 @@ packages with these native-RPC changes included.
 ### Native working-folder restoration and 0.2.7 — 20 September 2026
 
 Pi restores cwd from its session header before loading project resources. Removed
-BashKitten’s ineffective in-place folder change; new chats choose a folder and
+Taskarian’s ineffective in-place folder change; new chats choose a folder and
 existing chats display their saved folder. Resume reads that native path before
 spawning Pi, so a stale or nonexistent UI-cache path cannot prevent restoration.
 Offline history uses Pi’s parser and an in-memory session view without opening a
@@ -385,7 +385,7 @@ and folder selection only for new chats. Linux and both Android installations
 passed offline About/full licenses and normal restart/reconnect. Both Android
 Chromium browsers rendered their normal profiles; existing credentials, sessions
 and other apps were preserved. The external emulator needed two unreferenced old
-BashKitten runtime copies removed for disk space; this was manual device cleanup,
+Taskarian runtime copies removed for disk space; this was manual device cleanup,
 not an application uninstall or a new cleanup feature.
 
 Release **v0.2.7** uses code `f04f601`, production Android build **35519871019**
@@ -434,7 +434,7 @@ WildBuzzard Actions build **35516040809** (`3035aa4`, APK SHA-256
 was installed on both emulators. Native Pi discovered the extension and skill;
 page DOM, screenshots and downloads passed. Suite Termux used publisher-signature
 authorization; external Termux approved its own identity in WildBuzzard's native
-consent screen opened from BashKitten. Repeated setup performed no npm install.
+consent screen opened from Taskarian. Repeated setup performed no npm install.
 The emulator's previous browser displayed the same version but had a different
 checksum; replacing that stale build fixed its command permission failure.
 
@@ -446,7 +446,7 @@ The optional browser has no public release yet; its Actions APK is installed
 manually until a hash-pinned release is available in the suite catalog.
 
 All checks and fixtures remain outside the repositories. On the disposable
-emulators, unused old BashKitten verification runtimes were removed after checking
+emulators, unused old Taskarian verification runtimes were removed after checking
 active/previous/default runtime references and process usage. User data, current
 runtimes, rollback copies and installed applications were preserved.
 

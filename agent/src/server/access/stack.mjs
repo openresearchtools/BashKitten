@@ -20,7 +20,7 @@ import { guestBrowserRole } from './guest-browser.mjs';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const backendScript = fileURLToPath(new URL('../http/server.mjs', import.meta.url));
 const quote = value => JSON.stringify(value);
-const untrusted = ['Remote-User', 'Remote-Groups', 'Remote-Email', 'Remote-Name', 'X-Forwarded-For', 'X-Forwarded-Host', 'X-Forwarded-Proto', 'X-Forwarded-URI', 'X-Forwarded-Method', 'X-Bashkitten-Proxy', 'X-Bashkitten-Access'];
+const untrusted = ['Remote-User', 'Remote-Groups', 'Remote-Email', 'Remote-Name', 'X-Forwarded-For', 'X-Forwarded-Host', 'X-Forwarded-Proto', 'X-Forwarded-URI', 'X-Forwarded-Method', 'X-Taskarian-Proxy', 'X-Taskarian-Access'];
 function proxyHeaders() { return 'header_up X-Forwarded-For 127.0.0.1\nheader_up X-Forwarded-Host {http.request.hostport}\nheader_up X-Forwarded-Proto https'; }
 
 export class AccessStack {
@@ -48,19 +48,19 @@ export class AccessStack {
       this.providerOwnerToken = randomToken();
       this.guestBrowserToken = guestBrowserRole() ? randomToken() : '';
       this.localToken = randomToken(); this.localGeneration = randomUUID();
-      this.localCookieName = '__Host-bashkitten_local_' + identity.instanceId.replaceAll('-', '');
+      this.localCookieName = '__Host-taskarian_local_' + identity.instanceId.replaceAll('-', '');
       // Tor must never forward to the native local listener, even with a forged Host.
       do { this.remotePort = await availablePort(0); } while (this.remotePort === port);
       this.remoteOrigins = []; this.remoteAuthOrigin = null;
       try {
         await this.launch('backend', process.execPath, [backendScript], { ...process.env, ...phoneOwnerEnvironment(),
-          BASHKITTEN_ACCESS_ORIGIN: this.origin, BASHKITTEN_PROXY_TOKEN: this.proxyToken,
-          BASHKITTEN_GUEST_BROWSER_OWNER_TOKEN: this.guestBrowserToken,
-          BASHKITTEN_PHONE_OWNER_HTTP_TOKEN: this.phoneOwnerToken,
-          BASHKITTEN_PROVIDER_OWNER_HTTP_TOKEN: this.providerOwnerToken,
-          BASHKITTEN_INSTANCE_TOKEN: this.instanceToken, BASHKITTEN_BACKEND_SOCKET: paths.backend,
-          BASHKITTEN_AUTH_SOCKET: paths.auth, BASHKITTEN_LOCAL_COOKIE: this.localCookieName,
-          BASHKITTEN_LOCAL_TOKEN: this.localToken });
+          TASKARIAN_ACCESS_ORIGIN: this.origin, TASKARIAN_PROXY_TOKEN: this.proxyToken,
+          TASKARIAN_GUEST_BROWSER_OWNER_TOKEN: this.guestBrowserToken,
+          TASKARIAN_PHONE_OWNER_HTTP_TOKEN: this.phoneOwnerToken,
+          TASKARIAN_PROVIDER_OWNER_HTTP_TOKEN: this.providerOwnerToken,
+          TASKARIAN_INSTANCE_TOKEN: this.instanceToken, TASKARIAN_BACKEND_SOCKET: paths.backend,
+          TASKARIAN_AUTH_SOCKET: paths.auth, TASKARIAN_LOCAL_COOKIE: this.localCookieName,
+          TASKARIAN_LOCAL_TOKEN: this.localToken });
         await this.waitUntil(async () => {
           const response = await unixRequest(paths.backend, '/api/instance', { headers: { host: new URL(this.origin).host, authorization: 'Bearer ' + this.instanceToken } });
           return response.status === 200;
@@ -114,7 +114,7 @@ export class AccessStack {
       const caPem = JSON.parse(response.body).root_certificate, ca = new X509Certificate(caPem);
       if (!ca.ca) throw Error('Caddy returned an invalid CA');
       const caSha256 = ca.fingerprint256.replaceAll(':', '').toLowerCase();
-      if (this.identity.caSha256 && this.identity.caSha256 !== caSha256) throw Object.assign(Error('Saved BashKitten certificate identity changed'), { fatal: true });
+      if (this.identity.caSha256 && this.identity.caSha256 !== caSha256) throw Object.assign(Error('Saved Taskarian certificate identity changed'), { fatal: true });
       this.identity = { instanceId: this.identity.instanceId, caPem, caSha256 };
       return true;
     }, 'Caddy');
@@ -226,7 +226,7 @@ export class AccessStack {
     const remote = !this.stopping && this.remoteAuthOrigin ? await this.remote.state() : {};
     const caId = remote.id && remote.phase !== 'replacing' ? 'remote-' + remote.id : null;
     const strip = untrusted.map(name => `request_header -${name}`).join('\n');
-    const backend = access => `reverse_proxy ${quote('unix/' + paths.backend)} {\n${proxyHeaders()}\nheader_up X-Bashkitten-Proxy ${this.proxyToken}\nheader_up X-Bashkitten-Access ${access}\nflush_interval -1\n}`;
+    const backend = access => `reverse_proxy ${quote('unix/' + paths.backend)} {\n${proxyHeaders()}\nheader_up X-Taskarian-Proxy ${this.proxyToken}\nheader_up X-Taskarian-Access ${access}\nflush_interval -1\n}`;
     let config = `{
 admin ${quote('unix/' + paths.admin)}
 persist_config off
@@ -237,9 +237,9 @@ skip_install_trust
 auto_https disable_redirects
 pki {
 ca local {
-name "BashKitten Local CA"
+name "Taskarian Local CA"
 }
-${caId ? `ca ${caId} {\nname "BashKitten Remote CA"\n}` : ''}
+${caId ? `ca ${caId} {\nname "Taskarian Remote CA"\n}` : ''}
 }
 }
 `;
@@ -268,7 +268,7 @@ route {
 ${strip}
 reverse_proxy ${quote('unix/' + path.join(runDir, 'apps-http.sock'))} {
 ${proxyHeaders()}
-header_up X-Bashkitten-Proxy ${this.proxyToken}
+header_up X-Taskarian-Proxy ${this.proxyToken}
 flush_interval -1
 }
 }
@@ -284,7 +284,7 @@ ca ${caId}
 }
 route {
 ${strip}
-@private path /api/instance /api/instance/* /.well-known/bashkitten-ca /login/api/authz/*
+@private path /api/instance /api/instance/* /.well-known/taskarian-ca /login/api/authz/*
 respond @private "Not found" 404
 @portal path /login /login/*
 handle @portal {
@@ -538,7 +538,7 @@ async function terminate(child) {
 }
 export function verifiedHttps(origin, ca) {
   return new Promise(resolve => {
-    const req = https.get(origin + '/.well-known/bashkitten-ca', { ca, rejectUnauthorized: true }, res => { res.resume(); resolve(res.statusCode === 200); });
+    const req = https.get(origin + '/.well-known/taskarian-ca', { ca, rejectUnauthorized: true }, res => { res.resume(); resolve(res.statusCode === 200); });
     req.setTimeout(2000, () => req.destroy()); req.on('error', () => resolve(false));
   });
 }

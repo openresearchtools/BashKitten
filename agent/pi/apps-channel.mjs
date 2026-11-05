@@ -4,9 +4,9 @@ import http from 'node:http';
 const MAX_BYTES = 16 * 1024 * 1024;
 /** The existing owned Pi worker binds its current session; callers cannot choose authority. */
 export function appsRequest(value, signal) {
-  const socketPath = process.env.BASHKITTEN_WORKER_SOCKET;
-  const key = process.env.BASHKITTEN_WORKER_KEY;
-  if (!socketPath || !key) throw Error('References and Office require a live BashKitten Pi worker');
+  const socketPath = process.env.TASKARIAN_WORKER_SOCKET;
+  const key = process.env.TASKARIAN_WORKER_KEY;
+  if (!socketPath || !key) throw Error('References and Office require a live Taskarian Pi worker');
   const body = JSON.stringify(value);
   if (Buffer.byteLength(body) > MAX_BYTES) throw Error('Application request exceeds 16 MiB; use bounded pages or native file import');
   return new Promise((resolve, reject) => {

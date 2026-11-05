@@ -23,11 +23,11 @@ import org.mozilla.fenix.ext.navigateToNotificationsSettings
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.showToolbar
 import org.mozilla.fenix.ext.showToolbarWithIconButton
-import com.bashkitten.AgentAccessActivity
-import com.bashkitten.BrowserApp
+import com.taskarian.AgentAccessActivity
+import com.taskarian.BrowserApp
 import mozilla.components.ui.icons.R as iconsR
 
-/** Settings for the capabilities shipped by BashKitten. */
+/** Settings for the capabilities shipped by Taskarian. */
 class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment {
     private val args by navArgs<SettingsFragmentArgs>()
 
@@ -47,7 +47,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
         }
         val category = PreferenceCategory(requireContext()).apply {
             title = "Agent"
-            key = "bashkitten_settings"
+            key = "taskarian_settings"
             isIconSpaceReserved = false
         }
         preferenceScreen.addPreference(category)
@@ -56,7 +56,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
             summary = "Allow or disconnect the remote Agent's access to ordinary browser tabs"
             isIconSpaceReserved = false
             setOnPreferenceClickListener {
-                (activity as? HomeActivity)?.bashKittenAgentPanel?.browserControl()
+                (activity as? HomeActivity)?.taskarianAgentPanel?.browserControl()
                 true
             }
         })
@@ -64,7 +64,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
             title = "Completed-turn notifications"
             isIconSpaceReserved = false
             setOnPreferenceClickListener {
-                (activity as? HomeActivity)?.bashKittenAgentPanel?.notifications()
+                (activity as? HomeActivity)?.taskarianAgentPanel?.notifications()
                 true
             }
         })
@@ -90,7 +90,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
             title = "Updates"
             isIconSpaceReserved = false
             setOnPreferenceClickListener {
-                (activity as? HomeActivity)?.bashKittenAgentPanel?.checkBrowserUpdate()
+                (activity as? HomeActivity)?.taskarianAgentPanel?.checkBrowserUpdate()
                 true
             }
         })

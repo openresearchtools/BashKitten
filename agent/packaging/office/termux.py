@@ -24,7 +24,7 @@ import branding
 
 ROOT = Path(__file__).resolve().parents[3]
 PREFIX = '/data/data/com.termux/files/usr'
-RUNTIME = PREFIX + '/lib/bashkitten/office/runtime'
+RUNTIME = PREFIX + '/lib/taskarian/office/runtime'
 sys.path.insert(0, str(ROOT / 'agent/packaging'))
 from source_cache import fetch
 sys.path.insert(0, str(ROOT / 'agent/packaging/termux'))
@@ -241,7 +241,7 @@ def build_online(source, args, env):
     branding.verify_online(source)
     config = (source / 'config.h').read_text()
     for required in ['#define MOBILEAPP 0', '#define DISABLE_SECCOMP 0', '#define DISABLE_LANDLOCK 0',
-                     '#define HAVE_LIBCAP 1', '#define BASHKITTEN_TERMUX_PREFIX "' + PREFIX + '"']:
+                     '#define HAVE_LIBCAP 1', '#define TASKARIAN_TERMUX_PREFIX "' + PREFIX + '"']:
         if required not in config:
             raise ValueError('Native server/isolation configuration missing: ' + required)
     # Online forwards its complete configured CPPFLAGS to native gbuild. Keep

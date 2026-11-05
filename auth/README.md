@@ -1,6 +1,6 @@
 # Native access stack
 
-BashKitten builds the original Authelia, Caddy, Tor, Valkey and Chisel sources recorded in
+Taskarian builds the original Authelia, Caddy, Tor, Valkey and Chisel sources recorded in
 `upstreams.lock.json`. Their licenses and notices remain in each source tree.
 These private server executables are included in the Linux and Termux packages.
 Termux recipes and patches are separate; they never replace the pristine source.
@@ -10,7 +10,7 @@ Termux recipes and patches are separate; they never replace the pristine source.
 (`linux-amd64`, `linux-arm64`, `termux-aarch64` or `termux-x86_64`) and a staging directory.
 GitHub Actions produces the binaries, dependency notices and matching source.
 The staged `bin/`, `share/` and any `lib/` directories install below the Agent
-package's `auth/`; the server uses `BASHKITTEN_AUTH_BIN` only as an explicit
+package's `auth/`; the server uses `TASKARIAN_AUTH_BIN` only as an explicit
 override of that private binary directory.
 
 Chisel 1.12.0 is built without source patches. Caddy is pinned to 2.11.7;
@@ -25,7 +25,7 @@ its Android toolchain patches and component recipes remain in place. Upstream
 module/frontend locks remain those of each selected release.
 
 `build/remote.sh` builds the small shared adapter under `agent/native/remote/`
-as private `bashkitten-remote` for Linux and Termux. It is assembled and licensed
+as private `taskarian-remote` for Linux and Termux. It is assembled and licensed
 with this payload. The existing controller owns its private pipes and process;
 it does not replace Chisel with a second transport or expose a management port.
 The APK client is built separately with host code excluded. Native Share Local,
@@ -40,10 +40,10 @@ APK candidates include corresponding Go dependency and generated Java sources.
 No upstream Chisel or Go mobile source patch is applied.
 
 The exact original source archives selected by `upstreams.lock.json` live in
-the external `BASHKITTEN_SOURCE_CACHE`. Both native authentication and normal
+the external `TASKARIAN_SOURCE_CACHE`. Both native authentication and normal
 product source artifacts include those verified original archives alongside
 the pristine trees and full notices. Warm-cache reconstruction supports
-`BASHKITTEN_OFFLINE_SOURCES=1`; no archive bytes are committed to Git.
+`TASKARIAN_OFFLINE_SOURCES=1`; no archive bytes are committed to Git.
 
 The private `valkey-server` stores Authelia's sessions so remembered logins
 survive full service restarts. It listens only on the controller's private Unix

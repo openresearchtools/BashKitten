@@ -34,7 +34,7 @@
  
  
  
-+/* BashKitten OS: X11 struts must follow the WM's applied panel geometry.
++/* Taskarian OS: X11 struts must follow the WM's applied panel geometry.
 + * Publishing before its move can leave a resized desktop's workarea stale.
 + * No X round trip, timer, or alternate window-sizing policy is introduced. */
 +static gboolean

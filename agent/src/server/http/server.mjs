@@ -37,7 +37,7 @@ import { ApplicationModules } from '../apps/index.mjs';
 
 process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
-if (!process.env.BASHKITTEN_BACKEND_SOCKET) {
+if (!process.env.TASKARIAN_BACKEND_SOCKET) {
   const port = process.argv.find(arg => arg.startsWith('--port='))?.slice(7) || process.env.PORT;
   if (port) {
     if (!Number.isInteger(Number(port)) || Number(port) < 1024 || Number(port) > 65535) throw Error('Invalid HTTPS port');
@@ -45,25 +45,25 @@ if (!process.env.BASHKITTEN_BACKEND_SOCKET) {
   }
   await ensureManager();
   const status = await controlRequest('start', {});
-  console.log('BashKitten · ' + status.web.url);
+  console.log('Taskarian · ' + status.web.url);
   process.exit(0);
 }
 const ownership = await claimInstance('web');
 if (!ownership) {
   for (const deadline = Date.now() + 15000; Date.now() < deadline;) {
     const existing = await probeBackend();
-    if (existing) { console.log(`BashKitten already running at ${existing.url}`); process.exit(0); }
+    if (existing) { console.log(`Taskarian already running at ${existing.url}`); process.exit(0); }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  throw Error('The existing BashKitten backend is not responding. Use Restart backend.');
+  throw Error('The existing Taskarian backend is not responding. Use Restart backend.');
 }
-const instanceToken = process.env.BASHKITTEN_INSTANCE_TOKEN;
+const instanceToken = process.env.TASKARIAN_INSTANCE_TOKEN;
 if (!/^[a-f0-9]{64}$/.test(instanceToken || '')) throw Error('Private controller token required');
-const phoneOwnerToken = process.env.BASHKITTEN_PHONE_OWNER_HTTP_TOKEN;
-delete process.env.BASHKITTEN_PHONE_OWNER_HTTP_TOKEN;
+const phoneOwnerToken = process.env.TASKARIAN_PHONE_OWNER_HTTP_TOKEN;
+delete process.env.TASKARIAN_PHONE_OWNER_HTTP_TOKEN;
 if (!/^[a-f0-9]{64}$/.test(phoneOwnerToken || '')) throw Error('Private Phone controller token required');
-const providerOwnerToken = process.env.BASHKITTEN_PROVIDER_OWNER_HTTP_TOKEN;
-delete process.env.BASHKITTEN_PROVIDER_OWNER_HTTP_TOKEN;
+const providerOwnerToken = process.env.TASKARIAN_PROVIDER_OWNER_HTTP_TOKEN;
+delete process.env.TASKARIAN_PROVIDER_OWNER_HTTP_TOKEN;
 if (!/^[a-f0-9]{64}$/.test(providerOwnerToken || '')) throw Error('Private provider controller token required');
 const started = await processStart(process.pid);
 await syncContext();
@@ -114,19 +114,19 @@ async function startWorker(id, explicit) {
       const browserOwner = randomUUID(), browserSocket = await ensureBrowserSocket(browserOwner, id);
       const log = openSync(path.join(sessionDir(id), 'worker.log'), 'a', 0o600);
       const phoneSlot = await createPhoneWorkerSlot(id);
-      const workerEnvironment = withoutPhoneIssuers(process.env); delete workerEnvironment.BASHKITTEN_GUEST_BROWSER_OWNER_TOKEN;
-      delete workerEnvironment.BASHKITTEN_PROVIDER_OWNER_HTTP_TOKEN;
+      const workerEnvironment = withoutPhoneIssuers(process.env); delete workerEnvironment.TASKARIAN_GUEST_BROWSER_OWNER_TOKEN;
+      delete workerEnvironment.TASKARIAN_PROVIDER_OWNER_HTTP_TOKEN;
       let child;
       try {
-        child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: { ...workerEnvironment, ...phoneSlot.environment, BASHKITTEN_BROWSER_SOCKET: browserSocket, BASHKITTEN_BROWSER_OWNER: browserOwner } });
+        child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: { ...workerEnvironment, ...phoneSlot.environment, TASKARIAN_BROWSER_SOCKET: browserSocket, TASKARIAN_BROWSER_OWNER: browserOwner } });
         await phoneSlot.attach(child);
       } catch (error) { await phoneSlot.close(); child?.kill(); throw error; }
       finally { closeSync(log); }
       child.unref();
       let failure; child.on('error', error => { failure = error; });
-      child.once('exit', (code, signal) => { if (code !== 0) failure = Error(`BashKitten's Pi runtime could not start (${signal || code}). Check this chat's worker.log.`); });
+      child.once('exit', (code, signal) => { if (code !== 0) failure = Error(`Taskarian's Pi runtime could not start (${signal || code}). Check this chat's worker.log.`); });
       for (let attempt = 0; attempt < 160; attempt++) { if (failure) throw failure; if (await running(id)) return; await pause(100); }
-      throw Error("BashKitten's Pi runtime did not become ready. Check this chat's worker.log.");
+      throw Error("Taskarian's Pi runtime did not become ready. Check this chat's worker.log.");
     });
   })();
   starts.set(id, starting);
@@ -219,11 +219,11 @@ const logoUrl = '/logo.png?v=' + createHash('sha256').update(logo).digest('hex')
 const faviconUrl = '/favicon.ico?v=' + createHash('sha256').update(favicon).digest('hex');
 const build = await readJson(path.join(here, '../../../build-platform.json'), {});
 const sourceRef = /^[a-f0-9]{40}$/.test(build.revision || '') ? build.revision : 'main';
-const sourceRoot = 'https://github.com/openresearchtools/BashKitten';
+const sourceRoot = 'https://github.com/openresearchtools/Taskarian';
 const html = (await fs.readFile(path.join(here, '../../web/web_ui.html'), 'utf8'))
   .replaceAll('/logo.png', logoUrl).replaceAll('/favicon.ico', faviconUrl)
-  .replaceAll('/__bashkitten_source__', `${sourceRoot}/tree/${sourceRef}`)
-  .replaceAll('/__bashkitten_license__', `${sourceRoot}/blob/${sourceRef}/LICENSE`);
+  .replaceAll('/__taskarian_source__', `${sourceRoot}/tree/${sourceRef}`)
+  .replaceAll('/__taskarian_license__', `${sourceRoot}/blob/${sourceRef}/LICENSE`);
 const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
 const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
 async function selectedFile(url) {
@@ -326,7 +326,7 @@ async function handler(req, res) {
       return json(res, await subagents.handle(value.session, value));
     }
     auth.origin(req);
-    if (route === '/.well-known/bashkitten-ca' && req.method === 'GET') return json(res, await readJson(paths.identity));
+    if (route === '/.well-known/taskarian-ca' && req.method === 'GET') return json(res, await readJson(paths.identity));
     if (['/', '/pi-login'].includes(route) && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" }); return res.end(route === '/' ? html : loginHtml); }
     if (route === '/markdown.js' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(markdownScript); }
     if (route === '/app.css' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(css); }
@@ -339,7 +339,7 @@ async function handler(req, res) {
     if (mutation) auth.checkOrigin(req);
     const record = await auth.login(req);
     if (route === '/api/bootstrap') { requireMethod(req, ['GET']); return json(res, { ...await auth.bootstrap(record), fileManager: await managerAllowed(record) }); }
-    if (!record) throw Object.assign(Error('Sign in to BashKitten'), { status: 401 });
+    if (!record) throw Object.assign(Error('Sign in to Taskarian'), { status: 401 });
     if (mutation) auth.checkCsrf(req, record);
     if (route === '/api/apps/resolve') {
       requireMethod(req, ['POST']);
@@ -628,13 +628,13 @@ async function handler(req, res) {
 activeServer = http.createServer(handler);
 // Uploads stream to disk; a large file may legitimately take more than five minutes.
 activeServer.requestTimeout = 0;
-await fs.rm(process.env.BASHKITTEN_BACKEND_SOCKET, { force: true });
-await new Promise((resolve, reject) => { activeServer.once('error', reject); activeServer.listen(process.env.BASHKITTEN_BACKEND_SOCKET, resolve); });
-await fs.chmod(process.env.BASHKITTEN_BACKEND_SOCKET, 0o600);
+await fs.rm(process.env.TASKARIAN_BACKEND_SOCKET, { force: true });
+await new Promise((resolve, reject) => { activeServer.once('error', reject); activeServer.listen(process.env.TASKARIAN_BACKEND_SOCKET, resolve); });
+await fs.chmod(process.env.TASKARIAN_BACKEND_SOCKET, 0o600);
 await writeJson(paths.backendInfo, { pid: process.pid, started });
 for (const meta of await allMeta()) if (await running(meta.id)) {
   await ensureBrowserSocket(meta.browserOwner || meta.workerOwner || meta.id, meta.id);
   await workerRequest(meta.id, '/context', {}).catch(() => {});
 }
-console.log('BashKitten private Pi RPC backend ready');
+console.log('Taskarian private Pi RPC backend ready');
 process.on('SIGTERM', () => { closeBrowserChannels(); activeServer.close(); activeServer.closeAllConnections(); Promise.allSettled([services.cancel(), apps.close()]).finally(() => process.exit(0)); });

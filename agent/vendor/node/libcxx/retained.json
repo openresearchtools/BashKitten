@@ -1,6 +1,6 @@
 {
   "schema": 1,
   "inventorySha256": "ba1fda3afcfb736bb9f1dc401115820ce9158139e943aa079f1cbfc313eac2d8",
-  "sourceArchive": "The complete selected runtime directories and the Android patch/build repository are retained in the matching BashKitten source archive.",
+  "sourceArchive": "The complete selected runtime directories and the Android patch/build repository are retained in the matching Taskarian source archive.",
   "modified": false
 }

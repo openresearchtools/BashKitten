@@ -48,7 +48,7 @@ test('merged item identities share native citation numbering while source IDs an
   assert.deepEqual(Object.keys(merged.embeddedItems), [doi.id, pmid.id, distinct.id]);
   assert.equal(merged.embeddedItems[doi.id].id, joined.id);
   assert.equal(merged.embeddedItems[pmid.id].id, joined.id);
-  assert.ok(!JSON.stringify(merged).includes('_bashkittenSourceId'));
+  assert.ok(!JSON.stringify(merged).includes('_taskarianSourceId'));
 
   // Pre-merge snapshots preserve their original identities; refreshed snapshots
   // preserve the canonical identity they captured. Neither asks the live store

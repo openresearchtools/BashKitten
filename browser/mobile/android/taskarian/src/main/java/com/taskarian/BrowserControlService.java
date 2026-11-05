@@ -1,0 +1,78 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+package com.taskarian;
+
+import android.app.*;
+import android.content.*;
+import android.net.Uri;
+import android.os.*;
+import java.util.*;
+import com.taskarian.api.*;
+
+public final class BrowserControlService extends Service {
+    BrowserApp app;
+    @Override public void onCreate() {
+        super.onCreate(); app = BrowserApp.get(this);
+    }
+    @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        stopSelf(startId);
+        return START_NOT_STICKY;
+    }
+    private final IAgentBrowser.Stub binder = new IAgentBrowser.Stub() {
+        @Override public void registerDisplay(String version, IDisplaySource source) {
+            try { app.display.register(Binder.getCallingUid(), version, source); }
+            catch (Exception error) { throw new SecurityException(error.getMessage()); }
+        }
+        @Override public PendingIntent requestAccess() { return app.grants.request(Binder.getCallingUid()); }
+        @Override public PendingIntent showTab(String id) {
+            int uid = Binder.getCallingUid(); String owner = app.grants.require(uid);
+            // The non-exported activation activity rechecks ownership on the UI thread.
+            return PendingIntent.getActivity(BrowserControlService.this, 0,
+                new Intent(BrowserControlService.this, ActivateTabActivity.class).setData(Uri.parse("taskarian-tab:" + UUID.randomUUID()))
+                    .putExtra("tab", id).putExtra("owner", owner).putExtra("uid", uid),
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_ONE_SHOT);
+        }
+        @Override public void execute(String json, IAgentCallback callback) {
+            if (callback == null) throw new IllegalArgumentException("Callback required");
+            if (json == null) throw new IllegalArgumentException("Invalid request");
+            int uid = Binder.getCallingUid();
+            if (app.grants.allowed(uid)) { executeApproved(uid, json, callback); return; }
+            if (app.grants.denied(uid)) {
+                result(callback, "{\"error\":\"Browser access denied\",\"code\":\"authorization_denied\"}"); return;
+            }
+            String ticket;
+            try {
+                ticket = app.grants.ticket(uid);
+                callback.onApprovalRequired(app.grants.request(uid));
+            } catch (Exception error) {
+                result(callback, "{\"error\":\"Browser approval could not be delivered\",\"code\":\"transport_error\"}"); return;
+            }
+            app.main.post(new Runnable() {
+                @Override public void run() {
+                    if (!callback.asBinder().isBinderAlive()) return;
+                    String status;
+                    try { status = app.grants.status(uid, ticket); }
+                    catch (SecurityException error) { status = "revoked"; }
+                    if (status.equals("pending")) { app.main.postDelayed(this, 500); return; }
+                    if (status.equals("approved")) executeApproved(uid, json, callback);
+                    else result(callback, "{\"error\":\"Browser access " + status + "\",\"code\":\"authorization_" + status + "\"}");
+                }
+            });
+        }
+
+    };
+    private void executeApproved(int uid, String json, IAgentCallback callback) {
+        try { app.controller.execute(app.controller.forUid(uid), json, value -> result(callback, value)); }
+        catch (SecurityException error) { result(callback, "{\"error\":\"Browser access revoked\",\"code\":\"authorization_revoked\"}"); }
+        catch (Exception error) { result(callback, "{\"error\":\"Invalid browser command\"}"); }
+    }
+    private void result(IAgentCallback callback, String value) {
+        app.transfers.execute(() -> {
+            try { callback.onResult(value); }
+            catch (RemoteException error) {
+                try { callback.onResult("{\"error\":\"Android Binder could not deliver the browser result: " + error.getClass().getSimpleName() + "\",\"code\":\"transport_error\"}"); }
+                catch (RemoteException unavailable) { android.util.Log.w("Taskarian", "Browser callback is unavailable"); }
+            }
+        });
+    }
+    @Override public IBinder onBind(Intent intent) { return binder; }
+}

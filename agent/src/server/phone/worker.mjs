@@ -9,7 +9,7 @@ import { privateRequest } from './transport.mjs';
 /** Each Pi incarnation gets its own socket/key. Native session adoption rotates
  * authority behind this socket, rather than trusting Pi's spawn-time session env. */
 export async function createPhoneWorker({ sessionId }) {
-  const ownerSocket = process.env.BASHKITTEN_PHONE_OWNER_SOCKET, ownerKey = process.env.BASHKITTEN_PHONE_OWNER_WORKER_KEY;
+  const ownerSocket = process.env.TASKARIAN_PHONE_OWNER_SOCKET, ownerKey = process.env.TASKARIAN_PHONE_OWNER_WORKER_KEY;
   if (!ownerSocket || !ownerKey) return { environment: {}, adopt: async () => {}, close: async () => {} };
   const key = randomBytes(32).toString('base64url');
   const socket = socketPath(`phone-pi:${randomUUID()}`);
@@ -29,6 +29,6 @@ export async function createPhoneWorker({ sessionId }) {
   const adopt = session => { generation++; transition = transition.catch(() => {}).then(() => privateRequest(ownerSocket, ownerKey, 'adopt', { session })); return transition; };
   // Attach is performed by the spawning owner before the worker becomes ready.
   if (sessionId) await adopt(sessionId);
-  return { environment: { BASHKITTEN_PHONE_SOCKET: socket, BASHKITTEN_PHONE_WORKER_KEY: key }, adopt,
+  return { environment: { TASKARIAN_PHONE_SOCKET: socket, TASKARIAN_PHONE_WORKER_KEY: key }, adopt,
     async close() { active = false; generation++; server.close(); server.closeAllConnections(); await fs.rm(socket, { force: true }); await privateRequest(ownerSocket, ownerKey, 'close').catch(() => {}); } };
 }

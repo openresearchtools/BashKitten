@@ -343,7 +343,7 @@ export async function renderDocument(state, { signal, resolveItem } = {}) {
             id: processorIds.get(item.id),
             // Native citeproc preserves extra citation-item properties when
             // sorting. Keep this transient identity out of document metadata.
-            _bashkittenSourceId: item.id,
+            _taskarianSourceId: item.id,
           })),
           properties: { noteIndex, unsorted: !!c.unsorted },
         },
@@ -397,7 +397,7 @@ export async function renderDocument(state, { signal, resolveItem } = {}) {
             .filter((k) => item[k] !== undefined)
             .map((k) => [
               k,
-              k === "id" ? item._bashkittenSourceId || item.id : item[k],
+              k === "id" ? item._taskarianSourceId || item.id : item[k],
             ]),
         ),
       ),

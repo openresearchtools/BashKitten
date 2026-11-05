@@ -26,7 +26,7 @@ desktop switch were separately verified. The input lease was closed after this
 pass; Weston/viewer remained available.
 
 Reusable external infrastructure is under
-`/run/media/user/Data/BashkittenBuild/bin/isolated-intel-wayland/README.md`.
+`/run/media/user/Data/TaskarianBuild/bin/isolated-intel-wayland/README.md`.
 Its source commits include `ac8a792` (single-seat relay/recipe) and `8380caa`
 (private child diagnostic-file umask). The Build repository has no remote, so
 these infrastructure commits are local. Credentials, profiles and raw cores/logs
@@ -40,7 +40,7 @@ remain outside source and evidence commits.
 | `cab1310f18215337d4f92455b15da495c5808912` | Normal APT install. Actual Retry creation completed the retained failed container and its sidebar became running. Observation of that UI-triggered Podman process proved the separate rootless UID map/namespaces and scoped packaged AppArmor profile. No global policy bypass was applied. |
 | Same cab | Native Firefox About → Licenses → AI runtimes and models opened while creation continued. Installed runtime/model entries, original Qwen/Unsloth, NVIDIA/ggml-org and Kyutai/EryriLabs attribution were visible. Original Qwen Apache2 top/end, Parakeet CC-BY4 top and reference-voice CC0 legalcode top were inspected. This is not an exhaustive scroll of every transitive notice. |
 | Same cab | Container Display opened the actual guest desktop. Observe suppressed a typed guest address-bar probe; Interact accepted one. Closing/reopening the Display tab retained the running container, guest browser and unsent field. |
-| Same cab | Applications and the initially pinned BashKitten OS settings opened. Manage window size On, Two app mode Off, Dark and 100% defaults were visible. Management Off retained the saved Two app mode On choice and ignored an attempted toggle while disabled. The taskbar action truthfully reported that the current viewport could not fit both windows; a successful split/divider test remains pending. |
+| Same cab | Applications and the initially pinned Taskarian OS settings opened. Manage window size On, Two app mode Off, Dark and 100% defaults were visible. Management Off retained the saved Two app mode On choice and ignored an attempted toggle while disabled. The taskbar action truthfully reported that the current viewport could not fit both windows; a successful split/divider test remains pending. |
 
 The **15 October Applications list reference** is authoritative: vertical
 icon/title rows, independently scrolling lists, Pinned above fixed bottom
@@ -70,7 +70,7 @@ visual follow-up remains separate from the correct list/search positions.
   signal was sent.
 - One 26ba repeat, with `toolkit.asyncshutdown.log=true`, exited normally
   (coordinator launch exit 0; absence verified within 25 seconds). Its four logged
-  quit-application blockers and later BashKitten blockers completed. That launch
+  quit-application blockers and later Taskarian blockers completed. That launch
   had Cuttlefish WebRTC tabs, an already stopped container and **no newly opened
   container Display**. It does not resolve the earlier crash. A second 26ba
   native Quit removed the browser and owned workloads, but its coordinator
@@ -120,7 +120,7 @@ lease was closed when the test ended.
   browser/backend/container/display workloads and Display endpoints were gone;
   the dedicated machine service was inactive/dead with MainPID 0. Weston and
   the view-only viewer remained running. The private stderr completed
-  `quit-application` and all later BashKitten shutdown blockers. This does not
+  `quit-application` and all later Taskarian shutdown blockers. This does not
   erase the cab watchdog/26ba launcher failures or cover the remote, publishing,
   Local-Off and crash cleanup matrix.
 
@@ -138,12 +138,12 @@ real-Xorg acceptance remain separate records.
 Sanitized private-output screenshots, selected process/namespace observations,
 safe crash annotations and explicit partial-result JSON are retained locally:
 
-- `/run/media/user/Data/BashkittenBuild/verification/desktop-d39a/isolated-wayland-evidence/manifest.json`
-- `/run/media/user/Data/BashkittenBuild/verification/desktop-cab1/isolated-wayland-evidence/manifest.json`
+- `/run/media/user/Data/TaskarianBuild/verification/desktop-d39a/isolated-wayland-evidence/manifest.json`
+- `/run/media/user/Data/TaskarianBuild/verification/desktop-cab1/isolated-wayland-evidence/manifest.json`
   — 44 files; manifest SHA256 `8b27b3b09f42cf070abbd14b39ed729245c7f4c854ae9c5f3b52017ede514518`.
-- `/run/media/user/Data/BashkittenBuild/verification/desktop-26ba/isolated-wayland-evidence/manifest.json`
+- `/run/media/user/Data/TaskarianBuild/verification/desktop-26ba/isolated-wayland-evidence/manifest.json`
   — 21 files; manifest SHA256 `2d76a5e2461df494a1f982a3c2cc5a016193abf78ecb305a4830373d72cd7011`.
-- `/run/media/user/Data/BashkittenBuild/verification/desktop-5151/isolated-wayland-evidence/manifest.json`
+- `/run/media/user/Data/TaskarianBuild/verification/desktop-5151/isolated-wayland-evidence/manifest.json`
   — 32 files; manifest SHA256 `ea8920671e7c3768b7f623810c1aecc03ca0d5fbd07a15ce6974e24fafe7bde1`.
 
 Each manifest records per-file hashes. Raw profiles, headers, credentials and

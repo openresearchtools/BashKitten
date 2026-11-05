@@ -212,7 +212,7 @@ export async function resolverRuntime() {
         method,
         body: options.body || undefined,
         headers: {
-          "User-Agent": "BashKitten References/0.1",
+          "User-Agent": "Taskarian References/0.1",
           ...options.headers,
         },
         redirect: options.followRedirects === false ? "manual" : "follow",
@@ -393,7 +393,7 @@ export async function resolverRuntime() {
         active.signal?.throwIfAborted();
         const response = await fetch(url, {
           headers: {
-            "User-Agent": "BashKitten References/0.1",
+            "User-Agent": "Taskarian References/0.1",
             ...(options.referrer ? { Referer: options.referrer } : {}),
           },
           signal: active.signal

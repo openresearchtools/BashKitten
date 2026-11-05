@@ -15,7 +15,7 @@ during initialization. Preserve that failure and the earlier cab139/26ba143
 results; later successful attempts do not invalidate them.
 
 After the workstation reboot, diagnosis used only the existing
-`bashkitten-test-debian13-xorg` VM, its real Xorg login, the same installed outer
+`taskarian-test-debian13-xorg` VM, its real Xorg login, the same installed outer
 candidate and retained profile/data, and machine
 `0baf64c9-e198-42de-988c-cd95fdce8210` (Xorg 3c35). Old process identifiers were
 discarded. No unrelated VM, host desktop input, browser preferences or product
@@ -42,7 +42,7 @@ The original compositor value `true` was restored. The one-second sleep was
 external fault injection, never a proposed product startup delay.
 
 Source inspection found a possible readiness boundary if further evidence
-establishes this race. `agent/machines/guest/assets/bashkitten-display-session`
+establishes this race. `agent/machines/guest/assets/taskarian-display-session`
 launches the guest browser immediately after starting the configured desktop
 command. Upstream Xfwm initializes each screen's compositor before publishing
 `_NET_SUPPORTING_WM_CHECK` and before registering its session client. XFCE's
@@ -59,12 +59,12 @@ Source references:
 - [XFCE startup-complete state](https://github.com/xfce-mirror/xfce4-session/blob/xfce4-session-4.20.1/xfce4-session/xfsm-manager.c#L861)
 
 Original external evidence remains under
-`/run/media/user/Data/BashkittenBuild/acceptance/xorg-vm-control/5151/`, including
+`/run/media/user/Data/TaskarianBuild/acceptance/xorg-vm-control/5151/`, including
 `candidate-5151-xorg-controls-lifetime.json`,
 `black-startup-native-diagnostic.json`, and
 `black-startup-guest-complete-namespace-state.json`. The reboot comparisons and
 ordinary product captures are under
-`/home/user/Bashkitten-Acceptance/isolated-wayland-20261017/diagnostics/xorg-reboot-display/`,
+`/home/user/Taskarian-Acceptance/isolated-wayland-20261017/diagnostics/xorg-reboot-display/`,
 summarized in `bounded-compositor-probe-summary.json`.
 
 The next integrated candidate still needs cold container Display startup through
@@ -106,11 +106,11 @@ inspection. The diagnostic hold ended after copying the receipt, allowing the
 separately planned OS update and ordinary Display controls to continue.
 
 Evidence directory:
-`/home/user/Bashkitten-Acceptance/xorg-3107-20261017/`:
+`/home/user/Taskarian-Acceptance/xorg-3107-20261017/`:
 
 - `outer-installed-before-os-restart.png`
 - `inner-black-actual-x11.png`
 - `black-window-readonly.json`
 
 The original cold-start receipt is in the test VM at
-`~/.local/state/bashkitten-upgrade-3107/cold-autostart-black-area.json`.
+`~/.local/state/taskarian-upgrade-3107/cold-autostart-black-area.json`.

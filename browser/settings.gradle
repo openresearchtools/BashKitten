@@ -44,12 +44,12 @@ if (gradle.ext.mozconfig.substs.MOZ_APPSERVICES_IN_TREE) {
 // but it's hard to automatically arrange better.
 System.setProperty('android.home', gradle.mozconfig.substs.ANDROID_SDK_ROOT)
 
-include ':annotations', ':messaging_example', ':port_messaging_example', ':bashkitten'
-project(':bashkitten').projectDir = new File("${topsrcdir}/mobile/android/bashkitten")
-include ':bashkitten-sdk', ':bashkitten-display', ':bashkitten-telephony'
-project(':bashkitten-sdk').projectDir = new File("${topsrcdir}/mobile/android/bashkitten-sdk")
-project(':bashkitten-display').projectDir = new File("${topsrcdir}/mobile/android/bashkitten/display")
-project(':bashkitten-telephony').projectDir = new File("${topsrcdir}/mobile/android/bashkitten/telephony")
+include ':annotations', ':messaging_example', ':port_messaging_example', ':taskarian'
+project(':taskarian').projectDir = new File("${topsrcdir}/mobile/android/taskarian")
+include ':taskarian-sdk', ':taskarian-display', ':taskarian-telephony'
+project(':taskarian-sdk').projectDir = new File("${topsrcdir}/mobile/android/taskarian-sdk")
+project(':taskarian-display').projectDir = new File("${topsrcdir}/mobile/android/taskarian/display")
+project(':taskarian-telephony').projectDir = new File("${topsrcdir}/mobile/android/taskarian/telephony")
 include ':geckoview'
 include ':android-components'
 

@@ -19,14 +19,14 @@
 -        // if error, e.g. build from source without git repo, just show empty string
 -        Err(_) => "".to_string(),
 -    };
-+    // BashKitten builds materialized release sources outside a Git checkout.
++    // Taskarian builds materialized release sources outside a Git checkout.
 +    // Require the verified upstream pin instead of discovering an enclosing repo.
-+    println!("cargo:rerun-if-env-changed=BASHKITTEN_UPSTREAM_COMMIT");
-+    let commit = env::var("BASHKITTEN_UPSTREAM_COMMIT")
-+        .expect("BASHKITTEN_UPSTREAM_COMMIT must contain the verified release commit");
++    println!("cargo:rerun-if-env-changed=TASKARIAN_UPSTREAM_COMMIT");
++    let commit = env::var("TASKARIAN_UPSTREAM_COMMIT")
++        .expect("TASKARIAN_UPSTREAM_COMMIT must contain the verified release commit");
 +    assert!(
 +        commit.len() == 40 && commit.bytes().all(|byte| byte.is_ascii_hexdigit()),
-+        "BASHKITTEN_UPSTREAM_COMMIT must be a full release commit"
++        "TASKARIAN_UPSTREAM_COMMIT must be a full release commit"
 +    );
      println!("cargo:rustc-env=GIT_COMMIT={commit}");
  

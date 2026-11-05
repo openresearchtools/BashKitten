@@ -49,7 +49,7 @@ function deliver(channel) {
   channel.poll.finish({ commands: channel.queue.splice(0, 64) });
 }
 function targetFor(sessionId) {
-  if (process.env.BASHKITTEN_EXECUTION_ROLE === 'container') {
+  if (process.env.TASKARIAN_EXECUTION_ROLE === 'container') {
     const owned = [...channels.values()].find(channel => channel.nativeGuest);
     if (!owned) throw failure('The container browser is unavailable');
     return owned;
@@ -60,7 +60,7 @@ function targetFor(sessionId) {
     if (!channel) throw failure('Reconnect and allow this browser again');
     return channel;
   }
-  if (channels.size !== 1) throw failure(channels.size ? 'Choose the browser for this chat' : 'Open BashKitten and allow browser control');
+  if (channels.size !== 1) throw failure(channels.size ? 'Choose the browser for this chat' : 'Open Taskarian and allow browser control');
   const channel = channels.values().next().value;
   bindings.set(sessionId, { clientId: channel.clientId, owner: channel.owner });
   return channel;
@@ -104,7 +104,7 @@ function dispatchOn(channel, sessionId, command, { signal } = {}) {
 export function dispatchReferenceResolver(record, { projectId, requestId }, { signal } = {}) {
   if (!sessionPattern.test(projectId || '') || !sessionPattern.test(requestId || '') || !record?.key) throw failure('Invalid resolver job', 'invalid_command');
   const candidates = [...channels.values()].filter(channel => channel.key === record.key && channel.owner === record.username);
-  if (candidates.length !== 1) throw failure(candidates.length ? 'Choose a single authorized BashKitten browser for this account' : 'Open BashKitten and allow browser control');
+  if (candidates.length !== 1) throw failure(candidates.length ? 'Choose a single authorized Taskarian browser for this account' : 'Open Taskarian and allow browser control');
   const channel = candidates[0];
   if (!Array.isArray(channel.capabilities?.methods) || !channel.capabilities.methods.includes('references.resolve')) throw failure('Update this browser to enable References capture', 'unsupported');
   if ([...channel.pending.values()].filter(value => value.resolverDeadline).length >= 32) throw failure('Too many pending resolver browser requests', 'busy');

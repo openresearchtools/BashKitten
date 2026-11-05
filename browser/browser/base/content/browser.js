@@ -1281,7 +1281,7 @@ function HandleAppCommandEvent(evt) {
       break;
     case "Help":
       openTrustedLinkIn(
-        "https://github.com/openresearchtools/bashkitten/issues",
+        "https://github.com/openresearchtools/Taskarian/issues",
         "tab"
       );
       break;
@@ -1336,7 +1336,7 @@ function loadOneOrMoreURIs(
 
 function openLocation(event) {
   if (window.location.href == AppConstants.BROWSER_CHROME_URL) {
-    if (window.BashKittenAgent?.layout === "full") window.BashKittenAgent.browse();
+    if (window.TaskarianAgent?.layout === "full") window.TaskarianAgent.browse();
     let focusTarget = UrlbarUtils.getURLBarForFocus(window);
     focusTarget.select();
     focusTarget.view.autoOpen({ event });
@@ -3671,7 +3671,7 @@ function CanCloseWindow() {
 }
 
 function WindowIsClosing(event) {
-  if (!Services.startup.shuttingDown && window.BashKittenLifetime?.hide()) {
+  if (!Services.startup.shuttingDown && window.TaskarianLifetime?.hide()) {
     return false;
   }
   let source;
@@ -3705,8 +3705,8 @@ function WindowIsClosing(event) {
     // It's only needed to make tests pass, since they detect the
     // prompt even when it's not actually shown.
     window.skipNextCanClose = true;
-    if (window.BashKittenLifetime && !Services.startup.shuttingDown) {
-      window.BashKittenLifetime.quit();
+    if (window.TaskarianLifetime && !Services.startup.shuttingDown) {
+      window.TaskarianLifetime.quit();
       return false;
     }
     return true;

@@ -127,7 +127,7 @@ async function prepareModelInformation(preset, signal) {
   if (preset.referenceVoice) await fetchPinned(preset.referenceVoice, preset.referenceVoicePath, signal);
   signal?.throwIfAborted();
   await saveModelNoticeManifest({
-    distribution: 'Model weights, projectors, supporting audio and these notices are downloaded separately; they are not bundled with BashKitten.',
+    distribution: 'Model weights, projectors, supporting audio and these notices are downloaded separately; they are not bundled with Taskarian.',
     repository: model.repository, revision: model.revision, license: model.license, attribution: model.attribution, provenanceNotes: model.provenanceNotes || [],
     files: model.files.filter(file => preset.files.includes(file.name)), notices,
     ...(preset.referenceVoice ? { referenceVoice: { ...preset.referenceVoice, savedFile: preset.referenceVoicePath } } : {}),

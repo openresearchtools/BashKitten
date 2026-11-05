@@ -22,8 +22,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   SharedUtils: "resource://services-settings/SharedUtils.sys.mjs",
   UptakeTelemetry: "resource://services-settings/UptakeTelemetry.sys.mjs",
   Utils: "resource://services-settings/Utils.sys.mjs",
-  BashKittenSettingsPolicy:
-    "resource://services-settings/BashKittenSettingsPolicy.sys.mjs",
+  TaskarianSettingsPolicy:
+    "resource://services-settings/TaskarianSettingsPolicy.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "console", () => lazy.Utils.log);
@@ -486,7 +486,7 @@ export class RemoteSettingsClient extends EventEmitter {
               : -1;
             if (importedFromDump < 0) {
               if (
-                !lazy.BashKittenSettingsPolicy.canSync(
+                !lazy.TaskarianSettingsPolicy.canSync(
                   this.bucketName,
                   this.collectionName
                 )
@@ -682,7 +682,7 @@ export class RemoteSettingsClient extends EventEmitter {
     }
 
     if (
-      !lazy.BashKittenSettingsPolicy.canSync(
+      !lazy.TaskarianSettingsPolicy.canSync(
         this.bucketName,
         this.collectionName
       )
@@ -735,7 +735,7 @@ export class RemoteSettingsClient extends EventEmitter {
   async maybeSync(expectedTimestamp, options = {}) {
     if (
       lazy.Utils.shouldSkipRemoteActivity ||
-      !lazy.BashKittenSettingsPolicy.canSync(
+      !lazy.TaskarianSettingsPolicy.canSync(
         this.bucketName,
         this.collectionName
       )

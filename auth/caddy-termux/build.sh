@@ -1,4 +1,4 @@
-# BashKitten private installation of the upstream Termux Caddy recipe.
+# Taskarian private installation of the upstream Termux Caddy recipe.
 source "$TERMUX_PKG_BUILDER_DIR/upstream-build.sh"
 TERMUX_PKG_VERSION=2.11.7
 TERMUX_PKG_AUTO_UPDATE=false
@@ -8,7 +8,7 @@ TERMUX_PKG_DEPENDS='ca-certificates'
 
 termux_step_make() {
   termux_setup_golang
-  source "$BASHKITTEN_SOURCE_ROOT/auth/build/go-env.sh"
+  source "$TASKARIAN_SOURCE_ROOT/auth/build/go-env.sh"
   case "$TERMUX_ARCH" in
     aarch64) export GOARCH=arm64 ;;
     x86_64) export GOARCH=amd64 ;;
@@ -23,7 +23,7 @@ termux_step_make() {
 }
 
 termux_step_make_install() {
-  local payload="$TERMUX_PREFIX/lib/bashkitten/auth"
+  local payload="$TERMUX_PREFIX/lib/taskarian/auth"
   install -Dm755 "$TERMUX_PKG_BUILDDIR/caddy" "$payload/bin/caddy"
-  python3 "$BASHKITTEN_SOURCE_ROOT/auth/build/go-notices.py" "$TERMUX_PKG_SRCDIR" "$payload" caddy
+  python3 "$TASKARIAN_SOURCE_ROOT/auth/build/go-notices.py" "$TERMUX_PKG_SRCDIR" "$payload" caddy
 }

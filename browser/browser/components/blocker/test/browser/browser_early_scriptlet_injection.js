@@ -1,15 +1,15 @@
 /* Any copyright is dedicated to the Public Domain.
  * http://creativecommons.org/publicdomain/zero/1.0/ */
 
-const { BashKittenBlockerService } = ChromeUtils.importESModule(
-  "resource:///modules/BashKittenBlockerService.sys.mjs"
+const { TaskarianBlockerService } = ChromeUtils.importESModule(
+  "resource:///modules/TaskarianBlockerService.sys.mjs"
 );
 
-const BLOCKER_ENABLED_PREF = "bashkitten.blocker.enabled";
+const BLOCKER_ENABLED_PREF = "taskarian.blocker.enabled";
 const EARLY_SCRIPTLET_DIAGNOSTICS_PREF =
-  "bashkitten.blocker.earlyScriptletInjection.diagnostics";
+  "taskarian.blocker.earlyScriptletInjection.diagnostics";
 const EARLY_SCRIPTLET_PARSER_BLOCK_TIMEOUT_PREF =
-  "bashkitten.blocker.earlyScriptletInjection.parserBlockTimeoutMs";
+  "taskarian.blocker.earlyScriptletInjection.parserBlockTimeoutMs";
 const EARLY_SCRIPTLET_TEST_PARSER_BLOCK_TIMEOUT_MS = 10000;
 const TEST_URL =
   "https://example.com/browser/browser/components/blocker/test/browser/file_early_scriptlet_injection.html";
@@ -71,7 +71,7 @@ async function readProbeState(browser) {
     const proceduralTarget =
       content.document.getElementById("procedural-target");
     return {
-      diagnostics: win.__bashkittenBlockerEarlyScriptletDiagnostics || null,
+      diagnostics: win.__taskarianBlockerEarlyScriptletDiagnostics || null,
       hiddenDisplay: content.getComputedStyle(hideTarget).display,
       probe: win.__wfProbe,
       proceduralDisplay: content.getComputedStyle(proceduralTarget).display,
@@ -109,13 +109,13 @@ function median(values) {
 }
 
 add_setup(function setup() {
-  originalGetCosmeticResources = BashKittenBlockerService.getCosmeticResources;
+  originalGetCosmeticResources = TaskarianBlockerService.getCosmeticResources;
   originalInitializeEngineWithRetry =
-    BashKittenBlockerService._initializeEngineWithRetry;
-  originalWhenEngineReady = BashKittenBlockerService.whenEngineReady;
+    TaskarianBlockerService._initializeEngineWithRetry;
+  originalWhenEngineReady = TaskarianBlockerService.whenEngineReady;
 
-  BashKittenBlockerService._initializeEngineWithRetry = async function () {};
-  BashKittenBlockerService.getCosmeticResources = function (url) {
+  TaskarianBlockerService._initializeEngineWithRetry = async function () {};
+  TaskarianBlockerService.getCosmeticResources = function (url) {
     const parsed = new URL(url);
     if (!parsed.pathname.endsWith("file_early_scriptlet_injection.html")) {
       return null;
@@ -123,7 +123,7 @@ add_setup(function setup() {
     return resourcesForCase(parsed.searchParams.get("case"));
   };
 
-  BashKittenBlockerService.whenEngineReady = async function () {
+  TaskarianBlockerService.whenEngineReady = async function () {
     if (!engineReadyDelayMs) {
       return;
     }
@@ -133,11 +133,11 @@ add_setup(function setup() {
   };
 
   registerCleanupFunction(() => {
-    BashKittenBlockerService.getCosmeticResources =
+    TaskarianBlockerService.getCosmeticResources =
       originalGetCosmeticResources;
-    BashKittenBlockerService._initializeEngineWithRetry =
+    TaskarianBlockerService._initializeEngineWithRetry =
       originalInitializeEngineWithRetry;
-    BashKittenBlockerService.whenEngineReady = originalWhenEngineReady;
+    TaskarianBlockerService.whenEngineReady = originalWhenEngineReady;
     engineReadyDelayMs = 0;
   });
 });
@@ -276,12 +276,12 @@ add_task(async function test_latency_diagnostics() {
     }
 
     info(
-      `BashKittenBlocker early parser block median no-scriptlet duration: ${median(
+      `TaskarianBlocker early parser block median no-scriptlet duration: ${median(
         noScriptletDurations
       )}ms`
     );
     info(
-      `BashKittenBlocker early parser block median scriptlet duration: ${median(
+      `TaskarianBlocker early parser block median scriptlet duration: ${median(
         scriptletDurations
       )}ms`
     );

@@ -10,12 +10,12 @@ const { NetUtil } = ChromeUtils.importESModule(
 const {
   MAX_REPLACE_DIRECTIVES,
   REPLACE_MAX_INPUT_BYTES,
-  BashKittenBlockerService,
+  TaskarianBlockerService,
 } = ChromeUtils.importESModule(
-  "resource:///modules/BashKittenBlockerService.sys.mjs"
+  "resource:///modules/TaskarianBlockerService.sys.mjs"
 );
 
-const PREF_ENABLED = "bashkitten.blocker.enabled";
+const PREF_ENABLED = "taskarian.blocker.enabled";
 const REPLACE_DIRECTIVE = '/"adSlots"/"no_ads"/';
 const HTML_FILTER = htmlFilter([
   { type: "css-selector", arg: "script" },
@@ -73,7 +73,7 @@ function makeEngine({
   htmlFilters = [],
   responseHeaderFilters = [],
 } = {}) {
-  BashKittenBlockerService._engine = {
+  TaskarianBlockerService._engine = {
     checkRequestDetailed() {
       return JSON.stringify({
         exception: false,
@@ -187,11 +187,11 @@ add_setup(async function setup() {
   registerHeaderPath("/header", ORIGINAL_HTML);
   registerAttachmentPath("/attachment", ORIGINAL_JSON);
 
-  BashKittenBlockerService._registerNetworkObservers();
+  TaskarianBlockerService._registerNetworkObservers();
 
   registerCleanupFunction(async () => {
-    BashKittenBlockerService._unregisterNetworkObservers();
-    BashKittenBlockerService._engine = null;
+    TaskarianBlockerService._unregisterNetworkObservers();
+    TaskarianBlockerService._engine = null;
     Services.prefs.clearUserPref(PREF_ENABLED);
     await new Promise(resolve => server.stop(resolve));
   });
@@ -275,10 +275,10 @@ add_task(async function test_replace_response_filter_respects_disabled_pref() {
 
 add_task(async function test_replace_response_filter_respects_site_bypass() {
   makeEngine();
-  const originalBypass = BashKittenBlockerService.shouldBypassBlocking;
-  BashKittenBlockerService.shouldBypassBlocking = (candidateDomain, options) =>
+  const originalBypass = TaskarianBlockerService.shouldBypassBlocking;
+  TaskarianBlockerService.shouldBypassBlocking = (candidateDomain, options) =>
     candidateDomain === "127.0.0.1" ||
-    originalBypass.call(BashKittenBlockerService, candidateDomain, options);
+    originalBypass.call(TaskarianBlockerService, candidateDomain, options);
 
   try {
     Assert.equal(
@@ -287,7 +287,7 @@ add_task(async function test_replace_response_filter_respects_site_bypass() {
       "Site bypass should not rewrite responses"
     );
   } finally {
-    BashKittenBlockerService.shouldBypassBlocking = originalBypass;
+    TaskarianBlockerService.shouldBypassBlocking = originalBypass;
   }
 });
 

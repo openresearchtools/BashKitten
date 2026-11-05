@@ -1,8 +1,8 @@
-# BashKitten Files, Office and References integration plan
+# Taskarian Files, Office and References integration plan
 
 Requested and researched **28 October 2026**. **Plan only:** this document does
 not claim that any component is imported, ported, integrated or accepted. The
-research baseline is BashKitten `dd8db0849b0f4a0bc3d3960b2d1953ffda007a86`.
+research baseline is Taskarian `dd8db0849b0f4a0bc3d3960b2d1953ffda007a86`.
 Implementation and acceptance evidence must be recorded separately in
 [the Office status record](office-integration-status.md).
 
@@ -17,7 +17,7 @@ during implementation; do not preserve a second implementation behind a flag.
 
 Preserve the original native plan at
 `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, tagged
-`bashkitten/plan/native-environments-2026-10-11`, and its historical evidence.
+`taskarian/plan/native-environments-2026-10-11`, and its historical evidence.
 The [current native plan](native-environments-display-plan.md) continues to
 govern unrelated features and existing ownership, transport and packaging.
 This amendment records the user's new requirements instead of rewriting the
@@ -44,7 +44,7 @@ a local runtime comparison; those observations are not a controlled performance
 guarantee or installed-product acceptance.
 
 Office must open with a **light UI and light document canvas**, independently of
-BashKitten's surrounding theme, the operating system's theme and old browser
+Taskarian's surrounding theme, the operating system's theme and old browser
 preferences. Preserve actual stored cell fills, font colors, slide backgrounds
 and document formatting. Do not recolor document data to simulate a light view.
 
@@ -67,7 +67,7 @@ to remove unfinished requirements. See section 15.3 for its concrete boundary.
 
 Agent editing must work without requiring an open editor web UI. This is not a
 restriction on using the browser: agents can open the same document in an
-ordinary BashKitten tab to inspect its rendering, preview results and check
+ordinary Taskarian tab to inspect its rendering, preview results and check
 exports whenever useful. Expose both native editing/export operations and normal
 browser-view URLs. Test the independently runnable modules in parallel with the
 early browser batch; neither sequence reduces the required feature scope.
@@ -107,7 +107,7 @@ when changing a bound library would unlink existing citations and bibliography.
 ### User clarification — 28 October 2026: HTTPS and existing browser trust
 
 Files, Collabora and References browser-facing URLs must use HTTPS with
-BashKitten's existing certificate identity/trust handling, including ordinary
+Taskarian's existing certificate identity/trust handling, including ordinary
 tabs and the exact authorized Chisel service mapping. Reuse the existing TLS
 owner and local certificate mechanism; do not add warning bypasses, global
 certificate exceptions or a second trust system. Internal private Unix/backend
@@ -117,8 +117,8 @@ internal endpoint distinction without mixed-content failures.
 
 The privileged References host provides capture and browser-assisted resolver
 access. It is not a certificate-validation bypass. Verify the trusted HTTPS
-loading flows in the installed BashKitten browser; another browser can exercise
-independent web UI behavior but does not establish BashKitten trust acceptance.
+loading flows in the installed Taskarian browser; another browser can exercise
+independent web UI behavior but does not establish Taskarian trust acceptance.
 
 ### Mandatory implementation rule for all agents and subagents
 
@@ -142,7 +142,7 @@ existing source before designing new machinery. Prefer configuration, then
 native APIs/plugins with a small adapter. A new module must name the concrete
 gap it fills; do not duplicate collaboration, save timers, history viewers,
 format conversion, editing engines, service ownership or other existing native
-behavior. Reuse BashKitten's existing facilities on its side of the connection
+behavior. Reuse Taskarian's existing facilities on its side of the connection
 too. When research finds the feature already exists, remove the proposed
 replacement from the implementation scope. Necessary missing features remain
 required, but belong in the smallest separately iterable adapter/module.
@@ -165,7 +165,7 @@ The binding boundaries are:
   the same live document using its actual editing APIs. Ordinary web tabs own
   its UI. Clicking a document in Quantum uses its natural Office web integration;
   there is no separate Mozilla Office-opening or rendering integration.
-- **References:** a BashKitten-branded web library manager and backend, with
+- **References:** a Taskarian-branded web library manager and backend, with
   one independent library per project, plus a small browser capture/resolver
   extension. The screenshot specifies layout and functions, not its palette.
 - **Browser capture:** our own **References** extension, reusing Zotero
@@ -324,7 +324,7 @@ receive a scoped Files launch. References capture requires an explicit project
 destination, with a create/select-project route rather than a global-library
 fallback.
 
-Proposed layout under each owner's existing `$BASHKITTEN_DATA_DIR`:
+Proposed layout under each owner's existing `$TASKARIAN_DATA_DIR`:
 
 ```text
 services/files/                         # one Quantum config/database/cache
@@ -392,9 +392,9 @@ when implementation begins, then freeze the chosen source graph.
   download/upload, new files/folders and rename/move/copy/delete/archive actions.
   Do not add a separate administrative sidecar or manual first-run wizard.
 - Office documents open through Quantum's own web UI connector on click. Native
-  BashKitten only navigates normal URLs; it does not implement Office routing,
+  Taskarian only navigates normal URLs; it does not implement Office routing,
   preview, export, version history or document-event handling.
-- Use supported branding/name/favicon/CSS/theme settings, match BashKitten's
+- Use supported branding/name/favicon/CSS/theme settings, match Taskarian's
   palette and typography, and disable seasonal decoration. Non-admin roles and
   `account.disableSettings` remove irrelevant administration; hidden CSS alone
   never enforces permissions.
@@ -533,7 +533,7 @@ request deadlines.
 
 The comparison used official **CODE `26.04.5.2.1`**, reporting Online revision
 `42745e44dd8530fac7acd5f46cb7571ceea63c6a` (peeled `cp-26.04.5-2`). This is a
-researched integration candidate, not a committed BashKitten binary/source pin.
+researched integration candidate, not a committed Taskarian binary/source pin.
 Freeze and verify its complete matching source/package graph before import.
 Use one `coolwsd` server, native forkit/kit workers and the Collabora rendering/
 editing engine per environment. Native workers per active document are expected;
@@ -603,7 +603,7 @@ view selection, results/errors, disconnect/reconnect and safe disposal on the
 exact build. No permanent hidden browser or new Mozilla Office actor is assumed.
 If a required operation cannot yet run without a browser client, record that
 specific blocker and resolve the missing native API/adapter in the separately
-owned Office module. Agents can also open ordinary BashKitten editor/preview tabs
+owned Office module. Agents can also open ordinary Taskarian editor/preview tabs
 to inspect rendering, verify their work and view native exports; this is an
 intended tool capability, not only a diagnostic exception. Editing must still
 work when those tabs are closed. Do not replace live editing with disk writes or
@@ -652,7 +652,7 @@ small isolated configuration hook to Collabora's existing theme owner. Do not
 reimplement rendering, mutate browser internals, inject inversion CSS or modify
 actual authored cell/slide/document colors. Test OS dark mode, stale saved state,
 reconnect, desktop/mobile and document exports. References Office dialogs follow
-the light Office surface; Files/References manager and BashKitten chrome keep
+the light Office surface; Files/References manager and Taskarian chrome keep
 their requested branding.
 
 [Native launch parser](https://github.com/CollaboraOnline/online.mirror/blob/42745e44dd8530fac7acd5f46cb7571ceea63c6a/wsd/FileServerUtil.cpp#L191),
@@ -716,7 +716,7 @@ Pi/CLI-only and disconnected from the history UI and Git Changes.
 
 Preserve DOCX/XLSX/PPTX and ODT/ODS/ODP save-back and native export behavior,
 including citation metadata. Collabora uses its own LibreOffice-derived engine;
-removing BashKitten's old external LibreOffice-to-PDF preview process does not
+removing Taskarian's old external LibreOffice-to-PDF preview process does not
 mean removing this required internal engine. Native Office export creates a copy
 unless the user explicitly saves/replaces the source master. Code files and
 `.git` remain untouched by Office snapshots.
@@ -777,7 +777,7 @@ Every transaction, search job, cached result and attachment operation is scoped.
 ### 8.1 Web UI and screenshot fidelity
 
 The [user-supplied layout reference](design/bibliography-layout-reference.png)
-is retained for implementation. Use BashKitten colors, typography, icon family,
+is retained for implementation. Use Taskarian colors, typography, icon family,
 spacing and responsive conventions throughout; replace branded donor artwork.
 
 - Add the requested left sidebar with project/library names, collection tree,
@@ -808,7 +808,7 @@ Harvest interface ideas: query/field controls, supported search modes, sort/orde
 result limit/date filters, categorized searchable filters with removable chips,
 OA/PDF/abstract filters, result estimates, explicit import/PDF choices, saved
 search/source details, progress and partial-result presentation. Adapt these to
-the selected References project and BashKitten styling; expose only search modes
+the selected References project and Taskarian styling; expose only search modes
 and filters actually supported by the current provider. This supplements the
 requested library layout rather than replacing it with the old review workflow.
 Show any adopted defaults such as article-only or has-abstract filters explicitly;
@@ -881,7 +881,7 @@ read-only descriptions are not the appropriate contract.
 
 Preserve item/collection JSON schema, pagination, item versions, conditional
 writes, CSL JSON, instance identity, cancellation, rate-limit/backoff information
-and explicit errors. Use BashKitten's existing authentication and project grants,
+and explicit errors. Use Taskarian's existing authentication and project grants,
 not Zotero's unauthenticated localhost-read policy or a global auto-authorize
 patch. A local CLI uses the same authorized module interface without a publicly
 reachable unauthenticated service.
@@ -1174,7 +1174,7 @@ separately installed **References Office plugin**, with library access and CSL
 processing in the References backend. Use Collabora's native fields/reference marks, UNO/kit APIs and
 JavaScript extension dialogs/menu hooks. Do not hardcode citation parsing, styles, library
 management or a new citation engine into the Collabora application/engine. The
-plugin must be replaceable/testable without rebuilding Collabora or BashKitten.
+plugin must be replaceable/testable without rebuilding Collabora or Taskarian.
 Only a proven missing native API/event may justify a small isolated upstream
 integration patch; that patch exposes the missing capability, not citation logic.
 
@@ -1184,7 +1184,7 @@ All three editors expose **Add/Edit Citation**, **Bibliography**, **Refresh**,
 **Style** dropdown and locale/settings. Use the classic Zotero interaction
 pattern: library/collection and item search, selected-reference list, single or
 multiple citations, reorder, locator/label, prefix/suffix, suppress-author and
-preview. Port the behavior to a normal web modal with BashKitten styling; do not
+preview. Port the behavior to a normal web modal with Taskarian styling; do not
 embed the old XUL dialog or substitute the newer citation picker the user rejected.
 
 The classic donor remains in
@@ -1361,7 +1361,7 @@ identifier/import/attachment/OpenAlex/embedding/setup work.
 
 Before import, freeze the reviewed donor working state as an immutable source
 artifact with a full manifest/checksum. Preserve its pristine committed source
-and the local delta separately, then record BashKitten adaptations. Do not
+and the local delta separately, then record Taskarian adaptations. Do not
 reset/stash/commit the user's donor checkout, import upstream Git ancestry, or
 leave runtime dependencies on that sibling directory. The audit fingerprints
 were `8939d8eba4291157ee58b0dd54ce7e7adf879def41593c1efc21875a8e8f6eba`
@@ -1501,10 +1501,10 @@ shared utilities.
 | `agent/src/server/files/previews.mjs`, `preview-worker.mjs`, `preview-render.mjs`, `preview-types.mjs` | Delete bespoke conversion/rendering pipeline and its lifecycle cleanup. |
 | `agent/src/server/http/server.mjs` | Remove preview content/job routes and manager-only list/upload/archive/job status/cancel/download routes as part of the authorized browser-boundary batch; report the replacement as unavailable until its module is connected; retain folder, Git and shared attachment routes. |
 | `agent/src/server/files/jobs.mjs`, `worker.mjs` | Remove manager-exclusive workers and their shutdown/revocation plumbing after checking remaining callers. |
-| Desktop `BashKittenAgent.sys.mjs` / `BashKittenAgentChild.sys.mjs` | Remove ViewFile/CancelFileView, temporary prepared-document transfer/context state; retain pickers and needed native attachment actions. |
+| Desktop `TaskarianAgent.sys.mjs` / `TaskarianAgentChild.sys.mjs` | Remove ViewFile/CancelFileView, temporary prepared-document transfer/context state; retain pickers and needed native attachment actions. |
 | Android `DocumentPreviews.java` | Delete the bespoke preview component. |
 | Android `BrowserApp.java`, `AgentRuntime.java`, `BrowserKeepAliveService.java`, `FenixAgentHost.kt` | Remove preview startup, commands, callbacks, pending state and cleanup. |
-| `BashKittenController.java`, `BashKittenHostChild.sys.mjs`, `BashKittenHostParent.sys.mjs` | Remove obsolete `view-file`/`cancel-file-view` allowlist/protocol entries; add only the narrow new launch/extension hooks. |
+| `TaskarianController.java`, `TaskarianHostChild.sys.mjs`, `TaskarianHostParent.sys.mjs` | Remove obsolete `view-file`/`cancel-file-view` allowlist/protocol entries; add only the narrow new launch/extension hooks. |
 | `agent/vendor/sheetjs` | Delete current bundled source, metadata/checksum inventory and `xlsx-0.20.3.tgz`; remove `xlsx` from package/lock and packaging exceptions/copying. |
 | Other orphan dependencies | Remove manager-only `yazl`/`buffer-crc32`; remove direct preview-only `marked`/`dompurify` after final caller audit, without deleting Pi's independently used transitive dependencies. |
 | `agent/packaging/build.py` and related source/notices scripts | Remove LibreOffice preview requirements and conversion profiles/scratch code; regenerate actual dependency/source/notices graphs. Do not uninstall unrelated user apps or discard shared fonts/X11 dependencies indiscriminately. |
@@ -1548,7 +1548,7 @@ Prove document open/edit/coedit/save/reopen/export, browserless agent operation,
 light UI/canvas and all citation formats on native Termux and Linux. Record
 concrete blockers instead of inferring support from JavaScript or desktop apps.
 
-Use `/run/media/user/Data/BashkittenBuild` and its existing caches; re-read current
+Use `/run/media/user/Data/TaskarianBuild` and its existing caches; re-read current
 README/verification/acceptance records and the build-environment thread before
 implementation. Preserve unrelated unfinished work and AI daughter-CI ownership.
 The small browser integration build may precede completion of these ports under
@@ -1646,7 +1646,7 @@ one shared processor. Avoid two divergent citation engines between agent and UI.
 Extend the existing offline About **Bundled components** information with
 Collabora Online, its engine/dependencies and each add-on. Preserve source,
 version, full license/notices, original authors, dated modifications and matching
-source archive/checksum links. Use the existing shared BashKitten legal surface
+source archive/checksum links. Use the existing shared Taskarian legal surface
 and retain required native interactive notices, without a second Agent About menu.
 
 Inventory actual licenses from the selected source graph: Online's MPL-2.0 and
@@ -1654,7 +1654,7 @@ engine/transitive terms, fonts/dictionaries, Quantum's Apache-2.0 root and its
 Go/JS/MuPDF/FFmpeg dependencies, Zotero/Connector/translation AGPL and per-file
 exceptions, and CSL styles/locales CC BY-SA 3.0 attribution. The citeproc LICENSE
 offers AGPL v3-or-later or CPAL; verify the actual
-chosen processor, not inconsistent registry metadata. Product UI uses BashKitten
+chosen processor, not inconsistent registry metadata. Product UI uses Taskarian
 References branding without Zotero trademarks; retain donor attribution legally.
 
 Select source-complete redistributable fonts and verify layout with them. Do not
@@ -1688,7 +1688,7 @@ The primary development loop is to build/start the changed module, open its
 ordinary web URL in an already installed browser, exercise the real UI/API and
 replace/restart that module. Quantum launches Office directly in this loop;
 Pi invokes the same API for open/edit/export/view. Use an existing Chisel mapping
-to repeat remote flows. Rebuild BashKitten only for actual sidebar/extension-host
+to repeat remote flows. Rebuild Taskarian only for actual sidebar/extension-host
 source changes and the final installed integration checks, not every document,
 Office plugin, snapshot adapter or References change.
 
@@ -1702,7 +1702,7 @@ runner storage/time/cache constraints justify it. Do not create four repositorie
 merely because there are four targets.
 
 Cover Linux amd64/arm64 and native Termux aarch64/x86_64. Each build consumes an
-exact BashKitten source revision or verified corresponding-source bundle and
+exact Taskarian source revision or verified corresponding-source bundle and
 its locked component/dependency graph. Keep the canonical imported/adapted
 sources and notices under the existing source policy; build repos contain build
 orchestration, not divergent copies or moving upstream branches.
@@ -1717,7 +1717,7 @@ may be a local build tool where upstream requires it; that does not authorize
 its registry-backed cache configuration.
 Produce collectable package/build artifacts with target, source revision,
 toolchain, checksums, full notices and matching source provenance. The main
-BashKitten packaging job collects an exact successful run's artifacts by manifest
+Taskarian packaging job collects an exact successful run's artifacts by manifest
 and checksum and includes them in the normal product packages. A cache hit or a
 dispatched build is not a completed artifact; expiring CI storage must not leave
 the final package/source delivery incomplete.
@@ -1736,11 +1736,11 @@ peak memory, or proof that every possible build input is cached.
 
 | Repository | All Actions caches (GiB) | Mozilla `sccache` portion (GiB) |
 | --- | ---: | ---: |
-| `BashKitten` | 9.459 | None; component/dependency caches |
-| `bashkitten-build-amd64` | 0.728 | 0.728 |
-| `bashkitten-build-arm64` | 0.719 | 0.719 |
-| `bashkitten-build-android` | 2.643 | 0.900 |
-| `bashkitten-build-android-x86_64` | 2.655 | 0.911 |
+| `Taskarian` | 9.459 | None; component/dependency caches |
+| `taskarian-build-amd64` | 0.728 | 0.728 |
+| `taskarian-build-arm64` | 0.719 | 0.719 |
+| `taskarian-build-android` | 2.643 | 0.900 |
+| `taskarian-build-android-x86_64` | 2.655 | 0.911 |
 
 The four browser caches are already isolated in separate repositories. Android's
 remainder is principally Gradle downloads (1.644 GiB in each repo), plus Go
@@ -1800,13 +1800,13 @@ claim that all four targets' useful Actions cache working sets fit its allowance
 Measure that exact Actions-only configuration. If targets repeatedly evict each
 other's useful caches, split the Office builder repositories by platform/target
 as needed rather than substituting GHCR storage. Continue collecting their
-artifacts into the same BashKitten packages and releases.
+artifacts into the same Taskarian packages and releases.
 
 The existing latest combined candidate artifact is already about **12.36 GiB**
 (API size 13,270,909,814 bytes); that is distinct from Actions cache usage. Plan
 main-package collection/assembly in stages so moving compilation to another
 repository does not merely shift a disk-space problem into the final packaging
-job. Retain the ordinary BashKitten releases and complete source/notices delivery.
+job. Retain the ordinary Taskarian releases and complete source/notices delivery.
 
 ### 15.2 Workstreams
 
@@ -1887,7 +1887,7 @@ Do not turn this requirement document into a progress log or rewrite it to fit
 what happened to work. Use fresh acceptance profiles and existing build caches;
 do not copy credentials or seed normal profiles with test data.
 
-Existing repository rules keep BashKitten-owned fixtures/probes outside this
+Existing repository rules keep Taskarian-owned fixtures/probes outside this
 repository and release artifacts and use installed real UI flows for product
 acceptance. Source/build/artifact inspection and upstream checks are useful but
 do not replace those flows. Most component UI/API checks use an already installed
@@ -1895,7 +1895,7 @@ ordinary browser and independently started modules, without a browser rebuild.
 Final native checks verify the small Files button, References extension host,
 service lifetime/packaging and complete flows in the installed product.
 On Android, use ADB/direct Termux for setup and
-diagnosis, then the Cuttlefish web UI in the desktop BashKitten browser for the
+diagnosis, then the Cuttlefish web UI in the desktop Taskarian browser for the
 actual user interaction. Exercise native Linux on Wayland and the required real
 Xorg VM. Record unverified physical-device/architecture coverage honestly.
 
@@ -1921,7 +1921,7 @@ Required acceptance groups:
   opens Office from its own UI with no native Office-specific integration.
 - [ ] **Files:** browse, create/rename/copy/move/delete/archive, upload/download,
   images, text/Markdown and ordinary PDF tabs; all supported previews/Office opens
-  work on desktop and phone with BashKitten styling.
+  work on desktop and phone with Taskarian styling.
 - [ ] **Retained behavior:** project/chat folder pickers, native sharing, chat
   image/attachment operations, Git Changes/diff/cancellation and normal browser
   functions remain working after old-code deletion.
@@ -2038,7 +2038,7 @@ The user's later citation-dialog screenshot and accompanying clarification
 supersede the collection-sidebar/three-pane classic chooser layout above.
 They do not remove the sidebar from the standalone References library manager
 or remove citation functions. The screenshot supplies layout and interaction;
-retain BashKitten colors, styling, names and icons.
+retain Taskarian colors, styling, names and icons.
 
 Use a vertically compact citation dialog with search at the top, selected
 citations, one results table and the rendered citation preview below. Default
@@ -2092,11 +2092,11 @@ source manifests, exact pins or named patches, or expanding the purge to other
 files merely because they have an archive extension.
 
 Builders fetch the exact original HTTPS URLs recorded in the existing manifests
-into the external `BASHKITTEN_SOURCE_CACHE`, verifying the pinned checksums and
+into the external `TASKARIAN_SOURCE_CACHE`, verifying the pinned checksums and
 recorded sizes before use. Reuse the existing source-cache and native build
 owners. Seed the cache from verified existing downloads before removing their
 repository copies; never substitute a moving version or accept mismatched bytes.
-`BASHKITTEN_OFFLINE_SOURCES=1` requires a warm verified cache and fails when an
+`TASKARIAN_OFFLINE_SOURCES=1` requires a warm verified cache and fails when an
 input is missing. Native source-identity and artifact-provenance checks remain
 required.
 
@@ -2115,7 +2115,7 @@ that the full product has passed testing.
 ## 20. Office and Files branding amendment — 28 October 2026
 
 The user names the modified, bundled editor **Office**, as an integrated part of
-BashKitten. Its About/license UI must explain that it is BashKitten's integrated
+Taskarian. Its About/license UI must explain that it is Taskarian's integrated
 Office built on Collabora Online and LibreOffice technology. Replace product
 branding through the native engine/server asset and name configuration, with a
 narrow named patch only where the pinned release hardcodes product presentation.
@@ -2179,7 +2179,7 @@ The user replaces the previous workspace-to-library relationship with independen
 named References projects. Each project is one self-contained database, created
 and selected by users or agents; every backend initially provides Default.
 After that, explicit rename/archive/delete applies normally, without recreating
-a deliberately deleted database. A BashKitten workspace may use several References projects. Their identities
+a deliberately deleted database. A Taskarian workspace may use several References projects. Their identities
 must remain distinct from the workspace/file authorization used by Files and
 Office. Preserve existing database IDs, records, citation identities and
 attachments during migration.
@@ -2225,7 +2225,7 @@ backend and without automatically sending a message or copying a file merely
 to reference it. Reuse native Quantum upload/download behavior.
 
 On mobile add a folder-icon Files group beside the existing Agent, normal,
-private and onion tab groups. Launching Files or a file from BashKitten selects
+private and onion tab groups. Launching Files or a file from Taskarian selects
 that group; child tabs opened from Files tabs inherit it through the native tab
 owner. Preserve each backend's existing service session, authorization and TLS
 identity. Grouping must not create a shared cookie jar or change private/onion
@@ -2266,7 +2266,7 @@ light. These requirements do not claim successful builds or installed acceptance
 ## 27. Editable metadata, exact identifiers and attachment retention — 29 October 2026
 
 The References manager retains the requested editable metadata pane beside the
-item list, using BashKitten's appearance and responsive layout. Users and Pi
+item list, using Taskarian's appearance and responsive layout. Users and Pi
 agents can read and edit applicable item fields, creators, abstracts and
 identifiers, add local attachments and request enrichment through the same
 existing backend. Expose DOI, PMID, PMCID, OpenAlex work ID and arXiv identifiers

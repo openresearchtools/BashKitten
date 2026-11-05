@@ -481,7 +481,7 @@ var gIdentityHandler = {
     event.stopPropagation();
   },
 
-  // BashKitten: the cookie exception toggle in the site data footer.
+  // Taskarian: the cookie exception toggle in the site data footer.
   refreshSiteData() {
     document
       .getElementById("identity-popup-allow-sitedata-toggle")

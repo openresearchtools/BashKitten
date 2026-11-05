@@ -3,7 +3,7 @@
 version = 4
 
 [[package]]
-name = "bashkitten-sudo-bridge"
+name = "taskarian-sudo-bridge"
 version = "1.0.0"
 dependencies = [
  "libc",

@@ -2,7 +2,7 @@
 @import url("./theme.css");
 
 /* Keep the released Connector's selector, progress and keyboard behavior;
-   only adapt its native CSS surfaces to the shared BashKitten palette. */
+   only adapt its native CSS surfaces to the shared Taskarian palette. */
 :root {
   --theme-selection-background: var(--accent);
   --theme-splitter-color: var(--muted);

@@ -4,7 +4,7 @@
 
 "use strict";
 
-// BashKitten retains the diagnostics beside these upstream documentation badges.
+// Taskarian retains the diagnostics beside these upstream documentation badges.
 // External vendor-help controls are not part of the product UI.
 function MDNLink() {
   return null;

@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Native Online branding. Do not change document/cell/slide content colors. */
 :root {
-	--bashkitten-office-ink: #10243c;
-	--bashkitten-office-muted: #5f5f65;
+	--taskarian-office-ink: #10243c;
+	--taskarian-office-muted: #5f5f65;
 }
 
 #product-logo {
@@ -14,21 +14,21 @@
 }
 
 #integrator-logo {
-	background: url('images/bashkitten-wordmark.svg') no-repeat center / contain;
+	background: url('images/taskarian-wordmark.svg') no-repeat center / contain;
 	width: 150px;
 	min-width: 110px;
 	margin-inline-end: 16px;
 }
 
-#about-dialog-info .bashkitten-office-attribution,
-#about-dialog-info .bashkitten-office-legal {
+#about-dialog-info .taskarian-office-attribution,
+#about-dialog-info .taskarian-office-legal {
 	display: block;
 	max-width: 38em;
 	margin: 0 0 10px;
 	line-height: 1.5;
 }
 
-#about-dialog-info .bashkitten-office-legal a {
+#about-dialog-info .taskarian-office-legal a {
 	display: inline;
 }
 

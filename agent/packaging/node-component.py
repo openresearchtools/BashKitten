@@ -17,7 +17,7 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
-REPOSITORY = 'openresearchtools/bashkitten'
+REPOSITORY = 'openresearchtools/Taskarian'
 WORKFLOW = '.github/workflows/node-native.yml'
 TREES = ('agent/packaging/node', 'agent/vendor/node')
 SHARED_RECIPE = 'agent/packaging/source_cache.py'

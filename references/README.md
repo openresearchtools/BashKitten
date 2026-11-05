@@ -1,6 +1,6 @@
 # References module
 
-References is BashKitten's selective integration of reference-management
+References is Taskarian's selective integration of reference-management
 components, rather than the whole Zotero desktop application. The
 [component source map](legal/COMPONENT-ATTRIBUTION.md) links the exact upstream
 sources to our adapters, explains the modifications and retained licenses, and
@@ -23,7 +23,7 @@ An item edit requires its current version and returns 412 on conflict. A query
 cursor returns 409 after a concurrent library change, rather than skipping data.
 
 Each backend initially has Default and independently named References projects,
-created/selected by users and agents. They are separate from BashKitten workspaces;
+created/selected by users and agents. They are separate from Taskarian workspaces;
 one workspace can use several databases. Existing database/citation UUIDs survive
 migration. There are no collections in the product UI or API; legacy memberships
 remain stored without dropping their items.
@@ -100,7 +100,7 @@ and authorizes archived or unavailable-root lifecycle operations separately.
 uses the existing per-project transition owner to copy/verify attachments and
 atomically update their paths and the authoritative SQLite folder setting.
 Metadata remains available when an attachment folder is unavailable. Native
-BashKitten workspace/file authorization is independent and unchanged.
+Taskarian workspace/file authorization is independent and unchanged.
 
 `deleteLibrary({projectId,confirmProjectId,attachments,authority,signal})` and
 DELETE `projects/:id/library` require the exact project confirmation and an
@@ -198,7 +198,7 @@ use the existing Office reservation and exact-path reconciliation owner.
 `runtime-payload.json` is the runtime allowlist and legal inventory. Pristine
 donor trees, source manifests and licenses remain in Git. The shared source-cache
 owner fetches original archives from the exact URLs and checksums in those
-manifests into `BASHKITTEN_SOURCE_CACHE` (or the existing default external cache).
+manifests into `TASKARIAN_SOURCE_CACHE` (or the existing default external cache).
 The complete corresponding-source distribution includes these verified archives;
 the whole desktop application and upstream test/example trees are excluded from
 runtime. See `THIRD_PARTY_NOTICES.md` and the existing bundled-component legal

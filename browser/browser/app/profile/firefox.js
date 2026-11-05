@@ -2464,15 +2464,15 @@ pref("privacy.resistFingerprinting.skipEarlyBlankFirstPaint", true);
 
 pref("browser.contentblocking.database.enabled", true);
 
-// BashKitten's built-in content blocker.
-pref("bashkitten.blocker.enabled", true);
-pref("bashkitten.blocker.ui.enabled", true);
-pref("bashkitten.blocker.showBadge", true);
-pref("bashkitten.blocker.filterListUrls", "[]");
-pref("bashkitten.blocker.enabledLists", "{}");
-pref("bashkitten.blocker.extensionDetectionDismissed", false);
-pref("bashkitten.blocker.dismissedExtensionInstallWarnings", "[]");
-pref("bashkitten.blocker.coexist", false);
+// Taskarian's built-in content blocker.
+pref("taskarian.blocker.enabled", true);
+pref("taskarian.blocker.ui.enabled", true);
+pref("taskarian.blocker.showBadge", true);
+pref("taskarian.blocker.filterListUrls", "[]");
+pref("taskarian.blocker.enabledLists", "{}");
+pref("taskarian.blocker.extensionDetectionDismissed", false);
+pref("taskarian.blocker.dismissedExtensionInstallWarnings", "[]");
+pref("taskarian.blocker.coexist", false);
 
 // Enable Strip on Share by default on desktop
 pref("privacy.query_stripping.strip_on_share.enabled", true);

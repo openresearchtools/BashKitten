@@ -1,4 +1,4 @@
-BashKitten remote integration — AGPL-3.0-only for BashKitten modifications.
+Taskarian remote integration — AGPL-3.0-only for Taskarian modifications.
 
 The service-ID tunnel adapter and encrypted connection bundle are adapted from
 TorKitten v2, Copyright 2026 The Torkitten Authors, Apache-2.0.
@@ -11,7 +11,7 @@ OAuth exchange/registration follows internal/oauth/{client,login,registration}.g
 The complete Apache-2.0 text is in TORKITTEN-LICENSE.
 
 5 October 2026 adaptations: isolate the connection codec from the donor's
-application, filesystem and account managers; validate BashKitten's existing
+application, filesystem and account managers; validate Taskarian's existing
 username syntax; add the QR quiet zone; exclude host code from client builds.
 Retain TK2/version 2 field meanings, upstream age scrypt and Chisel wire/pipe
 behavior. Dependency versions, complete pristine source and licenses are under

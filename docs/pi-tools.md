@@ -11,7 +11,7 @@ separately; source inclusion alone does not establish a passing flow.
 The same plan's [Phone module section](native-environments-display-plan.md#12-android-phone-control-and-the-mcp-port)
 is implemented as the Termux `phoneuse` CLI and a concise normally discovered
 Pi skill.
-Only live local BashKitten-owned Pi workers receive scoped Phone authorization;
+Only live local Taskarian-owned Pi workers receive scoped Phone authorization;
 the native Android module enforces master/feature/grant policy on every request.
 The guide directs agents to current enabled-capability help instead of loading
 an MCP catalog or describing disabled commands. Accessibility stays optional;
@@ -95,7 +95,7 @@ reads. The one-retry instruction is model guidance, not a persisted retry counte
 the handoff only after successful compaction. Failure, cancellation or changed
 session/model/input prevents that continuation. Earlier files may be summarized
 by compaction. RPC clients must observe `compaction_end` and the resumed run's
-settlement, beyond the initial `agent_settled`. BashKitten adds no compaction
+settlement, beyond the initial `agent_settled`. Taskarian adds no compaction
 controller, provider path or UI flow. Both package targets copy the extension
 from this repository; prototype files, fixtures and live logs are not required.
 
@@ -137,11 +137,11 @@ other coding agents.
 
 The normal managed skill selection upgrades to the new packaged paths. Explicit
 custom package skill filters are preserved. Architecture acceptance uses the
-fresh private BashKitten Pi profile requested on 8 October; standalone Pi and npm
+fresh private Taskarian Pi profile requested on 8 October; standalone Pi and npm
 profiles are not imported.
 
 On 8 October, installed Android APK/backend `8ecc1a1d16` passed an actual
-subagent flow through the desktop BashKitten Cuttlefish UI. The managed r1
+subagent flow through the desktop Taskarian Cuttlefish UI. The managed r1
 llama.cpp router used Qwen3.5 2B Q4_0, explicit CPU, a 32,768-token context and
 two threads. The parent activated `agents` through stock `tool_search`, spawned
 Answerer and Questioner, and both children inherited its model and Reasoning Off.

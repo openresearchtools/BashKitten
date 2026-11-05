@@ -17,7 +17,7 @@
 
 using namespace mozilla;
 
-#ifdef MOZ_BASHKITTEN
+#ifdef MOZ_TASKARIAN
 #  define DBUS_NAMESPACE "com"
 #  define DBUS_OBJECT_NAMESPACE "/com"
 #else

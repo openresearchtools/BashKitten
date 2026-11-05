@@ -17,7 +17,7 @@ try:
     # Native reader imports/extraction may print advisories. Keep stdout for
     # the single JSON protocol response consumed by extractPDF.
     with redirect_stdout(sys.stderr):
-        from bashkitten_search._upstream._rag.parsers import _pdf
+        from taskarian_search._upstream._rag.parsers import _pdf
         pages,_,total=_pdf(sys.argv[1],want_images=False,max_pages=int(sys.argv[2]) if len(sys.argv)>2 else None)
     content='\n\n'.join(p.text for p in pages)
     print(json.dumps({'content':content,'indexedPages':len(pages),'totalPages':total,'indexedChars':len(content),'totalChars':len(content) if len(pages)==total else None},ensure_ascii=False))

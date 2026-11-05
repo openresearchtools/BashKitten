@@ -182,7 +182,7 @@ pref("dom.max_script_run_time", 20);
 // Enable meta-viewport support for font inflation code (bug 1106255)
 pref("dom.meta-viewport.enabled", true);
 
-// BashKitten Android has no website-push transport or subscription service.
+// Taskarian Android has no website-push transport or subscription service.
 pref("dom.push.enabled", false, locked);
 
 // Enable WebShare support (bug 1402369)
@@ -388,12 +388,12 @@ pref("browser.ipProtection.enabled", true);
 pref("browser.ipProtection.guardian.endpoint", "https://vpn.mozilla.org/");
 pref("toolkit.ipProtection.android.authProvider", "fxa");
 
-// BashKitten Android product defaults.
-pref("bashkitten.blocker.enabled", true);
+// Taskarian Android product defaults.
+pref("taskarian.blocker.enabled", true);
 pref("cookiebanners.service.mode", 1);
 pref("cookiebanners.service.mode.privateBrowsing", 1);
 pref("cookiebanners.service.detectOnly", false);
-pref("bashkitten.cookiebanners.rejectHidden", true);
+pref("taskarian.cookiebanners.rejectHidden", true);
 pref("privacy.globalprivacycontrol.enabled", true);
 pref("privacy.donottrackheader.enabled", true);
 pref("network.cookie.cookieBehavior", 5);
@@ -435,4 +435,4 @@ pref("browser.ipProtection.guardian.endpoint", "");
 pref("browser.safebrowsing.provider.mozilla.gethashURL", "");
 
 // Share the desktop product's audited no-vendor-service policy, including locks.
-#include ../../../bashkitten/browser/app/profile/99-bashkitten.js
+#include ../../../taskarian/browser/app/profile/99-taskarian.js

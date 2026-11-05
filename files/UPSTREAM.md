@@ -20,7 +20,7 @@ adapted to a private owner callback because upstream globals couple it to the
 Quantum users/files store. Added host duties are native RSA proof validation,
 live grant/generation/participant checks, complete atomic file publication,
 locked-save enforcement and native settings/extension delivery. Upstream token
-issuance does not replace BashKitten authorization. OnlyOffice handlers remain
+issuance does not replace Taskarian authorization. OnlyOffice handlers remain
 unaltered in the pristine native Files build.
 
 
@@ -77,7 +77,7 @@ replaceable boundary natively.
 
 Files branding uses the selected release's native `frontend.name`, description,
 favicon/login icon, external links, background colors and `customCSS` facilities.
-The artwork is the existing BashKitten image; the neutral light/dark palette and
+The artwork is the existing Taskarian image; the neutral light/dark palette and
 typography match the browser's current settings/Agent owners. Seasonal decoration
 and upstream release links are disabled through native configuration. The native
 external link opens a small offline About Files page within the existing scoped
@@ -103,10 +103,10 @@ it when upstream offers equivalent global configuration.
 packages. Go module sums and npm SRI values are preserved, as are archive hashes
 and original notice filenames. `native-sources.json` records separately selected
 MuPDF 1.28.6/FFmpeg 9.0.2/dav1d 1.5.4 source, native build tools and the upstream FFmpeg recipe.
-Downloaded archives live in the external `BASHKITTEN_SOURCE_CACHE`, selected by
+Downloaded archives live in the external `TASKARIAN_SOURCE_CACHE`, selected by
 their original HTTPS URLs and exact checksums; they are not committed to Git.
 Historical split-part manifests remain provenance for reconstructing and
-verifying existing cache seeds. `BASHKITTEN_OFFLINE_SOURCES=1` requires a warm
+verifying existing cache seeds. `TASKARIAN_OFFLINE_SOURCES=1` requires a warm
 verified cache. Normal corresponding-source artifacts include the complete
 selected original archives and notices, including native frontend build-tool
 sources for esbuild and Rollup; download links alone are insufficient. Product

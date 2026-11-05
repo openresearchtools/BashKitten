@@ -33,15 +33,15 @@ export async function bundledLicenses(root = appRoot) {
   try { version = JSON.parse(await fs.readFile(path.join(root, 'build-platform.json'))).version; }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (!version) {
-    try { version = (await fs.readFile(path.join(root, '../browser/bashkitten/config/version.txt'), 'utf8')).trim(); }
+    try { version = (await fs.readFile(path.join(root, '../browser/taskarian/config/version.txt'), 'utf8')).trim(); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
-  const records = [{ name: 'BashKitten', version: version || pkg.version, license: 'AGPL-3.0-only',
-    source: 'https://github.com/openresearchtools/bashkitten', text: await fs.readFile(path.join(root, 'LICENSE'), 'utf8') }];
+  const records = [{ name: 'Taskarian', version: version || pkg.version, license: 'AGPL-3.0-only',
+    source: 'https://github.com/openresearchtools/Taskarian', text: await fs.readFile(path.join(root, 'LICENSE'), 'utf8') }];
   const modelNotices = path.join(root, 'src/server/models/third_party');
   const modelProvenance = await fs.readFile(path.join(modelNotices, 'NOTICE'), 'utf8');
   for (const [name, license, file] of [
-    ['BashKitten Rust model downloader', 'Apache-2.0', 'BASHKITTEN-RUST-LICENSE'],
+    ['Taskarian Rust model downloader', 'Apache-2.0', 'TASKARIAN-RUST-LICENSE'],
     ['SimpleHF', 'MIT', 'SIMPLEHF-LICENSE'],
     ['rust-hf-downloader', 'MIT', 'RUST-HF-DOWNLOADER-LICENSE'],
     ['Pi Hugging Face client reference', 'MIT', 'PI-LICENSE'],

@@ -1,5 +1,5 @@
 // Remote enrollment follows TorKitten v2 (Apache-2.0); see NOTICE.
-// BashKitten native controller/lifecycle integration: AGPL-3.0-only.
+// Taskarian native controller/lifecycle integration: AGPL-3.0-only.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { X509Certificate } from 'node:crypto';
@@ -74,7 +74,7 @@ export class RemoteAccess {
   async authentication() {
     const keys = await this.identity(), host = await this.hostname();
     if (!keys || !host) throw Error('Set up the remote identity first');
-    const registration = await this.stack.tunnel.call('oauth-registration', { client_id: 'bashkitten-' + keys.id, onion: host });
+    const registration = await this.stack.tunnel.call('oauth-registration', { client_id: 'taskarian-' + keys.id, onion: host });
     return { jwks: [{ key: keys.oidc_key, algorithm: 'RS256', use: 'sig' }], clients: [registration] };
   }
   async startTunnel() {
@@ -169,7 +169,7 @@ export class RemoteAccess {
       await completeAccount(value);
       try {
         const state = await this.state(), keys = await this.identity();
-        const bundle = { version: 2, id: keys.id, name: 'BashKitten · ' + state.owner, owner: state.owner, onion: await this.hostname(),
+        const bundle = { version: 2, id: keys.id, name: 'Taskarian · ' + state.owner, owner: state.owner, onion: await this.hostname(),
           tor_private: keys.tor_private, root_ca: await this.stack.remoteRoot(), certificate: keys.certificate,
           private_key: keys.private_key, fingerprint: keys.fingerprint };
         const encoded = await this.stack.tunnel.call('encrypt', { bundle, password: pending.password.toString('utf8') });

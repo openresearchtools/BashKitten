@@ -17,8 +17,8 @@ does not relabel a historical artifact or establish a new test/build result.
 Existing explicit links to the frozen original plan remain valid.
 
 Current build recipes fetch exact HTTPS/checksum-pinned originals into
-`BASHKITTEN_SOURCE_CACHE` and support a verified warm cache with
-`BASHKITTEN_OFFLINE_SOURCES=1`. The accumulated implementation remains in the
+`TASKARIAN_SOURCE_CACHE` and support a verified warm cache with
+`TASKARIAN_OFFLINE_SOURCES=1`. The accumulated implementation remains in the
 current source tree. Earlier historical recipes were not retroactively changed:
 checking out an earlier rewritten commit may require restoring its original
 archive inputs from its matching source bundle before using those old recipes.

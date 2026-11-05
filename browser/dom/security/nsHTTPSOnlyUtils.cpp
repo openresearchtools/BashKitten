@@ -58,7 +58,7 @@ nsHTTPSOnlyUtils::UpgradeMode nsHTTPSOnlyUtils::GetUpgradeMode(
     nsILoadInfo* aLoadInfo) {
   // Ordinary Tor tabs keep HTTP support; protected Agent contexts retain their
   // HTTPS policy. This does not change Tor routing or TLS verification.
-  if (aLoadInfo->GetOriginAttributes().IsBashKittenNetworkIsolated(false)) {
+  if (aLoadInfo->GetOriginAttributes().IsTaskarianNetworkIsolated(false)) {
     return NO_UPGRADE_MODE;
   }
   bool isPrivateWin = aLoadInfo->GetOriginAttributes().IsPrivateBrowsing();

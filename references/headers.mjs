@@ -23,7 +23,7 @@
     ***** END LICENSE BLOCK *****
 */
 
-// BashKitten 2026-10-28: native Zotero 10.0.6 header decoder, independent of server transport.
+// Taskarian 2026-10-28: native Zotero 10.0.6 header decoder, independent of server transport.
 const Zotero = { debug() {} };
 export const decodeRFC2047 = function (value) {
 	// RFC 2047-decode the result.

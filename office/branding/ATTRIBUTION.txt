@@ -1,5 +1,5 @@
-BashKitten integrated Office built on Collabora Online.
-Office is part of BashKitten. This modified integration uses Collabora Online
+Taskarian integrated Office built on Collabora Online.
+Office is part of Taskarian. This modified integration uses Collabora Online
 and LibreOffice technology; it is not an unmodified upstream distribution.
 
 Collabora Online: copyright Collabora Productivity Limited and the Collabora
@@ -11,8 +11,8 @@ Upstream copyright, license and notice files remain applicable and are retained
 in the corresponding source and installed legal information. Product branding
 does not replace or amend those terms or imply upstream endorsement.
 
-The existing BashKitten kitten-with-glasses artwork is distributed under
-AGPL-3.0-only. The source is browser/bashkitten/browser/branding, whose LICENSE
+The existing Taskarian kitten-with-glasses artwork is distributed under
+AGPL-3.0-only. The source is browser/taskarian/browser/branding, whose LICENSE
 documents the original artwork and its provenance. The Office branding source
 and configuration are distributed under AGPL-3.0-only; embedded upstream license
 and notice documents retain their own terms unchanged.

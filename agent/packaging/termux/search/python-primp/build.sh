@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-# BashKitten recipe; build framework pinned in search/runtime-lock.json.
+# Taskarian recipe; build framework pinned in search/runtime-lock.json.
 TERMUX_PKG_HOMEPAGE=https://github.com/deedy5/primp
-TERMUX_PKG_DESCRIPTION="BashKitten private native DDGS HTTP client"
+TERMUX_PKG_DESCRIPTION="Taskarian private native DDGS HTTP client"
 TERMUX_PKG_LICENSE="MIT, Apache-2.0, ISC"
 TERMUX_PKG_LICENSE_FILE="crates/primp/LICENSE-MIT, crates/primp-reqwest/LICENSE-APACHE, crates/primp-rustls/rustls/LICENSE-ISC"
 TERMUX_PKG_MAINTAINER="openresearchtools <openresearchtools@gmail.com>"
@@ -13,7 +13,7 @@ TERMUX_PKG_BUILD_IN_SRC=true
 TERMUX_PKG_AUTO_UPDATE=false
 
 termux_step_get_source() {
-	python3 "$BASHKITTEN_SOURCE_ROOT/agent/search/build/termux-inputs.py" "$TERMUX_PKG_SRCDIR"
+	python3 "$TASKARIAN_SOURCE_ROOT/agent/search/build/termux-inputs.py" "$TERMUX_PKG_SRCDIR"
 }
 
 termux_step_pre_configure() {
@@ -45,7 +45,7 @@ termux_step_make() {
 }
 
 termux_step_make_install() {
-	local destination="$TERMUX_PREFIX/lib/bashkitten/search/runtime/site-packages"
+	local destination="$TERMUX_PREFIX/lib/taskarian/search/runtime/site-packages"
 	install -Dm755 "target/$CARGO_TARGET_NAME/release/libprimp.so" "$destination/primp.abi3.so"
 	patchelf --add-needed "libpython$TERMUX_PYTHON_VERSION.so" "$destination/primp.abi3.so"
 }

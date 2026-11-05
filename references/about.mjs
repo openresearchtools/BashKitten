@@ -14,7 +14,7 @@ export async function referenceAbout() {
     throw Error('The packaged References license inventory is invalid');
   return {
     name: 'References',
-    description: 'BashKitten reference management, page and PDF capture, and document citations. Uses selected Zotero components and the Citation Style Language project; the original authors and licenses are retained below.',
+    description: 'Taskarian reference management, page and PDF capture, and document citations. Uses selected Zotero components and the Citation Style Language project; the original authors and licenses are retained below.',
     attribution,
     components,
   };

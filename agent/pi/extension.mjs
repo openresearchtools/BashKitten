@@ -6,7 +6,7 @@ import { browserDocumentation, browserHelp } from './browser-help.mjs';
 import { browserDebugDocumentation, browserDebugHelp } from './browser-debug-help.mjs';
 import { searchWeb } from './search.mjs';
 
-export default function bashkitten(pi) {
+export default function taskarian(pi) {
   // Stock Pi records tool_search activation and later deferred loads in the
   // native transcript. Keep user/other-extension tools in the existing set.
   pi.on('session_start', () => {

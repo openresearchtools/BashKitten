@@ -23,7 +23,7 @@
     ***** END LICENSE BLOCK *****
 */
 
-// BashKitten 2026-10-28: native collection hierarchy mapper; persistence is injected.
+// Taskarian 2026-10-28: native collection hierarchy mapper; persistence is injected.
 module.exports = Zotero => {
 return async function (collections) {
 		var collectionsToProcess = collections.slice();

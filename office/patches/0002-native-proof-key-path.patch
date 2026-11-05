@@ -1,4 +1,4 @@
-From: BashKitten contributors
+From: Taskarian contributors
 Subject: [PATCH] Allow a private environment WOPI proof key path
 
 The native proof-key loader only used a compile-time configuration directory.

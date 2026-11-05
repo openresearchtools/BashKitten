@@ -1,9 +1,9 @@
-# BashKitten on Pi / Termux
+# Taskarian on Pi / Termux
 
 This branch contains a browser frontend and a Node adapter for unmodified Pi RPC
 processes. The old Rust implementation, build files, packages, differential
 fixtures and porting scripts are removed from the current tree. Git history and
-the separate [bashkitten-rust repository](https://github.com/openresearchtools/bashkitten-rust)
+the separate [legacy Rust repository](https://api.github.com/repositories/1377711242)
 retain the original Rust implementation and its complete main-branch history.
 Pi is pinned to npm `@earendil-works/pi-coding-agent@1.3.0`, upstream commit
 `71023aec1546d6d677a65669c5665c0927ce0dd0` (tag v1.3.0). The lockfile pins its
@@ -24,8 +24,8 @@ Termux supplies `ripgrep` and `fd`; no Linux binaries are downloaded on Android.
 
 On 8 October 2026, both active Pi children in Android 17 Cuttlefish were observed
 executing the bundled native x86_64 Node ELF under Termux's UID. Their
-`PI_CODING_AGENT_DIR` and session directory pointed beneath BashKitten's private
-`~/.local/share/bashkitten-pi/pi`, as did npm's prefix, cache and both configuration
+`PI_CODING_AGENT_DIR` and session directory pointed beneath Taskarian's private
+`~/.local/share/Taskarian/pi`, as did npm's prefix, cache and both configuration
 paths; `PI_PACKAGE_DIR` was absent. HOME and cwd remained Termux home. The installed
 Linux controller/server also used bundled Node and the private paths, but no Linux
 Pi child was active for this check. This verifies current process routing, without
@@ -83,13 +83,13 @@ It repairs Termux's bootstrap libraries before downloading `install.sh` from
 that APK's exact source revision, and passes its backend/OS versions, architecture
 and actual return activity. The script verifies architecture-specific keyring
 package hashes, enables the signed stable and nightly APT sources, and installs
-the exact `bashkitten` and `bashkitten-os` versions on a fresh backend. An existing
+the exact `taskarian` and `taskarian-os` versions on a fresh backend. An existing
 backend returns to the app for its normal coordinated replacement at idle.
 These are testing releases. The callback resumes Android permission/start setup;
 the APK verifies the backend's source revision and OS package identity before
 starting work. Missing matching published packages produce an error.
 Already-shipped APKs use a one-argument command through
-`https://termux.bashkitten.com`; that entry remains supported. On a fresh Termux
+`https://termux.taskarian.com`; that entry remains supported. On a fresh Termux
 installation it initially installs the signed repository candidate, then the
 installed APK's existing reconciler restores its exact pair before activation.
 Only new commands carry the APK's versions into the first install transaction.
@@ -108,7 +108,7 @@ Pi history remain in place. Automatically selected bundled Pi follows the
 Android package in either direction; explicit npm/custom selections remain
 independent, including the existing Update Pi and Roll back Pi controls.
 
-Display embeds the pinned Termux:X11 engine and input handling in the BashKitten
+Display embeds the pinned Termux:X11 engine and input handling in the Taskarian
 APK, with a matching architecture-specific Termux launcher. It does not require
 the standalone Termux:X11 APK or a shared Android UID. Its separate display
 endpoint allows the standalone Termux:X11 app to coexist. The native browser tab
@@ -136,13 +136,13 @@ notifications. A message already consumed at a turn boundary is never replayed.
 An edit temporarily holds the selected message in the worker; Cancel returns it to
 Pi. A worker crash loses unconsumed in-memory queues, as native RPC does.
 
-The header and file browser use Pi's saved working folder. BashKitten reads native
+The header and file browser use Pi's saved working folder. Taskarian reads native
 history through Pi's parser into an in-memory view; it never opens a second
 writable session manager. Fork uses the stock `fork` RPC
 command on that live Pi process, including extension hooks and cancellation.
 It forks before the selected user message and returns Pi's text to the editor.
 The worker follows the new native session; Pi alone decides when to save it.
-BashKitten never writes or reconstructs Pi JSONL. New sessions use Pi's normal
+Taskarian never writes or reconstructs Pi JSONL. New sessions use Pi's normal
 session directory; existing sessions resume by their recorded native file path.
 Saved model/thinking settings are restored by Pi, without cached UI overrides.
 Explicit choices in the UI use native model/thinking commands.
@@ -150,7 +150,7 @@ Explicit choices in the UI use native model/thinking commands.
 Extension commands go through native `prompt` RPC. Their dialogs use Pi's
 extension UI sub-protocol, and model lists for running chats come from
 `get_available_models`, including extension-provided models. TUI-only extension
-widgets have the limitations documented by upstream RPC; BashKitten does not
+widgets have the limitations documented by upstream RPC; Taskarian does not
 replace Pi's extension runtime.
 
 ## Files and authentication
@@ -218,7 +218,7 @@ Upstream references at the pinned release:
 
 - Pi RPC does not stream compaction summary tokens. The existing compaction style
   shows progress and then the native completed summary, with no invented deltas.
-- Pi has no built-in BashKitten goal loop. Goal commands are native Pi extension
+- Pi has no built-in Taskarian goal loop. Goal commands are native Pi extension
   commands if installed; the old harness goal UI is removed.
 - Existing custom providers are loaded from Pi's models.json; the old llama.cpp
   process manager and custom OpenAI credential store are not used.

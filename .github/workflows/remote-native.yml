@@ -18,10 +18,10 @@ on:
       - 'auth/caddy/go.sum'
       - 'auth/upstreams.lock.json'
       - 'auth/remote-termux/**'
-      - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/NativeRemote.java'
-      - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/RemoteAgentConnection.java'
-      - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/SecretStore.java'
-      - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/TorGateway.java'
+      - 'browser/mobile/android/taskarian/src/main/java/com/taskarian/NativeRemote.java'
+      - 'browser/mobile/android/taskarian/src/main/java/com/taskarian/RemoteAgentConnection.java'
+      - 'browser/mobile/android/taskarian/src/main/java/com/taskarian/SecretStore.java'
+      - 'browser/mobile/android/taskarian/src/main/java/com/taskarian/TorGateway.java'
       - '.github/workflows/remote-native.yml'
 
 permissions:
@@ -47,12 +47,12 @@ jobs:
             runner: ubuntu-24.04
             os: android
             arch: arm64
-            tags: bashkitten_client
+            tags: taskarian_client
           - target: android-amd64-client
             runner: ubuntu-24.04
             os: android
             arch: amd64
-            tags: bashkitten_client
+            tags: taskarian_client
     runs-on: ${{ matrix.runner }}
     env:
       GOTELEMETRY: 'off'
@@ -96,7 +96,7 @@ jobs:
     env:
       GOTELEMETRY: 'off'
       GOTOOLCHAIN: local
-      BASHKITTEN_ANDROID_ABI: ${{ matrix.abi }}
+      TASKARIAN_ANDROID_ABI: ${{ matrix.abi }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -115,7 +115,7 @@ jobs:
             auth/authelia/go.sum
             auth/caddy/go.sum
             auth/upstreams.lock.json
-            browser/mobile/android/bashkitten/src/main/java/com/bashkitten
+            browser/mobile/android/taskarian/src/main/java/com/taskarian
       - uses: actions/setup-go@v6
         with:
           go-version: '1.27.2'
@@ -133,13 +133,13 @@ jobs:
       - name: Compile the native encrypted-store adapter against the generated binding
         run: |
           mkdir -p "$RUNNER_TEMP/remote-java"
-          unzip -p "$RUNNER_TEMP/remote-android/bashkitten-remote.aar" classes.jar > "$RUNNER_TEMP/remote-java/binding.jar"
+          unzip -p "$RUNNER_TEMP/remote-android/taskarian-remote.aar" classes.jar > "$RUNNER_TEMP/remote-java/binding.jar"
           javac -source 8 -target 8 -classpath "$ANDROID_HOME/platforms/android-31/android.jar:$RUNNER_TEMP/remote-java/binding.jar" \
             -d "$RUNNER_TEMP/remote-java/classes" \
-            browser/mobile/android/bashkitten/src/main/java/com/bashkitten/SecretStore.java \
-            browser/mobile/android/bashkitten/src/main/java/com/bashkitten/NativeRemote.java \
-            browser/mobile/android/bashkitten/src/main/java/com/bashkitten/TorGateway.java \
-            browser/mobile/android/bashkitten/src/main/java/com/bashkitten/RemoteAgentConnection.java
+            browser/mobile/android/taskarian/src/main/java/com/taskarian/SecretStore.java \
+            browser/mobile/android/taskarian/src/main/java/com/taskarian/NativeRemote.java \
+            browser/mobile/android/taskarian/src/main/java/com/taskarian/TorGateway.java \
+            browser/mobile/android/taskarian/src/main/java/com/taskarian/RemoteAgentConnection.java
       - uses: actions/upload-artifact@v4
         with:
           name: remote-client-android-${{ matrix.abi }}

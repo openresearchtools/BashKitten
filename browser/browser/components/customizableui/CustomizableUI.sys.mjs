@@ -76,7 +76,7 @@ var kVersion = 31;
  */
 var ObsoleteBuiltinButtons = {
   "feed-button": 15,
-  "bashkitten-agent-toolbar-button": 30,
+  "taskarian-agent-toolbar-button": 30,
 };
 
 /**
@@ -363,8 +363,8 @@ var CustomizableUIInternal = {
         : "home-button",
       "spring",
       "vertical-spacer",
-      "bashkitten-tor-toolbar-button",
-      "bashkitten-blocker-toolbar-button",
+      "taskarian-tor-toolbar-button",
+      "taskarian-blocker-toolbar-button",
       "urlbar-container",
       "spring",
       "downloads-button",
@@ -382,8 +382,8 @@ var CustomizableUIInternal = {
         defaultPlacements: navbarPlacements,
         verticalTabsDefaultPlacements: [
           "firefox-view-button",
-          "bashkitten-tor-toolbar-button",
-          "bashkitten-blocker-toolbar-button",
+          "taskarian-tor-toolbar-button",
+          "taskarian-blocker-toolbar-button",
           "alltabs-button",
         ],
         defaultCollapsed: false,
@@ -859,14 +859,14 @@ var CustomizableUIInternal = {
     }
 
     if (currentVersion < 23) {
-      // BashKitten 140 betas registered the blocker button as an external
+      // Taskarian 140 betas registered the blocker button as an external
       // widget which queued it via gFuturePlacements; that path appended to
       // the navbar end. Remove any existing placement so it can be inserted
-      // at its default position via placeNewDefaultWidgetsInArea. BashKitten
+      // at its default position via placeNewDefaultWidgetsInArea. Taskarian
       // 140 release profiles are version 23 or later and keep their layout.
       for (let area of Object.keys(gSavedState.placements)) {
         let placements = gSavedState.placements[area];
-        let idx = placements.indexOf("bashkitten-blocker-toolbar-button");
+        let idx = placements.indexOf("taskarian-blocker-toolbar-button");
         if (idx !== -1) {
           placements.splice(idx, 1);
         }
@@ -877,7 +877,7 @@ var CustomizableUIInternal = {
       const navbarPlacements =
         gSavedState.placements[CustomizableUI.AREA_NAVBAR];
       if (navbarPlacements) {
-        const blocker = "bashkitten-blocker-toolbar-button";
+        const blocker = "taskarian-blocker-toolbar-button";
         const blockerIndex = navbarPlacements.indexOf(blocker);
         if (blockerIndex !== -1) {
           navbarPlacements.splice(blockerIndex, 1);
@@ -895,7 +895,7 @@ var CustomizableUIInternal = {
       for (const placements of Object.values(gSavedState.placements)) {
         let index;
         while (
-          (index = placements.indexOf("bashkitten-agent-toolbar-button")) !==
+          (index = placements.indexOf("taskarian-agent-toolbar-button")) !==
           -1
         ) {
           placements.splice(index, 1);
@@ -3215,8 +3215,8 @@ var CustomizableUIInternal = {
     lazy.log.debug("Iterating the actual nodes of the window palette");
     for (let node of aWindowPalette.children) {
       if (
-        AppConstants.MOZ_APP_NAME == "bashkitten" &&
-        node.hasAttribute("data-bashkitten-unavailable")
+        AppConstants.MOZ_APP_NAME == "taskarian" &&
+        node.hasAttribute("data-taskarian-unavailable")
       ) {
         continue;
       }

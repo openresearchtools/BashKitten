@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
+<?csp default-src chrome:; style-src chrome:; ?>
+
+<window
+  id="TaskarianBlockerFilterListsWindow"
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:html="http://www.w3.org/1999/xhtml"
+  data-l10n-id="taskarian-blocker-filter-lists-window"
+  data-l10n-attrs="title"
+  persist="width height"
+>
+  <dialog
+    id="taskarianBlockerFilterListsDialog"
+    buttons="accept,cancel"
+    data-l10n-id="taskarian-blocker-filter-lists-dialog"
+    data-l10n-attrs="buttonlabelaccept, buttonaccesskeyaccept"
+  >
+    <linkset>
+      <html:link rel="stylesheet" href="chrome://global/skin/global.css" />
+      <html:link
+        rel="stylesheet"
+        href="chrome://browser/skin/preferences/preferences.css"
+      />
+      <html:link
+        rel="stylesheet"
+        href="chrome://browser/content/preferences/dialogs/taskarianBlockerFilterLists.css"
+      />
+
+      <html:link rel="localization" href="browser/taskarian/blocker.ftl" />
+    </linkset>
+
+    <script src="chrome://browser/content/preferences/dialogs/taskarianBlockerFilterLists.js" />
+
+    <vbox class="contentPane" flex="1">
+      <label
+        id="taskarianBlockerFilterListsDescription"
+        data-l10n-id="taskarian-blocker-filter-lists-description"
+      />
+      <separator class="thin" />
+      <hbox id="taskarianBlockerFilterListsToolbar" align="center">
+        <button
+          id="taskarianBlockerRefreshNow"
+          data-l10n-id="taskarian-blocker-filter-lists-refresh-now"
+        />
+      </hbox>
+      <label
+        id="taskarianBlockerNextRefresh"
+        class="text-deemphasized taskarian-blocker-list-updated"
+      />
+      <separator class="thin" />
+      <html:input
+        id="taskarianBlockerFilterListsSearch"
+        type="search"
+        data-l10n-id="taskarian-blocker-filter-lists-search"
+        data-l10n-attrs="placeholder"
+      />
+      <separator class="thin" />
+      <vbox
+        id="taskarianBlockerFilterListsScrollContainer"
+        class="info-box-container taskarian-blocker-scroll-container"
+        flex="1"
+      >
+        <vbox id="taskarianBlockerFilterListsCategories" flex="1" />
+      </vbox>
+    </vbox>
+  </dialog>
+</window>

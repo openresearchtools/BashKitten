@@ -189,12 +189,12 @@ test('actual Pi references tool accepts complete native metadata without a field
     response.end(JSON.stringify({ status: 200, body: { key: 'CANONICAL1', version: 8, data: value.body.data } }));
   });
   await new Promise(resolve => server.listen(socket, resolve));
-  const previous = { socket: process.env.BASHKITTEN_WORKER_SOCKET, key: process.env.BASHKITTEN_WORKER_KEY };
-  process.env.BASHKITTEN_WORKER_SOCKET = socket;
-  process.env.BASHKITTEN_WORKER_KEY = 'fixture-private-worker';
+  const previous = { socket: process.env.TASKARIAN_WORKER_SOCKET, key: process.env.TASKARIAN_WORKER_KEY };
+  process.env.TASKARIAN_WORKER_SOCKET = socket;
+  process.env.TASKARIAN_WORKER_KEY = 'fixture-private-worker';
   t.after(async () => {
-    if (previous.socket === undefined) delete process.env.BASHKITTEN_WORKER_SOCKET; else process.env.BASHKITTEN_WORKER_SOCKET = previous.socket;
-    if (previous.key === undefined) delete process.env.BASHKITTEN_WORKER_KEY; else process.env.BASHKITTEN_WORKER_KEY = previous.key;
+    if (previous.socket === undefined) delete process.env.TASKARIAN_WORKER_SOCKET; else process.env.TASKARIAN_WORKER_SOCKET = previous.socket;
+    if (previous.key === undefined) delete process.env.TASKARIAN_WORKER_KEY; else process.env.TASKARIAN_WORKER_KEY = previous.key;
     await new Promise(resolve => server.close(resolve));
     await fs.rm(directory, { recursive: true, force: true });
   });

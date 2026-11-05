@@ -1,6 +1,6 @@
-/* BashKitten References host, Copyright 2026 BashKitten contributors. AGPL-3.0-or-later. */
+/* Taskarian References host, Copyright 2026 Taskarian contributors. AGPL-3.0-or-later. */
 'use strict';
-const CAPTURE_ID = 'references@bashkitten.org';
+const CAPTURE_ID = 'references@taskarian.org';
 const METHODS = new Set(['ping', 'getTranslators', 'getTranslatorCode', 'getSelectedCollection',
   'saveItems', 'saveSnapshot', 'saveSingleFile', 'saveAttachment', 'saveStandaloneAttachment',
   'getRecognizedItem', 'hasAttachmentResolvers', 'saveAttachmentFromResolver', 'updateSession',
@@ -44,9 +44,9 @@ function validate(message, sender) {
     bodyEncoding: message.bodyEncoding || 'json'};
 }
 async function nativeRequest(request) {
-  const response = browser.bashkittenReferences
-    ? await browser.bashkittenReferences.request(request)
-    : await browser.runtime.sendNativeMessage('bashkitten_references', request);
+  const response = browser.taskarianReferences
+    ? await browser.taskarianReferences.request(request)
+    : await browser.runtime.sendNativeMessage('taskarian_references', request);
   if (!response || response.apiVersion !== 1) throw new Error('Incompatible References backend host');
   return response;
 }
@@ -63,9 +63,9 @@ async function resolverEvent(message) {
   } catch (error) { completion = {error:String(error.message || error).slice(0,1024)}; }
   return nativeRequest({apiVersion:1,operation:'resolver-result',...binding,...completion});
 }
-if (browser.bashkittenReferences?.onResolverRequest) {
-  browser.bashkittenReferences.onResolverRequest.addListener(message => { resolverEvent({...message,operation:'resolver'}).catch(console.error); });
+if (browser.taskarianReferences?.onResolverRequest) {
+  browser.taskarianReferences.onResolverRequest.addListener(message => { resolverEvent({...message,operation:'resolver'}).catch(console.error); });
 } else {
-  const port = browser.runtime.connectNative('bashkitten_references');
+  const port = browser.runtime.connectNative('taskarian_references');
   port.onMessage.addListener(message => { resolverEvent(message).catch(console.error); });
 }

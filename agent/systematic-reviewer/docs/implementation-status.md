@@ -31,7 +31,7 @@ reset, stashed or committed.
 ## Focused checks performed
 
 Evidence scripts and results are outside the product repository in the existing
-`BashkittenBuild/verification/references-reviewer-20261028/` workspace.
+`TaskarianBuild/verification/references-reviewer-20261028/` workspace.
 
 - Node syntax checks passed for all 22 adapted/native bridge modules.
 - All standalone CLI help paths passed without network or model activity.

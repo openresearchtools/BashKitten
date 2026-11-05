@@ -1,7 +1,7 @@
 # File preview verification, 8 October 2026
 
-The Android checks below used the installed BashKitten browser, controlled through
-the desktop BashKitten browser's Cuttlefish web UI. The guest was Android 17 with
+The Android checks below used the installed Taskarian browser, controlled through
+the desktop Taskarian browser's Cuttlefish web UI. The guest was Android 17 with
 native KVM and graphics. Source documents were public project documentation,
 branding, the published model catalogue and the system's shared MIME specification.
 They remained outside the source repository and release artifacts.

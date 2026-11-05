@@ -3,7 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { cachedUsage, selectedUsageAuth, usageText } from './chatgpt-usage-data.mjs';
 export default function chatGPTUsage(pi) {
-  const root = path.resolve(process.env.BASHKITTEN_DATA_DIR || path.join(os.homedir(), '.local/share/bashkitten-pi'));
+  const root = path.resolve(process.env.TASKARIAN_DATA_DIR || path.join(path.isAbsolute(process.env.XDG_DATA_HOME || '') ? process.env.XDG_DATA_HOME : path.join(os.homedir(), '.local/share'), 'Taskarian'));
   let generation = 0, identity, inflight, controller;
   const publish = (ctx, snapshot) => {
     const text = usageText(snapshot);
@@ -36,5 +36,5 @@ export default function chatGPTUsage(pi) {
   pi.on('model_select', (_event, ctx) => { refresh(ctx, true); });
   pi.on('turn_end', (_event, ctx) => { refresh(ctx); });
   pi.on('session_shutdown', () => { generation++; controller?.abort(); });
-  pi.registerCommand('bashkitten-usage-refresh', { description: 'Refresh the selected subscription usage status', handler: async (args, ctx) => { refresh(ctx, args.trim() === 'invalidate'); } });
+  pi.registerCommand('taskarian-usage-refresh', { description: 'Refresh the selected subscription usage status', handler: async (args, ctx) => { refresh(ctx, args.trim() === 'invalidate'); } });
 }

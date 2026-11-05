@@ -6,8 +6,8 @@ trust root. Capture and the fixed host remain separate extension IDs:
 
 | Component | ID | Installation boundary |
 | --- | --- | --- |
-| Capture | `references@bashkitten.org` | Built into BashKitten initially; replaceable by an ordinary Mozilla-signed profile XPI |
-| Fixed host | `references-host@bashkitten.org` | Browser/APK resource only; changing its privileged API requires a browser build |
+| Capture | `references@taskarian.org` | Built into Taskarian initially; replaceable by an ordinary Mozilla-signed profile XPI |
+| Fixed host | `references-host@taskarian.org` | Browser/APK resource only; changing its privileged API requires a browser build |
 
 The current capture requires host API 1 and Connector API 3. Every host request
 checks API 1 and fails on mismatch. Translator sources are pinned inside each
@@ -33,7 +33,7 @@ capture package; replacing a package does not download executable translators.
    versioned filename, for example `references-1.0.2-signed.xpi`. Compute its
    SHA-256 separately: signing changes the package bytes. Keep the signed and
    unsigned digests distinct. Record the actual ID/version, host API, source
-   revision, signer result and signed digest alongside the existing BashKitten
+   revision, signer result and signed digest alongside the existing Taskarian
    release artifacts. A filename or ZIP signature entry is not proof of valid
    signing; the native installer must accept the signed package.
 5. Retain the previously accepted signed XPI and its digest for rollback. Deliver
@@ -45,14 +45,14 @@ The review source bundle must preserve the repository-relative paths for
 `references/connector/` (excluding generated `.build/` and `dist/`),
 `references/vendor/translators/`, `references/legal/`, `agent/packaging/source_cache.py`, and the branding `LICENSE` plus
 `default16.png`, `default32.png`, `default64.png` and `default128.png` under
-`browser/bashkitten/browser/branding/`. These are the build's complete source and
+`browser/taskarian/browser/branding/`. These are the build's complete source and
 asset inputs; a whole Mozilla checkout is not needed. Run the command above from
 that bundle's root with Python, Git, Bash, Node.js and npm available. The 1.0.2
 offline build used Python 3.14.4, Node.js 22.22.1 and npm 9.2.0. Preserve the exact
 source revision with the bundle and compare the rebuilt unsigned XPI digest
 before submission. Include the matching verified download-cache inputs from
-`vendor/npm/SOURCES.json`; set `BASHKITTEN_SOURCE_CACHE` to that extracted cache
-and `BASHKITTEN_OFFLINE_SOURCES=1` for an offline rebuild.
+`vendor/npm/SOURCES.json`; set `TASKARIAN_SOURCE_CACHE` to that extracted cache
+and `TASKARIAN_OFFLINE_SOURCES=1` for an offline rebuild.
 
 No signed References XPI or control of its Mozilla add-on record has been
 established by this work. The generated artifact remains unsigned. Signing and
@@ -112,13 +112,13 @@ Native source evidence:
 - `browser/toolkit/mozapps/extensions/internal/XPIInstall.sys.mjs`,
   `loadManifest`/`newVersionReason`: signature, ID/type checks and explicit
   `ADDON_DOWNGRADE` lifecycle reason for a lower manually installed version.
-- `browser/bashkitten/browser/app/profile/02-privacy.js`: signature checks remain
+- `browser/taskarian/browser/app/profile/02-privacy.js`: signature checks remain
   enabled. This procedure does not modify them.
 
 ## Android manual installation and rollback
 
 Download the accepted signed XPI through the existing release/manual artifact
-path, then open the **BashKitten settings gear → Update References from file**.
+path, then open the **Taskarian settings gear → Update References from file**.
 Choose the downloaded package in Android's document picker and confirm the
 native permission prompt. This menu entry is source-wired for the next browser
 package; it is not present in earlier sealed candidates. The capture logic can
@@ -134,10 +134,10 @@ The downstream native install path exists: `AddonManager.installAddon` →
 `GeckoEngine.installWebExtension` → `WebExtensionController.install` →
 `GeckoViewWebExtension.installWebExtension` → native AddonManager. Its required
 permission handler checks the verified extension ID and rejects anything except
-`references@bashkitten.org` before activation. Gecko checks the manifest and
+`references@taskarian.org` before activation. Gecko checks the manifest and
 signature before that prompt. No signature setting is changed.
 
-`BashKittenMenuDialog` invokes the existing `AddonFilePicker`, registered by
+`TaskarianMenuDialog` invokes the existing `AddonFilePicker`, registered by
 `HomeActivity` before its lifecycle reaches STARTED. The picker copies the chosen
 document into a unique private cache directory on the IO dispatcher, then calls
 the existing `AddonManager` with `InstallationMethod.FROM_FILE`. Native install
@@ -153,12 +153,12 @@ also distinguishes Android file installation from desktop web-download installs.
 
 Relevant source: `browser/mobile/android/android-components/components/feature/addons/src/main/java/mozilla/components/feature/addons/ui/AddonFilePicker.kt`,
 `AddonManager.kt`, `browser/engine-gecko/.../GeckoEngine.kt`,
-`browser/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/bashkitten/BashKittenMenu.kt`,
+`browser/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/taskarian/TaskarianMenu.kt`,
 `browser/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/HomeActivity.kt`,
 `browser/mobile/android/geckoview/src/main/java/org/mozilla/geckoview/WebExtensionController.java`,
 `browser/mobile/shared/modules/geckoview/GeckoViewWebExtension.sys.mjs`,
 `browser/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/extension/WebExtensionPromptFeature.kt`,
-and `browser/mobile/android/bashkitten/src/main/java/com/bashkitten/ReferencesHost.java`.
+and `browser/mobile/android/taskarian/src/main/java/com/taskarian/ReferencesHost.java`.
 
 ## Development reload and remaining evidence
 

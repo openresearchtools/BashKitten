@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+toolkit.jar:
+% content taskarian-settings %content/taskarian-settings/ contentaccessible=yes
+  content/taskarian-settings/autostart.mjs (autostart.mjs)
+  content/taskarian-settings/device-controls.mjs (device-controls.mjs)
+  content/taskarian-settings/display-settings.mjs (display-settings.mjs)
+  content/taskarian-settings/index.html (index.html)
+  content/taskarian-settings/localai.mjs (localai.mjs)
+  content/taskarian-settings/licenses.mjs (licenses.mjs)
+  content/taskarian-settings/machine.mjs (machine.mjs)
+  content/taskarian-settings/main.mjs (main.mjs)
+  content/taskarian-settings/performance.mjs (performance.mjs)
+  content/taskarian-settings/phone.mjs (phone.mjs)
+  content/taskarian-settings/remotes.mjs (remotes.mjs)
+  content/taskarian-settings/settings.css (settings.css)
+  content/taskarian-settings/share-local.mjs (share-local.mjs)
+  content/taskarian-settings/ui.mjs (ui.mjs)
+  content/taskarian-settings/updates.mjs (updates.mjs)

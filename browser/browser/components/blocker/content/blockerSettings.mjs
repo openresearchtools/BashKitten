@@ -10,23 +10,23 @@ import { SettingGroupManager } from "chrome://browser/content/preferences/config
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   AddonManager: "resource://gre/modules/AddonManager.sys.mjs",
-  addonDisplayName: "resource:///modules/BashKittenBlockerUtils.sys.mjs",
-  isEnabledAdblockAddon: "resource:///modules/BashKittenBlockerUtils.sys.mjs",
+  addonDisplayName: "resource:///modules/TaskarianBlockerUtils.sys.mjs",
+  isEnabledAdblockAddon: "resource:///modules/TaskarianBlockerUtils.sys.mjs",
 });
 
 Preferences.addAll([
-  { id: "bashkitten.blocker.enabled", type: "bool" },
+  { id: "taskarian.blocker.enabled", type: "bool" },
   { id: "cookiebanners.service.mode", type: "int" },
   { id: "cookiebanners.service.mode.privateBrowsing", type: "int" },
 ]);
 
 Preferences.addSetting({
-  id: "bashkitten-blocker-enabled",
-  pref: "bashkitten.blocker.enabled",
+  id: "taskarian-blocker-enabled",
+  pref: "taskarian.blocker.enabled",
 });
 
 Preferences.addSetting({
-  id: "bashkitten-cookie-banners-enabled",
+  id: "taskarian-cookie-banners-enabled",
   pref: "cookiebanners.service.mode",
   get(mode) {
     return mode !== Ci.nsICookieBannerService.MODE_DISABLED;
@@ -41,8 +41,8 @@ Preferences.addSetting({
 });
 
 Preferences.addSetting({
-  id: "bashkitten-blocker-extension-notice",
-  deps: ["bashkitten-blocker-enabled"],
+  id: "taskarian-blocker-extension-notice",
+  deps: ["taskarian-blocker-enabled"],
   _extensionName: "",
   setup(emitChange, deps) {
     const refresh = () => {
@@ -63,11 +63,11 @@ Preferences.addSetting({
       );
     };
     refresh();
-    deps["bashkitten-blocker-enabled"].on("change", refresh);
-    return () => deps["bashkitten-blocker-enabled"].off("change", refresh);
+    deps["taskarian-blocker-enabled"].on("change", refresh);
+    return () => deps["taskarian-blocker-enabled"].off("change", refresh);
   },
   visible(deps) {
-    return !deps["bashkitten-blocker-enabled"].value && !!this._extensionName;
+    return !deps["taskarian-blocker-enabled"].value && !!this._extensionName;
   },
   getControlConfig(config) {
     return {
@@ -77,47 +77,47 @@ Preferences.addSetting({
   },
 });
 
-Preferences.addSetting({ id: "bashkittenBlockerListsBoxGroup" });
+Preferences.addSetting({ id: "taskarianBlockerListsBoxGroup" });
 
 Preferences.addSetting({
-  id: "bashkitten-blocker-manage-lists",
+  id: "taskarian-blocker-manage-lists",
   onUserClick(e) {
     e.preventDefault();
     gSubDialog.open(
-      "chrome://browser/content/preferences/dialogs/bashkittenBlockerFilterLists.xhtml"
+      "chrome://browser/content/preferences/dialogs/taskarianBlockerFilterLists.xhtml"
     );
   },
 });
 
 Preferences.addSetting({
-  id: "bashkitten-blocker-custom-lists",
+  id: "taskarian-blocker-custom-lists",
   onUserClick(e) {
     e.preventDefault();
     gSubDialog.open(
-      "chrome://browser/content/preferences/dialogs/bashkittenBlockerCustomFilterLists.xhtml"
+      "chrome://browser/content/preferences/dialogs/taskarianBlockerCustomFilterLists.xhtml"
     );
   },
 });
 
 Preferences.addSetting({
-  id: "bashkitten-blocker-my-filters",
+  id: "taskarian-blocker-my-filters",
   onUserClick(e) {
     e.preventDefault();
     gSubDialog.open(
-      "chrome://browser/content/preferences/dialogs/bashkittenBlockerCustomFilters.xhtml"
+      "chrome://browser/content/preferences/dialogs/taskarianBlockerCustomFilters.xhtml"
     );
   },
 });
 
 Preferences.addSetting({
-  id: "bashkitten-blocker-exceptions",
+  id: "taskarian-blocker-exceptions",
   onUserClick(e) {
     e.preventDefault();
     gSubDialog.open(
       "chrome://browser/content/preferences/dialogs/permissions.xhtml",
       undefined,
       {
-        permissionType: "bashkitten-blocker",
+        permissionType: "taskarian-blocker",
         disableETPVisible: true,
         prefilledHost: "",
         hideStatusColumn: true,
@@ -127,29 +127,29 @@ Preferences.addSetting({
 });
 
 SettingGroupManager.registerGroups({
-  bashkittenBlocker: {
-    l10nId: "bashkitten-blocker-group",
+  taskarianBlocker: {
+    l10nId: "taskarian-blocker-group",
     headingLevel: 2,
     items: [
       {
-        id: "bashkitten-blocker-enabled",
-        l10nId: "bashkitten-blocker-enabled-toggle",
+        id: "taskarian-blocker-enabled",
+        l10nId: "taskarian-blocker-enabled-toggle",
         control: "moz-toggle",
         controlAttrs: {
           searchkeywords: "adblock adblocker ublock filter",
         },
       },
       {
-        id: "bashkitten-cookie-banners-enabled",
-        l10nId: "bashkitten-cookie-banners-enabled-toggle",
+        id: "taskarian-cookie-banners-enabled",
+        l10nId: "taskarian-cookie-banners-enabled-toggle",
         control: "moz-toggle",
         controlAttrs: {
           searchkeywords: "cookies consent banners reject dismiss hide",
         },
       },
       {
-        id: "bashkitten-blocker-extension-notice",
-        l10nId: "bashkitten-blocker-extension-notice",
+        id: "taskarian-blocker-extension-notice",
+        l10nId: "taskarian-blocker-extension-notice",
         control: "moz-message-bar",
         controlAttrs: {
           role: "status",
@@ -157,56 +157,56 @@ SettingGroupManager.registerGroups({
       },
     ],
   },
-  bashkittenBlockerLists: {
-    l10nId: "bashkitten-blocker-lists-group",
+  taskarianBlockerLists: {
+    l10nId: "taskarian-blocker-lists-group",
     headingLevel: 2,
     items: [
       {
-        id: "bashkittenBlockerListsBoxGroup",
+        id: "taskarianBlockerListsBoxGroup",
         control: "moz-box-group",
         items: [
           {
-            id: "bashkitten-blocker-manage-lists",
-            l10nId: "bashkitten-blocker-manage-lists-button",
+            id: "taskarian-blocker-manage-lists",
+            l10nId: "taskarian-blocker-manage-lists-button",
             control: "moz-box-button",
             controlAttrs: {
               "search-l10n-ids":
-                "bashkitten-blocker-filter-lists-window.title,bashkitten-blocker-filter-lists-description.value",
+                "taskarian-blocker-filter-lists-window.title,taskarian-blocker-filter-lists-description.value",
             },
           },
           {
-            id: "bashkitten-blocker-custom-lists",
-            l10nId: "bashkitten-blocker-custom-lists-button",
+            id: "taskarian-blocker-custom-lists",
+            l10nId: "taskarian-blocker-custom-lists-button",
             control: "moz-box-button",
             controlAttrs: {
               "search-l10n-ids":
-                "bashkitten-blocker-custom-filter-lists-window.title,bashkitten-blocker-custom-filter-lists-description",
+                "taskarian-blocker-custom-filter-lists-window.title,taskarian-blocker-custom-filter-lists-description",
             },
           },
           {
-            id: "bashkitten-blocker-my-filters",
-            l10nId: "bashkitten-blocker-my-filters-button",
+            id: "taskarian-blocker-my-filters",
+            l10nId: "taskarian-blocker-my-filters-button",
             control: "moz-box-button",
             controlAttrs: {
               "search-l10n-ids":
-                "bashkitten-blocker-custom-filters-window.title,bashkitten-blocker-custom-filters-description",
+                "taskarian-blocker-custom-filters-window.title,taskarian-blocker-custom-filters-description",
             },
           },
         ],
       },
     ],
   },
-  bashkittenBlockerExceptions: {
-    l10nId: "bashkitten-blocker-exceptions-group",
+  taskarianBlockerExceptions: {
+    l10nId: "taskarian-blocker-exceptions-group",
     headingLevel: 2,
     items: [
       {
-        id: "bashkitten-blocker-exceptions",
-        l10nId: "bashkitten-blocker-exceptions-button",
+        id: "taskarian-blocker-exceptions",
+        l10nId: "taskarian-blocker-exceptions-button",
         control: "moz-box-button",
         controlAttrs: {
           "search-l10n-ids":
-            "permissions-exceptions-bashkitten-blocker-window2.title,permissions-exceptions-manage-bashkitten-blocker-desc",
+            "permissions-exceptions-taskarian-blocker-window2.title,permissions-exceptions-manage-taskarian-blocker-desc",
         },
       },
     ],

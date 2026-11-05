@@ -25,10 +25,10 @@ def digest(path):
 
 
 def default_cache():
-    configured = os.environ.get('BASHKITTEN_SOURCE_CACHE')
+    configured = os.environ.get('TASKARIAN_SOURCE_CACHE')
     if configured:
         return Path(configured).expanduser()
-    return Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'bashkitten-sources'
+    return Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'Taskarian' / 'sources'
 
 
 def fetch(record, cache=None, *, local=None, offline=False):
@@ -36,7 +36,7 @@ def fetch(record, cache=None, *, local=None, offline=False):
 
     Required record fields are ``url`` (HTTPS) and ``sha256``; ``size`` is
     optional. An existing whole local archive may seed the external cache.
-    BASHKITTEN_OFFLINE_SOURCES=1 forbids network access for every caller.
+    TASKARIAN_OFFLINE_SOURCES=1 forbids network access for every caller.
     """
     url, expected = record.get('url'), record.get('sha256')
     if not isinstance(url, str) or urllib.parse.urlsplit(url).scheme != 'https':
@@ -79,7 +79,7 @@ def fetch(record, cache=None, *, local=None, offline=False):
     if seed is not None and seed.exists() and not verified(seed):
         raise ValueError('Local source checksum/size mismatch: ' + str(seed))
     if not (seed is not None and seed.is_file()) and (
-            offline or os.environ.get('BASHKITTEN_OFFLINE_SOURCES') == '1'):
+            offline or os.environ.get('TASKARIAN_OFFLINE_SOURCES') == '1'):
         raise FileNotFoundError('Pinned source is absent from the offline cache: ' + url)
     attempts = 1 if seed is not None and seed.is_file() else 3
     for attempt in range(attempts):
@@ -91,7 +91,7 @@ def fetch(record, cache=None, *, local=None, offline=False):
                     with seed.open('rb') as source:
                         shutil.copyfileobj(source, output)
                 else:
-                    request = urllib.request.Request(url, headers={'User-Agent': 'BashKitten-Source-Builder/1'})
+                    request = urllib.request.Request(url, headers={'User-Agent': 'Taskarian-Source-Builder/1'})
                     with urllib.request.urlopen(request, timeout=180) as source:
                         shutil.copyfileobj(source, output)
             if not verified(incoming):

@@ -5,16 +5,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const dataDir = path.resolve(process.env.BASHKITTEN_DATA_DIR || path.join(os.homedir(), '.local/share/bashkitten-pi'));
+export const dataDir = path.resolve(process.env.TASKARIAN_DATA_DIR || path.join(path.isAbsolute(process.env.XDG_DATA_HOME || '') ? process.env.XDG_DATA_HOME : path.join(os.homedir(), '.local/share'), 'Taskarian'));
 export const piAgentDir = path.join(dataDir, 'pi');
 // Native About uses the installed CLI only to read saved license records.
 const readOnly = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(new URL('./control.mjs', import.meta.url)) && process.argv[4] === '--read-only';
 // Pi and its tools resolve the live desktop through its existing owner record,
 // even when the desktop started after this worker. Never cache DISPLAY or D-Bus.
-if (process.env.BASHKITTEN_EXECUTION_ROLE === 'termux') {
-  process.env.BASHKITTEN_DESKTOP_CONTEXT = path.join(dataDir, 'display/context.json');
-} else if (process.env.BASHKITTEN_EXECUTION_ROLE !== 'container') {
-  delete process.env.BASHKITTEN_DESKTOP_CONTEXT;
+if (process.env.TASKARIAN_EXECUTION_ROLE === 'termux') {
+  process.env.TASKARIAN_DESKTOP_CONTEXT = path.join(dataDir, 'display/context.json');
+} else if (process.env.TASKARIAN_EXECUTION_ROLE !== 'container') {
+  delete process.env.TASKARIAN_DESKTOP_CONTEXT;
 }
 const app = fileURLToPath(new URL('../../', import.meta.url));
 const packaged = fs.existsSync(path.join(app, 'build-platform.json')) || fs.existsSync(path.join(app, 'runtime-default.json'));
@@ -30,7 +30,7 @@ if (packaged) {
   if (!fs.existsSync(bundledNode) || !fs.existsSync(bundledNpm) || !fs.existsSync(path.join(app, 'node/bin/pi')) ||
       fs.realpathSync(process.execPath) !== fs.realpathSync(bundledNode)) {
     const termux = process.platform === 'android' ? ' Termux must support direct native execution (the GitHub/F-Droid app targeting SDK 28); system-linker execution is unsupported.' : '';
-    throw Error('BashKitten requires its bundled Node runtime. Reinstall the package and launch bashkittenctl or bashkitten-pi.' + termux);
+    throw Error('Taskarian requires its bundled Node runtime. Reinstall the package and launch taskarianctl or taskarian-pi.' + termux);
   }
 }
 export const npmPrefix = path.join(piAgentDir, 'npm');

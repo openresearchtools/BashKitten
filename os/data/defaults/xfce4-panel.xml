@@ -16,7 +16,7 @@
  </property>
  <property name="plugins" type="empty">
   <property name="plugin-1" type="string" value="launcher">
-   <property name="items" type="array"><value type="string" value="@PREFIX@/share/applications/org.bashkitten.Applications.desktop"/></property>
+   <property name="items" type="array"><value type="string" value="@PREFIX@/share/applications/org.taskarian.Applications.desktop"/></property>
    <property name="show-label" type="bool" value="true"/>
    <property name="disable-tooltips" type="bool" value="true"/>
    <property name="arrow-position" type="uint" value="0"/>

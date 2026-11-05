@@ -38,9 +38,9 @@ def main():
     parser.add_argument('--warm-gkrust', choices=['true', 'false'], default='false')
     args = parser.parse_args()
     source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    repository = 'openresearchtools/bashkitten-build-' + args.target.removeprefix('linux-')
+    repository = 'openresearchtools/taskarian-build-' + args.target.removeprefix('linux-')
     request = f'{os.environ["GITHUB_RUN_ID"]}-{os.environ.get("GITHUB_RUN_ATTEMPT", "1")}-{args.target}'
-    title = f'BashKitten {source} / {request}'
+    title = f'Taskarian {source} / {request}'
     inputs = {'source_sha': source, 'request_id': request}
     for run in (args.auth_run, args.search_run, args.node_run):
         if not re.fullmatch('[0-9]+', run):
@@ -62,7 +62,7 @@ def main():
         print(f'Started {args.target} for source {source} in {repository}', flush=True)
     digest = component.fingerprint(args.target)
     name = (component.artifact_name(args.target, digest) if args.target.startswith('android')
-            else f'bashkitten-{args.target}-candidate')
+            else f'taskarian-{args.target}-candidate')
     linked = False
     while True:
         if run is None:

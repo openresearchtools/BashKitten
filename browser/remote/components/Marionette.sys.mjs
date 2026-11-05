@@ -133,16 +133,16 @@ class MarionetteParentProcess {
 
         {
           const enabledByCommandLine = subject.handleFlag("marionette", false);
-          const enabledForBashKittenControl = Services.prefs.getBoolPref(
-            "bashkitten.browserControl.webdriverTransport.enabled",
+          const enabledForTaskarianControl = Services.prefs.getBoolPref(
+            "taskarian.browserControl.webdriverTransport.enabled",
             false
           );
-          if (enabledForBashKittenControl && !enabledByCommandLine) {
+          if (enabledForTaskarianControl && !enabledByCommandLine) {
             // Browser-control clients discover the selected loopback port
             // through MarionetteActivePort.
             lazy.MarionettePrefs.port = 0;
           }
-          this.enabled = enabledByCommandLine || enabledForBashKittenControl;
+          this.enabled = enabledByCommandLine || enabledForTaskarianControl;
         }
 
         if (this.enabled) {

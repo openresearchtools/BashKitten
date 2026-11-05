@@ -149,7 +149,7 @@ export class ApplicationGateway {
     }
     const match = /^\/apps\/(files|references)\/([a-f0-9-]{36})\//.exec(url.pathname);
     const grant = match && this.grants.get(match[2]);
-    if (!grant || grant.component !== match[1] || grant.revoked) throw Object.assign(Error('Open this application from BashKitten again'), { status: 401 });
+    if (!grant || grant.component !== match[1] || grant.revoked) throw Object.assign(Error('Open this application from Taskarian again'), { status: 401 });
     const cookieName = 'bkapp_' + grant.id.replaceAll('-', '');
     return { origin, url, grant, cookieName, authenticated: matches(grant), basePath: grant.basePath, component: grant.component };
   }

@@ -312,7 +312,7 @@ class GeckoEngine(
      */
     override fun createSession(private: Boolean, contextId: String?): EngineSession {
         ThreadUtils.assertOnUiThread()
-        val privateMode = private || contextId?.startsWith("bashkitten-tor-") == true
+        val privateMode = private || contextId?.startsWith("taskarian-tor-") == true
         val speculativeSession = speculativeConnectionFactory.get(privateMode, contextId)
         return speculativeSession ?: GeckoEngineSession(
             runtime = runtime,

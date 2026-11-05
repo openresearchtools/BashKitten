@@ -1,15 +1,15 @@
 # Product packaging
 
 Release compilation runs in GitHub Actions; the 8 October local setup also uses
-an external data-drive workspace and cached Podman builders. Dispatch `Complete BashKitten candidates`
+an external data-drive workspace and cached Podman builders. Dispatch `Complete Taskarian candidates`
 on `main` to build ARM64 and x86_64 Android APKs, Linux amd64/arm64 packages,
 and native Termux aarch64/x86_64 packages. The main workflow builds authentication/search/private-Node components,
 Termux and source bundles. It dispatches the exact product commit to these builders:
 
-- `openresearchtools/bashkitten-build-arm64`: complete Linux ARM64 `.deb`.
-- `openresearchtools/bashkitten-build-amd64`: complete Linux AMD64 `.deb`.
-- `openresearchtools/bashkitten-build-android`: signed ARM64 Android APK.
-- `openresearchtools/bashkitten-build-android-x86_64`: signed x86_64 Android APK.
+- `openresearchtools/taskarian-build-arm64`: complete Linux ARM64 `.deb`.
+- `openresearchtools/taskarian-build-amd64`: complete Linux AMD64 `.deb`.
+- `openresearchtools/taskarian-build-android`: signed ARM64 Android APK.
+- `openresearchtools/taskarian-build-android-x86_64`: signed x86_64 Android APK.
 
 Each builder has its own compiler cache and uploads its installable candidate to
 its Actions run. Those artifacts can be downloaded manually immediately. The
@@ -82,12 +82,12 @@ inputs still require the ordinary pinned build, including its download errors.
 `build.py` accepts `linux|termux`, `--architecture`, `--auth-archive`,
 `--search-archive`, `--node-archive` and `--output`; Linux also requires `--browser-dir`.
 Each component requires its `SHA256SUMS` and target metadata. The Firefox-aligned
-product version comes from `browser/bashkitten/config/version.txt`; internal npm
+product version comes from `browser/taskarian/config/version.txt`; internal npm
 metadata uses its three-component SemVer equivalent. Native architecture and
 Termux 16 KB ELF alignment are checked before creating the package.
 
-The full Linux package installs the `bashkitten-podman` AppArmor conffile for
-its private `/usr/lib/bashkitten/machines/bin/podman` executable. This adapts
+The full Linux package installs the `taskarian-podman` AppArmor conffile for
+its private `/usr/lib/taskarian/machines/bin/podman` executable. This adapts
 upstream's named-unconfined Podman `userns` policy for the existing Ubuntu
 24.04-based runtime, using ABI 4.0 for AppArmor 4/5. The configure script reloads
 only this profile when AppArmor is active; it preserves administrator edits,
@@ -100,7 +100,7 @@ license and adaptation notice; the offline component licenses and release source
 archive include them. Normal removal retains configuration and loaded policy;
 purge removes only this profile's configuration/cache, following `dh_apparmor`.
 
-`release.py` collects two signed `com.bashkitten` APKs and four complete
+`release.py` collects two signed `com.taskarian` APKs and four complete
 native packages plus corresponding sources. A release must match the exact
 successful candidate run. Runtime/device validation happens outside the repository. Prereleases are published
 for that testing; a completed build does not certify device acceptance. Logs, probes and test profiles are not shipped.
@@ -177,10 +177,10 @@ Private Node components are built by `node-native.yml` for Linux amd64/arm64 and
 native Termux aarch64/x86_64. `node/build.py` consumes hash-pinned official Node
 LTS or Termux binaries and publishes `node-runtime-<platform>-<arch>.tar.gz`,
 `node-source-<platform>-<arch>.tar.gz` and SHA256SUMS. Its download cache defaults
-to `~/.cache/bashkitten-node` and can be moved with `BASHKITTEN_NODE_CACHE`.
+to `~/.cache/Taskarian/sources` and can be moved with `TASKARIAN_NODE_CACHE`.
 
 Termux launchers use upstream termux-exec's
-`TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable` for BashKitten and its children.
+`TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable` for Taskarian and its children.
 This preserves the actual Node ELF in `process.execPath`, including under
 `RUN_COMMAND` and terminal environments with `LD_PRELOAD`. The supported
 launchers re-execute a system shell once when selecting this mode, because

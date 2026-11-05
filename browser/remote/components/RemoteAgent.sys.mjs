@@ -443,16 +443,16 @@ class RemoteAgentParentProcess {
         {
           const enabledByCommandLine =
             this.#handleRemoteDebuggingPortFlag(subject);
-          const enabledForBashKittenControl = Services.prefs.getBoolPref(
-            "bashkitten.browserControl.webdriverTransport.enabled",
+          const enabledForTaskarianControl = Services.prefs.getBoolPref(
+            "taskarian.browserControl.webdriverTransport.enabled",
             false
           );
-          if (enabledForBashKittenControl && !enabledByCommandLine) {
+          if (enabledForTaskarianControl && !enabledByCommandLine) {
             // Use an ephemeral loopback port. A WebDriver session created
             // through Marionette receives the resulting BiDi websocket URL.
             this.#port = 0;
           }
-          this.#enabled = enabledByCommandLine || enabledForBashKittenControl;
+          this.#enabled = enabledByCommandLine || enabledForTaskarianControl;
         }
 
         if (this.#enabled) {

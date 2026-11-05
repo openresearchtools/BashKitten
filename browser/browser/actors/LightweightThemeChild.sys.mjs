@@ -5,8 +5,8 @@
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  BashKittenContentTheme:
-    "resource:///modules/BashKittenContentTheme.sys.mjs",
+  TaskarianContentTheme:
+    "resource:///modules/TaskarianContentTheme.sys.mjs",
 });
 
 /**
@@ -75,7 +75,7 @@ export class LightweightThemeChild extends JSWindowActorChild {
     const data = Services.cpmm.sharedData.get(
       `theme/${this._getChromeOuterWindowID()}`
     );
-    lazy.BashKittenContentTheme.apply(this.contentWindow.document, data);
+    lazy.TaskarianContentTheme.apply(this.contentWindow.document, data);
 
     const event = Cu.cloneInto(
       {

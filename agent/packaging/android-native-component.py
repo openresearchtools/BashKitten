@@ -18,14 +18,14 @@ WORKFLOW = '.github/builders/android.yml'
 # These application files do not generate Gecko JNI wrappers. In particular,
 # GeckoView Java, build definitions, native sources and version pins stay inputs.
 APPLICATION_PATHS = (
-    'browser/mobile/android/bashkitten/src/main/java/',
-    'browser/mobile/android/bashkitten/src/main/assets/',
-    'browser/mobile/android/bashkitten/src/main/res/',
+    'browser/mobile/android/taskarian/src/main/java/',
+    'browser/mobile/android/taskarian/src/main/assets/',
+    'browser/mobile/android/taskarian/src/main/res/',
     'browser/mobile/android/fenix/app/src/main/java/',
     'browser/mobile/android/fenix/app/src/main/assets/',
     'browser/mobile/android/fenix/app/src/main/res/',
 )
-COLLECTOR = 'browser/bashkitten/android/scripts/collect-artifacts.py'
+COLLECTOR = 'browser/taskarian/android/scripts/collect-artifacts.py'
 spec = importlib.util.spec_from_file_location('browser_component', ROOT / 'agent/packaging/browser-component.py')
 component = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(component)
@@ -71,7 +71,7 @@ def native_recipe(workflow):
 def historical_native_recipe(revision):
     # Read the small immutable recipe before considering a product-tree fetch.
     # Older trees can contain source archives removed from current history.
-    record = component.api(f'repos/openresearchtools/bashkitten/contents/{WORKFLOW}?ref={revision}')
+    record = component.api(f'repos/openresearchtools/Taskarian/contents/{WORKFLOW}?ref={revision}')
     return native_recipe(base64.b64decode(record['content']).decode())
 
 
@@ -138,7 +138,7 @@ def verify_native(apk, record, target):
     producer = record.get('producer')
     if producer:
         if (producer.get('source') != record['source'] or
-                producer.get('repository') != 'openresearchtools/bashkitten-build-' + target or
+                producer.get('repository') != 'openresearchtools/taskarian-build-' + target or
                 not all(re.fullmatch('[0-9]+', str(producer.get(key, ''))) for key in ('run', 'artifact')) or
                 not all(re.fullmatch('[0-9a-f]{64}', producer.get(key, ''))
                         for key in ('manifest_sha256', 'apk_sha256'))):
@@ -151,7 +151,7 @@ def record_build(apk, target):
     abi = 'x86_64' if target == 'android-x86_64' else 'arm64-v8a'
     current = git('rev-parse', 'HEAD').decode().strip()
     component.verify_android_resources(apk)
-    receipt = os.environ.get('BASHKITTEN_ANDROID_NATIVE_RECEIPT')
+    receipt = os.environ.get('TASKARIAN_ANDROID_NATIVE_RECEIPT')
     if receipt:
         record = json.loads(Path(receipt).read_text())
         verify_native(apk, record, target)
@@ -164,7 +164,7 @@ def artifact_mozconfig():
     # Artifact mode disables toolchain.configure, so its compiler-only options
     # are unavailable. Keep every assembly option and the native input file
     # unchanged; shell no-ops preserve conditional branches such as SCCACHE_PATH.
-    source = (ROOT / 'browser/bashkitten/android/mozconfig').read_text()
+    source = (ROOT / 'browser/taskarian/android/mozconfig').read_text()
     source = re.sub(r'^([ \t]*)ac_add_options --(?:(?:enable|disable)-(?:optimize|debug-symbols)|'
                     r'(?:with|without)-ccache)(?:=.*)?$',
                     r'\1: # Native compilation option; retained in the producer configuration.',
@@ -177,7 +177,7 @@ def artifact_mozconfig():
 
 def restore(directory, target):
     repository = os.environ['GITHUB_REPOSITORY']
-    if repository != 'openresearchtools/bashkitten-build-' + target:
+    if repository != 'openresearchtools/taskarian-build-' + target:
         raise ValueError('Native restoration must use its matching Android builder')
     current = git('rev-parse', 'HEAD').decode().strip()
     digest = native_inputs(current, target)
@@ -187,10 +187,10 @@ def restore(directory, target):
     while True:
         artifacts = component.api(f'repos/{repository}/actions/artifacts?per_page=100&page={page}')['artifacts']
         for artifact in artifacts:
-            if artifact['expired'] or not artifact['name'].startswith(f'bashkitten-browser-{target}-'):
+            if artifact['expired'] or not artifact['name'].startswith(f'taskarian-browser-{target}-'):
                 continue
             run = component.api(f'repos/{repository}/actions/runs/{artifact["workflow_run"]["id"]}')
-            source = re.match(r'^BashKitten ([0-9a-f]{40}) / ', run.get('display_title', ''))
+            source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
             if not source:
                 continue
             evidence = component.completed_producer(repository, run, target)
@@ -251,7 +251,7 @@ def restore(directory, target):
             mozconfig.write_text(artifact_mozconfig())
             with Path(os.environ['GITHUB_ENV']).open('a') as environment:
                 environment.write(f'MOZCONFIG={mozconfig.resolve()}\nMOZ_ARTIFACT_FILE={payload.resolve()}\n'
-                                  f'BASHKITTEN_ANDROID_NATIVE_RECEIPT={receipt.resolve()}\n')
+                                  f'TASKARIAN_ANDROID_NATIVE_RECEIPT={receipt.resolve()}\n')
             print(f'Reusing Gecko native producer {record["source"]} from {run["html_url"]}; '
                   'assembling current application resources and Java.', flush=True)
             return True

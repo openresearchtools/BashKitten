@@ -202,8 +202,8 @@ static void DoRegisterHostApp() {
 
   GVariantBuilder builder;
   g_variant_builder_init(&builder, G_VARIANT_TYPE("(sa{sv})"));
-#ifdef MOZ_BASHKITTEN
-  g_variant_builder_add(&builder, "s", "com.bashkitten");
+#ifdef MOZ_TASKARIAN
+  g_variant_builder_add(&builder, "s", "com.taskarian");
 #else
   g_variant_builder_add(&builder, "s", "org.mozilla.firefox");
 #endif

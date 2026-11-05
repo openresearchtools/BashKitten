@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=BashKitten OS desktop session
-Exec=bashkitten-os session
-OnlyShowIn=XFCE;
-NoDisplay=true
-X-GNOME-Autostart-Phase=Applications

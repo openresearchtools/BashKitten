@@ -22,7 +22,7 @@
  
  ***** END LICENSE BLOCK *****
 */
-// BashKitten adaptation: exact pinned native naming methods with JSON item, template and filesystem interfaces injected.
+// Taskarian adaptation: exact pinned native naming methods with JSON item, template and filesystem interfaces injected.
 module.exports = function(Zotero, lazy) {
  const native = {};
 	native.normalizeRenameTemplate = function (formatString) {

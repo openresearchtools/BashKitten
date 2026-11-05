@@ -23,7 +23,7 @@
     
     ***** END LICENSE BLOCK *****
 */
-// BashKitten 2026-10-28: only preserve fields discarded by the released
+// Taskarian 2026-10-28: only preserve fields discarded by the released
 // object-only API converter. Copy/import filtering, field mapping/deduplication
 // and Extra formatting come from pinned Zotero10.0.6; existing valid API fields
 // retain their existing conversion. No DOI, publisher or content-specific rules.

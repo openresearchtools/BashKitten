@@ -1,10 +1,10 @@
-name: BashKitten Linux package
-run-name: BashKitten ${{ inputs.source_sha }} / ${{ inputs.request_id }}
+name: Taskarian Linux package
+run-name: Taskarian ${{ inputs.source_sha }} / ${{ inputs.request_id }}
 'on':
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Exact BashKitten source commit
+        description: Exact Taskarian source commit
         required: true
         type: string
       request_id:
@@ -37,13 +37,13 @@ concurrency:
   cancel-in-progress: false
 jobs:
   browser:
-    runs-on: ${{ github.repository == 'openresearchtools/bashkitten-build-arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: ${{ github.repository == 'openresearchtools/taskarian-build-arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 360
     env:
       SCCACHE_GHA_ENABLED: 'true'
       RUSTUP_TOOLCHAIN: 1.96.0
-      BASHKITTEN_BUILD_JOBS: '2'
-      BASHKITTEN_BUILD_RUN_ID: hosted
+      TASKARIAN_BUILD_JOBS: '2'
+      TASKARIAN_BUILD_RUN_ID: hosted
       SCCACHE_IDLE_TIMEOUT: '0'
       GH_TOKEN: ${{ github.token }}
       PI_TELEMETRY: '0'
@@ -52,50 +52,50 @@ jobs:
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
-        repository: openresearchtools/bashkitten
+        repository: openresearchtools/Taskarian
         ref: ${{ inputs.source_sha }}
-        path: source/bashkitten
+        path: source/taskarian
         persist-credentials: false
     - name: Select the native target
       run: |
         # Python's IPDL workers create Unix sockets below the build temp path.
         echo "MOZBUILD_STATE_PATH=$RUNNER_TEMP/bk/browser/state" >> "$GITHUB_ENV"
         case "$GITHUB_REPOSITORY" in
-          openresearchtools/bashkitten-build-arm64) echo 'BROWSER_TARGET=linux-arm64' >> "$GITHUB_ENV"; echo 'BROWSER_ARCH=arm64' >> "$GITHUB_ENV" ;;
-          openresearchtools/bashkitten-build-amd64) echo 'BROWSER_TARGET=linux-amd64' >> "$GITHUB_ENV"; echo 'BROWSER_ARCH=amd64' >> "$GITHUB_ENV" ;;
+          openresearchtools/taskarian-build-arm64) echo 'BROWSER_TARGET=linux-arm64' >> "$GITHUB_ENV"; echo 'BROWSER_ARCH=arm64' >> "$GITHUB_ENV" ;;
+          openresearchtools/taskarian-build-amd64) echo 'BROWSER_TARGET=linux-amd64' >> "$GITHUB_ENV"; echo 'BROWSER_ARCH=amd64' >> "$GITHUB_ENV" ;;
           *) exit 1 ;;
         esac
     - id: component
       name: Restore a matching completed browser artifact
-      run: python3 source/bashkitten/agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
+      run: python3 source/taskarian/agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
     - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
       with:
         node-version: '24'
     - name: Prepare runner
       if: steps.component.outputs.hit != 'true'
-      run: source/bashkitten/agent/packaging/linux/prepare-runner.sh
+      run: source/taskarian/agent/packaging/linux/prepare-runner.sh
     - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
       if: steps.component.outputs.hit != 'true'
       with:
         version: v0.17.0
     - name: Install the compatible Rust toolchain
       run: |
-        version=$(python3 -c 'import json; print(json.load(open("source/bashkitten/agent/machines/rust-toolchain/sources.json"))["version"])')
+        version=$(python3 -c 'import json; print(json.load(open("source/taskarian/agent/machines/rust-toolchain/sources.json"))["version"])')
         test "$RUSTUP_TOOLCHAIN" = "$version"
         rustup toolchain install "$version" --profile minimal --component rust-docs --target wasm32-unknown-unknown
-        printf '%s\n' "BASHKITTEN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "BASHKITTEN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
+        printf '%s\n' "TASKARIAN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "TASKARIAN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
     - name: Bootstrap pinned Mozilla toolchain
       if: steps.component.outputs.hit != 'true'
-      working-directory: source/bashkitten/browser
+      working-directory: source/taskarian/browser
       run: ./mach --no-interactive bootstrap --application-choice browser
     - name: Optional native Rust cache warm-up
       if: steps.component.outputs.hit != 'true' && inputs.warm_gkrust
-      run: source/bashkitten/browser/bashkitten/scripts/build-linux-external.sh --action gkrust --build-root "$RUNNER_TEMP/bk/warm" --jobs 2 --ref HEAD
+      run: source/taskarian/browser/taskarian/scripts/build-linux-external.sh --action gkrust --build-root "$RUNNER_TEMP/bk/warm" --jobs 2 --ref HEAD
     - name: Build the complete browser archive
       if: steps.component.outputs.hit != 'true'
       run: |
-        source/bashkitten/browser/bashkitten/ci/build-browser-artifact.sh \
-          --bashkitten "$GITHUB_WORKSPACE/source/bashkitten/browser" \
+        source/taskarian/browser/taskarian/ci/build-browser-artifact.sh \
+          --taskarian "$GITHUB_WORKSPACE/source/taskarian/browser" \
           --commit "$SOURCE_SHA" --architecture "$BROWSER_ARCH" \
           --input-digest "$INPUT_DIGEST" \
           --work-dir "$RUNNER_TEMP/bk" \
@@ -104,7 +104,7 @@ jobs:
         SOURCE_SHA: ${{ inputs.source_sha }}
         INPUT_DIGEST: ${{ steps.component.outputs.digest }}
     - name: Verify the browser archive and source inputs
-      run: python3 source/bashkitten/agent/packaging/browser-component.py verify "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
+      run: python3 source/taskarian/agent/packaging/browser-component.py verify "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: ${{ steps.component.outputs.artifact }}
@@ -125,13 +125,13 @@ jobs:
         deadline=$((SECONDS + 300 * 60))
         for item in "auth:$AUTH_RUN:auth-$BROWSER_TARGET" "search:$SEARCH_RUN:search-runtime-$BROWSER_TARGET" "node:$NODE_RUN:node-runtime-$BROWSER_TARGET" "machines:$ENVIRONMENTS_RUN:machines-runtime-$BROWSER_TARGET" "display:$ENVIRONMENTS_RUN:display-runtime-$BROWSER_TARGET" "guest:$ENVIRONMENTS_RUN:guest-packages-$BROWSER_TARGET" "office:$OFFICE_RUN:office-$BROWSER_TARGET" "files:$OFFICE_RUN:files-$BROWSER_TARGET"; do
           IFS=: read -r target run artifact <<< "$item"
-          while ! gh api "repos/openresearchtools/bashkitten/actions/runs/$run/artifacts?per_page=100" --jq '.artifacts[] | select(.expired == false) | .name' | grep -Fxq "$artifact"; do
-            status=$(gh api "repos/openresearchtools/bashkitten/actions/runs/$run" --jq '.status')
+          while ! gh api "repos/openresearchtools/Taskarian/actions/runs/$run/artifacts?per_page=100" --jq '.artifacts[] | select(.expired == false) | .name' | grep -Fxq "$artifact"; do
+            status=$(gh api "repos/openresearchtools/Taskarian/actions/runs/$run" --jq '.status')
             if [ "$status" = completed ]; then echo "Required $artifact is missing from completed run $run" >&2; exit 1; fi
             if (( SECONDS >= deadline )); then echo "Shared 300-minute companion deadline expired waiting for $artifact from run $run" >&2; exit 1; fi
             sleep 30
           done
-          gh run download "$run" --repo openresearchtools/bashkitten --name "$artifact" --dir "$RUNNER_TEMP/companion/$target"
+          gh run download "$run" --repo openresearchtools/Taskarian --name "$artifact" --dir "$RUNNER_TEMP/companion/$target"
         done
     - name: Assemble matching guest browser and backend
       run: |
@@ -143,7 +143,7 @@ jobs:
           --office-archive "$RUNNER_TEMP/companion/office/office-$BROWSER_TARGET.tar.xz" \
           --files-archive "$RUNNER_TEMP/companion/files/files-$BROWSER_TARGET.tar.gz" \
           --browser-dir "$RUNNER_TEMP/browser/stage"
-      working-directory: source/bashkitten
+      working-directory: source/taskarian
     - name: Assemble complete native package
       run: |
         python3 agent/packaging/build.py linux \
@@ -157,10 +157,10 @@ jobs:
           --machines-archive "$RUNNER_TEMP/companion/machines/machines-runtime-$BROWSER_TARGET.tar.gz" \
           --display-archive "$RUNNER_TEMP/companion/display/display-runtime-$BROWSER_TARGET.tar.gz" \
           --guest-packages "$RUNNER_TEMP/companion/guest"
-      working-directory: source/bashkitten
+      working-directory: source/taskarian
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: bashkitten-${{ env.BROWSER_TARGET }}-candidate
+        name: taskarian-${{ env.BROWSER_TARGET }}-candidate
         path: ${{ runner.temp }}/package/
         if-no-files-found: error
         compression-level: 0

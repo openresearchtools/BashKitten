@@ -1,5 +1,5 @@
 Keep all one-time-code digits on one row on narrow Android screens. This is a
-BashKitten layout adaptation, 23 September 2026; Authelia's authentication and
+Taskarian layout adaptation, 23 September 2026; Authelia's authentication and
 field behavior are unchanged. Original file: Apache-2.0, Copyright 2026 Authelia.
 
 --- a/web/src/views/LoginPortal/SecondFactor/OTPDial.tsx

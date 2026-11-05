@@ -220,7 +220,7 @@ private fun EmptyList(
         ) {
             Text(
                 text = String.format(
-                    stringResource(R.string.bashkitten_saved_passwords_description),
+                    stringResource(R.string.taskarian_saved_passwords_description),
                     stringResource(R.string.app_name),
                 ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

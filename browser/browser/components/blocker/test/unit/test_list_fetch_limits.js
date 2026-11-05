@@ -8,8 +8,8 @@ const { LIST_DESCRIPTOR_ORIGIN_CATALOG, LIST_DESCRIPTOR_ORIGIN_CUSTOM } =
 const { MAX_LIST_BYTES, readListResponseText } = ChromeUtils.importESModule(
   "resource:///modules/internal/ListUpdates.sys.mjs"
 );
-const { BashKittenBlockerService } = ChromeUtils.importESModule(
-  "resource:///modules/BashKittenBlockerService.sys.mjs"
+const { TaskarianBlockerService } = ChromeUtils.importESModule(
+  "resource:///modules/TaskarianBlockerService.sys.mjs"
 );
 
 function makeHeaders(headers = {}) {
@@ -104,13 +104,13 @@ function opaqueRedirectResponse() {
 }
 
 async function withMockedFetch(fetchImpl, task) {
-  const originalFetch = BashKittenBlockerService._fetch;
-  BashKittenBlockerService._fetch = fetchImpl;
+  const originalFetch = TaskarianBlockerService._fetch;
+  TaskarianBlockerService._fetch = fetchImpl;
 
   try {
     await task(fetchImpl);
   } finally {
-    BashKittenBlockerService._fetch = originalFetch;
+    TaskarianBlockerService._fetch = originalFetch;
   }
 }
 
@@ -120,15 +120,15 @@ async function withServicePaths(name, task) {
 
   await IOUtils.remove(listsDir, { ignoreAbsent: true, recursive: true });
 
-  const originalListPath = BashKittenBlockerService._listPath;
-  const originalListsDirPath = BashKittenBlockerService._listsDirPath;
+  const originalListPath = TaskarianBlockerService._listPath;
+  const originalListsDirPath = TaskarianBlockerService._listsDirPath;
   const originalListsMetadataPath =
-    BashKittenBlockerService._listsMetadataPath;
+    TaskarianBlockerService._listsMetadataPath;
 
-  BashKittenBlockerService._listPath = filename =>
+  TaskarianBlockerService._listPath = filename =>
     PathUtils.join(listsDir, filename);
-  BashKittenBlockerService._listsDirPath = () => listsDir;
-  BashKittenBlockerService._listsMetadataPath = () => metaPath;
+  TaskarianBlockerService._listsDirPath = () => listsDir;
+  TaskarianBlockerService._listsMetadataPath = () => metaPath;
 
   try {
     await task({
@@ -138,9 +138,9 @@ async function withServicePaths(name, task) {
       metaPath,
     });
   } finally {
-    BashKittenBlockerService._listPath = originalListPath;
-    BashKittenBlockerService._listsDirPath = originalListsDirPath;
-    BashKittenBlockerService._listsMetadataPath = originalListsMetadataPath;
+    TaskarianBlockerService._listPath = originalListPath;
+    TaskarianBlockerService._listsDirPath = originalListsDirPath;
+    TaskarianBlockerService._listsMetadataPath = originalListsMetadataPath;
     await IOUtils.remove(listsDir, { ignoreAbsent: true, recursive: true });
   }
 }
@@ -202,7 +202,7 @@ add_task(
           });
         },
         async () => {
-          const records = await BashKittenBlockerService._fetchAndPersistLists(
+          const records = await TaskarianBlockerService._fetchAndPersistLists(
             [
               {
                 filename: "oversized.txt",
@@ -250,7 +250,7 @@ add_task(async function test_curated_list_fetch_follows_redirects() {
         }).response;
       },
       async () => {
-        const records = await BashKittenBlockerService._fetchAndPersistLists([
+        const records = await TaskarianBlockerService._fetchAndPersistLists([
           descriptor,
         ]);
 
@@ -299,7 +299,7 @@ add_task(
           },
           async () => {
             await Assert.rejects(
-              BashKittenBlockerService._fetchListForBootstrap(descriptor),
+              TaskarianBlockerService._fetchListForBootstrap(descriptor),
               /custom list URL redirected; redirects are not followed/,
               "Custom list redirects should get a distinct error"
             );
@@ -311,7 +311,7 @@ add_task(
 
             fetchOptions = null;
             const records =
-              await BashKittenBlockerService._fetchAndPersistLists([
+              await TaskarianBlockerService._fetchAndPersistLists([
                 descriptor,
               ]);
 

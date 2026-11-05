@@ -197,16 +197,16 @@ import mozilla.components.ui.icons.R as iconsR
  */
 @SuppressWarnings("TooManyFunctions", "LargeClass", "LongMethod")
 open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, CrashActionDispatcher {
-    var bashKittenAgentPanel: com.bashkitten.AgentPanel? = null
+    var taskarianAgentPanel: com.taskarian.AgentPanel? = null
         private set
-    val bashKittenAgentVisible = mutableStateOf(false)
-    private var bashKittenMenuFromAgent = false
-    private var bashKittenBrowserUiBack = false
-    fun showBashKittenAgent() { bashKittenAgentPanel?.showAgent() }
-    fun restoreSelectedBashKittenServiceTab(retry: Boolean = false) {
+    val taskarianAgentVisible = mutableStateOf(false)
+    private var taskarianMenuFromAgent = false
+    private var taskarianBrowserUiBack = false
+    fun showTaskarianAgent() { taskarianAgentPanel?.showAgent() }
+    fun restoreSelectedTaskarianServiceTab(retry: Boolean = false) {
         val destination = navHost.navController.currentDestination?.id
-        if (!bashKittenAgentVisible.value && (destination == R.id.browserFragment || destination == R.id.homeFragment)) {
-            com.bashkitten.BrowserApp.get(this).visitSelectedServiceTab(retry)
+        if (!taskarianAgentVisible.value && (destination == R.id.browserFragment || destination == R.id.homeFragment)) {
+            com.taskarian.BrowserApp.get(this).visitSelectedServiceTab(retry)
         }
     }
 
@@ -220,14 +220,14 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         }
     }
 
-    private fun openBashKittenBrowserMenu() {
-        bashKittenMenuFromAgent = true
+    private fun openTaskarianBrowserMenu() {
+        taskarianMenuFromAgent = true
         // The protected Agent has no ordinary page actions or extension menu context.
         navHost.navController.navigate(NavGraphDirections.actionGlobalMenuDialogFragment(MenuAccessPoint.Home))
     }
 
-    fun openBashKittenTabs() {
-        bashKittenMenuFromAgent = bashKittenAgentVisible.value
+    fun openTaskarianTabs() {
+        taskarianMenuFromAgent = taskarianAgentVisible.value
         navHost.navController.navigate(
             NavGraphDirections.actionGlobalTabManagementFragment(
                 page = if (browsingModeManager.mode.isPrivate) {
@@ -424,20 +424,20 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         dispatcher = onBackPressedDispatcher,
     ) {
         override fun handleOnBackPressed() {
-            if (bashKittenAgentPanel?.isShownAgent == true && navHost.navController.currentDestination?.id != R.id.menuDialogFragment) {
-                bashKittenAgentPanel?.showBrowser()
+            if (taskarianAgentPanel?.isShownAgent == true && navHost.navController.currentDestination?.id != R.id.menuDialogFragment) {
+                taskarianAgentPanel?.showBrowser()
                 return
             }
             if (shouldUsePredictiveBackLongPress()) {
                 backLongPressJob?.cancel()
             }
-            bashKittenBrowserUiBack = true
+            taskarianBrowserUiBack = true
             try {
                 super.handleOnBackPressed()
             } finally {
                 // FragmentManager may enqueue the pop; let that navigation finish
                 // before distinguishing another explicit browser navigation.
-                binding.root.post { bashKittenBrowserUiBack = false }
+                binding.root.post { taskarianBrowserUiBack = false }
             }
         }
 
@@ -579,41 +579,41 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
             val agentTabs = androidx.compose.ui.platform.ComposeView(this).apply {
                 setContent {
                     org.mozilla.fenix.theme.FirefoxTheme {
-                        org.mozilla.fenix.bashkitten.AgentTabsButton(this@HomeActivity)
+                        org.mozilla.fenix.taskarian.AgentTabsButton(this@HomeActivity)
                     }
                 }
             }
-            bashKittenAgentPanel = com.bashkitten.AgentPanel(
-                this, binding.root, components.core.geckoRuntime, R.drawable.bashkitten_logo, agentTabs,
-                ::openBashKittenBrowserMenu,
-                { org.mozilla.fenix.bashkitten.BashKittenMenuDialog().show(supportFragmentManager, "bashkitten-settings-menu") },
+            taskarianAgentPanel = com.taskarian.AgentPanel(
+                this, binding.root, components.core.geckoRuntime, R.drawable.taskarian_logo, agentTabs,
+                ::openTaskarianBrowserMenu,
+                { org.mozilla.fenix.taskarian.TaskarianMenuDialog().show(supportFragmentManager, "taskarian-settings-menu") },
                 { visible ->
-                    val returningToBrowser = bashKittenAgentVisible.value && !visible
-                    bashKittenAgentVisible.value = visible
-                    if (!visible) restoreSelectedBashKittenServiceTab(returningToBrowser)
+                    val returningToBrowser = taskarianAgentVisible.value && !visible
+                    taskarianAgentVisible.value = visible
+                    if (!visible) restoreSelectedTaskarianServiceTab(returningToBrowser)
                 },
             )
             // Theme and tablet-layout recreation retain the selected pane. New
             // launches keep AgentPanel's full-Agent default; ACTION_MAIN also
             // explicitly selects Agent when delivered through onNewIntent.
-            bashKittenAgentPanel?.restoreLayoutState(savedInstanceState?.getBundle("bashkitten.panel"))
-            setContentView(bashKittenAgentPanel)
-            bashKittenMenuFromAgent = savedInstanceState?.getBoolean("bashkitten.menuFromAgent") == true
+            taskarianAgentPanel?.restoreLayoutState(savedInstanceState?.getBundle("taskarian.panel"))
+            setContentView(taskarianAgentPanel)
+            taskarianMenuFromAgent = savedInstanceState?.getBoolean("taskarian.menuFromAgent") == true
             var previousDestination = navHost.navController.currentDestination?.id
             navHost.navController.addOnDestinationChangedListener { _, destination, _ ->
                 val content = destination.id == R.id.homeFragment || destination.id == R.id.browserFragment
                 val menu = destination.id == R.id.menuDialogFragment
-                if (content && bashKittenMenuFromAgent) {
+                if (content && taskarianMenuFromAgent) {
                     // Returning from native UI restores the existing full/split
                     // Agent layout; only a forward browser action selects a page.
-                    if (!bashKittenBrowserUiBack && previousDestination != R.id.menuDialogFragment) {
-                        bashKittenAgentPanel?.showBrowser()
+                    if (!taskarianBrowserUiBack && previousDestination != R.id.menuDialogFragment) {
+                        taskarianAgentPanel?.showBrowser()
                     }
-                    bashKittenMenuFromAgent = false
+                    taskarianMenuFromAgent = false
                 }
                 // Native settings and libraries use the full Fenix pane; the Agent
                 // document stays attached and returns when the user goes back.
-                bashKittenAgentPanel?.setBrowserUiVisible(!content && !menu)
+                taskarianAgentPanel?.setBrowserUiVisible(!content && !menu)
                 previousDestination = destination.id
             }
             lifecycleScope.launch {
@@ -621,12 +621,12 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
                 components.core.store.flow().map { it.tabs.isEmpty() }
                     .distinctUntilChanged()
                     .collect { empty ->
-                        if (hadTabs && empty) bashKittenAgentPanel?.showAgent()
+                        if (hadTabs && empty) taskarianAgentPanel?.showAgent()
                         hadTabs = !empty
                     }
             }
-            if (savedInstanceState == null && intent.action == Intent.ACTION_MAIN) com.bashkitten.BrowserApp.get(this).agent.freshLaunch(intent)
-            bashKittenAgentPanel?.openMessage(intent)
+            if (savedInstanceState == null && intent.action == Intent.ACTION_MAIN) com.taskarian.BrowserApp.get(this).agent.freshLaunch(intent)
+            taskarianAgentPanel?.openMessage(intent)
         } else {
             setContentView(binding.root)
         }
@@ -815,7 +815,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         permissions: Array<out String>,
         grantResults: IntArray,
     ) {
-        bashKittenAgentPanel?.permissionResult(requestCode)
+        taskarianAgentPanel?.permissionResult(requestCode)
         when (requestCode) {
             REQUEST_CODE_CAMERA_PERMISSIONS -> {
                 if (grantResults.isNotEmpty() &&
@@ -837,7 +837,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         // The protected Agent/settings sessions outlive BaseBrowserFragment.
         // Resolve Follow device here too when returning after a system theme change.
         components.core.engine.settings.preferredColorScheme = components.core.getPreferredColorScheme()
-        bashKittenAgentPanel?.resume()
+        taskarianAgentPanel?.resume()
 
         // Diagnostic breadcrumb for "Display already aquired" crash:
         // https://github.com/mozilla-mobile/android-components/issues/7960
@@ -997,14 +997,14 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
 
     @CallSuper
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putBoolean("bashkitten.menuFromAgent", bashKittenMenuFromAgent)
-        outState.putBundle("bashkitten.panel", bashKittenAgentPanel?.saveLayoutState())
+        outState.putBoolean("taskarian.menuFromAgent", taskarianMenuFromAgent)
+        outState.putBundle("taskarian.panel", taskarianAgentPanel?.saveLayoutState())
         super.onSaveInstanceState(outState)
     }
 
     @CallSuper
     override fun onDestroy() {
-        bashKittenAgentPanel?.destroy()
+        taskarianAgentPanel?.destroy()
         val startTimeProfiler = components.core.engine.profiler?.getProfilerTime()
 
         super.onDestroy()
@@ -1081,10 +1081,10 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     final override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleNewIntent(intent)
-        if (intent.action == Intent.ACTION_MAIN) com.bashkitten.BrowserApp.get(this).agent.freshLaunch(intent)
-        if (bashKittenAgentPanel?.openMessage(intent) != true) {
-            if (intent.getBooleanExtra("bashkitten.openAgent", false) || intent.action == Intent.ACTION_MAIN) bashKittenAgentPanel?.showAgent()
-            else if (intent.action == Intent.ACTION_VIEW || intent.getBooleanExtra(OPEN_TO_BROWSER, false)) bashKittenAgentPanel?.showBrowser()
+        if (intent.action == Intent.ACTION_MAIN) com.taskarian.BrowserApp.get(this).agent.freshLaunch(intent)
+        if (taskarianAgentPanel?.openMessage(intent) != true) {
+            if (intent.getBooleanExtra("taskarian.openAgent", false) || intent.action == Intent.ACTION_MAIN) taskarianAgentPanel?.showAgent()
+            else if (intent.action == Intent.ACTION_VIEW || intent.getBooleanExtra(OPEN_TO_BROWSER, false)) taskarianAgentPanel?.showBrowser()
         }
         startupPathProvider.onIntentReceived(intent)
     }
@@ -1197,7 +1197,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     @Deprecated("Deprecated in Java")
     // https://github.com/mozilla-mobile/fenix/issues/19919
     final override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (bashKittenAgentPanel?.activityResult(requestCode, resultCode, data) == true) return
+        if (taskarianAgentPanel?.activityResult(requestCode, resultCode, data) == true) return
         supportFragmentManager.primaryNavigationFragment?.childFragmentManager?.fragments?.forEach {
             if (it is ActivityResultHandler && it.onActivityResult(requestCode, data, resultCode)) {
                 return
@@ -1256,8 +1256,8 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         // after navigating to another fragment like Settings or Bookmarks, and then back this
         // key event is somehow getting consumed before it reaches onKeyDown or onKeyUp.
         if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_MENU) {
-            if (bashKittenAgentPanel?.isShownAgent == true) {
-                openBashKittenBrowserMenu()
+            if (taskarianAgentPanel?.isShownAgent == true) {
+                openTaskarianBrowserMenu()
                 return true
             }
             val navHostFragment =

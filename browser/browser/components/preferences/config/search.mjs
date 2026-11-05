@@ -1164,7 +1164,7 @@ SettingGroupManager.registerGroups({
           },
           {
             id: "showSearchSuggestionsPrivateWindowsCheckbox",
-            l10nId: "bashkitten-search-private-tab-suggestions",
+            l10nId: "taskarian-search-private-tab-suggestions",
           },
           {
             id: "showTrendingSuggestionsCheckbox",

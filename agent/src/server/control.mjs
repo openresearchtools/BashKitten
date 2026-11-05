@@ -69,9 +69,9 @@ function spawnManager(detached, browserOwner, initialWeb) {
   const log = detached ? openSync(path.join(dataDir, 'control.log'), 'a', 0o600) : null;
   const child = spawn(binary('runtime-guard'), [process.execPath, script, 'serve'], {
     detached, stdio: detached ? ['ignore', log, log] : 'inherit',
-    env: { ...process.env, BASHKITTEN_TERMUX: platform === 'termux' ? '1' : '0',
-      ...(platform === 'linux' && browserOwner ? { BASHKITTEN_BROWSER_PID: String(browserOwner.pid), BASHKITTEN_BROWSER_STARTED: browserOwner.started } : {}),
-      ...(initialWeb === false || platform === 'linux' && browserOwner ? { BASHKITTEN_INITIAL_WEB_STATE: '0' } : {}) },
+    env: { ...process.env, TASKARIAN_TERMUX: platform === 'termux' ? '1' : '0',
+      ...(platform === 'linux' && browserOwner ? { TASKARIAN_BROWSER_PID: String(browserOwner.pid), TASKARIAN_BROWSER_STARTED: browserOwner.started } : {}),
+      ...(initialWeb === false || platform === 'linux' && browserOwner ? { TASKARIAN_INITIAL_WEB_STATE: '0' } : {}) },
   });
   if (log !== null) closeSync(log);
   return child;
@@ -206,7 +206,7 @@ async function serve() {
     const closed = error => {
       if (browserWatcher !== child || exiting) return;
       browserWatcher = null; browserClosing = true;
-      if (Number(process.env.BASHKITTEN_GUARD_PID) === process.ppid) process.kill(process.ppid, 'SIGTERM');
+      if (Number(process.env.TASKARIAN_GUARD_PID) === process.ppid) process.kill(process.ppid, 'SIGTERM');
       serial = serial.then(async () => { await turnOff(error); if (!stopping) scheduleExit(); }).catch(error => { lastError = error.message; });
     };
     child.once('exit', code => closed(code === 0 ? null : 'Browser lifetime tracking stopped'));
@@ -249,7 +249,7 @@ async function serve() {
     return { ...await customStartup.status(), active: backgroundActive(), startupErrors: errors };
   }
   async function startConfiguredServices() {
-    if (browserClosing || shutdownRequested || exiting) throw Error('BashKitten is stopping');
+    if (browserClosing || shutdownRequested || exiting) throw Error('Taskarian is stopping');
     appStartupApplied = true; startupErrors = {};
     // Termux's existing owner acquires its wake lock before starting any work;
     // a failed native prerequisite must not produce a doomed background launch.
@@ -326,7 +326,7 @@ async function serve() {
       const current = await socketRequest(socketPath(meta.id), '/status', undefined, 1000).catch(() => null);
       return { id: meta.id, title: meta.title, cwd: meta.cwd, running: Boolean(current), ...current?.data };
     }));
-    return { version: 2, platform, manager: { pid: process.pid, revision, exiting, browserOwner, backgroundActive: backgroundActive(), attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' },
+    return { version: 2, platform, manager: { pid: process.pid, revision, exiting, browserOwner, backgroundActive: backgroundActive(), attached: process.env.TASKARIAN_ATTACHED_MANAGER === '1' },
       packages: { ...await updateStatus(), job: await jobs.status() },
       localAISetup: firstRunAI.status(),
       web: { status: stopping ? 'stopping' : starting || stack.reconfiguring ? 'starting' : stack.ready ? 'running' : lastError ? 'error' : 'stopped',
@@ -336,7 +336,7 @@ async function serve() {
   async function reloadServices(job) {
     if (platform === 'termux') await apt(job, ['check']);
     await atIdle(job, async () => {
-      await job.phase('Reloading updated BashKitten / Node');
+      await job.phase('Reloading updated Taskarian / Node');
       await stopGroup(true); restartPending = true;
     });
   }
@@ -351,7 +351,7 @@ async function serve() {
     if (command === 'autostart-status') return startupStatus();
     if (command === 'autostart-save') { await customStartup.save(value); if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake(); return startupStatus(); }
     if (command === 'autostart-startup') {
-      if (browserClosing || stopping) throw Error('BashKitten is stopping');
+      if (browserClosing || stopping) throw Error('Taskarian is stopping');
       if (!appStartupApplied) await startConfiguredServices(); return startupStatus();
     }
     if (command === 'phone-status') return phoneDispatch('phone.status', {}, null);
@@ -375,7 +375,7 @@ async function serve() {
       if (command === 'display-save') return display.save(value);
       if (command === 'display-stop') { const result = await display.stop(); if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake(); return result; }
       if (command !== 'display-start') throw Error('Unknown display action');
-      if (stopping || browserClosing || exiting) throw Error('BashKitten is stopping');
+      if (stopping || browserClosing || exiting) throw Error('Taskarian is stopping');
       await acquireWake();
       try { return await display.start(); }
       finally { if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake(); }
@@ -404,7 +404,7 @@ async function serve() {
       if (command === 'localai-cancel') { if (!['localai-first-run', 'localai-guided-select', 'localai-runtime', 'localai-quantize'].includes((await jobs.status())?.kind)) throw Error('No LocalAI operation is active'); await jobs.cancel(); return jobs.status(); }
       if (command === 'localai-share') return localAI.share(value.enabled);
       if (command === 'localai-action') {
-        if (value.action !== 'stop' && (stopping || browserClosing || shutdownRequested)) throw Error('BashKitten is stopping');
+        if (value.action !== 'stop' && (stopping || browserClosing || shutdownRequested)) throw Error('Taskarian is stopping');
         if (value.action !== 'stop' && !stack.ready) throw Error('Turn on Local before starting an engine');
         try { return await localAI.action(value.engine, value.action); }
         finally { if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake(); }
@@ -443,7 +443,7 @@ async function serve() {
       return stack.services.ensureApplication(value.service, { start: value.start !== false, restart: value.restart === true });
     }
     if (command === 'service-action') {
-      if (value.action !== 'stop' && (stopping || browserClosing || shutdownRequested)) throw Error('BashKitten is stopping');
+      if (value.action !== 'stop' && (stopping || browserClosing || shutdownRequested)) throw Error('Taskarian is stopping');
       if (value.action !== 'stop' && !stack.ready) throw Error('Turn on Local before starting a service');
       try {
         if (localAI && value.id === 'localai-llama') { await localAI.action('llama', value.action); return await stack.services.status(); }
@@ -544,7 +544,7 @@ async function serve() {
   function beginBrowserShutdown(value) {
     if (!browserOwner || browserOwner.pid !== value.browserOwner?.pid || browserOwner.started !== value.browserOwner?.started) throw Error('This browser does not own the local Agent');
     browserClosing = true;
-    if (Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid) throw Error('The desktop runtime guard is unavailable');
+    if (Number(process.env.TASKARIAN_GUARD_PID) !== process.ppid) throw Error('The desktop runtime guard is unavailable');
     process.kill(process.ppid, 'SIGTERM');
   }
   function scheduleExit() {
@@ -562,16 +562,16 @@ async function serve() {
   }
   // Recover an interrupted On state in the same queue as explicit commands.
   // A browser's first start must wait for recovery to publish its HTTPS URL.
-  if (platform === 'linux' && process.env.BASHKITTEN_BROWSER_PID) {
+  if (platform === 'linux' && process.env.TASKARIAN_BROWSER_PID) {
     try {
-      await adoptBrowser({ pid: Number(process.env.BASHKITTEN_BROWSER_PID), started: process.env.BASHKITTEN_BROWSER_STARTED });
+      await adoptBrowser({ pid: Number(process.env.TASKARIAN_BROWSER_PID), started: process.env.TASKARIAN_BROWSER_STARTED });
     }
     catch (error) { await turnOff(error.message); scheduleExit(); return; }
   }
   // Only a newly spawned native controller applies this bootstrap choice.
   // An already-running backend and standalone CLI/guest recovery are unchanged.
-  if (process.env.BASHKITTEN_INITIAL_WEB_STATE === '0') { state.web = false; await persist(); }
-  delete process.env.BASHKITTEN_INITIAL_WEB_STATE;
+  if (process.env.TASKARIAN_INITIAL_WEB_STATE === '0') { state.web = false; await persist(); }
+  delete process.env.TASKARIAN_INITIAL_WEB_STATE;
   serial = serial.then(async () => { if (state.web) await startWeb(); }).catch(() => {});
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(controlSocket, resolve); });
   await fs.chmod(controlSocket, 0o600);
@@ -611,7 +611,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
     try { await (await import('./machines/browser-transport.mjs')).browserTransport(process.argv[3], process.argv[4]); }
     catch (error) { console.error(JSON.stringify({error:error.message})); process.exitCode = 1; }
   } else if (command === 'serve') {
-    if (process.env.BASHKITTEN_GUARDED === '1' && Number(process.env.BASHKITTEN_GUARD_PID) === process.ppid) await serve();
+    if (process.env.TASKARIAN_GUARDED === '1' && Number(process.env.TASKARIAN_GUARD_PID) === process.ppid) await serve();
     else {
       await privateDir(dataDir);
       const child = spawnManager(false);

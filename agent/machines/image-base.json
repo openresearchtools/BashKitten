@@ -9,5 +9,5 @@
     "arm64": "sha256:a2ca65377c251208de42e1a2722cb949211236c161b634f6f3663754e2d06850"
   },
   "source": "https://github.com/debuerreotype/docker-debian-artifacts",
-  "packageProvenance": "Retain dpkg-query package/source/version inventory and /usr/share/doc copyright files from each built image; BashKitten guest packages must match the candidate revision."
+  "packageProvenance": "Retain dpkg-query package/source/version inventory and /usr/share/doc copyright files from each built image; Taskarian guest packages must match the candidate revision."
 }

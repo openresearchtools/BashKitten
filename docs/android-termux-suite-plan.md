@@ -1,8 +1,8 @@
-Licensing update, 4 October 2026: BashKitten-owned code now uses
+Licensing update, 4 October 2026: Taskarian-owned code now uses
 AGPL-3.0-only. Earlier GPL references below describe the historical suite plan.
 Third-party licenses remain unchanged.
 
-# BashKitten Android and Termux suite: implementation plan
+# Taskarian Android and Termux suite: implementation plan
 
 **Migration note, 22 September 2026:** the requested next architecture is in
 [the browser integration plan](browser-integration-plan.md). It replaces this
@@ -27,7 +27,7 @@ that every feature has already been implemented or tested.
 
 ## 1. Product and process ownership
 
-Build a Kotlin Android BashKitten app with a system WebView for the existing chat
+Build a Kotlin Android Taskarian app with a system WebView for the existing chat
 UI and a native store/control screen. On Android, Termux owns every backend, Pi
 and desktop process. The store remains available before Termux is installed and
 whenever the web server is stopped. Ordinary Android browsers continue to use
@@ -37,11 +37,11 @@ an APK. The diagram below describes the Android deployment of that shared code.
 
 ```mermaid
 flowchart TD
-    A[BashKitten APK] --> S[Native store and service controls]
-    A --> W[System WebView: existing BashKitten UI]
+    A[Taskarian APK] --> S[Native store and service controls]
+    A --> W[System WebView: existing Taskarian UI]
     S --> T[Signature-protected Termux command service]
     T --> M[Supervisor running inside Termux]
-    M --> B[Localhost BashKitten Node server]
+    M --> B[Localhost Taskarian Node server]
     W --> B
     C[Chrome or another Android browser] --> B
     B --> P[Detached workers: one native Pi RPC process per session]
@@ -62,7 +62,7 @@ instead of this file panel, as specified in section 10.
 
 WildBuzzard Android is an **optional** app in Apps, using its own logo and the
 shared signing identity. Its canonical Pi extension remains in
-`openresearchtools/wildbuzzard-android`; BashKitten downloads a hash-pinned copy
+`openresearchtools/wildbuzzard-android`; Taskarian downloads a hash-pinned copy
 and locked npm dependencies into Termux when the browser is installed. Native
 `pi install` registers the extension and the short Android browser skill. No
 extension code runs in or is bundled into the APK, and Linux does not install it.
@@ -90,14 +90,14 @@ it follows the browser/WebView's color preference, including at login and About.
 
 | Repository | Responsibility | Published artifacts |
 | --- | --- | --- |
-| `openresearchtools/bashkitten` | Shared `src/web/` and `src/server/`, hosts in `src/android/` and `src/linux/`, platform adapters and packaging | BashKitten APK, Termux `aarch64` server `.deb`, Linux `arm64`/`amd64` server and desktop `.deb` packages, source and release metadata |
+| `openresearchtools/Taskarian` | Shared `src/web/` and `src/server/`, hosts in `src/android/` and `src/linux/`, platform adapters and packaging | Taskarian APK, Termux `aarch64` server `.deb`, Linux `arm64`/`amd64` server and desktop `.deb` packages, source and release metadata |
 | `openresearchtools/termux-suite` | Tracked upstream Termux sources, patch series, build/signing workflows and suite catalog | Termux/add-on APKs, both X11 variants, matched X11 companion `.deb`, complete source archive and signed catalog |
 | Existing `openresearchtools/apt` | Final signed APT distribution for Linux `arm64`/`amd64` and native Termux `aarch64` packages | Platform-specific keyring packages and the existing shared signed index referencing application release assets |
 
-### Shared BashKitten source layout
+### Shared Taskarian source layout
 
 Keep application source under one `src/` tree, with the shared server independent
-of Android packaging. Proposed BashKitten layout:
+of Android packaging. Proposed Taskarian layout:
 
 ```text
 src/
@@ -123,7 +123,7 @@ server code. Move them to the appropriate `src/server/` areas, splitting out onl
 the actual platform dependencies. Move the two existing UI HTML files into
 `src/web/` and update launch scripts, asset paths, tests and packaging together.
 Do not create Android and Linux copies of the UI, HTTP(S) API or Pi controls.
-Pi remains an unmodified dependency; `rpc/` contains BashKitten's integration.
+Pi remains an unmodified dependency; `rpc/` contains Taskarian's integration.
 
 Pass a small platform adapter into the shared server for home/data/runtime paths,
 allowed working-folder roots, process startup and optional capabilities. On
@@ -232,7 +232,7 @@ Termux app identifies its main license as GPLv3-only with exceptions, and X11
 also carries GPLv3. See [Termux licensing](https://github.com/termux/termux-app/blob/master/LICENSE.md)
 and [X11 licensing](https://github.com/termux/termux-x11/blob/master/LICENSE).
 
-Keep Termux modifications in their licensed projects. BashKitten's own frontend,
+Keep Termux modifications in their licensed projects. Taskarian's own frontend,
 Node adapter and planned Android host use **GPL-3.0-only**, matching Termux's
 project license. Third-party components retain their own licenses and notices.
 Any borrowed implementation must be compatible with GPL-3.0-only and retain its
@@ -241,15 +241,15 @@ required attribution; this plan requires no third-party frontend code.
 ## 3. Signing, Android identity and build configuration
 
 All released APKs use one privately held Android signing identity, including
-BashKitten and every Termux add-on. Keep `com.termux`, `com.termux.api`,
-`com.termux.x11` and the other upstream add-on IDs. BashKitten's application ID
-is **`com.bashkitten`**. Derive its component names and provider authorities from
-that ID. The user owns **`bashkitten.com`**; record it as the product domain for
+Taskarian and every Termux add-on. Keep `com.termux`, `com.termux.api`,
+`com.termux.x11` and the other upstream add-on IDs. Taskarian's application ID
+is **`com.taskarian`**. Derive its component names and provider authorities from
+that ID. The user owns **`taskarian.com`**; record it as the product domain for
 future website/verified-link configuration. The localhost app remains usable
 without that domain being configured or reachable.
 
 Preserve Termux's `/data/data/com.termux/files/usr` prefix and its upstream
-shared-UID relationship with compatible add-ons. BashKitten has its own UID; it
+shared-UID relationship with compatible add-ons. Taskarian has its own UID; it
 does not need direct access to Termux's files. Equal certificates alone do not
 merge app storage. X11 offers its upstream shared-UID and standalone variants.
 
@@ -273,7 +273,7 @@ Signing procedure:
    it never replaces this usable local file. Never commit it or put its contents
    in logs, release assets or caches.
 3. Upload the **same local keystore and credentials** as repository-level GitHub
-   Actions Secrets in `openresearchtools/bashkitten` and
+   Actions Secrets in `openresearchtools/Taskarian` and
    `openresearchtools/termux-suite`. The owner is a personal GitHub account, so
    use a separate encrypted secret copy in each repository rather than
    organization-level secrets. Use consistent names: `ANDROID_KEYSTORE_BASE64`,
@@ -297,7 +297,7 @@ Signing procedure:
 
 Keep each app's **`versionName` equal to its selected official upstream release**.
 Termux, API, X11 and the other add-ons retain their own release sequences; do not
-assign BashKitten's version to them. Obtain the effective version from the
+assign Taskarian's version to them. Obtain the effective version from the
 upstream release workflow/tag and generated APK metadata, including supported
 version overrides, rather than assuming a static Gradle default is authoritative.
 For X11 nightlies, retain upstream's version/date/commit identity and pin the
@@ -307,7 +307,7 @@ Track our changes separately as `suiteRevision`, for example a store label
 `Termux <upstream version> · suite revision 2`. Put the upstream identity and suite
 revision in release asset names, notices and the signed catalog. These identify
 our modified, suite-signed distribution while preserving familiar upstream
-versioning. BashKitten itself retains its own version sequence.
+versioning. Taskarian itself retains its own version sequence.
 
 Keep a checked-in per-package release ledger for **`versionCode`**. On the first
 suite build, use the upstream code where valid. For a new suite release, allocate
@@ -329,13 +329,13 @@ key, including the backup/reinstall transition for a different certificate.
 
 The existing APT signing key remains separate. Its public fingerprint is
 `94A2 D5BD BD2A 22C1 B6F0 914D C7B3 EFA0 BA41 EB0A`. Use a separate signed-catalog
-key for store metadata, pinned in BashKitten, rather than exposing the Android
+key for store metadata, pinned in Taskarian, rather than exposing the Android
 keystore to routine catalog publishing jobs.
 
 Release Android APKs for the `arm64-v8a` Android ABI and native Termux packages
 with `Architecture: aarch64`. Use **aarch64** for the Termux build target, package
 filenames, APT metadata and package choices in the UI. Debian's `arm64` package
-target is separate and is not used for this Termux distribution. BashKitten's
+target is separate and is not used for this Termux distribution. Taskarian's
 proposed minimum is Android 12/API 31, with current stable compile/target SDK at release
 (API 37 in the current test environment). It needs no native NDK code of its own.
 Pin compatible SDK/NDK versions for each upstream app instead of forcing one
@@ -363,7 +363,7 @@ service: com.termux.app.SuiteRunCommandService
 activity: com.termux.app.SuiteSetupActivity
 ```
 
-BashKitten requests this permission in its manifest. Android grants signature
+Taskarian requests this permission in its manifest. Android grants signature
 permissions to apps signed with the declaring app's certificate without a runtime
 permission dialog. This is the mechanism for automatic trusted integration.
 See [Android permission protection levels](https://developer.android.com/guide/topics/manifest/permission-element).
@@ -383,7 +383,7 @@ before executing or writing results. Upstream's present policy check is visible
 in [RunCommandService](https://github.com/termux/termux-app/blob/master/app/src/main/java/com/termux/app/RunCommandService.java).
 
 `SuiteSetupActivity` reuses the normal Termux bootstrap installer and exposes
-preparing/ready/error status to BashKitten. BashKitten launches it while visible;
+preparing/ready/error status to Taskarian. Taskarian launches it while visible;
 the user may briefly see a setup progress window, but never has to enter terminal
 commands. This also gives first initialization a proper Android activity
 lifecycle. A command service alone cannot assume `$PREFIX` already exists.
@@ -398,14 +398,14 @@ First launch opens the native store with a guided setup flow:
 
 1. Check device ABI, Android version, free space, primary-user compatibility and
    installed package certificates.
-2. Ask Android to enable installation from BashKitten when needed, then submit
+2. Ask Android to enable installation from Taskarian when needed, then submit
    verified APKs through `PackageInstaller` and display Android's confirmation.
 3. Install Termux and Termux:API. Offer the desktop component with a clear X11
    standalone/shared-UID choice; default desktop setup includes XFCE/LibreOffice.
 4. Initialize Termux through the protected setup activity, then run the
    resumable package bootstrap through the protected command service.
 5. Start the supervisor/backend, wait for authenticated application readiness,
-   and open the existing BashKitten web login/setup page.
+   and open the existing Taskarian web login/setup page.
 
 ### Existing Termux installations and inexpensive preflight
 
@@ -414,11 +414,11 @@ Detect its signing certificate locally. If Termux is not signed with our suite
 key, never offer or install our Termux/add-on APKs alongside it. Missing API/X11
 cards show **Missing** in red and say to install from the same source as Termux;
 installed external apps show Installed and are not checked for our APK updates.
-BashKitten itself can still receive its own updates. Never uninstall anything.
+Taskarian itself can still receive its own updates. Never uninstall anything.
 
 Under the Termux card, **Connect to Termux** exposes a copyable command enabling
 `allow-external-apps`, Open Termux, and instructions/buttons for allowing
-BashKitten's normal Termux command permission in Android app settings. Verify the
+Taskarian's normal Termux command permission in Android app settings. Verify the
 connection through a real command before marking it connected. Our signed
 Termux uses the existing protected route without those manual steps. Both routes
 run the same package/bootstrap manager and install the required environment.
@@ -450,7 +450,7 @@ include the installer relationship and the updated app's target SDK; Android
 suite are not a v1 promise.** Termux and Termux:API currently target SDK 28;
 X11's shared-UID flavor also targets 28. They do not meet those thresholds.
 Keep those targets for compatibility. Modernize the standalone X11 target only
-after validating its behavior. BashKitten's modern target allows it to use the
+after validating its behavior. Taskarian's modern target allows it to use the
 supported self-update path when the other Android conditions are satisfied.
 See [Termux build settings](https://github.com/termux/termux-app/blob/master/gradle.properties),
 [API build settings](https://github.com/termux/termux-api/blob/master/gradle.properties),
@@ -480,7 +480,7 @@ https://github.com/openresearchtools/apt/releases/download/repo/openresearchtool
 
 After the normal Termux bootstrap exists, install the download/checksum tools
 through its authenticated upstream APT source. Download our keyring inside
-Termux, verify its hash against the catalog authenticated by BashKitten, then
+Termux, verify its hash against the catalog authenticated by Taskarian, then
 install it with `dpkg`. Pass the expected hash through the protected command
 channel. Its source configuration registers
 `https://apt.openresearchtools.com` under the correct Termux prefix. Later
@@ -494,7 +494,7 @@ native sessions or existing projects.
 | Layer | Installation |
 | --- | --- |
 | Core | Supported Termux `nodejs-lts` satisfying Node >=22.19, Python, Git (`git`), GitHub CLI (`gh`), ripgrep, fd, termux-api CLI, certificates and archive utilities |
-| BashKitten | Native `bashkitten` package containing server, current web UI, supervisor, launchers and pinned unmodified Pi/dependencies |
+| Taskarian | Native `taskarian` package containing server, current web UI, supervisor, launchers and pinned unmodified Pi/dependencies |
 | Desktop | `x11-repo`, `xfce4`, `dbus`, LibreOffice and required fonts, plus the companion X11 package matching our APK |
 | Graphics | Install the dependencies for the selected tested profile; renderer diagnostics remain available in the desktop controls |
 
@@ -516,7 +516,7 @@ Ship a concise base `AGENTS.md` template at
 During bootstrap and after template updates, synchronize it into Pi's global
 context file, normally `~/.pi/agent/AGENTS.md`. Resolve the effective agent
 directory through the selected Pi runtime, including `PI_CODING_AGENT_DIR`, and
-render paths from the real environment. This is separate from BashKitten's own
+render paths from the real environment. This is separate from Taskarian's own
 repository `AGENTS.md`; do not copy development instructions into the user's Pi.
 
 Use an identifiable, versioned managed block; atomically replace only that block
@@ -597,7 +597,7 @@ release supports these controls; see its [telemetry implementation](https://gith
 and [CLI options](https://github.com/earendil-works/pi/blob/v0.86.1/packages/coding-agent/src/cli/args.ts).
 GitHub CLI documents its [telemetry and update-check environment settings](https://cli.github.com/manual/gh_help_environment).
 
-BashKitten, Termux and the shipped add-ons must have analytics and automatic
+Taskarian, Termux and the shipped add-ons must have analytics and automatic
 crash-report uploads absent or disabled. Audit the pinned sources and apply actual
 supported settings/build options; do not assume a generic environment variable
 controls every app. Repeat the audit when upgrading components. Verify network
@@ -605,9 +605,9 @@ behavior during startup, idle operation and first use. Explicit model/provider
 requests, Git/GitHub actions, package downloads and the requested store update
 checks still work; disabling telemetry does not disable those functions.
 
-Publish `bashkitten_VERSION_aarch64.deb` from the BashKitten release, alongside
+Publish `taskarian_VERSION_aarch64.deb` from the Taskarian release, alongside
 the Linux artifacts described in section 10 when releasing those targets. Add
-`openresearchtools/bashkitten` with glob `bashkitten*.deb` to the existing APT
+`openresearchtools/Taskarian` with glob `taskarian*.deb` to the existing APT
 `packages.json`, covering the server and Linux desktop packages. Validate each
 asset's actual package name, architecture and version before publication.
 Dispatch the existing `package-released` workflow after publishing; retain the
@@ -625,16 +625,16 @@ is not a Termux `aarch64` build. Ship the pinned production dependency graph,
 without a network-dependent `npm install` in package-maintainer scripts. Pi remains the ordinary upstream
 package, currently pinned to 0.86.1 in this branch.
 
-Install `bashkitten-web`, `bashkittenctl` and a launcher for the same managed Pi
+Install `taskarian-web`, `taskarianctl` and a launcher for the same managed Pi
 runtime, initially supplied by the package. Expose `pi` for terminal use where
 it is unoccupied; detect any existing global Pi installation rather than
-overwriting it. Both the UI and BashKitten's launcher resolve the same selected,
+overwriting it. Both the UI and Taskarian's launcher resolve the same selected,
 exactly pinned runtime. An unrelated global npm installation is not the version
-reported as BashKitten's Pi.
+reported as Taskarian's Pi.
 
-Retain data at the current `~/.local/share/bashkitten-pi` location and credentials
+Retain data at the current `~/.local/share/Taskarian` location and credentials
 in Pi's native location. Stage immutable runtime versions in package-managed
-payloads and retain active runtime copies under `$PREFIX/var/lib/bashkitten`.
+payloads and retain active runtime copies under `$PREFIX/var/lib/Taskarian`.
 Switch the active launcher only after verification; old workers keep their
 runtime until exit, and are retained after exit. Account
 for dpkg removing old package files: merely naming package directories with
@@ -665,7 +665,7 @@ The common update check refreshes APK catalog, APT and npm status independently,
 with per-source timestamps and errors. A failed or offline npm check must not
 display Pi as up to date or prevent APT/APK checks. Read-only checks never change
 the installed runtime. Keep Pi's own startup catalog traffic and telemetry off;
-these are explicit BashKitten package checks, also available on Linux without APT.
+these are explicit Taskarian package checks, also available on Linux without APT.
 
 **Update packages** checks APT, installed global npm packages, and Pi's current
 npm release. Show package names with installed/available versions. Node/npm files
@@ -712,7 +712,7 @@ accurately and expose package-manager recovery through the same UI.
 
 ## 7. Native menu, app store and update window
 
-The compact hamburger beside BashKitten opens a menu. **Apps** is one menu item
+The compact hamburger beside Taskarian opens a menu. **Apps** is one menu item
 and opens a separate, professionally laid-out store screen. It does not toggle a
 single long page containing store, packages, services and chat controls.
 
@@ -758,21 +758,21 @@ Back from every native screen returns to the existing loaded chat. Keep the
 WebView attached and preserve its document, selected session, unsent draft and
 cookies. Opening or closing these screens does not stop services or reload chat.
 
-BashKitten never uninstalls applications. Changing X11 shared-UID membership
+Taskarian never uninstalls applications. Changing X11 shared-UID membership
 requires manual removal through Android settings. Emulator migration tests do
-that outside BashKitten on the disposable test device.
+that outside Taskarian on the disposable test device.
 
 ## 8. Supervisor, recovery and Pi lifecycle
 
-On Android, run `bashkitten-suite-manager` as a long-lived task owned by Termux's
+On Android, run `taskarian-suite-manager` as a long-lived task owned by Termux's
 existing service. Its Termux adapter manages the shared HTTP(S) server child,
 desktop process groups and state, while detached workers in `src/server/rpc/`
 continue to own Pi RPC on both platforms. It has a private local control socket
 and a CLI that returns versioned JSON status/results. Linux launches the same
 server/worker code using its platform adapter, without the Android command bridge.
 
-While BashKitten is visible, its native controller uses the protected Termux
-command component to run `bashkittenctl status/start/...`. This route works when
+While Taskarian is visible, its native controller uses the protected Termux
+command component to run `taskarianctl status/start/...`. This route works when
 the web server is down and does not require access to Termux's private files.
 Use fixed command entry points and bounded structured arguments. Keep a
 single-instance lock, readiness probes, restart backoff and request IDs so
@@ -789,12 +789,12 @@ because it occupies port 3939.
 
 On launch/resume, initialize Termux if needed, ensure the manager exists, and
 start the backend if it died unexpectedly. Closing the WebView, swiping away
-BashKitten, or closing a browser does not send a stop command. A deliberate Stop
+Taskarian, or closing a browser does not send a stop command. A deliberate Stop
 action sets a persisted desired state, so status polling does not immediately
 undo it. An explicit Play clears that state.
 
 Do not describe the manager as immortal: Android can kill or force-stop Termux.
-Reopening BashKitten initiates the foreground recovery path. An optional Boot
+Reopening Taskarian initiates the foreground recovery path. An optional Boot
 add-on can request restart after reboot, subject to Android restrictions and the
 user's settings. Battery settings are guided UI actions when necessary, not
 permissions granted by our certificate.
@@ -1003,7 +1003,7 @@ Chromium engine. Keep GTK/WebKit dependencies out of browser-only server install
 Sources: [PyGObject](https://pygobject.gnome.org/) and
 [WebKitGTK 6.0 API](https://webkitgtk.org/reference/webkitgtk/stable/).
 
-On launch, attach to the existing BashKitten server for this user/profile, or
+On launch, attach to the existing Taskarian server for this user/profile, or
 start the shared server with the Linux adapter and wait for readiness. Use a
 single-instance lock and verified local control connection so reopening does not
 start duplicate servers or attach to an unrelated process occupying the port.
@@ -1016,7 +1016,7 @@ ordinary web behavior.
 
 Give the host a persistent WebKit network session with private data/cache paths
 under the user's XDG directories and explicitly configure persistent cookie
-storage. Retain BashKitten's expiring persistent login cookie across window
+storage. Retain Taskarian's expiring persistent login cookie across window
 restarts and host updates; clear it on logout as usual. Keep a stable server
 origin and preserve server-side sessions. Do not share or copy the user's
 external browser cookies. See WebKit's [network sessions](https://webkitgtk.org/reference/webkitgtk/stable/class.NetworkSession.html)
@@ -1034,7 +1034,7 @@ connected to the same server. Presentation flags do not grant native privileges.
 | Select a working directory | Shared server folder picker with platform roots | Native folder chooser; pass selection to the same backend validation |
 | Attach/upload files and images | Browser/system file picker, paste and drag/drop | Same HTML file inputs and Pi attachment handling through WebKit's native chooser; preserve paste and drag/drop |
 | Click a local file/artifact link | Browser or Android download/open behavior | Open the existing local file in its associated application |
-| Click an external URL or provider login | External browser where the host provides it | Default system browser; internal chat navigation stays inside BashKitten |
+| Click an external URL or provider login | External browser where the host provides it | Default system browser; internal chat navigation stays inside Taskarian |
 | Repository download / ZIP | Backend ZIP and normal browser download | Hidden; project files are already available through the file manager |
 
 For working-directory selection, return a native absolute path and explicitly
@@ -1046,7 +1046,7 @@ thread sidebar. WebKit exposes the HTML upload request through
 [FileChooserRequest](https://webkitgtk.org/reference/webkitgtk/stable/class.FileChooserRequest.html).
 
 Implement **Open project folder**, **Open file** and external-link actions as a
-narrow native bridge available only to the trusted BashKitten main frame and
+narrow native bridge available only to the trusted Taskarian main frame and
 invoked by a user action. Resolve session/attachment IDs and relative file paths
 against validated project or attachment roots. The host opens that actual file,
 including uploaded attachments saved by the server, rather than downloading a
@@ -1083,8 +1083,8 @@ available; compile/select each native dependency for its target and supported
 distribution baseline. Do not reuse Termux binaries in a Linux package or relabel
 one architecture's `.deb` as another.
 
-Keep `bashkitten` as the server/Pi runtime package and `bashkitten-desktop` as the
-small Linux host package, depending on the matching `bashkitten` version. This
+Keep `taskarian` as the server/Pi runtime package and `taskarian-desktop` as the
+small Linux host package, depending on the matching `taskarian` version. This
 allows server-only installs without GTK/WebKit dependencies. Build the desktop
 package for each Linux architecture too: its host dependency constraints are
 Linux-specific even though its own wrapper is Python. Do not mark either package
@@ -1092,12 +1092,12 @@ as a cross-platform `Architecture: all` artifact in the shared APT index.
 
 | Target | Server package | Desktop host package |
 | --- | --- | --- |
-| Linux `arm64` | `bashkitten_VERSION_arm64.deb` | `bashkitten-desktop_VERSION_arm64.deb` |
-| Linux `amd64` | `bashkitten_VERSION_amd64.deb` | `bashkitten-desktop_VERSION_amd64.deb` |
-| Termux `aarch64` | `bashkitten_VERSION_aarch64.deb` | Android APK; no GTK host package |
+| Linux `arm64` | `taskarian_VERSION_arm64.deb` | `taskarian-desktop_VERSION_arm64.deb` |
+| Linux `amd64` | `taskarian_VERSION_amd64.deb` | `taskarian-desktop_VERSION_amd64.deb` |
+| Termux `aarch64` | `taskarian_VERSION_aarch64.deb` | Android APK; no GTK host package |
 
 Use normal Linux package paths and dependencies for the first two rows, preserving
-per-user Pi credentials/sessions and BashKitten data on install/upgrade/removal.
+per-user Pi credentials/sessions and Taskarian data on install/upgrade/removal.
 Keep the Termux prefix and dependency names confined to the third row. Record
 and test minimum Node, Python, GTK/WebKit and native library versions for each
 supported Linux distribution; avoid tying release binaries to newer libraries
@@ -1112,13 +1112,13 @@ must pass the same shared-server suite and relevant host checks before a Linux
 release is published.
 
 Publish tested `.deb` files and matching source/license artifacts to the
-BashKitten GitHub Release, then update the **existing `openresearchtools/apt`
+Taskarian GitHub Release, then update the **existing `openresearchtools/apt`
 catalog at `https://apt.openresearchtools.com`** through section 6's workflow.
 The current publisher already accepts `arm64`, `amd64` and `aarch64` in one signed
 flat index; preserve that design and let package architecture/dependencies select
 the correct target. Linux users use the existing Debian archive keyring package;
 Termux users use the existing Termux keyring. After repository setup, Linux users
-install the full app with `apt install bashkitten-desktop` and receive subsequent
+install the full app with `apt install taskarian-desktop` and receive subsequent
 package upgrades through APT. Use the APT signing identity for repository metadata;
 the Droid Android signing key remains for APKs.
 
@@ -1159,7 +1159,7 @@ normal user-controlled OS setting. Desktop web deployments disable this adapter.
 | Phase | Deliverable | Required evidence before moving on |
 | --- | --- | --- |
 | 0. Shared source and platform boundaries | One `src/web/`, shared `src/server/` with Pi controls in `rpc/`, thin Linux/Termux adapters and native APK source under `src/android/` | Same UI/RPC fixtures run on Linux and Termux; Linux starts without Android components; folder roots adapt correctly; source moves preserve sessions, credentials and rendering |
-| 1. Source and signed IPC | Suite sources/locks, upstream-based build recipes, tiny Termux patch, notices and a minimal BashKitten native controller | Matching certificate can initialize and run a command without manual Termux configuration; a differently signed test app is denied; upstream versions and all build deviations are recorded |
+| 1. Source and signed IPC | Suite sources/locks, upstream-based build recipes, tiny Termux patch, notices and a minimal Taskarian native controller | Matching certificate can initialize and run a command without manual Termux configuration; a differently signed test app is denied; upstream versions and all build deviations are recorded |
 | 2. Installation and packaging | Native store, certificate checks, keyring bootstrap, native `.deb`, APT indexing, Git/GitHub CLI, short Pi environment context and telemetry-off defaults | Fresh setup reaches the localhost UI; `git` and `gh` work; correct global context loads without losing personal instructions; template refresh waits for idle and preserves sessions/queues; telemetry opt-outs apply to terminal and background launches; interrupted setup resumes |
 | 3. Runtime lifecycle | Supervisor, backend controls, Pi stop/kill and recovery | Closing APK/browser preserves a real turn; backend restart preserves workers; no duplicate server or prompt replay; deliberate stops stay stopped |
 | 4. Browser integration | Persistent WebView, picker/paste/download/open/OAuth behavior | Same chat and files work in APK and Chrome; uploads use the real Android picker; provider callback returns to native Pi |
@@ -1178,7 +1178,7 @@ instructions remain effective, and a relevant skill body can be read on demand
 without injecting all skill contents. Test the Linux host separately from the
 ordinary browser, including files with spaces/Unicode, external/new-window links,
 persistent cookies, image attachments and desktop integration on Wayland and X11.
-Verify Android integration using external tools. Keep BashKitten-owned test
+Verify Android integration using external tools. Keep Taskarian-owned test
 suites, fixtures, probes and instrumentation outside the app repositories and
 release sources. Do not install test providers or chats into production profiles.
 Use a disposable emulator snapshot for signing-migration tests rather than

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { dataDir, privateDir } from './common.mjs';
 
 const signature=(key,value)=>createHmac('sha256',key).update(`${value.id}\n${value.nonce}\n${value.time}\n${value.payload}`).digest('hex');
-const proof=key=>createHmac('sha256',key).update('bashkitten-phone-frame-v1').digest();
+const proof=key=>createHmac('sha256',key).update('taskarian-phone-frame-v1').digest();
 function seal(key,payload,id=randomUUID(),nonce=randomUUID()){const value={id,nonce,time:Date.now(),payload:JSON.stringify(payload)};return {...value,mac:signature(key,value)};}
 function open(key,value){
   if(!value||typeof value.payload!=='string'||!Number.isSafeInteger(value.time)||Math.abs(Date.now()-value.time)>30000||!/^[a-f0-9]{64}$/.test(value.mac||''))throw Error('Expired phone gateway message');

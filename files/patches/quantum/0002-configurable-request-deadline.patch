@@ -16,7 +16,7 @@
 @@ -140,7 +140,9 @@
  		if strings.HasPrefix(prefix, "/apps/files/") && strings.HasSuffix(prefix, "/") && !strings.ContainsAny(prefix, "\\?#\r\n") && !strings.Contains(prefix, "..") {
  			baseURL = prefix
- 			provider := r.Header.Get("X-BashKitten-Document-Provider")
+ 			provider := r.Header.Get("X-Taskarian-Document-Provider")
 -			if provider == prefix+"api/document-provider/open" { documentProvider = provider }
 +			if provider == prefix+"api/document-provider/open" {
 +				documentProvider = provider

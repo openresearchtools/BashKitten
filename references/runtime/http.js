@@ -23,7 +23,7 @@
     ***** END LICENSE BLOCK *****
 */
 
-// BashKitten: preserve native server transport; add core retry/cancellation adapters.
+// Taskarian: preserve native server transport; add core retry/cancellation adapters.
 const context = require('./request-context');
 var config = require('./config');
 var request = require('request');

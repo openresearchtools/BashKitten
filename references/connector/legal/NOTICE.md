@@ -14,7 +14,7 @@ Translation dependencies retain their own COPYING/LICENSE and per-file notices.
 SingleFile sources and license are preserved in the Connector lib/SingleFile tree.
 The released package-lock.json pins JavaScript build/runtime dependencies.
 
-BashKitten modifications, 28 October 2026: project/session authorization transport,
+Taskarian modifications, 28 October 2026: project/session authorization transport,
 explicit pre-save destination choice, ordinary-tab selector/challenge presentation,
 References product branding, and removal of upstream cloud/reporting/update paths.
 These changes are recorded as named patches and small source modules separately

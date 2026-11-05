@@ -47,7 +47,7 @@ export class PhoneSpeech {
   async vadFiles() {
     const runtime = await runtimeInfo('whisper');
     if (!runtime?.capabilities?.streamingVad) throw Error('Download the current Whisper runtime in LocalAI to enable call speech detection');
-    const executable = path.join(path.dirname(runtime.binary), 'bashkitten-vad');
+    const executable = path.join(path.dirname(runtime.binary), 'taskarian-vad');
     const root = path.dirname(path.dirname(runtime.binary));
     const source = JSON.parse(await fs.readFile(path.join(root, 'models', 'VAD-SOURCE.json'), 'utf8'));
     const filename = source.model?.file;

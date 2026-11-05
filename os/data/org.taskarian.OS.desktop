@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Taskarian OS
+Comment=Desktop scaling and window settings
+Exec=taskarian-os settings
+Icon=taskarian-os
+Categories=Settings;DesktopSettings;
+Terminal=false
+StartupNotify=true

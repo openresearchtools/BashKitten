@@ -39,17 +39,17 @@ export async function prepareFiles({ dataRoot, scope, endpoint, privatePaths = [
     const filename = path.join(directory, 'quantum.yaml');
     const previous = await load(filename, null);
     const bootstrap = previous?.auth?.adminUsername || 'owner_' + randomBytes(24).toString('hex');
-    const rulesFor = folder => [{ folderPath: '/', ignoreSymlinks: true }, { fileStartsWith: '.bashkitten-save-' }, { fileStartsWith: '.bashkitten-restore-' }, ...privatePaths.filter(p => p === folder || p.startsWith(folder + path.sep)).flatMap(p => { const relative = p.slice(folder.length) || '/'; return [{ folderPath: relative, viewable: false }, { filePath: relative, viewable: false }]; })];
+    const rulesFor = folder => [{ folderPath: '/', ignoreSymlinks: true }, { fileStartsWith: '.taskarian-save-' }, { fileStartsWith: '.taskarian-restore-' }, ...privatePaths.filter(p => p === folder || p.startsWith(folder + path.sep)).flatMap(p => { const relative = p.slice(folder.length) || '/'; return [{ folderPath: relative, viewable: false }, { filePath: relative, viewable: false }]; })];
     const source = { name: sourceName(scope), path: root, config: { createUserDir: false, defaultEnabled: false, defaultUserScope: '/', private: true, defaultPermissions: { view: false, download: false, modify: false, delete: false, create: false, configured: true }, rules: rulesFor(root) } };
     // Preserve native source order. Merely returning to a previously opened
     // folder must not rewrite the shared configuration and restart Quantum.
     const sources = (previous?.server?.sources || []).map(entry => entry.path === root ? source : { ...entry, config: { ...entry.config, rules: rulesFor(entry.path) } });
     if (!sources.some(entry => entry.path === root)) sources.push(source);
-    const config = { server: { disableUpdateCheck: true, database: { path: path.join(directory, 'quantum.sqlite') }, cacheDir: path.join(directory, 'cache'), sources }, http: { requestTimeoutMs: 120000, proxyTransferTimeouts: true, socket: socketPath, baseURL: '/', disableWebDAV: true, trustProxyHeaders: true }, auth: { adminUsername: bootstrap, adminPassword: previous?.auth?.adminPassword || randomBytes(48).toString('base64url'), key: previous?.auth?.key || randomBytes(48).toString('base64url'), methods: { noauth: false, password: { enabled: false }, proxy: { enabled: true, header: 'X-BashKitten-Quantum-User' } } }, frontend: { name: 'Files', favicon: path.join(moduleRoot, 'web', 'bashkitten.png'), loginIcon: path.join(moduleRoot, 'web', 'bashkitten.png'), description: 'Files · BashKitten', disableDefaultLinks: true, disableSidebar: true, externalLinks: [{ text: 'About Files', title: 'BashKitten · source and licenses', url: '?bashkitten=about' }], disablePWAInstall: true, styling: { disableEventThemes: true, followBrowserTheme: true, customCSS: path.join(moduleRoot, 'web', 'quantum.css'), darkBackground: '#1e1e1e', lightBackground: '#f3f3f3' } }, userDefaults: { sidebar: { sticky: false, disableQuickToggles: true, showTools: false, hideFileActions: false }, account: { disableSettings: true, permissions: { admin: false, api: false, share: false, realtime: true } }, preview: { office: false } }, integrations: { media: { ffmpegPath: path.join(moduleRoot, 'bin') } } };
+    const config = { server: { disableUpdateCheck: true, database: { path: path.join(directory, 'quantum.sqlite') }, cacheDir: path.join(directory, 'cache'), sources }, http: { requestTimeoutMs: 120000, proxyTransferTimeouts: true, socket: socketPath, baseURL: '/', disableWebDAV: true, trustProxyHeaders: true }, auth: { adminUsername: bootstrap, adminPassword: previous?.auth?.adminPassword || randomBytes(48).toString('base64url'), key: previous?.auth?.key || randomBytes(48).toString('base64url'), methods: { noauth: false, password: { enabled: false }, proxy: { enabled: true, header: 'X-Taskarian-Quantum-User' } } }, frontend: { name: 'Files', favicon: path.join(moduleRoot, 'web', 'taskarian.png'), loginIcon: path.join(moduleRoot, 'web', 'taskarian.png'), description: 'Files · Taskarian', disableDefaultLinks: true, disableSidebar: true, externalLinks: [{ text: 'About Files', title: 'Taskarian · source and licenses', url: '?taskarian=about' }], disablePWAInstall: true, styling: { disableEventThemes: true, followBrowserTheme: true, customCSS: path.join(moduleRoot, 'web', 'quantum.css'), darkBackground: '#1e1e1e', lightBackground: '#f3f3f3' } }, userDefaults: { sidebar: { sticky: false, disableQuickToggles: true, showTools: false, hideFileActions: false }, account: { disableSettings: true, permissions: { admin: false, api: false, share: false, realtime: true } }, preview: { office: false } }, integrations: { media: { ffmpegPath: path.join(moduleRoot, 'bin') } } };
     await fs.mkdir(config.server.cacheDir, { recursive: true, mode: 0o700 });
     const content = JSON.stringify(config); const changed = !previous || JSON.stringify(previous) !== content; if (changed) await atomic(filename, config);
     const binary = path.join(moduleRoot, 'bin', 'filebrowser');
-    return { service: { id: 'quantum', name: 'Files', target: { network: 'unix', address: config.http.socket }, scheme: 'http', kind: 'web', openPath: '/', enabled: false, startup: false, command: { argv: [binary, '-c', filename], cwd: directory, env: { BASHKITTEN_FILES_CONFIG_REVISION: digest(content) } } }, ...filesLocation(scope), username: userName(scope), configRevision: digest(content), needsRestart: !!previous && changed, endpoint };
+    return { service: { id: 'quantum', name: 'Files', target: { network: 'unix', address: config.http.socket }, scheme: 'http', kind: 'web', openPath: '/', enabled: false, startup: false, command: { argv: [binary, '-c', filename], cwd: directory, env: { TASKARIAN_FILES_CONFIG_REVISION: digest(content) } } }, ...filesLocation(scope), username: userName(scope), configRevision: digest(content), needsRestart: !!previous && changed, endpoint };
   });
 }
 function request(socketPath, method, requestPath, { headers = {}, body, signal } = {}) {
@@ -62,7 +62,7 @@ function request(socketPath, method, requestPath, { headers = {}, body, signal }
   });
 }
 async function jsonRequest(socketPath, method, target, username, body, signal, byteLimit = 2 << 20) {
-  const response = await request(socketPath, method, target, { headers: { 'X-BashKitten-Quantum-User': username, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal });
+  const response = await request(socketPath, method, target, { headers: { 'X-Taskarian-Quantum-User': username, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal });
   let size = 0; const chunks = []; for await (const chunk of response) { size += chunk.length; if (byteLimit && size > byteLimit) throw failure(502, 'Native API response exceeds its bound'); chunks.push(chunk); }
   const text = Buffer.concat(chunks).toString(); if (response.statusCode >= 400) throw failure(response.statusCode, 'Native Files account reconciliation failed');
   return text ? JSON.parse(text) : null;
@@ -137,9 +137,9 @@ export async function handleFiles(req, res, { dataRoot, scope, basePath, signal,
   // Native externalLinks accepts a query-only URL, which stays inside this
   // authenticated launch even while browsing nested folders. This is our legal
   // document, not a second Files UI or a replacement for native branding.
-  if (url.searchParams.has('bashkitten')) {
+  if (url.searchParams.has('taskarian')) {
     if (req.method !== 'GET' && req.method !== 'HEAD') throw failure(405, 'Files information is read-only');
-    const page = url.searchParams.get('bashkitten');
+    const page = url.searchParams.get('taskarian');
     let content, type;
     if (page === 'about') {
       const license = await fs.readFile(path.join(moduleRoot, 'legal', 'Quantum-LICENSE'), 'utf8');
@@ -195,9 +195,9 @@ export async function handleFiles(req, res, { dataRoot, scope, basePath, signal,
       forwardedBody = Buffer.from(JSON.stringify({ ...nativeMove, source: undefined }));
     }
   }
-  const headers = { ...req.headers, 'X-BashKitten-Quantum-User': native.username, 'X-Forwarded-Prefix': basePath, 'X-BashKitten-Document-Provider': basePath + 'api/document-provider/open' };
-  for (const key of Object.keys(headers)) if (key.toLowerCase().startsWith('x-bashkitten-') || ['cookie', 'authorization', 'x-bashkitten-quantum-user', 'x-forwarded-prefix', 'x-bashkitten-document-provider', 'forwarded', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip'].includes(key.toLowerCase())) delete headers[key];
-  headers['X-BashKitten-Quantum-User'] = native.username; headers['X-Forwarded-Prefix'] = basePath; headers['X-BashKitten-Document-Provider'] = basePath + 'api/document-provider/open'; headers.host = 'files';
+  const headers = { ...req.headers, 'X-Taskarian-Quantum-User': native.username, 'X-Forwarded-Prefix': basePath, 'X-Taskarian-Document-Provider': basePath + 'api/document-provider/open' };
+  for (const key of Object.keys(headers)) if (key.toLowerCase().startsWith('x-taskarian-') || ['cookie', 'authorization', 'x-taskarian-quantum-user', 'x-forwarded-prefix', 'x-taskarian-document-provider', 'forwarded', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip'].includes(key.toLowerCase())) delete headers[key];
+  headers['X-Taskarian-Quantum-User'] = native.username; headers['X-Forwarded-Prefix'] = basePath; headers['X-Taskarian-Document-Provider'] = basePath + 'api/document-provider/open'; headers.host = 'files';
   if (userPreferencePatch) headers['content-type'] = 'application/json';
   if (Buffer.isBuffer(forwardedBody)) { delete headers['transfer-encoding']; headers['content-length'] = String(forwardedBody.length); }
   if (nativeMove) {

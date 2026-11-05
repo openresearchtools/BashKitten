@@ -66,7 +66,7 @@ export async function resolveIdentifiers({ identifiers, signal, timeoutMs, mailt
   let retrievedAt;
   if (pmcids.length) {
     const url = new URL('https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/');
-    url.search = new URLSearchParams({ ids: pmcids.join(','), idtype: 'pmcid', format: 'json', versions: 'yes', tool: 'BashKittenReferences' });
+    url.search = new URLSearchParams({ ids: pmcids.join(','), idtype: 'pmcid', format: 'json', versions: 'yes', tool: 'TaskarianReferences' });
     source = url.href;
     if (mailto) url.searchParams.set('email', mailto);
     let data;

@@ -199,7 +199,7 @@ AboutRedirector::NewChannel(nsIURI* aURI, nsILoadInfo* aLoadInfo,
 
   nsAutoCString path = GetAboutModuleName(aURI);
 
-  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten") &&
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("taskarian") &&
       (path.EqualsLiteral("profilemanager") || path.EqualsLiteral("editprofile") ||
        path.EqualsLiteral("deleteprofile") || path.EqualsLiteral("newprofile") ||
        path.EqualsLiteral("firefoxview") || path.EqualsLiteral("aichatcontent") ||
@@ -228,7 +228,7 @@ AboutRedirector::NewChannel(nsIURI* aURI, nsILoadInfo* aLoadInfo,
       nsAutoCString url;
 
       if (path.EqualsLiteral("welcome")) {
-        if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+        if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("taskarian")) {
           url.AssignASCII(ABOUT_HOME_URL);
         } else {
           NimbusFeatures::RecordExposureEvent("aboutwelcome"_ns, true);
@@ -285,7 +285,7 @@ AboutRedirector::GetURIFlags(nsIURI* aURI, uint32_t* result) {
   for (auto& redir : kRedirMap) {
     if (name.Equals(redir.id)) {
       *result = redir.flags;
-      if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten") &&
+      if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("taskarian") &&
           (name.EqualsLiteral("profilemanager") || name.EqualsLiteral("editprofile") ||
            name.EqualsLiteral("deleteprofile") || name.EqualsLiteral("newprofile") ||
            name.EqualsLiteral("firefoxview") || name.EqualsLiteral("aichatcontent") ||

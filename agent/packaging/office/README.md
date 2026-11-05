@@ -9,8 +9,8 @@ and compiler caches remain reusable. Builds do not use a downloaded CODE image.
 
 External dependencies keep their exact upstream URLs, SHA256 and sizes in
 `office/upstream/dependencies/sources.json`. Original archives are verified in
-`BASHKITTEN_SOURCE_CACHE` (default `~/.cache/bashkitten-sources`), rather than
-stored as Git blobs or chunks. Set `BASHKITTEN_OFFLINE_SOURCES=1` to require a
+`TASKARIAN_SOURCE_CACHE` (default `~/.cache/Taskarian/sources`), rather than
+stored as Git blobs or chunks. Set `TASKARIAN_OFFLINE_SOURCES=1` to require a
 populated cache. The normal corresponding-source artifact supplies those exact
 original bytes and offline cache instructions alongside the complete product
 source. Embedded pristine browser shrinkpack files remain part of the pinned
@@ -52,7 +52,7 @@ and Linux or Termux target. It uses
 ordinary Actions caches, without registry images, registry cache or separate
 product releases. `remote-office.py` checks the producer workflow, requested
 commit, target, archive checksums and complete file inventory before collection.
-The normal BashKitten package and corresponding-source flows retain ownership
+The normal Taskarian package and corresponding-source flows retain ownership
 of product delivery. Native compile and package success remain separate from
 installed editing, collaboration and citation acceptance.
 

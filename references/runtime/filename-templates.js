@@ -494,5 +494,5 @@ function isTemplateValid(template) {
 	return depth === 0 && levels.length === 0;
 }
 
-// BashKitten adaptation: CommonJS export only; native parser/rendering unchanged.
+// Taskarian adaptation: CommonJS export only; native parser/rendering unchanged.
 module.exports = {parseTemplateBrackets,generateHTMLFromTemplate,isTemplateValid};

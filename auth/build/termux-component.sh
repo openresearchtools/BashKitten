@@ -9,7 +9,7 @@ case "$architecture" in aarch64|x86_64) ;; *) echo "Unsupported Termux architect
 case "$component" in caddy|tor|authelia|valkey|chisel|remote) ;; *) echo "Unsupported component: $component" >&2; exit 2 ;; esac
 executable=$component
 [[ $component != valkey ]] || executable=valkey-server
-[[ $component != remote ]] || executable=bashkitten-remote
+[[ $component != remote ]] || executable=taskarian-remote
 [[ ${GITHUB_ACTIONS:-} == true ]] || { echo 'Native builds run in GitHub Actions.' >&2; exit 2; }
 [[ $(uname -m) == x86_64 ]] || { echo 'The pinned Termux builder requires an amd64 runner.' >&2; exit 2; }
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -25,12 +25,12 @@ print(p['commit'])
 print(p['builderImage'])
 PY
 )
-work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/bashkitten-termux-$component.XXXXXX")
-container="bashkitten-$component-${GITHUB_RUN_ID:-build}-${GITHUB_RUN_ATTEMPT:-1}-$$"
+work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/taskarian-termux-$component.XXXXXX")
+container="taskarian-$component-${GITHUB_RUN_ID:-build}-${GITHUB_RUN_ATTEMPT:-1}-$$"
 cleanup() {
   local status=$?
   if (( status != 0 )); then
-    local diagnostics="${BASHKITTEN_BUILD_LOG_DIR:-${RUNNER_TEMP:-/tmp}/bashkitten-build-logs}/$component-termux"
+    local diagnostics="${TASKARIAN_BUILD_LOG_DIR:-${RUNNER_TEMP:-/tmp}/taskarian-build-logs}/$component-termux"
     mkdir -p "$diagnostics"
     # Configure diagnostics belong to failed-build artifacts, never the payload.
     docker exec "$container" bash -c 'find /home/builder/.termux-build -maxdepth 5 -type f -name config.log -print0 | tar --null -T - -czf -' \
@@ -43,10 +43,10 @@ cleanup() {
 trap cleanup EXIT
 python3 "$root/auth/build/retained-sources.py" termux --commit "${pin[0]}" --output "$work"
 patch --directory "$work" --strip 1 < "$root/auth/build/termux-go-version.patch"
-package="bashkitten-$component-native"
-mkdir -p "$work/packages/$package" "$work/bashkitten-sources/$component"
+package="taskarian-$component-native"
+mkdir -p "$work/packages/$package" "$work/taskarian-sources/$component"
 cp -a "$recipe/." "$work/packages/$package/"
-cp -a "$source_dir/." "$work/bashkitten-sources/$component/"
+cp -a "$source_dir/." "$work/taskarian-sources/$component/"
 # buildorder.py reads dependency declarations statically; it does not follow
 # shell source commands. Flatten the pinned recipe before our overrides so the
 # upstream dependency resolver sees every native build/runtime dependency.
@@ -68,20 +68,20 @@ cat >> "$work/packages/$package/build.sh" <<EOF
 
 termux_step_get_source() {
   mkdir -p "\$TERMUX_PKG_SRCDIR"
-  cp -a "\$TERMUX_SCRIPTDIR/bashkitten-sources/$component/." "\$TERMUX_PKG_SRCDIR/"
+  cp -a "\$TERMUX_SCRIPTDIR/taskarian-sources/$component/." "\$TERMUX_PKG_SRCDIR/"
 }
 EOF
 export TERMUX_BUILDER_IMAGE_NAME="${pin[1]}"
 export CONTAINER_NAME="$container"
-export TERMUX_DOCKER_RUN_EXTRA_ARGS="--volume $root:/bashkitten:ro"
-export TERMUX_DOCKER_EXEC_EXTRA_ARGS='--env BASHKITTEN_SOURCE_ROOT=/bashkitten --env GITHUB_ACTIONS=true'
+export TERMUX_DOCKER_RUN_EXTRA_ARGS="--volume $root:/taskarian:ro"
+export TERMUX_DOCKER_EXEC_EXTRA_ARGS='--env TASKARIAN_SOURCE_ROOT=/taskarian --env GITHUB_ACTIONS=true'
 (
   cd "$work"
   ./scripts/run-docker.sh ./build-package.sh -a "$architecture" -I -f "$package"
 )
 # Upstream records the versions actually extracted into its target sysroot in
 # .built-packages; it does not install that sysroot using the host dpkg database.
-docker exec -i "$container" python3 - > "$work/bashkitten-dependencies.json" <<'PY'
+docker exec -i "$container" python3 - > "$work/taskarian-dependencies.json" <<'PY'
 import hashlib, json, pathlib, subprocess
 records = []
 markers = pathlib.Path('/data/data/.built-packages')
@@ -100,9 +100,9 @@ deb=${packages[0]}
 mkdir -p "$work/unpacked" "$output/share/metadata" "$output/share/licenses/$component"
 dpkg-deb -x "$deb" "$work/unpacked"
 prefix="$work/unpacked/data/data/com.termux/files/usr"
-test -x "$prefix/lib/bashkitten/auth/bin/$executable"
-cp -a "$prefix/lib/bashkitten/auth/." "$output/"
-cp "$work/bashkitten-dependencies.json" "$output/share/metadata/$component-termux-build-dependencies.json"
+test -x "$prefix/lib/taskarian/auth/bin/$executable"
+cp -a "$prefix/lib/taskarian/auth/." "$output/"
+cp "$work/taskarian-dependencies.json" "$output/share/metadata/$component-termux-build-dependencies.json"
 if [[ -d "$prefix/share/doc/$package" ]]; then
   cp -a "$prefix/share/doc/$package/." "$output/share/licenses/$component/"
 fi

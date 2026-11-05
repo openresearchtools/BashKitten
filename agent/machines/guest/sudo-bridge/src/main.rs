@@ -15,7 +15,7 @@ mod transport;
 
 const REAL_SUDO: &str = "/usr/bin/sudo";
 const SUDOERS_DIRECTORY: &str = "/etc/sudoers.d";
-const PASSWORDLESS_POLICY: &str = "/etc/sudoers.d/91-bashkitten-passwordless";
+const PASSWORDLESS_POLICY: &str = "/etc/sudoers.d/91-taskarian-passwordless";
 const PASSWORDLESS_POLICY_CONTENT: &[u8] = b"user ALL=(ALL:ALL) NOPASSWD: ALL\n";
 
 fn main() -> ExitCode {
@@ -31,7 +31,7 @@ fn main() -> ExitCode {
         .ok()
         .and_then(|path| path.file_name().map(OsStr::to_os_string));
 
-    if installed_as.as_deref() == Some(OsStr::new("bashkitten-sudo-exec")) {
+    if installed_as.as_deref() == Some(OsStr::new("taskarian-sudo-exec")) {
         if arguments
             .get(1)
             .is_some_and(|argument| argument == "--serve")
@@ -48,7 +48,7 @@ fn main() -> ExitCode {
         return match run_sudo_policy(&arguments[1..]) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
-                eprintln!("bashkitten sudo policy failed: {error}");
+                eprintln!("taskarian sudo policy failed: {error}");
                 ExitCode::from(1)
             }
         };
@@ -57,19 +57,19 @@ fn main() -> ExitCode {
     let mode = match invocation_mode(invoked_as) {
         Ok(mode) => mode,
         Err(error) => {
-            eprintln!("bashkitten sudo handoff failed: {error}");
+            eprintln!("taskarian sudo handoff failed: {error}");
             return ExitCode::from(126);
         }
     };
     if unsafe { libc::getuid() } == 0 {
         let error = exec_real_sudo(mode, &arguments[1..]);
-        eprintln!("bashkitten sudo handoff failed: {error}");
+        eprintln!("taskarian sudo handoff failed: {error}");
         return ExitCode::from(126);
     }
     match transport::run_client(mode, &arguments[1..]) {
         Ok(code) => ExitCode::from(code),
         Err(error) => {
-            eprintln!("bashkitten sudo handoff failed: {error}");
+            eprintln!("taskarian sudo handoff failed: {error}");
             ExitCode::from(126)
         }
     }
@@ -77,7 +77,7 @@ fn main() -> ExitCode {
 
 fn invocation_mode(executable: &OsStr) -> io::Result<&'static str> {
     match executable.as_bytes() {
-        b"sudo" | b"bashkitten-sudo" => Ok("sudo"),
+        b"sudo" | b"taskarian-sudo" => Ok("sudo"),
         b"sudoedit" => Ok("sudoedit"),
         _ => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -163,7 +163,7 @@ fn validate_existing_policy(path: &Path) -> io::Result<bool> {
     {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            "the existing passwordless-sudo policy is not the exact BashKitten policy",
+            "the existing passwordless-sudo policy is not the exact Taskarian policy",
         ));
     }
     let mut contents = Vec::with_capacity(PASSWORDLESS_POLICY_CONTENT.len());
@@ -235,7 +235,7 @@ mod tests {
     fn recognizes_only_sudo_and_sudoedit_names() {
         assert_eq!(invocation_mode(OsStr::new("sudo")).unwrap(), "sudo");
         assert_eq!(
-            invocation_mode(OsStr::new("bashkitten-sudo")).unwrap(),
+            invocation_mode(OsStr::new("taskarian-sudo")).unwrap(),
             "sudo"
         );
         assert_eq!(invocation_mode(OsStr::new("sudoedit")).unwrap(), "sudoedit");

@@ -667,7 +667,7 @@ export async function createReferencesService({
   ) {
     const normalized = normalizeIdentifier(input);
     if (normalized.type === "OpenAlex") {
-      const headers = { Accept: "application/json", "User-Agent": "BashKitten References/0.1" };
+      const headers = { Accept: "application/json", "User-Agent": "Taskarian References/0.1" };
       if (settings.openalexKey) headers.Authorization = "Bearer " + settings.openalexKey;
       let raw;
       try {
@@ -2804,7 +2804,7 @@ export async function createReferencesService({
             {
               headers: {
                 Accept: "application/json",
-                "User-Agent": "BashKitten References/0.1",
+                "User-Agent": "Taskarian References/0.1",
                 ...(settings.crossrefKey
                   ? {
                       "Crossref-Plus-API-Token":
@@ -2906,7 +2906,7 @@ export async function createReferencesService({
               {
                 headers: {
                   Accept: "application/json",
-                  "User-Agent": "BashKitten References/0.1",
+                  "User-Agent": "Taskarian References/0.1",
                   ...(settings.openalexKey
                     ? { Authorization: "Bearer " + settings.openalexKey }
                     : {}),

@@ -8,7 +8,7 @@ import { packageRoot } from './config.mjs';
 // browser's lifetime. The old owner keeps serving these paths until it is idle.
 export const duringUpdate = new Set(['status','list','get','operation','activations','cancel','stop','endpoint','display','display-stop','clipboard','guest-control','media-devices','autostart-status']);
 export const mutations = new Set(['create','save','startup','start','stop','restart','retry','delete','autostart-save','display-start','display-stop']);
-export const updateMessage = 'BashKitten has been updated. Let current container operations finish and stop running containers to load the updated container service.';
+export const updateMessage = 'Taskarian has been updated. Let current container operations finish and stop running containers to load the updated container service.';
 
 export async function runtimeVersion(running = false) {
   const manifest = await readJson(path.join(packageRoot, '..', 'build-platform.json'), null);

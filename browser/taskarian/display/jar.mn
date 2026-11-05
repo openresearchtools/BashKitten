@@ -1,0 +1,4 @@
+browser.jar:
+    content/browser/taskarian/display.xhtml (content/display.xhtml)
+    content/browser/taskarian/display.js (content/display.js)
+    content/browser/taskarian/display.css (content/display.css)

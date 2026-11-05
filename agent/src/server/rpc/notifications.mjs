@@ -59,7 +59,7 @@ export async function pendingNotifications() {
     const value = await readJson(path.join(outbox, name), null);
     if (value?.state !== 'pending') continue;
     result.push({ key: name.slice(0, -5), id: value.id, turn: value.turn,
-      title: value.title || 'BashKitten', text: settings.preview !== false ? value.text : 'Turn finished' });
+      title: value.title || 'Taskarian', text: settings.preview !== false ? value.text : 'Turn finished' });
   }
   return result;
 }

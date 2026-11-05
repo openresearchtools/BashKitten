@@ -169,11 +169,11 @@ def notices(source, runtime):
     # Keep donor legal payloads byte-for-byte; integration attribution is an
     # additional record and a separate installed plain-text notice.
     branding.inputs()
-    shutil.copy2(attribution, runtime / 'legal/BashKitten-Office-ATTRIBUTION.txt')
-    integration_license = branding.BRANDING / 'online/branding-bashkitten-LICENSE.txt'
-    shutil.copy2(integration_license, runtime / 'legal/BashKitten-Office-LICENSE.txt')
-    records.append({'name': 'BashKitten integrated Office',
-                    'license': 'AGPL-3.0-only (BashKitten integration); upstream components retain their own terms',
+    shutil.copy2(attribution, runtime / 'legal/Taskarian-Office-ATTRIBUTION.txt')
+    integration_license = branding.BRANDING / 'online/branding-taskarian-LICENSE.txt'
+    shutil.copy2(integration_license, runtime / 'legal/Taskarian-Office-LICENSE.txt')
+    records.append({'name': 'Taskarian integrated Office',
+                    'license': 'AGPL-3.0-only (Taskarian integration); upstream components retain their own terms',
                     'text': attribution.read_text() + '\n\n' + integration_license.read_text()})
     def read(paths):
         return '\n\n'.join(path.name + '\n' + path.read_text(errors='replace') for path in paths)
@@ -247,9 +247,9 @@ def linux_dependencies(runtime, work):
     dependency_work = work / 'dependencies'
     (dependency_work / 'debian').mkdir(parents=True, exist_ok=True)
     (dependency_work / 'debian/control').write_text(
-        'Source: bashkitten-office\nSection: utils\nPriority: optional\n'
+        'Source: taskarian-office\nSection: utils\nPriority: optional\n'
         'Maintainer: Open Research Tools <openresearchtools@gmail.com>\n\n'
-        'Package: bashkitten-office\nArchitecture: any\nDescription: private native Office component\n')
+        'Package: taskarian-office\nArchitecture: any\nDescription: private native Office component\n')
     dirs = sorted({str(path.parent) for path in binaries})
     result = subprocess.check_output(['dpkg-shlibdeps', '-O', '--ignore-missing-info',
                                       *('-l' + name for name in dirs),

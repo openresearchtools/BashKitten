@@ -53,19 +53,19 @@ def validate_termux_update(value, version=None, abi=None):
         if not isinstance(item, dict):
             raise ValueError('Invalid Android companion package expectation')
         name = item.get('name')
-        expected_version = {'bashkitten': product_version, 'bashkitten-os': product_version + '-1'}.get(name)
+        expected_version = {'taskarian': product_version, 'taskarian-os': product_version + '-1'}.get(name)
         if not expected_version or name in names or item.get('version') != expected_version or item.get('architecture') != architecture:
             raise ValueError('Android companion package identity/version mismatch')
         names.add(name)
         source = item.get('sourceCommit', '')
         if not isinstance(source, str) or not re.fullmatch('[0-9a-f]{40}', source):
             raise ValueError('Android companion package source revision is missing')
-        if name == 'bashkitten' and source != revision:
+        if name == 'taskarian' and source != revision:
             raise ValueError('Android companion backend source revision mismatch')
         digest = item.get('sha256')
-        if (name == 'bashkitten-os' or digest is not None) and (not isinstance(digest, str) or not re.fullmatch('[0-9a-f]{64}', digest)):
+        if (name == 'taskarian-os' or digest is not None) and (not isinstance(digest, str) or not re.fullmatch('[0-9a-f]{64}', digest)):
             raise ValueError('Android companion package checksum is missing or invalid')
-        if name == 'bashkitten-os' and (not isinstance(item.get('installedManifestSha256'), str)
+        if name == 'taskarian-os' and (not isinstance(item.get('installedManifestSha256'), str)
                 or not re.fullmatch('[0-9a-f]{64}', item['installedManifestSha256'])):
             raise ValueError('Android companion installed OS manifest checksum is missing')
     return value
@@ -74,7 +74,7 @@ def validate_termux_update(value, version=None, abi=None):
 def termux_os_identity(file):
     """Read producer identity and installed-file manifest from the actual .deb."""
     members = {}
-    for mode, name in [('--fsys-tarfile', 'data/data/com.termux/files/usr/share/bashkitten-os/build.json'),
+    for mode, name in [('--fsys-tarfile', 'data/data/com.termux/files/usr/share/taskarian-os/build.json'),
                        ('--ctrl-tarfile', 'md5sums')]:
         with subprocess.Popen(['dpkg-deb', mode, str(file)], stdout=subprocess.PIPE) as process:
             with tarfile.open(fileobj=process.stdout, mode='r|') as archive:
@@ -85,7 +85,7 @@ def termux_os_identity(file):
                         members[name] = archive.extractfile(item).read()
             if process.wait() != 0 or name not in members or not members[name]:
                 raise ValueError('Termux OS package is missing its producer stamp or installed-file manifest')
-    stamp = json.loads(members['data/data/com.termux/files/usr/share/bashkitten-os/build.json'])
+    stamp = json.loads(members['data/data/com.termux/files/usr/share/taskarian-os/build.json'])
     if (stamp.get('schemaVersion') != 1 or stamp.get('target') != 'termux'
             or stamp.get('architecture') not in ('aarch64', 'x86_64')
             or not re.fullmatch('[0-9a-f]{40}', stamp.get('sourceCommit', ''))
@@ -101,7 +101,7 @@ def sha(file):
 
 def asset_record(file, tag):
     return {'asset': file.name, 'sha256': sha(file), 'size': file.stat().st_size,
-            'url': f'https://github.com/openresearchtools/bashkitten/releases/download/{tag}/{file.name}'}
+            'url': f'https://github.com/openresearchtools/Taskarian/releases/download/{tag}/{file.name}'}
 
 
 def copy_asset(file, output, tag):
@@ -172,7 +172,7 @@ def source_instructions(archives, output, tag):
         name = archive['archive']
         parts = ' '.join(shlex.quote(part['asset']) for part in archive['parts'])
         text += (f'\n## {name}\n\nOriginal: {archive["size"]} bytes, SHA-256 `{archive["sha256"]}`.\n\n'
-                 f'```sh\ngh release download {shlex.quote(tag)} --repo openresearchtools/BashKitten '
+                 f'```sh\ngh release download {shlex.quote(tag)} --repo openresearchtools/Taskarian '
                  f'--pattern {shlex.quote(name + ".*")} &&\n'
                  f'sha256sum --check {shlex.quote(name + ".parts.sha256")} &&\n'
                  f'cat {parts} > {shlex.quote(name)} &&\n'
@@ -188,11 +188,11 @@ def package(file):
     # These are the existing application entrypoints in apps/locations.mjs.
     # Inspect archive modes: the builder can traverse its own 0700 staging
     # directories, which become inaccessible to ordinary users after root install.
-    required = {str(prefix / 'lib/bashkitten' / name): (False, 0o444) for name in (
+    required = {str(prefix / 'lib/taskarian' / name): (False, 0o444) for name in (
         'files/provider.mjs', 'files/office-provider.mjs', 'references/index.mjs',
         'office/src/service.mjs', 'office/src/prepare.mjs')}
     if termux:
-        required[str(prefix / 'bin/bashkitten-x11')] = (False, 0o555)
+        required[str(prefix / 'bin/taskarian-x11')] = (False, 0o555)
     for name in tuple(required):
         parent = Path(name).parent
         while parent.is_relative_to(prefix):
@@ -206,7 +206,7 @@ def package(file):
             name = item.name.removeprefix('./').rstrip('/')
             if name in required:
                 modes[name] = item if name not in modes else None
-            if item.name.endswith('/lib/bashkitten/build-platform.json'):
+            if item.name.endswith('/lib/taskarian/build-platform.json'):
                 stamp = json.load(archive.extractfile(item))
     if process.wait() != 0 or not stamp:
         raise ValueError('Package has no valid build provenance: ' + str(file))
@@ -227,7 +227,7 @@ def main():
     parser.add_argument('--candidate-only', action='store_true')
     parser.add_argument('--run', type=int, help='Successful complete-candidate workflow run')
     args = parser.parse_args()
-    version = (ROOT / 'browser/bashkitten/config/version.txt').read_text().strip()
+    version = (ROOT / 'browser/taskarian/config/version.txt').read_text().strip()
     engine = (ROOT / 'browser/browser/config/version_display.txt').read_text().strip()
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     if not re.fullmatch(r'\d+\.\d+(?:\.\d+)?', version):
@@ -241,7 +241,7 @@ def main():
         if not args.run:
             parser.error('--run is required outside the candidate build')
         build = json.loads(subprocess.check_output(
-            ['gh', 'api', f'repos/openresearchtools/bashkitten/actions/runs/{args.run}']))
+            ['gh', 'api', f'repos/openresearchtools/Taskarian/actions/runs/{args.run}']))
         if build['conclusion'] != 'success' or build['head_sha'] != revision:
             raise ValueError('Use a successful complete candidate from this exact revision')
     args.output.mkdir(parents=True, exist_ok=True)
@@ -273,8 +273,8 @@ def main():
                 ['python3', str(ROOT / 'agent/packaging/browser-component.py'), 'fingerprint', target], text=True).strip()
             if not re.fullmatch('[0-9a-f]{40}', manifest.get('source', '')) or manifest.get('browser_input_sha256') != inputs:
                 raise ValueError('Cached APK inputs do not match this source')
-        if manifest.get('package_id') != 'com.bashkitten' or not manifest.get('publisher_signed'):
-            raise ValueError('APK must be the signed BashKitten product')
+        if manifest.get('package_id') != 'com.taskarian' or not manifest.get('publisher_signed'):
+            raise ValueError('APK must be the signed Taskarian product')
         if manifest.get('apks', {}).get(apk.name) != sha(apk):
             raise ValueError('APK hash mismatch')
         with zipfile.ZipFile(apk) as archive:
@@ -293,10 +293,10 @@ def main():
         signature = subprocess.check_output([str(signers[-1]), 'verify', '--print-certs', str(apk)], text=True)
         if 'certificate SHA-256 digest: ' + CERT not in signature:
             raise ValueError('APK did not use the existing Droid signing certificate')
-        app = {**copy(apk), 'packageId': 'com.bashkitten', 'versionName': version,
+        app = {**copy(apk), 'packageId': 'com.taskarian', 'versionName': version,
                'versionCode': manifest['version_code'], 'abi': abi,
                'certificateSha256': CERT, 'sourceCommit': manifest['source'],
-               'buildRepository': manifest.get('build_repository', 'openresearchtools/bashkitten'),
+               'buildRepository': manifest.get('build_repository', 'openresearchtools/Taskarian'),
                'buildRun': manifest.get('build_run') or args.run or os.environ.get('GITHUB_RUN_ID')}
         apps.append(app)
     packages = []
@@ -306,16 +306,16 @@ def main():
     architectures = set()
     for file in sorted(args.candidates.rglob('*.deb')):
         name = subprocess.check_output(['dpkg-deb', '-f', str(file), 'Package'], text=True).strip()
-        if name != 'bashkitten':
+        if name != 'taskarian':
             fields = dict(line.split(': ', 1) for line in subprocess.check_output(
                 ['dpkg-deb', '-f', str(file), 'Package', 'Version', 'Architecture'], text=True).splitlines())
             architecture = fields['Architecture']
-            if name not in {'bashkitten-os', 'bashkitten-machines-guest'} or architecture not in {'amd64', 'arm64', 'aarch64', 'x86_64'}:
+            if name not in {'taskarian-os', 'taskarian-machines-guest'} or architecture not in {'amd64', 'arm64', 'aarch64', 'x86_64'}:
                 raise ValueError('Unexpected auxiliary package: ' + file.name)
             expected = version + '-1' if architecture in {'aarch64', 'x86_64'} else version
             if fields['Version'] != expected:
                 raise ValueError('Auxiliary package version mismatch: ' + file.name)
-            if name == 'bashkitten-os' and architecture in {'aarch64', 'x86_64'}:
+            if name == 'taskarian-os' and architecture in {'aarch64', 'x86_64'}:
                 identity = termux_os_identity(file)
                 if identity['architecture'] != architecture or identity['version'] != fields['Version']:
                     raise ValueError('Termux OS installed identity differs from its package')
@@ -331,7 +331,7 @@ def main():
             continue
         fields, stamp = package(file)
         architecture = fields['Architecture']
-        if fields['Package'] != 'bashkitten' or fields['Version'] != package_version:
+        if fields['Package'] != 'taskarian' or fields['Version'] != package_version:
             raise ValueError('Unexpected package name/version: ' + file.name)
         if architecture in architectures or architecture not in {'amd64', 'arm64', 'aarch64', 'x86_64'}:
             raise ValueError('Duplicate or unexpected package architecture')
@@ -346,7 +346,7 @@ def main():
             if stamp.get('components', {}).get('display', {}).get('developmentOnly'):
                 raise ValueError('Local development APK pairing cannot be published')
             display = stamp.get('components', {}).get('display', {}).get('metadata', {})
-            if display.get('signerSha256') != CERT or display.get('package') != 'com.bashkitten' or display.get('sourceCommit') != revision:
+            if display.get('signerSha256') != CERT or display.get('package') != 'com.taskarian' or display.get('sourceCommit') != revision:
                 raise ValueError('Termux Display is not paired with these APKs')
         elif not all(name in stamp.get('components', {}) for name in ['machines', 'display']):
             raise ValueError('Desktop package is missing native environment components')
@@ -354,7 +354,7 @@ def main():
         packages.append({**fields, **copy(file), 'build': stamp})
     if architectures != {'amd64', 'arm64', 'aarch64', 'x86_64'}:
         raise ValueError('All four complete native packages are required')
-    required_auxiliary = {('bashkitten-os', arch) for arch in architectures} | {('bashkitten-machines-guest', arch) for arch in ['amd64', 'arm64']}
+    required_auxiliary = {('taskarian-os', arch) for arch in architectures} | {('taskarian-machines-guest', arch) for arch in ['amd64', 'arm64']}
     if auxiliary_keys != required_auxiliary:
         raise ValueError('All architecture-matched desktop customization and guest packages are required')
     for pairing in pairings:
@@ -365,7 +365,7 @@ def main():
                 raise ValueError('APK companion package is absent from this release')
             actual = matches[0]
             source = actual['build'].get('sourceCommit', actual['build'].get('revision'))
-            identity = os_identities.get(expected['architecture']) if expected['name'] == 'bashkitten-os' else None
+            identity = os_identities.get(expected['architecture']) if expected['name'] == 'taskarian-os' else None
             if identity:
                 source = identity['sourceCommit']
             if (actual['Version'] != expected['version'] or source != expected['sourceCommit']
@@ -383,7 +383,7 @@ def main():
             else:
                 archives[file.name] = source_archive(file, args.output, tag)
     names = list(archives)
-    for token in ('bashkitten-source-', 'dependency-source-', 'auth', 'search', 'node-source-', 'blocker', 'android-library-source'):
+    for token in ('taskarian-source-', 'dependency-source-', 'auth', 'search', 'node-source-', 'blocker', 'android-library-source'):
         if not any(token in name for name in names):
             raise ValueError('Missing corresponding source bundle: ' + token)
     source_instructions(archives.values(), args.output, tag)
@@ -393,12 +393,12 @@ def main():
     readme = (ROOT / 'README.md').read_text()
     banner = next(line for line in readme.splitlines() if '](docs/testing-releases.svg)' in line)
     banner = banner.replace('(docs/testing-releases.svg)',
-                            '(https://raw.githubusercontent.com/openresearchtools/BashKitten/main/docs/testing-releases.svg)')
+                            '(https://raw.githubusercontent.com/openresearchtools/Taskarian/main/docs/testing-releases.svg)')
     notes = (banner + '\n\n> [!WARNING]\n> **Testing release only. Not ready for production. Coming soon.**\n\n'
-             f'BashKitten {version} · Firefox ESR {engine}.\n\n'
+             f'Taskarian {version} · Firefox ESR {engine}.\n\n'
              '- **Android:** install the ARM64 or x86_64 APK matching your device, open Agent and follow the Termux setup command.\n'
              '- **Linux:** install the AMD64 or ARM64 `.deb`, which includes the browser and Agent server.\n'
-             '- **Updating Android:** update both the APK and the BashKitten package in Termux. Provider logins and chat history are retained.\n\n'
+             '- **Updating Android:** update both the APK and the Taskarian package in Termux. Provider logins and chat history are retained.\n\n'
              'Local Agent opens without an account login. Publishing from Linux and connecting to remotes still require Tor authorization and account two-factor authentication.\n\n'
              'Checksums and corresponding source archives are attached.\n')
     if (args.output / 'SOURCE-ARCHIVES.md').exists():

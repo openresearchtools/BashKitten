@@ -26,7 +26,7 @@
           "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/Qwen3.5-0.8B-Q8_0.gguf"
         }
       ],
-      "attribution": "Qwen3.5-0.8B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with BashKitten.",
+      "attribution": "Qwen3.5-0.8B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with Taskarian.",
       "notices": [
         {
           "repository": "Qwen/Qwen3.5-0.8B",
@@ -99,7 +99,7 @@
         }
       ],
       "projector": "mmproj-F16.gguf",
-      "attribution": "Qwen3.5-2B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with BashKitten.",
+      "attribution": "Qwen3.5-2B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with Taskarian.",
       "notices": [
         {
           "repository": "Qwen/Qwen3.5-2B",
@@ -181,7 +181,7 @@
         }
       ],
       "projector": "mmproj-F16.gguf",
-      "attribution": "Qwen3.5-4B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with BashKitten.",
+      "attribution": "Qwen3.5-4B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with Taskarian.",
       "notices": [
         {
           "repository": "Qwen/Qwen3.5-4B",
@@ -252,7 +252,7 @@
         }
       ],
       "projector": "mmproj-F16.gguf",
-      "attribution": "Qwen3.5-9B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with BashKitten.",
+      "attribution": "Qwen3.5-9B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with Taskarian.",
       "notices": [
         {
           "repository": "Qwen/Qwen3.5-9B",
@@ -334,7 +334,7 @@
         }
       ],
       "projector": "mmproj-F16.gguf",
-      "attribution": "Qwen3.8-27B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with BashKitten.",
+      "attribution": "Qwen3.8-27B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with Taskarian.",
       "notices": [
         {
           "repository": "Qwen/Qwen3.8-27B",
@@ -417,7 +417,7 @@
           "url": "https://huggingface.co/ggml-org/parakeet-GGUF/resolve/35156454d1a39de06863303dd209fd2bed6ee079/ggml-parakeet-tdt-0.6b-v3-q8_0.bin"
         }
       ],
-      "attribution": "Original Parakeet TDT0.6Bv3 model by NVIDIA; converted and quantized for whisper.cpp by ggml-org. Preserve original model attribution and CC-BY-4.0; conversion MIT metadata is not a replacement for the original weights license. Model weights are downloaded separately, not bundled with BashKitten.",
+      "attribution": "Original Parakeet TDT0.6Bv3 model by NVIDIA; converted and quantized for whisper.cpp by ggml-org. Preserve original model attribution and CC-BY-4.0; conversion MIT metadata is not a replacement for the original weights license. Model weights are downloaded separately, not bundled with Taskarian.",
       "notices": [
         {
           "repository": "ggml-org/parakeet-GGUF",
@@ -500,7 +500,7 @@
           "url": "https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/ca27d74bc954b73dadab5b71ca265d87fc861a7c/mmproj-Qwen3-TTS-12Hz-1.7B-Base-bf16.gguf"
         }
       ],
-      "attribution": "Original Qwen3-TTS1.7B Base by the Qwen team; GGUF conversion distributed by ggml-org. Preserve original model source and Apache-2.0 notice. Model weights are downloaded separately, not bundled with BashKitten.",
+      "attribution": "Original Qwen3-TTS1.7B Base by the Qwen team; GGUF conversion distributed by ggml-org. Preserve original model source and Apache-2.0 notice. Model weights are downloaded separately, not bundled with Taskarian.",
       "notices": [
         {
           "repository": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
@@ -566,7 +566,7 @@
           "url": "https://huggingface.co/EryriLabs/pocket-tts-GGUF/resolve/701bad4152d97b3755686a6c7a4cec8b752a3e6e/pocket-tts-en.gguf"
         }
       ],
-      "attribution": "Original Pocket TTS by Kyutai; English GGUF model and Mimi codec/speaker projector conversion by EryriLabs. State conversion, and mark any user-created quantization separately. Model weights are downloaded separately, not bundled with BashKitten.",
+      "attribution": "Original Pocket TTS by Kyutai; English GGUF model and Mimi codec/speaker projector conversion by EryriLabs. State conversion, and mark any user-created quantization separately. Model weights are downloaded separately, not bundled with Taskarian.",
       "notices": [
         {
           "repository": "EryriLabs/pocket-tts-GGUF",
@@ -747,7 +747,7 @@
           "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo.bin"
         }
       ],
-      "attribution": "Original Whisper models by OpenAI; GGML conversion for whisper.cpp by its authors. Converted/quantized distributions; preserve original MIT and conversion notices. Model weights are downloaded separately, not bundled with BashKitten.",
+      "attribution": "Original Whisper models by OpenAI; GGML conversion for whisper.cpp by its authors. Converted/quantized distributions; preserve original MIT and conversion notices. Model weights are downloaded separately, not bundled with Taskarian.",
       "notices": [
         {
           "repository": "ggerganov/whisper.cpp",

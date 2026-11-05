@@ -33,7 +33,7 @@ sources = output / 'share/source'
 for directory in (notices, metadata, sources):
     directory.mkdir(parents=True, exist_ok=True)
 inventory = []
-with tempfile.TemporaryDirectory(prefix='bashkitten-web-source-') as temporary:
+with tempfile.TemporaryDirectory(prefix='taskarian-web-source-') as temporary:
     bundle = Path(temporary)
     for directory_name, package in sorted(packages.items()):
         directory = Path(directory_name)

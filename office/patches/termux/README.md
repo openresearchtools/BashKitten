@@ -2,7 +2,7 @@
 
 These patches adapt the immutable Collabora Online/engine release
 `cp-26.04.5-2` (`42745e44dd8530fac7acd5f46cb7571ceea63c6a`). Apply them
-at the Online source root after the shared BashKitten patch series. Pristine
+at the Online source root after the shared Taskarian patch series. Pristine
 source is never modified in place. `agent/packaging/office/termux.py` applies
 zero-fuzz patches in an external build directory and replaces only the explicit
 `@TERMUX_PREFIX@` build placeholder.
@@ -39,7 +39,7 @@ original MPL-2.0/Apache-2.0 notices. These rebased source changes are MPL-2.0.
 - `0003-optional-native-pam-build.patch`: exposes a configure switch for the
   server's **existing** no-PAM branch. Android has no Linux PAM development
   headers. An attempted PAM login still fails closed; normal WOPI and
-  BashKitten authentication retain their owners. The admin console is disabled
+  Taskarian authentication retain their owners. The admin console is disabled
   in the host's native configuration.
 
 - `0004-native-meson-cross-build.patch`: feeds the existing Meson cross files
@@ -156,8 +156,8 @@ private-directory writes succeeded, unrelated reads/truncation failed with
 Both full engine configurations passed; target compilation remains under active
 verification. This is not a complete native `coolwsd`/kit/engine runtime pass or
 installed product acceptance. Evidence and build logs stay outside the checkout
-under `BashkittenBuild/verification/office-port-20261028` and
-`BashkittenBuild/components/office/termux-*`.
+under `TaskarianBuild/verification/office-port-20261028` and
+`TaskarianBuild/components/office/termux-*`.
 
 The focused x86_64 native NSS and Python/libffi build targets also passed.
 `_multiprocessing` and `_posixshmem` are retained. The reused semaphore library

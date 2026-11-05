@@ -19,7 +19,7 @@ def browser_guide(text, target):
     text = re.sub(r'^description: .*$', 'description: ' + json.dumps(description), text, count=1, flags=re.M)
     if target == 'linux':
         changes = [
-            ('# BashKitten desktop browser', '# Browser'),
+            ('# Taskarian desktop browser', '# Browser'),
             ('Use this skill for the **connected browser**, not for the computer running the\nagent. The browser may be remote. A Linux agent can be connected to Android;\nthat connection requires the Android skill instead.', 'Use this skill for the **connected browser**. Start with `capabilities`; if\nits `browserGuide` differs from this file, read that guide before acting.'),
             ('Check `platform` and `methods`. Continue here only for `platform:"linux"`.\nPi adds `browserGuide`, the absolute path to the matching skill on the Pi host.', 'Check `methods` and `browserGuide`, the absolute path to the connected\nbrowser’s guide on the Pi host.'),
             ('once; do not repeatedly load help. `help` is implemented by the Pi extension,\nnot by the native browser dispatcher. It has no topic parameter.', 'once; do not repeatedly load help. It has no topic parameter.'),
@@ -35,7 +35,7 @@ def browser_guide(text, target):
         heading = '### Local shell entry point for agents without Pi tools'
     else:
         changes = [
-            ('# BashKitten Android browser', '# Browser'),
+            ('# Taskarian Android browser', '# Browser'),
             ("Use this skill for the **connected Android browser**, including a browser\ncontrolled remotely by Pi running on Linux. The agent host's OS does not select\nthe skill. This is browser-page automation, not phone-wide Android UI control.", 'Use this skill for the **connected browser**. Start with `capabilities`; if\nits `browserGuide` differs from this file, read that guide before acting.\nThis is browser-page automation, not phone-wide UI control.'),
             ("Check `platform`, `methods`, authorization and foreground information. Use\nthis guide for `android` or the help mapper's `termux` alias, not for `linux`.\nPi adds `browserGuide`, an absolute skill path on the Pi host.", 'Check `methods`, authorization, foreground information and `browserGuide`,\nthe absolute path to the connected browser’s guide on the Pi host.'),
             ('request help. `help` is a Pi-extension operation, not an Android browser\nmethod, and has no topic parameter.', 'request help. It has no topic parameter.'),
@@ -68,11 +68,11 @@ def browser_guide(text, target):
 def search_guide(text):
     changes = [
         ('name: web-search', 'name: websearch'),
-        ('using bashkitten-search.', 'using websearch.'),
+        ('using taskarian-search.', 'using websearch.'),
         ('### Use the shell helper, not a browser command', '### Send one search or URL request'),
-        ("Run `bashkitten-search` through Pi's `bash` tool, or another coding agent's\nshell tool. Linux and Android/Termux use the same command and JSON contract.\nThe command runs on the agent's host, not necessarily the browser's device.", 'Use the `websearch` tool. It runs on the agent’s host, which may differ\nfrom the browser’s device.'),
+        ("Run `taskarian-search` through Pi's `bash` tool, or another coding agent's\nshell tool. Linux and Android/Termux use the same command and JSON contract.\nThe command runs on the agent's host, not necessarily the browser's device.", 'Use the `websearch` tool. It runs on the agent’s host, which may differ\nfrom the browser’s device.'),
         ('Send exactly one JSON object on standard input, then close standard input.', 'Send exactly one JSON object per tool call.'),
-        ('Do not pass command-line arguments. In the current implementation, even\n`--help` is rejected. There is no search `method: "help"`, help topic, or\nseparately registered `bashkitten_search` Pi tool. This skill is the usage guide.', 'This skill is the complete usage guide; there is no `method` or help topic.'),
+        ('Do not pass command-line arguments. In the current implementation, even\n`--help` is rejected. There is no search `method: "help"`, help topic, or\nseparately registered `taskarian_search` Pi tool. This skill is the usage guide.', 'This skill is the complete usage guide; there is no `method` or help topic.'),
         ('Check the shell exit status and the returned `ok` field.', 'Check the tool error state and returned `ok` field.'),
         ('The command writes one JSON response to stdout. Converter diagnostics may appear\non stderr; they are not another response. Read the JSON rather than guessing\nsuccess from a log message.', 'The tool returns one JSON response. Read it rather than guessing success\nfrom a diagnostic message.'),
         ('A nonzero exit is also failure, even when the error\nmessage says no results were found.', 'A tool error is also failure, even when the message says no results were found.'),
@@ -80,12 +80,12 @@ def search_guide(text):
         ('Run each `sh` block as one shell command. Each command submits one request.\nKeep the quoted `<<\'JSON\'` delimiter: it prevents shell expansion within the\nrequest. Still encode quotes and newlines as valid JSON. For programmatically\nconstructed input, use a JSON serializer instead of shell interpolation.', 'Each JSON block below is one complete `websearch` tool call.'),
         ("A shell\nrunner's own timeout is separate and can terminate the command sooner.", 'Cancellation can terminate the request sooner.'),
         ('This command does not save the', 'This call does not save the'),
-        ('not input to\n`bashkitten-search`.', 'not input to\n`websearch`.'),
+        ('not input to\n`taskarian-search`.', 'not input to\n`websearch`.'),
         ('Another coding agent should use its corresponding local-file reader. Do not\nresubmit', 'Do not resubmit'),
     ]
     for old, new in changes:
         text = replace(text, old, new)
-    text, count = re.subn(r"```sh\nbashkitten-search <<'JSON'\n(.*?)\nJSON\n```", r'```json\n\1\n```', text, flags=re.S)
+    text, count = re.subn(r"```sh\ntaskarian-search <<'JSON'\n(.*?)\nJSON\n```", r'```json\n\1\n```', text, flags=re.S)
     if count != 15:
         raise ValueError('Review changed websearch examples before packaging')
     return text
@@ -95,7 +95,7 @@ def browser_debug_guide(text, target):
     text = replace(text, f'name: browser-debugging-{target}', 'name: browser-debugging')
     description = 'Debug ordinary browser pages: responsive/mobile emulation, page diagnostics and controlled test state. Start with browser_debug capabilities and its browserDebugGuide.'
     text = re.sub(r'^description: .*$', 'description: ' + json.dumps(description), text, count=1, flags=re.M)
-    title = '# BashKitten desktop browser debugging' if target == 'linux' else '# BashKitten Android browser debugging'
+    title = '# Taskarian desktop browser debugging' if target == 'linux' else '# Taskarian Android browser debugging'
     text = replace(text, title, '# Browser debugging')
     heading = '### Local shell entry point for agents without Pi tools' if target == 'linux' else '### Local Termux entry point for agents without Pi tools'
     start = text.index(heading)
@@ -142,7 +142,7 @@ def curate(root, target):
     package['pi']['skills'] = [renamed.get(value, value) for value in package['pi']['skills']
                                if value not in omitted]
     package['pi']['skills'].extend(['./desktop-guides/termux-use', './desktop-guides/computer-use'])
-    package['bashkitten'] = {**package.get('bashkitten', {}), 'browserGuides': guides, 'browserDebugGuides': debug_guides}
+    package['taskarian'] = {**package.get('taskarian', {}), 'browserGuides': guides, 'browserDebugGuides': debug_guides}
     package_file.write_text(json.dumps(package, indent=2) + '\n')
 
 

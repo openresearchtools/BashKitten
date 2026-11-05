@@ -321,7 +321,7 @@ Prompter.prototype = {
   },
 
   /**
-   * BashKitten: like confirmEx, but with a second optional, labeled checkbox.
+   * Taskarian: like confirmEx, but with a second optional, labeled checkbox.
    *
    * @param {mozIDOMWindowProxy} domWin - The parent window or null.
    * @param {string} title - Text to appear in the title of the dialog.
@@ -1536,7 +1536,7 @@ class ModalPrompter {
     return args.buttonNumClicked;
   }
 
-  // BashKitten: like confirmEx, but with a second optional, labeled checkbox.
+  // Taskarian: like confirmEx, but with a second optional, labeled checkbox.
   confirmEx2(
     title,
     text,

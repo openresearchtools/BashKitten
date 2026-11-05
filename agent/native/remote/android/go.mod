@@ -1,9 +1,9 @@
-module github.com/openresearchtools/bashkitten/remote/androidbuild
+module github.com/openresearchtools/Taskarian/remote/androidbuild
 
 go 1.27.0
 
 require (
-	github.com/openresearchtools/bashkitten/remote v0.0.0
+	github.com/openresearchtools/Taskarian/remote v0.0.0
 	golang.org/x/mobile v0.0.0-20260908204917-8b95e45f8d3e
 )
 
@@ -18,7 +18,7 @@ tool (
 	golang.org/x/mobile/cmd/gomobile
 )
 
-replace github.com/openresearchtools/bashkitten/remote => ..
+replace github.com/openresearchtools/Taskarian/remote => ..
 
 replace golang.org/x/mobile => ../../../../auth/mobile
 

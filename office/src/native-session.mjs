@@ -159,7 +159,7 @@ export class NativeOfficeSession extends EventEmitter {
       result.catch(() => {});
       const timeout = this.waitFor(message => message.startsWith('executescriptresult:') && jsonAfter(message, 'executescriptresult:').id === id, { signal });
       try {
-        this.send('executescript ' + id + ' 1 bashkitten-office-native\n' + script); sent = true;
+        this.send('executescript ' + id + ' 1 taskarian-office-native\n' + script); sent = true;
         await timeout;
         return await result;
       } catch (error) {

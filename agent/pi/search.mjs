@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 // One adapter for the existing packaged query-or-URL interface. Validation,
 // extraction, saved Markdown and cancellation stay with the same helper.
-const helper = fileURLToPath(new URL('../search/bashkitten-search', import.meta.url));
+const helper = fileURLToPath(new URL('../search/taskarian-search', import.meta.url));
 export function searchWeb(value, signal) {
   return new Promise((resolve, reject) => {
     const child = spawn(helper, [], { signal, stdio: ['pipe', 'pipe', 'inherit'] });

@@ -212,7 +212,7 @@ export class NetErrorParent extends EscapablePageParent {
         ) {
           Services.obs.notifyObservers(
             this.browser,
-            "bashkitten-onion-authorization-needed",
+            "taskarian-onion-authorization-needed",
             error
           );
         }

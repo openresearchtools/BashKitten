@@ -487,7 +487,7 @@ nsBrowserContentHandler.prototype = {
   /* nsICommandLineHandler */
   handle: function bch_handle(cmdLine) {
     if (
-      AppConstants.MOZ_APP_NAME === "bashkitten" &&
+      AppConstants.MOZ_APP_NAME === "taskarian" &&
       AppConstants.platform === "linux"
     ) {
       const { DesktopLifetime } = ChromeUtils.importESModule(
@@ -724,9 +724,9 @@ nsBrowserContentHandler.prototype = {
       "  --new-window <url> Open <url> in a new window.\n" +
       "  --new-tab <url>    Open <url> in a new tab.\n" +
       "  --private-window [<url>] Open <url> in a new private window.\n";
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
       info =
-        "  --browser          Open or focus BashKitten.\n" +
+        "  --browser          Open or focus Taskarian.\n" +
         "  --new-window <url> Open <url> in a new tab.\n" +
         "  --new-tab <url>    Open <url> in a new tab.\n" +
         "  --private-window [<url>] Open <url> in a new private tab.\n";

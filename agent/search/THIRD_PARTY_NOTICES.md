@@ -1,6 +1,6 @@
 # Search notices
 
-BashKitten Search adapts Buzzard Search commit
+Taskarian Search adapts Buzzard Search commit
 `05721962dd11c7506286ecc9aa5b35f6fc4828d0`, copyright 2026 its contributors,
 under AGPL-3.0-only. The full license is in `LICENSE`; original selected-file
 hashes and adaptations are in `third_party/buzzard-search.json`.
@@ -14,7 +14,7 @@ licenses list this separately as **Unsloth Studio — adapted search and page re
 Only selected search/read code is retained; its original dependency versions
 describe that historical source, not the current packaged runtime.
 
-OpenResearchTools modified the extracted code for BashKitten on 23 September
+OpenResearchTools modified the extracted code for Taskarian on 23 September
 2026: one DDGS query-or-URL command and native Pi skill; packaged Linux/Termux
 Python dependencies; private persistent Markdown files; complete extraction
 before the 16,000-character inline preview; removal of hard download/extraction
@@ -65,7 +65,7 @@ Both Linux runtime/source assemblies pass retained-source checks and full-notice
 generation. The amd64 Python 3.14 native imports, upstream PDF-to-Markdown,
 XML, IDNA, certificate-bundle and HTTP-request preparation diagnostics pass;
 the unchanged Termux source staging and Bionic DNS patch dry-run also pass.
-These are component checks, not installed BashKitten acceptance. Installed
+These are component checks, not installed Taskarian acceptance. Installed
 Linux/Android search and PDF flows, arm64 native execution and traffic checks
 remain required against the combined candidate. No helper behavior, SDK,
 telemetry integration or dependency extras are added by this refresh.

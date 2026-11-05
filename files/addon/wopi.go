@@ -1,6 +1,6 @@
 // Adapted from Quantum fd64a47 backend/internal/web/wopi.go (Apache-2.0).
 // Native protocol dispatch is retained; file/user globals become the private
-// BashKitten owner callback. See UPSTREAM.md for the exact extraction boundary.
+// Taskarian owner callback. See UPSTREAM.md for the exact extraction boundary.
 package main
 
 import (

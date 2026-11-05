@@ -262,8 +262,8 @@ class DownloadsFeature(
         val apps = getDownloaderApps(applicationContext, download)
         // We only show the dialog If we have multiple apps that can handle the download.
         val shouldShowAppDownloaderDialog = !shouldSkipConfirmation(tab.id) &&
-            !tab.contextId.orEmpty().startsWith("bashkitten-tor-") &&
-            !tab.contextId.orEmpty().startsWith("bashkitten-agent-ui-") &&
+            !tab.contextId.orEmpty().startsWith("taskarian-tor-") &&
+            !tab.contextId.orEmpty().startsWith("taskarian-agent-ui-") &&
             shouldForwardToThirdParties() && apps.size > 1
 
         return if (shouldShowAppDownloaderDialog) {

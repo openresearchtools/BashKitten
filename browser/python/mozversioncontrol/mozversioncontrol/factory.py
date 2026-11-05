@@ -120,10 +120,10 @@ def get_repository_object(path: Optional[Union[str, Path]]):
             return JujutsuRepository(path)
 
     if (path / ".git").exists() or (
-        (path / "bashkitten" / "config" / "version.txt").is_file()
+        (path / "taskarian" / "config" / "version.txt").is_file()
         and (path.parent / ".git").exists()
     ):
-        # BashKitten keeps Gecko in browser/ within the product repository.
+        # Taskarian keeps Gecko in browser/ within the product repository.
         # Keep this path as the source root; Git resolves the parent metadata.
         return GitRepository(path)
     if (path / "config" / "milestone.txt").exists():

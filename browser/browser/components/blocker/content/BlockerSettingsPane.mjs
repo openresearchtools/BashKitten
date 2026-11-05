@@ -6,15 +6,15 @@ import { SettingPaneManager } from "chrome://browser/content/preferences/config/
 
 SettingPaneManager.registerPanes({
   adBlocking: {
-    l10nId: "bashkitten-blocker-pane-header",
+    l10nId: "taskarian-blocker-pane-header",
     iconSrc: "chrome://browser/content/blocker/blockerShield.svg",
     groupIds: [
-      "bashkittenBlocker",
-      "bashkittenBlockerLists",
-      "bashkittenBlockerExceptions",
+      "taskarianBlocker",
+      "taskarianBlockerLists",
+      "taskarianBlockerExceptions",
     ],
     module: "chrome://browser/content/blocker/blockerSettings.mjs",
     visible: () =>
-      Services.prefs.getBoolPref("bashkitten.blocker.ui.enabled", true),
+      Services.prefs.getBoolPref("taskarian.blocker.ui.enabled", true),
   },
 });

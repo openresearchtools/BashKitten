@@ -13,6 +13,6 @@ test -s internal/server/public_html/index.html
 test -d internal/server/public_html/static
 mkdir -p "$(dirname "$output")"
 export GOTELEMETRY=off GOTOOLCHAIN=local
-go build -p "${BASHKITTEN_BUILD_JOBS:-2}" -buildmode=pie -buildvcs=false -mod=readonly -trimpath \
-  -ldflags="-linkmode=external -s -w -X github.com/authelia/authelia/v4/internal/utils.BuildTag=v$version -X github.com/authelia/authelia/v4/internal/utils.BuildCommit=$commit -X github.com/authelia/authelia/v4/internal/utils.BuildBranch=release -X 'github.com/authelia/authelia/v4/internal/utils.BuildState=tagged clean' -X github.com/authelia/authelia/v4/internal/utils.BuildExtra=bashkitten" \
+go build -p "${TASKARIAN_BUILD_JOBS:-2}" -buildmode=pie -buildvcs=false -mod=readonly -trimpath \
+  -ldflags="-linkmode=external -s -w -X github.com/authelia/authelia/v4/internal/utils.BuildTag=v$version -X github.com/authelia/authelia/v4/internal/utils.BuildCommit=$commit -X github.com/authelia/authelia/v4/internal/utils.BuildBranch=release -X 'github.com/authelia/authelia/v4/internal/utils.BuildState=tagged clean' -X github.com/authelia/authelia/v4/internal/utils.BuildExtra=taskarian" \
   -o "$output" ./cmd/authelia

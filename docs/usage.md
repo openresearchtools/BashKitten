@@ -1,6 +1,6 @@
-# Using BashKitten
+# Using Taskarian
 
-BashKitten is a Firefox-based browser with a protected Agent view for stock
+Taskarian is a Firefox-based browser with a protected Agent view for stock
 Pi 1.0.2. Linux packages include the browser and server; Android runs the server
 in ordinary Termux. Current releases are for testing and are not ready for
 production; see the [README](../README.md).
@@ -9,22 +9,22 @@ production; see the [README](../README.md).
 
 On Linux, install the complete package for your architecture from the
 [Open Research Tools package repository](https://github.com/openresearchtools/apt).
-Launch **BashKitten**, select **Agent → Local**, and use **Turn on**.
+Launch **Taskarian**, select **Agent → Local**, and use **Turn on**.
 
-On Android, install the signed `com.bashkitten` APK from
-[Releases](https://github.com/openresearchtools/bashkitten/releases). Local setup
+On Android, install the signed `com.taskarian` APK from
+[Releases](https://github.com/openresearchtools/Taskarian/releases). Local setup
 offers the official Termux download if needed. Open Termux to complete its
-bootstrap, then paste the single command shown by BashKitten. It first upgrades
+bootstrap, then paste the single command shown by Taskarian. It first upgrades
 all Termux packages through APT, then downloads our
-[setup script](https://github.com/openresearchtools/BashKitten/blob/main/agent/packaging/termux/install.sh).
-The script installs the verified repository keyring and `bashkitten` with its
+[setup script](https://github.com/openresearchtools/Taskarian/blob/main/agent/packaging/termux/install.sh).
+The script installs the verified repository keyring and `taskarian` with its
 declared dependencies. It enables the external-command bridge and
-returns to BashKitten. Allow Android's request to run commands in Termux;
-BashKitten verifies the connection and starts Agent automatically. There is no
+returns to Taskarian. Allow Android's request to run commands in Termux;
+Taskarian verifies the connection and starts Agent automatically. There is no
 separate Connect or Install packages step. Existing compatible Termux can be
 used; no Termux:API, Termux:X11 APK, root or ADB is required.
 
-For an existing Android installation, install the APK and open it. BashKitten
+For an existing Android installation, install the APK and open it. Taskarian
 automatically upgrades or downgrades its owned Termux packages to that APK's
 exact versions before starting Local. **Configuration → Updates** shows progress,
 offers package repair and checks general Termux package updates. Provider logins,
@@ -37,10 +37,10 @@ checks from working. If APT also fails, retain the exact error for diagnosis;
 do not delete Termux data or disable HTTPS verification.
 See [Termux's library recovery guidance](https://github.com/termux/termux-packages/wiki/Termux-execution-environment#package-dependencies-are-outdated).
 
-Turn on requests missing background battery access for BashKitten and, for Local,
+Turn on requests missing background battery access for Taskarian and, for Local,
 Termux. Approve Android's dialog to continue. Cancellation leaves a visible retry
 or **Continue with battery restrictions** choice. Already allowed apps are
-skipped; remote-only use requests access for BashKitten alone.
+skipped; remote-only use requests access for Taskarian alone.
 
 For local Termux on Android 14+, also enable **Developer options → Disable child
 process restrictions** and keep Developer options enabled. If hidden, tap
@@ -93,12 +93,12 @@ are inside Termux home, displayed as `~`.
 - **Local → LocalAI → Models** saves selected Hugging Face files to the local
   host's models directory. Android runs these models natively inside Termux.
 
-Pi supplies tools, extensions, skills, models and compaction. BashKitten uses its
-own Pi profile at `~/.local/share/bashkitten-pi/pi`, including provider/OAuth
+Pi supplies tools, extensions, skills, models and compaction. Taskarian uses its
+own Pi profile at `~/.local/share/Taskarian/pi`, including provider/OAuth
 credentials, settings, models, extensions, packages, themes, prompts and native
 session history. It does not import or update standalone Pi's `~/.pi/agent`.
-Inside BashKitten's agent shells, `pi install` uses this private runtime and
-profile. From an ordinary terminal, use `bashkitten-pi install` for BashKitten;
+Inside Taskarian's agent shells, `pi install` uses this private runtime and
+profile. From an ordinary terminal, use `taskarian-pi install` for Taskarian;
 an independently installed `pi` keeps its own profile.
 Browser and search skills ship in the integration package. The browser guide
 matches the authorized client platform.
@@ -112,7 +112,7 @@ reported explicitly until its matching package is installed.
 
 Files uses File Browser Quantum directly on the existing folder. Office documents
 open from that web UI in Collabora Online; PDFs use normal browser PDF tabs.
-These web apps use HTTPS through the owning BashKitten connection. The old
+These web apps use HTTPS through the owning Taskarian connection. The old
 internal file tree, spreadsheet grid and PDF conversion viewer are removed.
 The backend starts each shared component on first use and keeps its data outside
 project folders; it does not create another server for each chat or tab.
@@ -137,7 +137,7 @@ The verified list starts with the smallest files and includes Qwen3.5 0.8B, 2B
 and 4B, with Q4_0 and Q4_K_M choices. **Use** adds the actual downloaded path to
 the router INI; **Reload** applies it. **Keep router available while Agent is on**
 starts the server without eagerly loading models. The saved Pi import checkbox
-updates only BashKitten's owned provider; existing/default chat selections stay
+updates only Taskarian's owned provider; existing/default chat selections stay
 unchanged. Android path fields refer to Termux files, not Android shared storage.
 
 Whisper and Parakeet use the same single microphone beside Send. Click to record,
@@ -183,7 +183,7 @@ authenticated llama.cpp endpoint and browser loopback relay.
 Tools control ordinary tabs, including containers, private and Tor tabs. They
 cannot inspect the protected Agent/authentication views. Android requests native
 approval when Termux first controls the browser; this is separate from permission
-for BashKitten to command Termux. Remote Agent control of the client browser
+for Taskarian to command Termux. Remote Agent control of the client browser
 requires its own native approval.
 
 ## Power and storage
@@ -199,32 +199,32 @@ Wake locks do not prevent Android from killing an app under memory pressure or
 after force-stop. Reopening reconciles actual services. Explicit Turn off stays
 off during that app run; a fresh user launch defaults to Turn on.
 
-Server data defaults to `~/.local/share/bashkitten-pi/`;
-`BASHKITTEN_DATA_DIR` overrides it, including the `pi/` profile beneath it.
-BashKitten sets Pi's supported directory environment variables for every SDK,
+Server data defaults to `~/.local/share/Taskarian/`;
+`TASKARIAN_DATA_DIR` overrides it, including the `pi/` profile beneath it.
+Taskarian sets Pi's supported directory environment variables for every SDK,
 CLI, package operation and worker; inherited standalone Pi directory overrides
 do not select its profile. No existing credentials or extensions are copied.
 Installed desktop and Termux packages bundle their own Node 24 LTS and npm.
 Their launchers and all Pi workers use that native executable; a missing private
 runtime is an installation error. A development checkout uses its current Node.
-BashKitten-owned npm configuration lives at `pi/npm-config/{user,global}.npmrc`,
+Taskarian-owned npm configuration lives at `pi/npm-config/{user,global}.npmrc`,
 its cache at `pi/npm-cache/`, and the default global prefix at `pi/npm/` beneath
 the data directory. Inherited npm routing overrides and Node module/preload
 settings are cleared for child processes. Standalone `~/.npmrc`, system npm
 configuration and another Pi installation are not imported.
 The private runtime, its `pi` launcher and `pi/npm/bin` are first on the Agent's
-PATH. `pi install` uses BashKitten's selected Pi runtime even when another Pi is
+PATH. `pi install` uses Taskarian's selected Pi runtime even when another Pi is
 installed on the host. Development checkouts supply an owned `pi/bin/pi` shim. Ordinary
 `npm install -g` installs tools privately. Pi's own user package manager installs
 extensions under `pi/npm/node_modules`; trusted project dependencies and project
 configuration still belong to the selected project. This is not a shell sandbox:
 explicit package arguments and normal project `.npmrc` files retain npm behavior.
 Native npm addons use the bundled headers and private `npm-cache/node-gyp`
-cache. Node/npm itself is updated with BashKitten, while the package panel's npm updates
+cache. Node/npm itself is updated with Taskarian, while the package panel's npm updates
 cover tools in the private global prefix.
 
 Project-local Pi resources still belong to the selected project. Pi keeps its
-session files; BashKitten stores sidebar metadata,
+session files; Taskarian stores sidebar metadata,
 attachments and access-stack state separately. Removing a sidebar entry does not
 delete native Pi history or attachments.
 
@@ -233,7 +233,7 @@ delete native Pi history or attachments.
 Source lives under `agent/src/web/`, `agent/src/server/`, `browser/` and `auth/`.
 Install locked Node dependencies from `agent/` with `npm ci --ignore-scripts`
 (Node 24 LTS recommended; minimum 22.19). A checkout alone does not supply native authentication/search
-binaries. Use complete packages for ordinary setup; `bashkittenctl start`,
+binaries. Use complete packages for ordinary setup; `taskarianctl start`,
 `status` and `stop` control a packaged standalone server.
 
 See [packaging](../agent/packaging/README.md) for GitHub Actions builds and the

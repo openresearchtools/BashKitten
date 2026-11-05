@@ -991,16 +991,16 @@
   mirror: once
 
 #---------------------------------------------------------------------------
-# Prefs starting with "bashkitten."
+# Prefs starting with "taskarian."
 #---------------------------------------------------------------------------
 
 # Native context IDs shared by Tor channel routing and direct-transport guards.
-- name: bashkitten.tor.containerId
+- name: taskarian.tor.containerId
   type: RelaxedAtomicUint32
   value: 0
   mirror: always
 
-- name: bashkitten.tor.persistentContainerId
+- name: taskarian.tor.persistentContainerId
   type: RelaxedAtomicUint32
   value: 0
   mirror: always

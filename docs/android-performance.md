@@ -10,7 +10,7 @@ a separate **Total CPU** row. Its absence never substitutes a workload number
 for the system total.
 
 RAM uses Android's `ActivityManager.MemoryInfo`: total memory minus available
-memory, displayed as used/total decimal GB. **Workload CPU** covers BashKitten's
+memory, displayed as used/total decimal GB. **Workload CPU** covers Taskarian's
 launched backend workloads, not whole-device CPU. GPU requires a readable driver
 utilization counter. A missing or forbidden counter produces **—**, not zero,
 load average, clock frequency, offloaded-layer count or inferred utilization.
@@ -86,7 +86,7 @@ uses the virtual gfxstream GPU, not either of those physical drivers. The
 service-launched command ran in `untrusted_app_27`, the real Termux application
 domain, rather than `runas_app`. These observations establish the limitation of
 that app context; they do not establish physical Pixel or Qualcomm runtime
-coverage. The installed release BashKitten APK does not permit `run-as`.
+coverage. The installed release Taskarian APK does not permit `run-as`.
 
 The permission audit also exercised the actual Termux service before and after
 these authorized ADB grants, without modifying the APK or kernel:

@@ -1,5 +1,5 @@
 TERMUX_PKG_HOMEPAGE=https://www.authelia.com/
-TERMUX_PKG_DESCRIPTION="BashKitten private native Authelia authentication server"
+TERMUX_PKG_DESCRIPTION="Taskarian private native Authelia authentication server"
 TERMUX_PKG_LICENSE="Apache-2.0"
 TERMUX_PKG_MAINTAINER="openresearchtools <openresearchtools@gmail.com>"
 TERMUX_PKG_VERSION=4.39.28
@@ -9,7 +9,7 @@ TERMUX_PKG_AUTO_UPDATE=false
 
 termux_step_make() {
 	termux_setup_golang
-  source "$BASHKITTEN_SOURCE_ROOT/auth/build/go-env.sh"
+  source "$TASKARIAN_SOURCE_ROOT/auth/build/go-env.sh"
 	case "$TERMUX_ARCH" in
 	  aarch64) export GOARCH=arm64 ;;
 	  x86_64) export GOARCH=amd64 ;;
@@ -19,16 +19,16 @@ termux_step_make() {
 	export CGO_CFLAGS="$CFLAGS" CGO_CPPFLAGS="$CPPFLAGS"
 	export CGO_LDFLAGS="$LDFLAGS -Wl,-z,max-page-size=16384"
 	local output="$TERMUX_PKG_BUILDDIR/authelia"
-	bash "$BASHKITTEN_SOURCE_ROOT/auth/build/authelia-go.sh" "$TERMUX_PKG_SRCDIR" "$output"
+	bash "$TASKARIAN_SOURCE_ROOT/auth/build/authelia-go.sh" "$TERMUX_PKG_SRCDIR" "$output"
 	$CC $CPPFLAGS $CFLAGS -std=c11 -Wall -Wextra -Werror -O2 \
-		"$BASHKITTEN_SOURCE_ROOT/agent/src/server/access/runtime-guard.c" \
+		"$TASKARIAN_SOURCE_ROOT/agent/src/server/access/runtime-guard.c" \
 		$LDFLAGS -Wl,-z,max-page-size=16384 -o "$TERMUX_PKG_BUILDDIR/runtime-guard"
 }
 
 termux_step_make_install() {
-	local payload="$TERMUX_PREFIX/lib/bashkitten/auth"
+	local payload="$TERMUX_PREFIX/lib/taskarian/auth"
 	install -Dm755 "$TERMUX_PKG_BUILDDIR/authelia" "$payload/bin/authelia"
 	install -Dm755 "$TERMUX_PKG_BUILDDIR/runtime-guard" "$payload/bin/runtime-guard"
-	python3 "$BASHKITTEN_SOURCE_ROOT/auth/build/go-notices.py" "$TERMUX_PKG_SRCDIR" "$payload" authelia
-	cp -a "$TERMUX_PKG_SRCDIR/.bashkitten-frontend/share" "$payload/"
+	python3 "$TASKARIAN_SOURCE_ROOT/auth/build/go-notices.py" "$TERMUX_PKG_SRCDIR" "$payload" authelia
+	cp -a "$TERMUX_PKG_SRCDIR/.taskarian-frontend/share" "$payload/"
 }

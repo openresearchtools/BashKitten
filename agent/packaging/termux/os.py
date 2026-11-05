@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Build BashKitten OS using the pinned native Termux framework and recipe."""
+"""Build Taskarian OS using the pinned native Termux framework and recipe."""
 import argparse,hashlib,json,os,pathlib,shutil,subprocess,sys,tarfile
 ROOT=pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0,str(ROOT/'agent/packaging'))
@@ -17,7 +17,7 @@ def prepare_framework(work,archive,checksum):
  # Keep each pinned framework separate. A build-package.sh from an older
  # release is not evidence that the cached recipes match the current lock.
  framework=work/('framework-'+checksum[:16])
- marker=framework/'.bashkitten-source-sha256'
+ marker=framework/'.taskarian-source-sha256'
  if framework.exists() and (not marker.is_file() or marker.read_text().strip()!=checksum):
   raise ValueError('Incomplete or mismatched Termux framework cache: '+str(framework))
  if not framework.exists():
@@ -51,20 +51,20 @@ def main():
  lock=json.loads((ROOT/'agent/packaging/node/lock.json').read_text())['termux']['recipes']
  archive=fetch(lock,local=ROOT/'agent/vendor/node'/(lock['sha256']+'-'+lock['url'].rsplit('/',1)[-1]))
  framework=prepare_framework(work,archive,lock['sha256'])
- recipe=framework/'x11-packages/bashkitten-os';recipe.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/'os/packaging/termux/build.sh',recipe/'build.sh')
+ recipe=framework/'x11-packages/taskarian-os';recipe.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/'os/packaging/termux/build.sh',recipe/'build.sh')
  cache=work/'build-cache';cache.mkdir(exist_ok=True)
  data=work/'data';data.mkdir(exist_ok=True)
- container='bashkitten-os-'+a.architecture+'-'+lock['sha256'][:16]
+ container='taskarian-os-'+a.architecture+'-'+lock['sha256'][:16]
  ndk_pin=json.loads((ROOT/'agent/packaging/node/lock.json').read_text())['termux']['dependency_sources']['libc++']
  ndk_archive=fetch(ndk_pin,local=work/'android-ndk-r30-linux.zip')
  ndk=work/'android-ndk-r30'
  if not (ndk/'source.properties').is_file():subprocess.run(['unzip','-q',str(ndk_archive),'-d',str(work)],check=True)
  image=json.loads((ROOT/'auth/build/termux-toolchain.json').read_text())['builderImage']
  env={**os.environ,'TERMUX_BUILDER_IMAGE_NAME':image,'CONTAINER_NAME':container,
-  'TERMUX_DOCKER_RUN_EXTRA_ARGS':'--volume '+str(ROOT)+':/bashkitten:ro --volume '+str(ndk)+':/home/builder/lib/android-ndk-r30:ro --volume '+str(cache)+':/home/builder/.termux-build:rw --volume '+str(data)+':/data:rw',
-  'TERMUX_DOCKER_EXEC_EXTRA_ARGS':'--env BASHKITTEN_SOURCE_ROOT=/bashkitten --env GOTELEMETRY=off --env DO_NOT_TRACK=1'}
- subprocess.run(['./scripts/run-docker.sh','./build-package.sh','-I','-f','-a',a.architecture,'bashkitten-os'],cwd=framework,env=env,check=True)
- version=(ROOT/'browser/bashkitten/config/version.txt').read_text().strip()+'-1';deb=framework/'output'/f'bashkitten-os_{version}_{a.architecture}.deb'
+  'TERMUX_DOCKER_RUN_EXTRA_ARGS':'--volume '+str(ROOT)+':/taskarian:ro --volume '+str(ndk)+':/home/builder/lib/android-ndk-r30:ro --volume '+str(cache)+':/home/builder/.termux-build:rw --volume '+str(data)+':/data:rw',
+  'TERMUX_DOCKER_EXEC_EXTRA_ARGS':'--env TASKARIAN_SOURCE_ROOT=/taskarian --env GOTELEMETRY=off --env DO_NOT_TRACK=1'}
+ subprocess.run(['./scripts/run-docker.sh','./build-package.sh','-I','-f','-a',a.architecture,'taskarian-os'],cwd=framework,env=env,check=True)
+ version=(ROOT/'browser/taskarian/config/version.txt').read_text().strip()+'-1';deb=framework/'output'/f'taskarian-os_{version}_{a.architecture}.deb'
  if not deb.is_file():raise ValueError('Missing native Termux OS package')
  out.mkdir(parents=True,exist_ok=True);target=out/deb.name;shutil.copy2(deb,target)
  record={'sourceCommit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'version':version,'architecture':a.architecture,'target':'termux','file':deb.name,'sha256':hashlib.sha256(deb.read_bytes()).hexdigest(),'framework':lock,'ndk':ndk_pin}

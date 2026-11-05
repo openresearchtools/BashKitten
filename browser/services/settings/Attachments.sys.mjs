@@ -8,8 +8,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   RemoteSettingsWorker:
     "resource://services-settings/RemoteSettingsWorker.sys.mjs",
   Utils: "resource://services-settings/Utils.sys.mjs",
-  BashKittenSettingsPolicy:
-    "resource://services-settings/BashKittenSettingsPolicy.sys.mjs",
+  TaskarianSettingsPolicy:
+    "resource://services-settings/TaskarianSettingsPolicy.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "console", () => lazy.Utils.log);
@@ -185,7 +185,7 @@ export class Downloader {
   async cacheAll(force = false) {
     if (
       lazy.Utils.shouldSkipRemoteActivity ||
-      !lazy.BashKittenSettingsPolicy.canDownloadAttachments(
+      !lazy.TaskarianSettingsPolicy.canDownloadAttachments(
         this.bucketName,
         this.collectionName
       )
@@ -374,7 +374,7 @@ export class Downloader {
     if (
       !avoidDownload &&
       (lazy.Utils.shouldSkipRemoteActivity ||
-        !lazy.BashKittenSettingsPolicy.canDownloadAttachments(
+        !lazy.TaskarianSettingsPolicy.canDownloadAttachments(
           this.bucketName,
           this.collectionName
         ))
@@ -544,7 +544,7 @@ export class Downloader {
   async downloadAsBytes(record, options = {}) {
     if (
       lazy.Utils.shouldSkipRemoteActivity ||
-      !lazy.BashKittenSettingsPolicy.canDownloadAttachments(
+      !lazy.TaskarianSettingsPolicy.canDownloadAttachments(
         this.bucketName,
         this.collectionName
       )

@@ -269,7 +269,7 @@ private fun PoweredByFirefoxItem(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxWidth(),
     ) {
         Image(
-            painter = painterResource(id = R.drawable.bashkitten_logo),
+            painter = painterResource(id = R.drawable.taskarian_logo),
             contentDescription = null,
             modifier = Modifier
                 .size(16.dp)

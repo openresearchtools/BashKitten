@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { autostartConfig, saveAutostart } from '../autostart.mjs';
 
-const guestData = '/home/user/.local/share/bashkitten-pi';
+const guestData = '/home/user/.local/share/Taskarian';
 const pending = record => path.join(record.files.directory, 'autostart.pending.json');
 const stoppedStatus = config => ({ ...config, status: config.commands.map(entry => ({ id: entry.id, state: 'stopped', error: '', savedForNextStart: false })) });
 async function withGuestFile(record, callback) {
@@ -18,7 +18,7 @@ async function withGuestFile(record, callback) {
       descriptors.push(handle); directory = `/proc/self/fd/${handle.fd}`;
     }
     const owner = await descriptors.at(-1).stat();
-    if (owner.uid !== process.getuid() || owner.mode & 0o077) throw Error('The guest BashKitten data directory must be private and owned by its mapped user');
+    if (owner.uid !== process.getuid() || owner.mode & 0o077) throw Error('The guest Taskarian data directory must be private and owned by its mapped user');
     const file = path.join(directory, 'autostart.json');
     const stat = await fs.lstat(file).catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
     if (stat && (!stat.isFile() || stat.uid !== process.getuid() || stat.mode & 0o077)) throw Error('The guest startup configuration must be a private regular file owned by its mapped user');

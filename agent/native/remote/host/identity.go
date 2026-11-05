@@ -1,7 +1,7 @@
-//go:build !bashkitten_client
+//go:build !taskarian_client
 
 // Copyright 2026 The Torkitten Authors (Apache-2.0).
-// BashKitten adaptations: SPDX-License-Identifier: AGPL-3.0-only
+// Taskarian adaptations: SPDX-License-Identifier: AGPL-3.0-only
 
 package host
 
@@ -81,7 +81,7 @@ func NewEnrollmentKeys() (*EnrollmentKeys, error) {
 	if err != nil {
 		return nil, err
 	}
-	block, err := ssh.MarshalPrivateKey(host, "BashKitten Chisel")
+	block, err := ssh.MarshalPrivateKey(host, "Taskarian Chisel")
 	if err != nil {
 		return nil, err
 	}

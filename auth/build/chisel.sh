@@ -10,14 +10,14 @@ if [[ $target == termux-aarch64 || $target == termux-x86_64 ]]; then
   exec "$root/auth/build/termux-component.sh" chisel "$output" "${target#termux-}"
 fi
 case "$target:$(uname -m)" in linux-amd64:x86_64|linux-arm64:aarch64) ;; *) echo "Use a native runner for $target." >&2; exit 2 ;; esac
-work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/bashkitten-chisel.XXXXXX")
+work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/taskarian-chisel.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 cp -a "$root/auth/chisel/." "$work/"
 cd "$work"
 export CGO_ENABLED=0 GOTOOLCHAIN=local GOTELEMETRY=off
 version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["chisel"]["version"])' "$root/auth/upstreams.lock.json")
 mkdir -p "$output/bin"
-go build -p "${BASHKITTEN_BUILD_JOBS:-2}" -mod=readonly -trimpath -buildvcs=false \
+go build -p "${TASKARIAN_BUILD_JOBS:-2}" -mod=readonly -trimpath -buildvcs=false \
   -ldflags="-s -w -X github.com/jpillora/chisel/share.BuildVersion=$version" \
   -o "$output/bin/chisel" .
 install -Dm644 LICENSE "$output/share/licenses/chisel/LICENSE"

@@ -84,7 +84,7 @@ class BrowserNavigationBar(
         // Native Display places these same tab/menu actions in its compact row,
         // including while the IME is open. Custom and ordinary tabs are unchanged.
         val displaySelected = browserStore?.observeAsComposableState {
-            it.selectedTab?.contextId == com.bashkitten.display.DisplayTabs.CONTEXT
+            it.selectedTab?.contextId == com.taskarian.display.DisplayTabs.CONTEXT
         }?.value == true
         if (displaySelected) return
         val uiState by toolbarStore.stateFlow.collectAsState()

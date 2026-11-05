@@ -38,7 +38,7 @@
   }
 }
 
-:host([type="bashkitten-exclusive"]) {
+:host([type="taskarian-exclusive"]) {
   .moz-badge {
     color: var(--badge-text-color-filled);
     background-color: var(--color-accent-primary);

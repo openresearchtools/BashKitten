@@ -5,7 +5,7 @@
 /* import-globals-from preferences.js */
 
 const SyncHelpers =
-  AppConstants.MOZ_APP_NAME == "bashkitten"
+  AppConstants.MOZ_APP_NAME == "taskarian"
     ? null
     : ChromeUtils.importESModule(
         "chrome://browser/content/preferences/config/account-sync.mjs",

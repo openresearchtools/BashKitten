@@ -5,11 +5,11 @@
   "revision": "42745e44dd8530fac7acd5f46cb7571ceea63c6a",
   "release": "cp-26.04.5-2",
   "artwork": {
-    "path": "browser/bashkitten/browser/branding/content/about-logo@2x.png",
+    "path": "browser/taskarian/browser/branding/content/about-logo@2x.png",
     "sha256": "879382cd751bc6bcd784605179149dac8bc078211f67342718ab988893368694"
   },
   "wordmark": {
-    "path": "browser/bashkitten/browser/branding/content/bashkitten-wordmark.svg",
+    "path": "browser/taskarian/browser/branding/content/taskarian-wordmark.svg",
     "sha256": "60b1f9f88040864d3e6e18f0fdd55f177ca3f76556e0a03796c3b2965f130c90",
     "adaptation": "Fix existing light ink for the native light Office UI"
   },
@@ -22,12 +22,12 @@
       "source": "office/branding/ATTRIBUTION.txt",
       "sha256": "95198e70c88361db84d47c8e9ee4a02793ccd12a54b8b88c2df658c35dcab25c"
     },
-    "branding-bashkitten-LICENSE.txt": {
+    "branding-taskarian-LICENSE.txt": {
       "source": "LICENSE",
       "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
     },
     "branding-artwork-LICENSE.txt": {
-      "source": "browser/bashkitten/browser/branding/LICENSE",
+      "source": "browser/taskarian/browser/branding/LICENSE",
       "sha256": "97c01d663782faf22125d54c0c1c153e58302bb846dca9394abca90b4c75a751"
     },
     "branding-online-COPYING.txt": {

@@ -1,4 +1,4 @@
-// Adapted for BashKitten: see ../UPSTREAM.md and patches/.
+// Adapted for Taskarian: see ../UPSTREAM.md and patches/.
 package main
 
 import (

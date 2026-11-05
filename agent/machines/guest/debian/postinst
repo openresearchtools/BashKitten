@@ -5,10 +5,10 @@ set -eu
 if [ "$1" = configure ]; then
     # Existing accepted mount instances can finish their normal auto-unmount
     # lifetime; only stop accepting requests through the removed broker.
-    rm -f /etc/systemd/system/sockets.target.wants/bashkitten-fusermount.socket
+    rm -f /etc/systemd/system/sockets.target.wants/taskarian-fusermount.socket
     if [ -d /run/systemd/system ]; then
-        if systemctl is-active --quiet bashkitten-fusermount.socket; then
-            systemctl stop bashkitten-fusermount.socket
+        if systemctl is-active --quiet taskarian-fusermount.socket; then
+            systemctl stop taskarian-fusermount.socket
         fi
         systemctl daemon-reload
     fi

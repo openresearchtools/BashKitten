@@ -158,12 +158,12 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
         setupToolbarSwipeBehavior(settings, components)
 
         initBrowserToolbarComposableUpdates(view)
-        // Translation models and UI are not shipped by BashKitten.
+        // Translation models and UI are not shipped by Taskarian.
         initIPProtectionOnboarding(context, view)
 
         thumbnailsFeature.set(
             feature = BrowserThumbnails(context, binding.engineView, components.core.store, capture = { callback ->
-                org.mozilla.fenix.bashkitten.captureDisplayedPage(
+                org.mozilla.fenix.taskarian.captureDisplayedPage(
                     binding.engineView.asView(), binding.engineView::captureThumbnail, callback,
                 )
             }),

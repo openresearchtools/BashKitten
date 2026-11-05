@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Taskarian OS desktop session
+Exec=taskarian-os session
+OnlyShowIn=XFCE;
+NoDisplay=true
+X-GNOME-Autostart-Phase=Applications

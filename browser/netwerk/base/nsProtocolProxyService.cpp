@@ -131,9 +131,9 @@ void nsProtocolProxyService::CallOnProxyAvailableCallback(
     loadInfo = aChannel->LoadInfo();
   }
   const bool isolated =
-      loadInfo && loadInfo->GetOriginAttributes().IsBashKittenNetworkIsolated(false);
+      loadInfo && loadInfo->GetOriginAttributes().IsTaskarianNetworkIsolated(false);
   const bool scoped =
-      loadInfo && loadInfo->GetOriginAttributes().IsBashKittenNetworkIsolated();
+      loadInfo && loadInfo->GetOriginAttributes().IsTaskarianNetworkIsolated();
   if (isolated) {
     nsCOMPtr<nsProxyInfo> proxy = do_QueryInterface(aProxyInfo);
     if (!proxy || proxy->IsDirect() || NS_FAILED(aStatus)) {
@@ -2168,7 +2168,7 @@ nsresult nsProtocolProxyService::Resolve_Internal(nsIChannel* channel,
   // Native scoped routes are chosen by channel filters, never by a system PAC
   // script which could resolve or transmit the destination before those filters.
   nsCOMPtr<nsILoadInfo> loadInfo = channel->LoadInfo();
-  if (loadInfo->GetOriginAttributes().IsBashKittenNetworkIsolated()) {
+  if (loadInfo->GetOriginAttributes().IsTaskarianNetworkIsolated()) {
     return NS_OK;
   }
 

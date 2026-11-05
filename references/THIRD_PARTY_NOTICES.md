@@ -1,11 +1,11 @@
 # References source and attribution
 
-References is a BashKitten component built through selective component reuse and
+References is a Taskarian component built through selective component reuse and
 adaptation. It is not the Zotero desktop application or a standard whole-app
 Zotero fork. The [component source map](legal/COMPONENT-ATTRIBUTION.md) identifies
-what was reused, each immutable upstream revision, BashKitten's modifications,
+what was reused, each immutable upstream revision, Taskarian's modifications,
 online/offline adapter source links and the applicable original terms. The same
-map is included in BashKitten's generated offline About/license inventory.
+map is included in Taskarian's generated offline About/license inventory.
 
 References adapts reference-management facilities from the Zotero project,
 https://www.zotero.org/, by the Corporation for Digital Scholarship and the
@@ -15,9 +15,9 @@ The GNU Affero General Public License version 3 or later is reproduced in the
 packaged legal information. References is a separate application boundary;
 the desktop Zotero application is not part of the runtime payload.
 Zotero, Collabora, LibreOffice and other upstream names are attribution and
-compatibility references; BashKitten branding does not imply their endorsement.
+compatibility references; Taskarian branding does not imply their endorsement.
 The components retain their own licenses, including embedded and dual-license
-terms. The BashKitten project license does not replace those individual terms.
+terms. The Taskarian project license does not replace those individual terms.
 
 The native translation engine, complete translators and schema, date and item
 utilities, resolver selection and conservative request queue, and classic
@@ -33,7 +33,7 @@ Attribution-ShareAlike 3.0 Unported, https://creativecommons.org/licenses/by-sa/
 All style author/contributor and locale translator metadata is retained. The
 full CSL engine is the pinned Zotero distribution of citeproc-js by Frank G.
 Bennett and contributors, including Zotero's changes. Its original dual-license
-notice is retained with the runtime source and legal inventory; BashKitten selects
+notice is retained with the runtime source and legal inventory; Taskarian selects
 the AGPL-3.0-or-later option and includes the full license. Native Zotero Style
 and Cite configuration supplies citation-engine settings and bibliography layout.
 
@@ -64,9 +64,9 @@ records and bytes are retained; native attachment deduplication is not applied.
 
 The native adaptations are identified in source headers and `README.md`:
 Node host interfaces replace unavailable XPCOM interfaces; file storage and
-authorization use the existing BashKitten backend owners; browser-required PDF
+authorization use the existing Taskarian backend owners; browser-required PDF
 retrieval resumes through the existing authenticated capture helper. Automatic
-translator reporting is removed. These are BashKitten modifications, not
+translator reporting is removed. These are Taskarian modifications, not
 changes attributed to the upstream projects.
 
 The own-module `package-lock.json` pins every runtime npm dependency.

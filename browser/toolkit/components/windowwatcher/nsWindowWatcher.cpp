@@ -2596,7 +2596,7 @@ int32_t nsWindowWatcher::GetWindowOpenLocation(
   }
 
 #ifndef MOZ_WIDGET_ANDROID
-  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("taskarian")) {
     // Route remote window.open through the tab dispatcher as well, including
     // explicit popup features and Shift-click. Native dialogs do not use this.
     return nsIBrowserDOMWindow::OPEN_NEWTAB;

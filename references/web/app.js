@@ -355,7 +355,7 @@ async function openProjectSettings(project) {
         node(
           "p",
           { class: "empty-details" },
-          "This project's references need to be reopened. Use the dialog, or open References again from BashKitten.",
+          "This project's references need to be reopened. Use the dialog, or open References again from Taskarian.",
         ),
       );
     },
@@ -1956,7 +1956,7 @@ $("#about").onclick = async () => {
   d.el.classList.add('references-about');
   d.actions.append(button('Close', () => d.el.close()));
   d.el.addEventListener('close', () => controller.abort(), { once: true });
-  d.body.append(node('p', {}, 'BashKitten reference management, page and PDF capture, and document citations.'));
+  d.body.append(node('p', {}, 'Taskarian reference management, page and PDF capture, and document citations.'));
   d.open();
   try {
     if (!scope) throw Error('Select a References project to load its packaged source and licenses.');

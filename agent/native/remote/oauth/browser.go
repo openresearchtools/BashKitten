@@ -1,5 +1,5 @@
 // Copyright 2026 The Torkitten Authors (Apache-2.0).
-// BashKitten adaptations: SPDX-License-Identifier: AGPL-3.0-only
+// Taskarian adaptations: SPDX-License-Identifier: AGPL-3.0-only
 package oauth
 
 import (
@@ -123,7 +123,7 @@ func Registration(clientID, onion string) (map[string]any, error) {
 		return nil, errors.New("invalid native OAuth registration")
 	}
 	return map[string]any{
-		"client_id": clientID, "client_name": "BashKitten", "public": true,
+		"client_id": clientID, "client_name": "Taskarian", "public": true,
 		"authorization_policy": "two_factor", "consent_mode": "explicit",
 		"redirect_uris": []string{CallbackURI}, "scopes": strings.Fields(scope),
 		"audience": []string{"https://" + onion}, "grant_types": []string{"authorization_code", "refresh_token"},

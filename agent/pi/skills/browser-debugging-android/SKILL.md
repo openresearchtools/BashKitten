@@ -1,8 +1,8 @@
 ---
 name: browser-debugging-android
-description: Debug ordinary pages in the connected BashKitten Android browser. Use for supported page environment overrides and diagnostics when browser_debug capabilities.platform is android or termux.
+description: Debug ordinary pages in the connected Taskarian Android browser. Use for supported page environment overrides and diagnostics when browser_debug capabilities.platform is android or termux.
 ---
-# BashKitten Android browser debugging
+# Taskarian Android browser debugging
 
 ## Part 1 — Choose, inspect, act, verify
 
@@ -811,13 +811,13 @@ it is not a Pi tool or an assumed installed executable:
 ```sh
 bk_android() {
   local apk
-  apk="$(pm path com.bashkitten </dev/null 2>/dev/null | tr -d '\r' | sed -n 's/^package:\(.*\/base\.apk\)$/\1/p' | head -n 1)"
+  apk="$(pm path com.taskarian </dev/null 2>/dev/null | tr -d '\r' | sed -n 's/^package:\(.*\/base\.apk\)$/\1/p' | head -n 1)"
   if [ -z "$apk" ]; then
-    printf '%s\n' 'BashKitten base.apk was not found for this Android user.' >&2
+    printf '%s\n' 'Taskarian base.apk was not found for this Android user.' >&2
     return 1
   fi
   env -u LD_PRELOAD -u LD_LIBRARY_PATH CLASSPATH="$apk" \
-    /system/bin/app_process / com.bashkitten.BrowserCommand "$@"
+    /system/bin/app_process / com.taskarian.BrowserCommand "$@"
 }
 ```
 

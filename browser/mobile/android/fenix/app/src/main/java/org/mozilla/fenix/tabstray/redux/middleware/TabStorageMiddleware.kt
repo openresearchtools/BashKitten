@@ -511,7 +511,7 @@ class TabStorageMiddleware(
 
             when {
                 // Private onion tabs keep private storage and the private-tab lock.
-                !displayTab.private && tab.contextId?.startsWith("bashkitten-tor-") == true -> {
+                !displayTab.private && tab.contextId?.startsWith("taskarian-tor-") == true -> {
                     torTabs.add(displayTab)
                     if (displayTab.isFocused) selectedTorTabIndex = torTabs.lastIndex
                 }

@@ -3,7 +3,7 @@
 
 "use strict";
 
-const ENABLED_PREF = "bashkitten.blocker.enabled";
+const ENABLED_PREF = "taskarian.blocker.enabled";
 const DISABLED_LIST_OVERRIDES = JSON.stringify({
   "core-easylist": false,
   "core-easyprivacy": false,
@@ -66,11 +66,11 @@ add_task(async function test_ad_blocking_pane_registers() {
   ok(navButton, "The Ad Blocking nav button exists");
   ok(!navButton.hidden, "The Ad Blocking nav button is visible");
 
-  await settingGroupRenders(doc, "bashkittenBlocker");
+  await settingGroupRenders(doc, "taskarianBlocker");
   for (let groupId of [
-    "bashkittenBlocker",
-    "bashkittenBlockerLists",
-    "bashkittenBlockerExceptions",
+    "taskarianBlocker",
+    "taskarianBlockerLists",
+    "taskarianBlockerExceptions",
   ]) {
     ok(
       doc.querySelector(`setting-group[groupid="${groupId}"]`),
@@ -84,18 +84,18 @@ add_task(async function test_ad_blocking_pane_registers() {
 add_task(async function test_master_toggle_writes_pref() {
   await SpecialPowers.pushPrefEnv({
     set: [
-      ["bashkitten.blocker.enabledLists", DISABLED_LIST_OVERRIDES],
-      ["bashkitten.blocker.filterListUrls", "[]"],
+      ["taskarian.blocker.enabledLists", DISABLED_LIST_OVERRIDES],
+      ["taskarian.blocker.filterListUrls", "[]"],
       [ENABLED_PREF, true],
     ],
   });
 
   let tab = await openPrefsTab("adBlocking");
   let doc = tab.linkedBrowser.contentDocument;
-  await settingGroupRenders(doc, "bashkittenBlocker");
+  await settingGroupRenders(doc, "taskarianBlocker");
 
   let control = doc.getElementById(
-    "setting-control-bashkitten-blocker-enabled"
+    "setting-control-taskarian-blocker-enabled"
   );
   ok(control, "The master toggle control renders");
   let toggle = control.querySelector("moz-toggle");
@@ -131,7 +131,7 @@ add_task(async function test_master_toggle_writes_pref() {
 
 add_task(async function test_pane_hidden_without_blocker_ui() {
   await SpecialPowers.pushPrefEnv({
-    set: [["bashkitten.blocker.ui.enabled", false]],
+    set: [["taskarian.blocker.ui.enabled", false]],
   });
 
   let tab = await openPrefsTab("");

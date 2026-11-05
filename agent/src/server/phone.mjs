@@ -33,7 +33,7 @@ export async function registerPhone({ phoneId, backendId, generation, name, defa
   if (![phoneId, backendId, generation].every(v => typeof v === 'string' && v.length && !/[\x00-\x1f]/.test(v))) throw Error('Invalid phone registration identity');
   const previous = await phoneRegistration(phoneId);
   if (previous && previous.backendId !== backendId && previous.generation === generation) throw Error('A new backend binding requires a new registration generation');
-  const value = { phoneId, backendId, generation, name: String(name || 'BashKitten'), defaults: { ordinaryDefault: 'off', callDefault: 'calls', ...previous?.defaults, ...defaults }, enabled: previous?.enabled || { telephony: false, messages: false }, createdAt: previous?.createdAt || Date.now(), revoked: false };
+  const value = { phoneId, backendId, generation, name: String(name || 'Taskarian'), defaults: { ordinaryDefault: 'off', callDefault: 'calls', ...previous?.defaults, ...defaults }, enabled: previous?.enabled || { telephony: false, messages: false }, createdAt: previous?.createdAt || Date.now(), revoked: false };
   await writeJson(registrationPath(phoneId), value); await writeJson(path.join(root, 'selected.json'), { phoneId }); return value;
 }
 export async function phoneStatus() {

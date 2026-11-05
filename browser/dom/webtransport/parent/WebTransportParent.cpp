@@ -60,7 +60,7 @@ void WebTransportParent::Create(
   }
 
   if (!aPrincipal ||
-      aPrincipal->OriginAttributesRef().IsBashKittenNetworkIsolated()) {
+      aPrincipal->OriginAttributesRef().IsTaskarianNetworkIsolated()) {
     aResolver(ResolveType(
         NS_ERROR_DOM_NOT_ALLOWED_ERR,
         static_cast<uint8_t>(WebTransportReliabilityMode::Pending)));

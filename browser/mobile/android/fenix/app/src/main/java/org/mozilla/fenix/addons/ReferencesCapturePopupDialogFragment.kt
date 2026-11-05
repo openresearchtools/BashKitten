@@ -80,7 +80,7 @@ class ReferencesCapturePopupDialogFragment : NoObscuredTouchesDialogFragment() {
     }
 
     companion object {
-        const val EXTENSION_ID = "references@bashkitten.org"
+        const val EXTENSION_ID = "references@taskarian.org"
         const val TAG = "references-capture-popup"
         private const val TITLE = "title"
         private const val CONTAINER_ID = "containerId"

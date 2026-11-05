@@ -1,4 +1,4 @@
-//go:build !bashkitten_client
+//go:build !taskarian_client
 
 // SPDX-License-Identifier: AGPL-3.0-only
 
@@ -18,8 +18,8 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/openresearchtools/bashkitten/remote/bundle"
-	"github.com/openresearchtools/bashkitten/remote/mobile"
+	"github.com/openresearchtools/Taskarian/remote/bundle"
+	"github.com/openresearchtools/Taskarian/remote/mobile"
 )
 
 type request struct {

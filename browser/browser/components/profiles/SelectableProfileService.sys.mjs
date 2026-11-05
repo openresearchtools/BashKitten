@@ -417,7 +417,7 @@ class SelectableProfileServiceClass extends EventEmitter {
   }
 
   #getEnabledState() {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
       return false;
     }
     if (!Services.policies.isAllowed("profileManagement")) {
@@ -830,8 +830,8 @@ class SelectableProfileServiceClass extends EventEmitter {
    * @param {Array<string>} aUrls An array of urls to open in launched profile
    */
   launchInstance(aProfile, aUrls) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
-      throw new Error("BashKitten uses one profile");
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
+      throw new Error("Taskarian uses one profile");
     }
     let args = [];
 
@@ -1290,8 +1290,8 @@ class SelectableProfileServiceClass extends EventEmitter {
    * set as the default.
    */
   async setDefaultProfileForGroup(aProfile = this.currentProfile) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
-      throw new Error("BashKitten uses one profile");
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
+      throw new Error("Taskarian uses one profile");
     }
     if (!aProfile) {
       return;
@@ -1320,7 +1320,7 @@ class SelectableProfileServiceClass extends EventEmitter {
    * @param {boolean} shouldShow Whether or not we should show the profile selector
    */
   async setShowProfileSelectorWindow(shouldShow) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
       return;
     }
     this.groupToolkitProfile.showProfileSelector = shouldShow;
@@ -1338,8 +1338,8 @@ class SelectableProfileServiceClass extends EventEmitter {
    * @returns {string} The path for the given profile
    */
   async createProfileDirs(aProfileName) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
-      throw new Error("BashKitten uses one profile");
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
+      throw new Error("Taskarian uses one profile");
     }
     const salt = btoa(
       lazy.CryptoUtils.generateRandomBytesLegacy(
@@ -1490,8 +1490,8 @@ class SelectableProfileServiceClass extends EventEmitter {
    * @returns {SelectableProfile} The newly created profile object.
    */
   async #createProfile(existingProfilePath, source) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
-      throw new Error("BashKitten uses one profile");
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
+      throw new Error("Taskarian uses one profile");
     }
     let nextProfileNumber = Math.max(
       0,
@@ -1534,8 +1534,8 @@ class SelectableProfileServiceClass extends EventEmitter {
    * initing the service for profiles.
    */
   async maybeSetupDataStore() {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
-      throw new Error("BashKitten uses one profile");
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
+      throw new Error("Taskarian uses one profile");
     }
     if (this.#connection) {
       return;
@@ -1646,8 +1646,8 @@ class SelectableProfileServiceClass extends EventEmitter {
    * Schedule deletion of the current SelectableProfile as a background task.
    */
   async deleteCurrentProfile() {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
-      throw new Error("BashKitten uses one profile");
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
+      throw new Error("Taskarian uses one profile");
     }
     let profiles = await this.getAllProfiles();
 

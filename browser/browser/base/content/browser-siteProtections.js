@@ -3033,7 +3033,7 @@ var gProtectionsHandler = {
    * info button in the panel header.
    */
   _insertProtectionsPanelInfoMessage(event) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
       return;
     }
     // const PROTECTIONS_PANEL_INFOMSG_PREF =

@@ -6,7 +6,7 @@ export const accessDir = path.join(dataDir, 'access');
 // Remote reset may remove this whole directory. Local CA/session keys stay outside it.
 export const remoteDir = path.join(accessDir, 'remote');
 export const runDir = path.join(dataDir, 'run');
-export const authBin = process.env.BASHKITTEN_AUTH_BIN || path.join(bundledRoot, 'auth/bin');
+export const authBin = process.env.TASKARIAN_AUTH_BIN || path.join(bundledRoot, 'auth/bin');
 export const binary = name => path.join(authBin, name);
 export const paths = {
   control: path.join(runDir, 'control.sock'),

@@ -14,7 +14,7 @@ def recipe_archive(args):
                               offline=getattr(args, 'offline_sources', False))
 
 def environment(args, work, sources):
-    spec = importlib.util.spec_from_file_location('bashkitten_native_toolchain', ROOT/'agent/packaging/termux/native_toolchain.py')
+    spec = importlib.util.spec_from_file_location('taskarian_native_toolchain', ROOT/'agent/packaging/termux/native_toolchain.py')
     owner = importlib.util.module_from_spec(spec); spec.loader.exec_module(owner)
     args.work = work
     env, provenance = owner.build_environment(args)
@@ -30,7 +30,7 @@ def environment(args, work, sources):
                 member = next(m for m in upstream.getmembers() if m.name.endswith('/packages/'+component+'/'+name))
                 raw = upstream.extractfile(member).read()
                 patches.append({'name':component+'/'+name,'sha256':hashlib.sha256(raw).hexdigest()})
-                marker = sources[component]/('.bashkitten-'+name+'.sha256')
+                marker = sources[component]/('.taskarian-'+name+'.sha256')
                 if marker.exists():
                     if marker.read_text() != patches[-1]['sha256']: raise ValueError('Changed native patch requires a fresh work directory')
                     continue

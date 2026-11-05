@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
-const guides = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).bashkitten?.browserGuides;
+const guides = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).taskarian?.browserGuides;
 
 export function browserDocumentation(platform) {
   const target = ['android', 'termux'].includes(platform) ? 'android' : platform === 'linux' ? 'linux' : null;

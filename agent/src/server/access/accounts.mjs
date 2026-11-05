@@ -1,5 +1,5 @@
 // Authelia configuration/enrollment patterns adapted from Torkitten.
-// Copyright 2026 The Torkitten Authors (Apache-2.0); BashKitten changes AGPL-3.0-only.
+// Copyright 2026 The Torkitten Authors (Apache-2.0); Taskarian changes AGPL-3.0-only.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,7 +37,7 @@ export async function renderAuthelia(origin, instanceId, native, oidc) {
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
     const password = await native.call('hash-password', { password: randomToken() });
-    await fs.writeFile(paths.users, JSON.stringify({ users: { __bashkitten_setup: { disabled: true, displayname: 'Setup pending', password, groups: [] } } }), { mode: 0o600, flag: 'wx' });
+    await fs.writeFile(paths.users, JSON.stringify({ users: { __taskarian_setup: { disabled: true, displayname: 'Setup pending', password, groups: [] } } }), { mode: 0o600, flag: 'wx' });
   }
   const host = new URL(origin).hostname;
   if (!/^[a-z2-7]{56}\.onion$/.test(host)) throw Error('Remote authentication requires its enrolled onion');
@@ -49,12 +49,12 @@ export async function renderAuthelia(origin, instanceId, native, oidc) {
         authz: { 'forward-auth': { implementation: 'ForwardAuth', authn_strategies: [{ name: 'CookieSession' }] },
           tunnel: { implementation: 'ForwardAuth', authn_strategies: [{ name: 'HeaderAuthorization', schemes: ['Bearer'] }] } } } },
     log: { level: 'warn', format: 'json' },
-    totp: { issuer: 'BashKitten', algorithm: 'sha1', digits: 6, period: 30, skew: 1, secret_size: 32, disable_reuse_security_policy: false },
+    totp: { issuer: 'Taskarian', algorithm: 'sha1', digits: 6, period: 30, skew: 1, secret_size: 32, disable_reuse_security_policy: false },
     webauthn: { disable: true },
     authentication_backend: { password_reset: { disable: true }, password_change: { disable: true },
       file: { path: paths.users, watch: true, search: { email: false, case_insensitive: false } } },
     access_control: { default_policy: 'deny', rules: [{ domain: host, subject: 'group:owner', policy: 'two_factor' }] },
-    session: { name: 'bashkitten_' + instanceId.slice(0, 16), same_site: 'lax', inactivity: '1h', expiration: '12h', remember_me: '30d',
+    session: { name: 'taskarian_' + instanceId.slice(0, 16), same_site: 'lax', inactivity: '1h', expiration: '12h', remember_me: '30d',
       redis: { host: paths.sessionSocket, port: 0 },
       cookies: [{ domain: host, authelia_url: origin + '/login', default_redirection_url: origin + '/' }] },
     regulation: { modes: ['user'], max_retries: 3, find_time: '2m', ban_time: '5m' },
@@ -113,7 +113,7 @@ export async function enrollAccount(origin, value, { create = false, reset = fal
   if (!reset && (await accountStatus()).initialized) throw Error('Account setup is complete');
   if (reset || !await fs.stat(paths.qr).catch(() => null)) {
     await fs.rm(paths.qr, { force: true });
-    await command(binary('authelia'), ['storage', 'user', 'totp', 'generate', value.username, '--config', paths.config, '--issuer', 'BashKitten', '--path', paths.qr, ...(reset ? ['--force'] : [])], { env: await authEnvironment() });
+    await command(binary('authelia'), ['storage', 'user', 'totp', 'generate', value.username, '--config', paths.config, '--issuer', 'Taskarian', '--path', paths.qr, ...(reset ? ['--force'] : [])], { env: await authEnvironment() });
     await fs.chmod(paths.qr, 0o600);
   }
   if (reset) { await fs.rm(paths.complete, { force: true }); await writeJson(paths.pending, { username: value.username }); }
@@ -125,7 +125,7 @@ export async function enrollAccount(origin, value, { create = false, reset = fal
     if (!line.startsWith('otpauth://totp/')) continue;
     try {
       const uri = new URL(line);
-      if (decodeURIComponent(uri.pathname.slice(1)) !== 'BashKitten:' + value.username || uri.searchParams.get('issuer') !== 'BashKitten') continue;
+      if (decodeURIComponent(uri.pathname.slice(1)) !== 'Taskarian:' + value.username || uri.searchParams.get('issuer') !== 'Taskarian') continue;
       const key = uri.searchParams.get('secret');
       if (!/^[A-Z2-7]{16,128}$/.test(key || '')) continue;
       otpauthUrl = uri.href; secret = key;

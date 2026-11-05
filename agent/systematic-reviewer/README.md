@@ -1,4 +1,4 @@
-# Systematic Reviewer for BashKitten
+# Systematic Reviewer for Taskarian
 
 A bundled stock Pi extension and research skill using the shared References
 backend and native Collabora sessions. See [capabilities](docs/capabilities.md),

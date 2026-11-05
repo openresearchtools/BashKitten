@@ -1,16 +1,16 @@
 # Phone controls integration
 
-The adapted source lives in `browser/mobile/android/bashkitten/src/main/java/com/bashkitten/phone`.
+The adapted source lives in `browser/mobile/android/taskarian/src/main/java/com/taskarian/phone`.
 It is compiled by the existing main APK library, not a separate donor application.
 
 Manifest additions (root integrator owns the shared manifest):
 
 - permissions `android.permission.ACCESS_COARSE_LOCATION`, `android.permission.ACCESS_FINE_LOCATION` (requested only by user).
 - query intent MAIN / category LAUNCHER for visible apps; no QUERY_ALL_PACKAGES.
-- service `com.bashkitten.phone.PhoneNotificationService`, exported true, permission `android.permission.BIND_NOTIFICATION_LISTENER_SERVICE`, intent action `android.service.notification.NotificationListenerService`.
-- service `com.bashkitten.phone.PhoneAccessibilityService`, exported true, permission `android.permission.BIND_ACCESSIBILITY_SERVICE`, action `android.accessibilityservice.AccessibilityService`, metadata `android.accessibilityservice` resource `@xml/phone_accessibility`.
-- activity `com.bashkitten.phone.PhoneFilesActivity`, exported false.
-- activity `com.bashkitten.phone.PhoneShareActivity`, exported true, SEND/SEND_MULTIPLE content MIME `*/*`, DEFAULT category; it is inert with Files Off and never reads shared content in its callback.
+- service `com.taskarian.phone.PhoneNotificationService`, exported true, permission `android.permission.BIND_NOTIFICATION_LISTENER_SERVICE`, intent action `android.service.notification.NotificationListenerService`.
+- service `com.taskarian.phone.PhoneAccessibilityService`, exported true, permission `android.permission.BIND_ACCESSIBILITY_SERVICE`, action `android.accessibilityservice.AccessibilityService`, metadata `android.accessibilityservice` resource `@xml/phone_accessibility`.
+- activity `com.taskarian.phone.PhoneFilesActivity`, exported false.
+- activity `com.taskarian.phone.PhoneShareActivity`, exported true, SEND/SEND_MULTIPLE content MIME `*/*`, DEFAULT category; it is inert with Files Off and never reads shared content in its callback.
 
 Native Phone panel: `PhoneControlsPanel.build(Activity)` returns controls section.
 Call `PhoneControlsPanel.refresh(view)` after Android permission/settings return.

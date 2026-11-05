@@ -20,7 +20,7 @@ No Google developer registration, provider impersonation or trust bypass is used
 
 Commit `46d0877c63` removes Fenix Push/FCM/WebPush startup and integration code,
 the Firebase service and manifest/config entries, and their Gradle edges. The
-Android Push API is disabled. Ordinary web notification handling and BashKitten's
+Android Push API is disabled. Ordinary web notification handling and Taskarian's
 native agent notifications/replies/Callback are retained, as are local password
 storage/save/autofill. The same commit contains the independent call-VAD model
 selection correction; its title alone does not describe all included paths.
@@ -45,7 +45,7 @@ scenarios with 481 assertions passed. Installed provider create/get/cancel,
 local password save/autofill, browsing and native notification/Callback regression
 checks remain for the complete rebuilt candidate. Framework evidence and these
 limitations are retained in
-`verification/android-framework-webauthn-20261019/README.md` under BashkittenBuild.
+`verification/android-framework-webauthn-20261019/README.md` under TaskarianBuild.
 
 ## Historical investigation before the authorized removal
 
@@ -78,7 +78,7 @@ The actual OSS dependency set passes the updated pinned notice inventory and ful
 notice checksum validation. These checks do not establish APK absence or device
 behavior; both need the next complete candidate after the source blocker is fixed.
 
-`stageBashKittenDependencySources` now reconciles the actual Gradle graph with one
+`stageTaskarianDependencySources` now reconciles the actual Gradle graph with one
 committed source inventory, validates every retained input checksum, clears stale
 output and fails for coordinates without source. `collect-artifacts.py` rejects
 an incomplete receipt before signing or copying a candidate and verifies staged
@@ -115,7 +115,7 @@ and review-ktx dependencies. These removals do not touch browsing, accounts,
 WebAuthn, Firebase push or protected browser-origin checks.
 
 The source corpus now retains 261 original source JARs with exact coordinates
-and SHA-256 pins under `browser/bashkitten/android/sources`. Two Lifecycle
+and SHA-256 pins under `browser/taskarian/android/sources`. Two Lifecycle
 testing JARs left the runtime graph with the shake module and were removed from
 the current corpus. Their original imports remain recoverable in Git. Staging
 copies only currently resolved dependencies.
@@ -206,13 +206,13 @@ and [trust prompt](https://github.com/bitwarden/android/blob/747801fc0867b7c9f1e
 permit a user to approve an unrecognized browser locally; the
 [repository](https://github.com/bitwarden/android/blob/747801fc0867b7c9f1efedc3802249a458f19619/app/src/main/kotlin/com/x8bit/bitwarden/data/credentials/repository/PrivilegedAppRepositoryImpl.kt#L146)
 binds that approval to the actual package and signing certificate. Signature
-mismatches have a separate error path. `com.bashkitten` is absent from both
+mismatches have a separate error path. `com.taskarian` is absent from both
 bundled lists; the explicit user-trust path is relevant, not a claim that the
 browser is preapproved. No Google registration or provider submission occurred.
 
 This provides a source-supported third-party-provider path to test on Android
 14 and newer without making Google approval a prerequisite. It does not prove
-the installed BashKitten APK's registration/sign-in flows, every website/native
+the installed Taskarian APK's registration/sign-in flows, every website/native
 app, or older Android behavior. Bitwarden must hold a credential registered with
 the relying party; trusting a browser does not expose keys held only by Google
 Password Manager. Native app asset-link validation is a distinct path from a

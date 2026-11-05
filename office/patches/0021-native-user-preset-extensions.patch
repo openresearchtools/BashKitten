@@ -1,4 +1,4 @@
-From: BashKitten contributors
+From: Taskarian contributors
 Subject: [PATCH] Discover extensions from the existing native user preset
 
 The released server installs UserSettings extensions and sends

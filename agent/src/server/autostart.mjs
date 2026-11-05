@@ -120,7 +120,7 @@ export class AutostartCommands {
 // launch's snapshot before applying user environment overrides to its command.
 if (process.argv[1] && path.resolve(process.argv[1]) === script) {
   try {
-    if (process.argv[3] !== 'serve' || process.env.BASHKITTEN_GUARDED !== '1' || Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid || !/^[a-f0-9-]{36}$/.test(process.argv[2] || '')) throw Error('Startup commands must be launched by their controller');
+    if (process.argv[3] !== 'serve' || process.env.TASKARIAN_GUARDED !== '1' || Number(process.env.TASKARIAN_GUARD_PID) !== process.ppid || !/^[a-f0-9-]{36}$/.test(process.argv[2] || '')) throw Error('Startup commands must be launched by their controller');
     const [entry] = commands([await readJson(runFile(process.argv[2]))]);
     if (entry.id !== process.argv[2]) throw Error('Startup command identity changed');
     const child = spawn(entry.argv[0], entry.argv.slice(1), { cwd: entry.cwd, env: { ...process.env, ...entry.env }, stdio: 'ignore' });

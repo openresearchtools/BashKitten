@@ -7,9 +7,9 @@ upstream version labels, preserved without relabelling either release.
 
 The npm package contains prebuilt WASM, but the exact Git tree has no Cargo.lock.
 Binary panic paths expose some historical dependency versions, not a complete
-build closure. BashKitten therefore replaces that opaque binary and its generated
+build closure. Taskarian therefore replaces that opaque binary and its generated
 Node glue with a build of the same pristine source using the committed
-`Cargo.lock`. This is a marked BashKitten source build, not a claim to reproduce
+`Cargo.lock`. This is a marked Taskarian source build, not a claim to reproduce
 the historical npm binary. The npm dependency graph and package version stay
 unchanged. Native Cargo and the matching wasm-bindgen CLI generate the code;
 there is no replacement image-processing implementation.
@@ -19,7 +19,7 @@ Cargo locks, the matching wasm-bindgen CLI archive and its upstream lock checksu
 All these exact HTTPS URLs and SHA256 checksums also occur in the existing
 `agent/licenses/source-archives.json` owner. The normal corresponding-source
 artifact includes their original archives. Downloaded bytes remain outside Git
-in `BASHKITTEN_SOURCE_CACHE`. Cargo's native directory-source checksums are
+in `TASKARIAN_SOURCE_CACHE`. Cargo's native directory-source checksums are
 materialized from verified originals; both builds use `--frozen --offline`.
 
 The existing `agent/machines/rust-toolchain/sources.json` owns Rust 1.96.0 source,
@@ -33,18 +33,18 @@ after their ordinary npm installation. It verifies the actual installed public
 exports and class methods, then compares PNG/JPEG encode, PNG decode and Lanczos
 resize results against the selected original package using a synthetic image.
 Generated code replaces only this package's main glue/WASM; the obsolete generated
-`photon_rs_bg.js` is removed. The installed `BASHKITTEN-SOURCE.json` marks the
+`photon_rs_bg.js` is removed. The installed `TASKARIAN-SOURCE.json` marks the
 modification and records exact input identities, compiler/lock/recipe hashes,
 selected native packages, validation and generated-file checksums. The matching
 locks accompany it. Full original per-crate notices and Rust runtime notices in
-`BASHKITTEN-NOTICES.txt` flow through the existing npm offline legal collector.
+`TASKARIAN-NOTICES.txt` flow through the existing npm offline legal collector.
 
 Run it against an already installed package tree:
 
 ```sh
-export BASHKITTEN_SOURCE_CACHE=/absolute/path/to/verified-source-cache
-export BASHKITTEN_PHOTON_BUILD_CACHE=/absolute/path/to/build-cache
-export BASHKITTEN_OFFLINE_SOURCES=1
+export TASKARIAN_SOURCE_CACHE=/absolute/path/to/verified-source-cache
+export TASKARIAN_PHOTON_BUILD_CACHE=/absolute/path/to/build-cache
+export TASKARIAN_OFFLINE_SOURCES=1
 python3 agent/packaging/photon/build.py /absolute/path/to/application
 ```
 

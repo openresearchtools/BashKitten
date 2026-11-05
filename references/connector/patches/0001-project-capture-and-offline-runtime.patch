@@ -803,7 +803,7 @@
 -			[downloadLink, clientName, troubleshootLink]
 -		);
 -	},
-+	getConnectionErrorTroubleshootingString() { return 'Select the owning backend and project in BashKitten, then try References Add again.'; },
++	getConnectionErrorTroubleshootingString() { return 'Select the owning backend and project in Taskarian, then try References Add again.'; },
  	
  	/**
  	 * If Zotero is offline and attempting action fallback to zotero.org for first time: prompts about it
@@ -1460,7 +1460,7 @@
  		
  		if (err === "translationError") {
 -			let url = "https://www.zotero.org/support/troubleshooting_translator_issues";
-+			let url = "https://github.com/openresearchtools/BashKitten/issues";
++			let url = "https://github.com/openresearchtools/Taskarian/issues";
  			let pageName = Zotero.getString('progressWindow_error_troubleshootingTranslatorIssues');
  			let pageLink = `<a href="${url}" title="${url}">${pageName}</a>`;
  			let html = {
@@ -1469,7 +1469,7 @@
  		else if (err === "siteAccessLimits") {
  			const translator = `<b>${args[0]}</b>`;
 -			const siteAccessURL = "https://www.zotero.org/support/kb/site_access_limits";
-+			const siteAccessURL = "https://github.com/openresearchtools/BashKitten/issues";
++			const siteAccessURL = "https://github.com/openresearchtools/Taskarian/issues";
  			const siteAccessTitle = Zotero.getString('progressWindow_error_siteAccessLimits');
  			let siteAccessLink = `<a href="${siteAccessURL}" title="${siteAccessTitle}">${siteAccessTitle}</a>`;
  			let html = {
@@ -1478,7 +1478,7 @@
  		}
  		else if (err === "unexpectedError") {
 -			let url = "https://www.zotero.org/support/getting_help";
-+			let url = "https://github.com/openresearchtools/BashKitten/issues";
++			let url = "https://github.com/openresearchtools/Taskarian/issues";
  			contents = <span dangerouslySetInnerHTML={{
  				__html: Zotero.getString('progressWindow_error_unexpected', url)
  			}}/>;
@@ -1639,7 +1639,7 @@
 -	},
 -	GOOGLE_DOCS_DEV_MODE: false
 -};
-+const ZOTERO_CONFIG = { CLIENT_NAME: 'References', DOMAIN_NAME: 'bashkitten.org', CLIENT_DOWNLOAD_URL:'https://github.com/openresearchtools/BashKitten/releases', ALWAYS_FETCH_FROM_REPOSITORY:false, REPOSITORY_CHECK_INTERVAL:86400, REPOSITORY_RETRY_INTERVAL:3600 };
++const ZOTERO_CONFIG = { CLIENT_NAME: 'References', DOMAIN_NAME: 'taskarian.org', CLIENT_DOWNLOAD_URL:'https://github.com/openresearchtools/Taskarian/releases', ALWAYS_FETCH_FROM_REPOSITORY:false, REPOSITORY_CHECK_INTERVAL:86400, REPOSITORY_RETRY_INTERVAL:3600 };
 --- a/src/messages.json
 +++ b/src/messages.json
 @@ -61,34 +61,34 @@

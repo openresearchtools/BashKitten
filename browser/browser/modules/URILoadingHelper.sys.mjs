@@ -355,7 +355,7 @@ function _createNullPrincipalFromTabUserContextId(tab = null) {
 export const URILoadingHelper = {
   // A real browser-owned view is required, not a URL or a page-supplied flag.
   agentOpener(window, params = {}) {
-    if (AppConstants.MOZ_APP_NAME != "bashkitten") {
+    if (AppConstants.MOZ_APP_NAME != "taskarian") {
       return false;
     }
     const contextId = [
@@ -366,9 +366,9 @@ export const URILoadingHelper = {
     if (contextId === undefined) {
       return false;
     }
-    for (const browser of window.BashKittenAgent?.views.values() || []) {
+    for (const browser of window.TaskarianAgent?.views.values() || []) {
       if (
-        browser.hasAttribute("bashkitten-protected") &&
+        browser.hasAttribute("taskarian-protected") &&
         browser.browsingContext?.originAttributes.userContextId == contextId &&
         (!params.openerBrowser || params.openerBrowser == browser)
       ) {
@@ -494,7 +494,7 @@ export const URILoadingHelper = {
       return;
     }
 
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
       const agentBrowser = this.agentOpener(window, params);
       if (agentBrowser === null) {
         throw Components.Exception(
@@ -502,7 +502,7 @@ export const URILoadingHelper = {
           Cr.NS_ERROR_ABORT
         );
       }
-      if (agentBrowser && window.BashKittenAgent.saveFileFrom(agentBrowser, url, params.referrerInfo)) {
+      if (agentBrowser && window.TaskarianAgent.saveFileFrom(agentBrowser, url, params.referrerInfo)) {
         return;
       }
       if (agentBrowser && where != "save") {
@@ -514,7 +514,7 @@ export const URILoadingHelper = {
           target.prePath == enrolled.prePath &&
           /^\/login(?:[/?#]|$)/.test(target.pathQueryRef)
         ) {
-          window.BashKittenAgent.signIn().catch(console.error);
+          window.TaskarianAgent.signIn().catch(console.error);
           return;
         }
         // An OAuth link leaves the protected storage context and cannot retain
@@ -775,8 +775,8 @@ export const URILoadingHelper = {
     // We instead check for potential URL bar initiated bounce events directly
     // in gURLBar.controller.engagementEvent.startTrackingBounceEvent().
     if (!loadInBackground && targetBrowser == w.gBrowser.selectedBrowser &&
-        w.BashKittenAgent?.layout === "full") {
-      w.BashKittenAgent.browse();
+        w.TaskarianAgent?.layout === "full") {
+      w.TaskarianAgent.browse();
     }
     if (!params.initiatedByURLBar && targetBrowser) {
       w.gURLBar.controller.engagementEvent.handleBounceEventTrigger(

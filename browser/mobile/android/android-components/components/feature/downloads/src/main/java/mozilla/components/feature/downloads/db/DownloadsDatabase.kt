@@ -56,7 +56,7 @@ internal object Migrations {
             db.execSQL("ALTER TABLE downloads ADD COLUMN context_id TEXT")
             // Older records did not retain their route. A retry must not guess
             // DIRECT for a download which could have originated in Tor.
-            db.execSQL("UPDATE downloads SET context_id = 'bashkitten-tor-unavailable'")
+            db.execSQL("UPDATE downloads SET context_id = 'taskarian-tor-unavailable'")
         }
     }
     val migration_1_2 = object : Migration(1, 2) {

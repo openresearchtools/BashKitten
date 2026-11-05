@@ -344,7 +344,7 @@ const CONFIG_PANES = Object.freeze({
       "chrome://browser/content/preferences/config/passwords-autofill.mjs",
   },
   profiles: {
-    visible: () => AppConstants.MOZ_APP_NAME != "bashkitten",
+    visible: () => AppConstants.MOZ_APP_NAME != "taskarian",
     parent: srdSectionEnabled("sync") ? "sync" : "general",
     l10nId: "preferences-profiles-group-header",
     groupIds: ["profilePane"],
@@ -447,9 +447,9 @@ const CONFIG_PANES = Object.freeze({
   },
 });
 
-// These Firefox services are not part of BashKitten. Do not register their
+// These Firefox services are not part of Taskarian. Do not register their
 // panes: a hidden navigation button alone leaves them reachable from search.
-const BASHKITTEN_REMOVED_PANES = new Set([
+const TASKARIAN_REMOVED_PANES = new Set([
   "sync",
   "moreFromMozilla",
   "experimental",
@@ -526,7 +526,7 @@ function init_all() {
   // immediately when recipes are expected to be available, before
   // firefoxLabs.mjs loads on first navigation. The module itself updates
   // this cache when features are (un)available.
-  if (AppConstants.MOZ_APP_NAME != "bashkitten" && ExperimentAPI.labsEnabled) {
+  if (AppConstants.MOZ_APP_NAME != "taskarian" && ExperimentAPI.labsEnabled) {
     document.getElementById("category-experimental").hidden =
       Services.prefs.getBoolPref(
         "browser.preferences.experimental.hidden",
@@ -541,7 +541,7 @@ function init_all() {
     "identity.fxaccounts.enabled"
   );
   let categorySync = document.getElementById("category-sync");
-  if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+  if (AppConstants.MOZ_APP_NAME == "taskarian") {
     categorySync.hidden = true;
   } else if (redesignEnabled) {
     categorySync.setAttribute("data-l10n-id", "pane-account-sync-title2");
@@ -552,8 +552,8 @@ function init_all() {
     register_module("paneSync", gSyncPane);
   }
   register_module("paneSearchResults", gSearchResultsPane);
-  if (AppConstants.MOZ_APP_NAME == "bashkitten") {
-    for (const id of BASHKITTEN_REMOVED_PANES) {
+  if (AppConstants.MOZ_APP_NAME == "taskarian") {
+    for (const id of TASKARIAN_REMOVED_PANES) {
       document
         .querySelector(
           `#categories [view="${friendlyPrefCategoryNameToInternalName(id)}"]`
@@ -563,8 +563,8 @@ function init_all() {
   }
   for (let [id, config] of Object.entries(CONFIG_PANES)) {
     if (
-      AppConstants.MOZ_APP_NAME == "bashkitten" &&
-      BASHKITTEN_REMOVED_PANES.has(id)
+      AppConstants.MOZ_APP_NAME == "taskarian" &&
+      TASKARIAN_REMOVED_PANES.has(id)
     ) {
       continue;
     }
@@ -576,7 +576,7 @@ function init_all() {
   }
 
   ChromeUtils.importESModule(
-    "chrome://browser/content/bashkitten/settings/BashKittenSettingsPanes.mjs",
+    "chrome://browser/content/taskarian/settings/TaskarianSettingsPanes.mjs",
     { global: "current" }
   );
 
@@ -589,7 +589,7 @@ function init_all() {
       groupIds: ["customHomepage"],
       module: "chrome://browser/content/preferences/config/home-startup.mjs",
     });
-  } else if (AppConstants.MOZ_APP_NAME != "bashkitten") {
+  } else if (AppConstants.MOZ_APP_NAME != "taskarian") {
     NimbusFeatures.moreFromMozilla.recordExposureEvent({ once: true });
     if (NimbusFeatures.moreFromMozilla.getVariable("enabled")) {
       document.getElementById("category-more-from-mozilla").hidden = false;
@@ -672,7 +672,7 @@ async function gotoPref(
   let redesignEnabled = srdSectionPrefs.all;
   let categories = document.getElementById("categories");
   const kDefaultCategory = redesignEnabled
-    ? AppConstants.MOZ_APP_NAME == "bashkitten"
+    ? AppConstants.MOZ_APP_NAME == "taskarian"
       ? "home"
       : "sync"
     : "general";
@@ -698,8 +698,8 @@ async function gotoPref(
     category = resolved.category;
     subcategory = resolved.subcategory;
     if (
-      AppConstants.MOZ_APP_NAME == "bashkitten" &&
-      BASHKITTEN_REMOVED_PANES.has(category)
+      AppConstants.MOZ_APP_NAME == "taskarian" &&
+      TASKARIAN_REMOVED_PANES.has(category)
     ) {
       category = "home";
     }

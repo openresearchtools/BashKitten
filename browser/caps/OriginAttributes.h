@@ -88,7 +88,7 @@ class OriginAttributes : public dom::OriginAttributesDictionary {
   // Native Tor contexts cannot use DNS or transports which
   // bypass their channel proxy. Agent views also exclude direct media sockets;
   // their Local endpoint alone may use a native direct HTTPS route.
-  bool IsBashKittenNetworkIsolated(bool aIncludeAgent = true) const;
+  bool IsTaskarianNetworkIsolated(bool aIncludeAgent = true) const;
 
   // Keep field order in sync with CreateSuffix.
   [[nodiscard]] HashNumber Hash() const {

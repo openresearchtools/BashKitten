@@ -148,11 +148,11 @@ private const val BYTES_TO_MEGABYTES_CONVERSION = 1024.0 * 1024.0
  * Installs [CrashReporter], initializes [Glean] in fenix builds and setup [Megazord] in the main process.
  */
 @Suppress("Registered", "TooManyFunctions", "LargeClass")
-open class FenixApplication : Application(), Provider, ThemeProvider, com.bashkitten.BrowserApp.Provider {
-    private val bashKittenServices by lazy {
-        com.bashkitten.BrowserApp(this, org.mozilla.fenix.bashkitten.FenixAgentHost(this))
+open class FenixApplication : Application(), Provider, ThemeProvider, com.taskarian.BrowserApp.Provider {
+    private val taskarianServices by lazy {
+        com.taskarian.BrowserApp(this, org.mozilla.fenix.taskarian.FenixAgentHost(this))
     }
-    override fun bashKitten() = bashKittenServices
+    override fun taskarian() = taskarianServices
 
     init {
         // [TIMER] Record startup timestamp as early as reasonable with some degree of consistency.
@@ -310,7 +310,7 @@ open class FenixApplication : Application(), Provider, ThemeProvider, com.bashki
         // Kick off initialization of Glean backend off-thread. Glean will continue to queue
         // metric samples until the backend is ready. If we don't have data-upload consent then
         // this will be a no-op and initialization may be attempted after onboarding.
-        // BashKitten disables the upstream product service: maybeInitializeGlean()
+        // Taskarian disables the upstream product service: maybeInitializeGlean()
 
         // Initialize the [BrowserStore] so that [setStartupMetrics] can reference this.
         // Note: This is a historical artifact and should be revisited.
@@ -328,7 +328,7 @@ open class FenixApplication : Application(), Provider, ThemeProvider, com.bashki
 
         setDayNightTheme()
         // Prepare local policy stores before activity/service startup enables strict disk checks.
-        bashKittenServices
+        taskarianServices
         components.strictMode.enableStrictMode(true)
 
         initializeWebExtensionSupport()
@@ -344,11 +344,11 @@ open class FenixApplication : Application(), Provider, ThemeProvider, com.bashki
 
         GlobalSyncedTabsCommandsProvider.initialize(lazy { components.backgroundServices.syncedTabsCommands })
 
-        // BashKitten disables the upstream product service: initializeRemoteSettingsSupport()
+        // Taskarian disables the upstream product service: initializeRemoteSettingsSupport()
 
         restoreBrowserState()
         restoreDownloads()
-        // BashKitten disables the upstream product service: restoreMessaging()
+        // Taskarian disables the upstream product service: restoreMessaging()
 
         // [IMPORTANT] Don't progress further until application-services is actually ready to go.
         // This makes it easier to reason about behaviour and avoids issues in the Rust code.
@@ -364,7 +364,7 @@ open class FenixApplication : Application(), Provider, ThemeProvider, com.bashki
     private fun setupPostMegazord() {
         setupLeakCanary()
 
-        // BashKitten disables the upstream product service: maybeSetupIPProtection()
+        // Taskarian disables the upstream product service: maybeSetupIPProtection()
 
         GlobalFxSuggestDependencyProvider.initialize(components.fxSuggest.storage)
 
@@ -385,7 +385,7 @@ open class FenixApplication : Application(), Provider, ThemeProvider, com.bashki
             VisibilityLifecycleObserver(),
         )
 
-        // No telemetry upload or usage recorder in BashKitten.
+        // No telemetry upload or usage recorder in Taskarian.
 
 
     }
@@ -415,19 +415,19 @@ open class FenixApplication : Application(), Provider, ThemeProvider, com.bashki
         // We init these items in the visual completeness queue to avoid them initing in the critical
         // startup path, before the UI finishes drawing (i.e. visual completeness).
         queueInitStorageAndServices(queue)
-        // BashKitten disables the upstream product service: queueMetrics(queue)
+        // Taskarian disables the upstream product service: queueMetrics(queue)
         queueEngineWarmup(queue)
         queueIncrementNumberOfAppLaunches(queue)
         queueRestoreLocale(queue)
         queueStorageMaintenance(queue)
-        // BashKitten disables the upstream product service: queueNimbusFetchInForeground(queue)
-        // BashKitten disables the upstream product service: queueDownloadWallpapers(queue)
+        // Taskarian disables the upstream product service: queueNimbusFetchInForeground(queue)
+        // Taskarian disables the upstream product service: queueDownloadWallpapers(queue)
 
         if (components.settings.enableFxSuggest) {
             queueSuggestIngest(queue)
         }
 
-        // BashKitten disables the upstream product service: queueCollectProcessExitInfo(queue)
+        // Taskarian disables the upstream product service: queueCollectProcessExitInfo(queue)
     }
 
     private inline fun runOnVisualCompleteness(
@@ -766,15 +766,15 @@ open class FenixApplication : Application(), Provider, ThemeProvider, com.bashki
                         components.core.store.state.selectedTab?.content?.private
                             ?: components.settings.openLinksInAPrivateTab
 
-                    if (!geckoEngineSession.bashKittenSession().isOpen) {
+                    if (!geckoEngineSession.taskarianSession().isOpen) {
                         // Ordinary WebExtension tabs use the same normal store as the + button.
                         // Never inherit a selected application's, agent's or Tor tab's context.
                         geckoEngineSession.initializeSessionContext(
                             private = shouldCreatePrivateSession,
-                            contextId = geckoEngineSession.bashKittenSession().settings.contextId ?: "bashkitten-user",
+                            contextId = geckoEngineSession.taskarianSession().settings.contextId ?: "taskarian-user",
                         )
                     }
-                    val nativeSettings = geckoEngineSession.bashKittenSession().settings
+                    val nativeSettings = geckoEngineSession.taskarianSession().settings
                     components.useCases.tabsUseCases.addTab(
                         url = url,
                         selectTab = selected,

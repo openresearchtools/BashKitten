@@ -15,7 +15,7 @@ than stopping the remote host. Local/container controls remain independently own
 
 Controlling verification update, 8 October: ADB is explicitly authorized for
 all Android setup, permissions, package installation and debugging; use direct
-Termux shell access for terminal work. Actual BashKitten feature acceptance uses
+Termux shell access for terminal work. Actual Taskarian feature acceptance uses
 the desktop app with Cuttlefish's web UI. Fresh architecture profiles, Android 17,
 native KVM/graphics, 16 GiB RAM and at least 128 GiB userdata on the system SSD
 replace the older no-ADB/manual-Settings-only and profile/storage instructions
@@ -30,7 +30,7 @@ controller/catalogue/downloader now has source implementations for these flows;
 Android and desktop candidate builds and visible acceptance remain required.
 Parakeet uses the verified upstream CLI stdin decoder because `whisper-server`
 does not support that architecture. Its recordings remain in memory. The latest
-8 October performance request shows owned BashKitten workload CPU, with separate
+8 October performance request shows owned Taskarian workload CPU, with separate
 total CPU only where the device permits a real counter. GPU remains unavailable
 when no real device counter is readable; system RAM remains used/total GB.
 
@@ -59,7 +59,7 @@ Additional desktop requirement, 5 October: native **LocalAI** in the Local Agent
 tab owns llama.cpp/Whisper runtime setup, launch commands, router INI editing and
 model downloads. Move those controls out of the shared web UI; reuse backend
 workers/jobs. Share Local has only a **Share llama.cpp** checkbox for that managed
-service. Plan a separate `bashkitten-localai` build/distribution repository for
+service. Plan a separate `taskarian-localai` build/distribution repository for
 mainstream llama.cpp and whisper.cpp Linux amd64/arm64 CUDA/Vulkan artifacts,
 automatic managed updates, custom-binary opt-out and automatic Pi configuration.
 Whisper uses one microphone button: click to record (red), click again to stop
@@ -115,7 +115,7 @@ do not replace that final acceptance. Keep the minimal-code/no-fallback rules.
 | --- | --- |
 | Fresh Android Agent | The Termux setup page offers **Connect to remote** before any Termux install, command permission or package setup |
 | Agent selector | Local, named remotes and Connect to remote remain reachable in every setup/connection state |
-| Mobile Agent navigation | Replace the spelled-out **Agent** navigation button with the current BashKitten logo, retaining accessible naming, touch target and behavior |
+| Mobile Agent navigation | Replace the spelled-out **Agent** navigation button with the current Taskarian logo, retaining accessible naming, touch target and behavior |
 | Unconfigured Local | Show the short-command setup and **Back to remote**, retaining the previous remote, login and draft |
 | Android Local Display | One compact native panel: compatible X11 download if missing, current editable command, actual status, Start/Stop and Open X11; absent in Remote mode |
 | Desktop LocalAI | Native Local Agent button; llama.cpp binary/command, router INI and shared model downloader, plus optional Whisper model/device/command setup |
@@ -130,7 +130,7 @@ do not replace that final acceptance. Keep the minimal-code/no-fallback rules.
 | Tor browsing on both platforms | Every network request from a Tor tab uses Tor or is blocked; ordinary unenrolled `.onion` navigation always enters the private Tor context |
 | Host services | Linux or native Termux targets/launch commands, configuration, Start/Stop/Reload and Launch on startup; llama.cpp router support where a compatible native runtime is installed |
 | Reissue identity | Close old access, replace the remote account and all remote keys, enroll fresh TOTP, issue the new password-encrypted QR |
-| Linux lifetime | Close hides to a functioning tray with BashKitten icon; Quit stops owned services and exits; Start on login is configurable |
+| Linux lifetime | Close hides to a functioning tray with Taskarian icon; Quit stops owned services and exits; Start on login is configurable |
 
 No SSH service, remote terminal, arbitrary reverse-port forwarding or UDP UI is
 included. Retain Chisel's internal SSH transport without adding an SSH server
@@ -140,7 +140,7 @@ applications and llama.cpp.
 ### Mobile Agent button branding
 
 Additional requirement, 5 October: on Android, replace the visible **Agent** text
-on the navigation button with the existing BashKitten kitten-with-glasses logo.
+on the navigation button with the existing Taskarian kitten-with-glasses logo.
 Apply this consistently beside the address bar, in the leftmost Agent entry on
 the tabs screen and wherever the same Agent navigation control is reused. Use
 the current product asset, not an old kitten image or a newly generated logo.
@@ -228,23 +228,23 @@ headless Xvfb or remote connections. Do not restore the old suite/store UI.
 
 #### One command used by the user, native UI and Pi
 
-Package **`$PREFIX/bin/bashkitten-display`**, on ordinary Termux `PATH`, as a thin
+Package **`$PREFIX/bin/taskarian-display`**, on ordinary Termux `PATH`, as a thin
 entry to the existing private controller/process guard. Store its editable script
-at **`$BASHKITTEN_DATA_DIR/display/launch.sh`**, resolving the existing default to
-`~/.local/share/bashkitten-pi/display/launch.sh`. Expose the actual launcher/script
+at **`$TASKARIAN_DATA_DIR/display/launch.sh`**, resolving the existing default to
+`~/.local/share/Taskarian/display/launch.sh`. Expose the actual launcher/script
 paths in the Termux Pi environment note and launcher status; resolve them centrally
 so a custom data directory cannot leave the panel and agent editing different files.
 
 Planned stable command contract, to document with exact examples in the skill:
 
 ```sh
-bashkitten-display command                 # read the complete saved launch script
-bashkitten-display command --path          # resolve its actual absolute path
-bashkitten-display command --set < new.sh   # validate and save from stdin
-bashkitten-display command --reset         # restore the packaged default
-bashkitten-display status                  # real state, command path and display environment
-bashkitten-display start                   # execute the saved script, idempotently
-bashkitten-display stop                    # stop this owned display session
+taskarian-display command                 # read the complete saved launch script
+taskarian-display command --path          # resolve its actual absolute path
+taskarian-display command --set < new.sh   # validate and save from stdin
+taskarian-display command --reset         # restore the packaged default
+taskarian-display status                  # real state, command path and display environment
+taskarian-display start                   # execute the saved script, idempotently
+taskarian-display stop                    # stop this owned display session
 ```
 
 Native Edit/Save and Pi call this same implementation through the private local
@@ -266,7 +266,7 @@ termux-x11 :1 -nolisten tcp -xstartup \
   'env LIBGL_ALWAYS_SOFTWARE=true dbus-launch --exit-with-session xfce4-session'
 ```
 
-The software override is BashKitten's choice using
+The software override is Taskarian's choice using
 [Mesa's documented variable](https://docs.mesa3d.org/envvars.html);
 it is not a claim that upstream prescribes that exact combined command or that
 Android's own screen compositor runs on the CPU. Check display-number/socket
@@ -344,10 +344,10 @@ Go dependencies. A release/version check is not runtime verification.
 
 Adapt these donor differences deliberately:
 
-- V2 generates its account and uses a separate QR password. BashKitten uses the
+- V2 generates its account and uses a separate QR password. Taskarian uses the
   chosen username/password and the **same password for the QR**, with no second
   account database or password verifier.
-- V2 disables Remember me and locks profiles after restart. Preserve BashKitten's
+- V2 disables Remember me and locks profiles after restart. Preserve Taskarian's
   requested remembered login through native protected storage and Authelia's
   real session/refresh lifecycle, not repeated password prompts.
 - V2 explicitly has incomplete Android packaging/device proof. Its mobile
@@ -690,13 +690,13 @@ that same service is published. Other service definitions remain in Share Local.
 | Launch on startup | Start when the host runtime starts; off by default for newly added services |
 
 Reuse v2's systemd **user** units for Linux commands, with product-owned stable
-unit IDs and upstream group cleanup. Reuse existing BashKitten identities where
+unit IDs and upstream group cleanup. Reuse existing Taskarian identities where
 possible; do not add component fingerprinting. No root service is needed. Keep
 arguments/quoting intact; no implicit shell expansion. Owners needing shell syntax
 can explicitly configure `/bin/sh -lc ...`. Configuration files remain on the
 host, without a custom model registry or command rewriting.
 
-For Termux hosts, reuse the existing BashKitten controller and native process
+For Termux hosts, reuse the existing Taskarian controller and native process
 guard for equivalent owned-process-group start/stop/reload and startup choices.
 Use Termux paths and native Android/Bionic executables; do not run Linux/glibc
 binaries, systemd or `/bin/sh` assumptions on Android. Explicit shell commands
@@ -704,7 +704,7 @@ use the host platform's real shell. Track exact process identities and stop only
 owned services; do not kill unrelated Termux jobs. Expose actual support/errors
 for user commands and llama.cpp runtimes instead of offering Linux-only package
 or GPU controls on a phone. An external loopback service can still be published
-without pretending that BashKitten owns its process.
+without pretending that Taskarian owns its process.
 
 Start is idempotent; Stop stops the owned unit. **Reload** restarts it with the
 current command/configuration, matching v2, and indicates that active streams
@@ -847,7 +847,7 @@ chat `/api/models` and authorized inference/service-ID actions; they are differe
 operations. LocalAI command/config files and credentials must not be writable
 through the remote file manager. Stock Pi keeps its separate OS authority.
 
-Extend the existing `bashkitten-llama` provider integration through stock Pi's
+Extend the existing `taskarian-llama` provider integration through stock Pi's
 supported configuration, **only when its saved import checkbox is enabled**.
 Save changes imports/updates the one owned provider using the actual ready
 loopback URL, router model IDs and configured application bearer/key file, if any;
@@ -884,7 +884,7 @@ router entries from Whisper choices without duplicating downloaded files.
 
 ### Managed runtime builds and custom binaries
 
-Create **`openresearchtools/bashkitten-localai`** during implementation as the
+Create **`openresearchtools/taskarian-localai`** during implementation as the
 runtime build/distribution repository. Copy/adapt only mainstream llama.cpp
 workflows and necessary Docker/build inputs from
 [`llama-cpp-arm64-builds`](https://github.com/openresearchtools/llama-cpp-arm64-builds/tree/d6e2239e6b96365b6c79391c137c4e1e4df2944c),
@@ -913,7 +913,7 @@ LocalAI exposes the installed runtime's matching offline notices/source record;
 an independently updated runtime must not keep an older binary's license inventory.
 Keep artifacts downloadable from Actions immediately for manual checks as well
 as runtime releases; retain the testing-release notice while required. Product
-UI/controller/Pi changes remain in BashKitten. This explicitly requested runtime
+UI/controller/Pi changes remain in Taskarian. This explicitly requested runtime
 builder is separate from the three existing app build-only repositories; do not
 move product code or replace their cache/workflow arrangement. Preserve complete
 source for what is shipped, without reviving another product-source repository.
@@ -937,13 +937,13 @@ working version if validation fails. Avoid network checks on every chat render.
 This replaces the earlier APT-only llama-runtime selection; preserve existing
 external/APT installations and let users select their binary as Custom.
 
-**Custom binary** disables BashKitten's checks/downloads/replacement for that
+**Custom binary** disables Taskarian's checks/downloads/replacement for that
 engine, including queued automatic updates. Keep its selected path and adjoining
 libraries in place; validate executability, architecture and required router/server
 capabilities without copying over or modifying it. A missing/incompatible custom
 binary gets a visible error, not a silent switch to Managed. Re-enabling Managed
 is an explicit native choice. Changing llama ownership does not disable Whisper
-runtime updates or BashKitten app updates.
+runtime updates or Taskarian app updates.
 
 ### Whisper setup and private dictation
 
@@ -1013,7 +1013,7 @@ application headers. Apply the same transparent behavior to other services.
 
 Termux Pi/pillama uses the actual phone-local mapped URL through its supported
 provider settings. A remote Pi uses the host endpoint instead; localhost refers
-to the machine running that Pi. Update only explicitly BashKitten-managed
+to the machine running that Pi. Update only explicitly Taskarian-managed
 provider settings when an automatic local port changes.
 
 Upstream documents [resumable streaming](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README-dev.md#resumable-streaming-sse-replay-buffer)
@@ -1064,14 +1064,14 @@ retrying a network problem must never silently rotate credentials.
 
 ## 9. Linux startup, tray and Quit
 
-Native settings add **Start BashKitten when I log in** and **Keep running in the
+Native settings add **Start Taskarian when I log in** and **Keep running in the
 tray when the window closes**. Startup is opt-in; close-to-tray is the requested
 default where a working tray host exists. Use per-user XDG autostart and the
 existing single-instance path, without sudo, another profile/window or a system
 boot daemon. Service Launch on startup remains a separate per-service choice.
 
-Use a small native StatusNotifier/AppIndicator integration with the BashKitten
-icon. Tray actions: **Open BashKitten**, real Agent/remote status and **Quit**.
+Use a small native StatusNotifier/AppIndicator integration with the Taskarian
+icon. Tray actions: **Open Taskarian**, real Agent/remote status and **Quit**.
 Hide/show the existing window so its lifetime guard/adopted runtime stays alive;
 do not destroy the final Gecko window and try to revive the stopped backend.
 OS URL launches/another invocation reveal the same instance. Autostart can enter
@@ -1095,12 +1095,12 @@ during the current runtime.
 | `agent/src/server/platform/linux/{llama,llama-provider}.mjs` | Command/config service ownership; remove duplicate HTTP token-injecting relay behavior |
 | Desktop native Agent controls, private controller and `agent/src/server/models/` | LocalAI page, runtime/custom binary selection, router INI/pickers and relocated downloader; preserve workers/jobs and automatically configure the owned Pi provider |
 | `agent/src/web` composer, protected browser capture, authenticated inference and owned Whisper worker | Single-button recording/stop, on-demand transcription on the configured Agent host and saved Whisper auto-send/draft choice; no disk staging, content logs or telemetry |
-| New `openresearchtools/bashkitten-localai` workflows | Mainstream llama.cpp and whisper.cpp amd64/arm64 CUDA/Vulkan builds, upstream tracking, independent engine releases, downloadable artifacts, checksums/source/notices; no TurboQuant |
+| New `openresearchtools/taskarian-localai` workflows | Mainstream llama.cpp and whisper.cpp amd64/arm64 CUDA/Vulkan builds, upstream tracking, independent engine releases, downloadable artifacts, checksums/source/notices; no TurboQuant |
 | Existing `agent/src/web` settings and remote HTTP/RPC management | Remove host publishing/account/QR/identity/permission/service-definition controls and routes; retain chat and permitted file-manager operations |
 | `agent/src/server/http/server.mjs`, shared `files/` operations/jobs and web Files/Changes UI | Host-owned remote file-manager capability, complete route/transport enforcement, editor parity and live revocation without a privileged fallback |
 | Android `AgentPanel.java`, `AgentRuntime.java`, `AgentRemotesActivity.java` and Fenix Agent navigation | Native Share Local through private Termux bridge, remote-first onboarding/back, image import, service actions/mappings, foreground ownership and logo-based navigation |
 | Android native Agent panel, package visibility and `TermuxConnection.java` | Local-only Display sheet, compatible X11 detection/download, saved-command editing and private launcher actions; dismiss/deny actions after switching to Remote |
-| Termux platform/controller, `agent/packaging/build.py`, Pi integration and environment note | Package `bashkitten-display`, one durable editable launch script, owned display lifecycle/status, X11 companion dependency and local `termux-display` skill; retain headless Xvfb |
+| Termux platform/controller, `agent/packaging/build.py`, Pi integration and environment note | Package `taskarian-display`, one durable editable launch script, owned display lifecycle/status, X11 companion dependency and local `termux-display` skill; retain headless Xvfb |
 | Android `TorManager.java`, `TorGateway.java`, `SecretStore.java` | Reuse native Tor, scoped trust and protected credentials; add native tunnel client without Termux |
 | Desktop `components/{agent,tor}` | Native Share Local over protected local IPC, equivalent connection UI, protected Agent transport/storage; replace `LlamaRelay` with common native core |
 | Android/desktop native tab and network routing | Private Tor context before onion navigation; Tor-only subresources, DNS, redirects and downloads; block unsupported direct transports; keep native mapped-service routing separately scoped |
@@ -1135,13 +1135,13 @@ subset at `e37e76a2d4b3c8f9e5287d003d50eddc4b5a7e7f`, plus its MIT notice.
 Extend this to the complete source tree of the exact selected upstream revision,
 including its package/dependency lock files where supplied and build metadata,
 with recorded commit/hash/provenance. Keep upstream files pristine and the small
-BashKitten adapter separate. No submodule, runtime Git clone or release-time
+Taskarian adapter separate. No submodule, runtime Git clone or release-time
 fetch from the pillama repository is required to obtain product sources.
 
 Build/package the runtime extension from this checked-in tree on Linux/Termux;
 include the full corresponding tree in source releases and accurate notices in
 both browser platforms. Upstream development/test files may remain as source
-provenance but are not installed or executed as BashKitten product tests. Preserve
+provenance but are not installed or executed as Taskarian product tests. Preserve
 native Pi discovery/RPC and telemetry behavior. Audit the release manifests so
 every bundled component is traceable to source/build material in this product
 repository; no binary-only pillama payload or version label without matching
@@ -1164,7 +1164,7 @@ source. This does not vendor the user's models or unrelated external OS packages
 Work directly on main in focused commits and push finished slices. Record actual
 evidence per exact candidate commit. Resolve early integration gates before full
 Gecko iterations; reuse unchanged component artifacts under existing provenance
-rules. Keep the three app builders; the requested `bashkitten-localai` runtime
+rules. Keep the three app builders; the requested `taskarian-localai` runtime
 builder is the sole new repository in this extension. No new fingerprinting scheme.
 
 Preserve Local data, providers, Pi history/runtime, drafts, native permissions and
@@ -1178,16 +1178,16 @@ never negotiate a weaker fallback from the new tunnel flow.
 Use the current independent Linux arm64/amd64 and Android build repositories.
 Collect artifacts as soon as they upload; each builder keeps manually downloadable
 Actions artifacts and publishes no release. Build matching Termux aarch64 with
-current Pi/pillama/skills and prior Local recovery fixes. Preserve `com.bashkitten`,
+current Pi/pillama/skills and prior Local recovery fixes. Preserve `com.taskarian`,
 APK signer and increasing version code. Publish four installable artifacts,
 checksums, corresponding source/build material and offline Android/Linux notices,
-including Chisel, age, QR dependencies and reused TorKitten. BashKitten remains
+including Chisel, age, QR dependencies and reused TorKitten. Taskarian remains
 AGPL-3.0-only; preserve every retained dependency's own license.
 
 ## 12. Manual acceptance
 
 Use visible ordinary Cuttlefish UI, Linux browsers, APT and normal package
-installers. No ADB/root/hidden permissions or BashKitten-owned scripted product
+installers. No ADB/root/hidden permissions or Taskarian-owned scripted product
 tests. Source integrity/compiler/artifact checks are necessary but not user-flow
 proof. Keep evidence outside product source/artifacts. Record actual Android/VM
 configuration and the previously authorized child-process toggle; do not claim
@@ -1258,7 +1258,7 @@ slices and their limits; they do not replace the manual acceptance table.
   in source releases only. Installed-package/Pi acceptance remains pending.
 - `4088b4f8dd`: pristine Chisel 1.12.0 and age 1.3.2 imported, Caddy updated to
   2.11.7, with exact archive hashes and source-tree matches. Native access-stack
-  [run 37257679830](https://github.com/openresearchtools/BashKitten/actions/runs/37257679830)
+  [run 37257679830](https://github.com/openresearchtools/Taskarian/actions/runs/37257679830)
   passed Linux amd64/arm64 and Termux aarch64 builds, assembly and notices.
   Downloaded Chisel uses `/system/bin/linker64` and 16 KB ELF load alignment.
   **No Chisel source patches.** Device/tunnel operation remains pending.
@@ -1266,12 +1266,12 @@ slices and their limits; they do not replace the manual acceptance table.
   against the donor's exact upstream source trees.
 - `fa945a089e`: shared tunnel adapter and `TK2:` age/gzip/encrypted QR codec,
   with host adapter excluded from the Android client build. Native core
-  [run 37258757560](https://github.com/openresearchtools/BashKitten/actions/runs/37258757560)
+  [run 37258757560](https://github.com/openresearchtools/Taskarian/actions/runs/37258757560)
   compiled Linux amd64/arm64 and Android arm64 client packages. This is library
   compilation, not a JNI/APK integration or authentication acceptance result.
 - `0f5bdf12c8`: Android navigation uses the existing kitten logo; Local setup
   offers Connect to remote and remembers the previous remote for Back to remote.
-  [APK candidate run 37258390184](https://github.com/openresearchtools/BashKitten/actions/runs/37258390184)
+  [APK candidate run 37258390184](https://github.com/openresearchtools/Taskarian/actions/runs/37258390184)
   succeeded. Its signed APK was installed through the ordinary Android Package
   Installer in the existing Cuttlefish guest without clearing data. Opening it
   restored Local chat without the earlier saved-certificate-change error or an
@@ -1282,7 +1282,7 @@ slices and their limits; they do not replace the manual acceptance table.
   does not contain the new tunnel architecture.
 - `362db52356`: private native host executable, controller-pipe commands,
   service-ID Unix listener and active-carrier authorization rechecks. Native
-  [run 37259995050](https://github.com/openresearchtools/BashKitten/actions/runs/37259995050)
+  [run 37259995050](https://github.com/openresearchtools/Taskarian/actions/runs/37259995050)
   built Linux amd64/arm64 and Termux aarch64 executables with complete linked
   notices/source, plus the Android client source boundary. No public host
   management port or Chisel source patch was added.
@@ -1290,16 +1290,16 @@ slices and their limits; they do not replace the manual acceptance table.
   refresh/revocation and an onion-confined Tor/TLS HTTP transport. The intended
   native navigation callback preserves the protected Agent's real browser cookie;
   browser callback and client-certificate wiring are still pending. Native
-  [run 37260351793](https://github.com/openresearchtools/BashKitten/actions/runs/37260351793)
+  [run 37260351793](https://github.com/openresearchtools/Taskarian/actions/runs/37260351793)
   passed all executable/client builds. Downloaded Termux payload/source hashes
   match; its helper uses `/system/bin/linker64`, AArch64 PIE and 0x4000 LOAD
   alignment, and includes TorKitten and linked dependency license texts.
 - `c2fac8fca9`: added the helper to normal auth/package/source/license assembly
   and supplied its private pipe adapter through the existing AccessStack process
   owner. Native source compilation
-  [run 37260611280](https://github.com/openresearchtools/BashKitten/actions/runs/37260611280)
+  [run 37260611280](https://github.com/openresearchtools/Taskarian/actions/runs/37260611280)
   passed. Full auth assembly
-  [run 37260611311](https://github.com/openresearchtools/BashKitten/actions/runs/37260611311)
+  [run 37260611311](https://github.com/openresearchtools/Taskarian/actions/runs/37260611311)
   passed all Linux amd64/arm64 and Termux aarch64 component, runtime-guard and
   assembly jobs. Share Local has not activated the new helper; old remote
   management removal and migration remain pending, not silently complete.
@@ -1323,7 +1323,7 @@ slices and their limits; they do not replace the manual acceptance table.
   before revoking and clearing them. Token rotation erases the saved old token
   before exchange, preventing replay after a failed request or process death.
   A failed replacement-port bind preserves the working mapping. Native
-  [run 37264273374](https://github.com/openresearchtools/BashKitten/actions/runs/37264273374)
+  [run 37264273374](https://github.com/openresearchtools/Taskarian/actions/runs/37264273374)
   compiled Linux amd64/arm64 and the Android arm64 client source boundary.
   This has not yet been wired to native platform storage/UI or accepted through
   a real tunnel.
@@ -1334,7 +1334,7 @@ slices and their limits; they do not replace the manual acceptance table.
   callback and produces private Gecko certificate enrollment data. Android build
   integration adds the ARM64 AAR, complete linked notices and Go/generated-Java
   source to the candidate, with ABI/16 KB and library-hash checks. Native
-  [run 37265727085](https://github.com/openresearchtools/BashKitten/actions/runs/37265727085)
+  [run 37265727085](https://github.com/openresearchtools/Taskarian/actions/runs/37265727085)
   passed the ARM64 JNI library and all three source compilation targets. The
   downloaded artifact checksums, generated Java classes and AArch64 16 KB ELF
   load alignment match its manifest. Host packages are excluded and full linked
@@ -1354,7 +1354,7 @@ slices and their limits; they do not replace the manual acceptance table.
   the corresponding client certificate/PKCS#8 data only for its enrolled
   onion:443, excludes it from ordinary routing and refuses credential omission
   after enrollment. Its NSS copy is cleared with the existing scoped CA/session
-  lifetime. Native [run 37266464187](https://github.com/openresearchtools/BashKitten/actions/runs/37266464187)
+  lifetime. Native [run 37266464187](https://github.com/openresearchtools/Taskarian/actions/runs/37266464187)
   at `2dbd964683` passed all three source compilation targets, the ARM64 JNI/AAR
   build and Java compilation against its actual generated binding and Android
   API. APK/device operation and connection-screen/controller activation remain
@@ -1368,14 +1368,14 @@ slices and their limits; they do not replace the manual acceptance table.
   to the existing authentication process group and stops with it; no new
   supervisor or public hashing endpoint. Native builds and actual Authelia
   account/TOTP acceptance for this change remain pending. Native compilation
-  [run 37267463370](https://github.com/openresearchtools/BashKitten/actions/runs/37267463370)
+  [run 37267463370](https://github.com/openresearchtools/Taskarian/actions/runs/37267463370)
   and full access-stack assembly
-  [run 37267463395](https://github.com/openresearchtools/BashKitten/actions/runs/37267463395)
+  [run 37267463395](https://github.com/openresearchtools/Taskarian/actions/runs/37267463395)
   at `3a37ad1149` subsequently passed all requested native targets.
 - Linux browser candidates `37266283224` (arm64) and `37266262457` (amd64)
   at `6f6cbf9dfd` reached final package assembly. Both failed because the product
   license collector expected `auth/bin/remote` instead of the actual packaged
-  `auth/bin/bashkitten-remote`; Android candidate `37266258560` found the same
+  `auth/bin/taskarian-remote`; Android candidate `37266258560` found the same
   mismatch while collecting companion notices. Correct the executable lookup,
   retaining the mandatory component and full license checks. No complete package
   or Android browser-build acceptance is claimed from these failed runs.
@@ -1443,11 +1443,11 @@ slices and their limits; they do not replace the manual acceptance table.
   reuse a transient QR password. JavaScript parsing and diff checks pass. Native
   binding/gateway compilation and real login/tunnel acceptance are pending;
   connection-screen/controller activation is still being implemented.
-  Native core [run 37273992184](https://github.com/openresearchtools/BashKitten/actions/runs/37273992184)
+  Native core [run 37273992184](https://github.com/openresearchtools/Taskarian/actions/runs/37273992184)
   at `9223a35207` subsequently passed Linux amd64/arm64 and Android client builds,
   including the generated binding and actual Android API compilation of
   `NativeRemote`, `SecretStore` and `TorGateway`. Full access-stack
-  [run 37273991841](https://github.com/openresearchtools/BashKitten/actions/runs/37273991841)
+  [run 37273991841](https://github.com/openresearchtools/Taskarian/actions/runs/37273991841)
   passed all components and assembly for Linux amd64/arm64 and Termux aarch64.
   Gateway-only changes now trigger that native compilation workflow too.
   These results establish compilation/assembly, not an installed APK or the
@@ -1469,7 +1469,7 @@ slices and their limits; they do not replace the manual acceptance table.
   compilation and actual QR/password/TOTP/consent, draft, cancellation and tunnel
   acceptance remain pending; service cards and desktop client migration remain
   unfinished.
-  Native [run 37275524625](https://github.com/openresearchtools/BashKitten/actions/runs/37275524625)
+  Native [run 37275524625](https://github.com/openresearchtools/Taskarian/actions/runs/37275524625)
   at `a29c5d70ff` subsequently passed all three source targets, JNI/AAR and Java
   compilation, including `RemoteAgentConnection`. APK parent `37275535857` /
   child `37275735339` is building this integration with auth `37273991841`.
@@ -1483,7 +1483,7 @@ slices and their limits; they do not replace the manual acceptance table.
   The downloaded ARM64 package reports the exact `fc4ef81966` source, version
   153.4 and arm64 architecture. Its SHA-256 matches its accompanying metadata
   (`142c0e360c505fb6c0346fc58dde86d00791fb43b7f791c034939f65913aadc3`),
-  and the payload includes `auth/bin/bashkitten-remote` plus full helper/dependency
+  and the payload includes `auth/bin/taskarian-remote` plus full helper/dependency
   notices. The currently running browser and Cuttlefish guest were left intact;
   this download/integrity check did not install or accept that package.
 
@@ -1527,7 +1527,7 @@ slices and their limits; they do not replace the manual acceptance table.
   mapping cards/Pi import are pending. No full application build was dispatched.
 
 - Desktop lifetime source now uses a GTK StatusNotifier item with the packaged
-  BashKitten icon and Gecko's existing DBusMenu integration. Hiding requires a
+  Taskarian icon and Gecko's existing DBusMenu integration. Hiding requires a
   registered tray host; losing that host reveals the same native window. Open,
   selected Agent state/connected-remote count and Quit are available in the tray.
   Native General settings have opt-in per-user XDG login startup and the requested
@@ -1558,7 +1558,7 @@ Additional observed evidence, 5 October:
   controller, with compatible official X11 downloads, command Copy/Edit/Save,
   explicit default restore, Start/Stop/Open X11 and Copy prompt. Remote selection
   hides/dismisses it and is checked before dispatch. Its ViewModel retains an
-  unfinished command/action across rotation. One packaged `bashkitten-display`
+  unfinished command/action across rotation. One packaged `taskarian-display`
   launcher and durable script serve the panel, terminal user and local Pi;
   the existing process guard owns GUI descendants and whole-Agent shutdown.
   Saving validates syntax without executing or interrupting the current desktop.
@@ -1581,7 +1581,7 @@ Additional observed evidence, 5 October:
   `37273991841` and search `37231795625` components, was downloaded, checksum
   verified and reinstalled using the guest's visible Termux UI. SHA-256:
   `25e017c7fd4a6d39bf68a6a0c325b25bb5fd87d82ca315f54b03abf952450693`.
-  APT finished successfully. Reopening BashKitten started Local without an
+  APT finished successfully. Reopening Taskarian started Local without an
   account/CA prompt. Entering `/login` opened Providers. The installed APK was
   still `0f5bdf12`; this does not validate the new native connection screen.
   No provider was connected, so no inference/browser-tool turn was accepted.
@@ -1674,7 +1674,7 @@ need no local inference binary or Termux for host-side dictation. These statemen
 describe source behavior; actual device permission, audio privacy and queue/lifecycle
 acceptance remain pending.
 
-The requested [bashkitten-localai](https://github.com/openresearchtools/bashkitten-localai)
+The requested [taskarian-localai](https://github.com/openresearchtools/taskarian-localai)
 builder is created. It pins pristine llama.cpp v0.5.0 at
 `7fe450e19305b828c199d602c23a8337aaa1f03b` and whisper.cpp v1.9.4 at
 `927cfce34f31707e17f2bff35c349632fb9e2c3a`. Each engine has native amd64/arm64
@@ -1682,8 +1682,8 @@ CPU/Vulkan/CUDA builds with immediate Actions artifacts, matching full source,
 build records, offline notices, checksums and a testing-only release manifest.
 The first runtime compile identified GCC 13's missing ARM SME support; the
 builder uses GCC 14 without patching upstream. Runtime builds
-[llama 37308116410](https://github.com/openresearchtools/bashkitten-localai/actions/runs/37308116410)
-and [Whisper 37308122209](https://github.com/openresearchtools/bashkitten-localai/actions/runs/37308122209)
+[llama 37308116410](https://github.com/openresearchtools/taskarian-localai/actions/runs/37308116410)
+and [Whisper 37308122209](https://github.com/openresearchtools/taskarian-localai/actions/runs/37308122209)
 passed all twelve variants and published separate testing prereleases. Their
 six-variant manifests, exact source pins, checksums and builder-source inventories
 were checked; downloaded Vulkan/CUDA ELF dependencies match the declared ordinary
@@ -1738,7 +1738,7 @@ Full native compilation and manual damaged-state/startup/Reissue checks remain
 pending; no scripted product test or installed-runtime acceptance is claimed.
 
 The installed Linux ARM64 candidate `d773ea374f` exposed a missing tray component
-after a full Quit/relaunch. The product configure file defined `MOZ_BASHKITTEN`
+after a full Quit/relaunch. The product configure file defined `MOZ_TASKARIAN`
 for C++ but omitted its build substitution, excluding the tray source, XPIDL and
 static component registration. Exporting the same setting through `set_config`
 fixes those build gates. Build-file parsing and upstream XPIDL header generation
@@ -1817,7 +1817,7 @@ and ordinary request handling are unchanged.
 
 Whitespace and the existing member/call-path source checks passed. Native
 compilation and manual verification of this correction remain pending. The
-guest-wide capture's UDP traffic to `8.8.8.8:443` is not attributed to BashKitten
+guest-wide capture's UDP traffic to `8.8.8.8:443` is not attributed to Taskarian
 or this path; no runtime leak claim is made from that capture.
 
 ### 5 October dictation capability request correction

@@ -2195,8 +2195,8 @@ nsresult nsIOService::SpeculativeConnectInternal(
   NS_ENSURE_ARG(aURI);
 
   if ((aPrincipal &&
-       aPrincipal->OriginAttributesRef().IsBashKittenNetworkIsolated()) ||
-      (aOriginAttributes && aOriginAttributes.ref().IsBashKittenNetworkIsolated())) {
+       aPrincipal->OriginAttributesRef().IsTaskarianNetworkIsolated()) ||
+      (aOriginAttributes && aOriginAttributes.ref().IsTaskarianNetworkIsolated())) {
     return NS_OK;
   }
   if (!SchemeIsHttpOrHttps(aURI)) {

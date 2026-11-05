@@ -34,9 +34,9 @@ void DBusService::Run() {
 // Mozilla has old GIO version in build roots
 #define G_BUS_NAME_OWNER_FLAGS_DO_NOT_QUEUE GBusNameOwnerFlags(1 << 2)
 
-#ifdef MOZ_BASHKITTEN
-#  define DBUS_BUS_NAME_TEMPLATE "com.bashkitten"
-#  define DBUS_OBJECT_PATH_TEMPLATE "/com/bashkitten"
+#ifdef MOZ_TASKARIAN
+#  define DBUS_BUS_NAME_TEMPLATE "com.taskarian"
+#  define DBUS_OBJECT_PATH_TEMPLATE "/com/taskarian"
 #else
 #  define DBUS_BUS_NAME_TEMPLATE "org.mozilla.%s"
 #  define DBUS_OBJECT_PATH_TEMPLATE "/org/mozilla/%s"
@@ -44,7 +44,7 @@ void DBusService::Run() {
 
 static const char* GetDBusBusName() {
   static const char* name = []() {
-#ifdef MOZ_BASHKITTEN
+#ifdef MOZ_TASKARIAN
     return ToNewCString(nsLiteralCString(DBUS_BUS_NAME_TEMPLATE));
 #else
     nsAutoCString appName;
@@ -58,7 +58,7 @@ static const char* GetDBusBusName() {
 
 static const char* GetDBusObjectPath() {
   static const char* path = []() {
-#ifdef MOZ_BASHKITTEN
+#ifdef MOZ_TASKARIAN
     return ToNewCString(nsLiteralCString(DBUS_OBJECT_PATH_TEMPLATE));
 #else
     nsAutoCString appName;

@@ -60,7 +60,7 @@ jobs:
     env:
       GOTELEMETRY: 'off'
       DO_NOT_TRACK: '1'
-      BASHKITTEN_BUILD_JOBS: '2'
+      TASKARIAN_BUILD_JOBS: '2'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,7 +90,7 @@ jobs:
         with:
           path: |
             ~/.local/share/pnpm/store
-            ~/.cache/bashkitten-termux
+            ~/.cache/Taskarian/termux
           key: auth-${{ matrix.component }}-${{ matrix.target }}-${{ hashFiles('auth/upstreams.lock.json', 'auth/build/**', 'auth/*-termux/**', 'auth/authelia/web/pnpm-lock.yaml') }}
       - uses: actions/cache@v4
         id: payload
@@ -102,7 +102,7 @@ jobs:
         env:
           COMPONENT: ${{ matrix.component }}
           TARGET: ${{ matrix.target }}
-          BASHKITTEN_BUILD_LOG_DIR: ${{ runner.temp }}/build-logs
+          TASKARIAN_BUILD_LOG_DIR: ${{ runner.temp }}/build-logs
         run: |
           auth/build/"$COMPONENT".sh "$TARGET" "$RUNNER_TEMP/payload"
       - name: Retain failed native configure logs
@@ -120,7 +120,7 @@ jobs:
         run: |
           executable="$COMPONENT"
           if [[ "$COMPONENT" == valkey ]]; then executable=valkey-server; fi
-          if [[ "$COMPONENT" == remote ]]; then executable=bashkitten-remote; fi
+          if [[ "$COMPONENT" == remote ]]; then executable=taskarian-remote; fi
           readelf -h "$RUNNER_TEMP/payload/bin/$executable"
           readelf -lW "$RUNNER_TEMP/payload/bin/$executable"
           if [[ "$TARGET" == termux-* ]]; then
@@ -174,7 +174,7 @@ jobs:
       - name: Assemble private runtime, notices and source
         env:
           TARGET: ${{ matrix.target }}
-          BASHKITTEN_SOURCE_CACHE: ${{ runner.temp }}/source-cache
+          TASKARIAN_SOURCE_CACHE: ${{ runner.temp }}/source-cache
         run: |
           mkdir -p "$RUNNER_TEMP/payload"
           for archive in "$RUNNER_TEMP"/components/*/component.tar.gz; do

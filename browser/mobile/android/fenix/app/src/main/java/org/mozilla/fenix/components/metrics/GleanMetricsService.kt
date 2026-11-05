@@ -56,7 +56,7 @@ private val Event.wrapper: EventWrapper<*>?
     get() = null
 
 /**
- * Upstream metrics service; BashKitten keeps collection disabled.
+ * Upstream metrics service; Taskarian keeps collection disabled.
  */
 class GleanMetricsService(
     private val context: Context,

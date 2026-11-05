@@ -1,4 +1,4 @@
-name: Complete BashKitten candidates
+name: Complete Taskarian candidates
 'on':
   workflow_dispatch:
     inputs:
@@ -82,7 +82,7 @@ jobs:
       run: |
         version=$(python3 -c 'import json; print(json.load(open("agent/machines/rust-toolchain/sources.json"))["version"])')
         rustup toolchain install "$version" --profile minimal --component rust-docs --target wasm32-unknown-unknown
-        printf '%s\n' "RUSTUP_TOOLCHAIN=$version" "BASHKITTEN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "BASHKITTEN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
+        printf '%s\n' "RUSTUP_TOOLCHAIN=$version" "TASKARIAN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "TASKARIAN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: auth-termux-${{ matrix.architecture }}
@@ -124,7 +124,7 @@ jobs:
           --os-package "$(find inputs/os -maxdepth 1 -name '*.deb')"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: bashkitten-termux-${{ matrix.architecture }}-candidate
+        name: taskarian-termux-${{ matrix.architecture }}-candidate
         path: dist/
         if-no-files-found: error
         compression-level: 0
@@ -144,8 +144,8 @@ jobs:
           /auth/dependencies/go/proxy/
           /files/go_runtime.py
           /files/vendor/dependencies/
-          /browser/bashkitten/scripts/blocker_asset_provenance.py
-          /browser/bashkitten/BLOCKER-ASSET-SOURCE-NOTICE
+          /browser/taskarian/scripts/blocker_asset_provenance.py
+          /browser/taskarian/BLOCKER-ASSET-SOURCE-NOTICE
           /browser/browser/components/blocker/assets/
           /browser/browser/components/blocker/scripts/
     - name: Backfill the pinned source revision with native Git
@@ -176,14 +176,14 @@ jobs:
       run: python3 agent/packaging/sources.py "$RUNNER_TEMP/sources" --node-sources node-inputs --cache "$RUNNER_TEMP/source-cache"
     - name: Collect retained adblock corresponding source
       run: |
-        python3 -I -B browser/bashkitten/scripts/blocker_asset_provenance.py build \
+        python3 -I -B browser/taskarian/scripts/blocker_asset_provenance.py build \
           --repository "$GITHUB_WORKSPACE/browser" \
           --cache-dir "$RUNNER_TEMP/blocker-source-cache" \
-          --output "$RUNNER_TEMP/sources/bashkitten-blocker-assets-source.tar.xz" \
+          --output "$RUNNER_TEMP/sources/taskarian-blocker-assets-source.tar.xz" \
           --skip-reproduction-check
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: bashkitten-corresponding-source
+        name: taskarian-corresponding-source
         path: ${{ runner.temp }}/sources/
         if-no-files-found: error
         compression-level: 0
@@ -210,7 +210,7 @@ jobs:
         sparse-checkout: |
           /agent/packaging/
           /agent/src/server/platform/termux/updates-prepare.py
-          /browser/bashkitten/config/version.txt
+          /browser/taskarian/config/version.txt
           /browser/browser/config/version_display.txt
           /README.md
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -218,13 +218,13 @@ jobs:
         # Auth/search carry matching sources; Node sources are already in the
         # corresponding-source artifact. Other runtimes are inside the DEBs,
         # with their tracked source retained in the complete product archive.
-        pattern: '{bashkitten-{android*,linux-*,termux-*}-candidate,bashkitten-corresponding-source,auth-linux-*,auth-termux-*,search-runtime-*,guest-packages-linux-*,os-termux-*}'
+        pattern: '{taskarian-{android*,linux-*,termux-*}-candidate,taskarian-corresponding-source,auth-linux-*,auth-termux-*,search-runtime-*,guest-packages-linux-*,os-termux-*}'
         path: candidates
     - name: Verify six primary binaries and source inventory
       run: python3 agent/packaging/release.py candidates release --candidate-only
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: bashkitten-complete-candidate
+        name: taskarian-complete-candidate
         path: release/
         if-no-files-found: error
         compression-level: 0

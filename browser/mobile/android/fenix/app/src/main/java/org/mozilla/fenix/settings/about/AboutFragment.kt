@@ -188,7 +188,7 @@ class AboutFragment(
             ""
         }
 
-        val content = getString(R.string.bashkitten_about_content)
+        val content = getString(R.string.taskarian_about_content)
         val buildDate = BuildConfig.BUILD_DATE
 
         binding.aboutText.text = aboutText
@@ -201,7 +201,7 @@ class AboutFragment(
             AboutPageItem(
                 AboutItem.ExternalLink(
                     WHATS_NEW,
-                    "https://github.com/openresearchtools/bashkitten/releases",
+                    "https://github.com/openresearchtools/Taskarian/releases",
                 ),
                 // Note: Fenix only has release notes for 'Release' versions, NOT 'Beta' & 'Nightly'.
                 getString(R.string.about_whats_new, appName),
@@ -209,14 +209,14 @@ class AboutFragment(
             AboutPageItem(
                 AboutItem.ExternalLink(
                     SUPPORT,
-                    "https://github.com/openresearchtools/bashkitten/issues",
+                    "https://github.com/openresearchtools/Taskarian/issues",
                 ),
                 getString(R.string.about_support),
             ),
 
             AboutPageItem(
                 AboutItem.ExternalLink(LICENSING_INFO, ABOUT_LICENSE_URL),
-                getString(R.string.bashkitten_engine_licenses),
+                getString(R.string.taskarian_engine_licenses),
             ),
             AboutPageItem(
                 AboutItem.Libraries,
@@ -224,7 +224,7 @@ class AboutFragment(
             ),
             AboutPageItem(
                 AboutItem.ProductLicenses,
-                getString(R.string.bashkitten_licenses_and_source),
+                getString(R.string.taskarian_licenses_and_source),
             ),
         )
     }
@@ -259,7 +259,7 @@ class AboutFragment(
                 openLibrariesPage()
             }
             is AboutItem.ProductLicenses -> {
-                startActivity(Intent(requireContext(), com.bashkitten.LicensesActivity::class.java))
+                startActivity(Intent(requireContext(), com.taskarian.LicensesActivity::class.java))
             }
             is AboutItem.Crashes -> {
                 val navController = findNavController()

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "nodeVersion": "v22.23.2",
-  "artifact": "bashkitten-blocker-assets-source.tar.xz",
+  "artifact": "taskarian-blocker-assets-source.tar.xz",
   "sources": {
     "braveAdblockResources": {
       "name": "Brave adblock-resources",

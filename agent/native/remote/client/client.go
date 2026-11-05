@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/openresearchtools/bashkitten/remote/bundle"
-	"github.com/openresearchtools/bashkitten/remote/oauth"
-	"github.com/openresearchtools/bashkitten/remote/tunnel"
+	"github.com/openresearchtools/Taskarian/remote/bundle"
+	"github.com/openresearchtools/Taskarian/remote/oauth"
+	"github.com/openresearchtools/Taskarian/remote/tunnel"
 )
 
 type Config struct {
@@ -60,7 +60,7 @@ type Client struct {
 
 // OAuthClientID is derived from the bundle ID so no additional shared secret or
 // registration field is needed in TK2. Host registration uses this same value.
-func OAuthClientID(enrollment bundle.Bundle) string { return "bashkitten-" + enrollment.ID }
+func OAuthClientID(enrollment bundle.Bundle) string { return "taskarian-" + enrollment.ID }
 
 func New(config Config) (*Client, error) {
 	if config.Save == nil {

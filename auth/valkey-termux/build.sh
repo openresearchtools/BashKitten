@@ -39,9 +39,9 @@ PY
 }
 
 termux_step_make_install() {
-  local dest="$TERMUX_PREFIX/lib/bashkitten/auth"
+  local dest="$TERMUX_PREFIX/lib/taskarian/auth"
   install -Dm755 "$TERMUX_PKG_BUILDDIR/bin/valkey-server" "$dest/bin/valkey-server"
-  python3 "$BASHKITTEN_SOURCE_ROOT/auth/build/valkey-notices.py" "$TERMUX_PKG_SRCDIR" "$dest"
+  python3 "$TASKARIAN_SOURCE_ROOT/auth/build/valkey-notices.py" "$TERMUX_PKG_SRCDIR" "$dest"
 }
 
 termux_step_post_make_install() { :; }

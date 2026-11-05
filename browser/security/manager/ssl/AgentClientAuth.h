@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-#ifndef BashKittenAgentClientAuth_h
-#define BashKittenAgentClientAuth_h
+#ifndef TaskarianAgentClientAuth_h
+#define TaskarianAgentClientAuth_h
 
 #include "ScopedNSSTypes.h"
 #include "mozilla/OriginAttributes.h"

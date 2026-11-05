@@ -31,7 +31,7 @@ __pycache__/
 
 /agent/work/
 
-# Downloaded dependency wrappers use BASHKITTEN_SOURCE_CACHE (28 October 2026).
+# Downloaded dependency wrappers use TASKARIAN_SOURCE_CACHE (28 October 2026).
 # Keep source trees, manifests, licenses, fixtures and Maven source JARs visible.
 /agent/machines/vendor/*/*-vendor.tar.gz
 /agent/references/connector/vendor/npm/*.tgz

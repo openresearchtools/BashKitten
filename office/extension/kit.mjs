@@ -10,15 +10,15 @@ export function nativeOperation(request) {
   const documentType = model.supportsService('com.sun.star.text.TextDocument') ? 'text'
     : model.supportsService('com.sun.star.sheet.SpreadsheetDocument') ? 'spreadsheet'
     : model.supportsService('com.sun.star.presentation.PresentationDocument') ? 'presentation' : 'unsupported';
-  const propertyName = 'BashKittenReferencesV1';
+  const propertyName = 'TaskarianReferencesV1';
   const properties = model.getDocumentProperties().getUserDefinedProperties();
   const short = value => new uno.Any(uno.type.short, value);
   const fail = message => { throw new Error(message); };
   const integer = (value, min, max, name) => Number.isInteger(value) && value >= min && value <= max ? value : fail('Invalid ' + name);
   const text = (value, max = 262144, field = 'text') => typeof value === 'string' && value.length <= max ? value : fail('Invalid or oversized ' + field);
   const has = name => properties.getPropertySetInfo().hasPropertyByName(name);
-  const portablePrefix = 'ADDIN BASHKITTEN_CITATION ';
-  const portableNamespace = 'urn:bashkitten:references:1';
+  const portablePrefix = 'ADDIN TASKARIAN_CITATION ';
+  const portableNamespace = 'urn:taskarian:references:1';
   let fieldCache, objectCache, applyingState;
   function drawingPages() {
     const pages = documentType === 'spreadsheet' ? model.getSheets() : model.getDrawPages();

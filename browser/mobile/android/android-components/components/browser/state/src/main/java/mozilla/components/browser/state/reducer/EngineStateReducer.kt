@@ -25,7 +25,7 @@ internal object EngineStateReducer {
                     contextId = action.contextId ?: current.contextId,
                     content = current.content.copy(
                         private = current.content.private ||
-                            (action.contextId ?: current.contextId)?.startsWith("bashkitten-tor-") == true,
+                            (action.contextId ?: current.contextId)?.startsWith("taskarian-tor-") == true,
                     ),
                     engineState = current.engineState.copy(
                         engineSession = action.engineSession,

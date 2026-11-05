@@ -15,7 +15,7 @@ const cancelled = message => Object.assign(Error(message), { code: 'CANCELLED' }
 async function missingRuntime(engine, speech) {
   const runtime = await runtimeInfo(engine);
   if (!runtime?.binary || engine === 'whisper' && !runtime.capabilities?.streamingVad) return true;
-  const files = engine === 'llama' ? ['llama-server', 'llama-tts'] : ['whisper-server', 'parakeet-cli', 'bashkitten-vad'];
+  const files = engine === 'llama' ? ['llama-server', 'llama-tts'] : ['whisper-server', 'parakeet-cli', 'taskarian-vad'];
   for (const name of files) {
     try { await fs.access(path.join(path.dirname(runtime.binary), name), fs.constants.X_OK); }
     catch (error) { if (['ENOENT', 'EACCES'].includes(error.code)) return true; throw error; }
@@ -68,7 +68,7 @@ export class FirstRunLocalAI {
     if (settings.getDefaultProvider() !== undefined || settings.getDefaultModel() !== undefined) return;
     const preset = firstRunModelPresets(platform === 'termux' ? 'android' : 'linux').llama;
     const name = path.basename(preset.files.find(file => !/mmproj/i.test(file))).replace(/\.gguf$/i, '');
-    settings.setDefaultModelAndProvider('bashkitten-llama', routerModelId(name));
+    settings.setDefaultModelAndProvider('taskarian-llama', routerModelId(name));
     await settings.flush();
     const errors = settings.drainErrors();
     if (errors.length) throw Error('Could not save the default model: ' + errors.map(item => item.error?.message || item.message || String(item)).join('; '));

@@ -45,7 +45,7 @@ async function register() {
   const previousSkills = [...baseSkills, ...(platform === 'termux' ? ['skills/termux-display/SKILL.md'] : [])];
   const previousAllSkills = [...previousSkills, 'skills/subagents/SKILL.md'];
   const manifest = JSON.parse(await fs.readFile(path.join(integrationRoot, 'package.json'), 'utf8'));
-  const role = process.env.BASHKITTEN_EXECUTION_ROLE;
+  const role = process.env.TASKARIAN_EXECUTION_ROLE;
   const roleGuide = role === 'termux' ? 'termux-use' : role === 'container' ? 'computer-use' : null;
   const commonSkills = manifest.pi.skills.filter(directory =>
     !directory.startsWith('./desktop-guides/') &&

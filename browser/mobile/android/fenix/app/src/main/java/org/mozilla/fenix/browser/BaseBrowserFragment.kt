@@ -420,14 +420,14 @@ abstract class BaseBrowserFragment :
         return binding.root
     }
 
-    private var bashKittenDisplay: org.mozilla.fenix.bashkitten.FenixDisplayViewport? = null
+    private var taskarianDisplay: org.mozilla.fenix.taskarian.FenixDisplayViewport? = null
 
     final override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         // DO NOT ADD ANYTHING ABOVE THIS getProfilerTime CALL!
         val profilerStartTime = requireComponents.core.engine.profiler?.getProfilerTime()
 
         if (customTabSessionId == null) {
-            bashKittenDisplay = org.mozilla.fenix.bashkitten.FenixDisplayViewport(
+            taskarianDisplay = org.mozilla.fenix.taskarian.FenixDisplayViewport(
                 viewLifecycleOwner, binding.browserLayout, binding.swipeRefresh,
                 requireComponents.core.store, requireComponents.useCases.tabsUseCases,
                 requireComponents.useCases.sessionUseCases,
@@ -716,7 +716,7 @@ abstract class BaseBrowserFragment :
                 DownloadService::class,
                 notificationsDelegate = context.components.notificationsDelegate,
             ),
-            shouldSkipConfirmation = { id -> com.bashkitten.BrowserApp.get(context).agentTab(id) },
+            shouldSkipConfirmation = { id -> com.taskarian.BrowserApp.get(context).agentTab(id) },
             shouldForwardToThirdParties = {
                 PreferenceManager.getDefaultSharedPreferences(context).getBoolean(
                     context.getPreferenceKey(R.string.pref_key_external_download_manager),
@@ -1667,7 +1667,7 @@ abstract class BaseBrowserFragment :
         bottomToolbarHeight: Int,
     ) {
         val context = requireContext()
-        bashKittenDisplay?.toolbarInsets(topToolbarHeight, bottomToolbarHeight)
+        taskarianDisplay?.toolbarInsets(topToolbarHeight, bottomToolbarHeight)
 
         if (isToolbarDynamic(context) && webAppToolbarShouldBeVisible) {
             getEngineView().setDynamicToolbarMaxHeight(topToolbarHeight + bottomToolbarHeight)
@@ -2325,8 +2325,8 @@ abstract class BaseBrowserFragment :
      * Dereference these views when the fragment view is destroyed to prevent memory leaks
      */
     override fun onDestroyView() {
-        bashKittenDisplay?.destroy()
-        bashKittenDisplay = null
+        taskarianDisplay?.destroy()
+        taskarianDisplay = null
         super.onDestroyView()
 
         // Diagnostic breadcrumb for "Display already aquired" crash:

@@ -3,7 +3,7 @@ name: Publish testing release
   workflow_dispatch:
     inputs:
       candidate_run:
-        description: Successful Complete BashKitten candidates run to publish
+        description: Successful Complete Taskarian candidates run to publish
         required: true
         type: string
       prerelease:
@@ -24,7 +24,7 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ github.token }}
-      GH_REPO: openresearchtools/BashKitten
+      GH_REPO: openresearchtools/Taskarian
       CANDIDATE_RUN: ${{ inputs.candidate_run }}
       PRERELEASE: ${{ inputs.prerelease }}
     steps:
@@ -43,7 +43,7 @@ jobs:
         ref: ${{ steps.candidate.outputs.revision }}
         persist-credentials: false
     - name: Download complete release artifacts
-      run: gh run download "$CANDIDATE_RUN" --name bashkitten-complete-candidate --dir release
+      run: gh run download "$CANDIDATE_RUN" --name taskarian-complete-candidate --dir release
     - name: Verify artifacts and required testing notice
       id: release
       env:
@@ -62,7 +62,7 @@ jobs:
             raise SystemExit('Candidate source does not match the successful build')
         if not release.get('testingRelease') or 'testing-releases.svg' not in notes or 'Testing release only. Not ready for production.' not in notes:
             raise SystemExit('The testing release warning is required')
-        version = Path('../browser/bashkitten/config/version.txt').read_text().strip()
+        version = Path('../browser/taskarian/config/version.txt').read_text().strip()
         if not re.fullmatch(r'v\d+\.\d+(?:\.\d+)?', release['tag']) or release['tag'] != 'v' + version or release['version'] != version or release['packageVersion'] != version:
             raise SystemExit('Invalid product release tag')
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
@@ -79,5 +79,5 @@ jobs:
         if [ "$PRERELEASE" = true ]; then flags=(--prerelease --latest=false); fi
         gh release create "$RELEASE_TAG" release/* \
           --target "$CANDIDATE_REVISION" \
-          --title "BashKitten ${RELEASE_TAG#v} · Testing release" \
+          --title "Taskarian ${RELEASE_TAG#v} · Testing release" \
           --notes-file release/release-notes.md "${flags[@]}"

@@ -1691,7 +1691,7 @@ export var TelemetrySendImpl = {
   },
 
   runPingSender(_pings, _observer) {
-    // BashKitten does not ship the pingsender binary.
+    // Taskarian does not ship the pingsender binary.
     throw Components.Exception("", Cr.NS_ERROR_NOT_IMPLEMENTED);
   },
 };

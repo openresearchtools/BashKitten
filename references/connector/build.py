@@ -39,7 +39,7 @@ for directory in ['preferences','integration','tools','test','offscreen']:
 for filename in ['api.js','oauthsimple.js','updaterFix.js','manifest-v3.json']:
  (OUT/filename).unlink(missing_ok=True)
 # Use the References artwork for native action and per-tab status icons.
-# Donor legal attribution stays in legal/; main BashKitten branding is separate.
+# Donor legal attribution stays in legal/; main Taskarian branding is separate.
 icons=ROOT/'src/icons'
 for size in [16,32,64,128]:shutil.copy(icons/f'Icon-{size}.png',OUT/f'Icon-{size}.png')
 artwork=(icons/'references.svg').read_text()
@@ -96,7 +96,7 @@ for path in OUT.rglob('*.html'):
  text=path.read_text(encoding='utf-8-sig').replace('Zotero Connector','References').replace('>Zotero<','>References<').replace('<title>Zotero - Confirm Import','<title>References — Confirm Import').replace('>Zotero Item Selector','>References Item Selector')
  path.write_text(text)
 manifest=json.loads((OUT/'manifest.json').read_text())
-manifest.update(name='References',description='Capture references into the selected BashKitten project.',homepage_url='https://github.com/openresearchtools/BashKitten')
+manifest.update(name='References',description='Capture references into the selected Taskarian project.',homepage_url='https://github.com/openresearchtools/Taskarian')
 manifest['browser_action']['default_title']='References Add'
 manifest['browser_action']['default_popup']='references/destination.html'
 manifest['browser_action']['default_area']='navbar'
@@ -108,7 +108,7 @@ manifest.pop('applications',None)
 # Capture sends page URLs/content to the selected local or remote backend.
 # Use Gecko's existing required-data prompt, available on desktop 140 / Android 142.
 manifest['browser_specific_settings']={
- 'gecko':{'id':'references@bashkitten.org','strict_min_version':'140.0',
+ 'gecko':{'id':'references@taskarian.org','strict_min_version':'140.0',
           'data_collection_permissions':{'required':['browsingActivity','websiteContent']}},
  'gecko_android':{'strict_min_version':'142.0'},
 }
@@ -238,6 +238,6 @@ with zipfile.ZipFile(xpi,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
  for path in sorted(OUT.rglob('*')):
   if path.is_file():
    info=zipfile.ZipInfo(str(path.relative_to(OUT)),date_time=(2026,10,28,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16;archive.writestr(info,path.read_bytes())
-result={'version':VERSION,'extensionId':'references@bashkitten.org','hostId':'references-host@bashkitten.org','hostApi':1,'connectorApi':3,'translatorCount':len(metadata),'translatorCommit':'c83003773b65359e41466e1d419b2d1df5512af7','sha256':hashlib.sha256(xpi.read_bytes()).hexdigest(),'signed':False}
+result={'version':VERSION,'extensionId':'references@taskarian.org','hostId':'references-host@taskarian.org','hostApi':1,'connectorApi':3,'translatorCount':len(metadata),'translatorCommit':'c83003773b65359e41466e1d419b2d1df5512af7','sha256':hashlib.sha256(xpi.read_bytes()).hexdigest(),'signed':False}
 (ROOT/'dist/component.json').write_text(json.dumps(result,indent=2)+'\n')
 print(json.dumps(result,indent=2))

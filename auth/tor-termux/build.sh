@@ -1,4 +1,4 @@
-# BashKitten private installation of the upstream Termux Tor recipe and patches.
+# Taskarian private installation of the upstream Termux Tor recipe and patches.
 source "$TERMUX_PKG_BUILDER_DIR/upstream-build.sh"
 TERMUX_PKG_VERSION=0.4.9.15
 TERMUX_PKG_AUTO_UPDATE=false
@@ -22,11 +22,11 @@ termux_step_make() {
 }
 
 termux_step_make_install() {
-  local dest="$TERMUX_PREFIX/lib/bashkitten/auth"
+  local dest="$TERMUX_PREFIX/lib/taskarian/auth"
   install -Dm755 src/app/tor "$dest/bin/tor"
   install -Dm644 "$TERMUX_PKG_SRCDIR/src/config/geoip" "$dest/share/tor/geoip"
   install -Dm644 "$TERMUX_PKG_SRCDIR/src/config/geoip6" "$dest/share/tor/geoip6"
-  python3 "$BASHKITTEN_SOURCE_ROOT/auth/build/tor-notices.py" "$TERMUX_PKG_SRCDIR" "$dest"
+  python3 "$TASKARIAN_SOURCE_ROOT/auth/build/tor-notices.py" "$TERMUX_PKG_SRCDIR" "$dest"
   install -Dm644 "$TERMUX_SCRIPTDIR/packages/libandroid-glob/LICENSE" "$dest/share/licenses/tor/libandroid-glob-LICENSE"
 }
 

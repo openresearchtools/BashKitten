@@ -33,8 +33,8 @@ existing Linux and native Termux build owner. Native SBOM generation reads the
 patched engine list; source/legal assembly uses the same original archive pins.
 
 Downloaded archives and split parts remain outside Git in
-`BASHKITTEN_SOURCE_CACHE`. Prepare the cache through the existing source owner,
-then build with `BASHKITTEN_OFFLINE_SOURCES=1`. Corresponding-source artifacts
+`TASKARIAN_SOURCE_CACHE`. Prepare the cache through the existing source owner,
+then build with `TASKARIAN_OFFLINE_SOURCES=1`. Corresponding-source artifacts
 include the original archives and named patches. Files in `licenses/` are exact
 original full legal files or complete inline legal preambles; `refresh.json`
 records their archive members, checksums and byte ranges when needed. The

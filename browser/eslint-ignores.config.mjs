@@ -50,12 +50,12 @@ export default [
   // browser/ exclusions
   "browser/app/",
   "browser/branding/**/firefox-branding.js",
-  "bashkitten/browser/branding/**/firefox-branding.js",
-  "bashkitten/browser/app/profile/",
-  "bashkitten/browser/branding/**/firefox-branding.js",
+  "taskarian/browser/branding/**/firefox-branding.js",
+  "taskarian/browser/app/profile/",
+  "taskarian/browser/branding/**/firefox-branding.js",
   // Pre-processed default pref files
-  "bashkitten/browser/app/profile/",
-  "bashkitten/browser/themes/lepton/prefs-lepton.js",
+  "taskarian/browser/app/profile/",
+  "taskarian/browser/themes/lepton/prefs-lepton.js",
   // Gzipped test file.
   "browser/base/content/test/general/gZipOfflineChild.html",
   "browser/base/content/test/urlbar/file_blank_but_not_blank.html",

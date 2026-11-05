@@ -13,7 +13,7 @@ export default function extension(pi: ExtensionAPI) {
   let provider = 'llama.cpp';
   const selectProvider = (_event: unknown, ctx: ExtensionContext) => {
     const selected = ctx.model?.provider;
-    provider = selected === 'bashkitten-llama' || selected?.startsWith('bashkitten-remote-') ? selected : 'llama.cpp';
+    provider = selected === 'taskarian-llama' || selected?.startsWith('taskarian-remote-') ? selected : 'llama.cpp';
   };
   pi.on('session_start', selectProvider);
   pi.on('model_select', selectProvider);
@@ -27,9 +27,9 @@ export default function extension(pi: ExtensionAPI) {
   }, {
     agentDir,
     async isGeneratedProvider(id, definition) {
-      if (!/^bashkitten-(?:llama|remote-[a-f0-9]{48}-[a-z0-9_-]{1,64})$/.test(id)) return false;
+      if (!/^taskarian-(?:llama|remote-[a-f0-9]{48}-[a-z0-9_-]{1,64})$/.test(id)) return false;
       try {
-        // The owned Pi profile is $BASHKITTEN_DATA_DIR/pi on both platforms.
+        // The owned Pi profile is $TASKARIAN_DATA_DIR/pi on both platforms.
         const owner = JSON.parse(await readFile(join(dirname(agentDir), 'access/managed-providers', id + '.json'), 'utf8'));
         return isDeepStrictEqual(definition, owner?.provider) || isDeepStrictEqual(definition, owner?.pending);
       } catch { return false; }

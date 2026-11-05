@@ -1,7 +1,7 @@
-From: BashKitten contributors
+From: Taskarian contributors
 Subject: [PATCH] mount: require the configured private fusermount helper
 
-BashKitten owns its container helpers. If the configured packaged helper cannot
+Taskarian owns its container helpers. If the configured packaged helper cannot
 start, return that failure instead of searching for a host installation in PATH.
 This modification retains the LGPLv2 terms of lib/mount.c.
 
@@ -12,7 +12,7 @@ This modification retains the LGPLv2 terms of lib/mount.c.
  	/* See man 7 environ for the global environ pointer */
  
 -	/* first try the install path */
-+	/* BashKitten requires the configured private install path. */
++	/* Taskarian requires the configured private install path. */
  	int status = posix_spawn(&pid, full_path,  action, NULL,
  				 (char * const *) argv, environ);
 -	if (status != 0) {

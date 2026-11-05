@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+plugins {
+    alias(libs.plugins.kotlin.android)
+}
+
+apply plugin: 'com.android.library'
+android {
+    namespace 'com.taskarian.telephony'
+    compileSdk { version = release(project.ext.compileSdkMajorVersion) { minorApiLevel = project.ext.compileSdkMinorVersion } }
+    defaultConfig { minSdk 31; targetSdk project.ext.targetSdkVersion }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+dependencies { implementation libs.androidx.core }

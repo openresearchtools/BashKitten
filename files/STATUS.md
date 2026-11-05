@@ -17,7 +17,7 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
 - Runtime-owner integration exercised real Caddy HTTPS and native Files. Two
   launches had distinct grants and one Quantum process; admin/private traversal
   was denied; quit stopped the owned process. External evidence:
-  `BashkittenBuild/verification/apps-native-gateway-20261028/native-gateway-evidence.json`.
+  `TaskarianBuild/verification/apps-native-gateway-20261028/native-gateway-evidence.json`.
 - Standalone add-on rebuilt and Go vet passed, including derived native Save As
   session registration and distinct random token identities.
 - Actual stock Collabora native RSA proof key generation enabled discovery proofs.
@@ -47,7 +47,7 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
   `untrusted_app_27`, RunCommandService) passed FFmpeg/ffprobe, native Files
   page/list, private denial, PDF and video JPEG previews, SQLite, and the add-on
   private Unix health endpoint. Owned children exited afterward. Evidence:
-  `BashkittenBuild/verification/files-termux-20261028/native-termux-evidence.json`.
+  `TaskarianBuild/verification/files-termux-20261028/native-termux-evidence.json`.
   Reopening the same native database exposed a duplicate denyAll API failure;
   native GET-before-create reconciliation corrected it and the restart passed.
 - Actual revoked-view close released only its proof-verified matching native lock;
@@ -67,7 +67,7 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
   with retained Go 1.27.2 and dav1d 1.5.4, clean source revision
   `12923eaccbfc299c70892166aae0b9aa2cff4bd6`, and 599 checked files per artifact.
   Exact artifact hashes/paths are recorded outside the repository in
-  `BashkittenBuild/components/files/artifacts/sealed-receipts-20261028.json`.
+  `TaskarianBuild/components/files/artifacts/sealed-receipts-20261028.json`.
 - The runtime owner's actual Caddy/native test changed the validated forwarded
   Host to another HTTPS port. The wrapper form used that exact origin; native
   editor POST, public WebSocket, history, References bridge and token renewal
@@ -78,7 +78,7 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
   rejected its second use with 404. The explicit browser copy action returned
   the mapped saved-copy URL; native inspection found zero managed citations in
   the copy and one in the unchanged master. Evidence:
-  `BashkittenBuild/verification/apps-native-gateway-20261028/office-copy-export-evidence.json`.
+  `TaskarianBuild/verification/apps-native-gateway-20261028/office-copy-export-evidence.json`.
   A restricted remote-account export test was unavailable in that fixture.
 - Normal package assembly rejected the sealed Files artifacts because 73
   dependency records had no full notice text. Successful native compilation and
@@ -110,7 +110,7 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
   the existing file-only ffprobe gate for `StreamFile`. Actual queued cancellation,
   eight previews after cancellation, embedded subtitle extraction and local
   metadata then passed. Network protocol support remains disabled. Evidence is
-  under `BashkittenBuild/verification/files-licensed-20261028/`.
+  under `TaskarianBuild/verification/files-licensed-20261028/`.
   These are development validations; final sealing correctly refused dirty
   source. A clean committed rebuild and normal package collector acceptance
   remain required, including the final capability patch.
@@ -124,7 +124,7 @@ Requirements remain in `../docs/files-office-bibliography-plan.md`.
   a real cross-device source-cleanup failure retained its explicit failure phase.
   Configured symlink exclusion also rejected source and destination traversal
   without copying outside content or writing outside the selected folder.
-  Evidence: `BashkittenBuild/verification/files-moves-20261028/`.
+  Evidence: `TaskarianBuild/verification/files-moves-20261028/`.
 - The runtime owner's actual gateway proof preserved document ID/history across
   active-document rename, directory move and auto-suffixing, and rejected the old
   native session. An overwritten target's old ID opened only retained history;

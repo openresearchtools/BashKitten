@@ -27,7 +27,7 @@ import org.mozilla.fenix.nimbus.FxNimbus
  * [applicationContext] the application context required for glean initialization.
  * [logger] the logger to send logs about initializing Glean.
  * [isTelemetryUploadEnabled] indicate if telemetry should be enabled to be uploaded.
- * [client] retained for caller compatibility; BashKitten never uploads metrics.
+ * [client] retained for caller compatibility; Taskarian never uploads metrics.
  */
 fun initializeGlean(
     applicationContext: Context,

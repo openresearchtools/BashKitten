@@ -47,7 +47,7 @@ def linux_metadata(payload, work, architecture):
         needed.update(re.findall(r'\(NEEDED\).*\[([^]]+)\]', dynamic))
         versions.update(re.findall(r'GLIBC_([0-9]+\.[0-9]+)', subprocess.check_output(['readelf', '--version-info', binary], text=True)))
     dependency_work = work/'dependencies'; (dependency_work/'debian').mkdir(parents=True, exist_ok=True)
-    (dependency_work/'debian/control').write_text('Source: bashkitten-files\nSection: utils\nPriority: optional\nMaintainer: Open Research Tools <openresearchtools@gmail.com>\n\nPackage: bashkitten-files\nArchitecture: any\nDescription: private native Files component\n')
+    (dependency_work/'debian/control').write_text('Source: taskarian-files\nSection: utils\nPriority: optional\nMaintainer: Open Research Tools <openresearchtools@gmail.com>\n\nPackage: taskarian-files\nArchitecture: any\nDescription: private native Files component\n')
     result = subprocess.check_output(['dpkg-shlibdeps', '-O', *('-e'+str(binary) for binary in binaries)], cwd=dependency_work, text=True)
     depends = result.strip().removeprefix('shlibs:Depends=').split(', ')
     if not depends or not any(value.startswith('libc6') for value in depends): raise ValueError('Missing native OS dependency inventory')
@@ -63,7 +63,7 @@ def main():
     parser.add_argument('--go', default='go')
     parser.add_argument('--jobs', type=int, default=4)
     parser.add_argument('--prepare-only', action='store_true')
-    parser.add_argument('--source-cache', type=pathlib.Path, help='External verified original-source cache (or BASHKITTEN_SOURCE_CACHE)')
+    parser.add_argument('--source-cache', type=pathlib.Path, help='External verified original-source cache (or TASKARIAN_SOURCE_CACHE)')
     parser.add_argument('--offline-sources', action='store_true', help='Require every pinned source in the cache or an existing verified local archive')
     args = parser.parse_args(); work = args.work_dir.resolve(); work.mkdir(parents=True, exist_ok=True)
     if work == ROOT or ROOT in work.parents: raise ValueError('Build work must stay outside the source module')
@@ -156,7 +156,7 @@ def main():
     if payload.exists(): shutil.rmtree(payload)
     (payload/'bin').mkdir(parents=True)
     native_version = 'github.com/gtsteffaniak/filebrowser/backend/internal/version'
-    ldflags = '-s -w -X '+native_version+'.Version=2.0.2-stable+bashkitten -X '+native_version+'.CommitSHA=2c071d1e6eb48d4b88da2657885d345663a0a88b'
+    ldflags = '-s -w -X '+native_version+'.Version=2.0.2-stable+taskarian -X '+native_version+'.CommitSHA=2c071d1e6eb48d4b88da2657885d345663a0a88b'
     tags = 'mupdf,extlib,static'+(',cgosql' if toolchain else '')
     prepared_modules = go_runtime.resolved(args.go, source/'backend', env, tags)
     run([args.go,'build','-mod=readonly','-trimpath','-tags='+tags,'-ldflags='+ldflags,'-o',payload/'bin/filebrowser','.'],source/'backend',env)
@@ -170,7 +170,7 @@ def main():
     licenses = notices.write(payload, legal_records)
     shutil.copy2(ROOT/'vendor/quantum/source/LICENSE',payload/'legal/Quantum-LICENSE')
     for name in ['COPYING','LICENSE','NOTICE']: shutil.copy2(ROOT/'addon'/name,payload/'legal'/('addon-'+name))
-    licenses.extend([{'name':'File Browser Quantum','version':'2.0.2-stable','license':'Apache-2.0','text':(payload/'legal/Quantum-LICENSE').read_text()}, {'name':'BashKitten Files adapters and Office add-on','license':'AGPL-3.0-only AND Apache-2.0 AND MIT','text':'\n\n'.join((ROOT/'addon'/name).read_text() for name in ['NOTICE','COPYING','LICENSE'])}])
+    licenses.extend([{'name':'File Browser Quantum','version':'2.0.2-stable','license':'Apache-2.0','text':(payload/'legal/Quantum-LICENSE').read_text()}, {'name':'Taskarian Files adapters and Office add-on','license':'AGPL-3.0-only AND Apache-2.0 AND MIT','text':'\n\n'.join((ROOT/'addon'/name).read_text() for name in ['NOTICE','COPYING','LICENSE'])}])
     go_notices['write_toolchain_notices'](go_legal, payload/'legal/go-toolchain')
     licenses.append(go_legal['record'])
     if toolchain: licenses.extend(termux.notices(args,toolchain))

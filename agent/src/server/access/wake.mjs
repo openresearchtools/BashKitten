@@ -6,12 +6,12 @@ export async function acquireWake() {
   if (platform !== 'termux' || held) return;
   await command('termux-wake-lock', [], { timeout: 15000 });
   held = true;
-  if (Number(process.env.BASHKITTEN_GUARD_PID) === process.ppid) process.kill(process.ppid, 'SIGUSR1');
+  if (Number(process.env.TASKARIAN_GUARD_PID) === process.ppid) process.kill(process.ppid, 'SIGUSR1');
 }
 export async function releaseWake() {
   if (platform !== 'termux') return;
   // Reconcile the app-wide lock after an interrupted previous controller too.
   await command('termux-wake-unlock', [], { timeout: 15000 });
   held = false;
-  if (Number(process.env.BASHKITTEN_GUARD_PID) === process.ppid) process.kill(process.ppid, 'SIGUSR2');
+  if (Number(process.env.TASKARIAN_GUARD_PID) === process.ppid) process.kill(process.ppid, 'SIGUSR2');
 }

@@ -1,8 +1,8 @@
 ---
 name: browser-debugging-linux
-description: Debug ordinary pages in the connected BashKitten Linux desktop browser. Use for responsive/mobile emulation, page diagnostics and controlled test state when browser_debug capabilities.platform is linux.
+description: Debug ordinary pages in the connected Taskarian Linux desktop browser. Use for responsive/mobile emulation, page diagnostics and controlled test state when browser_debug capabilities.platform is linux.
 ---
-# BashKitten desktop browser debugging
+# Taskarian desktop browser debugging
 
 ## Part 1 — Choose, inspect, act, verify
 
@@ -1385,7 +1385,7 @@ a substitute for an established remote Pi connection. The native executable
 accepts one request on standard input:
 
 ```sh
-printf '%s\n' '{"method":"debug.capabilities","params":{}}' | bashkitten --no-start --agent-json
+printf '%s\n' '{"method":"debug.capabilities","params":{}}' | taskarian --no-start --agent-json
 ```
 
 Native debugging requests use the `debug.` prefix. Replace the JSON object

@@ -148,7 +148,7 @@ async function stopPrivatePause() {
 if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === 'idle' && process.argv[3] === 'serve') {
   // The caller holds machines-update; the still-running legacy owner keeps its
   // machines lock. This bounded read does not stop any of its existing work.
-  if (Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid) throw Error('The container cleanup guard is unavailable');
+  if (Number(process.env.TASKARIAN_GUARD_PID) !== process.ppid) throw Error('The container cleanup guard is unavailable');
   const deadline = setTimeout(() => process.kill(process.ppid,'SIGTERM'),10000);
   try {
     // Schema 1 predates the private Podman runtime directory. Create only that
@@ -161,7 +161,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === 'i
   const owner = await claimInstance('machines');
   if (!owner) throw Error('The container service is already owned');
   try {
-    if (Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid) throw Error('The container cleanup guard is unavailable');
+    if (Number(process.env.TASKARIAN_GUARD_PID) !== process.ppid) throw Error('The container cleanup guard is unavailable');
     // This one-shot controller is already draining. Arm the same bounded guard
     // deadline now; a lost caller must not leave an orphan cleanup process.
     process.on('SIGTERM', () => {});

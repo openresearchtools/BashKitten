@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+browser.jar:
+    content/browser/taskarian/agent/about.css (about.css)
+    content/browser/taskarian/agent/agent.css (agent.css)
+    content/browser/taskarian/agent/ConnectionQR.worker.js (ConnectionQR.worker.js)
+    content/browser/taskarian/agent/jsQR.js (third_party/jsqr/jsQR.js)

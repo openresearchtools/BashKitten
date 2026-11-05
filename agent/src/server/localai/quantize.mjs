@@ -41,7 +41,7 @@ export async function quantizePocket(job, { file, type, output } = {}) {
       hash.update(buffer.subarray(0, bytesRead)); offset += bytesRead;
     }
     if (hash.digest('hex') !== pocket.sha256 || !unchanged(identity, await fs.lstat(file))) throw Error('The source does not match the verified Pocket F16 model');
-    staging = await fs.mkdtemp(path.join(destination, '.bashkitten-quantize-'));
+    staging = await fs.mkdtemp(path.join(destination, '.taskarian-quantize-'));
     const temporary = path.join(staging, 'model.gguf');
     await job.phase(`Creating Pocket ${type}; the original model and projector are preserved`);
     const child = launchInference({ argv: [executable, file, temporary, type], cwd: destination, env: managedRuntimeEnvironment(runtime.binary, {}, 'cpu') }, { capture: false });

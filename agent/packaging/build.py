@@ -145,7 +145,7 @@ def install_machines(args, app, revision, version):
         shutil.copy2(ROOT / 'machines' / name, root / name)
     require(args.guest_packages is not None, 'Linux desktop packages require matching --guest-packages')
     packages = root / 'image/packages'; packages.mkdir(parents=True, exist_ok=True)
-    expected = {'bashkitten-backend', 'bashkitten-os', 'bashkitten-machines-guest'}
+    expected = {'taskarian-backend', 'taskarian-os', 'taskarian-machines-guest'}
     found = {}; records = []; guest_licenses = []
     for deb in sorted(args.guest_packages.rglob('*.deb')):
         fields = subprocess.check_output(['dpkg-deb', '-f', str(deb), 'Package', 'Version', 'Architecture'], text=True)
@@ -165,17 +165,17 @@ def install_machines(args, app, revision, version):
                     'Guest package checksum mismatch: ' + name)
         shutil.copy2(deb, packages / deb.name); found[name] = deb.name
         records.append({'package': name, 'file': deb.name, 'sha256': checksum, 'provenance': provenance})
-        if name != 'bashkitten-backend':
+        if name != 'taskarian-backend':
             with tempfile.TemporaryDirectory(prefix='guest-notices-', dir=app.parent) as extracted:
                 run(['dpkg-deb', '-x', str(deb), extracted])
-                notice_root = Path(extracted) / ('usr/share/bashkitten-os' if name == 'bashkitten-os'
-                                                else 'usr/share/bashkitten-machines-guest')
+                notice_root = Path(extracted) / ('usr/share/taskarian-os' if name == 'taskarian-os'
+                                                else 'usr/share/taskarian-machines-guest')
                 notices = license_files(notice_root)
                 require(notices, 'Missing full guest package license texts: ' + name)
                 guest_licenses.append({'name': name, 'version': version, 'source':
-                    'https://github.com/openresearchtools/bashkitten/tree/' + revision,
+                    'https://github.com/openresearchtools/Taskarian/tree/' + revision,
                     'text': '\n\n'.join(str(p.relative_to(notice_root)) + '\n' + p.read_text() for p in notices)})
-    require(set(found) == expected, 'Guest image needs backend, BashKitten OS and guest-service packages')
+    require(set(found) == expected, 'Guest image needs backend, Taskarian OS and guest-service packages')
     write_json(packages / 'manifest.json', {'schema': 1, 'revision': revision,
                'architecture': args.architecture, 'version': version, 'packages': records})
     write_json(root / 'guest-licenses.json', guest_licenses)
@@ -192,7 +192,7 @@ def install_display(args, app, revision):
     metadata = read_json(app / 'display/manifest.json')
     require(metadata.get('architecture') == args.architecture and metadata.get('sourceCommit') == revision,
             'Display component target/source revision mismatch')
-    require(sha(app / 'display/bashkitten-display') == metadata.get('binarySha256'), 'Display executable checksum mismatch')
+    require(sha(app / 'display/taskarian-display') == metadata.get('binarySha256'), 'Display executable checksum mismatch')
     require(isinstance(metadata.get('depends'), list), 'Display must declare native dependencies')
     (app / 'browser/runtime/display').symlink_to('../../display')
     return {'archive': args.display_archive.name, 'sha256': digest, 'metadata': metadata}
@@ -205,9 +205,9 @@ def install_machine_apparmor(stage, app):
         require(Path(item['path']).name == item['path'] and
                 sha(source / 'upstream' / item['path']) == item['sha256'],
                 'Private Podman AppArmor source checksum mismatch')
-    profile = stage / 'etc/apparmor.d/bashkitten-podman'
+    profile = stage / 'etc/apparmor.d/taskarian-podman'
     profile.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source / 'bashkitten-podman', profile)
+    shutil.copy2(source / 'taskarian-podman', profile)
     # Keep policy source/provenance and the full license available offline.
     notices = app / 'machines/apparmor'
     shutil.copytree(source, notices)
@@ -224,7 +224,7 @@ def install_termux_display(args, app, revision, bin_dir):
     require(args.termux_display_dir is not None, 'Termux requires the paired --termux-display-dir component')
     source = args.termux_display_dir
     metadata = read_json(source / 'manifest.json')
-    require(metadata.get('sourceCommit') == revision and metadata.get('package') == 'com.bashkitten',
+    require(metadata.get('sourceCommit') == revision and metadata.get('package') == 'com.taskarian',
             'Termux Display loader package/source revision mismatch')
     # The same publisher certificate is enforced against final APKs by release.py.
     from release import CERT
@@ -235,19 +235,19 @@ def install_termux_display(args, app, revision, bin_dir):
                 'Development pairing requires the explicit local signing receipt')
         signer = development['certificate_sha256']
     require(metadata.get('signerSha256') == signer, 'Termux Display loader is paired with a different APK signer')
-    for name in ['bashkitten-x11', 'bashkitten-x11-loader.jar']:
+    for name in ['taskarian-x11', 'taskarian-x11-loader.jar']:
         require(sha(source / name) == metadata['sha256'].get(name), 'Display loader checksum mismatch: ' + name)
     display = app / 'display'; display.mkdir(exist_ok=True)
-    loader = display / 'bashkitten-x11-loader.jar'
-    shutil.copy2(source / 'bashkitten-x11-loader.jar', loader)
+    loader = display / 'taskarian-x11-loader.jar'
+    shutil.copy2(source / 'taskarian-x11-loader.jar', loader)
     # Non-root dpkg reopens .dpkg-new for writeback after applying archive modes.
     # Like the donor package, make the installed loader read-only in postinst.
     loader.chmod(0o600)
     shutil.copytree(source / 'licenses', display / 'licenses')
     shutil.copy2(source / 'manifest.json', display / 'manifest.json')
     bin_dir.mkdir(parents=True, exist_ok=True)
-    launcher = bin_dir / 'bashkitten-x11'
-    shutil.copy2(source / 'bashkitten-x11', launcher)
+    launcher = bin_dir / 'taskarian-x11'
+    shutil.copy2(source / 'taskarian-x11', launcher)
     # Actions artifact transport does not retain the source executable mode.
     # The installed launcher is a command; set its mode at the package boundary.
     launcher.chmod(0o755)
@@ -258,17 +258,17 @@ def collect_termux_os(deb, app, revision, architecture, version):
     require(deb is not None and deb.is_file(), 'Termux requires matching --os-package')
     fields = subprocess.check_output(['dpkg-deb', '-f', str(deb), 'Package', 'Version', 'Architecture'], text=True)
     info = dict(line.split(': ', 1) for line in fields.splitlines())
-    require(info == {'Package': 'bashkitten-os', 'Version': version + '-1', 'Architecture': architecture},
+    require(info == {'Package': 'taskarian-os', 'Version': version + '-1', 'Architecture': architecture},
             'Termux OS package target/version mismatch')
     metadata = read_json(Path(str(deb) + '.json'))
     require(metadata.get('sourceCommit') == revision and metadata.get('sha256') == sha(deb),
             'Termux OS package source/hash mismatch')
     with tempfile.TemporaryDirectory(prefix='termux-os-notices-', dir=app.parent) as temporary:
         run(['dpkg-deb', '-x', str(deb), temporary])
-        root = Path(temporary) / 'data/data/com.termux/files/usr/share/bashkitten-os'
+        root = Path(temporary) / 'data/data/com.termux/files/usr/share/taskarian-os'
         paths = license_files(root)
         require(paths, 'Termux OS package lacks full license texts')
-        write_json(app / 'os-licenses.json', [{'name': 'BashKitten OS', 'version': version + '-1',
+        write_json(app / 'os-licenses.json', [{'name': 'Taskarian OS', 'version': version + '-1',
             'text': '\n\n'.join(str(p.relative_to(root)) + '\n' + p.read_text() for p in paths)}])
     return metadata
 
@@ -336,16 +336,16 @@ def package_browser(args, app, stage, version, auth):
     component['verify'](directory, 'linux-' + args.architecture, compile_digest)
     require(metadata.get('architecture') == args.architecture, 'Browser architecture mismatch')
     require(metadata.get('product_version') == version, 'Browser product version mismatch')
-    archives = [p for p in directory.glob('bashkitten*.tar.*') if p.is_file()]
-    require(len(archives) == 1, 'Expected one BashKitten browser archive')
+    archives = [p for p in directory.glob('taskarian*.tar.*') if p.is_file()]
+    require(len(archives) == 1, 'Expected one Taskarian browser archive')
     archive = archives[0]
     digest = checked_archive(archive)
     checked_archive(manifest)
     extracted = stage.parent / 'browser-input'
     extract(archive, extracted)
-    require({p.name for p in extracted.iterdir()} == {'bashkitten'}, 'Browser archive must contain one bashkitten directory')
-    browser = extracted / 'bashkitten'
-    require((browser / 'bashkitten').is_file(), 'Browser archive has no BashKitten executable')
+    require({p.name for p in extracted.iterdir()} == {'taskarian'}, 'Browser archive must contain one taskarian directory')
+    browser = extracted / 'taskarian'
+    require((browser / 'taskarian').is_file(), 'Browser archive has no Taskarian executable')
     ini = configparser.ConfigParser()
     ini.read(browser / 'application.ini')
     require(ini.get('App', 'Version', fallback='') in {version, metadata.get('firefox_version')},
@@ -364,18 +364,18 @@ def package_browser(args, app, stage, version, auth):
     require(tor_metadata['sha256'] == sha(auth / 'bin/tor'), 'Tor runtime provenance does not match its binary')
     write_json(tor / 'tor.json', {**tor_metadata, 'target': auth_metadata['target'],
                                 'architecture': auth_metadata['architecture']})
-    executable(stage / 'usr/bin/bashkitten', '#!/bin/sh\nexec /usr/lib/bashkitten/browser/bashkitten "$@"\n')
-    desktop = stage / 'usr/share/applications/com.bashkitten.desktop'
+    executable(stage / 'usr/bin/taskarian', '#!/bin/sh\nexec /usr/lib/taskarian/browser/taskarian "$@"\n')
+    desktop = stage / 'usr/share/applications/com.taskarian.desktop'
     desktop.parent.mkdir(parents=True, exist_ok=True)
-    desktop.write_text('[Desktop Entry]\nName=BashKitten\nComment=Browser and native Pi coding agent\n'
-                       'Exec=bashkitten %u\nIcon=com.bashkitten\nTerminal=false\nType=Application\n'
+    desktop.write_text('[Desktop Entry]\nName=Taskarian\nComment=Browser and native Pi coding agent\n'
+                       'Exec=taskarian %u\nIcon=com.taskarian\nTerminal=false\nType=Application\n'
                        'Categories=Network;WebBrowser;Development;\nStartupNotify=true\n'
-                       'StartupWMClass=com.bashkitten\n'
+                       'StartupWMClass=com.taskarian\n'
                        'MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;\n')
     for size in (16, 22, 24, 32, 48, 64, 128, 256, 512):
-        icon = REPOSITORY / f'browser/bashkitten/browser/branding/default{size}.png'
-        require(icon.is_file(), 'Missing BashKitten desktop icon')
-        installed_icon = stage / f'usr/share/icons/hicolor/{size}x{size}/apps/com.bashkitten.png'
+        icon = REPOSITORY / f'browser/taskarian/browser/branding/default{size}.png'
+        require(icon.is_file(), 'Missing Taskarian desktop icon')
+        installed_icon = stage / f'usr/share/icons/hicolor/{size}x{size}/apps/com.taskarian.png'
         installed_icon.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(icon, installed_icon)
     provenance = app / 'components/browser'
@@ -389,7 +389,7 @@ def package_browser(args, app, stage, version, auth):
         metadata['input_equivalence'] = read_json(equivalence)
         metadata['producer_browser_input_sha256'] = metadata['browser_input_sha256']
         metadata['browser_input_sha256'] = compile_digest
-    run(['python3', str(REPOSITORY / 'browser/bashkitten/scripts/generate-third-party-notices.py'),
+    run(['python3', str(REPOSITORY / 'browser/taskarian/scripts/generate-third-party-notices.py'),
          '--browser-dir', str(browser), '--json-output', str(browser / 'notices/licenses.json')])
     return {'archive': archive.name, 'sha256': digest, **metadata}
 
@@ -402,7 +402,7 @@ def assemble(args):
     target = args.target + '-' + args.architecture
     prefix = '/data/data/com.termux/files/usr' if termux else '/usr'
     shell = prefix + '/bin/sh' if termux else '/bin/sh'
-    version = (REPOSITORY / 'browser/bashkitten/config/version.txt').read_text().strip()
+    version = (REPOSITORY / 'browser/taskarian/config/version.txt').read_text().strip()
     require(re.fullmatch(r'\d+\.\d+(?:\.\d+)?', version), 'Invalid Firefox-aligned product version')
     package_version = version
     package = read_json(ROOT / 'package.json')
@@ -418,9 +418,9 @@ def assemble(args):
     output.mkdir(parents=True, exist_ok=True)
     stage_parent = args.stage_dir.resolve() if args.stage_dir else output
     stage_parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='bashkitten-package-', dir=stage_parent) as temporary:
+    with tempfile.TemporaryDirectory(prefix='taskarian-package-', dir=stage_parent) as temporary:
         stage = Path(temporary) / 'root'
-        app = stage / prefix.lstrip('/') / 'lib/bashkitten'
+        app = stage / prefix.lstrip('/') / 'lib/taskarian'
         app.mkdir(parents=True)
         for folder in ['src/server', 'src/web', 'src/phone', 'reference', 'licenses', 'pi']:
             require((ROOT / folder).is_dir(), f'Missing product payload: {folder}')
@@ -463,7 +463,7 @@ def assemble(args):
         for folder in ['src', 'third_party']:
             shutil.copytree(ROOT / 'search' / folder, app / 'search' / folder,
                             ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-        for name in ['LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md', 'pyproject.toml', 'runtime-lock.json', 'bashkitten-search']:
+        for name in ['LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md', 'pyproject.toml', 'runtime-lock.json', 'taskarian-search']:
             source = ROOT / 'search' / name
             require(source.is_file(), f'Missing search payload: {name}')
             shutil.copy2(source, app / 'search' / name)
@@ -487,7 +487,7 @@ def assemble(args):
         extract(args.auth_archive, auth)
         auth_meta = read_json(auth / 'share/metadata/runtime.json')
         require(auth_meta['target'] == target and auth_meta['architecture'] == args.architecture, 'Native auth target mismatch')
-        for executable_name in ['authelia', 'caddy', 'tor', 'valkey-server', 'chisel', 'bashkitten-remote', 'runtime-guard']:
+        for executable_name in ['authelia', 'caddy', 'tor', 'valkey-server', 'chisel', 'taskarian-remote', 'runtime-guard']:
             require(os.access(auth / 'bin' / executable_name, os.X_OK), f'Missing native {executable_name}')
         search_hash = checked_archive(args.search_archive)
         with tempfile.TemporaryDirectory(prefix='search-input-', dir=temporary) as incoming:
@@ -522,8 +522,8 @@ def assemble(args):
         run(['python3', str(ROOT / 'packaging/about.py'), args.target,
              str(app / 'licenses.json'), str(app / 'about.html'), '--version', version])
         # Per-user Pi integration registration happens at controller startup, never as root.
-        installation = (prefix + '/var/lib' if termux else '/var/lib') + '/bashkitten/installed.json'
-        runtime = (prefix + '/var/lib' if termux else '/var/lib') + '/bashkitten/runtimes/' + pi_version + '-' + lock_hash[:12]
+        installation = (prefix + '/var/lib' if termux else '/var/lib') + '/Taskarian/installed.json'
+        runtime = (prefix + '/var/lib' if termux else '/var/lib') + '/Taskarian/runtimes/' + pi_version + '-' + lock_hash[:12]
         stamp = {'format': 2, 'platform': 'android' if termux else 'linux', 'architecture': args.architecture,
                  'version': version, 'packageVersion': package_version, 'lockSha256': lock_hash, 'piVersion': pi_version,
                  'installationStamp': installation, 'revision': revision, 'components': components,
@@ -531,7 +531,7 @@ def assemble(args):
         write_json(app / 'build-platform.json', stamp)
         write_json(app / 'runtime-default.json', {'root': runtime, 'version': pi_version})
         bin_dir = stage / prefix.lstrip('/') / 'bin'
-        installed_app = prefix + '/lib/bashkitten'
+        installed_app = prefix + '/lib/taskarian'
         node = installed_app + '/node/bin/node'
         node_environment = f'unset NODE_OPTIONS NODE_PATH\nexport OPENSSL_CONF={installed_app}/node/etc/openssl.cnf\n'
         if termux:
@@ -545,32 +545,32 @@ def assemble(args):
             node_environment += ('if [ "${TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE:-}" != disable ]; then\n'
                                  '  export TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable\n'
                                  '  exec /system/bin/sh "$0" "$@"\nfi\n')
-            node_environment += 'export BASHKITTEN_EXECUTION_ROLE=termux\n'
+            node_environment += 'export TASKARIAN_EXECUTION_ROLE=termux\n'
         elif args.backend_only:
-            node_environment += 'export BASHKITTEN_EXECUTION_ROLE=container\n'
+            node_environment += 'export TASKARIAN_EXECUTION_ROLE=container\n'
         else:
-            node_environment += 'unset BASHKITTEN_EXECUTION_ROLE\n'
+            node_environment += 'unset TASKARIAN_EXECUTION_ROLE\n'
         executable(app / 'node/bin/pi', f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/rpc/launcher.mjs "$@"\n')
         executable(bin_dir / 'office-diff', f'#!{shell}\n{node_environment}exec {node} {installed_app}/office/cli/office-diff.mjs "$@"\n')
-        for name, script, extra in [('bashkittenctl', 'control.mjs', ''), ('bashkitten-web', 'control.mjs', 'start'),
-                                    ('bashkitten-pi', 'rpc/launcher.mjs', '')]:
+        for name, script, extra in [('taskarianctl', 'control.mjs', ''), ('taskarian-web', 'control.mjs', 'start'),
+                                    ('taskarian-pi', 'rpc/launcher.mjs', '')]:
             executable(bin_dir / name, f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/{script} {extra} "$@"\n')
         if termux:
-            executable(bin_dir / 'bashkitten-display', f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/platform/termux/display.mjs "$@"\n')
+            executable(bin_dir / 'taskarian-display', f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/platform/termux/display.mjs "$@"\n')
             executable(bin_dir / 'phoneuse', f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/phone/phoneuse.mjs "$@"\n')
-        executable(bin_dir / 'bashkitten-manager', f'#!{shell}\n{node_environment}export BASHKITTEN_ATTACHED_MANAGER=1\n'
+        executable(bin_dir / 'taskarian-manager', f'#!{shell}\n{node_environment}export TASKARIAN_ATTACHED_MANAGER=1\n'
                    f'while :; do\n  {node} {installed_app}/src/server/control.mjs serve\n  code=$?\n'
                    '  [ "$code" -eq 75 ] || exit "$code"\n  sleep 1\ndone\n')
-        (bin_dir / 'bashkitten-search').symlink_to('../lib/bashkitten/search/bashkitten-search')
-        search_launcher = app / 'search/bashkitten-search'
+        (bin_dir / 'taskarian-search').symlink_to('../lib/taskarian/search/taskarian-search')
+        search_launcher = app / 'search/taskarian-search'
         executable(search_launcher, f'#!{prefix}/bin/{"python" if termux else "python3"}\n' + search_launcher.read_text().split('\n', 1)[1])
         control = stage / 'DEBIAN'
         control.mkdir()
-        managed = json.dumps({'owner': 'bashkitten', 'version': pi_version, 'lockSha256': lock_hash})
-        display_postinst = f"chmod 400 '{installed_app}/display/bashkitten-x11-loader.jar'\n" if termux else ''
+        managed = json.dumps({'owner': 'taskarian', 'version': pi_version, 'lockSha256': lock_hash})
+        display_postinst = f"chmod 400 '{installed_app}/display/taskarian-x11-loader.jar'\n" if termux else ''
         apparmor_postinst = apparmor_postrm = ''
         if not termux and not args.backend_only:
-            (control / 'conffiles').write_text('/etc/apparmor.d/bashkitten-podman\n')
+            (control / 'conffiles').write_text('/etc/apparmor.d/taskarian-podman\n')
             apparmor_postinst = (ROOT / 'packaging/linux/apparmor/postinst').read_text()
             apparmor_postrm = (ROOT / 'packaging/linux/apparmor/postrm').read_text()
         executable(control / 'postinst', f'''#!{shell}
@@ -584,9 +584,9 @@ if [ ! -f "$runtime/ready" ]; then
   touch "$runtime/ready"
 fi
 printf '%s\\n' '{managed}' > "$runtime/managed.json"
-# Retire only the exact global alias created by older BashKitten packages.
+# Retire only the exact global alias created by older Taskarian packages.
 # Private agent shells use node/bin/pi; never replace an independent Pi.
-if [ "$(readlink '{prefix}/bin/pi')" = bashkitten-pi ]; then rm '{prefix}/bin/pi'; fi
+if [ "$(readlink '{prefix}/bin/pi')" = taskarian-pi ]; then rm '{prefix}/bin/pi'; fi
 mkdir -p '{Path(installation).parent}'
 cp '{installed_app}/build-platform.json' '{installation}.tmp'
 chmod 644 '{installation}.tmp'
@@ -594,12 +594,12 @@ mv '{installation}.tmp' '{installation}'
 ''')
         executable(control / 'postrm', f'''#!{shell}
 {apparmor_postrm}if [ "$1" = remove ] || [ "$1" = purge ]; then
-  if [ "$(readlink '{prefix}/bin/pi')" = bashkitten-pi ]; then rm '{prefix}/bin/pi'; fi
+  if [ "$(readlink '{prefix}/bin/pi')" = taskarian-pi ]; then rm '{prefix}/bin/pi'; fi
 fi
 # Preserve user data, native Pi sessions/credentials and retained runtimes.
 ''')
         if termux:
-            profile = stage / prefix.lstrip('/') / 'etc/profile.d/bashkitten-privacy.sh'
+            profile = stage / prefix.lstrip('/') / 'etc/profile.d/taskarian-privacy.sh'
             profile.parent.mkdir(parents=True)
             profile.write_text('export PI_TELEMETRY=0 PI_OFFLINE=1 GH_TELEMETRY=0 DO_NOT_TRACK=1\n'
                                'export GH_NO_UPDATE_NOTIFIER=1 GH_NO_EXTENSION_UPDATE_NOTIFIER=1\n')
@@ -613,9 +613,9 @@ fi
                                components.get('display', {}).get('metadata', {}).get('depends', []),
                                components.get('files', {}).get('metadata', {}).get('depends', []),
                                components.get('office', {}).get('metadata', {}).get('depends', []),
-                               [f'bashkitten-os (= {version}-1)'] if termux else [])
-        replacements = '' if termux or args.backend_only else 'Replaces: bashkitten-desktop\nBreaks: bashkitten-desktop\nProvides: bashkitten-desktop\n'
-        doc = stage / prefix.lstrip('/') / 'share/doc/bashkitten'
+                               [f'taskarian-os (= {version}-1)'] if termux else [])
+        replacements = '' if termux or args.backend_only else 'Replaces: taskarian-desktop\nBreaks: taskarian-desktop\nProvides: taskarian-desktop\n'
+        doc = stage / prefix.lstrip('/') / 'share/doc/taskarian'
         doc.mkdir(parents=True)
         for name in ['LICENSE', 'PI_UPSTREAM.md', 'THIRD_PARTY_NOTICES.md', 'licenses.json', 'build-platform.json']:
             shutil.copy2(app / name, doc / name)
@@ -623,11 +623,11 @@ fi
         write_json(app / 'build-platform.json', stamp)
         shutil.copy2(app / 'build-platform.json', doc / 'build-platform.json')
         size = sum(p.stat().st_size for p in stage.rglob('*') if p.is_file() and not p.is_symlink()) // 1024
-        package_name = 'bashkitten-backend' if args.backend_only else 'bashkitten'
+        package_name = 'taskarian-backend' if args.backend_only else 'taskarian'
         (control / 'control').write_text(f'Package: {package_name}\nVersion: {package_version}\nArchitecture: {args.architecture}\n'
             'Maintainer: openresearchtools <openresearchtools@gmail.com>\n'
             f'Depends: {", ".join(depends)}\nInstalled-Size: {size}\n{replacements}Section: web\nPriority: optional\n'
-            'Homepage: https://bashkitten.com\nDescription: BashKitten browser and native Pi agent\n'
+            'Homepage: https://taskarian.com\nDescription: Taskarian browser and native Pi agent\n'
             + (' Native Termux backend, search, authentication and browser controls.\n' if termux else
                ' Firefox-based browser, native Pi backend, search and authentication.\n'))
         asset = output / f'{package_name}_{package_version}_{args.architecture}.deb'

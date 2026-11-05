@@ -72,8 +72,8 @@ def write_toolchain_notices(toolchain, destination):
 def main():
     source, output, component = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
     command = {'authelia': ['./cmd/authelia'], 'caddy': ['./cmd/caddy'], 'chisel': ['.'],
-               'remote': ['./cmd/bashkitten-remote'],
-               'remote-client': ['github.com/openresearchtools/bashkitten/remote/mobile',
+               'remote': ['./cmd/taskarian-remote'],
+               'remote-client': ['github.com/openresearchtools/Taskarian/remote/mobile',
                                  'golang.org/x/mobile/bind/seq',
                                  'golang.org/x/mobile/internal/mobileinit']}[component]
     raw = subprocess.check_output(['go', 'list', '-mod=readonly', '-deps', '-json', *command], cwd=source, text=True)
@@ -99,7 +99,7 @@ def main():
         directory.mkdir(parents=True, exist_ok=True)
 
     inventory = []
-    with tempfile.TemporaryDirectory(prefix='bashkitten-go-source-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='taskarian-go-source-') as temporary:
         bundle = Path(temporary)
         for name, module in sorted(modules.items()):
             directory = Path(module['Dir'])
@@ -111,7 +111,7 @@ def main():
             files = []
             for current, directories, names in os.walk(directory):
                 directories[:] = [name for name in directories if name not in
-                                   ('.git', 'node_modules', '.bashkitten-frontend')]
+                                   ('.git', 'node_modules', '.taskarian-frontend')]
                 files.extend(Path(current) / name for name in names if
                              name.lower().startswith(('license', 'licence', 'unlicense', 'notice', 'copying',
                                                       'copyright', 'authors', 'patents'))

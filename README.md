@@ -1,4 +1,4 @@
-# BashKitten
+# Taskarian
 
 ![Testing releases: current releases are for automated testing only. Not ready for production. Coming soon.](docs/testing-releases.svg)
 
@@ -15,8 +15,8 @@ an account with two-factor authentication. Turning Agent off stops its services;
 closing the Linux browser also stops its local Agent. Closing the Android
 browser leaves Termux work running until Agent is turned off.
 
-BashKitten includes private Node/npm and Pi data. Pi extensions and `npm -g`
-installs made by its Agent stay in BashKitten’s data directory; ordinary project
+Taskarian includes private Node/npm and Pi data. Pi extensions and `npm -g`
+installs made by its Agent stay in Taskarian’s data directory; ordinary project
 dependencies remain in the selected project.
 
 Android setup includes battery-access prompts for background Agent work. For
@@ -24,7 +24,7 @@ local Termux on Android 14+, enable **Developer options → Disable child proces
 restrictions** and keep Developer options enabled. Setup links to Android Settings;
 this is separate from the wake locks managed by Turn on/off.
 
-[Releases](https://github.com/openresearchtools/bashkitten/releases) ·
+[Releases](https://github.com/openresearchtools/Taskarian/releases) ·
 [Package repository](https://github.com/openresearchtools/apt) ·
 [Build packages](agent/packaging/README.md)
 
@@ -33,5 +33,5 @@ the platform's main keyring and nightly setup package from the
 [package repository](https://github.com/openresearchtools/apt).
 
 About and full licenses are available offline in the browser's settings.
-BashKitten's own code is [AGPL-3.0-only](LICENSE); inherited browser and dependency notices retain
+Taskarian's own code is [AGPL-3.0-only](LICENSE); inherited browser and dependency notices retain
 their original terms. See [third-party notices](agent/THIRD_PARTY_NOTICES.md).

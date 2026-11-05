@@ -9,7 +9,7 @@ if [[ $target == termux-aarch64 || $target == termux-x86_64 ]]; then
   exec "$root/auth/build/termux-component.sh" caddy "$output" "${target#termux-}"
 fi
 case "$target:$(uname -m)" in linux-amd64:x86_64|linux-arm64:aarch64) ;; *) echo "Use a native runner for $target." >&2; exit 2 ;; esac
-work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/bashkitten-caddy.XXXXXX")
+work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/taskarian-caddy.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 cp -a "$root/auth/caddy/." "$work/"
 cd "$work"

@@ -7,7 +7,7 @@ output=$(realpath -m "${2:?staging directory required}")
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 [[ ${GITHUB_ACTIONS:-} == true ]] || { echo 'Native builds run in GitHub Actions.' >&2; exit 2; }
 case "$target" in linux-amd64|linux-arm64|termux-aarch64|termux-x86_64) ;; *) exit 2 ;; esac
-work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/bashkitten-authelia.XXXXXX")
+work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/taskarian-authelia.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 cp -a "$root/auth/authelia" "$work/source"
 patch --directory "$work/source" --strip 1 < "$root/auth/build/authelia-mobile-otp.patch"
@@ -15,7 +15,7 @@ export DO_NOT_TRACK=1 GOTELEMETRY=off GOTOOLCHAIN=local PNPM_DISABLE_SELF_UPDATE
 export NPM_CONFIG_AUDIT=false NPM_CONFIG_FUND=false NPM_CONFIG_UPDATE_NOTIFIER=false
 (
   cd "$work/source/web"
-  store="${BASHKITTEN_PNPM_STORE:-${RUNNER_TEMP:-/tmp}/bashkitten-pnpm-store}"
+  store="${TASKARIAN_PNPM_STORE:-${RUNNER_TEMP:-/tmp}/taskarian-pnpm-store}"
   python3 "$root/auth/build/retained-sources.py" frontend --lock pnpm-lock.yaml
   pnpm install --offline --trust-lockfile --store-dir "$store" --frozen-lockfile --ignore-scripts
   pnpm build
@@ -23,12 +23,12 @@ export NPM_CONFIG_AUDIT=false NPM_CONFIG_FUND=false NPM_CONFIG_UPDATE_NOTIFIER=f
 )
 rm -rf "$work/source/internal/server/public_html/api"
 cp -a "$work/source/api" "$work/source/internal/server/public_html/api"
-python3 "$root/auth/build/frontend-notices.py" "$work/frontend-licenses.json" "$work/source/.bashkitten-frontend"
-mkdir -p "$work/source/.bashkitten-frontend/share/licenses/authelia-assets"
-cp -a "$work/source/LICENSES/." "$work/source/.bashkitten-frontend/share/licenses/authelia-assets/"
+python3 "$root/auth/build/frontend-notices.py" "$work/frontend-licenses.json" "$work/source/.taskarian-frontend"
+mkdir -p "$work/source/.taskarian-frontend/share/licenses/authelia-assets"
+cp -a "$work/source/LICENSES/." "$work/source/.taskarian-frontend/share/licenses/authelia-assets/"
 find "$work/source/web" -path '*/node_modules' -prune -o -type f -name '*.license' -print0 | while IFS= read -r -d '' notice; do
   relative=${notice#"$work/source/"}
-  install -Dm644 "$notice" "$work/source/.bashkitten-frontend/share/licenses/authelia-assets/$relative"
+  install -Dm644 "$notice" "$work/source/.taskarian-frontend/share/licenses/authelia-assets/$relative"
 done
 if [[ $target == termux-aarch64 || $target == termux-x86_64 ]]; then
   "$root/auth/build/termux-component.sh" authelia "$output" "${target#termux-}" "$work/source"
@@ -44,12 +44,12 @@ else
   cc -std=c11 -Wall -Wextra -Werror -O2 "$root/agent/src/server/access/runtime-guard.c" -o "$output/bin/runtime-guard"
   python3 "$root/auth/build/go-notices.py" "$work/source" "$output" authelia
   install -Dm644 "$work/source/LICENSE" "$output/share/licenses/authelia/LICENSE"
-  cp -a "$work/source/.bashkitten-frontend/share" "$output/"
+  cp -a "$work/source/.taskarian-frontend/share" "$output/"
   "$output/bin/authelia" --version
   (
     cd "$work/source"
     mkdir -p debian
-    printf 'Source: bashkitten-auth\nSection: utils\nPriority: optional\nMaintainer: OpenResearchTools\nStandards-Version: 4.7.0\n\nPackage: bashkitten-auth\nArchitecture: any\nDescription: BashKitten native access stack\n' > debian/control
+    printf 'Source: taskarian-auth\nSection: utils\nPriority: optional\nMaintainer: OpenResearchTools\nStandards-Version: 4.7.0\n\nPackage: taskarian-auth\nArchitecture: any\nDescription: Taskarian native access stack\n' > debian/control
     dpkg-shlibdeps -O -e"$output/bin/authelia" -e"$output/bin/runtime-guard" | sed 's/^shlibs:Depends=//' | tr '\n' ','
     printf ' ca-certificates\n'
   ) > "$output/share/metadata/authelia.dependencies"

@@ -12,26 +12,26 @@ export async function connectReferencesHost({ signal, timeoutMs = 15000 } = {}) 
     if (event.source !== window.top) return;
     let data; try { data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data; } catch { return; }
     if (data?.nonce !== nonce || origin && event.origin !== origin) return;
-    if (data.MessageId === 'BashKitten_ReferencesContext') {
+    if (data.MessageId === 'Taskarian_ReferencesContext') {
       if (!/^https:\/\//.test(event.origin) || !data.documentId) return;
       origin = event.origin; clearTimeout(timer); resolveReady(data);
-    } else if (data.MessageId === 'BashKitten_ReferencesResult') {
+    } else if (data.MessageId === 'Taskarian_ReferencesResult') {
       const waiter = pending.get(data.requestId); if (!waiter) return; pending.delete(data.requestId); waiter.cleanup();
       if (data.error || data.status >= 400) waiter.reject(new Error(data.error?.message || data.error || data.body?.error || 'References request failed'));
       else waiter.resolve(data.body ?? data.result);
     }
   }
   window.addEventListener('message', receive);
-  const dispose = () => { if (disposed) return; disposed = true; clearTimeout(timer); rejectReady(new Error('References context closed')); window.removeEventListener('message', receive); signal?.removeEventListener('abort', dispose); for (const waiter of pending.values()) { window.top.postMessage({ MessageId: 'BashKitten_ReferencesCancel', nonce, requestId: waiter.requestId }, origin); waiter.cleanup(); waiter.reject(new Error('References context closed')); } pending.clear(); if (origin) window.top.postMessage({ MessageId: 'BashKitten_ReferencesClosed', nonce }, origin); };
+  const dispose = () => { if (disposed) return; disposed = true; clearTimeout(timer); rejectReady(new Error('References context closed')); window.removeEventListener('message', receive); signal?.removeEventListener('abort', dispose); for (const waiter of pending.values()) { window.top.postMessage({ MessageId: 'Taskarian_ReferencesCancel', nonce, requestId: waiter.requestId }, origin); waiter.cleanup(); waiter.reject(new Error('References context closed')); } pending.clear(); if (origin) window.top.postMessage({ MessageId: 'Taskarian_ReferencesClosed', nonce }, origin); };
   window.addEventListener('pagehide', dispose, { once: true });
   signal?.addEventListener('abort', dispose, { once: true });
-  window.top.postMessage({ MessageId: 'BashKitten_ReferencesReady', nonce }, '*');
+  window.top.postMessage({ MessageId: 'Taskarian_ReferencesReady', nonce }, '*');
   let context; try { context = await ready; } catch (error) { dispose(); throw error; }
   function send(message, { signal } = {}) {
     if (disposed) return Promise.reject(new Error('References context closed'));
     const requestId = String(++sequence);
     return new Promise((resolve, reject) => {
-      const abort = () => { pending.delete(requestId); cleanup(); window.top.postMessage({ MessageId: 'BashKitten_ReferencesCancel', nonce, requestId }, origin); reject(new DOMException('Cancelled', 'AbortError')); };
+      const abort = () => { pending.delete(requestId); cleanup(); window.top.postMessage({ MessageId: 'Taskarian_ReferencesCancel', nonce, requestId }, origin); reject(new DOMException('Cancelled', 'AbortError')); };
       const cleanup = () => signal?.removeEventListener('abort', abort);
       if (signal?.aborted) { abort(); return; }
       pending.set(requestId, { requestId, resolve, reject, cleanup }); signal?.addEventListener('abort', abort, { once: true });
@@ -48,7 +48,7 @@ export async function connectReferencesHost({ signal, timeoutMs = 15000 } = {}) 
     // The host reauthorizes the selected library while retaining file authority.
     if (path.split('?')[0] === prefix + '/settings' && method !== 'GET' && (method !== 'PATCH' || !body || Object.keys(body).length !== 1 || ![-1, 0, 1].includes(body.citationAutoRegenerate))) return Promise.reject(new Error('Office may only change the citation regeneration preference'));
     if (!['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) return Promise.reject(new Error('Invalid References method'));
-    return send({ MessageId: 'BashKitten_ReferencesRequest', method, path, body }, { signal });
+    return send({ MessageId: 'Taskarian_ReferencesRequest', method, path, body }, { signal });
   }
-  return { context, dispose, officeCopy: ({ name, format }, options) => send({ MessageId: 'BashKitten_OfficeCopy', name, format }, options), api: { request, project(projectId) { if (typeof projectId !== 'string' || !projectId) throw new Error('Select a project library'); return { request: (path, options) => request('/api/references/projects/' + encodeURIComponent(projectId) + '/' + path.replace(/^\//, ''), options) }; } } };
+  return { context, dispose, officeCopy: ({ name, format }, options) => send({ MessageId: 'Taskarian_OfficeCopy', name, format }, options), api: { request, project(projectId) { if (typeof projectId !== 'string' || !projectId) throw new Error('Select a project library'); return { request: (path, options) => request('/api/references/projects/' + encodeURIComponent(projectId) + '/' + path.replace(/^\//, ''), options) }; } } };
 }

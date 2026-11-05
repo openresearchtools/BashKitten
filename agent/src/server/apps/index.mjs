@@ -56,7 +56,7 @@ export class ApplicationModules {
     return identity.instanceId;
   }
   async authorize(record, work, options = {}) {
-    if (this.closed || !await this.auth.valid(record)) throw Object.assign(Error('The application session expired. Open it again from BashKitten.'), { status: 401 });
+    if (this.closed || !await this.auth.valid(record)) throw Object.assign(Error('The application session expired. Open it again from Taskarian.'), { status: 401 });
     return runManagerOperation(record, work, { ...options, watch: abort => {
       const stopRequest = options.watch?.(abort);
       const stopAuth = this.auth.watch(record, () => { abort(); options.cancel?.(); });

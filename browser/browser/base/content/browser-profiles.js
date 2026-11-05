@@ -4,7 +4,7 @@
 
 var gProfiles = {
   async init() {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
       // This belongs to browser startup, not the optional Agent connection.
       for (const id of [
         "profiles-menu",
@@ -88,12 +88,12 @@ var gProfiles = {
   toggleProfileMenus(isEnabled) {
     let profilesMenu = document.getElementById("profiles-menu");
     profilesMenu.hidden =
-      AppConstants.MOZ_APP_NAME == "bashkitten" || !isEnabled;
+      AppConstants.MOZ_APP_NAME == "taskarian" || !isEnabled;
   },
 
   async _onPanelShowing(profilesButton, emptyProfilesButton) {
     if (
-      AppConstants.MOZ_APP_NAME == "bashkitten" ||
+      AppConstants.MOZ_APP_NAME == "taskarian" ||
       !SelectableProfileService?.isEnabled
     ) {
       emptyProfilesButton.hidden = true;
@@ -131,7 +131,7 @@ var gProfiles = {
    * Draws the menubar panel contents.
    */
   async onPopupShowing() {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
+    if (AppConstants.MOZ_APP_NAME == "taskarian") return;
     let menuPopup = document.getElementById("menu_ProfilesPopup");
     let profiles = await SelectableProfileService.getAllProfiles();
     let currentProfile = SelectableProfileService.currentProfile;
@@ -178,7 +178,7 @@ var gProfiles = {
   },
 
   manageProfiles() {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
+    if (AppConstants.MOZ_APP_NAME == "taskarian") return;
     return SelectableProfileService.maybeSetupDataStore().then(() => {
       toOpenWindowByType(
         "about:profilemanager",
@@ -189,31 +189,31 @@ var gProfiles = {
   },
 
   copyProfile() {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
+    if (AppConstants.MOZ_APP_NAME == "taskarian") return;
     SelectableProfileService.maybeSetupDataStore().then(() => {
       SelectableProfileService.currentProfile.copyProfile();
     });
   },
 
   createNewProfile(source) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
+    if (AppConstants.MOZ_APP_NAME == "taskarian") return;
     SelectableProfileService.createNewProfile(true, null, source);
   },
 
   updateView(target) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
+    if (AppConstants.MOZ_APP_NAME == "taskarian") return;
     this.populateSubView();
     PanelUI.showSubView("PanelUI-profiles", target);
   },
 
   updateFxAView(target) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
+    if (AppConstants.MOZ_APP_NAME == "taskarian") return;
     this.populateSubView();
     PanelUI.showSubView("PanelUI-profiles", target);
   },
 
   launchProfile(aEvent) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
+    if (AppConstants.MOZ_APP_NAME == "taskarian") return;
     SelectableProfileService.getProfile(
       aEvent.target.getAttribute("profileid")
     ).then(profile => {
@@ -222,7 +222,7 @@ var gProfiles = {
   },
 
   async openTabsInProfile(aEvent, tabsToOpen) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
+    if (AppConstants.MOZ_APP_NAME == "taskarian") return;
     let profile = await SelectableProfileService.getProfile(
       aEvent.target.getAttribute("profileid")
     );
@@ -233,7 +233,7 @@ var gProfiles = {
   },
 
   async handleCommand(aEvent) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
+    if (AppConstants.MOZ_APP_NAME == "taskarian") return;
     switch (aEvent.target.id) {
       /* App menu button events */
       case "appMenu-profiles-button":
@@ -308,7 +308,7 @@ var gProfiles = {
    * either in the app menu or the FxA toolbar button menu.
    */
   async populateSubView() {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
+    if (AppConstants.MOZ_APP_NAME == "taskarian") return;
     let profiles = [];
     let currentProfile = null;
 
@@ -479,7 +479,7 @@ var gProfiles = {
   },
 
   async populateMoveTabMenu(menuPopup) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
+    if (AppConstants.MOZ_APP_NAME == "taskarian") return;
     if (!SelectableProfileService.initialized) {
       return;
     }

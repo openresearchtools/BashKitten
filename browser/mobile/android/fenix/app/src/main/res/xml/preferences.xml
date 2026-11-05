@@ -77,8 +77,8 @@
 
         <androidx.preference.SwitchPreferenceCompat
             android:key="@string/pref_key_cookie_banner_handling"
-            android:title="@string/bashkitten_cookie_banners_title"
-            android:summary="@string/bashkitten_cookie_banners_summary"
+            android:title="@string/taskarian_cookie_banners_title"
+            android:summary="@string/taskarian_cookie_banners_summary"
             android:defaultValue="true"
             app:iconSpaceReserved="false" />
 

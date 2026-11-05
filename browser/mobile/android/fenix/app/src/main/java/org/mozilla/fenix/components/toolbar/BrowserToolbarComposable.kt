@@ -49,7 +49,7 @@ import mozilla.components.ui.widgets.behavior.DependencyGravity
 import mozilla.components.ui.widgets.behavior.EngineViewScrollingBehavior
 import mozilla.components.ui.widgets.behavior.EngineViewScrollingBehaviorFactory
 import org.mozilla.fenix.browser.store.BrowserScreenStore
-import org.mozilla.fenix.bashkitten.TorTabPrivacyNotice
+import org.mozilla.fenix.taskarian.TorTabPrivacyNotice
 import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.appstate.AppAction.SearchAction.SearchEnded
 import org.mozilla.fenix.components.toolbar.ToolbarPosition.BOTTOM
@@ -106,7 +106,7 @@ class BrowserToolbarComposable(
         val isSearching = toolbarStore.observeAsComposableState { it.isEditMode() }.value
         val shouldShowTabStrip: Boolean = remember { shouldShowTabStrip() }
         val displaySelected by browserStore.observeAsComposableState {
-            customTabSession == null && it.selectedTab?.contextId == com.bashkitten.display.DisplayTabs.CONTEXT
+            customTabSession == null && it.selectedTab?.contextId == com.taskarian.display.DisplayTabs.CONTEXT
         }
         val customColors = browserScreenStore.observeAsComposableState { it.customTabColors }
         val shouldUseBottomToolbar = remember(settings) { settings.shouldUseBottomToolbar }
@@ -340,17 +340,17 @@ class BrowserToolbarComposable(
         useMinimalBottomToolbarWhenEnteringText: Boolean,
     ) {
         val displaySelected by browserStore.observeAsComposableState {
-            customTabSession == null && it.selectedTab?.contextId == com.bashkitten.display.DisplayTabs.CONTEXT
+            customTabSession == null && it.selectedTab?.contextId == com.taskarian.display.DisplayTabs.CONTEXT
         }
         if (displaySelected && activity is org.mozilla.fenix.HomeActivity) {
-            org.mozilla.fenix.bashkitten.DisplayToolbar(activity, store)
+            org.mozilla.fenix.taskarian.DisplayToolbar(activity, store)
             return
         }
         androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             if (activity is org.mozilla.fenix.HomeActivity) {
-                org.mozilla.fenix.bashkitten.AgentEntryButton(activity)
+                org.mozilla.fenix.taskarian.AgentEntryButton(activity)
                 if (customTabSession == null) {
-                    org.mozilla.fenix.bashkitten.ReferencesButton(browserStore)
+                    org.mozilla.fenix.taskarian.ReferencesButton(browserStore)
                 }
             }
             androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {

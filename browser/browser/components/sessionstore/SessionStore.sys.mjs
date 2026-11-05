@@ -4954,7 +4954,7 @@ var SessionStoreInternal = {
       }
     }
 
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
       const existing = this._getTopWindow();
       if (existing) {
         this.restoreWindows(existing, state, {
@@ -5269,7 +5269,7 @@ var SessionStoreInternal = {
     }
 
     let lastSessionState = LastSession.getState();
-    this._combineBashKittenWindows(lastSessionState);
+    this._combineTaskarianWindows(lastSessionState);
 
     // This shouldn't ever be the case...
     if (!lastSessionState.windows.length) {
@@ -5291,7 +5291,7 @@ var SessionStoreInternal = {
     let lastWindow = this._getTopWindow();
     let canUseLastWindow =
       lastWindow &&
-      (AppConstants.MOZ_APP_NAME == "bashkitten" ||
+      (AppConstants.MOZ_APP_NAME == "taskarian" ||
         !lastWindow.__SS_lastSessionWindowID);
 
     // global data must be restored before restoreWindow is called so that
@@ -5899,8 +5899,8 @@ var SessionStoreInternal = {
     return Promise.all(windowOpenedPromises);
   },
 
-  _combineBashKittenWindows(root) {
-    if (AppConstants.MOZ_APP_NAME != "bashkitten" || !root.windows?.length) {
+  _combineTaskarianWindows(root) {
+    if (AppConstants.MOZ_APP_NAME != "taskarian" || !root.windows?.length) {
       return;
     }
     const oldCount = root.windows.length;
@@ -6399,7 +6399,7 @@ var SessionStoreInternal = {
       return;
     }
 
-    this._combineBashKittenWindows(root);
+    this._combineTaskarianWindows(root);
 
     // Restore closed windows if any.
     if (root._closedWindows) {
@@ -7289,7 +7289,7 @@ var SessionStoreInternal = {
    *        Object containing session data
    */
   _openWindowWithState: function ssi_openWindowWithState(aState) {
-    this._combineBashKittenWindows(aState);
+    this._combineTaskarianWindows(aState);
     // Build arguments string
     let argString;
     // Build feature string

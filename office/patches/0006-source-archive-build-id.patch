@@ -1,4 +1,4 @@
-From: BashKitten contributors
+From: Taskarian contributors
 Subject: [PATCH] Accept the pinned revision for source-archive build metadata
 
 The engine source archive has no nested Git repository. Allow the packaging

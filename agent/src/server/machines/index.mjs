@@ -9,12 +9,12 @@ import { binary } from '../access/paths.mjs';
 import { daemonSocket, digest } from './config.mjs';
 import { run } from './process.mjs';
 import { duringUpdate, runtimeVersion, sameRuntime, updateMessage, updateError } from './update.mjs';
-const unit = 'bashkitten-machines-' + digest(dataDir).slice(0,16);
+const unit = 'taskarian-machines-' + digest(dataDir).slice(0,16);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const serviceScript = fileURLToPath(new URL('./service.mjs', import.meta.url));
 const controlScript = fileURLToPath(new URL('../control.mjs', import.meta.url));
 async function cleanupOrphans() {
-  await run(binary('runtime-guard'), [process.execPath, fileURLToPath(new URL('./shutdown.mjs', import.meta.url)), 'serve'], { env: { ...process.env, BASHKITTEN_DATA_DIR: dataDir } });
+  await run(binary('runtime-guard'), [process.execPath, fileURLToPath(new URL('./shutdown.mjs', import.meta.url)), 'serve'], { env: { ...process.env, TASKARIAN_DATA_DIR: dataDir } });
   return { stopped: true };
 }
 
@@ -37,7 +37,7 @@ async function sameLegacyUnit(identity) {
   return true;
 }
 async function legacyClientsIdle(installedNode) {
-  // Native machine calls are one-shot bashkittenctl processes, not requests to
+  // Native machine calls are one-shot taskarianctl processes, not requests to
   // the persistent Local manager. A process which loaded the old package may
   // still bypass machines-update. Let it finish before taking an idle snapshot.
   // Every package includes the private Node ELF; use the same inode identity
@@ -63,7 +63,7 @@ async function legacyIdle(identity, installedNode) {
   if (!await legacyClientsIdle(installedNode)) return {idle:false,message:'A container request from the previous package is still in progress. Let it finish to load the updated container service.'};
   // Even read-only Podman can create a pause helper. Keep that transient child
   // under the existing cleanup guard, never under the long-lived UI controller.
-  const result = await run(binary('runtime-guard'), [process.execPath, fileURLToPath(new URL('./shutdown.mjs', import.meta.url)), 'idle', 'serve'], {env:{...process.env,BASHKITTEN_DATA_DIR:dataDir}});
+  const result = await run(binary('runtime-guard'), [process.execPath, fileURLToPath(new URL('./shutdown.mjs', import.meta.url)), 'idle', 'serve'], {env:{...process.env,TASKARIAN_DATA_DIR:dataDir}});
   if (JSON.parse(result.stdout).idle !== true) return {idle:false};
   const latest = await ready();
   if (latest?.schema !== 1 || latest.pid !== identity.pid || !await sameLegacyUnit(identity) || !await backendAlive(identity)) throw Error('The container service owner changed during its idle check');
@@ -97,7 +97,7 @@ async function ready() {
   catch (error) { if (!['ENOENT','ECONNREFUSED','ECONNRESET','EPIPE'].includes(error.code)) throw error; return null; }
 }
 async function ensure(browserOwner) {
-  if (process.platform !== 'linux' || process.env.BASHKITTEN_EXECUTION_ROLE === 'container') throw Error('Container creation is available on the native Linux host only');
+  if (process.platform !== 'linux' || process.env.TASKARIAN_EXECUTION_ROLE === 'container') throw Error('Container creation is available on the native Linux host only');
   let current = await ready();
   const desired = await runtimeVersion();
   if (current?.schema >= 2 && sameRuntime(current.runtime, desired) && !current.updatePending) return;
@@ -137,7 +137,7 @@ async function ensure(browserOwner) {
       }
       if (current) throw Error('The container service is finishing its update. Try again shortly.');
     }
-    if (!Number.isInteger(browserOwner?.pid) || browserOwner.pid < 2 || !browserOwner.started || await processStart(browserOwner.pid) !== browserOwner.started) throw Error('Open BashKitten before starting its containers');
+    if (!Number.isInteger(browserOwner?.pid) || browserOwner.pid < 2 || !browserOwner.started || await processStart(browserOwner.pid) !== browserOwner.started) throw Error('Open Taskarian before starting its containers');
     await privateDir(path.dirname(daemonSocket));
     // --collect removes the exited transient unit asynchronously. Wait for it
     // before creating the replacement with the same persistent ownership name.
@@ -151,9 +151,9 @@ async function ensure(browserOwner) {
     }
     const args = ['--user','--collect','--service-type=exec', '--unit=' + unit,
       '--property=KillMode=mixed','--property=Delegate=yes','--property=TimeoutStopSec=45','--property=UMask=0077',
-      '--setenv=BASHKITTEN_DATA_DIR=' + dataDir,
-      '--setenv=BASHKITTEN_BROWSER_PID=' + browserOwner.pid,
-      '--setenv=BASHKITTEN_BROWSER_STARTED=' + browserOwner.started];
+      '--setenv=TASKARIAN_DATA_DIR=' + dataDir,
+      '--setenv=TASKARIAN_BROWSER_PID=' + browserOwner.pid,
+      '--setenv=TASKARIAN_BROWSER_STARTED=' + browserOwner.started];
     for (const key of ['HOME','PATH','XDG_RUNTIME_DIR','DBUS_SESSION_BUS_ADDRESS','PIPEWIRE_REMOTE','PULSE_SERVER']) if (process.env[key]) args.push('--setenv=' + key + '=' + process.env[key]);
     args.push('--', binary('runtime-guard'), process.execPath, serviceScript, 'serve');
     const result = await run('/usr/bin/systemd-run', args, { allowFailure: true });

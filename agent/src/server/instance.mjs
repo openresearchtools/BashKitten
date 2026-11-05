@@ -14,7 +14,7 @@ export async function claimInstance(name) {
   try {
     await new Promise((resolve, reject) => {
       lock.once('error', reject);
-      lock.listen('\0bashkitten-' + digest(`${process.getuid()}:${scope}:${name}`), resolve);
+      lock.listen('\0taskarian-' + digest(`${process.getuid()}:${scope}:${name}`), resolve);
     });
     return lock;
   } catch (error) {
@@ -38,7 +38,7 @@ export async function backendAlive(info) {
   try {
     if (!(await fs.readFile(`/proc/${info.pid}/cmdline`, 'utf8')).split('\0').includes(info.script)) return false;
     const env = Object.fromEntries((await fs.readFile(`/proc/${info.pid}/environ`, 'utf8')).split('\0').filter(v => v.includes('=')).map(v => [v.slice(0, v.indexOf('=')), v.slice(v.indexOf('=') + 1)]));
-    return await fs.realpath(env.BASHKITTEN_DATA_DIR || path.join(env.HOME, '.local/share/bashkitten-pi')) === await fs.realpath(dataDir);
+    return await fs.realpath(env.TASKARIAN_DATA_DIR || path.join(path.isAbsolute(env.XDG_DATA_HOME || '') ? env.XDG_DATA_HOME : path.join(env.HOME, '.local/share'), 'Taskarian')) === await fs.realpath(dataDir);
   }
   catch { return false; }
 }
@@ -54,7 +54,7 @@ export async function probeBackend(info) {
   } catch { return null; }
   return new Promise(resolve => {
     // Verify the saved CA and hostname before sending any credentials.
-    const req = https.get(info.url + '/.well-known/bashkitten-ca', { ca: info.identity.caPem, rejectUnauthorized: true }, res => {
+    const req = https.get(info.url + '/.well-known/taskarian-ca', { ca: info.identity.caPem, rejectUnauthorized: true }, res => {
       res.resume();
       res.on('end', () => resolve(res.statusCode === 200 ? info : null));
       res.on('error', () => resolve(null));

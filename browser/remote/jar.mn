@@ -108,12 +108,12 @@ remote.jar:
   # imports from external folders
   content/external/EventUtils.js (../testing/mochitest/tests/SimpleTest/EventUtils.js)
 
-  # BashKitten native visible-browser control
-  content/bashkitten/BrowserDebug.sys.mjs (bashkitten/BrowserDebug.sys.mjs)
-  content/bashkitten/BrowserDebugEnvironment.sys.mjs (bashkitten/BrowserDebugEnvironment.sys.mjs)
-  content/bashkitten/BrowserDebugDiagnostics.sys.mjs (bashkitten/BrowserDebugDiagnostics.sys.mjs)
+  # Taskarian native visible-browser control
+  content/taskarian/BrowserDebug.sys.mjs (taskarian/BrowserDebug.sys.mjs)
+  content/taskarian/BrowserDebugEnvironment.sys.mjs (taskarian/BrowserDebugEnvironment.sys.mjs)
+  content/taskarian/BrowserDebugDiagnostics.sys.mjs (taskarian/BrowserDebugDiagnostics.sys.mjs)
 #ifndef ANDROID
-  content/bashkitten/BrowserControl.sys.mjs (bashkitten/BrowserControl.sys.mjs)
+  content/taskarian/BrowserControl.sys.mjs (taskarian/BrowserControl.sys.mjs)
 #endif
-  content/bashkitten/BrowserControlChild.sys.mjs (bashkitten/BrowserControlChild.sys.mjs)
-  content/bashkitten/BrowserControlParent.sys.mjs (bashkitten/BrowserControlParent.sys.mjs)
+  content/taskarian/BrowserControlChild.sys.mjs (taskarian/BrowserControlChild.sys.mjs)
+  content/taskarian/BrowserControlParent.sys.mjs (taskarian/BrowserControlParent.sys.mjs)

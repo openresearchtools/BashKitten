@@ -186,7 +186,7 @@ class Sidebar extends PureComponent {
               PAGE_TYPES.RUNTIME === selectedPage &&
               selectedRuntimeId === RUNTIMES.THIS_FIREFOX,
             key: RUNTIMES.THIS_FIREFOX,
-            name: "This BashKitten",
+            name: "This Taskarian",
             to: `/runtime/${RUNTIMES.THIS_FIREFOX}`,
           })
         ),

@@ -43,17 +43,17 @@ class AppRequestInterceptor(
         isDirectNavigation: Boolean,
         isSubframeRequest: Boolean,
     ): RequestInterceptor.InterceptionResponse? {
-        val agent = com.bashkitten.BrowserApp.get(context)
-        val native = (engineSession as? mozilla.components.browser.engine.gecko.GeckoEngineSession)?.bashKittenSession()
+        val agent = com.taskarian.BrowserApp.get(context)
+        val native = (engineSession as? mozilla.components.browser.engine.gecko.GeckoEngineSession)?.taskarianSession()
         if (native != null && !isSubframeRequest && (uri.startsWith("http://") || uri.startsWith("https://"))) {
             val state = context.components.core.store.state.tabs.find { it.engineState.engineSession === engineSession }
             if (state != null) {
-                val tab = agent.forSession(native) ?: agent.track(com.bashkitten.BrowserApp.Tab(
-                    state.id, com.bashkitten.BrowserApp.USER, native,
+                val tab = agent.forSession(native) ?: agent.track(com.taskarian.BrowserApp.Tab(
+                    state.id, com.taskarian.BrowserApp.USER, native,
                 ), state.parentId)
                 tab.error = ""
                 if (agent.prepareNavigation(tab, uri)) return RequestInterceptor.InterceptionResponse.Deny
-            } else if (com.bashkitten.BrowserApp.onion(uri)) {
+            } else if (com.taskarian.BrowserApp.onion(uri)) {
                 return RequestInterceptor.InterceptionResponse.Deny
             }
         }
@@ -86,9 +86,9 @@ class AppRequestInterceptor(
         uri: String?,
     ): RequestInterceptor.ErrorResponse {
         val improvedErrorType = improveErrorType(errorType)
-        val native = (session as? mozilla.components.browser.engine.gecko.GeckoEngineSession)?.bashKittenSession()
+        val native = (session as? mozilla.components.browser.engine.gecko.GeckoEngineSession)?.taskarianSession()
         if (native != null) {
-            com.bashkitten.BrowserApp.get(context).forSession(native)?.error = improvedErrorType.name
+            com.taskarian.BrowserApp.get(context).forSession(native)?.error = improvedErrorType.name
         }
         val riskLevel = getRiskLevel(improvedErrorType)
 

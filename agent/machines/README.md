@@ -32,7 +32,7 @@ existing rootfs/images remain intact, and Podman retains saved database paths.
 Acceptance of the new cleanup on installed builds is required separately from
 source checks, including forced browser exit and an unrelated host Podman workload.
 
-Each named machine has a stable UUID directory below `$BASHKITTEN_DATA_DIR/machines`.
+Each named machine has a stable UUID directory below `$TASKARIAN_DATA_DIR/machines`.
 `launch.json` is the canonical editable executable/argv/environment/cwd definition;
 `Containerfile` is its saved installation recipe. Runtime status and credentials
 are separate. The empty rootfs anchor and external bind-root preserve guest package
@@ -73,12 +73,12 @@ startup. The saved device choice is retained; missing/unusable GPU capability is
 reported as software display by the gateway. A running X session is never silently
 recreated following a presentation failure.
 
-Guest services use an isolated D-Bus/PipeWire/X11 session. `/run/bashkitten-host`
+Guest services use an isolated D-Bus/PipeWire/X11 session. `/run/taskarian-host`
 contains only that guest's allocated endpoints; keep-id maps guest UID 1000 to the
 host owner so mode-0600 sockets remain private and usable. The HTTPS socket carries
 unchanged TLS bytes to guest Caddy; it does not replace authentication or CSRF.
 The protected Agent remains in the host browser. Guest tray Quit/Stop stops only
-that guest's BashKitten group; closing a window/tray does not stop the environment.
+that guest's Taskarian group; closing a window/tray does not stop the environment.
 
 `build-guest.py` produces the native amd64/arm64 guest service `.deb` offline from
 the pinned sudo bridge/libc and libfuse sources. The guest-only native FUSE
@@ -87,10 +87,10 @@ rootless guest user namespace. A package-owned diversion preserves the distro
 helper for removal/upgrades; ordinary libfuse and AppImages use the same native
 command semantics, without an AppImage-only mount broker or host policy changes.
 Main release composition stages matching
-BashKitten, BashKitten OS and guest service `.deb` artifacts into `image/packages`
+Taskarian, Taskarian OS and guest service `.deb` artifacts into `image/packages`
 with `manifest.json` (revision, architecture, package file/checksum entries).
 Provisioning verifies this manifest before building the pinned Debian image. Its
-installed package/source/version inventory is retained under `/usr/share/bashkitten`.
+installed package/source/version inventory is retained under `/usr/share/taskarian`.
 The private engine component is built by `packaging/machines/build.py`.
 
 These source/build checks do not establish product acceptance. Native candidate

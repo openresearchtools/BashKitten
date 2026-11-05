@@ -17,7 +17,7 @@ async function run(argv, environment = {}) {
     child.once('error', reject); child.once('exit', (code, signal) => { child = null; code === 0 ? resolve() : reject(Error('Native Office command exited with ' + (signal || code))); });
   });
 }
-const stamp = config.systemplate + '/.bashkitten-source-revision';
+const stamp = config.systemplate + '/.taskarian-source-revision';
 // Upstream setup creates an alias from this engine path to /lo in each jail.
 // Reusing the same artifact at a new path still requires that alias to change.
 const systemplateRevision = JSON.stringify({ revision: config.revision, engine: config.engine });

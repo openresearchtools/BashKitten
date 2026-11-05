@@ -16,8 +16,8 @@ INVENTORY = BASE + '/android-sources.json'
 
 def verify_android_tor(apk, root):
     """Bind the actual APK JNI library and embedded provenance to current source."""
-    owner = root / 'browser/bashkitten/android/tor/build.py'
-    spec = importlib.util.spec_from_file_location('bashkitten_android_tor', owner)
+    owner = root / 'browser/taskarian/android/tor/build.py'
+    spec = importlib.util.spec_from_file_location('taskarian_android_tor', owner)
     builder = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(builder)
     graph, fingerprint = builder.selection()

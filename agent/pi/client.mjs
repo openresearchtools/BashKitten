@@ -13,12 +13,12 @@ function unwrap(response) {
   return response.result;
 }
 async function androidCall(method, params, { output, signal }) {
-  const { stdout } = await execute('pm', ['path', 'com.bashkitten'], { encoding: 'utf8', signal, timeout: 10000 });
+  const { stdout } = await execute('pm', ['path', 'com.taskarian'], { encoding: 'utf8', signal, timeout: 10000 });
   const apk = stdout.split('\n').find(line => line.startsWith('package:') && line.trim().endsWith('/base.apk'))?.trim().slice(8);
-  if (!apk?.startsWith('/data/app/')) throw Error('Install and open BashKitten for Android first');
+  if (!apk?.startsWith('/data/app/')) throw Error('Install and open Taskarian for Android first');
   const env = { ...process.env, CLASSPATH: apk };
   delete env.LD_PRELOAD; delete env.LD_LIBRARY_PATH;
-  const args = ['/', 'com.bashkitten.BrowserCommand'];
+  const args = ['/', 'com.taskarian.BrowserCommand'];
   if (output) args.push('--output', output);
   args.push('--json', JSON.stringify({ method, params }));
   try {
@@ -36,7 +36,7 @@ async function androidCall(method, params, { output, signal }) {
 }
 function linuxCall(method, params, { signal }) {
   return new Promise((resolveCall, reject) => {
-    const process = spawn('bashkitten', ['--no-start', '--agent-json'], { signal, stdio: ['pipe', 'pipe', 'pipe'] });
+    const process = spawn('taskarian', ['--no-start', '--agent-json'], { signal, stdio: ['pipe', 'pipe', 'pipe'] });
     const chunks = [], errors = []; let errorBytes = 0;
     process.on('error', reject);
     process.stdout.on('data', chunk => chunks.push(chunk));
@@ -78,13 +78,13 @@ export async function browserCall(method, params = {}, options = {}) {
   if (typeof method !== 'string' || !method || typeof params !== 'object' || !params || Array.isArray(params)) throw Error('Use a browser method and parameter object');
   // Selecting remote control is explicit. A revoked/disconnected remote never
   // falls through to a different local browser.
-  if (process.env.BASHKITTEN_BROWSER_SOCKET) return remoteCall(process.env.BASHKITTEN_BROWSER_SOCKET, method, params, options);
+  if (process.env.TASKARIAN_BROWSER_SOCKET) return remoteCall(process.env.TASKARIAN_BROWSER_SOCKET, method, params, options);
   return process.platform === 'android' ? androidCall(method, params, options) : linuxCall(method, params, options);
 }
 async function storage(manager) {
   const id = manager.getSessionId();
   if (!id) throw Error('Pi did not provide a session identity');
-  const directory = resolve(manager.getSessionDir(), 'bashkitten-browser', createHash('sha256').update(id).digest('hex'));
+  const directory = resolve(manager.getSessionDir(), 'taskarian-browser', createHash('sha256').update(id).digest('hex'));
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const info = await lstat(directory);
   if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o077)) throw Error('Browser artifacts need a private directory');

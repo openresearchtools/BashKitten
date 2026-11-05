@@ -406,7 +406,7 @@ export const BrowserWindowTracker = {
    * @returns {Window}
    */
   openWindow(options = {}) {
-    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+    if (AppConstants.MOZ_APP_NAME == "taskarian") {
       const existing =
         this.getTopWindow({ allowFromInactiveWorkspace: true }) ||
         Array.from(this.pendingWindows.keys()).find(win => !win.closed);

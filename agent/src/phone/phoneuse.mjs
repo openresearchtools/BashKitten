@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: AGPL-3.0-only
-// The package launcher uses BashKitten's private bundled Node, not PATH node.
+// The package launcher uses Taskarian's private bundled Node, not PATH node.
 import http from 'node:http';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -29,8 +29,8 @@ async function main() {
     else args[name] = value === 'true' ? true : value === 'false' ? false : /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : value;
   }
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 120000) throw Error('Use a deadline from 1 to 120000 ms');
-  const socket = process.env.BASHKITTEN_PHONE_SOCKET, secret = process.env.BASHKITTEN_PHONE_WORKER_KEY;
-  if (!socket || !secret) throw Error('Phone is unavailable: this process has no live BashKitten-owned local Pi authorization');
+  const socket = process.env.TASKARIAN_PHONE_SOCKET, secret = process.env.TASKARIAN_PHONE_WORKER_KEY;
+  if (!socket || !secret) throw Error('Phone is unavailable: this process has no live Taskarian-owned local Pi authorization');
   const link = await privateRequest(socket, secret, 'lease');
   const url = endpoint(link.endpoint);
   // Renew only during this explicit command. Never resubmit/replay its operation.
@@ -63,7 +63,7 @@ async function main() {
   }
   if (response.statusCode !== 200) { response.destroy(); throw Error('Phone command failed'); }
   let directory;
-  if (!output) { directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'bashkitten-phone-')); await fsp.chmod(directory, 0o700); output = path.join(directory, command === 'screen.screenshot' ? 'screen.png' : 'file'); }
+  if (!output) { directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'taskarian-phone-')); await fsp.chmod(directory, 0o700); output = path.join(directory, command === 'screen.screenshot' ? 'screen.png' : 'file'); }
   output = path.resolve(output);
   let destination;
   try {

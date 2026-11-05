@@ -1,0 +1,69 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+    <!-- Agent access lets the user choose installed vendor apps and verifies their actual UID/signers. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <queries>
+        <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
+    </queries>
+    <application 
+        android:allowBackup="false"
+        android:usesCleartextTraffic="true" android:supportsRtl="true">
+        <activity android:name="com.taskarian.AgentSettingsActivity" android:exported="false" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+        <activity android:name="com.taskarian.AgentRemotesActivity" android:exported="false" />
+        <receiver android:name="com.taskarian.TermuxResultReceiver" android:exported="false" />
+        <activity android:name="com.taskarian.AgentAccessActivity" android:exported="false" />
+        <activity android:name="com.taskarian.TabOptionsActivity" android:exported="false" />
+        <activity android:name="com.taskarian.ActivateTabActivity" android:exported="false" />
+        <activity android:name="com.taskarian.LicensesActivity" android:exported="false" />
+        <activity android:name="com.taskarian.GrantActivity" android:exported="false" />
+        <activity android:name="com.taskarian.phone.PhoneFilesActivity" android:exported="false" />
+        <activity android:name="com.taskarian.phone.PhoneShareActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+        <service android:name="com.taskarian.phone.PhoneNotificationService" android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
+        </service>
+        <service android:name="com.taskarian.phone.PhoneAccessibilityService" android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/phone_accessibility" />
+        </service>
+        <activity android:name="com.taskarian.CommandAccessActivity" android:exported="true" />
+        <activity android:name="com.taskarian.OnionActivity" android:exported="false" />
+        <activity android:name="com.taskarian.OnionCaptureActivity" android:exported="false" android:theme="@style/AppTheme" />
+        <receiver android:name="com.taskarian.AppCommandReceiver" android:exported="true" />
+        <service android:name="com.taskarian.BrowserControlService" android:exported="true">
+            <intent-filter><action android:name="com.taskarian.BIND_AGENT" /></intent-filter>
+        </service>
+        <service android:name="com.taskarian.BrowserKeepAliveService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-authorized browser automation and active onion browsing" />
+        </service>
+        <service android:name="org.torproject.jni.TorService" android:exported="false" />
+        <provider android:name="com.taskarian.AgentFileProvider"
+            android:authorities="${applicationId}.files" android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/shared_files" />
+        </provider>
+    </application>
+</manifest>

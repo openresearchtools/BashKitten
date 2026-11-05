@@ -15,9 +15,9 @@ import (
 	"errors"
 	"io"
 
-	"github.com/openresearchtools/bashkitten/remote/bundle"
-	"github.com/openresearchtools/bashkitten/remote/client"
-	"github.com/openresearchtools/bashkitten/remote/oauth"
+	"github.com/openresearchtools/Taskarian/remote/bundle"
+	"github.com/openresearchtools/Taskarian/remote/client"
+	"github.com/openresearchtools/Taskarian/remote/oauth"
 )
 
 // TokenStore is implemented by the browser's native encrypted store. SaveToken

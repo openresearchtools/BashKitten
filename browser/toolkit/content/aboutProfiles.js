@@ -7,7 +7,7 @@
 const { AppConstants } = ChromeUtils.importESModule(
   "resource://gre/modules/AppConstants.sys.mjs"
 );
-const singleProfile = AppConstants.MOZ_APP_NAME == "bashkitten";
+const singleProfile = AppConstants.MOZ_APP_NAME == "taskarian";
 
 const { XPCOMUtils } = ChromeUtils.importESModule(
   "resource://gre/modules/XPCOMUtils.sys.mjs"

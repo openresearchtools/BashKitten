@@ -6713,7 +6713,7 @@ void HttpBaseChannel::MaybeFlushConsoleReports() {
 void HttpBaseChannel::DoDiagnosticAssertWhenOnStopNotCalledOnDestroy() {}
 
 bool HttpBaseChannel::Http3Allowed() const {
-  if (mLoadInfo->GetOriginAttributes().IsBashKittenNetworkIsolated()) {
+  if (mLoadInfo->GetOriginAttributes().IsTaskarianNetworkIsolated()) {
     return false;
   }
   bool allowedProxyInfo =

@@ -1,4 +1,4 @@
-# BashKitten browser integration plan
+# Taskarian browser integration plan
 
 Controlling extension, 10 October: the
 [native environments and Display plan](native-environments-display-plan.md)
@@ -15,13 +15,13 @@ rows have connection/disconnect/delete controls only, no Display/settings.
 
 Controlling verification update, 8 October: use ADB for Android setup,
 permissions, installation and debugging, and direct Termux shell access for
-package/terminal work. Use BashKitten's desktop browser and Cuttlefish web UI
+package/terminal work. Use Taskarian's desktop browser and Cuttlefish web UI
 for actual feature interaction. Fresh architecture-acceptance profiles are
 required; do not import old configuration. Cuttlefish uses Android 17, native
 KVM/graphics, 16 GiB RAM and at least 128 GiB userdata on the system SSD.
 The older no-ADB, manual-Settings-only, 64 GiB and preserve-test-profile passages
 below are historical and do not control this work. Node/npm are now bundled
-privately on Linux and Termux, with an isolated complete BashKitten Pi profile.
+privately on Linux and Termux, with an isolated complete Taskarian Pi profile.
 
 Proposed architecture, 22 September 2026. This records the new requested
 direction; it does not claim that the migration is implemented or tested.
@@ -70,7 +70,7 @@ Latest display clarification, 5 October: Android's native Agent tab gets a compa
 **Display** panel **only in Local mode**. It checks/downloads compatible Termux:X11,
 shows actual display state and a short scrollable editable XFCE launch command,
 and provides Start/Stop/Open X11. Native UI and local Pi use the same packaged
-`bashkitten-display` launcher and durable script; both can read/update it, and
+`taskarian-display` launcher and durable script; both can read/update it, and
 Start runs the saved command. Provide software rendering by default and a concise
 local Termux skill for verified device-specific GPU setup, with upstream links.
 This supersedes blanket removal of X11 controls/variants below only for this
@@ -84,7 +84,7 @@ Latest desktop LocalAI clarification, 5 October: move llama.cpp runtime/command
 and router INI editing plus model downloads from the shared web UI into native
 **LocalAI** in the desktop Local Agent tab. Keep backend workers/jobs; Share Local
 only gets **Share llama.cpp** for this same service. Use the new planned
-`bashkitten-localai` builder for mainstream llama.cpp and whisper.cpp Linux
+`taskarian-localai` builder for mainstream llama.cpp and whisper.cpp Linux
 amd64/arm64 CUDA/Vulkan runtimes, managed updates and custom llama binary selection
 that disables its managed updates. Configure stock Pi's owned provider from the
 actual router endpoint/model IDs only when **Import this configuration into the
@@ -128,10 +128,10 @@ user’s own screenshots or ordinary content tabs. This supersedes earlier
 references below to retained arbitrary operational limits.
 
 Latest delivery clarification, 23 September: promote the browser implementation
-onto `main` and delete the previous BashKitten releases. This supersedes the
+onto `main` and delete the previous Taskarian releases. This supersedes the
 earlier instruction to preserve the legacy release and separate product branch.
-Use three build-only repositories, `bashkitten-build-arm64`,
-`bashkitten-build-amd64` and `bashkitten-build-android`, for independent compiler
+Use three build-only repositories, `taskarian-build-arm64`,
+`taskarian-build-amd64` and `taskarian-build-android`, for independent compiler
 caches. Product source remains in this repository. Each builder checks out the
 requested exact product commit and exposes its installable artifact in Actions;
 the main workflow collects it immediately after upload. Builders never publish
@@ -139,7 +139,7 @@ releases. See `agent/packaging/README.md` for the workflow and secret arrangemen
 
 Latest engine update, 4 October: incorporate the exact Firefox 153.4.0esr
 release (`508788b6f8314edb3c33905f6d56c3fe6b087670`) into the shared browser
-subtree, retaining BashKitten integration and compact upstream ancestry. Product
+subtree, retaining Taskarian integration and compact upstream ancestry. Product
 version becomes 153.4. Source merge and provenance checks do not establish
 Android/Linux build or manual acceptance; complete those before publication.
 
@@ -167,8 +167,8 @@ the later Share Local/Termux host clarification above.
 
 ## 1. Product boundary
 
-Make BashKitten a Firefox-based browser on Android and Linux, using the existing
-WildBuzzard browser code. Keep the current BashKitten web UI and shared server.
+Make Taskarian a Firefox-based browser on Android and Linux, using the existing
+WildBuzzard browser code. Keep the current Taskarian web UI and shared server.
 The browser displays the Agent interface and controls its local service; Node,
 Pi, Caddy and Authelia run outside the browser, in Termux or native Linux.
 Server-only operation remains supported; running it does not require opening
@@ -181,7 +181,7 @@ extensions, skills, models, credentials, sessions and RPC. This is not another
 Pi adapter rewrite.
 Bundle the pinned pillama extension with Pi on Linux and Termux. Keep its complete
 pristine upstream source tree and build metadata in `agent/pi/vendor/pillama/`,
-with exact revision, original license and separate BashKitten adapter; build the
+with exact revision, original license and separate Taskarian adapter; build the
 runtime subset from this tree and include the full source in release archives.
 Under the existing token/compaction line, show its native RPC status text for llama.cpp
 loading, prefill progress, cached tokens, prefill/decode speeds and elapsed time.
@@ -251,7 +251,7 @@ SearXNG source update in this migration slice.
 
 ## 2. One repository, source ownership and Firefox updates
 
-Keep everything in **`openresearchtools/bashkitten`**, on its current product
+Keep everything in **`openresearchtools/Taskarian`**, on its current product
 branch. Firefox/WildBuzzard can live under `/browser`; preserve the complete
 Mozilla source layout inside that directory. Move the existing shared app under
 `/agent`, excluding the obsolete desktop/Android wrappers. Track the access-stack
@@ -259,7 +259,7 @@ sources under `/auth`. These are tracked source directories in one repository,
 not Git submodules or a second product repository:
 
 ```text
-openresearchtools/bashkitten/
+openresearchtools/Taskarian/
   agent/
     src/web/                                # current UI, moved intact
     src/server/
@@ -282,7 +282,7 @@ openresearchtools/bashkitten/
     browser/                                # Mozilla desktop subtree
     mobile/android/                         # GeckoView/Fenix, same Gecko tree
     toolkit/, dom/, netwerk/, ...
-    bashkitten/                             # renamed existing wildbuzzard/
+    taskarian/                             # renamed existing wildbuzzard/
       browser/, android/, components/
       branding/, scripts/, licenses/
       upstreams.toml, ports.toml, UPDATING-FIREFOX.md
@@ -334,7 +334,7 @@ source come from this repository.
 
 | Source | Recorded starting point |
 | --- | --- |
-| BashKitten server/UI | `main`, `b20cf1cbf56a12a47a5f7a954bb473986539e230` |
+| Taskarian server/UI | `main`, `b20cf1cbf56a12a47a5f7a954bb473986539e230` |
 | Desktop browser product | `WildBuzzard`, `refactor/browser-agent-independent`, `0bd2d7da099a365d2243b320e1e6b38e8ad76cf4` |
 | Android browser | `wildbuzzard-android`, local `main`, `b970e591350863113c7ea1f110f12f296a1170bd` |
 | Current browser Firefox pin | `FIREFOX_153_2_0esr_RELEASE`, `feec67e62a5148b41fd017ccbbc463e8a6f9e83d` |
@@ -355,10 +355,10 @@ authorized by the user for a compact GitLab mirror, retain the complete Firefox
 153.0 baseline and subsequent ESR/product commits, cutting the earlier Mozilla
 and unrelated imported Arti/WebTorrent parent histories. Preserve every retained
 commit's source tree, authorship, message and licenses; changed ancestry changes
-its commit ID. Keep the original BashKitten history, `main` and existing product
+its commit ID. Keep the original Taskarian history, `main` and existing product
 release tags unchanged. Record exact official release/donor SHAs and their
 compact source commits/trees in `upstreams.toml`. Use internal
-`bashkitten/firefox/<official-release-tag>` tags; do not retain native official
+`taskarian/firefox/<official-release-tag>` tags; do not retain native official
 tags or backup refs that make the omitted history reachable in a mirror.
 Keep an independent recovery backup outside the product repository before the
 cut. No permanent Mozilla tracking branch is needed. The current Waterfox donor is
@@ -385,20 +385,20 @@ update and build it; failed merges/builds cannot publish a release.
 ### Firefox-aligned product versions
 
 Keep WildBuzzard's existing versioning rule and `firefox_release.py` checks:
-BashKitten's major/minor matches the pinned Firefox ESR major/minor. For
+Taskarian's major/minor matches the pinned Firefox ESR major/minor. For
 Firefox **153.3.0esr**, the first product version is **153.3**, followed by
-**153.3.1**, **153.3.2**, etc. for BashKitten maintenance releases on that same
-Firefox line. Moving to Firefox 153.4.x starts BashKitten 153.4. Reuse the
+**153.3.1**, **153.3.2**, etc. for Taskarian maintenance releases on that same
+Firefox line. Moving to Firefox 153.4.x starts Taskarian 153.4. Reuse the
 donor's `next_product_version` logic rather than continue independent 0.x
 browser numbering or invent another release scheme.
 
 The full engine version remains exact: an About/build record shows, for example,
-**BashKitten 153.3.1 · Firefox 153.3.0esr**, together with the pinned upstream
-commit. A BashKitten maintenance suffix does not claim a Firefox security update.
+**Taskarian 153.3.1 · Firefox 153.3.0esr**, together with the pinned upstream
+commit. A Taskarian maintenance suffix does not claim a Firefox security update.
 An upstream ESR point update must actually be merged, pinned and built; merely
 bumping the product number cannot satisfy it.
 
-Use `browser/bashkitten/config/version.txt` as the product version source for
+Use `browser/taskarian/config/version.txt` as the product version source for
 release tags, browser About, APK `versionName`, all three `.deb` payloads and
 their update metadata. Retain a separately monotonically increasing Android
 `versionCode` and normal Debian packaging revisions when rebuilding the same
@@ -476,16 +476,16 @@ silently drop it or change authentication behavior to make compilation pass.
 
 Build Linux arm64/amd64 and native Termux aarch64 from this one source inventory.
 Ship the owned executables and required libraries with the server's package in
-private BashKitten paths, so they cannot replace unrelated system `caddy`, `tor`
+private Taskarian paths, so they cannot replace unrelated system `caddy`, `tor`
 or `authelia` installations. Include their full dependency licenses and matching
 source/build material. The browser's Tor client and backend Tor publisher remain
 separate runtime instances; reuse `/auth/tor` source for compatible build targets
 while retaining the necessary Android/JNI/browser integration and its notices.
 
 Rename product names, package namespaces, executable/control names, branding,
-URLs and preferences deliberately. Android keeps **`com.bashkitten`**, the
+URLs and preferences deliberately. Android keeps **`com.taskarian`**, the
 existing Droid signing key and a monotonically increasing version code so this
-replaces the current BashKitten APK. Historical copyrights, upstream links and
+replaces the current Taskarian APK. Historical copyrights, upstream links and
 license attribution retain their original names. Do not replace or rename an
 installed independent WildBuzzard application.
 
@@ -512,7 +512,7 @@ restores it after a content-process crash. User tab-close/close-all/duplicate,
 session restore and agent tab commands cannot remove, duplicate or replace it.
 The user can still quit the application normally.
 
-On phones, place the **BashKitten logo button** to the left of the address bar
+On phones, place the **Taskarian logo button** to the left of the address bar
 while browsing, replacing the spelled-out Agent button as requested on 5 October.
 Use the current kitten-with-glasses product asset and retain **Agent** as its
 accessible name, with the native rounded styling and full touch target. In the
@@ -584,10 +584,10 @@ to normal calls rather than leaving an error telling the user to authorize
 manually. Keep denial/cancellation distinct from transport errors, and do not
 repeatedly prompt or replay an already executed action. Calls from other apps
 can receive/send the same PendingIntent. If Android blocks a background activity
-launch, expose the pending approval when BashKitten is foregrounded instead of
+launch, expose the pending approval when Taskarian is foregrounded instead of
 claiming a popup can always be forced.
 
-This is a native BashKitten allow/deny screen, not a new signature-only Android
+This is a native Taskarian allow/deny screen, not a new signature-only Android
 permission. Remember approval against the installed app/signing identity and
 verify actual UID/identity on every call; package-name strings alone cannot
 authorize a caller. A different replacement APK requires approval again. Grants
@@ -630,7 +630,7 @@ permission. Hold/release at the app/controller level, never per Pi session or
 per tool call. Fifty agents still mean one browser lock and one Termux lock.
 There is no lease, expiry scheme or new Termux patch. Termux's stock wake lock is
 app-wide, so Turn off releases that Termux lock; it is not an isolated lock for
-BashKitten inside Termux. This does not terminate other Termux jobs.
+Taskarian inside Termux. This does not terminate other Termux jobs.
 See [Android wake locks](https://developer.android.com/develop/background-work/background-tasks/awake/wakelock/set)
 and the upstream [lock](https://github.com/termux/termux-tools/blob/master/scripts/termux-wake-lock.in)
 and [unlock](https://github.com/termux/termux-tools/blob/master/scripts/termux-wake-unlock.in) commands.
@@ -640,7 +640,7 @@ and [unlock](https://github.com/termux/termux-tools/blob/master/scripts/termux-w
 1. Record the Off intent so reconnect/restart logic cannot undo it; stop accepting
    new turns and disconnect Agent control/stream connections.
 2. Abort active owned Pi turns through stock RPC, checkpoint existing queues,
-   close all BashKitten-owned workers and stop the owned web backend, Caddy,
+   close all Taskarian-owned workers and stop the owned web backend, Caddy,
    Authelia, backend Tor and managed llama processes. Use graceful shutdown with
    a bounded force-kill fallback for those exact process identities/groups.
    Leave native Pi session files, projects and credentials intact. Do not kill
@@ -686,7 +686,7 @@ bridge to attach/start it if needed. If that fails, Agent shows the packaged
 onboarding page. It works before the backend exists. A selected remote does
 not need a local Termux installation merely to display that remote's UI.
 
-Turn on also checks Android's battery-optimization exemption for BashKitten
+Turn on also checks Android's battery-optimization exemption for Taskarian
 and, for Local, Termux. Request missing exemptions using Android's own approval
 screen, verify the actual exemption on return, then continue startup. Skip
 already allowed apps; a remote-only client does not request Termux access.
@@ -709,16 +709,16 @@ and wake locks do not disable that system restriction; the app cannot grant it.
    APK's actual launcher component. The script downloads and verifies our
    published Open Research Tools Termux keyring package, installs it and
    `x11-repo` through `pkg`, and runs
-   `pkg install bashkitten`. The `.deb` declares all required Node, Python,
+   `pkg install taskarian`. The `.deb` declares all required Node, Python,
    Git/archive, search/native-library and desktop dependencies, including XFCE,
    LibreOffice, Xvfb and the Termux:X11 companion for the optional visible display.
    Keep no duplicate dependency installer inside the APK.
    The upgrade is required before dependency installation: a fresh APK bootstrap
    may contain an older C++ runtime than the rolling repository's native packages.
    The same command enables external apps, reloads settings and returns through
-   the installed BashKitten launcher after successful installation. The final
+   the installed Taskarian launcher after successful installation. The final
    activity component must come from the actual new APK.
-3. On return, BashKitten requests Android's `com.termux.permission.RUN_COMMAND`
+3. On return, Taskarian requests Android's `com.termux.permission.RUN_COMMAND`
    permission directly. Verify a real command result before marking connected.
    Denied/permanently denied permission gets an appropriate Retry/Settings link.
    A fresh setup shows the command before requesting or probing this bridge;
@@ -736,7 +736,7 @@ mkdir -p ~/.termux && printf '\nallow-external-apps=true\n' >> ~/.termux/termux.
 
 The installer should avoid accumulating duplicate settings on repeated setup.
 Append the explicit Android return intent after this command. The shell does
-not grant an Android permission; the foreground BashKitten activity requests
+not grant an Android permission; the foreground Taskarian activity requests
 the normal system dialog. The return intent accepts no arbitrary command to run.
 This follows Termux's [RUN_COMMAND interface](https://github.com/termux/termux-app/wiki/RUN_COMMAND-Intent).
 
@@ -747,7 +747,7 @@ Keep the normal setup screen to the Termux button, one visible copyable command
 and the existing Turn on/off control. The Start action drives this sequence. Request the normal Android permission
 when it is needed, then probe the real Termux connection. Missing packages show
 the same copyable `pkg` command. After the one-time command is
-pasted in Termux, return through BashKitten's exported launcher and continue
+pasted in Termux, return through Taskarian's exported launcher and continue
 without another Connect button. Do not show already-satisfied permission steps
 or send every user to Android app settings. Show a settings recovery action only
 when Android has denied further permission prompts. Installation displays native
@@ -762,7 +762,7 @@ restrictions through its visible Developer options toggle. This is the sole
 exception to the developer-settings restriction; ADB, root, debugging and other
 developer workarounds remain excluded. Record that setting in verification
 results rather than claiming unchanged-default Android process behavior.
-Do not add or run BashKitten-owned scripted tests. Complete builds and manual
+Do not add or run Taskarian-owned scripted tests. Complete builds and manual
 first-install flows, fixing discovered failures before stopping. Label emulator
 results accurately; compilation alone does not satisfy this acceptance check.
 
@@ -770,7 +770,7 @@ Existing compatible Termux installations stay installed. Use their ordinary
 command interface; no signing match or new Termux patch is required. Retain an
 existing suite-specific connection only as upgrade compatibility while moving
 to the standard path. Permission for Termux/Pi to control the browser is a
-separate native browser grant from permission for BashKitten to command Termux.
+separate native browser grant from permission for Taskarian to command Termux.
 Present both during setup when required; do not claim one grant covers both.
 
 Detect a removed or reinstalled Termux using Android's package installation
@@ -790,7 +790,7 @@ Display feature needs the separate compatible X11 APK; chat, headless work and
 remote connections do not. Termux:API APK, proot, root and Android shared-storage
 permission remain unnecessary. Do not remove already installed desktop packages.
 The short managed Pi environment note explains Termux/Bionic, `pkg`, skills and
-the stable `bashkitten-display` launcher/saved-script paths, as defined in the
+the stable `taskarian-display` launcher/saved-script paths, as defined in the
 remote tunnel plan. User and Pi command edits go to the same durable file that
 native Start runs; status supplies the real display environment for GUI tools.
 Explain owned headless Xvfb separately, with `-nolisten tcp`, `DISPLAY` and cleanup;
@@ -801,7 +801,7 @@ Keep package controls in the app's setup/settings area with an expandable
 installed-packages list, explicit **Check for updates / Update packages**,
 APT/npm/Pi stages and the existing bounded, scrollable real output. Reuse the
 manager's durable jobs and locks. No package-network checks on every chat open.
-Replace suite APK cards with the relevant Termux setup/status and BashKitten
+Replace suite APK cards with the relevant Termux setup/status and Taskarian
 update controls; there is no remaining suite app store to maintain.
 
 Browser upload/download/paste uses Gecko and the Android picker. Working-folder
@@ -835,7 +835,7 @@ Escape file content and omit raw Git metadata noise. Handle new repositories,
 renames, deletions and binary files accurately. Run bounded asynchronous Git
 commands, refresh only on visible/focus/manual or actual work changes, and do
 not install filesystem watchers or poll hidden sidebars. If Git is not initialized,
-show that state until a later refresh detects it. BashKitten does not initialize,
+show that state until a later refresh detects it. Taskarian does not initialize,
 stage, commit or otherwise manage Git; the user or stock Pi does that. The local
 Linux desktop shell shows Changes instead of a full file manager, with native
 folder opening still available. Remote connections retain file browsing because
@@ -852,14 +852,14 @@ opened again; do not claim the OS cannot kill it. No Pi modification is needed.
 
 ```mermaid
 flowchart LR
-    Client[BashKitten browser or another web client] --> Caddy
+    Client[Taskarian browser or another web client] --> Caddy
     Remote[Tor client] --> Onion[Optional backend Tor service]
     Onion --> Caddy
     Caddy -->|authorization check| Auth[Authelia: mandatory two-factor login]
-    Caddy -->|authorized requests| UI[BashKitten web UI and API]
+    Caddy -->|authorized requests| UI[Taskarian web UI and API]
     UI --> Workers[Owned stock Pi RPC workers]
     Caddy --> Llama[Optional Linux llama-server: native bearer auth]
-    Manager[Existing BashKitten service manager] -. owns .-> Caddy
+    Manager[Existing Taskarian service manager] -. owns .-> Caddy
     Manager -. owns .-> Auth
     Manager -. owns .-> UI
     Manager -. owns .-> Onion
@@ -889,7 +889,7 @@ with no TCP listener and durable session persistence under the existing private
 access directory. Preserve Authelia's session encryption, expiry, logout and
 mandatory second factor. Start and stop this store with the whole service group;
 do not keep authentication processes alive after Turn off. No LDAP, second
-BashKitten account database or custom authentication layer.
+Taskarian account database or custom authentication layer.
 Reuse Torkitten's local account/TOTP enrollment approach, calling Authelia's own
 commands/APIs and requiring a valid second factor before setup completes.
 Enrollment is available only through the local private setup controller; remote
@@ -913,7 +913,7 @@ See [Authelia's Caddy integration](https://www.authelia.com/integration/proxies/
 dynamic, unprivileged port obtained from the existing verified service discovery.
 `<port>` is not a new fixed port or a permanent part of the server's identity.
 There is no public domain, DNS lookup, domain registration, hosts-file edit or
-dependency on `bashkitten.com`; that domain remains the user's website. The
+dependency on `taskarian.com`; that domain remains the user's website. The
 earlier claim that the pinned Authelia version needs a registered hostname was incorrect:
 Authelia v4.39.20 explicitly accepts IP cookie scopes, including `127.0.0.1`, in
 its [validator](https://github.com/authelia/authelia/blob/v4.39.20/internal/configuration/validator/session.go#L124-L142)
@@ -941,14 +941,14 @@ self-signed certificates or disable certificate verification. Keep hostname,
 expiry and key-change checks. Trust the persistent CA rather than a short-lived
 leaf so automatic certificate renewal does not break the connection. Reuse and
 tighten Android's existing enrolled-onion TLS handling, and implement the same
-scope on desktop. No user certificate import is needed in BashKitten. Other
+scope on desktop. No user certificate import is needed in Taskarian. Other
 browsers retain their normal certificate trust rules.
 [Caddy local HTTPS](https://caddyserver.com/docs/automatic-https#local-https).
 
 The core group is ready only when Node, Caddy and Authelia are healthy, plus the
 backend Tor process when remote publishing is enabled. A core child exit or
 fatal health failure stops ingress and shuts down the remaining owned group,
-including BashKitten's Pi workers, using the same shutdown path as Turn off.
+including Taskarian's Pi workers, using the same shutdown path as Turn off.
 Release the wake locks, show **Agent off** with the error, and let **Turn on**
 start the complete group again. Do not leave three independent crash/restart
 loops or report On for a partially functioning stack. A temporary Tor network
@@ -957,7 +957,7 @@ requested llama process recovery remains an owned optional operation while
 Agent is On; it cannot restart after Turn off.
 
 Keep the lifecycle owner outside the HTTP child. Track owned process identities
-and start times, include all BashKitten-owned Pi workers in group shutdown, and
+and start times, include all Taskarian-owned Pi workers in group shutdown, and
 use native parent-death/cleanup support where needed. If the existing Node
 launcher cannot enforce cleanup when killed, use one small native process-group
 guard; do not patch each upstream daemon or add a generic supervisor framework.
@@ -1119,7 +1119,7 @@ authenticated proxy. It remains a service for trusted local OS clients.
 
 Bind only loopback, remember/reserve each endpoint's port, and report a bind
 conflict rather than connect to an unknown listener. If a new port is selected,
-show it and update only BashKitten-managed provider configuration. Any normal
+show it and update only Taskarian-managed provider configuration. Any normal
 OpenAI-compatible client can use `http://127.0.0.1:<port>/v1`; Pi uses its standard
 custom-provider configuration. A remote Pi runs on the remote host: its
 `localhost` is not this desktop, so configure its model endpoint on that host.
@@ -1129,7 +1129,7 @@ port. This is the deliberately requested browser relay, not a second chat server
 
 For a **managed local Linux runtime**, follow the later LocalAI requirement in
 the remote tunnel plan: verified per-architecture CUDA or Vulkan/CPU downloads
-from the planned `bashkitten-localai` repository, using mainstream llama.cpp.
+from the planned `taskarian-localai` repository, using mainstream llama.cpp.
 The native LocalAI panel owns runtime/command/router INI/model configuration;
 Share Local only publishes this same service through its checkbox. Existing
 [llama-deb](https://github.com/openresearchtools/llama-deb) or other external
@@ -1162,7 +1162,7 @@ Move **Download models** into native desktop **LocalAI**, along with llama.cpp's
 binary/command and a real router INI editor with native Open/Save as pickers.
 Remove the shared web downloader/configuration controls and remote management
 routes, while preserving ordinary chat model selection. Reuse the
-SimpleHF/BashKitten Rust downloader behavior, retaining donor license texts and
+SimpleHF/Taskarian Rust downloader behavior, retaining donor license texts and
 provenance. Search Hugging Face,
 browse repository files and sizes, choose downloads, and display real progress
 with Pause, Resume and Cancel. Pin each download to its selected immutable
@@ -1242,18 +1242,18 @@ JavaScript-only pages can use the existing separately authorized browser skill.
 
 Declare `agent/pi/skills/web-search/` in the integration package's `pi.skills`.
 Its short `SKILL.md` tells stock Pi when/how to run the packaged
-`bashkitten-search` helper and read/save the resulting Markdown. Let Pi discover
+`taskarian-search` helper and read/save the resulting Markdown. Let Pi discover
 the description and read the full skill on demand, including native
 `/skill:web-search`; no custom skill loader, prompt injection on every turn,
 replacement tools or new Pi RPC commands. Normal Pi `bash`/`read` calls already
 stream through the current transcript UI. Register the package for the selected
 Pi runtime through its supported mechanism, preserving user skills/extensions.
-It must also work from ordinary terminal Pi without the BashKitten UI.
+It must also work from ordinary terminal Pi without the Taskarian UI.
 Follow the pinned [native Pi skills interface](https://github.com/earendil-works/pi/blob/cd32f7725fdbddbaecdff5b1e68491563394e0ca/packages/coding-agent/docs/skills.md).
 
 ### One search/read call
 
-Use the same `bashkitten-search` command on every platform, accepting one JSON
+Use the same `taskarian-search` command on every platform, accepting one JSON
 object on stdin. Model-facing examples need only one of these inputs:
 
 ```json
@@ -1298,7 +1298,7 @@ Preserve user-specified deadlines, cancellation and redirect/DNS/content checks;
 this helper, not to Pi's unrestricted native tools.
 
 Replace hardcoded `/tmp` and `/usr` assumptions with the platform paths. Default
-full Markdown to a private writable BashKitten data directory, available across
+full Markdown to a private writable Taskarian data directory, available across
 UI/server restarts; support an explicitly selected project output directory.
 Use unique filenames and return the actual path. Keep private directory/file
 permissions and safe creation, handle spaces/non-ASCII paths and concurrent
@@ -1374,10 +1374,10 @@ Build these **four primary binary artifacts from this one repository**:
 
 | Artifact | Complete product payload |
 | --- | --- |
-| `bashkitten_VERSION_amd64.deb` | Linux x86-64 browser, Agent web UI/server, native Pi and production npm dependencies, browser-control Pi extension/skill, DDGS Python search/read helper and Pi skill, Caddy/Authelia/Tor and lifecycle tools |
-| `bashkitten_VERSION_arm64.deb` | The same complete Linux product built for ARM64 |
-| `bashkitten_VERSION_aarch64.deb` | Native Termux/Bionic Agent web UI/server, Pi and production npm dependencies, browser-control Pi extension/skill, native DDGS search/read helper and Pi skill, native Caddy/Authelia/Tor, lifecycle/bootstrap/package tools; browser control and search execute in Termux beside Pi |
-| `bashkitten_VERSION_arm64-v8a.apk` | Android browser, protected Agent/onboarding UI, native Binder/Termux integration, power/wake controls, browser Tor client and offline notices; the backend and Pi extension run from the Termux package |
+| `taskarian_VERSION_amd64.deb` | Linux x86-64 browser, Agent web UI/server, native Pi and production npm dependencies, browser-control Pi extension/skill, DDGS Python search/read helper and Pi skill, Caddy/Authelia/Tor and lifecycle tools |
+| `taskarian_VERSION_arm64.deb` | The same complete Linux product built for ARM64 |
+| `taskarian_VERSION_aarch64.deb` | Native Termux/Bionic Agent web UI/server, Pi and production npm dependencies, browser-control Pi extension/skill, native DDGS search/read helper and Pi skill, native Caddy/Authelia/Tor, lifecycle/bootstrap/package tools; browser control and search execute in Termux beside Pi |
+| `taskarian_VERSION_arm64-v8a.apk` | Android browser, protected Agent/onboarding UI, native Binder/Termux integration, power/wake controls, browser Tor client and offline notices; the backend and Pi extension run from the Termux package |
 
 No separate WildBuzzard install, separately maintained browser repository or
 manual extension download is required. One release publishes all four verified
@@ -1385,8 +1385,8 @@ artifacts plus checksums, licenses and complete corresponding source/build
 material. The existing APT repository indexes the three `.deb` targets; Android
 installs/updates the APK through its normal package installer. Linux uses one
 complete `.deb` per architecture rather than separate new server/wrapper packages.
-Provide a proper APT upgrade/replacement from the old `bashkitten` server and
-`bashkitten-desktop` wrapper, preserving user data and resolving owned-file
+Provide a proper APT upgrade/replacement from the old `taskarian` server and
+`taskarian-desktop` wrapper, preserving user data and resolving owned-file
 overlap through package metadata, not deleting arbitrary files.
 
 Bundle the product's own access-stack executables, Pi/npm/extension payloads and
@@ -1456,7 +1456,7 @@ inventory even though the server is installed separately from the APK.
 Preserve Mozilla/Waterfox MPL notices, BrowserOS-derived AGPL notices, Mozilla
 DevTools MCP attribution, retained ad-block data licenses, Tor and all remaining
 native/npm dependency notices. The combined product uses AGPL-3.0-only for
-BashKitten-owned code from
+Taskarian-owned code from
 4 October 2026. Retained AGPL-3.0-or-later, MPL, GPL and other third-party
 permissions remain with their files; do not erase or narrow those notices.
 Preserve Torkitten's Apache-2.0 notices for reused code. Settings includes source
@@ -1478,7 +1478,7 @@ release notes stay short; implementation detail belongs here and in AGENTS.md.
 | --- | --- | --- |
 | 1 | Native access stack and coupled lifecycle | Build tracked `/auth` sources for Linux and Termux; real Authelia/TOTP/Caddy flow; no direct login bypass; whole-group shutdown and recovery including owner SIGKILL; native Termux patches stay isolated |
 | 2 | One repository and stripped browser sources | Both targets build under `/browser` after the required latest 153.x ESR update, with WildBuzzard's matching product-version rule and adapted artifact/cache workflow; cache-miss/cached builds and Agent-only reassembly work; an ESR subtree update changes only its prefix and preserves product edits without restoring pre-153 history; compact mirror refs and retained source trees verified; `/agent` runs after relocation; retained Waterfox/Tor features work; removed dependencies are absent; source/licenses match |
-| 3 | Rename and add protected Agent view | Existing BashKitten APK upgrades; one profile/window; new-window requests become tabs; protected view survives close-all, restore and crashes and rejects all automation/extension access |
+| 3 | Rename and add protected Agent view | Existing Taskarian APK upgrades; one profile/window; new-window requests become tabs; protected view survives close-all, restore and crashes and rejects all automation/extension access |
 | 4 | Local integration and any-Termux approval | Existing UI and real stock Pi turn; correct distinct mobile/desktop browser skill and actual platform tools; official GitHub, F-Droid, independently signed `com.termux` and existing suite Termux; first normal browser command opens native approval without `--authorize`, executes once after allow and never after deny; other-app request/revocation also works; bootstrap/files/OAuth/update jobs |
 | 5 | Power, wake locks, recovery and layout | Fresh launch On; actual browser and Termux CPU locks remain one each with 50 agents; Turn off stops all owned services/Pi and releases locks while leaving browser/Termux/unrelated tasks; Turn on discovers the actual dynamic port; core crash shows Off; owner/browser/Termux deaths recover without duplicates or prompt replay; rotate/fold preserves state |
 | 6 | Tor Agent remotes | QR/file/manual enrollment, 2FA, TLS renewal, rejected changed identity, revocation, offline/reconnect, ordinary private onion tabs and permission-controlled remote browser tools |
@@ -1493,7 +1493,7 @@ software-emulated guest; do not recreate one or replace the stock kernel. Keep
 build-time 16 KB alignment checks; do not claim 16 KB execution without a
 suitable device. Physical
 device checks are required for claimed GPU behavior and foldable behavior the
-emulator does not cover. Keep BashKitten-owned verification tools, fixtures,
+emulator does not cover. Keep Taskarian-owned verification tools, fixtures,
 test profiles and results outside product repositories/artifacts; do not remove
 Mozilla's unmodified upstream source tests merely because they are tests.
 

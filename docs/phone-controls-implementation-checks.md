@@ -37,7 +37,7 @@ release/source collector workstream.
 
 Checks completed:
 
-- Android 37 `javac` compiled the Phone module, then all current BashKitten Java
+- Android 37 `javac` compiled the Phone module, then all current Taskarian Java
   and Telephony sources together, with the newly built remote AAR. Real cached
   Gecko/AndroidX/support-utils libraries and generated resource classes supplied
   the external classpath; no source stubs replaced these modules. This does not
@@ -58,11 +58,11 @@ plan section 12 complete.
 
 ## Calling addresses
 
-The 11 October address change uses only `sip:kitten-phone@bashkitten.local`
-for the general line and `sip:kitten-<UUID>@bashkitten.local` for registered
+The 11 October address change uses only `sip:taskarian-phone@taskarian.local`
+for the general line and `sip:taskarian-<UUID>@taskarian.local` for registered
 backends. These are local Android Telecom identities; the native owner does
 not resolve the domain or connect to a SIP server. Calls still require the
-exact BashKitten PhoneAccount, and backend calls require an exact, non-revoked
+exact Taskarian PhoneAccount, and backend calls require an exact, non-revoked
 registry alias. Contact creation still uses the normal Android editor without
 contacts or call-log access.
 
@@ -74,7 +74,7 @@ establish that acceptance.
 
 ## Container ordinary browser
 
-The guest uses the existing BashKitten browser binary and existing browser
+The guest uses the existing Taskarian browser binary and existing browser
 dispatcher. Explicit guest role, machine UUID, registered private profile,
 installed browser executable, process parent/UID and user namespace are validated
 by the live private controller before it gives a browser transport grant.

@@ -71,7 +71,7 @@ Source contract: [llama.cpp v0.6.0 server model presets](https://github.com/ggml
 [argument definitions](https://github.com/ggml-org/llama.cpp/blob/d81235049384534c167caea52b85a694f6103d14/common/arg.cpp).
 
 On 8 October, the installed Android editor passed actual interaction through the
-BashKitten desktop browser's Cuttlefish UI: opening the existing Qwen3.5 0.8B
+Taskarian desktop browser's Cuttlefish UI: opening the existing Qwen3.5 0.8B
 Q4_0 preset, selecting explicit CPU, saving and retaining the global 8192 context
 setting. Backend file browsing selected a downloaded Pocket model from Termux's
 home directory. The normal Check/Download actions installed Android llama

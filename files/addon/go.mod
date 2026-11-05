@@ -1,4 +1,4 @@
-module openresearchtools.org/bashkitten/files-office
+module openresearchtools.org/taskarian/files-office
 
 go 1.24.0
 

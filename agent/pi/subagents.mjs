@@ -3,9 +3,9 @@ import { Type } from 'typebox';
 import { agentRequest } from './agent-channel.mjs';
 
 export default function subagents(pi) {
-  if (!process.env.BASHKITTEN_SESSION_ID) return;
+  if (!process.env.TASKARIAN_SESSION_ID) return;
   const request = (ctx, value, signal) => agentRequest({ ...value,
-    session: ctx.sessionManager.getSessionId(), chat: process.env.BASHKITTEN_SESSION_ID }, signal);
+    session: ctx.sessionManager.getSessionId(), chat: process.env.TASKARIAN_SESSION_ID }, signal);
   const configure = async ctx => {
     const { settings, canMessage } = await request(ctx, { action: 'settings' });
     // Hidden tools cannot be discovered/called, even through codemode. When
@@ -25,6 +25,6 @@ export default function subagents(pi) {
   };
   pi.registerTool(tool);
   pi.on('session_start', async (_event, ctx) => configure(ctx));
-  pi.registerCommand('bashkitten-agents-refresh', { description: 'Reload this chat’s saved subagent settings',
+  pi.registerCommand('taskarian-agents-refresh', { description: 'Reload this chat’s saved subagent settings',
     handler: async (_args, ctx) => configure(ctx) });
 }

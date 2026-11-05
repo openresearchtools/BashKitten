@@ -210,7 +210,7 @@ static int wait_owner(const char *pid_text, const char *started_text, bool stop_
     int guard_descriptor = -1;
     if (stop_group) {
         struct identity controller_identity, guard_before, guard_after;
-        const char *guard_text = getenv("BASHKITTEN_GUARD_PID");
+        const char *guard_text = getenv("TASKARIAN_GUARD_PID");
         char *guard_end = NULL;
         long guard = guard_text ? strtol(guard_text, &guard_end, 10) : 0;
         if (!guard_text || *guard_end || guard <= 1 || guard > INT_MAX ||
@@ -262,8 +262,8 @@ static int stop_podman_pause(const char *pid_text, const char *started_text,
     pid_t pid = (pid_t)number;
     unsigned long long started = strtoull(started_text, &end, 10);
     if (*end || !started || runtime[0] != '/' || executable[0] != '/') return 64;
-    const char *guard_text = getenv("BASHKITTEN_GUARD_PID");
-    const char *data = getenv("BASHKITTEN_DATA_DIR");
+    const char *guard_text = getenv("TASKARIAN_GUARD_PID");
+    const char *data = getenv("TASKARIAN_DATA_DIR");
     if (!guard_text || !data || data[0] != '/') return 125;
     long guard = strtol(guard_text, &end, 10);
     if (*end || guard <= 1 || guard > INT_MAX) return 125;
@@ -294,9 +294,9 @@ static int stop_podman_pause(const char *pid_text, const char *started_text,
         while (getdelim(&entry, &capacity, '\0', environment) > 0) {
             if (strcmp(entry, "_PODMAN_PAUSE=1") == 0) found |= 1;
             if (strncmp(entry, "XDG_RUNTIME_DIR=", sizeof("XDG_RUNTIME_DIR=") - 1) == 0 && strcmp(entry + sizeof("XDG_RUNTIME_DIR=") - 1, runtime) == 0) found |= 2;
-            if (strncmp(entry, "BASHKITTEN_DATA_DIR=", sizeof("BASHKITTEN_DATA_DIR=") - 1) == 0 && strcmp(entry + sizeof("BASHKITTEN_DATA_DIR=") - 1, data) == 0) found |= 4;
+            if (strncmp(entry, "TASKARIAN_DATA_DIR=", sizeof("TASKARIAN_DATA_DIR=") - 1) == 0 && strcmp(entry + sizeof("TASKARIAN_DATA_DIR=") - 1, data) == 0) found |= 4;
             if (strncmp(entry, "CONTAINERS_STORAGE_CONF=", sizeof("CONTAINERS_STORAGE_CONF=") - 1) == 0 && strcmp(entry + sizeof("CONTAINERS_STORAGE_CONF=") - 1, storage) == 0) found |= 8;
-            if (strncmp(entry, "BASHKITTEN_GUARD_PID=", sizeof("BASHKITTEN_GUARD_PID=") - 1) == 0 && strcmp(entry + sizeof("BASHKITTEN_GUARD_PID=") - 1, guard_text) == 0) found |= 16;
+            if (strncmp(entry, "TASKARIAN_GUARD_PID=", sizeof("TASKARIAN_GUARD_PID=") - 1) == 0 && strcmp(entry + sizeof("TASKARIAN_GUARD_PID=") - 1, guard_text) == 0) found |= 16;
         }
         free(entry); fclose(environment);
     }
@@ -368,8 +368,8 @@ int main(int argc, char **argv) {
         fprintf(stderr, "runtime-guard: child ownership requires /proc and subreaper support\n");
         return 125;
     }
-    termux = getenv("BASHKITTEN_TERMUX") &&
-        strcmp(getenv("BASHKITTEN_TERMUX"), "1") == 0;
+    termux = getenv("TASKARIAN_TERMUX") &&
+        strcmp(getenv("TASKARIAN_TERMUX"), "1") == 0;
     sigemptyset(&signals);
     sigaddset(&signals, SIGCHLD);
     sigaddset(&signals, SIGTERM);
@@ -402,8 +402,8 @@ int main(int argc, char **argv) {
         if (setpgid(0, 0) != 0) _exit(125);
         char pid[32];
         snprintf(pid, sizeof(pid), "%ld", (long)owner);
-        if (setenv("BASHKITTEN_GUARDED", "1", 1) != 0 ||
-            setenv("BASHKITTEN_GUARD_PID", pid, 1) != 0) _exit(125);
+        if (setenv("TASKARIAN_GUARDED", "1", 1) != 0 ||
+            setenv("TASKARIAN_GUARD_PID", pid, 1) != 0) _exit(125);
         execvp(argv[1], &argv[1]);
         perror("runtime-guard: exec controller");
         _exit(127);

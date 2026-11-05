@@ -35,7 +35,7 @@ It retains raw SSE byte offsets and the original generation ID across connection
 loss, trying the configured number of recoveries before stock Pi may retry a new
 request. It preserves Pi's native provider/parser and uses the same endpoint and
 authentication. `/pillama-resume off` disables it; the default is off. Settings
-live in BashKitten's private Pi profile, not the standalone Pi directory.
+live in Taskarian's private Pi profile, not the standalone Pi directory.
 
 
 The 29 October 2026 update uses the official v1.4.0 release commit and registry

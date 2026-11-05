@@ -1024,7 +1024,7 @@ nsresult nsDNSService::AsyncResolveInternal(
     nsICancelable** result) {
   // All destination resolution belongs to the native SOCKS route. Only its
   // numeric local listener may reach the platform resolver's literal path.
-  if (aOriginAttributes.IsBashKittenNetworkIsolated() &&
+  if (aOriginAttributes.IsTaskarianNetworkIsolated() &&
       !aHostname.EqualsLiteral("127.0.0.1")) {
     return NS_ERROR_UNKNOWN_PROXY_HOST;
   }
@@ -1258,7 +1258,7 @@ nsresult nsDNSService::DeprecatedSyncResolve(
 nsresult nsDNSService::ResolveInternal(
     const nsACString& aHostname, nsIDNSService::DNSFlags flags,
     const OriginAttributes& aOriginAttributes, nsIDNSRecord** result) {
-  if (aOriginAttributes.IsBashKittenNetworkIsolated() &&
+  if (aOriginAttributes.IsTaskarianNetworkIsolated() &&
       !aHostname.EqualsLiteral("127.0.0.1")) {
     return NS_ERROR_UNKNOWN_PROXY_HOST;
   }

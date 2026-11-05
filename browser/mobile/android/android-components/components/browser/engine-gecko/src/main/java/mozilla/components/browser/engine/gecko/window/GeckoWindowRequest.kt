@@ -18,7 +18,7 @@ class GeckoWindowRequest(
     private val onStart: () -> Unit = {},
 ) : WindowRequest {
 
-    override val contextId: String? get() = engineSession.bashKittenSession().settings.contextId
+    override val contextId: String? get() = engineSession.taskarianSession().settings.contextId
 
     override fun prepare(): EngineSession {
         return this.engineSession

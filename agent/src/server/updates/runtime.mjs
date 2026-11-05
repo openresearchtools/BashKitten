@@ -29,7 +29,7 @@ export async function checkPi() {
     const compatible = !latest.engines?.node || semver.satisfies(process.version, latest.engines.node);
     return { installed: runtime.version, latest: latest.version, compatible: compatible ? latest.version : runtime.version,
       updateAvailable: compatible && semver.gt(latest.version, runtime.version), upstreamAvailable: semver.gt(latest.version, runtime.version),
-      reason: compatible ? null : `Pi ${latest.version} needs Node ${latest.engines.node}. Update BashKitten first.` };
+      reason: compatible ? null : `Pi ${latest.version} needs Node ${latest.engines.node}. Update Taskarian first.` };
   });
 }
 export async function updateStatus() {
@@ -89,16 +89,16 @@ export async function installPi(job) {
     await job.phase(`Activating packaged Pi ${available.latest}`);
     await activateRuntime(job, packaged);
     await checkPi();
-    await job.log(`Pi ${available.latest} activated from the installed BashKitten package.\n`);
+    await job.log(`Pi ${available.latest} activated from the installed Taskarian package.\n`);
     return;
   }
-  const parent = process.platform === 'android' ? path.join(process.env.PREFIX, 'var/lib/bashkitten/runtimes') : path.join(dataDir, 'runtimes');
+  const parent = process.platform === 'android' ? path.join(process.env.PREFIX, 'var/lib/Taskarian/runtimes') : path.join(dataDir, 'runtimes');
   await privateDir(parent);
   const temporary = await fs.mkdtemp(path.join(parent, '.install-'));
   let root;
   try {
     await job.phase(`Downloading Pi ${available.latest} and npm dependencies`);
-    await writeJson(path.join(temporary, 'package.json'), { name: 'bashkitten-pi-runtime', private: true, type: 'module',
+    await writeJson(path.join(temporary, 'package.json'), { name: 'taskarian-pi-runtime', private: true, type: 'module',
       dependencies: { '@earendil-works/pi-coding-agent': available.latest, '@earendil-works/pi-ai': available.latest } });
     // npm records exact resolved versions and integrity in the new lock. The
     // running installation stays untouched until the native API check passes.
@@ -134,7 +134,7 @@ export async function installPi(job) {
     await job.exec(process.execPath, ['--input-type=module', '-e', check], { timeout: 60000 });
     const hash = digest(await fs.readFile(path.join(temporary, 'package-lock.json')));
     root = path.join(parent, available.latest + '-' + hash.slice(0, 12));
-    await writeJson(path.join(temporary, 'managed.json'), { owner: 'bashkitten', version: available.latest, lockSha256: hash });
+    await writeJson(path.join(temporary, 'managed.json'), { owner: 'taskarian', version: available.latest, lockSha256: hash });
     try { await fs.rename(temporary, root); }
     catch (error) { if (!['EEXIST', 'ENOTEMPTY'].includes(error.code)) throw error; }
     await job.phase(`Activating Pi ${available.latest}`);

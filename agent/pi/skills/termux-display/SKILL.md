@@ -1,32 +1,32 @@
 ---
 name: termux-display
-description: Start or configure this phone's visible XFCE desktop through BashKitten's shared Termux:X11 launcher; choose software rendering or verify a supported device-specific GPU setup.
+description: Start or configure this phone's visible XFCE desktop through Taskarian's shared Termux:X11 launcher; choose software rendering or verify a supported device-specific GPU setup.
 ---
 
 # Local Android desktop
 
 Use this skill in **local Termux** for visible desktop applications. XFCE supplies
-the desktop inside BashKitten’s native Display tab. Remote browser access does not
+the desktop inside Taskarian’s native Display tab. Remote browser access does not
 give a remote Pi control of this phone's display. For explicitly headless work,
 use your own Xvfb session instead, with `-nolisten tcp` and owned cleanup.
 
 **Configuration → Display**, the user and Pi share one launcher and script.
 The Display button opens the desktop; Configuration opens its launch settings.
 Do not create another startup service, edit this skill, or put competing commands
-in `.bashrc`. BashKitten's packages supply XFCE, Mesa and the paired `bashkitten-x11` loader.
-The native engine is included in BashKitten; no separate X11 app is needed.
+in `.bashrc`. Taskarian's packages supply XFCE, Mesa and the paired `taskarian-x11` loader.
+The native engine is included in Taskarian; no separate X11 app is needed.
 Turn on the local Agent before starting its desktop.
 
 ## Commands and results
 
 ```sh
-bashkitten-display status
-bashkitten-display command
-bashkitten-display command --path
-bashkitten-display command --set < new-launch.sh
-bashkitten-display command --reset
-bashkitten-display start
-bashkitten-display stop
+taskarian-display status
+taskarian-display command
+taskarian-display command --path
+taskarian-display command --set < new-launch.sh
+taskarian-display command --reset
+taskarian-display start
+taskarian-display stop
 ```
 
 `status`, `start` and `stop` print JSON: `state` (`stopped`, `starting`, `running`,
@@ -36,23 +36,23 @@ lists unmanaged X socket names (a stale socket alone does not prove a live serve
 Errors exit nonzero;
 read stderr and refreshed status. Do not report success from a spawned PID alone.
 Start waits for the X server/window manager and is idempotent while owned work
-exists. Stop terminates only BashKitten's owned desktop and descendants.
+exists. Stop terminates only Taskarian's owned desktop and descendants.
 
 `command` prints the complete script; `--path` prints its resolved absolute path:
-`$BASHKITTEN_DATA_DIR/display/launch.sh`, normally
-`~/.local/share/bashkitten-pi/display/launch.sh`. Read that resolved path rather
+`$TASKARIAN_DATA_DIR/display/launch.sh`, normally
+`~/.local/share/Taskarian/display/launch.sh`. Read that resolved path rather
 than assuming the default. `--set` validates shell syntax and saves atomically,
 detecting intervening edits; `--reset` explicitly saves the packaged default.
 Neither save executes anything. Direct edits are also read on the next Start.
 Package upgrades preserve custom scripts; only the exact untouched old generated
-`termux-x11` default migrates to `bashkitten-x11`. If status includes `launcherNote`,
+`termux-x11` default migrates to `taskarian-x11`. If status includes `launcherNote`,
 update that saved server command explicitly before expecting native attachment. A running desktop keeps its original
 command until an explicit Stop/Start; coordinate that interruption with the user.
 
 The default starts visible software-rendered XFCE:
 
 ```sh
-exec bashkitten-x11 "$DISPLAY" -nolisten tcp -xstartup \
+exec taskarian-x11 "$DISPLAY" -nolisten tcp -xstartup \
   'env LIBGL_ALWAYS_SOFTWARE=true dbus-launch --exit-with-session xfce4-session'
 ```
 
@@ -65,7 +65,7 @@ Local Agent Off stops the owned display. Switching the chat to Remote does
 not stop it; the phone's local Display remains available.
 
 After Start, use the `termux-use` skill and run GUI commands through
-`bashkitten-desktop-context --timeout SECONDS -- COMMAND`, choosing a timeout
+`taskarian-desktop-context --timeout SECONDS -- COMMAND`, choosing a timeout
 long enough for the intended operation. It reads the current owned display,
 authorization, desktop profile and session bus for each command, including when
 Display starts or restarts after Pi. Do not copy only `DISPLAY`, cache an old
@@ -97,7 +97,7 @@ Report independent X servers separately; never claim they belong to this launche
 Primary references:
 
 - [Termux:X11 setup and launch](https://github.com/termux/termux-x11#setup-instructions)
-  for native rendering/launch options. BashKitten uses its embedded engine and
+  for native rendering/launch options. Taskarian uses its embedded engine and
   paired loader; do not install an upstream X11 APK or replace Termux to configure it.
 - [Native package recipes](https://github.com/termux/termux-packages): check current
   names, dependencies and device restrictions before installation.

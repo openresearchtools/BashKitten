@@ -14,7 +14,7 @@ case "$target:$(uname -m)" in linux-amd64:x86_64|linux-arm64:aarch64) ;; *) echo
 cd "$source_dir"
 export CGO_ENABLED=0 GOTOOLCHAIN=local GOTELEMETRY=off
 mkdir -p "$output/bin"
-go build -p "${BASHKITTEN_BUILD_JOBS:-2}" -mod=readonly -trimpath -buildvcs=false \
-  -ldflags='-s -w' -o "$output/bin/bashkitten-remote" ./cmd/bashkitten-remote
+go build -p "${TASKARIAN_BUILD_JOBS:-2}" -mod=readonly -trimpath -buildvcs=false \
+  -ldflags='-s -w' -o "$output/bin/taskarian-remote" ./cmd/taskarian-remote
 python3 "$root/auth/build/go-notices.py" "$source_dir" "$output" remote
 

@@ -60,21 +60,21 @@ firefox-ci:
             - 'taskcluster/requirements.txt'
             - 'tools/tryselect/selectors/auto.py'
 
-bashkitten:
-    description: BashKitten ownership and built-in extension policy tests
+taskarian:
+    description: Taskarian ownership and built-in extension policy tests
     always-target: false
     treeherder:
         symbol: py3(wb)
     run:
         using: python-test
-        subsuite: bashkitten
+        subsuite: taskarian
     when:
         files-changed:
-            - 'bashkitten/**'
+            - 'taskarian/**'
             - 'browser/components/extensions/**/*Buzzard*'
             - 'browser/components/extensions/**/*buzzard*'
-            - 'toolkit/mozapps/extensions/internal/BashKitten*'
-            - 'toolkit/mozapps/extensions/test/xpcshell/test_bashkitten_xpi_trust.js'
+            - 'toolkit/mozapps/extensions/internal/Taskarian*'
+            - 'toolkit/mozapps/extensions/test/xpcshell/test_taskarian_xpi_trust.js'
             - 'taskcluster/kinds/source-test/python.yml'
 
 fog:

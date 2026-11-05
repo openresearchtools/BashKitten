@@ -3,8 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 const BUNDLED_RESOURCE_URLS = Object.freeze([
-  "resource://bashkitten/blocker/assets/resources/ubo-scriptlets.json",
-  "resource://bashkitten/blocker/assets/resources/resources.json",
+  "resource://taskarian/blocker/assets/resources/ubo-scriptlets.json",
+  "resource://taskarian/blocker/assets/resources/resources.json",
 ]);
 
 async function readBundledArray(url) {
@@ -17,7 +17,7 @@ async function readBundledArray(url) {
     return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
     console.warn(
-      `[BashKittenBlocker] Failed reading bundled resource ${url}:`,
+      `[TaskarianBlocker] Failed reading bundled resource ${url}:`,
       error
     );
     return [];

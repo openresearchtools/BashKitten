@@ -5,17 +5,17 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 XPIDL_SOURCES += [
-    "nsIBashKittenBlocker.idl",
+    "nsITaskarianBlocker.idl",
 ]
 
-XPIDL_MODULE = "bashkitten_blocker"
+XPIDL_MODULE = "taskarian_blocker"
 
 UNIFIED_SOURCES += [
-    "BashKittenBlockerXPCOM.cpp",
+    "TaskarianBlockerXPCOM.cpp",
 ]
 
 EXPORTS += [
-    "BashKittenBlockerXPCOM.h",
+    "TaskarianBlockerXPCOM.h",
 ]
 
 XPCOM_MANIFESTS += [
@@ -27,16 +27,16 @@ JAR_MANIFESTS += [
 ]
 
 EXTRA_JS_MODULES += [
-    "BashKittenBlockedPage.sys.mjs",
-    "BashKittenBlockedPageChild.sys.mjs",
-    "BashKittenBlockedPageParent.sys.mjs",
-    "BashKittenBlockerChild.sys.mjs",
-    "BashKittenBlockerExtensionDetector.sys.mjs",
-    "BashKittenBlockerPanel.sys.mjs",
-    "BashKittenBlockerParent.sys.mjs",
-    "BashKittenBlockerService.sys.mjs",
-    "BashKittenBlockerStartup.sys.mjs",
-    "BashKittenBlockerUtils.sys.mjs",
+    "TaskarianBlockedPage.sys.mjs",
+    "TaskarianBlockedPageChild.sys.mjs",
+    "TaskarianBlockedPageParent.sys.mjs",
+    "TaskarianBlockerChild.sys.mjs",
+    "TaskarianBlockerExtensionDetector.sys.mjs",
+    "TaskarianBlockerPanel.sys.mjs",
+    "TaskarianBlockerParent.sys.mjs",
+    "TaskarianBlockerService.sys.mjs",
+    "TaskarianBlockerStartup.sys.mjs",
+    "TaskarianBlockerUtils.sys.mjs",
 ]
 
 EXTRA_JS_MODULES.internal += [

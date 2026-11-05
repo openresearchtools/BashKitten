@@ -763,7 +763,7 @@ class Toolbox extends EventEmitter {
     const { AppConstants } = ChromeUtils.importESModule(
       "resource://gre/modules/AppConstants.sys.mjs"
     );
-    if (AppConstants.MOZ_APP_NAME === "bashkitten") {
+    if (AppConstants.MOZ_APP_NAME === "taskarian") {
       const { saveProfileToFile } = require(
         "resource://devtools/client/performance-new/shared/browser.js"
       );

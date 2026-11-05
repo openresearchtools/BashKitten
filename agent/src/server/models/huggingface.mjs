@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Changed JavaScript adaptation of BashKitten Rust / SimpleHF; see third_party/NOTICE.
+// Changed JavaScript adaptation of Taskarian Rust / SimpleHF; see third_party/NOTICE.
 import { getHuggingFaceToken } from './settings.mjs';
 
 const origin = 'https://huggingface.co';
@@ -13,7 +13,7 @@ export function revisionId(value) {
   return value;
 }
 export function repositoryPath(value) {
-  if (typeof value !== 'string' || !value || /[\\\x00-\x1f\x7f]/.test(value) || value.split('/').some(x => !x || x === '.' || x === '..' || x.startsWith('.bashkitten-'))) throw modelError('The repository contains an unsafe file path');
+  if (typeof value !== 'string' || !value || /[\\\x00-\x1f\x7f]/.test(value) || value.split('/').some(x => !x || x === '.' || x === '..' || x.startsWith('.taskarian-'))) throw modelError('The repository contains an unsafe file path');
   return value;
 }
 const encodedPath = value => value.split('/').map(encodeURIComponent).join('/');

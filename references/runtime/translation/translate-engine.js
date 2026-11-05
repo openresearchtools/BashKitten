@@ -2332,7 +2332,7 @@ Zotero.Translate.Web.prototype._translateServerComplete = function(statusCode, r
 /**
  * Overload complete to report translation failure
  */
-// BashKitten adaptation: translation errors remain local; remove donor reporting transport.
+// Taskarian adaptation: translation errors remain local; remove donor reporting transport.
 Zotero.Translate.Web.prototype.complete = function(returnValue,error) {
  return Zotero.Translate.Base.prototype.complete.apply(this,[returnValue,error]);
 };

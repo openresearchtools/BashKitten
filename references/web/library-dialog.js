@@ -51,7 +51,7 @@ export function manageLibrary({ api, project, onRetired = () => {}, onChanged = 
       node(
         "p",
         { class: "notice" },
-        "Reopen References from BashKitten to continue.",
+        "Reopen References from Taskarian to continue.",
       ),
     );
   }
@@ -178,7 +178,7 @@ export function manageLibrary({ api, project, onRetired = () => {}, onChanged = 
     node(
       "p",
       { class: "notice" },
-      "Delete this project’s reference database and saved import jobs. This cannot be undone here. Choose whether its attachment files are also deleted. Existing documents and BashKitten workspace history remain.",
+      "Delete this project’s reference database and saved import jobs. This cannot be undone here. Choose whether its attachment files are also deleted. Existing documents and Taskarian workspace history remain.",
     ),
     field("Type “" + project.name + "” to confirm", confirmation),
     field("Attachments", attachments),

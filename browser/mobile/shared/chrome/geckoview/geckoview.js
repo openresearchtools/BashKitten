@@ -462,13 +462,13 @@ function startup() {
 
   ModuleManager.init([
     {
-      name: "GeckoViewBashKitten",
+      name: "GeckoViewTaskarian",
       onInit: {
-        resource: "resource://gre/modules/GeckoViewBashKitten.sys.mjs",
+        resource: "resource://gre/modules/GeckoViewTaskarian.sys.mjs",
         actors: {
-          BashKittenBrowserControl: {
-            parent: { esModuleURI: "chrome://remote/content/bashkitten/BrowserControlParent.sys.mjs" },
-            child: { esModuleURI: "chrome://remote/content/bashkitten/BrowserControlChild.sys.mjs" },
+          TaskarianBrowserControl: {
+            parent: { esModuleURI: "chrome://remote/content/taskarian/BrowserControlParent.sys.mjs" },
+            child: { esModuleURI: "chrome://remote/content/taskarian/BrowserControlChild.sys.mjs" },
             allFrames: true,
             messageManagerGroups: ["browsers"],
           },

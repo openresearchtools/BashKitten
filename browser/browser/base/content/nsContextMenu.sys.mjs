@@ -2823,7 +2823,7 @@ export class nsContextMenu {
     if (!menuItem.hidden) {
       const docIsPrivate =
         lazy.PrivateBrowsingUtils.isBrowserPrivate(this.browser) ||
-        // BashKitten: private container tabs search with the private engine.
+        // Taskarian: private container tabs search with the private engine.
         lazy.PrivateTab.isPrivate(
           this.window.gBrowser?.getTabForBrowser(this.browser)
         );
@@ -2878,7 +2878,7 @@ export class nsContextMenu {
 
     let isBrowserPrivate =
       lazy.PrivateBrowsingUtils.isBrowserPrivate(this.browser) ||
-      // BashKitten: private container tabs search with the private engine.
+      // Taskarian: private container tabs search with the private engine.
       lazy.PrivateTab.isPrivate(
         this.window.gBrowser?.getTabForBrowser(this.browser)
       );

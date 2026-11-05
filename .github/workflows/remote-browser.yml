@@ -50,7 +50,7 @@ jobs:
       run: python3 agent/packaging/remote-browser.py "$BROWSER_TARGET" --directory "$RUNNER_TEMP/component" --auth-run "$AUTH_RUN" --search-run "$SEARCH_RUN" --node-run "$NODE_RUN" --environments-run "$ENVIRONMENTS_RUN" --office-run "$OFFICE_RUN" --warm-gkrust "$WARM_GKRUST"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: ${{ inputs.target == 'android' && 'bashkitten-android-candidate' || format('bashkitten-{0}-candidate', inputs.target) }}
+        name: ${{ inputs.target == 'android' && 'taskarian-android-candidate' || format('taskarian-{0}-candidate', inputs.target) }}
         path: ${{ runner.temp }}/component/
         if-no-files-found: error
         compression-level: 0

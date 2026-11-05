@@ -1,7 +1,7 @@
 # Office branding inputs
 
-The product name is **Office**, part of BashKitten. Its native About dialog says
-“BashKitten integrated Office built on Collabora Online” and identifies its
+The product name is **Office**, part of Taskarian. Its native About dialog says
+“Taskarian integrated Office built on Collabora Online” and identifies its
 LibreOffice technology. Upstream names remain in attribution, copyright,
 licenses, protocol identifiers and source information.
 
@@ -11,10 +11,10 @@ These files use the actual branding facilities in the pinned
 `office/upstream/online/source` is unchanged.
 
 - `engine/` is passed to native `--with-branding`, with native
-  `--with-product-name=Office` and `--with-vendor=BashKitten`. All seven required
+  `--with-product-name=Office` and `--with-vendor=Taskarian`. All seven required
   assets are present, preventing its missing-file fallback to donor artwork.
 - `online/` is passed to native `--with-app-branding`, with native
-  `--with-app-name=Office`, `--with-vendor=BashKitten` and the BashKitten
+  `--with-app-name=Office`, `--with-vendor=Taskarian` and the Taskarian
   `--with-info-url`. The pinned `browser/Makefile.am` copies `branding*` and
   `images/*.svg` into its own web distribution and copies `toolbar-bg-logo.svg`
   to the native `toolbar-bg.svg` location.
@@ -44,14 +44,14 @@ These files use the actual branding facilities in the pinned
 
 `ATTRIBUTION.txt` is an installed legal-metadata input. The local
 `branding-notices.html` page links complete, byte-identical copies of upstream
-license/notice documents, the BashKitten AGPL and original artwork provenance.
+license/notice documents, the Taskarian AGPL and original artwork provenance.
 `branding-engine-license.html` is the original upstream XHTML license listing,
 including optional-component sections; the native package's generated legal
 information records the actual built selection. The static page does not
 replace installed legal files or corresponding-source artifacts.
 `branding-sources.json` records exact copy origins and SHA-256 hashes.
 
-`generate.py` derives these assets from the existing BashKitten PNG and
+`generate.py` derives these assets from the existing Taskarian PNG and
 wordmark. The kitten PNG is embedded unchanged in SVG wrappers; its existing
 colors are retained. The wordmark's existing light ink is fixed to that color
 for Office's mandatory light UI. Intro rasters use the system DejaVu Sans

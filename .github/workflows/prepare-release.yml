@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ github.token }}
-      GH_REPO: openresearchtools/BashKitten
+      GH_REPO: openresearchtools/Taskarian
       WARM_GKRUST: ${{ inputs.warm_gkrust }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -30,10 +30,10 @@ jobs:
         if ! git diff --quiet; then
           git config user.name 'openresearchtools'
           git config user.email 'openresearchtools@gmail.com'
-          git add browser/bashkitten/config/version.txt agent/package.json agent/package-lock.json
-          git commit -m "Prepare BashKitten $version release"
+          git add browser/taskarian/config/version.txt agent/package.json agent/package-lock.json
+          git commit -m "Prepare Taskarian $version release"
           git push origin HEAD:main
         fi
-        printf 'Prepared BashKitten %s; publication remains a separate action.\n' "$version" >> "$GITHUB_STEP_SUMMARY"
+        printf 'Prepared Taskarian %s; publication remains a separate action.\n' "$version" >> "$GITHUB_STEP_SUMMARY"
     - name: Build complete candidates from the prepared main revision
       run: gh workflow run packages.yml --ref main -f "warm_gkrust=$WARM_GKRUST"

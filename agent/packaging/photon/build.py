@@ -160,13 +160,13 @@ def build(application, work=None):
                 'rustNoticeOwner': sha(ROOT / 'agent/packaging/machines/build.py'),
                 'host': platform.machine(), 'compiler': compiler}
     key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-    work = Path(work or os.environ.get('BASHKITTEN_PHOTON_BUILD_CACHE',
-                str(default_cache().parent / 'bashkitten-photon'))).resolve()
+    work = Path(work or os.environ.get('TASKARIAN_PHOTON_BUILD_CACHE',
+                str(default_cache().parent / 'photon'))).resolve()
     require(not work.is_relative_to(ROOT), 'Photon build/cache must remain outside the checkout')
     work.mkdir(parents=True, exist_ok=True)
     cache = work / key
     generated = cache / 'generated'
-    receipt_path = generated / 'BASHKITTEN-SOURCE.json'
+    receipt_path = generated / 'TASKARIAN-SOURCE.json'
     if receipt_path.is_file():
         receipt = json.loads(receipt_path.read_text())
         require(receipt['buildKey'] == key and all(sha(generated / name) == digest
@@ -186,13 +186,13 @@ def build(application, work=None):
         vendor_crates(originals[2:], vendor)
         # Cargo's directory-source protocol verifies both each original package
         # checksum and every staged source file. Native locks select the graph.
-        config = '[source.crates-io]\nreplace-with = "bashkitten-pinned"\n' \
-                 + '[source.bashkitten-pinned]\ndirectory = ' + json.dumps(str(vendor)) + '\n'
+        config = '[source.crates-io]\nreplace-with = "taskarian-pinned"\n' \
+                 + '[source.taskarian-pinned]\ndirectory = ' + json.dumps(str(vendor)) + '\n'
         for folder in (source, tool):
             (folder / '.cargo').mkdir(exist_ok=True)
             (folder / '.cargo/config.toml').write_text(config)
         env['CARGO_TARGET_DIR'] = str(cache / 'target')
-        env['RUSTFLAGS'] = '--remap-path-prefix=' + str(cache) + '=/bashkitten-photon'
+        env['RUSTFLAGS'] = '--remap-path-prefix=' + str(cache) + '=/taskarian-photon'
         jobs = str(min(4, os.cpu_count() or 1))
         run(['cargo', 'build', '--frozen', '--offline', '--release', '--jobs', jobs,
              '--bin', 'wasm-bindgen'], cwd=tool, env=env)
@@ -212,12 +212,12 @@ def build(application, work=None):
                 os.environ.pop('RUSTUP_TOOLCHAIN', None)
             else:
                 os.environ['RUSTUP_TOOLCHAIN'] = previous_toolchain
-        text = 'BashKitten source-built Photon native dependencies\n\n' + '\n\n'.join(
+        text = 'Taskarian source-built Photon native dependencies\n\n' + '\n\n'.join(
             r['name'] + ' ' + r['version'] + '\nSource: ' + str(r.get('source', ''))
             + '\nLicense: ' + r['license'] + '\n\n' + r['text'] for r in notices)
-        (generated / 'BASHKITTEN-NOTICES.txt').write_text(text)
+        (generated / 'TASKARIAN-NOTICES.txt').write_text(text)
         receipt = {'schema': 1, 'buildKey': key, 'package': lock['package'],
-            'modification': 'The npm prebuilt WASM and generated glue are replaced by a native Cargo/wasm-bindgen build of this exact source with the attached BashKitten Cargo.lock. This is not a reproduction of the historical npm binary.',
+            'modification': 'The npm prebuilt WASM and generated glue are replaced by a native Cargo/wasm-bindgen build of this exact source with the attached Taskarian Cargo.lock. This is not a reproduction of the historical npm binary.',
             'source': lock['source'], 'crateVersion': '0.3.3', 'toolchain': identity,
             'generator': lock['generator'], 'proof': proof,
             'selectedNativePackages': [{k: v for k, v in r.items() if k != 'text'} for r in notices],
@@ -231,10 +231,10 @@ def build(application, work=None):
         shutil.copy2(generated / name, package / name)
     (package / 'photon_rs_bg.js').unlink(missing_ok=True)
     shutil.copy2(receipt_path, package / receipt_path.name)
-    shutil.copy2(generated / 'BASHKITTEN-NOTICES.txt', package / 'BASHKITTEN-NOTICES.txt')
+    shutil.copy2(generated / 'TASKARIAN-NOTICES.txt', package / 'TASKARIAN-NOTICES.txt')
     shutil.copytree(generated / 'rust-notices', package / 'rust-notices', dirs_exist_ok=True)
-    shutil.copy2(HERE / 'Cargo.lock', package / 'BASHKITTEN-Cargo.lock')
-    shutil.copy2(HERE / 'lock.json', package / 'BASHKITTEN-source-lock.json')
+    shutil.copy2(HERE / 'Cargo.lock', package / 'TASKARIAN-Cargo.lock')
+    shutil.copy2(HERE / 'lock.json', package / 'TASKARIAN-source-lock.json')
     print('Installed source-built Photon:', receipt['files']['photon_rs_bg.wasm'],
           'native packages:', len(receipt['selectedNativePackages']), flush=True)
     return receipt

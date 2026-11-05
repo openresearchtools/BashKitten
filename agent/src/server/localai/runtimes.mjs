@@ -11,7 +11,7 @@ import { dataDir, privateDir, readJson, writeJson } from '../common.mjs';
 import { platform } from '../platform/index.mjs';
 import { engineEnvironment } from './environment.mjs';
 
-const exec = promisify(execFile), repository = 'openresearchtools/bashkitten-localai';
+const exec = promisify(execFile), repository = 'openresearchtools/taskarian-localai';
 export const localAIDir = path.join(dataDir, 'localai');
 export const runtimeDirectory = path.join(localAIDir, 'runtimes');
 const arch = { x64: 'amd64', arm64: 'arm64' }[process.arch];
@@ -34,7 +34,7 @@ export function formatRuntimeLicenses(content, name) {
   if (headings[0]?.index) dependencies.push(content.slice(0, headings[0].index));
   for (let i = 0; i < headings.length; i++) {
     const heading = headings[i][1], text = content.slice(headings[i].index, headings[i + 1]?.index ?? content.length);
-    (heading === 'LICENSE' ? upstream : heading.startsWith('BashKitten build integration (') || heading === 'MIT build recipe provenance' ? packaging : dependencies).push(text);
+    (heading === 'LICENSE' ? upstream : heading.startsWith('Taskarian build integration (') || heading === 'MIT build recipe provenance' ? packaging : dependencies).push(text);
   }
   if (upstream.length !== 1) throw Error('Runtime archive must identify its original upstream LICENSE');
   return `Original upstream license — ${name}\n\n${upstream[0]}` +
@@ -173,7 +173,7 @@ export async function validateBinary(engine, filename, backend, environment = {}
 }
 export async function installRuntime(job, { engine, config, selection, repair = false }, activate) {
   requireLocalRuntime(); engineName(engine);
-  if (config.mode !== 'managed') throw Error('Custom runtimes are not updated by BashKitten');
+  if (config.mode !== 'managed') throw Error('Custom runtimes are not updated by Taskarian');
   const available = selection || await checkRuntime(engine, config);
   if (!available.updateAvailable && !repair) return;
   const { artifact } = available;

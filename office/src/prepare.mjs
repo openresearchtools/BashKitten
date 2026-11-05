@@ -37,7 +37,7 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
     try { await fs.access(value, ['coolwsd', 'systemplateSetup'].includes(name) ? fs.constants.X_OK : fs.constants.R_OK); }
     catch { throw unavailable('the native component is incomplete: ' + name); }
   }
-  const extensionPath = path.join(componentRoot, 'share', 'bashkitten', 'org.bashkitten.references.zip');
+  const extensionPath = path.join(componentRoot, 'share', 'taskarian', 'org.taskarian.references.zip');
   let extensionBytes;
   try { const stat = await fs.stat(extensionPath); if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw Error('Invalid plugin size'); extensionBytes = await fs.readFile(extensionPath); }
   catch { throw unavailable('the replaceable References extension package is missing'); }
@@ -82,7 +82,7 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
     'storage.wopi[@allow]': 'true',
     'admin_console.enable': 'false', 'zotero.enable': 'false',
     'user_interface.brandProductName': 'Office',
-    'user_interface.brandProductURL': 'https://github.com/openresearchtools/BashKitten',
+    'user_interface.brandProductURL': 'https://github.com/openresearchtools/Taskarian',
     'fetch_update_check': '0', 'allow_update_popup': 'false',
     'remote_config.remote_url': '', 'remote_font_config.url': '',
     'logging.level': 'warning', 'logging.level_startup': 'warning', 'logging.protocol': 'false',
@@ -109,6 +109,6 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
   const artifactRevision = createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
   await writeChanged(launch, JSON.stringify({ schema: 1, revision: artifactRevision, argv, nativeEnvironment, systemplateEnvironment, cwd: directory, systemplateSetup: paths.systemplateSetup, systemplate, engine: paths.engine }));
   const configRevision = createHash('sha256').update(JSON.stringify({ manifest, configuration, argv, nativeEnvironment, systemplateEnvironment })).digest('hex');
-  const service = { id: 'office', name: 'Office', enabled: false, startup: false, configRevision, kind: 'web', scheme: 'http', openPath: serviceRoot + '/', target: { network: 'tcp', address: '127.0.0.1:' + port }, command: { argv: [process.execPath, fileURLToPath(new URL('./launch.mjs', import.meta.url)), launch], cwd: directory, env: { BASHKITTEN_OFFICE_CONFIG_REVISION: configRevision } } };
+  const service = { id: 'office', name: 'Office', enabled: false, startup: false, configRevision, kind: 'web', scheme: 'http', openPath: serviceRoot + '/', target: { network: 'tcp', address: '127.0.0.1:' + port }, command: { argv: [process.execPath, fileURLToPath(new URL('./launch.mjs', import.meta.url)), launch], cwd: directory, env: { TASKARIAN_OFFICE_CONFIG_REVISION: configRevision } } };
   return { service, collaboraInternalURL: 'http://127.0.0.1:' + port + serviceRoot, editorBasePath: serviceRoot, wopiURL, extension };
 }

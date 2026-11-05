@@ -11,7 +11,7 @@ import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
 const prefix = '/data/data/com.termux/files/usr';
-const app = prefix + '/lib/bashkitten';
+const app = prefix + '/lib/taskarian';
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const acknowledge = value => { if (process.connected) process.send(value, () => {}); };
@@ -26,17 +26,17 @@ export function validateTarget(value) {
       !['aarch64', 'x86_64'].includes(value.architecture) || value.apkAbi !== (value.architecture === 'aarch64' ? 'arm64-v8a' : 'x86_64') ||
       !/^[0-9][0-9A-Za-z.+:~_-]*$/.test(value.productVersion || '') || !Array.isArray(value.packages) || value.packages.length !== 2)
     throw Error('The APK package manifest is invalid');
-  for (const name of ['bashkitten', 'bashkitten-os']) {
+  for (const name of ['taskarian', 'taskarian-os']) {
     const records = value.packages.filter(item => item.name === name);
     if (records.length !== 1) throw Error('The APK package manifest has an invalid package list');
     const item = records[0];
     if (!/^[0-9][0-9A-Za-z.+:~_-]*$/.test(item.version || '') || item.architecture !== value.architecture ||
         !/^[a-f0-9]{40}$/.test(item.sourceCommit || '') || item.sha256 !== undefined && !/^[a-f0-9]{64}$/.test(item.sha256)) throw Error('Invalid package release identity');
-    if (name === 'bashkitten' && (item.version !== value.productVersion || item.sourceCommit !== value.sourceCommit)) throw Error('The backend does not match the APK release');
-    if (name === 'bashkitten-os' && (!item.sha256 || !/^[a-f0-9]{64}$/.test(item.installedManifestSha256 || ''))) throw Error('The APK has no OS package identity');
+    if (name === 'taskarian' && (item.version !== value.productVersion || item.sourceCommit !== value.sourceCommit)) throw Error('The backend does not match the APK release');
+    if (name === 'taskarian-os' && (!item.sha256 || !/^[a-f0-9]{64}$/.test(item.installedManifestSha256 || ''))) throw Error('The APK has no OS package identity');
   }
   return { schema: 1, productVersion: value.productVersion, sourceCommit: value.sourceCommit, bootstrapSha256: value.bootstrapSha256,
-    architecture: value.architecture, apkAbi: value.apkAbi, packages: ['bashkitten', 'bashkitten-os'].map(name => {
+    architecture: value.architecture, apkAbi: value.apkAbi, packages: ['taskarian', 'taskarian-os'].map(name => {
       const item = value.packages.find(record => record.name === name);
       return { name, version: item.version, architecture: item.architecture, sourceCommit: item.sourceCommit,
         ...(item.sha256 ? { sha256: item.sha256 } : {}),
@@ -54,7 +54,7 @@ async function installed() {
     exec('dpkg-query', ['-W', '-f=${binary:Package}\t${Version}\t${Architecture}\t${db:Status-Status}\n'], { timeout: 15000, maxBuffer: Infinity }),
   ]);
   return { architecture: architecture.trim(), packages: listing.trim().split('\n').map(line => line.split('\t'))
-    .filter(([name, , , state]) => ['bashkitten', 'bashkitten-os'].includes(name) && state === 'installed')
+    .filter(([name, , , state]) => ['taskarian', 'taskarian-os'].includes(name) && state === 'installed')
     .map(([name, version, architecture]) => ({ name, version, architecture })),
     build: await json(path.join(app, 'build-platform.json')) };
 }
@@ -65,12 +65,12 @@ export async function releaseStatus(target) {
     current.packages.some(item => item.name === expected.name && item.version === expected.version && item.architecture === expected.architecture));
   const build = current.build;
   const backend = build?.revision === target.sourceCommit && build?.packageVersion === target.productVersion && build?.architecture === target.architecture;
-  const expected = target.packages.find(item => item.name === 'bashkitten-os');
-  const osBuild = await json(path.join(prefix, 'share/bashkitten-os/build.json'));
+  const expected = target.packages.find(item => item.name === 'taskarian-os');
+  const osBuild = await json(path.join(prefix, 'share/taskarian-os/build.json'));
   let os = osBuild?.schemaVersion === 1 && osBuild.sourceCommit === expected.sourceCommit && osBuild.version === expected.version &&
     osBuild.target === 'termux' && osBuild.architecture === expected.architecture;
   if (os) {
-    try { os = sha(await fs.readFile(path.join(prefix, 'var/lib/dpkg/info/bashkitten-os.md5sums'))) === expected.installedManifestSha256; }
+    try { os = sha(await fs.readFile(path.join(prefix, 'var/lib/dpkg/info/taskarian-os.md5sums'))) === expected.installedManifestSha256; }
     catch (error) { if (error.code !== 'ENOENT') throw error; os = false; }
   }
   return { matched: Boolean(versions && backend && os), installed: { architecture: current.architecture, packages: current.packages,
@@ -121,8 +121,8 @@ async function packageOptions(job, target, channel) {
   return ['-o', 'Dir::Etc::preferences=' + preferences];
 }
 function checkRemoval(output) {
-  if (/^Remv (?:bashkitten(?:-os)?|python|termux-tools|openresearchtools-termux-keyring)(?: |:)/m.test(output))
-    throw Error('APT would remove a required BashKitten package; the transaction was not applied');
+  if (/^Remv (?:taskarian(?:-os)?|python|termux-tools|openresearchtools-termux-keyring)(?: |:)/m.test(output))
+    throw Error('APT would remove a required Taskarian package; the transaction was not applied');
 }
 async function checkPlan(output, target) {
   checkRemoval(output);
@@ -177,7 +177,7 @@ async function archives(job, target) {
       const handle = await fs.open(file);
       try { for await (const bytes of handle.createReadStream({ autoClose: false })) hash.update(bytes); } finally { await handle.close(); }
       if (expected.sha256 && hash.digest('hex') !== expected.sha256) throw Error(`${expected.name} does not match the APK package checksum`);
-      if (expected.name === 'bashkitten') {
+      if (expected.name === 'taskarian') {
         const build = await archiveBuild(file);
         if (build.revision !== expected.sourceCommit || build.packageVersion !== expected.version || build.architecture !== expected.architecture)
           throw Error('The configured APT repository does not contain the exact backend source release required by this APK');
@@ -225,7 +225,7 @@ export async function applyPackages(job, { target, channel }, { beforeApply = as
         !target.packages.every(expected => final.packages.some(item => item.name === expected.name && item.version === expected.version && item.architecture === expected.architecture)))
       throw Error('Package installation finished without the exact APK/backend match');
     if (!(await releaseStatus(target)).matched) throw Error('The installed OS package identity does not match this APK');
-    const verification = await command(job, 'dpkg', ['--verify', 'bashkitten-os'], { captureAll: true });
+    const verification = await command(job, 'dpkg', ['--verify', 'taskarian-os'], { captureAll: true });
     if (verification.trim()) throw Error('Installed package verification reported changed files; see update output');
   });
 }

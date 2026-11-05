@@ -196,7 +196,7 @@ export class AmpSuggestions extends SuggestProvider {
       {
         name: "manage",
         l10n: {
-          id: "bashkitten-urlbar-result-menu-manage-suggestions",
+          id: "taskarian-urlbar-result-menu-manage-suggestions",
         },
       },
       {

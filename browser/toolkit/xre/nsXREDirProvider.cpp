@@ -118,10 +118,10 @@ static const char* GetAppName() {
 
 #endif
 
-static bool IsBashKittenApp() {
+static bool IsTaskarianApp() {
   return gAppData && gAppData->vendor && gAppData->name &&
-         !strcmp(gAppData->vendor, "BashKitten") &&
-         !strcmp(gAppData->name, "BashKitten");
+         !strcmp(gAppData->vendor, "Taskarian") &&
+         !strcmp(gAppData->name, "Taskarian");
 }
 
 #ifdef XP_MACOSX
@@ -346,21 +346,21 @@ static nsresult GetSystemParentDirectory(nsIFile** aFile) {
   rv = GetOSXFolderType(kOnSystemDisk, kApplicationSupportFolderType,
                         getter_AddRefs(localDir));
   if (NS_SUCCEEDED(rv)) {
-    rv = localDir->AppendNative(IsBashKittenApp() ? "BashKitten"_ns
+    rv = localDir->AppendNative(IsTaskarianApp() ? "Taskarian"_ns
                                                    : "Mozilla"_ns);
   }
 #  else
 #    ifdef HAVE_USR_LIB64_DIR
-  constexpr auto bashKittenDir = "/usr/lib64/bashkitten"_ns;
+  constexpr auto taskarianDir = "/usr/lib64/taskarian"_ns;
   constexpr auto mozillaDir = "/usr/lib64/mozilla"_ns;
 #    elif defined(__OpenBSD__) || defined(__FreeBSD__)
-  constexpr auto bashKittenDir = "/usr/local/lib/bashkitten"_ns;
+  constexpr auto taskarianDir = "/usr/local/lib/taskarian"_ns;
   constexpr auto mozillaDir = "/usr/local/lib/mozilla"_ns;
 #    else
-  constexpr auto bashKittenDir = "/usr/lib/bashkitten"_ns;
+  constexpr auto taskarianDir = "/usr/lib/taskarian"_ns;
   constexpr auto mozillaDir = "/usr/lib/mozilla"_ns;
 #    endif
-  const auto dirname = IsBashKittenApp() ? bashKittenDir : mozillaDir;
+  const auto dirname = IsTaskarianApp() ? taskarianDir : mozillaDir;
   rv = NS_NewNativeLocalFile(dirname, getter_AddRefs(localDir));
 #  endif
 
@@ -427,7 +427,7 @@ nsXREDirProvider::GetFile(const char* aProperty, bool* aPersistent,
   else if (!strcmp(aProperty, XRE_SYS_NATIVE_MANIFESTS)) {
     rv = ::GetSystemParentDirectory(getter_AddRefs(file));
   } else if (!strcmp(aProperty, XRE_USER_NATIVE_MANIFESTS)) {
-    if (IsBashKittenApp()) {
+    if (IsTaskarianApp()) {
       rv = GetUserAppDataDirectory(getter_AddRefs(file));
     } else {
       // Keep forcing the legacy path for compatibility
@@ -468,12 +468,12 @@ nsXREDirProvider::GetFile(const char* aProperty, bool* aPersistent,
   else if (!strcmp(aProperty, XRE_SYS_SHARE_EXTENSION_PARENT_DIR)) {
 #  ifdef ENABLE_SYSTEM_EXTENSION_DIRS
 #    if defined(__OpenBSD__) || defined(__FreeBSD__)
-    const char* const sysLExtDir = IsBashKittenApp()
-                                      ? "/usr/local/share/bashkitten/extensions"
+    const char* const sysLExtDir = IsTaskarianApp()
+                                      ? "/usr/local/share/taskarian/extensions"
                                       : "/usr/local/share/mozilla/extensions";
 #    else
-    const char* const sysLExtDir = IsBashKittenApp()
-                                      ? "/usr/share/bashkitten/extensions"
+    const char* const sysLExtDir = IsTaskarianApp()
+                                      ? "/usr/share/taskarian/extensions"
                                       : "/usr/share/mozilla/extensions";
 #    endif
     rv = NS_NewNativeLocalFile(nsDependentCString(sysLExtDir),
@@ -1206,7 +1206,7 @@ nsresult nsXREDirProvider::GetUserDataDirectoryHome(nsIFile** aFile,
 
 nsresult nsXREDirProvider::GetSysUserExtensionsDirectory(nsIFile** aFile) {
   nsCOMPtr<nsIFile> localDir;
-  if (IsBashKittenApp()) {
+  if (IsTaskarianApp()) {
     nsresult rv = GetUserAppDataDirectory(getter_AddRefs(localDir));
     NS_ENSURE_SUCCESS(rv, rv);
     rv = localDir->AppendNative("extensions"_ns);
@@ -1357,6 +1357,11 @@ nsresult nsXREDirProvider::AppendFromAppData(nsIFile* aFile, bool aIsDotted) {
     return NS_OK;
   }
 
+  // Taskarian has one product directory, rather than a vendor/name pair.
+  if (IsTaskarianApp() && !gAppData->profile) {
+    return aFile->AppendNative(aIsDotted ? ".Taskarian"_ns : "Taskarian"_ns);
+  }
+
   // Similar to nsXREDirProvider::AppendProfilePath.
   // TODO: Bug 1990407 - Evaluate if refactoring might be required there in the
   // future?
@@ -1410,7 +1415,7 @@ bool nsXREDirProvider::LegacyHomeExists(nsIFile** aFile) {
   NS_ENSURE_SUCCESS(rv, false);
 
   // Give a chance to (3)
-  if (!exists && !IsBashKittenApp()) {
+  if (!exists && !IsTaskarianApp()) {
     nsCOMPtr<nsIFile> userDir;
     rv = parentDir->Clone(getter_AddRefs(userDir));
     NS_ENSURE_SUCCESS(rv, false);
@@ -1630,6 +1635,11 @@ nsresult nsXREDirProvider::AppendProfilePath(nsIFile* aFile, bool aLocal) {
 #  endif
   ) {
     folder.Assign('.');
+  }
+
+  if (IsTaskarianApp() && profile.IsEmpty()) {
+    folder.Append("Taskarian");
+    return aFile->AppendNative(folder);
   }
 
   if (!profile.IsEmpty()) {

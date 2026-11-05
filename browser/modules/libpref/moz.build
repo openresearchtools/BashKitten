@@ -28,7 +28,7 @@ pref_groups = [
     "accessibility",
     "alerts",
     "apz",
-    "bashkitten",
+    "taskarian",
     "beacon",
     "bidi",
     "browser",

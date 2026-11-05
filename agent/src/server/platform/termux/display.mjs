@@ -15,14 +15,14 @@ export const displayCommand = path.join(directory, 'launch.sh');
 const runningCommand = path.join(directory, 'running.sh');
 const previousCommand = path.join(directory, 'last-working.sh');
 const configFile = path.join(directory, 'config.json');
-// Node is private to BashKitten; shell/X11 paths belong to the Termux prefix.
+// Node is private to Taskarian; shell/X11 paths belong to the Termux prefix.
 const prefix = process.env.PREFIX || '/data/data/com.termux/files/usr';
 const shell = () => path.join(prefix, 'bin/sh');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const temporary = process.env.TMPDIR || path.join(prefix, 'tmp');
-const defaultCommand = `exec bashkitten-x11 "$DISPLAY" -nolisten tcp -xstartup 'env LIBGL_ALWAYS_SOFTWARE=true dbus-launch --exit-with-session xfce4-session'
+const defaultCommand = `exec taskarian-x11 "$DISPLAY" -nolisten tcp -xstartup 'env LIBGL_ALWAYS_SOFTWARE=true dbus-launch --exit-with-session xfce4-session'
 `;
-const legacyDefault = defaultCommand.replace('bashkitten-x11', 'termux-x11');
+const legacyDefault = defaultCommand.replace('taskarian-x11', 'termux-x11');
 
 function requireTermux() {
   if (platform !== 'termux') throw Error('Display is available only in local Termux');
@@ -88,8 +88,8 @@ export class TermuxDisplay {
     });
     return { state: this.state, error: this.error, output: this.output, startup: (await readJson(configFile, {})).startup === true,
       command: text, revision: digest(text), commandPath: displayCommand,
-      launcherNote: /(?:^|[\s/])termux-x11(?:\s|$)/m.test(text) && !text.includes('bashkitten-x11')
-        ? 'This saved command uses independent Termux:X11. Change its server launcher to bashkitten-x11 to show it in Display; your other settings are preserved.' : '',
+      launcherNote: /(?:^|[\s/])termux-x11(?:\s|$)/m.test(text) && !text.includes('taskarian-x11')
+        ? 'This saved command uses independent Termux:X11. Change its server launcher to taskarian-x11 to show it in Display; your other settings are preserved.' : '',
       previousCommandPath: previousCommand, environment: this.environment,
       otherDisplaySockets: sockets.filter(name => /^X\d+$/.test(name)).map(name => ':' + name.slice(1))
         .filter(display => display !== this.environment.DISPLAY),
@@ -137,17 +137,17 @@ export class TermuxDisplay {
     const desktopEnvironment = Object.fromEntries(['CONFIG', 'DATA', 'CACHE', 'RUNTIME'].map(name =>
       [`XDG_${name}_${name === 'RUNTIME' ? 'DIR' : 'HOME'}`, path.join(desktop, name.toLowerCase())]));
     await Promise.all(Object.values(desktopEnvironment).map(privateDir));
-    this.environment = { DISPLAY: `:${number}`, BASHKITTEN_EXECUTION_ROLE: 'termux',
+    this.environment = { DISPLAY: `:${number}`, TASKARIAN_EXECUTION_ROLE: 'termux',
       ...desktopEnvironment,
-      BASHKITTEN_DATA_DIR: dataDir, BASHKITTEN_DESKTOP_CONTEXT: path.join(directory, 'context.json') };
+      TASKARIAN_DATA_DIR: dataDir, TASKARIAN_DESKTOP_CONTEXT: path.join(directory, 'context.json') };
     const env = { ...process.env, ...this.environment };
     for (const key of ['DBUS_SESSION_BUS_ADDRESS', 'DBUS_SESSION_BUS_PID', 'AT_SPI_BUS_ADDRESS', 'SESSION_MANAGER', 'XAUTHORITY'])
       delete env[key];
-    const initialized = await fs.access(path.join(env.XDG_CONFIG_HOME, 'bashkitten-os/initialized')).then(() => true, error => {
+    const initialized = await fs.access(path.join(env.XDG_CONFIG_HOME, 'Taskarian/os/initialized')).then(() => true, error => {
       if (error.code === 'ENOENT') return false; throw error;
     });
     if (generation !== this.launchGeneration) throw Error('Display start was cancelled.');
-    if (!initialized) await exec('bashkitten-os', ['initialize'], { env });
+    if (!initialized) await exec('taskarian-os', ['initialize'], { env });
     await writePrivate(runningCommand, text);
     if (generation !== this.launchGeneration) throw Error('Display start was cancelled.');
     this.activeCommand = text; this.error = ''; this.output = ''; this.state = 'starting';
@@ -209,7 +209,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
     requireTermux();
     const [action = 'status', option] = process.argv.slice(2);
     if (action === 'serve') {
-      if (process.env.BASHKITTEN_GUARDED !== '1' || Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid) throw Error('Display must start through its controller');
+      if (process.env.TASKARIAN_GUARDED !== '1' || Number(process.env.TASKARIAN_GUARD_PID) !== process.ppid) throw Error('Display must start through its controller');
       // Exiting this owner lets the existing guard reap all GUI descendants,
       // including D-Bus/driver helpers that detached from the original shell.
       process.on('SIGTERM', () => process.exit(0));

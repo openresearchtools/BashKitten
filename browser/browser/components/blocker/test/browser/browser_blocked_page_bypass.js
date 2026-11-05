@@ -1,18 +1,18 @@
 /* Any copyright is dedicated to the Public Domain.
  * http://creativecommons.org/publicdomain/zero/1.0/ */
 
-const { BashKittenBlockedPageChild } = ChromeUtils.importESModule(
-  "resource:///modules/BashKittenBlockedPageChild.sys.mjs"
+const { TaskarianBlockedPageChild } = ChromeUtils.importESModule(
+  "resource:///modules/TaskarianBlockedPageChild.sys.mjs"
 );
-const { BashKittenBlockerService } = ChromeUtils.importESModule(
-  "resource:///modules/BashKittenBlockerService.sys.mjs"
+const { TaskarianBlockerService } = ChromeUtils.importESModule(
+  "resource:///modules/TaskarianBlockerService.sys.mjs"
 );
-const { BashKittenBlockerPanel } = ChromeUtils.importESModule(
-  "resource:///modules/BashKittenBlockerPanel.sys.mjs"
+const { TaskarianBlockerPanel } = ChromeUtils.importESModule(
+  "resource:///modules/TaskarianBlockerPanel.sys.mjs"
 );
 
-const PERMISSION_TYPE = "bashkitten-blocker";
-const PERMISSION_TYPE_PB = "bashkitten-blocker-pb";
+const PERMISSION_TYPE = "taskarian-blocker";
+const PERMISSION_TYPE_PB = "taskarian-blocker-pb";
 const BLOCKED_URL = "https://example.com/path?x=1&y=a%20b";
 const BLOCKED_HOST = "example.com";
 const FORGED_URL = "https://victim.example/";
@@ -31,7 +31,7 @@ function blockedPageUrl(url = BLOCKED_URL) {
 function cleanupBlockerState() {
   Services.perms.removeByType(PERMISSION_TYPE);
   Services.perms.removeByType(PERMISSION_TYPE_PB);
-  BashKittenBlockerService._clearTopLevelNavigationState();
+  TaskarianBlockerService._clearTopLevelNavigationState();
 }
 
 async function openBlockedPageInNewTab(url = BLOCKED_URL, win = window) {
@@ -112,11 +112,11 @@ function makeSiteExceptionsState() {
 
 function allowIfRecorded(browserId, url) {
   const hostname = new URL(url).hostname;
-  if (!BashKittenBlockerService.wasHostBlockedFor(browserId, hostname, url)) {
+  if (!TaskarianBlockerService.wasHostBlockedFor(browserId, hostname, url)) {
     return false;
   }
 
-  BashKittenBlockerService.allowSiteForSession(hostname);
+  TaskarianBlockerService.allowSiteForSession(hostname);
   return true;
 }
 
@@ -127,11 +127,11 @@ add_setup(function setup() {
 add_task(function test_session_bypass_requires_recorded_blocked_host() {
   cleanupBlockerState();
   const originalSiteExceptionsState =
-    BashKittenBlockerService._siteExceptionsState;
-  BashKittenBlockerService._siteExceptionsState = makeSiteExceptionsState();
+    TaskarianBlockerService._siteExceptionsState;
+  TaskarianBlockerService._siteExceptionsState = makeSiteExceptionsState();
 
   try {
-    BashKittenBlockerService._rememberBlockedTopLevelDocument(
+    TaskarianBlockerService._rememberBlockedTopLevelDocument(
       VALIDATION_BROWSER_ID,
       BLOCKED_HOST,
       BLOCKED_URL
@@ -143,17 +143,17 @@ add_task(function test_session_bypass_requires_recorded_blocked_host() {
       "A forged blocked page for an unrelated host should not be allowed"
     );
     Assert.equal(
-      BashKittenBlockerService.shouldBypassBlocking(FORGED_HOST),
+      TaskarianBlockerService.shouldBypassBlocking(FORGED_HOST),
       false,
       "The unrelated host should not receive a session bypass"
     );
     Assert.equal(
-      BashKittenBlockerService.shouldBypassBlocking(BLOCKED_HOST),
+      TaskarianBlockerService.shouldBypassBlocking(BLOCKED_HOST),
       false,
       "A mismatched validation should consume the recorded block without granting"
     );
 
-    BashKittenBlockerService._rememberBlockedTopLevelDocument(
+    TaskarianBlockerService._rememberBlockedTopLevelDocument(
       VALIDATION_BROWSER_ID,
       BLOCKED_HOST,
       BLOCKED_URL
@@ -165,12 +165,12 @@ add_task(function test_session_bypass_requires_recorded_blocked_host() {
       "The recorded blocked host should be allowed"
     );
     Assert.equal(
-      BashKittenBlockerService.shouldBypassBlocking(BLOCKED_HOST),
+      TaskarianBlockerService.shouldBypassBlocking(BLOCKED_HOST),
       true,
       "The recorded host should receive a session bypass"
     );
     Assert.equal(
-      BashKittenBlockerService.shouldBypassBlocking(FORGED_HOST),
+      TaskarianBlockerService.shouldBypassBlocking(FORGED_HOST),
       false,
       "The bypass should not apply to other hosts"
     );
@@ -180,8 +180,8 @@ add_task(function test_session_bypass_requires_recorded_blocked_host() {
       "The recorded blocked document should be consumed after validation"
     );
   } finally {
-    BashKittenBlockerService._clearTopLevelNavigationState();
-    BashKittenBlockerService._siteExceptionsState =
+    TaskarianBlockerService._clearTopLevelNavigationState();
+    TaskarianBlockerService._siteExceptionsState =
       originalSiteExceptionsState;
     cleanupBlockerState();
   }
@@ -218,7 +218,7 @@ add_task(async function test_genuine_load_anyway_grants_session_exception() {
   const tab = await openBlockedPageInNewTab();
 
   try {
-    BashKittenBlockerService._rememberBlockedTopLevelDocument(
+    TaskarianBlockerService._rememberBlockedTopLevelDocument(
       gBrowser.selectedBrowser.browserId,
       BLOCKED_HOST,
       BLOCKED_URL
@@ -227,20 +227,20 @@ add_task(async function test_genuine_load_anyway_grants_session_exception() {
     await clickLoadAnyway(tab.linkedBrowser);
     await TestUtils.waitForCondition(
       () =>
-        BashKittenBlockerService.isSiteExcepted(BLOCKED_HOST, {
+        TaskarianBlockerService.isSiteExcepted(BLOCKED_HOST, {
           isPrivate: false,
         }),
       "Waiting for Load anyway to grant a session exception"
     );
 
     Assert.ok(
-      BashKittenBlockerService.isSiteExcepted(BLOCKED_HOST, {
+      TaskarianBlockerService.isSiteExcepted(BLOCKED_HOST, {
         isPrivate: false,
       }),
       "The genuine blocked page should grant a normal session exception"
     );
     Assert.ok(
-      !BashKittenBlockerService.isSiteExcepted(BLOCKED_HOST, {
+      !TaskarianBlockerService.isSiteExcepted(BLOCKED_HOST, {
         isPrivate: true,
       }),
       "A normal session exception should not apply to private windows"
@@ -260,7 +260,7 @@ add_task(
 
     try {
       const tab = await openBlockedPageInNewTab(BLOCKED_URL, privateWin);
-      BashKittenBlockerService._rememberBlockedTopLevelDocument(
+      TaskarianBlockerService._rememberBlockedTopLevelDocument(
         tab.linkedBrowser.browsingContext.top.browserId,
         BLOCKED_HOST,
         BLOCKED_URL
@@ -269,32 +269,32 @@ add_task(
       await clickLoadAnyway(tab.linkedBrowser);
       await TestUtils.waitForCondition(
         () =>
-          BashKittenBlockerService.isSiteExcepted(BLOCKED_HOST, {
+          TaskarianBlockerService.isSiteExcepted(BLOCKED_HOST, {
             isPrivate: true,
           }),
         "Waiting for Load anyway to grant a private session exception"
       );
 
       Assert.ok(
-        BashKittenBlockerService.isSiteExcepted(BLOCKED_HOST, {
+        TaskarianBlockerService.isSiteExcepted(BLOCKED_HOST, {
           isPrivate: true,
         }),
         "The private blocked page should grant a private session exception"
       );
       Assert.ok(
-        !BashKittenBlockerService.isSiteExcepted(BLOCKED_HOST, {
+        !TaskarianBlockerService.isSiteExcepted(BLOCKED_HOST, {
           isPrivate: false,
         }),
         "A private session exception should not apply to normal windows"
       );
       Assert.ok(
-        BashKittenBlockerService.shouldBypassBlocking(BLOCKED_HOST, {
+        TaskarianBlockerService.shouldBypassBlocking(BLOCKED_HOST, {
           isPrivate: true,
         }),
         "Private bypass checks should see the private exception"
       );
       Assert.ok(
-        !BashKittenBlockerService.shouldBypassBlocking(BLOCKED_HOST, {
+        !TaskarianBlockerService.shouldBypassBlocking(BLOCKED_HOST, {
           isPrivate: false,
         }),
         "Normal bypass checks should not see the private exception"
@@ -306,13 +306,13 @@ add_task(
       privateWin = null;
 
       Assert.ok(
-        !BashKittenBlockerService.isSiteExcepted(BLOCKED_HOST, {
+        !TaskarianBlockerService.isSiteExcepted(BLOCKED_HOST, {
           isPrivate: true,
         }),
         "The private session exception should be cleared after the private session ends"
       );
       Assert.ok(
-        !BashKittenBlockerService.isSiteExcepted(BLOCKED_HOST, {
+        !TaskarianBlockerService.isSiteExcepted(BLOCKED_HOST, {
           isPrivate: false,
         }),
         "The private session exception should leave no normal exception behind"
@@ -332,8 +332,8 @@ add_task(async function test_private_panel_exception_uses_private_scope() {
     private: true,
   });
   let tab = null;
-  const originalReloadCurrentTab = BashKittenBlockerPanel._reloadCurrentTab;
-  BashKittenBlockerPanel._reloadCurrentTab = () => {};
+  const originalReloadCurrentTab = TaskarianBlockerPanel._reloadCurrentTab;
+  TaskarianBlockerPanel._reloadCurrentTab = () => {};
 
   try {
     tab = await BrowserTestUtils.openNewForegroundTab(
@@ -341,10 +341,10 @@ add_task(async function test_private_panel_exception_uses_private_scope() {
       PANEL_TEST_URL
     );
 
-    BashKittenBlockerPanel._setSiteExceptionForCurrentSite(privateWin, true);
+    TaskarianBlockerPanel._setSiteExceptionForCurrentSite(privateWin, true);
 
     Assert.ok(
-      BashKittenBlockerService.isSiteExcepted(PANEL_TEST_HOST, {
+      TaskarianBlockerService.isSiteExcepted(PANEL_TEST_HOST, {
         isPrivate: true,
       }),
       "The private panel allow action should create a private exception"
@@ -362,16 +362,16 @@ add_task(async function test_private_panel_exception_uses_private_scope() {
       "The private panel allow action should not write a normal permission"
     );
     Assert.ok(
-      BashKittenBlockerService.shouldBypassBlocking(PANEL_TEST_HOST, {
+      TaskarianBlockerService.shouldBypassBlocking(PANEL_TEST_HOST, {
         isPrivate: true,
       }),
       "The private panel allow action should bypass blocking in private windows"
     );
 
-    BashKittenBlockerPanel._setSiteExceptionForCurrentSite(privateWin, false);
+    TaskarianBlockerPanel._setSiteExceptionForCurrentSite(privateWin, false);
 
     Assert.ok(
-      !BashKittenBlockerService.isSiteExcepted(PANEL_TEST_HOST, {
+      !TaskarianBlockerService.isSiteExcepted(PANEL_TEST_HOST, {
         isPrivate: true,
       }),
       "The private panel re-enable action should remove the private exception"
@@ -389,7 +389,7 @@ add_task(async function test_private_panel_exception_uses_private_scope() {
       "The private panel re-enable action should not create a normal permission"
     );
 
-    BashKittenBlockerService.addSiteException(PANEL_TEST_HOST);
+    TaskarianBlockerService.addSiteException(PANEL_TEST_HOST);
     assertPermission(
       PANEL_TEST_HOST,
       PERMISSION_TYPE,
@@ -397,7 +397,7 @@ add_task(async function test_private_panel_exception_uses_private_scope() {
       "The setup normal permission should exist before private re-enable"
     );
 
-    BashKittenBlockerPanel._setSiteExceptionForCurrentSite(privateWin, false);
+    TaskarianBlockerPanel._setSiteExceptionForCurrentSite(privateWin, false);
 
     assertPermission(
       PANEL_TEST_HOST,
@@ -412,7 +412,7 @@ add_task(async function test_private_panel_exception_uses_private_scope() {
       "Private re-enable should not recreate a private permission"
     );
 
-    BashKittenBlockerService.removeSiteException(PANEL_TEST_HOST);
+    TaskarianBlockerService.removeSiteException(PANEL_TEST_HOST);
     assertPermission(
       PANEL_TEST_HOST,
       PERMISSION_TYPE,
@@ -438,7 +438,7 @@ add_task(async function test_private_panel_exception_uses_private_scope() {
       "No normal permission should remain after closing the private window"
     );
   } finally {
-    BashKittenBlockerPanel._reloadCurrentTab = originalReloadCurrentTab;
+    TaskarianBlockerPanel._reloadCurrentTab = originalReloadCurrentTab;
     if (tab) {
       await BrowserTestUtils.removeTab(tab);
     }
@@ -455,15 +455,15 @@ add_task(
     let privateWin = null;
 
     try {
-      BashKittenBlockerService.addSiteException(PERMANENT_HOST);
+      TaskarianBlockerService.addSiteException(PERMANENT_HOST);
       Assert.ok(
-        BashKittenBlockerService.isSiteExcepted(PERMANENT_HOST, {
+        TaskarianBlockerService.isSiteExcepted(PERMANENT_HOST, {
           isPrivate: false,
         }),
         "A permanent exception should apply in normal windows"
       );
       Assert.ok(
-        !BashKittenBlockerService.isSiteExcepted(PERMANENT_HOST, {
+        !TaskarianBlockerService.isSiteExcepted(PERMANENT_HOST, {
           isPrivate: true,
         }),
         "A permanent normal exception should not apply in private windows"
@@ -476,13 +476,13 @@ add_task(
       privateWin = null;
 
       Assert.ok(
-        BashKittenBlockerService.isSiteExcepted(PERMANENT_HOST, {
+        TaskarianBlockerService.isSiteExcepted(PERMANENT_HOST, {
           isPrivate: false,
         }),
         "A permanent normal exception should persist after private browsing ends"
       );
       Assert.ok(
-        !BashKittenBlockerService.isSiteExcepted(PERMANENT_HOST, {
+        !TaskarianBlockerService.isSiteExcepted(PERMANENT_HOST, {
           isPrivate: true,
         }),
         "Ending private browsing should not create a private permanent exception"
@@ -505,7 +505,7 @@ add_task(async function test_forged_blocked_page_does_not_grant() {
     await waitForActorRoundTrip();
 
     Assert.ok(
-      !BashKittenBlockerService.isSiteExcepted(FORGED_HOST),
+      !TaskarianBlockerService.isSiteExcepted(FORGED_HOST),
       "A forged blocked page should not grant a session exception"
     );
   } finally {
@@ -526,7 +526,7 @@ add_task(function test_untrusted_click_handler_does_not_send_query() {
     },
   };
 
-  BashKittenBlockedPageChild.prototype.handleEvent.call(actor, {
+  TaskarianBlockedPageChild.prototype.handleEvent.call(actor, {
     button: 0,
     isTrusted: false,
     originalTarget: { id: "load-anyway" },

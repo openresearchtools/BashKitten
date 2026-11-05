@@ -463,7 +463,7 @@ nsresult PeerConnectionImpl::Initialize(PeerConnectionObserver& aObserver,
 
   if (aWindow && aWindow->GetExtantDoc() &&
       aWindow->GetExtantDoc()->NodePrincipal()->OriginAttributesRef()
-          .IsBashKittenNetworkIsolated()) {
+          .IsTaskarianNetworkIsolated()) {
     return NS_ERROR_DOM_NOT_ALLOWED_ERR;
   }
 

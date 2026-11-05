@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-/* The existing BashKitten sidecar palette, following the browser's native
+/* The existing Taskarian sidecar palette, following the browser's native
    prefers-color-scheme. Office retains its explicit data-theme="light". */
 :root {
   color-scheme: dark;

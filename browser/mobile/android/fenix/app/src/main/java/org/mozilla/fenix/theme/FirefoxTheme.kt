@@ -35,11 +35,11 @@ fun FirefoxTheme(
     theme: Theme = getThemeProvider().provideTheme(),
     content: @Composable () -> Unit,
 ) {
-    val colors: AcornColors = bashKittenColors(theme)
+    val colors: AcornColors = taskarianColors(theme)
 
-    val colorScheme: ColorScheme = bashKittenScheme(theme)
+    val colorScheme: ColorScheme = taskarianScheme(theme)
 
-    val gradients = bashKittenGradients(theme)
+    val gradients = taskarianGradients(theme)
 
     val tabGroupColors: TabGroupColorPalette = when (theme) {
         Theme.Light -> TabGroupColorPalette.lightPalette

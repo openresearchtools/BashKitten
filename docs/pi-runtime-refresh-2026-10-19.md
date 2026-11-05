@@ -18,7 +18,7 @@ Experimental Pi Durable is not enabled.
 Both direct Pi packages and all seven Pi runtime packages resolve to exactly
 1.3.0. Provider SDK versions follow that release's exact dependencies. Upstream
 removed chord/esbuild from the runtime, so their obsolete npm distributions are
-removed from the runtime lock/source inventory. BashKitten's separate DOMPurify
+removed from the runtime lock/source inventory. Taskarian's separate DOMPurify
 and marked dependencies advance to 3.4.17 and 18.1.1. Pi TUI retains its own exact
 marked 18.0.11 dependency. SheetJS and adapted Pillama/usage donor sources remain
 at their existing pins; no adapted module is silently replaced.
@@ -58,7 +58,7 @@ Checks cover separate/private profile paths, inherited standalone overrides,
 stock package registration, extension loading/deferred tool discovery, native
 parser/cwd, equal phone-message sources, queued steering priority, native resume
 without history writes, clone IDs and fork attribution. The isolated RPC process
-has no live BashKitten backend coordinator; the subagent extension's six expected
+has no live Taskarian backend coordinator; the subagent extension's six expected
 session-start refusals are recorded explicitly, with no unexpected extension
 errors. This does not verify installed subagent coordination or provider login.
 
@@ -70,15 +70,15 @@ This narrow fixture observation does not establish whole-product traffic or
 physical-device behavior.
 
 The profile check seeds a separate temporary standalone Pi settings file and
-conflicting inherited Pi paths, then registers BashKitten in its owned profile.
+conflicting inherited Pi paths, then registers Taskarian in its owned profile.
 The standalone file remains byte-identical; HOME/cwd stay at the fixture's normal
 home/project. The reported real standalone Pillama flag conflict was separately
-traced to a BashKitten package registration predating private-profile isolation
+traced to a Taskarian package registration predating private-profile isolation
 (`b6c435807f`, 8 October 10:55 UTC). No standalone settings, credentials or
 automatic cleanup migration are changed by this source update.
 
 Evidence and fixtures are outside release inputs at
-`/run/media/user/Data/BashkittenBuild/verification/pi-1.3.0-20261019/`.
+`/run/media/user/Data/TaskarianBuild/verification/pi-1.3.0-20261019/`.
 Installed candidate/package reconciliation, real provider/OAuth behavior,
 notifications/calls/questions/subagents and responsive full browser flows remain
 required for combined acceptance.

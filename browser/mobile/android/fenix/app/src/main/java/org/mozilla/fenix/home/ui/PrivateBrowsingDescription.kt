@@ -67,7 +67,7 @@ fun PrivateBrowsingDescription(
 
             Text(
                 text = stringResource(
-                    id = R.string.bashkitten_private_browsing_explanation,
+                    id = R.string.taskarian_private_browsing_explanation,
                 ),
                 textAlign = TextAlign.Center,
                 style = FirefoxTheme.typography.subtitle1,

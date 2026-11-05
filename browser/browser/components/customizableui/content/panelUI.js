@@ -439,7 +439,7 @@ const PanelUI = {
         setTimeout(() => BrowserCommands.fullScreen(), 0);
         break;
       case "appMenu-settings-button":
-        window.BashKittenAgent?.browse();
+        window.TaskarianAgent?.browse();
         openPreferences();
         break;
       case "appMenu-more-button2":

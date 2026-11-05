@@ -8,7 +8,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location(
-    'firefox_release', ROOT / 'browser/bashkitten/scripts/firefox_release.py')
+    'firefox_release', ROOT / 'browser/taskarian/scripts/firefox_release.py')
 firefox = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(firefox)
 
@@ -19,7 +19,7 @@ def parts(version):
 
 
 def newest_published():
-    repository = os.environ.get('GH_REPO', 'openresearchtools/BashKitten')
+    repository = os.environ.get('GH_REPO', 'openresearchtools/Taskarian')
     tags = subprocess.check_output(
         ['gh', 'api', '--paginate', f'repos/{repository}/releases?per_page=100',
          '--jq', '.[] | select(.draft == false) | .tag_name'], text=True).splitlines()
@@ -36,7 +36,7 @@ def main():
     parser.add_argument('command', choices=['prepare', 'check'])
     args = parser.parse_args()
     current = firefox.validate_versions(ROOT / 'browser')
-    version = current['bashkitten']
+    version = current['taskarian']
     latest = newest_published()
     if args.command == 'check':
         if parts(version) <= latest:
@@ -48,7 +48,7 @@ def main():
                 raise ValueError('The source uses an older Firefox release line than the latest published version')
             latest_version = '.'.join(map(str, latest if latest[2] else latest[:2]))
             version = firefox.next_product_version(latest_version, current['firefox'])
-        (ROOT / 'browser/bashkitten/config/version.txt').write_text(version + '\n')
+        (ROOT / 'browser/taskarian/config/version.txt').write_text(version + '\n')
         npm_version = version if version.count('.') == 2 else version + '.0'
         for name in ('package.json', 'package-lock.json'):
             path = ROOT / 'agent' / name

@@ -18,10 +18,10 @@ export function options(args, allowed) {
   }
   return result;
 }
-export function requestForSession(session = process.env.BASHKITTEN_SESSION_ID) {
-  if (process.env.BASHKITTEN_WORKER_SOCKET) return appsRequest;
+export function requestForSession(session = process.env.TASKARIAN_SESSION_ID) {
+  if (process.env.TASKARIAN_WORKER_SOCKET) return appsRequest;
   return async (value, signal) => {
-    if (!session) throw Error('Choose an existing authorized BashKitten session with --session, or run from its Pi worker');
+    if (!session) throw Error('Choose an existing authorized Taskarian session with --session, or run from its Pi worker');
     const { appsRequest: ownerRequest } = await import('../../src/server/apps/client.mjs');
     return ownerRequest({ ...value, session }, { signal });
   };

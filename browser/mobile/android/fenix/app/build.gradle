@@ -41,12 +41,12 @@ if (!project.hasProperty('android-lint')) {
 apply from: 'benchmark.gradle'
 
 def isAppBundle = gradle.startParameter.taskNames.any { it.toLowerCase().contains("bundle") }
-def publisherKeystore = System.getenv('BASHKITTEN_PUBLISHER_KEYSTORE')
+def publisherKeystore = System.getenv('TASKARIAN_PUBLISHER_KEYSTORE')
 def publisherSigning = publisherKeystore && file(publisherKeystore).exists()
-def bashKittenVersion = file("${rootProject.projectDir}/bashkitten/config/version.txt").text.trim()
+def taskarianVersion = file("${rootProject.projectDir}/taskarian/config/version.txt").text.trim()
 
 android {
-    def ciDebugKeystore = System.getenv('BASHKITTEN_DEBUG_KEYSTORE')
+    def ciDebugKeystore = System.getenv('TASKARIAN_DEBUG_KEYSTORE')
     if (ciDebugKeystore) {
         signingConfigs.debug {
             storeFile = file(ciDebugKeystore)
@@ -77,11 +77,11 @@ android {
             arg("room.schemaLocation", "$projectDir/schemas".toString())
         }
 
-        applicationId "com.bashkitten"
+        applicationId "com.taskarian"
         minSdk 31
         targetSdk config.targetSdkVersion
         versionCode 1
-        versionName bashKittenVersion
+        versionName taskarianVersion
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments clearPackageData: 'true'
@@ -97,7 +97,7 @@ android {
         // This should be the base URL used to call the AMO API.
         buildConfigField "String", "AMO_SERVER_URL", "\"https://services.addons.mozilla.org\""
 
-        def deepLinkSchemeValue = "bashkitten"
+        def deepLinkSchemeValue = "taskarian"
         buildConfigField "String", "DEEP_LINK_SCHEME", "\"$deepLinkSchemeValue\""
 
         manifestPlaceholders = [
@@ -140,7 +140,7 @@ android {
             shrinkResources = false
             minifyEnabled = publisherSigning
             if (publisherSigning) {
-                proguardFiles = [getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'bashkitten-quiet.pro']
+                proguardFiles = [getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'taskarian-quiet.pro']
             }
             applicationIdSuffix ""
             resValue "bool", "IS_DEBUG", publisherSigning ? "false" : "true"
@@ -149,7 +149,7 @@ android {
         nightly releaseTemplate >> {
             applicationIdSuffix ""
             buildConfigField "boolean", "USE_RELEASE_VERSIONING", "true"
-            def deepLinkSchemeValue = "bashkitten-nightly"
+            def deepLinkSchemeValue = "taskarian-nightly"
             buildConfigField "String", "DEEP_LINK_SCHEME", "\"$deepLinkSchemeValue\""
             manifestPlaceholders.putAll([
                     "deepLinkScheme": deepLinkSchemeValue
@@ -158,7 +158,7 @@ android {
         beta releaseTemplate >> {
             buildConfigField "boolean", "USE_RELEASE_VERSIONING", "true"
             applicationIdSuffix ""
-            def deepLinkSchemeValue = "bashkitten-beta"
+            def deepLinkSchemeValue = "taskarian-beta"
             buildConfigField "String", "DEEP_LINK_SCHEME", "\"$deepLinkSchemeValue\""
             manifestPlaceholders.putAll([
                     "deepLinkScheme": deepLinkSchemeValue,
@@ -167,7 +167,7 @@ android {
         release releaseTemplate >> {
             buildConfigField "boolean", "USE_RELEASE_VERSIONING", "true"
             applicationIdSuffix ""
-            def deepLinkSchemeValue = "bashkitten"
+            def deepLinkSchemeValue = "taskarian"
             buildConfigField "String", "DEEP_LINK_SCHEME", "\"$deepLinkSchemeValue\""
             manifestPlaceholders.putAll([
                     "deepLinkScheme": deepLinkSchemeValue,
@@ -314,9 +314,9 @@ androidComponents {
                 }.unique().sort { a, b -> "${a.group}:${a.name}:${a.version}" <=> "${b.group}:${b.name}:${b.version}" }
             }
             tasks.named("${variant.name}OssDependencyTask").configure {
-                inputs.property('bashKittenRuntimeModules', resolvedModules)
+                inputs.property('taskarianRuntimeModules', resolvedModules)
                 doLast { task ->
-                    def modules = task.inputs.properties['bashKittenRuntimeModules']
+                    def modules = task.inputs.properties['taskarianRuntimeModules']
                     if (modules.isEmpty()) throw new GradleException('Android dependency notices require resolved runtime modules')
                     task.dependenciesJson.get().asFile.text = new groovy.json.JsonBuilder(modules).toPrettyString()
                 }
@@ -336,7 +336,7 @@ androidComponents {
         // object so we could read the flag directly; onVariants only gives us the build type name, so
         // we gate on the names instead.
         if (buildType in ['nightly', 'beta', 'release', 'benchmark']) {
-            def versionName = bashKittenVersion
+            def versionName = taskarianVersion
             project.logger.debug("versionName override: $versionName")
 
             variant.outputs.each { output ->
@@ -346,7 +346,7 @@ androidComponents {
                 // directions without removing app data. Product versionName
                 // orders update discovery; source identity stays in manifests.
                 def abiBits = ['arm64-v8a': 2, 'x86_64': 6, universal: 7][abi]
-                if (abiBits == null) throw new GradleException("Invalid BashKitten ABI: $abi")
+                if (abiBits == null) throw new GradleException("Invalid Taskarian ABI: $abi")
                 def versionCodeOverride = 2024000000 + abiBits
                 project.logger.debug("versionCode for $abi = $versionCodeOverride")
                 output.versionName.set(versionName)
@@ -476,7 +476,7 @@ nimbus {
 }
 
 dependencies {
-    implementation project(':bashkitten')
+    implementation project(':taskarian')
     implementation project('longfox')
     implementation project(':components:browser-engine-gecko')
     implementation project(':components:compose-awesomebar')
@@ -811,26 +811,26 @@ tasks.register("detekt", Exec) {
 
 // Ship the same offline About renderer as the web UI, using this APK's resolved
 // dependencies plus the matching companion package inventory.
-android.sourceSets.main.assets.srcDir("$buildDir/generated/bashkitten-about")
-def productAbout = tasks.register('stageBashKittenAbout', Exec) {
-    dependsOn ':bashkitten:stageNotices'
+android.sourceSets.main.assets.srcDir("$buildDir/generated/taskarian-about")
+def productAbout = tasks.register('stageTaskarianAbout', Exec) {
+    dependsOn ':taskarian:stageNotices'
     // Read the same packaged Gecko license page that ships in the APK.
     dependsOn rootProject.tasks.named('machStagePackage')
-    commandLine 'python3', "${rootProject.projectDir}/bashkitten/android/scripts/about-assets.py",
-        '--native-notices', "${project(':bashkitten').buildDir}/generated/notices",
-        '--output', "$buildDir/generated/bashkitten-about", '--version', bashKittenVersion
+    commandLine 'python3', "${rootProject.projectDir}/taskarian/android/scripts/about-assets.py",
+        '--native-notices', "${project(':taskarian').buildDir}/generated/notices",
+        '--output', "$buildDir/generated/taskarian-about", '--version', taskarianVersion
     outputs.upToDateWhen { false }
 }
 androidComponents.onVariants(androidComponents.selector().withBuildType('release')) { variant ->
     def licenses = tasks.named("${variant.name}OssLicensesTask")
     productAbout.configure {
         dependsOn licenses
-        environment 'BASHKITTEN_APK_LICENSES', licenses.get().generatedDirectory.get().asFile.absolutePath
+        environment 'TASKARIAN_APK_LICENSES', licenses.get().generatedDirectory.get().asFile.absolutePath
     }
 }
 tasks.matching { it.name == 'mergeReleaseAssets' }.configureEach { dependsOn productAbout }
 
-tasks.register('stageBashKittenDependencySources') {
+tasks.register('stageTaskarianDependencySources') {
     notCompatibleWithConfigurationCache('Checks the resolved runtime graph against committed dependency sources')
     doLast {
         def ids = configurations.releaseRuntimeClasspath.incoming.resolutionResult.allComponents
@@ -841,7 +841,7 @@ tasks.register('stageBashKittenDependencySources') {
         if (removedSdks) {
             throw new GradleException('Removed Android client SDKs were reintroduced: ' + removedSdks.join(', '))
         }
-        def sourceRoot = file("${rootProject.projectDir}/bashkitten/android/sources")
+        def sourceRoot = file("${rootProject.projectDir}/taskarian/android/sources")
         def inventory = new groovy.json.JsonSlurper().parse(new File(sourceRoot, 'sources.json'))
         def pins = inventory.entries.collectEntries { [(it.component): it] }
         if (inventory.schema != 1 || pins.size() != inventory.entries.size()) {
@@ -857,7 +857,7 @@ tasks.register('stageBashKittenDependencySources') {
         def sha256 = { input ->
             java.security.MessageDigest.getInstance('SHA-256').digest(input.bytes).encodeHex().toString()
         }
-        def destination = file("$buildDir/generated/bashkitten-sources")
+        def destination = file("$buildDir/generated/taskarian-sources")
         // Never carry a removed dependency's source into a later candidate.
         delete destination
         destination.mkdirs()
@@ -911,5 +911,5 @@ tasks.register('stageBashKittenDependencySources') {
     }
 }
 tasks.matching { it.name == 'assembleRelease' }.configureEach {
-    finalizedBy 'stageBashKittenDependencySources'
+    finalizedBy 'stageTaskarianDependencySources'
 }

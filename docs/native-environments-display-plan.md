@@ -1,8 +1,8 @@
-# BashKitten native environments, desktop and Display plan
+# Taskarian native environments, desktop and Display plan
 
 Requested and researched 10–11 October 2026. **Status: implementation plan only.**
 No application code, package, installed runtime or working user flow is delivered
-by this document. Research used BashKitten `a39f8b1d1ab8ab0ee202a5bb174f905578e83333`
+by this document. Research used Taskarian `a39f8b1d1ab8ab0ee202a5bb174f905578e83333`
 and the pinned sources below; integration and acceptance remain future work.
 
 ## Installed regressions and wide layout — 30 October 2026
@@ -12,7 +12,7 @@ supersedes conflicting earlier launch/layout decisions. The original frozen
 baseline/tag and historical evidence remain unchanged. These are requirements,
 not claims that the reported defects have passed verification.
 
-- Fix desktop Files access denied at `/usr/lib/bashkitten/files/provider.mjs`
+- Fix desktop Files access denied at `/usr/lib/taskarian/files/provider.mjs`
   and the Termux Display launcher installed without executable permission.
   Correct package assembly, preserve intentional private data permissions and
   reject inaccessible static modules/non-executable commands in final artifacts.
@@ -60,7 +60,7 @@ not claims that the reported defects have passed verification.
 
 Batch these fixes into the next ordinary GitHub Actions prerelease, using the
 existing caches and matching binary/source/legal checks. Test the changed flows
-in installed BashKitten; no unrelated full acceptance restart is requested.
+in installed Taskarian; no unrelated full acceptance restart is requested.
 
 ### Later clarification: release refresh and update channels
 
@@ -74,15 +74,15 @@ product behavior. Verify the embedded Termux:X11 source, browser adapter and
 paired loader against the current official release/nightly, updating all required
 parts together rather than substituting an unrelated X11 APK.
 
-Termux app updates always follow official stable releases. BashKitten's
-prerelease preference applies only to BashKitten and its matching packages; it
+Termux app updates always follow official stable releases. Taskarian's
+prerelease preference applies only to Taskarian and its matching packages; it
 must not enable Termux prereleases. Preserve installed signer/distribution checks.
 Keep new source/build/installed evidence separate from this requirement and
 preserve the frozen original plan and historical verification records.
 
 ## User amendment — 28 October 2026: Hide Agent inside the sidebar
 
-Keep the BashKitten logo's original position, sidebar action, labels and other
+Keep the Taskarian logo's original position, sidebar action, labels and other
 responsibilities/gestures unchanged. Remove the extra sidebar-looking toolbar
 button and desktop toolbar Hide Agent control. Put an explicit **Hide Agent**
 button at the top of the projects/chats sidebar itself, invoking the existing
@@ -121,9 +121,9 @@ during implementation, rather than retaining parallel paths.
 
 The main browser only needs small tab-launch/lifecycle hooks and a small
 privileged References capture/resolver extension. Reuse Zotero Connector's
-actual save logic with BashKitten branding; upstream names/notices belong in
+actual save logic with Taskarian branding; upstream names/notices belong in
 legal/source information. PDFs open in normal browser tabs. The supplied
-screenshot defines library layout/functions, with BashKitten colors and styling.
+screenshot defines library layout/functions, with Taskarian colors and styling.
 
 The later clarification makes Files a one-click sidecar folder button opening
 the ordinary local or Chisel-forwarded loopback URL. Quantum opens Office itself;
@@ -174,14 +174,14 @@ upgrades instead of silently dropping features. Research/import/enrichment/PDFs,
 managed citations/style/bibliography, edits, saves and exports must work end to
 end through native sessions and replaceable adapters.
 Editing must work without requiring an open editor web UI; agents may also open
-ordinary BashKitten tabs to inspect rendering, preview and check native exports.
+ordinary Taskarian tabs to inspect rendering, preview and check native exports.
 This is an explicit agent capability, not a prohibition on browser use. Iterate
 and verify standalone modules in parallel with the early browser batch, retaining
 the complete feature scope.
 Browser-facing Files/Office/References URLs use HTTPS with the existing native
 certificate identity/trust and exact Chisel service mappings. The References
 extension does not bypass certificate checks. Verify HTTPS loading in installed
-BashKitten, alongside independent module checks in ordinary browsers.
+Taskarian, alongside independent module checks in ordinary browsers.
 References and its shared classic citation web modal must remain nonblocking and
 scrollable with lazy/virtualized lists and indexed backend queries for project
 libraries up to 100,000 records. Preserve classic donor behavior, creator search,
@@ -219,8 +219,8 @@ is unchanged. See the detailed plan section 15.3 for the build boundary.
 ## Agreed original baseline
 
 The user-agreed starting plan is frozen at commit
-[`f71686dcb76402ec43bac3e6a7db8979ef0fb119`](https://github.com/openresearchtools/BashKitten/blob/f71686dcb76402ec43bac3e6a7db8979ef0fb119/docs/native-environments-display-plan.md),
-with permanent tag `bashkitten/plan/native-environments-2026-10-11`.
+[`f71686dcb76402ec43bac3e6a7db8979ef0fb119`](https://github.com/openresearchtools/Taskarian/blob/f71686dcb76402ec43bac3e6a7db8979ef0fb119/docs/native-environments-display-plan.md),
+with permanent tag `taskarian/plan/native-environments-2026-10-11`.
 Read that original alongside the current plan before implementation and after
 compaction, and include its identity in subagent handoffs. The commit SHA is the
 authoritative reference even if a working copy of this document changes:
@@ -244,7 +244,7 @@ requirement, without erasing the original record.
 
 **Implementation mandate:** every feature in this plan is equally required.
 Except for the later-authorized 28 October browser-boundary iteration build,
-implement and integrate the complete scope before the first full BashKitten
+implement and integrate the complete scope before the first full Taskarian
 main-app candidate builds, then test all features, fix blockers across the
 scope and batch the next builds. Independent component builds can iterate
 earlier and faster. Section 17 defines this execution rule; feature order is
@@ -306,10 +306,10 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
 - Creating a Linux container opens a preparation view with real installation
   output. The saved Containerfile and ordinary Podman launch configuration remain
   editable by the user or Local agent. GUI helpers edit that same configuration.
-  Its user-chosen name maps to its own machine directory under BashKitten's
+  Its user-chosen name maps to its own machine directory under Taskarian's
   existing user-data root, including the rootfs and all durable machine state.
   Retain the machine lifecycle helpers, including explicit machine deletion.
-- Each container has its own BashKitten installation and private Pi profile.
+- Each container has its own Taskarian installation and private Pi profile.
   Its agent/browser runtime stays available while the container runs. Closing a
   Display tab or browser window does not stop the container. Each container has
   its own startup toggle and settings for launch configuration, existing ports,
@@ -317,12 +317,12 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
 - Termux runs the same customized XFCE experience without containers. Use one
   workplace by default, with normal main windows maximized inside the workarea.
   Parent-owned dialogs and other auxiliary windows may float above them.
-  **Manage window size** in BashKitten OS settings defaults On; Off gives normal
+  **Manage window size** in Taskarian OS settings defaults On; Off gives normal
   XFCE sizing/placement without our maximization or split enforcement.
   An optional split-screen setting enables a taskbar
   **Two app mode** action and one draggable divider between the two apps.
   Both platforms use one bottom taskbar containing only an **Applications**
-  button with the BashKitten icon, running-window buttons and an application
+  button with the Taskarian icon, running-window buttons and an application
   tray at the right: no XFCE menu icon, clock/date or preseeded network/status
   widgets. Applications opens a
   maximized application launcher:
@@ -330,14 +330,14 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   in an alphabetical left-to-right wrapping icon/title grid. It adapts to phone,
   tablet and desktop sizes and scrolls vertically. Omit the extra launcher dock,
   pinned taskbar shortcuts and default desktop shortcut icons.
-- The desktop customization is named **BashKitten OS**, packaged as its own
-  `.deb` (for example `BashKittenOS.deb`) and native Termux counterpart. Its
-  **BashKitten OS** settings app appears in Applications and is pinned by default,
+- The desktop customization is named **Taskarian OS**, packaged as its own
+  `.deb` (for example `TaskarianOS.deb`) and native Termux counterpart. Its
+  **Taskarian OS** settings app appears in Applications and is pinned by default,
   providing the requested scaling and desktop settings. The package provides
   PeGPU's scaling functions directly, Gnozzard's exact dark/orange palette for
   the taskbar, background, Start menu
   and Thunar, plus Xfce Terminal. The default desktop background is the same
-  dark color with the existing BashKitten logo centered, never enlarged beyond
+  dark color with the existing Taskarian logo centered, never enlarged beyond
   its native image resolution. Preserve later user wallpaper/appearance choices.
   PeGPU's initialization scripts and the old Buzzard shell/CUA stack are not
   imported.
@@ -355,7 +355,7 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   contact setup and delivery/speech defaults first, then a divider and
   **Phone controls On/Off**, independent control switches and the optional
   Accessibility-dependent section. Both backend modules are in the main APK.
-  Local BashKitten-owned Pi sessions use the `phoneuse` CLI/skill for enabled
+  Local Taskarian-owned Pi sessions use the `phoneuse` CLI/skill for enabled
   controls; that CLI has no camera/microphone commands. Telephony uses the
   normal Android call screen, contacts, recents and keypad, with phone-side
   speech processing and a compact per-chat delivery selector for finals/questions.
@@ -376,7 +376,7 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   questions through its registered phone, resolving the same question from web,
   call or notification. Listening and replying later do not extend its deadline.
 
-Product UI, executable/package names and new configuration use **BashKitten**.
+Product UI, executable/package names and new configuration use **Taskarian**.
 Keep original donor names in licenses, copyright notices and provenance.
 “Container VM” here means a persistent Podman desktop environment sharing the
 host kernel; it is not a new hypervisor or a separately booted guest kernel.
@@ -384,11 +384,11 @@ host kernel; it is not a new hypervisor or a separately booted guest kernel.
 ### Implementation discipline: merge only the needed code
 
 Write only the code needed to deliver these specified functions. Bring the
-applicable BuzzardOS code directly into BashKitten and adapt its existing owners,
+applicable BuzzardOS code directly into Taskarian and adapt its existing owners,
 helpers and APIs; do not maintain it as a second product, require a separate
 Buzzard installation/release, or build an elaborate compatibility/framework layer
 to preserve its former product boundary. This is the requested product merge.
-Retain the exact donor provenance and licenses while using BashKitten naming.
+Retain the exact donor provenance and licenses while using Taskarian naming.
 
 Reuse existing controllers and upstream facilities; keep new code limited to
 the missing integration, native viewport/process boundary and requested behavior.
@@ -410,7 +410,7 @@ in section 17 rather than a full-app build/test cycle per feature.
 
 | Source | Verified starting point | Reuse or required change |
 | --- | --- | --- |
-| BashKitten | `a39f8b1d1ab8ab0ee202a5bb174f905578e83333` | Existing private controllers, protected Agent, per-session Pi workers, native remotes, display launcher and packaging. |
+| Taskarian | `a39f8b1d1ab8ab0ee202a5bb174f905578e83333` | Existing private controllers, protected Agent, per-session Pi workers, native remotes, display launcher and packaging. |
 | [BuzzardOS, podman branch](https://github.com/openresearchtools/BuzzardOS/tree/6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0) | `6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0`, inspected in `buzzardospodman` | Persistent external rootfs, native runtime setup, private display/media gateways, settings and sudo bridge. Its current desktop is Sway-based and its host viewer is Wayland/GTK/DMA-BUF-only; those are not the requested final frontend. |
 | [Podman v6.1.3](https://github.com/podman-container-tools/podman/releases/tag/v6.1.3) | `85b994955e0b4e30fbce9c8351cab85676140ede` | Latest official stable release verified 10 October 2026; vendor its release source and build the private local engine for both Linux architectures. |
 | [crun 1.30.1](https://github.com/containers/crun/releases/tag/1.30.1) | `079ff6a7a16d029460af882f9ea44674e6a510b6` | Latest official stable release verified 10 October 2026; supersedes the donor's older crun pin for this implementation. |
@@ -419,10 +419,10 @@ in section 17 rather than a full-app build/test cycle per feature.
 | [Gnozzard](https://github.com/openresearchtools/gnozzard/tree/59ca6d56ef147dea820381036838e76645074d0e) | `59ca6d56ef147dea820381036838e76645074d0e`, checked against GitHub main | Installer/registration and search/pin behavior, exact dark/orange palette and persistent wallpaper defaults; adapt to Thunar/XFCE and the requested maximized grid. Code/CSS GPL-3.0-or-later; retained folder artwork has its own LGPL-3.0-only notices. |
 | [XFCE panel](https://gitlab.xfce.org/xfce/xfce4-panel/-/tree/xfce4-panel-4.20.7) | `f4e21b14a389fa6b7cc4fd756cb92e0a822ed3e5` | Stock Window Buttons/tasklist and right-aligned systray supporting StatusNotifier and legacy XEmbed. Per-window menus need a narrow source patch for Two app mode; the public plugin menu API is not a per-window extension hook. |
 | [SheetJS CE v0.20.3](https://git.sheetjs.com/sheetjs/sheetjs/src/tag/v0.20.3) | `8a7cfd47bde8258c0d91df6a737bf0136699cdf8` | Existing `xlsx` spreadsheet parser; official annotated release tag peeled to this commit. Vendor the source and matching official release distribution with Apache-2.0/component notices. |
-| [Pi v1.1.0](https://github.com/earendil-works/pi/releases/tag/v1.1.0) | Published 7 October 2026; `abe508e1b89912adde45528136c3221eb69acdd7` | Planned update from current v1.0.2. Durable is a separate experimental package, not an automatic change to BashKitten's stock RPC sessions. |
+| [Pi v1.1.0](https://github.com/earendil-works/pi/releases/tag/v1.1.0) | Published 7 October 2026; `abe508e1b89912adde45528136c3221eb69acdd7` | Planned update from current v1.0.2. Durable is a separate experimental package, not an automatic change to Taskarian's stock RPC sessions. |
 
 Research checkouts and notes are outside the product tree under
-`/home/user/Bashkitten-Research/graphics-2026-10-10/`. The plan's source links and
+`/home/user/Taskarian-Research/graphics-2026-10-10/`. The plan's source links and
 pins are portable; implementation must not depend on that workstation directory.
 
 ## 3. Native module and ownership
@@ -478,7 +478,7 @@ stretching an unchanged desktop bitmap does not satisfy this requirement.
 Coalesce rapid changes, keep geometry/frame replies tied to the current view,
 and ignore stale or zero-sized hidden-tab measurements. Reattachment uses the
 new tab's actual size without restarting the desktop/apps. Keep the saved
-BashKitten OS UI/font scaling independent: a resize must not reset scale, pins,
+Taskarian OS UI/font scaling independent: a resize must not reset scale, pins,
 wallpaper or app state. Recompute the panel workarea and launcher grid from the
 accepted dimensions. Apply our main-window/split reflow only while **Manage
 window size** is On; stock Xfwm's own resize/maximization behavior still works
@@ -633,7 +633,7 @@ introducing another transcript database:
 | --- | --- |
 | Environment ID | Stable native catalogue identity for Local, a local container or a saved remote; separate from its editable name and current socket/port. |
 | Project ID | Optional stable record on the owning backend, with an editable name and selected working directory for new chats. An absent project ID means a standalone chat directly under that backend. Existing sessions retain their own recorded cwd. |
-| Chat reference | Environment ID plus the existing BashKitten session ID; backend resolves its existing native Pi session reference. |
+| Chat reference | Environment ID plus the existing Taskarian session ID; backend resolves its existing native Pi session reference. |
 | Chat title | Pi's native session name through supported RPC; existing metadata is only its UI index. |
 
 Projects optionally group chats within an environment. Users can create a chat
@@ -739,9 +739,9 @@ Read the active saved branch correctly and expose available branch references
 through the same native reader when needed, rather than flattening unrelated
 forks into one invented conversation.
 
-The skill briefly explains the locations: `$BASHKITTEN_DATA_DIR/sessions/<id>/ui.json`
-is BashKitten's existing UI/session mapping; native Pi history is under its private
-`$BASHKITTEN_DATA_DIR/pi/sessions` tree and the actual file comes from the recorded
+The skill briefly explains the locations: `$TASKARIAN_DATA_DIR/sessions/<id>/ui.json`
+is Taskarian's existing UI/session mapping; native Pi history is under its private
+`$TASKARIAN_DATA_DIR/pi/sessions` tree and the actual file comes from the recorded
 `piFile` reference/Pi's supported session discovery. Do not guess filenames from
 titles or treat the project working directory as the chat-history directory.
 The helper returns resolved local session references when appropriate; it never
@@ -769,16 +769,16 @@ running chat must not block its worker or rewrite its JSONL.
 
 ### User-data storage and machine names
 
-Use the existing resolved `$BASHKITTEN_DATA_DIR` for machine storage, alongside
-BashKitten's local configuration. Its current default in
-`agent/src/server/node-runtime.mjs` is `~/.local/share/bashkitten-pi`; honor a
+Use the existing resolved `$TASKARIAN_DATA_DIR` for machine storage, alongside
+Taskarian's local configuration. Its current default in
+`agent/src/server/node-runtime.mjs` is `~/.local/share/Taskarian`; honor a
 configured data root rather than inventing another global machine directory.
 Keep all durable rootfs, machine configuration, creation state and private Podman
 storage beneath that root. Installed helper executables remain in their normal
 package-owned paths; temporary sockets/process state use the existing private
 runtime mechanism and are not another location for persistent machine data.
 
-Store each machine under `$BASHKITTEN_DATA_DIR/machines/<machine-id>/`, with its
+Store each machine under `$TASKARIAN_DATA_DIR/machines/<machine-id>/`, with its
 `rootfs/`, saved Containerfile/launch configuration and durable metadata there.
 The catalogue maps the user-chosen machine name to this stable ID and directory.
 Use the same name in the backend heading and machine settings; resolve actions
@@ -787,12 +787,12 @@ Handle duplicate names explicitly within the local machine catalogue. Renaming
 updates this mapping without moving a live rootfs or changing Pi/session identity.
 The mapped directory remains inspectable by Local Pi through the normal config.
 
-Place shared private Podman image/build storage under the same BashKitten data
+Place shared private Podman image/build storage under the same Taskarian data
 root, separately from per-machine directories so deleting one machine cannot
-erase another machine's data or shared cache. A guest's own BashKitten/Pi data
+erase another machine's data or shared cache. A guest's own Taskarian/Pi data
 lives inside its rootfs and is not an alias of the host's Local Pi profile.
 The donor term “external rootfs” means external to Podman's image overlay; in
-BashKitten it still lives inside this user-data layout. Do not keep donor
+Taskarian it still lives inside this user-data layout. Do not keep donor
 arbitrary machine directories, repository/build folders or system VM-image
 locations as the default product storage model.
 
@@ -801,7 +801,7 @@ locations as the default product storage model.
 Reuse the **podman branch** of BuzzardOS, not older Sway/VM donor copies.
 Current donor packaging bundles crun 1.29.1 at
 `f0d911de5587342cfeb16473bf32ecdfeaf25957` but depends on distro Podman/Buildah.
-Building and packaging BashKitten's own Podman is therefore new work. Its current
+Building and packaging Taskarian's own Podman is therefore new work. Its current
 package script also hardcodes amd64; add native Linux amd64 and arm64 outputs.
 
 For the implementation, use the latest official release sources recorded above:
@@ -830,7 +830,7 @@ Missing prerequisites produce a
 specific setup error, not an alternate runtime.
 
 Provision a persistent Debian rootfs from the tracked Containerfile, with XFCE,
-the customization package, Thunar, Xfce Terminal, Xwayland, native BashKitten and
+the customization package, Thunar, Xfce Terminal, Xwayland, native Taskarian and
 the actual required guest services/libraries. Pin the Debian base release/digest
 and record package/source provenance. Reuse optional NVIDIA/device integration
 from the donor with compatible host drivers and architecture checks; do not
@@ -892,7 +892,7 @@ does not authorize importing PeGPU's shell initialization machinery.
 Separate the container's service lifetime from its viewer. Detached Podman and
 the owned per-environment display/backend services must not inherit the browser
 window's death guard. Reuse native process/service ownership; do not duplicate Pi
-supervision. The guest's BashKitten backend and ordinary browser/control runtime
+supervision. The guest's Taskarian backend and ordinary browser/control runtime
 are started with the environment and kept available while it is on, even when
 no Display view is attached. The private gateway must also survive: keeping only
 the container alive is insufficient if its Wayland server exits and kills guest
@@ -902,9 +902,9 @@ is absent. Reopening attaches to the existing instance.
 
 | Action | Required effect |
 | --- | --- |
-| Close/hide Display or close browser window | Detach the viewer; keep container, guest desktop, guest BashKitten and work running. |
+| Close/hide Display or close browser window | Detach the viewer; keep container, guest desktop, guest Taskarian and work running. |
 | Select another environment/chat | Change the view; do not stop the previous environment. |
-| Per-container startup enabled | Start that saved environment when BashKitten starts, without duplicate instances; Off prevents automatic starts and does not stop an already-running container. |
+| Per-container startup enabled | Start that saved environment when Taskarian starts, without duplicate instances; Off prevents automatic starts and does not stop an already-running container. |
 | Explicit container Stop | Stop that environment's owned runtime safely, preserving rootfs, Pi sessions and configuration. |
 | Container heading toggle Off/On | Invoke that same container Stop/Start owner, independent of Local and other backend toggles; preserve saved data and configuration. |
 | Explicit Delete machine | Confirm the named machine and its stored data, stop its owned runtime, remove its container definition and private machine directory, then remove its catalogue entry. This is distinct from Stop or closing a view. |
@@ -940,7 +940,7 @@ Bring the later donor bridge, not an early pipe-only version. In
 `75b423830f5af94c9037c47b681ec457d6db6ddf` handles PTYs, redirected standard FDs,
 signals, terminal resize and suspend/resume. Preserve its integration with the
 guest's real sudo semantics. The audited donor currently defaults to password
-authentication; BashKitten must explicitly select the requested passwordless
+authentication; Taskarian must explicitly select the requested passwordless
 guest policy and validate it with `visudo`.
 
 The requested result is both agent `sudo -n apt ...` and interactive terminal
@@ -991,7 +991,7 @@ primary software frames, and `GuestFrame` carries only DMA-BUF. Its commit
 `dd0dd7ce65af7716543e39f04ae9c4308e523bae` removed the earlier `ShmFrame` path.
 Use that history as a reference, review its validation/lifetimes, and implement
 the CPU path in the new Firefox receiver. Reverting one donor commit alone is
-not a working BashKitten display integration.
+not a working Taskarian display integration.
 
 Gecko already has `DMABufSurface`, DMA-BUF image support, `ImageContainer` and
 `SourceSurfaceImage`; investigate those existing interfaces for the narrow
@@ -1038,7 +1038,7 @@ History must show what was imported, retained, removed and changed; do not begin
 with an already edited source dump whose relationship to upstream is unclear.
 
 Use section 11's tracked pristine source plus named patches/adapters, retaining
-the import baseline in BashKitten's compact commit history. Do not import donor
+the import baseline in Taskarian's compact commit history. Do not import donor
 Git ancestry, nested `.git` directories or another Firefox source tree. The
 result remains the reusable native module described in section 3, with its own
 renderer process and small documented Firefox/Fenix integration hooks. This is
@@ -1047,13 +1047,13 @@ or replace the module automatically with later upstream snapshots.
 
 ### Native module and paired loader
 
-Keep `com.bashkitten`, its current signer and independent Android UID. Shared UID
+Keep `com.taskarian`, its current signer and independent Android UID. Shared UID
 with Termux is unnecessary for Binder/FD transfer and would require matching
 Termux's signer. Any supported installed `com.termux` remains usable through the
 existing real UID/signing-identity approval flow.
 
 Bundle the pinned `lorie` Java/resources/AIDL and native `libXlorie.so` in the
-BashKitten APK for arm64-v8a and x86_64. It is an Android library but not a
+Taskarian APK for arm64-v8a and x86_64. It is an Android library but not a
 drop-in isolated View: `LorieView`, input helpers and `MainActivity` currently
 depend on the upstream Activity/Application. Extract a narrow frontend host
 interface, preserving upstream native rendering and input. Fenix's Activity
@@ -1089,12 +1089,12 @@ verified, including renderer-child crash/hang containment and reattachment.
 The server continues to execute **under Termux's UID**. Upstream's Termux
 `app_process` loader reads classes and `libXlorie.so` from the installed APK.
 Its official loader hardcodes `com.termux.x11` and its signer, so ship a paired
-BashKitten Termux loader from the same pinned source targeting `com.bashkitten`
-and the existing BashKitten signer. The APK owns these native code payloads;
+Taskarian Termux loader from the same pinned source targeting `com.taskarian`
+and the existing Taskarian signer. The APK owns these native code payloads;
 the Termux package owns the matching launcher plus desktop/runtime dependencies.
 Detect a mismatched APK/loader pair and show the necessary package update.
 
-Reuse the existing `bashkitten-display` backend owner, readiness checks, explicit
+Reuse the existing `taskarian-display` backend owner, readiness checks, explicit
 Start/Stop and user-editable launch command. Replace only the separate-APK
 download/detection and external Open X11 path with native Display attachment.
 Use the existing private browser/Termux IPC to hand off `ParcelFileDescriptor`
@@ -1134,14 +1134,14 @@ UID or privileged system-key permissions in the shipped user flow. Development
 setup/debugging still uses the authorized ADB/direct Termux workflow. Android
 16/17 behavior and physical-device GPU support require actual acceptance.
 
-## 8. BashKitten OS: shared XFCE customization package
+## 8. Taskarian OS: shared XFCE customization package
 
-Name this shared desktop customization **BashKitten OS**. Package it as
-`BashKittenOS.deb` (with release version/architecture suffixes where required)
+Name this shared desktop customization **Taskarian OS**. Package it as
+`TaskarianOS.deb` (with release version/architecture suffixes where required)
 for Debian guests and as a native Bionic Termux `.deb` built from the same
-source. Use the normal lowercase package identifier `bashkitten-os` in package
+source. Use the normal lowercase package identifier `taskarian-os` in package
 metadata. These are platform-specific packages, not interchangeable binaries.
-This names the customization and its settings app within BashKitten; it does not
+This names the customization and its settings app within Taskarian; it does not
 introduce a separate distribution, browser or bootable OS. Reuse upstream
 XFCE/Xfwm and the actual PeGPU apps: **Thunar + Xfce Terminal**. Nautilus is not XFCE's file
 manager and is not what the inspected PeGPU setup installs. Do not pull in an
@@ -1154,10 +1154,10 @@ start those components. First-run defaults are applied once to the owned
 desktop profile, then user changes persist. No
 PeGPU account assumptions, login-time install scripts or repeated settings reset.
 
-### BashKitten OS settings application
+### Taskarian OS settings application
 
-Install one native **BashKitten OS** application entry with the existing
-BashKitten icon. It opens this environment's customization settings, including
+Install one native **Taskarian OS** application entry with the existing
+Taskarian icon. It opens this environment's customization settings, including
 the PeGPU-derived scaling controls, **Manage window size**, the requested
 optional two-app layout setting, and the application Dark/Light preference below.
 Reuse the same
@@ -1178,9 +1178,9 @@ desktop package.
 
 ### Dark and Light preference for applications
 
-Add a simple **Dark / Light** choice to BashKitten OS settings on both Linux
+Add a simple **Dark / Light** choice to Taskarian OS settings on both Linux
 containers and Termux. This is the desktop session's advertised system/application
-preference; BashKitten OS's own dark/orange panel, Start menu, settings styling,
+preference; Taskarian OS's own dark/orange panel, Start menu, settings styling,
 Thunar customization, icons and wallpaper keep their existing colors. Changing
 the preference must not recolor or reset those assets or change the host Linux
 or Android system setting. Applications decide whether to follow the preference.
@@ -1201,18 +1201,18 @@ a parallel preferences daemon/store. Keep its dependencies in the source/license
 inventory. The guest session owns this value, not a forwarded host portal.
 
 Keep toolkit preference paths consistent with that saved choice while preserving
-the explicitly styled BashKitten surfaces. Scope our custom styling to its
+the explicitly styled Taskarian surfaces. Scope our custom styling to its
 intended components; do not force all third-party apps dark through a global
 `GTK_THEME`, broad CSS override or theme reset that defeats Light. Apply changes
 asynchronously through settings notifications, with no polling or app restarts
-forced by BashKitten. Apps that do not follow system appearance can retain their
+forced by Taskarian. Apps that do not follow system appearance can retain their
 own theme; do not promise universal live switching.
 
 ### One bottom taskbar on both platforms
 
 Ship the same layout on native Termux and Linux containers: one full-width
 horizontal panel along the bottom edge containing an **Applications** button
-with the existing BashKitten icon for the launcher below, ordinary labelled
+with the existing Taskarian icon for the launcher below, ordinary labelled
 Window Buttons for running applications, and an **application system tray at
 the right edge**. The tasklist uses the remaining space; use the panel's normal
 expanding layout/spacer rather than fixed pixel placement. Replace the XFCE menu icon with the
@@ -1242,7 +1242,7 @@ StatusNotifier/AppIndicator and legacy XEmbed implementations in
 `plugins/systray/`. One tray handles both; do not add a second indicator plugin,
 new tray protocol or hardcoded application allowlist. Installed applications
 that publish supported tray items get their normal icon/actions, including
-BashKitten running automatically in a container. Preserve native item menus,
+Taskarian running automatically in a container. Preserve native item menus,
 activation, user hide/reorder choices and sizing through panel/viewport changes.
 Do not start extra status applets just to populate the tray; a user-installed
 or deliberately launched application's tray icon remains allowed.
@@ -1250,17 +1250,17 @@ or deliberately launched application's tray icon remains allowed.
 The tray belongs to the owning XFCE X server/session bus. Never forward the
 host's session bus/tray or another container's indicators into it. A tray host
 only displays icons actually registered by running applications; it must not
-invent a BashKitten icon for an unrepresented headless Node process. The current
-`browser/widget/gtk/BashKittenTray.cpp` item is tied to a browser `nsWindow` and
+invent a Taskarian icon for an unrepresented headless Node process. The current
+`browser/widget/gtk/TaskarianTray.cpp` item is tied to a browser `nsWindow` and
 owned by `DesktopLifetime.sys.mjs`; it does not automatically appear on a guest's
-private bus. Add the necessary small guest-side BashKitten indicator, reusing
+private bus. Add the necessary small guest-side Taskarian indicator, reusing
 the existing status/lifetime and narrow activation path, so automatic container
 startup registers one real item with truthful status and existing actions.
 Use normal session/service registration rather than new startup shell scripts.
 Bind its status/actions to the guest backend identity. **Open** activates that
 backend through the authorized native host path, not a second protected Agent
 page inside the controlled X server. An explicit **Quit/Stop** targets the guest
-BashKitten service owner, never the host-global browser Quit callback or another
+Taskarian service owner, never the host-global browser Quit callback or another
 backend, and does not delete/stop the container itself. Container lifecycle
 remains with its existing sidecar owner. Closing/restarting the indicator or an
 ordinary browser window does not stop guest services or the container. Reconnect
@@ -1269,7 +1269,7 @@ backend/browser. Preserve the existing container and protected-Agent boundaries.
 
 Use existing asynchronous registration and native panel behavior; item discovery,
 icon loading and actions cannot block browser/settings UI. Verify both tray
-protocols on Linux and Termux; desktop BashKitten's native tray is the Linux
+protocols on Linux and Termux; desktop Taskarian's native tray is the Linux
 case, while Termux shows supported native X11 applications' tray items.
 
 ### Maximized Start menu: search, pins and application grid
@@ -1304,7 +1304,7 @@ debounce, alphabetical ordering and saved desktop-ID pins. Its pinned search
 currently matches names only; use the same simple name/description match for
 both blocks here. Pins appear only in their own block, not twice in the menu.
 **Pin/Unpin** stores the ordered ID list per environment, initially containing
-only the **BashKitten OS** settings app. Renaming an entry preserves its ID/pin
+only the **Taskarian OS** settings app. Renaming an entry preserves its ID/pin
 and explicit deletion removes its pin.
 Unavailable entries are omitted without wiping saved selections on a transient
 refresh failure. Clear search on close; retain pins across relaunch and upgrades.
@@ -1343,7 +1343,7 @@ This is window arrangement within the owned desktop, not separate input seats
 for agents. Existing/user-edited XFCE workplace settings survive upgrades.
 
 Add persistent per-environment **Manage window size**, default **On** in new
-profiles, to BashKitten OS settings. While On, maximize eligible normal,
+profiles, to Taskarian OS settings. While On, maximize eligible normal,
 resizable main windows when opened/activated, inside the actual desktop workarea
 above the taskbar. Explicit two-app members retain their split rectangles when
 activated. Full workarea size means normal maximization, not fullscreen hiding
@@ -1416,7 +1416,7 @@ Reuse the MIT functions in
 [`Resources/Guest/scaling-app/src/pegpu_scaling.py`](https://github.com/openresearchtools/PEGPU/blob/aae5382fae02eaeb97ceeb7fcaa531f88009b081/Resources/Guest/scaling-app/src/pegpu_scaling.py):
 profiles, normalization, scale planning, changed-value XFConf writes, cursor
 resources, transaction and saved selection. Wire them into the customization's
-**BashKitten OS** settings application directly. Preserve their license and
+**Taskarian OS** settings application directly. Preserve their license and
 provenance.
 
 The implementation coordinates Xft DPI, GDK integer factor, cursor/icons, panel
@@ -1445,7 +1445,7 @@ and [`data/90_gnozzard.gschema.override`](https://github.com/openresearchtools/g
 | --- | --- |
 | Taskbar/panel | `#282828` |
 | Start menu surface | `#222222` |
-| Initial desktop background behind the centered BashKitten logo | `#202225` |
+| Initial desktop background behind the centered Taskarian logo | `#202225` |
 | Hover | `#3f3f3f` |
 | Orange focus/selection/active indicator | `#ff7139` |
 | Normal / subdued text | `#ffffff` / `#c8c8c8` |
@@ -1461,7 +1461,7 @@ earlier Firefox-gray palette or another approximate orange.
 
 The default XFCE wallpaper on both platforms uses that `#202225` background and
 the current transparent kitten-with-glasses logo from
-`browser/bashkitten/browser/branding/assets/bashkitten-logo-glasses-original.png`
+`browser/taskarian/browser/branding/assets/taskarian-logo-glasses-original.png`
 (1254 × 1254 source pixels), preserving its branding license. Center it horizontally
 and vertically with its aspect ratio intact. Keep the chosen display size at or
 below the original dimensions in physical pixels, including at high DPI;
@@ -1470,7 +1470,7 @@ viewport, but never stretch, crop, tile or upscale it to fill a larger screen.
 Use the original asset rather than enlarging a small generated app icon. Perform
 any default-wallpaper sizing off the UI thread and only while this managed
 default is selected. The Applications button uses a small panel-sized version
-of the same BashKitten branding independently of the wallpaper.
+of the same Taskarian branding independently of the wallpaper.
 
 Preserve Gnozzard's defaults-only wallpaper principle: it supplies an initial
 solid background through schema defaults and does not overwrite the user's
@@ -1498,7 +1498,7 @@ Applications-menu actions. BuzzardOS already adapts the five AppImage actions
 to Thunar in `guest/assets/thunar-uca.xml` and merges their owned IDs without
 discarding other custom actions in `guest/shortcut-helper/src/thunar.rs`.
 Reuse that Thunar integration and Gnozzard's relevant helper functions directly
-under BashKitten names. Keep one implementation of validation, extraction,
+under Taskarian names. Keep one implementation of validation, extraction,
 launching and registration, not parallel Gnozzard/Buzzard helpers or stores.
 Do not import GNOME Shell, Nautilus, their extensions or the donor desktop shell.
 
@@ -1563,7 +1563,7 @@ Installed package launchers become available through normal XDG menu discovery;
 a CLI-only package does not get an invented GUI application entry.
 
 **Applications and optional shortcuts.** Use the guest user's XDG applications
-and icon directories, with stable BashKitten-owned entry identities, correct
+and icon directories, with stable Taskarian-owned entry identities, correct
 Exec escaping, atomic updates and desktop-database refresh. AppImage registration
 points to the user's file; it does not silently relocate/copy the application.
 AppImage entry identity follows the original path, and re-registering preserves
@@ -1610,15 +1610,15 @@ validation and bounded/streaming work consistent with the rest of this plan.
 ### One shared skill with backend-specific names
 
 Add one concise shared XFCE desktop-use guide, curated into **`termux-use`** for
-Pi inside BashKitten's native Termux backend and **`computer-use`** for Pi inside
-a BashKitten-managed container desktop. Only the name, short description and
+Pi inside Taskarian's native Termux backend and **`computer-use`** for Pi inside
+a Taskarian-managed container desktop. Only the name, short description and
 backend setup reference differ; keep one maintained workflow and supporting
 scripts. This is planned work, not an already installed skill.
 
 | Pi execution environment | Discovered desktop-use skill |
 | --- | --- |
-| BashKitten-owned native Termux backend | `termux-use`, controlling that backend's XFCE desktop |
-| BashKitten-managed container backend | `computer-use`, controlling that container's XFCE desktop |
+| Taskarian-owned native Termux backend | `termux-use`, controlling that backend's XFCE desktop |
+| Taskarian-managed container backend | `computer-use`, controlling that container's XFCE desktop |
 | Ordinary Linux host, standalone Pi, or other unmanaged backend | Neither guide |
 
 Choose from where Pi actually executes, not the connected browser's OS or the
@@ -1805,7 +1805,7 @@ media endpoints, not a raw shared PipeWire socket. Preserve that existing media
 mechanism and device choices; the requested private Unix link is for local
 environment/control/display access, not a claim that donor media is already UDS.
 
-The guest is its own BashKitten host. Its remote publishing has its own existing
+The guest is its own Taskarian host. Its remote publishing has its own existing
 identity/account/service definitions and uses the normal Share Local workflow
 through the private local controller connection. Put that setup in the container
 settings instead of creating a second remote-management web API. Local socket
@@ -1822,9 +1822,9 @@ Use the existing one-product repository and component-build workflow:
 
 | Location/seam | Planned responsibility |
 | --- | --- |
-| `browser/bashkitten/browser/components/agent/` | Linux native sidebar/selection, private environment connection adapter and reuse of existing service settings/draft ownership. |
+| `browser/taskarian/browser/components/agent/` | Linux native sidebar/selection, private environment connection adapter and reuse of existing service settings/draft ownership. |
 | Product-owned browser Display component | Separate renderer child, small Linux Gecko surface/input host, typed asynchronous IPC and special-tab lifecycle. Keep a narrow version-adapter boundary for future Firefox updates. |
-| `browser/mobile/android/bashkitten/` plus narrow Fenix host/tab hooks | Native sidebar and embedded X11 View; replace `AgentDisplayDialog` external-app path, reuse `AgentRuntime` and Termux connection approval. |
+| `browser/mobile/android/taskarian/` plus narrow Fenix host/tab hooks | Native sidebar and embedded X11 View; replace `AgentDisplayDialog` external-app path, reuse `AgentRuntime` and Termux connection approval. |
 | `agent/src/server/control.mjs`, platform adapters and new environment module | Native container setup/config/lifecycle, private guest sockets and streamable preparation status. No new remote administration routes. |
 | `agent/src/server/common.mjs`, HTTP/session adapter and RPC worker | Project grouping metadata and existing stock session operations; no custom Pi history writes. |
 | `agent/pi` extension/skills and `agent/packaging/pi-skills.py` | Concise `chats` guide and one deferred read-only list/search/read adapter over the sidecar metadata and native Pi history reader. |
@@ -1832,14 +1832,14 @@ Use the existing one-product repository and component-build workflow:
 | Android product-owned telephony library module and existing native/Termux service owners | Import the pinned Phony source/licenses, then reduce it to managed Telecom calls, contact setup, keypad events and the authenticated Pi voice gateway. Same APK and Phone panel, independent of `phoneuse`; no Mozilla core changes. |
 | `agent/pi` extensions, existing RPC worker/status/queue and notification outbox | Narrow ChatGPT usage adapter with terminal/web status; deferred `ask_user` plus concise `ask-user` skill and durable question resolution. Reuse native Pi APIs and existing chat/phone delivery owners. |
 | `agent/src/web/web_ui.html` | Opened-chat view; remove replaced hierarchy/navigation while preserving existing chat/file functions. |
-| Product-owned BashKitten OS source/package | Shared XFCE taskbar with right application tray and guest BashKitten indicator, maximized search/pins/app-grid launcher, initially pinned settings app with Manage window size, layout/scaling and Gnozzard dark/orange styling with persistent wallpaper; Linux guest Thunar application installation/registration adapted from Gnozzard/Buzzard. |
-| Directly merged BashKitten implementation | Needed Buzzard runtime/rootfs/media/lifecycle/sudo functions adapted into their BashKitten owners, with original source pins and notices; no parallel Buzzard app, updater or release chain. |
+| Product-owned Taskarian OS source/package | Shared XFCE taskbar with right application tray and guest Taskarian indicator, maximized search/pins/app-grid launcher, initially pinned settings app with Manage window size, layout/scaling and Gnozzard dark/orange styling with persistent wallpaper; Linux guest Thunar application installation/registration adapted from Gnozzard/Buzzard. |
+| Directly merged Taskarian implementation | Needed Buzzard runtime/rootfs/media/lifecycle/sudo functions adapted into their Taskarian owners, with original source pins and notices; no parallel Buzzard app, updater or release chain. |
 | Tracked external component source + patch series | Release source trees for Podman/crun and required helpers, embedded Termux:X11/native dependencies, XFCE custom components, spreadsheet/other JS components, patches, exact provenance and licenses. |
-| Existing packaging/component builders | Private Podman/crun/helper builds, embedded X11 in the BashKitten APK and paired Termux loader, desktop packages, source/notices and architecture checks. |
+| Existing packaging/component builders | Private Podman/crun/helper builds, embedded X11 in the Taskarian APK and paired Termux loader, desktop packages, source/notices and architecture checks. |
 
 Paths for new modules are proposed; reuse an existing owner rather than creating
 parallel controllers with the same job. Merge needed Buzzard functions directly
-and maintain the resulting code as part of BashKitten; do not retain its duplicate
+and maintain the resulting code as part of Taskarian; do not retain its duplicate
 product shell, branding, configuration/update machinery or separate build/release
 requirements. Keep original attribution and a record of the source being merged.
 For external components such as Termux:X11, XFCE and Podman/crun, retain pristine
@@ -1858,7 +1858,7 @@ release trees into the relevant existing component directory, with no nested
 `.git` directory or imported upstream ancestry. Materialize required submodule
 sources at their pinned gitlinks; an unresolved gitlink is not a complete source
 snapshot. Keep pristine external source and small named patches separate. Direct
-donor code merged into BashKitten retains its original pin/notices and a record
+donor code merged into Taskarian retains its original pin/notices and a record
 of our changes.
 
 Use the latest official released version when adding/updating a component, within
@@ -1883,7 +1883,7 @@ data out of Git. Ordinary declared distro dependencies remain package-managed,
 with their package/source provenance recorded; if we begin building or embedding
 one, it becomes part of this source inventory. The existing AI-engine daughter
 repository remains the build owner for downloadable AI runtimes, with matching
-release manifests/source/licenses consumed by BashKitten.
+release manifests/source/licenses consumed by Taskarian.
 
 **Spreadsheet example:** the present preview code imports SheetJS CE `xlsx`
 0.20.3 on the backend and renders the existing read-only grid. Currently
@@ -1967,18 +1967,18 @@ unexplained reporting or missing review blocks release preparation.
 For upgrades, preserve user-written launch configuration and desktop settings.
 Update an untouched generated Termux default to the new private loader, but do
 not regex-rewrite arbitrary user scripts. Show the needed edit for custom commands.
-Remove BashKitten's separate-X11-APK dependency/path; leave an independently
+Remove Taskarian's separate-X11-APK dependency/path; leave an independently
 installed Termux:X11 and its command alone. Use fresh profiles for architecture
 acceptance and separately check preservation with an explicit upgrade case.
 
 ## 12. Android Phone control and the MCP port
 
 Requested 10 October 2026. **Status: implementation plan only.** Bundle the
-Android control backend into the **main BashKitten APK**, as explicitly selected
+Android control backend into the **main Taskarian APK**, as explicitly selected
 by the user. A native Phone panel controls an optional backend module; Termux
 agents use a small CLI and the `phoneuse` Pi skill. No companion APK is required.
 
-**Scope: port the device tools and controls only.** BashKitten's existing Pi
+**Scope: port the device tools and controls only.** Taskarian's existing Pi
 integration is the caller and continues to own model/provider connections,
 credentials and agent execution. The Phone module must not implement an MCP
 server/client, MCP session/protocol layer, provider connection setup, model
@@ -2034,7 +2034,7 @@ short, but every operation must have an explicit owner in this table.
 | Accessibility | Text and keys | Append/insert/replace/clear text and supported key input through the available Accessibility input connection. |
 | Accessibility | Navigation | Back, Home, Recents, notification shade, quick settings and keyboard dismissal. Opening the notification shade is distinct from reading notifications. |
 
-Android provides broad service grants; the switches are additional BashKitten
+Android provides broad service grants; the switches are additional Taskarian
 authorization. Existing browser permissions never make a switched-off Phone
 feature available. Ordinary notification replies do not require SMS/contacts
 access and cannot send to arbitrary recipients outside a current reply action.
@@ -2045,13 +2045,13 @@ Respect Android's sensitive-notification redaction and work-profile restrictions
 Start from [Android Remote Control MCP v1.12.0](https://github.com/danielealbano/android-remote-control-mcp/releases/tag/v1.12.0),
 release commit `3777403d148283c5a18a3e8122ff819da4eed808`, the release exercised by
 the `mcp` thread. Preserve its MIT `LICENSE.md`, including the original copyright
-**2026–2027 Daniele Salvatore Albano**, and dependency notices. BashKitten's own
+**2026–2027 Daniele Salvatore Albano**, and dependency notices. Taskarian's own
 code remains under its existing license; do not relabel the donor's files.
 
 Import the original pinned source and provenance into a clearly identified
 adapted component directory in a focused commit. Follow with separate commits
 removing unneeded parts and adapting retained native Android operations to this module.
-Record that this is a maintained BashKitten fork; do not automatically overwrite
+Record that this is a maintained Taskarian fork; do not automatically overwrite
 it with mainstream donor updates. Preserve original source through the import
 commit and source delivery, without compiling a second donor app. Keep original
 and modified file provenance clear and ship full offline notices/source archives.
@@ -2095,7 +2095,7 @@ merely because `startActivity` returned. See Android's
 ### Backend authorization and lifecycle
 
 Use one native policy owner shared by UI, command dispatch and Android service
-entrypoints. Save policy in BashKitten's private Android data. Only the native
+entrypoints. Save policy in Taskarian's private Android data. Only the native
 user settings flow changes it; the CLI cannot enable itself, grant permissions
 or rewrite policy. Missing, corrupt or unknown policy/capabilities mean Off.
 
@@ -2146,21 +2146,21 @@ Use this path, without a web UI relay for each command:
 
 ```text
 Local Termux Pi -> bundled Node phoneuse CLI -> authenticated local transport
-               -> Phone backend module in BashKitten APK -> Android APIs
+               -> Phone backend module in Taskarian APK -> Android APIs
 ```
 
-Package the CLI with BashKitten's native Termux runtime and use its private
+Package the CLI with Taskarian's native Termux runtime and use its private
 bundled Node. Reuse the approved Termux/native-controller setup to deliver the
-dynamic endpoint and credential privately. Termux and BashKitten keep separate
+dynamic endpoint and credential privately. Termux and Taskarian keep separate
 UIDs; matching signatures or filesystem access are not assumed. The research
 verified literal localhost between those UIDs, not an Android cross-UID Unix
 socket. No third application or repeated companion pairing is introduced.
 
-#### Restrict access to BashKitten-owned Pi sessions
+#### Restrict access to Taskarian-owned Pi sessions
 
-Only live **local BashKitten-owned Pi workers**, including their owned subagents,
+Only live **local Taskarian-owned Pi workers**, including their owned subagents,
 may obtain Phone authorization. Installing the CLI, knowing the port, sharing
-Termux's UID, using a particular executable name or setting `BASHKITTEN_*`
+Termux's UID, using a particular executable name or setting `TASKARIAN_*`
 environment variables is not authentication. Standalone Pi, an ordinary Termux
 shell, other Android apps, websites and remote/container Pi sessions receive no
 Phone grant. No new per-chat permission UI is needed for this requirement.
@@ -2175,7 +2175,7 @@ credential-issuing authority out of the CLI and ordinary Pi environment.
 
 Android owns the active-grant registry. Registration and renewal require the
 trusted worker owner over its private controller path, not generic Termux
-approval or a CLI-provided session/PID. The current `BASHKITTEN_INSTANCE_TOKEN`
+approval or a CLI-provided session/PID. The current `TASKARIAN_INSTANCE_TOKEN`
 is inherited by Pi and cannot serve as the Phone grant-issuing authority. Keep
 that authority separate and explicitly exclude it from inherited Pi/command
 environments. Each subagent worker receives its own scoped grant.
@@ -2195,7 +2195,7 @@ Use the existing `http/server.mjs` worker creation and `rpc/worker.mjs`/`rpc.mjs
 launch/lifecycle seams. `adoptSession()` can change the native session while the
 Pi process stays alive. Rebind/rotate its Phone authority through that owner
 transition, invalidate old-session work/results and let CLI requests obtain the
-current grant through private worker IPC. A spawn-time `BASHKITTEN_SESSION_ID`
+current grant through private worker IPC. A spawn-time `TASKARIAN_SESSION_ID`
 or static environment credential must not determine later session identity.
 Native backend restart invalidates registrations; only the trusted live owner
 can re-register. Never turn a stale command into an automatic retry.
@@ -2207,7 +2207,7 @@ checks are not security boundaries. Any ordinary app can try localhost; it must
 be rejected without valid authorization. Android Settings/Phone policy cannot
 be changed with the same command credential.
 
-This enforces **BashKitten session authorization**, with an explicit platform
+This enforces **Taskarian session authorization**, with an explicit platform
 limit: all programs inside Termux share its Android UID. Files, environments,
 worker IPC and process inspection are not a strong isolation boundary against
 malicious same-UID code or a credential deliberately leaked by an authorized
@@ -2245,7 +2245,7 @@ tools. Its initial guide explains status, enabled-capability discovery, concise
 results, permission errors and cancellation; it does not carry a permanent
 catalog of disabled operations. Keep recipes in capability-filtered CLI help.
 No Pi patch, custom loader or automatically registered MCP tools are needed.
-Install only into BashKitten's private Pi environment; preserve native Pi tools
+Install only into Taskarian's private Pi environment; preserve native Pi tools
 and the standalone user's Pi configuration. This plan does not silently grant
 remote backends a new phone-control endpoint.
 
@@ -2328,7 +2328,7 @@ claim that the current whole product has already passed an audit.
 3. Package the Termux CLI and concise `phoneuse` guide; deliver full licenses,
    sources and architecture-correct artifacts through normal release builds.
 4. Complete the following acceptance on fresh Android 16/17 profiles using the
-   real BashKitten UI for user flows. ADB is appropriate for setup/debugging and
+   real Taskarian UI for user flows. ADB is appropriate for setup/debugging and
    external negative checks, never a requirement of the delivered user flow.
 
 | Check | Required result |
@@ -2347,7 +2347,7 @@ claim that the current whole product has already passed an audit.
 | Release contents | Correct sources/licenses, private bundled Node, concise skill discovery, no secrets or test artifacts; no unsolicited external reporting from any bundled component. |
 
 The `mcp` thread's scratch research is under
-`/run/media/user/Data/Repositories/bashkitten-android-control-research/2026-10-10/`.
+`/run/media/user/Data/Repositories/taskarian-android-control-research/2026-10-10/`.
 Its `RESEARCH_RESULT.txt` and `reports/` establish notification read/reply from
 the actual Termux UID with Accessibility disabled on Android 17 Cuttlefish,
 and live notification-access revocation. Its CLI still used MCP internally,
@@ -2362,7 +2362,7 @@ Requested 11 October, incorporating the earlier 9 October calling research.
 **Status: implementation plan only.** Keep the normal Android call interface:
 call, answer, hang up, keypad, recents and contact callback. Do not create a
 custom dialer or replace the system assistant. The native calling backend is a
-small Android library module **inside the main BashKitten APK**, with setup in
+small Android library module **inside the main Taskarian APK**, with setup in
 Phone. This replaces the earlier optional companion APK, separate UID/signature
 pairing and installation flow. Termux remains a separate application/UID.
 
@@ -2372,7 +2372,7 @@ Start with the unchanged [Phony v2.6 release](https://github.com/DDOneApps/Phony
 at `5c52157dec285c73bc84dd1f388247d3741a127f`, recording the archive checksum,
 full GPLv3 license, original copyrights and matching source. Mark subsequent
 changes and dates; retain Phony's license on its retained source and the existing
-BashKitten license on our code. Import first, then strip/adapt in focused commits.
+Taskarian license on our code. Import first, then strip/adapt in focused commits.
 Maintain this fork in our tracked sources; no automatic replacement from Phony.
 The research also inspected post-release `e062ad628de6b54163cd1c35d2588fe9f461c602`
 (audio/API-26 fixes). It is not the v2.6 release commit; port only individually
@@ -2398,7 +2398,7 @@ code/dependencies pass the same source/license/telemetry gates as section 12.
 
 The panel starts with independent **Telephony On/Off** and **Replyable messages
 On/Off**, actual readiness, and minimal **Calling account setup**, **Call agent**,
-**Add Kitten contact** actions. Keep delivery defaults, recent-chat count, speech
+**Add Taskarian contact** actions. Keep delivery defaults, recent-chat count, speech
 completion settings and per-backend voicemail controls in this same section.
 Then a divider separates section 12's **Phone controls On/Off** and its feature
 switches. All three masters default Off and retain independent saved choices.
@@ -2442,23 +2442,23 @@ Telephony Off detaches voice without cancelling the underlying Pi work.
 
 ### Contact, outgoing call and callback
 
-Use the researched general address **`sip:kitten-phone@bashkitten.invalid`** as a local
+Use the researched general address **`sip:taskarian-phone@taskarian.invalid`** as a local
 Android routing identity, not a public SIP server, cellular number or network
 telephony subscription. **Call agent** uses `TelecomManager.placeCall` with our
 explicit owned account. Incoming agent invitations use `addNewIncomingCall`
-under BashKitten's UID. Validate the owned account, scheme and registered address in
+under Taskarian's UID. Validate the owned account, scheme and registered address in
 incoming/outgoing callbacks; never route a failed call through a SIM or another
 provider. Return the actual failure when Telecom or the backend rejects it.
 
-**Add Kitten contact** opens the system editor with `ACTION_INSERT`,
-`RawContacts.CONTENT_TYPE`, `Insert.NAME = "Kitten"`, and `Insert.DATA` containing
+**Add Taskarian contact** opens the system editor with `ACTION_INSERT`,
+`RawContacts.CONTENT_TYPE`, `Insert.NAME = "Taskarian"`, and `Insert.DATA` containing
 a Phone `ContentValues` row:
 
 ```text
 MIMETYPE = Phone.CONTENT_ITEM_TYPE
-Phone.NUMBER = kitten-phone@bashkitten.invalid
+Phone.NUMBER = taskarian-phone@taskarian.invalid
 Phone.TYPE = Phone.TYPE_CUSTOM
-Phone.LABEL = BashKitten
+Phone.LABEL = Taskarian
 ```
 
 The Phone row intentionally has **no `sip:` prefix**; Android's tested Contacts
@@ -2469,7 +2469,7 @@ or unavailable editor is not a saved-contact success. A contact does not store
 our account handle: test account selection with multiple SIP providers and do
 not promise universal OEM Contacts behavior.
 
-The general Kitten contact reopens the service's backend menu; the optional
+The general Taskarian contact reopens the service's backend menu; the optional
 backend-specific contacts below go straight to their selected environment.
 Neither permanently hardcodes a chat. The spoken menu uses the existing
 project/title/session mapping to select a running or saved chat, or explicitly
@@ -2477,14 +2477,14 @@ start a new one, on an eligible
 local/registered remote backend. Reattach to existing Pi workers through their
 normal owner; do not duplicate running sessions. A stopped/unavailable backend
 must not be silently replaced by another backend or model. Android maintains
-its ordinary call record; BashKitten does not need to write the call log.
+its ordinary call record; Taskarian does not need to write the call log.
 
 ### Optional contacts for selected containers and remotes
 
-Extend **Add Kitten contact** with a choice of the general service or a specific
+Extend **Add Taskarian contact** with a choice of the general service or a specific
 phone-connected container environment/saved remote. Create contacts only for
 the backends the user chooses, through the same normal phone contact editor.
-Suggest a readable name such as **Kitten · Research VM** or **Kitten · Laptop**;
+Suggest a readable name such as **Taskarian · Research VM** or **Taskarian · Laptop**;
 the user can edit it. A container must have an authorized connection and phone
 registration of its own backend identity; a contact creates no remote access,
 new transport or permission to administer its host. Phone-side setup can select
@@ -2492,9 +2492,9 @@ these registered environments without adding another settings screen per one.
 Saving a contact does not start the environment or enable every chat's Phone hook.
 
 Give each selected backend a stable opaque local call alias, for example
-`sip:kitten-<opaque-id>@bashkitten.invalid`, mapped in the phone registration
+`sip:taskarian-<opaque-id>@taskarian.invalid`, mapped in the phone registration
 metadata to its existing environment/remote identity. Store the address without
-`sip:` in the contact's Phone row, as above. Keep **one** BashKitten PhoneAccount;
+`sip:` in the contact's Phone row, as above. Keep **one** Taskarian PhoneAccount;
 do not create an account or provider per contact. The alias is a routing key,
 not a credential, hostname, user-chosen display name or embedded session token.
 Renaming the container/remote preserves its alias. Deleting/revoking it invalidates
@@ -2533,7 +2533,7 @@ contacts read/write permission merely to synchronize it after a backend rename.
 The prior probe displayed its supplied caller label, so it does not establish
 saved-contact name/photo matching; test that separately from readable labels.
 The caller identity explains which environment needs attention, not its private
-task transcript. The existing general Kitten contact remains available.
+task transcript. The existing general Taskarian contact remains available.
 
 This per-backend alias/contact matching is new planned behavior, not part of
 the earlier single-address probe claim. Verify two independently named backends:
@@ -2685,7 +2685,7 @@ project when present, and chat title. Keep stable conversation identity from the
 backend/session IDs; equal or renamed titles must never retarget a reply. Final
 messages and questions use the same event owner and existing background gateway
 as calls. Remote replies remain text over the existing encrypted connection.
-This is BashKitten notification messaging, not insertion into the SMS database
+This is Taskarian notification messaging, not insertion into the SMS database
 or a new carrier/RCS provider.
 
 Follow Android's [notification messaging integration](https://developer.android.com/training/cars/communication/notification-messaging):
@@ -2703,7 +2703,7 @@ a running session or bypasses Stop. Mark-read is
 not an answer. Use MessagingStyle, not deprecated `UnreadConversation`.
 
 Users may listen/reply later through Android Auto's message notification/tiles
-and notification centre. BashKitten does not start TTS just because a message
+and notification centre. Taskarian does not start TTS just because a message
 arrived. Google's [documented reply flow](https://support.google.com/androidauto/answer/6348317?hl=en-gb)
 reads the dictated message back and offers send, cancel or editing. Use that
 host-owned flow where available. The app receives the final submitted text;
@@ -2890,7 +2890,7 @@ explain the changed meaning and require a fresh Send for that follow-up.
 Listening/transcribing/review never extends the 120-second
 question deadline. No ringing of expired questions after reconnect.
 
-Persist mailbox delivery items under BashKitten's existing private data root:
+Persist mailbox delivery items under Taskarian's existing private data root:
 backend/session, final-entry or question ID/revision, creation/delivery identity
 and played/replied/cleared state, plus the delivered message/question text needed
 to listen later. Store only those voicemail items, not full chat history or
@@ -2925,12 +2925,12 @@ decoder or shell-command construction. Question choices additionally bind to
 their question ID/revision; spoken custom replies use the same phone-side STT.
 
 The earlier research is saved in
-`/home/user/Bashkitten-Research/pi-calling-2026-10-09/CALLING_IMPLEMENTATION.txt`
+`/home/user/Taskarian-Research/pi-calling-2026-10-09/CALLING_IMPLEMENTATION.txt`
 and its contact, Termux and fork reports. Probes covered managed calls, contact/
 recents callback, process-death startup and keypad `1`, `2`, `*`, `#` on Android
 16/16 QPR2/17 test environments. Google Contacts 4.51.25.737635969 and
 4.74.28.876719826 were exercised. These are **probe results**, not integrated
-BashKitten, voice, physical-OEM or Android Auto acceptance. No new probes were
+Taskarian, voice, physical-OEM or Android Auto acceptance. No new probes were
 run while writing this addition.
 
 Implementation acceptance uses normal public-API setup on Android 16/17 and
@@ -2955,7 +2955,7 @@ keypad evidence does not establish voice support on every phone or car.
 ## 14. ChatGPT usage and reset status
 
 Add a narrow Pi extension that shows the selected ChatGPT subscription's actual
-remaining limits in both **Pi's terminal UI and BashKitten's web chat**, using
+remaining limits in both **Pi's terminal UI and Taskarian's web chat**, using
 the same publication pattern as Pillama. This is account subscription usage,
 separate from the chat's token/cost counters or API-key billing.
 
@@ -3033,7 +3033,7 @@ is not permission for telemetry, developer callbacks or new account controls.
 ## 15. Nonblocking agent questions
 
 Add one stock-deferred **`ask_user`** extension tool and concise normally
-discovered **`ask-user`** skill to BashKitten-owned Pi. It asks a short question,
+discovered **`ask-user`** skill to Taskarian-owned Pi. It asks a short question,
 optionally offers choices, and always allows a custom text reply. The guide
 teaches asking early, continuing independent work and applying a later answer.
 Keep schemas deferred through Pi's normal `tool_search`; no custom tool loader.
@@ -3156,7 +3156,7 @@ Recheck the latest official release when implementation begins, pin its exact
 commit/packages/lock integrity and update `agent/PI_UPSTREAM.md`. Check supported
 RPC, ModelRuntime, extension/deferred-tool and subagent APIs against that release
 before updating adapters. Preserve bundled Node and the entire private
-`$BASHKITTEN_DATA_DIR/pi` profile, including npm configuration and extension paths.
+`$TASKARIAN_DATA_DIR/pi` profile, including npm configuration and extension paths.
 
 Upstream announced [Pi Durable on 1 October](https://earendil.com/posts/pi-durable/),
 and its [v1.1.0 package documentation](https://github.com/earendil-works/pi/blob/v1.1.0/packages/durable/README.md)
@@ -3185,7 +3185,7 @@ or the execution environment changes, and report a changed limit honestly.
 
 Assign independent features to subagents when their boundaries permit useful
 parallel work. Suitable boundaries include Android Display/paired loader, Linux
-Display/gateway, container runtime/lifecycle, BashKitten OS/XFCE, native
+Display/gateway, container runtime/lifecycle, Taskarian OS/XFCE, native
 sidecar/projects/chats, Phone controls/CLI, telephony/messages/speech, Pi
 usage/questions, and source/package integration. Combine or split these as
 dependencies and workload require; this is not a fixed nine-agent assignment.
@@ -3202,10 +3202,10 @@ check and shared candidate, rather than declaring success when one subagent ends
 
 ### Existing build environment and unfinished work
 
-Reuse the environment from **Set up Bashkitten build environment**, local thread
+Reuse the environment from **Set up Taskarian build environment**, local thread
 `01a11b1e-1ac8-7d61-859a-eeab97f02315`. Read its relevant handoff, failures and
 unfinished checks at implementation start, together with the separate build
-workspace's `/run/media/user/Data/BashkittenBuild/README.md`,
+workspace's `/run/media/user/Data/TaskarianBuild/README.md`,
 `config/verification.json` and applicable `acceptance/` records. Reconcile those
 records against the current source, installed artifacts and this plan; historical
 success, a queued candidate or an old README summary is not current acceptance.
@@ -3240,7 +3240,7 @@ repositories, build inputs, artifacts, documentation and logs.
    modules and iterate independently buildable XFCE, Termux, native helpers and
    packages without waiting for unrelated features. Use early source/API checks
    and isolated native probes for uncertain interfaces. These checks do not
-   authorize other preliminary full BashKitten builds containing only Display,
+   authorize other preliminary full Taskarian builds containing only Display,
    Phone or another subset; the later 28 October browser-boundary exception is
    specifically authorized above. They also do not replace installed product acceptance.
    Downloadable AI runtimes still build only in the daughter GitHub Actions;
@@ -3284,8 +3284,8 @@ checklist, not a serial execution schedule or permission to defer features.
 | --- | --- | --- |
 | 1. Sources and runtime contracts | Track all built/bundled component source, official release commits, donor subsets, licenses and private Podman/helper matrix; update Pi through supported APIs. | Clean-checkout builds consume tracked source/locks; no floating refs, missing source/notices or unexpected system runtime selection; Pi API/packaging checks. |
 | 2. Native Display feasibility | Reusable module and own renderer child; Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real cross-process viewport attachment/input/resize and child-failure containment. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK; small documented Firefox integration patch set. |
-| 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest BashKitten and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. |
-| 4. BashKitten OS package | Shared `.deb`/native Termux packaging and initially pinned settings app, single-workplace default, Manage window size, bottom taskbar/right application tray, maximized search/pins/app-grid Start, no dock/default shortcuts, main-window maximize/two-app behavior, scaling and Gnozzard styling; Linux Thunar actions. | Matching responsive Linux/Termux layouts, On/Off behavior and parent-dialog exclusions, both tray protocols and guest BashKitten icon/activation, preserved user choices, real apps/input/scaling; donor launch rules, passwordless APT, menu/shortcut management and wallpaper. |
+| 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest Taskarian and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. |
+| 4. Taskarian OS package | Shared `.deb`/native Termux packaging and initially pinned settings app, single-workplace default, Manage window size, bottom taskbar/right application tray, maximized search/pins/app-grid Start, no dock/default shortcuts, main-window maximize/two-app behavior, scaling and Gnozzard styling; Linux Thunar actions. | Matching responsive Linux/Termux layouts, On/Off behavior and parent-dialog exclusions, both tray protocols and guest Taskarian icon/activation, preserved user choices, real apps/input/scaling; donor launch rules, passwordless APT, menu/shortcut management and wallpaper. |
 | 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects with folder-picker creation and new-chat cwd inheritance, standalone chats, rename/move, selected-chat web view. | New project chats use their project's directory; standalone behavior and existing histories/cwd remain unchanged; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
 | 7. Phone module and CLI | Main-APK MCP port, native master/feature policy, optional Accessibility, owned-Pi worker grants, Termux CLI and `phoneuse` skill. | Complete section 12's user-flow and denial checks; no camera/microphone commands, companion APK, exposed MCP catalog or reusable general-shell token. |
@@ -3295,9 +3295,9 @@ checklist, not a serial execution schedule or permission to defer features.
 
 ### Required testing through the installed apps
 
-**Full acceptance means using BashKitten itself on both Android and desktop.**
+**Full acceptance means using Taskarian itself on both Android and desktop.**
 Exercise the installed Android candidate through Cuttlefish's web UI opened in
-the **desktop BashKitten browser**. Exercise the installed Linux candidate's own
+the **desktop Taskarian browser**. Exercise the installed Linux candidate's own
 native controls, Agent, ordinary tabs and embedded Display on the Wayland host
 and in the real Xorg test VM below. Test every feature and its integrations from
 the user's entry points through the visible result, including setup, toggles,
@@ -3314,7 +3314,7 @@ remaining whole-scope coverage before declaring completion. Record the exact
 app/backend revisions and the result or blocker for each case.
 
 Keep external probes/evidence outside product source/artifacts. Do not add
-BashKitten-owned scripted product tests. Use stock Android 17 native KVM
+Taskarian-owned scripted product tests. Use stock Android 17 native KVM
 Cuttlefish with the existing 16 GiB/128 GiB SSD configuration and fresh browser,
 backend and Pi profiles for architecture acceptance. Android 16, physical-device
 GPU/OEM and Android Auto coverage remain separately identified requirements;
@@ -3327,11 +3327,11 @@ As part of implementation verification, install **virt-manager/libvirt/QEMU-KVM*
 and create a dedicated Debian or Ubuntu Linux test VM with an actual **Xorg/X11
 desktop session**. A Debian XFCE installation is a suitable planned target;
 select an image/session that really provides Xorg. Install the candidate native
-Linux BashKitten package inside that VM and run its local Podman container and
+Linux Taskarian package inside that VM and run its local Podman container and
 embedded XFCE Display there. From the product's perspective this Linux VM is
 the host system; its Podman environments are ordinary Linux containers and do
 not require nested KVM. This test VM is external development infrastructure,
-not another backend offered by BashKitten or a product dependency on virt-manager.
+not another backend offered by Taskarian or a product dependency on virt-manager.
 
 Verify and record the actual login session type, Xorg server, browser window
 backend and renderer. A browser using Xwayland under a Wayland login does not
@@ -3346,12 +3346,12 @@ without confusing that development disk with the product machine data layout.
 
 | Manual case | Expected result |
 | --- | --- |
-| Android fresh install | Termux setup installs native dependencies/paired loader; Display opens inside BashKitten with no X11 companion APK and no shipped root/ADB requirement. |
+| Android fresh install | Termux setup installs native dependencies/paired loader; Display opens inside Taskarian with no X11 companion APK and no shipped root/ADB requirement. |
 | Android input/viewport | Real GUI app accepts hardware modifiers, Unicode/composing IME, touch/mouse/scroll; keyboard shrink/restore and portrait/landscape maintain correct pointer coordinates. |
 | Android lifetime | Tab close/reopen, browser background/recreation and rotation preserve the desktop; Stop/Local heading Off stop only their owned processes; display crash leaves chats usable and independent remotes stay connected. |
 | Linux preparation/config | Visible real package output while the browser stays usable; edited launch flags take effect; invalid config shows the real error without another runtime. |
 | Linux persistence/startup | Guest-installed packages, files and Pi work survive viewer/browser-window close and later attachment; per-container startup on/off behaves independently. |
-| Machine storage/name/delete | Default and configured BashKitten data roots contain the rootfs/configuration/state; chosen names resolve to the correct stable directory; rename preserves work; deletion removes only the selected machine and its owned data, preserving other machines/shared caches/host-mounted folders. |
+| Machine storage/name/delete | Default and configured Taskarian data roots contain the rootfs/configuration/state; chosen names resolve to the correct stable directory; rename preserves work; deletion removes only the selected machine and its owned data, preserving other machines/shared caches/host-mounted folders. |
 | Host rendering | Same guest works in X11-host and Wayland-host sessions; deliberately unavailable acceleration selects the actual software path without modifying saved GPU choice. |
 | Native X11 host VM | Installed candidate runs its local container Display inside a virt-manager-managed Debian/Ubuntu VM logged into real Xorg; session/backend/renderer and the native product flows above are recorded. Xwayland-on-Wayland alone is insufficient. |
 | UI responsiveness, including Display | During provisioning/deletion, expensive GPU/software frames, resize/rotation and stalled display/backend I/O, chat/sidebar/navigation/tab close remain usable; no synchronous frame/fence/process wait blocks the UI. Detached views release work asynchronously without stopping their guest. |
@@ -3360,14 +3360,14 @@ without confusing that development disk with the product machine data layout.
 | GPU limits | Actual supported devices and optional NVIDIA path verified; no physical-GPU claim from Cuttlefish, no guaranteed CUDA/game support from software rendering. |
 | Sudo | Noninteractive `sudo -n` package work, interactive PTY programs and `sudoedit` work; redirected input/output, interrupt, Ctrl-Z/`fg`, terminal resize and terminal restoration remain correct; no host privilege gained. |
 | XFCE layout | Fresh Termux and Linux desktops have one workplace and one bottom taskbar with Applications/kitten icon, normal running-window buttons and right-aligned application tray. No XFCE menu icon, clock/date, preseeded network/audio/power widgets, workspace switcher, Show Desktop, dock, pinned taskbar launcher or default desktop shortcut. Switching, resize, keyboard, rotation and scaling preserve the bottom workarea. Relaunch does not reset user edits. |
-| Application tray | Real StatusNotifier/AppIndicator and legacy XEmbed applications appear with working activation/menus; newly installed apps require no allowlist. Automatic guest BashKitten startup supplies exactly one real guest indicator, accurate status and the existing protected host activation path. Panel restart, browser closure, explicit Quit, icon hide/reorder and resizing behave correctly; no shared host bus, duplicate runtime, second protected Agent in the guest, injected system applets or UI stalls. |
-| BashKitten OS settings | Correct native package installs the application/icon and seeds its Start pin once. Manage window size defaults On; Off relinquishes layout and disables Two app mode while retaining its saved preference. Scaling/appearance/tray remain independent. Changes are responsive and persist across restart/upgrade; pin/unpin choices survive. Host/container-sharing controls are not duplicated here. |
-| Application Dark/Light preference | Change Dark/Light on Linux and Termux; the owning session's portal reads 1/2 and emits the change, and representative apps that follow system appearance observe it. Save/restart/upgrade retains the choice. BashKitten's dark/orange surfaces, Thunar customization and user wallpaper stay unchanged, as do other environments and host settings. No UI stalls, forced app restart or hidden polling. |
+| Application tray | Real StatusNotifier/AppIndicator and legacy XEmbed applications appear with working activation/menus; newly installed apps require no allowlist. Automatic guest Taskarian startup supplies exactly one real guest indicator, accurate status and the existing protected host activation path. Panel restart, browser closure, explicit Quit, icon hide/reorder and resizing behave correctly; no shared host bus, duplicate runtime, second protected Agent in the guest, injected system applets or UI stalls. |
+| Taskarian OS settings | Correct native package installs the application/icon and seeds its Start pin once. Manage window size defaults On; Off relinquishes layout and disables Two app mode while retaining its saved preference. Scaling/appearance/tray remain independent. Changes are responsive and persist across restart/upgrade; pin/unpin choices survive. Host/container-sharing controls are not duplicated here. |
+| Application Dark/Light preference | Change Dark/Light on Linux and Termux; the owning session's portal reads 1/2 and emits the change, and representative apps that follow system appearance observe it. Save/restart/upgrade retains the choice. Taskarian's dark/orange surfaces, Thunar customization and user wallpaper stay unchanged, as do other environments and host settings. No UI stalls, forced app restart or hidden polling. |
 | Maximized launcher | Start opens search at top, ordered pins, one divider and an alphabetical left-to-right wrapping icon/title grid of remaining apps. Phone/tablet/desktop widths and keyboard/rotation reflow without overflow; large app/pin sets scroll. Launch/search/pin/unpin/context actions/close stay responsive; pins survive rename/reopen/restart/update, appear once and disappear on explicit managed-entry deletion. No hidden grid polling, second Start menu, Garcon fork or split-layout disruption. |
 | XFCE behavior | Normal main windows maximize within the workarea; in-app modals, separate/late parent dialogs, file pickers, utilities, menus and fullscreen keep native behavior and do not dissolve a pair. Independent same-app windows remain main windows. Check pairing/drag, third main-window activation, member close, minimum sizes and viewport changes. Toggle management Off during queued resize/drag: divider disappears, pending enforcement stops, user moves/resizes normally, and no stale callback reapplies layout. On resumes without restarting apps or resurrecting a stale pair; no automatic extra workplace allocation. |
 | Linux application actions | Use real Thunar secondary-click actions on matching-architecture AppImages, `.desktop` launchers and `.deb` packages. Verify direct FUSE launch, explicit persistent extraction/reuse, explicit no-sandbox marker, icon/menu registration and rename/removal, requested desktop shortcuts and package dependencies through passwordless guest sudo. Menu/file names with spaces and percent signs work; source apps survive registration deletion. Check actual failure/cancel reporting, UI responsiveness, preservation of unrelated Thunar actions and no host/Termux installation. Record amd64/arm64 coverage separately. |
 | Scaling | Saved profiles update owned XFCE settings and new app launches; launcher reflows and the exact Gnozzard palette remains consistent; restart-needed apps are reported truthfully; no startup script resets user edits. |
-| Appearance/wallpaper persistence | Panel/menu/Thunar/default background use the recorded Gnozzard dark/orange colors on both platforms. The default wallpaper centers the existing BashKitten logo proportionally over #202225, shrinking when needed and never exceeding its 1254 × 1254 native pixels, including on high-DPI/large screens. Set a user wallpaper and placement through XFCE, then reopen Start/Display, rotate/resize, change scale, restart the desktop and upgrade the package; the saved image/placement and user appearance changes remain. No copied lock-screen override. |
+| Appearance/wallpaper persistence | Panel/menu/Thunar/default background use the recorded Gnozzard dark/orange colors on both platforms. The default wallpaper centers the existing Taskarian logo proportionally over #202225, shrinking when needed and never exceeding its 1254 × 1254 native pixels, including on high-DPI/large screens. Set a user wallpaper and placement through XFCE, then reopen Start/Display, rotate/resize, change scale, restart the desktop and upgrade the package; the saved image/placement and user appearance changes remain. No copied lock-screen override. |
 | Sidecar/backend controls | One + routes to remote setup or Linux container creation; every container heading opens its own full Display tab and Settings; individual toggles affect only their backend; remotes have no Display/settings; no large selector or artificial machine-count cap. |
 | Projects/sessions | Create chats with no project on every backend; create/rename projects, rename chats, move chats into/between/out of projects, retain subagents and reconnect; same native Pi history/cwd and correct effective model/reasoning/draft/queue ownership. |
 | Project working directory | Create a project through the modal on each backend, then create multiple chats beneath it without another folder prompt and verify their actual Pi cwd. Cancel leaves no project; missing/inaccessible directories report an error. Standalone new chats retain current behavior; reopening or regrouping existing chats preserves their recorded cwd. |
@@ -3401,7 +3401,7 @@ backend ownership, nonblocking behavior or acceptance requirements.
   the connection-add plus. Keep the browser's three-line menu at the far right.
 - Move Local AI, Notifications, Phone/Computer Use, Remote Connections,
   Telephone and Performance into the actual native Firefox menu on mobile
-  and desktop, with an icon and these titles under a **BashKitten controls**
+  and desktop, with an icon and these titles under a **Taskarian controls**
   divider. On mobile put this section above Settings in the existing menu
   containing History and Bookmarks. Remove their extra top-bar shortcuts;
   do not introduce a second replacement menu. Use each existing feature's
@@ -3416,10 +3416,10 @@ backend ownership, nonblocking behavior or acceptance requirements.
 The original protected baseline remains unchanged. These are implementation
 requirements from the user, not a claim that the revised installed UI passes.
 
-### Later 11 October correction: separate BashKitten settings and hierarchy
+### Later 11 October correction: separate Taskarian settings and hierarchy
 
 The user's subsequent decision replaces the native Firefox menu insertion
-described above. Use three clear controls: the BashKitten logo, a BashKitten
+described above. Use three clear controls: the Taskarian logo, a Taskarian
 settings gear, and the existing native Firefox three-line menu. Keep Firefox's
 menu for browser functions. The separate gear menu uses the same native menu
 presentation and contains Local AI, Notifications, Phone/Computer Use, Remote
@@ -3428,8 +3428,8 @@ settings. Remove duplicate entries for Providers/general settings elsewhere.
 Render setting details in Gecko web views, reusing the existing native owners
 and protected local control paths; never grant local management authority to
 remote-served chat documents or add public management HTTP routes. Desktop's
-Agent title/tab becomes BashKitten with its settings gear beside it; remove the
-duplicate Agent/LocalAI/menu header inside the BashKitten pane.
+Agent title/tab becomes Taskarian with its settings gear beside it; remove the
+duplicate Agent/LocalAI/menu header inside the Taskarian pane.
 
 The logo toggles the sidebar. On wide layouts the sidebar stays beside the
 selected chat; on narrow layouts selecting a chat shows that chat and closes
@@ -3455,11 +3455,11 @@ whole-plan acceptance requirements remain unchanged.
 
 ### Final 11 October toolbar correction: logo only
 
-The user explicitly removed the written-out BashKitten title/button after
+The user explicitly removed the written-out Taskarian title/button after
 inspecting the desktop toolbar. Use the logo as the sidebar/chat entry, followed
 by the separate configuration gear, with the original Firefox three-line menu
 at the far right. Label the gear **Configuration** for its tooltip and accessible
-name. Do not retain a second BashKitten text pill or Agent entry beside the logo.
+name. Do not retain a second Taskarian text pill or Agent entry beside the logo.
 This supersedes the preceding desktop title/tab wording only; the gear's
 destinations, flat repeated sidebar and native browser menu remain as specified.
 
@@ -3468,7 +3468,7 @@ destinations, flat repeated sidebar and native browser menu remain as specified.
 The user explicitly retains Termux **Display setup** under the Android
 Configuration gear. This opens the same setup used by the viewport: editable launch
 command, saved-command controls and the existing agent-help skill/prompt. The
-UI and Local Pi edit the same durable `display/launch.sh` beneath BashKitten's
+UI and Local Pi edit the same durable `display/launch.sh` beneath Taskarian's
 data directory; retain custom commands across upgrades and use them on the next
 start. Embedding Termux:X11 does not remove this setup or create a second command
 store. The user further clarified that this entry opens setup, while the
@@ -3494,7 +3494,7 @@ uses the tray; if no tray is available, keep the existing window minimized.
 Neither action is Quit.
 
 Explicit Quit, including Quit from the tray, force-quitting the native browser,
-or a browser crash must stop **all BashKitten-owned local processes**: Pi workers,
+or a browser crash must stop **all Taskarian-owned local processes**: Pi workers,
 LocalAI, publishing/authentication/Tor, client remote connections and Chisel,
 container desktops and their workloads, display/media helpers, and the container
 service itself. Apply this even when Local is Off. Preserve saved machines,
@@ -3517,7 +3517,7 @@ Source changes alone are not lifetime acceptance.
 
 ### Mobile toolbar and unified Autostart — 11 October 2026
 
-The user's latest placement correction keeps the clickable BashKitten logo on
+The user's latest placement correction keeps the clickable Taskarian logo on
 the left of the mobile toolbar and groups **Display, Configuration, native
 Firefox menu**, in that order, on the right. Display uses the matching native
 icon and opens the local Termux viewport in one click. Display setup remains in
@@ -3537,7 +3537,7 @@ truthful; a one-shot speech command is not an already-running server.
 
 Allow named custom startup commands with their launch arguments, working
 directory and environment, stored in editable configuration beneath the owning
-BashKitten data directory. Users and their local agent can add, edit or remove
+Taskarian data directory. Users and their local agent can add, edit or remove
 these entries. Support them separately in native desktop Local, Termux and each
 managed container; execute inside the selected environment, never accidentally
 on its host. Retain stable command identities, configured enabled state and real
@@ -3568,7 +3568,7 @@ The user further clarified that selecting a container chat makes its own
 configuration available from the host's controls. Its Pi provider logins,
 credentials, models, LocalAI services, startup commands and other backend
 settings remain owned by that container. The user must not need to open the
-guest BashKitten browser manually to manage them. Use the existing authenticated
+guest Taskarian browser manually to manage them. Use the existing authenticated
 private Unix-socket controller with explicit container identity, scoped native
 actions and a clearly named target in settings. Preserve each container's
 independent Pi profile and OAuth lifecycle; do not copy host credentials or
@@ -3589,7 +3589,7 @@ controls, then verify remote access separately over the intended encrypted route
 
 The user reiterated that an open desktop remains a browser tab. Keep the normal
 tab controls reachable while viewing it: switch or close tabs, open other tabs
-and return to BashKitten without closing the desktop session. Reuse Firefox's
+and return to Taskarian without closing the desktop session. Reuse Firefox's
 existing navigation controls rather than presenting a replacement full-screen
 application with no route back. Embedded Termux:X11 retains its native keyboard,
 pointer, rotation and keyboard-inset behavior inside the remaining viewport.
@@ -3615,8 +3615,8 @@ Configuration pages and all setup dialogs must match the existing sidebar,
 chat and Firefox interface in both light and dark mode: the same theme,
 typography, colors, spacing and rounded controls, without separate accent
 palettes. Restore the sidecar's top-left rounding below the tab/title bar while
-keeping its integrated layout. This concerns the BashKitten browser interface;
-the explicitly requested BashKitten OS desktop palette remains as specified
+keeping its integrated layout. This concerns the Taskarian browser interface;
+the explicitly requested Taskarian OS desktop palette remains as specified
 above. Verify the installed surfaces in both themes, including mobile sizing.
 
 An open Display tab uses only the normal browser toolbar: remove the redundant
@@ -3642,7 +3642,7 @@ not licensing obligations or provider functions.
 ### Display-only toolbar and viewport toggle — 11 October 2026
 
 The user removed the address bar from local container and Termux Display tabs.
-Keep the BashKitten logo, a matching Display icon, Configuration and the native
+Keep the Taskarian logo, a matching Display icon, Configuration and the native
 Firefox menu, together with ordinary tab switching and closing. Do not add a
 second Display toolbar or hide navigation needed to reach chats or other tabs.
 Ordinary browser tabs retain their address bar and normal browser controls.
@@ -3665,7 +3665,7 @@ title with “Updates”. Combine the Android application update check/download 
 Termux package update controls there; reuse the existing progress and package
 operations instead of introducing a second updater. The user installs the new
 APK through Android's normal installer. On launch after an APK update,
-automatically reconcile BashKitten's Termux packages to the versions matching
+automatically reconcile Taskarian's Termux packages to the versions matching
 that installed application, showing update progress when needed. Include checks
 and updates for the general Termux APT packages in the same destination.
 
@@ -3680,8 +3680,8 @@ and license delivery in the existing browser About/settings.
 
 ### Readable local calling address — 11 October 2026
 
-Use **`bashkitten.local`**, rather than `bashkitten.invalid`, in newly created
-Kitten calling/contact addresses. The user requested this because “invalid”
+Use **`taskarian.local`**, rather than `taskarian.invalid`, in newly created
+Taskarian calling/contact addresses. The user requested this because “invalid”
 looks like a broken address. Keep the existing managed Telecom account and
 opaque backend aliases; this changes their native identifier's presentation,
 not the transport or backend authorization. The user explicitly rejected
@@ -3732,14 +3732,14 @@ Resume the whole agreed implementation and all subsequent user corrections after
 host maintenance. Preserve interrupted work and continue integrated builds and
 installed testing. The user's separate virt-manager `debian-llama-private` VM
 and its services are unrelated and must not be used, altered or stopped. Restart
-only the existing BashKitten Cuttlefish and Xorg acceptance environments.
+only the existing Taskarian Cuttlefish and Xorg acceptance environments.
 
 The embedded Android X11 implementation must coexist with the standalone
 Termux:X11 application, including simultaneous use. Keep their owned X displays,
 sockets, discovery, process groups and runtime/session state separate. Starting,
-stopping or attaching BashKitten Display must never capture or terminate the
+stopping or attaching Taskarian Display must never capture or terminate the
 standalone Termux:X11 session. Use the existing paired embedded implementation;
-a separate X11 APK is still not required by BashKitten.
+a separate X11 APK is still not required by Taskarian.
 
 In Termux and container Display tabs, use the address-bar space for matching
 compact controls: Display service On/Off, a shortcut to that backend's Display
@@ -3758,7 +3758,7 @@ existing fonts, colors, icons and rounded controls in both themes, including
 narrow mobile layouts; keep all lifecycle and rendering work nonblocking.
 
 Add a concise, visually matching notice at Tor selection and in Tor browsing
-surfaces explaining that BashKitten's Tor integration is intended for `.onion`
+surfaces explaining that Taskarian's Tor integration is intended for `.onion`
 access and does not provide Tor Browser's full privacy protections. Recommend a
 dedicated Tor browser for privacy-sensitive general browsing. This is information,
 not permission to weaken Tor routing, bypass authentication or modify website
@@ -3855,7 +3855,7 @@ do not remove application styling or change the taskbar's functions.
 ### Android stable and nightly updates — 17 October 2026
 
 Resume interrupted implementation and installed acceptance after the host reboot,
-restoring the existing BashKitten test environments without touching the user's
+restoring the existing Taskarian test environments without touching the user's
 separate private VM. Build and publish a complete GitHub Actions prerelease so
 the user can test the normal mobile release and update workflow alongside local
 acceptance. Preserve the required testing-release notice and matching sources.
@@ -3868,7 +3868,7 @@ package selection, including its actual shared signing-key arrangement rather
 than inventing a second trust key or an alternate updater.
 
 The selected channel must never produce a browser/backend mixture: the installed
-APK's immutable package requirements remain authoritative for its BashKitten
+APK's immutable package requirements remain authoritative for its Taskarian
 backend and OS packages. Switching channels must not replace those packages with
 an unrelated candidate before the corresponding APK is installed. Retain the
 ability to repair the currently installed pair, and report pending updates and
@@ -3903,7 +3903,7 @@ Identify downloaded runtimes and models by their original upstream names,
 versions/revisions and sources, and distinguish those sources from the actual
 download/build repository and artifact. Show the original upstream license first;
 retain all dependency, Android NDK, model-weight, conversion and packaging notices
-with their own attribution. BashKitten's build repository is not the original
+with their own attribution. Taskarian's build repository is not the original
 llama.cpp or Whisper source, and its license must not label those engines or
 their dependencies. Preserve historical notices rather than relabeling old files.
 
@@ -3952,14 +3952,14 @@ Display owner; do not add public management routes or synthetic trusted events.
 Place any necessary rendering/clipboard status within the existing controls or
 status presentation, without reserving another full-width inner bar.
 
-The default BashKitten OS wallpaper must use one solid **#202225** desktop
+The default Taskarian OS wallpaper must use one solid **#202225** desktop
 background filling the entire viewport and a proportionally centered transparent
-BashKitten logo. The logo shrinks when needed and never exceeds its original
+Taskarian logo. The logo shrinks when needed and never exceeds its original
 1254 × 1254 size. Window/sidebar resizing, rotation and keyboard insets must not
 leave an old-size gray image rectangle over a different black background. Prefer
 XFCE's native background fill and centered-image behavior, with asynchronous
 image fitting only where required. Apply corrections only while the environment
-still uses its BashKitten-owned default; preserve user-selected wallpapers and
+still uses its Taskarian-owned default; preserve user-selected wallpapers and
 appearance choices. Verify both Termux and Linux container desktops across
 larger, smaller, portrait and landscape viewports. These are user-authorized
 presentation corrections, not installed acceptance claims.
@@ -3988,7 +3988,7 @@ Desktop WebAuthn remains unchanged.
 
 Remove the website push SDK/service/build integration, not merely its preference
 or UI. Do not leave inert Firebase placeholders or ship replacement proprietary
-clients. Preserve BashKitten's native final/question notifications, reply actions,
+clients. Preserve Taskarian's native final/question notifications, reply actions,
 Callback and phone services; these are separate from website WebPush. Open-source
 Android platform/AndroidX dependencies are not prohibited merely because Google
 maintains them; they retain the same verified source and license requirements.
@@ -4016,7 +4016,7 @@ For a Firefox update, compare the corresponding released Tor Browser/Firefox
 lineage and security fixes against the proposed Android base. Carry applicable
 security backports that are not already present, with exact source provenance,
 and verify their applicability rather than assuming equal version labels mean
-equal patches. Preserve BashKitten's existing security and encrypted remote
+equal patches. Preserve Taskarian's existing security and encrypted remote
 boundaries; this does not authorize unrelated Tor Browser feature replacement.
 
 Integrate compatible source/dependency updates with the Android SDK removal in
@@ -4032,7 +4032,7 @@ official unmodified Pi 1.3.0 release at
 `71023aec1546d6d677a65669c5665c0927ce0dd0`, with its exact package resolution,
 retained sources and notices. This updates the earlier runtime selection, not
 the frozen original plan or Pi's ownership of sessions, providers and compaction.
-Keep BashKitten's private profile independent of standalone Pi.
+Keep Taskarian's private profile independent of standalone Pi.
 
 The user-authorized full-file-reading handoff adds the tested extension to the
 existing bundled Pi package. Name its tool exactly `full-read` and retain
@@ -4048,14 +4048,14 @@ before compaction. Keep descriptions short and concrete.
 to call `compact_context` with a handoff, then retry once; a file that still does
 not fit must be read in chunks. Pi and the extension own asynchronous compaction
 and automatic continuation, including Stop, model/session changes, queued input
-and compaction errors. BashKitten continues as the UI/RPC client; add no second
+and compaction errors. Taskarian continues as the UI/RPC client; add no second
 compaction implementation, provider/model logic, UI control or fallback.
 
 Verify the final tool name and behavior through the existing extension loading
 and package paths, keeping synthetic files and live test logs outside shipped
 assets. RPC verification must observe compaction and its resumed run after the
 initial settled event. Prototype SDK/RPC and live-model evidence do not replace
-installed BashKitten acceptance of the integrated extension.
+installed Taskarian acceptance of the integrated extension.
 
 ### Flowing chat header and readable Termux paths — 19 October 2026
 
@@ -4094,7 +4094,7 @@ original implementation source that NVIDIA does not provide. Do not describe
 NVIDIA code as MIT or compiled bitcode as original implementation source.
 Matching source and notices remain required for source-available engines and
 dependencies. This clarification does not authorize proprietary SDKs inside
-the browser APK/DEB or change BashKitten's AGPL and Mozilla's MPL file licenses.
+the browser APK/DEB or change Taskarian's AGPL and Mozilla's MPL file licenses.
 Downloads retain the existing central About/license presentation and separate
 runtime process boundary; this adds no new settings or UI.
 
@@ -4103,7 +4103,7 @@ runtime process boundary; this adds no new settings or UI.
 The user reports failures from manual Android testing and requests these fixes
 together with complete GitHub Actions candidates. Restore ordinary browsing:
 app-owned request cancellation must not change the shared Gecko fetch lifetime.
-Keep agent/service logic in the existing BashKitten backend/modules, with only
+Keep agent/service logic in the existing Taskarian backend/modules, with only
 the necessary browser control, protected-view and display integration hooks.
 
 Files provides Download and Reference in chat, plus View for supported files.
@@ -4119,7 +4119,7 @@ must not be reported as successfully downloaded.
 
 Android's Agent header needs an explicit Hide Agent control that also works
 while Display is selected on tablets/foldables. Do not force the sidecar open
-on wide screens. Avoid duplicate BashKitten logo controls in the combined
+on wide screens. Avoid duplicate Taskarian logo controls in the combined
 Agent/Display layout. Expose the native numbered tab-switcher control while
 Agent occupies a normal phone screen. Hide the wide-screen top tab strip only
 when the selected tab is internal Display; other tabs retain the user's normal
@@ -4138,11 +4138,11 @@ viewport, rather than oversized separate modals.
 The user's explicit scaling correction applies **225% to the Termux desktop**
 on first setup, not Linux/container desktops or browser zoom. Preserve every
 existing user choice on updates; Linux/container defaults remain unchanged.
-The installed Android APK determines the exact matching versions of BashKitten's
+The installed Android APK determines the exact matching versions of Taskarian's
 Termux buildable packages, including when an older APK requires a downgrade.
 Use the existing signed package channel and matching published artifacts;
 preserve user configurations and intentional custom runtime choices. Do not
-downgrade unrelated Termux packages merely to align the BashKitten payload.
+downgrade unrelated Termux packages merely to align the Taskarian payload.
 
 The user's later clarification establishes 153.5.2 as the supported rollback
 baseline. From this release onward, verify upgrading to a newer testing APK and

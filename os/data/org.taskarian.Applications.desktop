@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Applications
+Exec=taskarian-os launcher
+Icon=taskarian-os
+NoDisplay=true
+Terminal=false

@@ -1,0 +1,3 @@
+-keep class com.termux.x11.** { *; }
+-keep class com.taskarian.display.** { *; }
+-keep class com.taskarian.DisplayPublisher { public static *; }

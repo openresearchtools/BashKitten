@@ -1,10 +1,10 @@
-name: BashKitten Android browser
-run-name: BashKitten ${{ inputs.source_sha }} / ${{ inputs.request_id }}
+name: Taskarian Android browser
+run-name: Taskarian ${{ inputs.source_sha }} / ${{ inputs.request_id }}
 'on':
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Exact BashKitten source commit
+        description: Exact Taskarian source commit
         required: true
         type: string
       request_id:
@@ -37,9 +37,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     env:
-      MOZCONFIG: ${{ github.workspace }}/browser/bashkitten/android/mozconfig
+      MOZCONFIG: ${{ github.workspace }}/browser/taskarian/android/mozconfig
       MOZBUILD_STATE_PATH: ${{ github.workspace }}-mozbuild
-      BASHKITTEN_ANDROID_OBJDIR: ${{ github.workspace }}-obj-android
+      TASKARIAN_ANDROID_OBJDIR: ${{ github.workspace }}-obj-android
       ANDROID_NDK_HOME: ${{ github.workspace }}-mozbuild/android-ndk-r29
       PYTHONUNBUFFERED: '1'
       DISABLE_TELEMETRY: '1'
@@ -51,29 +51,29 @@ jobs:
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       # mach replaces GRADLE_OPTS; GRADLE_FLAGS is its supported argument path.
       GRADLE_FLAGS: --no-daemon --max-workers=2 --build-cache
-      MOZ_SOURCE_REPO: https://github.com/openresearchtools/bashkitten
+      MOZ_SOURCE_REPO: https://github.com/openresearchtools/Taskarian
       MOZ_SOURCE_CHANGESET: ${{ inputs.source_sha }}
       SCCACHE_IDLE_TIMEOUT: '0'
       SCCACHE_BASEDIRS: ${{ github.workspace }}:${{ github.workspace }}-obj-android
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
-        repository: openresearchtools/bashkitten
+        repository: openresearchtools/Taskarian
         ref: ${{ inputs.source_sha }}
         persist-credentials: false
     - name: Select the Android architecture
       run: |
         case "$GITHUB_REPOSITORY" in
-          openresearchtools/bashkitten-build-android)
+          openresearchtools/taskarian-build-android)
             echo 'BROWSER_TARGET=android' >> "$GITHUB_ENV"
-            echo 'BASHKITTEN_ANDROID_ABI=arm64-v8a' >> "$GITHUB_ENV"
-            echo 'BASHKITTEN_ANDROID_TARGET=aarch64-linux-android' >> "$GITHUB_ENV"
+            echo 'TASKARIAN_ANDROID_ABI=arm64-v8a' >> "$GITHUB_ENV"
+            echo 'TASKARIAN_ANDROID_TARGET=aarch64-linux-android' >> "$GITHUB_ENV"
             echo 'TERMUX_ARCH=aarch64' >> "$GITHUB_ENV"
             ;;
-          openresearchtools/bashkitten-build-android-x86_64)
+          openresearchtools/taskarian-build-android-x86_64)
             echo 'BROWSER_TARGET=android-x86_64' >> "$GITHUB_ENV"
-            echo 'BASHKITTEN_ANDROID_ABI=x86_64' >> "$GITHUB_ENV"
-            echo 'BASHKITTEN_ANDROID_TARGET=x86_64-linux-android' >> "$GITHUB_ENV"
+            echo 'TASKARIAN_ANDROID_ABI=x86_64' >> "$GITHUB_ENV"
+            echo 'TASKARIAN_ANDROID_TARGET=x86_64-linux-android' >> "$GITHUB_ENV"
             echo 'TERMUX_ARCH=x86_64' >> "$GITHUB_ENV"
             ;;
           *) echo 'Unknown Android builder repository' >&2; exit 1 ;;
@@ -91,7 +91,7 @@ jobs:
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Prepare hosted runner
       run: |
-        printf '%s\n' "BASHKITTEN_PUBLISHER_KEYSTORE=$RUNNER_TEMP/droid.p12" "BASHKITTEN_COMPANION_LICENSES=$RUNNER_TEMP/companion-licenses.json" >> "$GITHUB_ENV"
+        printf '%s\n' "TASKARIAN_PUBLISHER_KEYSTORE=$RUNNER_TEMP/droid.p12" "TASKARIAN_COMPANION_LICENSES=$RUNNER_TEMP/companion-licenses.json" >> "$GITHUB_ENV"
         mkdir -p artifacts "$MOZBUILD_STATE_PATH"
         cat > "$MOZBUILD_STATE_PATH/machrc" <<'MACHRC'
         [mach_telemetry]
@@ -102,10 +102,10 @@ jobs:
         sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
         sudo apt-get update
         sudo apt-get install -y build-essential autoconf automake libtool pkg-config python3-dev python3-venv libasound2-dev libcurl4-openssl-dev libdbus-1-dev libdbus-glib-1-dev libdrm-dev libgtk-3-dev libpulse-dev libx11-xcb-dev libxt-dev m4 nasm unzip zip zstd imagemagick
-        sudo fallocate -l 8G /mnt/bashkitten.swap
-        sudo chmod 600 /mnt/bashkitten.swap
-        sudo mkswap /mnt/bashkitten.swap
-        sudo swapon /mnt/bashkitten.swap
+        sudo fallocate -l 8G /mnt/taskarian.swap
+        sudo chmod 600 /mnt/taskarian.swap
+        sudo mkswap /mnt/taskarian.swap
+        sudo swapon /mnt/taskarian.swap
       if: (success()) && steps.component.outputs.hit != 'true'
     - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       id: toolchain-cache
@@ -113,14 +113,14 @@ jobs:
         path: |
           ~/.gradle/caches/modules-2
           ~/.gradle/wrapper
-        key: bashkitten-android-gradle-downloads-v1-${{ runner.os }}-${{ hashFiles('browser/gradle/libs.versions.toml', 'browser/mobile/android/android-components/.config.yml', 'browser/mobile/android/*/build.gradle',
+        key: taskarian-android-gradle-downloads-v1-${{ runner.os }}-${{ hashFiles('browser/gradle/libs.versions.toml', 'browser/mobile/android/android-components/.config.yml', 'browser/mobile/android/*/build.gradle',
           'browser/mobile/android/fenix/app/build.gradle', 'browser/python/mozboot/mozboot/android.py', 'browser/python/mozboot/mozboot/mozconfig.py') }}
-        restore-keys: bashkitten-android-gradle-downloads-v1-${{ runner.os }}-
+        restore-keys: taskarian-android-gradle-downloads-v1-${{ runner.os }}-
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Stage the existing Droid signing identity
       env:
         ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      run: python3 browser/bashkitten/android/scripts/prepare-signing.py
+      run: python3 browser/taskarian/android/scripts/prepare-signing.py
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Restore Gradle task outputs
       env:
@@ -147,9 +147,9 @@ jobs:
       run: |
         version=$(python3 -c 'import json; print(json.load(open("agent/machines/rust-toolchain/sources.json"))["version"])')
         test "$RUSTUP_TOOLCHAIN" = "$version"
-        rustup toolchain install "$version" --profile minimal --component rust-docs --target "$BASHKITTEN_ANDROID_TARGET"
+        rustup toolchain install "$version" --profile minimal --component rust-docs --target "$TASKARIAN_ANDROID_TARGET"
         rustup target add --toolchain "$version" wasm32-unknown-unknown
-        printf '%s\n' "BASHKITTEN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "BASHKITTEN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
+        printf '%s\n' "TASKARIAN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "TASKARIAN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Bootstrap the pinned Mozilla Android toolchain
       working-directory: browser
@@ -158,7 +158,7 @@ jobs:
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Generate the product artwork
       working-directory: browser
-      run: python3 bashkitten/scripts/render-branding.py
+      run: python3 taskarian/scripts/render-branding.py
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Select the retained Go compiler
       id: go-compiler
@@ -179,19 +179,19 @@ jobs:
         export ANDROID_HOME="$MOZBUILD_STATE_PATH/android-sdk-linux"
         "$ANDROID_HOME/cmdline-tools/20.0/bin/sdkmanager" 'platforms;android-31' 'cmake;3.22.1'
         bash auth/build/remote-android.sh "$RUNNER_TEMP/remote-android"
-        echo "BASHKITTEN_REMOTE_CLIENT_DIR=$RUNNER_TEMP/remote-android" >> "$GITHUB_ENV"
+        echo "TASKARIAN_REMOTE_CLIENT_DIR=$RUNNER_TEMP/remote-android" >> "$GITHUB_ENV"
       if: (success()) && steps.component.outputs.hit != 'true'
     - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       id: tor-native-cache
       with:
         path: ${{ runner.temp }}/tor-android
-        key: bashkitten-android-tor-${{ env.BASHKITTEN_ANDROID_ABI }}-${{ hashFiles('browser/bashkitten/android/tor/**', 'browser/bashkitten/android/scripts/tor.py', 'browser/bashkitten/android/notices/**', 'browser/bashkitten/third_party/tor.toml', 'agent/vendor/native/android-sources.json', 'agent/packaging/node/lock.json') }}
+        key: taskarian-android-tor-${{ env.TASKARIAN_ANDROID_ABI }}-${{ hashFiles('browser/taskarian/android/tor/**', 'browser/taskarian/android/scripts/tor.py', 'browser/taskarian/android/notices/**', 'browser/taskarian/third_party/tor.toml', 'agent/vendor/native/android-sources.json', 'agent/packaging/node/lock.json') }}
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Build and verify the pinned Android Tor JNI library
       run: |
-        python3 -B browser/bashkitten/android/tor/build.py --abi "$BASHKITTEN_ANDROID_ABI" \
+        python3 -B browser/taskarian/android/tor/build.py --abi "$TASKARIAN_ANDROID_ABI" \
           --jdk "$JAVA_HOME" --work "$RUNNER_TEMP/tor-build" --output "$RUNNER_TEMP/tor-android" --jobs 2
-        echo "BASHKITTEN_TOR_ANDROID_DIR=$RUNNER_TEMP/tor-android" >> "$GITHUB_ENV"
+        echo "TASKARIAN_TOR_ANDROID_DIR=$RUNNER_TEMP/tor-android" >> "$GITHUB_ENV"
       if: (success()) && steps.component.outputs.hit != 'true'
     - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
@@ -227,15 +227,15 @@ jobs:
         for item in "auth:$AUTH_RUN:auth-termux-$TERMUX_ARCH" "search:$SEARCH_RUN:search-runtime-termux-$TERMUX_ARCH" "node:$NODE_RUN:node-runtime-termux-$TERMUX_ARCH" "display:$ENVIRONMENTS_RUN:display-loader-termux" "os:$ENVIRONMENTS_RUN:os-termux-$TERMUX_ARCH" "office:$OFFICE_RUN:office-termux-$TERMUX_ARCH" "files:$OFFICE_RUN:files-termux-$TERMUX_ARCH"; do
           IFS=: read -r target run artifact <<< "$item"
           while true; do
-            count=$(gh api --paginate "repos/openresearchtools/bashkitten/actions/runs/$run/artifacts" --jq ".artifacts[] | select(.name == \"$artifact\" and .expired == false) | .id" | wc -l)
+            count=$(gh api --paginate "repos/openresearchtools/Taskarian/actions/runs/$run/artifacts" --jq ".artifacts[] | select(.name == \"$artifact\" and .expired == false) | .id" | wc -l)
             if [ "$count" = 1 ]; then break; fi
-            status=$(gh api "repos/openresearchtools/bashkitten/actions/runs/$run" --jq '.status')
+            status=$(gh api "repos/openresearchtools/Taskarian/actions/runs/$run" --jq '.status')
             if [ "$status" = completed ]; then echo "Required $artifact is missing from completed run $run" >&2; exit 1; fi
             if (( SECONDS >= deadline )); then echo "Shared 300-minute companion deadline expired waiting for $artifact from run $run" >&2; exit 1; fi
             echo "Waiting for $artifact from run $run within the shared companion deadline"
             sleep 30
           done
-          gh run download "$run" --repo "openresearchtools/bashkitten" --name "$artifact" --dir "$RUNNER_TEMP/companion/$target"
+          gh run download "$run" --repo "openresearchtools/Taskarian" --name "$artifact" --dir "$RUNNER_TEMP/companion/$target"
         done
         python3 agent/packaging/android-notices.py --architecture "$TERMUX_ARCH" \
           --auth-archive "$RUNNER_TEMP/companion/auth/auth-termux-$TERMUX_ARCH.tar.gz" \
@@ -245,14 +245,14 @@ jobs:
           --files-archive "$RUNNER_TEMP/companion/files/files-termux-$TERMUX_ARCH.tar.gz" \
           --termux-display-dir "$RUNNER_TEMP/companion/display" \
           --os-package "$(find "$RUNNER_TEMP/companion/os" -maxdepth 1 -name '*.deb')" \
-          --output "$BASHKITTEN_COMPANION_LICENSES"
+          --output "$TASKARIAN_COMPANION_LICENSES"
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Assemble the release browser
       working-directory: browser
       run: set -o pipefail; ./mach gradle :fenix:assembleRelease --profile 2>&1 | tee ../artifacts/apk-build.log
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Sign, verify and collect the production APK
-      run: python3 browser/bashkitten/android/scripts/collect-artifacts.py candidate
+      run: python3 browser/taskarian/android/scripts/collect-artifacts.py candidate
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Verify the Android artifact and source inputs
       run: python3 agent/packaging/browser-component.py verify "$BROWSER_TARGET" --directory candidate
@@ -269,7 +269,7 @@ jobs:
         path: |
           ~/.gradle/caches/modules-2
           ~/.gradle/wrapper
-        key: bashkitten-android-gradle-downloads-v1-${{ runner.os }}-${{ hashFiles('browser/gradle/libs.versions.toml', 'browser/mobile/android/android-components/.config.yml', 'browser/mobile/android/*/build.gradle',
+        key: taskarian-android-gradle-downloads-v1-${{ runner.os }}-${{ hashFiles('browser/gradle/libs.versions.toml', 'browser/mobile/android/android-components/.config.yml', 'browser/mobile/android/*/build.gradle',
           'browser/mobile/android/fenix/app/build.gradle', 'browser/python/mozboot/mozboot/android.py', 'browser/python/mozboot/mozboot/mozconfig.py') }}
     - name: Save Gradle task outputs
       if: success() && steps.component.outputs.hit != 'true'
@@ -291,7 +291,7 @@ jobs:
         if-no-files-found: ignore
     - name: Remove staged signing key
       if: (always()) && steps.component.outputs.hit != 'true'
-      run: rm -f "$BASHKITTEN_PUBLISHER_KEYSTORE"
+      run: rm -f "$TASKARIAN_PUBLISHER_KEYSTORE"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always() && steps.component.outputs.hit != 'true'
       with:

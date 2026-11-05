@@ -139,7 +139,7 @@ async function gInit(perfFront, traits, pageContext, openAboutProfiling) {
     const { AppConstants } = ChromeUtils.importESModule(
       "resource://gre/modules/AppConstants.sys.mjs"
     );
-    if (AppConstants.MOZ_APP_NAME === "bashkitten") {
+    if (AppConstants.MOZ_APP_NAME === "taskarian") {
       await saveProfileToFile(
         error || !profileAndAdditionalInformation
           ? {

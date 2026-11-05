@@ -1,0 +1,12 @@
+browser.jar:
+%   content browser %content/browser/ contentaccessible=yes
+    content/browser/taskarian/settings/TaskarianSettingsPanes.mjs          (TaskarianSettingsPanes.mjs)
+    content/browser/taskarian/settings/taskarianAppearance.mjs             (taskarianAppearance.mjs)
+    content/browser/taskarian/settings/taskarianAppearance.css             (taskarianAppearance.css)
+    content/browser/taskarian/settings/taskarianDataCollection.mjs         (taskarianDataCollection.mjs)
+    content/browser/taskarian/settings/taskarianDesktop.mjs                (taskarianDesktop.mjs)
+    content/browser/taskarian/settings/taskarianHome.mjs                   (taskarianHome.mjs)
+    content/browser/taskarian/settings/taskarianPrivacy.mjs                (taskarianPrivacy.mjs)
+    content/browser/taskarian/settings/taskarianSearch.mjs                 (taskarianSearch.mjs)
+    content/browser/taskarian/settings/taskarianTabs.mjs                   (taskarianTabs.mjs)
+    content/browser/taskarian/settings/taskarianAbout.mjs                  (taskarianAbout.mjs)

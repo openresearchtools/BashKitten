@@ -133,8 +133,8 @@ fun TabStrip(
     val context = LocalContext.current
     val addTabForCurrentRoute: () -> Unit = {
         val tab = browserStore.state.selectedTab
-        if (tab?.contextId?.startsWith("bashkitten-tor-") == true) {
-            com.bashkitten.BrowserApp.get(context).openTorTab("") {
+        if (tab?.contextId?.startsWith("taskarian-tor-") == true) {
+            com.taskarian.BrowserApp.get(context).openTorTab("") {
                 android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
             }
         } else {
@@ -210,7 +210,7 @@ private fun TabStripContent(
 ) {
     Row(
         modifier = Modifier
-            .testTag("bashkitten_tab_strip")
+            .testTag("taskarian_tab_strip")
             .semantics { testTagsAsResourceId = true }
             .fillMaxWidth()
             .height(dimensionResource(R.dimen.tab_strip_height))
@@ -498,7 +498,7 @@ private fun TabStripIcon(
             )
         } else if (url == ABOUT_HOME_URL) {
             Favicon(
-                imageResource = R.drawable.bashkitten_logo,
+                imageResource = R.drawable.taskarian_logo,
                 size = tabStripIconSize,
             )
         } else {

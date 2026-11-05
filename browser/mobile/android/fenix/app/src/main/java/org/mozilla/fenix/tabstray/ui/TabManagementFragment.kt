@@ -333,7 +333,7 @@ class TabManagementFragment : Fragment() {
                                     onOpenAgentClick = {
                                         val host = requireActivity() as HomeActivity
                                         onTabsTrayDismissed()
-                                        host.showBashKittenAgent()
+                                        host.showTaskarianAgent()
                                     },
                                     onTabPageClick = { page ->
                                         onTabPageClick(
@@ -609,7 +609,7 @@ class TabManagementFragment : Fragment() {
             selectedPage = when {
                 requestedPage != Page.NormalTabs -> requestedPage
                 coreState.tabs.any { it.id == coreState.selectedTabId && !it.content.private &&
-                    it.contextId?.startsWith("bashkitten-tor-") == true } -> Page.TorTabs
+                    it.contextId?.startsWith("taskarian-tor-") == true } -> Page.TorTabs
                 coreState.tabs.any { it.id == coreState.selectedTabId && !it.content.private &&
                     it.id in coreState.filesTabIds() } -> Page.FilesTabs
                 else -> requestedPage

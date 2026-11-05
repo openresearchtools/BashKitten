@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { engineEnvironment } from './environment.mjs';
 
 try {
-  if (process.argv.at(-1) !== 'serve' || process.env.BASHKITTEN_GUARDED !== '1' || Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid) throw Error('Private inference worker only');
+  if (process.argv.at(-1) !== 'serve' || process.env.TASKARIAN_GUARDED !== '1' || Number(process.env.TASKARIAN_GUARD_PID) !== process.ppid) throw Error('Private inference worker only');
   const input = fs.readFileSync(3); fs.closeSync(3);
   let command;
   try { command = JSON.parse(input.toString('utf8')); } finally { input.fill(0); }

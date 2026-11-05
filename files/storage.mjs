@@ -35,7 +35,7 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
     // denies hard links; that owner uses Termux's renameat2 no-replace path.
     // Standalone Linux modules retain their existing native link publication.
     if (typeof publishNewFile !== 'function') {
-      if (process.platform === 'android' || process.env.BASHKITTEN_TERMUX === '1') throw failure(503, 'The owning native file publisher is unavailable');
+      if (process.platform === 'android' || process.env.TASKARIAN_TERMUX === '1') throw failure(503, 'The owning native file publisher is unavailable');
       return fs.link(temporary, target);
     }
     const source = await fs.stat(temporary, { bigint: true });
@@ -182,7 +182,7 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
       if ((staleVersion || fingerprint(original) !== fingerprint(current)) && !reconciledRetry) throw failure(409, 'Document changed during native save', 'STORAGE_CHANGED');
       signal?.throwIfAborted();
       if (!reconciledRetry) {
-        const staged = path.join(path.dirname(m.path), `.bashkitten-save-${randomUUID()}`);
+        const staged = path.join(path.dirname(m.path), `.taskarian-save-${randomUUID()}`);
         try { await fs.copyFile(recovery, staged, constants.COPYFILE_EXCL); await fs.chmod(staged, Number(original.mode & 0o777n)); const out = await fs.open(staged, 'r'); try { await out.sync(); } finally { await out.close(); }
           await permitted(scope, m.path); signal?.throwIfAborted(); await fs.rename(staged, m.path); await syncDir(path.dirname(m.path));
         } finally { await fs.unlink(staged).catch(() => {}); }
@@ -217,7 +217,7 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
       const receipt = path.join(root, 'recovery', 'rename-' + randomUUID() + '.json');
       await writeJSON(receipt, { operation: 'rename', documentId: m.id, generation: m.generation, original: m.path, target, phase: 'prepared' });
       const original = await fs.stat(m.path, { bigint: true });
-      const staged = path.join(path.dirname(m.path), `.bashkitten-save-${randomUUID()}`);
+      const staged = path.join(path.dirname(m.path), `.taskarian-save-${randomUUID()}`);
       let published = false, removed = false, stagedIdentity;
       try {
         // Publish a complete sibling copy. The Android native publisher moves
@@ -258,7 +258,7 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
       const id = randomUUID(); const receipt = recovery + '.json';
       const record = { operation: 'save-as', documentId: id, sourceDocumentId: m.id, generation: m.generation, bytes: received.size, sha256: await digestFile(recovery), phase: 'received' };
       await writeJSON(receipt, { ...record, target });
-      const staging = path.join(path.dirname(m.path), `.bashkitten-save-${randomUUID()}`);
+      const staging = path.join(path.dirname(m.path), `.taskarian-save-${randomUUID()}`);
       let published = false;
       try {
         await fs.copyFile(recovery, staging, constants.COPYFILE_EXCL); const file = await fs.open(staging, 'r'); try { await file.sync(); } finally { await file.close(); }
@@ -303,7 +303,7 @@ export function createDocumentOwner({ dataRoot, environmentId, authorizeOperatio
     await coordinateNativeRestore(claims.fid);
     return await serialized(claims.fid, () => authorize(claims, 'modify', async (m, scope, signal) => {
       const old = m.versions.find(v => v.id === versionId); if (!old) throw failure(404, 'Version unavailable');
-      const source = path.join(directory(m.id), 'versions', old.name); const target = path.join(path.dirname(m.path), `.bashkitten-restore-${randomUUID()}`);
+      const source = path.join(directory(m.id), 'versions', old.name); const target = path.join(path.dirname(m.path), `.taskarian-restore-${randomUUID()}`);
       try { await fs.copyFile(source, target, constants.COPYFILE_EXCL); await retain(m, m.path, 'pre-restore', { force: true }); const original = await fs.stat(m.path); await fs.chmod(target, original.mode & 0o777); const fd = await fs.open(target, 'r'); try { await fd.sync(); } finally { await fd.close(); }
         await permitted(scope, m.path); signal?.throwIfAborted(); m.generation++; m.version = String(BigInt(m.version) + 1n); await saveManifest(m); // Invalidate old participants before replacement.
         await fs.rename(target, m.path); await syncDir(path.dirname(m.path)); m.lastDigest = old.sha256; m.lastWrite = new Date().toISOString(); m.fingerprint = fingerprint(await fs.stat(m.path, { bigint: true })); await saveManifest(m); await retain(m, m.path, 'restore', { force: true });

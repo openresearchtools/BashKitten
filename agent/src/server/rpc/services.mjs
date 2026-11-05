@@ -11,7 +11,7 @@ const providerRevisionFile = path.join(dataDir, 'provider-revision.json');
 export const providerRevision = () => readJson(providerRevisionFile, null);
 export const providersChanged = () => writeJson(providerRevisionFile, randomUUID());
 
-/** Stock ModelRuntime in BashKitten's private Pi profile, with no catalog network refresh. */
+/** Stock ModelRuntime in Taskarian's private Pi profile, with no catalog network refresh. */
 export class Services {
   attempt = null;
   async runtime() {
@@ -50,7 +50,7 @@ export class Services {
     const runtime = await this.runtime();
     const settings = pi.SettingsManager.create(cwd, piAgentDir, { projectTrusted: false });
     const { managedLocalProvider } = await import('./managed-provider.mjs');
-    const unknownThinking = new Set((await managedLocalProvider()).unknownThinking.map(id => 'bashkitten-llama/' + id));
+    const unknownThinking = new Set((await managedLocalProvider()).unknownThinking.map(id => 'taskarian-llama/' + id));
     models ||= runtime.getAvailableSnapshot();
     const separator = model.indexOf('/');
     const selected = separator > 0 ? runtime.getModel(model.slice(0, separator), model.slice(separator + 1)) : undefined;

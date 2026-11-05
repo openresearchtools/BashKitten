@@ -19,8 +19,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   SyncHistory: "resource://services-settings/SyncHistory.sys.mjs",
   UptakeTelemetry: "resource://services-settings/UptakeTelemetry.sys.mjs",
   Utils: "resource://services-settings/Utils.sys.mjs",
-  BashKittenSettingsPolicy:
-    "resource://services-settings/BashKittenSettingsPolicy.sys.mjs",
+  TaskarianSettingsPolicy:
+    "resource://services-settings/TaskarianSettingsPolicy.sys.mjs",
 });
 
 const PREF_SETTINGS_BRANCH = "services.settings.";
@@ -288,7 +288,7 @@ function remoteSettingsFunction() {
         const collection = changeset.metadata.id;
         const identifier = `${bucket}/${collection}`;
 
-        if (!lazy.BashKittenSettingsPolicy.canSync(bucket, collection)) {
+        if (!lazy.TaskarianSettingsPolicy.canSync(bucket, collection)) {
           continue;
         }
 
@@ -543,7 +543,7 @@ function remoteSettingsFunction() {
         // This collection has no associated client (eg. preview, other platform...)
         continue;
       }
-      if (!lazy.BashKittenSettingsPolicy.canSync(bucket, collection)) {
+      if (!lazy.TaskarianSettingsPolicy.canSync(bucket, collection)) {
         // Records for this collection only ever come from bundled dumps.
         continue;
       }

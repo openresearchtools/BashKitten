@@ -112,4 +112,4 @@ run-if = [
 ]
 
 ["test_fx_telemetry.js"]
-skip-if = ["appname == 'bashkitten'"]
+skip-if = ["appname == 'taskarian'"]

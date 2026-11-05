@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
+    # Match resource:/// modules and chrome://browser viewport resources.
+    DIST_SUBDIR = "browser"
+    include("/ipc/chromium/chromium-config.mozbuild")
+    XPIDL_SOURCES += ["native/nsITaskarianDisplay.idl"]
+    XPIDL_MODULE = "taskarian_display"
+    SOURCES += ["native/TaskarianDisplay.cpp"]
+    XPCOM_MANIFESTS += ["native/components.conf"]
+    LOCAL_INCLUDES += [
+        "/dom/media", "/dom/media/mediaelement", "/gfx/layers", "/gfx/layers/ipc",
+        "/toolkit/components/jsoncpp/include", "/widget/gtk",
+    ]
+    USE_LIBS += ["jsoncpp"]
+    FINAL_LIBRARY = "xul"
+    EXTRA_JS_MODULES += ["TaskarianDisplay.sys.mjs"]
+    JAR_MANIFESTS += ["jar.mn"]

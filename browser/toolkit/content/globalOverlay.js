@@ -90,8 +90,8 @@ function goQuitApplication(event) {
     return false;
   }
 
-  if (window.BashKittenLifetime) {
-    window.BashKittenLifetime.quit();
+  if (window.TaskarianLifetime) {
+    window.TaskarianLifetime.quit();
     return false;
   }
   Services.startup.quit(Ci.nsIAppStartup.eAttemptQuit);

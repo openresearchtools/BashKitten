@@ -1,0 +1,8 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<resources>
+    <!-- Same neutral palette as agent/src/web/web_ui.html. -->
+    <color name="taskarian_surface">#f3f3f3</color>
+    <color name="taskarian_text">#242426</color>
+    <color name="taskarian_secondary">#66666b</color>
+    <color name="taskarian_button">#e5e5e7</color>
+</resources>

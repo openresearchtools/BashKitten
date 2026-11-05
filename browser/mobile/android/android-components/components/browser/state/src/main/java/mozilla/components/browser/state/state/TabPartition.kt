@@ -7,11 +7,11 @@ package mozilla.components.browser.state.state
 import java.util.UUID
 
 /** Files is a presentation group; its tabs retain their independent native storage contexts. */
-const val BASHKITTEN_FILES_PARTITION = "bashkitten-files"
-const val BASHKITTEN_FILES_GROUP = "files"
+const val TASKARIAN_FILES_PARTITION = "taskarian-files"
+const val TASKARIAN_FILES_GROUP = "files"
 
 fun BrowserState.filesTabIds(): Set<String> =
-    tabPartitions[BASHKITTEN_FILES_PARTITION]?.getGroupById(BASHKITTEN_FILES_GROUP)?.tabIds ?: emptySet()
+    tabPartitions[TASKARIAN_FILES_PARTITION]?.getGroupById(TASKARIAN_FILES_GROUP)?.tabIds ?: emptySet()
 
 /**
  * Value type representing a tab partition. Partitions can overlap i.e., a tab

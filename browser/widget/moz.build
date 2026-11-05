@@ -70,8 +70,8 @@ if toolkit == "cocoa":
         "nsITouchBarUpdater.idl",
     ]
 elif toolkit == "gtk":
-    if CONFIG["MOZ_BASHKITTEN"]:
-        XPIDL_SOURCES += ["nsIBashKittenTray.idl"]
+    if CONFIG["MOZ_TASKARIAN"]:
+        XPIDL_SOURCES += ["nsITaskarianTray.idl"]
     XPIDL_SOURCES += [
         "nsIApplicationChooser.idl",
         "nsIGtkTaskbarProgress.idl",

@@ -1,5 +1,5 @@
 // Copyright 2026 The Torkitten Authors (Apache-2.0).
-// BashKitten adaptations: SPDX-License-Identifier: AGPL-3.0-only
+// Taskarian adaptations: SPDX-License-Identifier: AGPL-3.0-only
 
 // Package bundle handles the TorKitten v2 encrypted connection format. It has
 // no filesystem, account, network or credential-persistence authority.

@@ -61,29 +61,29 @@ window.addEventListener('pagehide', () => { lifetime.abort(); clearTimeout(renew
 window.addEventListener('message', event => {
   if (event.origin !== context.origin) return;
   let message = event.data; if (typeof message === 'string') { try { message = JSON.parse(message); } catch { return; } }
-  if (message?.MessageId === 'BashKitten_ReferencesReady') {
+  if (message?.MessageId === 'Taskarian_ReferencesReady') {
     let child = false; try { child = event.source === editor.contentWindow || event.source.parent === editor.contentWindow; } catch { return; }
     if (!child || !context.referenceContext || typeof message.nonce !== 'string' || message.nonce.length > 128) return;
     abortFrame(event.source);
     extensionFrames.set(event.source, { nonce: message.nonce, requests: new Map() });
-    event.source.postMessage({ MessageId: 'BashKitten_ReferencesContext', nonce: message.nonce, ...context.referenceContext }, context.origin); return;
+    event.source.postMessage({ MessageId: 'Taskarian_ReferencesContext', nonce: message.nonce, ...context.referenceContext }, context.origin); return;
   }
-  if (message?.MessageId === 'BashKitten_ReferencesClosed') {
+  if (message?.MessageId === 'Taskarian_ReferencesClosed') {
     const frame = extensionFrames.get(event.source);
     if (!frame || frame.nonce !== message.nonce) return;
     abortFrame(event.source); extensionFrames.delete(event.source); return;
   }
-  if (['BashKitten_ReferencesRequest', 'BashKitten_ReferencesCancel', 'BashKitten_OfficeCopy'].includes(message?.MessageId)) {
+  if (['Taskarian_ReferencesRequest', 'Taskarian_ReferencesCancel', 'Taskarian_OfficeCopy'].includes(message?.MessageId)) {
     const frame = extensionFrames.get(event.source);
     if (!frame || frame.nonce !== message.nonce || typeof message.requestId !== 'string' || message.requestId.length > 128) return;
     frame.requests.get(message.requestId)?.abort();
-    if (message.MessageId === 'BashKitten_ReferencesCancel') { frame.requests.delete(message.requestId); return; }
+    if (message.MessageId === 'Taskarian_ReferencesCancel') { frame.requests.delete(message.requestId); return; }
     if (frame.requests.size >= 32) return;
     const target = event.source, request = new AbortController(); frame.requests.set(message.requestId, request);
-    const copying = message.MessageId === 'BashKitten_OfficeCopy';
+    const copying = message.MessageId === 'Taskarian_OfficeCopy';
     api(copying ? 'copy' : 'references', copying ? { name: message.name, format: message.format } : { method: message.method, path: message.path, body: message.body }, request.signal).then(
-      result => { if (!request.signal.aborted) target.postMessage({ MessageId: 'BashKitten_ReferencesResult', nonce: message.nonce, requestId: message.requestId, result }, context.origin); },
-      error => { if (!request.signal.aborted) target.postMessage({ MessageId: 'BashKitten_ReferencesResult', nonce: message.nonce, requestId: message.requestId, error: error.message }, context.origin); }
+      result => { if (!request.signal.aborted) target.postMessage({ MessageId: 'Taskarian_ReferencesResult', nonce: message.nonce, requestId: message.requestId, result }, context.origin); },
+      error => { if (!request.signal.aborted) target.postMessage({ MessageId: 'Taskarian_ReferencesResult', nonce: message.nonce, requestId: message.requestId, error: error.message }, context.origin); }
     ).finally(() => { if (frame.requests.get(message.requestId) === request) frame.requests.delete(message.requestId); });
     return;
   }

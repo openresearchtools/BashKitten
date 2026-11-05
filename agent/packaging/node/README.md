@@ -7,7 +7,7 @@ processes use the bundled runtime. `node/bin/npm` and `npx` explicitly launch it
 Matching upstream headers and `config.gypi` support native addon builds.
 
 ```sh
-BASHKITTEN_NODE_CACHE=/path/to/persistent/cache python3 agent/packaging/node/build.py \
+TASKARIAN_NODE_CACHE=/path/to/persistent/cache python3 agent/packaging/node/build.py \
   --platform linux --architecture amd64 --output /path/to/artifacts
 ```
 
@@ -23,12 +23,12 @@ original library, complete upstream NOTICE, LLVM notice and exact extraction
 provenance are retained. Unrelated NDK host executables are not redistributed;
 this input does not claim to contain LLVM's entire source repository.
 
-Downloaded archives live in the external `BASHKITTEN_SOURCE_CACHE` (default:
-`$XDG_CACHE_HOME/bashkitten-sources` or `~/.cache/bashkitten-sources`), with the
-existing `BASHKITTEN_NODE_CACHE` override retained for this builder. Repository
+Downloaded archives live in the external `TASKARIAN_SOURCE_CACHE` (default:
+`$XDG_CACHE_HOME/Taskarian/sources` or `~/.cache/Taskarian/sources`), with the
+existing `TASKARIAN_NODE_CACHE` override retained for this builder. Repository
 archives are optional cache seeds during migration. Every cached or downloaded
 input must match its pinned SHA256 and any recorded size. Set
-`BASHKITTEN_OFFLINE_SOURCES=1` to require already cached inputs. The source artifact
+`TASKARIAN_OFFLINE_SOURCES=1` to require already cached inputs. The source artifact
 includes the shared cache helper, and its exact identity participates in producer
 receipt verification alongside the native locks, sources and licenses.
 
@@ -103,7 +103,7 @@ declared package dependencies.
 
 ## Licenses
 
-BashKitten's assembly code is AGPL-3.0-only. Node's complete upstream LICENSE,
+Taskarian's assembly code is AGPL-3.0-only. Node's complete upstream LICENSE,
 npm's license, each actually bundled npm dependency's license/notice, and native
 library notices are emitted in `node/licenses.json` and individual text files.
 The source/distribution archives preserve the original notices too. npm package
@@ -119,7 +119,7 @@ build and requires an explicit reviewed lock update.
 package recipes/patches have their respective package licenses; general build
 infrastructure is Apache-2.0. The complete Apache-2.0 text accompanies it.
 `manifest.json` records native and npm dependency identities, input provenance
-and remaining OS package dependencies for BashKitten's package and About page.
+and remaining OS package dependencies for Taskarian's package and About page.
 
 ## Verification
 

@@ -120,7 +120,7 @@ class GeckoEngineSession(
     internal lateinit var geckoSession: GeckoSession
 
     /** Browser-owned Android control integration; does not install a remote debugger. */
-    fun bashKittenSession(): GeckoSession = geckoSession
+    fun taskarianSession(): GeckoSession = geckoSession
 
     /** Apply the tab owner's storage/privacy choices before a new session is opened or observed. */
     fun initializeSessionContext(private: Boolean, contextId: String?) {

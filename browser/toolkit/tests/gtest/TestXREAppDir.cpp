@@ -567,7 +567,7 @@ class CacheXREAppDir_NoEnv : public BaseXREAppDir {
 };
 
 #if defined(XP_UNIX) && !defined(XP_MACOSX)
-class BashKittenXDGIsolation : public BaseXREAppDir {
+class TaskarianXDGIsolation : public BaseXREAppDir {
  protected:
   void SetUp() override {
     BaseXREAppDir::SetUp();
@@ -580,8 +580,8 @@ class BashKittenXDGIsolation : public BaseXREAppDir {
     SetEnv("XDG_CACHE_HOME", mXdgCacheDir.get());
     SwitchFakeAppDataOn();
     mFakeAppData.profile = nullptr;
-    mFakeAppData.name = "BashKitten";
-    mFakeAppData.vendor = "BashKitten";
+    mFakeAppData.name = "Taskarian";
+    mFakeAppData.vendor = "Taskarian";
   }
 
   nsCString mBaitDir;
@@ -589,10 +589,10 @@ class BashKittenXDGIsolation : public BaseXREAppDir {
   nsCString mXdgCacheDir;
 };
 
-TEST_F(BashKittenXDGIsolation, ProductDirectoriesDoNotUseMozillaRoots) {
+TEST_F(TaskarianXDGIsolation, ProductDirectoriesDoNotUseMozillaRoots) {
   nsCString configRoot =
-      mXdgConfigDir + "/bashkitten/bashkitten"_ns;
-  nsCString cacheRoot = mXdgCacheDir + "/bashkitten/bashkitten"_ns;
+      mXdgConfigDir + "/taskarian/taskarian"_ns;
+  nsCString cacheRoot = mXdgCacheDir + "/taskarian/taskarian"_ns;
 
   ASSERT_EQ(configRoot, GetUserAppDataDirectory());
   ASSERT_EQ(configRoot, GetUserProfilesRootDir());
@@ -602,7 +602,7 @@ TEST_F(BashKittenXDGIsolation, ProductDirectoriesDoNotUseMozillaRoots) {
 
   nsCString systemManifests =
       GetFromXREDirProvider(XRE_SYS_NATIVE_MANIFESTS);
-  ASSERT_TRUE(systemManifests.EndsWith("/bashkitten"_ns));
+  ASSERT_TRUE(systemManifests.EndsWith("/taskarian"_ns));
   ASSERT_FALSE(systemManifests.Contains("mozilla"_ns));
 }
 #endif

@@ -120,12 +120,12 @@ fun createTab(
     securityInfo: SecurityInfo = SecurityInfo.Unknown,
 ): TabSessionState {
     // A supplied native engine already owns its context, including a null default.
-    val tabContextId = contextId ?: if (engineSession == null) parent?.contextId ?: "bashkitten-user" else null
+    val tabContextId = contextId ?: if (engineSession == null) parent?.contextId ?: "taskarian-user" else null
     return TabSessionState(
         id = id,
         content = ContentState(
             url,
-            private || tabContextId?.startsWith("bashkitten-tor-") == true,
+            private || tabContextId?.startsWith("taskarian-tor-") == true,
             title = title,
             securityInfo = securityInfo,
             webAppManifest = webAppManifest,

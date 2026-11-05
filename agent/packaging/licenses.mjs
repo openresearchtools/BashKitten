@@ -87,16 +87,16 @@ async function applicationInventory(root) {
     try {
       const inventory = await arrayInventory(location, component);
       const manifest = await json(path.join(root, directory, 'manifest.json'));
-      const changes = `https://github.com/openresearchtools/BashKitten/tree/${manifest.sourceCommit}/${component.toLowerCase()}`;
+      const changes = `https://github.com/openresearchtools/Taskarian/tree/${manifest.sourceCommit}/${component.toLowerCase()}`;
       for (const entry of inventory) {
         if (component === 'Files' && entry.name === 'File Browser Quantum') {
           entry.source ||= `https://github.com/gtsteffaniak/filebrowser/tree/${manifest.upstream.quantum}`;
           entry.modifications = changes + '/patches';
-        } else if (component === 'Files' && entry.name === 'BashKitten Files adapters and Office add-on') {
+        } else if (component === 'Files' && entry.name === 'Taskarian Files adapters and Office add-on') {
           entry.source ||= `https://github.com/gtsteffaniak/filebrowser/tree/${manifest.upstream.wopi}`;
           entry.modifications = changes + '/addon';
           entry.attribution = changes + '/UPSTREAM.md';
-        } else if (component === 'Office' && entry.name === 'BashKitten integrated Office') {
+        } else if (component === 'Office' && entry.name === 'Taskarian integrated Office') {
           entry.source ||= changes;
           entry.modifications = changes + '/patches';
           entry.attribution = changes + '/branding/ATTRIBUTION.txt';
@@ -123,7 +123,7 @@ async function searchInventory(root, expectedTarget) {
     ['Unsloth Studio — adapted search and page reading', 'AGPL-3.0-only',
       ['third_party/unsloth-studio/NOTICE', 'third_party/unsloth-studio/LICENSE'],
       { source: 'https://github.com/unslothai/unsloth/tree/bfcaea46574d63ec470ce9c7d7221471a38ea7e4', version: 'bfcaea46574d' }],
-    ['BashKitten Search / Buzzard Search', 'AGPL-3.0-only', ['THIRD_PARTY_NOTICES.md', 'LICENSE'],
+    ['Taskarian Search / Buzzard Search', 'AGPL-3.0-only', ['THIRD_PARTY_NOTICES.md', 'LICENSE'],
       { source: 'https://github.com/openresearchtools/buzzard-search/tree/05721962dd11c7506286ecc9aa5b35f6fc4828d0' }],
     ['pi-web-access repository reader', 'MIT', ['third_party/pi-web-access/LICENSE']],
     ['youtube-transcript-api', 'MIT', ['third_party/youtube-transcript-api/LICENSE']],
@@ -180,8 +180,8 @@ export async function collectLicenses(root, { target, version, browser, 'backend
   const components = new Set(auth.components?.map(value => value.name));
   for (const name of ['authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote']) {
     if (!components.has(name)) throw Error('Missing native access component: ' + name);
-    await fs.access(path.join(root, 'auth/bin', { valkey: 'valkey-server', remote: 'bashkitten-remote' }[name] || name));
-    const license = name === 'remote' ? 'remote/github.com__openresearchtools__bashkitten__remote/LICENSE' : name + '/LICENSE';
+    await fs.access(path.join(root, 'auth/bin', { valkey: 'valkey-server', remote: 'taskarian-remote' }[name] || name));
+    const license = name === 'remote' ? 'remote/github.com__openresearchtools__taskarian__remote/LICENSE' : name + '/LICENSE';
     await relativeText(path.join(root, 'auth/share/licenses'), license);
   }
   const records = await npmInventory(root, target, auth.architecture);
@@ -223,7 +223,7 @@ export async function collectLicenses(root, { target, version, browser, 'backend
     records.push(...await arrayInventory(path.join(root, 'os-licenses.json'), 'Termux desktop'));
   }
   const external = target === 'termux'
-    ? 'Termux, Python, Git, GitHub CLI and the declared Termux packages are installed separately, not embedded in this package. Each is governed by its own package license and accompanying notices. The Android BashKitten browser is a separate APK with its own offline About and licenses.'
+    ? 'Termux, Python, Git, GitHub CLI and the declared Termux packages are installed separately, not embedded in this package. Each is governed by its own package license and accompanying notices. The Android Taskarian browser is a separate APK with its own offline About and licenses.'
     : 'Python, GTK, operating-system graphics/audio libraries, Git, GitHub CLI and other declared system dependencies are installed separately. They retain their own package licenses and notices. Optional LocalAI runtimes are downloaded separately with their own native dependency notices; GPU drivers and model weights are not bundled here.';
   records.push(record({ name: 'External platform packages', license: 'Separate package licenses', text: external }, 'Platform', 'external'));
   // Keep distinct versions and changed texts even when names coincide across modules.

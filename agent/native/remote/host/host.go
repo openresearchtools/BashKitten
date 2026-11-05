@@ -1,7 +1,7 @@
-//go:build !bashkitten_client
+//go:build !taskarian_client
 
 // Copyright 2026 The Torkitten Authors (Apache-2.0).
-// BashKitten adaptations: SPDX-License-Identifier: AGPL-3.0-only
+// Taskarian adaptations: SPDX-License-Identifier: AGPL-3.0-only
 
 // Package host exposes only the service-ID carrier on a private Unix socket.
 // The existing controller owns Tor, Caddy, Authelia, enrollment and service jobs.
@@ -22,8 +22,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/openresearchtools/bashkitten/remote/oauth"
-	"github.com/openresearchtools/bashkitten/remote/tunnel"
+	"github.com/openresearchtools/Taskarian/remote/oauth"
+	"github.com/openresearchtools/Taskarian/remote/tunnel"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -112,7 +112,7 @@ func Start(c Config) (*Host, error) {
 		// The authenticated SSH request cannot select a URL, issuer, client ID,
 		// scope or redirect. Authelia checks refresh-token ownership/revocation.
 		values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken},
-			"client_id": {"bashkitten-" + c.Generation}}
+			"client_id": {"taskarian-" + c.Generation}}
 		r, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+c.Onion+"/login/api/oidc/token", strings.NewReader(values.Encode()))
 		if err != nil {
 			return result, errors.New("invalid OAuth refresh request")

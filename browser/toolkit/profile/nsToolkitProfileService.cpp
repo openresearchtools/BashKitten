@@ -1405,7 +1405,7 @@ NS_IMETHODIMP
 nsToolkitProfileService::SetDefaultProfile(nsIToolkitProfile* aProfile) {
   nsToolkitProfile* profile = static_cast<nsToolkitProfile*>(aProfile);
 #ifndef MOZ_WIDGET_ANDROID
-  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten") && mCurrent &&
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("taskarian") && mCurrent &&
       profile != mCurrent) {
     return NS_ERROR_NOT_AVAILABLE;
   }
@@ -1609,7 +1609,7 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
   const char* arg;
 
 #ifndef MOZ_WIDGET_ANDROID
-  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("taskarian")) {
     // Reuse the product profile even after moving/upgrading the installation.
     // Do not allow XRE_PROFILE_PATH or selectable-profile restart state to
     // create a second profile. No existing profile data is removed here.
@@ -2133,7 +2133,7 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
 nsresult nsToolkitProfileService::CreateResetProfile(
     nsIToolkitProfile** aNewProfile) {
 #ifndef MOZ_WIDGET_ANDROID
-  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("taskarian")) {
     return NS_ERROR_NOT_AVAILABLE;
   }
 #endif
@@ -2326,7 +2326,7 @@ nsToolkitProfileService::CreateUniqueProfile(nsIFile* aRootDir,
                                              const nsACString& aSource,
                                              nsIToolkitProfile** aResult) {
 #ifndef MOZ_WIDGET_ANDROID
-  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("taskarian")) {
     return NS_ERROR_NOT_AVAILABLE;
   }
 #endif
@@ -2366,7 +2366,7 @@ nsToolkitProfileService::CreateProfile(nsIFile* aRootDir,
                                        const nsACString& aSource,
                                        nsIToolkitProfile** aResult) {
 #ifndef MOZ_WIDGET_ANDROID
-  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("taskarian")) {
     return NS_ERROR_NOT_AVAILABLE;
   }
 #endif

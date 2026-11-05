@@ -1,10 +1,10 @@
 {
-  "name": "@bashkitten/systematic-reviewer",
+  "name": "@taskarian/systematic-reviewer",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
-  "description": "Systematic Reviewer research capabilities using BashKitten References and live Collabora",
+  "description": "Systematic Reviewer research capabilities using Taskarian References and live Collabora",
   "engines": {
     "node": ">=22.19.0"
   },

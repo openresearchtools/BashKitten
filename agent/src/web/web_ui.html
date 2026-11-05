@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content">
-  <title>BashKitten</title>
+  <title>Taskarian</title>
   <link rel="icon" href="/favicon.ico" sizes="32x32">
   <style>
     :root, :root[data-theme="dark"] {
@@ -631,7 +631,7 @@
 </head>
 <body>
   <section id="auth" class="hidden">
-    <h1><img src="/logo.png" width="40" height="40" alt="" style="vertical-align:middle;margin-inline-end:8px">BashKitten</h1>
+    <h1><img src="/logo.png" width="40" height="40" alt="" style="vertical-align:middle;margin-inline-end:8px">Taskarian</h1>
     <p id="authHint">Connecting to your agent…</p>
     <a id="authLogin" href="/login" target="_blank" rel="noopener" class="hidden">Sign in</a>
     <button id="authRetry" type="button">Reconnect</button>
@@ -682,7 +682,7 @@
             <div class="subscription-actions"><input id="serviceFilter" placeholder="Find a provider" aria-label="Find a provider"><button id="refreshServices" type="button">Refresh</button></div>
             <div id="serviceLogin" class="hidden settings-section" role="status"></div>
             <div id="servicesList"></div>
-            <p class="meta">Models, provider logins, settings and extensions belong to BashKitten’s own Pi profile. Use bashkitten-pi to configure it; standalone Pi keeps its separate configuration.</p>
+            <p class="meta">Models, provider logins, settings and extensions belong to Taskarian’s own Pi profile. Use taskarian-pi to configure it; standalone Pi keeps its separate configuration.</p>
             <div class="subscription-actions"><button id="importPiSessions" type="button">Open an existing Pi session</button></div>
             <div id="piSessions"></div>
           </section>
@@ -698,7 +698,7 @@
           <div id="queuePanel" class="hidden" aria-label="Queued messages"></div>
           <div class="compose-box">
             <div id="attachmentTray" class="hidden"></div>
-            <textarea id="prompt" rows="2" placeholder="Message Kitten…" aria-label="Message Kitten"></textarea>
+            <textarea id="prompt" rows="2" placeholder="Message Taskarian…" aria-label="Message Taskarian"></textarea>
             <div id="goalChip" class="hidden"><span>Goal</span><button id="removeGoalChip" type="button" aria-label="Remove goal from message">×</button></div>
             <div class="composer-toolbar">
               <input id="files" class="hidden" type="file" multiple>
@@ -805,7 +805,7 @@
     <form id="deleteChatForm" class="dialog-body">
       <h2 id="deleteChatHeading">Remove chat?</h2>
       <p id="deleteChatName"></p>
-      <p id="deleteChatDescription">This removes the chat from BashKitten and stops its running work. Native Pi history, attachments and project files are kept.</p>
+      <p id="deleteChatDescription">This removes the chat from Taskarian and stops its running work. Native Pi history, attachments and project files are kept.</p>
       <p><strong>Your working folder and project files will be kept.</strong></p>
       <p id="deleteChatError" class="meta" role="alert"></p>
       <div class="dialog-actions"><button id="cancelChatDelete" type="button" data-close autofocus>Cancel</button><button id="confirmChatDelete" class="primary delete-confirm">Remove chat</button></div>
@@ -822,10 +822,10 @@
       draftChangeQueued = true;
       queueMicrotask(() => {
         draftChangeQueued = false;
-        if (!draftRestoring) window.dispatchEvent(new Event('BashKittenDraftChanged'));
+        if (!draftRestoring) window.dispatchEvent(new Event('TaskarianDraftChanged'));
       });
     }
-    window.addEventListener('BashKittenDraftError', event => {
+    window.addEventListener('TaskarianDraftError', event => {
       $('#composerHint').textContent = 'Draft could not be saved or restored: ' + event.detail;
     });
     let models = [];
@@ -866,7 +866,7 @@
     function beginComposerOperation(kind) {
       const key = composerKey();
       if (composerOperations.has(key)) return null;
-      const draft = window.bashkittenDraft.capture(false);
+      const draft = window.taskarianDraft.capture(false);
       if (!draft) return null;
       const operation = {key, kind, view:sessionView, draft};
       composerOperations.set(key, operation);
@@ -883,7 +883,7 @@
     }
     function updateComposerDraft(operation, change) {
       const visible = operation.key === composerKey();
-      const draft = (visible && window.bashkittenDraft.capture(false)) || chatDrafts.get(operation.key) ||
+      const draft = (visible && window.taskarianDraft.capture(false)) || chatDrafts.get(operation.key) ||
         {...operation.draft, text:'', files:[], retained:[], goal:false, edit:null};
       if (change(draft) === false) return;
       chatDrafts.set(operation.key, draft);
@@ -914,7 +914,7 @@
     let loadingSessions = null;
     let sessionCatalogueReady = false;
     const $ = selector => selector === '#chatInner' && historyRenderTarget ? historyRenderTarget : document.querySelector(selector);
-    let nativeHost = window.bashkittenHost || null;
+    let nativeHost = window.taskarianHost || null;
     let nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
     let phoneAvailable = false;
     const visibilityClient = crypto.randomUUID();
@@ -928,14 +928,14 @@
     window.addEventListener('focus', sendVisibility);
     window.addEventListener('blur', sendVisibility);
     function configureNativeHost() {
-      nativeHost = window.bashkittenHost || null;
+      nativeHost = window.taskarianHost || null;
       nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
       $('#app').classList.toggle('native-navigation', Boolean(nativeHost?.navigation));
       $('#filesToggle').classList.toggle('hidden', !fileManagerAllowed);
       $('#openProjectFolder').classList.toggle('hidden', !nativeLinux);
       showAgentChoice();
     }
-    window.addEventListener('bashkitten-host-ready', configureNativeHost);
+    window.addEventListener('taskarian-host-ready', configureNativeHost);
     configureNativeHost();
     document.addEventListener('click', event => {
         if (!nativeLinux) return;
@@ -965,7 +965,7 @@
       $('#app').classList.add('hidden');
       $('#auth').classList.remove('hidden');
       const local = location.hostname === '127.0.0.1';
-      $('#authHint').textContent = local ? 'Reconnect through BashKitten’s Agent view. Your draft and attachments are kept here.' : initialized ? 'Sign in again to reconnect. Your draft and attachments are kept here.' : 'Sign in with your account and second factor.';
+      $('#authHint').textContent = local ? 'Reconnect through Taskarian’s Agent view. Your draft and attachments are kept here.' : initialized ? 'Sign in again to reconnect. Your draft and attachments are kept here.' : 'Sign in with your account and second factor.';
       $('#authLogin').textContent = local ? 'Reconnect Agent' : 'Sign in';
       $('#authLogin').href = loginUrl();
       $('#authLogin').classList.remove('hidden');
@@ -985,7 +985,7 @@
     async function api(url, options = {}) {
       options.headers = options.headers || {};
       const mutation = options.method && options.method !== 'GET';
-      if (mutation) options.headers['x-bashkitten-csrf'] = csrf;
+      if (mutation) options.headers['x-taskarian-csrf'] = csrf;
       let response = await fetch(url, options);
       const nativeFiles = String(url).startsWith('/api/apps/files/native/');
       let value = await responseValue(response, nativeFiles);
@@ -996,7 +996,7 @@
         const login = await responseValue(bootstrap);
         if (bootstrap.ok && login.authenticated && login.csrf) {
           csrf = login.csrf;
-          options.headers['x-bashkitten-csrf'] = csrf;
+          options.headers['x-taskarian-csrf'] = csrf;
           response = await fetch(url, options);
           value = await responseValue(response, nativeFiles);
         }
@@ -2252,7 +2252,7 @@
     }
 
     async function mutateQueued(id, action, content = null, owner = null) {
-      owner ||= {key:composerKey(), draft:window.bashkittenDraft.capture(false), sessionId:current?.id, view:sessionView, editToken:editingQueueId === id ? editingQueueToken : null};
+      owner ||= {key:composerKey(), draft:window.taskarianDraft.capture(false), sessionId:current?.id, view:sessionView, editToken:editingQueueId === id ? editingQueueToken : null};
       if (!owner.sessionId) return false;
       try {
         const value = await api(`/api/sessions/${owner.sessionId}/queue`, {
@@ -2367,7 +2367,7 @@
 
     function renderSessionSidebar(sessions) {
       if (nativeHost?.navigation) {
-        window.dispatchEvent(new Event('BashKittenNavigationChanged'));
+        window.dispatchEvent(new Event('TaskarianNavigationChanged'));
         return;
       }
       const root = $('#sessions');
@@ -2422,7 +2422,7 @@
             item.append(dot);
           }
           bindSessionContextMenu(item,session);
-          item.onclick = () => window.bashkittenNavigation.call('open', {id:session.id}).catch(error => { $('#composerHint').textContent = error.message; });
+          item.onclick = () => window.taskarianNavigation.call('open', {id:session.id}).catch(error => { $('#composerHint').textContent = error.message; });
           item.addEventListener('keydown',event=>{if(event.target===item&&(event.key==='Enter'||event.key===' ')){event.preventDefault();item.click();}});
           container.append(item);
           if (descendants.length && !collapsedAgents.has(session.id)) {
@@ -2462,7 +2462,7 @@
       closeSessionActions();const target=managedChat;
       $('#deleteChatHeading').textContent=target.project?'Remove project chats?':'Remove chat?';
       $('#deleteChatName').textContent=target.project?target.cwd:target.title;
-      $('#deleteChatDescription').textContent=target.project?'Counting project chats…':'This removes the chat from BashKitten and stops its running work. Native Pi history, attachments and project files are kept.';
+      $('#deleteChatDescription').textContent=target.project?'Counting project chats…':'This removes the chat from Taskarian and stops its running work. Native Pi history, attachments and project files are kept.';
       $('#confirmChatDelete').textContent=target.project?'Remove project chats':'Remove chat';
       $('#confirmChatDelete').disabled=!!target.project;$('#deleteChatError').textContent='';
       $('#deleteChatDialog').showModal();$('#cancelChatDelete').focus();
@@ -2471,7 +2471,7 @@
           if(managedChat!==target||!$('#deleteChatDialog').open)return;
           target.sessionIds=result.sessionIds;
           const count=target.sessionIds.length;
-          $('#deleteChatDescription').textContent=`This removes ${count} ${count===1?'chat':'chats'} from BashKitten and stops their running work. Native Pi history, attachments and project files are kept.`;
+          $('#deleteChatDescription').textContent=`This removes ${count} ${count===1?'chat':'chats'} from Taskarian and stops their running work. Native Pi history, attachments and project files are kept.`;
           $('#confirmChatDelete').disabled=!count;
         }catch(error){if(managedChat===target)$('#deleteChatError').textContent=error.message;}
       }
@@ -2738,7 +2738,7 @@
         $('#composerHint').textContent = 'Opening chat…';
         if (!reconnect) {
           renderQueueState();
-          if (savedDraft) await window.bashkittenDraft.restore(savedDraft);
+          if (savedDraft) await window.taskarianDraft.restore(savedDraft);
           else applyComposerContent({sessionId:session.id, text:''});
           if (sessionView !== view) return;
         }
@@ -2805,7 +2805,7 @@
         $('#thinking').value = modelDefaults.thinking;
       }
       const draft = chatDrafts.get(composerKey());
-      if (draft) await window.bashkittenDraft.restore(draft);
+      if (draft) await window.taskarianDraft.restore(draft);
       else applyComposerContent({text:''});
       if (sessionView !== view) return;
       document.querySelectorAll('.session').forEach(element => element.classList.remove('active'));
@@ -2968,7 +2968,7 @@
           if (authRequired) throw error;
           $('#composerHint').textContent = error.message;
         }
-        window.dispatchEvent(new Event('BashKittenDraftReady'));
+        window.dispatchEvent(new Event('TaskarianDraftReady'));
       } catch (error) {
         if (!initialized) $('#auth').classList.remove('hidden');
         $('#authError').textContent = error.message;
@@ -2976,7 +2976,7 @@
       } finally { booting = false; }
     }
     window.addEventListener('focus', () => { if (bootPending || authRequired) boot(); });
-    window.addEventListener('BashKittenAuthenticated', boot);
+    window.addEventListener('TaskarianAuthenticated', boot);
 
     $('#sessions').addEventListener('scroll', () => {
       const panel = $('#sessions');
@@ -3005,7 +3005,7 @@
     };
 
     window.addEventListener('focus',()=>{if(current)refreshQueue().catch(()=>{});});
-    $('#newBtn').onclick = () => window.bashkittenNavigation.call('new').catch(error => { $('#composerHint').textContent = error.message; });
+    $('#newBtn').onclick = () => window.taskarianNavigation.call('new').catch(error => { $('#composerHint').textContent = error.message; });
     async function loadFolder(path, nearest = false) {
       const generation = ++folderGeneration;
       $('#folderUse').disabled = true;
@@ -3796,7 +3796,7 @@
         // authorized service mapping in an ordinary tab, outside Agent storage.
         if (nativeHost) await nativeHost.call('open-files', destination);
         else {
-          if (!localSession) throw Error('Open remote Files through its saved BashKitten service connection.');
+          if (!localSession) throw Error('Open remote Files through its saved Taskarian service connection.');
           // Reserve the tab during the click; first use may start the service.
           tab=window.open('about:blank', '_blank');
           if (!tab) throw Error('Allow a new tab to open Files.');
@@ -4130,7 +4130,7 @@
 
     // The enrolled native browser retains this visible composer across origin
     // changes and restarts. These hooks never send or queue a message or audio.
-    window.bashkittenDraft = {
+    window.taskarianDraft = {
       capture(includeStored = true) {
         if (!initialized || draftRestoring) return null;
         return {sessionId:current?.id || null,projectId:pendingProjectId,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,notice:chatDrafts.get(composerKey())?.notice || '',cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,modelSelectionEdited:newModelSelectionEdited,thinkingSelectionEdited:newThinkingSelectionEdited,subagents:chatAgents,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null,...(includeStored ? {chatDrafts:[...chatDrafts]} : {})};
@@ -4175,7 +4175,7 @@
     // Called only by the browser-owned protected document adapter. This does
     // not expose native controllers or filesystem authority to web content.
     const nativeFolderRequests = new Map();
-    window.bashkittenNavigation = {
+    window.taskarianNavigation = {
       async call(action, value = {}) {
         if (action === 'folders-cancel') { nativeFolderRequests.get(value.requestId)?.abort(); nativeFolderRequests.delete(value.requestId); return true; }
         // Native application tabs need this backend's authenticated bootstrap,
@@ -4200,7 +4200,7 @@
           await loadSessions(action === 'more'); return this.call('snapshot');
         }
         if (action === 'open' || action === 'new') {
-          const key = composerKey(), draft = window.bashkittenDraft.capture(false);
+          const key = composerKey(), draft = window.taskarianDraft.capture(false);
           if (draft) chatDrafts.set(key, draft);
           let view = ++sessionView;
           // The edit hold stays with its original chat while another is shown.

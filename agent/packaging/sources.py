@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect unmodified npm source/distribution archives and BashKitten release source.
+"""Collect unmodified npm source/distribution archives and Taskarian release source.
 
 Locked tarballs retain their original license/notice payloads. No package scripts
 execute; GitHub publishing is a separate step.
@@ -147,26 +147,26 @@ cache_instructions.write_text(
     'The cache contains original upstream source bytes, with URL, SHA256, size and exact-revision manifest provenance in downloaded-source-components.json. '
     'No dependency versions are resolved during reconstruction.\n\n'
     'Before running the supplied native build recipes, set:\n\n'
-    '```sh\nexport BASHKITTEN_SOURCE_CACHE=/absolute/path/to/source-cache\n'
-    'export BASHKITTEN_OFFLINE_SOURCES=1\n```\n\n'
+    '```sh\nexport TASKARIAN_SOURCE_CACHE=/absolute/path/to/source-cache\n'
+    'export TASKARIAN_OFFLINE_SOURCES=1\n```\n\n'
     'The existing build recipes verify each original archive again and stage npm, Go and native inputs through their usual offline build facilities. '
     'Build tools and operating-system prerequisites remain those documented by each recipe.\n')
-with tarfile.open(args.output / ('bashkitten-download-cache-source-' + revision[:12] + '.tar'), 'w') as archive:
+with tarfile.open(args.output / ('taskarian-download-cache-source-' + revision[:12] + '.tar'), 'w') as archive:
     archive.add(cache_receipt, arcname='downloaded-source-components.json')
     archive.add(cache_instructions, arcname='DOWNLOADED-SOURCES.md')
     for name, record in sorted(originals.items()):
         archive.add(record['file'], arcname='source-cache/' + name)
 
-source = args.output / ('bashkitten-source-' + revision[:12] + '.tar.gz')
+source = args.output / ('taskarian-source-' + revision[:12] + '.tar.gz')
 archive_revision(ROOT, revision, source)
-with tarfile.open(args.output / ('bashkitten-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
+with tarfile.open(args.output / ('taskarian-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
     archive.add(manifest_path, arcname='dependencies/components.json')
     archive.add(pi_source, arcname='dependencies/' + pi_source.name)
     for component in components: archive.add(cache / component['file'], arcname='dependencies/' + component['file'])
 # Native sources and license supplements omitted from npm distributions.
 extra_cache = cache_root / 'native'
 extra_cache.mkdir(parents=True, exist_ok=True)
-with tarfile.open(args.output / ('bashkitten-native-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
+with tarfile.open(args.output / ('taskarian-native-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
     for value in json.loads(tracked('agent/licenses/source-archives.json')):
         file = extra_cache / value['file']
         file.parent.mkdir(parents=True, exist_ok=True)
@@ -175,7 +175,7 @@ with tarfile.open(args.output / ('bashkitten-native-dependency-source-' + revisi
         assert actual == value['sha256'], 'Native source checksum mismatch: ' + value['file']
         archive.add(file, arcname='native-dependencies/' + value['file'])
 # Android's Tor/JNI and retained assets use pinned source outside Gecko itself.
-android_records = json.loads(tracked('browser/bashkitten/android/notices/sources.json'))
+android_records = json.loads(tracked('browser/taskarian/android/notices/sources.json'))
 android_archives = {}
 android_pins = {item['file']: item for item in json.loads(tracked('agent/vendor/native/android-sources.json'))}
 for record in android_records:
@@ -206,7 +206,7 @@ for record in android_records:
             license_bytes = upstream.extractfile(matches[0]).read()
     assert hashlib.sha256(license_bytes).hexdigest() == record['sha256'], 'Android license source mismatch: ' + record['name']
 android_manifest = []
-with tarfile.open(args.output / ('bashkitten-android-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
+with tarfile.open(args.output / ('taskarian-android-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
     collect_android_native(source_read, archive,
         fetch_source=lambda record, name: source_file({**android_download_pin(record),
             'paths': [] if record.get('member') else [name]}))
@@ -218,7 +218,7 @@ with tarfile.open(args.output / ('bashkitten-android-dependency-source-' + revis
     android_inventory = args.output / 'android-source-components.json'
     android_inventory.write_text(json.dumps(android_manifest, indent=2) + '\n')
     archive.add(android_inventory, arcname='android-dependencies/components.json')
-print('Collected', len(components), 'integrity-verified dependency archives, Pi upstream source and BashKitten source at', revision)
+print('Collected', len(components), 'integrity-verified dependency archives, Pi upstream source and Taskarian source at', revision)
 
 # These source bundles come from the same pinned Node component jobs as the
 # runtime payloads. Retain all four targets, including native Termux libraries.

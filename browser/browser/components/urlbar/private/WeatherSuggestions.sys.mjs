@@ -391,7 +391,7 @@ export class WeatherSuggestions extends SuggestProvider {
       {
         name: RESULT_MENU_COMMAND.MANAGE,
         l10n: {
-          id: "bashkitten-urlbar-result-menu-manage-suggestions",
+          id: "taskarian-urlbar-result-menu-manage-suggestions",
         },
       },
       {

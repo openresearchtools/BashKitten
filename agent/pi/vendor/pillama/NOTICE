@@ -6,6 +6,6 @@ Imported 8 October 2026.
 The complete upstream source tree, including its dependency lock and development
 metadata, is unmodified. Its provenance is recorded in ../pillama.upstream.json.
 Source releases contain that complete tree; installed packages contain only
-the upstream package's declared runtime files plus this notice. BashKitten's
+the upstream package's declared runtime files plus this notice. Taskarian's
 separate pillama.ts adapter selects the built-in llama.cpp or managed
-bashkitten-llama provider; the web UI displays pillama's native RPC status text.
+taskarian-llama provider; the web UI displays pillama's native RPC status text.

@@ -1,25 +1,25 @@
 import { timingSafeEqual, createHmac, createHash } from 'node:crypto';
 import { unixRequest } from '../access/io.mjs';
 
-const proxyToken = process.env.BASHKITTEN_PROXY_TOKEN;
-const authSocket = process.env.BASHKITTEN_AUTH_SOCKET;
-const localOrigin = process.env.BASHKITTEN_ACCESS_ORIGIN;
-const localCookieName = process.env.BASHKITTEN_LOCAL_COOKIE;
-const localToken = process.env.BASHKITTEN_LOCAL_TOKEN;
+const proxyToken = process.env.TASKARIAN_PROXY_TOKEN;
+const authSocket = process.env.TASKARIAN_AUTH_SOCKET;
+const localOrigin = process.env.TASKARIAN_ACCESS_ORIGIN;
+const localCookieName = process.env.TASKARIAN_LOCAL_COOKIE;
+const localToken = process.env.TASKARIAN_LOCAL_TOKEN;
 const equal = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 export function origin(req) {
-  if (!proxyToken || !equal(req.headers['x-bashkitten-proxy'], proxyToken) || req.headers['x-forwarded-proto'] !== 'https') throw Object.assign(Error('Trusted HTTPS proxy required'), { status: 403 });
+  if (!proxyToken || !equal(req.headers['x-taskarian-proxy'], proxyToken) || req.headers['x-forwarded-proto'] !== 'https') throw Object.assign(Error('Trusted HTTPS proxy required'), { status: 403 });
   return 'https://' + req.headers.host;
 }
 export async function login(req) {
   const requestOrigin = origin(req);
-  if (req.headers['x-bashkitten-access'] === 'local') {
+  if (req.headers['x-taskarian-access'] === 'local') {
     if (requestOrigin !== localOrigin || !localCookieName || !localToken) return null;
     const values = String(req.headers.cookie || '').split(';').map(part => part.trim()).filter(part => part.startsWith(localCookieName + '='));
     if (values.length !== 1 || !equal(values[0].slice(localCookieName.length + 1), localToken)) return null;
     return localAuthority();
   }
-  if (req.headers['x-bashkitten-access'] !== 'remote') return null;
+  if (req.headers['x-taskarian-access'] !== 'remote') return null;
   const username = req.headers['remote-user'], cookie = req.headers.cookie;
   return typeof username === 'string' && username && cookie ? { username, cookie, key: createHash('sha256').update(cookie).digest('hex'), origin: origin(req) } : null;
 }
@@ -34,7 +34,7 @@ export function checkOrigin(req) {
 }
 const csrf = record => createHmac('sha256', proxyToken).update(record.username + '\0' + record.cookie).digest('hex');
 export function checkCsrf(req, record) {
-  if (!equal(req.headers['x-bashkitten-csrf'], csrf(record))) throw Object.assign(Error('Invalid CSRF token'), { status: 403 });
+  if (!equal(req.headers['x-taskarian-csrf'], csrf(record))) throw Object.assign(Error('Invalid CSRF token'), { status: 403 });
 }
 export async function bootstrap(record) { return { hasUser: true, authenticated: Boolean(record), local: Boolean(record?.local), ...(record ? { csrf: csrf(record) } : { loginUrl: '/login' }) }; }
 export async function valid(record) {

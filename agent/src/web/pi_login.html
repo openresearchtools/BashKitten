@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content">
-  <title>Pi login · BashKitten</title>
+  <title>Pi login · Taskarian</title>
   <link rel="stylesheet" href="/app.css">
   <style>
     html,body { overflow: auto; height: auto; min-height: 100%; }
@@ -21,8 +21,8 @@
     <p id="notice" role="status">Preparing Pi’s login…</p>
     <div id="steps"></div>
     <button id="cancel" type="button" hidden>Cancel login</button>
-    <a id="signIn" target="_blank" rel="noopener" hidden>Sign in to BashKitten</a>
-    <a href="/">Return to BashKitten</a>
+    <a id="signIn" target="_blank" rel="noopener" hidden>Sign in to Taskarian</a>
+    <a href="/">Return to Taskarian</a>
   </main>
   <script>
     const provider = new URLSearchParams(location.search).get('provider');
@@ -32,7 +32,7 @@
       if (response.status === 401 || (response.redirected && new URL(response.url).pathname.startsWith('/login'))) {
         const link = document.querySelector('#signIn');
         link.href = '/login?rd=' + encodeURIComponent(location.href); link.hidden = false;
-        throw Error('Sign in to BashKitten again, then return to this tab.');
+        throw Error('Sign in to Taskarian again, then return to this tab.');
       }
       if (!(response.headers.get('content-type') || '').includes('application/json')) throw Error('The server did not return an API response.');
       const value = await response.json();
@@ -41,13 +41,13 @@
     }
     async function bootstrap() {
       const value = await readResponse(await fetch('/api/bootstrap'));
-      if (!value.authenticated) throw Error('Sign in to BashKitten first, then open Providers to connect a provider.');
+      if (!value.authenticated) throw Error('Sign in to Taskarian first, then open Providers to connect a provider.');
       csrf = value.csrf;
       document.querySelector('#signIn').hidden = true;
     }
     async function post(action, body) {
       for (let tries = 0; tries < 2; tries++) {
-        const response = await fetch('/api/services/' + action, { method: 'POST', headers: { 'content-type': 'application/json', 'x-bashkitten-csrf': csrf }, body: JSON.stringify(body) });
+        const response = await fetch('/api/services/' + action, { method: 'POST', headers: { 'content-type': 'application/json', 'x-taskarian-csrf': csrf }, body: JSON.stringify(body) });
         if (response.status === 403 && !tries) {
           const value = await response.clone().json().catch(() => ({}));
           if (value.error === 'Invalid CSRF token') { await bootstrap(); continue; }
@@ -63,7 +63,7 @@
       const next = JSON.stringify(login); if (next === signature) return; signature = next;
       steps.replaceChildren();
       if (!pending) {
-        notice.textContent = login.status === 'complete' ? 'Connected. You can close this tab and return to BashKitten.' : login.error || 'Login cancelled.';
+        notice.textContent = login.status === 'complete' ? 'Connected. You can close this tab and return to Taskarian.' : login.error || 'Login cancelled.';
         return;
       }
       notice.textContent = 'Sign in with ' + provider + '. Pi completes authorization automatically.';

@@ -24,8 +24,8 @@ case "$architecture" in
         ;;
     *) echo "Unsupported Termux architecture: $architecture. Use ARM64 or x86_64 Termux." >&2; exit 1 ;;
 esac
-if [[ ( $# != 1 && $# != 4 ) || ! $1 =~ ^com\.bashkitten/[A-Za-z0-9_.$]+$ ]]; then
-    echo 'Copy the complete setup command from the installed BashKitten APK; its package versions and architecture are required.' >&2
+if [[ ( $# != 1 && $# != 4 ) || ! $1 =~ ^com\.taskarian/[A-Za-z0-9_.$]+$ ]]; then
+    echo 'Copy the complete setup command from the installed Taskarian APK; its package versions and architecture are required.' >&2
     exit 1
 fi
 destination=$1
@@ -51,23 +51,23 @@ curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
 printf '%s  %s\n' "$nightly_sha" "$setup_dir/nightly.deb" | sha256sum -c -
 pkg install -y -o Dpkg::Options::=--force-confold "$setup_dir/nightly.deb"
 apt-get -o APT::Update::Error-Mode=any update
-if [[ $(dpkg-query -W -f='${Status}' bashkitten 2>/dev/null || true) == 'install ok installed' ]]; then
+if [[ $(dpkg-query -W -f='${Status}' taskarian 2>/dev/null || true) == 'install ok installed' ]]; then
     # The installed backend may own live work. The APK's updater verifies the
     # package identities and replaces them only at its existing idle boundary.
-    printf 'Returning to the installed BashKitten app to verify and match its required packages.\n'
+    printf 'Returning to the installed Taskarian app to verify and match its required packages.\n'
 else
     # APT verifies the signed catalogue; new APK commands select exact versions.
     # The returning APK checks producer/OS identities before backend startup.
     install_options=(--no-remove install -y
         -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
     if [[ -n $backend_version ]]; then
-        install_options+=(--allow-downgrades "bashkitten=$backend_version" "bashkitten-os=$os_version")
+        install_options+=(--allow-downgrades "taskarian=$backend_version" "taskarian-os=$os_version")
     else
         # Already-shipped APKs pass only their return Activity. Preserve their
         # bootstrap entry point; their APK-owned exact reconciler gates startup.
         # New APKs always supply their requirements before initial installation.
         printf 'Legacy setup: the installed app will verify its exact packages before starting Agent.\n'
-        install_options+=(bashkitten)
+        install_options+=(taskarian)
     fi
     apt-get -s "${install_options[@]}" > "$setup_dir/plan"
     cat "$setup_dir/plan"
@@ -76,7 +76,7 @@ else
     while IFS= read -r line; do
         if [[ $line =~ ^Inst\ ([^[:space:]]+)\ \[([^]]+)\]\ \(([^[:space:]]+) ]]; then
             package=${BASH_REMATCH[1]%%:*}
-            if [[ $package != bashkitten && $package != bashkitten-os ]] &&
+            if [[ $package != taskarian && $package != taskarian-os ]] &&
                 dpkg --compare-versions "${BASH_REMATCH[3]}" lt "${BASH_REMATCH[2]}"; then
                 printf 'Refusing to downgrade unrelated package %s during app setup.\n' "$package" >&2
                 exit 1
@@ -86,7 +86,7 @@ else
     apt-get "${install_options[@]}"
 fi
 # The Display owner provisions its private desktop profile on first use;
-# installing BashKitten must not change an independent Termux:X11 profile.
+# installing Taskarian must not change an independent Termux:X11 profile.
 
 mkdir -p ~/.termux
 if grep -q '^[[:space:]]*allow-external-apps[[:space:]]*=' ~/.termux/termux.properties 2>/dev/null; then
@@ -97,4 +97,4 @@ fi
 termux-reload-settings
 am start --user "$(( $(id -u) / 100000 ))" \
     -a android.intent.action.MAIN -c android.intent.category.LAUNCHER \
-    -n "$destination" --ez com.bashkitten.TERMUX_SETUP_COMPLETE true
+    -n "$destination" --ez com.taskarian.TERMUX_SETUP_COMPLETE true
