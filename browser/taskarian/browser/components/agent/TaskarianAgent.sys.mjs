@@ -370,20 +370,20 @@ class AgentView {
     void control("autostart-startup").then(result => this.updateStartupNotice(result))
       .catch(error => this.updateStartupNotice({ error: error.message }));
     void AgentRemotes.startup(() => !this.win.closed && !DesktopLifetime.quitting && !closingLocal)
-      .catch(error => { this.sidecar.notice.textContent = `Connection startup: ${error.message}`; });
+      .catch(error => { this.sidecar.setNotice(`Connection startup: ${error.message}`); });
     void (async () => {
       const { TaskarianDisplay } = ChromeUtils.importESModule("resource:///modules/TaskarianDisplay.sys.mjs");
       const result = await control("machines.startup", { displayCapabilities: TaskarianDisplay.capabilities() });
       this.machineStartupResult.resolve(result);
       await this.sidecar.refresh();
-    })().catch(error => { this.machineStartupResult.reject(error); this.sidecar.notice.textContent = `Container startup: ${error.message}`; });
+    })().catch(error => { this.machineStartupResult.reject(error); this.sidecar.setNotice(`Container startup: ${error.message}`); });
     void this.watchMachineActivations();
     const selected = Services.prefs.getStringPref("taskarian.agent.selectedRemote", "");
     await this.run(async () => {
       let status;
       if (localAutostart()) {
         try { status = await control("start"); this.localOn = status.web?.status === "running"; }
-        catch (error) { this.sidecar.notice.textContent = `Local startup: ${error.message}`; }
+        catch (error) { this.sidecar.setNotice(`Local startup: ${error.message}`); }
       }
       if (DesktopLifetime.quitting || this.win.closed) return;
       const previous = this.sidecar.backends.find(backend => backend.id === selected);
@@ -402,7 +402,7 @@ class AgentView {
     const previous = this.startupNotice || "";
     this.startupNotice = errors.length ? `Service startup: ${errors.join("; ")}` : "";
     // Other sidebar operations own their own errors. Refresh only our notice.
-    if (!this.sidecar.notice.textContent || this.sidecar.notice.textContent === previous) this.sidecar.notice.textContent = this.startupNotice;
+    if (!this.sidecar.notice.textContent || this.sidecar.notice.textContent === previous) this.sidecar.setNotice(this.startupNotice);
   }
 
   installSettingsMenu() {
@@ -849,7 +849,7 @@ class AgentView {
       if (epoch !== this.selectionEpoch || this.selection !== id || this.off) return;
       void this.disconnectSelected();
       this.message("Container disconnected", error.message);
-      this.sidecar.notice.textContent = error.message;
+      this.sidecar.setNotice(error.message);
     }, () => epoch === this.selectionEpoch && this.selection === id && !this.off && !this.win.closed);
     if (epoch !== this.selectionEpoch || this.selection !== id || this.off) { await disconnectMachine(id, connection.transportGeneration); return; }
     await this.connect(connection, true, { reload: true });
@@ -873,12 +873,12 @@ class AgentView {
             // An explicit guest-tray Open may replace a pending selection.
             // Do not consume it through run(), which can skip while busy.
             await this.choose(activation.machineId);
-          } catch (error) { this.sidecar.notice.textContent = error.message; }
+          } catch (error) { this.sidecar.setNotice(error.message); }
           finally { await control("machines.activations", { ack: activation }); }
         }
       }
     } catch (error) {
-      if (!this.win.closed && !DesktopLifetime.quitting) this.sidecar.notice.textContent = `Container activation: ${error.message}`;
+      if (!this.win.closed && !DesktopLifetime.quitting) this.sidecar.setNotice(`Container activation: ${error.message}`);
     }
   }
 

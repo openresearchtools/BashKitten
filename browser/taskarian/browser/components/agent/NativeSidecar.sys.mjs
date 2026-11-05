@@ -10,6 +10,7 @@ export class NativeSidecar {
     this.host = host; this.control = control; this.doc = host.doc;
     this.cache = new Map(); this.rows = new Map(); this.expanded = new Map(); this.renderEpoch = 0;
     this.sharing = new Map(); this.sharingPending = new Set(); this.sharingEpoch = new Map();
+    this.dismissedNotices = new Set();
     host.win.addEventListener("unload", () => { this.closed = true; this.renderEpoch++; clearTimeout(this.catalogueTimer); this.resize.disconnect(); }, { once: true });
     this.root = this.node("aside", { id: "taskarian-native-sidecar", "aria-label": "Environments, projects and chats" });
     const controls = this.node("div", { class: "native-sidecar-controls" });
@@ -18,7 +19,12 @@ export class NativeSidecar {
     this.settingsButton = this.node("button", { id: "taskarian-settings-button", type: "button", title: "Configuration", "aria-label": "Configuration", "aria-haspopup": "menu", "aria-controls": "taskarian-settings-menu", "aria-expanded": "false" });
     this.settingsButton.append(this.node("img", { src: "chrome://global/skin/icons/settings.svg", alt: "", class: "native-control-icon" }));
     controls.append(hide, this.settingsButton); this.root.append(controls);
-    this.notice = this.node("p", { role: "status" }); this.root.append(this.notice);
+    this.noticeRow = this.node("div", { class: "native-sidecar-notice", hidden: "" });
+    this.notice = this.node("p", { role: "status" });
+    const dismissNotice = this.node("button", { type: "button", class: "native-notice-close", title: "Dismiss notice", "aria-label": "Dismiss notice" });
+    dismissNotice.append(this.node("img", { src: "chrome://global/skin/icons/close.svg", alt: "", class: "native-control-icon" }));
+    dismissNotice.addEventListener("click", () => { this.dismissedNotices.add(this.notice.textContent); this.noticeRow.hidden = true; });
+    this.noticeRow.append(this.notice, dismissNotice); this.root.append(this.noticeRow);
     this.groups = new Map();
     for (const kind of ["local", "machine", "remote"]) {
       const group = this.node("div", { class: "native-environment-group" }); this.groups.set(kind, group); this.root.append(group);
@@ -32,6 +38,12 @@ export class NativeSidecar {
     });
     this.resize.observe(host.pane); this.open();
   }
+  setNotice(message, { retry = false } = {}) {
+    const text = String(message || "");
+    if (retry) this.dismissedNotices.delete(text);
+    this.notice.textContent = text;
+    this.noticeRow.hidden = !text || this.dismissedNotices.has(text);
+  }
   node(tag, attrs = {}, text) { const node = this.doc.createElementNS(NS, tag); for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value); if (text !== undefined) node.textContent = text; return node; }
   icon(kind) {
     const paths = { folder: "M3 7V5h6l2 2h10v13H3V7Z" };
@@ -41,7 +53,7 @@ export class NativeSidecar {
   }
   button(text, label, action) {
     const button = this.node("button", { type: "button", title: label, "aria-label": label }, text);
-    button.addEventListener("click", async () => { button.disabled = true; try { this.notice.textContent = ""; await action(button); } catch (error) { if (error.name !== "AbortError") this.notice.textContent = error.message; } finally { if (button.isConnected) button.disabled = false; } }); return button;
+    button.addEventListener("click", async () => { button.disabled = true; try { this.setNotice(""); await action(button); } catch (error) { if (error.name !== "AbortError") this.setNotice(error.message, { retry: true }); } finally { if (button.isConnected) button.disabled = false; } }); return button;
   }
   iconButton(image, label, action) {
     const button = this.button("", label, action);
@@ -54,7 +66,7 @@ export class NativeSidecar {
   }
   isOpen() { return this.host.pane.getAttribute("data-sidecar-open") !== "false"; }
   setOpen(open) { this.host.pane.setAttribute("data-sidecar-open", String(open)); this.host.chatsToggle?.setAttribute("aria-expanded", String(open)); }
-  open() { this.setOpen(true); if (this.backends) void this.refresh().catch(error => { this.notice.textContent = error.message; }); }
+  open() { this.setOpen(true); if (this.backends) void this.refresh().catch(error => { this.setNotice(error.message); }); }
   close() { this.actionPanel?.close(); this.setOpen(false); }
   toggle() { if (this.isOpen()) this.close(); else this.open(); }
   chatSelected() { if (this.narrow) this.close(); }
@@ -137,13 +149,13 @@ export class NativeSidecar {
       this.backends = [{ id: "local", name: "Local", kind: "local" },
         ...(machines.status === "fulfilled" ? (machines.value.machines || machines.value || []).map(machine => ({ ...machine, kind: "machine" })) : previous.filter(backend => backend.kind === "machine")),
         ...(remotes.status === "fulfilled" ? remotes.value.map(remote => ({ ...remote, kind: "remote" })) : previous.filter(backend => backend.kind === "remote"))];
-      for (const result of [machines, remotes]) if (result.status === "rejected") this.notice.textContent = result.reason.message;
+      for (const result of [machines, remotes]) if (result.status === "rejected") this.setNotice(result.reason.message);
       await this.render(); await Promise.all([this.refreshChats(), this.refreshSharing()]);
     })().finally(() => {
       this.refreshTask = null;
       if (!this.closed && (this.isOpen() || this.backends?.some(backend => backend.kind === "machine"))) {
         const pending = this.backends.some(backend => ["preparing", "starting", "stopping", "deleting"].includes(backend.state));
-        this.catalogueTimer = setTimeout(() => this.refresh().catch(error => { this.notice.textContent = error.message; }), pending ? 1000 : 5000);
+        this.catalogueTimer = setTimeout(() => this.refresh().catch(error => { this.setNotice(error.message); }), pending ? 1000 : 5000);
       }
     });
     return this.refreshTask;

@@ -57,7 +57,10 @@
 #taskarian-native-sidecar .native-chat[data-selected="true"] { background: var(--sidecar-active); }
 #taskarian-native-sidecar .native-chat > .native-title { font-size: 13px; font-weight: 430; padding: 7px 9px; }
 #taskarian-native-sidecar :is(p, small) { overflow-wrap: anywhere; color: var(--sidecar-muted); }
-#taskarian-native-sidecar > p:empty { display: none; }
+#taskarian-native-sidecar .native-sidecar-notice { display: flex; align-items: start; gap: 4px; margin-block: 8px; }
+#taskarian-native-sidecar .native-sidecar-notice[hidden] { display: none; }
+#taskarian-native-sidecar .native-sidecar-notice > p { flex: 1; min-width: 0; margin: 5px 0; }
+#taskarian-native-sidecar .native-notice-close { flex: none; padding: 0; border-radius: 50%; color: var(--sidecar-muted); }
 #taskarian-native-sidecar :is(.native-error, [role="status"]:not(.native-backend-state)) { max-height: 5.5em; overflow: auto; font-size: 12px; }
 #taskarian-native-sidecar .native-backend-state { display: block; margin: 0 8px 4px; font-size: 12px; }
 #taskarian-native-sidecar details { padding-inline-start: 8px; margin-block: 5px 12px; }
