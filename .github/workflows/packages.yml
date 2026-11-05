@@ -84,6 +84,7 @@ jobs:
     - office
     runs-on: ubuntu-24.04
     env:
+      GH_TOKEN: ${{ github.token }}
       PI_TELEMETRY: '0'
       PI_OFFLINE: '1'
       DO_NOT_TRACK: '1'

@@ -41,6 +41,8 @@ def github(command, **kwargs):
             return subprocess.check_output(['gh', *command], stderr=subprocess.PIPE, **kwargs)
         except subprocess.CalledProcessError as error:
             detail = error.stderr.decode(errors='replace') if isinstance(error.stderr, bytes) else error.stderr or ''
+            if error.returncode == 4:
+                raise MetadataUnavailable('GitHub metadata authentication is unavailable; configure GH_TOKEN for this job and retry without rebuilding native components') from error
             if re.search(r'HTTP (?:404|410)\b', detail):
                 raise
             if attempt == 2:
