@@ -10,7 +10,7 @@
   },
   "wordmark": {
     "path": "browser/taskarian/browser/branding/content/taskarian-wordmark.svg",
-    "sha256": "60b1f9f88040864d3e6e18f0fdd55f177ca3f76556e0a03796c3b2965f130c90",
+    "sha256": "66d6c7033954394193f1a39c0290d495ea416a7ddd653c7cbab330abe6fe3d4f",
     "adaptation": "Fix existing light ink for the native light Office UI"
   },
   "rasterFonts": {
@@ -20,7 +20,7 @@
   "legal": {
     "branding-attribution.txt": {
       "source": "office/branding/ATTRIBUTION.txt",
-      "sha256": "95198e70c88361db84d47c8e9ee4a02793ccd12a54b8b88c2df658c35dcab25c"
+      "sha256": "26d691b01a49cd9340faa9736511346a1ec49a67b7eed5555130fa6b4f9f056b"
     },
     "branding-taskarian-LICENSE.txt": {
       "source": "LICENSE",
@@ -28,7 +28,7 @@
     },
     "branding-artwork-LICENSE.txt": {
       "source": "browser/taskarian/browser/branding/LICENSE",
-      "sha256": "97c01d663782faf22125d54c0c1c153e58302bb846dca9394abca90b4c75a751"
+      "sha256": "eb0240a85ce5dc6217dcf66e8f550adc6a0f5b8fe124d2bda6758d0bd32cfef1"
     },
     "branding-online-COPYING.txt": {
       "source": "office/upstream/online/source/COPYING",

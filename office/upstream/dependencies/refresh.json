@@ -8,7 +8,7 @@
   "patchInputs": [
     {
       "file": "office/patches/0029-native-dependency-refresh.patch",
-      "sha256": "26da086bc81fdf9b61fe81df71960774f49113732aa2eec1fbae0ea260c48f6e"
+      "sha256": "bc70406e3fec43bcff63781728ff5d160c2f1643e897cf39c7648abdafd02f81"
     }
   ],
   "components": [

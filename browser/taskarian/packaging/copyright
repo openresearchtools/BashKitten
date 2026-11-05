@@ -8,7 +8,7 @@ The complete general license texts are installed beside this file and are
 also available in the browser at about:license.
 
 Taskarian browser licences and source notices
-----------------------------------------------
+---------------------------------------------
 
 Installed component: Taskarian browser licences and source notices
 
@@ -685,7 +685,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 
 ==============================================================================
 
-SHA-256: 33f40fa8d82726b7cae55a90841dccce7b47a55b7edddc265134b6441cdcf492
+SHA-256: 26d86b0491d4aadb0e88ce029f40a17e6d4cceaaeb249ecc7b84f31a7af311d1
 Packages: Taskarian browser licences and source notices
 Upstream paths: taskarian/BLOCKER-ASSET-SOURCE-NOTICE
 
@@ -700,7 +700,7 @@ same release set.
 
 ==============================================================================
 
-SHA-256: 68227c6c1c058d991d19625c21df6bf8870c0560ee66c35019386ac64cfa2b80
+SHA-256: 5f934a64e5b18fb0439450a2f1e618ffbcafac7b5b6668a27223dc9be8d71f8d
 Packages: Taskarian browser licences and source notices
 Upstream paths: taskarian/SOURCE-NOTICE
 
@@ -757,7 +757,7 @@ SOFTWARE.
 
 ==============================================================================
 
-SHA-256: 937b0af1adcead7df5980d6a2d7efb28ca4e3f1d246d708ceb79ed97e5db9869
+SHA-256: a7293c535da948258df662eac5c89deaece2baa624f13f2fe13ce85dcc5b24ae
 Packages: Taskarian browser licences and source notices
 Upstream paths: LICENSE
 
@@ -799,7 +799,7 @@ or any other party, including the Firefox or Waterfox names and logos.
 
 ==============================================================================
 
-SHA-256: 97c01d663782faf22125d54c0c1c153e58302bb846dca9394abca90b4c75a751
+SHA-256: eb0240a85ce5dc6217dcf66e8f550adc6a0f5b8fe124d2bda6758d0bd32cfef1
 Packages: Taskarian browser licences and source notices
 Upstream paths: taskarian/browser/branding/LICENSE
 
@@ -1281,7 +1281,7 @@ For more information, please refer to <http://unlicense.org/>
 
 ==============================================================================
 
-SHA-256: d99e38abd87f72d2d24570f119e90717bfb4017275bd33086456407a43f85bd5
+SHA-256: a4b3f4865bc85dd8fdd0a0bfa4ce27dca157c094fa08d6fc0074e3ff71c25e3c
 Packages: Adblock engine and memchr source notices
 Upstream paths: taskarian/BLOCKER-ENGINE-SOURCE-NOTICE
 
@@ -1320,7 +1320,7 @@ Packages:
 
 Exact upstream legal files:
 
-SHA-256: c681e62dc5182163301eb4baf839e5fb803e43a36fcbaece369e57f93dce185f
+SHA-256: 82629860772bec414727ed39c3f1a2d6ea267866beaeca9a8454c7c6d7a2b14a
 Packages: Waterfox source and modification notices
 Upstream paths: taskarian/WATERFOX-NOTICE
 
@@ -2913,7 +2913,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 
 ==============================================================================
 
-SHA-256: 7a585752e48f54839aa8b8bca2563e5928a54d4798201d41246b5d1fdbbb215e
+SHA-256: 575254f838093f241539e0b1174bc7b5a4979dca342bc0105f4f0ed9b6304a4e
 Packages: BrowserOS browser tools, modifications and GNU AGPL 3.0
 Upstream paths: taskarian/components/taskarian-cli/NOTICE
 
@@ -3981,7 +3981,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 
 ==============================================================================
 
-SHA-256: 7eb04ce7aa017196c37a152abcd6cff055fcec426493ce024ca1e62b55867fe5
+SHA-256: 7925c073bcadcbc7245dadcbb3e62665d98f71b374893e82857cf72b4169313f
 Packages: Unsloth Studio search adaptations in the companion Agent server
 Upstream paths: agent/search/third_party/unsloth-studio/NOTICE
 

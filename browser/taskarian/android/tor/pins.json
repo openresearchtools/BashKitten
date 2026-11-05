@@ -17,7 +17,7 @@
     "commit": "4a522a3ca491c6c04d4a44cb006b92101c42efc1",
     "base": "8fe2745aee2c35116ff1081f19b2952418b43069",
     "patch": "patches/0001-guardian-android-jni.patch",
-    "sha256": "c83b2d4ca6fd899e7ff49f8bd55b6eae3e158b57ca0ea3f470a31eba119ec0f0"
+    "sha256": "7f9acc626f433bd8d452a0e95d8e4471c9dca0573f891ece54060aa0873e3242"
   },
   "dependencies": {
     "elf-cleaner": "termux-elf-cleaner-e4f87f8d13541779756f4907c6957d2a000653da.tar.gz",
