@@ -60,6 +60,11 @@ def records(read):
             paths.append(row['file'])
         add(manifest, row, ['office/upstream/dependencies/' + path for path in paths])
 
+    manifest = 'office/upstream/dependencies/refresh.json'
+    for row in document(manifest)['components']:
+        if row.get('ecosystem') == 'npm':
+            add(manifest, row, ['office/upstream/dependencies/' + row['file']])
+
     owner = Path(__file__).resolve().parents[2] / 'files/go_runtime.py'
     spec = importlib.util.spec_from_file_location('files_source_selection', owner)
     go_runtime = importlib.util.module_from_spec(spec)

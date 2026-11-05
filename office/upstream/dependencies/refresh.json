@@ -8,7 +8,7 @@
   "patchInputs": [
     {
       "file": "office/patches/0029-native-dependency-refresh.patch",
-      "sha256": "bc70406e3fec43bcff63781728ff5d160c2f1643e897cf39c7648abdafd02f81"
+      "sha256": "cbbed87eec9140c7411311503c03d43fc275518a5e6ab3c459dff46ea3c79ed1"
     }
   ],
   "components": [
@@ -331,6 +331,27 @@
           "sha256": "39fc4986b224f2f5575dec58ae66c7c9ee2d5d3884ba4971c932f1fd5b40b033",
           "offsetBytes": 1601,
           "lengthBytes": 426
+        }
+      ]
+    },
+    {
+      "ecosystem": "npm",
+      "name": "dompurify",
+      "product": "DOMPurify",
+      "version": "3.4.17",
+      "url": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.17.tgz",
+      "sha256": "056cbdae276897208b88c21d1d779adfa09ad7be488a2f510a28e900d3bbffe7",
+      "size": 335573,
+      "file": "archives/dompurify-3.4.17.tgz",
+      "resolved": "file:node_shrinkpack/dompurify-3.4.17.tar",
+      "integrity": "sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w== sha512-GQ+L1vcMoiR8cQosEV2vEMUWGZTuUuwzkxQGsPuKrkTbsXhb5zxTjRoSfqSh44qVzdKGGuJWIOJk84tPpmLDmQ==",
+      "license": "MPL-2.0 OR Apache-2.0",
+      "repository": "https://github.com/cure53/DOMPurify",
+      "licenseFiles": [
+        {
+          "file": "licenses/dompurify-3.4.17/LICENSE",
+          "member": "package/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
         }
       ]
     }

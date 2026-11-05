@@ -168,3 +168,37 @@ diff --git a/engine/external/curl/ExternalProject_curl.mk b/engine/external/curl
  			-DCURL_DISABLE_SMTP=ON \
  			-DCURL_DISABLE_TELNET=ON \
  			-DCURL_DISABLE_TFTP=ON \
+diff --git a/browser/Makefile.am b/browser/Makefile.am
+--- a/browser/Makefile.am
++++ b/browser/Makefile.am
+@@ -272 +272 @@
+-	dompurify@3.4.14 \
++	dompurify@3.4.17 \
+diff --git a/browser/package.json b/browser/package.json
+--- a/browser/package.json
++++ b/browser/package.json
+@@ -21,7 +21,7 @@
+     "browserify": "16.5.1",
+     "browserify-css": "0.15.0",
+     "d3": "7.9.0",
+-    "dompurify": "3.4.14",
++    "dompurify": "3.4.17",
+     "esbuild-wasm": "^0.28.1",
+     "eslint": "^7.32.0",
+     "eslint-config-prettier": "^9.1.0",
+diff --git a/browser/npm-shrinkwrap.json.in b/browser/npm-shrinkwrap.json.in
+--- a/browser/npm-shrinkwrap.json.in
++++ b/browser/npm-shrinkwrap.json.in
+@@ -3654,9 +3654,9 @@
+       }
+     },
+     "node_modules/dompurify": {
+-      "version": "3.4.14",
+-      "resolved": "file:node_shrinkpack/dompurify-3.4.14.tar",
+-      "integrity": "sha512-dVoH9z+MY+C9IilgGCk3YfFqjLi3fChm2OiKJMzh6axrJ5qwxqWaZamgmHrpv22CN/KdbZJuGEGgfQoL00LTdg== sha512-YcW3IEXo5o9+TmodVRw9JB55OAObWsG/Zqy/mGIS6aE+tBQ+ZIBuLGH5dQwkPU593+FyTdJFmuXEtckt+N1JEA==",
++      "version": "3.4.17",
++      "resolved": "file:node_shrinkpack/dompurify-3.4.17.tar",
++      "integrity": "sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w== sha512-GQ+L1vcMoiR8cQosEV2vEMUWGZTuUuwzkxQGsPuKrkTbsXhb5zxTjRoSfqSh44qVzdKGGuJWIOJk84tPpmLDmQ==",
+       "dev": true,
+       "license": "(MPL-2.0 OR Apache-2.0)",
+       "optionalDependencies": {

@@ -128,6 +128,7 @@ def prepare(work, cache):
     # Upstream's archive build entry point for the native version/hash reply.
     (source / 'dist_git_hash').write_text(pin['commit'][:10] + '\n')
     patch_source(source)
+    source_graph.prepare_browser_dependencies(source)
     return source
 
 

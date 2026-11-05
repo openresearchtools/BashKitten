@@ -88,6 +88,7 @@ def prepare(work, cache, architecture):
                            cwd=source, text=True, check=True)
         (source / 'dist_git_hash').write_text(pin['commit'][:10] + '\n')
         write_json(stamp, expected)
+    source_graph.prepare_browser_dependencies(source)
     return source
 
 

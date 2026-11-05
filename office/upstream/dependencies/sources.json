@@ -3,11 +3,11 @@
   "pristineDownloadListSha256": "6694de718cb3e73fd27f2aad7534d717a19fc07e90bb57ec95fe8d04e402813b",
   "downloadListSha256": "68748a0b5f0177a19846a441aca2203553efb8b044b2f93d3382d713e11c1a5b",
   "fetchRecipeSha256": "91fac72a196d1084b94c89c40f7b4448a4738c5a0cc8192ad29e00dbd7432cfd",
-  "refreshManifestSha256": "b31a8ab71aa21f42dedf3acc5c87fdfba5caf7bfacee1e9e725cb5731540af90",
+  "refreshManifestSha256": "cf810e8ee7d054e0e16b9b8d2d3e26d04267c10e209340d943a82bfc99c7f489",
   "patchInputs": [
     {
       "file": "office/patches/0029-native-dependency-refresh.patch",
-      "sha256": "bc70406e3fec43bcff63781728ff5d160c2f1643e897cf39c7648abdafd02f81"
+      "sha256": "cbbed87eec9140c7411311503c03d43fc275518a5e6ab3c459dff46ea3c79ed1"
     }
   ],
   "configuration": "config_host.mk",

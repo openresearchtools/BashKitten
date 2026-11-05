@@ -8,6 +8,7 @@ import argparse
 import base64
 import concurrent.futures
 import contextlib
+import gzip
 import hashlib
 import json
 import os
@@ -57,7 +58,9 @@ def dependency_source():
             paths = set(re.findall(r'^(?:---|\+\+\+) [ab]/([^\t\n]+)', patch.read_text(), re.M))
             for relative in paths:
                 path = Path(relative)
-                if path.is_absolute() or '..' in path.parts or path.parts[0] != 'engine':
+                browser_inputs = {'browser/Makefile.am', 'browser/package.json', 'browser/npm-shrinkwrap.json.in'}
+                if (path.is_absolute() or '..' in path.parts
+                        or path.parts[0] != 'engine' and relative not in browser_inputs):
                     raise ValueError('Named dependency patch leaves the native engine')
                 original = SOURCE / path
                 destination = root / path
@@ -148,7 +151,7 @@ manifest:
     result = subprocess.run(['make', '--no-builtin-rules', '--no-builtin-variables', '-f', '-', 'manifest'],
                             input=recipe, check=True, text=True, capture_output=True)
     records = []
-    refreshed = {row['variable']: row for row in dependency_refresh()['components']}
+    refreshed = {row['variable']: row for row in dependency_refresh()['components'] if row.get('ecosystem') != 'npm'}
     for line in result.stdout.splitlines():
         variable, name, expected, base = line.split('|')
         if len(expected) != 64 or any(c not in '0123456789abcdef' for c in expected):
@@ -231,6 +234,29 @@ def verify_dependencies(cache=None, *, offline=False):
     for record in manifest['components']:
         dependency_file(record, cache, offline=offline)
     return manifest
+
+
+def prepare_browser_dependencies(source):
+    """Seed upstream shrinkpack from the pinned original npm release bytes."""
+    lock = json.loads((source / 'browser/npm-shrinkwrap.json.in').read_text())['packages']
+    for record in dependency_refresh()['components']:
+        if record.get('ecosystem') != 'npm':
+            continue
+        selected = lock['node_modules/' + record['name']]
+        if any(selected[key] != record[key] for key in ('version', 'resolved', 'integrity')):
+            raise ValueError('Browser dependency refresh differs from its native npm lock')
+        relative = Path(record['resolved'].removeprefix('file:'))
+        if (not record['resolved'].startswith('file:node_shrinkpack/') or relative.is_absolute()
+                or '..' in relative.parts):
+            raise ValueError('Browser dependency leaves its upstream shrinkpack')
+        payload = gzip.decompress(dependency_file(record).read_bytes())
+        if not any(hashlib.new(algorithm, payload).digest() == base64.b64decode(encoded)
+                   for algorithm, encoded in (item.split('-', 1) for item in selected['integrity'].split())):
+            raise ValueError('Original browser archive differs from the native npm integrity pin')
+        destination = source / 'browser' / relative
+        if not destination.is_file() or destination.read_bytes() != payload:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(payload)
 
 
 def import_dependencies(config, cache):
