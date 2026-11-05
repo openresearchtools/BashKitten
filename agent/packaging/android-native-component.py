@@ -82,7 +82,14 @@ def historical_native_recipe(revision):
 
 
 @cache
-def native_inputs(revision, target, legacy_android_module=False):
+def native_tree(revision):
+    component.ensure_source(revision)
+    return git('ls-tree', '-r', '-z', revision, '--', 'browser')
+
+
+@cache
+def native_inputs(revision, target, legacy_android_module=False,
+                  legacy_fixture_metadata=False, legacy_desktop_resources=False):
     if not isinstance(revision, str) or not re.fullmatch('[0-9a-f]{40}', revision):
         raise ValueError('Invalid native source revision')
     if subprocess.run(['git', 'cat-file', '-e', revision + '^{commit}'], cwd=ROOT,
@@ -91,13 +98,17 @@ def native_inputs(revision, target, legacy_android_module=False):
         # sharing the current tree's blobs; never fetch Mozilla ancestry or tags.
         component.network_command(['git', 'fetch', '--filter=blob:none', '--no-tags', '--depth=1', 'origin', revision])
     entries = []
-    for entry in git('ls-tree', '-r', '-z', revision, '--', 'browser').split(b'\0'):
+    for entry in native_tree(revision).split(b'\0'):
         if not entry:
             continue
         path = entry.split(b'\t', 1)[1].decode()
         # This exact EXTRA_JS_MODULES input is repackaged into omni.ja. Keep its
         # moz.build and all other shared files in the native input comparison.
         if path == component.ANDROID_ONLY_MODULE and not legacy_android_module:
+            continue
+        if path in component.FIXTURE_METADATA and not legacy_fixture_metadata:
+            continue
+        if path in component.ANDROID_DESKTOP_RESOURCES and not legacy_desktop_resources:
             continue
         if path == COLLECTOR or path.startswith(APPLICATION_PATHS) or '/__pycache__/' in path:
             continue
@@ -137,7 +148,8 @@ def verify_native(apk, record, target):
     # Preserve old receipts, including their original digest. Validate that
     # digest under its actual producer's old/new calculation before comparing
     # current native inputs with the producer under the narrow resource rule.
-    recorded_inputs = {producer_inputs, native_inputs(record.get('source', ''), target, True)}
+    recorded_inputs = {native_inputs(record.get('source', ''), target, module, fixtures, desktop)
+                       for module in (False, True) for fixtures in (False, True) for desktop in (False, True)}
     if (record.get('schema') != 1 or record.get('architecture') != abi or
             record.get('input_sha256') not in recorded_inputs or
             producer_inputs != native_inputs(current, target) or
@@ -301,10 +313,12 @@ def restore_early(directory, target):
     current = git('rev-parse', 'HEAD').decode().strip()
     digest = native_inputs(current, target)
     name = native_artifact(target, digest)
-    for page in range(1, 101):
-        artifacts = component.api(f'repos/{repository}/actions/artifacts?name={name}&per_page=100&page={page}')['artifacts']
+    page = 0
+    while True:
+        query = f'name={name}&per_page=100' if page == 0 else f'per_page=100&page={page}'
+        artifacts = component.api(f'repos/{repository}/actions/artifacts?{query}')['artifacts']
         for artifact in artifacts:
-            if artifact['expired'] or artifact['name'] != name:
+            if artifact['expired'] or not artifact['name'].startswith(f'taskarian-gecko-{target}-'):
                 continue
             try:
                 run = component.api(f'repos/{repository}/actions/runs/{artifact["workflow_run"]["id"]}')
@@ -312,9 +326,13 @@ def restore_early(directory, target):
                 evidence = early_producer(repository, run, artifact)
                 if not source or not evidence or native_inputs(source[1], target) != digest:
                     continue
+                accepted_names = {native_artifact(target, native_inputs(source[1], target, module, fixtures, desktop))
+                                  for module in (False, True) for fixtures in (False, True) for desktop in (False, True)}
+                if artifact['name'] not in accepted_names:
+                    continue
                 with tempfile.TemporaryDirectory(prefix='gecko-restore-', dir=directory.parent) as temporary:
                     producer = Path(temporary)
-                    component.download(repository, run['id'], name, producer)
+                    component.download(repository, run['id'], artifact['name'], producer)
                     component.verify_checksums(producer)
                     manifest = producer / 'native-gecko.json'
                     record = json.loads(manifest.read_text())
@@ -334,9 +352,12 @@ def restore_early(directory, target):
                 return True
             except (OSError, ValueError, KeyError, TypeError, UnicodeError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
                 print(f'Skipping unusable native Gecko cache {artifact["id"]}: {error}', flush=True)
+        if page == 0:
+            page = 1
+            continue
         if len(artifacts) < 100:
             return False
-    return False
+        page += 1
 
 
 def restore_apk(directory, target):

@@ -18,5 +18,8 @@
     "build": "rm -rf dist && react-scripts build && mv build dist",
     "test": "react-scripts test"
   },
-  "homepage": "./"
+  "homepage": "./",
+  "overrides": {
+    "fsevents": "1.2.13"
+  }
 }

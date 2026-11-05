@@ -19,5 +19,8 @@
     "clean-old-assets": "rm -r ../app-build || true",
     "copy-assets": "yarn clean-old-assets; yarn build; cp -r ./build ../app-build; yarn clean-build",
     "copy-assets-windows": "yarn build; cp -r ./build ../app-build"
+  },
+  "resolutions": {
+    "fsevents": "1.2.13"
   }
 }

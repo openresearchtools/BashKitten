@@ -23,6 +23,42 @@ ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = 'agent/packaging/browser-component.py'
 EQUIVALENCE = 'browser-input-equivalence.json'
 ANDROID_ONLY_MODULE = 'browser/mobile/shared/modules/geckoview/TaskarianAndroid.sys.mjs'
+# Desktop DIST_SUBDIR=browser resources are not native/JNI input. The Android
+# packager does not include that subtree; any optional copy still must be fresh.
+ANDROID_DESKTOP_RESOURCES = (
+    'browser/taskarian/browser/components/agent/NativeSidecar.sys.mjs',
+    'browser/taskarian/browser/components/agent/TaskarianAgent.sys.mjs',
+    'browser/taskarian/browser/components/agent/agent.css',
+)
+
+# Explicit disabled-test metadata: never compiler, runtime or generated JNI inputs.
+FIXTURE_METADATA = (
+    'browser/devtools/client/aboutdebugging/test/node/yarn.lock',
+    'browser/devtools/client/accessibility/test/node/yarn.lock',
+    'browser/devtools/client/application/test/node/yarn.lock',
+    'browser/devtools/client/debugger/test/mochitest/examples/react/yarn.lock',
+    'browser/devtools/client/debugger/test/mochitest/examples/sourcemapped/builds/parcel/yarn.lock',
+    'browser/devtools/client/debugger/test/mochitest/examples/sourcemapped/builds/webpack3-babel6/yarn.lock',
+    'browser/devtools/client/debugger/test/mochitest/examples/sourcemapped/builds/webpack3-babel7/yarn.lock',
+    'browser/devtools/client/debugger/test/mochitest/examples/sourcemapped/builds/webpack3/yarn.lock',
+    'browser/devtools/client/debugger/test/mochitest/examples/sourcemapped/builds/webpack4-babel6/yarn.lock',
+    'browser/devtools/client/debugger/test/mochitest/examples/sourcemapped/builds/webpack4-babel7/yarn.lock',
+    'browser/devtools/client/debugger/test/mochitest/examples/sourcemapped/builds/webpack4/yarn.lock',
+    'browser/devtools/client/debugger/test/mochitest/examples/sourcemapped/yarn.lock',
+    'browser/devtools/client/inspector/compatibility/test/node/yarn.lock',
+    'browser/devtools/client/netmonitor/test/node/yarn.lock',
+    'browser/testing/talos/talos/tests/devtools/addon/content/pages/custom/debugger/app/package.json',
+    'browser/testing/talos/talos/tests/devtools/addon/content/pages/custom/debugger/app/yarn.lock',
+    'browser/third_party/webkit/PerformanceTests/Speedometer/resources/todomvc/architecture-examples/angular/package-lock.json',
+    'browser/third_party/webkit/PerformanceTests/Speedometer/resources/todomvc/architecture-examples/emberjs/package-lock.json',
+    'browser/third_party/webkit/PerformanceTests/Speedometer/resources/todomvc/architecture-examples/preact/package-lock.json',
+    'browser/third_party/webkit/PerformanceTests/Speedometer/resources/todomvc/architecture-examples/react-redux/package-lock.json',
+    'browser/third_party/webkit/PerformanceTests/Speedometer/resources/todomvc/architecture-examples/react-redux/package.json',
+    'browser/third_party/webkit/PerformanceTests/Speedometer/resources/todomvc/architecture-examples/react/package-lock.json',
+    'browser/third_party/webkit/PerformanceTests/Speedometer/resources/todomvc/architecture-examples/vuejs-cli/package-lock.json',
+    'browser/third_party/webkit/PerformanceTests/Speedometer/resources/todomvc/architecture-examples/vuejs-cli/yarn.lock',
+    'browser/third_party/webkit/PerformanceTests/Speedometer/resources/todomvc/vanilla-examples/es2015-babel-webpack/package-lock.json',
+)
 
 
 class NetworkUnavailable(RuntimeError):
@@ -92,24 +128,39 @@ def input_paths(target, include_verifier=False):
     return paths
 
 
-def fingerprint(target, legacy_verifier=None, legacy_android_module=None, legacy_linux_workflow=None):
-    listing = subprocess.check_output(['git', 'ls-files', '--stage', '-z', '--',
-                                       *input_paths(target, bool(legacy_verifier))], cwd=ROOT)
+@cache
+def input_listing(target, include_verifier):
+    return subprocess.check_output(['git', 'ls-files', '--stage', '-z', '--',
+                                    *input_paths(target, include_verifier)], cwd=ROOT)
+
+
+def fingerprint(target, legacy_verifier=None, legacy_android_module=None,
+                legacy_linux_workflow=None, legacy_fixture_blobs=None):
     if legacy_android_module and target.startswith('android'):
         raise ValueError('Android APK resources cannot use Linux input equivalence')
-    for path, blob in ((VERIFIER, legacy_verifier), (ANDROID_ONLY_MODULE, legacy_android_module),
-                       ('.github/builders/linux.yml', legacy_linux_workflow)):
-        if not blob:
-            continue
-        if not re.fullmatch('[0-9a-f]{40}', blob):
-            raise ValueError('Invalid legacy source identity')
-        entries = listing.split(b'\0')
-        matching = [i for i, entry in enumerate(entries) if entry.endswith(b'\t' + path.encode())]
-        if len(matching) != 1:
-            raise ValueError('Missing tracked legacy input')
-        entries[matching[0]] = f'100644 {blob} 0\t{path}'.encode()
-        listing = b'\0'.join(entries)
-    return hashlib.sha256(target.encode() + b'\0' + listing).hexdigest()
+    substitutions = {path: blob for path, blob in (
+        (VERIFIER, legacy_verifier), (ANDROID_ONLY_MODULE, legacy_android_module),
+        ('.github/builders/linux.yml', legacy_linux_workflow)) if blob}
+    if legacy_fixture_blobs:
+        if not isinstance(legacy_fixture_blobs, dict) or set(legacy_fixture_blobs) - set(FIXTURE_METADATA):
+            raise ValueError('Only declared fixture metadata can use historical lock identities')
+        substitutions.update(legacy_fixture_blobs)
+    for blob in substitutions.values():
+        if not isinstance(blob, str) or not re.fullmatch('[0-9a-f]{40}', blob):
+            raise ValueError('Invalid historical source identity')
+    encoded = {path.encode(): blob for path, blob in substitutions.items()}
+    found = set()
+    entries = []
+    for entry in input_listing(target, bool(legacy_verifier)).split(b'\0'):
+        if b'\t' in entry:
+            path = entry.split(b'\t', 1)[1]
+            if path in encoded:
+                entry = f'100644 {encoded[path]} 0\t'.encode() + path
+                found.add(path)
+        entries.append(entry)
+    if found != encoded.keys():
+        raise ValueError('Missing tracked historical input')
+    return hashlib.sha256(target.encode() + b'\0' + b'\0'.join(entries)).hexdigest()
 
 
 @cache
@@ -160,7 +211,8 @@ def equivalent_source(source, target):
     requested_recipe = (ROOT / workflow).read_text()
     if linux_native_recipe(producer_recipe) != linux_native_recipe(requested_recipe):
         return False
-    paths = [*input_paths(target), ':(exclude)' + workflow, ':(exclude)' + ANDROID_ONLY_MODULE]
+    paths = [*input_paths(target), ':(exclude)' + workflow, ':(exclude)' + ANDROID_ONLY_MODULE,
+             *(':(exclude)' + path for path in FIXTURE_METADATA)]
     return not network_command(['git', 'diff-tree', '--no-commit-id', '--raw', '-r', '--no-renames',
                                 source, current, '--', *paths])
 
@@ -182,6 +234,11 @@ def matching_input(directory, target, recorded, digest, producer, legacy_android
     if not isinstance(receipt, dict):
         raise ValueError('Browser equivalence receipt must be an object')
     manifest = Path(directory) / ('build-manifest.json' if target.startswith('android') else 'browser-artifact-manifest.txt')
+    fixture_blobs = receipt.get('legacyFixtureLockBlobs') or {path: source_blob(producer, path) for path in FIXTURE_METADATA}
+    if not isinstance(fixture_blobs, dict) or set(fixture_blobs) != set(FIXTURE_METADATA):
+        raise ValueError('Fixture metadata receipt must cover exactly the declared fixture files')
+    if any(source_blob(producer, path) != blob for path, blob in fixture_blobs.items()):
+        raise ValueError('Fixture metadata receipt differs from the actual producer Git objects')
     if (receipt.get('schema') != 1 or receipt.get('target') != target or
             receipt.get('producerSource') != producer or
             receipt.get('producerFingerprint') != recorded or
@@ -189,7 +246,7 @@ def matching_input(directory, target, recorded, digest, producer, legacy_android
             receipt.get('producerManifestSha256') != hashlib.sha256(manifest.read_bytes()).hexdigest() or
             fingerprint(target, receipt.get('legacyVerifierBlob'),
                         receipt.get('legacyAndroidModuleBlob', legacy_android_module),
-                        receipt.get('legacyLinuxWorkflowBlob')) != recorded):
+                        receipt.get('legacyLinuxWorkflowBlob'), fixture_blobs) != recorded):
         raise ValueError('Browser source equivalence does not match this source')
 
 
@@ -230,6 +287,13 @@ def verify_android_resources(apk):
         with zipfile.ZipFile(io.BytesIO(archive.read('assets/omni.ja'))) as omni:
             if omni.read('modules/TaskarianAndroid.sys.mjs') != (ROOT / ANDROID_ONLY_MODULE).read_bytes():
                 raise ValueError('Android omnijar module does not match the current source')
+            for source in ANDROID_DESKTOP_RESOURCES:
+                suffix = '/taskarian/agent/agent.css' if source.endswith('.css') else '/' + Path(source).name
+                for name in omni.namelist():
+                    if name.endswith(suffix):
+                        expected = (ROOT / source).read_bytes() if (ROOT / source).is_file() else network_command(['git', 'show', 'HEAD:' + source]).encode()
+                        if omni.read(name) != expected:
+                            raise ValueError('Android optional desktop resource differs from the current source: ' + name)
 
 
 def verify_checksums(directory):
@@ -485,24 +549,25 @@ def restore_available(directory, target, digest):
                 source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
                 if not source or not equivalent_source(source[1], target):
                     continue
-                legacy = legacy_module = legacy_workflow = None
+                legacy = legacy_module = legacy_workflow = legacy_fixtures = None
                 expected = digest
                 if artifact['name'] != name:
                     source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
                     if not source:
                         continue
                     verifier = source_blob(source[1], VERIFIER)
-                    candidates = [(verifier, None, None)]
+                    candidates = [(verifier, None, None, None)]
                     if not target.startswith('android'):
                         # This exact module is traversed only by mobile Android/iOS
                         # builds. Prove all remaining Linux inputs still match;
                         # retain the original source/blob in the equivalence receipt.
                         module = source_blob(source[1], ANDROID_ONLY_MODULE)
                         workflow = source_blob(source[1], '.github/builders/linux.yml')
-                        candidates += [(v, m, w) for v in (None, verifier)
-                                       for m in (None, module) for w in (None, workflow)]
-                    for legacy, legacy_module, legacy_workflow in candidates:
-                        expected = fingerprint(target, legacy, legacy_module, legacy_workflow)
+                        fixtures = {path: source_blob(source[1], path) for path in FIXTURE_METADATA}
+                        candidates += [(v, m, w, f) for v in (None, verifier)
+                                       for m in (None, module) for w in (None, workflow) for f in (None, fixtures)]
+                    for legacy, legacy_module, legacy_workflow, legacy_fixtures in candidates:
+                        expected = fingerprint(target, legacy, legacy_module, legacy_workflow, legacy_fixtures)
                         if artifact['name'] == artifact_name(target, expected):
                             break
                     else:
@@ -539,6 +604,7 @@ def restore_available(directory, target, digest):
                         receipt['legacyAndroidModuleBlob'] = source_blob(producer, ANDROID_ONLY_MODULE)
                     if legacy_workflow:
                         receipt['legacyLinuxWorkflowBlob'] = source_blob(producer, '.github/builders/linux.yml')
+                    receipt['legacyFixtureLockBlobs'] = {path: source_blob(producer, path) for path in FIXTURE_METADATA}
                     receipt['restoredFrom'] = {'repository': repository, 'run': run['id'],
                         'source': source[1], 'artifact': artifact['id'], 'steps': evidence,
                         'sha256': {line.split('  ', 1)[1]: line.split('  ', 1)[0]
