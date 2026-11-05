@@ -1,5 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 EXTRA_JS_MODULES += [
+    "ContainerConnection.sys.mjs",
+    "DesktopAutostart.sys.mjs",
+    "DesktopLifetime.sys.mjs",
+    "NativeSidecar.sys.mjs",
+    "Performance.sys.mjs",
+    "ProviderLogin.sys.mjs",
+    "RemoteSettings.sys.mjs",
     "TaskarianAbout.sys.mjs",
     "TaskarianAgent.sys.mjs",
     "TaskarianAgentChild.sys.mjs",
@@ -8,12 +15,5 @@ EXTRA_JS_MODULES += [
     "TaskarianSettings.sys.mjs",
     "TaskarianSettingsChild.sys.mjs",
     "TaskarianSettingsParent.sys.mjs",
-    "ContainerConnection.sys.mjs",
-    "DesktopAutostart.sys.mjs",
-    "DesktopLifetime.sys.mjs",
-    "NativeSidecar.sys.mjs",
-    "Performance.sys.mjs",
-    "ProviderLogin.sys.mjs",
-    "RemoteSettings.sys.mjs",
 ]
 JAR_MANIFESTS += ["jar.mn"]

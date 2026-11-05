@@ -4,13 +4,6 @@
 
 EXTRA_JS_MODULES += [
     "/taskarian/browser/components/agent/TaskarianDrafts.sys.mjs",
-    "TaskarianAndroid.sys.mjs",
-    "TaskarianHost.sys.mjs",
-    "TaskarianHostChild.sys.mjs",
-    "TaskarianHostParent.sys.mjs",
-    "TaskarianSettings.sys.mjs",
-    "TaskarianSettingsChild.sys.mjs",
-    "TaskarianSettingsParent.sys.mjs",
     "BrowserUsageTelemetry.sys.mjs",
     "ChildCrashHandler.sys.mjs",
     "DelayedInit.sys.mjs",
@@ -20,7 +13,6 @@ EXTRA_JS_MODULES += [
     "GeckoViewAIFeatures.sys.mjs",
     "GeckoViewAutocomplete.sys.mjs",
     "GeckoViewAutofill.sys.mjs",
-    "GeckoViewTaskarian.sys.mjs",
     "GeckoViewClipboardPermission.sys.mjs",
     "GeckoViewConsole.sys.mjs",
     "GeckoViewContent.sys.mjs",
@@ -40,6 +32,7 @@ EXTRA_JS_MODULES += [
     "GeckoViewSettings.sys.mjs",
     "GeckoViewStorageController.sys.mjs",
     "GeckoViewTab.sys.mjs",
+    "GeckoViewTaskarian.sys.mjs",
     "GeckoViewTelemetry.sys.mjs",
     "GeckoViewTestUtils.sys.mjs",
     "GeckoViewTrackingDB.sys.mjs",
@@ -50,6 +43,13 @@ EXTRA_JS_MODULES += [
     "MediaUtils.sys.mjs",
     "Messaging.sys.mjs",
     "NimbusGeckoViewQATelemetry.sys.mjs",
+    "TaskarianAndroid.sys.mjs",
+    "TaskarianHost.sys.mjs",
+    "TaskarianHostChild.sys.mjs",
+    "TaskarianHostParent.sys.mjs",
+    "TaskarianSettings.sys.mjs",
+    "TaskarianSettingsChild.sys.mjs",
+    "TaskarianSettingsParent.sys.mjs",
 ]
 
 XPCSHELL_TESTS_MANIFESTS += ["test/xpcshell/xpcshell.toml"]

@@ -3,8 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 EXTRA_JS_MODULES += [
+    "BrowserControlChannel.sys.mjs",
     "TaskarianCommand.sys.mjs",
     "TaskarianControlStartup.sys.mjs",
-    "BrowserControlChannel.sys.mjs",
 ]
 
