@@ -991,21 +991,6 @@
   mirror: once
 
 #---------------------------------------------------------------------------
-# Prefs starting with "taskarian."
-#---------------------------------------------------------------------------
-
-# Native context IDs shared by Tor channel routing and direct-transport guards.
-- name: taskarian.tor.containerId
-  type: RelaxedAtomicUint32
-  value: 0
-  mirror: always
-
-- name: taskarian.tor.persistentContainerId
-  type: RelaxedAtomicUint32
-  value: 0
-  mirror: always
-
-#---------------------------------------------------------------------------
 # Prefs starting with "beacon."
 #---------------------------------------------------------------------------
 
@@ -19165,6 +19150,21 @@
 - name: svg.use-element.recursive-clone-limit
   type: uint32_t
   value: 8
+  mirror: always
+
+#---------------------------------------------------------------------------
+# Prefs starting with "taskarian."
+#---------------------------------------------------------------------------
+
+# Native context IDs shared by Tor channel routing and direct-transport guards.
+- name: taskarian.tor.containerId
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+- name: taskarian.tor.persistentContainerId
+  type: RelaxedAtomicUint32
+  value: 0
   mirror: always
 
 #---------------------------------------------------------------------------

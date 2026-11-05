@@ -268,6 +268,8 @@ support-files = [
 
 ["test_sort_orders.js"]
 
+["test_taskarian_engine_selection.js"]
+
 ["test_telemetry_default.js"]
 
 ["test_telemetry_installed_engine_counts.js"]
@@ -298,5 +300,3 @@ support-files = ["settings/v1-migrate-to-webextension.json"]
 ["test_webextensions_upgrade.js"]
 
 ["test_webextensions_valid.js"]
-
-["test_taskarian_engine_selection.js"]

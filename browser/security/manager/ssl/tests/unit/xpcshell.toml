@@ -404,8 +404,8 @@ skip-if = [
 
 ["test_sts_preloadlist_selfdestruct.js"]
 
+["test_taskarian_onion_trust.js"]
+
 ["test_trust_anchors.js"]
 
 ["test_x509.js"]
-
-["test_taskarian_onion_trust.js"]
