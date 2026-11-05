@@ -23,6 +23,9 @@ name: Collect a separate browser build
       warm_gkrust:
         default: false
         type: boolean
+      force_rebuild:
+        default: false
+        type: boolean
     secrets:
       BUILD_REPOS_TOKEN:
         required: true
@@ -37,6 +40,21 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         persist-credentials: false
+        sparse-checkout-cone-mode: false
+        sparse-checkout: |
+          /.github/builders/
+          /agent/packaging/*.py
+          /agent/packaging/node/lock.json
+          /agent/vendor/native/android-sources.json
+          /agent/src/server/platform/termux/updates-prepare.py
+          /browser/taskarian/android/mozconfig
+          /browser/taskarian/android/tor/
+          /browser/taskarian/android/notices/
+          /browser/taskarian/android/scripts/tor.py
+          /browser/taskarian/third_party/tor.toml
+          /browser/mobile/shared/modules/geckoview/TaskarianAndroid.sys.mjs
+          /browser/mobile/android/installer/package-manifest.in
+          /references/runtime-payload.json
     - name: Dispatch and collect this target independently
       env:
         GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
@@ -47,7 +65,8 @@ jobs:
         ENVIRONMENTS_RUN: ${{ inputs.environments_run || github.run_id }}
         OFFICE_RUN: ${{ inputs.office_run || github.run_id }}
         WARM_GKRUST: ${{ inputs.warm_gkrust }}
-      run: python3 agent/packaging/remote-browser.py "$BROWSER_TARGET" --directory "$RUNNER_TEMP/component" --auth-run "$AUTH_RUN" --search-run "$SEARCH_RUN" --node-run "$NODE_RUN" --environments-run "$ENVIRONMENTS_RUN" --office-run "$OFFICE_RUN" --warm-gkrust "$WARM_GKRUST"
+        FORCE_REBUILD: ${{ inputs.force_rebuild }}
+      run: python3 agent/packaging/remote-browser.py "$BROWSER_TARGET" --directory "$RUNNER_TEMP/component" --auth-run "$AUTH_RUN" --search-run "$SEARCH_RUN" --node-run "$NODE_RUN" --environments-run "$ENVIRONMENTS_RUN" --office-run "$OFFICE_RUN" --warm-gkrust "$WARM_GKRUST" --force-rebuild "$FORCE_REBUILD"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: ${{ inputs.target == 'android' && 'taskarian-android-candidate' || format('taskarian-{0}-candidate', inputs.target) }}

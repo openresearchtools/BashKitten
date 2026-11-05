@@ -2,6 +2,7 @@
 """Reuse verified browser artifacts without consuming the compiler-cache quota."""
 import argparse
 import base64
+from datetime import datetime
 from functools import cache
 import hashlib
 import importlib.util
@@ -10,7 +11,10 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
+import tempfile
+import time
 import zipfile
 
 from release import validate_termux_update, TERMUX_UPDATE_ASSET, TERMUX_BOOTSTRAP_ASSET, TERMUX_PREPARER_ASSET
@@ -21,13 +25,34 @@ EQUIVALENCE = 'browser-input-equivalence.json'
 ANDROID_ONLY_MODULE = 'browser/mobile/shared/modules/geckoview/TaskarianAndroid.sys.mjs'
 
 
-def fingerprint(target, legacy_verifier=None, legacy_android_module=None):
+class NetworkUnavailable(RuntimeError):
+    """Retry the reuse check later instead of starting duplicate compilation."""
+
+
+def network_command(command):
+    for attempt in range(3):
+        result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+        if result.returncode == 0:
+            return result.stdout
+        if re.search(r'HTTP 404|"status"\s*:\s*"?404|does not exist in|not our ref|couldn.t find remote ref', result.stderr + result.stdout):
+            raise FileNotFoundError('Published producer metadata/artifact is no longer available')
+        if attempt < 2:
+            time.sleep(5 * (attempt + 1))
+    raise NetworkUnavailable('Artifact/producer metadata could not be fetched after three attempts; retry this job without rebuilding.')
+
+
+def download(repository, run, name, directory):
+    network_command(['gh', 'run', 'download', str(run), '--repo', repository,
+                     '--name', name, '--dir', str(directory)])
+
+
+def input_paths(target, include_verifier=False):
     # Cache policy is not compiler input. Preserve the old calculation only to
     # prove equivalence of already-published artifacts; no producer is relabelled.
     paths = ['browser', 'references/connector', 'references/vendor/translators', 'references/legal',
              'references/web/theme.css',
              'agent/packaging/references-component.py',
-             'agent/packaging/source_cache.py'] + ([VERIFIER] if legacy_verifier else [])
+             'agent/packaging/source_cache.py'] + ([VERIFIER] if include_verifier else [])
     if target.startswith('android'):
         paths += ['.github/builders/android.yml', 'auth', 'agent/native/remote', 'agent/native/phone-control',
                   'agent/packaging/android-notices.py', 'agent/packaging/build.py',
@@ -64,10 +89,16 @@ def fingerprint(target, legacy_verifier=None, legacy_android_module=None):
     else:
         paths += ['.github/builders/linux.yml', 'agent/packaging/linux/prepare-runner.sh',
                   ':(exclude)browser/mobile/android', ':(exclude)browser/taskarian/android']
-    listing = subprocess.check_output(['git', 'ls-files', '--stage', '-z', '--', *paths], cwd=ROOT)
+    return paths
+
+
+def fingerprint(target, legacy_verifier=None, legacy_android_module=None, legacy_linux_workflow=None):
+    listing = subprocess.check_output(['git', 'ls-files', '--stage', '-z', '--',
+                                       *input_paths(target, bool(legacy_verifier))], cwd=ROOT)
     if legacy_android_module and target.startswith('android'):
         raise ValueError('Android APK resources cannot use Linux input equivalence')
-    for path, blob in ((VERIFIER, legacy_verifier), (ANDROID_ONLY_MODULE, legacy_android_module)):
+    for path, blob in ((VERIFIER, legacy_verifier), (ANDROID_ONLY_MODULE, legacy_android_module),
+                       ('.github/builders/linux.yml', legacy_linux_workflow)):
         if not blob:
             continue
         if not re.fullmatch('[0-9a-f]{40}', blob):
@@ -81,18 +112,75 @@ def fingerprint(target, legacy_verifier=None, legacy_android_module=None):
     return hashlib.sha256(target.encode() + b'\0' + listing).hexdigest()
 
 
+@cache
+def ensure_source(source):
+    if not isinstance(source, str) or not re.fullmatch('[0-9a-f]{40}', source):
+        raise ValueError('Invalid browser producer source')
+    if subprocess.run(['git', 'cat-file', '-e', source + '^{commit}'], cwd=ROOT,
+                      stderr=subprocess.DEVNULL).returncode:
+        network_command(['git', 'fetch', '--filter=blob:none', '--no-tags', '--depth=1', 'origin', source])
+
+
+def linux_native_recipe(source):
+    # Scheduling, restore and upload policy cannot change compiled browser bits.
+    # Keep the actual toolchain environment and native commands in the proof.
+    recipe = {}
+    for name in ('Select the native target', 'Prepare runner', 'Install the compatible Rust toolchain',
+                 'Bootstrap pinned Mozilla toolchain', 'Optional native Rust cache warm-up',
+                 'Build the complete browser archive'):
+        block = re.search(r'^    - (?:id: .+\n      )?name: ' + re.escape(name) +
+                          r'\n((?:      .*\n|\n)+)', source, re.M)
+        if not block:
+            raise ValueError('Linux native recipe is missing ' + name)
+        recipe[name] = [line for line in block[1].splitlines()
+                        if not re.match(r'      (?:if|timeout-minutes):', line)]
+    environment = re.search(r'^    env:\n((?:      .+\n)+)', source, re.M)
+    runner = re.search(r'^    runs-on: (.+)$', source, re.M)
+    if not environment or not runner:
+        raise ValueError('Linux native recipe is missing its environment')
+    recipe['runner'] = runner[1]
+    recipe['environment'] = environment[1]
+    for action in ('mozilla-actions/sccache-action', 'actions/setup-node'):
+        block = re.search(r'^    - uses: ' + re.escape(action) + r'@(.+\n)((?:      .*\n|\n)*)', source, re.M)
+        if not block:
+            raise ValueError('Linux native recipe is missing ' + action)
+        recipe[action] = block[1] + '\n'.join(line for line in block[2].splitlines()
+                                             if not re.match(r'      if:', line))
+    return recipe
+
+
+@cache
+def equivalent_source(source, target):
+    ensure_source(source)
+    current = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    if target.startswith('android'):
+        return source == current  # Complete APK resources are revision-specific.
+    workflow = '.github/builders/linux.yml'
+    producer_recipe = network_command(['git', 'show', source + ':' + workflow])
+    requested_recipe = (ROOT / workflow).read_text()
+    if linux_native_recipe(producer_recipe) != linux_native_recipe(requested_recipe):
+        return False
+    paths = [*input_paths(target), ':(exclude)' + workflow, ':(exclude)' + ANDROID_ONLY_MODULE]
+    return not network_command(['git', 'diff-tree', '--no-commit-id', '--raw', '-r', '--no-renames',
+                                source, current, '--', *paths])
+
+
 def artifact_name(target, digest):
     return f'taskarian-browser-{target}-{digest}'
 
 
 def api(endpoint):
-    return json.loads(subprocess.check_output(['gh', 'api', endpoint], text=True))
+    return json.loads(network_command(['gh', 'api', endpoint]))
 
 
 def matching_input(directory, target, recorded, digest, producer, legacy_android_module=None):
-    if recorded == digest:
+    if not equivalent_source(producer, target):
+        raise ValueError('Browser producer effective Git inputs differ from this source')
+    if recorded == digest and not (Path(directory) / EQUIVALENCE).exists():
         return
     receipt = json.loads((Path(directory) / EQUIVALENCE).read_text())
+    if not isinstance(receipt, dict):
+        raise ValueError('Browser equivalence receipt must be an object')
     manifest = Path(directory) / ('build-manifest.json' if target.startswith('android') else 'browser-artifact-manifest.txt')
     if (receipt.get('schema') != 1 or receipt.get('target') != target or
             receipt.get('producerSource') != producer or
@@ -100,7 +188,8 @@ def matching_input(directory, target, recorded, digest, producer, legacy_android
             receipt.get('compileFingerprint') != digest or
             receipt.get('producerManifestSha256') != hashlib.sha256(manifest.read_bytes()).hexdigest() or
             fingerprint(target, receipt.get('legacyVerifierBlob'),
-                        receipt.get('legacyAndroidModuleBlob', legacy_android_module)) != recorded):
+                        receipt.get('legacyAndroidModuleBlob', legacy_android_module),
+                        receipt.get('legacyLinuxWorkflowBlob')) != recorded):
         raise ValueError('Browser source equivalence does not match this source')
 
 
@@ -164,6 +253,8 @@ def verify(directory, target, digest, legacy_android_module=None):
     verify_checksums(directory)
     if target.startswith('android'):
         manifest = json.loads((directory / 'build-manifest.json').read_text())
+        if not isinstance(manifest, dict):
+            raise ValueError('Android component manifest must be an object')
         if manifest.get('architecture') != ('x86_64' if target == 'android-x86_64' else 'arm64-v8a'):
             raise ValueError('Android component inputs do not match this source')
         if not re.fullmatch('[0-9a-f]{40}', manifest.get('source', '')):
@@ -213,7 +304,7 @@ def verify_package(directory, target, source, digest):
 
 
 @cache
-def android_workflow_steps(repository, revision):
+def workflow_steps(repository, revision, job_name):
     if not re.fullmatch('[0-9a-f]{40}', revision):
         raise ValueError('Invalid builder workflow revision')
     path = '.github/workflows/build.yml'
@@ -224,7 +315,7 @@ def android_workflow_steps(repository, revision):
     # Actions results start with setup-job (1), then these steps (2 onwards).
     # Resolve commands from the immutable recipe: API display names can be
     # secret-redacted, including the word Android, and are not identities.
-    if re.findall(r'^  ([\w-]+):$', jobs, re.M) != ['apk']:
+    if re.findall(r'^  ([\w-]+):$', jobs, re.M) != [job_name]:
         return None
     steps = re.split(r'^    - ', jobs.partition('    steps:\n')[2], flags=re.M)[1:]
     if not steps:
@@ -233,7 +324,7 @@ def android_workflow_steps(repository, revision):
 
 
 def completed_android_producer(repository, run, jobs):
-    recipe = android_workflow_steps(repository, run['head_sha'])
+    recipe = workflow_steps(repository, run['head_sha'], 'apk')
     if recipe is None or len(jobs) != 1:
         return None
     steps, workflow = recipe
@@ -270,15 +361,36 @@ def completed_android_producer(repository, run, jobs):
     if all(step.get('conclusion') == 'success' for step in builds):
         return {**evidence, 'build': builds}
     restored = results.get(restore_number, {})
-    if (run['conclusion'] == 'success' and restored.get('conclusion') == 'success' and
+    if (restored.get('conclusion') == 'success' and
             all(step.get('conclusion') == 'skipped' for step in builds)):
         return {**evidence, 'restored': restored}
     return None
 
 
-def completed_producer(repository, run, target):
-    if (run['status'] != 'completed' or run['conclusion'] not in ('success', 'failure') or
-            run['event'] != 'workflow_dispatch' or run['head_branch'] != 'main' or
+def producer_attempts(run):
+    return ({**run, 'run_attempt': attempt} for attempt in range(run['run_attempt'], 0, -1))
+
+
+def upload_matches(evidence, artifact):
+    if artifact is None:
+        return True
+    upload = evidence['upload']
+    parse = lambda value: datetime.fromisoformat(value.replace('Z', '+00:00'))
+    return parse(upload['started_at']) <= parse(artifact['created_at']) <= parse(upload['completed_at'])
+
+
+def completed_producer(repository, run, target, artifact=None):
+    for attempt in producer_attempts(run):
+        evidence = producer_attempt(repository, attempt, target)
+        if evidence and upload_matches(evidence, artifact):
+            return {**evidence, 'attempt': attempt['run_attempt']}
+    return None
+
+
+def producer_attempt(repository, run, target):
+    # Artifact upload is the publication boundary. Later assembly, cancellation,
+    # or an unrelated target does not invalidate successful native proof.
+    if (run['event'] != 'workflow_dispatch' or run['head_branch'] != 'main' or
             run['path'] != '.github/workflows/build.yml'):
         return None
     run_id, attempt = run.get('id'), run.get('run_attempt')
@@ -291,26 +403,46 @@ def completed_producer(repository, run, target):
             raise ValueError('Browser producer job belongs to another run or attempt')
     if target.startswith('android'):
         return completed_android_producer(repository, run, jobs)
-    verify_name = 'Verify the browser archive and source inputs'
-    build_names = ['Build the complete browser archive']
+    recipe = workflow_steps(repository, run['head_sha'], 'browser')
+    source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
+    if recipe is None or source is None:
+        return None
+    immutable = base64.b64decode(api(f'repos/{repository}/contents/.github/workflows/build.yml?ref={run["head_sha"]}')['content']).decode()
+    ensure_source(source[1])
+    original = network_command(['git', 'show', source[1] + ':.github/builders/linux.yml'])
+    if linux_native_recipe(immutable) != linux_native_recipe(original):
+        return None
+    recipes, workflow = recipe
+    def numbered(name):
+        matches = [index + 2 for index, step in enumerate(recipes) if step.startswith('name: ' + name + '\n')]
+        return matches[0] if len(matches) == 1 else None
+    build_number = numbered('Build the complete browser archive')
+    verify_number = numbered('Verify the browser archive and source inputs')
+    if not build_number or not verify_number or build_number >= verify_number:
+        return None
+    upload_recipe = recipes[verify_number - 1]
+    if (not re.match(r'uses: actions/upload-artifact@[0-9a-f]{40}\n', upload_recipe) or
+            not re.search(r'^        path: \$\{\{ runner\.temp \}\}/browser/stage/$', upload_recipe, re.M) or
+            not re.search(r'^        name: \$\{\{ steps\.component\.outputs\.artifact \}\}$', upload_recipe, re.M)):
+        return None
     for job in jobs:
         steps = job.get('steps', [])
-        verification = next((s for s in steps if s['name'] == verify_name and s['conclusion'] == 'success'), None)
+        verification = next((s for s in steps if s['number'] == verify_number and s['conclusion'] == 'success'), None)
         if not verification:
             continue
         upload = next((s for s in steps if s['number'] == verification['number'] + 1 and
                        'actions/upload-artifact@' in s['name'] and s['conclusion'] == 'success'), None)
-        builds = [next((s for s in steps if s['name'] == name), {}) for name in build_names]
+        builds = [next((s for s in steps if s['number'] == build_number), {})]
         if not upload:
             continue
         if all(s.get('conclusion') == 'success' for s in builds):
-            return {'job': job['id'], 'build': builds, 'verify': verification, 'upload': upload}
+            return {'job': job['id'], 'workflow': workflow, 'build': builds, 'verify': verification, 'upload': upload}
         # A successful workflow may itself have restored a verified producer.
         # A failed workflow is reusable only after an actual successful build.
         restored = next((s for s in steps if s['name'].startswith('Restore a matching completed ') and
                          s['conclusion'] == 'success'), None)
-        if run['conclusion'] == 'success' and restored and all(s.get('conclusion') == 'skipped' for s in builds):
-            return {'job': job['id'], 'restored': restored, 'verify': verification, 'upload': upload}
+        if restored and all(s.get('conclusion') == 'skipped' for s in builds):
+            return {'job': job['id'], 'workflow': workflow, 'restored': restored, 'verify': verification, 'upload': upload}
     return None
 
 
@@ -324,86 +456,150 @@ def source_blob(source, path):
     return api(f'repos/openresearchtools/Taskarian/contents/{path}?ref={source}')['sha']
 
 
-def restore(directory, target, digest):
+def restore_available(directory, target, digest):
     repository = os.environ['GITHUB_REPOSITORY']
     expected = 'openresearchtools/taskarian-build-' + target.removeprefix('linux-')
     if repository != expected:
         raise ValueError('Component restoration must run in the matching build repository')
     name = artifact_name(target, digest)
-    page = 1
+    page = 0
     while True:
-        artifacts = api(f'repos/{repository}/actions/artifacts?per_page=100&page={page}')['artifacts']
+        query = f'name={name}&per_page=100' if page == 0 else f'per_page=100&page={page}'
+        artifacts = api(f'repos/{repository}/actions/artifacts?{query}')['artifacts']
         for artifact in artifacts:
             if artifact['expired'] or not artifact['name'].startswith(f'taskarian-browser-{target}-'):
                 continue
-            run = api(f'repos/{repository}/actions/runs/{artifact["workflow_run"]["id"]}')
-            if target.startswith('android'):
-                # The APK carries exact companion package expectations. A
-                # different assembly revision needs new APK resources, even
-                # when unchanged Gecko objects remain in the compiler cache.
-                source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
-                current = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-                if not source or source[1] != current:
+            try:
+                run = api(f'repos/{repository}/actions/runs/{artifact["workflow_run"]["id"]}')
+                if target.startswith('android'):
+                    # The APK carries exact companion package expectations. A
+                    # different assembly revision needs new APK resources, even
+                    # when unchanged Gecko objects remain in the compiler cache.
+                    source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
+                    current = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+                    if not source or source[1] != current:
+                        continue
+                evidence = completed_producer(repository, run, target, artifact)
+                if not evidence:
                     continue
-            evidence = completed_producer(repository, run, target)
-            if not evidence:
+                source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
+                if not source or not equivalent_source(source[1], target):
+                    continue
+                legacy = legacy_module = legacy_workflow = None
+                expected = digest
+                if artifact['name'] != name:
+                    source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
+                    if not source:
+                        continue
+                    verifier = source_blob(source[1], VERIFIER)
+                    candidates = [(verifier, None, None)]
+                    if not target.startswith('android'):
+                        # This exact module is traversed only by mobile Android/iOS
+                        # builds. Prove all remaining Linux inputs still match;
+                        # retain the original source/blob in the equivalence receipt.
+                        module = source_blob(source[1], ANDROID_ONLY_MODULE)
+                        workflow = source_blob(source[1], '.github/builders/linux.yml')
+                        candidates += [(v, m, w) for v in (None, verifier)
+                                       for m in (None, module) for w in (None, workflow)]
+                    for legacy, legacy_module, legacy_workflow in candidates:
+                        expected = fingerprint(target, legacy, legacy_module, legacy_workflow)
+                        if artifact['name'] == artifact_name(target, expected):
+                            break
+                    else:
+                        continue
+                # Never leave a partial/corrupt optional cache in the build output.
+                with tempfile.TemporaryDirectory(prefix='browser-restore-', dir=Path(directory).parent) as temporary:
+                    try:
+                        download(repository, run['id'], artifact['name'], temporary)
+                        verify(temporary, target, expected, legacy_module)
+                        for file in Path(temporary).iterdir():
+                            shutil.move(str(file), Path(directory) / file.name)
+                    except (OSError, ValueError, KeyError, TypeError, UnicodeError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
+                        print(f'Skipping unusable browser cache {artifact["id"]}: {error}', flush=True)
+                        continue
+                if expected != digest or not target.startswith('android'):
+                    manifest_file = Path(directory) / ('build-manifest.json' if target.startswith('android') else 'browser-artifact-manifest.txt')
+                    manifest = json.loads(manifest_file.read_text()) if target.startswith('android') else dict(line.split('=', 1) for line in manifest_file.read_text().splitlines())
+                    producer = manifest['source' if target.startswith('android') else 'taskarian_commit']
+                    receipt_file = Path(directory) / EQUIVALENCE
+                    if receipt_file.exists():
+                        # verify() already checked the previous receipt and complete
+                        # artifact. Preserve the original producer through reuse.
+                        receipt = json.loads(receipt_file.read_text())
+                        receipt['compileFingerprint'] = digest
+                    else:
+                        if legacy and source_blob(producer, VERIFIER) != legacy:
+                            raise ValueError('Producer verifier differs from the proven legacy input')
+                        receipt = {'schema': 1, 'target': target, 'producerSource': producer,
+                                   'producerFingerprint': expected, 'compileFingerprint': digest,
+                                   'legacyVerifierBlob': legacy, 'repository': repository, 'run': run['id'],
+                                   'artifact': artifact['id'], 'producerSteps': evidence,
+                                   'producerManifestSha256': hashlib.sha256(manifest_file.read_bytes()).hexdigest()}
+                    if legacy_module:
+                        receipt['legacyAndroidModuleBlob'] = source_blob(producer, ANDROID_ONLY_MODULE)
+                    if legacy_workflow:
+                        receipt['legacyLinuxWorkflowBlob'] = source_blob(producer, '.github/builders/linux.yml')
+                    receipt['restoredFrom'] = {'repository': repository, 'run': run['id'],
+                        'source': source[1], 'artifact': artifact['id'], 'steps': evidence,
+                        'sha256': {line.split('  ', 1)[1]: line.split('  ', 1)[0]
+                                   for line in (Path(directory) / 'SHA256SUMS').read_text().splitlines()
+                                   if not line.endswith('  ' + EQUIVALENCE)}}
+                    receipt_file.write_text(json.dumps(receipt, indent=2) + '\n')
+                    checksums = Path(directory) / 'SHA256SUMS'
+                    lines = [line for line in checksums.read_text().splitlines()
+                             if not line.endswith('  ' + EQUIVALENCE)]
+                    lines.append(hashlib.sha256(receipt_file.read_bytes()).hexdigest() + '  ' + EQUIVALENCE)
+                    checksums.write_text('\n'.join(lines) + '\n')
+                    verify(directory, target, digest)
+                print(f'Reused verified {target} browser from {run["html_url"]}', flush=True)
+                return True
+            except (OSError, ValueError, KeyError, TypeError, UnicodeError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
+                for file in Path(directory).iterdir():
+                    shutil.rmtree(file) if file.is_dir() else file.unlink()
+                print(f'Skipping unprovable browser cache {artifact["id"]}: {error}', flush=True)
                 continue
-            legacy = None
-            legacy_module = None
-            expected = digest
-            if artifact['name'] != name:
-                source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
-                if not source:
-                    continue
-                verifier = source_blob(source[1], VERIFIER)
-                candidates = [(verifier, None)]
-                if not target.startswith('android'):
-                    # This exact module is traversed only by mobile Android/iOS
-                    # builds. Prove all remaining Linux inputs still match;
-                    # retain the original source/blob in the equivalence receipt.
-                    module = source_blob(source[1], ANDROID_ONLY_MODULE)
-                    candidates += [(None, module), (verifier, module)]
-                for legacy, legacy_module in candidates:
-                    expected = fingerprint(target, legacy, legacy_module)
-                    if artifact['name'] == artifact_name(target, expected):
-                        break
-                else:
-                    continue
-            subprocess.run(['gh', 'run', 'download', str(run['id']), '--repo', repository,
-                            '--name', artifact['name'], '--dir', str(directory)], check=True)
-            verify(directory, target, expected, legacy_module)
-            if expected != digest:
-                manifest_file = Path(directory) / ('build-manifest.json' if target.startswith('android') else 'browser-artifact-manifest.txt')
-                manifest = json.loads(manifest_file.read_text()) if target.startswith('android') else dict(line.split('=', 1) for line in manifest_file.read_text().splitlines())
-                producer = manifest['source' if target.startswith('android') else 'taskarian_commit']
-                receipt_file = Path(directory) / EQUIVALENCE
-                if receipt_file.exists():
-                    # verify() already checked the previous receipt and complete
-                    # artifact. Preserve the original producer through reuse.
-                    receipt = json.loads(receipt_file.read_text())
-                    receipt['compileFingerprint'] = digest
-                else:
-                    if legacy and source_blob(producer, VERIFIER) != legacy:
-                        raise ValueError('Producer verifier differs from the proven legacy input')
-                    receipt = {'schema': 1, 'target': target, 'producerSource': producer,
-                               'producerFingerprint': expected, 'compileFingerprint': digest,
-                               'legacyVerifierBlob': legacy, 'repository': repository, 'run': run['id'],
-                               'artifact': artifact['id'], 'producerSteps': evidence,
-                               'producerManifestSha256': hashlib.sha256(manifest_file.read_bytes()).hexdigest()}
-                if legacy_module:
-                    receipt['legacyAndroidModuleBlob'] = source_blob(producer, ANDROID_ONLY_MODULE)
-                receipt_file.write_text(json.dumps(receipt, indent=2) + '\n')
-                checksums = Path(directory) / 'SHA256SUMS'
-                lines = [line for line in checksums.read_text().splitlines()
-                         if not line.endswith('  ' + EQUIVALENCE)]
-                lines.append(hashlib.sha256(receipt_file.read_bytes()).hexdigest() + '  ' + EQUIVALENCE)
-                checksums.write_text('\n'.join(lines) + '\n')
-                verify(directory, target, digest)
-            print(f'Reused verified {target} browser from {run["html_url"]}', flush=True)
-            return True
+        if page == 0:
+            page = 1
+            continue
         if len(artifacts) < 100:
             return False
         page += 1
+
+
+def restore(directory, target, digest):
+    repository = os.environ['GITHUB_REPOSITORY']
+    current_run = int(os.environ.get('GITHUB_RUN_ID', '0'))
+    deadline = time.monotonic() + 5 * 60 * 60
+    while True:
+        if restore_available(directory, target, digest):
+            return True
+        if not current_run or target.startswith('android'):
+            return False
+        # Older run IDs form an acyclic producer chain. Wait only through its
+        # native stage; a verified upload is consumed on the next iteration.
+        runs = api(f'repos/{repository}/actions/workflows/build.yml/runs?event=workflow_dispatch&per_page=100')['workflow_runs']
+        pending = None
+        for run in sorted(runs, key=lambda item: item['id']):
+            if run['id'] >= current_run or run['status'] == 'completed' or run.get('head_branch') != 'main':
+                continue
+            source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
+            if not source or not equivalent_source(source[1], target):
+                continue
+            jobs = api(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100')['jobs']
+            native = [step for job in jobs for step in job.get('steps', [])
+                      if step['name'] in ('Build the complete browser archive', 'Verify the browser archive and source inputs')]
+            if any(step.get('conclusion') in ('failure', 'cancelled') for step in native):
+                continue
+            # A published native stage with an unavailable/invalid artifact is
+            # a cache miss, not a reason to wait for unrelated package assembly.
+            if completed_producer(repository, run, target):
+                continue
+            pending = run
+            break
+        if pending is None or time.monotonic() >= deadline:
+            return False
+        print(f'Waiting for matching native browser producer {pending["html_url"]}; no duplicate compilation.', flush=True)
+        time.sleep(30)
 
 
 def main():
@@ -411,6 +607,7 @@ def main():
     parser.add_argument('action', choices=['fingerprint', 'restore', 'verify'])
     parser.add_argument('target', choices=['linux-arm64', 'linux-amd64', 'android', 'android-x86_64'])
     parser.add_argument('--directory', type=Path)
+    parser.add_argument('--force-build', action='store_true', help='Bypass optional artifact restoration')
     args = parser.parse_args()
     digest = fingerprint(args.target)
     name = artifact_name(args.target, digest)
@@ -425,10 +622,16 @@ def main():
     args.directory.mkdir(parents=True, exist_ok=True)
     if any(args.directory.iterdir()):
         raise ValueError('Restore destination must be empty')
-    hit = restore(args.directory, args.target, digest)
+    try:
+        hit = False if args.force_build or os.environ.get('TASKARIAN_FORCE_FULL_BUILD') == '1' else restore(args.directory, args.target, digest)
+    except (OSError, ValueError, KeyError, TypeError, UnicodeError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
+        for file in args.directory.iterdir():
+            shutil.rmtree(file) if file.is_dir() else file.unlink()
+        print(f'Optional browser restoration unavailable: {error}; using a normal build.', flush=True)
+        hit = False
     with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
         output.write(f'hit={str(hit).lower()}\ndigest={digest}\nartifact={name}\n')
-    print('Matching completed browser artifact found' if hit else 'Compiling changed browser inputs')
+    print('Matching verified browser artifact found' if hit else 'Compiling changed browser inputs')
 
 
 if __name__ == '__main__':

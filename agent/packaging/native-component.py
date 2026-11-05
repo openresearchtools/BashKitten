@@ -1,0 +1,551 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Restore native Actions artifacts whose committed build inputs are unchanged."""
+import argparse
+import base64
+from functools import cache
+import hashlib
+import json
+import os
+from pathlib import Path
+import posixpath
+import re
+import shutil
+import struct
+import subprocess
+import tarfile
+import tempfile
+import time
+import zipfile
+
+ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY = 'openresearchtools/Taskarian'
+AUTH = ('authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote')
+TARGETS = ('linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64')
+
+
+def git(*args):
+    try:
+        return subprocess.check_output(['git', *args], cwd=ROOT, stderr=subprocess.PIPE).decode().strip()
+    except subprocess.CalledProcessError as error:
+        raise MetadataUnavailable('Native Git metadata/blob lookup failed; retry without rebuilding completed components') from error
+
+
+class MetadataUnavailable(RuntimeError):
+    """A transient lookup/download failure must not trigger native compilation."""
+
+
+def github(command, **kwargs):
+    for attempt in range(3):
+        try:
+            return subprocess.check_output(['gh', *command], stderr=subprocess.PIPE, **kwargs)
+        except subprocess.CalledProcessError as error:
+            detail = error.stderr.decode(errors='replace') if isinstance(error.stderr, bytes) else error.stderr or ''
+            if re.search(r'HTTP (?:404|410)\b', detail):
+                raise
+            if attempt == 2:
+                raise MetadataUnavailable('GitHub artifact service is unavailable; retry this job after connectivity recovers') from error
+            time.sleep(2 ** attempt)
+
+
+def api(endpoint):
+    return json.loads(github(['api', endpoint]))
+
+
+@cache
+def local(revision):
+    return subprocess.run(['git', 'cat-file', '-e', revision + '^{commit}'], cwd=ROOT,
+                          stderr=subprocess.DEVNULL).returncode == 0
+
+
+@cache
+def tree(sha):
+    return {entry['path']: entry for entry in api(f'repos/{REPOSITORY}/git/trees/{sha}')['tree']}
+
+
+@cache
+def entry(revision, path):
+    if not re.fullmatch('[0-9a-f]{40}', revision):
+        raise ValueError('Invalid native source revision')
+    if local(revision):
+        line = git('ls-tree', revision, '--', path)
+        return line.split()[2] if line else None
+    current = revision
+    for part in path.split('/'):
+        record = tree(current).get(part)
+        if record is None:
+            return None
+        current = record['sha']
+    return current
+
+
+@cache
+def content(revision, path):
+    if local(revision):
+        return git('show', revision + ':' + path)
+    return base64.b64decode(api(f'repos/{REPOSITORY}/git/blobs/{entry(revision, path)}')['content']).decode()
+
+
+def recipe(revision, workflow, job, names, commands=()):
+    """Only native execution inputs; artifact/cache policy never changes a binary."""
+    text = content(revision, '.github/workflows/' + workflow + '.yml')
+    match = re.search(r'^  ' + re.escape(job) + r':\n(.*?)(?=^  [\w-]+:|\Z)', text, re.M | re.S)
+    if not match:
+        raise ValueError('Missing native build job: ' + job)
+    block = match[1]
+    runner = re.findall(r'^    runs-on: (.*)$', block, re.M)
+    environment = re.search(r'^    env:\n((?:      .+\n)+)', block, re.M)
+    result = {'runner': runner, 'environment': environment.group(1) if environment else '', 'steps': []}
+    for step in re.split(r'^      - ', block, flags=re.M)[1:]:
+        name = re.match(r'name: (.*)', step)
+        uses = re.match(r'uses: ([^\n]+)', step)
+        if uses and any(tool in uses[1] for tool in ('setup-go@', 'setup-node@', 'setup-python@', 'pnpm/action-setup@')):
+            result['steps'].append('\n'.join(line for line in step.splitlines()
+                                            if not re.match(r'        (?:if|id):', line)))
+        elif name and name[1] in names:
+            run = re.search(r'^        run: (.*?)(?=^        [a-z][\w-]*:|\Z)', step, re.M | re.S)
+            if not run:
+                raise ValueError('Missing native execution command: ' + name[1])
+            command = run[1].rstrip()
+            if commands:
+                result['steps'] += [line.strip() for line in command.splitlines()
+                                    if any(part in line for part in commands)]
+            else:
+                env = re.search(r'^        env:\n((?:          .+\n)+)', step, re.M)
+                result['steps'].append({'run': command, 'environment': env.group(1) if env else ''})
+    if not result['steps']:
+        raise ValueError('No native execution inputs found')
+    return result
+
+
+def go_sources(revision, directory):
+    """Follow committed local replace directives without resolving/downloading Go."""
+    seen = set()
+    pending = [directory]
+    while pending:
+        current = pending.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        if entry(revision, current + '/go.mod') is None:
+            raise ValueError('Unproven native Go module input: ' + current)
+        module = content(revision, current + '/go.mod')
+        for destination in re.findall(r'=>\s+("(?:\\.|[^"\\])*"|`[^`]*`|[^\s]+)', module):
+            if destination.startswith('"'):
+                try:
+                    destination = json.loads(destination)
+                except ValueError as error:
+                    raise ValueError('Unproven quoted native Go replacement') from error
+            elif destination.startswith('`'):
+                raise ValueError('Unproven quoted native Go replacement')
+            if destination.startswith('/'):
+                raise ValueError('Native Go replacement lies outside the committed repository')
+            if destination.startswith(('./', '../')):
+                path = posixpath.normpath(posixpath.join(current, destination))
+                if path == '..' or path.startswith('../'):
+                    raise ValueError('Native Go replacement escapes its source tree')
+                pending.append(path)
+    return sorted(seen)
+
+
+def go_pins(revision, sources):
+    retained = json.loads(content(revision, 'auth/dependencies/go/sources.json'))
+    locks, modules = {}, set()
+    for directory in sources:
+        path = directory + '/go.sum'
+        if entry(revision, path) is None:
+            continue
+        text = content(revision, path)
+        locks[path] = entry(revision, path)
+        for line in text.splitlines():
+            name, version, _ = line.split()
+            modules.add((name, version.removesuffix('/go.mod')))
+    # The shared manifest records which component lock actually selected each
+    # source. Its other components and union lock digest are not native inputs.
+    selected = [{key: value for key, value in item.items() if key != 'locks'}
+                for item in retained['modules'] if (item['name'], item['version']) in modules]
+    metadata = [item for item in retained['moduleMetadata'] if (item['name'], item['version']) in modules]
+    return {'locks': locks, 'modules': selected, 'moduleMetadata': metadata}
+
+
+@cache
+def inputs(component, target, revision):
+    if target not in TARGETS:
+        raise ValueError('Unsupported native target')
+    paths = ['LICENSE', 'agent/packaging/source_cache.py']
+    records = {}
+    if component == 'auth' or component.startswith('auth-'):
+        job = 'assemble' if component == 'auth' else 'component'
+        names = ('Assemble private runtime, notices and source',) if component == 'auth' else ('Native build prerequisites', 'Build tracked source for the target ABI')
+        native_recipe = recipe(revision, 'auth-native', job, names)
+        if component == 'auth':
+            paths += ['auth/upstreams.lock.json', 'auth/build/assemble.py', 'agent/src/server/access/runtime-guard.c']
+            records['guardRecipe'] = recipe(revision, 'auth-native', 'guard', ('Build lifecycle guard independently of the web assets',))
+            # An aggregate may contain independently restored native components.
+            records['components'] = {name: inputs('auth-' + name, target, revision) for name in AUTH}
+        else:
+            name = component.removeprefix('auth-')
+            if name not in AUTH:
+                raise ValueError('Unsupported authentication component')
+            paths += ['agent/native/remote' if name == 'remote' else 'auth/' + name,
+                      'auth/build/' + name + '.sh', 'auth/build/' + name + '-notices.py',
+                      'auth/build/retained-sources.py', 'auth/build/TORKITTEN-LICENSE']
+            lock = json.loads(content(revision, 'auth/upstreams.lock.json'))
+            records['upstream'] = lock.get(name)
+            if name in ('authelia', 'caddy', 'chisel', 'remote'):
+                sources = go_sources(revision, 'agent/native/remote' if name == 'remote' else 'auth/' + name)
+                paths += sources
+                records['goPins'] = go_pins(revision, sources)
+                paths += ['auth/build/go-env.sh', 'auth/build/go-notices.py', 'auth/dependencies/go-toolchain']
+            if name == 'authelia':
+                paths += ['auth/build/authelia-go.sh', 'auth/build/authelia-mobile-otp.patch', 'auth/build/frontend-notices.py',
+                          'auth/dependencies/frontend', 'agent/src/server/access/runtime-guard.c']
+            if target.startswith('termux-'):
+                paths += ['auth/' + name + '-termux', 'auth/build/termux-component.sh', 'auth/build/termux-toolchain.json',
+                          'auth/build/termux-go-version.patch']
+                toolchain = json.loads(content(revision, 'auth/build/termux-toolchain.json'))
+                retained = json.loads(content(revision, 'auth/dependencies/termux/sources.json'))
+                records['termuxFramework'] = [{key: value for key, value in item.items() if key not in ('lock', 'lockSha256')}
+                    for item in retained['components'] if item['sourceCommit'] == toolchain['commit']]
+    elif component == 'search':
+        paths += ['agent/search', 'agent/packaging/machines/build.py', 'auth/build/go-notices.py']
+        job = 'termux' if target.startswith('termux-') else 'linux'
+        if job == 'termux':
+            paths += ['agent/packaging/termux/search', 'auth/build/retained-sources.py', 'auth/dependencies/termux']
+        # All native commands and pinned Python setup are part of this owner.
+        names = ('Extract retained Termux framework', 'Build Android/Bionic primp using the upstream Termux build system',
+                 'Assemble Termux payload with private native binding', 'Assemble locked native runtime and source')
+        native_recipe = recipe(revision, 'search-native', job, names)
+    elif component in ('machines', 'display'):
+        paths += (['agent/packaging/machines', 'agent/machines/vendor', 'agent/machines/patches', 'agent/machines/license-supplements',
+                   'agent/machines/rust-toolchain', 'agent/machines/NOTICE', 'auth/build/go-notices.py', 'auth/dependencies/go-toolchain']
+                  if component == 'machines' else ['browser/taskarian/display', 'agent/packaging/machines/build.py',
+                                                  'agent/machines/rust-toolchain', 'auth/build/go-notices.py'])
+        native_recipe = recipe(revision, 'machines-native', 'runtime',
+                               ('Install native component build tools', 'Build private engine and display from tracked sources',
+                                'Build private engine from tracked sources', 'Build private display from tracked sources'),
+                               ('apt-get ', 'rustup ', 'agent/packaging/machines/build.py' if component == 'machines' else 'browser/taskarian/display/build.py'))
+    elif component == 'guest':
+        paths += ['os', 'agent/machines/guest', 'agent/machines/build-guest.py', 'agent/machines/vendor/libfuse',
+                  'agent/machines/upstream/buzzard-runtime', 'agent/machines/NOTICE', 'agent/packaging/machines/build.py',
+                  'agent/machines/rust-toolchain', 'agent/machines/image-base.json', 'auth/build/go-notices.py',
+                  'browser/taskarian/config/version.txt']
+        native_recipe = recipe(revision, 'machines-native', 'guest', ('Build guest packages against the pinned Debian guest ABI',))
+    elif component == 'os':
+        paths += ['os', 'agent/packaging/termux/os.py', 'auth/build/termux-toolchain.json', 'browser/taskarian/config/version.txt']
+        lock = json.loads(content(revision, 'agent/packaging/node/lock.json'))['termux']
+        records['framework'] = lock['recipes']
+        records['ndk'] = lock['dependency_sources']['libc++']
+        native_recipe = recipe(revision, 'machines-native', 'termux_os', ('Build native Termux desktop customization',))
+    elif component == 'loader':
+        paths += ['browser/mobile/android/taskarian/display/loader',
+                  'browser/mobile/android/taskarian/display/src/main/java/com/taskarian/display/DisplayProtocol.java',
+                  'browser/taskarian/vendor/termux-x11', 'agent/packaging/release.py']
+        native_recipe = recipe(revision, 'machines-native', 'termux_display', ('Build loader paired with the established APK publisher',))
+    else:
+        raise ValueError('Unsupported native component: ' + component)
+    return {'schema': 1, 'component': component, 'target': target,
+            'files': {path: entry(revision, path) for path in paths}, 'records': records, 'recipe': native_recipe}
+
+
+def sha(path):
+    with path.open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def inventory(directory):
+    result = {}
+    paths = directory.glob('*') if (directory / 'SHA256SUMS').exists() else directory.rglob('*')
+    for path in sorted(paths):
+        if path.is_symlink():
+            raise ValueError('Unexpected symlink in Actions component payload')
+        if path.is_file() and not path.name.startswith('native-input-equivalence-'):
+            if (directory / 'SHA256SUMS').exists() and path.parent != directory:
+                continue
+            result[str(path.relative_to(directory))] = sha(path)
+    if not result:
+        raise ValueError('Empty native component payload')
+    return result
+
+
+def receipt_name(component, target):
+    return f'native-input-equivalence-{component}-{target}.json'
+
+
+def embedded_sources(directory):
+    """Producer revisions recorded by the native owners stay in their own files."""
+    sources = set()
+    for path in directory.glob('*.json'):
+        if path.name.startswith('native-input-equivalence-'):
+            continue
+        data = json.loads(path.read_text())
+        if isinstance(data, dict):
+            sources.update(data[key] for key in ('sourceCommit', 'revision') if key in data)
+    return sources
+
+
+def verify_payload(directory, component, target):
+    files = inventory(directory)
+    for sums in directory.glob('SHA256SUMS'):
+        seen = set()
+        for line in sums.read_text().splitlines():
+            digest, name = line.split('  ', 1)
+            relative = Path(name.removeprefix('./'))
+            if relative.is_absolute() or '..' in relative.parts or name in seen or files.get(str(relative)) != digest:
+                raise ValueError('Invalid native component checksum: ' + name)
+            seen.add(name)
+    name = artifact_name(component, target)
+    if component in ('auth', 'search'):
+        suffix = 'tar.gz' if component == 'auth' else 'tar.zst'
+        prefix = 'auth' if component == 'auth' else 'search-runtime'
+        required = {f'{prefix}-{target}.{suffix}', f'{component}-source-{target}.{suffix}' if component == 'search' else f'auth-{target}-source.tar.gz', 'SHA256SUMS'}
+    elif component.startswith('auth-'):
+        required = {'component.tar.gz'}
+    elif component in ('machines', 'display'):
+        required = {name + '.tar.gz', 'SHA256SUMS'}
+    elif component == 'loader':
+        required = {'taskarian-x11', 'taskarian-x11-loader.jar', 'manifest.json'}
+    else:
+        packages = list(directory.glob('*.deb'))
+        if len(packages) != (2 if component == 'guest' else 1):
+            raise ValueError('Incomplete native package artifact')
+        required = {p.name for p in packages} | {p.name + '.json' for p in packages}
+    if not required.issubset(files):
+        raise ValueError('Incomplete native artifact inventory: ' + name)
+    architecture = target.split('-', 1)[1]
+    machine = 62 if architecture in ('amd64', 'x86_64') else 183
+    archive_metadata = []
+    for path in directory.glob('*.tar.*'):
+        if '-source' in path.name:
+            continue
+        unpacked = None
+        if path.name.endswith('.zst'):
+            unpacked = tempfile.TemporaryFile()
+            subprocess.run(['zstd', '-dc', str(path)], stdout=unpacked, stderr=subprocess.PIPE, check=True)
+            unpacked.seek(0)
+        with tarfile.open(fileobj=unpacked, name=None if unpacked else path, mode='r:*') as archive:
+            members = {item.name.removeprefix('./'): item for item in archive.getmembers()}
+            for name, item in members.items():
+                if name in ('machines/manifest.json', 'display/manifest.json', 'search/runtime/manifest.json', 'share/metadata/runtime.json') and item.isfile():
+                    value = json.load(archive.extractfile(item))
+                    if isinstance(value, dict) and ('sourceCommit' in value or 'target' in value or 'architecture' in value):
+                        archive_metadata.append(value)
+            if component.startswith('auth-'):
+                executable = {'remote': 'taskarian-remote', 'valkey': 'valkey-server'}.get(component[5:], component[5:])
+                binary = members.get('bin/' + executable)
+                if not binary or not binary.mode & 0o111:
+                    raise ValueError('Missing native authentication executable')
+                header = archive.extractfile(binary).read(20)
+                if header[:6] != b'\x7fELF\x02\x01' or struct.unpack('<H', header[18:20])[0] != machine:
+                    raise ValueError('Native authentication ELF target mismatch')
+                if not any(name.startswith('share/licenses/') and member.isfile() and member.size
+                           for name, member in members.items()):
+                    raise ValueError('Missing native component licenses')
+        if unpacked:
+            unpacked.close()
+    for metadata in archive_metadata:
+        if metadata.get('target', target) != target or metadata.get('architecture', architecture) != architecture:
+            raise ValueError('Native component target mismatch')
+    for deb in directory.glob('*.deb'):
+        metadata = json.loads(Path(str(deb) + '.json').read_text())
+        fields = subprocess.check_output(['dpkg-deb', '-f', str(deb), 'Architecture'], text=True).strip()
+        if fields != architecture or metadata.get('architecture', architecture) != architecture:
+            raise ValueError('Native Debian package architecture mismatch')
+        if metadata.get('sha256', sha(deb)) != sha(deb):
+            raise ValueError('Native Debian package checksum mismatch')
+    return files, embedded_sources(directory) | {data['sourceCommit'] for data in archive_metadata if 'sourceCommit' in data}
+
+
+def verify_equivalence(directory, component, target, requested, producer=None):
+    """Assembly accepts a different revision only with independently checked inputs."""
+    if producer == requested:
+        return None
+    path = directory / receipt_name(component, target)
+    value = json.loads(path.read_text())
+    actual = inventory(directory)
+    # Other components (notably the current backend guest .deb) may be merged
+    # beside this artifact. Check exactly the original producer inventory.
+    expected_files = value.get('files', {})
+    if not expected_files or any(actual.get(name) != digest for name, digest in expected_files.items()):
+        raise ValueError('Native equivalence receipt does not cover its producer bytes')
+    original, requested_inputs = value.get('producerSource', ''), inputs(component, target, requested)
+    if (value.get('schema') != 1 or value.get('component') != component or value.get('target') != target or
+            value.get('requestedSource') != requested or value.get('repository') != REPOSITORY or
+            (producer is not None and producer != original) or
+            value.get('inputs') != requested_inputs or inputs(component, target, original) != requested_inputs):
+        raise ValueError('Native producer and requested build inputs are different')
+    return value
+
+
+def artifact_name(component, target):
+    if component.startswith('auth-'):
+        return f'auth-component-{component[5:]}-{target}'
+    return {'auth': 'auth-' + target, 'search': 'search-runtime-' + target,
+            'machines': 'machines-runtime-' + target, 'display': 'display-runtime-' + target,
+            'guest': 'guest-packages-' + target, 'os': 'os-' + target,
+            'loader': 'display-loader-termux'}[component]
+
+
+def candidates(component, target, requested):
+    expected = inputs(component, target, requested)
+    name = artifact_name(component, target)
+    artifacts = api(f'repos/{REPOSITORY}/actions/artifacts?name={name}&per_page=100')['artifacts']
+    for artifact in artifacts:
+        if artifact['expired'] or artifact['name'] != name:
+            continue
+        run_id = artifact['workflow_run']['id']
+        if run_id == int(os.environ.get('GITHUB_RUN_ID', '0')):
+            continue
+        try:
+            run = api(f'repos/{REPOSITORY}/actions/runs/{run_id}')
+            if (run['head_repository']['full_name'].lower() != REPOSITORY.lower() or run['head_branch'] != 'main' or
+                    run['event'] not in ('workflow_dispatch', 'push') or run['path'] not in
+                    ('.github/workflows/packages.yml', '.github/workflows/auth-native.yml',
+                     '.github/workflows/search-native.yml', '.github/workflows/machines-native.yml')):
+                continue
+            if inputs(component, target, run['head_sha']) == expected:
+                yield artifact, run
+        except (subprocess.CalledProcessError, ValueError, KeyError) as error:
+            print(f'Unprovable optional native producer {run_id}: {error}', flush=True)
+
+
+def restore(directory, component, target, requested, selected=None):
+    """Missing or unprovable optional artifacts fall back to the normal builder."""
+    expected = inputs(component, target, requested)
+    name = artifact_name(component, target)
+    for artifact, run in candidates(component, target, requested):
+        if selected is not None and artifact['id'] != selected:
+            continue
+        run_id = run['id']
+        try:
+            with tempfile.TemporaryDirectory(prefix='restore-native-') as temporary:
+                temporary = Path(temporary)
+                archive = temporary / 'artifact.zip'
+                for attempt in range(3):
+                    with archive.open('wb') as output:
+                        download = subprocess.run(['gh', 'api', f'repos/{REPOSITORY}/actions/artifacts/{artifact["id"]}/zip'],
+                                                  stdout=output, stderr=subprocess.PIPE)
+                    if download.returncode == 0:
+                        break
+                    if re.search(rb'HTTP (?:404|410)\b', download.stderr):
+                        raise ValueError('Optional Actions artifact expired during restoration')
+                    if attempt == 2:
+                        raise MetadataUnavailable('Native artifact download interrupted; retry this job to resume reuse')
+                    time.sleep(2 ** attempt)
+                if artifact.get('digest') and artifact['digest'] != 'sha256:' + sha(archive):
+                    raise ValueError('Actions archive digest mismatch')
+                incoming = temporary / 'payload'; incoming.mkdir()
+                with zipfile.ZipFile(archive) as payload:
+                    for member in payload.infolist():
+                        path = Path(member.filename)
+                        if path.is_absolute() or '..' in path.parts or (member.external_attr >> 16) & 0o170000 == 0o120000:
+                            raise ValueError('Unsafe Actions artifact member')
+                    payload.extractall(incoming)
+                files, sources = verify_payload(incoming, component, target)
+                prior = incoming / receipt_name(component, target)
+                original = run['head_sha']
+                producer = {'runId': run_id, 'artifactId': artifact['id'], 'artifactName': name}
+                if prior.exists():
+                    value = json.loads(prior.read_text())
+                    original = value['producerSource']
+                    if (value.get('schema') != 1 or value.get('repository') != REPOSITORY or
+                            value.get('component') != component or value.get('target') != target or
+                            value.get('requestedSource') != run['head_sha'] or value.get('inputs') != expected or
+                            inputs(component, target, original) != expected or value.get('files') != files):
+                        raise ValueError('Invalid original native component receipt')
+                    producer = value['producer']
+                if sources and sources != {original}:
+                    raise ValueError('Native archive producer revision differs from Actions provenance')
+                value = {'schema': 1, 'repository': REPOSITORY, 'component': component, 'target': target,
+                         'producerSource': original, 'requestedSource': requested, 'inputs': expected,
+                         'producer': producer, 'files': files}
+                prior.write_text(json.dumps(value, indent=2) + '\n')
+                directory.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(incoming, directory, dirs_exist_ok=True)
+            print(f'Reused verified {name} from original source {original} ({run["html_url"]})', flush=True)
+            return True
+        except (subprocess.CalledProcessError, OSError, ValueError, KeyError, tarfile.TarError, zipfile.BadZipFile) as error:
+            print(f'Cannot prove optional native artifact {artifact["id"]}: {error}; checking another producer', flush=True)
+    return False
+
+
+def output(name, value):
+    if os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+            stream.write(f'{name}={value}\n')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action', choices=['restore', 'plan-auth', 'verify', 'materialize'])
+    parser.add_argument('component')
+    parser.add_argument('target')
+    parser.add_argument('--directory', type=Path, required=True)
+    parser.add_argument('--force', default='false')
+    parser.add_argument('--artifact', type=int)
+    parser.add_argument('--output-name', default='hit')
+    args = parser.parse_args()
+    revision = git('rev-parse', 'HEAD')
+    if os.environ.get('GITHUB_REPOSITORY', REPOSITORY).lower() != REPOSITORY.lower():
+        raise ValueError('Native artifact reuse requires the product repository')
+    if args.action == 'materialize':
+        try:
+            paths = set(inputs(args.component, args.target, revision)['files'])
+        except ValueError:
+            # Unknown optional input syntax cannot block the established build.
+            subprocess.run(['git', 'sparse-checkout', 'set', 'auth', 'agent/native/remote',
+                            'agent/packaging', 'agent/src/server/access'], cwd=ROOT, check=True)
+            return
+        paths.update(('agent/packaging', '.github/workflows', 'auth/upstreams.lock.json'))
+        if args.component.startswith('auth-'):
+            name = args.component[5:]
+            if name in ('authelia', 'caddy', 'chisel', 'remote'):
+                retained = json.loads(content(revision, 'auth/dependencies/go/sources.json'))
+                paths.update(retained['locks'])
+                paths.add('auth/dependencies/go')
+            if name == 'authelia':
+                paths.add('auth/dependencies/frontend')
+            if args.target.startswith('termux-'):
+                paths.add('auth/dependencies/termux')
+        # Non-cone patterns select individual shared lock files without checking
+        # out every unrelated source tree below their common parent directory.
+        patterns = ['/*', '!/*/']
+        patterns += ['/' + path for path in sorted(paths) if entry(revision, path) is not None]
+        subprocess.run(['git', 'sparse-checkout', 'set', '--no-cone', '--stdin'], cwd=ROOT,
+                       input='\n'.join(patterns) + '\n', text=True, check=True)
+    elif args.action == 'plan-auth':
+        targets = TARGETS if args.target == 'all' else (args.target,)
+        components = AUTH if args.component == 'all' else (args.component,)
+        missing, restores = [], []
+        for target in targets:
+            candidate = None
+            if args.component == 'all' and args.force != 'true':
+                try:
+                    candidate = next(candidates('auth', target, revision), None)
+                except (subprocess.CalledProcessError, ValueError, KeyError) as error:
+                    print(f'No provable auth artifact: {error}; building normally', flush=True)
+            if candidate:
+                restores.append({'target': target, 'artifact': candidate[0]['id']})
+            else:
+                missing.append(target)
+        output('targets', json.dumps(missing, separators=(',', ':')))
+        output('restores', json.dumps({'include': restores}, separators=(',', ':')))
+        output('restore', str(bool(restores)).lower())
+        output('matrix', json.dumps({'include': [{'component': component, 'target': target}
+                    for target in missing for component in components]}, separators=(',', ':')))
+        output('build', str(bool(missing)).lower())
+    elif args.action == 'restore':
+        hit = False
+        if args.force != 'true':
+            try:
+                hit = restore(args.directory, args.component, args.target, revision, args.artifact)
+            except (subprocess.CalledProcessError, ValueError, KeyError) as error:
+                print(f'No provable native artifact: {error}; building normally', flush=True)
+        output(args.output_name, str(hit).lower())
+    elif args.action == 'verify':
+        verify_payload(args.directory, args.component, args.target)
+        verify_equivalence(args.directory, args.component, args.target, revision)
+
+
+if __name__ == '__main__':
+    main()

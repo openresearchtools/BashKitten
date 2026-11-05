@@ -11,6 +11,11 @@ run-name: Office ${{ inputs.source_sha }} / ${{ inputs.request_id }}
         description: Collection request from the normal package build
         required: true
         type: string
+      force_rebuild:
+        description: Ignore completed native artifacts and compile from source
+        required: false
+        default: false
+        type: boolean
       target:
         description: Native targets to build
         required: false
@@ -30,6 +35,7 @@ run-name: Office ${{ inputs.source_sha }} / ${{ inputs.request_id }}
           - files
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: office-${{ inputs.source_sha }}
   cancel-in-progress: false
@@ -64,49 +70,74 @@ jobs:
           path: source
           persist-credentials: false
           sparse-checkout-cone-mode: false
+          filter: blob:none
           sparse-checkout: |
             /.gitignore
-            /${{ matrix.component }}/
-            /LICENSE
-            /browser/taskarian/browser/branding/
-            /auth/dependencies/go-toolchain/
-            /auth/build/go-notices.py
-            /files/patches/collabora/
-            /agent/packaging/office/
-            /agent/packaging/source_cache.py
-            /agent/packaging/node/
-            /agent/packaging/termux/native_toolchain.py
-            /agent/licenses/upstream/saxes/
-            /agent/vendor/node/libcxx/
-            /agent/vendor/node/sources.json
+            /.github/builders/office.yml
+            /agent/packaging/remote-office.py
+            /agent/packaging/native-component.py
+            /agent/packaging/applications.py
+            /agent/packaging/build.py
+      - name: Restore a matching completed native component
+        id: component-reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ matrix.platform.target }}-${{ matrix.platform.architecture }}
+          COMPONENT: ${{ matrix.component }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
+        run: python3 source/agent/packaging/remote-office.py restore --component "$COMPONENT" --target "$TARGET" --directory "$RUNNER_TEMP/office-output" --force "$FORCE_REBUILD"
+      - name: Materialize changed native component sources
+        if: steps.component-reuse.outputs.hit != 'true'
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          git -C source sparse-checkout add --stdin <<PATTERNS
+          /.gitignore
+          /$COMPONENT/
+          /LICENSE
+          /browser/taskarian/browser/branding/
+          /auth/dependencies/go-toolchain/
+          /auth/build/go-notices.py
+          /files/patches/collabora/
+          /agent/packaging/office/
+          /agent/packaging/source_cache.py
+          /agent/packaging/node/
+          /agent/packaging/termux/native_toolchain.py
+          /agent/licenses/upstream/saxes/
+          /agent/vendor/node/libcxx/
+          /agent/vendor/node/sources.json
+          PATTERNS
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: steps.component-reuse.outputs.hit != 'true'
         with:
           node-version: '24.13.0'
       - id: go-compiler
         name: Select the existing retained Go toolchain
-        if: matrix.component == 'files'
+        if: steps.component-reuse.outputs.hit != 'true' && matrix.component == 'files'
         run: python3 -c 'import json; print("version=" + json.load(open("source/auth/dependencies/go-toolchain/sources.json"))["version"])' >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        if: matrix.component == 'files'
+        if: steps.component-reuse.outputs.hit != 'true' && matrix.component == 'files'
         with:
           go-version: ${{ steps.go-compiler.outputs.version }}
           cache: false
       - name: Prepare native build prerequisites
+        if: steps.component-reuse.outputs.hit != 'true'
         run: bash source/agent/packaging/office/prepare-runner.sh
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: native-cache
+        if: steps.component-reuse.outputs.hit != 'true'
         with:
           path: ${{ env.CCACHE_DIR }}
           key: native-ccache-${{ matrix.component }}-${{ matrix.platform.target }}-${{ matrix.platform.architecture }}-${{ hashFiles('source/office/upstream/online/source.json', 'source/office/upstream/dependencies/sources.json', 'source/agent/packaging/office/**', 'source/agent/packaging/source_cache.py', 'source/agent/packaging/termux/native_toolchain.py', 'source/agent/packaging/node/lock.json', 'source/office/patches/**', 'source/office/branding/**', 'source/browser/taskarian/browser/branding/**', 'source/LICENSE', 'source/auth/build/go-notices.py', 'source/auth/dependencies/go-toolchain/**', 'source/files/patches/**', 'source/files/build.py', 'source/files/termux.py', 'source/files/vendor/dependencies/*sources.json') }}-${{ github.run_id }}
           restore-keys: |
             native-ccache-${{ matrix.component }}-${{ matrix.platform.target }}-${{ matrix.platform.architecture }}-
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        if: matrix.platform.target == 'termux'
+        if: steps.component-reuse.outputs.hit != 'true' && matrix.platform.target == 'termux'
         with:
           path: ${{ runner.temp }}/office-ndk-archive
           key: office-ndk-${{ hashFiles('source/agent/packaging/node/lock.json') }}
       - name: Prepare the existing pinned native Termux toolchain
-        if: matrix.platform.target == 'termux'
+        if: steps.component-reuse.outputs.hit != 'true' && matrix.platform.target == 'termux'
         run: |
           python3 - <<'PYTHON'
           import importlib.util, os, pathlib, subprocess
@@ -123,10 +154,12 @@ jobs:
           PYTHON
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: source-cache
+        if: steps.component-reuse.outputs.hit != 'true'
         with:
           path: ${{ env.TASKARIAN_SOURCE_CACHE }}
           key: source-archives-${{ matrix.component }}-${{ hashFiles('source/**/sources.json', 'source/**/native-sources.json', 'source/**/licensed-go-sources.json', 'source/agent/packaging/source_cache.py') }}
       - name: Build native engine and server from retained sources
+        if: steps.component-reuse.outputs.hit != 'true'
         shell: bash
         run: |
           set -o pipefail
@@ -174,7 +207,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
       - name: Collect build diagnostics
-        if: always()
+        if: always() && steps.component-reuse.outputs.hit != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/office-diagnostics"
           cp "$RUNNER_TEMP/office-build.log" "$RUNNER_TEMP/office-diagnostics/" 2>/dev/null || true
@@ -183,7 +216,7 @@ jobs:
           du -sx source "$RUNNER_TEMP/office-work" "$CCACHE_DIR" > "$RUNNER_TEMP/office-diagnostics/workspace-kib.txt" 2>/dev/null || true
           dpkg-query -W -f='${Package}\t${Version}\n' > "$RUNNER_TEMP/office-diagnostics/builder-packages.txt"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
+        if: always() && steps.component-reuse.outputs.hit != 'true'
         with:
           name: ${{ matrix.component }}-build-diagnostics-${{ matrix.platform.target }}-${{ matrix.platform.architecture }}
           path: ${{ runner.temp }}/office-diagnostics/

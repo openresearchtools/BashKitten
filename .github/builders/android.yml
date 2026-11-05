@@ -11,6 +11,10 @@ run-name: Taskarian ${{ inputs.source_sha }} / ${{ inputs.request_id }}
         description: Request from the main workflow
         required: true
         type: string
+      force_rebuild:
+        description: Bypass native and APK artifact reuse
+        default: false
+        type: boolean
       auth_run:
         required: true
         type: string
@@ -29,9 +33,6 @@ run-name: Taskarian ${{ inputs.source_sha }} / ${{ inputs.request_id }}
 permissions:
   contents: read
   actions: read
-concurrency:
-  group: browser-${{ inputs.source_sha }}
-  cancel-in-progress: false
 jobs:
   apk:
     runs-on: ubuntu-24.04
@@ -61,6 +62,21 @@ jobs:
         repository: openresearchtools/Taskarian
         ref: ${{ inputs.source_sha }}
         persist-credentials: false
+        sparse-checkout-cone-mode: false
+        sparse-checkout: |
+          /.github/builders/
+          /agent/packaging/*.py
+          /agent/packaging/node/lock.json
+          /agent/vendor/native/android-sources.json
+          /agent/src/server/platform/termux/updates-prepare.py
+          /browser/taskarian/android/mozconfig
+          /browser/taskarian/android/tor/
+          /browser/taskarian/android/notices/
+          /browser/taskarian/android/scripts/tor.py
+          /browser/taskarian/third_party/tor.toml
+          /browser/mobile/shared/modules/geckoview/TaskarianAndroid.sys.mjs
+          /browser/mobile/android/installer/package-manifest.in
+          /references/runtime-payload.json
     - name: Select the Android architecture
       run: |
         case "$GITHUB_REPOSITORY" in
@@ -82,12 +98,17 @@ jobs:
       name: Restore a matching completed Android artifact
       env:
         GH_TOKEN: ${{ github.token }}
+        TASKARIAN_FORCE_FULL_BUILD: ${{ inputs.force_rebuild && '1' || '0' }}
       run: python3 agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory candidate
     - id: native-component
       name: Restore unchanged Android Gecko libraries
       env:
         GH_TOKEN: ${{ github.token }}
+        TASKARIAN_FORCE_FULL_BUILD: ${{ inputs.force_rebuild && '1' || '0' }}
       run: python3 agent/packaging/android-native-component.py "$BROWSER_TARGET" --directory "$RUNNER_TEMP/android-native"
+      if: (success()) && steps.component.outputs.hit != 'true'
+    - name: Materialize Android application build sources
+      run: git sparse-checkout disable
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Prepare hosted runner
       run: |
@@ -207,6 +228,19 @@ jobs:
     - name: Build Gecko for the selected architecture
       working-directory: browser
       run: set -o pipefail; ./mach build 2>&1 | tee ../artifacts/gecko-build.log
+      if: (success()) && steps.component.outputs.hit != 'true'
+    - name: Stage and verify native Gecko libraries
+      working-directory: browser
+      run: |
+        ./mach build stage-package
+        python3 ../agent/packaging/android-native-component.py "$BROWSER_TARGET" --publish --directory "$RUNNER_TEMP/android-gecko-artifact"
+      if: (success()) && steps.component.outputs.hit != 'true'
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ steps.native-component.outputs.artifact }}
+        path: ${{ runner.temp }}/android-gecko-artifact/
+        compression-level: 0
+        if-no-files-found: error
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Record Gecko compiler cache statistics
       if: always() && steps.component.outputs.hit != 'true' && env.SCCACHE_PATH != ''

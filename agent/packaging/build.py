@@ -3,6 +3,7 @@
 import argparse
 import configparser
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT.parent
+_native_spec = importlib.util.spec_from_file_location('native_component', ROOT / 'packaging/native-component.py')
+_native_components = importlib.util.module_from_spec(_native_spec)
+_native_spec.loader.exec_module(_native_components)
 
 
 def run(command, **kwargs):
@@ -123,7 +127,7 @@ def install_machines(args, app, revision, version):
     root = app / 'machines'; metadata = read_json(root / 'manifest.json')
     require(metadata.get('schema') == 1 and metadata.get('platform') == 'linux' and
             metadata.get('architecture') == args.architecture, 'Private Podman target mismatch')
-    require(metadata.get('sourceCommit') == revision, 'Machine runtime must be prepared for this source revision')
+    equivalence = _native_components.verify_equivalence(args.machines_archive.parent, 'machines', 'linux-' + args.architecture, revision, metadata.get('sourceCommit'))
     helpers = ['podman', 'rootlessport', 'crun', 'conmon', 'netavark', 'aardvark-dns',
                'pasta', 'passt', 'pesto', 'fusermount3', 'fuse-overlayfs', 'catatonit']
     if args.architecture == 'amd64': helpers += ['passt.avx2', 'pasta.avx2']
@@ -155,8 +159,12 @@ def install_machines(args, app, revision, version):
         require(info['Version'] == version and info['Architecture'] == args.architecture,
                 'Guest package version/architecture mismatch: ' + name)
         provenance = read_json(Path(str(deb) + '.json'))
-        require(provenance.get('revision', provenance.get('sourceCommit')) == revision,
-                'Guest package source revision mismatch: ' + name)
+        producer = provenance.get('revision', provenance.get('sourceCommit'))
+        guest_equivalence = None
+        if name == 'taskarian-backend':
+            require(producer == revision, 'Guest backend must contain the current integration source')
+        else:
+            guest_equivalence = _native_components.verify_equivalence(deb.parent, 'guest', 'linux-' + args.architecture, revision, producer)
         checksum = sha(deb)
         if provenance.get('sha256'):
             require(provenance['sha256'] == checksum, 'Guest package checksum mismatch: ' + name)
@@ -164,7 +172,9 @@ def install_machines(args, app, revision, version):
             require(Path(str(deb) + '.sha256').read_text().split()[0] == checksum,
                     'Guest package checksum mismatch: ' + name)
         shutil.copy2(deb, packages / deb.name); found[name] = deb.name
-        records.append({'package': name, 'file': deb.name, 'sha256': checksum, 'provenance': provenance})
+        record = {'package': name, 'file': deb.name, 'sha256': checksum, 'provenance': provenance}
+        if guest_equivalence: record['inputEquivalence'] = guest_equivalence
+        records.append(record)
         if name != 'taskarian-backend':
             with tempfile.TemporaryDirectory(prefix='guest-notices-', dir=app.parent) as extracted:
                 run(['dpkg-deb', '-x', str(deb), extracted])
@@ -173,13 +183,15 @@ def install_machines(args, app, revision, version):
                 notices = license_files(notice_root)
                 require(notices, 'Missing full guest package license texts: ' + name)
                 guest_licenses.append({'name': name, 'version': version, 'source':
-                    'https://github.com/openresearchtools/Taskarian/tree/' + revision,
+                    'https://github.com/openresearchtools/Taskarian/tree/' + producer,
                     'text': '\n\n'.join(str(p.relative_to(notice_root)) + '\n' + p.read_text() for p in notices)})
     require(set(found) == expected, 'Guest image needs backend, Taskarian OS and guest-service packages')
     write_json(packages / 'manifest.json', {'schema': 1, 'revision': revision,
                'architecture': args.architecture, 'version': version, 'packages': records})
     write_json(root / 'guest-licenses.json', guest_licenses)
-    return {'archive': args.machines_archive.name, 'sha256': digest, 'metadata': metadata}
+    result = {'archive': args.machines_archive.name, 'sha256': digest, 'metadata': metadata}
+    if equivalence: result['inputEquivalence'] = equivalence
+    return result
 
 
 def install_display(args, app, revision):
@@ -190,12 +202,14 @@ def install_display(args, app, revision):
         require({p.name for p in Path(incoming).iterdir()} == {'display'}, 'Unexpected Display archive root')
         shutil.move(str(Path(incoming) / 'display'), app / 'display')
     metadata = read_json(app / 'display/manifest.json')
-    require(metadata.get('architecture') == args.architecture and metadata.get('sourceCommit') == revision,
-            'Display component target/source revision mismatch')
+    require(metadata.get('architecture') == args.architecture, 'Display component target mismatch')
+    equivalence = _native_components.verify_equivalence(args.display_archive.parent, 'display', 'linux-' + args.architecture, revision, metadata.get('sourceCommit'))
     require(sha(app / 'display/taskarian-display') == metadata.get('binarySha256'), 'Display executable checksum mismatch')
     require(isinstance(metadata.get('depends'), list), 'Display must declare native dependencies')
     (app / 'browser/runtime/display').symlink_to('../../display')
-    return {'archive': args.display_archive.name, 'sha256': digest, 'metadata': metadata}
+    result = {'archive': args.display_archive.name, 'sha256': digest, 'metadata': metadata}
+    if equivalence: result['inputEquivalence'] = equivalence
+    return result
 
 
 def install_machine_apparmor(stage, app):
@@ -224,8 +238,8 @@ def install_termux_display(args, app, revision, bin_dir):
     require(args.termux_display_dir is not None, 'Termux requires the paired --termux-display-dir component')
     source = args.termux_display_dir
     metadata = read_json(source / 'manifest.json')
-    require(metadata.get('sourceCommit') == revision and metadata.get('package') == 'com.taskarian',
-            'Termux Display loader package/source revision mismatch')
+    require(metadata.get('package') == 'com.taskarian', 'Termux Display loader package mismatch')
+    equivalence = _native_components.verify_equivalence(source, 'loader', 'termux-aarch64', revision, metadata.get('sourceCommit'))
     # The same publisher certificate is enforced against final APKs by release.py.
     from release import CERT
     signer = CERT
@@ -251,7 +265,9 @@ def install_termux_display(args, app, revision, bin_dir):
     # Actions artifact transport does not retain the source executable mode.
     # The installed launcher is a command; set its mode at the package boundary.
     launcher.chmod(0o755)
-    return {'metadata': metadata, 'developmentOnly': bool(args.development_signing)}
+    result = {'metadata': metadata, 'developmentOnly': bool(args.development_signing)}
+    if equivalence: result['inputEquivalence'] = equivalence
+    return result
 
 
 def collect_termux_os(deb, app, revision, architecture, version):
@@ -261,8 +277,8 @@ def collect_termux_os(deb, app, revision, architecture, version):
     require(info == {'Package': 'taskarian-os', 'Version': version + '-1', 'Architecture': architecture},
             'Termux OS package target/version mismatch')
     metadata = read_json(Path(str(deb) + '.json'))
-    require(metadata.get('sourceCommit') == revision and metadata.get('sha256') == sha(deb),
-            'Termux OS package source/hash mismatch')
+    require(metadata.get('sha256') == sha(deb), 'Taskarian OS package hash mismatch')
+    equivalence = _native_components.verify_equivalence(deb.parent, 'os', 'termux-' + architecture, revision, metadata.get('sourceCommit'))
     with tempfile.TemporaryDirectory(prefix='termux-os-notices-', dir=app.parent) as temporary:
         run(['dpkg-deb', '-x', str(deb), temporary])
         root = Path(temporary) / 'data/data/com.termux/files/usr/share/taskarian-os'
@@ -270,7 +286,7 @@ def collect_termux_os(deb, app, revision, architecture, version):
         require(paths, 'Termux OS package lacks full license texts')
         write_json(app / 'os-licenses.json', [{'name': 'Taskarian OS', 'version': version + '-1',
             'text': '\n\n'.join(str(p.relative_to(root)) + '\n' + p.read_text() for p in paths)}])
-    return metadata
+    return {**metadata, 'inputEquivalence': equivalence} if equivalence else metadata
 
 def key_values(path):
     return dict(line.split('=', 1) for line in path.read_text().splitlines()
@@ -486,6 +502,9 @@ def assemble(args):
         auth = app / 'auth'
         extract(args.auth_archive, auth)
         auth_meta = read_json(auth / 'share/metadata/runtime.json')
+        auth_equivalence = None
+        if (args.auth_archive.parent / _native_components.receipt_name('auth', target)).exists():
+            auth_equivalence = _native_components.verify_equivalence(args.auth_archive.parent, 'auth', target, revision)
         require(auth_meta['target'] == target and auth_meta['architecture'] == args.architecture, 'Native auth target mismatch')
         for executable_name in ['authelia', 'caddy', 'tor', 'valkey-server', 'chisel', 'taskarian-remote', 'runtime-guard']:
             require(os.access(auth / 'bin' / executable_name, os.X_OK), f'Missing native {executable_name}')
@@ -497,6 +516,9 @@ def assemble(args):
             require({p.name for p in search.iterdir()} == {'runtime'}, 'Search archive may only replace its native runtime')
             shutil.move(str(search / 'runtime'), app / 'search/runtime')
         search_meta = read_json(app / 'search/runtime/manifest.json')
+        search_equivalence = None
+        if search_meta.get('sourceCommit') != revision:
+            search_equivalence = _native_components.verify_equivalence(args.search_archive.parent, 'search', target, revision, search_meta.get('sourceCommit'))
         require(search_meta['target'] == target, 'Native search target mismatch')
         components = {
             **application_components,
@@ -504,6 +526,8 @@ def assemble(args):
             'auth': {'archive': args.auth_archive.name, 'sha256': auth_hash, 'metadata': auth_meta},
             'search': {'archive': args.search_archive.name, 'sha256': search_hash, 'metadata': search_meta},
         }
+        if auth_equivalence: components['auth']['inputEquivalence'] = auth_equivalence
+        if search_equivalence: components['search']['inputEquivalence'] = search_equivalence
         if termux:
             components['display'] = install_termux_display(args, app, revision, stage / prefix.lstrip('/') / 'bin')
             components['os'] = collect_termux_os(args.os_package, app, revision, args.architecture, version)

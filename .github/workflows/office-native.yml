@@ -1,6 +1,10 @@
 name: Collect native Files and Office components
 'on':
   workflow_call:
+    inputs:
+      force_rebuild:
+        type: boolean
+        default: false
     secrets:
       BUILD_REPOS_TOKEN:
         required: true
@@ -16,12 +20,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/builders/office.yml
+            /agent/packaging/remote-office.py
+            /agent/packaging/native-component.py
+            /agent/packaging/applications.py
+            /agent/packaging/build.py
       - id: builder
         name: Dispatch one source-pinned component batch
         env:
           GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
           REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
-        run: python3 agent/packaging/remote-office.py dispatch --request "$REQUEST_ID"
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
+        run: python3 agent/packaging/remote-office.py dispatch --request "$REQUEST_ID" --force "$FORCE_REBUILD"
   collect:
     needs: dispatch
     strategy:
@@ -35,6 +48,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/builders/office.yml
+            /agent/packaging/remote-office.py
+            /agent/packaging/native-component.py
+            /agent/packaging/applications.py
+            /agent/packaging/build.py
       - name: Collect this target as soon as its native build finishes
         env:
           GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}

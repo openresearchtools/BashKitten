@@ -10,6 +10,7 @@ import sys
 import tarfile
 
 root, stage, target, artifacts = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4])
+component_artifacts = Path(sys.argv[5]) if len(sys.argv) > 5 else None
 architecture = {'linux-amd64': 'amd64', 'linux-arm64': 'arm64', 'termux-aarch64': 'aarch64', 'termux-x86_64': 'x86_64'}[target]
 artifacts.mkdir(parents=True, exist_ok=True)
 metadata = stage / 'share/metadata'
@@ -23,6 +24,10 @@ for component in ('authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote'):
     details = ({'version': '1', 'repository': 'https://github.com/openresearchtools/Taskarian',
                 'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()}
                if component == 'remote' else json.loads(record.read_text())[component])
+    if component == 'remote' and component_artifacts is not None:
+        receipt = component_artifacts / f'auth-component-remote-{target}' / f'native-input-equivalence-auth-remote-{target}.json'
+        if receipt.exists():
+            details['commit'] = json.loads(receipt.read_text())['producerSource']
     components.append(dict(name=component, version=details['version'], source=details['repository'], commit=details['commit'], sha256=hashlib.sha256(binary.read_bytes()).hexdigest()))
 dependencies = set()
 for path in metadata.glob('*.dependencies'):

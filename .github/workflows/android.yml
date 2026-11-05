@@ -2,6 +2,10 @@ name: Android browser candidate
 'on':
   workflow_dispatch:
     inputs:
+      force_rebuild:
+        description: Bypass native and APK artifact reuse
+        default: false
+        type: boolean
       auth_run:
         description: Successful native-auth run containing native auth artifacts for both Termux architectures
         required: true
@@ -24,6 +28,9 @@ name: Android browser candidate
         type: string
   workflow_call:
     inputs:
+      force_rebuild:
+        default: false
+        type: boolean
       auth_run:
         default: ''
         type: string
@@ -54,6 +61,7 @@ jobs:
     uses: ./.github/workflows/remote-browser.yml
     with:
       target: ${{ matrix.target }}
+      force_rebuild: ${{ inputs.force_rebuild }}
       auth_run: ${{ inputs.auth_run }}
       search_run: ${{ inputs.search_run }}
       node_run: ${{ inputs.node_run }}

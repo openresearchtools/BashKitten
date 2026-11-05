@@ -36,12 +36,15 @@ def main():
     parser.add_argument('--environments-run', default=os.environ.get('GITHUB_RUN_ID', ''))
     parser.add_argument('--office-run', default=os.environ.get('GITHUB_RUN_ID', ''))
     parser.add_argument('--warm-gkrust', choices=['true', 'false'], default='false')
+    parser.add_argument('--force-rebuild', choices=['true', 'false'], default='false')
     args = parser.parse_args()
     source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     repository = 'openresearchtools/taskarian-build-' + args.target.removeprefix('linux-')
     request = f'{os.environ["GITHUB_RUN_ID"]}-{os.environ.get("GITHUB_RUN_ATTEMPT", "1")}-{args.target}'
     title = f'Taskarian {source} / {request}'
     inputs = {'source_sha': source, 'request_id': request}
+    if args.force_rebuild == 'true':
+        inputs['force_rebuild'] = True
     for run in (args.auth_run, args.search_run, args.node_run):
         if not re.fullmatch('[0-9]+', run):
             raise ValueError('Build requires the source component run IDs')

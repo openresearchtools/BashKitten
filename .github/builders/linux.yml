@@ -11,6 +11,10 @@ run-name: Taskarian ${{ inputs.source_sha }} / ${{ inputs.request_id }}
         description: Request from the main workflow
         required: true
         type: string
+      force_rebuild:
+        description: Bypass native browser artifact reuse
+        default: false
+        type: boolean
       warm_gkrust:
         default: false
         type: boolean
@@ -32,9 +36,6 @@ run-name: Taskarian ${{ inputs.source_sha }} / ${{ inputs.request_id }}
 permissions:
   contents: read
   actions: read
-concurrency:
-  group: browser-${{ inputs.source_sha }}
-  cancel-in-progress: false
 jobs:
   browser:
     runs-on: ${{ github.repository == 'openresearchtools/taskarian-build-arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
@@ -56,6 +57,21 @@ jobs:
         ref: ${{ inputs.source_sha }}
         path: source/taskarian
         persist-credentials: false
+        sparse-checkout-cone-mode: false
+        sparse-checkout: |
+          /.github/builders/
+          /agent/packaging/*.py
+          /agent/packaging/node/lock.json
+          /agent/vendor/native/android-sources.json
+          /agent/src/server/platform/termux/updates-prepare.py
+          /browser/taskarian/android/mozconfig
+          /browser/taskarian/android/tor/
+          /browser/taskarian/android/notices/
+          /browser/taskarian/android/scripts/tor.py
+          /browser/taskarian/third_party/tor.toml
+          /browser/mobile/shared/modules/geckoview/TaskarianAndroid.sys.mjs
+          /browser/mobile/android/installer/package-manifest.in
+          /references/runtime-payload.json
     - name: Select the native target
       run: |
         # Python's IPDL workers create Unix sockets below the build temp path.
@@ -67,7 +83,36 @@ jobs:
         esac
     - id: component
       name: Restore a matching completed browser artifact
+      env:
+        TASKARIAN_FORCE_FULL_BUILD: ${{ inputs.force_rebuild && '1' || '0' }}
       run: python3 source/taskarian/agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
+    - name: Materialize required build or assembly sources
+      working-directory: source/taskarian
+      env:
+        NATIVE_REUSED: ${{ steps.component.outputs.hit }}
+      run: |
+        if [ "$NATIVE_REUSED" != true ]; then
+          git sparse-checkout disable
+        else
+          python3 - <<'PYTHON'
+        import json, subprocess
+        from pathlib import Path
+        payload = json.loads(Path('references/runtime-payload.json').read_text())
+        patterns = ['/.github/', '/agent/', '/auth/', '/node/', '/os/skills/',
+                    '/office/', '!/office/upstream/', '/office/upstream/*.json',
+                    '/office/upstream/dependencies/*.json', '/office/upstream/dependencies/*.py',
+                    '/files/', '!/files/upstream/', '/files/upstream/*.json',
+                    '/browser/taskarian/config/', '/browser/taskarian/scripts/',
+                    '/browser/taskarian/browser/branding/']
+        patterns += ['/references/' + pattern for pattern in payload['files']]
+        patterns += ['/references/vendor/npm/', '/references/legal/']
+        for item in payload['legal']:
+            patterns += ['/references/' + item['source']]
+            patterns += ['/references/' + path for path in item['files']]
+        subprocess.run(['git', 'sparse-checkout', 'set', '--no-cone', '--stdin'],
+                       input='\n'.join(patterns) + '\n', text=True, check=True)
+        PYTHON
+        fi
     - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
       with:
         node-version: '24'

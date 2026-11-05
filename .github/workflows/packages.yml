@@ -2,6 +2,10 @@ name: Complete Taskarian candidates
 'on':
   workflow_dispatch:
     inputs:
+      force_rebuild:
+        description: Build native components without reusing completed artifacts
+        default: false
+        type: boolean
       warm_gkrust:
         description: Warm the desktop Rust compiler cache
         default: false
@@ -23,21 +27,32 @@ concurrency:
 jobs:
   auth:
     uses: ./.github/workflows/auth-native.yml
+    with:
+      force_rebuild: ${{ inputs.force_rebuild }}
   search:
     uses: ./.github/workflows/search-native.yml
+    with:
+      force_rebuild: ${{ inputs.force_rebuild }}
   node:
     uses: ./.github/workflows/node-native.yml
+    with:
+      force_rebuild: ${{ inputs.force_rebuild }}
   office:
     uses: ./.github/workflows/office-native.yml
+    with:
+      force_rebuild: ${{ inputs.force_rebuild }}
     secrets:
       BUILD_REPOS_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
   environments:
     uses: ./.github/workflows/machines-native.yml
+    with:
+      force_rebuild: ${{ inputs.force_rebuild }}
   browser_arm64:
     if: ${{ !inputs.native_only }}
     uses: ./.github/workflows/remote-browser.yml
     with:
       target: linux-arm64
+      force_rebuild: ${{ inputs.force_rebuild }}
       warm_gkrust: ${{ inputs.warm_gkrust }}
     secrets:
       BUILD_REPOS_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
@@ -46,12 +61,15 @@ jobs:
     uses: ./.github/workflows/remote-browser.yml
     with:
       target: linux-amd64
+      force_rebuild: ${{ inputs.force_rebuild }}
       warm_gkrust: ${{ inputs.warm_gkrust }}
     secrets:
       BUILD_REPOS_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
   android:
     if: ${{ !inputs.native_only && !inputs.linux_only }}
     uses: ./.github/workflows/android.yml
+    with:
+      force_rebuild: ${{ inputs.force_rebuild }}
     secrets: inherit
   termux:
     strategy:

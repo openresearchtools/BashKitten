@@ -2,7 +2,16 @@ name: Native search runtime
 
 on:
   workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: Build native inputs without restoring completed artifacts
+        type: boolean
+        default: false
   workflow_call:
+    inputs:
+      force_rebuild:
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -12,6 +21,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   linux:
@@ -27,27 +37,36 @@ jobs:
         with:
           fetch-depth: 1
           filter: blob:none
-          sparse-checkout: |
-            agent/search
-            agent/packaging/termux/search
-            agent/packaging/machines
-            auth/build
-            auth/dependencies/termux
+          sparse-checkout: agent/packaging
+      - name: Restore unchanged search before installing build tools
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 agent/packaging/native-component.py restore search ${{ matrix.target }} --directory "$RUNNER_TEMP/search" --force '${{ inputs.force_rebuild }}'
+      - name: Materialize changed search sources
+        if: steps.reuse.outputs.hit != 'true'
+        run: git sparse-checkout set agent/search agent/packaging auth/build auth/dependencies/termux
       - uses: actions/setup-python@v5
+        if: steps.reuse.outputs.hit != 'true'
         with:
           python-version: '3.12'
       - run: sudo apt-get update && sudo apt-get install -y zstd
+        if: steps.reuse.outputs.hit != 'true'
       - uses: actions/cache@v4
+        if: steps.reuse.outputs.hit != 'true'
         with:
           path: ${{ runner.temp }}/search/downloads
           key: search-sources-${{ hashFiles('agent/search/runtime-lock.json') }}
           restore-keys: search-sources-
       - name: Assemble locked native runtime and source
+        if: steps.reuse.outputs.hit != 'true'
         run: python3 agent/search/build/runtime.py '${{ matrix.target }}' --output "$RUNNER_TEMP/search"
       - uses: actions/setup-python@v5
+        if: steps.reuse.outputs.hit != 'true'
         with:
           python-version: '3.14'
       - name: Check the Python ABI used by current Linux installations
+        if: steps.reuse.outputs.hit != 'true'
         env:
           SEARCH_STAGE: ${{ runner.temp }}/search/stage-${{ matrix.target }}/search
         run: |
@@ -67,6 +86,7 @@ jobs:
           path: |
             ${{ runner.temp }}/search/search-*.tar.zst
             ${{ runner.temp }}/search/SHA256SUMS
+            ${{ runner.temp }}/search/native-input-equivalence-*.json
           if-no-files-found: error
 
   termux:
@@ -82,16 +102,22 @@ jobs:
         with:
           fetch-depth: 1
           filter: blob:none
-          sparse-checkout: |
-            agent/search
-            agent/packaging/termux/search
-            agent/packaging/machines
-            auth/build
-            auth/dependencies/termux
+          sparse-checkout: agent/packaging
+      - name: Restore unchanged search before installing build tools
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 agent/packaging/native-component.py restore search termux-${{ matrix.architecture }} --directory "$RUNNER_TEMP/search" --force '${{ inputs.force_rebuild }}'
+      - name: Materialize changed search sources
+        if: steps.reuse.outputs.hit != 'true'
+        run: git sparse-checkout set agent/search agent/packaging auth/build auth/dependencies/termux
       - name: Extract retained Termux framework
+        if: steps.reuse.outputs.hit != 'true'
         run: python3 auth/build/retained-sources.py termux --commit 748983f1e4376b17babf23143baebd244e589b52 --output termux-packages
       - run: sudo apt-get update && sudo apt-get install -y zstd
+        if: steps.reuse.outputs.hit != 'true'
       - name: Identify native compiler inputs
+        if: steps.reuse.outputs.hit != 'true'
         id: primp-inputs
         run: |
           python3 - <<'PY'
@@ -111,12 +137,13 @@ jobs:
               output.write('key=search-primp-termux-' + os.environ['TERMUX_ARCH'] + '-' + digest.hexdigest() + '\n')
           PY
       - uses: actions/cache/restore@v4
+        if: steps.reuse.outputs.hit != 'true'
         id: primp
         with:
           path: termux-packages/output/python-primp_1.3.1_${{ matrix.architecture }}.deb
           key: ${{ steps.primp-inputs.outputs.key }}
       - name: Build Android/Bionic primp using the upstream Termux build system
-        if: steps.primp.outputs.cache-hit != 'true'
+        if: steps.reuse.outputs.hit != 'true' && steps.primp.outputs.cache-hit != 'true'
         env:
           TERMUX_BUILDER_IMAGE_NAME: ghcr.io/termux/package-builder@sha256:a753715a74c288a4006d5f0bd8c3fcbc0f9ee4313460706a3b77c1a6417b7ae6
         run: |
@@ -126,6 +153,7 @@ jobs:
           cd termux-packages
           scripts/run-docker.sh ./build-package.sh -I -a "$TERMUX_ARCH" python-primp
       - name: Stage and check native ELF alignment
+        if: steps.reuse.outputs.hit != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/native"
           dpkg-deb -x termux-packages/output/python-primp_1.3.1_${{ matrix.architecture }}.deb "$RUNNER_TEMP/native"
@@ -133,16 +161,18 @@ jobs:
           readelf -lW "$RUNNER_TEMP/native/data/data/com.termux/files/usr/lib/taskarian/search/runtime/site-packages/primp.abi3.so" |
             awk '$1=="LOAD" { if ($NF!="0x4000" && $NF!="0x10000") exit 1; found=1 } END { if (!found) exit 1 }'
       - uses: actions/cache/save@v4
-        if: steps.primp.outputs.cache-hit != 'true'
+        if: steps.reuse.outputs.hit != 'true' && steps.primp.outputs.cache-hit != 'true'
         with:
           path: termux-packages/output/python-primp_1.3.1_${{ matrix.architecture }}.deb
           key: ${{ steps.primp-inputs.outputs.key }}
       - uses: actions/cache@v4
+        if: steps.reuse.outputs.hit != 'true'
         with:
           path: ${{ runner.temp }}/search/downloads
           key: search-sources-${{ hashFiles('agent/search/runtime-lock.json') }}
           restore-keys: search-sources-
       - name: Assemble Termux payload with private native binding
+        if: steps.reuse.outputs.hit != 'true'
         run: |
           python3 agent/search/build/runtime.py "termux-$TERMUX_ARCH" --output "$RUNNER_TEMP/search" \
             --termux-native "$RUNNER_TEMP/native/data/data/com.termux/files/usr/lib/taskarian/search/runtime/site-packages"
@@ -152,4 +182,5 @@ jobs:
           path: |
             ${{ runner.temp }}/search/search-*.tar.zst
             ${{ runner.temp }}/search/SHA256SUMS
+            ${{ runner.temp }}/search/native-input-equivalence-*.json
           if-no-files-found: error

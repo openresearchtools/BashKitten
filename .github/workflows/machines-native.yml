@@ -1,9 +1,19 @@
 name: Native environments components
 'on':
   workflow_call:
+    inputs:
+      force_rebuild:
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: Build native inputs without restoring completed artifacts
+        type: boolean
+        default: false
 permissions:
   contents: read
+  actions: read
 jobs:
   runtime:
     strategy:
@@ -23,26 +33,46 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          filter: blob:none
+          sparse-checkout: agent/packaging
+      - name: Restore unchanged machines before installing build tools
+        id: machines-reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 agent/packaging/native-component.py restore machines linux-${{ matrix.architecture }} --directory "$RUNNER_TEMP/machines" --force '${{ inputs.force_rebuild }}'
+      - name: Restore unchanged display before installing build tools
+        id: display-reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 agent/packaging/native-component.py restore display linux-${{ matrix.architecture }} --directory "$RUNNER_TEMP/display" --force '${{ inputs.force_rebuild }}'
+      - name: Materialize changed native sources
+        if: steps.machines-reuse.outputs.hit != 'true' || steps.display-reuse.outputs.hit != 'true'
+        run: git sparse-checkout set agent/packaging agent/machines auth/build auth/dependencies/go-toolchain browser/taskarian/display
       - uses: actions/setup-go@v6
+        if: steps.machines-reuse.outputs.hit != 'true'
         with:
           go-version: '1.27.2'
           cache-dependency-path: agent/machines/vendor/podman/source/go.sum
       - name: Install native component build tools
+        if: steps.machines-reuse.outputs.hit != 'true' || steps.display-reuse.outputs.hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential autoconf automake libtool pkg-config libcap-dev libseccomp-dev libsystemd-dev libjson-c-dev libglib2.0-dev meson ninja-build libprotobuf-dev protobuf-compiler libgpgme-dev libapparmor-dev libbpf-dev libxkbcommon-dev libdrm-dev libgbm-dev libegl-dev libgles-dev python3 dpkg-dev
           rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rust-docs
       - uses: actions/cache@v4
+        if: steps.machines-reuse.outputs.hit != 'true' || steps.display-reuse.outputs.hit != 'true'
         with:
           path: |
             ${{ runner.temp }}/machines-cache
             ${{ runner.temp }}/display-cache
           key: native-environments-${{ matrix.architecture }}-${{ hashFiles('agent/packaging/machines/**', 'agent/machines/vendor/**/source.json', 'agent/machines/license-supplements/**', 'agent/machines/rust-toolchain/**', 'auth/build/go-notices.py', 'auth/dependencies/go-toolchain/**', 'browser/taskarian/display/**') }}
           restore-keys: native-environments-${{ matrix.architecture }}-
-      - name: Build private engine and display from tracked sources
-        run: |
-          python3 agent/packaging/machines/build.py --architecture ${{ matrix.architecture }} --work "$RUNNER_TEMP/machines-cache" --output "$RUNNER_TEMP/machines" --jobs 2
-          python3 browser/taskarian/display/build.py --work-dir "$RUNNER_TEMP/display-cache" --output "$RUNNER_TEMP/display"
+      - name: Build private engine from tracked sources
+        if: steps.machines-reuse.outputs.hit != 'true'
+        run: python3 agent/packaging/machines/build.py --architecture ${{ matrix.architecture }} --work "$RUNNER_TEMP/machines-cache" --output "$RUNNER_TEMP/machines" --jobs 2
+      - name: Build private display from tracked sources
+        if: steps.display-reuse.outputs.hit != 'true'
+        run: python3 browser/taskarian/display/build.py --work-dir "$RUNNER_TEMP/display-cache" --output "$RUNNER_TEMP/display"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: machines-runtime-linux-${{ matrix.architecture }}
@@ -69,12 +99,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          filter: blob:none
+          sparse-checkout: agent/packaging
+      - name: Restore unchanged guest before installing build tools
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 agent/packaging/native-component.py restore guest linux-${{ matrix.architecture }} --directory "$RUNNER_TEMP/guest-packages" --force '${{ inputs.force_rebuild }}'
+      - name: Materialize changed native sources
+        if: steps.reuse.outputs.hit != 'true'
+        run: git sparse-checkout set agent/packaging agent/machines os auth/build auth/dependencies/go-toolchain browser/taskarian/config
       - uses: actions/cache@v4
+        if: steps.reuse.outputs.hit != 'true'
         with:
           path: ${{ runner.temp }}/guest-cache
           key: guest-native-${{ matrix.architecture }}-${{ hashFiles('os/**', 'agent/machines/guest/**', 'agent/machines/build-guest.py', 'agent/machines/vendor/libfuse/**', 'agent/packaging/machines/build.py', 'agent/machines/rust-toolchain/**', 'auth/build/go-notices.py') }}
           restore-keys: guest-native-${{ matrix.architecture }}-
       - name: Build guest packages against the pinned Debian guest ABI
+        if: steps.reuse.outputs.hit != 'true'
         env:
           ARCH: ${{ matrix.architecture }}
           SOURCE_COMMIT: ${{ github.sha }}
@@ -97,6 +139,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
   termux_os:
+    name: Taskarian OS — Termux (${{ matrix.architecture }})
     strategy:
       fail-fast: false
       matrix:
@@ -106,7 +149,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          filter: blob:none
+          sparse-checkout: agent/packaging
+      - name: Restore unchanged os before installing build tools
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 agent/packaging/native-component.py restore os termux-${{ matrix.architecture }} --directory "$RUNNER_TEMP/packages" --force '${{ inputs.force_rebuild }}'
+      - name: Materialize changed native sources
+        if: steps.reuse.outputs.hit != 'true'
+        run: git sparse-checkout set agent/packaging os auth/build browser/taskarian/config
       - uses: actions/cache@v4
+        if: steps.reuse.outputs.hit != 'true'
         id: termux-os-cache
         with:
           # Keep compiled outputs and the verified ZIP, not its extracted NDK copy.
@@ -120,13 +174,14 @@ jobs:
       # Paths participate in the cache version. Reuse an old whole-work cache
       # only on a miss; the cache action above saves only the reduced path set.
       - name: Restore previous Termux OS cache layout
-        if: steps.termux-os-cache.outputs.cache-hit == ''
+        if: steps.reuse.outputs.hit != 'true' && steps.termux-os-cache.outputs.cache-hit == ''
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/termux-os
           key: termux-os-${{ matrix.architecture }}-${{ hashFiles('os/**', 'agent/packaging/termux/os.py', 'agent/packaging/node/lock.json') }}
           restore-keys: termux-os-${{ matrix.architecture }}-
       - name: Build native Termux desktop customization
+        if: steps.reuse.outputs.hit != 'true'
         run: python3 agent/packaging/termux/os.py --architecture ${{ matrix.architecture }} --work "$RUNNER_TEMP/termux-os" --output "$RUNNER_TEMP/packages"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -140,7 +195,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          filter: blob:none
+          sparse-checkout: agent/packaging
+      - name: Restore unchanged loader before installing build tools
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 agent/packaging/native-component.py restore loader termux-aarch64 --directory "$RUNNER_TEMP/loader" --force '${{ inputs.force_rebuild }}'
+      - name: Materialize changed native sources
+        if: steps.reuse.outputs.hit != 'true'
+        run: git sparse-checkout set agent/packaging browser/mobile/android/taskarian/display browser/taskarian/vendor/termux-x11
       - name: Build loader paired with the established APK publisher
+        if: steps.reuse.outputs.hit != 'true'
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37.0' 'build-tools;37.0.0'
           signer=$(python3 -c 'import sys;sys.path.insert(0,"agent/packaging");from release import CERT;print(CERT)')
@@ -155,5 +221,6 @@ jobs:
             ${{ runner.temp }}/loader/taskarian-x11-loader.jar
             ${{ runner.temp }}/loader/manifest.json
             ${{ runner.temp }}/loader/licenses/
+            ${{ runner.temp }}/loader/native-input-equivalence-*.json
           if-no-files-found: error
           compression-level: 0

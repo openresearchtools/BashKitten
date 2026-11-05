@@ -218,8 +218,14 @@ def install(args, app, revision, cache, checked_archive, extract):
                 raise ValueError('Files archive contains files outside its native component boundary')
             metadata = json.loads((root / 'manifest.json').read_text())
             if (metadata.get('schema') != 1 or metadata.get('target') != args.target
-                    or metadata.get('architecture') != args.architecture or metadata.get('sourceCommit') != revision):
+                    or metadata.get('architecture') != args.architecture):
                 raise ValueError('Native ' + component + ' artifact target/source mismatch')
+            equivalence = None
+            if metadata.get('sourceCommit') != revision:
+                owner = runpy.run_path(str(ROOT / 'agent/packaging/remote-office.py'))
+                equivalence = owner['verify_receipt'](archive.parent, component,
+                    args.target + '-' + args.architecture, revision, metadata.get('sourceCommit'), digest,
+                    hashlib.sha256((root / 'manifest.json').read_bytes()).hexdigest())
             if metadata.get('development') and not getattr(args, 'integration_iteration', False):
                 raise ValueError('Uncommitted native ' + component + ' build inputs cannot enter a release package')
             if not isinstance(metadata.get('depends'), list) or not (root / 'licenses.json').is_file():
@@ -235,6 +241,8 @@ def install(args, app, revision, cache, checked_archive, extract):
             # This is static package content, not the user's service data.
             destination.chmod(0o755)
         result[component] = {'available': True, 'archive': archive.name, 'sha256': digest, 'metadata': metadata}
+        if equivalence:
+            result[component]['inputEquivalence'] = equivalence
     if result['office']['available']:
         result['office']['extension'] = office_extension(app / 'office/runtime')
     return result

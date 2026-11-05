@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -36,18 +37,20 @@ def api(endpoint):
             return json.loads(subprocess.check_output(
                 ['gh', 'api', endpoint], text=True, stderr=subprocess.PIPE))
         except subprocess.CalledProcessError as error:
-            # These are idempotent metadata reads. Keep authentication,
-            # provenance and JSON failures fatal; only retry server failures.
-            if attempt == 2 or not re.search(r'\bHTTP 5\d\d\b', error.stderr or ''):
-                sys.stderr.write(error.stderr or '')
-                if re.search(r'\bHTTP 5\d\d\b', error.stderr or ''):
-                    raise MetadataUnavailable('GitHub Node cache metadata is unavailable: ' + endpoint) from error
+            # Missing historical artifacts are cache misses; a network outage
+            # remains a resumable job failure and never triggers compilation.
+            if re.search(r'\bHTTP (?:404|410)\b', error.stderr or ''):
                 raise
+            if attempt == 2:
+                raise MetadataUnavailable('GitHub Node artifact metadata is unavailable; retry this job instead of rebuilding') from error
             time.sleep(2 ** attempt)
 
 
 def git(*args):
-    return subprocess.check_output(['git', *args], cwd=ROOT)
+    try:
+        return subprocess.check_output(['git', *args], cwd=ROOT, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as error:
+        raise MetadataUnavailable('Node Git input lookup failed; retry without rebuilding') from error
 
 
 def sha(path):
@@ -211,8 +214,7 @@ def verify(directory, target):
 
 
 def completed_producer(run, target):
-    if (run['status'] != 'completed' or run['conclusion'] not in ('success', 'failure') or
-            run['event'] != 'workflow_dispatch' or run['head_branch'] != 'main' or
+    if (run['event'] != 'workflow_dispatch' or run['head_branch'] != 'main' or
             run['path'] not in (WORKFLOW, '.github/workflows/packages.yml')):
         return None
     run_id, attempt = run.get('id'), run.get('run_attempt')
@@ -280,21 +282,43 @@ def restore(directory, target):
                 continue
             if producer_inputs != current:
                 continue
-            subprocess.run(['gh', 'run', 'download', str(run['id']), '--repo', REPOSITORY,
-                            '--name', artifact['name'], '--dir', str(directory)], check=True)
-            archives = verify(directory, target)
-            receipt = directory / f'node-provenance-{target}.json'
-            if not receipt.exists():
-                if not evidence['assembled']:
-                    raise ValueError('Restored Node component lacks its original producer receipt')
-                write_receipt(directory, target, {'schema': 1, 'target': target, 'repository': REPOSITORY,
-                    'producerSource': run['head_sha'], 'producerRun': run['id'],
-                    'producerArtifact': artifact['id'], 'producerEvidence': evidence,
-                    'inputs': current, 'archives': archives})
-            elif evidence['assembled']:
-                provenance = json.loads(receipt.read_text())
-                if provenance['producerSource'] != run['head_sha'] or provenance['producerRun'] != run['id']:
-                    raise ValueError('Assembled Node artifact misidentifies its producer')
+            try:
+                for attempt in range(3):
+                    # A prior interrupted transfer must not poison the retry.
+                    for path in directory.iterdir():
+                        if path.is_dir(): shutil.rmtree(path)
+                        else: path.unlink()
+                    try:
+                        subprocess.run(['gh', 'run', 'download', str(run['id']), '--repo', REPOSITORY,
+                                        '--name', artifact['name'], '--dir', str(directory)], check=True,
+                                       stderr=subprocess.PIPE)
+                        break
+                    except subprocess.CalledProcessError as error:
+                        detail = error.stderr.decode(errors='replace') if isinstance(error.stderr, bytes) else error.stderr or ''
+                        if re.search(r'HTTP (?:404|410)\b|no artifacts (?:found|match)', detail, re.I):
+                            raise ValueError('Optional Node artifact expired during restoration') from error
+                        if attempt == 2:
+                            raise MetadataUnavailable('Node artifact download interrupted; retry to restore completed work') from error
+                        time.sleep(2 ** attempt)
+                archives = verify(directory, target)
+                receipt = directory / f'node-provenance-{target}.json'
+                if not receipt.exists():
+                    if not evidence['assembled']:
+                        raise ValueError('Restored Node component lacks its original producer receipt')
+                    write_receipt(directory, target, {'schema': 1, 'target': target, 'repository': REPOSITORY,
+                        'producerSource': run['head_sha'], 'producerRun': run['id'],
+                        'producerArtifact': artifact['id'], 'producerEvidence': evidence,
+                        'inputs': current, 'archives': archives})
+                elif evidence['assembled']:
+                    provenance = json.loads(receipt.read_text())
+                    if provenance['producerSource'] != run['head_sha'] or provenance['producerRun'] != run['id']:
+                        raise ValueError('Assembled Node artifact misidentifies its producer')
+            except (ValueError, KeyError, TypeError, OSError, tarfile.TarError, subprocess.CalledProcessError) as error:
+                for path in directory.iterdir():
+                    if path.is_dir(): shutil.rmtree(path)
+                    else: path.unlink()
+                print(f'Discarding absent/unprovable optional Node artifact {artifact["id"]}: {error}', flush=True)
+                continue
             print(f'Reused verified {target} runtime and corresponding source from {run["html_url"]}', flush=True)
             return True
         if len(artifacts) < 100:
@@ -307,6 +331,7 @@ def main():
     parser.add_argument('action', choices=['restore', 'verify'])
     parser.add_argument('target', choices=['linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64'])
     parser.add_argument('--directory', type=Path, required=True)
+    parser.add_argument('--force', default='false')
     args = parser.parse_args()
     if os.environ.get('GITHUB_REPOSITORY', REPOSITORY).lower() != REPOSITORY.lower():
         raise ValueError('Node component reuse requires the product repository')
@@ -314,13 +339,7 @@ def main():
     if args.action == 'restore':
         if any(args.directory.iterdir()):
             raise ValueError('Node restore destination must be empty')
-        try:
-            hit = restore(args.directory, args.target)
-        except MetadataUnavailable:
-            if any(args.directory.iterdir()):
-                raise
-            print('Optional Node cache metadata is unavailable; using pinned assembly', flush=True)
-            hit = False
+        hit = False if args.force == 'true' else restore(args.directory, args.target)
         with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
             output.write(f'hit={str(hit).lower()}\n')
         print('Matching complete Node component found' if hit else 'Assembling changed Node inputs')
