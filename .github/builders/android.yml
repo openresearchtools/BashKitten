@@ -108,6 +108,8 @@ jobs:
       run: python3 agent/packaging/android-native-component.py "$BROWSER_TARGET" --directory "$RUNNER_TEMP/android-native"
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Materialize Android application build sources
+      env:
+        GIT_LFS_SKIP_SMUDGE: '1'
       run: git sparse-checkout disable
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Prepare hosted runner

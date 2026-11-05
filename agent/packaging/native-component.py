@@ -494,7 +494,8 @@ def main():
         except ValueError:
             # Unknown optional input syntax cannot block the established build.
             subprocess.run(['git', 'sparse-checkout', 'set', 'auth', 'agent/native/remote',
-                            'agent/packaging', 'agent/src/server/access'], cwd=ROOT, check=True)
+                            'agent/packaging', 'agent/src/server/access'], cwd=ROOT,
+                           env={**os.environ, 'GIT_LFS_SKIP_SMUDGE': '1'}, check=True)
             return
         paths.update(('agent/packaging', '.github/workflows', 'auth/upstreams.lock.json'))
         if args.component.startswith('auth-'):
@@ -512,7 +513,8 @@ def main():
         patterns = ['/*', '!/*/']
         patterns += ['/' + path for path in sorted(paths) if entry(revision, path) is not None]
         subprocess.run(['git', 'sparse-checkout', 'set', '--no-cone', '--stdin'], cwd=ROOT,
-                       input='\n'.join(patterns) + '\n', text=True, check=True)
+                       input='\n'.join(patterns) + '\n', text=True,
+                       env={**os.environ, 'GIT_LFS_SKIP_SMUDGE': '1'}, check=True)
     elif args.action == 'plan-auth':
         targets = TARGETS if args.target == 'all' else (args.target,)
         components = AUTH if args.component == 'all' else (args.component,)

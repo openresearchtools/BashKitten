@@ -47,7 +47,7 @@ jobs:
         run: python3 agent/packaging/native-component.py restore display linux-${{ matrix.architecture }} --directory "$RUNNER_TEMP/display" --force '${{ inputs.force_rebuild }}'
       - name: Materialize changed native sources
         if: steps.machines-reuse.outputs.hit != 'true' || steps.display-reuse.outputs.hit != 'true'
-        run: git sparse-checkout set agent/packaging agent/machines auth/build auth/dependencies/go-toolchain browser/taskarian/display
+        run: GIT_LFS_SKIP_SMUDGE=1 git sparse-checkout set agent/packaging agent/machines auth/build auth/dependencies/go-toolchain browser/taskarian/display
       - uses: actions/setup-go@v6
         if: steps.machines-reuse.outputs.hit != 'true'
         with:
@@ -108,7 +108,7 @@ jobs:
         run: python3 agent/packaging/native-component.py restore guest linux-${{ matrix.architecture }} --directory "$RUNNER_TEMP/guest-packages" --force '${{ inputs.force_rebuild }}'
       - name: Materialize changed native sources
         if: steps.reuse.outputs.hit != 'true'
-        run: git sparse-checkout set agent/packaging agent/machines os auth/build auth/dependencies/go-toolchain browser/taskarian/config
+        run: GIT_LFS_SKIP_SMUDGE=1 git sparse-checkout set agent/packaging agent/machines os auth/build auth/dependencies/go-toolchain browser/taskarian/config
       - uses: actions/cache@v4
         if: steps.reuse.outputs.hit != 'true'
         with:
@@ -158,7 +158,7 @@ jobs:
         run: python3 agent/packaging/native-component.py restore os termux-${{ matrix.architecture }} --directory "$RUNNER_TEMP/packages" --force '${{ inputs.force_rebuild }}'
       - name: Materialize changed native sources
         if: steps.reuse.outputs.hit != 'true'
-        run: git sparse-checkout set agent/packaging os auth/build browser/taskarian/config
+        run: GIT_LFS_SKIP_SMUDGE=1 git sparse-checkout set agent/packaging os auth/build browser/taskarian/config
       - uses: actions/cache@v4
         if: steps.reuse.outputs.hit != 'true'
         id: termux-os-cache
@@ -204,7 +204,7 @@ jobs:
         run: python3 agent/packaging/native-component.py restore loader termux-aarch64 --directory "$RUNNER_TEMP/loader" --force '${{ inputs.force_rebuild }}'
       - name: Materialize changed native sources
         if: steps.reuse.outputs.hit != 'true'
-        run: git sparse-checkout set agent/packaging browser/mobile/android/taskarian/display browser/taskarian/vendor/termux-x11
+        run: GIT_LFS_SKIP_SMUDGE=1 git sparse-checkout set agent/packaging browser/mobile/android/taskarian/display browser/taskarian/vendor/termux-x11
       - name: Build loader paired with the established APK publisher
         if: steps.reuse.outputs.hit != 'true'
         run: |

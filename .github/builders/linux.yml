@@ -90,6 +90,7 @@ jobs:
       working-directory: source/taskarian
       env:
         NATIVE_REUSED: ${{ steps.component.outputs.hit }}
+        GIT_LFS_SKIP_SMUDGE: '1'
       run: |
         if [ "$NATIVE_REUSED" != true ]; then
           git sparse-checkout disable

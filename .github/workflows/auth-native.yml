@@ -82,7 +82,7 @@ jobs:
           done
       - name: Materialize source for missing aggregate assembly
         if: steps.reuse.outputs.hit != 'true'
-        run: git sparse-checkout set auth agent/native/remote agent/packaging agent/src/server/access
+        run: GIT_LFS_SKIP_SMUDGE=1 git sparse-checkout set auth agent/native/remote agent/packaging agent/src/server/access
       - uses: actions/setup-go@v6
         if: steps.reuse.outputs.hit != 'true' && (steps.checkpoints.outputs.hit_authelia != 'true' || steps.checkpoints.outputs.hit_caddy != 'true' || steps.checkpoints.outputs.hit_tor != 'true' || steps.checkpoints.outputs.hit_valkey != 'true' || steps.checkpoints.outputs.hit_chisel != 'true' || steps.checkpoints.outputs.hit_remote != 'true')
         with:

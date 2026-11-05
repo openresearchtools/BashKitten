@@ -90,6 +90,7 @@ jobs:
         if: steps.component-reuse.outputs.hit != 'true'
         env:
           COMPONENT: ${{ matrix.component }}
+          GIT_LFS_SKIP_SMUDGE: '1'
         run: |
           git -C source sparse-checkout add --stdin <<PATTERNS
           /.gitignore

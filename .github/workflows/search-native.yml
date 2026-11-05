@@ -45,7 +45,7 @@ jobs:
         run: python3 agent/packaging/native-component.py restore search ${{ matrix.target }} --directory "$RUNNER_TEMP/search" --force '${{ inputs.force_rebuild }}'
       - name: Materialize changed search sources
         if: steps.reuse.outputs.hit != 'true'
-        run: git sparse-checkout set agent/search agent/packaging auth/build auth/dependencies/termux
+        run: GIT_LFS_SKIP_SMUDGE=1 git sparse-checkout set agent/search agent/packaging auth/build auth/dependencies/termux
       - uses: actions/setup-python@v5
         if: steps.reuse.outputs.hit != 'true'
         with:
@@ -110,7 +110,7 @@ jobs:
         run: python3 agent/packaging/native-component.py restore search termux-${{ matrix.architecture }} --directory "$RUNNER_TEMP/search" --force '${{ inputs.force_rebuild }}'
       - name: Materialize changed search sources
         if: steps.reuse.outputs.hit != 'true'
-        run: git sparse-checkout set agent/search agent/packaging auth/build auth/dependencies/termux
+        run: GIT_LFS_SKIP_SMUDGE=1 git sparse-checkout set agent/search agent/packaging auth/build auth/dependencies/termux
       - name: Extract retained Termux framework
         if: steps.reuse.outputs.hit != 'true'
         run: python3 auth/build/retained-sources.py termux --commit 748983f1e4376b17babf23143baebd244e589b52 --output termux-packages
