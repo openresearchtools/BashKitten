@@ -224,6 +224,7 @@ jobs:
         ./mach build stage-package
         python3 ../agent/packaging/android-native-component.py "$BROWSER_TARGET" --publish --directory "$RUNNER_TEMP/android-gecko-artifact"
       if: (success()) && steps.component.outputs.hit != 'true'
+      id: stage-gecko
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: ${{ steps.native-component.outputs.artifact }}
@@ -231,6 +232,11 @@ jobs:
         compression-level: 0
         if-no-files-found: error
       if: (success()) && steps.component.outputs.hit != 'true'
+      id: engine-checkpoint
+    - name: Release verified native object intermediates before cache backup
+      if: always() && !cancelled() && steps.engine-checkpoint.outcome == 'success' && steps.component.outputs.hit != 'true' && inputs.engine_only && steps.stage-gecko.outputs.license_captured == 'true'
+      working-directory: browser
+      run: ./mach clobber
     - name: Record native cache hits and flush the completed disk objects
       if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != '' && env.SCCACHE_PATH != ''
       run: |
@@ -243,6 +249,7 @@ jobs:
       with:
         path: ${{ env.SCCACHE_DIR }}
         key: gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.digest }}-${{ github.run_id }}
+      continue-on-error: true
     - name: Keep the completed compiler objects as a release fallback
       if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
       env:
@@ -256,10 +263,11 @@ jobs:
         path: ${{ runner.temp }}/sccache-gecko.json
         if-no-files-found: ignore
     - name: Publish the verified native Gecko component
-      if: steps.component.outputs.hit != 'true'
+      if: always() && !cancelled() && steps.engine-checkpoint.outcome == 'success'
       env:
         GH_TOKEN: ${{ github.token }}
       run: python3 agent/packaging/browser-release.py publish-engine "$BROWSER_TARGET" --directory "$RUNNER_TEMP/android-gecko-artifact"
+      id: publish-engine
     - name: Restore exact app-native dependencies and actual companion licenses
       if: '!inputs.engine_only && (steps.component.outputs.hit != ''true'')'
       run: |

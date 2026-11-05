@@ -198,6 +198,11 @@ jobs:
         path: ${{ runner.temp }}/browser/stage/
         compression-level: 0
         if-no-files-found: error
+      id: engine-checkpoint
+    - name: Release verified native object intermediates before cache backup
+      if: always() && !cancelled() && steps.engine-checkpoint.outcome == 'success' && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      working-directory: ${{ runner.temp }}/bk/browser/runs/hosted/source/browser
+      run: ./mach clobber
     - name: Record native cache hits and flush the completed disk objects
       if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != '' && env.SCCACHE_PATH != ''
       working-directory: source/taskarian
@@ -211,6 +216,7 @@ jobs:
       with:
         path: ${{ env.SCCACHE_DIR }}
         key: gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.digest }}-${{ github.run_id }}
+      continue-on-error: true
     - name: Keep the completed compiler objects as a release fallback
       if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
       working-directory: source/taskarian
@@ -225,12 +231,14 @@ jobs:
         path: ${{ runner.temp }}/sccache-gecko.json
         if-no-files-found: ignore
     - name: Publish the verified native Gecko component
-      if: steps.component.outputs.hit != 'true'
+      if: always() && !cancelled() && steps.engine-checkpoint.outcome == 'success'
       working-directory: source/taskarian
       run: python3 agent/packaging/browser-release.py publish-engine "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
+      id: publish-engine
     - name: Publish the current browser resources independently
       working-directory: source/taskarian
       run: python3 agent/packaging/browser-release.py publish-resources "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
+      if: always() && !cancelled() && steps.publish-engine.outcome == 'success'
     - name: Install assembly tools
       run: sudo apt-get update && sudo apt-get install -y zstd python3
     - name: Assemble from the exact durable component modules

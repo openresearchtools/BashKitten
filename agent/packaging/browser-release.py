@@ -302,6 +302,11 @@ def checkpoint_proof(directory, target):
 
 
 def packaged_legal(directory, staging, target):
+    captured = list(Path(directory).glob('gecko-built-license-*.html'))
+    if captured:
+        for page in captured:
+            shutil.copy2(page, staging / page.name)
+        return {page.name: 'legal' for page in captured}
     archives = []
     if target.startswith('linux'):
         package, = Path(directory).glob('taskarian*.tar.*')

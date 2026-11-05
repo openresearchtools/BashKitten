@@ -281,6 +281,18 @@ def publish(directory, target):
     verify_libraries(payload, record, target)
     record['archiveSource'] = source
     (directory / 'native-gecko.json').write_text(json.dumps(record, indent=2) + '\n')
+    # Keep the actual built page with the checkpoint, so an engine-only owner
+    # can clobber object intermediates before archiving its compiler cache.
+    count = 0
+    for omni in (Path(os.environ['TASKARIAN_ANDROID_OBJDIR']) / 'dist').rglob('omni.ja'):
+        with zipfile.ZipFile(omni) as archive:
+            for name in archive.namelist():
+                if name.endswith('/license.html'):
+                    (directory / f'gecko-built-license-{count}.html').write_bytes(archive.read(name))
+                    count += 1
+    if os.environ.get('GITHUB_OUTPUT'):
+        with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+            output.write('license_captured=' + str(bool(count)).lower() + '\n')
     (directory / 'SHA256SUMS').write_text(''.join(sha(path) + '  ' + path.name + '\n'
         for path in sorted(directory.iterdir()) if path.is_file() and path.name != 'SHA256SUMS'))
     component.verify_checksums(directory)
